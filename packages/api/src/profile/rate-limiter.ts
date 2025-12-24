@@ -5,35 +5,25 @@
  * how often users can update their profiles.
  */
 
-import {
-  and,
-  asc,
-  count,
-  db,
-  desc,
-  eq,
-  gte,
-  profileUpdateLogs,
-  sql,
-} from '@babylon/db';
-import { generateSnowflakeId, logger } from '@babylon/shared';
+import { and, asc, db, eq, gte, profileUpdateLogs } from '@babylon/db'
+import { generateSnowflakeId, logger } from '@babylon/shared'
 
 interface RateLimitConfig {
-  maxUpdatesPerDay: number;
-  maxUpdatesPerHour: number;
-  maxUsernameChangesPerDay: number;
+  maxUpdatesPerDay: number
+  maxUpdatesPerHour: number
+  maxUsernameChangesPerDay: number
 }
 
 const DEFAULT_CONFIG: RateLimitConfig = {
   maxUpdatesPerDay: 50, // 50 profile updates per day
   maxUpdatesPerHour: 10, // 10 per hour
   maxUsernameChangesPerDay: 2, // Only 2 username changes per day
-};
+}
 
 interface RateLimitResult {
-  allowed: boolean;
-  reason?: string;
-  retryAfter?: number; // Seconds until retry allowed
+  allowed: boolean
+  reason?: string
+  retryAfter?: number // Seconds until retry allowed
 }
 
 /**
@@ -41,94 +31,93 @@ interface RateLimitResult {
  */
 export async function checkProfileUpdateRateLimit(
   userId: string,
-  isUsernameChange: boolean
+  isUsernameChange: boolean,
 ): Promise<RateLimitResult> {
-  const now = new Date();
-  const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-  const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
+  const now = new Date()
+  const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000)
+  const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000)
 
-  // Count recent updates (cast needed due to CQL client type inference)
-  const [recentUpdates24hResult, recentUpdates1hResult] = (await Promise.all([
+  // Count recent updates using repository count method
+  const [recentUpdates24h, recentUpdates1h] = await Promise.all([
     // Updates in last 24 hours
-    db
-      .select({ count: count() })
-      .from(profileUpdateLogs)
-      .where(
-        and(
-          eq(profileUpdateLogs.userId, userId),
-          gte(profileUpdateLogs.createdAt, oneDayAgo)
-        )
-      ),
+    db.profileUpdateLog.count({
+      where: {
+        AND: [{ userId }, { createdAt: { gte: oneDayAgo } }],
+      },
+    }),
     // Updates in last hour
-    db
-      .select({ count: count() })
-      .from(profileUpdateLogs)
-      .where(
-        and(
-          eq(profileUpdateLogs.userId, userId),
-          gte(profileUpdateLogs.createdAt, oneHourAgo)
-        )
-      ),
-  ])) as unknown as [
-    { count: number | string | bigint }[],
-    { count: number | string | bigint }[],
-  ];
-
-  const recentUpdates24h = Number(recentUpdates24hResult[0]?.count ?? 0);
-  const recentUpdates1h = Number(recentUpdates1hResult[0]?.count ?? 0);
+    db.profileUpdateLog.count({
+      where: {
+        AND: [{ userId }, { createdAt: { gte: oneHourAgo } }],
+      },
+    }),
+  ])
 
   // Username changes in last 24 hours
-  let recentUsernameChanges = 0;
+  let recentUsernameChanges = 0
   if (isUsernameChange) {
-    const usernameChangesResult = (await db
-      .select({ count: count() })
+    // Query all username updates in last 24h and filter in JS since CQL doesn't support array contains
+    const allRecentUpdates = await db
+      .select({
+        changedFields: profileUpdateLogs.changedFields,
+      })
       .from(profileUpdateLogs)
       .where(
         and(
           eq(profileUpdateLogs.userId, userId),
           gte(profileUpdateLogs.createdAt, oneDayAgo),
-          sql`'username' = ANY(${profileUpdateLogs.changedFields})`
-        )
-      )) as unknown as { count: number }[];
-    recentUsernameChanges = Number(usernameChangesResult[0]?.count ?? 0);
+        ),
+      )
+    // Filter for username changes
+    // changedFields is stored as JsonValue (array) in database
+    recentUsernameChanges = allRecentUpdates.filter((update) => {
+      const fields = Array.isArray(update.changedFields)
+        ? (update.changedFields as string[])
+        : null
+      return fields?.includes('username')
+    }).length
   }
 
   // Check hourly limit
   if (recentUpdates1h >= DEFAULT_CONFIG.maxUpdatesPerHour) {
     const oldestRecentUpdateResult = await db
-      .select()
+      .select({
+        createdAt: profileUpdateLogs.createdAt,
+      })
       .from(profileUpdateLogs)
       .where(
         and(
           eq(profileUpdateLogs.userId, userId),
-          gte(profileUpdateLogs.createdAt, oneHourAgo)
-        )
+          gte(profileUpdateLogs.createdAt, oneHourAgo),
+        ),
       )
       .orderBy(asc(profileUpdateLogs.createdAt))
-      .limit(1);
+      .limit(1)
 
-    const oldestRecentUpdate = oldestRecentUpdateResult[0];
+    const oldestRecentUpdate = oldestRecentUpdateResult[0] as
+      | { createdAt: Date }
+      | undefined
 
     const retryAfter = oldestRecentUpdate
       ? Math.ceil(
           (oldestRecentUpdate.createdAt.getTime() +
             60 * 60 * 1000 -
             now.getTime()) /
-            1000
+            1000,
         )
-      : 3600;
+      : 3600
 
     logger.warn(
       'Profile update rate limit exceeded (hourly)',
       { userId, recentUpdates1h },
-      'RateLimiter'
-    );
+      'RateLimiter',
+    )
 
     return {
       allowed: false,
       reason: `Too many profile updates. Please wait ${Math.ceil(retryAfter / 60)} minutes.`,
       retryAfter,
-    };
+    }
   }
 
   // Check daily limit
@@ -136,14 +125,14 @@ export async function checkProfileUpdateRateLimit(
     logger.warn(
       'Profile update rate limit exceeded (daily)',
       { userId, recentUpdates24h },
-      'RateLimiter'
-    );
+      'RateLimiter',
+    )
 
     return {
       allowed: false,
       reason: 'Daily profile update limit reached. Try again tomorrow.',
       retryAfter: 86400,
-    };
+    }
   }
 
   // Check username change limit
@@ -154,17 +143,17 @@ export async function checkProfileUpdateRateLimit(
     logger.warn(
       'Username change rate limit exceeded',
       { userId, recentUsernameChanges },
-      'RateLimiter'
-    );
+      'RateLimiter',
+    )
 
     return {
       allowed: false,
       reason: 'You can only change your username twice per day.',
       retryAfter: 86400,
-    };
+    }
   }
 
-  return { allowed: true };
+  return { allowed: true }
 }
 
 /**
@@ -174,7 +163,7 @@ export async function logProfileUpdate(
   userId: string,
   changedFields: string[],
   backendSigned: boolean,
-  txHash?: string
+  txHash?: string,
 ): Promise<void> {
   await db.insert(profileUpdateLogs).values({
     id: await generateSnowflakeId(),
@@ -183,7 +172,7 @@ export async function logProfileUpdate(
     backendSigned,
     txHash: txHash || null,
     createdAt: new Date(),
-  });
+  })
 }
 
 /**
@@ -191,24 +180,24 @@ export async function logProfileUpdate(
  */
 export async function getProfileUpdateHistory(
   userId: string,
-  limit = 20
+  limit = 20,
 ): Promise<
   Array<{
-    changedFields: string[];
-    backendSigned: boolean;
-    txHash: string | null;
-    createdAt: Date;
+    changedFields: string[]
+    backendSigned: boolean
+    txHash: string | null
+    createdAt: Date
   }>
 > {
-  return await db
-    .select({
-      changedFields: profileUpdateLogs.changedFields,
-      backendSigned: profileUpdateLogs.backendSigned,
-      txHash: profileUpdateLogs.txHash,
-      createdAt: profileUpdateLogs.createdAt,
-    })
-    .from(profileUpdateLogs)
-    .where(eq(profileUpdateLogs.userId, userId))
-    .orderBy(desc(profileUpdateLogs.createdAt))
-    .limit(limit);
+  return db.profileUpdateLog.findMany({
+    where: { userId },
+    select: {
+      changedFields: true,
+      backendSigned: true,
+      txHash: true,
+      createdAt: true,
+    },
+    orderBy: { createdAt: 'desc' },
+    take: limit,
+  })
 }

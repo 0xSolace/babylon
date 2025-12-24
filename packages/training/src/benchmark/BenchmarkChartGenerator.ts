@@ -5,36 +5,36 @@
  * Creates interactive HTML reports with embedded charts.
  */
 
-import { promises as fs } from 'fs';
-import * as path from 'path';
-import type { SimulationMetrics } from './SimulationEngine';
+import { promises as fs } from 'node:fs'
+import * as path from 'node:path'
+import type { SimulationMetrics } from './SimulationEngine'
 
 export interface ChartData {
-  labels: string[];
-  datasets: ChartDataset[];
+  labels: string[]
+  datasets: ChartDataset[]
 }
 
 export interface ChartDataset {
-  label: string;
-  data: number[];
-  backgroundColor?: string;
-  borderColor?: string;
+  label: string
+  data: number[]
+  backgroundColor?: string
+  borderColor?: string
 }
 
 export interface ModelComparisonData {
-  modelId: string;
-  modelName: string;
-  metrics: SimulationMetrics;
-  runAt: Date;
+  modelId: string
+  modelName: string
+  metrics: SimulationMetrics
+  runAt: Date
 }
 
 export interface BenchmarkHistoryEntry {
-  runId: string;
-  modelId: string;
-  modelName: string;
-  benchmarkId: string;
-  metrics: SimulationMetrics;
-  runAt: Date;
+  runId: string
+  modelId: string
+  modelName: string
+  benchmarkId: string
+  metrics: SimulationMetrics
+  runAt: Date
 }
 
 /**
@@ -49,11 +49,12 @@ const CHART_COLORS = {
   cyan: '#06b6d4',
   pink: '#ec4899',
   gray: '#6b7280',
-};
+}
 
 /**
  * Generates benchmark charts and reports
  */
+// biome-ignore lint/complexity/noStaticOnlyClass: Service pattern uses static methods for stateless operations
 export class BenchmarkChartGenerator {
   /**
    * Generate a comprehensive HTML report with charts
@@ -62,13 +63,13 @@ export class BenchmarkChartGenerator {
     results: ModelComparisonData[],
     outputPath: string,
     options: {
-      title?: string;
-      benchmarkId?: string;
-      includeHistory?: BenchmarkHistoryEntry[];
-    } = {}
+      title?: string
+      benchmarkId?: string
+      includeHistory?: BenchmarkHistoryEntry[]
+    } = {},
   ): Promise<string> {
-    const title = options.title ?? 'Benchmark Report';
-    const benchmarkId = options.benchmarkId ?? 'unknown';
+    const title = options.title ?? 'Benchmark Report'
+    const benchmarkId = options.benchmarkId ?? 'unknown'
 
     const html = `
 <!DOCTYPE html>
@@ -273,21 +274,21 @@ export class BenchmarkChartGenerator {
       <p class="subtitle">Benchmark: ${benchmarkId} | Models: ${results.length}</p>
     </header>
     
-    ${this.generateSummaryStats(results)}
+    ${BenchmarkChartGenerator.generateSummaryStats(results)}
     
     <div class="grid grid-2" style="margin-top: 1.5rem;">
-      ${this.generatePnLChartCard()}
-      ${this.generateAccuracyChartCard()}
+      ${BenchmarkChartGenerator.generatePnLChartCard()}
+      ${BenchmarkChartGenerator.generateAccuracyChartCard()}
     </div>
     
     <div class="grid grid-2" style="margin-top: 1.5rem;">
-      ${this.generatePerpMetricsChartCard()}
-      ${this.generateTimingChartCard()}
+      ${BenchmarkChartGenerator.generatePerpMetricsChartCard()}
+      ${BenchmarkChartGenerator.generateTimingChartCard()}
     </div>
     
-    ${this.generateComparisonTable(results)}
+    ${BenchmarkChartGenerator.generateComparisonTable(results)}
     
-    ${options.includeHistory ? this.generateHistorySection(options.includeHistory) : ''}
+    ${options.includeHistory ? BenchmarkChartGenerator.generateHistorySection(options.includeHistory) : ''}
     
     <p class="timestamp">Generated: ${new Date().toLocaleString()}</p>
   </div>
@@ -296,40 +297,40 @@ export class BenchmarkChartGenerator {
     Chart.defaults.color = '#94a3b8';
     Chart.defaults.borderColor = '#475569';
     
-    ${this.generateChartScripts(results)}
+    ${BenchmarkChartGenerator.generateChartScripts(results)}
   </script>
 </body>
-</html>`;
+</html>`
 
-    await fs.mkdir(path.dirname(outputPath), { recursive: true });
-    await fs.writeFile(outputPath, html, 'utf-8');
+    await fs.mkdir(path.dirname(outputPath), { recursive: true })
+    await fs.writeFile(outputPath, html, 'utf-8')
 
-    return outputPath;
+    return outputPath
   }
 
   /**
    * Generate summary stats section
    */
   private static generateSummaryStats(results: ModelComparisonData[]): string {
-    if (results.length === 0) return '';
+    if (results.length === 0) return ''
 
     // Find best model for each metric
     const bestPnl = results.reduce((best, curr) =>
-      curr.metrics.totalPnl > best.metrics.totalPnl ? curr : best
-    );
+      curr.metrics.totalPnl > best.metrics.totalPnl ? curr : best,
+    )
     const bestAccuracy = results.reduce((best, curr) =>
       curr.metrics.predictionMetrics.accuracy >
       best.metrics.predictionMetrics.accuracy
         ? curr
-        : best
-    );
+        : best,
+    )
     const avgPnl =
-      results.reduce((sum, r) => sum + r.metrics.totalPnl, 0) / results.length;
+      results.reduce((sum, r) => sum + r.metrics.totalPnl, 0) / results.length
     const avgAccuracy =
       results.reduce(
         (sum, r) => sum + r.metrics.predictionMetrics.accuracy,
-        0
-      ) / results.length;
+        0,
+      ) / results.length
 
     return `
     <div class="stats-grid">
@@ -357,7 +358,7 @@ export class BenchmarkChartGenerator {
         <div class="stat-value">${results.length}</div>
         <div class="stat-label">Models Tested</div>
       </div>
-    </div>`;
+    </div>`
   }
 
   /**
@@ -370,7 +371,7 @@ export class BenchmarkChartGenerator {
       <div class="chart-container">
         <canvas id="pnlChart"></canvas>
       </div>
-    </div>`;
+    </div>`
   }
 
   /**
@@ -383,7 +384,7 @@ export class BenchmarkChartGenerator {
       <div class="chart-container">
         <canvas id="accuracyChart"></canvas>
       </div>
-    </div>`;
+    </div>`
   }
 
   /**
@@ -396,7 +397,7 @@ export class BenchmarkChartGenerator {
       <div class="chart-container">
         <canvas id="perpChart"></canvas>
       </div>
-    </div>`;
+    </div>`
   }
 
   /**
@@ -409,31 +410,31 @@ export class BenchmarkChartGenerator {
       <div class="chart-container">
         <canvas id="timingChart"></canvas>
       </div>
-    </div>`;
+    </div>`
   }
 
   /**
    * Generate comparison table
    */
   private static generateComparisonTable(
-    results: ModelComparisonData[]
+    results: ModelComparisonData[],
   ): string {
     // Sort by P&L descending
     const sorted = [...results].sort(
-      (a, b) => b.metrics.totalPnl - a.metrics.totalPnl
-    );
-    const bestPnlModel = sorted[0]?.modelId;
+      (a, b) => b.metrics.totalPnl - a.metrics.totalPnl,
+    )
+    const bestPnlModel = sorted[0]?.modelId
 
     const rows = sorted
       .map((r) => {
-        const pnlClass = r.metrics.totalPnl >= 0 ? 'positive' : 'negative';
-        const isWinner = r.modelId === bestPnlModel;
+        const pnlClass = r.metrics.totalPnl >= 0 ? 'positive' : 'negative'
+        const isWinner = r.modelId === bestPnlModel
         const accuracyBadge =
           r.metrics.predictionMetrics.accuracy >= 0.6
             ? 'badge-success'
             : r.metrics.predictionMetrics.accuracy >= 0.4
               ? 'badge-warning'
-              : 'badge-danger';
+              : 'badge-danger'
 
         return `
       <tr>
@@ -454,9 +455,9 @@ export class BenchmarkChartGenerator {
         <td>${(r.metrics.perpMetrics.winRate * 100).toFixed(1)}%</td>
         <td>${r.metrics.optimalityScore.toFixed(1)}%</td>
         <td>${(r.metrics.timing.totalDuration / 1000).toFixed(1)}s</td>
-      </tr>`;
+      </tr>`
       })
-      .join('');
+      .join('')
 
     return `
     <div class="card" style="margin-top: 1.5rem;">
@@ -478,23 +479,23 @@ export class BenchmarkChartGenerator {
           ${rows}
         </tbody>
       </table>
-    </div>`;
+    </div>`
   }
 
   /**
    * Generate history section
    */
   private static generateHistorySection(
-    history: BenchmarkHistoryEntry[]
+    history: BenchmarkHistoryEntry[],
   ): string {
-    if (history.length === 0) return '';
+    if (history.length === 0) return ''
 
     // Group by model
-    const byModel = new Map<string, BenchmarkHistoryEntry[]>();
+    const byModel = new Map<string, BenchmarkHistoryEntry[]>()
     for (const entry of history) {
-      const entries = byModel.get(entry.modelId) ?? [];
-      entries.push(entry);
-      byModel.set(entry.modelId, entries);
+      const entries = byModel.get(entry.modelId) ?? []
+      entries.push(entry)
+      byModel.set(entry.modelId, entries)
     }
 
     return `
@@ -503,27 +504,27 @@ export class BenchmarkChartGenerator {
       <div class="chart-container" style="height: 400px;">
         <canvas id="historyChart"></canvas>
       </div>
-    </div>`;
+    </div>`
   }
 
   /**
    * Generate Chart.js scripts
    */
   private static generateChartScripts(results: ModelComparisonData[]): string {
-    const labels = results.map((r) => r.modelName);
-    const pnlData = results.map((r) => r.metrics.totalPnl);
+    const labels = results.map((r) => r.modelName)
+    const pnlData = results.map((r) => r.metrics.totalPnl)
     const accuracyData = results.map(
-      (r) => r.metrics.predictionMetrics.accuracy * 100
-    );
-    const winRateData = results.map((r) => r.metrics.perpMetrics.winRate * 100);
-    const optimalityData = results.map((r) => r.metrics.optimalityScore);
+      (r) => r.metrics.predictionMetrics.accuracy * 100,
+    )
+    const winRateData = results.map((r) => r.metrics.perpMetrics.winRate * 100)
+    const optimalityData = results.map((r) => r.metrics.optimalityScore)
     const durationData = results.map(
-      (r) => r.metrics.timing.totalDuration / 1000
-    );
+      (r) => r.metrics.timing.totalDuration / 1000,
+    )
 
     const pnlColors = pnlData.map((v) =>
-      v >= 0 ? CHART_COLORS.success : CHART_COLORS.danger
-    );
+      v >= 0 ? CHART_COLORS.success : CHART_COLORS.danger,
+    )
 
     return `
     // P&L Chart
@@ -651,7 +652,7 @@ export class BenchmarkChartGenerator {
           }
         }
       }
-    });`;
+    });`
   }
 
   /**
@@ -660,35 +661,34 @@ export class BenchmarkChartGenerator {
   static generateTerminalChart(
     title: string,
     data: Array<{ label: string; value: number }>,
-    options: { width?: number; valueFormat?: (v: number) => string } = {}
+    options: { width?: number; valueFormat?: (v: number) => string } = {},
   ): string {
-    const width = options.width ?? 40;
-    const formatValue = options.valueFormat ?? ((v: number) => v.toFixed(2));
+    const width = options.width ?? 40
+    const formatValue = options.valueFormat ?? ((v: number) => v.toFixed(2))
 
-    const maxValue = Math.max(...data.map((d) => Math.abs(d.value)));
-    const maxLabelLen = Math.max(...data.map((d) => d.label.length));
+    const maxValue = Math.max(...data.map((d) => Math.abs(d.value)))
+    const maxLabelLen = Math.max(...data.map((d) => d.label.length))
 
-    const lines: string[] = [];
-    lines.push(`\n  ${title}`);
-    lines.push('  ' + '─'.repeat(width + maxLabelLen + 20));
+    const lines: string[] = []
+    lines.push(`\n  ${title}`)
+    lines.push(`  ${'─'.repeat(width + maxLabelLen + 20)}`)
 
     for (const item of data) {
-      const normalizedValue =
-        maxValue > 0 ? Math.abs(item.value) / maxValue : 0;
-      const barLen = Math.round(normalizedValue * width);
-      const bar = item.value >= 0 ? '█'.repeat(barLen) : '░'.repeat(barLen);
-      const color = item.value >= 0 ? '\x1b[32m' : '\x1b[31m';
-      const reset = '\x1b[0m';
-      const paddedLabel = item.label.padEnd(maxLabelLen);
+      const normalizedValue = maxValue > 0 ? Math.abs(item.value) / maxValue : 0
+      const barLen = Math.round(normalizedValue * width)
+      const bar = item.value >= 0 ? '█'.repeat(barLen) : '░'.repeat(barLen)
+      const color = item.value >= 0 ? '\x1b[32m' : '\x1b[31m'
+      const reset = '\x1b[0m'
+      const paddedLabel = item.label.padEnd(maxLabelLen)
 
       lines.push(
-        `  ${paddedLabel} │${color}${bar}${reset} ${formatValue(item.value)}`
-      );
+        `  ${paddedLabel} │${color}${bar}${reset} ${formatValue(item.value)}`,
+      )
     }
 
-    lines.push('  ' + '─'.repeat(width + maxLabelLen + 20));
+    lines.push(`  ${'─'.repeat(width + maxLabelLen + 20)}`)
 
-    return lines.join('\n');
+    return lines.join('\n')
   }
 
   /**
@@ -696,53 +696,53 @@ export class BenchmarkChartGenerator {
    */
   static generateTerminalSummary(results: ModelComparisonData[]): string {
     const sorted = [...results].sort(
-      (a, b) => b.metrics.totalPnl - a.metrics.totalPnl
-    );
-    const winner = sorted[0];
+      (a, b) => b.metrics.totalPnl - a.metrics.totalPnl,
+    )
+    const winner = sorted[0]
 
-    const lines: string[] = [];
-    lines.push('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    lines.push('📊 BENCHMARK RESULTS');
-    lines.push('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    const lines: string[] = []
+    lines.push('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+    lines.push('📊 BENCHMARK RESULTS')
+    lines.push('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
 
     // P&L Chart
     lines.push(
-      this.generateTerminalChart(
+      BenchmarkChartGenerator.generateTerminalChart(
         '💰 Total P&L',
         sorted.map((r) => ({ label: r.modelName, value: r.metrics.totalPnl })),
-        { valueFormat: (v) => `$${v.toFixed(2)}` }
-      )
-    );
+        { valueFormat: (v) => `$${v.toFixed(2)}` },
+      ),
+    )
 
     // Accuracy Chart
     lines.push(
-      this.generateTerminalChart(
+      BenchmarkChartGenerator.generateTerminalChart(
         '🎯 Prediction Accuracy',
         sorted.map((r) => ({
           label: r.modelName,
           value: r.metrics.predictionMetrics.accuracy * 100,
         })),
-        { valueFormat: (v) => `${v.toFixed(1)}%` }
-      )
-    );
+        { valueFormat: (v) => `${v.toFixed(1)}%` },
+      ),
+    )
 
     // Winner
     if (winner) {
-      const loser = sorted[sorted.length - 1];
-      const pnlDelta = winner.metrics.totalPnl - (loser?.metrics.totalPnl ?? 0);
+      const loser = sorted[sorted.length - 1]
+      const pnlDelta = winner.metrics.totalPnl - (loser?.metrics.totalPnl ?? 0)
 
-      lines.push('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      lines.push(`🏆 WINNER: ${winner.modelName}`);
-      lines.push(`   P&L: $${winner.metrics.totalPnl.toFixed(2)}`);
+      lines.push('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━')
+      lines.push(`🏆 WINNER: ${winner.modelName}`)
+      lines.push(`   P&L: $${winner.metrics.totalPnl.toFixed(2)}`)
       lines.push(
-        `   Accuracy: ${(winner.metrics.predictionMetrics.accuracy * 100).toFixed(1)}%`
-      );
+        `   Accuracy: ${(winner.metrics.predictionMetrics.accuracy * 100).toFixed(1)}%`,
+      )
       if (results.length > 1 && loser) {
-        lines.push(`   Lead: $${pnlDelta.toFixed(2)} over ${loser.modelName}`);
+        lines.push(`   Lead: $${pnlDelta.toFixed(2)} over ${loser.modelName}`)
       }
-      lines.push('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
+      lines.push('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n')
     }
 
-    return lines.join('\n');
+    return lines.join('\n')
   }
 }

@@ -5,15 +5,15 @@
  * Eliminates duplicate boilerplate across autonomous services.
  */
 
-import { db, eq, users } from '@babylon/db';
-import { StaticDataRegistry } from '@babylon/engine';
+import { db, eq, users } from '@babylon/db'
+import { StaticDataRegistry } from '@babylon/engine'
 
 export interface AgentContext {
-  agentUserId: string;
-  displayName: string;
-  isNpc: boolean;
+  agentUserId: string
+  displayName: string
+  isNpc: boolean
   /** Lifetime P&L (0 for NPCs) */
-  lifetimePnL: number;
+  lifetimePnL: number
 }
 
 /**
@@ -27,11 +27,11 @@ export interface AgentContext {
  * @throws Error if agent not found and not an NPC
  */
 export async function getAgentContext(
-  agentUserId: string
+  agentUserId: string,
 ): Promise<AgentContext> {
   // Check if this is an NPC (has entry in StaticDataRegistry)
-  const npcActor = StaticDataRegistry.getActor(agentUserId);
-  const isNpc = !!npcActor;
+  const npcActor = StaticDataRegistry.getActor(agentUserId)
+  const isNpc = !!npcActor
 
   if (isNpc) {
     return {
@@ -39,7 +39,7 @@ export async function getAgentContext(
       displayName: npcActor.name,
       isNpc: true,
       lifetimePnL: 0, // NPCs don't track P&L
-    };
+    }
   }
 
   // USER_CONTROLLED: Get from User table
@@ -52,18 +52,24 @@ export async function getAgentContext(
     })
     .from(users)
     .where(eq(users.id, agentUserId))
-    .limit(1);
+    .limit(1)
 
   if (!agent?.isAgent) {
-    throw new Error(`Agent not found: ${agentUserId}`);
+    throw new Error(`Agent not found: ${agentUserId}`)
   }
+
+  // Convert displayName to string, handling possible null/undefined/object types from CQL
+  const displayName =
+    typeof agent.displayName === 'string' && agent.displayName
+      ? agent.displayName
+      : agentUserId
 
   return {
     agentUserId,
-    displayName: agent.displayName ?? agentUserId,
+    displayName,
     isNpc: false,
     lifetimePnL: Number(agent.lifetimePnL ?? 0),
-  };
+  }
 }
 
 /**
@@ -73,5 +79,5 @@ export async function getAgentContext(
  * @returns True if the user is an NPC in StaticDataRegistry
  */
 export function isNpcUser(userId: string): boolean {
-  return !!StaticDataRegistry.getActor(userId);
+  return !!StaticDataRegistry.getActor(userId)
 }

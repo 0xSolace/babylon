@@ -2,8 +2,8 @@
  * Trading-related validation schemas
  */
 
-import { z } from 'zod';
-import { JsonValueSchema } from '../../types/common';
+import { z } from 'zod'
+import { JsonValueSchema } from '../../types/common'
 import {
   DateTimeSchema,
   DecimalPercentageSchema,
@@ -12,7 +12,7 @@ import {
   SnowflakeIdSchema,
   TimeFrameSchema,
   UserIdSchema,
-} from './common';
+} from './common'
 
 /**
  * Create trade order schema
@@ -36,32 +36,32 @@ export const CreateTradeOrderSchema = z
     (data) => {
       // Validate price for limit orders
       if (data.orderType === 'LIMIT' || data.orderType === 'STOP_LIMIT') {
-        if (!data.price) return false;
+        if (!data.price) return false
       }
       // Validate stop price for stop orders
       if (data.orderType === 'STOP' || data.orderType === 'STOP_LIMIT') {
-        if (!data.stopPrice) return false;
+        if (!data.stopPrice) return false
       }
-      return true;
+      return true
     },
     {
       message:
         'Price required for limit orders, stop price required for stop orders',
-    }
+    },
   )
   .refine(
     (data) => {
       // Validate market identifiers
       if (data.marketType === 'prediction') {
-        return !!data.marketId;
+        return !!data.marketId
       }
-      return !!data.ticker;
+      return !!data.ticker
     },
     {
       message:
         'Ticker required for perp/spot, marketId required for predictions',
-    }
-  );
+    },
+  )
 
 /**
  * Update trade order schema (for modifying open orders)
@@ -71,14 +71,14 @@ export const UpdateTradeOrderSchema = z.object({
   price: z.number().positive().optional(),
   size: z.number().positive().optional(),
   stopPrice: z.number().positive().optional(),
-});
+})
 
 /**
  * Cancel trade order schema
  */
 export const CancelTradeOrderSchema = z.object({
   orderId: SnowflakeIdSchema,
-});
+})
 
 /**
  * Close position schema
@@ -91,7 +91,7 @@ export const ClosePositionSchema = z
   })
   .refine((data) => !data.percentage || !data.size, {
     message: 'Specify either percentage or size, not both',
-  });
+  })
 
 /**
  * Trade signal schema (for AI/algorithmic trading)
@@ -109,7 +109,7 @@ export const TradeSignalSchema = z.object({
   timeframe: TimeFrameSchema.optional(),
   reasoning: z.string().max(1000).optional(),
   metadata: z.record(z.string(), JsonValueSchema).optional(),
-});
+})
 
 /**
  * Market data query schema
@@ -122,7 +122,7 @@ export const MarketDataQuerySchema = z.object({
   startTime: DateTimeSchema.optional(),
   endTime: DateTimeSchema.optional(),
   limit: z.number().positive().max(1000).default(100),
-});
+})
 
 /**
  * Position query schema
@@ -135,7 +135,7 @@ export const PositionQuerySchema = z.object({
   marketId: z.string().optional(),
   status: z.enum(['OPEN', 'CLOSED', 'LIQUIDATED']).optional(),
   includeHistory: z.boolean().default(false),
-});
+})
 
 /**
  * Trade history query schema
@@ -149,7 +149,7 @@ export const TradeHistoryQuerySchema = z.object({
   endDate: DateTimeSchema.optional(),
   side: OrderSideSchema.optional(),
   includeMetadata: z.boolean().default(false),
-});
+})
 
 /**
  * Risk parameters schema
@@ -164,7 +164,7 @@ export const RiskParametersSchema = z.object({
   dailyLossLimit: z.number().positive().optional(),
   marginCallLevel: DecimalPercentageSchema.default(0.5), // 50%
   liquidationLevel: DecimalPercentageSchema.default(0.25), // 25%
-});
+})
 
 /**
  * Trade execution response schema
@@ -184,7 +184,7 @@ export const TradeExecutionResponseSchema = z.object({
   timestamp: DateTimeSchema,
   transactionHash: z.string().optional(),
   errorMessage: z.string().optional(),
-});
+})
 
 /**
  * Position response schema
@@ -209,7 +209,7 @@ export const PositionResponseSchema = z.object({
   openedAt: DateTimeSchema,
   closedAt: DateTimeSchema.nullable(),
   updatedAt: DateTimeSchema,
-});
+})
 
 /**
  * Order book schema
@@ -223,17 +223,17 @@ export const OrderBookSchema = z.object({
       price: z.number(),
       size: z.number(),
       orders: z.number().optional(),
-    })
+    }),
   ),
   asks: z.array(
     z.object({
       price: z.number(),
       size: z.number(),
       orders: z.number().optional(),
-    })
+    }),
   ),
   timestamp: DateTimeSchema,
-});
+})
 
 /**
  * Market statistics schema
@@ -254,7 +254,7 @@ export const MarketStatsSchema = z.object({
   markPrice: z.number().optional(),
   indexPrice: z.number().optional(),
   timestamp: DateTimeSchema,
-});
+})
 
 /**
  * Prediction market buy/sell schema
@@ -267,7 +267,7 @@ export const PredictionMarketTradeSchema = z.object({
     .number()
     .positive({ message: 'Amount must be positive' })
     .min(1, { message: 'Minimum order size is $1' }),
-});
+})
 
 /**
  * Prediction market sell schema (shares-based)
@@ -278,7 +278,7 @@ export const PredictionMarketSellSchema = z.object({
     .positive({ message: 'Shares must be positive' })
     .min(0.01, { message: 'Minimum shares to sell is 0.01' }),
   positionId: SnowflakeIdSchema.optional(),
-});
+})
 
 /**
  * Perpetual position open schema
@@ -296,24 +296,24 @@ export const PerpOpenPositionSchema = z.object({
     .max(100, { message: 'Maximum leverage is 100x' }),
   /** Max slippage tolerance (0-1, e.g., 0.01 = 1%). Rejects if spot/mark deviation exceeds this. */
   maxSlippage: z.number().min(0).max(1).optional(),
-});
+})
 
 // Type exports
-export type CreateTradeOrder = z.infer<typeof CreateTradeOrderSchema>;
-export type UpdateTradeOrder = z.infer<typeof UpdateTradeOrderSchema>;
-export type CancelTradeOrder = z.infer<typeof CancelTradeOrderSchema>;
-export type ClosePosition = z.infer<typeof ClosePositionSchema>;
-export type TradeSignal = z.infer<typeof TradeSignalSchema>;
-export type MarketDataQuery = z.infer<typeof MarketDataQuerySchema>;
-export type PositionQuery = z.infer<typeof PositionQuerySchema>;
-export type TradeHistoryQuery = z.infer<typeof TradeHistoryQuerySchema>;
-export type RiskParameters = z.infer<typeof RiskParametersSchema>;
+export type CreateTradeOrder = z.infer<typeof CreateTradeOrderSchema>
+export type UpdateTradeOrder = z.infer<typeof UpdateTradeOrderSchema>
+export type CancelTradeOrder = z.infer<typeof CancelTradeOrderSchema>
+export type ClosePosition = z.infer<typeof ClosePositionSchema>
+export type TradeSignal = z.infer<typeof TradeSignalSchema>
+export type MarketDataQuery = z.infer<typeof MarketDataQuerySchema>
+export type PositionQuery = z.infer<typeof PositionQuerySchema>
+export type TradeHistoryQuery = z.infer<typeof TradeHistoryQuerySchema>
+export type RiskParameters = z.infer<typeof RiskParametersSchema>
 export type TradeExecutionResponse = z.infer<
   typeof TradeExecutionResponseSchema
->;
-export type PositionResponse = z.infer<typeof PositionResponseSchema>;
-export type OrderBook = z.infer<typeof OrderBookSchema>;
-export type MarketStats = z.infer<typeof MarketStatsSchema>;
-export type PredictionMarketTrade = z.infer<typeof PredictionMarketTradeSchema>;
-export type PredictionMarketSell = z.infer<typeof PredictionMarketSellSchema>;
-export type PerpOpenPosition = z.infer<typeof PerpOpenPositionSchema>;
+>
+export type PositionResponse = z.infer<typeof PositionResponseSchema>
+export type OrderBook = z.infer<typeof OrderBookSchema>
+export type MarketStats = z.infer<typeof MarketStatsSchema>
+export type PredictionMarketTrade = z.infer<typeof PredictionMarketTradeSchema>
+export type PredictionMarketSell = z.infer<typeof PredictionMarketSellSchema>
+export type PerpOpenPosition = z.infer<typeof PerpOpenPositionSchema>

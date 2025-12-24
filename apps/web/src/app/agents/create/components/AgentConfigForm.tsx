@@ -1,28 +1,26 @@
-'use client';
-
-import { cn } from '@babylon/shared';
-import { Loader2, Sparkles } from 'lucide-react';
-import { memo } from 'react';
-import type { AgentFormData } from '../hooks/useAgentForm';
+import { cn } from '@babylon/shared'
+import { Loader2, Sparkles } from 'lucide-react'
+import { memo } from 'react'
+import type { AgentFormData } from '../hooks/useAgentForm'
 
 interface AgentConfigFormProps {
-  agentData: AgentFormData;
-  generatingField: string | null;
-  maxDeposit: number;
-  onFieldChange: (field: keyof AgentFormData, value: string | number) => void;
-  onRegenerate: (field: string) => void;
+  agentData: AgentFormData
+  generatingField: string | null
+  maxDeposit: number
+  onFieldChange: (field: keyof AgentFormData, value: string | number) => void
+  onRegenerate: (field: string) => void
 }
 
 interface FieldWithAIProps {
-  id: string;
-  label: string;
-  value: string;
-  placeholder: string;
-  rows?: number;
-  isGenerating: boolean;
-  onRegenerate: () => void;
-  onChange: (value: string) => void;
-  helpText?: string;
+  id: string
+  label: string
+  value: string
+  placeholder: string
+  rows?: number
+  isGenerating: boolean
+  onRegenerate: () => void
+  onChange: (value: string) => void
+  helpText?: string
 }
 
 const FieldWithAI = memo(function FieldWithAI({
@@ -49,7 +47,7 @@ const FieldWithAI = memo(function FieldWithAI({
           className={cn(
             'flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs transition-colors',
             'text-muted-foreground hover:bg-muted hover:text-foreground',
-            'disabled:cursor-not-allowed disabled:opacity-50'
+            'disabled:cursor-not-allowed disabled:opacity-50',
           )}
         >
           {isGenerating ? (
@@ -74,13 +72,13 @@ const FieldWithAI = memo(function FieldWithAI({
         className={cn(
           'w-full resize-none rounded-lg border border-border bg-muted px-4 py-3 font-mono text-sm',
           'focus:outline-none focus:ring-2 focus:ring-[#0066FF]',
-          isGenerating && 'animate-pulse opacity-70'
+          isGenerating && 'animate-pulse opacity-70',
         )}
       />
       {helpText && <p className="text-muted-foreground text-xs">{helpText}</p>}
     </div>
-  );
-});
+  )
+})
 
 export const AgentConfigForm = memo(function AgentConfigForm({
   agentData,
@@ -144,25 +142,25 @@ export const AgentConfigForm = memo(function AgentConfigForm({
           value={agentData.initialDeposit === 0 ? '' : agentData.initialDeposit}
           onChange={(e) => {
             // Allow free typing - accept empty or numeric values
-            const rawValue = e.target.value.replace(/[^0-9]/g, '');
+            const rawValue = e.target.value.replace(/[^0-9]/g, '')
             if (rawValue === '') {
-              onFieldChange('initialDeposit', 0);
+              onFieldChange('initialDeposit', 0)
             } else {
-              onFieldChange('initialDeposit', parseInt(rawValue, 10));
+              onFieldChange('initialDeposit', parseInt(rawValue, 10))
             }
           }}
           onBlur={() => {
             // On blur, clamp to valid range
-            const val = agentData.initialDeposit;
+            const val = agentData.initialDeposit
             if (val < 10) {
-              onFieldChange('initialDeposit', 10);
+              onFieldChange('initialDeposit', 10)
             } else if (val > maxDeposit) {
-              onFieldChange('initialDeposit', maxDeposit);
+              onFieldChange('initialDeposit', maxDeposit)
             }
           }}
           className={cn(
             'w-full rounded-lg border border-border bg-muted px-4 py-3 font-mono text-sm',
-            'focus:outline-none focus:ring-2 focus:ring-[#0066FF]'
+            'focus:outline-none focus:ring-2 focus:ring-[#0066FF]',
           )}
         />
         <p className="text-muted-foreground text-xs">
@@ -171,5 +169,5 @@ export const AgentConfigForm = memo(function AgentConfigForm({
         </p>
       </div>
     </div>
-  );
-});
+  )
+})

@@ -3,23 +3,25 @@
  * Generates A2A agent cards for specific agents
  */
 
-import type { AgentCard } from '@a2a-js/sdk';
-import { db } from '@babylon/db';
+import type { AgentCard } from '@a2a-js/sdk'
+import { db } from '@babylon/db'
 
-const BASE_URL = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:5007';
+const BABYLON_API_PORT = process.env.BABYLON_API_PORT ?? '5009'
+const BASE_URL =
+  process.env.PUBLIC_APP_URL || `http://localhost:${BABYLON_API_PORT}`
 
 /**
  * Common skills for agent cards
  * Shared between async and sync generation functions
  */
 const AGENT_CARD_SKILLS: Array<{
-  id: string;
-  name: string;
-  description: string;
-  tags: string[];
-  examples: string[];
-  inputModes: string[];
-  outputModes: string[];
+  id: string
+  name: string
+  description: string
+  tags: string[]
+  examples: string[]
+  inputModes: string[]
+  outputModes: string[]
 }> = [
   {
     id: 'social',
@@ -70,7 +72,7 @@ const AGENT_CARD_SKILLS: Array<{
     inputModes: ['text/plain'],
     outputModes: ['application/json'],
   },
-] as const;
+] as const
 
 /**
  * Create agent card object from agent data
@@ -80,7 +82,7 @@ function createAgentCardObject(
   agentId: string,
   agentName: string,
   agentDescription: string,
-  profileImageUrl: string | null
+  profileImageUrl: string | null,
 ): AgentCard {
   return {
     protocolVersion: '0.3.0',
@@ -119,7 +121,7 @@ function createAgentCardObject(
     skills: [...AGENT_CARD_SKILLS],
 
     supportsAuthenticatedExtendedCard: false,
-  };
+  }
 }
 
 /**
@@ -136,10 +138,10 @@ export async function generateAgentCard(agentId: string): Promise<AgentCard> {
       profileImageUrl: true,
       isAgent: true,
     },
-  });
+  })
 
   if (!user || !user.isAgent) {
-    throw new Error(`Agent ${agentId} not found`);
+    throw new Error(`Agent ${agentId} not found`)
   }
 
   // Get agent config
@@ -151,53 +153,53 @@ export async function generateAgentCard(agentId: string): Promise<AgentCard> {
       tradingStrategy: true,
       a2aEnabled: true,
     },
-  });
+  })
 
   if (!agentConfig?.a2aEnabled) {
-    throw new Error(`Agent ${agentId} does not have A2A enabled`);
+    throw new Error(`Agent ${agentId} does not have A2A enabled`)
   }
 
-  const displayName = user.displayName ? String(user.displayName) : null;
-  const bio = user.bio ? String(user.bio) : null;
+  const displayName = user.displayName ? String(user.displayName) : null
+  const bio = user.bio ? String(user.bio) : null
   const profileImageUrl = user.profileImageUrl
     ? String(user.profileImageUrl)
-    : null;
+    : null
   const systemPrompt = agentConfig.systemPrompt
     ? String(agentConfig.systemPrompt)
-    : null;
+    : null
 
-  const agentName = displayName || `Agent ${agentId.substring(0, 8)}`;
+  const agentName = displayName || `Agent ${agentId.substring(0, 8)}`
   const agentDescription =
-    bio || systemPrompt || 'Autonomous agent on Babylon platform';
+    bio || systemPrompt || 'Autonomous agent on Babylon platform'
 
   return createAgentCardObject(
     agentId,
     agentName,
     agentDescription,
-    profileImageUrl
-  );
+    profileImageUrl,
+  )
 }
 
 /**
  * Generate an agent card synchronously (for use in route handlers where agent is already loaded)
  */
 export function generateAgentCardSync(agent: {
-  id: string;
-  displayName: string | null;
-  bio: string | null;
-  profileImageUrl: string | null;
-  systemPrompt?: string | null;
-  personality?: string | null;
-  tradingStrategy?: string | null;
+  id: string
+  displayName: string | null
+  bio: string | null
+  profileImageUrl: string | null
+  systemPrompt?: string | null
+  personality?: string | null
+  tradingStrategy?: string | null
 }): AgentCard {
-  const agentName = agent.displayName || `Agent ${agent.id.substring(0, 8)}`;
+  const agentName = agent.displayName || `Agent ${agent.id.substring(0, 8)}`
   const agentDescription =
-    agent.bio || agent.systemPrompt || 'Autonomous agent on Babylon platform';
+    agent.bio || agent.systemPrompt || 'Autonomous agent on Babylon platform'
 
   return createAgentCardObject(
     agent.id,
     agentName,
     agentDescription,
-    agent.profileImageUrl
-  );
+    agent.profileImageUrl,
+  )
 }

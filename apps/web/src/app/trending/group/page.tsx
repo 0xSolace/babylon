@@ -1,85 +1,83 @@
-'use client';
-
-import { logger } from '@babylon/shared';
-import { useQuery } from '@tanstack/react-query';
-import { ArrowLeft } from 'lucide-react';
-import { useRouter, useSearchParams } from 'next/navigation';
-import { PostCard } from '@/components/posts/PostCard';
-import { PageContainer } from '@/components/shared/PageContainer';
+import { logger } from '@babylon/shared'
+import { useQuery } from '@tanstack/react-query'
+import { ArrowLeft } from 'lucide-react'
+import { PostCard } from '@/components/posts/PostCard'
+import { PageContainer } from '@/components/shared/PageContainer'
+import { useRouter, useSearchParams } from '@/lib/navigation'
 
 interface PostData {
-  id: string;
-  content: string;
-  authorId: string;
-  authorName: string;
-  authorUsername?: string | null;
-  authorProfileImageUrl?: string | null;
-  timestamp: string;
-  likeCount?: number;
-  commentCount?: number;
-  shareCount?: number;
-  type?: string;
-  isShared?: boolean;
-  articleTitle?: string | null;
-  byline?: string | null;
-  biasScore?: number | null;
-  category?: string | null;
+  id: string
+  content: string
+  authorId: string
+  authorName: string
+  authorUsername?: string | null
+  authorProfileImageUrl?: string | null
+  timestamp: string
+  likeCount?: number
+  commentCount?: number
+  shareCount?: number
+  type?: string
+  isShared?: boolean
+  articleTitle?: string | null
+  byline?: string | null
+  biasScore?: number | null
+  category?: string | null
 }
 
 interface TagInfo {
-  id: string;
-  displayName: string;
-  category: string | null;
+  id: string
+  displayName: string
+  category: string | null
 }
 
 interface TrendingGroupResponse {
-  success: boolean;
-  posts: PostData[];
-  tags: TagInfo[];
+  success: boolean
+  posts: PostData[]
+  tags: TagInfo[]
 }
 
 export default function GroupedTrendingPage() {
-  const searchParams = useSearchParams();
-  const router = useRouter();
-  const tagsParam = searchParams.get('tags') || '';
+  const searchParams = useSearchParams()
+  const router = useRouter()
+  const tagsParam = searchParams.get('tags') || ''
 
   const { data, isLoading: loading } = useQuery({
     queryKey: ['trending', 'group', tagsParam],
     queryFn: async (): Promise<{ posts: PostData[]; tags: TagInfo[] }> => {
       if (!tagsParam) {
-        return { posts: [], tags: [] };
+        return { posts: [], tags: [] }
       }
 
       const response = await fetch(
-        `/api/trending/group?tags=${tagsParam}&limit=50`
-      );
+        `/api/trending/group?tags=${tagsParam}&limit=50`,
+      )
 
       if (!response.ok) {
         logger.warn(
           'Failed to fetch grouped trending posts',
           { tagsParam },
-          'GroupedTrendingPage'
-        );
-        return { posts: [], tags: [] };
+          'GroupedTrendingPage',
+        )
+        return { posts: [], tags: [] }
       }
 
-      const result = (await response.json()) as TrendingGroupResponse;
+      const result = (await response.json()) as TrendingGroupResponse
 
       if (result.success) {
-        return { posts: result.posts || [], tags: result.tags || [] };
+        return { posts: result.posts || [], tags: result.tags || [] }
       }
 
-      return { posts: [], tags: [] };
+      return { posts: [], tags: [] }
     },
     enabled: !!tagsParam,
-  });
+  })
 
-  const posts = data?.posts ?? [];
-  const tags = data?.tags ?? [];
+  const posts = data?.posts ?? []
+  const tags = data?.tags ?? []
 
   const handleBack = () => {
-    router.back();
-  };
+    router.back()
+  }
 
   return (
     <PageContainer>
@@ -88,6 +86,7 @@ export default function GroupedTrendingPage() {
         <div className="sticky top-0 z-10 border-border border-b bg-background px-4 py-3">
           <div className="flex items-center gap-4">
             <button
+              type="button"
               onClick={handleBack}
               className="rounded-full p-2 transition-colors hover:bg-muted"
               aria-label="Go back"
@@ -140,5 +139,5 @@ export default function GroupedTrendingPage() {
         </div>
       </div>
     </PageContainer>
-  );
+  )
 }

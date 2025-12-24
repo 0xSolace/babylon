@@ -13,7 +13,7 @@ export {
   DecentralizedAgentRunner,
   type ExecutionReport,
   runAgentDaemon,
-} from './decentralized-agent-runner';
+} from './decentralized-agent-runner'
 
 export {
   type AgentStats,
@@ -22,4 +22,4 @@ export {
   ExecutionRegistryClient,
   type ExecutionReportParams,
   stringToBytes32,
-} from './execution-registry-client';
+} from './execution-registry-client'

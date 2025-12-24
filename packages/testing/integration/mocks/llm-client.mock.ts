@@ -4,10 +4,10 @@
  * Avoids hitting real APIs during tests which causes timeouts and flakes.
  * Mocks @babylon/engine and overrides only BabylonLLMClient.
  */
-import { mock } from 'bun:test';
+import { mock } from 'bun:test'
 
 mock.module('@babylon/engine', async () => {
-  const actualEngine = await import('@babylon/engine');
+  const actualEngine = await import('@babylon/engine')
 
   const createMockClient = () => ({
     getStats: () => ({ provider: 'mock', model: 'mock-model' }),
@@ -15,7 +15,7 @@ mock.module('@babylon/engine', async () => {
     generateJSON: async (
       _prompt: string,
       schema: { properties?: Record<string, unknown> } | undefined,
-      _options?: Record<string, unknown>
+      _options?: Record<string, unknown>,
     ) => {
       // Handle schema-based detection
       if (schema?.properties) {
@@ -23,7 +23,7 @@ mock.module('@babylon/engine', async () => {
           return {
             question: 'Will testing succeed?',
             resolutionCriteria: 'If tests pass',
-          };
+          }
         }
         if (schema.properties.npcId) {
           // Market decision mock
@@ -35,7 +35,7 @@ mock.module('@babylon/engine', async () => {
               action: 'hold',
               confidence: 0.5,
             },
-          ];
+          ]
         }
         if (schema.properties.title) {
           // Article mock
@@ -44,13 +44,13 @@ mock.module('@babylon/engine', async () => {
             summary: 'This is a mock article summary.',
             article:
               'This is a mock article body.\n\nSecond paragraph.\n\nThird paragraph.\n\nFourth paragraph.',
-          };
+          }
         }
         if (schema.properties.post) {
           // Post mock
           return {
             post: 'This is a mock post content.',
-          };
+          }
         }
       }
 
@@ -58,7 +58,7 @@ mock.module('@babylon/engine', async () => {
       // Check scenario generation first because "MAIN ACTORS:" contains "ACTORS:"
       const isScenarioGeneration =
         _prompt.includes('Create 3 dramatic, satirical scenarios') ||
-        (_prompt.includes('MAIN ACTORS:') && _prompt.includes('<scenarios>'));
+        (_prompt.includes('MAIN ACTORS:') && _prompt.includes('<scenarios>'))
 
       if (isScenarioGeneration) {
         return {
@@ -72,14 +72,14 @@ mock.module('@babylon/engine', async () => {
               involvedOrganizations: [],
             },
           ],
-        };
+        }
       }
 
       // Question generation
       const isQuestionGeneration =
         _prompt.includes('prediction market questions') ||
         _prompt.includes('COMPANIES:') ||
-        (_prompt.includes('ACTORS:') && !_prompt.includes('MAIN ACTORS:'));
+        (_prompt.includes('ACTORS:') && !_prompt.includes('MAIN ACTORS:'))
 
       if (isQuestionGeneration) {
         // Return format matches what XML parser produces (root element unwrapped)
@@ -98,13 +98,13 @@ mock.module('@babylon/engine', async () => {
               observableOutcome: 'Tests pass successfully',
             },
           ],
-        };
+        }
       }
 
-      return {};
+      return {}
     },
     complete: async () => 'Mock completion response',
-  });
+  })
 
   return {
     ...actualEngine,
@@ -114,5 +114,5 @@ mock.module('@babylon/engine', async () => {
       forClaude: createMockClient,
       forOpenAI: createMockClient,
     },
-  };
-});
+  }
+})

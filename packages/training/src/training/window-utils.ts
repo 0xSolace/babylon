@@ -11,20 +11,20 @@
  * Parsed window ID components
  */
 export interface ParsedWindowId {
-  year: number;
-  month: number;
-  day: number;
-  hour: number;
-  date: Date;
+  year: number
+  month: number
+  day: number
+  hour: number
+  date: Date
 }
 
 /**
  * Window range with start and end timestamps
  */
 export interface WindowRange {
-  windowId: string;
-  start: Date;
-  end: Date;
+  windowId: string
+  start: Date
+  end: Date
 }
 
 /**
@@ -33,7 +33,7 @@ export interface WindowRange {
  * @returns Window ID for the current hour (e.g., "2024-01-15T14:00")
  */
 export function getCurrentWindowId(): string {
-  return getWindowIdForTimestamp(Date.now());
+  return getWindowIdForTimestamp(Date.now())
 }
 
 /**
@@ -43,8 +43,8 @@ export function getCurrentWindowId(): string {
  * @returns Window ID for the specified hour
  */
 export function getPreviousWindowId(hoursAgo = 1): string {
-  const timestamp = Date.now() - hoursAgo * 60 * 60 * 1000;
-  return getWindowIdForTimestamp(timestamp);
+  const timestamp = Date.now() - hoursAgo * 60 * 60 * 1000
+  return getWindowIdForTimestamp(timestamp)
 }
 
 /**
@@ -54,13 +54,13 @@ export function getPreviousWindowId(hoursAgo = 1): string {
  * @returns Window ID (format: YYYY-MM-DDTHH:00)
  */
 export function getWindowIdForTimestamp(timestamp: number): string {
-  const date = new Date(timestamp);
-  const year = date.getUTCFullYear();
-  const month = String(date.getUTCMonth() + 1).padStart(2, '0');
-  const day = String(date.getUTCDate()).padStart(2, '0');
-  const hour = String(date.getUTCHours()).padStart(2, '0');
+  const date = new Date(timestamp)
+  const year = date.getUTCFullYear()
+  const month = String(date.getUTCMonth() + 1).padStart(2, '0')
+  const day = String(date.getUTCDate()).padStart(2, '0')
+  const hour = String(date.getUTCHours()).padStart(2, '0')
 
-  return `${year}-${month}-${day}T${hour}:00`;
+  return `${year}-${month}-${day}T${hour}:00`
 }
 
 /**
@@ -70,15 +70,15 @@ export function getWindowIdForTimestamp(timestamp: number): string {
  * @returns Parsed components
  */
 export function parseWindowId(windowId: string): ParsedWindowId {
-  const match = windowId.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):00$/);
-  if (!match) {
-    throw new Error(`Invalid window ID format: ${windowId}`);
+  const match = windowId.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):00$/)
+  if (!match || !match[1] || !match[2] || !match[3] || !match[4]) {
+    throw new Error(`Invalid window ID format: ${windowId}`)
   }
 
-  const year = parseInt(match[1]!, 10);
-  const month = parseInt(match[2]!, 10);
-  const day = parseInt(match[3]!, 10);
-  const hour = parseInt(match[4]!, 10);
+  const year = parseInt(match[1], 10)
+  const month = parseInt(match[2], 10)
+  const day = parseInt(match[3], 10)
+  const hour = parseInt(match[4], 10)
 
   return {
     year,
@@ -86,7 +86,7 @@ export function parseWindowId(windowId: string): ParsedWindowId {
     day,
     hour,
     date: new Date(Date.UTC(year, month - 1, day, hour, 0, 0, 0)),
-  };
+  }
 }
 
 /**
@@ -96,11 +96,11 @@ export function parseWindowId(windowId: string): ParsedWindowId {
  * @returns Start and end times for the window
  */
 export function getWindowRange(windowId: string): WindowRange {
-  const parsed = parseWindowId(windowId);
-  const start = parsed.date;
-  const end = new Date(start.getTime() + 60 * 60 * 1000); // 1 hour later
+  const parsed = parseWindowId(windowId)
+  const start = parsed.date
+  const end = new Date(start.getTime() + 60 * 60 * 1000) // 1 hour later
 
-  return { windowId, start, end };
+  return { windowId, start, end }
 }
 
 /**
@@ -112,10 +112,10 @@ export function getWindowRange(windowId: string): WindowRange {
  */
 export function isTimestampInWindow(
   timestamp: number,
-  windowId: string
+  windowId: string,
 ): boolean {
-  const range = getWindowRange(windowId);
-  return timestamp >= range.start.getTime() && timestamp < range.end.getTime();
+  const range = getWindowRange(windowId)
+  return timestamp >= range.start.getTime() && timestamp < range.end.getTime()
 }
 
 /**
@@ -125,8 +125,8 @@ export function isTimestampInWindow(
  * @returns True if the window has ended
  */
 export function isWindowComplete(windowId: string): boolean {
-  const range = getWindowRange(windowId);
-  return Date.now() >= range.end.getTime();
+  const range = getWindowRange(windowId)
+  return Date.now() >= range.end.getTime()
 }
 
 /**
@@ -138,15 +138,15 @@ export function isWindowComplete(windowId: string): boolean {
  */
 export function generateWindowIds(
   count: number,
-  startingFrom?: number
+  startingFrom?: number,
 ): string[] {
-  const windows: string[] = [];
-  const baseTime = startingFrom ?? Date.now();
+  const windows: string[] = []
+  const baseTime = startingFrom ?? Date.now()
 
   for (let i = 0; i < count; i++) {
-    const timestamp = baseTime - i * 60 * 60 * 1000;
-    windows.push(getWindowIdForTimestamp(timestamp));
+    const timestamp = baseTime - i * 60 * 60 * 1000
+    windows.push(getWindowIdForTimestamp(timestamp))
   }
 
-  return windows;
+  return windows
 }

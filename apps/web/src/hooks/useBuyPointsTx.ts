@@ -1,16 +1,15 @@
-import { CHAIN } from '@babylon/shared';
-import { useCallback } from 'react';
-import type { Address } from 'viem';
-import { useSmartWallet } from '@/hooks/useSmartWallet';
+import { useCallback } from 'react'
+import type { Address } from 'viem'
+import { useSmartWallet } from '@/hooks/useSmartWallet'
 
 /**
  * Input for sending a points payment transaction.
  */
 interface PointsPaymentInput {
   /** The recipient address */
-  to: Address;
+  to: Address
   /** The amount to send in wei (can be bigint, string, or number) */
-  amountWei: bigint | string | number;
+  amountWei: bigint | string | number
 }
 
 /**
@@ -37,21 +36,20 @@ interface PointsPaymentInput {
  * ```
  */
 export function useBuyPointsTx() {
-  const { sendSmartWalletTransaction } = useSmartWallet();
+  const { sendSmartWalletTransaction } = useSmartWallet()
 
   const sendPointsPayment = useCallback(
     async ({ to, amountWei }: PointsPaymentInput) => {
       const normalizedValue =
-        typeof amountWei === 'bigint' ? amountWei : BigInt(amountWei);
+        typeof amountWei === 'bigint' ? amountWei : BigInt(amountWei)
 
       return await sendSmartWalletTransaction({
         to,
         value: normalizedValue,
-        chain: CHAIN,
-      });
+      })
     },
-    [sendSmartWalletTransaction]
-  );
+    [sendSmartWalletTransaction],
+  )
 
-  return { sendPointsPayment };
+  return { sendPointsPayment }
 }

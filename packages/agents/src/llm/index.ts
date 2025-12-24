@@ -22,10 +22,7 @@
  */
 
 // Agent LLM (routes through Jeju Compute)
-export * from './agent-llm';
-
-// Legacy compatibility exports (callGroqDirect -> callJejuDirect)
-export { callGroqDirect, callJejuDirect } from './agent-llm';
+export * from './agent-llm'
 
 // Jeju inference marketplace (decentralized LLM routing)
 export {
@@ -36,10 +33,10 @@ export {
   type InferenceResponse,
   JejuInference,
   type JejuInferenceConfig,
-} from './jeju-inference';
+} from './jeju-inference'
 
 // Jeju provider (alternative interface)
-export * from './jeju-provider';
+export * from './jeju-provider'
 
 // Ollama provider (for local development with self-hosted models)
-export * from './ollama-provider';
+export * from './ollama-provider'

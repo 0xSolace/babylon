@@ -1,0 +1,44 @@
+{
+  "name": "@babylonai/plugin-babylon",
+  "description": "ElizaOS plugin for autonomous AI agents to participate in Babylon prediction markets",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "dist/index.js",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "packageType": "plugin",
+  "platform": "node",
+  "license": "MIT",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "bun run build.ts",
+    "test": "bun test src/__tests__",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@babylon/agents": "workspace:*",
+    "@elizaos/core": "^1.6.3",
+    "zod": "4.2.1"
+  },
+  "devDependencies": {
+    "@elizaos/cli": "workspace:*",
+    "@types/node": "^24.9.1",
+    "dotenv": "16.4.5",
+    "prettier": "3.5.3",
+    "typescript": "5.9.3"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

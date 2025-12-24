@@ -1,8 +1,6 @@
-'use client';
-
-import { useJejuAuth } from '@babylon/auth/client';
-import { cn } from '@babylon/shared';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useJejuAuth } from '@babylon/auth'
+import { cn } from '@babylon/shared'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Crown,
   Loader2,
@@ -14,52 +12,52 @@ import {
   UserMinus,
   UserPlus,
   X,
-} from 'lucide-react';
-import { useEffect, useState } from 'react';
-import { Avatar } from '@/components/shared/Avatar';
-import { useAuthStore } from '@/stores/authStore';
+} from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Avatar } from '@/components/shared/Avatar'
+import { useAuthStore } from '@/stores/authStore'
 
 /**
  * Member structure for group management modal.
  */
 interface Member {
-  id: string;
-  displayName: string | null;
-  username: string | null;
-  profileImageUrl: string | null;
-  isAdmin: boolean;
-  joinedAt: Date | string;
+  id: string
+  displayName: string | null
+  username: string | null
+  profileImageUrl: string | null
+  isAdmin: boolean
+  joinedAt: Date | string
 }
 
 /**
  * Group details structure for group management modal.
  */
 interface GroupDetails {
-  id: string;
-  name: string;
-  description: string | null;
-  members: Member[];
-  isAdmin: boolean;
-  isCreator: boolean;
-  createdById: string;
+  id: string
+  name: string
+  description: string | null
+  members: Member[]
+  isAdmin: boolean
+  isCreator: boolean
+  createdById: string
 }
 
 interface GroupDetailsResponse {
-  group: GroupDetails;
+  group: GroupDetails
 }
 
 /**
  * User structure for group management modal.
  */
 interface User {
-  id: string;
-  displayName: string | null;
-  username: string | null;
-  profileImageUrl: string | null;
+  id: string
+  displayName: string | null
+  username: string | null
+  profileImageUrl: string | null
 }
 
 interface SearchUsersResponse {
-  users: User[];
+  users: User[]
 }
 
 /**
@@ -97,10 +95,10 @@ interface SearchUsersResponse {
  * ```
  */
 interface GroupManagementModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  groupId: string | null;
-  onGroupUpdated?: () => void;
+  isOpen: boolean
+  onClose: () => void
+  groupId: string | null
+  onGroupUpdated?: () => void
 }
 
 export function GroupManagementModal({
@@ -109,25 +107,25 @@ export function GroupManagementModal({
   groupId,
   onGroupUpdated,
 }: GroupManagementModalProps) {
-  const { getAccessToken } = useJejuAuth();
-  const { user } = useAuthStore();
-  const queryClient = useQueryClient();
+  const { getAccessToken } = useJejuAuth()
+  const { user } = useAuthStore()
+  const queryClient = useQueryClient()
 
   // Add member state
-  const [showAddMember, setShowAddMember] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState<User[]>([]);
-  const [searching, setSearching] = useState(false);
+  const [showAddMember, setShowAddMember] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchResults, setSearchResults] = useState<User[]>([])
+  const [searching, setSearching] = useState(false)
 
   // Confirm dialogs
   const [confirmAction, setConfirmAction] = useState<{
-    type: 'remove' | 'promote' | 'demote' | 'delete' | 'leave';
-    userId?: string;
-    userName?: string;
-  } | null>(null);
+    type: 'remove' | 'promote' | 'demote' | 'delete' | 'leave'
+    userId?: string
+    userName?: string
+  } | null>(null)
 
   // Action loading state (for specific member actions)
-  const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
+  const [actionLoadingId, setActionLoadingId] = useState<string | null>(null)
 
   // Load group details
   const {
@@ -137,70 +135,70 @@ export function GroupManagementModal({
   } = useQuery({
     queryKey: ['group-management', groupId],
     queryFn: async (): Promise<GroupDetails> => {
-      const token = await getAccessToken();
+      const token = await getAccessToken()
       const response = await fetch(`/api/groups/${groupId}`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
-      });
+      })
 
       if (!response.ok) {
-        throw new Error('Failed to load group details');
+        throw new Error('Failed to load group details')
       }
 
-      const data: GroupDetailsResponse = await response.json();
-      return data.group;
+      const data: GroupDetailsResponse = await response.json()
+      return data.group
     },
     enabled: isOpen && !!groupId,
-  });
+  })
 
   // Reset state when modal closes
   useEffect(() => {
     if (!isOpen) {
-      setShowAddMember(false);
-      setSearchQuery('');
-      setSearchResults([]);
-      setConfirmAction(null);
+      setShowAddMember(false)
+      setSearchQuery('')
+      setSearchResults([])
+      setConfirmAction(null)
     }
-  }, [isOpen]);
+  }, [isOpen])
 
   // Search for users to add with debounce
   useEffect(() => {
     if (!searchQuery.trim() || searchQuery.length < 2) {
-      setSearchResults([]);
-      return;
+      setSearchResults([])
+      return
     }
 
     const searchUsers = async () => {
-      setSearching(true);
-      const token = await getAccessToken();
+      setSearching(true)
+      const token = await getAccessToken()
       const response = await fetch(
         `/api/users/search?q=${encodeURIComponent(searchQuery)}`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
           },
-        }
-      );
+        },
+      )
 
       if (response.ok) {
-        const data: SearchUsersResponse = await response.json();
+        const data: SearchUsersResponse = await response.json()
         // Filter out existing members
-        const existingMemberIds = groupDetails?.members.map((m) => m.id) || [];
+        const existingMemberIds = groupDetails?.members.map((m) => m.id) || []
         setSearchResults(
-          (data.users || []).filter((u) => !existingMemberIds.includes(u.id))
-        );
+          (data.users || []).filter((u) => !existingMemberIds.includes(u.id)),
+        )
       }
-      setSearching(false);
-    };
+      setSearching(false)
+    }
 
-    const debounce = setTimeout(searchUsers, 300);
-    return () => clearTimeout(debounce);
-  }, [searchQuery, getAccessToken, groupDetails]);
+    const debounce = setTimeout(searchUsers, 300)
+    return () => clearTimeout(debounce)
+  }, [searchQuery, getAccessToken, groupDetails])
 
   const addMemberMutation = useMutation({
     mutationFn: async (userId: string) => {
-      const token = await getAccessToken();
+      const token = await getAccessToken()
       const response = await fetch(`/api/groups/${groupId}/members`, {
         method: 'POST',
         headers: {
@@ -208,28 +206,28 @@ export function GroupManagementModal({
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({ userId }),
-      });
+      })
 
       if (!response.ok) {
-        throw new Error('Failed to add member');
+        throw new Error('Failed to add member')
       }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({
         queryKey: ['group-management', groupId],
-      });
-      setSearchQuery('');
-      setSearchResults([]);
-      onGroupUpdated?.();
+      })
+      setSearchQuery('')
+      setSearchResults([])
+      onGroupUpdated?.()
     },
     onSettled: () => {
-      setActionLoadingId(null);
+      setActionLoadingId(null)
     },
-  });
+  })
 
   const removeMemberMutation = useMutation({
     mutationFn: async (userId: string) => {
-      const token = await getAccessToken();
+      const token = await getAccessToken()
       const response = await fetch(
         `/api/groups/${groupId}/members?userId=${userId}`,
         {
@@ -237,28 +235,28 @@ export function GroupManagementModal({
           headers: {
             Authorization: `Bearer ${token}`,
           },
-        }
-      );
+        },
+      )
 
       if (!response.ok) {
-        throw new Error('Failed to remove member');
+        throw new Error('Failed to remove member')
       }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({
         queryKey: ['group-management', groupId],
-      });
-      onGroupUpdated?.();
+      })
+      onGroupUpdated?.()
     },
     onSettled: () => {
-      setActionLoadingId(null);
-      setConfirmAction(null);
+      setActionLoadingId(null)
+      setConfirmAction(null)
     },
-  });
+  })
 
   const promoteToAdminMutation = useMutation({
     mutationFn: async (userId: string) => {
-      const token = await getAccessToken();
+      const token = await getAccessToken()
       const response = await fetch(`/api/groups/${groupId}/admins`, {
         method: 'POST',
         headers: {
@@ -266,27 +264,27 @@ export function GroupManagementModal({
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({ userId }),
-      });
+      })
 
       if (!response.ok) {
-        throw new Error('Failed to promote member');
+        throw new Error('Failed to promote member')
       }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({
         queryKey: ['group-management', groupId],
-      });
-      onGroupUpdated?.();
+      })
+      onGroupUpdated?.()
     },
     onSettled: () => {
-      setActionLoadingId(null);
-      setConfirmAction(null);
+      setActionLoadingId(null)
+      setConfirmAction(null)
     },
-  });
+  })
 
   const demoteAdminMutation = useMutation({
     mutationFn: async (userId: string) => {
-      const token = await getAccessToken();
+      const token = await getAccessToken()
       const response = await fetch(
         `/api/groups/${groupId}/admins?userId=${userId}`,
         {
@@ -294,54 +292,54 @@ export function GroupManagementModal({
           headers: {
             Authorization: `Bearer ${token}`,
           },
-        }
-      );
+        },
+      )
 
       if (!response.ok) {
-        throw new Error('Failed to remove admin status');
+        throw new Error('Failed to remove admin status')
       }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({
         queryKey: ['group-management', groupId],
-      });
-      onGroupUpdated?.();
+      })
+      onGroupUpdated?.()
     },
     onSettled: () => {
-      setActionLoadingId(null);
-      setConfirmAction(null);
+      setActionLoadingId(null)
+      setConfirmAction(null)
     },
-  });
+  })
 
   const deleteGroupMutation = useMutation({
     mutationFn: async () => {
-      const token = await getAccessToken();
+      const token = await getAccessToken()
       const response = await fetch(`/api/groups/${groupId}`, {
         method: 'DELETE',
         headers: {
           Authorization: `Bearer ${token}`,
         },
-      });
+      })
 
       if (!response.ok) {
-        throw new Error('Failed to delete group');
+        throw new Error('Failed to delete group')
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['user-groups'] });
-      onGroupUpdated?.();
-      onClose();
+      queryClient.invalidateQueries({ queryKey: ['user-groups'] })
+      onGroupUpdated?.()
+      onClose()
     },
     onSettled: () => {
-      setActionLoadingId(null);
-      setConfirmAction(null);
+      setActionLoadingId(null)
+      setConfirmAction(null)
     },
-  });
+  })
 
   const leaveGroupMutation = useMutation({
     mutationFn: async () => {
-      if (!user) throw new Error('User not authenticated');
-      const token = await getAccessToken();
+      if (!user) throw new Error('User not authenticated')
+      const token = await getAccessToken()
       const response = await fetch(
         `/api/groups/${groupId}/members?userId=${user.id}`,
         {
@@ -349,61 +347,61 @@ export function GroupManagementModal({
           headers: {
             Authorization: `Bearer ${token}`,
           },
-        }
-      );
+        },
+      )
 
       if (!response.ok) {
-        throw new Error('Failed to leave group');
+        throw new Error('Failed to leave group')
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['user-groups'] });
-      onGroupUpdated?.();
-      onClose();
+      queryClient.invalidateQueries({ queryKey: ['user-groups'] })
+      onGroupUpdated?.()
+      onClose()
     },
     onSettled: () => {
-      setActionLoadingId(null);
-      setConfirmAction(null);
+      setActionLoadingId(null)
+      setConfirmAction(null)
     },
-  });
+  })
 
   const handleAddMember = (userId: string) => {
-    setActionLoadingId(userId);
-    addMemberMutation.mutate(userId);
-  };
+    setActionLoadingId(userId)
+    addMemberMutation.mutate(userId)
+  }
 
   const handleConfirmAction = () => {
-    if (!confirmAction) return;
+    if (!confirmAction) return
 
     switch (confirmAction.type) {
       case 'remove':
         if (confirmAction.userId) {
-          setActionLoadingId(confirmAction.userId);
-          removeMemberMutation.mutate(confirmAction.userId);
+          setActionLoadingId(confirmAction.userId)
+          removeMemberMutation.mutate(confirmAction.userId)
         }
-        break;
+        break
       case 'promote':
         if (confirmAction.userId) {
-          setActionLoadingId(confirmAction.userId);
-          promoteToAdminMutation.mutate(confirmAction.userId);
+          setActionLoadingId(confirmAction.userId)
+          promoteToAdminMutation.mutate(confirmAction.userId)
         }
-        break;
+        break
       case 'demote':
         if (confirmAction.userId) {
-          setActionLoadingId(confirmAction.userId);
-          demoteAdminMutation.mutate(confirmAction.userId);
+          setActionLoadingId(confirmAction.userId)
+          demoteAdminMutation.mutate(confirmAction.userId)
         }
-        break;
+        break
       case 'delete':
-        setActionLoadingId('delete');
-        deleteGroupMutation.mutate();
-        break;
+        setActionLoadingId('delete')
+        deleteGroupMutation.mutate()
+        break
       case 'leave':
-        setActionLoadingId('leave');
-        leaveGroupMutation.mutate();
-        break;
+        setActionLoadingId('leave')
+        leaveGroupMutation.mutate()
+        break
     }
-  };
+  }
 
   const isAnyMutationPending =
     addMemberMutation.isPending ||
@@ -411,14 +409,14 @@ export function GroupManagementModal({
     promoteToAdminMutation.isPending ||
     demoteAdminMutation.isPending ||
     deleteGroupMutation.isPending ||
-    leaveGroupMutation.isPending;
+    leaveGroupMutation.isPending
 
-  if (!isOpen || !groupId) return null;
+  if (!isOpen || !groupId) return null
 
   const handleClose = () => {
-    if (isAnyMutationPending) return; // Prevent closing during actions
-    onClose();
-  };
+    if (isAnyMutationPending) return // Prevent closing during actions
+    onClose()
+  }
 
   return (
     <>
@@ -426,13 +424,23 @@ export function GroupManagementModal({
         className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm"
         onClick={(e) => {
           if (e.target === e.currentTarget) {
-            handleClose();
+            handleClose()
           }
         }}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') {
+            handleClose()
+          }
+        }}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Group management"
       >
         <div
           className="flex max-h-[85vh] w-full max-w-lg flex-col rounded-xl border border-border bg-background shadow-2xl"
           onClick={(e) => e.stopPropagation()}
+          onKeyDown={(e) => e.stopPropagation()}
+          role="dialog"
         >
           {/* Header */}
           <div className="flex shrink-0 items-center justify-between border-border border-b p-6">
@@ -443,6 +451,7 @@ export function GroupManagementModal({
               </h2>
             </div>
             <button
+              type="button"
               onClick={handleClose}
               className="text-muted-foreground transition-colors hover:text-foreground"
               disabled={isAnyMutationPending}
@@ -470,6 +479,7 @@ export function GroupManagementModal({
                   {/* Leave Group (everyone can do this) */}
                   {!groupDetails.isCreator && (
                     <button
+                      type="button"
                       onClick={() => setConfirmAction({ type: 'leave' })}
                       disabled={isAnyMutationPending}
                       className="rounded-lg border border-yellow-600 px-4 py-2 font-medium text-sm text-yellow-600 transition-colors hover:bg-yellow-600/10 disabled:opacity-50"
@@ -482,6 +492,7 @@ export function GroupManagementModal({
                   {/* Delete Group (admins only) */}
                   {groupDetails.isAdmin && (
                     <button
+                      type="button"
                       onClick={() => setConfirmAction({ type: 'delete' })}
                       disabled={isAnyMutationPending}
                       className="rounded-lg border border-red-500 px-4 py-2 font-medium text-red-500 text-sm transition-colors hover:bg-red-500/10 disabled:opacity-50"
@@ -495,11 +506,12 @@ export function GroupManagementModal({
                 {/* Members Section */}
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
-                    <label className="block font-semibold text-sm">
+                    <div className="block font-semibold text-sm">
                       Members ({groupDetails.members.length})
-                    </label>
+                    </div>
                     {groupDetails.isAdmin && (
                       <button
+                        type="button"
                         onClick={() => setShowAddMember(!showAddMember)}
                         className="rounded-lg border border-border bg-sidebar px-3 py-1.5 font-medium text-sm transition-colors hover:bg-accent"
                       >
@@ -539,6 +551,7 @@ export function GroupManagementModal({
                         <div className="max-h-[150px] overflow-hidden overflow-y-auto rounded-lg border border-border bg-background">
                           {searchResults.map((searchUser) => (
                             <button
+                              type="button"
                               key={searchUser.id}
                               onClick={() => handleAddMember(searchUser.id)}
                               disabled={actionLoadingId === searchUser.id}
@@ -575,7 +588,7 @@ export function GroupManagementModal({
                   {/* Members */}
                   <div className="space-y-2">
                     {groupDetails.members.map((member) => {
-                      const isCreator = member.id === groupDetails.createdById;
+                      const isCreator = member.id === groupDetails.createdById
                       return (
                         <div
                           key={member.id}
@@ -612,6 +625,7 @@ export function GroupManagementModal({
                             <div className="flex items-center gap-1">
                               {!member.isAdmin ? (
                                 <button
+                                  type="button"
                                   onClick={() =>
                                     setConfirmAction({
                                       type: 'promote',
@@ -630,6 +644,7 @@ export function GroupManagementModal({
                                 </button>
                               ) : (
                                 <button
+                                  type="button"
                                   onClick={() =>
                                     setConfirmAction({
                                       type: 'demote',
@@ -648,6 +663,7 @@ export function GroupManagementModal({
                                 </button>
                               )}
                               <button
+                                type="button"
                                 onClick={() =>
                                   setConfirmAction({
                                     type: 'remove',
@@ -667,7 +683,7 @@ export function GroupManagementModal({
                             </div>
                           )}
                         </div>
-                      );
+                      )
                     })}
                   </div>
                 </div>
@@ -683,13 +699,23 @@ export function GroupManagementModal({
           className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
           onClick={(e) => {
             if (e.target === e.currentTarget && !isAnyMutationPending) {
-              setConfirmAction(null);
+              setConfirmAction(null)
             }
           }}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape' && !isAnyMutationPending) {
+              setConfirmAction(null)
+            }
+          }}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Confirm action"
         >
           <div
             className="w-full max-w-sm rounded-xl border border-border bg-background shadow-2xl"
             onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => e.stopPropagation()}
+            role="dialog"
           >
             <div className="space-y-4 p-6">
               <h3 className="font-semibold text-lg">
@@ -714,6 +740,7 @@ export function GroupManagementModal({
 
               <div className="flex gap-3">
                 <button
+                  type="button"
                   onClick={() => setConfirmAction(null)}
                   disabled={isAnyMutationPending}
                   className="flex-1 rounded-lg border border-border bg-sidebar px-4 py-2.5 transition-colors hover:bg-accent disabled:opacity-50"
@@ -721,6 +748,7 @@ export function GroupManagementModal({
                   Cancel
                 </button>
                 <button
+                  type="button"
                   onClick={handleConfirmAction}
                   disabled={isAnyMutationPending}
                   className={cn(
@@ -730,7 +758,7 @@ export function GroupManagementModal({
                       ? 'bg-red-500 text-primary-foreground hover:bg-red-600'
                       : confirmAction.type === 'leave'
                         ? 'bg-yellow-500 text-primary-foreground hover:bg-yellow-600'
-                        : 'bg-primary text-primary-foreground hover:bg-primary/90'
+                        : 'bg-primary text-primary-foreground hover:bg-primary/90',
                   )}
                 >
                   {isAnyMutationPending ? (
@@ -745,5 +773,5 @@ export function GroupManagementModal({
         </div>
       )}
     </>
-  );
+  )
 }

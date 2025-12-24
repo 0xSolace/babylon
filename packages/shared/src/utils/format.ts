@@ -22,7 +22,7 @@
  * ```
  */
 export function clamp(value: number, min: number, max: number): number {
-  return Math.min(Math.max(value, min), max);
+  return Math.min(Math.max(value, min), max)
 }
 
 /**
@@ -40,12 +40,12 @@ export function clamp(value: number, min: number, max: number): number {
  * ```
  */
 export function formatDate(date: Date | string): string {
-  const d = typeof date === 'string' ? new Date(date) : date;
+  const d = typeof date === 'string' ? new Date(date) : date
   return d.toLocaleDateString('en-US', {
     month: 'short',
     day: 'numeric',
     year: 'numeric',
-  });
+  })
 }
 
 /**
@@ -63,12 +63,12 @@ export function formatDate(date: Date | string): string {
  * ```
  */
 export function formatTime(date: Date | string): string {
-  const d = typeof date === 'string' ? new Date(date) : date;
+  const d = typeof date === 'string' ? new Date(date) : date
   return d.toLocaleTimeString('en-US', {
     hour: 'numeric',
     minute: '2-digit',
     hour12: true,
-  });
+  })
 }
 
 /**
@@ -88,19 +88,19 @@ export function formatTime(date: Date | string): string {
  * ```
  */
 export function formatRelativeTime(date: Date | string): string {
-  const d = typeof date === 'string' ? new Date(date) : date;
-  const now = new Date();
-  const diff = now.getTime() - d.getTime();
-  const seconds = Math.floor(diff / 1000);
-  const minutes = Math.floor(seconds / 60);
-  const hours = Math.floor(minutes / 60);
-  const days = Math.floor(hours / 24);
+  const d = typeof date === 'string' ? new Date(date) : date
+  const now = new Date()
+  const diff = now.getTime() - d.getTime()
+  const seconds = Math.floor(diff / 1000)
+  const minutes = Math.floor(seconds / 60)
+  const hours = Math.floor(minutes / 60)
+  const days = Math.floor(hours / 24)
 
-  if (seconds < 60) return `${seconds}s`;
-  if (minutes < 60) return `${minutes}m`;
-  if (hours < 24) return `${hours}h`;
-  if (days < 7) return `${days}d`;
-  return formatDate(d);
+  if (seconds < 60) return `${seconds}s`
+  if (minutes < 60) return `${minutes}m`
+  if (hours < 24) return `${hours}h`
+  if (days < 7) return `${days}d`
+  return formatDate(d)
 }
 
 /**
@@ -120,9 +120,9 @@ export function formatRelativeTime(date: Date | string): string {
  * ```
  */
 export function formatCompactNumber(num: number): string {
-  if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
-  if (num >= 1000) return `${(num / 1000).toFixed(1)}K`;
-  return num.toString();
+  if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`
+  if (num >= 1000) return `${(num / 1000).toFixed(1)}K`
+  return num.toString()
 }
 
 /**
@@ -141,7 +141,7 @@ export function formatCompactNumber(num: number): string {
  * ```
  */
 export function formatCurrency(amount: number, decimals = 2): string {
-  return `$${amount.toFixed(decimals)}`;
+  return `$${amount.toFixed(decimals)}`
 }
 
 /**
@@ -159,7 +159,7 @@ export function formatCurrency(amount: number, decimals = 2): string {
  * ```
  */
 export function formatPercentage(value: number): string {
-  return `${Math.round(value)}%`;
+  return `${Math.round(value)}%`
 }
 
 /**
@@ -181,13 +181,13 @@ export function formatPercentage(value: number): string {
  */
 export function sanitizeId(id: string | undefined | null): string {
   if (!id) {
-    return 'unknown';
+    return 'unknown'
   }
   return id
     .toLowerCase()
     .replace(/\s+/g, '-')
     .replace(/[^a-z0-9\-_]/g, '')
-    .trim();
+    .trim()
 }
 
 /**
@@ -207,7 +207,7 @@ export function sanitizeId(id: string | undefined | null): string {
  * ```
  */
 export function formatNumber(num: number): string {
-  return formatCompactNumber(num);
+  return formatCompactNumber(num)
 }
 
 /**
@@ -219,7 +219,7 @@ type DecimalLike =
   | bigint
   | null
   | undefined
-  | { toString: () => string };
+  | { toString: () => string }
 
 /**
  * Safely convert a value to a string representation
@@ -241,21 +241,21 @@ type DecimalLike =
  */
 export function toSafeString(
   value: DecimalLike,
-  defaultValue: string = '0'
+  defaultValue: string = '0',
 ): string {
   if (value === null || value === undefined) {
-    return defaultValue;
+    return defaultValue
   }
   if (typeof value === 'string') {
-    return value;
+    return value
   }
   if (typeof value === 'number' || typeof value === 'bigint') {
-    return String(value);
+    return String(value)
   }
   if (typeof value === 'object' && typeof value.toString === 'function') {
-    return value.toString();
+    return value.toString()
   }
-  return defaultValue;
+  return defaultValue
 }
 
 /**
@@ -280,16 +280,16 @@ export function toSafeString(
  */
 export function toSafeNumber(
   value: DecimalLike,
-  defaultValue: number = 0
+  defaultValue: number = 0,
 ): number {
   if (value === null || value === undefined) {
-    return defaultValue;
+    return defaultValue
   }
   if (typeof value === 'number') {
-    return Number.isNaN(value) ? defaultValue : value;
+    return Number.isNaN(value) ? defaultValue : value
   }
   if (typeof value === 'bigint') {
-    return Number(value);
+    return Number(value)
   }
 
   // Convert to string first (handles objects with toString)
@@ -298,20 +298,20 @@ export function toSafeNumber(
       ? value.trim()
       : typeof value === 'object' && typeof value.toString === 'function'
         ? value.toString()
-        : String(value);
+        : String(value)
 
-  const parsed = Number(str);
-  return Number.isNaN(parsed) ? defaultValue : parsed;
+  const parsed = Number(str)
+  return Number.isNaN(parsed) ? defaultValue : parsed
 }
 
 /**
  * Balance data structure with optional fields
  */
 interface BalanceData {
-  virtualBalance?: DecimalLike;
-  totalDeposited?: DecimalLike;
-  totalWithdrawn?: DecimalLike;
-  lifetimePnL?: DecimalLike;
+  virtualBalance?: DecimalLike
+  totalDeposited?: DecimalLike
+  totalWithdrawn?: DecimalLike
+  lifetimePnL?: DecimalLike
 }
 
 /**
@@ -339,15 +339,15 @@ interface BalanceData {
  * ```
  */
 export function convertBalanceToStrings(balance: BalanceData): {
-  virtualBalance: string;
-  totalDeposited: string;
-  totalWithdrawn: string;
-  lifetimePnL: string;
+  virtualBalance: string
+  totalDeposited: string
+  totalWithdrawn: string
+  lifetimePnL: string
 } {
   return {
     virtualBalance: toSafeString(balance.virtualBalance),
     totalDeposited: toSafeString(balance.totalDeposited),
     totalWithdrawn: toSafeString(balance.totalWithdrawn),
     lifetimePnL: toSafeString(balance.lifetimePnL),
-  };
+  }
 }

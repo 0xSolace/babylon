@@ -15,27 +15,41 @@
  * ```
  */
 
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useCallback, useMemo } from 'react';
-import type { PerpMarket } from '@/types/markets';
-import { MARKETS_CONFIG } from '@/types/markets';
-
-// Re-export for backwards compatibility
-export type { PerpMarket } from '@/types/markets';
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useCallback, useMemo } from 'react'
+import type { PerpMarket } from '../types/markets'
+import { MARKETS_CONFIG } from '../types/markets'
 
 /** Query key for perp markets */
-export const PERP_MARKETS_QUERY_KEY = ['markets', 'perps'] as const;
+export const PERP_MARKETS_QUERY_KEY = ['markets', 'perps'] as const
+
+import { hasArrayProperty, isObject } from '@babylon/shared'
+
+/** Response shape from perp markets API */
+interface PerpMarketsResponse {
+  markets?: PerpMarket[]
+}
+
+/** Type guard for perp markets response */
+function isPerpMarketsResponse(data: unknown): data is PerpMarketsResponse {
+  if (!isObject(data)) return false
+  // Valid if 'markets' is missing or is an array
+  return !('markets' in data) || hasArrayProperty(data, 'markets')
+}
 
 /** Fetch perp markets from API */
 async function fetchPerpMarkets(): Promise<PerpMarket[]> {
-  const response = await fetch('/api/markets/perps');
+  const response = await fetch('/api/markets/perps')
 
   if (!response.ok) {
-    throw new Error(`Failed to fetch perp markets: ${response.status}`);
+    throw new Error(`Failed to fetch perp markets: ${response.status}`)
   }
 
-  const data = (await response.json()) as { markets?: PerpMarket[] };
-  return data.markets ?? [];
+  const data: unknown = await response.json()
+  if (!isPerpMarketsResponse(data)) {
+    throw new Error('Invalid perp markets response format')
+  }
+  return data.markets ?? []
 }
 
 /**
@@ -51,30 +65,30 @@ export function usePerpMarkets(options?: { pollingInterval?: number }) {
     staleTime: MARKETS_CONFIG.CACHE_TTL_MS,
     refetchInterval: options?.pollingInterval,
     placeholderData: (previousData) => previousData,
-  });
+  })
 
-  const markets = data ?? [];
+  const markets = data ?? []
 
   return {
     markets,
     loading: isLoading,
     error: error?.message ?? null,
     refetch: useCallback(() => refetch(), [refetch]),
-  };
+  }
 }
 
 /**
  * Get a specific perp market by ticker (memoized)
  */
 export function usePerpMarket(ticker: string) {
-  const { markets, loading, error, refetch } = usePerpMarkets();
+  const { markets, loading, error, refetch } = usePerpMarkets()
 
   const market = useMemo(
     () => markets.find((m) => m.ticker === ticker),
-    [markets, ticker]
-  );
+    [markets, ticker],
+  )
 
-  return { market, loading, error, refetch };
+  return { market, loading, error, refetch }
 }
 
 /**
@@ -82,11 +96,11 @@ export function usePerpMarket(ticker: string) {
  * Useful after mutations (open/close positions).
  */
 export function useInvalidatePerpMarkets() {
-  const queryClient = useQueryClient();
+  const queryClient = useQueryClient()
 
   return useCallback(() => {
     return queryClient.invalidateQueries({
       queryKey: PERP_MARKETS_QUERY_KEY,
-    });
-  }, [queryClient]);
+    })
+  }, [queryClient])
 }

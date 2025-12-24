@@ -1,102 +1,97 @@
-'use client';
-
-import { cn } from '@babylon/shared';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { formatDistanceToNow } from 'date-fns';
-import { ArrowLeft, MessageCircle } from 'lucide-react';
-import { useRouter } from 'next/navigation';
-import { use, useEffect, useRef, useState } from 'react';
-import { CommentInput } from '@/components/interactions/CommentInput';
-import { LikeButton } from '@/components/interactions/LikeButton';
-import { Avatar } from '@/components/shared/Avatar';
-import { EmptyState } from '@/components/shared/EmptyState';
-import { PageContainer } from '@/components/shared/PageContainer';
-import { Skeleton } from '@/components/shared/Skeleton';
-import { TaggedText } from '@/components/shared/TaggedText';
+import { cn } from '@babylon/shared'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { formatDistanceToNow } from 'date-fns'
+import { ArrowLeft, MessageCircle } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { useParams } from 'react-router-dom'
+import { CommentInput } from '@/components/interactions/CommentInput'
+import { LikeButton } from '@/components/interactions/LikeButton'
+import { Avatar } from '@/components/shared/Avatar'
+import { EmptyState } from '@/components/shared/EmptyState'
+import { PageContainer } from '@/components/shared/PageContainer'
+import { Skeleton } from '@/components/shared/Skeleton'
+import { TaggedText } from '@/components/shared/TaggedText'
 import {
   isNpcIdentifier,
   VerifiedBadge,
-} from '@/components/shared/VerifiedBadge';
-import { MAX_REPLY_COUNT } from '@/lib/constants';
-
-interface CommentPageProps {
-  params: Promise<{ id: string }>;
-}
+} from '@/components/shared/VerifiedBadge'
+import { MAX_REPLY_COUNT } from '@/lib/constants'
+import { useRouter } from '@/lib/navigation'
 
 interface CommentDetail {
-  id: string;
-  content: string;
-  postId: string;
-  authorId: string;
-  authorName: string;
-  authorUsername: string | null;
-  authorProfileImageUrl: string | null;
-  parentCommentId: string | null;
+  id: string
+  content: string
+  postId: string
+  authorId: string
+  authorName: string
+  authorUsername: string | null
+  authorProfileImageUrl: string | null
+  parentCommentId: string | null
   parentComment: {
-    id: string;
-    content: string;
-    authorId: string;
-    authorName: string;
-    authorUsername: string | null;
-    authorProfileImageUrl: string | null;
-  } | null;
-  createdAt: string;
-  updatedAt: string;
-  likeCount: number;
-  replyCount: number;
-  isLiked: boolean;
+    id: string
+    content: string
+    authorId: string
+    authorName: string
+    authorUsername: string | null
+    authorProfileImageUrl: string | null
+  } | null
+  createdAt: string
+  updatedAt: string
+  likeCount: number
+  replyCount: number
+  isLiked: boolean
 }
 
 interface Reply {
-  id: string;
-  content: string;
-  postId: string;
-  authorId: string;
-  authorName: string;
-  authorUsername: string | null;
-  authorProfileImageUrl: string | null;
-  parentCommentId: string | null;
-  parentCommentAuthorName: string | null;
-  createdAt: string;
-  updatedAt: string;
-  likeCount: number;
-  replyCount: number;
-  isLiked: boolean;
+  id: string
+  content: string
+  postId: string
+  authorId: string
+  authorName: string
+  authorUsername: string | null
+  authorProfileImageUrl: string | null
+  parentCommentId: string | null
+  parentCommentAuthorName: string | null
+  createdAt: string
+  updatedAt: string
+  likeCount: number
+  replyCount: number
+  isLiked: boolean
 }
 
 interface ParentComment {
-  id: string;
-  content: string;
-  authorId: string;
-  authorName: string;
-  authorUsername: string | null;
-  authorProfileImageUrl: string | null;
-  createdAt: string;
+  id: string
+  content: string
+  authorId: string
+  authorName: string
+  authorUsername: string | null
+  authorProfileImageUrl: string | null
+  createdAt: string
 }
 
 interface PostData {
-  id: string;
-  content: string;
-  authorId: string;
-  authorName: string;
-  authorUsername: string | null;
-  authorProfileImageUrl: string | null;
-  createdAt: string;
+  id: string
+  content: string
+  authorId: string
+  authorName: string
+  authorUsername: string | null
+  authorProfileImageUrl: string | null
+  createdAt: string
 }
 
 interface CommentApiResponse {
-  comment: CommentDetail;
-  replies: Reply[];
-  parentChain: ParentComment[];
-  post: PostData | null;
+  comment: CommentDetail
+  replies: Reply[]
+  parentChain: ParentComment[]
+  post: PostData | null
 }
 
 interface CommentApiResult {
-  data?: CommentApiResponse;
-  comment?: CommentDetail;
-  replies?: Reply[];
-  parentChain?: ParentComment[];
-  post?: PostData | null;
+  data?: CommentApiResponse
+  comment?: CommentDetail
+  replies?: Reply[]
+  parentChain?: ParentComment[]
+  post?: PostData | null
 }
 
 /**
@@ -105,17 +100,24 @@ interface CommentApiResult {
  * Has connector line to link to parent chain / main comment
  */
 function OriginalPostCard({ post }: { post: PostData }) {
-  const router = useRouter();
-  const showVerifiedBadge = isNpcIdentifier(post.authorId);
+  const router = useRouter()
+  const showVerifiedBadge = isNpcIdentifier(post.authorId)
 
   return (
     <div className="relative">
       {/* Connector line - from avatar center down */}
       <div className="absolute top-10 bottom-0 left-[1.625rem] w-0.5 bg-border sm:left-[1.875rem]" />
 
-      <div
-        className="flex cursor-pointer gap-3 px-4 py-3 transition-colors hover:bg-muted/50 sm:px-6"
+      <button
+        type="button"
+        className="flex w-full cursor-pointer gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50 sm:px-6"
         onClick={() => router.push(`/post/${post.id}`)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault()
+            router.push(`/post/${post.id}`)
+          }
+        }}
       >
         {/* Avatar */}
         <div className="relative z-10 shrink-0">
@@ -151,9 +153,9 @@ function OriginalPostCard({ post }: { post: PostData }) {
             <TaggedText text={post.content} />
           </p>
         </div>
-      </div>
+      </button>
     </div>
-  );
+  )
 }
 
 /**
@@ -164,11 +166,11 @@ function ParentCommentCard({
   parent,
   showConnector,
 }: {
-  parent: ParentComment;
-  showConnector: boolean;
+  parent: ParentComment
+  showConnector: boolean
 }) {
-  const router = useRouter();
-  const showVerifiedBadge = isNpcIdentifier(parent.authorId);
+  const router = useRouter()
+  const showVerifiedBadge = isNpcIdentifier(parent.authorId)
 
   return (
     <div className="relative">
@@ -177,9 +179,16 @@ function ParentCommentCard({
         <div className="absolute top-10 bottom-0 left-[1.625rem] w-0.5 bg-border sm:left-[1.875rem]" />
       )}
 
-      <div
-        className="flex cursor-pointer gap-3 px-4 py-3 transition-colors hover:bg-muted/50 sm:px-6"
+      <button
+        type="button"
+        className="flex w-full cursor-pointer gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50 sm:px-6"
         onClick={() => router.push(`/comment/${parent.id}`)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault()
+            router.push(`/comment/${parent.id}`)
+          }
+        }}
       >
         {/* Avatar */}
         <div className="relative z-10 shrink-0">
@@ -215,9 +224,9 @@ function ParentCommentCard({
             <TaggedText text={parent.content} />
           </p>
         </div>
-      </div>
+      </button>
     </div>
-  );
+  )
 }
 
 /**
@@ -230,18 +239,18 @@ function ReplyCard({
   postId,
   onReplySubmit,
 }: {
-  reply: Reply;
-  postId: string;
-  onReplySubmit: () => void;
+  reply: Reply
+  postId: string
+  onReplySubmit: () => void
 }) {
-  const router = useRouter();
-  const showVerifiedBadge = isNpcIdentifier(reply.authorId);
-  const hasReplies = reply.replyCount > 0;
-  const [isReplying, setIsReplying] = useState(false);
+  const router = useRouter()
+  const showVerifiedBadge = isNpcIdentifier(reply.authorId)
+  const hasReplies = reply.replyCount > 0
+  const [isReplying, setIsReplying] = useState(false)
 
   const handleNavigateToReply = () => {
-    router.push(`/comment/${reply.id}`);
-  };
+    router.push(`/comment/${reply.id}`)
+  }
 
   return (
     <div className="flex gap-3 border-border border-b py-4 last:border-b-0">
@@ -285,11 +294,11 @@ function ReplyCard({
               text={reply.content}
               onTagClick={(tag) => {
                 if (tag.startsWith('@')) {
-                  const username = tag.slice(1);
-                  router.push(`/profile/${username}`);
+                  const username = tag.slice(1)
+                  router.push(`/profile/${username}`)
                 } else if (tag.startsWith('$')) {
-                  const symbol = tag.slice(1);
-                  router.push(`/markets?search=${encodeURIComponent(symbol)}`);
+                  const symbol = tag.slice(1)
+                  router.push(`/markets?search=${encodeURIComponent(symbol)}`)
                 }
               }}
             />
@@ -305,7 +314,7 @@ function ReplyCard({
             className={cn(
               'flex items-center gap-1.5 rounded-full px-2 py-1 text-xs transition-colors',
               'text-muted-foreground hover:bg-[#0066FF]/10 hover:text-[#0066FF]',
-              isReplying && 'bg-[#0066FF]/10 text-[#0066FF]'
+              isReplying && 'bg-[#0066FF]/10 text-[#0066FF]',
             )}
           >
             <MessageCircle size={14} />
@@ -339,8 +348,8 @@ function ReplyCard({
               replyingToName={reply.authorName}
               autoFocus
               onSubmit={async () => {
-                setIsReplying(false);
-                onReplySubmit();
+                setIsReplying(false)
+                onReplySubmit()
               }}
               onCancel={() => setIsReplying(false)}
             />
@@ -348,42 +357,42 @@ function ReplyCard({
         )}
       </div>
     </div>
-  );
+  )
 }
 
-export default function CommentPage({ params }: CommentPageProps) {
-  const { id: commentId } = use(params);
-  const router = useRouter();
-  const queryClient = useQueryClient();
-  const mainCommentRef = useRef<HTMLDivElement>(null);
-  const [isReplying, setIsReplying] = useState(false);
+export default function CommentPage() {
+  const { id: commentId } = useParams<{ id: string }>()
+  const router = useRouter()
+  const queryClient = useQueryClient()
+  const mainCommentRef = useRef<HTMLDivElement>(null)
+  const [isReplying, setIsReplying] = useState(false)
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['comment', commentId],
     queryFn: async (): Promise<CommentApiResponse> => {
-      const response = await fetch(`/api/comments/${commentId}`);
+      const response = await fetch(`/api/comments/${commentId}`)
 
       if (!response.ok) {
-        throw new Error('Comment not found');
+        throw new Error('Comment not found')
       }
 
-      const result = (await response.json()) as CommentApiResult;
-      const apiData = result.data ?? result;
+      const result = (await response.json()) as CommentApiResult
+      const apiData = result.data ?? result
 
       return {
         comment: apiData.comment as CommentDetail,
         replies: apiData.replies ?? [],
         parentChain: apiData.parentChain ?? [],
         post: apiData.post ?? null,
-      };
+      }
     },
     enabled: !!commentId,
-  });
+  })
 
-  const comment = data?.comment ?? null;
-  const replies = data?.replies ?? [];
-  const parentChain = data?.parentChain ?? [];
-  const post = data?.post ?? null;
+  const comment = data?.comment ?? null
+  const replies = data?.replies ?? []
+  const parentChain = data?.parentChain ?? []
+  const post = data?.post ?? null
 
   // Scroll to main comment when loaded (after parent chain)
   useEffect(() => {
@@ -395,18 +404,18 @@ export default function CommentPage({ params }: CommentPageProps) {
     ) {
       // Small delay to ensure DOM is rendered
       setTimeout(() => {
-        mainCommentRef.current?.scrollIntoView({ behavior: 'instant' });
-      }, 50);
+        mainCommentRef.current?.scrollIntoView({ behavior: 'instant' })
+      }, 50)
     }
-  }, [isLoading, comment, parentChain.length]);
+  }, [isLoading, comment, parentChain.length])
 
   const handleReplySubmit = async () => {
-    setIsReplying(false);
+    setIsReplying(false)
     // Invalidate to get fresh data
-    await queryClient.invalidateQueries({ queryKey: ['comment', commentId] });
-  };
+    await queryClient.invalidateQueries({ queryKey: ['comment', commentId] })
+  }
 
-  const showVerifiedBadge = comment ? isNpcIdentifier(comment.authorId) : false;
+  const showVerifiedBadge = comment ? isNpcIdentifier(comment.authorId) : false
 
   if (isLoading) {
     return (
@@ -419,7 +428,7 @@ export default function CommentPage({ params }: CommentPageProps) {
           </div>
         </div>
       </PageContainer>
-    );
+    )
   }
 
   if (error || !comment) {
@@ -433,6 +442,7 @@ export default function CommentPage({ params }: CommentPageProps) {
                 'The comment you are looking for does not exist.'}
             </p>
             <button
+              type="button"
               onClick={() => router.push('/feed')}
               className="rounded-md bg-primary px-4 py-2 text-primary-foreground transition-colors hover:bg-primary/90"
             >
@@ -441,7 +451,7 @@ export default function CommentPage({ params }: CommentPageProps) {
           </div>
         </div>
       </PageContainer>
-    );
+    )
   }
 
   return (
@@ -452,16 +462,17 @@ export default function CommentPage({ params }: CommentPageProps) {
           <div className="px-4 py-3 sm:px-6 sm:py-4">
             <div className="flex items-center gap-4">
               <button
+                type="button"
                 onClick={() => {
                   // Navigate to parent: immediate parent comment > post > feed
                   if (parentChain.length > 0) {
                     router.push(
-                      `/comment/${parentChain[parentChain.length - 1]?.id}`
-                    );
+                      `/comment/${parentChain[parentChain.length - 1]?.id}`,
+                    )
                   } else if (post) {
-                    router.push(`/post/${post.id}`);
+                    router.push(`/post/${post.id}`)
                   } else {
-                    router.push('/feed');
+                    router.push('/feed')
                   }
                 }}
                 className="rounded-md p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
@@ -531,13 +542,13 @@ export default function CommentPage({ params }: CommentPageProps) {
                         text={comment.content}
                         onTagClick={(tag) => {
                           if (tag.startsWith('@')) {
-                            const username = tag.slice(1);
-                            router.push(`/profile/${username}`);
+                            const username = tag.slice(1)
+                            router.push(`/profile/${username}`)
                           } else if (tag.startsWith('$')) {
-                            const symbol = tag.slice(1);
+                            const symbol = tag.slice(1)
                             router.push(
-                              `/markets?search=${encodeURIComponent(symbol)}`
-                            );
+                              `/markets?search=${encodeURIComponent(symbol)}`,
+                            )
                           }
                         }}
                       />
@@ -564,7 +575,7 @@ export default function CommentPage({ params }: CommentPageProps) {
                       className={cn(
                         'flex items-center gap-1.5 rounded-full px-2 py-1 text-sm transition-colors',
                         'text-muted-foreground hover:bg-[#0066FF]/10 hover:text-[#0066FF]',
-                        isReplying && 'bg-[#0066FF]/10 text-[#0066FF]'
+                        isReplying && 'bg-[#0066FF]/10 text-[#0066FF]',
                       )}
                     >
                       <MessageCircle size={16} />
@@ -624,7 +635,7 @@ export default function CommentPage({ params }: CommentPageProps) {
                       onReplySubmit={() => {
                         queryClient.invalidateQueries({
                           queryKey: ['comment', commentId],
-                        });
+                        })
                       }}
                     />
                   ))}
@@ -635,5 +646,5 @@ export default function CommentPage({ params }: CommentPageProps) {
         </div>
       </div>
     </PageContainer>
-  );
+  )
 }

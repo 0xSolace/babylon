@@ -1,15 +1,16 @@
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
 # dependencies
-/node_modules
+node_modules
+**/node_modules/**
 
-# next.js
-/.next/
-/out/
-.next/
+# build output
 dist/
+/out/
 .turbo/
 /.turbo/
+.dev/
+apps/web/.dev/
 
 # production
 /build
@@ -31,12 +32,9 @@ apps/*/.env.local
 .secrets
 .secrets.local
 
-# vercel
-.vercel
 
 # typescript
 *.tsbuildinfo
-next-env.d.ts
 
 **/node_modules/**
 
@@ -68,7 +66,6 @@ training-data/
 packages/training/data/**/*.jsonl
 /storage/
 apps/web/debug/
-packages/experimental/honest-demo-output/
 _docs/
 debug/
 
@@ -87,3 +84,12 @@ packages/training/training-data-output
 # Local metrics and audit files
 .metrics/
 **/MARKETS_FRONTEND_AUDIT.md
+
+# Generated directories
+test-results/
+trained_models/
+logs/
+/circuits/
+
+# Generated deployment configs
+warp-routes-config.json

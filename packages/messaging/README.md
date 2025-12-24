@@ -76,19 +76,19 @@ client.onMessage((event) => {
 ### Farcaster Hub Client
 
 ```typescript
-import { createFarcasterHubClient } from '@babylon/messaging';
+import { FarcasterClient } from '@babylon/messaging';
 
-const hub = createFarcasterHubClient('nemes.farcaster.xyz:2283');
+const client = new FarcasterClient({ hubUrl: 'nemes.farcaster.xyz:2283' });
 
 // Get user profile
-const profile = await hub.getProfileByFid(3);
+const profile = await client.getProfile(3);
 console.log(profile.username, profile.displayName);
 
 // Get user casts
-const { casts } = await hub.getCastsByFid(3, { limit: 10 });
+const { messages: casts } = await client.getCastsByFid(3, { pageSize: 10 });
 
-// Check following
-const follows = await hub.isFollowing(followerFid, targetFid);
+// Get links (following)
+const { messages: following } = await client.getLinksByFid(followerFid);
 ```
 
 ### CovenantSQL Storage

@@ -1,4 +1,4 @@
-import type { Organization } from '../../types/shared';
+import type { Organization } from '../../types/shared'
 
 export const data = {
   id: 'the-vairge',
@@ -25,4 +25,4 @@ export const data = {
     'Tech news and reviews. The intersection of technology and culture. Gadgets, science, entertainment. Making tech make sense.',
   originalName: 'The Verge',
   originalHandle: 'verge',
-} as const satisfies Organization;
+} as const satisfies Organization

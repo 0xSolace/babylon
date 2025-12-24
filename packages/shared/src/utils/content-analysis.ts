@@ -23,7 +23,7 @@
  * ```
  */
 export function analyzeCertainty(content: string): number {
-  const text = content.toLowerCase();
+  const text = content.toLowerCase()
 
   // Certainty markers (increase score):
   const certaintyWords = [
@@ -42,7 +42,7 @@ export function analyzeCertainty(content: string): number {
     'verified',
     'established',
     'conclusive',
-  ];
+  ]
 
   // Hedging markers (decrease score):
   const hedgingWords = [
@@ -62,20 +62,20 @@ export function analyzeCertainty(content: string): number {
     'unsure',
     'questionable',
     'doubtful',
-  ];
+  ]
 
-  let certaintyScore = 0.5; // Neutral baseline
+  let certaintyScore = 0.5 // Neutral baseline
 
   certaintyWords.forEach((word) => {
-    if (text.includes(word)) certaintyScore += 0.1;
-  });
+    if (text.includes(word)) certaintyScore += 0.1
+  })
 
   hedgingWords.forEach((word) => {
-    if (text.includes(word)) certaintyScore -= 0.1;
-  });
+    if (text.includes(word)) certaintyScore -= 0.1
+  })
 
   // Clamp to 0-1:
-  return Math.max(0, Math.min(1, certaintyScore));
+  return Math.max(0, Math.min(1, certaintyScore))
 }
 
 /**
@@ -93,7 +93,7 @@ export function analyzeCertainty(content: string): number {
  * ```
  */
 export function hasInsiderLanguage(content: string): boolean {
-  const text = content.toLowerCase();
+  const text = content.toLowerCase()
 
   const insiderPhrases = [
     'my sources',
@@ -111,9 +111,9 @@ export function hasInsiderLanguage(content: string): boolean {
     'private meeting',
     'leaked',
     'just learned',
-  ];
+  ]
 
-  return insiderPhrases.some((phrase) => text.includes(phrase));
+  return insiderPhrases.some((phrase) => text.includes(phrase))
 }
 
 /**
@@ -132,7 +132,7 @@ export function hasInsiderLanguage(content: string): boolean {
  * ```
  */
 export function analyzeSentiment(content: string): number {
-  const text = content.toLowerCase();
+  const text = content.toLowerCase()
 
   // Positive words:
   const positiveWords = [
@@ -152,7 +152,7 @@ export function analyzeSentiment(content: string): number {
     'growth',
     'profit',
     'surge',
-  ];
+  ]
 
   // Negative words:
   const negativeWords = [
@@ -173,19 +173,19 @@ export function analyzeSentiment(content: string): number {
     'concern',
     'worry',
     'risk',
-  ];
+  ]
 
-  let score = 0;
+  let score = 0
 
   positiveWords.forEach((word) => {
-    if (text.includes(word)) score += 0.15;
-  });
+    if (text.includes(word)) score += 0.15
+  })
 
   negativeWords.forEach((word) => {
-    if (text.includes(word)) score -= 0.15;
-  });
+    if (text.includes(word)) score -= 0.15
+  })
 
-  return Math.max(-1, Math.min(1, score));
+  return Math.max(-1, Math.min(1, score))
 }
 
 /**
@@ -206,11 +206,11 @@ export function analyzeSentiment(content: string): number {
  */
 export function calculateFreshness(
   postDay: number,
-  currentDay: number
+  currentDay: number,
 ): number {
-  const age = currentDay - postDay;
-  const freshness = Math.max(0.3, 1.0 - age * 0.08);
-  return freshness;
+  const age = currentDay - postDay
+  const freshness = Math.max(0.3, 1.0 - age * 0.08)
+  return freshness
 }
 
 /**
@@ -248,24 +248,24 @@ export function calculateContentQuality(
   authorRole?: string | null,
   postDay?: number | null,
   currentDay?: number | null,
-  historicalAccuracy?: number | null
+  historicalAccuracy?: number | null,
 ): number {
   // Component 1: Content analysis (0-40 points)
-  const certainty = analyzeCertainty(content);
-  const hasInsider = hasInsiderLanguage(content);
-  const contentScore = certainty * 30 + (hasInsider ? 10 : 0);
+  const certainty = analyzeCertainty(content)
+  const hasInsider = hasInsiderLanguage(content)
+  const contentScore = certainty * 30 + (hasInsider ? 10 : 0)
 
   // Component 2: Source quality (0-30 points) - from historical accuracy
-  const sourceScore = (historicalAccuracy ?? 0.5) * 30;
+  const sourceScore = (historicalAccuracy ?? 0.5) * 30
 
   // Component 3: Role credibility (0-15 points) - observable from profile
-  const roleScore = getRoleBaseScore(authorRole);
+  const roleScore = getRoleBaseScore(authorRole)
 
   // Component 4: Freshness (0-15 points)
   const freshnessScore =
-    postDay && currentDay ? calculateFreshness(postDay, currentDay) * 15 : 15; // Default to fresh if no day info
+    postDay && currentDay ? calculateFreshness(postDay, currentDay) * 15 : 15 // Default to fresh if no day info
 
-  return Math.round(contentScore + sourceScore + roleScore + freshnessScore);
+  return Math.round(contentScore + sourceScore + roleScore + freshnessScore)
 }
 
 /**
@@ -280,9 +280,9 @@ function getRoleBaseScore(role?: string | null): number {
     analyst: 9,
     supporting: 5,
     extra: 3,
-  };
+  }
 
-  return role ? (roleScores[role] ?? 5) : 5;
+  return role ? (roleScores[role] ?? 5) : 5
 }
 
 /**
@@ -301,11 +301,11 @@ function getRoleBaseScore(role?: string | null): number {
  * ```
  */
 export function detectPrediction(content: string): {
-  makesPrediction: boolean;
-  direction: 'YES' | 'NO' | 'UNCLEAR';
-  confidence: number;
+  makesPrediction: boolean
+  direction: 'YES' | 'NO' | 'UNCLEAR'
+  confidence: number
 } {
-  const text = content.toLowerCase();
+  const text = content.toLowerCase()
 
   // YES indicators:
   const yesIndicators = [
@@ -317,7 +317,7 @@ export function detectPrediction(content: string): {
     'absolutely',
     'for sure',
     'guaranteed',
-  ];
+  ]
 
   // NO indicators:
   const noIndicators = [
@@ -329,29 +329,29 @@ export function detectPrediction(content: string): {
     'no way',
     'impossible',
     "won't succeed",
-  ];
+  ]
 
-  const hasYes = yesIndicators.some((phrase) => text.includes(phrase));
-  const hasNo = noIndicators.some((phrase) => text.includes(phrase));
+  const hasYes = yesIndicators.some((phrase) => text.includes(phrase))
+  const hasNo = noIndicators.some((phrase) => text.includes(phrase))
 
   if (hasYes && !hasNo) {
     return {
       makesPrediction: true,
       direction: 'YES',
       confidence: analyzeCertainty(content),
-    };
+    }
   }
   if (hasNo && !hasYes) {
     return {
       makesPrediction: true,
       direction: 'NO',
       confidence: analyzeCertainty(content),
-    };
+    }
   }
 
   return {
     makesPrediction: false,
     direction: 'UNCLEAR',
     confidence: 0,
-  };
+  }
 }

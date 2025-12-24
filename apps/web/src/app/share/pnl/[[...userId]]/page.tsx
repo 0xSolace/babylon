@@ -1,9 +1,5 @@
-import SharePnLClient from './SharePnLClient';
-
-export function generateStaticParams(): Array<{ userId?: string[] }> {
-  return [{ userId: [] }];
-}
+import SharePnLClient from './SharePnLClient'
 
 export default function SharePnLPage() {
-  return <SharePnLClient />;
+  return <SharePnLClient />
 }

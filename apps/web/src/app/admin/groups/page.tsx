@@ -9,10 +9,8 @@
  * @access Admin / Localhost Debug
  */
 
-'use client';
-
-import { cn } from '@babylon/shared';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { cn } from '@babylon/shared'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Calendar,
   ChevronDown,
@@ -22,9 +20,9 @@ import {
   Search,
   User as UserIcon,
   Users,
-} from 'lucide-react';
-import { useState } from 'react';
-import { z } from 'zod';
+} from 'lucide-react'
+import { useState } from 'react'
+import { z } from 'zod'
 
 /**
  * Participant schema for validation.
@@ -36,7 +34,7 @@ const ParticipantSchema = z.object({
   isNPC: z.boolean().optional().default(false),
   profileImageUrl: z.string().nullable().optional(),
   joinedAt: z.coerce.date(),
-});
+})
 
 /**
  * Message schema for validation.
@@ -50,7 +48,7 @@ const MessageSchema = z.object({
     name: z.string(),
     isNPC: z.boolean(),
   }),
-});
+})
 
 /**
  * Group chat schema for validation.
@@ -67,23 +65,23 @@ const GroupChatSchema = z.object({
   recentMessages: z.array(MessageSchema),
   createdAt: z.coerce.date(),
   updatedAt: z.coerce.date(),
-});
-type GroupChat = z.infer<typeof GroupChatSchema>;
+})
+type GroupChat = z.infer<typeof GroupChatSchema>
 
 interface AdminGroupsApiResponse {
   data?: {
-    groups?: GroupChat[];
-  };
+    groups?: GroupChat[]
+  }
 }
 
 export default function AdminGroupsPage() {
-  const queryClient = useQueryClient();
-  const [searchTerm, setSearchTerm] = useState('');
-  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const queryClient = useQueryClient()
+  const [searchTerm, setSearchTerm] = useState('')
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set())
   const [sortBy, setSortBy] = useState<
     'createdAt' | 'memberCount' | 'messageCount'
-  >('createdAt');
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  >('createdAt')
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
 
   const {
     data: groups = [],
@@ -94,47 +92,45 @@ export default function AdminGroupsPage() {
     queryKey: ['admin', 'groups', sortBy, sortOrder],
     queryFn: async (): Promise<GroupChat[]> => {
       const response = await fetch(
-        `/api/admin/groups?sortBy=${sortBy}&sortOrder=${sortOrder}`
-      );
+        `/api/admin/groups?sortBy=${sortBy}&sortOrder=${sortOrder}`,
+      )
 
       if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`API error: ${response.status} - ${errorText}`);
+        const errorText = await response.text()
+        throw new Error(`API error: ${response.status} - ${errorText}`)
       }
 
-      const data = (await response.json()) as AdminGroupsApiResponse;
+      const data = (await response.json()) as AdminGroupsApiResponse
       if (!data.data?.groups) {
-        throw new Error(
-          'Invalid group data structure from API: missing groups'
-        );
+        throw new Error('Invalid group data structure from API: missing groups')
       }
-      const validation = z.array(GroupChatSchema).safeParse(data.data.groups);
+      const validation = z.array(GroupChatSchema).safeParse(data.data.groups)
       if (!validation.success) {
-        throw new Error('Invalid group data structure from API');
+        throw new Error('Invalid group data structure from API')
       }
-      return validation.data;
+      return validation.data
     },
-  });
+  })
 
-  const error = queryError ? (queryError as Error).message : null;
+  const error = queryError ? (queryError as Error).message : null
 
   const fetchGroups = () => {
     void queryClient.invalidateQueries({
       queryKey: ['admin', 'groups', sortBy, sortOrder],
-    });
-  };
+    })
+  }
 
   const toggleExpanded = (groupId: string) => {
     setExpandedGroups((prev) => {
-      const next = new Set(prev);
+      const next = new Set(prev)
       if (next.has(groupId)) {
-        next.delete(groupId);
+        next.delete(groupId)
       } else {
-        next.add(groupId);
+        next.add(groupId)
       }
-      return next;
-    });
-  };
+      return next
+    })
+  }
 
   const filteredGroups = groups.filter(
     (group) =>
@@ -142,45 +138,45 @@ export default function AdminGroupsPage() {
       group.creatorName.toLowerCase().includes(searchTerm.toLowerCase()) ||
       group.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
       group.participants.some((p) =>
-        p.name.toLowerCase().includes(searchTerm.toLowerCase())
-      )
-  );
+        p.name.toLowerCase().includes(searchTerm.toLowerCase()),
+      ),
+  )
 
   const getGroupTypeLabel = (type: string) => {
     switch (type) {
       case 'npc-only':
-        return 'NPC Only';
+        return 'NPC Only'
       case 'npc-mixed':
-        return 'NPC + Users';
+        return 'NPC + Users'
       case 'user':
-        return 'User Created';
+        return 'User Created'
       default:
-        return 'Unknown';
+        return 'Unknown'
     }
-  };
+  }
 
   const getGroupTypeColor = (type: string) => {
     switch (type) {
       case 'npc-only':
-        return 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20';
+        return 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20'
       case 'npc-mixed':
-        return 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20';
+        return 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20'
       case 'user':
-        return 'bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20';
+        return 'bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20'
       default:
-        return 'bg-muted text-muted-foreground border-border';
+        return 'bg-muted text-muted-foreground border-border'
     }
-  };
+  }
 
   // Stats summary
-  const totalGroups = groups.length;
-  const npcOnlyGroups = groups.filter((g) => g.groupType === 'npc-only').length;
+  const totalGroups = groups.length
+  const npcOnlyGroups = groups.filter((g) => g.groupType === 'npc-only').length
   const npcMixedGroups = groups.filter(
-    (g) => g.groupType === 'npc-mixed'
-  ).length;
-  const userGroups = groups.filter((g) => g.groupType === 'user').length;
-  const totalParticipants = groups.reduce((sum, g) => sum + g.memberCount, 0);
-  const totalMessages = groups.reduce((sum, g) => sum + g.messageCount, 0);
+    (g) => g.groupType === 'npc-mixed',
+  ).length
+  const userGroups = groups.filter((g) => g.groupType === 'user').length
+  const totalParticipants = groups.reduce((sum, g) => sum + g.memberCount, 0)
+  const totalMessages = groups.reduce((sum, g) => sum + g.messageCount, 0)
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-6">
@@ -197,19 +193,20 @@ export default function AdminGroupsPage() {
             </div>
           </div>
           <button
+            type="button"
             onClick={fetchGroups}
             disabled={isLoading || isRefreshing}
             className={cn(
               'flex items-center gap-2 rounded-lg px-4 py-2',
               'bg-primary text-primary-foreground',
               'transition-colors hover:bg-primary/90',
-              'disabled:cursor-not-allowed disabled:opacity-50'
+              'disabled:cursor-not-allowed disabled:opacity-50',
             )}
           >
             <RefreshCw
               className={cn(
                 'h-4 w-4',
-                (isLoading || isRefreshing) && 'animate-spin'
+                (isLoading || isRefreshing) && 'animate-spin',
               )}
             />
             Refresh
@@ -269,7 +266,7 @@ export default function AdminGroupsPage() {
             className={cn(
               'w-full rounded-lg border border-border py-2 pr-4 pl-10',
               'bg-background text-foreground',
-              'focus:border-primary focus:outline-none'
+              'focus:border-primary focus:outline-none',
             )}
           />
         </div>
@@ -280,7 +277,7 @@ export default function AdminGroupsPage() {
             className={cn(
               'rounded-lg border border-border px-4 py-2',
               'bg-background text-foreground',
-              'focus:border-primary focus:outline-none'
+              'focus:border-primary focus:outline-none',
             )}
           >
             <option value="createdAt">Created Date</option>
@@ -288,10 +285,11 @@ export default function AdminGroupsPage() {
             <option value="messageCount">Message Count</option>
           </select>
           <button
+            type="button"
             onClick={() => setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')}
             className={cn(
               'rounded-lg border border-border px-4 py-2',
-              'bg-background transition-colors hover:bg-muted'
+              'bg-background transition-colors hover:bg-muted',
             )}
           >
             {sortOrder === 'asc' ? '↑ Asc' : '↓ Desc'}
@@ -329,15 +327,16 @@ export default function AdminGroupsPage() {
         ) : (
           <div className="space-y-3">
             {filteredGroups.map((group) => {
-              const isExpanded = expandedGroups.has(group.id);
+              const isExpanded = expandedGroups.has(group.id)
               return (
                 <div
                   key={group.id}
                   className="overflow-hidden rounded-lg border border-border bg-card"
                 >
                   {/* Group Header (clickable to expand) */}
-                  <div
-                    className="flex cursor-pointer items-center gap-3 p-4 hover:bg-muted/50"
+                  <button
+                    type="button"
+                    className="flex w-full cursor-pointer items-center gap-3 p-4 hover:bg-muted/50"
                     onClick={() => toggleExpanded(group.id)}
                   >
                     {isExpanded ? (
@@ -354,7 +353,7 @@ export default function AdminGroupsPage() {
                         <span
                           className={cn(
                             'shrink-0 rounded border px-2 py-0.5 font-medium text-xs',
-                            getGroupTypeColor(group.groupType)
+                            getGroupTypeColor(group.groupType),
                           )}
                         >
                           {getGroupTypeLabel(group.groupType)}
@@ -381,7 +380,7 @@ export default function AdminGroupsPage() {
                         </span>
                       </div>
                     </div>
-                  </div>
+                  </button>
 
                   {/* Expanded Content */}
                   {isExpanded && (
@@ -415,7 +414,7 @@ export default function AdminGroupsPage() {
                                 </div>
                                 <span className="text-muted-foreground text-xs">
                                   {new Date(
-                                    participant.joinedAt
+                                    participant.joinedAt,
                                   ).toLocaleDateString()}
                                 </span>
                               </div>
@@ -452,7 +451,7 @@ export default function AdminGroupsPage() {
                                     </div>
                                     <span className="text-muted-foreground text-xs">
                                       {new Date(
-                                        message.createdAt
+                                        message.createdAt,
                                       ).toLocaleString()}
                                     </span>
                                   </div>
@@ -479,11 +478,11 @@ export default function AdminGroupsPage() {
                     </div>
                   )}
                 </div>
-              );
+              )
             })}
           </div>
         )}
       </div>
     </div>
-  );
+  )
 }

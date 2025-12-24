@@ -10,29 +10,29 @@ import type {
   ReputationSyncOptions,
   ReputationSyncResult,
   ReputationSyncServiceInterface as ReputationSyncService,
-} from '@babylon/engine';
-import { batchSyncReputationsToERC8004 } from './erc8004-reputation-sync';
+} from '@babylon/engine'
+import { batchSyncReputationsToERC8004 } from './erc8004-reputation-sync'
 
 /**
  * Adapter implementation that wraps batchSyncReputationsToERC8004
  */
 class ReputationSyncAdapter implements ReputationSyncService {
   async batchSync(
-    options?: ReputationSyncOptions
+    options?: ReputationSyncOptions,
   ): Promise<ReputationSyncResult> {
     const result = await batchSyncReputationsToERC8004({
       limit: options?.limit,
       offset: options?.offset,
       forceRecalculate: options?.forceRecalculate,
       prioritizeNew: options?.prioritizeNew,
-    });
+    })
 
     return {
       synced: result.synced,
       failed: result.failed,
       total: result.total,
       skipped: result.skipped,
-    };
+    }
   }
 }
 
@@ -40,5 +40,5 @@ class ReputationSyncAdapter implements ReputationSyncService {
  * Create and return the reputation sync adapter instance
  */
 export function createReputationSyncAdapter(): ReputationSyncService {
-  return new ReputationSyncAdapter();
+  return new ReputationSyncAdapter()
 }

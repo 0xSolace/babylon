@@ -11,10 +11,8 @@
  * @access Admin only
  */
 
-'use client';
-
-import { cn } from '@babylon/shared';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { cn } from '@babylon/shared'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   AlertTriangle,
   ArrowUpRight,
@@ -29,8 +27,8 @@ import {
   TrendingUp,
   Users,
   Wallet,
-} from 'lucide-react';
-import { useState } from 'react';
+} from 'lucide-react'
+import { useState } from 'react'
 import {
   type Address,
   createPublicClient,
@@ -38,39 +36,40 @@ import {
   custom,
   type EIP1193Provider,
   formatEther,
-} from 'viem';
-import { hardhat, mainnet, sepolia } from 'viem/chains';
-import { PageContainer } from '@/components/shared/PageContainer';
-import { Skeleton } from '@/components/shared/Skeleton';
-import { useAuth } from '@/hooks/useAuth';
+} from 'viem'
+import { hardhat, mainnet, sepolia } from 'viem/chains'
+import { PageContainer } from '@/components/shared/PageContainer'
+import { Skeleton } from '@/components/shared/Skeleton'
+import { getChainId, PRESALE_CONTRACTS } from '@/config'
+import { useAuth } from '@/hooks/useAuth'
 
 // Types
 interface ICOStatus {
-  raised: bigint;
-  participants: bigint;
-  progress: bigint;
-  timeRemaining: bigint;
-  isActive: boolean;
-  isFinalized: boolean;
-  isFailed: boolean;
+  raised: bigint
+  participants: bigint
+  progress: bigint
+  timeRemaining: bigint
+  isActive: boolean
+  isFinalized: boolean
+  isFailed: boolean
 }
 
 interface Contributor {
-  address: string;
-  ethAmount: bigint;
-  tokenAllocation: bigint;
-  isElizaHolder: boolean;
+  address: string
+  ethAmount: bigint
+  tokenAllocation: bigint
+  isElizaHolder: boolean
 }
 
 interface ICOConfig {
-  softCap: bigint;
-  hardCap: bigint;
-  minContribution: bigint;
-  maxContribution: bigint;
-  startPrice: bigint;
-  currentPrice: bigint;
-  lpFundingBps: number;
-  elizaBonusBps: number;
+  softCap: bigint
+  hardCap: bigint
+  minContribution: bigint
+  maxContribution: bigint
+  startPrice: bigint
+  currentPrice: bigint
+  lpFundingBps: number
+  elizaBonusBps: number
 }
 
 // BBLN Presale ABI
@@ -212,54 +211,54 @@ const PRESALE_ABI = [
     inputs: [],
     outputs: [{ type: 'bool' }],
   },
-] as const;
+] as const
 
-// Get chain config from env
+// Get chain config from centralized config
 function getChainConfig() {
-  const chainId = parseInt(process.env.NEXT_PUBLIC_CHAIN_ID || '31337');
+  const chainId = getChainId()
   switch (chainId) {
     case 1:
-      return mainnet;
+      return mainnet
     case 11155111:
-      return sepolia;
+      return sepolia
     default:
-      return hardhat;
+      return hardhat
   }
 }
 
 // Helper to get ethereum provider
 function getEthereumProvider(): EIP1193Provider | null {
-  return (window as unknown as { ethereum?: EIP1193Provider }).ethereum ?? null;
+  return (window as { ethereum?: EIP1193Provider }).ethereum ?? null
 }
 
 // Fetch ICO data from blockchain
 interface ICOData {
-  status: ICOStatus;
-  config: ICOConfig;
-  contributors: Contributor[];
-  isPaused: boolean;
+  status: ICOStatus
+  config: ICOConfig
+  contributors: Contributor[]
+  isPaused: boolean
 }
 
 async function fetchICODataFromChain(
   presaleAddress: Address,
-  chain: ReturnType<typeof getChainConfig>
+  chain: ReturnType<typeof getChainConfig>,
 ): Promise<ICOData> {
-  const ethereum = getEthereumProvider();
+  const ethereum = getEthereumProvider()
   if (!ethereum) {
-    throw new Error('No ethereum provider found');
+    throw new Error('No ethereum provider found')
   }
 
   const client = createPublicClient({
     chain,
     transport: custom(ethereum),
-  });
+  })
 
   // Fetch status
   const statusResult = (await client.readContract({
     address: presaleAddress,
     abi: PRESALE_ABI,
     functionName: 'getStatus',
-  })) as [bigint, bigint, bigint, bigint, boolean, boolean, boolean];
+  })) as [bigint, bigint, bigint, bigint, boolean, boolean, boolean]
 
   const status: ICOStatus = {
     raised: statusResult[0],
@@ -269,7 +268,7 @@ async function fetchICODataFromChain(
     isActive: statusResult[4],
     isFinalized: statusResult[5],
     isFailed: statusResult[6],
-  };
+  }
 
   // Fetch config
   const [
@@ -338,7 +337,7 @@ async function fetchICODataFromChain(
     bigint,
     bigint,
     boolean,
-  ];
+  ]
 
   const config: ICOConfig = {
     softCap,
@@ -349,14 +348,14 @@ async function fetchICODataFromChain(
     currentPrice,
     lpFundingBps: Number(lpFundingBps),
     elizaBonusBps: Number(elizaBonusBps),
-  };
+  }
 
   // Fetch contributors
   const contributorAddresses = (await client.readContract({
     address: presaleAddress,
     abi: PRESALE_ABI,
     functionName: 'getContributors',
-  })) as readonly Address[];
+  })) as readonly Address[]
 
   const contributors = await Promise.all(
     contributorAddresses.slice(0, 100).map(async (addr) => {
@@ -365,43 +364,41 @@ async function fetchICODataFromChain(
         abi: PRESALE_ABI,
         functionName: 'contributions',
         args: [addr],
-      })) as [bigint, bigint, bigint, bigint, boolean, boolean];
+      })) as [bigint, bigint, bigint, bigint, boolean, boolean]
 
       return {
         address: addr,
         ethAmount: contribution[0],
         tokenAllocation: contribution[1] + contribution[2], // base + bonus
         isElizaHolder: contribution[4],
-      };
-    })
-  );
+      }
+    }),
+  )
 
-  return { status, config, contributors, isPaused: paused };
+  return { status, config, contributors, isPaused: paused }
 }
 
 export default function ICOAdminPage() {
-  const { authenticated, ready } = useAuth();
-  const queryClient = useQueryClient();
+  const { authenticated, ready } = useAuth()
+  const queryClient = useQueryClient()
 
   // Settings (local form state only)
-  const [presaleDuration, setPresaleDuration] = useState(7);
-  const [claimDelay, setClaimDelay] = useState(1);
+  const [presaleDuration, setPresaleDuration] = useState(7)
+  const [claimDelay, setClaimDelay] = useState(1)
 
-  const presaleAddress = process.env.NEXT_PUBLIC_BBLN_PRESALE_ADDRESS as
-    | Address
-    | undefined;
-  const chain = getChainConfig();
+  const presaleAddress = PRESALE_CONTRACTS.bblnPresale
+  const chain = getChainConfig()
 
   // Query: Admin access check
   const { data: isAuthorized, isLoading: isCheckingAuth } = useQuery({
     queryKey: ['admin', 'ico', 'access'],
     queryFn: async () => {
-      if (!authenticated) return false;
-      const response = await fetch('/api/admin/stats');
-      return response.ok;
+      if (!authenticated) return false
+      const response = await fetch('/api/admin/stats')
+      return response.ok
     },
     enabled: ready,
-  });
+  })
 
   // Query: ICO data with polling
   const {
@@ -412,36 +409,36 @@ export default function ICOAdminPage() {
   } = useQuery({
     queryKey: ['admin', 'ico', 'data', presaleAddress],
     queryFn: () => {
-      if (!presaleAddress) throw new Error('No presale address');
-      return fetchICODataFromChain(presaleAddress, chain);
+      if (!presaleAddress) throw new Error('No presale address')
+      return fetchICODataFromChain(presaleAddress, chain)
     },
     enabled: isAuthorized === true && !!presaleAddress,
     refetchInterval: 30000, // Poll every 30s
-  });
+  })
 
-  const status = icoData?.status ?? null;
-  const config = icoData?.config ?? null;
-  const contributors = icoData?.contributors ?? [];
-  const isPaused = icoData?.isPaused ?? false;
+  const status = icoData?.status ?? null
+  const config = icoData?.config ?? null
+  const contributors = icoData?.contributors ?? []
+  const isPaused = icoData?.isPaused ?? false
 
   // Mutation: Start presale
   const startPresaleMutation = useMutation({
     mutationFn: async () => {
-      const ethereum = getEthereumProvider();
+      const ethereum = getEthereumProvider()
       if (!presaleAddress || !ethereum) {
-        throw new Error('No presale address or ethereum provider');
+        throw new Error('No presale address or ethereum provider')
       }
 
       const walletClient = createWalletClient({
         chain,
         transport: custom(ethereum),
-      });
+      })
 
-      const [account] = await walletClient.getAddresses();
-      if (!account) throw new Error('No account found');
+      const [account] = await walletClient.getAddresses()
+      if (!account) throw new Error('No account found')
 
-      const duration = BigInt(presaleDuration * 24 * 60 * 60);
-      const delay = BigInt(claimDelay * 24 * 60 * 60);
+      const duration = BigInt(presaleDuration * 24 * 60 * 60)
+      const delay = BigInt(claimDelay * 24 * 60 * 60)
 
       await walletClient.writeContract({
         account,
@@ -449,79 +446,79 @@ export default function ICOAdminPage() {
         abi: PRESALE_ABI,
         functionName: 'startPresale',
         args: [duration, delay],
-      });
+      })
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({
         queryKey: ['admin', 'ico', 'data'],
-      });
+      })
     },
-  });
+  })
 
   // Mutation: Pause/Unpause presale
   const pausePresaleMutation = useMutation({
     mutationFn: async () => {
-      const ethereum = getEthereumProvider();
+      const ethereum = getEthereumProvider()
       if (!presaleAddress || !ethereum) {
-        throw new Error('No presale address or ethereum provider');
+        throw new Error('No presale address or ethereum provider')
       }
 
       const walletClient = createWalletClient({
         chain,
         transport: custom(ethereum),
-      });
+      })
 
-      const [account] = await walletClient.getAddresses();
-      if (!account) throw new Error('No account found');
+      const [account] = await walletClient.getAddresses()
+      if (!account) throw new Error('No account found')
 
       await walletClient.writeContract({
         account,
         address: presaleAddress,
         abi: PRESALE_ABI,
         functionName: isPaused ? 'unpause' : 'pause',
-      });
+      })
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({
         queryKey: ['admin', 'ico', 'data'],
-      });
+      })
     },
-  });
+  })
 
   // Mutation: Finalize presale
   const finalizePresaleMutation = useMutation({
     mutationFn: async () => {
-      const ethereum = getEthereumProvider();
+      const ethereum = getEthereumProvider()
       if (!presaleAddress || !ethereum) {
-        throw new Error('No presale address or ethereum provider');
+        throw new Error('No presale address or ethereum provider')
       }
 
       const walletClient = createWalletClient({
         chain,
         transport: custom(ethereum),
-      });
+      })
 
-      const [account] = await walletClient.getAddresses();
-      if (!account) throw new Error('No account found');
+      const [account] = await walletClient.getAddresses()
+      if (!account) throw new Error('No account found')
 
       await walletClient.writeContract({
         account,
         address: presaleAddress,
         abi: PRESALE_ABI,
         functionName: 'finalize',
-      });
+      })
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({
         queryKey: ['admin', 'ico', 'data'],
-      });
+      })
     },
-  });
+  })
 
   const isActionPending =
     startPresaleMutation.isPending ||
     pausePresaleMutation.isPending ||
-    finalizePresaleMutation.isPending;
+    finalizePresaleMutation.isPending
 
   if (isCheckingAuth || (isAuthorized && isLoadingICO)) {
     return (
@@ -530,7 +527,7 @@ export default function ICOAdminPage() {
           <Skeleton className="h-64 w-full max-w-4xl" />
         </div>
       </PageContainer>
-    );
+    )
   }
 
   if (!isAuthorized) {
@@ -542,7 +539,7 @@ export default function ICOAdminPage() {
           <p className="text-muted-foreground">Admin access required.</p>
         </div>
       </PageContainer>
-    );
+    )
   }
 
   if (!presaleAddress) {
@@ -552,32 +549,31 @@ export default function ICOAdminPage() {
           <AlertTriangle className="mb-4 h-16 w-16 text-yellow-500" />
           <h1 className="mb-2 font-bold text-2xl">Presale Not Deployed</h1>
           <p className="text-muted-foreground">
-            Set NEXT_PUBLIC_BBLN_PRESALE_ADDRESS
+            Configure PRESALE_CONTRACTS.bblnPresale in config
           </p>
         </div>
       </PageContainer>
-    );
+    )
   }
 
   const formatDuration = (seconds: bigint): string => {
-    if (seconds <= 0n) return 'Ended';
-    const secs = Number(seconds);
-    const days = Math.floor(secs / 86400);
-    const hours = Math.floor((secs % 86400) / 3600);
-    const mins = Math.floor((secs % 3600) / 60);
-    return `${days}d ${hours}h ${mins}m`;
-  };
+    if (seconds <= 0n) return 'Ended'
+    const secs = Number(seconds)
+    const days = Math.floor(secs / 86400)
+    const hours = Math.floor((secs % 86400) / 3600)
+    const mins = Math.floor((secs % 3600) / 60)
+    return `${days}d ${hours}h ${mins}m`
+  }
 
   const getStatusBadge = () => {
-    if (status?.isFailed) return { text: 'FAILED', color: 'bg-red-500' };
-    if (status?.isFinalized)
-      return { text: 'FINALIZED', color: 'bg-green-500' };
-    if (isPaused) return { text: 'PAUSED', color: 'bg-yellow-500' };
-    if (status?.isActive) return { text: 'ACTIVE', color: 'bg-emerald-500' };
-    return { text: 'NOT STARTED', color: 'bg-gray-500' };
-  };
+    if (status?.isFailed) return { text: 'FAILED', color: 'bg-red-500' }
+    if (status?.isFinalized) return { text: 'FINALIZED', color: 'bg-green-500' }
+    if (isPaused) return { text: 'PAUSED', color: 'bg-yellow-500' }
+    if (status?.isActive) return { text: 'ACTIVE', color: 'bg-emerald-500' }
+    return { text: 'NOT STARTED', color: 'bg-gray-500' }
+  }
 
-  const statusBadge = getStatusBadge();
+  const statusBadge = getStatusBadge()
 
   return (
     <PageContainer className="space-y-6">
@@ -590,7 +586,7 @@ export default function ICOAdminPage() {
             <span
               className={cn(
                 'rounded-full px-3 py-1 font-medium text-sm text-white',
-                statusBadge.color
+                statusBadge.color,
               )}
             >
               {statusBadge.text}
@@ -601,6 +597,7 @@ export default function ICOAdminPage() {
           </p>
         </div>
         <button
+          type="button"
           onClick={() => refetchICOData()}
           disabled={isRefreshing}
           className="flex items-center gap-2 rounded-lg bg-muted px-4 py-2 transition-colors hover:bg-muted/80"
@@ -680,12 +677,18 @@ export default function ICOAdminPage() {
           {!status?.isActive && !status?.isFinalized && (
             <div className="mb-4 space-y-3">
               <div>
-                <label className="mb-1 block text-sm">Duration (days)</label>
+                <label
+                  htmlFor="presale-duration"
+                  className="mb-1 block text-sm"
+                >
+                  Duration (days)
+                </label>
                 <input
+                  id="presale-duration"
                   type="number"
                   value={presaleDuration}
                   onChange={(e) =>
-                    setPresaleDuration(parseInt(e.target.value) || 7)
+                    setPresaleDuration(parseInt(e.target.value, 10) || 7)
                   }
                   className="w-full rounded-lg border border-border bg-muted px-3 py-2"
                   min={1}
@@ -693,11 +696,16 @@ export default function ICOAdminPage() {
                 />
               </div>
               <div>
-                <label className="mb-1 block text-sm">Claim Delay (days)</label>
+                <label htmlFor="claim-delay" className="mb-1 block text-sm">
+                  Claim Delay (days)
+                </label>
                 <input
+                  id="claim-delay"
                   type="number"
                   value={claimDelay}
-                  onChange={(e) => setClaimDelay(parseInt(e.target.value) || 1)}
+                  onChange={(e) =>
+                    setClaimDelay(parseInt(e.target.value, 10) || 1)
+                  }
                   className="w-full rounded-lg border border-border bg-muted px-3 py-2"
                   min={0}
                   max={7}
@@ -709,6 +717,7 @@ export default function ICOAdminPage() {
           <div className="flex flex-wrap gap-3">
             {!status?.isActive && !status?.isFinalized && (
               <button
+                type="button"
                 onClick={() => startPresaleMutation.mutate()}
                 disabled={isActionPending}
                 className="flex items-center gap-2 rounded-lg bg-emerald-600 px-4 py-2 text-white transition-colors hover:bg-emerald-700 disabled:opacity-50"
@@ -722,13 +731,14 @@ export default function ICOAdminPage() {
 
             {status?.isActive && !status?.isFinalized && (
               <button
+                type="button"
                 onClick={() => pausePresaleMutation.mutate()}
                 disabled={isActionPending}
                 className={cn(
                   'flex items-center gap-2 rounded-lg px-4 py-2 transition-colors disabled:opacity-50',
                   isPaused
                     ? 'bg-emerald-600 text-white hover:bg-emerald-700'
-                    : 'bg-yellow-600 text-white hover:bg-yellow-700'
+                    : 'bg-yellow-600 text-white hover:bg-yellow-700',
                 )}
               >
                 {isPaused ? (
@@ -748,6 +758,7 @@ export default function ICOAdminPage() {
               !status?.isFinalized &&
               status.timeRemaining === 0n && (
                 <button
+                  type="button"
                   onClick={() => finalizePresaleMutation.mutate()}
                   disabled={isActionPending}
                   className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-white transition-colors hover:bg-primary/90 disabled:opacity-50"
@@ -870,7 +881,7 @@ export default function ICOAdminPage() {
         </div>
       </div>
     </PageContainer>
-  );
+  )
 }
 
 function StatCard({
@@ -879,10 +890,10 @@ function StatCard({
   value,
   subtext,
 }: {
-  icon: typeof DollarSign;
-  label: string;
-  value: string;
-  subtext: string;
+  icon: typeof DollarSign
+  label: string
+  value: string
+  subtext: string
 }) {
   return (
     <div className="rounded-xl border border-border bg-card p-6">
@@ -893,7 +904,7 @@ function StatCard({
       <div className="font-bold text-2xl">{value}</div>
       <div className="text-muted-foreground text-xs">{subtext}</div>
     </div>
-  );
+  )
 }
 
 function ConfigItem({ label, value }: { label: string; value: string }) {
@@ -902,5 +913,5 @@ function ConfigItem({ label, value }: { label: string; value: string }) {
       <span className="text-muted-foreground">{label}:</span>
       <span className="ml-2 font-medium">{value}</span>
     </div>
-  );
+  )
 }

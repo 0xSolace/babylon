@@ -1,5 +1,5 @@
-import { definePrompt } from '../define-prompt';
-import { ANTI_REPETITION_RULES, PARODY_NAME_RULES } from '../shared-sections';
+import { definePrompt } from '../define-prompt'
+import { ANTI_REPETITION_RULES, PARODY_NAME_RULES } from '../shared-sections'
 
 /**
  * Prompt for generating rumors and unconfirmed information for game world.
@@ -87,4 +87,4 @@ Respond with XML:
 
 No other text.
 `.trim(),
-});
+})

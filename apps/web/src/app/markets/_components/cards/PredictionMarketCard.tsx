@@ -1,14 +1,12 @@
-'use client';
-
-import { cn } from '@babylon/shared';
-import { ArrowUpDown, Clock } from 'lucide-react';
-import { memo } from 'react';
-import type { PredictionMarketWithPosition } from '@/types/markets';
-import { calculateSharePercentages, getDaysLeft } from '../../_lib/formatters';
+import { cn } from '@babylon/shared'
+import { ArrowUpDown, Clock } from 'lucide-react'
+import { memo } from 'react'
+import type { PredictionMarketWithPosition } from '@/types/markets'
+import { calculateSharePercentages, getDaysLeft } from '../../_lib/formatters'
 
 interface PredictionMarketCardProps {
-  prediction: PredictionMarketWithPosition;
-  onClick: (prediction: PredictionMarketWithPosition) => void;
+  prediction: PredictionMarketWithPosition
+  onClick: (prediction: PredictionMarketWithPosition) => void
 }
 
 /**
@@ -21,11 +19,11 @@ export const PredictionMarketCard = memo(function PredictionMarketCard({
 }: PredictionMarketCardProps) {
   const { yesPercent, noPercent, totalShares } = calculateSharePercentages(
     prediction.yesShares,
-    prediction.noShares
-  );
-  const daysLeft = getDaysLeft(prediction.resolutionDate);
+    prediction.noShares,
+  )
+  const daysLeft = getDaysLeft(prediction.resolutionDate)
   const hasPosition =
-    prediction.userPosition !== null && prediction.userPosition !== undefined;
+    prediction.userPosition !== null && prediction.userPosition !== undefined
 
   return (
     <button
@@ -35,7 +33,7 @@ export const PredictionMarketCard = memo(function PredictionMarketCard({
         'w-full cursor-pointer rounded p-3 text-left transition-all',
         hasPosition
           ? 'bg-[#0066FF]/5 hover:bg-[#0066FF]/20'
-          : 'bg-muted/30 hover:bg-muted'
+          : 'bg-muted/30 hover:bg-muted',
       )}
     >
       <div className="mb-2 font-medium">
@@ -85,7 +83,7 @@ export const PredictionMarketCard = memo(function PredictionMarketCard({
                 'rounded px-2 py-0.5 font-medium',
                 prediction.userPosition.side === 'YES'
                   ? 'bg-green-600/20 text-green-600'
-                  : 'bg-red-600/20 text-red-600'
+                  : 'bg-red-600/20 text-red-600',
               )}
             >
               {prediction.userPosition.side}{' '}
@@ -96,7 +94,7 @@ export const PredictionMarketCard = memo(function PredictionMarketCard({
                 'font-medium',
                 prediction.userPosition.unrealizedPnL >= 0
                   ? 'text-green-600'
-                  : 'text-red-600'
+                  : 'text-red-600',
               )}
             >
               {prediction.userPosition.unrealizedPnL >= 0 ? '+' : ''}$
@@ -106,5 +104,5 @@ export const PredictionMarketCard = memo(function PredictionMarketCard({
         )}
       </div>
     </button>
-  );
-});
+  )
+})

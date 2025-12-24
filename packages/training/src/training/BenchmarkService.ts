@@ -13,47 +13,47 @@
  * @see ModelBenchmarkService - For HuggingFace upload evaluation
  */
 
-import fs from 'node:fs/promises';
-import path from 'node:path';
-import { db } from '@babylon/db';
-import { logger } from '@babylon/shared';
-import { BenchmarkRunner } from '../benchmark/BenchmarkRunner';
-import { getAgentRuntimeManager } from '../dependencies';
+import fs from 'node:fs/promises'
+import path from 'node:path'
+import { db } from '@babylon/db'
+import { logger } from '@babylon/shared'
+import { BenchmarkRunner } from '../benchmark/BenchmarkRunner'
+import { getAgentRuntimeManager } from '../dependencies'
 
 export interface BenchmarkResults {
-  modelId: string;
-  benchmarkScore: number; // Overall composite score
-  pnl: number;
-  accuracy: number;
-  optimality: number;
-  perpTrades: number;
-  correctPredictions: number;
-  totalPositions: number;
-  duration: number;
-  timestamp: Date;
+  modelId: string
+  benchmarkScore: number // Overall composite score
+  pnl: number
+  accuracy: number
+  optimality: number
+  perpTrades: number
+  correctPredictions: number
+  totalPositions: number
+  duration: number
+  timestamp: Date
 }
 
 export interface ComparisonResults {
-  newModel: string;
-  previousModel: string | null;
-  newScore: number;
-  previousScore: number | null;
-  improvement: number | null; // Percentage improvement
-  shouldDeploy: boolean;
-  reason: string;
+  newModel: string
+  previousModel: string | null
+  newScore: number
+  previousScore: number | null
+  improvement: number | null // Percentage improvement
+  shouldDeploy: boolean
+  reason: string
 }
 
 export class BenchmarkService {
-  private readonly DEPLOYMENT_THRESHOLD = 0.95; // Deploy if new model >= 95% of best
+  private readonly DEPLOYMENT_THRESHOLD = 0.95 // Deploy if new model >= 95% of best
   // Use the 1-week benchmark we generated for comprehensive evaluation
   private readonly DEFAULT_BENCHMARK_PATH = path.resolve(
     process.cwd(),
-    'benchmarks/benchmark-week-10080-60-10-5-8-12345.json'
-  );
+    'benchmarks/benchmark-week-10080-60-10-5-8-12345.json',
+  )
   private readonly RESULTS_DIR = path.resolve(
     process.cwd(),
-    'benchmark-results/models'
-  );
+    'benchmark-results/models',
+  )
 
   /**
    * Get benchmark path with fallback to first available benchmark
@@ -67,30 +67,31 @@ export class BenchmarkService {
   private async getBenchmarkPath(): Promise<string> {
     // Try default first
     try {
-      await fs.access(this.DEFAULT_BENCHMARK_PATH);
-      return this.DEFAULT_BENCHMARK_PATH;
+      await fs.access(this.DEFAULT_BENCHMARK_PATH)
+      return this.DEFAULT_BENCHMARK_PATH
     } catch {
       // Fallback: find any benchmark file
-      const benchmarkDir = path.resolve(process.cwd(), 'benchmarks');
-      const files = await fs.readdir(benchmarkDir);
+      const benchmarkDir = path.resolve(process.cwd(), 'benchmarks')
+      const files = await fs.readdir(benchmarkDir)
       const benchmarkFiles = files.filter(
-        (f) => f.startsWith('benchmark-') && f.endsWith('.json')
-      );
+        (f) => f.startsWith('benchmark-') && f.endsWith('.json'),
+      )
 
-      if (benchmarkFiles.length > 0) {
-        const fallbackPath = path.join(benchmarkDir, benchmarkFiles[0]!);
+      const firstBenchmarkFile = benchmarkFiles[0]
+      if (firstBenchmarkFile) {
+        const fallbackPath = path.join(benchmarkDir, firstBenchmarkFile)
         logger.warn(
           `Default benchmark not found, using: ${fallbackPath}`,
           undefined,
-          'BenchmarkService'
-        );
-        return fallbackPath;
+          'BenchmarkService',
+        )
+        return fallbackPath
       }
     }
 
     throw new Error(
-      `No benchmark files found. Generate one with: babylon train generate`
-    );
+      `No benchmark files found. Generate one with: babylon train generate`,
+    )
   }
 
   /**
@@ -113,45 +114,41 @@ export class BenchmarkService {
    */
   async benchmarkModel(
     modelId: string,
-    benchmarkPath?: string
+    benchmarkPath?: string,
   ): Promise<BenchmarkResults> {
-    logger.info(
-      `Benchmarking model: ${modelId}`,
-      undefined,
-      'BenchmarkService'
-    );
+    logger.info(`Benchmarking model: ${modelId}`, undefined, 'BenchmarkService')
 
-    const startTime = Date.now();
+    const startTime = Date.now()
 
     // Get benchmark file (with fallback logic)
-    const bmPath = benchmarkPath || (await this.getBenchmarkPath());
+    const bmPath = benchmarkPath || (await this.getBenchmarkPath())
 
     // Get test agent
-    const agent = await this.getTestAgent();
+    const agent = await this.getTestAgent()
 
     // Create output directory
     const outputDir = path.join(
       this.RESULTS_DIR,
       modelId,
-      Date.now().toString()
-    );
-    await fs.mkdir(outputDir, { recursive: true });
+      Date.now().toString(),
+    )
+    await fs.mkdir(outputDir, { recursive: true })
 
     // Get agent runtime
-    const runtime = await getAgentRuntimeManager().getRuntime(agent.id);
+    const runtime = await getAgentRuntimeManager().getRuntime(agent.id)
 
     // Force the runtime to use the specific model we're benchmarking
     // by temporarily overriding the model selection
     const model = await db.trainedModel.findUnique({
       where: { modelId },
-    });
+    })
 
     if (!model) {
-      throw new Error(`Model not found: ${modelId}`);
+      throw new Error(`Model not found: ${modelId}`)
     }
 
     // Validate and get model identifier for inference
-    const modelIdentifier = this.getValidModelIdentifier(model);
+    const modelIdentifier = this.getValidModelIdentifier(model)
 
     // Run benchmark
     logger.info(
@@ -161,8 +158,8 @@ export class BenchmarkService {
         modelIdentifier,
         agent: agent.username,
       },
-      'BenchmarkService'
-    );
+      'BenchmarkService',
+    )
 
     const result = await BenchmarkRunner.runSingle({
       benchmarkPath: bmPath,
@@ -171,17 +168,17 @@ export class BenchmarkService {
       saveTrajectory: true,
       outputDir,
       forceModel: modelIdentifier, // Use validated W&B model ID
-    });
+    })
 
-    const duration = Date.now() - startTime;
+    const duration = Date.now() - startTime
 
     // Calculate composite benchmark score
     // Formula: 0.4 * normalized_pnl + 0.3 * accuracy + 0.3 * optimality
-    const normalizedPnl = this.normalizePnl(result.metrics.totalPnl);
+    const normalizedPnl = this.normalizePnl(result.metrics.totalPnl)
     const benchmarkScore =
       0.4 * normalizedPnl +
       0.3 * result.metrics.predictionMetrics.accuracy +
-      0.3 * (result.metrics.optimalityScore / 100);
+      0.3 * (result.metrics.optimalityScore / 100)
 
     const benchmarkResults: BenchmarkResults = {
       modelId,
@@ -194,7 +191,7 @@ export class BenchmarkService {
       totalPositions: result.metrics.predictionMetrics.totalPositions,
       duration,
       timestamp: new Date(),
-    };
+    }
 
     logger.info(
       'Benchmark complete',
@@ -202,18 +199,17 @@ export class BenchmarkService {
         modelId,
         score: benchmarkScore.toFixed(3),
         pnl: result.metrics.totalPnl.toFixed(2),
-        accuracy:
-          (result.metrics.predictionMetrics.accuracy * 100).toFixed(1) + '%',
-        optimality: result.metrics.optimalityScore.toFixed(1) + '%',
+        accuracy: `${(result.metrics.predictionMetrics.accuracy * 100).toFixed(1)}%`,
+        optimality: `${result.metrics.optimalityScore.toFixed(1)}%`,
         duration: `${(duration / 1000).toFixed(1)}s`,
       },
-      'BenchmarkService'
-    );
+      'BenchmarkService',
+    )
 
     // Store results
-    await this.storeBenchmarkResults(modelId, benchmarkResults);
+    await this.storeBenchmarkResults(modelId, benchmarkResults)
 
-    return benchmarkResults;
+    return benchmarkResults
   }
 
   /**
@@ -237,28 +233,24 @@ export class BenchmarkService {
    */
   async compareModels(
     newModelId: string,
-    threshold: number = this.DEPLOYMENT_THRESHOLD
+    threshold: number = this.DEPLOYMENT_THRESHOLD,
   ): Promise<ComparisonResults> {
-    logger.info(
-      `Comparing model: ${newModelId}`,
-      undefined,
-      'BenchmarkService'
-    );
+    logger.info(`Comparing model: ${newModelId}`, undefined, 'BenchmarkService')
 
     // Get new model's benchmark results
     const newModel = await db.trainedModel.findUnique({
       where: { modelId: newModelId },
-    });
+    })
 
     if (!newModel) {
-      throw new Error(`Model not found: ${newModelId}`);
+      throw new Error(`Model not found: ${newModelId}`)
     }
 
     if (newModel.benchmarkScore === null) {
-      throw new Error(`Model has not been benchmarked: ${newModelId}`);
+      throw new Error(`Model has not been benchmarked: ${newModelId}`)
     }
 
-    const newScore = newModel.benchmarkScore;
+    const newScore = newModel.benchmarkScore
 
     // Get previous best model (excluding the new one)
     const previousBest = await db.trainedModel.findFirst({
@@ -268,15 +260,15 @@ export class BenchmarkService {
         benchmarkScore: { not: null },
       },
       orderBy: { benchmarkScore: 'desc' },
-    });
+    })
 
     // If no previous model, always deploy
     if (!previousBest) {
       logger.info(
         'No previous model to compare - will deploy',
         { newScore },
-        'BenchmarkService'
-      );
+        'BenchmarkService',
+      )
       return {
         newModel: newModelId,
         previousModel: null,
@@ -285,23 +277,23 @@ export class BenchmarkService {
         improvement: null,
         shouldDeploy: true,
         reason: 'First model - no comparison available',
-      };
+      }
     }
 
-    const previousScore = previousBest.benchmarkScore!;
-    const improvement = ((newScore - previousScore) / previousScore) * 100;
-    const thresholdScore = previousScore * threshold;
-    const shouldDeploy = newScore >= thresholdScore;
+    const previousScore = previousBest.benchmarkScore ?? 0
+    const improvement = ((newScore - previousScore) / previousScore) * 100
+    const thresholdScore = previousScore * threshold
+    const shouldDeploy = newScore >= thresholdScore
 
-    let reason = '';
+    let reason = ''
     if (shouldDeploy) {
       if (newScore > previousScore) {
-        reason = `Improved by ${improvement.toFixed(1)}% (${newScore.toFixed(3)} > ${previousScore.toFixed(3)})`;
+        reason = `Improved by ${improvement.toFixed(1)}% (${newScore.toFixed(3)} > ${previousScore.toFixed(3)})`
       } else {
-        reason = `Within acceptable range (${newScore.toFixed(3)} >= ${thresholdScore.toFixed(3)}, threshold: ${threshold * 100}%)`;
+        reason = `Within acceptable range (${newScore.toFixed(3)} >= ${thresholdScore.toFixed(3)}, threshold: ${threshold * 100}%)`
       }
     } else {
-      reason = `Performance too low (${newScore.toFixed(3)} < ${thresholdScore.toFixed(3)}, need ${threshold * 100}% of best)`;
+      reason = `Performance too low (${newScore.toFixed(3)} < ${thresholdScore.toFixed(3)}, need ${threshold * 100}% of best)`
     }
 
     logger.info(
@@ -311,12 +303,12 @@ export class BenchmarkService {
         newScore: newScore.toFixed(3),
         previousModel: previousBest.modelId,
         previousScore: previousScore.toFixed(3),
-        improvement: improvement.toFixed(1) + '%',
+        improvement: `${improvement.toFixed(1)}%`,
         shouldDeploy,
         reason,
       },
-      'BenchmarkService'
-    );
+      'BenchmarkService',
+    )
 
     return {
       newModel: newModelId,
@@ -326,7 +318,7 @@ export class BenchmarkService {
       improvement,
       shouldDeploy,
       reason,
-    };
+    }
   }
 
   /**
@@ -341,7 +333,7 @@ export class BenchmarkService {
    */
   async storeBenchmarkResults(
     modelId: string,
-    results: BenchmarkResults
+    results: BenchmarkResults,
   ): Promise<void> {
     await db.trainedModel.update({
       where: { modelId },
@@ -360,13 +352,13 @@ export class BenchmarkService {
         },
         updatedAt: new Date(),
       },
-    });
+    })
 
     logger.info(
       'Stored benchmark results',
       { modelId, score: results.benchmarkScore },
-      'BenchmarkService'
-    );
+      'BenchmarkService',
+    )
   }
 
   /**
@@ -382,10 +374,10 @@ export class BenchmarkService {
    */
   async shouldDeploy(
     modelId: string,
-    threshold: number = this.DEPLOYMENT_THRESHOLD
+    threshold: number = this.DEPLOYMENT_THRESHOLD,
   ): Promise<boolean> {
-    const comparison = await this.compareModels(modelId, threshold);
-    return comparison.shouldDeploy;
+    const comparison = await this.compareModels(modelId, threshold)
+    return comparison.shouldDeploy
   }
 
   /**
@@ -404,11 +396,11 @@ export class BenchmarkService {
    * - Falls back to baseModel if none valid
    */
   private getValidModelIdentifier(model: {
-    storagePath: string;
-    modelId: string;
-    baseModel: string;
+    storagePath: string | null
+    modelId: string | null
+    baseModel: string | null
   }): string {
-    const storagePath = model.storagePath;
+    const storagePath = model.storagePath
 
     // Validate storagePath format (should be W&B model ID or HuggingFace path)
     // W&B format: entity/project/model-name:version or entity/project/model-name:stepN
@@ -417,29 +409,35 @@ export class BenchmarkService {
     if (storagePath && storagePath.trim().length > 0) {
       // Check if it looks like a valid model ID
       if (storagePath.includes('/') || storagePath.includes(':')) {
-        return storagePath;
+        return storagePath
       }
 
       // StoragePath is invalid, log warning
       logger.warn(
         `Invalid storagePath format: ${storagePath}, falling back to modelId`,
         { modelId: model.modelId },
-        'BenchmarkService'
-      );
+        'BenchmarkService',
+      )
     }
 
     // Fallback to base model if modelId also doesn't look valid
-    if (model.modelId.includes('/')) {
-      return model.modelId;
+    if (model.modelId?.includes('/')) {
+      return model.modelId
     }
 
     // Last resort: use base model from training
-    logger.warn(
-      `No valid model identifier found, using baseModel`,
-      { modelId: model.modelId, baseModel: model.baseModel },
-      'BenchmarkService'
-    );
-    return model.baseModel;
+    if (model.baseModel) {
+      logger.warn(
+        `No valid model identifier found, using baseModel`,
+        { modelId: model.modelId, baseModel: model.baseModel },
+        'BenchmarkService',
+      )
+      return model.baseModel
+    }
+
+    throw new Error(
+      'No valid model identifier found and no baseModel available',
+    )
   }
 
   /**
@@ -460,20 +458,20 @@ export class BenchmarkService {
           in: ['trader-aggressive', 'test-agent', 'benchmark-agent'],
         },
       },
-    });
+    })
 
     // Fall back to any agent
     if (!agent) {
       agent = await db.user.findFirst({
         where: { isAgent: true },
-      });
+      })
     }
 
     if (!agent) {
-      throw new Error('No test agent available for benchmarking');
+      throw new Error('No test agent available for benchmarking')
     }
 
-    return agent;
+    return agent
   }
 
   /**
@@ -481,10 +479,10 @@ export class BenchmarkService {
    * Assumes typical range of -5000 to +5000
    */
   private normalizePnl(pnl: number): number {
-    const min = -5000;
-    const max = 5000;
-    const normalized = (pnl - min) / (max - min);
-    return Math.max(0, Math.min(1, normalized)); // Clamp to [0, 1]
+    const min = -5000
+    const max = 5000
+    const normalized = (pnl - min) / (max - min)
+    return Math.max(0, Math.min(1, normalized)) // Clamp to [0, 1]
   }
 
   /**
@@ -495,7 +493,7 @@ export class BenchmarkService {
       where: { benchmarkScore: { not: null } },
       orderBy: { benchmarkScore: 'desc' },
       take: 10,
-    });
+    })
 
     const summary = models.map((m) => ({
       modelId: m.modelId,
@@ -504,7 +502,7 @@ export class BenchmarkService {
       accuracy: m.accuracy,
       status: m.status,
       createdAt: m.createdAt,
-    }));
+    }))
 
     return {
       totalBenchmarked: models.length,
@@ -512,10 +510,10 @@ export class BenchmarkService {
       recentModels: summary
         .sort(
           (a, b) =>
-            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
         )
         .slice(0, 5),
-    };
+    }
   }
 
   /**
@@ -523,18 +521,18 @@ export class BenchmarkService {
    */
   async benchmarkMultipleModels(
     modelIds: string[],
-    benchmarkPath?: string
+    benchmarkPath?: string,
   ): Promise<Record<string, BenchmarkResults>> {
-    const results: Record<string, BenchmarkResults> = {};
+    const results: Record<string, BenchmarkResults> = {}
 
     for (const modelId of modelIds) {
-      const result = await this.benchmarkModel(modelId, benchmarkPath);
-      results[modelId] = result;
+      const result = await this.benchmarkModel(modelId, benchmarkPath)
+      results[modelId] = result
     }
 
-    return results;
+    return results
   }
 }
 
 // Export singleton instance
-export const benchmarkService = new BenchmarkService();
+export const benchmarkService = new BenchmarkService()

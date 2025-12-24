@@ -1,1 +1,0 @@
-{"version":3,"file":"narrative-state-service.d.ts","sourceRoot":"","sources":["narrative-state-service.ts"],"names":[],"mappings":"AAAA;;;;;GAKG;AAIH,OAAO,KAAK,EAAE,eAAe,IAAI,WAAW,EAAE,MAAM,wBAAwB,CAAC;AAK7E,mCAAmC;AACnC,wBAAsB,WAAW,CAC/B,UAAU,EAAE,MAAM,EAClB,GAAG,EAAE,WAAW,GACf,OAAO,CAAC,IAAI,CAAC,CA6Bf;AAED,kCAAkC;AAClC,wBAAsB,UAAU,CAAC,UAAU,EAAE,MAAM;;;;;;;;;;;;;;;UAIlD"}

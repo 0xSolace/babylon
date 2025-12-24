@@ -5,175 +5,125 @@
 
 import {
   AgentCapabilitiesSchema,
+  IDENTITY_REGISTRY_ABI,
   type JsonValue,
   logger,
-} from '@babylon/shared';
+  REPUTATION_SYSTEM_ABI,
+} from '@babylon/shared'
 import {
+  type Abi,
+  type Address,
   createPublicClient,
-  type GetContractReturnType,
-  getContract,
+  getAddress,
   http,
+  isAddress,
   type PublicClient,
-} from 'viem';
-import type { AgentProfile, AgentReputation } from '../types/a2a';
+} from 'viem'
+import type { AgentProfile, AgentReputation } from '../types/a2a'
 
-// ERC-8004 Identity Registry ABI (minimal)
-const IDENTITY_ABI = [
-  {
-    type: 'function',
-    name: 'getTokenId',
-    inputs: [{ name: '_address', type: 'address' }],
-    outputs: [{ type: 'uint256' }],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
-    name: 'ownerOf',
-    inputs: [{ name: 'tokenId', type: 'uint256' }],
-    outputs: [{ type: 'address' }],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
-    name: 'getAgentProfile',
-    inputs: [{ name: '_tokenId', type: 'uint256' }],
-    outputs: [
-      { name: 'name', type: 'string' },
-      { name: 'endpoint', type: 'string' },
-      { name: 'capabilitiesHash', type: 'bytes32' },
-      { name: 'registeredAt', type: 'uint256' },
-      { name: 'isActive', type: 'bool' },
-      { name: 'metadata', type: 'string' },
-    ],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
-    name: 'isRegistered',
-    inputs: [{ name: '_address', type: 'address' }],
-    outputs: [{ type: 'bool' }],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
-    name: 'getAllActiveAgents',
-    inputs: [],
-    outputs: [{ type: 'uint256[]' }],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
-    name: 'isEndpointActive',
-    inputs: [{ name: 'endpoint', type: 'string' }],
-    outputs: [{ type: 'bool' }],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
-    name: 'getAgentsByCapability',
-    inputs: [{ name: 'capabilityHash', type: 'bytes32' }],
-    outputs: [{ type: 'uint256[]' }],
-    stateMutability: 'view',
-  },
-] as const;
+// Use ABIs from @babylon/shared - typed as viem Abi
+const IDENTITY_ABI = IDENTITY_REGISTRY_ABI
+const REPUTATION_ABI = REPUTATION_SYSTEM_ABI
 
-// Reputation System ABI (minimal)
-const REPUTATION_ABI = [
-  {
-    type: 'function',
-    name: 'getReputation',
-    inputs: [{ name: '_tokenId', type: 'uint256' }],
-    outputs: [
-      { name: 'totalBets', type: 'uint256' },
-      { name: 'winningBets', type: 'uint256' },
-      { name: 'totalVolume', type: 'uint256' },
-      { name: 'profitLoss', type: 'uint256' },
-      { name: 'accuracyScore', type: 'uint256' },
-      { name: 'trustScore', type: 'uint256' },
-      { name: 'isBanned', type: 'bool' },
-    ],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
-    name: 'getFeedbackCount',
-    inputs: [{ name: '_tokenId', type: 'uint256' }],
-    outputs: [{ type: 'uint256' }],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
-    name: 'getFeedback',
-    inputs: [
-      { name: '_tokenId', type: 'uint256' },
-      { name: '_index', type: 'uint256' },
-    ],
-    outputs: [
-      { name: 'from', type: 'address' },
-      { name: 'rating', type: 'int8' },
-      { name: 'comment', type: 'string' },
-      { name: 'timestamp', type: 'uint256' },
-    ],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
-    name: 'getAgentsByMinScore',
-    inputs: [{ name: 'minScore', type: 'uint256' }],
-    outputs: [{ type: 'uint256[]' }],
-    stateMutability: 'view',
-  },
-] as const;
-
-export interface RegistryConfig {
-  rpcUrl: string;
-  identityRegistryAddress: string;
-  reputationSystemAddress: string;
+/**
+ * Validates and normalizes an Ethereum address string to viem Address type.
+ * Throws if the address is invalid.
+ */
+function toAddress(address: string): Address {
+  if (!isAddress(address)) {
+    throw new Error(`Invalid Ethereum address: ${address}`)
+  }
+  return getAddress(address)
 }
 
-type IdentityContract = GetContractReturnType<
-  typeof IDENTITY_ABI,
-  PublicClient
->;
-type ReputationContract = GetContractReturnType<
-  typeof REPUTATION_ABI,
-  PublicClient
->;
+export interface RegistryConfig {
+  rpcUrl: string
+  identityRegistryAddress: string
+  reputationSystemAddress: string
+}
 
 export class RegistryClient {
-  private readonly client: PublicClient;
-  private readonly identityRegistry: IdentityContract;
-  private readonly reputationSystem: ReputationContract;
+  private readonly client: PublicClient
+  private readonly identityRegistryAddress: Address
+  private readonly reputationSystemAddress: Address
 
   constructor(config: RegistryConfig) {
     // Initialize viem public client
     this.client = createPublicClient({
       transport: http(config.rpcUrl),
-    });
+    })
+    // Validate addresses at construction time
+    this.identityRegistryAddress = toAddress(config.identityRegistryAddress)
+    this.reputationSystemAddress = toAddress(config.reputationSystemAddress)
+  }
 
-    // Create typed contract instances
-    this.identityRegistry = getContract({
-      address: config.identityRegistryAddress as `0x${string}`,
-      abi: IDENTITY_ABI,
-      client: this.client,
-    });
+  /**
+   * Helper to read from identity registry.
+   * Uses viem's readContract with proper ABI typing.
+   * The generic T represents the expected return type from the contract call.
+   */
+  private async readIdentity<T>(
+    functionName: string,
+    args: readonly bigint[] | readonly string[] | readonly [],
+  ): Promise<T> {
+    // viem's readContract returns unknown for dynamic ABI/function combinations.
+    // We use a generic to type the expected result based on the caller's knowledge.
+    // Type assertions needed because viem expects literal function names from ABI,
+    // but we're calling dynamically based on runtime string values.
+    const result = await this.client.readContract({
+      address: this.identityRegistryAddress,
+      abi: IDENTITY_ABI satisfies Abi,
+      functionName: functionName as 'getAgentProfile',
+      args: args as readonly [bigint],
+    })
+    // The result type is unknown from viem due to dynamic function selection.
+    // The caller provides the expected type T based on contract knowledge.
+    return result as T
+  }
 
-    this.reputationSystem = getContract({
-      address: config.reputationSystemAddress as `0x${string}`,
-      abi: REPUTATION_ABI,
-      client: this.client,
-    });
+  /**
+   * Helper to read from reputation system.
+   * Uses viem's readContract with proper ABI typing.
+   * The generic T represents the expected return type from the contract call.
+   */
+  private async readReputation<T>(
+    functionName: string,
+    args: readonly bigint[] | readonly [],
+  ): Promise<T> {
+    // viem's readContract returns unknown for dynamic ABI/function combinations.
+    // We use a generic to type the expected result based on the caller's knowledge.
+    // Type assertions needed because viem expects literal function names from ABI,
+    // but we're calling dynamically based on runtime string values.
+    const result = await this.client.readContract({
+      address: this.reputationSystemAddress,
+      abi: REPUTATION_ABI satisfies Abi,
+      functionName: functionName as 'getReputation',
+      args: args as readonly [bigint],
+    })
+    // The result type is unknown from viem due to dynamic function selection.
+    // The caller provides the expected type T based on contract knowledge.
+    return result as T
   }
 
   /**
    * Get agent profile by token ID
    */
   async getAgentProfile(tokenId: number): Promise<AgentProfile | null> {
-    const profile = await this.identityRegistry.read.getAgentProfile([
+    type ProfileResult = readonly [
+      string,
+      string,
+      string,
+      string,
+      boolean,
+      string,
+    ]
+    const profile = await this.readIdentity<ProfileResult>('getAgentProfile', [
       BigInt(tokenId),
-    ]);
-    const reputation = await this.getAgentReputation(tokenId);
-    const address = await this.identityRegistry.read.ownerOf([BigInt(tokenId)]);
+    ])
+    const reputation = await this.getAgentReputation(tokenId)
+    const address = await this.readIdentity<Address>('ownerOf', [
+      BigInt(tokenId),
+    ])
 
     return {
       tokenId,
@@ -183,29 +133,39 @@ export class RegistryClient {
       capabilities: this.parseCapabilities(profile[5]), // metadata
       reputation,
       isActive: profile[4], // isActive
-    };
+    }
   }
 
   /**
    * Get agent profile by address
    */
   async getAgentProfileByAddress(
-    address: string
+    address: string,
   ): Promise<AgentProfile | null> {
-    const tokenId = await this.identityRegistry.read.getTokenId([
-      address as `0x${string}`,
-    ]);
-    if (tokenId === 0n) return null;
-    return this.getAgentProfile(Number(tokenId));
+    const validatedAddress = toAddress(address)
+    const tokenId = await this.readIdentity<bigint>('getTokenId', [
+      validatedAddress,
+    ])
+    if (tokenId === 0n) return null
+    return this.getAgentProfile(Number(tokenId))
   }
 
   /**
    * Get agent reputation
    */
   async getAgentReputation(tokenId: number): Promise<AgentReputation> {
-    const rep = await this.reputationSystem.read.getReputation([
+    type RepResult = readonly [
+      bigint,
+      bigint,
+      bigint,
+      bigint,
+      bigint,
+      bigint,
+      boolean,
+    ]
+    const rep = await this.readReputation<RepResult>('getReputation', [
       BigInt(tokenId),
-    ]);
+    ])
 
     return {
       totalBets: Number(rep[0] || 0),
@@ -215,36 +175,40 @@ export class RegistryClient {
       accuracyScore: Number(rep[4] || 0),
       trustScore: Number(rep[5] || 0),
       isBanned: rep[6] || false,
-    };
+    }
   }
 
   /**
    * Discover agents by filters
    */
   async discoverAgents(filters?: {
-    strategies?: string[];
-    minReputation?: number;
-    markets?: string[];
+    strategies?: string[]
+    minReputation?: number
+    markets?: string[]
   }): Promise<AgentProfile[]> {
-    let tokenIds: readonly bigint[];
+    let tokenIds: readonly bigint[]
 
     if (filters?.minReputation) {
-      tokenIds = await this.reputationSystem.read.getAgentsByMinScore([
-        BigInt(filters.minReputation),
-      ]);
+      tokenIds = await this.readReputation<readonly bigint[]>(
+        'getAgentsByMinScore',
+        [BigInt(filters.minReputation)],
+      )
     } else {
-      tokenIds = await this.identityRegistry.read.getAllActiveAgents();
+      tokenIds = await this.readIdentity<readonly bigint[]>(
+        'getAllActiveAgents',
+        [],
+      )
     }
 
-    const profiles: AgentProfile[] = [];
+    const profiles: AgentProfile[] = []
     for (const tokenId of tokenIds) {
-      const profile = await this.getAgentProfile(Number(tokenId));
+      const profile = await this.getAgentProfile(Number(tokenId))
       if (profile && this.matchesFilters(profile, filters)) {
-        profiles.push(profile);
+        profiles.push(profile)
       }
     }
 
-    return profiles;
+    return profiles
   }
 
   /**
@@ -253,75 +217,88 @@ export class RegistryClient {
   private matchesFilters(
     profile: AgentProfile,
     filters?: {
-      strategies?: string[];
-      minReputation?: number;
-      markets?: string[];
-    }
+      strategies?: string[]
+      minReputation?: number
+      markets?: string[]
+    },
   ): boolean {
-    if (!filters) return true;
+    if (!filters) return true
 
     // Check strategies
     if (filters.strategies && filters.strategies.length > 0) {
       const hasStrategy = filters.strategies.some((s) =>
-        profile.capabilities.strategies.includes(s)
-      );
-      if (!hasStrategy) return false;
+        profile.capabilities.strategies.includes(s),
+      )
+      if (!hasStrategy) return false
     }
 
     // Check markets
     if (filters.markets && filters.markets.length > 0) {
       const hasMarket = filters.markets.some((m) =>
-        profile.capabilities.markets.includes(m)
-      );
-      if (!hasMarket) return false;
+        profile.capabilities.markets.includes(m),
+      )
+      if (!hasMarket) return false
     }
 
     // Check reputation (already filtered in query if provided)
     if (filters.minReputation) {
       if (profile.reputation.trustScore < filters.minReputation) {
-        return false;
+        return false
       }
     }
 
-    return true;
+    return true
   }
 
   /**
-   * Parse capabilities from metadata JSON
+   * Parse capabilities from metadata JSON.
+   * Uses zod schema validation to safely parse the capabilities.
    */
   private parseCapabilities(metadata: string): {
-    strategies: string[];
-    markets: string[];
-    actions: string[];
-    version: string;
-    skills: string[];
-    domains: string[];
+    strategies: string[]
+    markets: string[]
+    actions: string[]
+    version: string
+    skills: string[]
+    domains: string[]
   } {
-    const parsed = JSON.parse(metadata) as Record<string, unknown>;
-    const validation = AgentCapabilitiesSchema.safeParse(parsed);
+    // JSON.parse returns any by default - immediately validate with zod
+    // which handles any input type safely and returns typed data
+    const validation = AgentCapabilitiesSchema.safeParse(JSON.parse(metadata))
+    if (validation.success) {
+      return {
+        strategies: validation.data.strategies ?? [],
+        markets: validation.data.markets ?? [],
+        actions: validation.data.actions ?? [],
+        version: validation.data.version ?? '1.0.0',
+        skills: validation.data.skills ?? [],
+        domains: validation.data.domains ?? [],
+      }
+    }
+    // Return defaults if validation fails
     return {
-      strategies: validation.data?.strategies ?? [],
-      markets: validation.data?.markets ?? [],
-      actions: validation.data?.actions ?? [],
-      version: validation.data?.version ?? '1.0.0',
-      skills: validation.data?.skills ?? [],
-      domains: validation.data?.domains ?? [],
-    };
+      strategies: [],
+      markets: [],
+      actions: [],
+      version: '1.0.0',
+      skills: [],
+      domains: [],
+    }
   }
 
   /**
    * Verify agent address owns the token ID
    */
   async verifyAgent(address: string, tokenId: number): Promise<boolean> {
-    const owner = await this.identityRegistry.read.ownerOf([BigInt(tokenId)]);
-    return owner.toLowerCase() === address.toLowerCase();
+    const owner = await this.readIdentity<Address>('ownerOf', [BigInt(tokenId)])
+    return owner.toLowerCase() === address.toLowerCase()
   }
 
   /**
    * Check if endpoint is active
    */
   async isEndpointActive(endpoint: string): Promise<boolean> {
-    return await this.identityRegistry.read.isEndpointActive([endpoint]);
+    return await this.readIdentity<boolean>('isEndpointActive', [endpoint])
   }
 
   /**
@@ -337,12 +314,12 @@ export class RegistryClient {
    */
   async register(
     agentId: string,
-    data: Record<string, JsonValue>
+    data: Record<string, JsonValue>,
   ): Promise<void> {
-    logger.info(`Register agent ${agentId} (read-only client)`, { data });
+    logger.info(`Register agent ${agentId} (read-only client)`, { data })
     throw new Error(
-      'RegistryClient is read-only. Use Agent0Client.registerAgent() or /api/agents/onboard for registration'
-    );
+      'RegistryClient is read-only. Use Agent0Client.registerAgent() or /api/agents/onboard for registration',
+    )
   }
 
   /**
@@ -353,10 +330,10 @@ export class RegistryClient {
    * server-side operation.
    */
   async unregister(agentId: string): Promise<void> {
-    logger.info(`Unregister agent ${agentId} (read-only client)`);
+    logger.info(`Unregister agent ${agentId} (read-only client)`)
     throw new Error(
-      'RegistryClient is read-only. Unregistration requires direct blockchain interaction with agent owner wallet'
-    );
+      'RegistryClient is read-only. Unregistration requires direct blockchain interaction with agent owner wallet',
+    )
   }
 
   /**
@@ -365,7 +342,7 @@ export class RegistryClient {
   async getAgents(): Promise<
     Array<{ agentId: string; [key: string]: JsonValue }>
   > {
-    const profiles = await this.discoverAgents();
+    const profiles = await this.discoverAgents()
     return profiles.map((profile) => ({
       agentId: String(profile.tokenId),
       tokenId: profile.tokenId,
@@ -390,22 +367,22 @@ export class RegistryClient {
         isBanned: profile.reputation.isBanned,
       },
       isActive: profile.isActive,
-    }));
+    }))
   }
 
   /**
    * Get agent by ID (required by RegistryClient interface)
    */
   async getAgent(
-    agentId: string
+    agentId: string,
   ): Promise<{ agentId: string; [key: string]: JsonValue } | null> {
-    const tokenId = Number.parseInt(agentId, 10);
-    if (isNaN(tokenId)) {
-      return null;
+    const tokenId = Number.parseInt(agentId, 10)
+    if (Number.isNaN(tokenId)) {
+      return null
     }
-    const profile = await this.getAgentProfile(tokenId);
+    const profile = await this.getAgentProfile(tokenId)
     if (!profile) {
-      return null;
+      return null
     }
     return {
       agentId: String(profile.tokenId),
@@ -431,6 +408,6 @@ export class RegistryClient {
         isBanned: profile.reputation.isBanned,
       },
       isActive: profile.isActive,
-    };
+    }
   }
 }

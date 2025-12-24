@@ -1,83 +1,41 @@
-'use client';
+import type { PerpPosition } from '@babylon/shared'
+import { type JsonValue, UserPositionsApiResponseSchema } from '@babylon/shared'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useCallback } from 'react'
+import type { UserPredictionPosition } from '../types/widgets'
 
-import type { PerpPosition, UserPredictionPosition } from '@babylon/shared';
-import { UserPositionsApiResponseSchema } from '@babylon/shared';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useCallback } from 'react';
+// Helper to extract error message
+function getErrorMessage(error: unknown): string | null {
+  if (!error) return null
+  if (error instanceof Error) return error.message
+  if (typeof error === 'string') return error
+  return 'Unknown error'
+}
 
 /**
  * Helper to safely convert API values to numbers.
  */
-function toNumber(value: unknown, fallback = 0): number {
+function toNumber(value: JsonValue, fallback = 0): number {
   if (typeof value === 'number' && Number.isFinite(value)) {
-    return value;
+    return value
   }
   if (typeof value === 'string') {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : fallback;
+    const parsed = Number(value)
+    return Number.isFinite(parsed) ? parsed : fallback
   }
-  return fallback;
+  return fallback
 }
 
-// Re-export for convenience
-export type { UserPredictionPosition } from '@babylon/shared';
-
 interface PerpStats {
-  totalPositions: number;
-  totalPnL: number;
-  totalFunding: number;
+  totalPositions: number
+  totalPnL: number
+  totalFunding: number
 }
 
 interface PositionsState {
-  perpPositions: PerpPosition[];
-  predictionPositions: UserPredictionPosition[];
-  perpStats: PerpStats;
-}
-
-type NumericLike = number | string | null | undefined;
-
-interface ApiPerpPositionPayload {
-  id: string;
-  userId?: string;
-  ticker: string;
-  organizationId?: string;
-  side: PerpPosition['side'];
-  entryPrice: NumericLike;
-  currentPrice: NumericLike;
-  size: NumericLike;
-  leverage: NumericLike;
-  liquidationPrice?: NumericLike;
-  unrealizedPnL?: NumericLike;
-  unrealizedPnLPercent?: NumericLike;
-  fundingPaid?: NumericLike;
-  openedAt: string;
-  lastUpdated?: string;
-}
-
-interface ApiPredictionPositionPayload {
-  id: string;
-  marketId: string;
-  question: string;
-  side: UserPredictionPosition['side'];
-  shares: NumericLike;
-  avgPrice: NumericLike;
-  currentPrice: NumericLike;
-  currentValue?: NumericLike;
-  costBasis?: NumericLike;
-  unrealizedPnL?: NumericLike;
-  currentProbability?: NumericLike;
-  resolved?: boolean;
-  resolution?: boolean | null;
-}
-
-interface PositionsApiResponse {
-  perpetuals?: {
-    positions?: ApiPerpPositionPayload[];
-    stats?: PerpStats;
-  };
-  predictions?: {
-    positions?: ApiPredictionPositionPayload[];
-  };
+  perpPositions: PerpPosition[]
+  predictionPositions: UserPredictionPosition[]
+  perpStats: PerpStats
 }
 
 /**
@@ -85,20 +43,20 @@ interface PositionsApiResponse {
  */
 interface UseUserPositionsOptions {
   /** Whether to enable position fetching (default: true) */
-  enabled?: boolean;
+  enabled?: boolean
 }
 
 const DEFAULT_STATS: PerpStats = {
   totalPositions: 0,
   totalPnL: 0,
   totalFunding: 0,
-};
+}
 
 const createDefaultState = (): PositionsState => ({
   perpPositions: [],
   predictionPositions: [],
   perpStats: { ...DEFAULT_STATS },
-});
+})
 
 /**
  * Hook for fetching and managing user trading positions.
@@ -133,10 +91,10 @@ const createDefaultState = (): PositionsState => ({
  */
 export function useUserPositions(
   userId?: string | null,
-  options: UseUserPositionsOptions = {}
+  options: UseUserPositionsOptions = {},
 ) {
-  const { enabled = true } = options;
-  const queryClient = useQueryClient();
+  const { enabled = true } = options
+  const queryClient = useQueryClient()
 
   const {
     data = createDefaultState(),
@@ -146,19 +104,17 @@ export function useUserPositions(
     queryKey: ['userPositions', userId],
     queryFn: async (): Promise<PositionsState> => {
       const response = await fetch(
-        `/api/markets/positions/${encodeURIComponent(userId!)}`
-      );
+        `/api/markets/positions/${encodeURIComponent(userId)}`,
+      )
 
-      const json: unknown = await response.json();
-      const responseData = UserPositionsApiResponseSchema.parse(
-        json
-      ) as PositionsApiResponse;
+      const json: unknown = await response.json()
+      const responseData = UserPositionsApiResponseSchema.parse(json)
 
-      const perpetuals = responseData.perpetuals ?? {};
-      const predictions = responseData.predictions ?? {};
+      const perpetuals = responseData.perpetuals ?? {}
+      const predictions = responseData.predictions ?? {}
 
-      const normalizedPerps = (perpetuals.positions ?? []).map(
-        (pos: ApiPerpPositionPayload) => ({
+      const normalizedPerps: PerpPosition[] = (perpetuals.positions ?? []).map(
+        (pos) => ({
           id: pos.id,
           userId: pos.userId,
           ticker: pos.ticker,
@@ -174,54 +130,54 @@ export function useUserPositions(
           fundingPaid: toNumber(pos.fundingPaid),
           openedAt: pos.openedAt,
           lastUpdated: pos.lastUpdated ?? pos.openedAt,
-        })
-      ) as PerpPosition[];
+        }),
+      )
 
-      const normalizedPredictions = (predictions.positions ?? []).map(
-        (pos: ApiPredictionPositionPayload) => {
-          const shares = toNumber(pos.shares);
-          const avgPrice = toNumber(pos.avgPrice);
-          return {
-            id: pos.id,
-            marketId: pos.marketId,
-            question: pos.question,
-            side: pos.side,
-            shares,
-            avgPrice,
-            currentPrice: toNumber(pos.currentPrice),
-            currentValue: toNumber(pos.currentValue ?? 0),
-            costBasis: toNumber(pos.costBasis ?? shares * avgPrice),
-            unrealizedPnL: toNumber(pos.unrealizedPnL ?? 0),
-            resolved: Boolean(pos.resolved),
-            resolution: pos.resolution ?? null,
-          };
+      const normalizedPredictions: UserPredictionPosition[] = (
+        predictions.positions ?? []
+      ).map((pos) => {
+        const shares = toNumber(pos.shares)
+        const avgPrice = toNumber(pos.avgPrice)
+        return {
+          id: pos.id,
+          marketId: pos.marketId,
+          question: pos.question,
+          side: pos.side,
+          shares,
+          avgPrice,
+          currentPrice: toNumber(pos.currentPrice),
+          currentValue: toNumber(pos.currentValue ?? 0),
+          costBasis: toNumber(pos.costBasis ?? shares * avgPrice),
+          unrealizedPnL: toNumber(pos.unrealizedPnL ?? 0),
+          resolved: Boolean(pos.resolved),
+          resolution: pos.resolution ?? null,
         }
-      ) as UserPredictionPosition[];
+      })
 
       return {
         perpPositions: normalizedPerps,
         predictionPositions: normalizedPredictions,
         perpStats: perpetuals.stats ?? { ...DEFAULT_STATS },
-      };
+      }
     },
     enabled: enabled && !!userId,
     staleTime: 30000,
-  });
+  })
 
   const refresh = useCallback(() => {
     if (userId && enabled) {
       void queryClient.invalidateQueries({
         queryKey: ['userPositions', userId],
-      });
+      })
     }
-  }, [queryClient, userId, enabled]);
+  }, [queryClient, userId, enabled])
 
   return {
     perpPositions: data.perpPositions,
     predictionPositions: data.predictionPositions,
     perpStats: data.perpStats,
     loading: isLoading,
-    error: error as Error | null,
+    error: getErrorMessage(error),
     refresh,
-  };
+  }
 }

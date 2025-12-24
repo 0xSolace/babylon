@@ -1,39 +1,37 @@
-'use client';
-
-import { useJejuAuth } from '@babylon/auth/client';
-import type { OnboardingProfilePayload } from '@babylon/shared';
+import { useJejuAuth } from '@babylon/auth'
+import type { OnboardingProfilePayload } from '@babylon/shared'
 import {
   CHAIN,
   getWalletErrorMessage,
   logger,
   POINTS,
   WALLET_ERROR_MESSAGES,
-} from '@babylon/shared';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+} from '@babylon/shared'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   type ImportedProfileData,
   OnboardingModal,
-} from '@/components/onboarding/OnboardingModal';
-import { useAuth } from '@/hooks/useAuth';
-import { useRegisterAgentTx } from '@/hooks/useRegisterAgentTx';
-import { apiFetch } from '@/utils/api-fetch';
+} from '@/components/onboarding/OnboardingModal'
+import { useAuth } from '@/hooks/useAuth'
+import { useRegisterAgentTx } from '@/hooks/useRegisterAgentTx'
+import { apiFetch } from '@/utils/api-fetch'
 
 /**
  * Check if we're on a local network where smart wallets aren't supported.
  * Smart wallets (ERC-4337) require bundler infrastructure that only exists
  * on supported chains like Base/Base Sepolia, not on local Hardhat networks.
  */
-const isLocalNetwork = CHAIN.id === 31337;
+const isLocalNetwork = CHAIN.id === 31337
 
-import type { JsonValue } from '@babylon/shared';
-import { type User as StoreUser, useAuthStore } from '@/stores/authStore';
+import type { JsonValue } from '@babylon/shared'
+import { type User as StoreUser, useAuthStore } from '@/stores/authStore'
 
-import { clearReferralCode, getReferralCode } from './ReferralCaptureProvider';
+import { clearReferralCode, getReferralCode } from './ReferralCaptureProvider'
 
 /**
  * Onboarding stage type for multi-step onboarding flow.
  */
-type OnboardingStage = 'PROFILE' | 'ONCHAIN' | 'COMPLETED';
+type OnboardingStage = 'PROFILE' | 'ONCHAIN' | 'COMPLETED'
 
 /**
  * Onboarding provider component for managing user onboarding flow.
@@ -58,7 +56,7 @@ type OnboardingStage = 'PROFILE' | 'ONCHAIN' | 'COMPLETED';
 export function OnboardingProvider({
   children,
 }: {
-  children: React.ReactNode;
+  children: React.ReactNode
 }) {
   const {
     authenticated,
@@ -68,114 +66,114 @@ export function OnboardingProvider({
     loadingProfile,
     refresh,
     logout,
-  } = useAuth();
+  } = useAuth()
 
   // Get linked social accounts and auth token from OAuth3
-  const { linkedAccounts, getAccessToken } = useJejuAuth();
+  const { linkedAccounts, getAccessToken } = useJejuAuth()
 
-  const { setUser, setNeedsOnboarding, setNeedsOnchain } = useAuthStore();
+  const { setUser, setNeedsOnboarding, setNeedsOnchain } = useAuthStore()
   const { registerAgent, smartWalletAddress, smartWalletReady } =
-    useRegisterAgentTx();
+    useRegisterAgentTx()
 
-  const [stage, setStage] = useState<OnboardingStage>('PROFILE');
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [stage, setStage] = useState<OnboardingStage>('PROFILE')
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const [submittedProfile, setSubmittedProfile] =
-    useState<OnboardingProfilePayload | null>(null);
-  const [userDismissed, setUserDismissed] = useState(false);
+    useState<OnboardingProfilePayload | null>(null)
+  const [userDismissed, setUserDismissed] = useState(false)
   const [importedProfileData, setImportedProfileData] =
-    useState<ImportedProfileData | null>(null);
+    useState<ImportedProfileData | null>(null)
   const [_hasProgressedPastSocialImport, setHasProgressedPastSocialImport] =
-    useState(false);
+    useState(false)
   const [pendingOnchainSubmission, setPendingOnchainSubmission] =
-    useState<OnboardingProfilePayload | null>(null);
+    useState<OnboardingProfilePayload | null>(null)
   const [onchainReferralCode, setOnchainReferralCode] = useState<string | null>(
-    null
-  );
+    null,
+  )
 
   // Delay modal display to prevent flickering
-  const [isReadyToShow, setIsReadyToShow] = useState(false);
-  const [hasInitialized, setHasInitialized] = useState(false);
+  const [isReadyToShow, setIsReadyToShow] = useState(false)
+  const [hasInitialized, setHasInitialized] = useState(false)
 
   // Wait for app to stabilize before showing modal
   useEffect(() => {
     if (!authenticated || loadingProfile) {
-      setIsReadyToShow(false);
-      setHasInitialized(false);
-      return;
+      setIsReadyToShow(false)
+      setHasInitialized(false)
+      return
     }
 
     // If already initialized and conditions change, show immediately
     if (hasInitialized) {
-      setIsReadyToShow(true);
-      return;
+      setIsReadyToShow(true)
+      return
     }
 
     // First time: wait 2-3 seconds for app to load
-    const delay = Math.random() * 1000 + 2000; // 2-3 seconds
+    const delay = Math.random() * 1000 + 2000 // 2-3 seconds
     const timer = setTimeout(() => {
-      setIsReadyToShow(true);
-      setHasInitialized(true);
-    }, delay);
+      setIsReadyToShow(true)
+      setHasInitialized(true)
+    }, delay)
 
-    return () => clearTimeout(timer);
-  }, [authenticated, loadingProfile, hasInitialized]);
+    return () => clearTimeout(timer)
+  }, [authenticated, loadingProfile, hasInitialized])
 
   // If needsOnboarding is manually set to true, show modal immediately
   useEffect(() => {
     if (needsOnboarding && authenticated && !loadingProfile) {
-      setIsReadyToShow(true);
-      setHasInitialized(true);
-      setUserDismissed(false); // Reset dismissed state when explicitly requesting onboarding
+      setIsReadyToShow(true)
+      setHasInitialized(true)
+      setUserDismissed(false) // Reset dismissed state when explicitly requesting onboarding
     }
-  }, [needsOnboarding, authenticated, loadingProfile]);
+  }, [needsOnboarding, authenticated, loadingProfile])
 
   const shouldShowModal = useMemo(() => {
     // Check if dev mode is enabled via URL parameter
     if (typeof window !== 'undefined') {
-      const params = new URLSearchParams(window.location.search);
-      const isDevMode = params.get('dev') === 'true';
-      const isProduction = window.location.hostname === 'babylon.market';
-      const isHomePage = window.location.pathname === '/';
-      const isWaitlistFlow = params.get('waitlist') === 'true';
+      const params = new URLSearchParams(window.location.search)
+      const isDevMode = params.get('dev') === 'true'
+      const isProduction = window.location.hostname === 'babylon.market'
+      const isHomePage = window.location.pathname === '/'
+      const isWaitlistFlow = params.get('waitlist') === 'true'
 
       // Hide onboarding modal on production (babylon.market) on home page unless ?dev=true
       // BUT allow it if user is in waitlist flow (coming from waitlist signup)
       if (isProduction && isHomePage && !isDevMode && !isWaitlistFlow) {
-        return false;
+        return false
       }
     }
 
     // Don't show until ready (prevents flickering)
     if (!isReadyToShow) {
-      return false;
+      return false
     }
 
     if (!authenticated || loadingProfile) {
-      return false;
+      return false
     }
 
     // User explicitly dismissed the modal
     if (userDismissed) {
-      return false;
+      return false
     }
 
     // Don't show modal if user is already fully registered (defensive check)
     if (user?.onChainRegistered && user?.nftTokenId && user?.profileComplete) {
-      return false;
+      return false
     }
 
     // Don't keep showing modal after completion
     if (stage === 'COMPLETED') {
-      return true; // Show briefly to show success message, but allow closing
+      return true // Show briefly to show success message, but allow closing
     }
 
     return Boolean(
       needsOnboarding ||
         needsOnchain ||
         stage === 'ONCHAIN' ||
-        stage === 'PROFILE'
-    );
+        stage === 'PROFILE',
+    )
   }, [
     isReadyToShow,
     authenticated,
@@ -185,29 +183,29 @@ export function OnboardingProvider({
     stage,
     user,
     userDismissed,
-  ]);
+  ])
 
   useEffect(() => {
     if (!authenticated) {
-      setStage('PROFILE');
-      setSubmittedProfile(null);
-      setError(null);
-      setUserDismissed(false); // Reset dismissed state on logout
-      setImportedProfileData(null);
-      setHasProgressedPastSocialImport(false);
-      setPendingOnchainSubmission(null);
-      setOnchainReferralCode(null);
-      return;
+      setStage('PROFILE')
+      setSubmittedProfile(null)
+      setError(null)
+      setUserDismissed(false) // Reset dismissed state on logout
+      setImportedProfileData(null)
+      setHasProgressedPastSocialImport(false)
+      setPendingOnchainSubmission(null)
+      setOnchainReferralCode(null)
+      return
     }
 
     if (loadingProfile) {
-      return;
+      return
     }
 
     if (needsOnboarding) {
       // Start directly at profile setup
-      setStage('PROFILE');
-      return;
+      setStage('PROFILE')
+      return
     }
 
     if (needsOnchain) {
@@ -218,18 +216,18 @@ export function OnboardingProvider({
           bio: user.bio,
           profileImageUrl: user.profileImageUrl,
           coverImageUrl: user.coverImageUrl,
-        });
+        })
       }
-      setStage((prev) => (prev === 'COMPLETED' ? prev : 'ONCHAIN'));
-      return;
+      setStage((prev) => (prev === 'COMPLETED' ? prev : 'ONCHAIN'))
+      return
     }
 
     if (stage !== 'COMPLETED') {
-      setStage('PROFILE');
-      setSubmittedProfile(null);
-      setError(null);
-      setImportedProfileData(null);
-      setHasProgressedPastSocialImport(false);
+      setStage('PROFILE')
+      setSubmittedProfile(null)
+      setError(null)
+      setImportedProfileData(null)
+      setHasProgressedPastSocialImport(false)
     }
   }, [
     authenticated,
@@ -239,16 +237,16 @@ export function OnboardingProvider({
     user,
     submittedProfile,
     stage,
-  ]);
+  ])
 
   // Automatically extract social profile data from linked accounts when authenticating
   useEffect(() => {
-    if (!authenticated || !needsOnboarding) return;
-    if (importedProfileData) return; // Already have imported data
-    if (loadingProfile) return; // Wait for profile to load
+    if (!authenticated || !needsOnboarding) return
+    if (importedProfileData) return // Already have imported data
+    if (loadingProfile) return // Wait for profile to load
 
     // Check for Farcaster account in linked accounts
-    const farcasterAccount = linkedAccounts.find((a) => a.type === 'farcaster');
+    const farcasterAccount = linkedAccounts.find((a) => a.type === 'farcaster')
     if (farcasterAccount) {
       const profileData: ImportedProfileData = {
         platform: 'farcaster',
@@ -257,7 +255,7 @@ export function OnboardingProvider({
         bio: undefined,
         profileImageUrl: null,
         farcasterFid: farcasterAccount.identifier,
-      };
+      }
 
       logger.info(
         'Auto-imported Farcaster profile from OAuth3 - will award points on signup',
@@ -268,16 +266,16 @@ export function OnboardingProvider({
           rewardEligible: true,
           expectedPoints: POINTS.FARCASTER_LINK,
         },
-        'OnboardingProvider'
-      );
+        'OnboardingProvider',
+      )
 
-      setImportedProfileData(profileData);
-      setHasProgressedPastSocialImport(true);
-      return;
+      setImportedProfileData(profileData)
+      setHasProgressedPastSocialImport(true)
+      return
     }
 
     // Check for Twitter account in linked accounts
-    const twitterAccount = linkedAccounts.find((a) => a.type === 'twitter');
+    const twitterAccount = linkedAccounts.find((a) => a.type === 'twitter')
     if (twitterAccount) {
       const profileData: ImportedProfileData = {
         platform: 'twitter',
@@ -286,7 +284,7 @@ export function OnboardingProvider({
         bio: undefined,
         profileImageUrl: null,
         twitterId: twitterAccount.identifier,
-      };
+      }
 
       logger.info(
         'Auto-imported Twitter profile from OAuth3 - will award points on signup',
@@ -297,57 +295,57 @@ export function OnboardingProvider({
           rewardEligible: true,
           expectedPoints: POINTS.TWITTER_LINK,
         },
-        'OnboardingProvider'
-      );
+        'OnboardingProvider',
+      )
 
-      setImportedProfileData(profileData);
-      setHasProgressedPastSocialImport(true);
-      return;
+      setImportedProfileData(profileData)
+      setHasProgressedPastSocialImport(true)
+      return
     }
 
     // For wallet-only logins, don't set imported data - let the generated profile flow handle it
     logger.info(
       'User authenticated with wallet only - will use generated profile',
       undefined,
-      'OnboardingProvider'
-    );
+      'OnboardingProvider',
+    )
   }, [
     authenticated,
     linkedAccounts,
     needsOnboarding,
     importedProfileData,
     loadingProfile,
-  ]);
+  ])
 
   // Listen for social import callbacks from URL parameters (for manual social linking)
   useEffect(() => {
-    if (typeof window === 'undefined' || !authenticated) return;
+    if (typeof window === 'undefined' || !authenticated) return
 
-    const params = new URLSearchParams(window.location.search);
-    const socialImport = params.get('social_import');
-    const dataParam = params.get('data');
+    const params = new URLSearchParams(window.location.search)
+    const socialImport = params.get('social_import')
+    const dataParam = params.get('data')
 
     if (socialImport && dataParam) {
       const profileData = JSON.parse(
-        decodeURIComponent(dataParam)
-      ) as ImportedProfileData;
+        decodeURIComponent(dataParam),
+      ) as ImportedProfileData
       logger.info(
         'Social profile data received from URL',
         { platform: socialImport },
-        'OnboardingProvider'
-      );
+        'OnboardingProvider',
+      )
 
-      setImportedProfileData(profileData);
-      setHasProgressedPastSocialImport(true);
-      setStage('PROFILE');
+      setImportedProfileData(profileData)
+      setHasProgressedPastSocialImport(true)
+      setStage('PROFILE')
 
       // Clean up URL
-      const newUrl = new URL(window.location.href);
-      newUrl.searchParams.delete('social_import');
-      newUrl.searchParams.delete('data');
-      window.history.replaceState({}, '', newUrl.toString());
+      const newUrl = new URL(window.location.href)
+      newUrl.searchParams.delete('social_import')
+      newUrl.searchParams.delete('data')
+      window.history.replaceState({}, '', newUrl.toString())
     }
-  }, [authenticated]);
+  }, [authenticated])
 
   const submitOnchain = useCallback(
     async (profile: OnboardingProfilePayload, referralCode: string | null) => {
@@ -360,47 +358,47 @@ export function OnboardingProvider({
         logger.info(
           'User already fully registered, skipping onchain submission',
           { userId: user.id, nftTokenId: user.nftTokenId },
-          'OnboardingProvider'
-        );
-        setNeedsOnboarding(false);
-        setNeedsOnchain(false);
-        setStage('COMPLETED');
-        return;
+          'OnboardingProvider',
+        )
+        setNeedsOnboarding(false)
+        setNeedsOnchain(false)
+        setStage('COMPLETED')
+        return
       }
 
       const body = {
         walletAddress: smartWalletAddress || null,
         referralCode: referralCode || null,
-      };
+      }
 
       const callEndpoint = async (payload: Record<string, string | null>) => {
         const response = await apiFetch('/api/users/onboarding/onchain', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload),
-        });
+        })
 
-        const data = await response.json();
+        const data = await response.json()
         if (!response.ok) {
-          const rawError = data?.error;
+          const rawError = data?.error
           const message =
             (typeof rawError === 'string'
               ? rawError
               : typeof rawError?.message === 'string'
                 ? rawError.message
                 : null) ??
-            `Failed to complete on-chain onboarding (status ${response.status})`;
-          throw new Error(message);
+            `Failed to complete on-chain onboarding (status ${response.status})`
+          throw new Error(message)
         }
         return data as {
-          onchain: Record<string, JsonValue>;
-          user: StoreUser | null;
-        };
-      };
+          onchain: Record<string, JsonValue>
+          user: StoreUser | null
+        }
+      }
 
       const applyResponse = (data: {
-        onchain: Record<string, JsonValue>;
-        user: StoreUser | null;
+        onchain: Record<string, JsonValue>
+        user: StoreUser | null
       }) => {
         if (data.user) {
           setUser({
@@ -424,13 +422,13 @@ export function OnboardingProvider({
             createdAt: data.user.createdAt ?? user?.createdAt,
             onChainRegistered:
               data.user.onChainRegistered ?? user?.onChainRegistered,
-          });
+          })
         }
-        setNeedsOnboarding(false);
-        setNeedsOnchain(false);
-        setStage('COMPLETED');
-        void refresh().catch(() => undefined);
-      };
+        setNeedsOnboarding(false)
+        setNeedsOnchain(false)
+        setStage('COMPLETED')
+        void refresh().catch(() => undefined)
+      }
 
       const completeWithClient = async () => {
         // On local networks (Hardhat), smart wallets (ERC-4337) don't work because
@@ -439,76 +437,76 @@ export function OnboardingProvider({
           logger.info(
             'Local network detected - using backend-signed registration (no bundler available)',
             { chainId: CHAIN.id },
-            'OnboardingProvider'
-          );
-          const data = await callEndpoint(body);
-          applyResponse(data);
-          return;
+            'OnboardingProvider',
+          )
+          const data = await callEndpoint(body)
+          applyResponse(data)
+          return
         }
 
         if (!smartWalletReady || !smartWalletAddress) {
-          throw new Error(WALLET_ERROR_MESSAGES.NO_EMBEDDED_WALLET);
+          throw new Error(WALLET_ERROR_MESSAGES.NO_EMBEDDED_WALLET)
         }
 
         logger.info(
           'Attempting client-signed on-chain registration',
           { address: smartWalletAddress },
-          'OnboardingProvider'
-        );
+          'OnboardingProvider',
+        )
 
         // Check if wallet is already registered before submitting transaction
         // If already registered, the server will handle syncing the state
         const registrationResult = await registerAgent(profile).catch(
           (txError: Error) => {
-            const errorMessage = txError.message.toLowerCase();
+            const errorMessage = txError.message.toLowerCase()
             // If the error is "already registered", don't throw - let the server handle it
             if (errorMessage.includes('already registered')) {
               logger.info(
                 'Wallet already registered on-chain, syncing with server',
                 { address: smartWalletAddress },
-                'OnboardingProvider'
-              );
-              return 'already-registered';
+                'OnboardingProvider',
+              )
+              return 'already-registered'
             }
             // For other errors, re-throw
-            throw txError;
-          }
-        );
+            throw txError
+          },
+        )
 
         if (registrationResult === 'already-registered') {
           // Call the endpoint without a txHash - server will detect existing registration
-          const data = await callEndpoint(body);
-          applyResponse(data);
-          return;
+          const data = await callEndpoint(body)
+          applyResponse(data)
+          return
         }
 
-        const txHash = registrationResult as string;
+        const txHash = registrationResult as string
         logger.info(
           'Client-submitted on-chain registration transaction',
           { txHash },
-          'OnboardingProvider'
-        );
+          'OnboardingProvider',
+        )
 
         const data = await callEndpoint({
           ...body,
           txHash,
-        });
-        applyResponse(data);
-      };
+        })
+        applyResponse(data)
+      }
 
       const response = await completeWithClient().catch((rawError: Error) => {
         // Use wallet-aware error message
-        const userFriendlyMessage = getWalletErrorMessage(rawError);
-        setError(userFriendlyMessage);
+        const userFriendlyMessage = getWalletErrorMessage(rawError)
+        setError(userFriendlyMessage)
         logger.error(
           'Failed to complete on-chain onboarding',
           { error: rawError.message },
-          'OnboardingProvider'
-        );
-        return null;
-      });
+          'OnboardingProvider',
+        )
+        return null
+      })
 
-      if (!response) return;
+      if (!response) return
     },
     [
       smartWalletReady,
@@ -519,13 +517,13 @@ export function OnboardingProvider({
       setUser,
       smartWalletAddress,
       user,
-    ]
-  );
+    ],
+  )
 
   useEffect(() => {
     // On local networks, we use backend signing so smart wallet isn't required
     const walletReady =
-      isLocalNetwork || (smartWalletReady && smartWalletAddress);
+      isLocalNetwork || (smartWalletReady && smartWalletAddress)
 
     if (
       stage !== 'ONCHAIN' ||
@@ -533,17 +531,17 @@ export function OnboardingProvider({
       !walletReady ||
       isSubmitting
     ) {
-      return;
+      return
     }
 
-    setIsSubmitting(true);
-    setError(null);
+    setIsSubmitting(true)
+    setError(null)
     void submitOnchain(pendingOnchainSubmission, onchainReferralCode).finally(
       () => {
-        setPendingOnchainSubmission(null);
-        setIsSubmitting(false);
-      }
-    );
+        setPendingOnchainSubmission(null)
+        setIsSubmitting(false)
+      },
+    )
   }, [
     stage,
     pendingOnchainSubmission,
@@ -552,25 +550,25 @@ export function OnboardingProvider({
     isSubmitting,
     submitOnchain,
     onchainReferralCode,
-  ]);
+  ])
 
   const handleProfileSubmit = useCallback(
     async (payload: OnboardingProfilePayload) => {
-      setIsSubmitting(true);
-      setError(null);
+      setIsSubmitting(true)
+      setError(null)
 
-      const referralCode = getReferralCode();
+      const referralCode = getReferralCode()
 
       // Get OAuth3 access token for signup
-      const accessToken = await getAccessToken();
+      const accessToken = await getAccessToken()
       logger.info(
         'OAuth3 token state during signup',
         {
           present: Boolean(accessToken),
           tokenPreview: accessToken ? `${accessToken.slice(0, 12)}...` : null,
         },
-        'OnboardingProvider'
-      );
+        'OnboardingProvider',
+      )
 
       const response = await apiFetch('/api/users/signup', {
         method: 'POST',
@@ -579,15 +577,14 @@ export function OnboardingProvider({
           ...payload,
           referralCode: referralCode || undefined,
         }),
-      });
+      })
 
-      const data = await response.json();
+      const data = await response.json()
       if (!response.ok) {
         const message =
-          data?.error ||
-          `Failed to complete signup (status ${response.status})`;
-        setIsSubmitting(false);
-        throw new Error(message);
+          data?.error || `Failed to complete signup (status ${response.status})`
+        setIsSubmitting(false)
+        throw new Error(message)
       }
 
       if (data.user) {
@@ -612,17 +609,17 @@ export function OnboardingProvider({
           createdAt: data.user.createdAt ?? user?.createdAt,
           onChainRegistered:
             data.user.onChainRegistered ?? user?.onChainRegistered,
-        });
+        })
       }
-      setNeedsOnboarding(false);
-      setNeedsOnchain(true);
+      setNeedsOnboarding(false)
+      setNeedsOnchain(true)
 
-      clearReferralCode();
-      setSubmittedProfile(payload);
-      setOnchainReferralCode(referralCode || null);
-      setPendingOnchainSubmission({ ...payload });
-      setStage('ONCHAIN');
-      setIsSubmitting(false);
+      clearReferralCode()
+      setSubmittedProfile(payload)
+      setOnchainReferralCode(referralCode || null)
+      setPendingOnchainSubmission({ ...payload })
+      setStage('ONCHAIN')
+      setIsSubmitting(false)
     },
     [
       user,
@@ -631,32 +628,32 @@ export function OnboardingProvider({
       setNeedsOnchain,
       getAccessToken,
       smartWalletAddress,
-    ]
-  );
+    ],
+  )
 
   const handleRetryOnchain = useCallback(async () => {
-    if (!submittedProfile) return;
-    setError(null);
+    if (!submittedProfile) return
+    setError(null)
 
-    setOnchainReferralCode((prev) => prev ?? getReferralCode());
-    setPendingOnchainSubmission({ ...submittedProfile });
-  }, [submittedProfile]);
+    setOnchainReferralCode((prev) => prev ?? getReferralCode())
+    setPendingOnchainSubmission({ ...submittedProfile })
+  }, [submittedProfile])
 
   const handleSkipOnchain = useCallback(() => {
     logger.info(
       'User skipped onchain registration',
       { userId: user?.id },
-      'OnboardingProvider'
-    );
-    setNeedsOnchain(false);
-    setUserDismissed(true);
-    setStage('PROFILE');
-    setSubmittedProfile(null);
-    setError(null);
-    setImportedProfileData(null);
-    setPendingOnchainSubmission(null);
-    setOnchainReferralCode(null);
-  }, [user, setNeedsOnchain]);
+      'OnboardingProvider',
+    )
+    setNeedsOnchain(false)
+    setUserDismissed(true)
+    setStage('PROFILE')
+    setSubmittedProfile(null)
+    setError(null)
+    setImportedProfileData(null)
+    setPendingOnchainSubmission(null)
+    setOnchainReferralCode(null)
+  }, [user, setNeedsOnchain])
 
   const handleClose = useCallback(() => {
     logger.info(
@@ -667,21 +664,21 @@ export function OnboardingProvider({
         needsOnchain,
         userRegistered: user?.onChainRegistered,
       },
-      'OnboardingProvider'
-    );
+      'OnboardingProvider',
+    )
 
-    setUserDismissed(true);
-    setStage('PROFILE');
-    setSubmittedProfile(null);
-    setError(null);
-    setImportedProfileData(null);
-    setHasProgressedPastSocialImport(false);
-    setPendingOnchainSubmission(null);
-    setOnchainReferralCode(null);
+    setUserDismissed(true)
+    setStage('PROFILE')
+    setSubmittedProfile(null)
+    setError(null)
+    setImportedProfileData(null)
+    setHasProgressedPastSocialImport(false)
+    setPendingOnchainSubmission(null)
+    setOnchainReferralCode(null)
 
     // Clear onboarding flags so modal doesn't keep reappearing
-    setNeedsOnboarding(false);
-    setNeedsOnchain(false);
+    setNeedsOnboarding(false)
+    setNeedsOnchain(false)
   }, [
     stage,
     needsOnboarding,
@@ -689,7 +686,7 @@ export function OnboardingProvider({
     user,
     setNeedsOnboarding,
     setNeedsOnchain,
-  ]);
+  ])
 
   return (
     <>
@@ -712,5 +709,5 @@ export function OnboardingProvider({
         />
       )}
     </>
-  );
+  )
 }

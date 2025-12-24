@@ -1,7 +1,5 @@
-'use client';
-
-import { useJejuAuth, useJejuWallet } from '@babylon/auth/client';
-import { logger } from '@babylon/shared';
+import { useJejuAuth, useJejuWallet } from '@babylon/auth'
+import { logger } from '@babylon/shared'
 import {
   AlertCircle,
   CheckCircle2,
@@ -10,9 +8,9 @@ import {
   LogOut,
   Shield,
   Wallet,
-} from 'lucide-react';
-import { toast } from 'sonner';
-import { useAuth } from '@/hooks/useAuth';
+} from 'lucide-react'
+import { toast } from 'sonner'
+import { useAuth } from '@/hooks/useAuth'
 
 /**
  * Security tab component for managing account security settings.
@@ -30,31 +28,31 @@ import { useAuth } from '@/hooks/useAuth';
  * @returns Security tab element
  */
 export function SecurityTab() {
-  const { userId, linkedAccounts } = useJejuAuth();
-  const { address: walletAddress } = useJejuWallet();
-  const { logout } = useAuth();
+  const { userId, linkedAccounts } = useJejuAuth()
+  const { address: walletAddress } = useJejuWallet()
+  const { logout } = useAuth()
 
   const copyToClipboard = async (text: string, label: string) => {
-    await navigator.clipboard.writeText(text);
-    toast.success(`${label} copied to clipboard`);
-  };
+    await navigator.clipboard.writeText(text)
+    toast.success(`${label} copied to clipboard`)
+  }
 
   const handleLogout = async () => {
-    await logout();
-    toast.success('Logged out successfully');
+    await logout()
+    toast.success('Logged out successfully')
     logger.info(
       'User logged out from security settings',
       undefined,
-      'SecurityTab'
-    );
-  };
+      'SecurityTab',
+    )
+  }
 
   // Extract linked account info
-  const emailAccount = linkedAccounts.find((acc) => acc.type === 'email');
+  const emailAccount = linkedAccounts.find((acc) => acc.type === 'email')
   const farcasterAccount = linkedAccounts.find(
-    (acc) => acc.type === 'farcaster'
-  );
-  const twitterAccount = linkedAccounts.find((acc) => acc.type === 'twitter');
+    (acc) => acc.type === 'farcaster',
+  )
+  const twitterAccount = linkedAccounts.find((acc) => acc.type === 'twitter')
 
   return (
     <div className="space-y-6">
@@ -153,6 +151,7 @@ export function SecurityTab() {
                     {walletAddress.slice(0, 6)}...{walletAddress.slice(-4)}
                   </code>
                   <button
+                    type="button"
                     onClick={() => copyToClipboard(walletAddress, 'Address')}
                     className="rounded p-1 hover:bg-background"
                     title="Copy full address"
@@ -188,6 +187,7 @@ export function SecurityTab() {
               authentication.
             </p>
             <button
+              type="button"
               onClick={handleLogout}
               className="mt-3 rounded-lg bg-muted px-4 py-2 font-medium text-foreground text-sm hover:bg-muted/80"
             >
@@ -247,5 +247,5 @@ export function SecurityTab() {
         </div>
       </div>
     </div>
-  );
+  )
 }

@@ -13,57 +13,84 @@ import {
   feedbacks,
   gte,
   users,
-} from '@babylon/db';
-import { generateSnowflakeId, logger } from '@babylon/shared';
+} from '@babylon/db'
+import { generateSnowflakeId, logger } from '@babylon/shared'
 import {
   calculateConfidenceScore,
   calculateWinRate,
   getTrustLevel,
   normalizePnL,
-} from './pnl-normalizer';
+} from './pnl-normalizer'
+
+// Note: UserRow type is defined inline where needed to avoid unused declaration warnings
+
+/** DB row type for agent_performance_metrics table */
+interface AgentMetricsRow {
+  id: string
+  userId: string | null
+  gamesPlayed: number | string | null
+  gamesWon: number | string | null
+  averageGameScore: number | string | null
+  lastGameScore: number | string | null
+  lastGamePlayedAt: Date | string | null
+  lastActivityAt: Date | string | null
+  firstActivityAt: Date | string | null
+  tradesCount: number | string | null
+  profitableTrades: number | string | null
+  totalTradingVolume: number | string | null
+  totalTradingPnL: number | string | null
+  averageTradeSize: number | string | null
+  largestWin: number | string | null
+  largestLoss: number | string | null
+  feedbackCount: number | string | null
+  averageFeedbackScore: number | string | null
+  reputationScore: number | string | null
+}
+
+// Note: FeedbackRow type is defined inline where needed to avoid unused declaration warnings
 
 export interface ReputationScoreBreakdown {
-  reputationScore: number;
-  trustLevel: string;
-  confidenceScore: number;
+  reputationScore: number
+  trustLevel: string
+  confidenceScore: number
   breakdown: {
-    pnlComponent: number;
-    feedbackComponent: number;
-    activityComponent: number;
-  };
+    pnlComponent: number
+    feedbackComponent: number
+    activityComponent: number
+  }
   metrics: {
-    normalizedPnL: number;
-    averageFeedbackScore: number;
-    gamesPlayed: number;
-    totalFeedbackCount: number;
-    winRate: number;
-  };
+    normalizedPnL: number
+    averageFeedbackScore: number
+    gamesPlayed: number
+    totalFeedbackCount: number
+    winRate: number
+  }
 }
 
 /**
  * Game performance metrics for auto-feedback generation
  */
 export interface GameMetrics {
-  won: boolean;
-  pnl: number;
-  positionsClosed: number;
-  finalBalance: number;
-  startingBalance: number;
-  decisionsCorrect: number;
-  decisionsTotal: number;
-  timeToComplete?: number;
-  riskManagement?: number;
+  won: boolean
+  pnl: number
+  positionsClosed: number
+  finalBalance: number
+  startingBalance: number
+  decisionsCorrect: number
+  decisionsTotal: number
+  timeToComplete?: number
+  riskManagement?: number
 }
 
 /**
  * Trade performance metrics for auto-feedback generation
  */
 export interface TradeMetrics {
-  profitable: boolean;
-  roi: number;
-  holdingPeriod: number;
-  timingScore: number;
-  riskScore: number;
+  profitable: boolean
+  roi: number
+  holdingPeriod: number
+  timingScore: number
+  riskScore: number
 }
 
 /**
@@ -87,32 +114,32 @@ export function calculateReputationScore(
   averageFeedbackScore: number,
   gamesPlayed: number,
   winRate = 0,
-  intelScore = averageFeedbackScore
+  intelScore = averageFeedbackScore,
 ): number {
   // Weight distribution
-  const pnlWeight = 0.4;
-  const feedbackWeight = 0.4;
-  const activityWeight = 0.2;
+  const pnlWeight = 0.4
+  const feedbackWeight = 0.4
+  const activityWeight = 0.2
 
   // Performance component mixes normalized PnL (70%) and win rate (30%)
-  const performanceScore = normalizedPnL * 0.7 + winRate * 0.3;
-  const pnlComponent = performanceScore * 100;
+  const performanceScore = normalizedPnL * 0.7 + winRate * 0.3
+  const pnlComponent = performanceScore * 100
 
   // Feedback blend: general feedback (70%) + intel-specific feedback (30%)
-  const feedbackComponent = averageFeedbackScore * 0.7 + intelScore * 0.3;
+  const feedbackComponent = averageFeedbackScore * 0.7 + intelScore * 0.3
 
   // Activity bonus: linear scaling, caps at 50 games = 100 points
   // 0 games = 0 points, 25 games = 50 points, 50+ games = 100 points
-  const activityComponent = Math.min(100, gamesPlayed * 2);
+  const activityComponent = Math.min(100, gamesPlayed * 2)
 
   // Weighted sum
   const score =
     pnlComponent * pnlWeight +
     feedbackComponent * feedbackWeight +
-    activityComponent * activityWeight;
+    activityComponent * activityWeight
 
   // Clamp to [0, 100]
-  return Math.max(0, Math.min(100, score));
+  return Math.max(0, Math.min(100, score))
 }
 
 /**
@@ -126,20 +153,21 @@ export function calculateReputationScore(
 export async function updateGameMetrics(
   userId: string,
   gameScore: number,
-  won: boolean
+  won: boolean,
 ) {
   logger.info(
     'Updating game metrics',
     { userId, gameScore, won },
-    'ReputationService'
-  );
+    'ReputationService',
+  )
 
   // Get or create metrics
-  let [metrics] = await db
+  let metricsRaw = await db
     .select()
     .from(agentPerformanceMetrics)
     .where(eq(agentPerformanceMetrics.userId, userId))
-    .limit(1);
+    .limit(1)
+  let [metrics] = metricsRaw as unknown as AgentMetricsRow[]
 
   if (!metrics) {
     await db.insert(agentPerformanceMetrics).values({
@@ -149,25 +177,26 @@ export async function updateGameMetrics(
       gamesWon: 0,
       averageGameScore: 0,
       updatedAt: new Date(),
-    });
+    })
 
-    [metrics] = await db
+    metricsRaw = await db
       .select()
       .from(agentPerformanceMetrics)
       .where(eq(agentPerformanceMetrics.userId, userId))
-      .limit(1);
+      .limit(1)
+    ;[metrics] = metricsRaw as unknown as AgentMetricsRow[]
   }
 
   if (!metrics) {
-    throw new Error(`Failed to create metrics for user ${userId}`);
+    throw new Error(`Failed to create metrics for user ${userId}`)
   }
 
   // Calculate new average game score
-  const gamesPlayed = Number(metrics.gamesPlayed ?? 0);
-  const gamesWon = Number(metrics.gamesWon ?? 0);
-  const avgScore = Number(metrics.averageGameScore ?? 0);
-  const totalGames = gamesPlayed + 1;
-  const newAverageScore = (avgScore * gamesPlayed + gameScore) / totalGames;
+  const gamesPlayed = Number(metrics.gamesPlayed ?? 0)
+  const gamesWon = Number(metrics.gamesWon ?? 0)
+  const avgScore = Number(metrics.averageGameScore ?? 0)
+  const totalGames = gamesPlayed + 1
+  const newAverageScore = (avgScore * gamesPlayed + gameScore) / totalGames
 
   // Update metrics
   await db
@@ -181,19 +210,19 @@ export async function updateGameMetrics(
       lastActivityAt: new Date(),
       firstActivityAt: metrics.firstActivityAt || new Date(),
     })
-    .where(eq(agentPerformanceMetrics.userId, userId));
+    .where(eq(agentPerformanceMetrics.userId, userId))
 
   // Recalculate reputation
-  await recalculateReputation(userId);
+  await recalculateReputation(userId)
 
   // Return updated metrics
   const [updated] = await db
     .select()
     .from(agentPerformanceMetrics)
     .where(eq(agentPerformanceMetrics.userId, userId))
-    .limit(1);
+    .limit(1)
 
-  return updated;
+  return updated
 }
 
 /**
@@ -208,39 +237,43 @@ export async function updateTradingMetrics(
   userId: string,
   pnl: number,
   invested: number,
-  profitable: boolean
+  profitable: boolean,
 ) {
   logger.info(
     'Updating trading metrics',
     { userId, pnl, invested, profitable },
-    'ReputationService'
-  );
+    'ReputationService',
+  )
 
   // Get user's lifetime PNL and total deposits
-  const [user] = await db
+  const userResult = await db
     .select({
       lifetimePnL: users.lifetimePnL,
       totalDeposited: users.totalDeposited,
     })
     .from(users)
     .where(eq(users.id, userId))
-    .limit(1);
+    .limit(1)
+
+  const user = userResult[0] as
+    | { lifetimePnL: string; totalDeposited: string }
+    | undefined
 
   if (!user) {
-    throw new Error(`User ${userId} not found`);
+    throw new Error(`User ${userId} not found`)
   }
 
   // Normalize PNL based on total deposits
-  const totalInvested = Number.parseFloat(user.totalDeposited.toString());
-  const lifetimePnLNum = Number.parseFloat(user.lifetimePnL.toString());
-  const normalized = normalizePnL(lifetimePnLNum, totalInvested);
+  const totalInvested = Number.parseFloat(user.totalDeposited.toString())
+  const lifetimePnLNum = Number.parseFloat(user.lifetimePnL.toString())
+  const normalized = normalizePnL(lifetimePnLNum, totalInvested)
 
   // Get or create metrics
   let [metrics] = await db
     .select()
     .from(agentPerformanceMetrics)
     .where(eq(agentPerformanceMetrics.userId, userId))
-    .limit(1);
+    .limit(1)
 
   if (!metrics) {
     await db.insert(agentPerformanceMetrics).values({
@@ -250,32 +283,32 @@ export async function updateTradingMetrics(
       totalTrades: 0,
       profitableTrades: 0,
       updatedAt: new Date(),
-    });
+    })
 
-    [metrics] = await db
+    ;[metrics] = await db
       .select()
       .from(agentPerformanceMetrics)
       .where(eq(agentPerformanceMetrics.userId, userId))
-      .limit(1);
+      .limit(1)
   }
 
   if (!metrics) {
-    throw new Error(`Failed to create metrics for user ${userId}`);
+    throw new Error(`Failed to create metrics for user ${userId}`)
   }
 
   // Update trade counts
-  const totalTrades = Number(metrics.totalTrades ?? 0);
-  const profitableTrades = Number(metrics.profitableTrades ?? 0);
-  const newTotalTrades = totalTrades + 1;
+  const totalTrades = Number(metrics.totalTrades ?? 0)
+  const profitableTrades = Number(metrics.profitableTrades ?? 0)
+  const newTotalTrades = totalTrades + 1
   const newProfitableTrades = profitable
     ? profitableTrades + 1
-    : profitableTrades;
+    : profitableTrades
 
   // Calculate win rate
-  const winRate = calculateWinRate(newProfitableTrades, newTotalTrades);
+  const winRate = calculateWinRate(newProfitableTrades, newTotalTrades)
 
   // Calculate average ROI (simplified - would need full trade history for accuracy)
-  const avgROI = lifetimePnLNum / totalInvested;
+  const avgROI = lifetimePnLNum / totalInvested
 
   // Update metrics
   await db
@@ -289,19 +322,19 @@ export async function updateTradingMetrics(
       lastActivityAt: new Date(),
       firstActivityAt: metrics.firstActivityAt || new Date(),
     })
-    .where(eq(agentPerformanceMetrics.userId, userId));
+    .where(eq(agentPerformanceMetrics.userId, userId))
 
   // Recalculate reputation
-  await recalculateReputation(userId);
+  await recalculateReputation(userId)
 
   // Return updated metrics
   const [updated] = await db
     .select()
     .from(agentPerformanceMetrics)
     .where(eq(agentPerformanceMetrics.userId, userId))
-    .limit(1);
+    .limit(1)
 
-  return updated;
+  return updated
 }
 
 /**
@@ -311,14 +344,14 @@ export async function updateTradingMetrics(
  * @param score - Feedback score (0-100)
  */
 interface FeedbackContext {
-  category?: string | null;
-  interactionType?: string | null;
+  category?: string | null
+  interactionType?: string | null
 }
 
 export async function updateFeedbackMetrics(
   userId: string,
   score: number,
-  context?: FeedbackContext
+  context?: FeedbackContext,
 ) {
   logger.info(
     'Updating feedback metrics',
@@ -328,15 +361,15 @@ export async function updateFeedbackMetrics(
       category: context?.category,
       interactionType: context?.interactionType,
     },
-    'ReputationService'
-  );
+    'ReputationService',
+  )
 
   // Get or create metrics
   let [metrics] = await db
     .select()
     .from(agentPerformanceMetrics)
     .where(eq(agentPerformanceMetrics.userId, userId))
-    .limit(1);
+    .limit(1)
 
   if (!metrics) {
     await db.insert(agentPerformanceMetrics).values({
@@ -347,53 +380,53 @@ export async function updateFeedbackMetrics(
       intelFeedbackCount: 0,
       averageIntelScore: 50,
       updatedAt: new Date(),
-    });
+    })
 
-    [metrics] = await db
+    ;[metrics] = await db
       .select()
       .from(agentPerformanceMetrics)
       .where(eq(agentPerformanceMetrics.userId, userId))
-      .limit(1);
+      .limit(1)
   }
 
   if (!metrics) {
-    throw new Error(`Failed to create metrics for user ${userId}`);
+    throw new Error(`Failed to create metrics for user ${userId}`)
   }
 
   // Calculate new average
-  const feedbackCount = Number(metrics.totalFeedbackCount ?? 0);
-  const avgFeedbackScore = Number(metrics.averageFeedbackScore ?? 0);
-  const newCount = feedbackCount + 1;
-  const newAverage = (avgFeedbackScore * feedbackCount + score) / newCount;
+  const feedbackCount = Number(metrics.totalFeedbackCount ?? 0)
+  const avgFeedbackScore = Number(metrics.averageFeedbackScore ?? 0)
+  const newCount = feedbackCount + 1
+  const newAverage = (avgFeedbackScore * feedbackCount + score) / newCount
 
   // Classify feedback
-  const isPositive = score >= 70;
-  const isNeutral = score >= 40 && score < 70;
-  const isNegative = score < 40;
+  const isPositive = score >= 70
+  const isNeutral = score >= 40 && score < 70
+  const isNegative = score < 40
 
-  const category = context?.category?.toLowerCase();
-  const interactionType = context?.interactionType?.toLowerCase();
+  const category = context?.category?.toLowerCase()
+  const interactionType = context?.interactionType?.toLowerCase()
   const isIntel =
     category === 'intel' ||
     category === 'helpful_intel' ||
-    interactionType === 'intel';
+    interactionType === 'intel'
 
-  let intelFeedbackCount = Number(metrics.intelFeedbackCount ?? 0);
-  let averageIntelScore = Number(metrics.averageIntelScore ?? 50);
+  let intelFeedbackCount = Number(metrics.intelFeedbackCount ?? 0)
+  let averageIntelScore = Number(metrics.averageIntelScore ?? 50)
 
   if (isIntel) {
-    const newIntelCount = intelFeedbackCount + 1;
+    const newIntelCount = intelFeedbackCount + 1
     const newIntelAverage =
-      (averageIntelScore * intelFeedbackCount + score) / newIntelCount;
-    intelFeedbackCount = newIntelCount;
-    averageIntelScore = newIntelAverage;
+      (averageIntelScore * intelFeedbackCount + score) / newIntelCount
+    intelFeedbackCount = newIntelCount
+    averageIntelScore = newIntelAverage
   }
 
   // Update metrics
-  const currentPositiveCount = Number(metrics.positiveCount ?? 0);
-  const currentNeutralCount = Number(metrics.neutralCount ?? 0);
-  const currentNegativeCount = Number(metrics.negativeCount ?? 0);
-  const currentTotalInteractions = Number(metrics.totalInteractions ?? 0);
+  const currentPositiveCount = Number(metrics.positiveCount ?? 0)
+  const currentNeutralCount = Number(metrics.neutralCount ?? 0)
+  const currentNegativeCount = Number(metrics.negativeCount ?? 0)
+  const currentTotalInteractions = Number(metrics.totalInteractions ?? 0)
 
   await db
     .update(agentPerformanceMetrics)
@@ -413,19 +446,19 @@ export async function updateFeedbackMetrics(
       lastActivityAt: new Date(),
       firstActivityAt: metrics.firstActivityAt || new Date(),
     })
-    .where(eq(agentPerformanceMetrics.userId, userId));
+    .where(eq(agentPerformanceMetrics.userId, userId))
 
   // Recalculate reputation
-  await recalculateReputation(userId);
+  await recalculateReputation(userId)
 
   // Return updated metrics
   const [updated] = await db
     .select()
     .from(agentPerformanceMetrics)
     .where(eq(agentPerformanceMetrics.userId, userId))
-    .limit(1);
+    .limit(1)
 
-  return updated;
+  return updated
 }
 
 /**
@@ -439,33 +472,33 @@ export async function recalculateReputation(userId: string) {
     .select()
     .from(agentPerformanceMetrics)
     .where(eq(agentPerformanceMetrics.userId, userId))
-    .limit(1);
+    .limit(1)
 
   if (!metrics) {
-    return null;
+    return null
   }
 
   // Calculate composite reputation
-  const normalizedPnL = Number(metrics.normalizedPnL ?? 0);
-  const avgFeedback = Number(metrics.averageFeedbackScore ?? 50);
-  const gamesPlayed = Number(metrics.gamesPlayed ?? 0);
-  const winRate = Number(metrics.winRate ?? 0);
-  const intelScore = Number(metrics.averageIntelScore ?? avgFeedback);
+  const normalizedPnL = Number(metrics.normalizedPnL ?? 0)
+  const avgFeedback = Number(metrics.averageFeedbackScore ?? 50)
+  const gamesPlayed = Number(metrics.gamesPlayed ?? 0)
+  const winRate = Number(metrics.winRate ?? 0)
+  const intelScore = Number(metrics.averageIntelScore ?? avgFeedback)
 
   const reputationScore = calculateReputationScore(
     normalizedPnL,
     avgFeedback,
     gamesPlayed,
     winRate,
-    intelScore
-  );
+    intelScore,
+  )
 
   // Determine trust level
-  const trustLevel = getTrustLevel(reputationScore);
+  const trustLevel = getTrustLevel(reputationScore)
 
   // Calculate confidence based on sample size (games + feedback)
-  const sampleSize = gamesPlayed + Number(metrics.totalFeedbackCount ?? 0);
-  const confidenceScore = calculateConfidenceScore(sampleSize);
+  const sampleSize = gamesPlayed + Number(metrics.totalFeedbackCount ?? 0)
+  const confidenceScore = calculateConfidenceScore(sampleSize)
 
   // Update metrics
   await db
@@ -475,22 +508,22 @@ export async function recalculateReputation(userId: string) {
       trustLevel,
       confidenceScore,
     })
-    .where(eq(agentPerformanceMetrics.userId, userId));
+    .where(eq(agentPerformanceMetrics.userId, userId))
 
   logger.info(
     'Recalculated reputation',
     { userId, reputationScore, trustLevel, confidenceScore },
-    'ReputationService'
-  );
+    'ReputationService',
+  )
 
   // Return updated metrics
   const [updated] = await db
     .select()
     .from(agentPerformanceMetrics)
     .where(eq(agentPerformanceMetrics.userId, userId))
-    .limit(1);
+    .limit(1)
 
-  return updated;
+  return updated
 }
 
 /**
@@ -500,40 +533,40 @@ export async function recalculateReputation(userId: string) {
  * @returns Reputation score with component breakdown
  */
 export async function getReputationBreakdown(
-  userId: string
+  userId: string,
 ): Promise<ReputationScoreBreakdown | null> {
   let [metrics] = await db
     .select()
     .from(agentPerformanceMetrics)
     .where(eq(agentPerformanceMetrics.userId, userId))
-    .limit(1);
+    .limit(1)
 
   if (!metrics) {
     await db.insert(agentPerformanceMetrics).values({
       id: await generateSnowflakeId(),
       userId,
       updatedAt: new Date(),
-    });
+    })
 
-    [metrics] = await db
+    ;[metrics] = await db
       .select()
       .from(agentPerformanceMetrics)
       .where(eq(agentPerformanceMetrics.userId, userId))
-      .limit(1);
+      .limit(1)
   }
 
   if (!metrics) {
-    return null;
+    return null
   }
 
   // Calculate components
-  const normalizedPnL = Number(metrics.normalizedPnL ?? 0);
-  const avgFeedbackScore = Number(metrics.averageFeedbackScore ?? 50);
-  const gamesPlayed = Number(metrics.gamesPlayed ?? 0);
+  const normalizedPnL = Number(metrics.normalizedPnL ?? 0)
+  const avgFeedbackScore = Number(metrics.averageFeedbackScore ?? 50)
+  const gamesPlayed = Number(metrics.gamesPlayed ?? 0)
 
-  const pnlComponent = normalizedPnL * 100;
-  const feedbackComponent = avgFeedbackScore;
-  const activityComponent = Math.min(100, gamesPlayed * 2);
+  const pnlComponent = normalizedPnL * 100
+  const feedbackComponent = avgFeedbackScore
+  const activityComponent = Math.min(100, gamesPlayed * 2)
 
   return {
     reputationScore: Number(metrics.reputationScore ?? 0),
@@ -551,7 +584,7 @@ export async function getReputationBreakdown(
       totalFeedbackCount: Number(metrics.totalFeedbackCount ?? 0),
       winRate: Number(metrics.winRate ?? 0),
     },
-  };
+  }
 }
 
 /**
@@ -562,6 +595,7 @@ export async function getReputationBreakdown(
  * @returns Array of agents sorted by reputation score
  */
 export async function getReputationLeaderboard(limit = 100, minGames = 5) {
+  // Query builder infers types from table reference and selected fields
   const topAgents = await db
     .select({
       userId: agentPerformanceMetrics.userId,
@@ -575,7 +609,7 @@ export async function getReputationLeaderboard(limit = 100, minGames = 5) {
     .from(agentPerformanceMetrics)
     .where(gte(agentPerformanceMetrics.gamesPlayed, minGames))
     .orderBy(desc(agentPerformanceMetrics.reputationScore))
-    .limit(limit);
+    .limit(limit)
 
   // Fetch user data for each agent
   const results = await Promise.all(
@@ -590,7 +624,7 @@ export async function getReputationLeaderboard(limit = 100, minGames = 5) {
         })
         .from(users)
         .where(eq(users.id, agent.userId))
-        .limit(1);
+        .limit(1)
 
       return {
         rank: index + 1,
@@ -605,11 +639,11 @@ export async function getReputationLeaderboard(limit = 100, minGames = 5) {
         gamesPlayed: agent.gamesPlayed,
         winRate: agent.winRate,
         normalizedPnL: agent.normalizedPnL,
-      };
-    })
-  );
+      }
+    }),
+  )
 
-  return results;
+  return results
 }
 
 // AUTO-FEEDBACK GENERATION FUNCTIONS
@@ -628,27 +662,27 @@ export async function getReputationLeaderboard(limit = 100, minGames = 5) {
  */
 export function calculateGameScore(metrics: GameMetrics): number {
   // PNL component (40%)
-  const normalizedRoi = normalizePnL(metrics.pnl, metrics.startingBalance);
-  const pnlScore = normalizedRoi * 100 * 0.4;
+  const normalizedRoi = normalizePnL(metrics.pnl, metrics.startingBalance)
+  const pnlScore = normalizedRoi * 100 * 0.4
 
   // Decision quality component (30%)
   const decisionAccuracy =
     metrics.decisionsTotal > 0
       ? metrics.decisionsCorrect / metrics.decisionsTotal
-      : 0.5;
-  const decisionScore = decisionAccuracy * 100 * 0.3;
+      : 0.5
+  const decisionScore = decisionAccuracy * 100 * 0.3
 
   // Risk management component (20%)
-  const riskScore = (metrics.riskManagement ?? 0.5) * 100 * 0.2;
+  const riskScore = (metrics.riskManagement ?? 0.5) * 100 * 0.2
 
   // Game outcome bonus (10%)
-  const outcomeBonus = metrics.won ? 10 : 0;
+  const outcomeBonus = metrics.won ? 10 : 0
 
   // Composite score
-  const totalScore = pnlScore + decisionScore + riskScore + outcomeBonus;
+  const totalScore = pnlScore + decisionScore + riskScore + outcomeBonus
 
   // Clamp to [0, 100]
-  return Math.max(0, Math.min(100, totalScore));
+  return Math.max(0, Math.min(100, totalScore))
 }
 
 /**
@@ -665,20 +699,20 @@ export function calculateGameScore(metrics: GameMetrics): number {
 export function calculateTradeScore(metrics: TradeMetrics): number {
   // ROI component (50%) - normalize ROI to 0-1 scale
   // Assume -50% to +100% ROI range maps to 0-100 score
-  const normalizedRoi = Math.max(0, Math.min(1, (metrics.roi + 0.5) / 1.5));
-  const roiScore = normalizedRoi * 100 * 0.5;
+  const normalizedRoi = Math.max(0, Math.min(1, (metrics.roi + 0.5) / 1.5))
+  const roiScore = normalizedRoi * 100 * 0.5
 
   // Timing component (25%)
-  const timingScore = metrics.timingScore * 100 * 0.25;
+  const timingScore = metrics.timingScore * 100 * 0.25
 
   // Risk management component (25%)
-  const riskScore = metrics.riskScore * 100 * 0.25;
+  const riskScore = metrics.riskScore * 100 * 0.25
 
   // Composite score
-  const totalScore = roiScore + timingScore + riskScore;
+  const totalScore = roiScore + timingScore + riskScore
 
   // Clamp to [0, 100]
-  return Math.max(0, Math.min(100, totalScore));
+  return Math.max(0, Math.min(100, totalScore))
 }
 
 /**
@@ -694,33 +728,33 @@ export function calculateTradeScore(metrics: TradeMetrics): number {
 export async function generateGameCompletionFeedback(
   agentId: string,
   gameId: string,
-  performanceMetrics: GameMetrics
+  performanceMetrics: GameMetrics,
 ) {
   logger.info(
     'Generating game completion feedback',
     { agentId, gameId },
-    'AutoFeedback'
-  );
+    'AutoFeedback',
+  )
 
   // Calculate feedback score from performance
-  const score = calculateGameScore(performanceMetrics);
+  const score = calculateGameScore(performanceMetrics)
 
   // Determine comment based on performance
-  let comment = '';
+  let comment = ''
   if (score >= 80) {
     comment =
-      'Excellent game performance! Strong decision-making and risk management.';
+      'Excellent game performance! Strong decision-making and risk management.'
   } else if (score >= 60) {
-    comment = 'Good game performance with solid fundamentals.';
+    comment = 'Good game performance with solid fundamentals.'
   } else if (score >= 40) {
-    comment = 'Moderate performance. Room for improvement in decision-making.';
+    comment = 'Moderate performance. Room for improvement in decision-making.'
   } else {
     comment =
-      'Challenging game. Focus on improving risk management and decision quality.';
+      'Challenging game. Focus on improving risk management and decision quality.'
   }
 
   // Create feedback record
-  const feedbackId = await generateSnowflakeId();
+  const feedbackId = await generateSnowflakeId()
   await db.insert(feedbacks).values({
     id: feedbackId,
     toUserId: agentId,
@@ -738,26 +772,26 @@ export async function generateGameCompletionFeedback(
       timestamp: new Date().toISOString(),
     },
     updatedAt: new Date(),
-  });
+  })
 
   // Update game metrics (this will trigger reputation recalculation)
-  await updateGameMetrics(agentId, score, performanceMetrics.won);
+  await updateGameMetrics(agentId, score, performanceMetrics.won)
 
   await updateFeedbackMetrics(agentId, score, {
     category: 'game_performance',
     interactionType: 'game_to_agent',
-  });
+  })
 
   // Get created feedback
   const [feedback] = await db
     .select()
     .from(feedbacks)
     .where(eq(feedbacks.id, feedbackId))
-    .limit(1);
+    .limit(1)
 
-  logger.info('Generated game feedback', { feedbackId, score }, 'AutoFeedback');
+  logger.info('Generated game feedback', { feedbackId, score }, 'AutoFeedback')
 
-  return feedback;
+  return feedback
 }
 
 /**
@@ -771,33 +805,33 @@ export async function generateGameCompletionFeedback(
 export async function generateTradeCompletionFeedback(
   agentId: string,
   tradeId: string,
-  performanceMetrics: TradeMetrics
+  performanceMetrics: TradeMetrics,
 ) {
   logger.info(
     'Generating trade completion feedback',
     { agentId, tradeId },
-    'AutoFeedback'
-  );
+    'AutoFeedback',
+  )
 
   // Calculate feedback score from trade performance
-  const score = calculateTradeScore(performanceMetrics);
+  const score = calculateTradeScore(performanceMetrics)
 
   // Determine comment
-  let comment = '';
+  let comment = ''
   if (score >= 80) {
     comment =
-      'Excellent trade execution with strong timing and risk management.';
+      'Excellent trade execution with strong timing and risk management.'
   } else if (score >= 60) {
-    comment = 'Good trade performance with solid fundamentals.';
+    comment = 'Good trade performance with solid fundamentals.'
   } else if (score >= 40) {
     comment =
-      'Moderate trade performance. Consider improving entry/exit timing.';
+      'Moderate trade performance. Consider improving entry/exit timing.'
   } else {
-    comment = 'Challenging trade. Focus on risk management and timing.';
+    comment = 'Challenging trade. Focus on risk management and timing.'
   }
 
   // Create feedback record
-  const feedbackId = await generateSnowflakeId();
+  const feedbackId = await generateSnowflakeId()
   await db.insert(feedbacks).values({
     id: feedbackId,
     toUserId: agentId,
@@ -814,28 +848,24 @@ export async function generateTradeCompletionFeedback(
       timestamp: new Date().toISOString(),
     },
     updatedAt: new Date(),
-  });
+  })
 
   // Update feedback metrics
   await updateFeedbackMetrics(agentId, score, {
     category: 'trade_performance',
     interactionType: 'trade_to_agent',
-  });
+  })
 
   // Get created feedback
   const [feedback] = await db
     .select()
     .from(feedbacks)
     .where(eq(feedbacks.id, feedbackId))
-    .limit(1);
+    .limit(1)
 
-  logger.info(
-    'Generated trade feedback',
-    { feedbackId, score },
-    'AutoFeedback'
-  );
+  logger.info('Generated trade feedback', { feedbackId, score }, 'AutoFeedback')
 
-  return feedback;
+  return feedback
 }
 
 /**
@@ -848,47 +878,47 @@ export async function generateTradeCompletionFeedback(
  */
 export async function generateBatchGameFeedback(
   completions: Array<{
-    agentId: string;
-    gameId: string;
-    metrics: GameMetrics;
-  }>
+    agentId: string
+    gameId: string
+    metrics: GameMetrics
+  }>,
 ) {
   logger.info(
     'Generating batch game feedback',
     { count: completions.length },
-    'AutoFeedback'
-  );
+    'AutoFeedback',
+  )
 
   // Process sequentially to avoid overwhelming the database
   const results: PromiseSettledResult<
     Awaited<ReturnType<typeof generateGameCompletionFeedback>>
-  >[] = [];
+  >[] = []
 
   for (const completion of completions) {
     const result = await generateGameCompletionFeedback(
       completion.agentId,
       completion.gameId,
-      completion.metrics
-    );
-    results.push({ status: 'fulfilled', value: result });
+      completion.metrics,
+    )
+    results.push({ status: 'fulfilled', value: result })
   }
 
-  const successful = results.filter((r) => r.status === 'fulfilled').length;
-  const failed = results.filter((r) => r.status === 'rejected').length;
+  const successful = results.filter((r) => r.status === 'fulfilled').length
+  const failed = results.filter((r) => r.status === 'rejected').length
 
   logger.info(
     'Batch feedback generation complete',
     { successful, failed },
-    'AutoFeedback'
-  );
+    'AutoFeedback',
+  )
 
   return results
     .filter(
       (
-        r
+        r,
       ): r is PromiseFulfilledResult<
         Awaited<ReturnType<typeof generateGameCompletionFeedback>>
-      > => r.status === 'fulfilled'
+      > => r.status === 'fulfilled',
     )
-    .map((r) => r.value);
+    .map((r) => r.value)
 }

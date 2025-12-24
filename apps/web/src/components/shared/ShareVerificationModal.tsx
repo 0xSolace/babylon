@@ -1,9 +1,7 @@
-'use client';
-
-import { cn } from '@babylon/shared';
-import { Check, X as XIcon } from 'lucide-react';
-import { useState } from 'react';
-import { toast } from 'sonner';
+import { cn } from '@babylon/shared'
+import { Check, X as XIcon } from 'lucide-react'
+import { useState } from 'react'
+import { toast } from 'sonner'
 
 /**
  * Share verification modal component for verifying external shares.
@@ -27,12 +25,12 @@ import { toast } from 'sonner';
  * ```
  */
 interface ShareVerificationModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  shareId: string;
-  platform: 'twitter' | 'farcaster';
-  userId: string;
-  onSuccess?: (pointsAwarded: number) => void;
+  isOpen: boolean
+  onClose: () => void
+  shareId: string
+  platform: 'twitter' | 'farcaster'
+  userId: string
+  onSuccess?: (pointsAwarded: number) => void
 }
 
 export function ShareVerificationModal({
@@ -42,26 +40,26 @@ export function ShareVerificationModal({
   platform,
   userId,
 }: ShareVerificationModalProps) {
-  const [postUrl, setPostUrl] = useState('');
-  const [verifying, setVerifying] = useState(false);
+  const [postUrl, setPostUrl] = useState('')
+  const [verifying, setVerifying] = useState(false)
 
-  if (!isOpen) return null;
+  if (!isOpen) return null
 
   const handleVerify = async () => {
     if (!postUrl.trim()) {
-      toast.error('Please enter the URL to your post');
-      return;
+      toast.error('Please enter the URL to your post')
+      return
     }
 
-    setVerifying(true);
+    setVerifying(true)
 
     const token =
-      typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
+      typeof window !== 'undefined' ? window.__oauth3AccessToken : null
     const headers: HeadersInit = {
       'Content-Type': 'application/json',
-    };
+    }
     if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
+      headers.Authorization = `Bearer ${token}`
     }
 
     const response = await fetch(
@@ -74,46 +72,46 @@ export function ShareVerificationModal({
           platform,
           postUrl: postUrl.trim(),
         }),
-      }
-    );
+      },
+    )
 
-    const data = await response.json();
+    const data = await response.json()
 
     if (!response.ok) {
-      const errorMessage = data.message || data.error;
+      const errorMessage = data.message || data.error
       if (!errorMessage) {
-        throw new Error('Failed to verify share: Unknown error');
+        throw new Error('Failed to verify share: Unknown error')
       }
-      toast.error(errorMessage);
-      setVerifying(false);
-      return;
+      toast.error(errorMessage)
+      setVerifying(false)
+      return
     }
 
     if (data.verified) {
       const pointsMessage =
         data.points.awarded > 0
           ? `Share verified! You earned ${data.points.awarded} points.`
-          : 'Share verified! Thank you for sharing!';
-      toast.success(pointsMessage);
+          : 'Share verified! Thank you for sharing!'
+      toast.success(pointsMessage)
 
       setTimeout(() => {
         // Reload the page to update points display
-        window.location.reload();
-      }, 2000);
+        window.location.reload()
+      }, 2000)
     } else {
       if (!data.message) {
-        throw new Error('Verification failed: No error message provided');
+        throw new Error('Verification failed: No error message provided')
       }
-      toast.error(data.message);
+      toast.error(data.message)
     }
-    setVerifying(false);
-  };
+    setVerifying(false)
+  }
 
-  const platformName = platform === 'twitter' ? 'X' : 'Farcaster';
+  const platformName = platform === 'twitter' ? 'X' : 'Farcaster'
   const placeholderUrl =
     platform === 'twitter'
       ? 'https://x.com/username/status/1234567890'
-      : 'https://farcaster.xyz/username/0x1234abcd';
+      : 'https://farcaster.xyz/username/0x1234abcd'
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
@@ -122,6 +120,7 @@ export function ShareVerificationModal({
         <div className="flex items-center justify-between border-border border-b p-6">
           <h2 className="font-bold text-xl">Verify Your Share</h2>
           <button
+            type="button"
             onClick={onClose}
             className="rounded-lg p-2 transition-colors hover:bg-muted"
           >
@@ -146,7 +145,7 @@ export function ShareVerificationModal({
               value={postUrl}
               onChange={(e) => setPostUrl(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === 'Enter') handleVerify();
+                if (e.key === 'Enter') handleVerify()
               }}
               placeholder={placeholderUrl}
               className="w-full rounded-lg bg-sidebar-accent/50 px-4 py-2 focus:border-border focus:outline-none"
@@ -164,19 +163,18 @@ export function ShareVerificationModal({
 
           <div className="flex gap-2">
             <button
+              type="button"
               onClick={handleVerify}
               disabled={verifying || !postUrl.trim()}
               className={cn(
                 'flex-1 rounded-lg px-4 py-2 font-semibold transition-colors',
                 'bg-primary text-primary-foreground hover:bg-primary/90',
                 'disabled:cursor-not-allowed disabled:opacity-50',
-                'flex items-center justify-center gap-2'
+                'flex items-center justify-center gap-2',
               )}
             >
               {verifying ? (
-                <>
-                  <span>Verifying...</span>
-                </>
+                <span>Verifying...</span>
               ) : (
                 <>
                   <Check className="h-4 w-4" />
@@ -186,6 +184,7 @@ export function ShareVerificationModal({
             </button>
 
             <button
+              type="button"
               onClick={onClose}
               disabled={verifying}
               className="rounded-lg bg-muted px-4 py-2 font-semibold transition-colors hover:bg-muted/70"
@@ -196,5 +195,5 @@ export function ShareVerificationModal({
         </div>
       </div>
     </div>
-  );
+  )
 }

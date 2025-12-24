@@ -1,5 +1,5 @@
-import { cn } from '@babylon/shared';
-import type React from 'react';
+import { cn } from '@babylon/shared'
+import type React from 'react'
 
 /**
  * Badge component for displaying labels and status indicators.
@@ -16,7 +16,7 @@ import type React from 'react';
  * ```
  */
 export interface BadgeProps extends React.ComponentPropsWithoutRef<'span'> {
-  variant?: 'default' | 'secondary' | 'outline' | 'destructive';
+  variant?: 'default' | 'secondary' | 'outline' | 'destructive'
 }
 
 export const Badge = ({
@@ -29,6 +29,6 @@ export const Badge = ({
     <span className={cn(className)} {...props}>
       {children}
     </span>
-  );
-};
-export const badgeVariants = () => '';
+  )
+}
+export const badgeVariants = () => ''

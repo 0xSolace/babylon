@@ -6,12 +6,12 @@
  * @packageDocumentation
  */
 
-import { db } from '@babylon/db';
-import type { IAgentRuntime } from '@elizaos/core';
-import { callJejuDirect } from '../llm';
-import { getAgentConfig } from '../shared/agent-config';
-import { logger } from '../shared/logger';
-import { executeDirectMessage } from './DirectExecutors';
+import { db } from '@babylon/db'
+import type { IAgentRuntime } from '@elizaos/core'
+import { callAgentLLM } from '../llm'
+import { getAgentConfig } from '../shared/agent-config'
+import { logger } from '../shared/logger'
+import { executeDirectMessage } from './DirectExecutors'
 
 /**
  * Service for autonomous group chat participation
@@ -22,36 +22,36 @@ export class AutonomousGroupChatService {
    */
   async participateInGroupChats(
     agentUserId: string,
-    _runtime: IAgentRuntime
+    _runtime: IAgentRuntime,
   ): Promise<number> {
     const agent = await db.user.findUnique({
       where: { id: agentUserId },
-    });
+    })
 
     if (!agent?.isAgent) {
-      throw new Error('Agent not found');
+      throw new Error('Agent not found')
     }
 
-    const config = await getAgentConfig(agentUserId);
-    const displayName = agent.displayName ? String(agent.displayName) : 'Agent';
-    const username = agent.username ? String(agent.username) : 'agent';
+    const config = await getAgentConfig(agentUserId)
+    const displayName = agent.displayName ? String(agent.displayName) : 'Agent'
+    const username = agent.username ? String(agent.username) : 'agent'
 
     // Get agent's group chats
     const chatParticipants = await db.chatParticipant.findMany({
       where: { userId: agentUserId },
-    });
+    })
 
-    let messagesCreated = 0;
+    let messagesCreated = 0
 
     for (const chatParticipant of chatParticipants) {
       const chat = await db.chat.findUnique({
         where: { id: String(chatParticipant.chatId) },
-      });
+      })
 
-      if (!chat || !chat.isGroup) continue; // Skip DMs
+      if (!chat || !chat.isGroup) continue // Skip DMs
 
       // Get recent messages in this group
-      const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+      const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000)
       const recentMessages = await db.message.findMany({
         where: {
           chatId: String(chat.id),
@@ -59,25 +59,25 @@ export class AutonomousGroupChatService {
         },
         orderBy: { createdAt: 'desc' },
         take: 10,
-      });
+      })
 
-      if (recentMessages.length === 0) continue;
+      if (recentMessages.length === 0) continue
 
       // Check if agent was mentioned or should respond
       const agentMentioned = recentMessages.some((m) => {
-        const content = String(m.content).toLowerCase();
+        const content = String(m.content).toLowerCase()
         return (
           content.includes(username.toLowerCase()) ||
           content.includes(displayName.toLowerCase())
-        );
-      });
+        )
+      })
 
       // Don't spam - only respond if mentioned or if it's been a while
       const agentLastMessage = recentMessages.find(
-        (m) => String(m.senderId) === agentUserId
-      );
+        (m) => String(m.senderId) === agentUserId,
+      )
       if (!agentMentioned && agentLastMessage) {
-        continue;
+        continue
       }
 
       // Generate contextual response
@@ -90,7 +90,7 @@ ${recentMessages
   .reverse()
   .map(
     (m) =>
-      `${String(m.senderId) === agentUserId ? 'You' : 'User'}: ${String(m.content)}`
+      `${String(m.senderId) === agentUserId ? 'You' : 'User'}: ${String(m.content)}`,
   )
   .join('\n')}
 
@@ -103,24 +103,24 @@ IMPORTANT: If mentioning prediction markets, use SHORT SUMMARIES not full questi
 ❌ BAD: "the 'Will TeslAI achieve full self-driving readiness by Q1 2025?' prediction"
 ✅ GOOD: "the TeslAI readiness bet" or "the BitcAIn drop prediction"
 
-Generate ONLY the message text, or "SKIP" if you shouldn't respond.`;
+Generate ONLY the message text, or "SKIP" if you shouldn't respond.`
 
       // Use large model (qwen3-32b) for quality group chat content
-      const responseContent = await callJejuDirect({
+      const responseContent = await callAgentLLM({
         prompt,
-        system: config?.systemPrompt ?? undefined,
+        system: config?.systemPrompt,
         modelSize: 'large',
         runtime: _runtime,
         temperature: 0.8,
         maxTokens: 80,
         actionType: 'generate_group_chat_response',
         purpose: 'response',
-      });
+      })
 
-      const cleanContent = responseContent.trim().replace(/^["']|["']$/g, '');
+      const cleanContent = responseContent.trim().replace(/^["']|["']$/g, '')
 
       if (!cleanContent || cleanContent.length < 5 || cleanContent === 'SKIP') {
-        continue;
+        continue
       }
 
       // Create group message
@@ -128,30 +128,30 @@ Generate ONLY the message text, or "SKIP" if you shouldn't respond.`;
         agentUserId,
         chatId: String(chat.id),
         content: cleanContent,
-      });
+      })
 
       if (!result.success) {
         logger.warn(
           `Failed to create group chat message: ${result.error}`,
           undefined,
-          'AutonomousGroupChat'
-        );
-        continue;
+          'AutonomousGroupChat',
+        )
+        continue
       }
 
-      messagesCreated++;
+      messagesCreated++
       logger.info(
         `Agent ${displayName} participated in group chat ${chat.id}`,
         undefined,
-        'AutonomousGroupChat'
-      );
+        'AutonomousGroupChat',
+      )
 
       // Only respond to one group per tick to avoid spam
-      break;
+      break
     }
 
-    return messagesCreated;
+    return messagesCreated
   }
 }
 
-export const autonomousGroupChatService = new AutonomousGroupChatService();
+export const autonomousGroupChatService = new AutonomousGroupChatService()

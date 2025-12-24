@@ -5,22 +5,22 @@
  * Handles database initialization, database readiness checks, and test isolation.
  */
 
-import { db } from '@babylon/db';
+import { db } from '@babylon/db'
 
 /**
  * Check if database is available and properly configured
  * Throws if database is not available (fail-fast)
  */
 export async function ensureDatabaseReady(): Promise<boolean> {
-  const databaseUrl = process.env.DATABASE_URL;
+  const databaseUrl = process.env.DATABASE_URL
 
   if (!databaseUrl) {
-    throw new Error('DATABASE_URL not set');
+    throw new Error('DATABASE_URL not set')
   }
 
   // Simple connection test using db.$queryRaw
-  await db.$queryRaw`SELECT 1`;
-  return true;
+  await db.$queryRaw`SELECT 1`
+  return true
 }
 
 /**
@@ -30,27 +30,27 @@ export async function ensureDatabaseReady(): Promise<boolean> {
  * @param options.skipDatabase - If true, skip database connection (for unit tests)
  */
 export async function setupTestEnvironment(options?: {
-  skipDatabase?: boolean;
+  skipDatabase?: boolean
 }) {
   // For unit tests, skip database setup
   if (options?.skipDatabase) {
-    return;
+    return
   }
 
   // Ensure DATABASE_URL is available
   if (!process.env.DATABASE_URL) {
     console.warn(
-      '⚠️  DATABASE_URL not set - database-dependent tests will be skipped'
-    );
-    return;
+      '⚠️  DATABASE_URL not set - database-dependent tests will be skipped',
+    )
+    return
   }
 
   // Check database readiness - will throw if not available (fail-fast)
-  await ensureDatabaseReady();
+  await ensureDatabaseReady()
 
   // Ensure database client is connected
-  await db.$connect();
-  console.log('✅ Test environment ready');
+  await db.$connect()
+  console.log('✅ Test environment ready')
 }
 
 /**
@@ -58,17 +58,17 @@ export async function setupTestEnvironment(options?: {
  * Call this in afterAll() hooks
  */
 export async function cleanupTestEnvironment() {
-  await db.$disconnect();
+  await db.$disconnect()
 }
 
 /**
  * Helper to check if tests should skip based on database availability
  */
 export function shouldSkipDatabaseTests(): boolean {
-  const hasDatabase = !!process.env.DATABASE_URL;
-  const skipRequested = process.env.SKIP_DATABASE_TESTS === 'true';
+  const hasDatabase = !!process.env.DATABASE_URL
+  const skipRequested = process.env.SKIP_DATABASE_TESTS === 'true'
 
-  return !hasDatabase || skipRequested;
+  return !hasDatabase || skipRequested
 }
 
 /**
@@ -86,17 +86,17 @@ export async function cleanupStaleLocks(): Promise<number> {
         { lockedBy: { contains: 'test' } },
       ],
     },
-  });
-  return result.count;
+  })
+  return result.count
 }
 
 /**
  * Generate a unique test ID to avoid conflicts between parallel tests
  */
 export function generateTestId(prefix = 'test'): string {
-  const timestamp = Date.now();
-  const random = Math.random().toString(36).substring(2, 10);
-  return `${prefix}-${timestamp}-${random}`;
+  const timestamp = Date.now()
+  const random = Math.random().toString(36).substring(2, 10)
+  return `${prefix}-${timestamp}-${random}`
 }
 
 /**
@@ -113,10 +113,10 @@ export function generateTestId(prefix = 'test'): string {
  * ```
  */
 export async function createIsolatedTestContext(name: string): Promise<{
-  testPrefix: string;
-  cleanup: () => Promise<void>;
+  testPrefix: string
+  cleanup: () => Promise<void>
 }> {
-  const testPrefix = generateTestId(name);
+  const testPrefix = generateTestId(name)
 
   const cleanup = async () => {
     // Clean up any records created with this test prefix
@@ -127,7 +127,7 @@ export async function createIsolatedTestContext(name: string): Promise<{
           { lockedBy: { contains: testPrefix } },
         ],
       },
-    });
+    })
 
     await db.user.deleteMany({
       where: {
@@ -136,10 +136,10 @@ export async function createIsolatedTestContext(name: string): Promise<{
           { id: { contains: testPrefix } },
         ],
       },
-    });
-  };
+    })
+  }
 
-  return { testPrefix, cleanup };
+  return { testPrefix, cleanup }
 }
 
 /**
@@ -149,13 +149,13 @@ export async function createIsolatedTestContext(name: string): Promise<{
 export async function withTimeout<T>(
   operation: Promise<T>,
   timeoutMs: number,
-  operationName = 'operation'
+  operationName = 'operation',
 ): Promise<T> {
   const timeoutPromise = new Promise<never>((_, reject) => {
     setTimeout(() => {
-      reject(new Error(`${operationName} timed out after ${timeoutMs}ms`));
-    }, timeoutMs);
-  });
+      reject(new Error(`${operationName} timed out after ${timeoutMs}ms`))
+    }, timeoutMs)
+  })
 
-  return Promise.race([operation, timeoutPromise]);
+  return Promise.race([operation, timeoutPromise])
 }

@@ -1,23 +1,21 @@
-'use client';
-
-import { calculateUnrealizedPnL, cn } from '@babylon/shared';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle, TrendingDown, TrendingUp } from 'lucide-react';
-import { useCallback, useMemo, useState } from 'react';
-import { toast } from 'sonner';
-import { useAuth } from '@/hooks/useAuth';
-import { useMarketPrices } from '@/hooks/useMarketPrices';
-import { usePerpTrade } from '@/hooks/usePerpTrade';
-import type { DisplayPerpPosition } from '@/types/markets';
+import { calculateUnrealizedPnL, cn } from '@babylon/shared'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { AlertTriangle, TrendingDown, TrendingUp } from 'lucide-react'
+import { useCallback, useMemo, useState } from 'react'
+import { toast } from 'sonner'
+import { useAuth } from '@/hooks/useAuth'
+import { useMarketPrices } from '@/hooks/useMarketPrices'
+import { usePerpTrade } from '@/hooks/usePerpTrade'
+import type { DisplayPerpPosition } from '@/types/markets'
 import {
   type ClosePerpDetails,
   TradeConfirmationDialog,
-} from './TradeConfirmationDialog';
+} from './TradeConfirmationDialog'
 
 /**
  * Alias for DisplayPerpPosition for local usage.
  */
-type PerpPosition = DisplayPerpPosition;
+type PerpPosition = DisplayPerpPosition
 
 /**
  * Perpetual positions list component for displaying and managing open positions.
@@ -46,81 +44,78 @@ type PerpPosition = DisplayPerpPosition;
  * ```
  */
 interface PerpPositionsListProps {
-  positions: PerpPosition[];
-  onPositionClosed?: () => void;
+  positions: PerpPosition[]
+  onPositionClosed?: () => void
 }
 
 export function PerpPositionsList({
   positions,
   onPositionClosed,
 }: PerpPositionsListProps) {
-  const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
+  const [confirmDialogOpen, setConfirmDialogOpen] = useState(false)
   const [pendingClose, setPendingClose] = useState<{
-    position: PerpPosition;
-    currentPrice: number;
-    pnl: number;
-    pnlPercent: number;
-  } | null>(null);
-  const { getAccessToken } = useAuth();
+    position: PerpPosition
+    currentPrice: number
+    pnl: number
+    pnlPercent: number
+  } | null>(null)
+  const { getAccessToken } = useAuth()
   const { closePosition: closePerpPosition } = usePerpTrade({
     getAccessToken,
-  });
-  const queryClient = useQueryClient();
+  })
+  const queryClient = useQueryClient()
 
-  const tickers = useMemo(
-    () => positions.map((pos) => pos.ticker),
-    [positions]
-  );
-  const livePrices = useMarketPrices(tickers);
+  const tickers = useMemo(() => positions.map((pos) => pos.ticker), [positions])
+  const livePrices = useMarketPrices(tickers)
 
   // Mutation for closing perpetual position
   const closeMutation = useMutation({
     mutationFn: async (positionId: string) => {
-      return closePerpPosition(positionId);
+      return closePerpPosition(positionId)
     },
     onSuccess: (data) => {
-      if (!pendingClose) return;
+      if (!pendingClose) return
       if (!data) {
-        throw new Error('No data returned from close position');
+        throw new Error('No data returned from close position')
       }
       const pnl =
         typeof data.pnl === 'number'
           ? data.pnl
           : typeof data.realizedPnL === 'number'
             ? data.realizedPnL
-            : 0;
+            : 0
 
       toast.success('Position closed!', {
         description: `${pendingClose.position.ticker}: ${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)} PnL`,
-      });
-      void queryClient.invalidateQueries({ queryKey: ['markets', 'perps'] });
-      void queryClient.invalidateQueries({ queryKey: ['positions'] });
-      void queryClient.invalidateQueries({ queryKey: ['walletBalance'] });
-      onPositionClosed?.();
-      setPendingClose(null);
+      })
+      void queryClient.invalidateQueries({ queryKey: ['markets', 'perps'] })
+      void queryClient.invalidateQueries({ queryKey: ['positions'] })
+      void queryClient.invalidateQueries({ queryKey: ['walletBalance'] })
+      onPositionClosed?.()
+      setPendingClose(null)
     },
     onError: (error: Error) => {
-      toast.error(error.message);
-      setPendingClose(null);
+      toast.error(error.message)
+      setPendingClose(null)
     },
-  });
+  })
 
   // Pre-calculate PnL for all positions to avoid recalculating during render
   const positionsWithPnL = useMemo(
     () =>
       positions.map((position) => {
-        const livePrice = livePrices.get(position.ticker)?.price;
-        const currentPrice = livePrice ?? position.currentPrice;
+        const livePrice = livePrices.get(position.ticker)?.price
+        const currentPrice = livePrice ?? position.currentPrice
         const { pnl, pnlPercent } = calculateUnrealizedPnL(
           position.entryPrice,
           currentPrice,
           position.side,
-          position.size
-        );
+          position.size,
+        )
         const liquidationDistance =
           position.side === 'long'
             ? ((currentPrice - position.liquidationPrice) / currentPrice) * 100
-            : ((position.liquidationPrice - currentPrice) / currentPrice) * 100;
+            : ((position.liquidationPrice - currentPrice) / currentPrice) * 100
         return {
           position,
           currentPrice,
@@ -128,30 +123,30 @@ export function PerpPositionsList({
           pnlPercent,
           liquidationDistance,
           isNearLiquidation: liquidationDistance < 5,
-        };
+        }
       }),
-    [positions, livePrices]
-  );
+    [positions, livePrices],
+  )
 
   const handleCloseClick = useCallback(
     (
       position: PerpPosition,
       currentPrice: number,
       pnl: number,
-      pnlPercent: number
+      pnlPercent: number,
     ) => {
-      setPendingClose({ position, currentPrice, pnl, pnlPercent });
-      setConfirmDialogOpen(true);
+      setPendingClose({ position, currentPrice, pnl, pnlPercent })
+      setConfirmDialogOpen(true)
     },
-    []
-  );
+    [],
+  )
 
   const handleConfirmClose = useCallback(() => {
-    if (!pendingClose) return;
+    if (!pendingClose) return
 
-    setConfirmDialogOpen(false);
-    closeMutation.mutate(pendingClose.position.id);
-  }, [closeMutation, pendingClose]);
+    setConfirmDialogOpen(false)
+    closeMutation.mutate(pendingClose.position.id)
+  }, [closeMutation, pendingClose])
 
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat('en-US', {
@@ -159,18 +154,18 @@ export function PerpPositionsList({
       currency: 'USD',
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
-    }).format(price);
-  };
+    }).format(price)
+  }
 
   const formatDate = (dateStr: string) => {
-    const date = new Date(dateStr);
+    const date = new Date(dateStr)
     return date.toLocaleDateString('en-US', {
       month: 'short',
       day: 'numeric',
       hour: '2-digit',
       minute: '2-digit',
-    });
-  };
+    })
+  }
 
   if (positions.length === 0) {
     return (
@@ -180,7 +175,7 @@ export function PerpPositionsList({
           Open a long or short position to get started
         </p>
       </div>
-    );
+    )
   }
 
   return (
@@ -195,14 +190,14 @@ export function PerpPositionsList({
           isNearLiquidation,
         }) => {
           const isClosing =
-            closeMutation.isPending && closeMutation.variables === position.id;
+            closeMutation.isPending && closeMutation.variables === position.id
 
           return (
             <div
               key={position.id}
               className={cn(
                 'rounded p-4 transition-all',
-                isNearLiquidation ? 'bg-red-600/10' : 'bg-muted/40'
+                isNearLiquidation ? 'bg-red-600/10' : 'bg-muted/40',
               )}
             >
               {/* Header */}
@@ -213,7 +208,7 @@ export function PerpPositionsList({
                       'flex items-center gap-1 rounded px-2 py-1 font-bold text-xs',
                       position.side === 'long'
                         ? 'bg-green-600/20 text-green-600'
-                        : 'bg-red-600/20 text-red-600'
+                        : 'bg-red-600/20 text-red-600',
                     )}
                   >
                     {position.side === 'long' ? (
@@ -232,7 +227,7 @@ export function PerpPositionsList({
                   <div
                     className={cn(
                       'font-bold text-lg',
-                      pnl >= 0 ? 'text-green-600' : 'text-red-600'
+                      pnl >= 0 ? 'text-green-600' : 'text-red-600',
                     )}
                   >
                     {pnl >= 0 ? '+' : ''}
@@ -241,7 +236,7 @@ export function PerpPositionsList({
                   <div
                     className={cn(
                       'text-xs',
-                      pnl >= 0 ? 'text-green-600' : 'text-red-600'
+                      pnl >= 0 ? 'text-green-600' : 'text-red-600',
                     )}
                   >
                     {pnl >= 0 ? '+' : ''}
@@ -293,7 +288,7 @@ export function PerpPositionsList({
                       'font-medium',
                       position.fundingPaid >= 0
                         ? 'text-red-600'
-                        : 'text-green-600'
+                        : 'text-green-600',
                     )}
                   >
                     {position.fundingPaid >= 0 ? '-' : '+'}
@@ -310,6 +305,7 @@ export function PerpPositionsList({
 
               {/* Close Button */}
               <button
+                type="button"
                 onClick={() =>
                   handleCloseClick(position, currentPrice, pnl, pnlPercent)
                 }
@@ -319,7 +315,7 @@ export function PerpPositionsList({
                   isNearLiquidation
                     ? 'bg-red-600 text-primary-foreground hover:bg-red-700'
                     : 'bg-muted text-foreground hover:bg-muted',
-                  isClosing && 'cursor-not-allowed opacity-50'
+                  isClosing && 'cursor-not-allowed opacity-50',
                 )}
               >
                 {isClosing ? (
@@ -332,8 +328,8 @@ export function PerpPositionsList({
                 )}
               </button>
             </div>
-          );
-        }
+          )
+        },
       )}
 
       {/* Confirmation Dialog */}
@@ -361,5 +357,5 @@ export function PerpPositionsList({
         }
       />
     </div>
-  );
+  )
 }

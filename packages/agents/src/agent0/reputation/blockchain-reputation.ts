@@ -5,38 +5,32 @@
  * Handles feedback submission, reputation queries, and sync with local database.
  */
 
-import { agentPerformanceMetrics, db, eq } from '@babylon/db';
+import { agentPerformanceMetrics, db, eq } from '@babylon/db'
 import {
   getCurrentRpcUrl,
   REPUTATION_SYSTEM_ABI,
   REPUTATION_SYSTEM_BASE_SEPOLIA,
-} from '@babylon/shared';
-import {
-  type Address,
-  createPublicClient,
-  http,
-  parseAbi,
-  type WalletClient,
-} from 'viem';
-import { baseSepolia } from 'viem/chains';
-import { logger } from '../../shared/logger';
+} from '@babylon/shared'
+import { type Address, createPublicClient, http, type WalletClient } from 'viem'
+import { baseSepolia } from 'viem/chains'
+import { logger } from '../../shared/logger'
 
 // Contract addresses from canonical config
-const REPUTATION_SYSTEM_ADDRESS = REPUTATION_SYSTEM_BASE_SEPOLIA as Address;
+const REPUTATION_SYSTEM_ADDRESS = REPUTATION_SYSTEM_BASE_SEPOLIA as Address
 
 const publicClient = createPublicClient({
   chain: baseSepolia,
   transport: http(getCurrentRpcUrl()),
-});
+})
 
 interface OnChainReputation {
-  totalBets: bigint;
-  winningBets: bigint;
-  totalVolume: bigint;
-  profitLoss: bigint;
-  accuracyScore: bigint;
-  trustScore: bigint;
-  isBanned: boolean;
+  totalBets: bigint
+  winningBets: bigint
+  totalVolume: bigint
+  profitLoss: bigint
+  accuracyScore: bigint
+  trustScore: bigint
+  isBanned: boolean
 }
 
 /**
@@ -46,14 +40,15 @@ interface OnChainReputation {
  * @returns On-chain reputation data
  */
 export async function getOnChainReputation(
-  tokenId: number
+  tokenId: number,
 ): Promise<OnChainReputation | null> {
   const reputation = (await publicClient.readContract({
     address: REPUTATION_SYSTEM_ADDRESS,
-    abi: parseAbi(REPUTATION_SYSTEM_ABI),
+    abi: REPUTATION_SYSTEM_ABI,
     functionName: 'getReputation',
     args: [BigInt(tokenId)],
-  })) as [bigint, bigint, bigint, bigint, bigint, bigint, boolean];
+    authorizationList: undefined,
+  })) as [bigint, bigint, bigint, bigint, bigint, bigint, boolean]
 
   return {
     totalBets: reputation[0],
@@ -63,7 +58,7 @@ export async function getOnChainReputation(
     accuracyScore: reputation[4],
     trustScore: reputation[5],
     isBanned: reputation[6],
-  };
+  }
 }
 
 /**
@@ -79,28 +74,28 @@ export async function submitOnChainFeedback(
   tokenId: number,
   rating: number,
   comment: string,
-  walletClient: WalletClient
+  walletClient: WalletClient,
 ): Promise<string> {
   if (!walletClient.account) {
-    throw new Error('Wallet client must have an account');
+    throw new Error('Wallet client must have an account')
   }
 
   // Convert 0-100 scale to -128 to 127 scale
   // 0-100 → -128 to 127 (0 = -128, 50 = 0, 100 = 127)
-  const int8Rating = Math.floor((rating / 100) * 255 - 128);
+  const int8Rating = Math.floor((rating / 100) * 255 - 128)
 
   const hash = await walletClient.writeContract({
     chain: baseSepolia,
     address: REPUTATION_SYSTEM_ADDRESS,
-    abi: parseAbi(REPUTATION_SYSTEM_ABI),
+    abi: REPUTATION_SYSTEM_ABI,
     functionName: 'submitFeedback',
     args: [BigInt(tokenId), int8Rating, comment],
     account: walletClient.account,
-  });
+  })
 
-  logger.info('Submitted on-chain feedback', { tokenId, rating, hash });
+  logger.info('Submitted on-chain feedback', { tokenId, rating, hash })
 
-  return hash;
+  return hash
 }
 
 /**
@@ -114,24 +109,24 @@ export async function submitOnChainFeedback(
 export async function recordBet(
   tokenId: number,
   amount: number,
-  walletClient: WalletClient
+  walletClient: WalletClient,
 ): Promise<string> {
   if (!walletClient.account) {
-    throw new Error('Wallet client must have an account');
+    throw new Error('Wallet client must have an account')
   }
 
   const hash = await walletClient.writeContract({
     chain: baseSepolia,
     address: REPUTATION_SYSTEM_ADDRESS,
-    abi: parseAbi(REPUTATION_SYSTEM_ABI),
+    abi: REPUTATION_SYSTEM_ABI,
     functionName: 'recordBet',
     args: [BigInt(tokenId), BigInt(amount)],
     account: walletClient.account,
-  });
+  })
 
-  logger.info('Recorded bet on-chain', { tokenId, amount, hash });
+  logger.info('Recorded bet on-chain', { tokenId, amount, hash })
 
-  return hash;
+  return hash
 }
 
 /**
@@ -145,10 +140,10 @@ export async function recordBet(
 export async function recordWin(
   tokenId: number,
   profit: number,
-  walletClient: WalletClient
+  walletClient: WalletClient,
 ): Promise<string> {
   if (!walletClient.account) {
-    throw new Error('Wallet client must have an account');
+    throw new Error('Wallet client must have an account')
   }
 
   const hash = await walletClient.writeContract({
@@ -158,11 +153,11 @@ export async function recordWin(
     functionName: 'recordWin',
     args: [BigInt(tokenId), BigInt(profit)],
     account: walletClient.account,
-  });
+  })
 
-  logger.info('Recorded win on-chain', { tokenId, profit, hash });
+  logger.info('Recorded win on-chain', { tokenId, profit, hash })
 
-  return hash;
+  return hash
 }
 
 /**
@@ -176,10 +171,10 @@ export async function recordWin(
 export async function recordLoss(
   tokenId: number,
   loss: number,
-  walletClient: WalletClient
+  walletClient: WalletClient,
 ): Promise<string> {
   if (!walletClient.account) {
-    throw new Error('Wallet client must have an account');
+    throw new Error('Wallet client must have an account')
   }
 
   const hash = await walletClient.writeContract({
@@ -189,11 +184,11 @@ export async function recordLoss(
     functionName: 'recordLoss',
     args: [BigInt(tokenId), BigInt(loss)],
     account: walletClient.account,
-  });
+  })
 
-  logger.info('Recorded loss on-chain', { tokenId, loss, hash });
+  logger.info('Recorded loss on-chain', { tokenId, loss, hash })
 
-  return hash;
+  return hash
 }
 
 /**
@@ -204,13 +199,13 @@ export async function recordLoss(
  * @returns Updated performance metrics
  */
 export async function syncOnChainReputation(userId: string, tokenId: number) {
-  const onChainRep = await getOnChainReputation(tokenId);
+  const onChainRep = await getOnChainReputation(tokenId)
 
   if (!onChainRep) {
-    throw new Error('Failed to fetch on-chain reputation');
+    throw new Error('Failed to fetch on-chain reputation')
   }
 
-  // Update local database with on-chain data using Drizzle
+  // Update local database with on-chain data
   const updated = await db
     .update(agentPerformanceMetrics)
     .set({
@@ -220,16 +215,16 @@ export async function syncOnChainReputation(userId: string, tokenId: number) {
       onChainAccuracyScore: Number(onChainRep.accuracyScore),
     })
     .where(eq(agentPerformanceMetrics.userId, userId))
-    .returning();
+    .returning()
 
   logger.info('Synced on-chain reputation', {
     userId,
     tokenId,
     trustScore: onChainRep.trustScore.toString(),
     accuracyScore: onChainRep.accuracyScore.toString(),
-  });
+  })
 
-  return updated[0];
+  return updated[0]
 }
 
 /**
@@ -239,16 +234,17 @@ export async function syncOnChainReputation(userId: string, tokenId: number) {
  * @returns Feedback count
  */
 export async function getOnChainFeedbackCount(
-  tokenId: number
+  tokenId: number,
 ): Promise<number> {
   const count = await publicClient.readContract({
     address: REPUTATION_SYSTEM_ADDRESS,
     abi: REPUTATION_SYSTEM_ABI,
     functionName: 'getFeedbackCount',
     args: [BigInt(tokenId)],
-  });
+    authorizationList: undefined,
+  })
 
-  return Number(count);
+  return Number(count)
 }
 
 /**
@@ -260,24 +256,25 @@ export async function getOnChainFeedbackCount(
  */
 export async function getOnChainFeedback(
   tokenId: number,
-  index: number
+  index: number,
 ): Promise<{
-  from: Address;
-  rating: number;
-  comment: string;
-  timestamp: bigint;
+  from: Address
+  rating: number
+  comment: string
+  timestamp: bigint
 } | null> {
   const feedback = (await publicClient.readContract({
     address: REPUTATION_SYSTEM_ADDRESS,
     abi: REPUTATION_SYSTEM_ABI,
     functionName: 'getFeedback',
     args: [BigInt(tokenId), BigInt(index)],
-  })) as [Address, number, string, bigint];
+    authorizationList: undefined,
+  })) as [Address, number, string, bigint]
 
   return {
     from: feedback[0],
     rating: Number(feedback[1]),
     comment: feedback[2],
     timestamp: feedback[3],
-  };
+  }
 }

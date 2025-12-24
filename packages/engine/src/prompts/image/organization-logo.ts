@@ -1,4 +1,4 @@
-import { definePrompt } from '../define-prompt';
+import { definePrompt } from '../define-prompt'
 
 /**
  * Prompt for generating logos for organizations based on description.
@@ -26,7 +26,7 @@ IMPORTANT:
 - No text on the image (visual elements only)
 - Keep it bold and recognizable at small sizes
 `.trim(),
-});
+})
 
 /**
  * Prompt for generating organization profile banners.
@@ -54,4 +54,4 @@ IMPORTANT:
 - No text on the image
 - Focus on visual storytelling and corporate satire
 `.trim(),
-});
+})

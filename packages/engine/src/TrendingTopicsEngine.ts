@@ -37,32 +37,38 @@
  * ```
  */
 
-import { logger, TrendingTopicSchema } from '@babylon/shared';
-import { z } from 'zod';
-import type { BabylonLLMClient } from './llm/openai-client';
-import { getPromptParams, renderPrompt, trendingTopics } from './prompts';
-import type { FeedPost } from './types/shared';
+import { logger, TrendingTopicSchema } from '@babylon/shared'
+import { z } from 'zod'
+import type { BabylonLLMClient } from './llm/openai-client'
+import { getPromptParams, renderPrompt, trendingTopics } from './prompts'
+import type { FeedPost } from './types/shared'
+
+/** Type for individual trend items from LLM responses */
+type TrendItem = z.infer<typeof TrendingTopicSchema>
+
+/** Type for nested XML trend structures */
+type NestedTrendsData = TrendItem[] | { trend: TrendItem | TrendItem[] }
 
 /**
  * A trending topic with LLM-generated description
  */
 export interface TrendingTopic {
   /** Primary tag/keyword */
-  tag: string;
+  tag: string
   /** Number of posts mentioning this topic */
-  count: number;
+  count: number
   /** Recency score (0-1, higher = more recent) */
-  recency: number;
+  recency: number
   /** Combined score (count * recency weight) */
-  score: number;
+  score: number
   /** LLM-generated trend name (catchy, descriptive) */
-  trendName: string;
+  trendName: string
   /** LLM-generated micro-summary (1-2 sentences) */
-  description: string;
+  description: string
   /** Related question IDs */
-  relatedQuestions: number[];
+  relatedQuestions: number[]
   /** Sample post IDs */
-  samplePosts: string[];
+  samplePosts: string[]
 }
 
 /**
@@ -76,14 +82,14 @@ export interface TrendingTopic {
  * redundant LLM calls when topics haven't changed.
  */
 export class TrendingTopicsEngine {
-  private llm: BabylonLLMClient;
-  private currentTrends: TrendingTopic[] = [];
-  private lastUpdateTick = 0;
-  private updateInterval = 4; // Update every 4 ticks (4 hours, 6x per day)
+  private llm: BabylonLLMClient
+  private currentTrends: TrendingTopic[] = []
+  private lastUpdateTick = 0
+  private updateInterval = 4 // Update every 4 ticks (4 hours, 6x per day)
   /** Hash of the last top topics to detect changes */
-  private lastTopicsHash = '';
+  private lastTopicsHash = ''
   /** Minimum score change ratio required to trigger regeneration (30%) */
-  private static readonly MIN_CHANGE_THRESHOLD = 0.3;
+  private static readonly MIN_CHANGE_THRESHOLD = 0.3
 
   /**
    * Create a new TrendingTopicsEngine
@@ -91,7 +97,7 @@ export class TrendingTopicsEngine {
    * @param llm - Babylon LLM client for trend description generation
    */
   constructor(llm: BabylonLLMClient) {
-    this.llm = llm;
+    this.llm = llm
   }
 
   /**
@@ -104,59 +110,59 @@ export class TrendingTopicsEngine {
   async updateTrends(
     recentPosts: FeedPost[],
     currentTick: number,
-    forceUpdate = false
+    forceUpdate = false,
   ): Promise<void> {
     // Validation
     if (!recentPosts || recentPosts.length === 0) {
       logger.warn(
         'No recent posts available for trend detection',
         undefined,
-        'TrendingTopicsEngine'
-      );
-      return;
+        'TrendingTopicsEngine',
+      )
+      return
     }
 
     // Only update every N ticks (unless forced or first update)
     const isFirstUpdate =
-      this.lastUpdateTick === 0 && this.currentTrends.length === 0;
+      this.lastUpdateTick === 0 && this.currentTrends.length === 0
     if (
       !forceUpdate &&
       !isFirstUpdate &&
       currentTick - this.lastUpdateTick < this.updateInterval
     ) {
-      return;
+      return
     }
 
     // 1. Aggregate tags from recent posts
-    const tagFrequency = this.aggregateTags(recentPosts);
+    const tagFrequency = this.aggregateTags(recentPosts)
 
     if (tagFrequency.size === 0) {
       logger.warn(
         'No tags found in recent posts - cannot generate trends',
         undefined,
-        'TrendingTopicsEngine'
-      );
-      return;
+        'TrendingTopicsEngine',
+      )
+      return
     }
 
     // 2. Rank by frequency and recency
-    const rankedTopics = this.rankTopics(tagFrequency, currentTick);
+    const rankedTopics = this.rankTopics(tagFrequency, currentTick)
 
     if (rankedTopics.length === 0) {
       logger.warn(
         'No topics to rank - cannot generate trends',
         undefined,
-        'TrendingTopicsEngine'
-      );
-      return;
+        'TrendingTopicsEngine',
+      )
+      return
     }
 
     // 3. Take top 5 topics
-    const topTopics = rankedTopics.slice(0, 5);
+    const topTopics = rankedTopics.slice(0, 5)
 
     // 4. Check if topics have changed significantly - skip LLM if not
-    const newTopicsHash = this.computeTopicsHash(topTopics);
-    const hasSignificantChange = this.hasTopicsChanged(topTopics);
+    const newTopicsHash = this.computeTopicsHash(topTopics)
+    const hasSignificantChange = this.hasTopicsChanged(topTopics)
 
     if (
       !forceUpdate &&
@@ -166,12 +172,12 @@ export class TrendingTopicsEngine {
       logger.debug(
         `Skipping trend regeneration - topics unchanged (hash: ${newTopicsHash})`,
         { topTopics: topTopics.map((t) => t.tag) },
-        'TrendingTopicsEngine'
-      );
+        'TrendingTopicsEngine',
+      )
       // Update the tick but reuse existing trends with updated counts
-      this.lastUpdateTick = currentTick;
-      this.updateTrendCounts(topTopics);
-      return;
+      this.lastUpdateTick = currentTick
+      this.updateTrendCounts(topTopics)
+      return
     }
 
     logger.info(
@@ -182,104 +188,104 @@ export class TrendingTopicsEngine {
         previousHash: this.lastTopicsHash,
         hasSignificantChange,
       },
-      'TrendingTopicsEngine'
-    );
+      'TrendingTopicsEngine',
+    )
 
-    this.lastUpdateTick = currentTick;
-    this.lastTopicsHash = newTopicsHash;
+    this.lastUpdateTick = currentTick
+    this.lastTopicsHash = newTopicsHash
 
     // 5. Generate LLM descriptions for each trend
     this.currentTrends = await this.generateTrendDescriptions(
       topTopics,
-      recentPosts
-    );
+      recentPosts,
+    )
 
     logger.info(
       `Generated ${this.currentTrends.length} trending topics`,
       {
         trends: this.currentTrends.map((t) => t.trendName),
       },
-      'TrendingTopicsEngine'
-    );
+      'TrendingTopicsEngine',
+    )
   }
 
   /**
    * Compute a hash of the top topics for change detection
    */
   private computeTopicsHash(
-    topics: Array<{ tag: string; count: number; score: number }>
+    topics: Array<{ tag: string; count: number; score: number }>,
   ): string {
     // Hash based on tag names and relative ordering
-    return topics.map((t) => `${t.tag}:${Math.round(t.score)}`).join('|');
+    return topics.map((t) => `${t.tag}:${Math.round(t.score)}`).join('|')
   }
 
   /**
    * Check if topics have changed significantly from previous update
    */
   private hasTopicsChanged(
-    newTopics: Array<{ tag: string; count: number; score: number }>
+    newTopics: Array<{ tag: string; count: number; score: number }>,
   ): boolean {
     // If no previous trends, definitely changed
     if (this.currentTrends.length === 0 || !this.lastTopicsHash) {
-      return true;
+      return true
     }
 
-    const newHash = this.computeTopicsHash(newTopics);
+    const newHash = this.computeTopicsHash(newTopics)
 
     // Quick check: if hash is identical, no change
     if (newHash === this.lastTopicsHash) {
-      return false;
+      return false
     }
 
     // Check if the top tags are the same (order might differ)
-    const currentTags = new Set(this.currentTrends.map((t) => t.tag));
-    const newTags = new Set(newTopics.map((t) => t.tag));
+    const currentTags = new Set(this.currentTrends.map((t) => t.tag))
+    const newTags = new Set(newTopics.map((t) => t.tag))
 
     // Count how many tags are different
-    let differentTags = 0;
+    let differentTags = 0
     for (const tag of newTags) {
       if (!currentTags.has(tag)) {
-        differentTags++;
+        differentTags++
       }
     }
 
     // If more than 40% of tags are different, it's a significant change
-    const changeRatio = differentTags / newTags.size;
+    const changeRatio = differentTags / newTags.size
 
     // Also check if scores have changed significantly
-    const scoreChange = this.computeScoreChange(newTopics);
+    const scoreChange = this.computeScoreChange(newTopics)
 
     return (
       changeRatio >= TrendingTopicsEngine.MIN_CHANGE_THRESHOLD ||
       scoreChange >= 0.5
-    );
+    )
   }
 
   /**
    * Compute how much the scores have changed relative to current trends
    */
   private computeScoreChange(
-    newTopics: Array<{ tag: string; score: number }>
+    newTopics: Array<{ tag: string; score: number }>,
   ): number {
-    if (this.currentTrends.length === 0) return 1;
+    if (this.currentTrends.length === 0) return 1
 
     const currentScoreMap = new Map(
-      this.currentTrends.map((t) => [t.tag, t.score])
-    );
+      this.currentTrends.map((t) => [t.tag, t.score]),
+    )
 
-    let totalChange = 0;
-    let compared = 0;
+    let totalChange = 0
+    let compared = 0
 
     for (const topic of newTopics) {
-      const currentScore = currentScoreMap.get(topic.tag);
+      const currentScore = currentScoreMap.get(topic.tag)
       if (currentScore !== undefined && currentScore > 0) {
-        const change = Math.abs(topic.score - currentScore) / currentScore;
-        totalChange += change;
-        compared++;
+        const change = Math.abs(topic.score - currentScore) / currentScore
+        totalChange += change
+        compared++
       }
     }
 
-    return compared > 0 ? totalChange / compared : 1;
+    return compared > 0 ? totalChange / compared : 1
   }
 
   /**
@@ -287,24 +293,24 @@ export class TrendingTopicsEngine {
    */
   private updateTrendCounts(
     newTopics: Array<{
-      tag: string;
-      count: number;
-      recency: number;
-      score: number;
-      relatedQuestions: number[];
-      samplePosts: string[];
-    }>
+      tag: string
+      count: number
+      recency: number
+      score: number
+      relatedQuestions: number[]
+      samplePosts: string[]
+    }>,
   ): void {
-    const newTopicMap = new Map(newTopics.map((t) => [t.tag, t]));
+    const newTopicMap = new Map(newTopics.map((t) => [t.tag, t]))
 
     for (const trend of this.currentTrends) {
-      const newData = newTopicMap.get(trend.tag);
+      const newData = newTopicMap.get(trend.tag)
       if (newData) {
-        trend.count = newData.count;
-        trend.recency = newData.recency;
-        trend.score = newData.score;
-        trend.relatedQuestions = newData.relatedQuestions;
-        trend.samplePosts = newData.samplePosts;
+        trend.count = newData.count
+        trend.recency = newData.recency
+        trend.score = newData.score
+        trend.relatedQuestions = newData.relatedQuestions
+        trend.samplePosts = newData.samplePosts
       }
     }
   }
@@ -313,7 +319,7 @@ export class TrendingTopicsEngine {
    * Get current trending topics
    */
   getTrends(): TrendingTopic[] {
-    return this.currentTrends;
+    return this.currentTrends
   }
 
   /**
@@ -326,15 +332,15 @@ export class TrendingTopicsEngine {
    */
   getTrendContext(): string {
     if (this.currentTrends.length === 0) {
-      return 'No trending topics yet.';
+      return 'No trending topics yet.'
     }
 
     const trendList = this.currentTrends
       .slice(0, 3) // Top 3 trends
       .map((t) => `"${t.trendName}" (${t.count} posts)`)
-      .join(', ');
+      .join(', ')
 
-    return `🔥 Trending: ${trendList}`;
+    return `🔥 Trending: ${trendList}`
   }
 
   /**
@@ -345,25 +351,25 @@ export class TrendingTopicsEngine {
    */
   getDetailedTrendContext(): string {
     if (this.currentTrends.length === 0) {
-      return 'TRENDING TOPICS: (none yet)';
+      return 'TRENDING TOPICS: (none yet)'
     }
 
     const trendList = this.currentTrends
       .map((t, i) => {
         if (!t.trendName || !t.description) {
           throw new Error(
-            `Invalid trend at index ${i}: missing trendName or description`
-          );
+            `Invalid trend at index ${i}: missing trendName or description`,
+          )
         }
         const desc =
           t.description.length > 60
-            ? t.description.substring(0, 60) + '...'
-            : t.description;
-        return `${i + 1}."${t.trendName}"(${t.count}): ${desc}`;
+            ? `${t.description.substring(0, 60)}...`
+            : t.description
+        return `${i + 1}."${t.trendName}"(${t.count}): ${desc}`
       })
-      .join('\n');
+      .join('\n')
 
-    return `TRENDING TOPICS:\n${trendList}`;
+    return `TRENDING TOPICS:\n${trendList}`
   }
 
   /**
@@ -372,46 +378,51 @@ export class TrendingTopicsEngine {
   private aggregateTags(posts: FeedPost[]): Map<
     string,
     {
-      count: number;
-      posts: FeedPost[];
-      relatedQuestions: Set<number>;
+      count: number
+      posts: FeedPost[]
+      relatedQuestions: Set<number>
     }
   > {
     const tagMap = new Map<
       string,
       {
-        count: number;
-        posts: FeedPost[];
-        relatedQuestions: Set<number>;
+        count: number
+        posts: FeedPost[]
+        relatedQuestions: Set<number>
       }
-    >();
+    >()
 
     for (const post of posts) {
-      if (!post.tags || post.tags.length === 0) continue;
+      if (!post.tags || post.tags.length === 0) continue
 
       for (const tag of post.tags) {
-        const normalized = tag.toLowerCase().trim();
-        if (!normalized) continue;
+        const normalized = tag.toLowerCase().trim()
+        if (!normalized) continue
 
         if (!tagMap.has(normalized)) {
           tagMap.set(normalized, {
             count: 0,
             posts: [],
             relatedQuestions: new Set(),
-          });
+          })
         }
 
-        const entry = tagMap.get(normalized)!;
-        entry.count++;
-        entry.posts.push(post);
+        const entry = tagMap.get(normalized)
+        if (!entry) {
+          throw new Error(
+            `Tag entry not found for normalized tag: ${normalized}`,
+          )
+        }
+        entry.count++
+        entry.posts.push(post)
 
         if (post.relatedQuestion) {
-          entry.relatedQuestions.add(post.relatedQuestion);
+          entry.relatedQuestions.add(post.relatedQuestion)
         }
       }
     }
 
-    return tagMap;
+    return tagMap
   }
 
   /**
@@ -421,43 +432,43 @@ export class TrendingTopicsEngine {
     tagFrequency: Map<
       string,
       {
-        count: number;
-        posts: FeedPost[];
-        relatedQuestions: Set<number>;
+        count: number
+        posts: FeedPost[]
+        relatedQuestions: Set<number>
       }
     >,
-    currentTick: number
+    currentTick: number,
   ): Array<{
-    tag: string;
-    count: number;
-    recency: number;
-    score: number;
-    relatedQuestions: number[];
-    samplePosts: string[];
+    tag: string
+    count: number
+    recency: number
+    score: number
+    relatedQuestions: number[]
+    samplePosts: string[]
   }> {
     const topics: Array<{
-      tag: string;
-      count: number;
-      recency: number;
-      score: number;
-      relatedQuestions: number[];
-      samplePosts: string[];
-    }> = [];
+      tag: string
+      count: number
+      recency: number
+      score: number
+      relatedQuestions: number[]
+      samplePosts: string[]
+    }> = []
 
     for (const [tag, data] of tagFrequency.entries()) {
       // Calculate recency score (recent posts weighted higher)
       const mostRecentPost = data.posts.reduce((latest, post) => {
-        const postTime = new Date(post.timestamp).getTime();
-        const latestTime = new Date(latest.timestamp).getTime();
-        return postTime > latestTime ? post : latest;
-      });
+        const postTime = new Date(post.timestamp).getTime()
+        const latestTime = new Date(latest.timestamp).getTime()
+        return postTime > latestTime ? post : latest
+      })
 
       // Recency score: 1.0 for current tick, decaying to 0.5 for older posts
-      const ticksAgo = currentTick - (mostRecentPost.day || 0);
-      const recency = Math.max(0.5, 1.0 - ticksAgo * 0.05);
+      const ticksAgo = currentTick - (mostRecentPost.day || 0)
+      const recency = Math.max(0.5, 1.0 - ticksAgo * 0.05)
 
       // Combined score: count * recency (favors frequent + recent)
-      const score = data.count * recency;
+      const score = data.count * recency
 
       topics.push({
         tag,
@@ -466,11 +477,11 @@ export class TrendingTopicsEngine {
         score,
         relatedQuestions: Array.from(data.relatedQuestions),
         samplePosts: data.posts.slice(0, 5).map((p) => p.id),
-      });
+      })
     }
 
     // Sort by score (highest first)
-    return topics.sort((a, b) => b.score - a.score);
+    return topics.sort((a, b) => b.score - a.score)
   }
 
   /**
@@ -478,38 +489,38 @@ export class TrendingTopicsEngine {
    */
   private async generateTrendDescriptions(
     topics: Array<{
-      tag: string;
-      count: number;
-      recency: number;
-      score: number;
-      relatedQuestions: number[];
-      samplePosts: string[];
+      tag: string
+      count: number
+      recency: number
+      score: number
+      relatedQuestions: number[]
+      samplePosts: string[]
     }>,
-    allPosts: FeedPost[]
+    allPosts: FeedPost[],
   ): Promise<TrendingTopic[]> {
     // Build prompt with sample posts for each topic
     const topicsList = topics
       .map((topic, i) => {
         const samplePosts = allPosts
           .filter((p) => topic.samplePosts.includes(p.id))
-          .slice(0, 3);
+          .slice(0, 3)
 
         const posts = samplePosts
           .map((p) => {
             const content =
               p.content.length > 80
-                ? p.content.substring(0, 80) + '...'
-                : p.content;
-            return `@${p.authorName}:"${content}"`;
+                ? `${p.content.substring(0, 80)}...`
+                : p.content
+            return `@${p.authorName}:"${content}"`
           })
-          .join(' | ');
+          .join(' | ')
 
-        return `${i + 1}. "${topic.tag}" (${topic.count}): ${posts}`;
+        return `${i + 1}. "${topic.tag}" (${topic.count}): ${posts}`
       })
-      .join('\n');
+      .join('\n')
 
-    const prompt = renderPrompt(trendingTopics, { topicsList });
-    const params = getPromptParams(trendingTopics);
+    const prompt = renderPrompt(trendingTopics, { topicsList })
+    const params = getPromptParams(trendingTopics)
 
     const rawResponse = await this.llm.generateJSON<Record<string, unknown>>(
       prompt,
@@ -518,17 +529,17 @@ export class TrendingTopicsEngine {
         ...params,
         format: 'xml',
         promptType: 'trending_topics_generate',
-      }
-    );
+      },
+    )
 
     // Extract trend descriptions from XML response structure
-    const trendDescriptions = this.extractTrendDescriptions(rawResponse);
+    const trendDescriptions = this.extractTrendDescriptions(rawResponse)
 
     // Combine topic data with LLM descriptions
     return topics.map((topic, i) => {
-      const desc = trendDescriptions[i];
-      const trendName = desc?.trendName?.trim();
-      const description = desc?.description?.trim();
+      const desc = trendDescriptions[i]
+      const trendName = desc?.trendName?.trim()
+      const description = desc?.description?.trim()
       return {
         tag: topic.tag,
         count: topic.count,
@@ -539,8 +550,8 @@ export class TrendingTopicsEngine {
           description || `${topic.count} posts discussing ${topic.tag}`,
         relatedQuestions: topic.relatedQuestions,
         samplePosts: topic.samplePosts,
-      };
-    });
+      }
+    })
   }
 
   /**
@@ -548,39 +559,35 @@ export class TrendingTopicsEngine {
    * Uses Zod validation to ensure type safety
    */
   private extractTrendDescriptions(
-    rawResponse: Record<string, unknown>
+    rawResponse: Record<string, unknown>,
   ): Array<{ trendName: string; description: string }> {
-    // Type for nested XML trend structures
-    type TrendItem = z.infer<typeof TrendingTopicSchema>;
-    type NestedTrendsData = TrendItem[] | { trend: TrendItem | TrendItem[] };
-
     // Direct trends array
     if ('trends' in rawResponse && Array.isArray(rawResponse.trends)) {
       const parseResult = z
         .array(TrendingTopicSchema)
-        .safeParse(rawResponse.trends);
+        .safeParse(rawResponse.trends)
       if (parseResult.success) {
-        return parseResult.data;
+        return parseResult.data
       }
       logger.warn(
         'Trend descriptions failed validation, using raw data',
         { error: parseResult.error.message },
-        'TrendingTopicsEngine'
-      );
-      return rawResponse.trends as TrendItem[];
+        'TrendingTopicsEngine',
+      )
+      return rawResponse.trends as TrendItem[]
     }
 
     // Wrapped in response object
     if ('response' in rawResponse && rawResponse.response) {
-      const response = rawResponse.response as Record<string, unknown>;
+      const response = rawResponse.response as Record<string, unknown>
       if ('trends' in response && Array.isArray(response.trends)) {
         const parseResult = z
           .array(TrendingTopicSchema)
-          .safeParse(response.trends);
+          .safeParse(response.trends)
         if (parseResult.success) {
-          return parseResult.data;
+          return parseResult.data
         }
-        return response.trends as TrendItem[];
+        return response.trends as TrendItem[]
       }
       // Single trend wrapped in object
       if (
@@ -588,25 +595,23 @@ export class TrendingTopicsEngine {
         response.trends &&
         typeof response.trends === 'object'
       ) {
-        const trendsObj = response.trends as NestedTrendsData;
+        const trendsObj = response.trends as NestedTrendsData
         if ('trend' in trendsObj) {
-          const nestedData = trendsObj as { trend: TrendItem | TrendItem[] };
-          const trendData = nestedData.trend;
-          const trendsArray = Array.isArray(trendData)
-            ? trendData
-            : [trendData];
+          const nestedData = trendsObj as { trend: TrendItem | TrendItem[] }
+          const trendData = nestedData.trend
+          const trendsArray = Array.isArray(trendData) ? trendData : [trendData]
           const parseResult = z
             .array(TrendingTopicSchema)
-            .safeParse(trendsArray);
+            .safeParse(trendsArray)
           if (parseResult.success) {
-            return parseResult.data;
+            return parseResult.data
           }
-          return trendsArray;
+          return trendsArray
         }
       }
     }
 
-    return [];
+    return []
   }
 
   /**
@@ -616,13 +621,13 @@ export class TrendingTopicsEngine {
    */
   setUpdateInterval(ticks: number): void {
     // Enforce minimum of 1 tick to prevent continuous updates
-    this.updateInterval = Math.max(1, ticks);
+    this.updateInterval = Math.max(1, ticks)
     if (ticks < 1) {
       logger.warn(
         `Update interval ${ticks} is too low, using minimum of 1`,
         undefined,
-        'TrendingTopicsEngine'
-      );
+        'TrendingTopicsEngine',
+      )
     }
   }
 
@@ -630,7 +635,7 @@ export class TrendingTopicsEngine {
    * Get current update interval
    */
   getUpdateInterval(): number {
-    return this.updateInterval;
+    return this.updateInterval
   }
 
   /**
@@ -641,9 +646,9 @@ export class TrendingTopicsEngine {
    */
   async forceTrendUpdate(
     recentPosts: FeedPost[],
-    currentTick: number
+    currentTick: number,
   ): Promise<void> {
-    await this.updateTrends(recentPosts, currentTick, true);
+    await this.updateTrends(recentPosts, currentTick, true)
   }
 
   /**
@@ -653,13 +658,13 @@ export class TrendingTopicsEngine {
    * @returns true if update is due based on interval
    */
   needsUpdate(currentTick: number): boolean {
-    return currentTick - this.lastUpdateTick >= this.updateInterval;
+    return currentTick - this.lastUpdateTick >= this.updateInterval
   }
 
   /**
    * Get the last update tick
    */
   getLastUpdateTick(): number {
-    return this.lastUpdateTick;
+    return this.lastUpdateTick
   }
 }

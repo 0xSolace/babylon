@@ -15,8 +15,8 @@ import {
   pointsTransactions,
   reports,
   users,
-} from '@babylon/db';
-import { generateSnowflakeId, logger } from '@babylon/shared';
+} from '@babylon/db'
+import { generateSnowflakeId, logger } from '@babylon/shared'
 
 /**
  * PointsService interface for dependency injection
@@ -29,28 +29,28 @@ type PointsService = {
     userId: string,
     amount: number,
     reason: string,
-    metadata?: Record<string, unknown>
+    metadata?: Record<string, unknown>,
   ) => Promise<{
-    success: boolean;
-    pointsAwarded: number;
-    newTotal: number;
-  }>;
-};
+    success: boolean
+    pointsAwarded: number
+    newTotal: number
+  }>
+}
 
 // Service instance injected from the web application layer
-let pointsServiceInstance: PointsService | null = null;
+let pointsServiceInstance: PointsService | null = null
 
 export function setPointsService(service: PointsService): void {
-  pointsServiceInstance = service;
+  pointsServiceInstance = service
 }
 
 function getPointsService(): PointsService {
   if (!pointsServiceInstance) {
     throw new Error(
-      'PointsService not initialized. Call setPointsService() first.'
-    );
+      'PointsService not initialized. Call setPointsService() first.',
+    )
   }
-  return pointsServiceInstance;
+  return pointsServiceInstance
 }
 
 /**
@@ -61,7 +61,7 @@ function getPointsService(): PointsService {
  */
 export async function distributePointsToReporters(
   reportedUserId: string,
-  reason: 'scammer' | 'csam'
+  reason: 'scammer' | 'csam',
 ): Promise<void> {
   logger.info(
     'Distributing points to successful reporters',
@@ -69,11 +69,11 @@ export async function distributePointsToReporters(
       reportedUserId,
       reason,
     },
-    'PointsDistribution'
-  );
+    'PointsDistribution',
+  )
 
   // Get the reported user's point balance
-  const [reportedUser] = await db
+  const reportedUserResult = await db
     .select({
       id: users.id,
       reputationPoints: users.reputationPoints,
@@ -83,34 +83,44 @@ export async function distributePointsToReporters(
     })
     .from(users)
     .where(eq(users.id, reportedUserId))
-    .limit(1);
+    .limit(1)
+
+  const reportedUser = reportedUserResult[0] as
+    | {
+        id: string
+        reputationPoints: number
+        earnedPoints: number
+        invitePoints: number
+        bonusPoints: number
+      }
+    | undefined
 
   if (!reportedUser) {
     logger.warn(
       'Reported user not found',
       { reportedUserId },
-      'PointsDistribution'
-    );
-    return;
+      'PointsDistribution',
+    )
+    return
   }
 
   // Calculate forfeited points (all points except earned points)
   // We only forfeit bonus/invite points, not earned points
-  const forfeitedPoints = reportedUser.invitePoints + reportedUser.bonusPoints;
+  const forfeitedPoints = reportedUser.invitePoints + reportedUser.bonusPoints
 
   if (forfeitedPoints <= 0) {
     logger.info(
       'No points to distribute',
       { reportedUserId, forfeitedPoints },
-      'PointsDistribution'
-    );
-    return;
+      'PointsDistribution',
+    )
+    return
   }
 
   // Find all successful reports for this user
-  const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000);
+  const ninetyDaysAgo = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000)
 
-  const successfulReports = await db
+  const successfulReportsResult = await db
     .select({
       id: reports.id,
       reporterId: reports.reporterId,
@@ -122,28 +132,34 @@ export async function distributePointsToReporters(
         eq(reports.reportedUserId, reportedUserId),
         eq(reports.status, 'resolved'),
         eq(reports.category, reason === 'scammer' ? 'spam' : 'inappropriate'),
-        gte(reports.createdAt, ninetyDaysAgo)
-      )
+        gte(reports.createdAt, ninetyDaysAgo),
+      ),
     )
-    .orderBy(asc(reports.createdAt));
+    .orderBy(asc(reports.createdAt))
+
+  const successfulReports = successfulReportsResult as Array<{
+    id: string
+    reporterId: string
+    createdAt: Date
+  }>
 
   if (successfulReports.length === 0) {
     logger.info(
       'No successful reports found',
       { reportedUserId },
-      'PointsDistribution'
-    );
+      'PointsDistribution',
+    )
     // Still forfeit the points (remove them from the user)
-    await forfeitUserPoints(reportedUserId, forfeitedPoints);
-    return;
+    await forfeitUserPoints(reportedUserId, forfeitedPoints)
+    return
   }
 
   // Distribute points proportionally
   // Each reporter gets an equal share
   const pointsPerReporter = Math.floor(
-    forfeitedPoints / successfulReports.length
-  );
-  const remainder = forfeitedPoints % successfulReports.length;
+    forfeitedPoints / successfulReports.length,
+  )
+  const remainder = forfeitedPoints % successfulReports.length
 
   logger.info(
     'Distributing points',
@@ -154,19 +170,19 @@ export async function distributePointsToReporters(
       pointsPerReporter,
       remainder,
     },
-    'PointsDistribution'
-  );
+    'PointsDistribution',
+  )
 
-  const pointsService = getPointsService();
+  const pointsService = getPointsService()
 
   // Distribute points to each reporter
   const distributionResults = await Promise.allSettled(
     successfulReports.map(async (report, index) => {
       // First reporter gets the remainder if any
-      const pointsToAward = pointsPerReporter + (index === 0 ? remainder : 0);
+      const pointsToAward = pointsPerReporter + (index === 0 ? remainder : 0)
 
       if (pointsToAward <= 0) {
-        return;
+        return
       }
 
       await pointsService.awardPoints(
@@ -178,8 +194,8 @@ export async function distributePointsToReporters(
           reportId: report.id,
           reason,
           forfeitedPoints: pointsToAward,
-        }
-      );
+        },
+      )
 
       logger.info(
         'Awarded points to reporter',
@@ -188,13 +204,13 @@ export async function distributePointsToReporters(
           points: pointsToAward,
           reportId: report.id,
         },
-        'PointsDistribution'
-      );
-    })
-  );
+        'PointsDistribution',
+      )
+    }),
+  )
 
   // Log any failures
-  const failures = distributionResults.filter((r) => r.status === 'rejected');
+  const failures = distributionResults.filter((r) => r.status === 'rejected')
   if (failures.length > 0) {
     logger.error(
       'Failed to distribute points to some reporters',
@@ -203,12 +219,12 @@ export async function distributePointsToReporters(
         failures: failures.length,
         total: distributionResults.length,
       },
-      'PointsDistribution'
-    );
+      'PointsDistribution',
+    )
   }
 
   // Forfeit the points from the reported user
-  await forfeitUserPoints(reportedUserId, forfeitedPoints);
+  await forfeitUserPoints(reportedUserId, forfeitedPoints)
 
   logger.info(
     '✅ Points distribution complete',
@@ -218,8 +234,8 @@ export async function distributePointsToReporters(
       reportersRewarded: successfulReports.length,
       totalDistributed: forfeitedPoints,
     },
-    'PointsDistribution'
-  );
+    'PointsDistribution',
+  )
 }
 
 /**
@@ -227,9 +243,9 @@ export async function distributePointsToReporters(
  */
 async function forfeitUserPoints(
   userId: string,
-  amount: number
+  amount: number,
 ): Promise<void> {
-  const [user] = await db
+  const userResult = await db
     .select({
       reputationPoints: users.reputationPoints,
       invitePoints: users.invitePoints,
@@ -237,27 +253,35 @@ async function forfeitUserPoints(
     })
     .from(users)
     .where(eq(users.id, userId))
-    .limit(1);
+    .limit(1)
+
+  const user = userResult[0] as
+    | {
+        reputationPoints: number
+        invitePoints: number
+        bonusPoints: number
+      }
+    | undefined
 
   if (!user) {
-    return;
+    return
   }
 
   // Calculate how much to remove from each category
-  const totalForfeitable = user.invitePoints + user.bonusPoints;
+  const totalForfeitable = user.invitePoints + user.bonusPoints
   if (totalForfeitable === 0) {
-    return;
+    return
   }
 
   // Remove proportionally from invite and bonus points
   // Avoid division by zero
   const inviteRatio =
-    totalForfeitable > 0 ? user.invitePoints / totalForfeitable : 0;
+    totalForfeitable > 0 ? user.invitePoints / totalForfeitable : 0
   const bonusRatio =
-    totalForfeitable > 0 ? user.bonusPoints / totalForfeitable : 0;
+    totalForfeitable > 0 ? user.bonusPoints / totalForfeitable : 0
 
-  const inviteToRemove = Math.floor(amount * inviteRatio);
-  const bonusToRemove = Math.floor(amount * bonusRatio);
+  const inviteToRemove = Math.floor(amount * inviteRatio)
+  const bonusToRemove = Math.floor(amount * bonusRatio)
 
   // Update user
   await db
@@ -267,7 +291,7 @@ async function forfeitUserPoints(
       bonusPoints: Math.max(0, user.bonusPoints - bonusToRemove),
       reputationPoints: Math.max(0, user.reputationPoints - amount),
     })
-    .where(eq(users.id, userId));
+    .where(eq(users.id, userId))
 
   // Create transaction record
   await db.insert(pointsTransactions).values({
@@ -281,7 +305,7 @@ async function forfeitUserPoints(
       reason: 'csam_or_scammer_confirmed',
       forfeitedAmount: amount,
     }),
-  });
+  })
 
   logger.info(
     'Forfeited points from user',
@@ -291,15 +315,15 @@ async function forfeitUserPoints(
       inviteRemoved: inviteToRemove,
       bonusRemoved: bonusToRemove,
     },
-    'PointsDistribution'
-  );
+    'PointsDistribution',
+  )
 }
 
 /**
  * Check if a user should have points distributed (CSAM/scammer confirmed)
  */
 export async function shouldDistributePoints(userId: string): Promise<boolean> {
-  const [user] = await db
+  const userResult = await db
     .select({
       isBanned: users.isBanned,
       isScammer: users.isScammer,
@@ -309,12 +333,22 @@ export async function shouldDistributePoints(userId: string): Promise<boolean> {
     })
     .from(users)
     .where(eq(users.id, userId))
-    .limit(1);
+    .limit(1)
+
+  const user = userResult[0] as
+    | {
+        isBanned: boolean
+        isScammer: boolean
+        isCSAM: boolean
+        invitePoints: number
+        bonusPoints: number
+      }
+    | undefined
 
   if (!user) {
-    return false;
+    return false
   }
 
   // Only distribute if user is banned AND marked as scammer or CSAM
-  return user.isBanned && (user.isScammer || user.isCSAM);
+  return user.isBanned && (user.isScammer || user.isCSAM)
 }

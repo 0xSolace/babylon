@@ -1,6 +1,6 @@
-import { cn } from '@babylon/shared';
-import { cva, type VariantProps } from 'class-variance-authority';
-import * as React from 'react';
+import { cn } from '@babylon/shared'
+import { cva, type VariantProps } from 'class-variance-authority'
+import * as React from 'react'
 
 const alertVariants = cva(
   'relative w-full rounded-lg border p-4 [&>svg+div]:translate-y-[-3px] [&>svg]:absolute [&>svg]:top-4 [&>svg]:left-4 [&>svg]:text-foreground [&>svg~*]:pl-7',
@@ -15,8 +15,8 @@ const alertVariants = cva(
     defaultVariants: {
       variant: 'default',
     },
-  }
-);
+  },
+)
 
 /**
  * Alert component for displaying informational messages.
@@ -45,8 +45,8 @@ const Alert = React.forwardRef<
     className={cn(alertVariants({ variant }), className)}
     {...props}
   />
-));
-Alert.displayName = 'Alert';
+))
+Alert.displayName = 'Alert'
 
 /**
  * Alert title component.
@@ -65,8 +65,8 @@ const AlertTitle = React.forwardRef<
     className={cn('mb-1 font-medium leading-none tracking-tight', className)}
     {...props}
   />
-));
-AlertTitle.displayName = 'AlertTitle';
+))
+AlertTitle.displayName = 'AlertTitle'
 
 /**
  * Alert description component.
@@ -85,7 +85,7 @@ const AlertDescription = React.forwardRef<
     className={cn('text-sm [&_p]:leading-relaxed', className)}
     {...props}
   />
-));
-AlertDescription.displayName = 'AlertDescription';
+))
+AlertDescription.displayName = 'AlertDescription'
 
-export { Alert, AlertTitle, AlertDescription };
+export { Alert, AlertTitle, AlertDescription }

@@ -1,6 +1,4 @@
-'use client';
-
-import { cn } from '@babylon/shared';
+import { cn } from '@babylon/shared'
 
 /**
  * Feed toggle component for switching between feed views.
@@ -20,18 +18,19 @@ import { cn } from '@babylon/shared';
  * ```
  */
 interface FeedToggleProps {
-  activeTab: 'latest' | 'following' | 'trades';
-  onTabChange: (tab: 'latest' | 'following' | 'trades') => void;
+  activeTab: 'latest' | 'following' | 'trades'
+  onTabChange: (tab: 'latest' | 'following' | 'trades') => void
 }
 
 export function FeedToggle({ activeTab, onTabChange }: FeedToggleProps) {
   return (
     <div className="flex w-full items-center border-border border-b">
       <button
+        type="button"
         onClick={() => onTabChange('latest')}
         className={cn(
           'relative flex-1 py-3.5 font-semibold transition-all hover:bg-muted/20',
-          activeTab === 'latest' ? 'text-foreground' : 'text-muted-foreground'
+          activeTab === 'latest' ? 'text-foreground' : 'text-muted-foreground',
         )}
       >
         Latest
@@ -40,12 +39,13 @@ export function FeedToggle({ activeTab, onTabChange }: FeedToggleProps) {
         )}
       </button>
       <button
+        type="button"
         onClick={() => onTabChange('following')}
         className={cn(
           'relative flex-1 py-3.5 font-semibold transition-all hover:bg-muted/20',
           activeTab === 'following'
             ? 'text-foreground'
-            : 'text-muted-foreground'
+            : 'text-muted-foreground',
         )}
       >
         Following
@@ -54,10 +54,11 @@ export function FeedToggle({ activeTab, onTabChange }: FeedToggleProps) {
         )}
       </button>
       <button
+        type="button"
         onClick={() => onTabChange('trades')}
         className={cn(
           'relative flex-1 py-3.5 font-semibold transition-all hover:bg-muted/20',
-          activeTab === 'trades' ? 'text-foreground' : 'text-muted-foreground'
+          activeTab === 'trades' ? 'text-foreground' : 'text-muted-foreground',
         )}
       >
         Trades
@@ -66,5 +67,5 @@ export function FeedToggle({ activeTab, onTabChange }: FeedToggleProps) {
         )}
       </button>
     </div>
-  );
+  )
 }

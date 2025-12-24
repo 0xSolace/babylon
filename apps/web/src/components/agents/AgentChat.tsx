@@ -1,45 +1,43 @@
-'use client';
+import { cn, logger } from '@babylon/shared'
+import { useMutation, useQuery } from '@tanstack/react-query'
+import { Send, Sparkles } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { toast } from 'sonner'
+import { AnimatedResponse } from '@/components/chat/AnimatedResponse'
+import { Avatar } from '@/components/shared/Avatar'
+import { Textarea } from '@/components/ui/textarea'
+import { useAuth } from '@/hooks/useAuth'
 
-import { cn, logger } from '@babylon/shared';
-import { useMutation, useQuery } from '@tanstack/react-query';
-import { Send, Sparkles } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { toast } from 'sonner';
-import { AnimatedResponse } from '@/components/chat/AnimatedResponse';
-import { Avatar } from '@/components/shared/Avatar';
-import { Textarea } from '@/components/ui/textarea';
-import { useAuth } from '@/hooks/useAuth';
-
-const MAX_TEXTAREA_HEIGHT = 160;
+const MAX_TEXTAREA_HEIGHT = 160
 
 /**
  * Chat message structure for agent chat.
  */
 interface Message {
-  id: string;
-  role: 'user' | 'assistant' | 'system';
-  content: string;
-  modelUsed?: string;
-  pointsCost: number;
-  createdAt: string;
+  id: string
+  role: 'user' | 'assistant' | 'system'
+  content: string
+  modelUsed?: string
+  pointsCost: number
+  createdAt: string
 }
 
 interface MessagesResponse {
-  success: boolean;
-  messages: Message[];
+  success: boolean
+  messages: Message[]
 }
 
 interface SendMessageResponse {
-  success: boolean;
-  messageId: string;
-  response: string;
-  modelUsed: string;
-  pointsCost: number;
-  balanceAfter: number;
+  success: boolean
+  messageId: string
+  response: string
+  modelUsed: string
+  pointsCost: number
+  balanceAfter: number
 }
 
 interface SendMessageError {
-  error: string;
+  error: string
 }
 
 /**
@@ -71,76 +69,75 @@ interface SendMessageError {
  */
 interface AgentChatProps {
   agent: {
-    id: string;
-    name: string;
-    profileImageUrl?: string;
-    pointsBalance: number;
-    modelTier: 'free' | 'pro';
-  };
-  onBalanceUpdate?: (newBalance: number) => void;
+    id: string
+    name: string
+    profileImageUrl?: string
+    pointsBalance: number
+    modelTier: 'free' | 'pro'
+  }
+  onBalanceUpdate?: (newBalance: number) => void
 }
 
 export function AgentChat({ agent, onBalanceUpdate }: AgentChatProps) {
-  const { user, getAccessToken } = useAuth();
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [input, setInput] = useState('');
-  const [usePro, setUsePro] = useState(false);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const { user, getAccessToken } = useAuth()
+  const [messages, setMessages] = useState<Message[]>([])
+  const [input, setInput] = useState('')
+  const [usePro, setUsePro] = useState(false)
+  const messagesEndRef = useRef<HTMLDivElement>(null)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   const scrollToBottom = useCallback(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, []);
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [])
 
   // Resize textarea based on content
   const resizeTextarea = useCallback(() => {
-    const textarea = textareaRef.current;
+    const textarea = textareaRef.current
     if (textarea) {
-      textarea.style.height = 'auto';
-      textarea.style.height =
-        Math.min(textarea.scrollHeight, MAX_TEXTAREA_HEIGHT) + 'px';
+      textarea.style.height = 'auto'
+      textarea.style.height = `${Math.min(textarea.scrollHeight, MAX_TEXTAREA_HEIGHT)}px`
     }
-  }, []);
+  }, [])
 
   // Resize textarea when input value changes
   useEffect(() => {
-    resizeTextarea();
-  }, [resizeTextarea]);
+    resizeTextarea()
+  }, [resizeTextarea])
 
   // Fetch messages
   const { isLoading } = useQuery({
     queryKey: ['agent', 'chat', agent.id],
     queryFn: async (): Promise<Message[]> => {
-      const token = await getAccessToken();
-      if (!token) return [];
+      const token = await getAccessToken()
+      if (!token) return []
 
       const res = await fetch(`/api/agents/${agent.id}/chat?limit=50`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
-      });
+      })
 
       if (!res.ok) {
-        logger.error('Failed to fetch messages', undefined, 'AgentChat');
-        return [];
+        logger.error('Failed to fetch messages', undefined, 'AgentChat')
+        return []
       }
 
-      const data: MessagesResponse = await res.json();
+      const data: MessagesResponse = await res.json()
       if (data.success && data.messages) {
-        const reversedMessages = data.messages.reverse();
-        setMessages(reversedMessages);
-        return reversedMessages;
+        const reversedMessages = data.messages.reverse()
+        setMessages(reversedMessages)
+        return reversedMessages
       }
-      return [];
+      return []
     },
-  });
+  })
 
   // Send message mutation
   const sendMessageMutation = useMutation({
     mutationFn: async (userMessage: string): Promise<SendMessageResponse> => {
-      const token = await getAccessToken();
+      const token = await getAccessToken()
       if (!token) {
-        throw new Error('Authentication required');
+        throw new Error('Authentication required')
       }
 
       const res = await fetch(`/api/agents/${agent.id}/chat`, {
@@ -153,14 +150,14 @@ export function AgentChat({ agent, onBalanceUpdate }: AgentChatProps) {
           message: userMessage,
           usePro,
         }),
-      });
+      })
 
       if (!res.ok) {
-        const error: SendMessageError = await res.json();
-        throw new Error(error.error || 'Failed to send message');
+        const error: SendMessageError = await res.json()
+        throw new Error(error.error || 'Failed to send message')
       }
 
-      return res.json();
+      return res.json()
     },
     onMutate: async (userMessage) => {
       // Optimistically add user message
@@ -170,18 +167,18 @@ export function AgentChat({ agent, onBalanceUpdate }: AgentChatProps) {
         content: userMessage,
         pointsCost: 0,
         createdAt: new Date().toISOString(),
-      };
-      setMessages((prev) => [...prev, optimisticMessage]);
-      return { optimisticMessage };
+      }
+      setMessages((prev) => [...prev, optimisticMessage])
+      return { optimisticMessage }
     },
     onSuccess: (data, _userMessage, context) => {
       if (!data.response || !data.messageId) {
         // Remove optimistic message
         setMessages((prev) =>
-          prev.filter((m) => m.id !== context?.optimisticMessage.id)
-        );
-        toast.error('Invalid response from agent');
-        return;
+          prev.filter((m) => m.id !== context?.optimisticMessage.id),
+        )
+        toast.error('Invalid response from agent')
+        return
       }
 
       // Add assistant message
@@ -192,47 +189,47 @@ export function AgentChat({ agent, onBalanceUpdate }: AgentChatProps) {
         modelUsed: data.modelUsed,
         pointsCost: data.pointsCost,
         createdAt: new Date().toISOString(),
-      };
-      setMessages((prev) => [...prev, assistantMessage]);
+      }
+      setMessages((prev) => [...prev, assistantMessage])
 
       // Update agent balance without full page refresh
-      onBalanceUpdate?.(data.balanceAfter);
-      toast.success(`Message sent (-${data.pointsCost} points)`);
+      onBalanceUpdate?.(data.balanceAfter)
+      toast.success(`Message sent (-${data.pointsCost} points)`)
     },
     onError: (error, _userMessage, context) => {
       // Remove optimistic message if context exists
       if (context) {
         setMessages((prev) =>
-          prev.filter((m) => m.id !== context.optimisticMessage.id)
-        );
+          prev.filter((m) => m.id !== context.optimisticMessage.id),
+        )
       }
       toast.error(
-        error instanceof Error ? error.message : 'Failed to send message'
-      );
+        error instanceof Error ? error.message : 'Failed to send message',
+      )
     },
-  });
+  })
 
   useEffect(() => {
     if (messages.length > 0) {
-      scrollToBottom();
+      scrollToBottom()
     }
-  }, [messages, scrollToBottom]);
+  }, [messages, scrollToBottom])
 
   const sendMessage = async () => {
-    if (!input.trim() || sendMessageMutation.isPending) return;
+    if (!input.trim() || sendMessageMutation.isPending) return
 
-    const userMessage = input;
-    setInput('');
-    sendMessageMutation.mutate(userMessage);
-  };
+    const userMessage = input
+    setInput('')
+    sendMessageMutation.mutate(userMessage)
+  }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      sendMessage();
+      e.preventDefault()
+      sendMessage()
     }
     // Shift+Enter will insert a newline (default behavior)
-  };
+  }
 
   return (
     <div className="flex h-[600px] flex-col rounded-lg border border-border bg-card/50 backdrop-blur">
@@ -246,13 +243,14 @@ export function AgentChat({ agent, onBalanceUpdate }: AgentChatProps) {
         </div>
         <div className="flex items-center gap-2">
           <button
+            type="button"
             onClick={() => setUsePro(!usePro)}
             disabled={agent.modelTier === 'free'}
             className={cn(
               'flex items-center gap-2 rounded-lg px-3 py-1.5 font-medium text-sm transition-all disabled:cursor-not-allowed disabled:opacity-50',
               usePro
                 ? 'bg-[#0066FF] text-primary-foreground'
-                : 'bg-muted text-foreground hover:bg-muted/80'
+                : 'bg-muted text-foreground hover:bg-muted/80',
             )}
           >
             <Sparkles className="h-4 w-4" />
@@ -274,12 +272,12 @@ export function AgentChat({ agent, onBalanceUpdate }: AgentChatProps) {
           </div>
         ) : (
           messages.map((message, index) => {
-            const isLastMessage = index === messages.length - 1;
+            const isLastMessage = index === messages.length - 1
             const messageAge =
-              Date.now() - new Date(message.createdAt).getTime();
-            const isRecent = messageAge < 10000; // Less than 10 seconds
+              Date.now() - new Date(message.createdAt).getTime()
+            const isRecent = messageAge < 10000 // Less than 10 seconds
             const shouldAnimate =
-              message.role === 'assistant' && isLastMessage && isRecent;
+              message.role === 'assistant' && isLastMessage && isRecent
 
             return (
               <div
@@ -302,7 +300,7 @@ export function AgentChat({ agent, onBalanceUpdate }: AgentChatProps) {
                     'max-w-[70%] rounded-lg p-3',
                     message.role === 'user'
                       ? 'bg-[#0066FF] text-primary-foreground'
-                      : 'bg-muted'
+                      : 'bg-muted',
                   )}
                 >
                   {message.role === 'assistant' ? (
@@ -350,7 +348,7 @@ export function AgentChat({ agent, onBalanceUpdate }: AgentChatProps) {
                   />
                 )}
               </div>
-            );
+            )
           })
         )}
         {sendMessageMutation.isPending && (
@@ -402,11 +400,12 @@ export function AgentChat({ agent, onBalanceUpdate }: AgentChatProps) {
             disabled={sendMessageMutation.isPending}
             className={cn(
               'max-h-40 min-h-10 flex-1 resize-none overflow-y-auto py-2.5',
-              'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring'
+              'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring',
             )}
             rows={1}
           />
           <button
+            type="button"
             onClick={sendMessage}
             disabled={
               !input.trim() ||
@@ -420,5 +419,5 @@ export function AgentChat({ agent, onBalanceUpdate }: AgentChatProps) {
         </div>
       </div>
     </div>
-  );
+  )
 }

@@ -7,28 +7,51 @@
  *   start     - Start the continuous game
  *   pause     - Pause the continuous game
  *   status    - Show game runtime status
+ *   tick      - Execute a single game tick
+ *   run       - Run game ticks in a loop
+ *   cron      - Local cron simulator (calls server endpoints)
  *   generate  - Generate a new game with scenarios and questions
  *   validate  - Validate actor data integrity
  */
 
-import type { JsonValue } from '@babylon/db';
+import type { Game, GameConfig, JsonValue, Post } from '@babylon/db'
 import {
   and,
   closeDatabase,
   db,
-  generateSnowflakeId as dbGenerateSnowflakeId,
   desc,
   eq,
   gameConfigs,
   games,
   isNull,
   posts,
-} from '@babylon/db';
-import type { GameHistory, GroupMessage } from '@babylon/engine';
-import { GameGenerator, loadActorsData } from '@babylon/engine';
-import { v4 as uuidv4 } from 'uuid';
-import { getFlag, parseArgs, wantsHelp } from '../lib/args.js';
-import { logger } from '../lib/logger.js';
+} from '@babylon/db'
+import type { GameHistory, GroupMessage } from '@babylon/engine'
+import { generateSnowflakeId as dbGenerateSnowflakeId } from '@babylon/shared'
+
+/**
+ * Convert GameHistory to JsonValue for database storage.
+ * GameHistory is structurally compatible with JsonValue (plain JSON object),
+ * but TypeScript's structural typing doesn't recognize this.
+ */
+function toJsonValue(history: GameHistory): JsonValue {
+  // JSON round-trip ensures the value is a pure JSON structure
+  // JSON.parse of a stringified object always produces a valid JsonValue
+  const parsed: unknown = JSON.parse(JSON.stringify(history))
+  return parsed as JsonValue
+}
+
+import {
+  executeGameTick,
+  GameGenerator,
+  GroupInviteOrchestrator,
+  getGroupChatConfigSummary,
+  loadActorsData,
+  validateGroupChatConfig,
+} from '@babylon/engine'
+import { v4 as uuidv4 } from 'uuid'
+import { getFlag, getOption, parseArgs, wantsHelp } from '../lib/args.js'
+import { logger } from '../lib/logger.js'
 
 function printHelp(): void {
   console.log(`
@@ -41,9 +64,19 @@ COMMANDS:
   start       Start the continuous game
   pause       Pause the continuous game
   status      Show game runtime status
+  tick        Execute a single game tick directly
+  run         Run game ticks in a loop continuously
+  cron        Local cron simulator (calls server endpoints)
   generate    Generate a new game with scenarios and questions
   simulate    Run game simulation
   validate    Validate actor data integrity
+
+OPTIONS (tick/run):
+  --interval=N      Seconds between ticks (default: 60, only with run)
+
+OPTIONS (cron):
+  --port=N          Server port to call (default: 5007)
+  --interval=N      Seconds between ticks (default: 60)
 
 OPTIONS (generate):
   -v, --verbose    Enable detailed logging
@@ -56,11 +89,14 @@ EXAMPLES:
   babylon game start                    Start the game
   babylon game pause                    Pause the game
   babylon game status                   Check if game is running
+  babylon game tick                     Execute single game tick
+  babylon game run --interval=30        Run ticks every 30 seconds
+  babylon game cron --port=5007         Start local cron simulator
   babylon game generate                 Generate new game content
   babylon game simulate --ticks=100     Run 100 invite processing ticks
   babylon game simulate --config        Show current configuration
   babylon game validate                 Validate actor affiliations
-`);
+`)
 }
 
 /**
@@ -70,7 +106,7 @@ EXAMPLES:
  * @internal
  */
 async function generateSnowflakeId(): Promise<string> {
-  return uuidv4();
+  return uuidv4()
 }
 
 /**
@@ -82,19 +118,19 @@ async function generateSnowflakeId(): Promise<string> {
  * @internal
  */
 async function controlGame(action: 'start' | 'pause'): Promise<void> {
-  logger.header(action === 'start' ? 'Starting Game' : 'Pausing Game');
+  logger.header(action === 'start' ? 'Starting Game' : 'Pausing Game')
 
-  const result = await db
+  const result = (await db
     .select()
     .from(games)
     .where(eq(games.isContinuous, true))
-    .limit(1);
+    .limit(1)) as unknown as Game[]
 
-  let game = result[0];
+  let game = result[0]
 
   if (!game) {
-    const gameId = await dbGenerateSnowflakeId();
-    const created = await db
+    const gameId = await dbGenerateSnowflakeId()
+    const created = (await db
       .insert(games)
       .values({
         id: gameId,
@@ -104,31 +140,34 @@ async function controlGame(action: 'start' | 'pause'): Promise<void> {
         startedAt: action === 'start' ? new Date() : null,
         updatedAt: new Date(),
       })
-      .returning();
-    game = created[0]!;
+      .returning()) as unknown as Game[]
+    game = created[0]
+    if (!game) {
+      throw new Error('Failed to create game')
+    }
     logger.success(
-      `Game created and ${action === 'start' ? 'started' : 'paused'}`
-    );
-    console.log(`  Game ID: ${game.id}`);
+      `Game created and ${action === 'start' ? 'started' : 'paused'}`,
+    )
+    console.log(`  Game ID: ${game.id}`)
   } else {
-    const isRunning = action === 'start';
+    const isRunning = action === 'start'
     const updateData: Record<string, Date | boolean | null> = {
       isRunning,
       updatedAt: new Date(),
-    };
-
-    if (action === 'start') {
-      updateData.startedAt = new Date();
-      updateData.pausedAt = null;
-    } else {
-      updateData.pausedAt = new Date();
     }
 
-    await db.update(games).set(updateData).where(eq(games.id, game.id));
+    if (action === 'start') {
+      updateData.startedAt = new Date()
+      updateData.pausedAt = null
+    } else {
+      updateData.pausedAt = new Date()
+    }
 
-    logger.success(`Game ${action === 'start' ? 'started' : 'paused'}`);
-    console.log(`  Game ID: ${game.id}`);
-    console.log(`  Current Day: ${game.currentDay}`);
+    await db.update(games).set(updateData).where(eq(games.id, game.id))
+
+    logger.success(`Game ${action === 'start' ? 'started' : 'paused'}`)
+    console.log(`  Game ID: ${game.id}`)
+    console.log(`  Current Day: ${game.currentDay}`)
   }
 }
 
@@ -138,41 +177,41 @@ async function controlGame(action: 'start' | 'pause'): Promise<void> {
  * @internal
  */
 async function showGameStatus(): Promise<void> {
-  logger.header('Game Status');
+  logger.header('Game Status')
 
-  const result = await db
+  const result = (await db
     .select()
     .from(games)
     .where(eq(games.isContinuous, true))
-    .limit(1);
+    .limit(1)) as unknown as Game[]
 
-  const game = result[0];
+  const game = result[0]
 
   if (!game) {
-    console.log('No continuous game found.');
-    console.log('\nCreate one with: babylon game start');
-    return;
+    console.log('No continuous game found.')
+    console.log('\nCreate one with: babylon game start')
+    return
   }
 
-  console.log(`Game ID:        ${game.id}`);
-  console.log(`Status:         ${game.isRunning ? '✅ RUNNING' : '⏸️  PAUSED'}`);
-  console.log(`Current Day:    ${game.currentDay}`);
-  console.log(`Current Date:   ${game.currentDate.toLocaleString()}`);
-  console.log(`Speed:          ${game.speed}ms between ticks`);
-  console.log(`Active Qs:      ${game.activeQuestions || 0}`);
+  console.log(`Game ID:        ${game.id}`)
+  console.log(`Status:         ${game.isRunning ? '✅ RUNNING' : '⏸️  PAUSED'}`)
+  console.log(`Current Day:    ${game.currentDay}`)
+  console.log(`Current Date:   ${game.currentDate.toLocaleString()}`)
+  console.log(`Speed:          ${game.speed}ms between ticks`)
+  console.log(`Active Qs:      ${game.activeQuestions || 0}`)
 
   if (game.startedAt) {
-    console.log(`Started At:     ${game.startedAt.toLocaleString()}`);
+    console.log(`Started At:     ${game.startedAt.toLocaleString()}`)
   }
   if (game.pausedAt) {
-    console.log(`Paused At:      ${game.pausedAt.toLocaleString()}`);
+    console.log(`Paused At:      ${game.pausedAt.toLocaleString()}`)
   }
   if (game.lastTickAt) {
-    console.log(`Last Tick:      ${game.lastTickAt.toLocaleString()}`);
+    console.log(`Last Tick:      ${game.lastTickAt.toLocaleString()}`)
   }
 
   if (!game.isRunning) {
-    console.log('\n💡 To start the game: babylon game start');
+    console.log('\n💡 To start the game: babylon game start')
   }
 }
 
@@ -187,32 +226,32 @@ async function showGameStatus(): Promise<void> {
  * @throws {Error} If the value doesn't match the expected GameHistory structure
  * @internal
  */
-function validateGameHistory(value: JsonValue): GameHistory {
+function isGameHistory(value: unknown): value is GameHistory {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    throw new Error('Invalid game history format');
+    return false
   }
+  // After object check, use 'in' operator for property access
+  return (
+    'gameNumber' in value &&
+    typeof value.gameNumber === 'number' &&
+    'completedAt' in value &&
+    typeof value.completedAt === 'string' &&
+    'summary' in value &&
+    typeof value.summary === 'string' &&
+    'keyOutcomes' in value &&
+    Array.isArray(value.keyOutcomes) &&
+    'highlights' in value &&
+    Array.isArray(value.highlights) &&
+    'topMoments' in value &&
+    Array.isArray(value.topMoments)
+  )
+}
 
-  const obj = value as Record<string, JsonValue>;
-
-  if (
-    typeof obj.gameNumber !== 'number' ||
-    typeof obj.completedAt !== 'string' ||
-    typeof obj.summary !== 'string' ||
-    !Array.isArray(obj.keyOutcomes) ||
-    !Array.isArray(obj.highlights) ||
-    !Array.isArray(obj.topMoments)
-  ) {
-    throw new Error('Invalid game history format');
+function validateGameHistory(value: JsonValue): GameHistory {
+  if (!isGameHistory(value)) {
+    throw new Error('Invalid game history format')
   }
-
-  return {
-    gameNumber: obj.gameNumber as number,
-    completedAt: obj.completedAt as string,
-    summary: obj.summary as string,
-    keyOutcomes: obj.keyOutcomes as GameHistory['keyOutcomes'],
-    highlights: obj.highlights as string[],
-    topMoments: obj.topMoments as string[],
-  };
+  return value
 }
 
 /**
@@ -228,21 +267,21 @@ function validateGameHistory(value: JsonValue): GameHistory {
  */
 async function generateMinimalGameHistory(
   gameId: string,
-  gameNumber: number
+  gameNumber: number,
 ): Promise<GameHistory> {
-  const postsData = await db
+  const postsData = (await db
     .select()
     .from(posts)
     .where(and(eq(posts.gameId, gameId), isNull(posts.deletedAt)))
     .orderBy(desc(posts.timestamp))
-    .limit(100);
+    .limit(100)) as unknown as Post[]
 
-  const topPosts = postsData.slice(0, 10);
-  const summary = `Game ${gameNumber} featured ${postsData.length} posts over 30 days.`;
+  const topPosts = postsData.slice(0, 10)
+  const summary = `Game ${gameNumber} featured ${postsData.length} posts over 30 days.`
 
-  const highlights = topPosts.map((p) =>
-    p.content.length > 100 ? p.content.substring(0, 100) + '...' : p.content
-  );
+  const highlights: string[] = topPosts.map((p) =>
+    p.content.length > 100 ? `${p.content.substring(0, 100)}...` : p.content,
+  )
 
   return {
     gameNumber,
@@ -251,7 +290,7 @@ async function generateMinimalGameHistory(
     keyOutcomes: [],
     highlights,
     topMoments: highlights.slice(0, 5),
-  };
+  }
 }
 
 /**
@@ -264,31 +303,31 @@ async function generateMinimalGameHistory(
  * @internal
  */
 async function validateActorsData(): Promise<void> {
-  const actorsData = loadActorsData();
-  const actors = actorsData.actors;
-  const organizations = actorsData.organizations;
+  const actorsData = loadActorsData()
+  const actors = actorsData.actors
+  const organizations = actorsData.organizations
 
-  const validOrgIds = new Set(organizations.map((org) => org.id));
-  const errors: string[] = [];
+  const validOrgIds = new Set(organizations.map((org) => org.id))
+  const errors: string[] = []
 
   for (const actor of actors) {
-    if (!actor.affiliations || actor.affiliations.length === 0) continue;
+    if (!actor.affiliations || actor.affiliations.length === 0) continue
 
     for (const affiliation of actor.affiliations) {
       if (!validOrgIds.has(affiliation)) {
         errors.push(
-          `${actor.name} (${actor.id}) has invalid affiliation: "${affiliation}"`
-        );
+          `${actor.name} (${actor.id}) has invalid affiliation: "${affiliation}"`,
+        )
       }
     }
   }
 
   if (errors.length > 0) {
-    logger.fail('Actor validation failed');
+    logger.fail('Actor validation failed')
     for (const error of errors) {
-      console.log(`  - ${error}`);
+      console.log(`  - ${error}`)
     }
-    process.exit(1);
+    process.exit(1)
   }
 }
 
@@ -304,41 +343,41 @@ async function validateActorsData(): Promise<void> {
  * @internal
  */
 async function generateGame(args: ReturnType<typeof parseArgs>): Promise<void> {
-  const verbose = getFlag(args, 'verbose', 'v');
+  const verbose = getFlag(args, 'verbose', 'v')
 
-  logger.header('Babylon Game Generator');
+  logger.header('Babylon Game Generator')
 
   // Validate actors
-  logger.step('Validating actors...');
-  await validateActorsData();
-  logger.success('Actors validated');
+  logger.step('Validating actors...')
+  await validateActorsData()
+  logger.success('Actors validated')
 
   // Check API keys
-  const groqKey = process.env.GROQ_API_KEY;
-  const openaiKey = process.env.OPENAI_API_KEY;
+  const groqKey = process.env.GROQ_API_KEY
+  const openaiKey = process.env.OPENAI_API_KEY
 
   if (!groqKey && !openaiKey) {
-    logger.fail('No API key found!');
-    console.log('\nSet one of the following:');
-    console.log('  export GROQ_API_KEY=your_key_here');
-    console.log('  export OPENAI_API_KEY=your_key_here');
-    process.exit(1);
+    logger.fail('No API key found!')
+    console.log('\nSet one of the following:')
+    console.log('  export GROQ_API_KEY=your_key_here')
+    console.log('  export OPENAI_API_KEY=your_key_here')
+    process.exit(1)
   }
 
-  console.log(`Using: ${groqKey ? 'Groq' : 'OpenAI'}`);
+  console.log(`Using: ${groqKey ? 'Groq' : 'OpenAI'}`)
 
-  const startTime = Date.now();
+  const startTime = Date.now()
 
   // Check for existing games
-  const existingGames = await db
+  const existingGames = (await db
     .select()
     .from(games)
-    .orderBy(desc(games.currentDate));
+    .orderBy(desc(games.currentDate))) as unknown as Game[]
 
   if (existingGames.length === 0) {
-    logger.step('No genesis game found, generating...');
-    const generator = new GameGenerator();
-    const genesis = await generator.generateGenesis();
+    logger.step('No genesis game found, generating...')
+    const generator = new GameGenerator()
+    const genesis = await generator.generateGenesis()
 
     await db.insert(games).values({
       id: await generateSnowflakeId(),
@@ -347,23 +386,23 @@ async function generateGame(args: ReturnType<typeof parseArgs>): Promise<void> {
       currentDate: new Date(),
       speed: 60000,
       updatedAt: new Date(),
-    });
+    })
 
-    logger.success('Genesis game created');
+    logger.success('Genesis game created')
     console.log(
-      `  Events: ${genesis.timeline.reduce((sum, day) => sum + day.events.length, 0)}`
-    );
+      `  Events: ${genesis.timeline.reduce((sum, day) => sum + day.events.length, 0)}`,
+    )
     console.log(
-      `  Posts: ${genesis.timeline.reduce((sum, day) => sum + day.feedPosts.length, 0)}`
-    );
+      `  Posts: ${genesis.timeline.reduce((sum, day) => sum + day.feedPosts.length, 0)}`,
+    )
   } else {
-    console.log(`Found ${existingGames.length} existing game(s)`);
+    console.log(`Found ${existingGames.length} existing game(s)`)
   }
 
   // Load history
-  const history: GameHistory[] = [];
-  let nextStartDate: string;
-  let gameNumber = 1;
+  const history: GameHistory[] = []
+  let nextStartDate: string
+  let gameNumber = 1
 
   if (existingGames.length > 0) {
     for (
@@ -371,82 +410,85 @@ async function generateGame(args: ReturnType<typeof parseArgs>): Promise<void> {
       i < existingGames.length;
       i++
     ) {
-      const gameData = existingGames[i];
-      if (!gameData) continue;
+      const gameData = existingGames[i]
+      if (!gameData) continue
 
-      const historyConfigResult = await db
+      const historyConfigResult = (await db
         .select()
         .from(gameConfigs)
         .where(eq(gameConfigs.key, `game-history-${gameData.id}`))
-        .limit(1);
-      const historyConfig = historyConfigResult[0];
+        .limit(1)) as unknown as GameConfig[]
+      const historyConfig = historyConfigResult[0]
 
-      if (historyConfig && historyConfig.value) {
-        history.push(validateGameHistory(historyConfig.value));
+      if (historyConfig?.value) {
+        history.push(validateGameHistory(historyConfig.value))
       } else {
-        history.push(await generateMinimalGameHistory(gameData.id, i + 1));
+        history.push(
+          await generateMinimalGameHistory(String(gameData.id), i + 1),
+        )
       }
     }
 
-    const lastGame = existingGames[0]!;
-    const nextDate = new Date(lastGame.currentDate);
-    nextDate.setDate(nextDate.getDate() + 30);
-    nextStartDate = nextDate.toISOString().split('T')[0]!;
-    gameNumber = existingGames.length + 1;
+    const lastGame = existingGames[0]
+    if (!lastGame) {
+      throw new Error('No existing games found')
+    }
+    const nextDate = new Date(lastGame.currentDate)
+    nextDate.setDate(nextDate.getDate() + 30)
+    const dateStr = nextDate.toISOString().split('T')[0]
+    nextStartDate = dateStr ?? ''
+    gameNumber = existingGames.length + 1
   } else {
-    const now = new Date();
-    nextStartDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`;
+    const now = new Date()
+    nextStartDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
   }
 
-  logger.step(`Generating Game #${gameNumber} (starting ${nextStartDate})...`);
+  logger.step(`Generating Game #${gameNumber} (starting ${nextStartDate})...`)
 
   const generator = new GameGenerator(
     undefined,
-    history.length > 0 ? history : undefined
-  );
-  const game = await generator.generateCompleteGame(nextStartDate);
-  const duration = Date.now() - startTime;
+    history.length > 0 ? history : undefined,
+  )
+  const game = await generator.generateCompleteGame(nextStartDate)
+  const duration = Date.now() - startTime
 
-  logger.success('Generation complete');
-  console.log(`  Duration: ${(duration / 1000).toFixed(1)}s`);
+  logger.success('Generation complete')
+  console.log(`  Duration: ${(duration / 1000).toFixed(1)}s`)
   console.log(
-    `  Events: ${game.timeline.reduce((sum, day) => sum + day.events.length, 0)}`
-  );
+    `  Events: ${game.timeline.reduce((sum, day) => sum + day.events.length, 0)}`,
+  )
   console.log(
-    `  Posts: ${game.timeline.reduce((sum, day) => sum + day.feedPosts.length, 0)}`
-  );
+    `  Posts: ${game.timeline.reduce((sum, day) => sum + day.feedPosts.length, 0)}`,
+  )
   console.log(
     `  Group messages: ${
       Object.values(
-        game.timeline.reduce(
-          (acc, day) => {
-            Object.entries(day.groupChats).forEach(([groupId, messages]) => {
-              if (!acc[groupId]) acc[groupId] = [];
-              acc[groupId]!.push(...messages);
-            });
-            return acc;
-          },
-          {} as Record<string, GroupMessage[]>
-        )
+        game.timeline.reduce<Record<string, GroupMessage[]>>((acc, day) => {
+          Object.entries(day.groupChats).forEach(([groupId, messages]) => {
+            if (!acc[groupId]) acc[groupId] = []
+            acc[groupId].push(...messages)
+          })
+          return acc
+        }, {}),
       ).flat().length
-    }`
-  );
+    }`,
+  )
 
   // Show scenarios
-  console.log('\nScenarios:');
+  console.log('\nScenarios:')
   game.setup.scenarios.forEach((scenario) => {
-    console.log(`  ${scenario.id}. ${scenario.title} (${scenario.theme})`);
+    console.log(`  ${scenario.id}. ${scenario.title} (${scenario.theme})`)
     if (verbose) {
-      console.log(`     ${scenario.description}`);
+      console.log(`     ${scenario.description}`)
     }
-  });
+  })
 
   // Save to database
-  logger.step('Saving to database...');
+  logger.step('Saving to database...')
 
-  const gameHistory = generator.createGameHistory(game);
+  const gameHistory = generator.createGameHistory(game)
 
-  const savedGameResult = await db
+  const savedGameResult = (await db
     .insert(games)
     .values({
       id: await generateSnowflakeId(),
@@ -456,120 +498,309 @@ async function generateGame(args: ReturnType<typeof parseArgs>): Promise<void> {
       speed: 60000,
       updatedAt: new Date(),
     })
-    .returning();
-  const savedGame = savedGameResult[0]!;
+    .returning()) as unknown as Game[]
+  const savedGame = savedGameResult[0]
+  if (!savedGame) {
+    throw new Error('Failed to save game')
+  }
 
   // Upsert gameConfig: check if exists, update or create
-  const existingConfig = await db
+  const existingConfig = (await db
     .select()
     .from(gameConfigs)
     .where(eq(gameConfigs.key, `game-history-${savedGame.id}`))
-    .limit(1);
+    .limit(1)) as unknown as GameConfig[]
 
   if (existingConfig[0]) {
     await db
       .update(gameConfigs)
-      .set({ value: gameHistory as never, updatedAt: new Date() })
-      .where(eq(gameConfigs.key, `game-history-${savedGame.id}`));
+      .set({ value: toJsonValue(gameHistory), updatedAt: new Date() })
+      .where(eq(gameConfigs.key, `game-history-${savedGame.id}`))
   } else {
     await db.insert(gameConfigs).values({
       id: await generateSnowflakeId(),
       key: `game-history-${savedGame.id}`,
-      value: gameHistory as never,
+      value: toJsonValue(gameHistory),
       createdAt: new Date(),
       updatedAt: new Date(),
-    });
+    })
   }
 
-  logger.success(`Game saved (ID: ${savedGame.id})`);
+  logger.success(`Game saved (ID: ${savedGame.id})`)
 }
 
 async function runSimulation(
-  args: ReturnType<typeof parseArgs>
+  args: ReturnType<typeof parseArgs>,
 ): Promise<void> {
-  const {
-    getGroupChatConfigSummary,
-    GroupInviteOrchestrator,
-    validateGroupChatConfig,
-  } = await import('@babylon/engine');
+  logger.header('Group Dynamics Simulation')
 
-  logger.header('Group Dynamics Simulation');
-
-  const ticksOption = args.options['ticks'];
-  const ticks = ticksOption ? Number.parseInt(ticksOption, 10) : 10;
-  const showConfig = getFlag(args, 'config');
+  const ticksOption = args.options.ticks
+  const ticks = ticksOption ? Number.parseInt(ticksOption, 10) : 10
+  const showConfig = getFlag(args, 'config')
 
   // Show current configuration
   if (showConfig) {
-    console.log('\nCurrent Configuration:');
-    const config = getGroupChatConfigSummary();
+    console.log('\nCurrent Configuration:')
+    const config = getGroupChatConfigSummary()
     for (const [key, value] of Object.entries(config)) {
-      console.log(`  ${key}: ${value}`);
+      console.log(`  ${key}: ${value}`)
     }
 
-    const validation = validateGroupChatConfig();
+    const validation = validateGroupChatConfig()
     if (!validation.valid) {
-      console.log('\nConfiguration Warnings:');
+      console.log('\nConfiguration Warnings:')
       for (const warning of validation.warnings) {
-        console.log(`  ⚠️  ${warning}`);
+        console.log(`  ⚠️  ${warning}`)
       }
     }
-    console.log('');
+    console.log('')
   }
 
   // Get initial stats
-  const initialStats = await GroupInviteOrchestrator.getInviteStats();
-  console.log('\nInitial State:');
-  console.log(`  Pending candidates: ${initialStats.pendingCandidates}`);
-  console.log(`  Pending invites: ${initialStats.pendingInvites}`);
-  console.log(`  Invites (24h): ${initialStats.invitesLast24h}`);
-  console.log(`  Accepts (24h): ${initialStats.acceptsLast24h}`);
+  const initialStats = await GroupInviteOrchestrator.getInviteStats()
+  console.log('\nInitial State:')
+  console.log(`  Pending candidates: ${initialStats.pendingCandidates}`)
+  console.log(`  Pending invites: ${initialStats.pendingInvites}`)
+  console.log(`  Invites (24h): ${initialStats.invitesLast24h}`)
+  console.log(`  Accepts (24h): ${initialStats.acceptsLast24h}`)
 
   // Run simulation ticks
-  console.log(`\nRunning ${ticks} invite processing ticks...`);
+  console.log(`\nRunning ${ticks} invite processing ticks...`)
 
-  let totalInvitesSent = 0;
-  let totalProcessed = 0;
-  let totalExpired = 0;
-  let totalSkipped = 0;
+  let totalInvitesSent = 0
+  let totalProcessed = 0
+  let totalExpired = 0
+  let totalSkipped = 0
 
   for (let i = 1; i <= ticks; i++) {
-    const result = await GroupInviteOrchestrator.processQueuedInvites();
-    totalInvitesSent += result.invitesSent;
-    totalProcessed += result.candidatesProcessed;
-    totalExpired += result.expired;
-    totalSkipped += result.skipped;
+    const result = await GroupInviteOrchestrator.processQueuedInvites()
+    totalInvitesSent += result.invitesSent
+    totalProcessed += result.candidatesProcessed
+    totalExpired += result.expired
+    totalSkipped += result.skipped
 
     if (result.invitesSent > 0) {
-      console.log(`  Tick ${i}: ${result.invitesSent} invite(s) sent`);
+      console.log(`  Tick ${i}: ${result.invitesSent} invite(s) sent`)
     }
   }
 
   // Get final stats
-  const finalStats = await GroupInviteOrchestrator.getInviteStats();
+  const finalStats = await GroupInviteOrchestrator.getInviteStats()
 
-  console.log('\nSimulation Results:');
-  console.log(`  Ticks run: ${ticks}`);
-  console.log(`  Candidates processed: ${totalProcessed}`);
-  console.log(`  Invites sent: ${totalInvitesSent}`);
-  console.log(`  Expired: ${totalExpired}`);
-  console.log(`  Skipped: ${totalSkipped}`);
+  console.log('\nSimulation Results:')
+  console.log(`  Ticks run: ${ticks}`)
+  console.log(`  Candidates processed: ${totalProcessed}`)
+  console.log(`  Invites sent: ${totalInvitesSent}`)
+  console.log(`  Expired: ${totalExpired}`)
+  console.log(`  Skipped: ${totalSkipped}`)
 
-  console.log('\nFinal State:');
-  console.log(`  Pending candidates: ${finalStats.pendingCandidates}`);
-  console.log(`  Pending invites: ${finalStats.pendingInvites}`);
-  console.log(`  Invites (24h): ${finalStats.invitesLast24h}`);
-  console.log(`  Accepts (24h): ${finalStats.acceptsLast24h}`);
+  console.log('\nFinal State:')
+  console.log(`  Pending candidates: ${finalStats.pendingCandidates}`)
+  console.log(`  Pending invites: ${finalStats.pendingInvites}`)
+  console.log(`  Invites (24h): ${finalStats.invitesLast24h}`)
+  console.log(`  Accepts (24h): ${finalStats.acceptsLast24h}`)
 
   if (finalStats.invitesLast24h > 0) {
     const acceptRate = (
       (finalStats.acceptsLast24h / finalStats.invitesLast24h) *
       100
-    ).toFixed(1);
-    console.log(`  Accept rate: ${acceptRate}%`);
+    ).toFixed(1)
+    console.log(`  Accept rate: ${acceptRate}%`)
   }
 
-  logger.success('Simulation complete');
+  logger.success('Simulation complete')
+}
+
+/**
+ * Executes a single game tick directly without needing the web server.
+ *
+ * @internal
+ */
+async function runSingleTick(): Promise<void> {
+  logger.header('Executing Game Tick')
+
+  const startTime = Date.now()
+  const result = await executeGameTick()
+  const duration = Date.now() - startTime
+
+  logger.success('Tick completed')
+  console.log(`  Duration: ${duration}ms`)
+  console.log(`  Posts created: ${result.postsCreated}`)
+  console.log(`  Events created: ${result.eventsCreated}`)
+  console.log(`  Articles created: ${result.articlesCreated}`)
+  console.log(`  Markets updated: ${result.marketsUpdated}`)
+  console.log(`  Questions resolved: ${result.questionsResolved}`)
+  console.log(`  Questions created: ${result.questionsCreated}`)
+}
+
+/**
+ * Runs game ticks continuously in a loop.
+ *
+ * @param intervalSeconds - Seconds between ticks
+ * @internal
+ */
+async function runTickLoop(intervalSeconds: number): Promise<void> {
+  logger.header('Game Tick Runner (Loop Mode)')
+  console.log(`Interval: ${intervalSeconds} seconds`)
+  console.log('Press Ctrl+C to stop\n')
+
+  let running = true
+  let tickCount = 0
+
+  const cleanup = () => {
+    running = false
+    console.log(`\nStopping after ${tickCount} ticks...`)
+  }
+
+  process.on('SIGINT', cleanup)
+  process.on('SIGTERM', cleanup)
+
+  while (running) {
+    tickCount++
+    console.log(`\n🎮 Tick #${tickCount}`)
+    await runSingleTick()
+
+    if (running) {
+      console.log(`\nWaiting ${intervalSeconds}s until next tick...`)
+      await new Promise((resolve) =>
+        setTimeout(resolve, intervalSeconds * 1000),
+      )
+    }
+  }
+}
+
+/**
+ * Local cron simulator - calls server endpoints for game and agent ticks.
+ *
+ * @param port - Server port to call
+ * @param intervalSeconds - Seconds between ticks
+ * @internal
+ */
+async function runLocalCron(
+  port: number,
+  intervalSeconds: number,
+): Promise<void> {
+  logger.header('Local Cron Simulator')
+  console.log(`Server: http://localhost:${port}`)
+  console.log(`Interval: ${intervalSeconds} seconds`)
+  console.log('Press Ctrl+C to stop\n')
+
+  const cronSecret = process.env.CRON_SECRET || 'development'
+  const gameTickUrl = `http://localhost:${port}/api/cron/game-tick`
+  const agentTickUrl = `http://localhost:${port}/api/cron/agent-tick`
+
+  // Wait for server to be ready
+  logger.step('Waiting for server to be ready...')
+  let serverReady = false
+  for (let attempt = 1; attempt <= 60; attempt++) {
+    try {
+      const response = await fetch(`http://localhost:${port}/api/health`, {
+        method: 'GET',
+        signal: AbortSignal.timeout(1000),
+      })
+      if (response.ok) {
+        logger.success(`Server ready after ${attempt} attempt(s)`)
+        serverReady = true
+        break
+      }
+    } catch {
+      if (attempt < 60) {
+        console.log(`  Attempt ${attempt}/60: Server not ready, waiting 3s...`)
+        await new Promise((resolve) => setTimeout(resolve, 3000))
+      }
+    }
+  }
+
+  if (!serverReady) {
+    logger.fail('Server did not become ready')
+    console.log('\nStart the server first: bun run dev')
+    process.exit(1)
+  }
+
+  let running = true
+  let tickCount = 0
+
+  const cleanup = () => {
+    running = false
+    console.log(`\nStopping cron simulator after ${tickCount} ticks...`)
+  }
+
+  process.on('SIGINT', cleanup)
+  process.on('SIGTERM', cleanup)
+
+  const executeCronTick = async () => {
+    tickCount++
+
+    // Game tick
+    console.log(`\n🎮 Triggering game tick #${tickCount}...`)
+    try {
+      const gameResponse = await fetch(gameTickUrl, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${cronSecret}`,
+          'Content-Type': 'application/json',
+        },
+      })
+
+      if (gameResponse.ok) {
+        const data = await gameResponse.json()
+        if (data.skipped) {
+          console.log(`  ⏭️  Skipped: ${data.reason}`)
+        } else {
+          console.log(`  ✅ Game tick completed (${data.duration})`)
+        }
+      } else {
+        console.log(`  ❌ Failed (HTTP ${gameResponse.status})`)
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      console.log(`  ❌ Error: ${message}`)
+      if (message.includes('ECONNREFUSED')) {
+        logger.fail('Server not running!')
+        process.exit(1)
+      }
+    }
+
+    // Agent tick
+    console.log(`🤖 Triggering agent tick #${tickCount}...`)
+    try {
+      const agentResponse = await fetch(agentTickUrl, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${cronSecret}`,
+          'Content-Type': 'application/json',
+        },
+      })
+
+      if (agentResponse.ok) {
+        const contentType = agentResponse.headers.get('content-type') || ''
+        if (contentType.includes('application/json')) {
+          const data = await agentResponse.json()
+          console.log(
+            `  ✅ Agent tick completed (${data.processed || 0} agents, ${data.totalActions || 0} actions)`,
+          )
+        } else {
+          console.log('  ✅ Agent tick completed')
+        }
+      } else {
+        console.log(`  ❌ Failed (HTTP ${agentResponse.status})`)
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      console.log(`  ❌ Error: ${message}`)
+    }
+  }
+
+  // Execute first tick immediately
+  await executeCronTick()
+
+  // Then execute at interval
+  while (running) {
+    await new Promise((resolve) => setTimeout(resolve, intervalSeconds * 1000))
+    if (running) {
+      await executeCronTick()
+    }
+  }
 }
 
 /**
@@ -578,48 +809,65 @@ async function runSimulation(
  * @param args - Raw command-line arguments for the game domain
  */
 export async function runGameCommand(args: string[]): Promise<void> {
-  const parsed = parseArgs(args);
+  const parsed = parseArgs(args)
 
   if (wantsHelp(parsed)) {
-    printHelp();
-    process.exit(0);
+    printHelp()
+    process.exit(0)
   }
 
   try {
     switch (parsed.command) {
       case 'start':
-        await controlGame('start');
-        break;
+        await controlGame('start')
+        break
 
       case 'pause':
-        await controlGame('pause');
-        break;
+        await controlGame('pause')
+        break
 
       case 'status':
-        await showGameStatus();
-        break;
+        await showGameStatus()
+        break
+
+      case 'tick':
+        await runSingleTick()
+        break
+
+      case 'run': {
+        const runInterval = parseInt(getOption(parsed, 'interval') || '60', 10)
+        await runTickLoop(runInterval)
+        break
+      }
+
+      case 'cron': {
+        const cronPort = parseInt(getOption(parsed, 'port') || '5007', 10)
+        const cronInterval = parseInt(getOption(parsed, 'interval') || '60', 10)
+        await runLocalCron(cronPort, cronInterval)
+        break
+      }
 
       case 'generate':
-        await generateGame(parsed);
-        break;
+        await generateGame(parsed)
+        break
 
       case 'simulate':
-        await runSimulation(parsed);
-        break;
+        await runSimulation(parsed)
+        break
 
       case 'validate':
-        await validateActorsData();
-        logger.success('All actor affiliations are valid!');
-        break;
+        await validateActorsData()
+        logger.success('All actor affiliations are valid!')
+        break
 
       default:
         if (parsed.command) {
-          logger.fail(`Unknown command: ${parsed.command}`);
+          logger.fail(`Unknown command: ${parsed.command}`)
         }
-        printHelp();
-        process.exit(parsed.command ? 1 : 0);
+        printHelp()
+        process.exit(parsed.command ? 1 : 0)
     }
   } finally {
-    await closeDatabase();
+    await closeDatabase()
   }
 }

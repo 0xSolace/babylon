@@ -1,5 +1,5 @@
-import { definePrompt } from '../define-prompt';
-import { PARODY_NAME_RULES } from '../shared-sections';
+import { definePrompt } from '../define-prompt'
+import { PARODY_NAME_RULES } from '../shared-sections'
 
 /**
  * Prompt for generating a single satirical group chat name.
@@ -59,4 +59,4 @@ Return ONLY this XML:
 
 No other text.
 `.trim(),
-});
+})

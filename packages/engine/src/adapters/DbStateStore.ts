@@ -15,8 +15,8 @@ import {
   posts,
   questions,
   worldEvents,
-} from '@babylon/db';
-import { generateSnowflakeId } from '@babylon/shared';
+} from '@babylon/db'
+import { generateSnowflakeId } from '@babylon/shared'
 import type {
   ActiveMarket,
   ActiveQuestion,
@@ -30,27 +30,46 @@ import type {
   QuestionInput,
   TradeInput,
   TradeResult,
-} from '../GameTick';
-import { StaticDataRegistry } from '../services/static-data-registry';
+} from '../GameTick'
+import { StaticDataRegistry } from '../services/static-data-registry'
 
 export class DbStateStore implements GameStateStore {
   async getActiveQuestions(): Promise<ActiveQuestion[]> {
     const rows = await db
       .select()
       .from(questions)
-      .where(eq(questions.status, 'active'));
+      .where(eq(questions.status, 'active'))
 
-    return rows.map(
-      (q): ActiveQuestion => ({
-        id: q.id as string,
-        questionNumber: q.questionNumber as number,
-        text: q.text as string,
-        status: q.status as 'active' | 'resolved',
-        outcome: (q.outcome as boolean | null) ?? undefined,
-        resolutionDate: (q.resolutionDate as Date | null) ?? undefined,
-        scenarioId: (q.scenarioId as number | null) ?? undefined,
+    return rows
+      .filter((q): q is NonNullable<typeof q> => q != null)
+      .map((q) => {
+        // Parse outcome: DB stores 'true'/'false' string, interface expects boolean
+        const outcomeVal = q.outcome
+        const outcome =
+          outcomeVal === 'true' || outcomeVal === true
+            ? true
+            : outcomeVal === 'false' || outcomeVal === false
+              ? false
+              : null
+        const resDate = q.resolutionDate
+        return {
+          id: String(q.id ?? ''),
+          questionNumber: Number(q.questionNumber ?? 0),
+          text: String(q.text ?? ''),
+          status:
+            String(q.status ?? 'active') === 'resolved'
+              ? ('resolved' as const)
+              : ('active' as const),
+          outcome,
+          resolutionDate:
+            resDate instanceof Date
+              ? resDate
+              : resDate
+                ? new Date(String(resDate))
+                : null,
+          scenarioId: q.scenarioId ? Number(q.scenarioId) : null,
+        } satisfies ActiveQuestion
       })
-    );
   }
 
   async getQuestionsToResolve(beforeTime: Date): Promise<ActiveQuestion[]> {
@@ -60,26 +79,45 @@ export class DbStateStore implements GameStateStore {
       .where(
         and(
           eq(questions.status, 'active'),
-          lte(questions.resolutionDate, beforeTime)
-        )
-      );
+          lte(questions.resolutionDate, beforeTime),
+        ),
+      )
 
-    return rows.map(
-      (q): ActiveQuestion => ({
-        id: q.id as string,
-        questionNumber: q.questionNumber as number,
-        text: q.text as string,
-        status: q.status as 'active' | 'resolved',
-        outcome: (q.outcome as boolean | null) ?? undefined,
-        resolutionDate: (q.resolutionDate as Date | null) ?? undefined,
-        scenarioId: (q.scenarioId as number | null) ?? undefined,
+    return rows
+      .filter((q): q is NonNullable<typeof q> => q != null)
+      .map((q) => {
+        // Parse outcome: DB stores 'true'/'false' string, interface expects boolean
+        const outcomeVal = q.outcome
+        const outcome =
+          outcomeVal === 'true' || outcomeVal === true
+            ? true
+            : outcomeVal === 'false' || outcomeVal === false
+              ? false
+              : null
+        const resDate = q.resolutionDate
+        return {
+          id: String(q.id ?? ''),
+          questionNumber: Number(q.questionNumber ?? 0),
+          text: String(q.text ?? ''),
+          status:
+            String(q.status ?? 'active') === 'resolved'
+              ? ('resolved' as const)
+              : ('active' as const),
+          outcome,
+          resolutionDate:
+            resDate instanceof Date
+              ? resDate
+              : resDate
+                ? new Date(String(resDate))
+                : null,
+          scenarioId: q.scenarioId ? Number(q.scenarioId) : null,
+        } satisfies ActiveQuestion
       })
-    );
   }
 
   async createQuestion(question: QuestionInput): Promise<string> {
-    const id = await generateSnowflakeId();
-    const questionNumber = Date.now() % 100000;
+    const id = await generateSnowflakeId()
+    const questionNumber = Date.now() % 100000
 
     await db.insert(questions).values({
       id,
@@ -92,9 +130,9 @@ export class DbStateStore implements GameStateStore {
       scenarioId: question.scenarioId ?? 1, // Default to scenario 1 if not provided
       createdAt: new Date(),
       updatedAt: new Date(),
-    });
+    })
 
-    return id;
+    return id
   }
 
   async resolveQuestion(questionId: string, outcome: boolean): Promise<void> {
@@ -105,40 +143,43 @@ export class DbStateStore implements GameStateStore {
         outcome,
         updatedAt: new Date(),
       })
-      .where(eq(questions.id, questionId));
+      .where(eq(questions.id, questionId))
   }
 
   async getActiveMarkets(): Promise<ActiveMarket[]> {
     const rows = await db
       .select()
       .from(markets)
-      .where(eq(markets.resolved, false));
+      .where(eq(markets.resolved, false))
 
-    return rows.map(
-      (m): ActiveMarket => ({
-        id: m.id as string,
-        questionNumber: 0, // Markets don't have questionNumber directly
-        yesShares: Number(m.yesShares),
-        noShares: Number(m.noShares),
-        yesPrice:
-          Number(m.yesShares) / (Number(m.yesShares) + Number(m.noShares) || 1),
-        noPrice:
-          Number(m.noShares) / (Number(m.yesShares) + Number(m.noShares) || 1),
-        resolved: m.resolved as boolean,
+    return rows
+      .filter((m): m is NonNullable<typeof m> => m != null)
+      .map((m) => {
+        const yesShares = Number(m.yesShares ?? 0)
+        const noShares = Number(m.noShares ?? 0)
+        const totalShares = yesShares + noShares || 1
+        return {
+          id: String(m.id ?? ''),
+          questionNumber: 0, // Markets don't have questionNumber directly
+          yesShares,
+          noShares,
+          yesPrice: yesShares / totalShares,
+          noPrice: noShares / totalShares,
+          resolved: Boolean(m.resolved ?? false),
+        } satisfies ActiveMarket
       })
-    );
   }
 
   async updateMarketPrice(
     _marketId: string,
     _yesPrice: number,
-    _noPrice: number
+    _noPrice: number,
   ): Promise<void> {
     // Prices are derived from shares - no direct update needed
   }
 
   async createPost(post: PostInput): Promise<string> {
-    const id = await generateSnowflakeId();
+    const id = await generateSnowflakeId()
 
     await db.insert(posts).values({
       id,
@@ -147,13 +188,13 @@ export class DbStateStore implements GameStateStore {
       type: post.type,
       timestamp: post.timestamp,
       gameId: 'continuous',
-    });
+    })
 
-    return id;
+    return id
   }
 
   async createEvent(event: EventInput): Promise<string> {
-    const id = await generateSnowflakeId();
+    const id = await generateSnowflakeId()
 
     await db.insert(worldEvents).values({
       id,
@@ -165,13 +206,13 @@ export class DbStateStore implements GameStateStore {
       pointsToward: event.pointsToward,
       relatedQuestion: event.relatedQuestion,
       timestamp: new Date(),
-    });
+    })
 
-    return id;
+    return id
   }
 
   async createArticle(article: ArticleInput): Promise<string> {
-    const id = await generateSnowflakeId();
+    const id = await generateSnowflakeId()
 
     await db.insert(posts).values({
       id,
@@ -183,37 +224,37 @@ export class DbStateStore implements GameStateStore {
       timestamp: article.timestamp,
       category: article.category,
       gameId: 'continuous',
-    });
+    })
 
-    return id;
+    return id
   }
 
   /**
    * Get actors from in-memory static data registry (NO DATABASE CALL)
    */
   async getActors(limit = 50): Promise<GameActor[]> {
-    const staticActors = StaticDataRegistry.getAllActors().slice(0, limit);
+    const staticActors = StaticDataRegistry.getAllActors().slice(0, limit)
 
     return staticActors.map((a) => ({
       id: a.id,
       name: a.name,
-      tier: a.tier ?? undefined,
-      personality: a.personality ?? undefined,
+      tier: a.tier,
+      personality: a.personality,
       domain: a.domain.length > 0 ? a.domain : undefined,
-    }));
+    }))
   }
 
   /**
    * Get organizations from in-memory static data registry (NO DATABASE CALL)
    */
   async getOrganizations(): Promise<GameOrganization[]> {
-    const staticOrgs = StaticDataRegistry.getAllOrganizations();
+    const staticOrgs = StaticDataRegistry.getAllOrganizations()
 
     return staticOrgs.map((o) => ({
       id: o.id,
       name: o.name,
       type: o.type as 'company' | 'media' | 'government',
-    }));
+    }))
   }
 
   async executeTrade(_trade: TradeInput): Promise<TradeResult> {
@@ -221,11 +262,11 @@ export class DbStateStore implements GameStateStore {
     return {
       success: false,
       error: 'Use TradeExecutionService for trade execution',
-    };
+    }
   }
 
   async getPositions(_actorId: string): Promise<Position[]> {
     // Positions are managed through pools - use NPCInvestmentManager for full access
-    return [];
+    return []
   }
 }

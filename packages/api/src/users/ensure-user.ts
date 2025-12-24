@@ -6,8 +6,8 @@
  * information.
  */
 
-import { db, type User } from '@babylon/db';
-import type { AuthenticatedUser } from '../auth-middleware';
+import { db, type User } from '@babylon/db'
+import { type AuthenticatedUser, toNull } from '@babylon/shared'
 
 /**
  * Options for ensuring user exists
@@ -15,9 +15,9 @@ import type { AuthenticatedUser } from '../auth-middleware';
  * @description Configuration options for user creation/update.
  */
 export interface EnsureUserOptions {
-  displayName?: string;
-  username?: string | null;
-  isActor?: boolean;
+  displayName?: string
+  username?: string | null
+  isActor?: boolean
 }
 
 export type CanonicalUser = Pick<
@@ -29,7 +29,7 @@ export type CanonicalUser = Pick<
   | 'walletAddress'
   | 'isActor'
   | 'profileImageUrl'
->;
+>
 
 /**
  * Ensure user exists in database for authenticated user
@@ -52,9 +52,9 @@ export type CanonicalUser = Pick<
  */
 export async function ensureUserForAuth(
   user: AuthenticatedUser,
-  options: EnsureUserOptions = {}
+  options: EnsureUserOptions = {},
 ): Promise<{ user: CanonicalUser }> {
-  const oauth3Id = user.oauth3Id ?? user.userId;
+  const oauth3Id = user.oauth3Id ?? user.userId
 
   const toCanonicalUser = (u: User): CanonicalUser => ({
     id: u.id,
@@ -64,60 +64,60 @@ export async function ensureUserForAuth(
     walletAddress: u.walletAddress,
     isActor: u.isActor,
     profileImageUrl: u.profileImageUrl,
-  });
+  })
 
-  const existingUser = await db.user.findFirst({ where: { oauth3Id } });
+  const existingUser = await db.user.findFirst({ where: { oauth3Id } })
 
   if (existingUser) {
-    const now = new Date();
+    const now = new Date()
     const updateData: {
-      walletAddress?: string | null;
-      username?: string | null;
-      isActor?: boolean;
-      displayName?: string | null;
-      updatedAt?: Date;
-    } = {};
+      walletAddress?: string | null
+      username?: string | null
+      isActor?: boolean
+      displayName?: string | null
+      updatedAt?: Date
+    } = {}
 
     if (
       user.walletAddress !== undefined &&
       user.walletAddress !== existingUser.walletAddress
     ) {
-      updateData.walletAddress = user.walletAddress ?? null;
+      updateData.walletAddress = toNull(user.walletAddress)
     }
 
     if (
       options.username !== undefined &&
       options.username !== existingUser.username
     ) {
-      updateData.username = options.username;
+      updateData.username = options.username
     }
 
     if (
       options.isActor !== undefined &&
       options.isActor !== existingUser.isActor
     ) {
-      updateData.isActor = options.isActor;
+      updateData.isActor = options.isActor
     }
 
     if (
       options.displayName !== undefined &&
       existingUser.displayName === null
     ) {
-      updateData.displayName = options.displayName;
+      updateData.displayName = options.displayName
     }
 
     if (Object.keys(updateData).length > 0) {
-      updateData.updatedAt = now;
+      updateData.updatedAt = now
       const updatedUser = await db.user.update({
         where: { id: existingUser.id },
         data: updateData,
-      });
-      user.dbUserId = updatedUser.id;
-      return { user: toCanonicalUser(updatedUser) };
+      })
+      user.dbUserId = updatedUser.id
+      return { user: toCanonicalUser(updatedUser) }
     }
 
-    user.dbUserId = existingUser.id;
-    return { user: toCanonicalUser(existingUser) };
+    user.dbUserId = existingUser.id
+    return { user: toCanonicalUser(existingUser) }
   }
 
   const createdUser = await db.user.create({
@@ -125,15 +125,15 @@ export async function ensureUserForAuth(
       id: user.dbUserId ?? user.userId,
       oauth3Id,
       isActor: options.isActor ?? false,
-      walletAddress: user.walletAddress ?? null,
-      username: options.username ?? null,
-      displayName: options.displayName ?? null,
+      walletAddress: toNull(user.walletAddress),
+      username: toNull(options.username),
+      displayName: toNull(options.displayName),
       updatedAt: new Date(),
     },
-  });
+  })
 
-  user.dbUserId = createdUser.id;
-  return { user: toCanonicalUser(createdUser) };
+  user.dbUserId = createdUser.id
+  return { user: toCanonicalUser(createdUser) }
 }
 
 /**
@@ -152,7 +152,7 @@ export async function ensureUserForAuth(
  * ```
  */
 export function getCanonicalUserId(
-  user: Pick<AuthenticatedUser, 'userId' | 'dbUserId'>
+  user: Pick<AuthenticatedUser, 'userId' | 'dbUserId'>,
 ): string {
-  return user.dbUserId ?? user.userId;
+  return user.dbUserId ?? user.userId
 }

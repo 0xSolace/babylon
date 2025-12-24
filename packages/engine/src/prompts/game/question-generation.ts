@@ -1,9 +1,9 @@
-import { definePrompt } from '../define-prompt';
+import { definePrompt } from '../define-prompt'
 import {
   ANTI_REPETITION_RULES,
   PARODY_NAME_RULES,
   QUESTION_CONTINUITY_RULES,
-} from '../shared-sections';
+} from '../shared-sections'
 
 /**
  * Prompt for generating new prediction market questions for daily gameplay.
@@ -131,4 +131,4 @@ EXAMPLES OF BAD QUESTIONS:
 
 Generate EXACTLY {{numToGenerate}} questions. Each must be verified against the checks above.
 `.trim(),
-});
+})

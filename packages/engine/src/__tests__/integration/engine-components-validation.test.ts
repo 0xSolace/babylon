@@ -19,33 +19,46 @@
  * RUN_REAL_ENGINE_TESTS=true bun test engine-components-validation
  */
 
-import { beforeAll, describe, expect, setDefaultTimeout, test } from 'bun:test';
-import { existsSync, readFileSync } from 'fs';
+import { beforeAll, describe, expect, setDefaultTimeout, test } from 'bun:test'
+import { existsSync, readFileSync } from 'node:fs'
+import { ArticleGenerator } from '../../ArticleGenerator'
+import { loadActorsData } from '../../actors-loader'
+import { InMemoryStateStore } from '../../adapters/InMemoryStateStore'
+import { FEE_CONFIG } from '../../config/fees'
+import { FeedGenerator } from '../../FeedGenerator'
+import { GameClock } from '../../GameClock'
+import { BabylonLLMClient } from '../../llm/openai-client'
+import { MarketDecisionEngine } from '../../MarketDecisionEngine'
+import { QuestionManager } from '../../QuestionManager'
+import { MarketContextService } from '../../services/market-context-service'
+import { PerpDbAdapter, PerpMarketService } from '../../services/markets'
+import { StaticDataRegistry } from '../../services/static-data-registry'
+import { WalletService } from '../../services/wallet-service'
 
 // Set timeout to 5 minutes
-setDefaultTimeout(300000);
+setDefaultTimeout(300000)
 
 // Load environment
 const loadEnvFile = (filePath: string) => {
-  if (!existsSync(filePath)) return;
-  const envContent = readFileSync(filePath, 'utf-8');
+  if (!existsSync(filePath)) return
+  const envContent = readFileSync(filePath, 'utf-8')
   for (const line of envContent.split('\n')) {
-    const trimmed = line.trim();
+    const trimmed = line.trim()
     if (trimmed && !trimmed.startsWith('#')) {
-      const [key, ...valueParts] = trimmed.split('=');
+      const [key, ...valueParts] = trimmed.split('=')
       if (key && valueParts.length > 0) {
-        const value = valueParts.join('=').replace(/^["']|["']$/g, '');
+        const value = valueParts.join('=').replace(/^["']|["']$/g, '')
         if (!process.env[key]) {
-          process.env[key] = value;
+          process.env[key] = value
         }
       }
     }
   }
-};
+}
 
-loadEnvFile('.env');
-loadEnvFile('.env.test');
-loadEnvFile('.env.local');
+loadEnvFile('.env')
+loadEnvFile('.env.test')
+loadEnvFile('.env.local')
 
 // Check if Jeju Compute is available for inference AND LLM API keys are configured
 const hasJejuCompute = !!(
@@ -54,39 +67,35 @@ const hasJejuCompute = !!(
   (process.env.OPENAI_API_KEY ||
     process.env.ANTHROPIC_API_KEY ||
     process.env.GROQ_API_KEY)
-);
+)
 
 // Skip tests if Jeju compute with API keys is not available
 describe.skipIf(!hasJejuCompute)('Engine Components Validation', () => {
   beforeAll(() => {
-    console.log('\n🔧 Testing Individual Engine Components');
-    console.log('==========================================\n');
-  });
+    console.log('\n🔧 Testing Individual Engine Components')
+    console.log('==========================================\n')
+  })
 
   describe('ArticleGenerator', () => {
     test('generates article from event context', async () => {
-      const { ArticleGenerator } = await import('../../ArticleGenerator');
-      const { BabylonLLMClient } = await import('../../llm/openai-client');
-      const { loadActorsData } = await import('../../actors-loader');
+      console.log('📰 Testing ArticleGenerator...')
 
-      console.log('📰 Testing ArticleGenerator...');
-
-      const llm = BabylonLLMClient.forGameTick();
-      const generator = new ArticleGenerator(llm);
+      const llm = BabylonLLMClient.forGameTick()
+      const generator = new ArticleGenerator(llm)
 
       // Load real actor data
-      const actorsData = loadActorsData();
+      const actorsData = loadActorsData()
       const actors = actorsData.actors.slice(0, 10).map((a) => ({
         ...a,
         tier: a.tier || ('B_TIER' as const),
         role: a.role || ('supporting' as const),
         initialLuck: a.initialLuck || ('medium' as const),
         initialMood: a.initialMood || 0,
-      }));
+      }))
 
       const organizations = actorsData.organizations.filter(
-        (o) => o.type === 'media'
-      );
+        (o) => o.type === 'media',
+      )
 
       // Create a mock event
       const mockEvent = {
@@ -97,67 +106,61 @@ describe.skipIf(!hasJejuCompute)('Engine Components Validation', () => {
           'TechCorp announces new AI product that will revolutionize the market',
         actors: actors.slice(0, 2).map((a) => a.id),
         visibility: 'public' as const,
-      };
+      }
 
       const articles = await generator.generateArticlesForEvent(
         mockEvent,
         organizations.slice(0, 2),
         actors,
-        []
-      );
+        [],
+      )
 
-      console.log(`   Generated ${articles.length} articles`);
+      console.log(`   Generated ${articles.length} articles`)
 
-      expect(articles.length).toBeGreaterThan(0);
+      expect(articles.length).toBeGreaterThan(0)
 
       for (const article of articles) {
         // Validate article structure
-        expect(article.title).toBeDefined();
-        expect(article.title.length).toBeGreaterThan(10);
-        expect(article.content).toBeDefined();
-        expect(article.content.length).toBeGreaterThan(100);
-        expect(article.authorOrgId).toBeDefined();
+        expect(article.title).toBeDefined()
+        expect(article.title.length).toBeGreaterThan(10)
+        expect(article.content).toBeDefined()
+        expect(article.content.length).toBeGreaterThan(100)
+        expect(article.authorOrgId).toBeDefined()
 
         const isMocked =
           article.title.toLowerCase().includes('mock') ||
-          article.content.toLowerCase().includes('mock content');
-        expect(isMocked).toBe(false);
-        console.log(`   ✅ "${article.title.substring(0, 50)}..."`);
+          article.content.toLowerCase().includes('mock content')
+        expect(isMocked).toBe(false)
+        console.log(`   ✅ "${article.title.substring(0, 50)}..."`)
       }
-    });
-  });
+    })
+  })
 
   describe('QuestionManager', () => {
     test('generates prediction questions', async () => {
-      const { QuestionManager } = await import('../../QuestionManager');
-      const { BabylonLLMClient } = await import('../../llm/openai-client');
+      console.log('❓ Testing QuestionManager...')
 
-      console.log('❓ Testing QuestionManager...');
-
-      const llm = BabylonLLMClient.forGameTick();
-      const manager = new QuestionManager(llm);
+      const llm = BabylonLLMClient.forGameTick()
+      const manager = new QuestionManager(llm)
 
       // Generate questions using the continuous game method (what game tick uses)
       // This requires database context, so it tests the full integration
-      const deadlineMs = Date.now() + 60000; // 1 minute deadline
+      const deadlineMs = Date.now() + 60000 // 1 minute deadline
       const questionsCreated = await manager.generateQuestionsForContinuousGame(
         2, // Generate 2 questions
-        deadlineMs
-      );
+        deadlineMs,
+      )
 
-      console.log(`   Generated ${questionsCreated} questions`);
+      console.log(`   Generated ${questionsCreated} questions`)
 
       // Should create at least 0 questions (may be limited by existing questions)
-      expect(questionsCreated).toBeGreaterThanOrEqual(0);
-      console.log('   ✅ QuestionManager generates questions successfully');
-    });
+      expect(questionsCreated).toBeGreaterThanOrEqual(0)
+      console.log('   ✅ QuestionManager generates questions successfully')
+    })
 
     test('resolves questions with proper outcome', async () => {
-      const { QuestionManager } = await import('../../QuestionManager');
-      const { BabylonLLMClient } = await import('../../llm/openai-client');
-
-      const llm = BabylonLLMClient.forGameTick();
-      const manager = new QuestionManager(llm);
+      const llm = BabylonLLMClient.forGameTick()
+      const manager = new QuestionManager(llm)
 
       // Create a question to resolve
       const question = {
@@ -167,36 +170,32 @@ describe.skipIf(!hasJejuCompute)('Engine Components Validation', () => {
         outcome: true,
         rank: 1,
         status: 'active' as const,
-      };
+      }
 
-      const resolved = manager.resolveQuestion(question, true);
+      const resolved = manager.resolveQuestion(question, true)
 
-      expect(resolved.status).toBe('resolved');
-      expect(resolved.resolvedOutcome).toBe(true);
+      expect(resolved.status).toBe('resolved')
+      expect(resolved.resolvedOutcome).toBe(true)
 
-      console.log('   ✅ Question resolution works correctly');
-    });
-  });
+      console.log('   ✅ Question resolution works correctly')
+    })
+  })
 
   describe('FeedGenerator', () => {
     test('generates feed posts', async () => {
-      const { FeedGenerator } = await import('../../FeedGenerator');
-      const { BabylonLLMClient } = await import('../../llm/openai-client');
-      const { loadActorsData } = await import('../../actors-loader');
+      console.log('📝 Testing FeedGenerator...')
 
-      console.log('📝 Testing FeedGenerator...');
+      const llm = BabylonLLMClient.forGameTick()
+      const generator = new FeedGenerator(llm)
 
-      const llm = BabylonLLMClient.forGameTick();
-      const generator = new FeedGenerator(llm);
-
-      const actorsData = loadActorsData();
+      const actorsData = loadActorsData()
       const actors = actorsData.actors.slice(0, 5).map((a) => ({
         ...a,
         tier: a.tier || ('B_TIER' as const),
         role: a.role || ('supporting' as const),
         initialLuck: a.initialLuck || ('medium' as const),
         initialMood: a.initialMood || 0,
-      }));
+      }))
 
       // Create mock events for feed generation
       const events = [
@@ -208,54 +207,48 @@ describe.skipIf(!hasJejuCompute)('Engine Components Validation', () => {
           actors: actors.slice(0, 2).map((a) => a.id),
           visibility: 'public' as const,
         },
-      ];
+      ]
 
-      const posts = await generator.generateDayFeed(1, events, actors);
+      const posts = await generator.generateDayFeed(1, events, actors)
 
-      console.log(`   Generated ${posts.length} feed posts`);
+      console.log(`   Generated ${posts.length} feed posts`)
 
       // At least some posts should be generated (even if rate limited, we retry)
-      expect(posts.length).toBeGreaterThanOrEqual(0);
+      expect(posts.length).toBeGreaterThanOrEqual(0)
 
       // Filter posts with actual content (rate limiting may cause some empty posts)
       const postsWithContent = posts.filter(
-        (p) => p.content && p.content.length > 10
-      );
+        (p) => p.content && p.content.length > 10,
+      )
       console.log(
-        `   Posts with valid content: ${postsWithContent.length}/${posts.length}`
-      );
+        `   Posts with valid content: ${postsWithContent.length}/${posts.length}`,
+      )
 
       // If we have posts with content, validate them
       for (const post of postsWithContent.slice(0, 3)) {
-        expect(post.content).toBeDefined();
-        expect(post.content.length).toBeGreaterThan(10);
-        expect(post.author).toBeDefined();
+        expect(post.content).toBeDefined()
+        expect(post.content.length).toBeGreaterThan(10)
+        expect(post.author).toBeDefined()
 
-        const isMocked = post.content.toLowerCase().includes('mock post');
-        expect(isMocked).toBe(false);
+        const isMocked = post.content.toLowerCase().includes('mock post')
+        expect(isMocked).toBe(false)
 
         console.log(
-          `   ✅ [${post.authorName}] "${post.content.substring(0, 40)}..."`
-        );
+          `   ✅ [${post.authorName}] "${post.content.substring(0, 40)}..."`,
+        )
       }
 
       // If no posts with content, log warning but don't fail
       // (rate limiting in test environment is acceptable)
       if (postsWithContent.length === 0 && posts.length > 0) {
-        console.log('   ⚠️  All posts have empty content (likely rate limited)');
+        console.log('   ⚠️  All posts have empty content (likely rate limited)')
       }
-    });
-  });
+    })
+  })
 
   describe('PerpMarketService', () => {
     test('initializes and can fetch market snapshots', async () => {
-      console.log('📈 Testing PerpMarketService...');
-
-      const { PerpMarketService, PerpDbAdapter } = await import(
-        '@babylon/core/markets/perps'
-      );
-      const { WalletService } = await import('../../services/wallet-service');
-      const { FEE_CONFIG } = await import('../../config/fees');
+      console.log('📈 Testing PerpMarketService...')
 
       const service = new PerpMarketService({
         db: new PerpDbAdapter(),
@@ -266,7 +259,7 @@ describe.skipIf(!hasJejuCompute)('Engine Components Validation', () => {
               amount,
               reason,
               description ?? '',
-              relatedId
+              relatedId,
             ),
           credit: ({ userId, amount, reason, description, relatedId }) =>
             WalletService.credit(
@@ -274,10 +267,10 @@ describe.skipIf(!hasJejuCompute)('Engine Components Validation', () => {
               amount,
               reason,
               description ?? '',
-              relatedId
+              relatedId,
             ),
           recordPnL: async ({ userId, pnl, reason, relatedId }) => {
-            await WalletService.recordPnL(userId, pnl, reason, relatedId);
+            await WalletService.recordPnL(userId, pnl, reason, relatedId)
           },
           getBalance: (userId: string) => WalletService.getBalance(userId),
         },
@@ -287,57 +280,44 @@ describe.skipIf(!hasJejuCompute)('Engine Components Validation', () => {
           referrerShare: FEE_CONFIG.REFERRER_SHARE,
           minFeeAmount: FEE_CONFIG.MIN_FEE_AMOUNT,
         },
-      });
+      })
 
-      const markets = await service.getMarketsSnapshot();
-      console.log(`   ✅ Fetched ${markets.length} perp market snapshots`);
+      const markets = await service.getMarketsSnapshot()
+      console.log(`   ✅ Fetched ${markets.length} perp market snapshots`)
 
-      expect(Array.isArray(markets)).toBe(true);
+      expect(Array.isArray(markets)).toBe(true)
 
       if (markets.length > 0) {
-        const market = markets[0];
-        expect(market).toHaveProperty('ticker');
-        expect(market).toHaveProperty('price');
+        const market = markets[0]
+        expect(market).toHaveProperty('ticker')
+        expect(market).toHaveProperty('currentPrice')
         console.log(
-          `   ✅ Sample market: ${market?.ticker} @ $${market?.price}`
-        );
+          `   ✅ Sample market: ${market?.ticker} @ $${market?.currentPrice}`,
+        )
       }
-    });
-  });
+    })
+  })
 
   describe('MarketDecisionEngine', () => {
     test('generates NPC trading decisions', async () => {
-      console.log('💹 Testing MarketDecisionEngine...');
+      console.log('💹 Testing MarketDecisionEngine...')
 
       // Verify static registry connection
-      const { StaticDataRegistry } = await import(
-        '../../services/static-data-registry'
-      );
-      const allActors = StaticDataRegistry.getAllActors();
-      console.log(
-        `   Static registry loaded, found ${allActors.length} actors`
-      );
+      const allActors = StaticDataRegistry.getAllActors()
+      console.log(`   Static registry loaded, found ${allActors.length} actors`)
 
-      const { MarketDecisionEngine } = await import(
-        '../../MarketDecisionEngine'
-      );
-      const { MarketContextService } = await import(
-        '../../services/market-context-service'
-      );
-      const { BabylonLLMClient } = await import('../../llm/openai-client');
-
-      const llm = BabylonLLMClient.forGameTick();
-      const contextService = new MarketContextService();
-      const engine = new MarketDecisionEngine(llm, contextService);
+      const llm = BabylonLLMClient.forGameTick()
+      const contextService = new MarketContextService()
+      const engine = new MarketDecisionEngine(llm, contextService)
 
       // Generate batch decisions
-      const decisions = await engine.generateBatchDecisions();
+      const decisions = await engine.generateBatchDecisions()
 
-      console.log(`   Generated ${decisions.length} trading decisions`);
+      console.log(`   Generated ${decisions.length} trading decisions`)
 
       for (const decision of decisions.slice(0, 5)) {
-        expect(decision.npcId).toBeDefined();
-        expect(decision.action).toBeDefined();
+        expect(decision.npcId).toBeDefined()
+        expect(decision.action).toBeDefined()
         expect(
           [
             'buy_yes',
@@ -346,85 +326,75 @@ describe.skipIf(!hasJejuCompute)('Engine Components Validation', () => {
             'open_short',
             'close_position',
             'hold',
-          ].includes(decision.action)
-        ).toBe(true);
+          ].includes(decision.action),
+        ).toBe(true)
 
         console.log(
-          `   ✅ NPC ${decision.npcId}: ${decision.action}${decision.amount ? ` $${decision.amount}` : ''}`
-        );
+          `   ✅ NPC ${decision.npcId}: ${decision.action}${decision.amount ? ` $${decision.amount}` : ''}`,
+        )
       }
-    });
-  });
+    })
+  })
 
   describe('GameClock Modes', () => {
     test('realtime mode tracks actual time', async () => {
-      const { GameClock } = await import('../../GameClock');
+      console.log('⏰ Testing realtime mode...')
 
-      console.log('⏰ Testing realtime mode...');
-
-      const clock = GameClock.realtime();
-      const time1 = clock.now();
+      const clock = GameClock.realtime()
+      const time1 = clock.now()
 
       // Wait a bit
-      await new Promise((r) => setTimeout(r, 100));
+      await new Promise((r) => setTimeout(r, 100))
 
-      const time2 = clock.now();
+      const time2 = clock.now()
 
       expect(time2.timestamp.getTime()).toBeGreaterThanOrEqual(
-        time1.timestamp.getTime()
-      );
-      console.log(`   ✅ Realtime: ${time2.timestamp.toISOString()}`);
-    });
+        time1.timestamp.getTime(),
+      )
+      console.log(`   ✅ Realtime: ${time2.timestamp.toISOString()}`)
+    })
 
     test('simulated mode allows fast-forward', async () => {
-      const { GameClock } = await import('../../GameClock');
+      console.log('⏱️  Testing simulated mode...')
 
-      console.log('⏱️  Testing simulated mode...');
-
-      const startDate = new Date('2025-01-01T00:00:00Z');
-      const clock = GameClock.simulated(startDate, startDate);
+      const startDate = new Date('2025-01-01T00:00:00Z')
+      const clock = GameClock.simulated(startDate, startDate)
 
       // Initial state
-      let time = clock.now();
-      expect(time.day).toBe(1);
-      expect(time.hour).toBe(0);
+      let time = clock.now()
+      expect(time.day).toBe(1)
+      expect(time.hour).toBe(0)
 
       // Fast forward 48 hours
-      time = clock.advanceHours(48);
-      expect(time.day).toBe(3);
-      expect(time.tick).toBe(48);
+      time = clock.advanceHours(48)
+      expect(time.day).toBe(3)
+      expect(time.tick).toBe(48)
 
-      console.log(`   ✅ After 48 hours: Day ${time.day}, Tick ${time.tick}`);
-    });
+      console.log(`   ✅ After 48 hours: Day ${time.day}, Tick ${time.tick}`)
+    })
 
     test('fed-in time allows specific timestamps', async () => {
-      const { GameClock } = await import('../../GameClock');
+      console.log('📅 Testing fed-in time mode...')
 
-      console.log('📅 Testing fed-in time mode...');
-
-      const startDate = new Date('2025-01-01T00:00:00Z');
-      const clock = GameClock.simulated(startDate, startDate);
+      const startDate = new Date('2025-01-01T00:00:00Z')
+      const clock = GameClock.simulated(startDate, startDate)
 
       // Set specific time
-      const targetDate = new Date('2025-01-15T14:30:00Z');
-      clock.setTime(targetDate);
+      const targetDate = new Date('2025-01-15T14:30:00Z')
+      clock.setTime(targetDate)
 
-      const time = clock.now();
-      expect(time.day).toBe(15);
-      expect(time.hour).toBe(14);
-      expect(time.minute).toBe(30);
+      const time = clock.now()
+      expect(time.day).toBe(15)
+      expect(time.hour).toBe(14)
+      expect(time.minute).toBe(30)
 
-      console.log(`   ✅ Fed-in: Day ${time.day}, ${time.hour}:${time.minute}`);
-    });
-  });
+      console.log(`   ✅ Fed-in: Day ${time.day}, ${time.hour}:${time.minute}`)
+    })
+  })
 
   describe('InMemoryStateStore (Offline Mode)', () => {
     test('supports full game simulation without database', async () => {
-      const { InMemoryStateStore } = await import(
-        '../../adapters/InMemoryStateStore'
-      );
-
-      console.log('🧠 Testing offline simulation...');
+      console.log('🧠 Testing offline simulation...')
 
       const store = new InMemoryStateStore({
         numPredictionMarkets: 3,
@@ -432,52 +402,52 @@ describe.skipIf(!hasJejuCompute)('Engine Components Validation', () => {
         numAgents: 5,
         durationDays: 7,
         seed: 42,
-      });
+      })
 
       // Test complete simulation loop
-      let tradesExecuted = 0;
-      let ticksProcessed = 0;
+      let tradesExecuted = 0
+      let ticksProcessed = 0
 
       while (!store.isComplete() && ticksProcessed < 168) {
         // 7 days max
         // Get state
-        const state = store.getState();
+        const state = store.getState()
 
         // Execute some trades
-        const agent = state.agents[ticksProcessed % state.agents.length];
+        const agent = state.agents[ticksProcessed % state.agents.length]
         const market =
           state.predictionMarkets[
             ticksProcessed % state.predictionMarkets.length
-          ];
+          ]
 
         if (agent && market && !market.resolved && agent.balance > 10) {
-          const side = Math.random() > 0.5 ? 'YES' : 'NO';
+          const side = Math.random() > 0.5 ? 'YES' : 'NO'
           const result = store.buyPredictionShares(
             agent.id,
             market.id,
             side,
-            10
-          );
-          if (result.success) tradesExecuted++;
+            10,
+          )
+          if (result.success) tradesExecuted++
         }
 
         // Advance time
-        store.advanceTick();
-        ticksProcessed++;
+        store.advanceTick()
+        ticksProcessed++
       }
 
-      const finalState = store.getState();
-      const progress = store.getProgress();
+      const finalState = store.getState()
+      const progress = store.getProgress()
 
-      console.log(`   ✅ Processed ${ticksProcessed} ticks`);
-      console.log(`   ✅ Executed ${tradesExecuted} trades`);
-      console.log(`   ✅ Final day: ${progress.day}`);
+      console.log(`   ✅ Processed ${ticksProcessed} ticks`)
+      console.log(`   ✅ Executed ${tradesExecuted} trades`)
+      console.log(`   ✅ Final day: ${progress.day}`)
       console.log(
-        `   ✅ Markets resolved: ${finalState.predictionMarkets.filter((m) => m.resolved).length}/${finalState.predictionMarkets.length}`
-      );
+        `   ✅ Markets resolved: ${finalState.predictionMarkets.filter((m) => m.resolved).length}/${finalState.predictionMarkets.length}`,
+      )
 
-      expect(ticksProcessed).toBeGreaterThan(0);
-      expect(tradesExecuted).toBeGreaterThan(0);
-    });
-  });
-});
+      expect(ticksProcessed).toBeGreaterThan(0)
+      expect(tradesExecuted).toBeGreaterThan(0)
+    })
+  })
+})

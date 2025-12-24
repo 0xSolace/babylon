@@ -51,11 +51,11 @@
  */
 
 const env = (key: string, fallback: number): number => {
-  const val = process.env[key];
-  if (!val) return fallback;
-  const n = Number(val);
-  return Number.isNaN(n) ? fallback : n;
-};
+  const val = process.env[key]
+  if (!val) return fallback
+  const n = Number(val)
+  return Number.isNaN(n) ? fallback : n
+}
 
 /** Group Invite Orchestrator Configuration */
 export const GroupInviteConfig = {
@@ -73,8 +73,8 @@ export const GroupInviteConfig = {
     B_TIER: env('GROUP_CHAT_TIER_B_MULTIPLIER', 0.7),
     C_TIER: env('GROUP_CHAT_TIER_C_MULTIPLIER', 0.9),
     NONE: env('GROUP_CHAT_TIER_NONE_MULTIPLIER', 1.0),
-  } as Record<string, number>,
-};
+  } satisfies Record<string, number>,
+}
 
 /** NPC Group Dynamics Configuration */
 export const NPCGroupDynamicsConfig = {
@@ -87,7 +87,7 @@ export const NPCGroupDynamicsConfig = {
   minGroupSize: env('GROUP_CHAT_MIN_GROUP_SIZE', 3),
   maxGroupSize: env('GROUP_CHAT_MAX_GROUP_SIZE', 12),
   idealGroupSize: env('GROUP_CHAT_IDEAL_GROUP_SIZE', 7),
-};
+}
 
 /** Group Chat Service Configuration (Sweep/Kick mechanics) */
 export const GroupChatServiceConfig = {
@@ -97,7 +97,7 @@ export const GroupChatServiceConfig = {
   activitySweetSpotMin: env('GROUP_CHAT_ACTIVITY_SWEET_SPOT_MIN', 1),
   activitySweetSpotMax: env('GROUP_CHAT_ACTIVITY_SWEET_SPOT_MAX', 3),
   activityHardCap: env('GROUP_CHAT_ACTIVITY_HARD_CAP', 10),
-};
+}
 
 /** Get all current configuration as a flat object (for logging/debugging) */
 export function getGroupChatConfigSummary(): Record<string, number> {
@@ -121,15 +121,15 @@ export function getGroupChatConfigSummary(): Record<string, number> {
     'service.baseKickProbability': GroupChatServiceConfig.baseKickProbability,
     'service.inactivityGracePeriodTicks':
       GroupChatServiceConfig.inactivityGracePeriodTicks,
-  };
+  }
 }
 
 /** Validate configuration and return warnings for unusual values */
 export function validateGroupChatConfig(): {
-  valid: boolean;
-  warnings: string[];
+  valid: boolean
+  warnings: string[]
 } {
-  const warnings: string[] = [];
+  const warnings: string[] = []
 
   const probabilities: [string, number][] = [
     ['baseInviteProbability', GroupInviteConfig.baseInviteProbability],
@@ -138,25 +138,25 @@ export function validateGroupChatConfig(): {
     ['leaveGroupChance', NPCGroupDynamicsConfig.leaveGroupChance],
     ['postMessageChance', NPCGroupDynamicsConfig.postMessageChance],
     ['kickCheckChance', NPCGroupDynamicsConfig.kickCheckChance],
-  ];
+  ]
 
   for (const [name, value] of probabilities) {
-    if (value < 0 || value > 1) warnings.push(`${name} (${value}) must be 0-1`);
-    if (value > 0.5) warnings.push(`${name} (${value}) unusually high`);
+    if (value < 0 || value > 1) warnings.push(`${name} (${value}) must be 0-1`)
+    if (value > 0.5) warnings.push(`${name} (${value}) unusually high`)
   }
 
   for (const [tier, mult] of Object.entries(
-    GroupInviteConfig.tierMultipliers
+    GroupInviteConfig.tierMultipliers,
   )) {
     if (mult < 0 || mult > 2)
-      warnings.push(`Tier ${tier} (${mult}) must be 0-2`);
+      warnings.push(`Tier ${tier} (${mult}) must be 0-2`)
   }
 
   if (
     NPCGroupDynamicsConfig.minGroupSize >= NPCGroupDynamicsConfig.maxGroupSize
   ) {
-    warnings.push('minGroupSize must be < maxGroupSize');
+    warnings.push('minGroupSize must be < maxGroupSize')
   }
 
-  return { valid: warnings.length === 0, warnings };
+  return { valid: warnings.length === 0, warnings }
 }

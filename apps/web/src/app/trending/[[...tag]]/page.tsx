@@ -1,9 +1,5 @@
-import TrendingTagClient from './TrendingTagClient';
-
-export function generateStaticParams(): Array<{ tag?: string[] }> {
-  return [{ tag: [] }];
-}
+import TrendingTagClient from './TrendingTagClient'
 
 export default function TrendingTagPage() {
-  return <TrendingTagClient />;
+  return <TrendingTagClient />
 }

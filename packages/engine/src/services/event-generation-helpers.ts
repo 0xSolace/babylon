@@ -1,30 +1,30 @@
-import { db, type Question, worldEvents } from '@babylon/db';
-import { generateSnowflakeId, logger } from '@babylon/shared';
-import { toSafeDayNumber } from '../utils/date-utils';
-import { secureRandom, weightedPick } from '../utils/entropy';
+import { db, type Question, worldEvents } from '@babylon/db'
+import { generateSnowflakeId, logger } from '@babylon/shared'
+import { toSafeDayNumber } from '../utils/date-utils'
+import { secureRandom, weightedPick } from '../utils/entropy'
 import {
   getArcPlan,
   getPhaseForDay,
   getSignalDirection,
-} from './narrative-state-service';
-import { StaticDataRegistry } from './static-data-registry';
+} from './narrative-state-service'
+import { StaticDataRegistry } from './static-data-registry'
 
 // Minimal question type for event generation (only fields actually used)
 // outcome is optional - only used for arc plan signal direction, and the code handles missing outcome
 type QuestionForEvent = Pick<Question, 'id' | 'text' | 'questionNumber'> & {
-  outcome?: boolean | null;
-};
+  outcome?: boolean | null
+}
 
 /**
  * Event types with weights and templates for variety
  */
 type EventTypeConfig = {
-  type: string;
-  weight: number;
-  templates: string[];
-  visibility: 'public' | 'leaked' | 'private';
-  requiresActors: boolean;
-};
+  type: string
+  weight: number
+  templates: string[]
+  visibility: 'public' | 'leaked' | 'private'
+  requiresActors: boolean
+}
 
 const EVENT_TYPES: EventTypeConfig[] = [
   {
@@ -108,13 +108,13 @@ const EVENT_TYPES: EventTypeConfig[] = [
     visibility: 'public',
     requiresActors: false,
   },
-];
+]
 
 /**
  * Select a random event type based on weights
  */
 function selectEventType(): EventTypeConfig {
-  return weightedPick(EVENT_TYPES, (config) => config.weight);
+  return weightedPick(EVENT_TYPES, (config) => config.weight)
 }
 
 /**
@@ -128,7 +128,7 @@ function sanitizeTopic(topic: string): string {
     .replace(/\{date\}/gi, 'the scheduled date')
     .replace(/\{[a-zA-Z_]+\}/g, '') // Remove any other template variables
     .replace(/\s+/g, ' ') // Normalize whitespace
-    .trim();
+    .trim()
 }
 
 /**
@@ -137,57 +137,57 @@ function sanitizeTopic(topic: string): string {
 function generateDescription(
   template: string,
   topic: string,
-  actors: string[]
+  actors: string[],
 ): string {
   // Sanitize topic to remove any template variable leakage
-  const cleanTopic = sanitizeTopic(topic);
-  let description = template.replace('{topic}', cleanTopic);
+  const cleanTopic = sanitizeTopic(topic)
+  let description = template.replace('{topic}', cleanTopic)
 
   // Add actor names if template supports it
   if (actors.length > 0) {
     const actorNames = actors
       .map((id) => {
-        const actor = StaticDataRegistry.getActor(id);
-        return actor?.name || 'Unknown';
+        const actor = StaticDataRegistry.getActor(id)
+        return actor?.name || 'Unknown'
       })
-      .filter((name) => name !== 'Unknown');
+      .filter((name) => name !== 'Unknown')
 
     if (actorNames.length > 0 && description.includes('Key figures')) {
       description = description.replace(
         'Key figures',
-        actorNames.slice(0, 2).join(' and ')
-      );
+        actorNames.slice(0, 2).join(' and '),
+      )
     }
   }
 
-  return description;
+  return description
 }
 
 /**
  * Select random actors relevant to a question
  */
 function selectRelevantActors(maxActors: number = 2): string[] {
-  const allActors = StaticDataRegistry.getAllActors();
-  if (allActors.length === 0) return [];
+  const allActors = StaticDataRegistry.getAllActors()
+  if (allActors.length === 0) return []
 
   // Prefer S_TIER and A_TIER actors (most influential)
   const tieredActors = allActors.filter(
-    (a) => a.tier === 'S_TIER' || a.tier === 'A_TIER'
-  );
-  const pool = tieredActors.length > 0 ? tieredActors : allActors;
+    (a) => a.tier === 'S_TIER' || a.tier === 'A_TIER',
+  )
+  const pool = tieredActors.length > 0 ? tieredActors : allActors
 
   // Randomly select actors
-  const selected: string[] = [];
-  const shuffled = [...pool].sort(() => secureRandom() - 0.5);
+  const selected: string[] = []
+  const shuffled = [...pool].sort(() => secureRandom() - 0.5)
 
   for (let i = 0; i < Math.min(maxActors, shuffled.length); i++) {
-    const actor = shuffled[i];
+    const actor = shuffled[i]
     if (actor) {
-      selected.push(actor.id);
+      selected.push(actor.id)
     }
   }
 
-  return selected;
+  return selected
 }
 
 /**
@@ -215,18 +215,18 @@ function selectRelevantActors(maxActors: number = 2): string[] {
 export async function generateEvents(
   questions: QuestionForEvent[],
   timestamp: Date,
-  currentDay?: number
+  currentDay?: number,
 ): Promise<number> {
-  if (questions.length === 0) return 0;
+  if (questions.length === 0) return 0
 
-  let eventsCreated = 0;
-  const eventsToGenerate = Math.min(2, questions.length);
+  let eventsCreated = 0
+  const eventsToGenerate = Math.min(2, questions.length)
 
   for (let i = 0; i < eventsToGenerate; i++) {
-    const question = questions[i];
+    const question = questions[i]
 
     if (!question || !question.text) {
-      continue;
+      continue
     }
 
     // Validate integer fields to prevent overflow
@@ -236,24 +236,24 @@ export async function generateEvents(
       question.questionNumber >= 0 &&
       question.questionNumber <= 2147483647
         ? question.questionNumber
-        : undefined;
+        : undefined
 
     const safeDayNumber =
-      typeof currentDay === 'number' ? toSafeDayNumber(currentDay) : undefined;
+      typeof currentDay === 'number' ? toSafeDayNumber(currentDay) : undefined
 
     // Get arc plan for signal direction
-    let pointsToward: 'YES' | 'NO' | null = null;
-    let phase: 'early' | 'middle' | 'late' | 'climax' | undefined;
+    let pointsToward: 'YES' | 'NO' | null = null
+    let phase: 'early' | 'middle' | 'late' | 'climax' | undefined
 
     if (currentDay !== undefined) {
-      const arcPlan = await getArcPlan(question.id);
+      const arcPlan = await getArcPlan(question.id)
       if (arcPlan) {
-        phase = getPhaseForDay(currentDay, arcPlan);
+        phase = getPhaseForDay(currentDay, arcPlan)
         // Events don't have an actor, so pass empty string
         // Use question.outcome if available, default to true
-        const outcome = question.outcome ?? true;
-        const signal = getSignalDirection(arcPlan, phase, '', outcome);
-        pointsToward = signal.direction === 'NEUTRAL' ? null : signal.direction;
+        const outcome = question.outcome ?? true
+        const signal = getSignalDirection(arcPlan, phase, '', outcome)
+        pointsToward = signal.direction === 'NEUTRAL' ? null : signal.direction
 
         logger.debug(
           'Event signal direction determined',
@@ -264,38 +264,38 @@ export async function generateEvents(
             pointsToward,
             outcome,
           },
-          'EventGeneration'
-        );
+          'EventGeneration',
+        )
       }
     }
 
     // Select event type with weighted randomness
-    const eventConfig = selectEventType();
+    const eventConfig = selectEventType()
 
     // Select random template from the event type
     const templateIndex = Math.floor(
-      secureRandom() * eventConfig.templates.length
-    );
-    const template = eventConfig.templates[templateIndex] || '{topic}';
+      secureRandom() * eventConfig.templates.length,
+    )
+    const template = eventConfig.templates[templateIndex] || '{topic}'
 
     // Extract topic from question text (simplified extraction)
     const topic =
       question.text.length > 100
-        ? question.text.slice(0, 100) + '...'
-        : question.text;
+        ? `${question.text.slice(0, 100)}...`
+        : question.text
 
     // Select actors if required by event type
-    const actors = eventConfig.requiresActors ? selectRelevantActors(2) : [];
+    const actors = eventConfig.requiresActors ? selectRelevantActors(2) : []
 
     // Generate description
-    const description = generateDescription(template, topic, actors);
+    const description = generateDescription(template, topic, actors)
 
     // Adjust visibility based on phase (late game has more leaks/revelations)
-    let visibility = eventConfig.visibility;
+    let visibility = eventConfig.visibility
     if (phase === 'late' || phase === 'climax') {
       // In late game, even leaks become public knowledge faster
       if (visibility === 'leaked' && secureRandom() < 0.3) {
-        visibility = 'public';
+        visibility = 'public'
       }
     }
 
@@ -310,8 +310,8 @@ export async function generateEvents(
       dayNumber: safeDayNumber,
       timestamp: timestamp,
       pointsToward,
-    });
-    eventsCreated++;
+    })
+    eventsCreated++
 
     logger.debug(
       'Generated diverse event',
@@ -321,9 +321,9 @@ export async function generateEvents(
         hasActors: actors.length > 0,
         questionId: question.id,
       },
-      'EventGeneration'
-    );
+      'EventGeneration',
+    )
   }
 
-  return eventsCreated;
+  return eventsCreated
 }

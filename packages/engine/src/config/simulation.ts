@@ -28,7 +28,7 @@ export const SIMULATION_AGENT_NAMES = [
   'Sophia Martinez',
   'Daniel Taylor',
   'Ava Anderson',
-] as const;
+] as const
 
 /**
  * Sample prediction market questions for simulation
@@ -39,14 +39,14 @@ export const SIMULATION_QUESTIONS = [
   'Will CryptoToken reach $100 by end of day?',
   'Will the merger between MegaCorp and StartupInc be approved?',
   'Will the new regulation pass the committee vote?',
-] as const;
+] as const
 
 /**
  * Prediction market templates for generating questions
  */
 export const PREDICTION_TEMPLATES = [
   {
-    q: 'Will {company} stock reach ${target} by end of month?',
+    q: 'Will {company} stock reach $\\{target\\} by end of month?',
     desc: 'Price target prediction',
   },
   {
@@ -61,7 +61,7 @@ export const PREDICTION_TEMPLATES = [
     q: 'Will {company} announce new product launch?',
     desc: 'Product announcement',
   },
-] as const;
+] as const
 
 /**
  * Sample companies for simulation
@@ -72,7 +72,7 @@ export const SIMULATION_COMPANIES = [
   { ticker: 'HLTH', name: 'HealthGen Solutions', sector: 'Healthcare' },
   { ticker: 'ENRG', name: 'EnergyFlow Corp', sector: 'Energy' },
   { ticker: 'RETA', name: 'RetailMax Inc', sector: 'Retail' },
-] as const;
+] as const
 
 /**
  * Clue templates for insider information distribution
@@ -92,7 +92,7 @@ export const SIMULATION_CLUE_TEMPLATES = {
     'Internal documents hint at unfavorable decision',
     'Reliable sources confirm negative trajectory',
   ],
-} as const;
+} as const
 
 /**
  * Default simulation configuration
@@ -105,7 +105,7 @@ export const DEFAULT_SIMULATION_CONFIG = {
   startingBalance: 10000,
   liquidityB: 100,
   insiderPercentage: 0.3,
-} as const;
+} as const
 
 /**
  * Agent trading strategies for simulation
@@ -114,11 +114,11 @@ export type SimulationStrategy =
   | 'informed'
   | 'momentum'
   | 'contrarian'
-  | 'random';
+  | 'random'
 
 export const SIMULATION_STRATEGIES: readonly SimulationStrategy[] = [
   'informed',
   'momentum',
   'contrarian',
   'random',
-] as const;
+] as const

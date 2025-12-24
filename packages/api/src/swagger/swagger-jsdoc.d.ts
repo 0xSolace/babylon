@@ -1,31 +1,22 @@
 declare module 'swagger-jsdoc' {
-  interface Options {
-    definition: {
-      openapi: string;
-      info: {
-        title: string;
-        version: string;
-        description?: string;
-      };
-      servers?: Array<{
-        url: string;
-        description?: string;
-      }>;
-      components?: {
-        securitySchemes?: Record<string, unknown>;
-        schemas?: Record<string, unknown>;
-      };
-      security?: Array<Record<string, unknown[]>>;
-    };
-    apis: string[];
+  interface SwaggerDefinition {
+    openapi?: string
+    info?: {
+      title?: string
+      version?: string
+      description?: string
+    }
+    servers?: Array<{ url: string; description?: string }>
+    components?: Record<string, unknown>
   }
 
-  function swaggerJsdoc(options: Options): object;
+  interface Options {
+    definition?: SwaggerDefinition
+    swaggerDefinition?: SwaggerDefinition
+    apis: string[]
+  }
 
-  export = swaggerJsdoc;
+  function swaggerJsdoc(options: Options): Record<string, unknown>
+
+  export = swaggerJsdoc
 }
-
-
-
-
-

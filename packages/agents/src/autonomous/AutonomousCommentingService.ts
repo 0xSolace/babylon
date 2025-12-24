@@ -8,15 +8,16 @@
  * - Existing comment threads
  */
 
-import { db } from '@babylon/db';
-import type { IAgentRuntime } from '@elizaos/core';
-import { callJejuDirect } from '../llm';
-import { getAgentConfig } from '../shared/agent-config';
-import { logger } from '../shared/logger';
-import { executeDirectComment } from './DirectExecutors';
+import { db } from '@babylon/db'
+import { toNull } from '@babylon/shared'
+import type { IAgentRuntime } from '@elizaos/core'
+import { callAgentLLM } from '../llm'
+import { getAgentConfig } from '../shared/agent-config'
+import { logger } from '../shared/logger'
+import { executeDirectComment } from './DirectExecutors'
 
 // Max characters for comment content in prompts
-const MAX_COMMENT_CHARS = 200;
+const MAX_COMMENT_CHARS = 200
 
 export class AutonomousCommentingService {
   /**
@@ -26,28 +27,28 @@ export class AutonomousCommentingService {
    */
   async createAgentComment(
     agentUserId: string,
-    _runtime: IAgentRuntime
+    _runtime: IAgentRuntime,
   ): Promise<string | null> {
     const agent = await db.user.findUnique({
       where: { id: agentUserId },
-    });
+    })
 
     if (!agent?.isAgent) {
-      throw new Error('Agent not found');
+      throw new Error('Agent not found')
     }
 
-    const now = new Date();
-    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const now = new Date()
+    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000)
 
     // Get posts agent already commented on
     const agentComments = await db.comment.findMany({
       where: { authorId: agentUserId },
       select: { postId: true },
-    });
+    })
 
     const commentedPostIds = agentComments
       .map((c) => String(c.postId))
-      .filter((id) => id !== 'null' && id !== 'undefined');
+      .filter((id) => id !== 'null' && id !== 'undefined')
 
     // Get recent posts that agent hasn't commented on
     const recentPosts = await db.post.findMany({
@@ -58,33 +59,33 @@ export class AutonomousCommentingService {
       },
       orderBy: { createdAt: 'desc' },
       take: 10,
-    });
+    })
 
     // Filter to posts agent hasn't commented on
     const uncommentedPosts = recentPosts.filter(
-      (p) => !commentedPostIds.includes(String(p.id))
-    );
+      (p) => !commentedPostIds.includes(String(p.id)),
+    )
 
     if (uncommentedPosts.length === 0) {
       const displayName = agent.displayName
         ? String(agent.displayName)
-        : 'Agent';
+        : 'Agent'
       logger.info(
         `No uncommented posts for agent ${displayName}`,
         undefined,
-        'AutonomousCommenting'
-      );
-      return null;
+        'AutonomousCommenting',
+      )
+      return null
     }
 
     // Get a random post to comment on
-    const randomIndex = Math.floor(Math.random() * uncommentedPosts.length);
-    const post = uncommentedPosts[randomIndex];
-    if (!post) return null;
+    const randomIndex = Math.floor(Math.random() * uncommentedPosts.length)
+    const post = uncommentedPosts[randomIndex]
+    if (!post) return null
 
-    const config = await getAgentConfig(agentUserId);
-    const displayName = agent.displayName ? String(agent.displayName) : 'Agent';
-    const postContent = post.content ? String(post.content) : '';
+    const config = await getAgentConfig(agentUserId)
+    const displayName = agent.displayName ? String(agent.displayName) : 'Agent'
+    const postContent = post.content ? String(post.content) : ''
 
     const prompt = `${config?.systemPrompt ?? 'You are an AI agent on Babylon.'}
 
@@ -96,24 +97,24 @@ Task: Write a brief, engaging comment (1-2 sentences, under ${MAX_COMMENT_CHARS}
 Be authentic to your personality and trading expertise.
 If mentioning markets, use SHORT SUMMARIES (e.g., "the TeslAI bet") not full questions.
 
-Generate ONLY the comment text, nothing else.`;
+Generate ONLY the comment text, nothing else.`
 
     // Use small model (llama-3.1-8b-instant) for fast comment generation
-    const commentContent = await callJejuDirect({
+    const commentContent = await callAgentLLM({
       prompt,
-      system: config?.systemPrompt ?? undefined,
+      system: config?.systemPrompt,
       modelSize: 'small',
       runtime: _runtime,
       temperature: 0.8,
       maxTokens: 80,
       actionType: 'generate_comment',
       purpose: 'response',
-    });
+    })
 
-    const cleanContent = commentContent.trim().replace(/^["']|["']$/g, '');
+    const cleanContent = commentContent.trim().replace(/^["']|["']$/g, '')
 
     if (!cleanContent || cleanContent.length < 5) {
-      return null;
+      return null
     }
 
     // Create the comment via DirectExecutors
@@ -121,25 +122,25 @@ Generate ONLY the comment text, nothing else.`;
       agentUserId,
       postId: String(post.id),
       content: cleanContent,
-    });
+    })
 
     if (!result.success) {
       logger.warn(
         `Failed to create comment: ${result.error}`,
         { agentUserId },
-        'AutonomousCommenting'
-      );
-      return null;
+        'AutonomousCommenting',
+      )
+      return null
     }
 
     logger.info(
       `Agent ${displayName} commented on post ${post.id}`,
       undefined,
-      'AutonomousCommenting'
-    );
+      'AutonomousCommenting',
+    )
 
-    return result.commentId ?? null;
+    return toNull(result.commentId)
   }
 }
 
-export const autonomousCommentingService = new AutonomousCommentingService();
+export const autonomousCommentingService = new AutonomousCommentingService()

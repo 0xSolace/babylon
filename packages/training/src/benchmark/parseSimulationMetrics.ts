@@ -8,8 +8,8 @@
  * due to SimulationEngine being deprecated and types being consolidated.
  */
 
-// eslint-disable-next-line @typescript-eslint/no-restricted-imports
-import type { SimulationMetrics } from './index';
+import { isObject } from '@babylon/shared'
+import type { SimulationMetrics } from './index'
 
 /**
  * JSON value type for parsing untyped data
@@ -21,7 +21,7 @@ export type JsonValue =
   | null
   | undefined
   | JsonValue[]
-  | { [key: string]: JsonValue };
+  | { [key: string]: JsonValue }
 
 /**
  * Parse and validate SimulationMetrics from JSON data
@@ -31,15 +31,15 @@ export type JsonValue =
  * @throws Error if data is invalid or missing required fields
  */
 export function parseSimulationMetrics(data: JsonValue): SimulationMetrics {
-  if (typeof data !== 'object' || data === null) {
-    throw new Error('Invalid SimulationMetrics: expected object');
+  if (!isObject(data)) {
+    throw new Error('Invalid SimulationMetrics: expected object')
   }
 
-  const metrics = data as Record<string, JsonValue>;
+  const metrics = data
 
   // Validate required fields
   if (typeof metrics.totalPnl !== 'number') {
-    throw new Error('Invalid SimulationMetrics: totalPnl must be a number');
+    throw new Error('Invalid SimulationMetrics: totalPnl must be a number')
   }
 
   if (
@@ -47,53 +47,51 @@ export function parseSimulationMetrics(data: JsonValue): SimulationMetrics {
     metrics.predictionMetrics === null
   ) {
     throw new Error(
-      'Invalid SimulationMetrics: predictionMetrics must be an object'
-    );
+      'Invalid SimulationMetrics: predictionMetrics must be an object',
+    )
   }
 
   if (typeof metrics.perpMetrics !== 'object' || metrics.perpMetrics === null) {
-    throw new Error('Invalid SimulationMetrics: perpMetrics must be an object');
+    throw new Error('Invalid SimulationMetrics: perpMetrics must be an object')
   }
 
   if (typeof metrics.optimalityScore !== 'number') {
     throw new Error(
-      'Invalid SimulationMetrics: optimalityScore must be a number'
-    );
+      'Invalid SimulationMetrics: optimalityScore must be a number',
+    )
   }
 
   if (typeof metrics.timing !== 'object' || metrics.timing === null) {
-    throw new Error('Invalid SimulationMetrics: timing must be an object');
+    throw new Error('Invalid SimulationMetrics: timing must be an object')
   }
 
   // Validate nested structures
-  const predictionMetrics = metrics.predictionMetrics as Record<
-    string,
-    JsonValue
-  >;
-  const perpMetrics = metrics.perpMetrics as Record<string, JsonValue>;
-  const timing = metrics.timing as Record<string, JsonValue>;
+  const predictionMetrics = metrics.predictionMetrics
+  const perpMetrics = metrics.perpMetrics
+  const timing = metrics.timing
 
-  // Helper to safely get number or default
-  const getNumber = (obj: Record<string, JsonValue>, key: string): number => {
-    const val = obj[key];
-    return typeof val === 'number' ? val : 0;
-  };
+  // Helper to safely get number or default from an object
+  const getNumber = (
+    obj: { [key: string]: JsonValue } | JsonValue[],
+    key: string,
+  ): number => {
+    if (Array.isArray(obj)) return 0
+    const val = obj[key]
+    return typeof val === 'number' ? val : 0
+  }
 
   // Parse socialMetrics if present
-  const socialMetricsData = metrics.socialMetrics;
-  const socialMetrics =
-    typeof socialMetricsData === 'object' && socialMetricsData !== null
-      ? (socialMetricsData as Record<string, JsonValue>)
-      : null;
+  const socialMetricsData = metrics.socialMetrics
+  const socialMetrics = isObject(socialMetricsData) ? socialMetricsData : null
 
   return {
-    totalPnl: metrics.totalPnl as number,
+    totalPnl: typeof metrics.totalPnl === 'number' ? metrics.totalPnl : 0,
     predictionMetrics: {
       totalPositions: getNumber(predictionMetrics, 'totalPositions'),
       correctPredictions: getNumber(predictionMetrics, 'correctPredictions'),
       incorrectPredictions: getNumber(
         predictionMetrics,
-        'incorrectPredictions'
+        'incorrectPredictions',
       ),
       accuracy: getNumber(predictionMetrics, 'accuracy'),
       avgPnlPerPosition: getNumber(predictionMetrics, 'avgPnlPerPosition'),
@@ -123,6 +121,7 @@ export function parseSimulationMetrics(data: JsonValue): SimulationMetrics {
       maxResponseTime: getNumber(timing, 'maxResponseTime'),
       totalDuration: getNumber(timing, 'totalDuration'),
     },
-    optimalityScore: metrics.optimalityScore as number,
-  };
+    optimalityScore:
+      typeof metrics.optimalityScore === 'number' ? metrics.optimalityScore : 0,
+  }
 }

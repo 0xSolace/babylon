@@ -10,7 +10,7 @@
  * - Database-based locking (works across multiple servers)
  * - Automatic stale lock recovery (15 minutes expiry)
  * - Simple acquire/release pattern
- * - No external dependencies (uses Drizzle)
+ * - No external dependencies (uses CQL)
  * - Serverless-safe (uses timestamp + random bytes instead of process.pid)
  *
  * @example
@@ -29,8 +29,8 @@
  * @packageDocumentation
  */
 
-import { DistributedLockService } from '@babylon/api';
-import { randomBytes } from 'crypto';
+import { randomBytes } from 'node:crypto'
+import { acquireLock, checkLock, releaseLock } from '@babylon/api'
 
 /**
  * Lock duration for agent tick operations.
@@ -45,37 +45,37 @@ import { randomBytes } from 'crypto';
  *   to recover within a reasonable timeframe
  */
 const LOCK_DURATION_MS =
-  Number(process.env.AGENT_LOCK_DURATION_MS) || 15 * 60 * 1000; // 15 minutes
+  Number(process.env.AGENT_LOCK_DURATION_MS) || 15 * 60 * 1000 // 15 minutes
 
 function getAgentLockId(agentId: string): string {
-  return `agent-tick-${agentId}`;
+  return `agent-tick-${agentId}`
 }
 
 export async function acquireAgentLock(
   agentId: string,
-  processId?: string
+  processId?: string,
 ): Promise<boolean> {
   const lockHolder =
-    processId || `serverless-${Date.now()}-${randomBytes(8).toString('hex')}`;
-  const lockId = getAgentLockId(agentId);
+    processId || `serverless-${Date.now()}-${randomBytes(8).toString('hex')}`
+  const lockId = getAgentLockId(agentId)
 
-  return DistributedLockService.acquireLock({
+  return acquireLock({
     lockId,
     durationMs: LOCK_DURATION_MS,
     operation: 'agent-tick',
     processId: lockHolder,
-  });
+  })
 }
 
 export async function releaseAgentLock(
   agentId: string,
-  processId?: string
+  processId?: string,
 ): Promise<void> {
-  const lockId = getAgentLockId(agentId);
-  return DistributedLockService.releaseLock(lockId, processId);
+  const lockId = getAgentLockId(agentId)
+  return releaseLock(lockId, processId)
 }
 
 export async function checkAgentLock(agentId: string) {
-  const lockId = getAgentLockId(agentId);
-  return DistributedLockService.checkLock(lockId);
+  const lockId = getAgentLockId(agentId)
+  return checkLock(lockId)
 }

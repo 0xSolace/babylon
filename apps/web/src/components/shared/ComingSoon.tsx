@@ -1,12 +1,10 @@
-'use client';
-
-import { useJejuAuth } from '@babylon/auth/client';
+import { useJejuAuth } from '@babylon/auth'
 import {
   getReferralUrl,
   logger,
   POINTS,
   signInWithFarcaster,
-} from '@babylon/shared';
+} from '@babylon/shared'
 import {
   Check,
   ChevronDown,
@@ -20,78 +18,77 @@ import {
   Users,
   Wallet,
   X,
-} from 'lucide-react';
-import Image from 'next/image';
-import { useRouter, useSearchParams } from 'next/navigation';
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { toast } from 'sonner';
-import { LinkSocialAccountsModal } from '@/components/profile/LinkSocialAccountsModal';
-import { Avatar } from '@/components/shared/Avatar';
-import { PlayerStatsModal } from '@/components/shared/PlayerStatsModal';
-import { useAuth } from '@/hooks/useAuth';
+} from 'lucide-react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { toast } from 'sonner'
+import { LinkSocialAccountsModal } from '@/components/profile/LinkSocialAccountsModal'
+import { Avatar } from '@/components/shared/Avatar'
+import Image from '@/components/shared/Image'
+import { PlayerStatsModal } from '@/components/shared/PlayerStatsModal'
+import { EXTERNAL_URLS } from '@/config'
+import { useAuth } from '@/hooks/useAuth'
+import { useRouter, useSearchParams } from '@/lib/navigation'
 
-// Blog URL from environment with fallback
-const blogUrl =
-  process.env.NEXT_PUBLIC_BLOG_URL || 'https://blog.babylon.market';
+const blogUrl = EXTERNAL_URLS.blog
 
 /**
  * Waitlist data structure containing user position and points information.
  */
 interface WaitlistData {
-  position: number; // Leaderboard rank (dynamic)
-  leaderboardRank: number; // Same as position
-  waitlistPosition: number; // Historical signup order
-  totalAhead: number;
-  totalCount: number;
-  percentile: number; // Top X%
-  inviteCode: string;
-  points: number;
+  position: number // Leaderboard rank (dynamic)
+  leaderboardRank: number // Same as position
+  waitlistPosition: number // Historical signup order
+  totalAhead: number
+  totalCount: number
+  percentile: number // Top X%
+  inviteCode: string
+  points: number
   pointsBreakdown: {
-    total: number;
-    invite: number;
-    earned: number;
-    bonus: number;
-    base: number;
-  };
-  referralCount: number;
-  weeklyReferralCount?: number;
-  weeklyLimit?: number;
+    total: number
+    invite: number
+    earned: number
+    bonus: number
+    base: number
+  }
+  referralCount: number
+  weeklyReferralCount?: number
+  weeklyLimit?: number
   // Referral breakdown
-  invitedCount?: number; // Users who signed up (pending)
-  qualifiedCount?: number; // Users who completed profile (qualified)
-  totalReferralPoints?: number; // Total points from referrals
-  invitedUsers?: ReferralUser[]; // Pending users list
-  qualifiedUsers?: ReferralUser[]; // Qualified users list
+  invitedCount?: number // Users who signed up (pending)
+  qualifiedCount?: number // Users who completed profile (qualified)
+  totalReferralPoints?: number // Total points from referrals
+  invitedUsers?: ReferralUser[] // Pending users list
+  qualifiedUsers?: ReferralUser[] // Qualified users list
 }
 
 /**
  * Top user structure for leaderboard display.
  */
 interface TopUser {
-  id: string;
-  username: string | null;
-  displayName: string | null;
-  profileImageUrl: string | null;
-  invitePoints: number;
-  reputationPoints: number;
-  referralCount: number;
-  rank: number;
+  id: string
+  username: string | null
+  displayName: string | null
+  profileImageUrl: string | null
+  invitePoints: number
+  reputationPoints: number
+  referralCount: number
+  rank: number
 }
 
 /**
  * Referral user structure for invited/qualified users display.
  */
 interface ReferralUser {
-  id: string;
-  username: string | null;
-  displayName: string | null;
-  profileImageUrl: string | null;
-  email?: string | null;
-  farcasterUsername?: string | null;
-  twitterUsername?: string | null;
-  createdAt: string;
-  completedAt?: string;
-  status: 'pending' | 'qualified';
+  id: string
+  username: string | null
+  displayName: string | null
+  profileImageUrl: string | null
+  email?: string | null
+  farcasterUsername?: string | null
+  twitterUsername?: string | null
+  createdAt: string
+  completedAt?: string
+  status: 'pending' | 'qualified'
 }
 
 /**
@@ -112,47 +109,47 @@ interface ReferralUser {
  * @returns Coming soon page element
  */
 export function ComingSoon() {
-  const { loginWithWallet, authenticated, logout } = useJejuAuth();
-  const { user: dbUser, refresh, getAccessToken } = useAuth();
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const [waitlistData, setWaitlistData] = useState<WaitlistData | null>(null);
-  const [copiedCode, setCopiedCode] = useState(false);
-  const [showProfileModal, setShowProfileModal] = useState(false);
-  const [showLinkSocialModal, setShowLinkSocialModal] = useState(false);
-  const [previousRank, setPreviousRank] = useState<number | null>(null);
-  const [showRankImprovement, setShowRankImprovement] = useState(false);
-  const [topUsers, setTopUsers] = useState<TopUser[]>([]);
-  const [leaderboardPage, setLeaderboardPage] = useState(1);
-  const [leaderboardTotalPages, setLeaderboardTotalPages] = useState(10); // 10 pages for top 100
+  const { loginWithWallet, authenticated, logout } = useJejuAuth()
+  const { user: dbUser, refresh, getAccessToken } = useAuth()
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const [waitlistData, setWaitlistData] = useState<WaitlistData | null>(null)
+  const [copiedCode, setCopiedCode] = useState(false)
+  const [showProfileModal, setShowProfileModal] = useState(false)
+  const [showLinkSocialModal, setShowLinkSocialModal] = useState(false)
+  const [previousRank, setPreviousRank] = useState<number | null>(null)
+  const [showRankImprovement, setShowRankImprovement] = useState(false)
+  const [topUsers, setTopUsers] = useState<TopUser[]>([])
+  const [leaderboardPage, setLeaderboardPage] = useState(1)
+  const [leaderboardTotalPages, setLeaderboardTotalPages] = useState(10) // 10 pages for top 100
   const [leaderboardTab, setLeaderboardTab] = useState<
     'leaderboard' | 'inviters'
-  >('leaderboard');
-  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
-  const [showPlayerStatsModal, setShowPlayerStatsModal] = useState(false);
+  >('leaderboard')
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null)
+  const [showPlayerStatsModal, setShowPlayerStatsModal] = useState(false)
   const [referralTab, setReferralTab] = useState<'pending' | 'qualified'>(
-    'qualified'
-  );
+    'qualified',
+  )
   const [leaderboardLastFetched, setLeaderboardLastFetched] =
-    useState<number>(0);
-  const [hasFarcasterFollow, setHasFarcasterFollow] = useState(false);
-  const [isVerifyingFollow, setIsVerifyingFollow] = useState(false);
-  const [showVerifyFollowButton, setShowVerifyFollowButton] = useState(false);
-  const [hasTwitterFollow, setHasTwitterFollow] = useState(false);
+    useState<number>(0)
+  const [hasFarcasterFollow, setHasFarcasterFollow] = useState(false)
+  const [isVerifyingFollow, setIsVerifyingFollow] = useState(false)
+  const [showVerifyFollowButton, setShowVerifyFollowButton] = useState(false)
+  const [hasTwitterFollow, setHasTwitterFollow] = useState(false)
   const [isVerifyingTwitterFollow, setIsVerifyingTwitterFollow] =
-    useState(false);
+    useState(false)
   const [showVerifyTwitterFollowButton, setShowVerifyTwitterFollowButton] =
-    useState(false);
+    useState(false)
 
   // Discord join state
-  const [hasDiscordJoin, setHasDiscordJoin] = useState(false);
-  const [isVerifyingDiscordJoin, setIsVerifyingDiscordJoin] = useState(false);
+  const [hasDiscordJoin, setHasDiscordJoin] = useState(false)
+  const [isVerifyingDiscordJoin, setIsVerifyingDiscordJoin] = useState(false)
   const [showVerifyDiscordJoinButton, setShowVerifyDiscordJoinButton] =
-    useState(false);
+    useState(false)
 
   // Profile dropdown state
-  const [showProfileDropdown, setShowProfileDropdown] = useState(false);
-  const profileDropdownRef = useRef<HTMLDivElement>(null);
+  const [showProfileDropdown, setShowProfileDropdown] = useState(false)
+  const profileDropdownRef = useRef<HTMLDivElement>(null)
 
   // Profile form state
   const [profileForm, setProfileForm] = useState({
@@ -161,111 +158,107 @@ export function ComingSoon() {
     bio: dbUser?.bio ?? '',
     profileImageUrl: dbUser?.profileImageUrl ?? '',
     coverImageUrl: dbUser?.coverImageUrl ?? '',
-  });
-  const [profilePictureIndex, setProfilePictureIndex] = useState(1);
-  const [bannerIndex, setBannerIndex] = useState(1);
+  })
+  const [profilePictureIndex, setProfilePictureIndex] = useState(1)
+  const [bannerIndex, setBannerIndex] = useState(1)
   const [uploadedProfileImage, setUploadedProfileImage] = useState<
     string | null
-  >(null);
-  const [uploadedBanner, setUploadedBanner] = useState<string | null>(null);
-  const [isSavingProfile, setIsSavingProfile] = useState(false);
-  const prevShowProfileModalRef = useRef(false);
+  >(null)
+  const [uploadedBanner, setUploadedBanner] = useState<string | null>(null)
+  const [isSavingProfile, setIsSavingProfile] = useState(false)
+  const prevShowProfileModalRef = useRef(false)
 
   // Username validation state
-  const [isCheckingUsername, setIsCheckingUsername] = useState(false);
+  const [isCheckingUsername, setIsCheckingUsername] = useState(false)
   const [usernameStatus, setUsernameStatus] = useState<
     'available' | 'taken' | null
-  >(null);
+  >(null)
   const [usernameSuggestion, setUsernameSuggestion] = useState<string | null>(
-    null
-  );
+    null,
+  )
 
   // Total available assets
-  const TOTAL_PROFILE_PICTURES = 100;
-  const TOTAL_BANNERS = 100;
+  const TOTAL_PROFILE_PICTURES = 100
+  const TOTAL_BANNERS = 100
 
   // Helper function to get the best display name for a referral user
   const getReferralUserDisplayName = (user: ReferralUser): string => {
     // Priority: displayName > username > farcasterUsername > twitterUsername > email (first part) > Anonymous
-    if (user.displayName) return user.displayName;
-    if (user.username) return user.username;
-    if (user.farcasterUsername) return user.farcasterUsername;
-    if (user.twitterUsername) return `@${user.twitterUsername}`;
+    if (user.displayName) return user.displayName
+    if (user.username) return user.username
+    if (user.farcasterUsername) return user.farcasterUsername
+    if (user.twitterUsername) return `@${user.twitterUsername}`
     if (user.email) {
       // Show first part of email (before @)
-      const emailParts = user.email.split('@');
-      const emailPrefix = emailParts[0] || user.email;
+      const emailParts = user.email.split('@')
+      const emailPrefix = emailParts[0] || user.email
       return emailPrefix.length > 20
         ? `${emailPrefix.slice(0, 17)}...`
-        : emailPrefix;
+        : emailPrefix
     }
-    return 'Anonymous';
-  };
+    return 'Anonymous'
+  }
 
   // Helper function to get subtitle/handle for a referral user
   const getReferralUserSubtitle = (user: ReferralUser): string | null => {
     // Show username as subtitle if displayName exists, otherwise show email/social
     if (user.username && user.displayName) {
-      return `@${user.username}`;
+      return `@${user.username}`
     }
     if (user.email && !user.username) {
-      return user.email;
+      return user.email
     }
-    return null;
-  };
+    return null
+  }
 
   // Handle Twitter OAuth
   const handleTwitterOAuth = () => {
     if (!dbUser?.id) {
-      toast.error('Please complete your profile first');
-      logger.warn('Twitter OAuth attempted without user ID', {}, 'ComingSoon');
-      return;
+      toast.error('Please complete your profile first')
+      logger.warn('Twitter OAuth attempted without user ID', {}, 'ComingSoon')
+      return
     }
 
     // Store current URL to return to
-    sessionStorage.setItem('oauth_return_url', window.location.pathname);
+    sessionStorage.setItem('oauth_return_url', window.location.pathname)
     // Redirect to Twitter OAuth initiation
     // Cookies should be sent automatically with the redirect
-    window.location.href = '/api/auth/twitter/initiate';
-  };
+    window.location.href = '/api/auth/twitter/initiate'
+  }
 
   const handleDiscordOAuth = () => {
     if (!dbUser?.id) {
-      toast.error('Please complete your profile first');
-      logger.warn('Discord OAuth attempted without user ID', {}, 'ComingSoon');
-      return;
+      toast.error('Please complete your profile first')
+      logger.warn('Discord OAuth attempted without user ID', {}, 'ComingSoon')
+      return
     }
 
     // Store current URL to return to
-    sessionStorage.setItem('oauth_return_url', window.location.pathname);
+    sessionStorage.setItem('oauth_return_url', window.location.pathname)
     // Redirect to Discord OAuth initiation
-    window.location.href = '/api/auth/discord/initiate';
-  };
+    window.location.href = '/api/auth/discord/initiate'
+  }
 
   // Handle Farcaster OAuth - uses proper Sign In with Farcaster (SIWF) protocol
   // Creates a channel on relay.farcaster.xyz, then polls for authentication completion
   const handleFarcasterOAuth = async () => {
     if (!dbUser?.id) {
-      toast.error('Please complete your profile first');
-      logger.warn(
-        'Farcaster OAuth attempted without user ID',
-        {},
-        'ComingSoon'
-      );
-      return;
+      toast.error('Please complete your profile first')
+      logger.warn('Farcaster OAuth attempted without user ID', {}, 'ComingSoon')
+      return
     }
 
     // Use the proper SIWF protocol via relay.farcaster.xyz
     const result = await signInWithFarcaster({
       userId: dbUser.id,
       onStatusUpdate: (status) => {
-        logger.debug('Farcaster auth status', { status }, 'ComingSoon');
+        logger.debug('Farcaster auth status', { status }, 'ComingSoon')
       },
-    });
+    })
 
     // Send authentication data to backend for verification and linking
     const token =
-      typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
+      typeof window !== 'undefined' ? window.__oauth3AccessToken : null
     const response = await fetch('/api/auth/farcaster/callback', {
       method: 'POST',
       headers: {
@@ -281,74 +274,72 @@ export function ComingSoon() {
         pfpUrl: result.pfpUrl,
         state: result.state,
       }),
-    });
+    })
 
-    const data = await response.json();
+    const data = await response.json()
 
     if (response.ok && data.success) {
       // Refresh user profile to reflect the linked Farcaster account
-      await refresh();
+      await refresh()
 
       // Refresh waitlist position to update points
       if (dbUser?.id) {
-        await fetchWaitlistPosition(dbUser.id);
+        await fetchWaitlistPosition(dbUser.id)
       }
 
       if (data.pointsAwarded > 0) {
-        toast.success(
-          `Farcaster linked! +${data.pointsAwarded} points awarded`
-        );
+        toast.success(`Farcaster linked! +${data.pointsAwarded} points awarded`)
       } else {
-        toast.success('Farcaster account linked successfully!');
+        toast.success('Farcaster account linked successfully!')
       }
     } else {
       // Show specific error message for 409 conflicts
-      const errorMessage = data.error || 'Failed to link Farcaster account';
+      const errorMessage = data.error || 'Failed to link Farcaster account'
       if (response.status === 409) {
         toast.error(
           errorMessage.includes('already linked')
             ? errorMessage
-            : 'This Farcaster account is already linked to another user'
-        );
+            : 'This Farcaster account is already linked to another user',
+        )
       } else {
-        toast.error(errorMessage);
+        toast.error(errorMessage)
       }
     }
-  };
+  }
 
   // Handle Farcaster Follow - just open the link
   const handleFarcasterFollow = () => {
     if (!dbUser?.id) {
-      toast.error('Please complete your profile first');
+      toast.error('Please complete your profile first')
       logger.warn(
         'Farcaster follow link clicked without user ID',
         {},
-        'ComingSoon'
-      );
-      return;
+        'ComingSoon',
+      )
+      return
     }
 
     if (!dbUser?.hasFarcaster) {
-      toast.error('Please link your Farcaster account first');
-      return;
+      toast.error('Please link your Farcaster account first')
+      return
     }
 
     // Open Farcaster profile in new tab
-    window.open('https://warpcast.com/playbabylon', '_blank');
+    window.open('https://warpcast.com/playbabylon', '_blank')
 
     // Show verify button
-    setShowVerifyFollowButton(true);
-    toast.success('After following, click the "Verify Follow" button below!');
-  };
+    setShowVerifyFollowButton(true)
+    toast.success('After following, click the "Verify Follow" button below!')
+  }
 
   // Handle verify follow - check if they actually followed
   const handleVerifyFollow = async () => {
-    if (!dbUser?.id) return;
+    if (!dbUser?.id) return
 
-    setIsVerifyingFollow(true);
+    setIsVerifyingFollow(true)
 
     try {
-      const token = await getAccessToken();
+      const token = await getAccessToken()
       const response = await fetch(
         `/api/users/${encodeURIComponent(dbUser.id)}/verify-farcaster-follow`,
         {
@@ -357,76 +348,73 @@ export function ComingSoon() {
             'Content-Type': 'application/json',
             ...(token ? { Authorization: `Bearer ${token}` } : {}),
           },
-        }
-      );
+        },
+      )
 
-      const data = await response.json();
+      const data = await response.json()
 
       if (response.ok && data.verified) {
-        setHasFarcasterFollow(true);
-        setShowVerifyFollowButton(false);
+        setHasFarcasterFollow(true)
+        setShowVerifyFollowButton(false)
 
         // Refresh waitlist position to update points
-        await fetchWaitlistPosition(dbUser.id);
+        await fetchWaitlistPosition(dbUser.id)
 
         if (data.points?.awarded > 0) {
           toast.success(
-            `Follow verified! +${data.points.awarded} points awarded`
-          );
+            `Follow verified! +${data.points.awarded} points awarded`,
+          )
         } else {
           toast.success(
-            'Follow verified! You already received points for this action.'
-          );
+            'Follow verified! You already received points for this action.',
+          )
         }
       } else {
         toast.error(
           data.message ??
-            'Could not verify follow. Please make sure you followed @playbabylon on Farcaster.'
-        );
+            'Could not verify follow. Please make sure you followed @playbabylon on Farcaster.',
+        )
       }
     } catch {
-      toast.error('Network error. Please try again.');
+      toast.error('Network error. Please try again.')
     } finally {
-      setIsVerifyingFollow(false);
+      setIsVerifyingFollow(false)
     }
-  };
+  }
 
   // Handle Twitter Follow - just open the follow intent link
   const handleTwitterFollow = () => {
     if (!dbUser?.id) {
-      toast.error('Please complete your profile first');
+      toast.error('Please complete your profile first')
       logger.warn(
         'Twitter follow link clicked without user ID',
         {},
-        'ComingSoon'
-      );
-      return;
+        'ComingSoon',
+      )
+      return
     }
 
     if (!dbUser?.hasTwitter) {
-      toast.error('Please link your Twitter account first');
-      return;
+      toast.error('Please link your Twitter account first')
+      return
     }
 
     // Open Twitter follow intent in new tab
-    window.open(
-      'https://x.com/intent/follow?screen_name=PlayBabylon',
-      '_blank'
-    );
+    window.open('https://x.com/intent/follow?screen_name=PlayBabylon', '_blank')
 
     // Show verify button
-    setShowVerifyTwitterFollowButton(true);
-    toast.success('After following, click the "Claim Reward" button below!');
-  };
+    setShowVerifyTwitterFollowButton(true)
+    toast.success('After following, click the "Claim Reward" button below!')
+  }
 
   // Handle verify Twitter follow - award points (trusted system)
   const handleVerifyTwitterFollow = async () => {
-    if (!dbUser?.id) return;
+    if (!dbUser?.id) return
 
-    setIsVerifyingTwitterFollow(true);
+    setIsVerifyingTwitterFollow(true)
 
     try {
-      const token = await getAccessToken();
+      const token = await getAccessToken()
       const response = await fetch(
         `/api/users/${encodeURIComponent(dbUser.id)}/verify-twitter-follow`,
         {
@@ -435,73 +423,65 @@ export function ComingSoon() {
             'Content-Type': 'application/json',
             ...(token ? { Authorization: `Bearer ${token}` } : {}),
           },
-        }
-      );
+        },
+      )
 
-      const data = await response.json();
+      const data = await response.json()
 
       if (response.ok && data.verified) {
-        setHasTwitterFollow(true);
-        setShowVerifyTwitterFollowButton(false);
+        setHasTwitterFollow(true)
+        setShowVerifyTwitterFollowButton(false)
 
         // Refresh waitlist position to update points
-        await fetchWaitlistPosition(dbUser.id);
+        await fetchWaitlistPosition(dbUser.id)
 
         if (data.points?.awarded > 0) {
           toast.success(
-            `Thank you for following! +${data.points.awarded} points awarded`
-          );
+            `Thank you for following! +${data.points.awarded} points awarded`,
+          )
         } else {
-          toast.success('You already received points for this action.');
+          toast.success('You already received points for this action.')
         }
       } else {
-        toast.error(
-          data.message ?? 'Could not claim reward. Please try again.'
-        );
+        toast.error(data.message ?? 'Could not claim reward. Please try again.')
       }
     } catch {
-      toast.error('Network error. Please try again.');
+      toast.error('Network error. Please try again.')
     } finally {
-      setIsVerifyingTwitterFollow(false);
+      setIsVerifyingTwitterFollow(false)
     }
-  };
+  }
 
   // Handle Discord Join - open invite link
   const handleDiscordJoin = () => {
     if (!dbUser?.id) {
-      toast.error('Please complete your profile first');
-      logger.warn(
-        'Discord join link clicked without user ID',
-        {},
-        'ComingSoon'
-      );
-      return;
+      toast.error('Please complete your profile first')
+      logger.warn('Discord join link clicked without user ID', {}, 'ComingSoon')
+      return
     }
 
     if (!dbUser?.hasDiscord) {
-      toast.error('Please link your Discord account first');
-      return;
+      toast.error('Please link your Discord account first')
+      return
     }
 
     // Open Discord invite in new tab
-    const discordInviteUrl =
-      process.env.NEXT_PUBLIC_DISCORD_INVITE_URL ||
-      'https://discord.gg/4DYsFgyp';
-    window.open(discordInviteUrl, '_blank');
+    const discordInviteUrl = EXTERNAL_URLS.discordInvite
+    window.open(discordInviteUrl, '_blank')
 
     // Show verify button
-    setShowVerifyDiscordJoinButton(true);
-    toast.success('After joining, click the "Verify Join" button below!');
-  };
+    setShowVerifyDiscordJoinButton(true)
+    toast.success('After joining, click the "Verify Join" button below!')
+  }
 
   // Handle verify Discord join - check if they actually joined
   const handleVerifyDiscordJoin = async () => {
-    if (!dbUser?.id) return;
+    if (!dbUser?.id) return
 
-    setIsVerifyingDiscordJoin(true);
+    setIsVerifyingDiscordJoin(true)
 
     try {
-      const token = await getAccessToken();
+      const token = await getAccessToken()
       const response = await fetch(
         `/api/users/${encodeURIComponent(dbUser.id)}/verify-discord-join`,
         {
@@ -510,55 +490,55 @@ export function ComingSoon() {
             'Content-Type': 'application/json',
             ...(token ? { Authorization: `Bearer ${token}` } : {}),
           },
-        }
-      );
+        },
+      )
 
-      const data = await response.json();
+      const data = await response.json()
 
       if (response.ok && data.verified) {
-        setHasDiscordJoin(true);
-        setShowVerifyDiscordJoinButton(false);
+        setHasDiscordJoin(true)
+        setShowVerifyDiscordJoinButton(false)
 
         // Refresh waitlist position to update points
-        await fetchWaitlistPosition(dbUser.id);
+        await fetchWaitlistPosition(dbUser.id)
 
         if (data.points?.awarded > 0) {
           toast.success(
-            `Discord membership verified! +${data.points.awarded} points awarded`
-          );
+            `Discord membership verified! +${data.points.awarded} points awarded`,
+          )
         } else {
           toast.success(
-            'Membership verified! You already received points for this action.'
-          );
+            'Membership verified! You already received points for this action.',
+          )
         }
       } else {
         toast.error(
           data.message ||
-            'Could not verify membership. Please make sure you joined the Babylon Discord server.'
-        );
+            'Could not verify membership. Please make sure you joined the Babylon Discord server.',
+        )
       }
     } catch {
-      toast.error('Network error. Please try again.');
+      toast.error('Network error. Please try again.')
     } finally {
-      setIsVerifyingDiscordJoin(false);
+      setIsVerifyingDiscordJoin(false)
     }
-  };
+  }
 
   // Check if user has already been awarded follow rewards on page load
   useEffect(() => {
-    if (!authenticated || !dbUser?.id) return;
+    if (!authenticated || !dbUser?.id) return
 
     // Use dbUser fields to check if rewards were already claimed
     if (dbUser.pointsAwardedForFarcasterFollow) {
-      setHasFarcasterFollow(true);
+      setHasFarcasterFollow(true)
     }
 
     if (dbUser.pointsAwardedForTwitterFollow) {
-      setHasTwitterFollow(true);
+      setHasTwitterFollow(true)
     }
 
     if (dbUser.pointsAwardedForDiscordJoin) {
-      setHasDiscordJoin(true);
+      setHasDiscordJoin(true)
     }
   }, [
     authenticated,
@@ -566,7 +546,7 @@ export function ComingSoon() {
     dbUser?.pointsAwardedForFarcasterFollow,
     dbUser?.pointsAwardedForTwitterFollow,
     dbUser?.pointsAwardedForDiscordJoin,
-  ]);
+  ])
 
   // Close profile dropdown when clicking outside
   useEffect(() => {
@@ -575,65 +555,65 @@ export function ComingSoon() {
         profileDropdownRef.current &&
         !profileDropdownRef.current.contains(event.target as Node)
       ) {
-        setShowProfileDropdown(false);
+        setShowProfileDropdown(false)
       }
-    };
-
-    if (showProfileDropdown) {
-      document.addEventListener('mousedown', handleClickOutside);
-      return () => {
-        document.removeEventListener('mousedown', handleClickOutside);
-      };
     }
 
-    return undefined;
-  }, [showProfileDropdown]);
+    if (showProfileDropdown) {
+      document.addEventListener('mousedown', handleClickOutside)
+      return () => {
+        document.removeEventListener('mousedown', handleClickOutside)
+      }
+    }
+
+    return undefined
+  }, [showProfileDropdown])
 
   const getPointsTypeForTab = useCallback(
     (tab: 'leaderboard' | 'inviters') =>
       tab === 'leaderboard' ? 'total' : 'invite',
-    []
-  );
+    [],
+  )
 
   const fetchWaitlistPosition = useCallback(
     async (userId: string, skipLeaderboard = false): Promise<boolean> => {
       // Only fetch leaderboard if not skipped AND (never fetched OR stale > 5 minutes)
-      const now = Date.now();
+      const now = Date.now()
       const shouldFetchLeaderboard =
-        !skipLeaderboard && now - leaderboardLastFetched > 5 * 60 * 1000;
-      const pointsType = getPointsTypeForTab(leaderboardTab);
+        !skipLeaderboard && now - leaderboardLastFetched > 5 * 60 * 1000
+      const pointsType = getPointsTypeForTab(leaderboardTab)
 
       // Get auth token for authenticated position endpoint
-      const token = await getAccessToken();
+      const token = await getAccessToken()
 
       const requests = [
         fetch('/api/waitlist/position', {
           headers: token ? { Authorization: `Bearer ${token}` } : {},
         }),
-      ];
+      ]
       if (shouldFetchLeaderboard) {
         // Fetch first page of leaderboard with pagination
         requests.push(
           fetch(
-            `/api/waitlist/leaderboard?page=1&limit=10&pointsType=${pointsType}`
-          )
-        );
+            `/api/waitlist/leaderboard?page=1&limit=10&pointsType=${pointsType}`,
+          ),
+        )
       }
 
-      const results = await Promise.allSettled(requests);
-      const positionResult = results[0];
-      const leaderboardResult = shouldFetchLeaderboard ? results[1] : null;
+      const results = await Promise.allSettled(requests)
+      const positionResult = results[0]
+      const leaderboardResult = shouldFetchLeaderboard ? results[1] : null
 
       // Handle position response
       if (!positionResult) {
-        logger.error('Position result is undefined', { userId }, 'ComingSoon');
-        return false;
+        logger.error('Position result is undefined', { userId }, 'ComingSoon')
+        return false
       }
 
       if (positionResult.status === 'fulfilled') {
-        const positionResponse = positionResult.value;
+        const positionResponse = positionResult.value
         if (!positionResponse.ok) {
-          const errorText = await positionResponse.text();
+          const errorText = await positionResponse.text()
           logger.error(
             'Failed to fetch waitlist position',
             {
@@ -641,17 +621,17 @@ export function ComingSoon() {
               status: positionResponse.status,
               errorText,
             },
-            'ComingSoon'
-          );
+            'ComingSoon',
+          )
           // User might not be on waitlist yet
-          return false;
+          return false
         }
 
-        const data = await positionResponse.json();
+        const data = await positionResponse.json()
 
         // Check if user is actually on waitlist (API returns { position: null } if not)
         if (data.position === null) {
-          return false;
+          return false
         }
 
         // Verify points calculation consistency
@@ -659,8 +639,8 @@ export function ComingSoon() {
           (data.pointsBreakdown?.base ?? 0) +
           (data.pointsBreakdown?.invite ?? 0) +
           (data.pointsBreakdown?.earned ?? 0) +
-          (data.pointsBreakdown?.bonus ?? 0);
-        const reportedTotal = data.points ?? 0;
+          (data.pointsBreakdown?.bonus ?? 0)
+        const reportedTotal = data.points ?? 0
 
         // Log warning if points don't match (but don't block - might be base points)
         if (Math.abs(calculatedTotal - reportedTotal) > 100) {
@@ -672,8 +652,8 @@ export function ComingSoon() {
               reportedTotal,
               breakdown: data.pointsBreakdown,
             },
-            'ComingSoon'
-          );
+            'ComingSoon',
+          )
         }
 
         // Log if invite code is missing for debugging
@@ -681,18 +661,18 @@ export function ComingSoon() {
           logger.warn(
             'Invite code missing in waitlist data',
             { userId },
-            'ComingSoon'
-          );
+            'ComingSoon',
+          )
         }
 
         // Check if rank improved
         if (previousRank !== null && data.leaderboardRank < previousRank) {
-          setShowRankImprovement(true);
-          setTimeout(() => setShowRankImprovement(false), 5000);
+          setShowRankImprovement(true)
+          setTimeout(() => setShowRankImprovement(false), 5000)
         }
-        setPreviousRank(data.leaderboardRank);
+        setPreviousRank(data.leaderboardRank)
 
-        setWaitlistData(data);
+        setWaitlistData(data)
       } else {
         logger.error(
           'Failed to fetch waitlist position (network error)',
@@ -703,29 +683,29 @@ export function ComingSoon() {
                 ? positionResult.reason.message
                 : String(positionResult.reason),
           },
-          'ComingSoon'
-        );
-        return false;
+          'ComingSoon',
+        )
+        return false
       }
 
       // Handle leaderboard response (non-blocking - don't fail if this fails)
       if (leaderboardResult && leaderboardResult.status === 'fulfilled') {
-        const leaderboardResponse = leaderboardResult.value;
+        const leaderboardResponse = leaderboardResult.value
         if (leaderboardResponse.ok) {
-          const leaderboardData = await leaderboardResponse.json();
-          setTopUsers(leaderboardData.leaderboard ?? []);
-          setLeaderboardTotalPages(leaderboardData.totalPages ?? 10);
-          setLeaderboardLastFetched(now);
+          const leaderboardData = await leaderboardResponse.json()
+          setTopUsers(leaderboardData.leaderboard ?? [])
+          setLeaderboardTotalPages(leaderboardData.totalPages ?? 10)
+          setLeaderboardLastFetched(now)
           // Reset to first page when leaderboard updates
-          setLeaderboardPage(1);
+          setLeaderboardPage(1)
         } else {
           logger.warn(
             'Failed to fetch leaderboard',
             {
               status: leaderboardResponse.status,
             },
-            'ComingSoon'
-          );
+            'ComingSoon',
+          )
         }
       } else if (leaderboardResult && leaderboardResult.status === 'rejected') {
         // Leaderboard fetch failed - log but don't block
@@ -737,11 +717,11 @@ export function ComingSoon() {
                 ? leaderboardResult.reason.message
                 : String(leaderboardResult.reason),
           },
-          'ComingSoon'
-        );
+          'ComingSoon',
+        )
       }
 
-      return true;
+      return true
     },
     [
       leaderboardLastFetched,
@@ -749,8 +729,8 @@ export function ComingSoon() {
       getAccessToken,
       previousRank,
       getPointsTypeForTab,
-    ]
-  );
+    ],
+  )
 
   const awardWalletBonus = useCallback(
     async (userId: string, walletAddress: string) => {
@@ -759,10 +739,10 @@ export function ComingSoon() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ userId, walletAddress }),
-        });
+        })
 
         if (!response.ok) {
-          const errorText = await response.text();
+          const errorText = await response.text()
           logger.error(
             'Failed to award wallet bonus',
             {
@@ -771,12 +751,12 @@ export function ComingSoon() {
               status: response.status,
               errorText,
             },
-            'ComingSoon'
-          );
-          return;
+            'ComingSoon',
+          )
+          return
         }
 
-        const result = await response.json();
+        const result = await response.json()
         logger.info(
           'Wallet bonus awarded',
           {
@@ -784,53 +764,53 @@ export function ComingSoon() {
             awarded: result.awarded,
             bonusAmount: result.bonusAmount,
           },
-          'ComingSoon'
-        );
+          'ComingSoon',
+        )
 
         // Refresh position to show updated points
-        await fetchWaitlistPosition(userId);
+        await fetchWaitlistPosition(userId)
       } catch {
         // Network error - silently fail (non-critical)
         logger.warn(
           'Network error awarding wallet bonus',
           { userId },
-          'ComingSoon'
-        );
+          'ComingSoon',
+        )
       }
     },
-    [fetchWaitlistPosition]
-  );
+    [fetchWaitlistPosition],
+  )
 
   // If user completes onboarding, mark as waitlisted and fetch position
   useEffect(() => {
-    if (!authenticated || !dbUser || !dbUser.id) return;
+    if (!authenticated || !dbUser || !dbUser.id) return
 
     // Only mark as waitlisted if user has completed profile setup (has username)
     // This ensures onboarding modal completes first
     if (!dbUser.profileComplete || !dbUser.username) {
-      return;
+      return
     }
 
     const setupWaitlist = async (userId: string) => {
       // Check if already on waitlist
-      const existingPosition = await fetchWaitlistPosition(userId);
+      const existingPosition = await fetchWaitlistPosition(userId)
       if (existingPosition) {
         // Already setup, just refresh data
         // Check if user has been awarded points for Farcaster follow
-        const token = await getAccessToken();
+        const token = await getAccessToken()
         const response = await fetch(`/api/waitlist/position`, {
           headers: token ? { Authorization: `Bearer ${token}` } : {},
-        });
+        })
 
         if (response.ok) {
           // Check points transactions to see if farcaster_follow was awarded
           // For now, we'll fetch this status when needed
         }
-        return;
+        return
       }
 
       // Mark user as waitlisted (they completed onboarding)
-      const referralCode = searchParams.get('ref') || undefined;
+      const referralCode = searchParams.get('ref') || undefined
 
       logger.info(
         'Marking user as waitlisted',
@@ -839,11 +819,11 @@ export function ComingSoon() {
           hasReferralCode: !!referralCode,
           referralCode,
         },
-        'ComingSoon'
-      );
+        'ComingSoon',
+      )
 
       // Get access token for authentication
-      const token = await getAccessToken();
+      const token = await getAccessToken()
       const response = await fetch('/api/waitlist/mark', {
         method: 'POST',
         headers: {
@@ -854,10 +834,10 @@ export function ComingSoon() {
           userId,
           referralCode,
         }),
-      });
+      })
 
       if (!response.ok) {
-        const errorText = await response.text();
+        const errorText = await response.text()
         logger.error(
           'Failed to mark as waitlisted',
           {
@@ -865,12 +845,12 @@ export function ComingSoon() {
             status: response.status,
             errorText,
           },
-          'ComingSoon'
-        );
-        return;
+          'ComingSoon',
+        )
+        return
       }
 
-      const result = await response.json();
+      const result = await response.json()
       logger.info(
         'User marked as waitlisted',
         {
@@ -880,20 +860,20 @@ export function ComingSoon() {
           points: result.points,
           referrerRewarded: result.referrerRewarded,
         },
-        'ComingSoon'
-      );
+        'ComingSoon',
+      )
 
       // Fetch position data to get complete info
-      await fetchWaitlistPosition(userId);
+      await fetchWaitlistPosition(userId)
 
       // Award bonuses if available (wallet address comes from dbUser now)
-      const walletAddress = dbUser?.walletAddress;
+      const walletAddress = dbUser?.walletAddress
       if (walletAddress) {
-        await awardWalletBonus(userId, walletAddress);
+        await awardWalletBonus(userId, walletAddress)
       }
-    };
+    }
 
-    void setupWaitlist(dbUser.id);
+    void setupWaitlist(dbUser.id)
   }, [
     authenticated,
     dbUser?.id,
@@ -905,114 +885,114 @@ export function ComingSoon() {
     getAccessToken,
     fetchWaitlistPosition,
     awardWalletBonus,
-  ]);
+  ])
 
   // Award wallet bonus when user connects wallet
   // This runs separately from setupWaitlist to catch cases where user connects wallet after joining waitlist
   useEffect(() => {
-    if (!authenticated || !dbUser?.id) return;
+    if (!authenticated || !dbUser?.id) return
 
     const checkAndAwardWalletBonus = async () => {
       // Check for wallet bonus
-      const walletAddress = dbUser?.walletAddress;
+      const walletAddress = dbUser?.walletAddress
       if (walletAddress) {
-        await awardWalletBonus(dbUser.id, walletAddress);
+        await awardWalletBonus(dbUser.id, walletAddress)
       }
-    };
+    }
 
     // Small delay to ensure dbUser state is stable
     const timeoutId = setTimeout(() => {
-      void checkAndAwardWalletBonus();
-    }, 500);
+      void checkAndAwardWalletBonus()
+    }, 500)
 
-    return () => clearTimeout(timeoutId);
-  }, [authenticated, dbUser?.id, dbUser?.walletAddress, awardWalletBonus]);
+    return () => clearTimeout(timeoutId)
+  }, [authenticated, dbUser?.id, dbUser?.walletAddress, awardWalletBonus])
 
   // Periodically refresh waitlist position to show real-time updates
   // (e.g., when others get referrals and user's rank changes)
   // Skip leaderboard on polls to save bandwidth - it's fetched separately
   useEffect(() => {
-    if (!authenticated || !dbUser?.id || !waitlistData) return;
+    if (!authenticated || !dbUser?.id || !waitlistData) return
 
     const refreshInterval = setInterval(() => {
-      void fetchWaitlistPosition(dbUser.id, true); // Skip leaderboard on polls
-    }, 30000); // Refresh every 30 seconds
+      void fetchWaitlistPosition(dbUser.id, true) // Skip leaderboard on polls
+    }, 30000) // Refresh every 30 seconds
 
-    return () => clearInterval(refreshInterval);
-  }, [authenticated, dbUser?.id, waitlistData, fetchWaitlistPosition]);
+    return () => clearInterval(refreshInterval)
+  }, [authenticated, dbUser?.id, waitlistData, fetchWaitlistPosition])
 
   // Fetch leaderboard for a specific page
   const fetchLeaderboardPage = async (
     page: number,
-    tab: 'leaderboard' | 'inviters' = leaderboardTab
+    tab: 'leaderboard' | 'inviters' = leaderboardTab,
   ) => {
     try {
-      const pointsType = getPointsTypeForTab(tab);
+      const pointsType = getPointsTypeForTab(tab)
       const response = await fetch(
-        `/api/waitlist/leaderboard?page=${page}&limit=10&pointsType=${pointsType}`
-      );
+        `/api/waitlist/leaderboard?page=${page}&limit=10&pointsType=${pointsType}`,
+      )
       if (!response.ok) {
         logger.warn(
           'Failed to fetch leaderboard page',
           { page, status: response.status },
-          'ComingSoon'
-        );
-        return false;
+          'ComingSoon',
+        )
+        return false
       }
 
-      const data = await response.json();
-      setTopUsers(data.leaderboard ?? []);
-      setLeaderboardTotalPages(data.totalPages ?? 10);
-      setLeaderboardLastFetched(Date.now());
-      return true;
+      const data = await response.json()
+      setTopUsers(data.leaderboard ?? [])
+      setLeaderboardTotalPages(data.totalPages ?? 10)
+      setLeaderboardLastFetched(Date.now())
+      return true
     } catch {
       // Network error - silently fail
-      return false;
+      return false
     }
-  };
+  }
 
   const handleCopyInviteCode = useCallback(() => {
     if (waitlistData?.inviteCode) {
-      const inviteUrl = getReferralUrl(waitlistData.inviteCode);
-      navigator.clipboard.writeText(inviteUrl);
-      setCopiedCode(true);
-      setTimeout(() => setCopiedCode(false), 2000);
+      const inviteUrl = getReferralUrl(waitlistData.inviteCode)
+      navigator.clipboard.writeText(inviteUrl)
+      setCopiedCode(true)
+      setTimeout(() => setCopiedCode(false), 2000)
     }
-  }, [waitlistData]);
+  }, [waitlistData])
 
   const handleSaveProfile = async () => {
-    if (!dbUser?.id) return;
+    if (!dbUser?.id) return
 
     // Validate and trim values
-    const trimmedUsername = profileForm.username?.trim();
-    const trimmedDisplayName = profileForm.displayName?.trim();
-    const trimmedBio = profileForm.bio?.trim();
+    const trimmedUsername = profileForm.username?.trim()
+    const trimmedDisplayName = profileForm.displayName?.trim()
+    const trimmedBio = profileForm.bio?.trim()
 
     // Use uploaded image or current form value
     const profileImageUrl =
       uploadedProfileImage ||
       profileForm.profileImageUrl?.trim() ||
-      `/assets/user-profiles/profile-${profilePictureIndex}.jpg`;
+      `/assets/user-profiles/profile-${profilePictureIndex}.jpg`
     const coverImageUrl =
       uploadedBanner ||
       profileForm.coverImageUrl?.trim() ||
-      `/assets/user-banners/banner-${bannerIndex}.jpg`;
+      `/assets/user-banners/banner-${bannerIndex}.jpg`
 
     if (!trimmedUsername || !trimmedDisplayName) {
-      toast.error('Please fill in all required fields.');
-      return;
+      toast.error('Please fill in all required fields.')
+      return
     }
 
     // Check username validation
     if (usernameStatus === 'taken') {
-      toast.error('Username is already taken. Please choose another.');
-      return;
+      toast.error('Username is already taken. Please choose another.')
+      return
     }
 
-    setIsSavingProfile(true);
+    setIsSavingProfile(true)
 
     try {
-      const token = await getAccessToken();
+      const token = await getAccessToken()
       const response = await fetch(
         `/api/users/${encodeURIComponent(dbUser.id)}/update-profile`,
         {
@@ -1028,15 +1008,15 @@ export function ComingSoon() {
             profileImageUrl,
             coverImageUrl,
           }),
-        }
-      );
+        },
+      )
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
+        const errorData = await response.json().catch(() => ({}))
         const errorMessage =
           errorData?.error?.message ||
           errorData?.message ||
-          'Failed to update profile';
+          'Failed to update profile'
         logger.error(
           'Failed to update profile',
           {
@@ -1044,28 +1024,28 @@ export function ComingSoon() {
             status: response.status,
             error: errorMessage,
           },
-          'ComingSoon'
-        );
-        toast.error(errorMessage);
-        return;
+          'ComingSoon',
+        )
+        toast.error(errorMessage)
+        return
       }
 
-      await refresh();
-      await fetchWaitlistPosition(dbUser.id);
-      setShowProfileModal(false);
-      toast.success('Profile updated successfully!');
+      await refresh()
+      await fetchWaitlistPosition(dbUser.id)
+      setShowProfileModal(false)
+      toast.success('Profile updated successfully!')
     } catch {
-      toast.error('Network error. Please try again.');
+      toast.error('Network error. Please try again.')
     } finally {
-      setIsSavingProfile(false);
+      setIsSavingProfile(false)
     }
-  };
+  }
 
   // Sync profile form with dbUser when modal opens (only on modal open, not on dbUser changes)
   useEffect(() => {
     if (showProfileModal) {
       // Only sync when modal transitions from closed to open
-      const wasClosed = !prevShowProfileModalRef.current;
+      const wasClosed = !prevShowProfileModalRef.current
       if (wasClosed && dbUser) {
         setProfileForm({
           username: dbUser.username || '',
@@ -1073,125 +1053,125 @@ export function ComingSoon() {
           bio: dbUser.bio || '',
           profileImageUrl: dbUser.profileImageUrl || '',
           coverImageUrl: dbUser.coverImageUrl || '',
-        });
+        })
         // Reset upload states
-        setUploadedProfileImage(null);
-        setUploadedBanner(null);
+        setUploadedProfileImage(null)
+        setUploadedBanner(null)
         // Reset username validation
-        setUsernameStatus(null);
-        setUsernameSuggestion(null);
+        setUsernameStatus(null)
+        setUsernameSuggestion(null)
       }
-      prevShowProfileModalRef.current = true;
+      prevShowProfileModalRef.current = true
     } else {
-      prevShowProfileModalRef.current = false;
+      prevShowProfileModalRef.current = false
     }
-  }, [showProfileModal, dbUser]);
+  }, [showProfileModal, dbUser])
 
   // Real-time username validation
   useEffect(() => {
-    if (!showProfileModal) return;
+    if (!showProfileModal) return
 
-    const username = profileForm.username?.trim();
+    const username = profileForm.username?.trim()
 
     // Don't check if username is empty or too short
     if (!username || username.length < 3) {
-      setUsernameStatus(null);
-      setUsernameSuggestion(null);
-      return;
+      setUsernameStatus(null)
+      setUsernameSuggestion(null)
+      return
     }
 
     // Don't check if username hasn't changed from original
     if (username === dbUser?.username) {
-      setUsernameStatus('available');
-      setUsernameSuggestion(null);
-      return;
+      setUsernameStatus('available')
+      setUsernameSuggestion(null)
+      return
     }
 
-    let cancelled = false;
+    let cancelled = false
 
     const checkUsername = async () => {
-      setIsCheckingUsername(true);
+      setIsCheckingUsername(true)
 
       const response = await fetch(
-        `/api/onboarding/check-username?username=${encodeURIComponent(username)}`
-      );
+        `/api/onboarding/check-username?username=${encodeURIComponent(username)}`,
+      )
 
       if (!cancelled && response.ok) {
-        const result = await response.json();
-        setUsernameStatus(result.available ? 'available' : 'taken');
+        const result = await response.json()
+        setUsernameStatus(result.available ? 'available' : 'taken')
         setUsernameSuggestion(
-          result.available ? null : result.suggestion || null
-        );
+          result.available ? null : result.suggestion || null,
+        )
       }
       if (!cancelled) {
-        setIsCheckingUsername(false);
+        setIsCheckingUsername(false)
       }
-    };
+    }
 
     const timeoutId = setTimeout(() => {
-      void checkUsername();
-    }, 500); // Debounce 500ms
+      void checkUsername()
+    }, 500) // Debounce 500ms
 
     return () => {
-      cancelled = true;
-      clearTimeout(timeoutId);
-    };
-  }, [profileForm.username, showProfileModal, dbUser?.username]);
+      cancelled = true
+      clearTimeout(timeoutId)
+    }
+  }, [profileForm.username, showProfileModal, dbUser?.username])
 
   // Image cycling and upload handlers
   const cycleProfilePicture = (direction: 'next' | 'prev') => {
-    setUploadedProfileImage(null);
+    setUploadedProfileImage(null)
     setProfilePictureIndex((prev) => {
       if (direction === 'next') {
-        return prev >= TOTAL_PROFILE_PICTURES ? 1 : prev + 1;
+        return prev >= TOTAL_PROFILE_PICTURES ? 1 : prev + 1
       }
-      return prev <= 1 ? TOTAL_PROFILE_PICTURES : prev - 1;
-    });
-  };
+      return prev <= 1 ? TOTAL_PROFILE_PICTURES : prev - 1
+    })
+  }
 
   const cycleBanner = (direction: 'next' | 'prev') => {
-    setUploadedBanner(null);
+    setUploadedBanner(null)
     setBannerIndex((prev) => {
       if (direction === 'next') {
-        return prev >= TOTAL_BANNERS ? 1 : prev + 1;
+        return prev >= TOTAL_BANNERS ? 1 : prev + 1
       }
-      return prev <= 1 ? TOTAL_BANNERS : prev - 1;
-    });
-  };
+      return prev <= 1 ? TOTAL_BANNERS : prev - 1
+    })
+  }
 
   const handleProfileImageUpload = (
-    event: React.ChangeEvent<HTMLInputElement>
+    event: React.ChangeEvent<HTMLInputElement>,
   ) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
+    const file = event.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
     reader.onloadend = () => {
-      setUploadedProfileImage(reader.result as string);
-      setProfileForm((prev) => ({ ...prev, profileImageUrl: '' }));
-    };
-    reader.readAsDataURL(file);
-  };
+      setUploadedProfileImage(reader.result as string)
+      setProfileForm((prev) => ({ ...prev, profileImageUrl: '' }))
+    }
+    reader.readAsDataURL(file)
+  }
 
   const handleBannerUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
+    const file = event.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
     reader.onloadend = () => {
-      setUploadedBanner(reader.result as string);
-      setProfileForm((prev) => ({ ...prev, coverImageUrl: '' }));
-    };
-    reader.readAsDataURL(file);
-  };
+      setUploadedBanner(reader.result as string)
+      setProfileForm((prev) => ({ ...prev, coverImageUrl: '' }))
+    }
+    reader.readAsDataURL(file)
+  }
 
   const handleJoinWaitlist = () => {
     // Trigger OAuth3 login with waitlist context
     // After login, OnboardingProvider will handle profile setup
     // Then we'll mark as waitlisted in the useEffect above
-    const currentUrl = new URL(window.location.href);
-    currentUrl.searchParams.set('waitlist', 'true');
-    router.push(currentUrl.pathname + currentUrl.search, { scroll: false });
-    loginWithWallet();
-  };
+    const currentUrl = new URL(window.location.href)
+    currentUrl.searchParams.set('waitlist', 'true')
+    router.push(currentUrl.pathname + currentUrl.search)
+    loginWithWallet()
+  }
 
   // Unauthenticated state - Show landing page
   if (!authenticated || !dbUser) {
@@ -1261,6 +1241,7 @@ export function ComingSoon() {
             {/* Join Waitlist Button */}
             <div className="animation-delay-200 relative z-20 mb-8 animate-fadeIn px-4 sm:mb-16">
               <button
+                type="button"
                 onClick={handleJoinWaitlist}
                 className="group relative w-full skew-x-[-10deg] overflow-hidden rounded-none bg-primary px-10 py-5 font-bold text-primary-foreground text-xl shadow-[0_0_20px_rgba(var(--primary),0.4)] transition-all duration-300 hover:-translate-y-1 hover:bg-primary/90 hover:shadow-[0_0_40px_rgba(var(--primary),0.6)] disabled:opacity-50 sm:w-auto sm:px-12 sm:py-6 sm:text-2xl"
               >
@@ -1806,6 +1787,7 @@ export function ComingSoon() {
               <div className="mb-10 grid grid-cols-1 gap-4 sm:mb-12 sm:grid-cols-2 sm:gap-6 md:mb-16 md:gap-8 lg:grid-cols-4">
                 {/* Join Waitlist */}
                 <button
+                  type="button"
                   onClick={handleJoinWaitlist}
                   className="group touch-manipulation rounded-none border border-primary/20 bg-primary p-6 text-center shadow-[0_0_20px_rgba(var(--primary),0.2)] backdrop-blur-md transition-all duration-300 hover:bg-primary/90 hover:shadow-[0_0_40px_rgba(var(--primary),0.4)] active:scale-95 disabled:opacity-50 sm:p-8 md:p-10"
                 >
@@ -1962,12 +1944,13 @@ export function ComingSoon() {
                   >
                     Farcaster
                   </a>
-                  <a
-                    href="#"
+                  <button
+                    type="button"
                     className="touch-manipulation opacity-60 transition-colors duration-200 hover:text-primary"
+                    aria-label="Telegram (coming soon)"
                   >
                     Telegram
-                  </a>
+                  </button>
                   <a
                     href="https://t.me/+JDu3deg56Ok2NWVh"
                     target="_blank"
@@ -2085,18 +2068,20 @@ export function ComingSoon() {
                     Legal
                   </h3>
                   <nav className="flex flex-col gap-2 text-muted-foreground text-sm sm:gap-3">
-                    <a
-                      href="#"
-                      className="touch-manipulation opacity-60 transition-colors duration-200 hover:text-primary"
+                    <button
+                      type="button"
+                      className="touch-manipulation opacity-60 transition-colors duration-200 hover:text-primary text-left"
+                      aria-label="Privacy Policy (coming soon)"
                     >
                       Privacy Policy
-                    </a>
-                    <a
-                      href="#"
-                      className="touch-manipulation opacity-60 transition-colors duration-200 hover:text-primary"
+                    </button>
+                    <button
+                      type="button"
+                      className="touch-manipulation opacity-60 transition-colors duration-200 hover:text-primary text-left"
+                      aria-label="Terms of Service (coming soon)"
                     >
                       Terms of Service
-                    </a>
+                    </button>
                   </nav>
                 </div>
               </div>
@@ -2154,7 +2139,7 @@ export function ComingSoon() {
           }
         `}</style>
       </div>
-    );
+    )
   }
 
   // Loading waitlist data
@@ -2168,7 +2153,7 @@ export function ComingSoon() {
           </p>
         </div>
       </div>
-    );
+    )
   }
 
   // Authenticated & waitlisted - Show position and leaderboard
@@ -2219,6 +2204,7 @@ export function ComingSoon() {
               {/* Profile Dropdown */}
               <div className="relative shrink-0" ref={profileDropdownRef}>
                 <button
+                  type="button"
                   onClick={() => setShowProfileDropdown(!showProfileDropdown)}
                   className="flex min-h-[48px] items-center gap-3 rounded-lg border border-border/50 bg-background/30 px-4 py-2 backdrop-blur-sm transition-all duration-200 hover:border-primary/30 hover:bg-background/40"
                 >
@@ -2257,9 +2243,10 @@ export function ComingSoon() {
                     <div className="p-2">
                       {/* Edit Profile */}
                       <button
+                        type="button"
                         onClick={() => {
-                          setShowProfileModal(true);
-                          setShowProfileDropdown(false);
+                          setShowProfileModal(true)
+                          setShowProfileDropdown(false)
                         }}
                         className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition-colors hover:bg-muted"
                       >
@@ -2279,9 +2266,10 @@ export function ComingSoon() {
 
                       {/* Sign Out */}
                       <button
+                        type="button"
                         onClick={() => {
-                          logout();
-                          setShowProfileDropdown(false);
+                          logout()
+                          setShowProfileDropdown(false)
                         }}
                         className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-red-500 transition-colors hover:bg-red-500/10"
                       >
@@ -2413,6 +2401,7 @@ export function ComingSoon() {
                   <>
                     <div className="mb-4 flex items-center gap-1 border-border/50 border-b">
                       <button
+                        type="button"
                         onClick={() => setReferralTab('qualified')}
                         className={`relative px-4 py-2 font-semibold text-sm transition-colors ${
                           referralTab === 'qualified'
@@ -2427,6 +2416,7 @@ export function ComingSoon() {
                       </button>
 
                       <button
+                        type="button"
                         onClick={() => setReferralTab('pending')}
                         className={`relative px-4 py-2 font-semibold text-sm transition-colors ${
                           referralTab === 'pending'
@@ -2450,8 +2440,8 @@ export function ComingSoon() {
                           waitlistData.invitedUsers.length > 0 ? (
                             waitlistData.invitedUsers.map((user) => {
                               const displayName =
-                                getReferralUserDisplayName(user);
-                              const subtitle = getReferralUserSubtitle(user);
+                                getReferralUserDisplayName(user)
+                              const subtitle = getReferralUserSubtitle(user)
 
                               return (
                                 <div
@@ -2480,7 +2470,7 @@ export function ComingSoon() {
                                     <p className="mt-0.5 text-muted-foreground text-xs">
                                       Signed up{' '}
                                       {new Date(
-                                        user.createdAt
+                                        user.createdAt,
                                       ).toLocaleDateString()}
                                     </p>
                                   </div>
@@ -2492,7 +2482,7 @@ export function ComingSoon() {
                                     </span>
                                   </div>
                                 </div>
-                              );
+                              )
                             })
                           ) : (
                             <div className="py-8 text-center text-muted-foreground text-sm">
@@ -2509,8 +2499,8 @@ export function ComingSoon() {
                           waitlistData.qualifiedUsers.length > 0 ? (
                             waitlistData.qualifiedUsers.map((user) => {
                               const displayName =
-                                getReferralUserDisplayName(user);
-                              const subtitle = getReferralUserSubtitle(user);
+                                getReferralUserDisplayName(user)
+                              const subtitle = getReferralUserSubtitle(user)
 
                               return (
                                 <div
@@ -2538,12 +2528,12 @@ export function ComingSoon() {
                                     )}
                                     <p className="mt-0.5 text-muted-foreground text-xs">
                                       {new Date(
-                                        user.completedAt || user.createdAt
+                                        user.completedAt || user.createdAt,
                                       ).toLocaleDateString()}
                                     </p>
                                   </div>
                                 </div>
-                              );
+                              )
                             })
                           ) : (
                             <div className="py-8 text-center text-muted-foreground text-sm">
@@ -2595,6 +2585,7 @@ export function ComingSoon() {
                       {getReferralUrl(waitlistData.inviteCode)}
                     </div>
                     <button
+                      type="button"
                       onClick={handleCopyInviteCode}
                       className="flex min-h-[36px] shrink-0 touch-manipulation items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 font-semibold text-primary-foreground text-sm transition-all duration-200 hover:bg-primary/90 active:scale-95 sm:min-h-[40px]"
                     >
@@ -2627,14 +2618,14 @@ export function ComingSoon() {
                   {/* Profile Completion */}
                   {(() => {
                     // Check if profile is complete AND if they already received the points
-                    const isProfileComplete = dbUser?.profileComplete;
+                    const isProfileComplete = dbUser?.profileComplete
                     return !isProfileComplete ? (
                       <button
                         type="button"
                         onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          setShowProfileModal(true);
+                          e.preventDefault()
+                          e.stopPropagation()
+                          setShowProfileModal(true)
                         }}
                         className="flex min-h-[48px] w-full cursor-pointer touch-manipulation items-center justify-between rounded-lg border border-border bg-background/50 p-3 transition-all duration-200 hover:border-primary/30 hover:bg-background active:scale-[0.98] sm:p-4"
                       >
@@ -2660,7 +2651,7 @@ export function ComingSoon() {
                           +{POINTS.PROFILE_COMPLETION}
                         </span>
                       </div>
-                    );
+                    )
                   })()}
 
                   {/* Twitter/X Link */}
@@ -2668,9 +2659,9 @@ export function ComingSoon() {
                     <button
                       type="button"
                       onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        handleTwitterOAuth();
+                        e.preventDefault()
+                        e.stopPropagation()
+                        handleTwitterOAuth()
                       }}
                       className="flex min-h-[48px] w-full cursor-pointer touch-manipulation items-center justify-between rounded-lg border border-border bg-background/50 p-3 transition-all duration-200 hover:border-primary/30 hover:bg-background active:scale-[0.98] sm:p-4"
                     >
@@ -2705,14 +2696,14 @@ export function ComingSoon() {
                       <button
                         type="button"
                         onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
+                          e.preventDefault()
+                          e.stopPropagation()
                           if (dbUser?.hasTwitter) {
-                            handleTwitterFollow();
+                            handleTwitterFollow()
                           } else {
                             toast.error(
-                              'Please link your Twitter account first'
-                            );
+                              'Please link your Twitter account first',
+                            )
                           }
                         }}
                         disabled={!dbUser?.hasTwitter}
@@ -2741,9 +2732,9 @@ export function ComingSoon() {
                           <button
                             type="button"
                             onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              handleVerifyTwitterFollow();
+                              e.preventDefault()
+                              e.stopPropagation()
+                              handleVerifyTwitterFollow()
                             }}
                             disabled={isVerifyingTwitterFollow}
                             className="flex min-h-[44px] flex-1 touch-manipulation items-center justify-center gap-2 rounded-lg bg-primary p-3 font-semibold text-primary-foreground transition-all duration-200 hover:bg-primary/90 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
@@ -2758,9 +2749,9 @@ export function ComingSoon() {
                           <button
                             type="button"
                             onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              setShowVerifyTwitterFollowButton(false);
+                              e.preventDefault()
+                              e.stopPropagation()
+                              setShowVerifyTwitterFollowButton(false)
                             }}
                             disabled={isVerifyingTwitterFollow}
                             className="touch-manipulation rounded-lg border border-border bg-background/50 px-4 transition-all duration-200 hover:bg-background disabled:cursor-not-allowed disabled:opacity-50"
@@ -2791,9 +2782,9 @@ export function ComingSoon() {
                     <button
                       type="button"
                       onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        handleDiscordOAuth();
+                        e.preventDefault()
+                        e.stopPropagation()
+                        handleDiscordOAuth()
                       }}
                       className="flex min-h-[48px] w-full cursor-pointer touch-manipulation items-center justify-between rounded-lg border border-border bg-background/50 p-3 transition-all duration-200 hover:border-primary/30 hover:bg-background active:scale-[0.98] sm:p-4"
                     >
@@ -2828,14 +2819,14 @@ export function ComingSoon() {
                       <button
                         type="button"
                         onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
+                          e.preventDefault()
+                          e.stopPropagation()
                           if (dbUser?.hasDiscord) {
-                            handleDiscordJoin();
+                            handleDiscordJoin()
                           } else {
                             toast.error(
-                              'Please link your Discord account first'
-                            );
+                              'Please link your Discord account first',
+                            )
                           }
                         }}
                         disabled={!dbUser?.hasDiscord}
@@ -2864,9 +2855,9 @@ export function ComingSoon() {
                           <button
                             type="button"
                             onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              handleVerifyDiscordJoin();
+                              e.preventDefault()
+                              e.stopPropagation()
+                              handleVerifyDiscordJoin()
                             }}
                             disabled={isVerifyingDiscordJoin}
                             className="flex min-h-[44px] flex-1 touch-manipulation items-center justify-center gap-2 rounded-lg bg-primary p-3 font-semibold text-primary-foreground transition-all duration-200 hover:bg-primary/90 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
@@ -2881,9 +2872,9 @@ export function ComingSoon() {
                           <button
                             type="button"
                             onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              setShowVerifyDiscordJoinButton(false);
+                              e.preventDefault()
+                              e.stopPropagation()
+                              setShowVerifyDiscordJoinButton(false)
                             }}
                             disabled={isVerifyingDiscordJoin}
                             className="touch-manipulation rounded-lg border border-border bg-background/50 px-4 transition-all duration-200 hover:bg-background disabled:cursor-not-allowed disabled:opacity-50"
@@ -2914,9 +2905,9 @@ export function ComingSoon() {
                     <button
                       type="button"
                       onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        handleFarcasterOAuth();
+                        e.preventDefault()
+                        e.stopPropagation()
+                        handleFarcasterOAuth()
                       }}
                       className="flex min-h-[48px] w-full cursor-pointer touch-manipulation items-center justify-between rounded-lg border border-border bg-background/50 p-3 transition-all duration-200 hover:border-primary/30 hover:bg-background active:scale-[0.98] sm:p-4"
                     >
@@ -2951,14 +2942,14 @@ export function ComingSoon() {
                       <button
                         type="button"
                         onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
+                          e.preventDefault()
+                          e.stopPropagation()
                           if (dbUser?.hasFarcaster) {
-                            handleFarcasterFollow();
+                            handleFarcasterFollow()
                           } else {
                             toast.error(
-                              'Please link your Farcaster account first'
-                            );
+                              'Please link your Farcaster account first',
+                            )
                           }
                         }}
                         disabled={!dbUser?.hasFarcaster}
@@ -2987,9 +2978,9 @@ export function ComingSoon() {
                           <button
                             type="button"
                             onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              handleVerifyFollow();
+                              e.preventDefault()
+                              e.stopPropagation()
+                              handleVerifyFollow()
                             }}
                             disabled={isVerifyingFollow}
                             className="flex min-h-[44px] flex-1 touch-manipulation items-center justify-center gap-2 rounded-lg bg-primary p-3 font-semibold text-primary-foreground transition-all duration-200 hover:bg-primary/90 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
@@ -3004,9 +2995,9 @@ export function ComingSoon() {
                           <button
                             type="button"
                             onClick={(e) => {
-                              e.preventDefault();
-                              e.stopPropagation();
-                              setShowVerifyFollowButton(false);
+                              e.preventDefault()
+                              e.stopPropagation()
+                              setShowVerifyFollowButton(false)
                             }}
                             disabled={isVerifyingFollow}
                             className="touch-manipulation rounded-lg border border-border bg-background/50 px-4 transition-all duration-200 hover:bg-background disabled:cursor-not-allowed disabled:opacity-50"
@@ -3035,6 +3026,7 @@ export function ComingSoon() {
                   {/* Wallet Connect */}
                   {!dbUser?.walletAddress && (
                     <button
+                      type="button"
                       onClick={loginWithWallet}
                       className="flex min-h-[48px] w-full touch-manipulation items-center justify-between rounded-lg border border-border bg-background/50 p-3 transition-all duration-200 hover:border-primary/30 hover:bg-background active:scale-[0.98] sm:p-4"
                     >
@@ -3070,11 +3062,11 @@ export function ComingSoon() {
             {topUsers.length > 0 &&
               (() => {
                 // Users are already sorted and ranked by the API
-                const displayUsers = topUsers;
-                const totalPages = leaderboardTotalPages;
+                const displayUsers = topUsers
+                const totalPages = leaderboardTotalPages
                 const currentUserInPage = displayUsers.some(
-                  (u) => u.id === dbUser.id
-                );
+                  (u) => u.id === dbUser.id,
+                )
 
                 return (
                   <div className="lg:col-span-3">
@@ -3082,10 +3074,11 @@ export function ComingSoon() {
                       {/* Tab Navigation */}
                       <div className="mb-6 flex items-center gap-1 border-border/50 border-b">
                         <button
+                          type="button"
                           onClick={() => {
-                            setLeaderboardTab('leaderboard');
-                            setLeaderboardPage(1);
-                            void fetchLeaderboardPage(1, 'leaderboard');
+                            setLeaderboardTab('leaderboard')
+                            setLeaderboardPage(1)
+                            void fetchLeaderboardPage(1, 'leaderboard')
                           }}
                           className={`relative px-4 py-3 font-semibold text-sm transition-colors ${
                             leaderboardTab === 'leaderboard'
@@ -3099,10 +3092,11 @@ export function ComingSoon() {
                           )}
                         </button>
                         <button
+                          type="button"
                           onClick={() => {
-                            setLeaderboardTab('inviters');
-                            setLeaderboardPage(1);
-                            void fetchLeaderboardPage(1, 'inviters');
+                            setLeaderboardTab('inviters')
+                            setLeaderboardPage(1)
+                            void fetchLeaderboardPage(1, 'inviters')
                           }}
                           className={`relative px-4 py-3 font-semibold text-sm transition-colors ${
                             leaderboardTab === 'inviters'
@@ -3123,13 +3117,21 @@ export function ComingSoon() {
                       {/* Leaderboard List */}
                       <div className="mb-6 space-y-3">
                         {displayUsers.map((topUser) => {
-                          const isCurrentUser = topUser.id === dbUser.id;
+                          const isCurrentUser = topUser.id === dbUser.id
                           return (
-                            <div
+                            <button
+                              type="button"
                               key={topUser.id || `user-${topUser.rank}`}
                               onClick={() => {
-                                setSelectedUserId(topUser.id);
-                                setShowPlayerStatsModal(true);
+                                setSelectedUserId(topUser.id)
+                                setShowPlayerStatsModal(true)
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter' || e.key === ' ') {
+                                  e.preventDefault()
+                                  setSelectedUserId(topUser.id)
+                                  setShowPlayerStatsModal(true)
+                                }
                               }}
                               className={`flex cursor-pointer items-center justify-between rounded-xl border p-4 transition-colors lg:p-5 ${
                                 isCurrentUser
@@ -3191,8 +3193,8 @@ export function ComingSoon() {
                                     : 'invite pts'}
                                 </div>
                               </div>
-                            </div>
-                          );
+                            </button>
+                          )
                         })}
                       </div>
 
@@ -3202,11 +3204,11 @@ export function ComingSoon() {
                         waitlistData.leaderboardRank > 0 &&
                         (() => {
                           // Use waitlistData for current user's rank and points
-                          const userRank = waitlistData.leaderboardRank;
+                          const userRank = waitlistData.leaderboardRank
                           const reputationPoints =
-                            waitlistData.pointsBreakdown?.total ?? 0;
+                            waitlistData.pointsBreakdown?.total ?? 0
                           const invitePoints =
-                            waitlistData.pointsBreakdown?.invite ?? 0;
+                            waitlistData.pointsBreakdown?.invite ?? 0
                           return (
                             <div className="mb-6 border-border/50 border-t pt-4">
                               <div className="flex items-center justify-between rounded-xl border border-primary bg-primary/20 p-4 shadow-md lg:p-5">
@@ -3244,20 +3246,18 @@ export function ComingSoon() {
                                 </div>
                               </div>
                             </div>
-                          );
+                          )
                         })()}
 
                       {/* Pagination Controls */}
                       {totalPages > 1 && (
                         <div className="flex items-center justify-between border-border/50 border-t pt-4">
                           <button
+                            type="button"
                             onClick={() => {
-                              const newPage = Math.max(1, leaderboardPage - 1);
-                              setLeaderboardPage(newPage);
-                              void fetchLeaderboardPage(
-                                newPage,
-                                leaderboardTab
-                              );
+                              const newPage = Math.max(1, leaderboardPage - 1)
+                              setLeaderboardPage(newPage)
+                              void fetchLeaderboardPage(newPage, leaderboardTab)
                             }}
                             disabled={leaderboardPage === 1}
                             className="flex min-h-[44px] touch-manipulation items-center gap-2 rounded-lg border border-border bg-background/50 px-4 py-2 font-semibold text-sm transition-all duration-200 hover:bg-background disabled:cursor-not-allowed disabled:opacity-50"
@@ -3269,16 +3269,14 @@ export function ComingSoon() {
                             Page {leaderboardPage} of {totalPages}
                           </div>
                           <button
+                            type="button"
                             onClick={() => {
                               const newPage = Math.min(
                                 totalPages,
-                                leaderboardPage + 1
-                              );
-                              setLeaderboardPage(newPage);
-                              void fetchLeaderboardPage(
-                                newPage,
-                                leaderboardTab
-                              );
+                                leaderboardPage + 1,
+                              )
+                              setLeaderboardPage(newPage)
+                              void fetchLeaderboardPage(newPage, leaderboardTab)
                             }}
                             disabled={leaderboardPage >= totalPages}
                             className="flex min-h-[44px] touch-manipulation items-center gap-2 rounded-lg border border-border bg-background/50 px-4 py-2 font-semibold text-sm transition-all duration-200 hover:bg-background disabled:cursor-not-allowed disabled:opacity-50"
@@ -3290,7 +3288,7 @@ export function ComingSoon() {
                       )}
                     </div>
                   </div>
-                );
+                )
               })()}
           </div>
         </div>
@@ -3299,15 +3297,30 @@ export function ComingSoon() {
       {/* Profile Completion Modal */}
       {showProfileModal && (
         <>
-          <div
+          <button
+            type="button"
             className="fixed inset-0 z-[100] bg-black/70 backdrop-blur-sm transition-opacity duration-300"
             onClick={() => !isSavingProfile && setShowProfileModal(false)}
+            onKeyDown={(e) => {
+              if ((e.key === 'Enter' || e.key === ' ') && !isSavingProfile) {
+                e.preventDefault()
+                setShowProfileModal(false)
+              }
+            }}
             style={{ pointerEvents: 'auto' }}
+            aria-label="Close modal"
           />
           <div className="pointer-events-none fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto p-4">
             <div
+              role="dialog"
               className="pointer-events-auto my-8 w-full max-w-2xl rounded-lg border border-border bg-background shadow-xl transition-all duration-300"
               onClick={(e) => e.stopPropagation()}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape' && !isSavingProfile) {
+                  e.preventDefault()
+                  setShowProfileModal(false)
+                }
+              }}
             >
               {/* Header */}
               <div className="flex items-center justify-between border-border border-b p-6">
@@ -3337,6 +3350,7 @@ export function ComingSoon() {
                   </div>
                 </div>
                 <button
+                  type="button"
                   onClick={() => setShowProfileModal(false)}
                   disabled={isSavingProfile}
                   className="rounded-lg p-2 transition-colors hover:bg-muted disabled:opacity-50"
@@ -3348,8 +3362,8 @@ export function ComingSoon() {
               {/* Content */}
               <form
                 onSubmit={(e) => {
-                  e.preventDefault();
-                  handleSaveProfile();
+                  e.preventDefault()
+                  handleSaveProfile()
                 }}
                 className="space-y-6 p-6"
               >
@@ -3369,9 +3383,9 @@ export function ComingSoon() {
 
                 {/* Banner Image */}
                 <div className="space-y-2">
-                  <label className="block font-medium text-sm">
+                  <div className="block font-medium text-sm">
                     Profile Banner
-                  </label>
+                  </div>
                   <div className="group relative h-40 overflow-hidden rounded-lg bg-muted">
                     <Image
                       src={
@@ -3471,10 +3485,14 @@ export function ComingSoon() {
                   <div className="flex-1 space-y-4">
                     {/* Display Name */}
                     <div className="space-y-2">
-                      <label className="block font-medium text-sm">
+                      <label
+                        htmlFor="display-name"
+                        className="block font-medium text-sm"
+                      >
                         Display Name *
                       </label>
                       <input
+                        id="display-name"
                         type="text"
                         value={profileForm.displayName}
                         onChange={(e) =>
@@ -3492,7 +3510,10 @@ export function ComingSoon() {
 
                     {/* Username */}
                     <div className="space-y-2">
-                      <label className="block font-medium text-sm">
+                      <label
+                        htmlFor="username"
+                        className="block font-medium text-sm"
+                      >
                         Username *
                       </label>
                       <div className="relative">
@@ -3500,6 +3521,7 @@ export function ComingSoon() {
                           @
                         </span>
                         <input
+                          id="username"
                           type="text"
                           value={profileForm.username}
                           onChange={(e) =>
@@ -3549,8 +3571,11 @@ export function ComingSoon() {
 
                 {/* Bio */}
                 <div className="space-y-2">
-                  <label className="block font-medium text-sm">Bio</label>
+                  <label htmlFor="bio" className="block font-medium text-sm">
+                    Bio
+                  </label>
                   <textarea
+                    id="bio"
                     value={profileForm.bio}
                     onChange={(e) =>
                       setProfileForm((prev) => ({
@@ -3582,9 +3607,9 @@ export function ComingSoon() {
                   <button
                     type="submit"
                     disabled={(() => {
-                      const username = profileForm.username?.trim() || '';
-                      const displayName = profileForm.displayName?.trim() || '';
-                      return isSavingProfile || !username || !displayName;
+                      const username = profileForm.username?.trim() || ''
+                      const displayName = profileForm.displayName?.trim() || ''
+                      return isSavingProfile || !username || !displayName
                     })()}
                     className="min-h-[44px] flex-1 rounded-lg bg-primary px-4 py-2 font-semibold text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
                   >
@@ -3605,10 +3630,10 @@ export function ComingSoon() {
       <LinkSocialAccountsModal
         isOpen={showLinkSocialModal}
         onClose={async () => {
-          setShowLinkSocialModal(false);
-          await refresh();
+          setShowLinkSocialModal(false)
+          await refresh()
           if (dbUser?.id) {
-            await fetchWaitlistPosition(dbUser.id);
+            await fetchWaitlistPosition(dbUser.id)
           }
         }}
       />
@@ -3617,8 +3642,8 @@ export function ComingSoon() {
       <PlayerStatsModal
         isOpen={showPlayerStatsModal}
         onClose={() => {
-          setShowPlayerStatsModal(false);
-          setSelectedUserId(null);
+          setShowPlayerStatsModal(false)
+          setSelectedUserId(null)
         }}
         userId={selectedUserId}
       />
@@ -3639,5 +3664,5 @@ export function ComingSoon() {
         }
       `}</style>
     </div>
-  );
+  )
 }

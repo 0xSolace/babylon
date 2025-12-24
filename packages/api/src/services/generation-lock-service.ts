@@ -10,7 +10,7 @@
  * - Database-based locking (works across multiple servers)
  * - Automatic expiry (15 minutes for stale lock recovery)
  * - Simple acquire/release pattern
- * - No external dependencies (uses Drizzle)
+ * - No external dependencies (uses CQL)
  * - Serverless-safe (uses timestamp + random bytes instead of process.pid)
  *
  * Usage:
@@ -27,14 +27,14 @@
  * ```
  */
 
-import { DistributedLockService } from '@babylon/api';
-import { randomBytes } from 'crypto';
+import { randomBytes } from 'node:crypto'
+import { acquireLock, checkLock, releaseLock } from './distributed-lock-service'
 
-const LOCK_ID = 'game-tick-lock';
-const LOCK_DURATION_MS = 15 * 60 * 1000; // 15 minutes
+const LOCK_ID = 'game-tick-lock'
+const LOCK_DURATION_MS = 15 * 60 * 1000 // 15 minutes
 
 export async function acquireGenerationLock(
-  processId?: string
+  processId?: string,
 ): Promise<boolean> {
   /**
    * If processId is not provided, we generate one here.
@@ -43,20 +43,20 @@ export async function acquireGenerationLock(
    * To maintain compatibility with the interface, we handle it here.
    */
   const lockHolder =
-    processId || `serverless-${Date.now()}-${randomBytes(8).toString('hex')}`;
+    processId || `serverless-${Date.now()}-${randomBytes(8).toString('hex')}`
 
-  return DistributedLockService.acquireLock({
+  return acquireLock({
     lockId: LOCK_ID,
     durationMs: LOCK_DURATION_MS,
     operation: 'game-tick',
     processId: lockHolder,
-  });
+  })
 }
 
 export async function releaseGenerationLock(processId?: string): Promise<void> {
-  return DistributedLockService.releaseLock(LOCK_ID, processId);
+  return releaseLock(LOCK_ID, processId)
 }
 
 export async function checkGenerationLock() {
-  return DistributedLockService.checkLock(LOCK_ID);
+  return checkLock(LOCK_ID)
 }

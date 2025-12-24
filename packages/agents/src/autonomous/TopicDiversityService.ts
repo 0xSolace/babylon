@@ -11,8 +11,8 @@
  * 4. Cooldown management - Prevent same topic spam in short windows
  */
 
-import { db, desc, gte, posts } from '@babylon/db';
-import { logger } from '../shared/logger';
+import { db, desc, gte, posts } from '@babylon/db'
+import { logger } from '../shared/logger'
 
 // =============================================================================
 // Types
@@ -20,33 +20,33 @@ import { logger } from '../shared/logger';
 
 interface TopicCoverage {
   /** Topic identifier (normalized keywords) */
-  topicKey: string;
+  topicKey: string
   /** How many times covered in current window */
-  coverageCount: number;
+  coverageCount: number
   /** Last time this topic was posted about */
-  lastPostedAt: Date;
+  lastPostedAt: Date
   /** Agent IDs who have posted about this */
-  coveredByAgents: Set<string>;
+  coveredByAgents: Set<string>
   /** Sample content for similarity checking */
-  sampleContent: string[];
+  sampleContent: string[]
 }
 
 interface TopicAssignment {
   /** Primary topic/market for this agent */
-  primaryTopicKey: string;
+  primaryTopicKey: string
   /** Market ID if this is a prediction market topic */
-  marketId?: string;
+  marketId?: string
   /** Signal direction from arc plan (YES/NO/NEUTRAL) */
-  signalDirection?: 'YES' | 'NO' | 'NEUTRAL';
+  signalDirection?: 'YES' | 'NO' | 'NEUTRAL'
   /** Suggested angle/take for variety */
-  suggestedAngle: string;
+  suggestedAngle: string
 }
 
 export interface PredictionMarketForTopic {
-  id: string;
-  question: string;
-  yesPrice: number;
-  noPrice: number;
+  id: string
+  question: string
+  yesPrice: number
+  noPrice: number
 }
 
 // =============================================================================
@@ -54,13 +54,13 @@ export interface PredictionMarketForTopic {
 // =============================================================================
 
 /** How long to track topic coverage (30 minutes) */
-const TOPIC_TRACKING_WINDOW_MS = 30 * 60 * 1000;
+const TOPIC_TRACKING_WINDOW_MS = 30 * 60 * 1000
 
 /** Max posts about same topic in window before blocking */
-const MAX_TOPIC_COVERAGE = 5;
+const MAX_TOPIC_COVERAGE = 5
 
 /** Minimum word overlap to consider posts similar */
-const SIMILARITY_THRESHOLD = 0.5; // Raised to allow more variety in similar topics
+const SIMILARITY_THRESHOLD = 0.5 // Raised to allow more variety in similar topics
 
 /** Angles for variety in posting */
 const POSTING_ANGLES = [
@@ -74,7 +74,7 @@ const POSTING_ANGLES = [
   'historical', // Compare to past events
   'questioning', // Ask a question
   'declarative', // Bold statement
-];
+]
 
 // =============================================================================
 // Topic Diversity Service
@@ -82,13 +82,13 @@ const POSTING_ANGLES = [
 
 export class TopicDiversityService {
   /** In-memory topic coverage tracking */
-  private topicCoverage: Map<string, TopicCoverage> = new Map();
+  private topicCoverage: Map<string, TopicCoverage> = new Map()
 
   /** Agent to assigned topic mapping for current tick batch */
-  private agentAssignments: Map<string, TopicAssignment> = new Map();
+  private agentAssignments: Map<string, TopicAssignment> = new Map()
 
   /** Last cleanup timestamp */
-  private lastCleanup = 0;
+  private lastCleanup = 0
 
   /**
    * Extract topic key from content (normalized keywords)
@@ -99,10 +99,10 @@ export class TopicDiversityService {
       .toLowerCase()
       .replace(/[^\w\s]/g, ' ')
       .replace(/\s+/g, ' ')
-      .trim();
+      .trim()
 
     // Extract key nouns/entities (simple heuristic)
-    const words = normalized.split(' ');
+    const words = normalized.split(' ')
     const stopWords = new Set([
       'the',
       'a',
@@ -212,15 +212,15 @@ export class TopicDiversityService {
       'him',
       'us',
       'them',
-    ]);
+    ])
 
     const keyTerms = words
       .filter((w) => w.length > 3 && !stopWords.has(w))
       .slice(0, 5)
       .sort()
-      .join('_');
+      .join('_')
 
-    return keyTerms || 'generic';
+    return keyTerms || 'generic'
   }
 
   /**
@@ -233,22 +233,22 @@ export class TopicDiversityService {
         .toLowerCase()
         .replace(/[^\w\s]/g, '')
         .split(/\s+/)
-        .filter((w) => w.length > 3)
-    );
+        .filter((w) => w.length > 3),
+    )
     const words2 = new Set(
       content2
         .toLowerCase()
         .replace(/[^\w\s]/g, '')
         .split(/\s+/)
-        .filter((w) => w.length > 3)
-    );
+        .filter((w) => w.length > 3),
+    )
 
-    if (words1.size === 0 || words2.size === 0) return 0;
+    if (words1.size === 0 || words2.size === 0) return 0
 
-    const intersection = new Set([...words1].filter((w) => words2.has(w)));
-    const union = new Set([...words1, ...words2]);
+    const intersection = new Set([...words1].filter((w) => words2.has(w)))
+    const union = new Set([...words1, ...words2])
 
-    return intersection.size / union.size;
+    return intersection.size / union.size
   }
 
   /**
@@ -257,22 +257,22 @@ export class TopicDiversityService {
   recordTopicCoverage(
     agentId: string,
     content: string,
-    topicKey?: string
+    topicKey?: string,
   ): void {
-    this.cleanupOldEntries();
+    this.cleanupOldEntries()
 
-    const key = topicKey || this.extractTopicKey(content);
-    const now = new Date();
+    const key = topicKey || this.extractTopicKey(content)
+    const now = new Date()
 
-    const existing = this.topicCoverage.get(key);
+    const existing = this.topicCoverage.get(key)
     if (existing) {
-      existing.coverageCount++;
-      existing.lastPostedAt = now;
-      existing.coveredByAgents.add(agentId);
-      existing.sampleContent.push(content.substring(0, 200));
+      existing.coverageCount++
+      existing.lastPostedAt = now
+      existing.coveredByAgents.add(agentId)
+      existing.sampleContent.push(content.substring(0, 200))
       // Keep only last 10 samples
       if (existing.sampleContent.length > 10) {
-        existing.sampleContent = existing.sampleContent.slice(-10);
+        existing.sampleContent = existing.sampleContent.slice(-10)
       }
     } else {
       this.topicCoverage.set(key, {
@@ -281,7 +281,7 @@ export class TopicDiversityService {
         lastPostedAt: now,
         coveredByAgents: new Set([agentId]),
         sampleContent: [content.substring(0, 200)],
-      });
+      })
     }
   }
 
@@ -289,48 +289,48 @@ export class TopicDiversityService {
    * Check if a topic can be posted about (not over-covered)
    */
   canPostAboutTopic(agentId: string, topicKey: string): boolean {
-    this.cleanupOldEntries();
+    this.cleanupOldEntries()
 
-    const coverage = this.topicCoverage.get(topicKey);
-    if (!coverage) return true;
+    const coverage = this.topicCoverage.get(topicKey)
+    if (!coverage) return true
 
     // Block if too many posts about this topic
     if (coverage.coverageCount >= MAX_TOPIC_COVERAGE) {
-      return false;
+      return false
     }
 
     // Block if this agent already posted about it recently
     if (coverage.coveredByAgents.has(agentId)) {
-      return false;
+      return false
     }
 
-    return true;
+    return true
   }
 
   /**
    * Check if content is too similar to recent posts
    */
   isTooSimilarToRecent(content: string): {
-    isSimilar: boolean;
-    matchedContent?: string;
-    similarity?: number;
+    isSimilar: boolean
+    matchedContent?: string
+    similarity?: number
   } {
-    this.cleanupOldEntries();
+    this.cleanupOldEntries()
 
     for (const coverage of this.topicCoverage.values()) {
       for (const sample of coverage.sampleContent) {
-        const similarity = this.calculateSimilarity(content, sample);
+        const similarity = this.calculateSimilarity(content, sample)
         if (similarity >= SIMILARITY_THRESHOLD) {
           return {
             isSimilar: true,
             matchedContent: sample,
             similarity,
-          };
+          }
         }
       }
     }
 
-    return { isSimilar: false };
+    return { isSimilar: false }
   }
 
   /**
@@ -340,25 +340,25 @@ export class TopicDiversityService {
    * Focus: Prevent repetitiveness, NOT restrict creative language
    */
   validateContent(agentId: string, content: string): string[] {
-    const issues: string[] = [];
+    const issues: string[] = []
 
     // Check topic coverage - prevent same topic spam
-    const topicKey = this.extractTopicKey(content);
+    const topicKey = this.extractTopicKey(content)
     if (!this.canPostAboutTopic(agentId, topicKey)) {
       issues.push(
-        `Topic "${topicKey}" has been covered too many times recently. Post about a different market or topic.`
-      );
+        `Topic "${topicKey}" has been covered too many times recently. Post about a different market or topic.`,
+      )
     }
 
     // Check similarity - prevent copy-paste style repetition
-    const similarityCheck = this.isTooSimilarToRecent(content);
+    const similarityCheck = this.isTooSimilarToRecent(content)
     if (similarityCheck.isSimilar) {
       issues.push(
-        `Content is ${Math.round((similarityCheck.similarity ?? 0) * 100)}% similar to a recent post. Add your unique take.`
-      );
+        `Content is ${Math.round((similarityCheck.similarity ?? 0) * 100)}% similar to a recent post. Add your unique take.`,
+      )
     }
 
-    return issues;
+    return issues
   }
 
   /**
@@ -367,57 +367,57 @@ export class TopicDiversityService {
    */
   async assignTopicsToAgents(
     agentIds: string[],
-    availableMarkets: PredictionMarketForTopic[]
+    availableMarkets: PredictionMarketForTopic[],
   ): Promise<Map<string, TopicAssignment>> {
-    this.cleanupOldEntries();
-    this.agentAssignments.clear();
+    this.cleanupOldEntries()
+    this.agentAssignments.clear()
 
     // Score markets by how under-covered they are
     const marketScores = availableMarkets.map((market) => {
-      const topicKey = this.extractTopicKey(market.question);
-      const coverage = this.topicCoverage.get(topicKey);
-      const coverageCount = coverage?.coverageCount ?? 0;
+      const topicKey = this.extractTopicKey(market.question)
+      const coverage = this.topicCoverage.get(topicKey)
+      const coverageCount = coverage?.coverageCount ?? 0
 
       // Higher score = less covered = better to assign
-      const freshness = Math.max(0, MAX_TOPIC_COVERAGE - coverageCount);
+      const freshness = Math.max(0, MAX_TOPIC_COVERAGE - coverageCount)
 
       // Add some randomness for variety
-      const randomBonus = Math.random() * 2;
+      const randomBonus = Math.random() * 2
 
       return {
         market,
         topicKey,
         score: freshness + randomBonus,
-      };
-    });
+      }
+    })
 
     // Sort by score (highest first)
-    marketScores.sort((a, b) => b.score - a.score);
+    marketScores.sort((a, b) => b.score - a.score)
 
     // Shuffle agents for fairness
-    const shuffledAgents = [...agentIds].sort(() => Math.random() - 0.5);
+    const shuffledAgents = [...agentIds].sort(() => Math.random() - 0.5)
 
     // Assign topics round-robin
     for (let i = 0; i < shuffledAgents.length; i++) {
-      const agentId = shuffledAgents[i];
-      if (!agentId) continue;
+      const agentId = shuffledAgents[i]
+      if (!agentId) continue
 
       // Pick market for this agent (cycle through available markets)
-      const marketIndex = i % marketScores.length;
-      const marketData = marketScores[marketIndex];
+      const marketIndex = i % marketScores.length
+      const marketData = marketScores[marketIndex]
 
-      if (!marketData) continue;
+      if (!marketData) continue
 
       // Pick a random angle for variety
       const angle =
         POSTING_ANGLES[Math.floor(Math.random() * POSTING_ANGLES.length)] ??
-        'analytical';
+        'analytical'
 
       this.agentAssignments.set(agentId, {
         primaryTopicKey: marketData.topicKey,
         marketId: marketData.market.id,
         suggestedAngle: angle,
-      });
+      })
     }
 
     logger.info(
@@ -426,26 +426,26 @@ export class TopicDiversityService {
         marketsAvailable: availableMarkets.length,
         assignmentCount: this.agentAssignments.size,
       },
-      'TopicDiversityService'
-    );
+      'TopicDiversityService',
+    )
 
-    return this.agentAssignments;
+    return this.agentAssignments
   }
 
   /**
    * Get the assigned topic for an agent
    */
   getAgentAssignment(agentId: string): TopicAssignment | undefined {
-    return this.agentAssignments.get(agentId);
+    return this.agentAssignments.get(agentId)
   }
 
   /**
    * Load recent posts from DB to seed the topic tracker
    */
   async seedFromRecentPosts(): Promise<void> {
-    const cutoff = new Date(Date.now() - TOPIC_TRACKING_WINDOW_MS);
+    const cutoff = new Date(Date.now() - TOPIC_TRACKING_WINDOW_MS)
 
-    const recentPosts = await db
+    const recentPostsQuery = await db
       .select({
         authorId: posts.authorId,
         content: posts.content,
@@ -454,17 +454,24 @@ export class TopicDiversityService {
       .from(posts)
       .where(gte(posts.timestamp, cutoff))
       .orderBy(desc(posts.timestamp))
-      .limit(100);
+      .limit(100)
+
+    // Database query returns Record<string, unknown>[] but runtime values match expected structure
+    const recentPosts = recentPostsQuery as Array<{
+      authorId: string
+      content: string
+      timestamp: Date
+    }>
 
     for (const post of recentPosts) {
-      this.recordTopicCoverage(post.authorId, post.content);
+      this.recordTopicCoverage(post.authorId, post.content)
     }
 
     logger.info(
       `Seeded topic tracker with ${recentPosts.length} recent posts`,
       { topicsTracked: this.topicCoverage.size },
-      'TopicDiversityService'
-    );
+      'TopicDiversityService',
+    )
   }
 
   /**
@@ -473,11 +480,11 @@ export class TopicDiversityService {
    * Emphasizes: Trading, events, markets, organic engagement
    */
   getDiversityInstructions(agentId: string): string {
-    const assignment = this.agentAssignments.get(agentId);
+    const assignment = this.agentAssignments.get(agentId)
     const recentTopics = Array.from(this.topicCoverage.entries())
       .filter(([, coverage]) => coverage.coverageCount >= 3)
       .map(([key]) => key)
-      .slice(0, 5);
+      .slice(0, 5)
 
     let instructions = `
 # PLAY THE GAME - MIX IT UP
@@ -504,17 +511,17 @@ ${this.getAngleDescription(assignment?.suggestedAngle || 'analytical')}
 - Question something others believe
 - Dunk on a bad take
 - Just vibe about the game world
-`;
+`
 
     if (assignment?.marketId) {
       instructions += `
 ## Your Focus Market:
 Market ID: ${assignment.marketId}
 You could trade this, post about it, or comment on price action.
-`;
+`
     }
 
-    return instructions;
+    return instructions
   }
 
   /**
@@ -540,26 +547,26 @@ You could trade this, post about it, or comment on price action.
       questioning:
         'Ask a provocative question that gets others thinking. Engage the community.',
       declarative: 'Make a bold, confident statement. Take a strong position.',
-    };
+    }
 
-    return descriptions[angle] || 'Bring your unique perspective.';
+    return descriptions[angle] || 'Bring your unique perspective.'
   }
 
   /**
    * Clean up old entries from the tracker
    */
   private cleanupOldEntries(): void {
-    const now = Date.now();
+    const now = Date.now()
 
     // Only cleanup every 5 minutes
-    if (now - this.lastCleanup < 5 * 60 * 1000) return;
+    if (now - this.lastCleanup < 5 * 60 * 1000) return
 
-    this.lastCleanup = now;
-    const cutoff = new Date(now - TOPIC_TRACKING_WINDOW_MS);
+    this.lastCleanup = now
+    const cutoff = new Date(now - TOPIC_TRACKING_WINDOW_MS)
 
     for (const [key, coverage] of this.topicCoverage.entries()) {
       if (coverage.lastPostedAt < cutoff) {
-        this.topicCoverage.delete(key);
+        this.topicCoverage.delete(key)
       }
     }
   }
@@ -568,22 +575,22 @@ You could trade this, post about it, or comment on price action.
    * Get current topic coverage stats (for debugging/monitoring)
    */
   getTopicStats(): {
-    topicsTracked: number;
-    mostCovered: { topic: string; count: number }[];
+    topicsTracked: number
+    mostCovered: { topic: string; count: number }[]
   } {
     const sorted = Array.from(this.topicCoverage.entries())
       .map(([key, coverage]) => ({
         topic: key,
         count: coverage.coverageCount,
       }))
-      .sort((a, b) => b.count - a.count);
+      .sort((a, b) => b.count - a.count)
 
     return {
       topicsTracked: this.topicCoverage.size,
       mostCovered: sorted.slice(0, 10),
-    };
+    }
   }
 }
 
 // Export singleton
-export const topicDiversityService = new TopicDiversityService();
+export const topicDiversityService = new TopicDiversityService()

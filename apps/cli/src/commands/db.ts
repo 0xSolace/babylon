@@ -10,10 +10,18 @@
  * @module cli/commands/db
  */
 
-import { db, getDB, initializeDB, resetDB } from '@babylon/db';
-import { $ } from 'bun';
-import { parseArgs, wantsHelp } from '../lib/args.js';
-import { logger } from '../lib/logger.js';
+import {
+  db,
+  getDB,
+  initializeDatabase,
+  initializeDB,
+  resetDB,
+} from '@babylon/db'
+import { GameBootstrapService } from '@babylon/engine'
+import { isJejuNetwork, type JejuNetwork } from '@babylon/shared'
+import { getCQLUrl, getDWSUrl } from '@jejunetwork/config'
+import { getFlag, parseArgs, wantsHelp } from '../lib/args.js'
+import { logger } from '../lib/logger.js'
 
 function printHelp(): void {
   console.log(`
@@ -53,7 +61,7 @@ CONFIGURATION:
 
   For local development, set JEJU_NETWORK=localnet and run:
     cd /path/to/jeju && jeju dev
-`);
+`)
 }
 
 /**
@@ -64,17 +72,17 @@ CONFIGURATION:
  * @internal
  */
 function checkCQLConfig(): void {
-  const endpoint = process.env.CQL_BLOCK_PRODUCER_ENDPOINT;
-  const network = process.env.JEJU_NETWORK;
+  const endpoint = process.env.CQL_BLOCK_PRODUCER_ENDPOINT
+  const network = process.env.JEJU_NETWORK
 
   if (!endpoint && !network) {
-    logger.fail('CQL not configured');
-    console.log('\nConfigure using one of these methods:');
-    console.log('  1. Set JEJU_NETWORK=localnet (recommended for development)');
-    console.log('  2. Set CQL_BLOCK_PRODUCER_ENDPOINT explicitly');
-    console.log('\nFor local development, start Jeju first:');
-    console.log('  cd /path/to/jeju && jeju dev');
-    process.exit(1);
+    logger.fail('CQL not configured')
+    console.log('\nConfigure using one of these methods:')
+    console.log('  1. Set JEJU_NETWORK=localnet (recommended for development)')
+    console.log('  2. Set CQL_BLOCK_PRODUCER_ENDPOINT explicitly')
+    console.log('\nFor local development, start Jeju first:')
+    console.log('  cd /path/to/jeju && jeju dev')
+    process.exit(1)
   }
 }
 
@@ -84,26 +92,26 @@ function checkCQLConfig(): void {
  * @internal
  */
 async function testConnection(): Promise<void> {
-  logger.header('Testing CQL Connection');
+  logger.header('Testing CQL Connection')
 
-  checkCQLConfig();
+  checkCQLConfig()
 
-  logger.step('Initializing CQL client...');
-  await initializeDB();
+  logger.step('Initializing CQL client...')
+  await initializeDB()
 
-  logger.step('Checking health...');
-  const cqlDb = getDB();
-  const healthy = await cqlDb.isHealthy();
+  logger.step('Checking health...')
+  const cqlDb = getDB()
+  const healthy = await cqlDb.isHealthy()
 
   if (!healthy) {
-    logger.fail('CQL is not healthy');
-    console.log('\nEnsure Jeju is running:');
-    console.log('  cd /path/to/jeju && jeju dev');
-    process.exit(1);
+    logger.fail('CQL is not healthy')
+    console.log('\nEnsure Jeju is running:')
+    console.log('  cd /path/to/jeju && jeju dev')
+    process.exit(1)
   }
 
-  logger.success('CQL connection established');
-  await showConnectionInfo();
+  logger.success('CQL connection established')
+  await showConnectionInfo()
 }
 
 /**
@@ -114,43 +122,43 @@ async function testConnection(): Promise<void> {
  * @internal
  */
 async function showStatus(): Promise<void> {
-  logger.header('Database Status (CQL via Jeju DWS)');
+  logger.header('Database Status (CQL via Jeju DWS)')
 
-  const endpoint = process.env.CQL_BLOCK_PRODUCER_ENDPOINT;
-  const network = process.env.JEJU_NETWORK;
-  const databaseId = process.env.CQL_DATABASE_ID || 'babylon';
+  const endpoint = process.env.CQL_BLOCK_PRODUCER_ENDPOINT
+  const network = process.env.JEJU_NETWORK
+  const databaseId = process.env.CQL_DATABASE_ID || 'babylon'
 
-  console.log('Configuration:');
+  console.log('Configuration:')
   if (network) {
-    console.log(`  Network:  ${network} (auto-resolved)`);
+    console.log(`  Network:  ${network} (auto-resolved)`)
   }
   if (endpoint) {
-    console.log(`  Endpoint: ${endpoint}${network ? ' (override)' : ''}`);
+    console.log(`  Endpoint: ${endpoint}${network ? ' (override)' : ''}`)
   }
-  console.log(`  Database: ${databaseId}`);
+  console.log(`  Database: ${databaseId}`)
 
   if (!endpoint && !network) {
-    console.log('\nStatus: ❌ Not configured');
-    console.log('\nSet JEJU_NETWORK=localnet or CQL_BLOCK_PRODUCER_ENDPOINT.');
-    console.log('Start Jeju: cd /path/to/jeju && jeju dev');
-    return;
+    console.log('\nStatus: ❌ Not configured')
+    console.log('\nSet JEJU_NETWORK=localnet or CQL_BLOCK_PRODUCER_ENDPOINT.')
+    console.log('Start Jeju: cd /path/to/jeju && jeju dev')
+    return
   }
 
-  logger.step('Checking CQL health...');
+  logger.step('Checking CQL health...')
 
-  await initializeDB();
-  const cqlDb = getDB();
-  const healthy = await cqlDb.isHealthy();
+  await initializeDB()
+  const cqlDb = getDB()
+  const healthy = await cqlDb.isHealthy()
 
   if (healthy) {
-    console.log('Status: ✅ Connected');
+    console.log('Status: ✅ Connected')
 
-    const blockHeight = await cqlDb.getBlockHeight();
-    console.log(`Block Height: ${blockHeight}`);
+    const blockHeight = await cqlDb.getBlockHeight()
+    console.log(`Block Height: ${blockHeight}`)
   } else {
-    console.log('Status: ❌ Unhealthy');
-    console.log('\nEnsure Jeju is running:');
-    console.log('  cd /path/to/jeju && jeju dev');
+    console.log('Status: ❌ Unhealthy')
+    console.log('\nEnsure Jeju is running:')
+    console.log('  cd /path/to/jeju && jeju dev')
   }
 }
 
@@ -160,53 +168,98 @@ async function showStatus(): Promise<void> {
  * @internal
  */
 async function showConnectionInfo(): Promise<void> {
-  const endpoint = process.env.CQL_BLOCK_PRODUCER_ENDPOINT || 'not set';
-  const databaseId = process.env.CQL_DATABASE_ID || 'babylon';
-  const timeout = process.env.CQL_TIMEOUT || '30000';
-  const debug = process.env.CQL_DEBUG || 'false';
+  const endpoint = process.env.CQL_BLOCK_PRODUCER_ENDPOINT || 'not set'
+  const databaseId = process.env.CQL_DATABASE_ID || 'babylon'
+  const timeout = process.env.CQL_TIMEOUT || '30000'
+  const debug = process.env.CQL_DEBUG || 'false'
 
-  console.log('\nConnection Info:');
-  console.log(`  Endpoint:    ${endpoint}`);
-  console.log(`  Database ID: ${databaseId}`);
-  console.log(`  Timeout:     ${timeout}ms`);
-  console.log(`  Debug:       ${debug}`);
+  console.log('\nConnection Info:')
+  console.log(`  Endpoint:    ${endpoint}`)
+  console.log(`  Database ID: ${databaseId}`)
+  console.log(`  Timeout:     ${timeout}ms`)
+  console.log(`  Debug:       ${debug}`)
 
-  const cqlDb = getDB();
+  const cqlDb = getDB()
   if (cqlDb.isInitialized()) {
-    const blockHeight = await cqlDb.getBlockHeight();
-    console.log(`  Block Height: ${blockHeight}`);
+    const blockHeight = await cqlDb.getBlockHeight()
+    console.log(`  Block Height: ${blockHeight}`)
   }
 }
 
 /**
  * Seeds the database with initial data.
  *
- * Runs the seed script to populate the database with actors, organizations,
+ * Uses GameBootstrapService to populate the database with actors, organizations,
  * and other initial data. Requires CQL connection.
  *
+ * @param args - Parsed command-line arguments
  * @internal
  */
-async function seedDatabase(args: string[]): Promise<void> {
-  logger.header('Seeding Database');
+async function seedDatabase(args: ReturnType<typeof parseArgs>): Promise<void> {
+  logger.header('Seeding Database')
 
-  checkCQLConfig();
+  checkCQLConfig()
 
-  logger.step('Initializing CQL...');
-  await initializeDB();
+  logger.step('Initializing CQL and creating tables...')
+  await initializeDatabase()
 
-  const cqlDb = getDB();
-  const healthy = await cqlDb.isHealthy();
+  const cqlDb = getDB()
+  const healthy = await cqlDb.isHealthy()
   if (!healthy) {
-    logger.fail('CQL is not healthy');
-    console.log('Start Jeju first: cd /path/to/jeju && jeju dev');
-    process.exit(1);
+    logger.fail('CQL is not healthy')
+    console.log('Start Jeju first: cd /path/to/jeju && jeju dev')
+    process.exit(1)
   }
 
-  logger.step('Running seed script...');
-  const rootDir = import.meta.dirname.replace('/apps/cli/src/commands', '');
-  const seedArgs = args.filter((arg) => arg.startsWith('--'));
-  await $`bun run ${rootDir}/scripts/seed-database.ts ${seedArgs}`;
-  logger.success('Database seeded');
+  const forceReseed = getFlag(args, 'force')
+
+  if (forceReseed) {
+    logger.step('Force reseeding all data...')
+    const result = await GameBootstrapService.forceFullSync()
+    logger.success('Force reseed complete')
+    console.log(`  Actors created: ${result.actorsCreated}`)
+    console.log(`  Actors updated: ${result.actorsUpdated}`)
+    console.log(`  Organizations created: ${result.organizationsCreated}`)
+    console.log(`  Organizations updated: ${result.organizationsUpdated}`)
+    console.log(`  Pools created: ${result.poolsCreated}`)
+    console.log(`  RSS feeds created: ${result.rssFeedsCreated}`)
+  } else {
+    logger.step('Running bootstrap (will only seed missing data)...')
+    const result = await GameBootstrapService.bootstrapIfNeeded()
+    if (result) {
+      logger.success('Bootstrap complete')
+      console.log(`  Actors created: ${result.actorsCreated}`)
+      console.log(`  Actors updated: ${result.actorsUpdated}`)
+      console.log(`  Organizations created: ${result.organizationsCreated}`)
+      console.log(`  Organizations updated: ${result.organizationsUpdated}`)
+      console.log(`  Pools created: ${result.poolsCreated}`)
+      console.log(`  RSS feeds created: ${result.rssFeedsCreated}`)
+    } else {
+      logger.info('Bootstrap skipped (recently run or no changes needed)')
+      // Force a fresh check
+      const freshResult = await GameBootstrapService.forceFullSync()
+      logger.success('Fresh sync complete')
+      console.log(`  Actors created: ${freshResult.actorsCreated}`)
+      console.log(`  Actors updated: ${freshResult.actorsUpdated}`)
+      console.log(
+        `  Organizations created: ${freshResult.organizationsCreated}`,
+      )
+      console.log(
+        `  Organizations updated: ${freshResult.organizationsUpdated}`,
+      )
+      console.log(`  Pools created: ${freshResult.poolsCreated}`)
+      console.log(`  RSS feeds created: ${freshResult.rssFeedsCreated}`)
+    }
+  }
+
+  // Show final stats
+  const stats = await GameBootstrapService.getStats()
+  console.log('\nDatabase Summary:')
+  console.log(`  Actors: ${stats.actors}`)
+  console.log(`  Organizations: ${stats.organizations}`)
+  console.log(`  Pools: ${stats.pools}`)
+  console.log(`  RSS Feed Sources: ${stats.rssFeedSources}`)
+  console.log(`  Perp Markets: ${stats.perpMarkets}`)
 }
 
 /**
@@ -215,13 +268,31 @@ async function seedDatabase(args: string[]): Promise<void> {
  * @internal
  */
 async function showStats(): Promise<void> {
-  logger.header('Database Statistics');
+  logger.header('Database Statistics')
 
-  checkCQLConfig();
+  checkCQLConfig()
 
-  logger.step('Fetching stats...');
-  const rootDir = import.meta.dirname.replace('/apps/cli/src/commands', '');
-  await $`bun run ${rootDir}/scripts/seed-database.ts --stats`;
+  logger.step('Initializing CQL...')
+  await initializeDB()
+
+  const cqlDb = getDB()
+  const healthy = await cqlDb.isHealthy()
+  if (!healthy) {
+    logger.fail('CQL is not healthy')
+    process.exit(1)
+  }
+
+  logger.step('Fetching stats...')
+  const stats = await GameBootstrapService.getStats()
+
+  console.log('\nDatabase Summary:')
+  console.log(`  Actors: ${stats.actors}`)
+  console.log(`  Organizations: ${stats.organizations}`)
+  console.log(`  Pools: ${stats.pools}`)
+  console.log(`  RSS Feed Sources: ${stats.rssFeedSources}`)
+  console.log(`  Perp Markets: ${stats.perpMarkets}`)
+  console.log(`  Character Mappings: ${stats.characterMappings}`)
+  console.log(`  Organization Mappings: ${stats.organizationMappings}`)
 }
 
 /**
@@ -232,39 +303,39 @@ async function showStats(): Promise<void> {
  * @internal
  */
 async function resetDatabase(): Promise<void> {
-  logger.header('Resetting Database');
+  logger.header('Resetting Database')
 
-  logger.warn('This will delete all data!');
+  logger.warn('This will delete all data!')
 
-  checkCQLConfig();
+  checkCQLConfig()
 
-  logger.step('Initializing CQL...');
-  await initializeDB();
+  logger.step('Initializing CQL...')
+  await initializeDB()
 
-  const cqlDb = getDB();
-  const healthy = await cqlDb.isHealthy();
+  const cqlDb = getDB()
+  const healthy = await cqlDb.isHealthy()
   if (!healthy) {
-    logger.fail('CQL is not healthy');
-    process.exit(1);
+    logger.fail('CQL is not healthy')
+    process.exit(1)
   }
 
-  logger.step('Clearing database...');
+  logger.step('Clearing database...')
 
   // Get list of all tables and truncate them
   // Note: CQL/SQLite uses sqlite_master, not information_schema
   const tables = await db.query<{ name: string }>(
-    `SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cql_%'`
-  );
+    `SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cql_%'`,
+  )
 
   for (const table of tables) {
-    logger.step(`Clearing table: ${table.name}`);
-    await db.exec(`DELETE FROM "${table.name}"`);
+    logger.step(`Clearing table: ${table.name}`)
+    await db.exec(`DELETE FROM "${table.name}"`)
   }
 
-  logger.success('Database reset complete');
+  logger.success('Database reset complete')
 
   // Reset the client to clear any cached state
-  resetDB();
+  resetDB()
 }
 
 /**
@@ -275,25 +346,27 @@ async function resetDatabase(): Promise<void> {
  * @internal
  */
 async function provisionDatabase(args: string[]): Promise<void> {
-  logger.header('Provisioning Database via Jeju DWS');
+  logger.header('Provisioning Database via Jeju DWS')
 
-  const network = args.includes('--network')
+  const networkArg = args.includes('--network')
     ? args[args.indexOf('--network') + 1]
-    : process.env.JEJU_NETWORK || 'localnet';
+    : process.env.JEJU_NETWORK || 'localnet'
+
+  const network: JejuNetwork =
+    networkArg && isJejuNetwork(networkArg) ? networkArg : 'localnet'
 
   const databaseId = args.includes('--id')
     ? args[args.indexOf('--id') + 1]
-    : 'babylon';
+    : 'babylon'
 
-  console.log(`Network:     ${network}`);
-  console.log(`Database ID: ${databaseId}`);
-  console.log('');
+  console.log(`Network:     ${network}`)
+  console.log(`Database ID: ${databaseId}`)
+  console.log('')
 
   // Get DWS URL from Jeju config
-  let dwsUrl: string;
+  let dwsUrl: string
   try {
-    const { getDWSUrl } = await import('@jejunetwork/config');
-    dwsUrl = getDWSUrl(network as 'localnet' | 'testnet' | 'mainnet');
+    dwsUrl = getDWSUrl(network)
   } catch {
     // Fallback for local development
     dwsUrl =
@@ -301,32 +374,31 @@ async function provisionDatabase(args: string[]): Promise<void> {
         ? 'http://localhost:4030'
         : network === 'testnet'
           ? 'https://dws-testnet.jejunetwork.org'
-          : 'https://dws.jejunetwork.org';
+          : 'https://dws.jejunetwork.org'
   }
 
-  logger.step(`Connecting to DWS at ${dwsUrl}...`);
+  logger.step(`Connecting to DWS at ${dwsUrl}...`)
 
   // Check DWS health
   try {
     const healthRes = await fetch(`${dwsUrl}/health`, {
       signal: AbortSignal.timeout(5000),
-    });
+    })
     if (!healthRes.ok) {
-      throw new Error(`DWS not healthy: ${healthRes.status}`);
+      throw new Error(`DWS not healthy: ${healthRes.status}`)
     }
-    logger.success('DWS connected');
+    logger.success('DWS connected')
   } catch (error) {
-    logger.fail(`Cannot connect to DWS: ${error}`);
-    console.log('\nStart Jeju DWS first:');
-    console.log('  cd /path/to/jeju && jeju dws dev');
-    process.exit(1);
+    logger.fail(`Cannot connect to DWS: ${error}`)
+    console.log('\nStart Jeju DWS first:')
+    console.log('  cd /path/to/jeju && jeju dws dev')
+    process.exit(1)
   }
 
   // Get CQL URL from Jeju config
-  let cqlUrl: string;
+  let cqlUrl: string
   try {
-    const { getCQLUrl } = await import('@jejunetwork/config');
-    cqlUrl = getCQLUrl(network as 'localnet' | 'testnet' | 'mainnet');
+    cqlUrl = getCQLUrl(network)
   } catch {
     // Fallback for local development
     cqlUrl =
@@ -334,23 +406,23 @@ async function provisionDatabase(args: string[]): Promise<void> {
         ? 'http://localhost:4661'
         : network === 'testnet'
           ? 'https://cql-testnet.jejunetwork.org'
-          : 'https://cql.jejunetwork.org';
+          : 'https://cql.jejunetwork.org'
   }
 
-  logger.success('Database provisioned');
-  console.log('\n📋 Configuration:');
-  console.log('');
-  console.log('Add to your .env file:');
-  console.log('```');
-  console.log(`JEJU_NETWORK=${network}`);
-  console.log(`CQL_DATABASE_ID=${databaseId}`);
-  console.log('```');
-  console.log('');
-  console.log('Or use explicit endpoint:');
-  console.log('```');
-  console.log(`CQL_BLOCK_PRODUCER_ENDPOINT=${cqlUrl}`);
-  console.log(`CQL_DATABASE_ID=${databaseId}`);
-  console.log('```');
+  logger.success('Database provisioned')
+  console.log('\n📋 Configuration:')
+  console.log('')
+  console.log('Add to your .env file:')
+  console.log('```')
+  console.log(`JEJU_NETWORK=${network}`)
+  console.log(`CQL_DATABASE_ID=${databaseId}`)
+  console.log('```')
+  console.log('')
+  console.log('Or use explicit endpoint:')
+  console.log('```')
+  console.log(`CQL_BLOCK_PRODUCER_ENDPOINT=${cqlUrl}`)
+  console.log(`CQL_DATABASE_ID=${databaseId}`)
+  console.log('```')
 }
 
 /**
@@ -369,58 +441,58 @@ async function provisionDatabase(args: string[]): Promise<void> {
  * @throws Exits process with code 1 on error, 0 on success
  */
 export async function runDbCommand(args: string[]): Promise<void> {
-  const parsed = parseArgs(args);
+  const parsed = parseArgs(args)
 
   if (wantsHelp(parsed)) {
-    printHelp();
-    process.exit(0);
+    printHelp()
+    process.exit(0)
   }
 
   switch (parsed.command) {
     case 'status':
-      await showStatus();
-      break;
+      await showStatus()
+      break
 
     case 'connect':
-      await testConnection();
-      break;
+      await testConnection()
+      break
 
     case 'seed':
-      await seedDatabase(args);
-      break;
+      await seedDatabase(parsed)
+      break
 
     case 'stats':
-      await showStats();
-      break;
+      await showStats()
+      break
 
     case 'reset':
-      await resetDatabase();
-      break;
+      await resetDatabase()
+      break
 
     case 'provision':
-      await provisionDatabase(args);
-      break;
+      await provisionDatabase(args)
+      break
 
     // Legacy commands - provide helpful migration messages
     case 'start':
     case 'stop':
     case 'restart':
-      logger.warn(`The '${parsed.command}' command is not needed with CQL.`);
-      console.log('\nCQL connects to a Jeju block producer instance.');
-      console.log('Start Jeju instead: cd /path/to/jeju && jeju dev');
-      break;
+      logger.warn(`The '${parsed.command}' command is not needed with CQL.`)
+      console.log('\nCQL connects to a Jeju block producer instance.')
+      console.log('Start Jeju instead: cd /path/to/jeju && jeju dev')
+      break
 
     case 'migrate':
-      logger.warn("The 'migrate' command is not needed with CQL.");
-      console.log('\nCQL handles schema management automatically.');
-      console.log('Use "babylon db status" to check connection health.');
-      break;
+      logger.warn("The 'migrate' command is not needed with CQL.")
+      console.log('\nCQL handles schema management automatically.')
+      console.log('Use "babylon db status" to check connection health.')
+      break
 
     default:
       if (parsed.command) {
-        logger.fail(`Unknown command: ${parsed.command}`);
+        logger.fail(`Unknown command: ${parsed.command}`)
       }
-      printHelp();
-      process.exit(parsed.command ? 1 : 0);
+      printHelp()
+      process.exit(parsed.command ? 1 : 0)
   }
 }

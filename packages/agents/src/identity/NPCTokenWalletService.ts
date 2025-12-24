@@ -11,17 +11,18 @@
  * @packageDocumentation
  */
 
-import { db } from '@babylon/db';
-import { StaticDataRegistry } from '@babylon/engine';
-import { type ActorTier, logger } from '@babylon/shared';
-
 /**
  * Paymaster client interface for gasless transactions.
  * Injected at runtime to avoid circular dependency with @babylon/api.
  */
+import type { UserOperation } from '@babylon/api'
+import { db } from '@babylon/db'
+import { StaticDataRegistry } from '@babylon/engine'
+import { type ActorTier, logger, toAddressOrNull } from '@babylon/shared'
+
 export interface PaymasterClient {
-  initialize(): Promise<void>;
-  sponsorUserOperation?(userOp: unknown): Promise<unknown>;
+  initialize(): Promise<void>
+  sponsorUserOperation?(userOp: UserOperation): Promise<UserOperation>
 }
 
 import {
@@ -33,9 +34,113 @@ import {
   type Hex,
   http,
   parseUnits,
-} from 'viem';
-import { privateKeyToAccount } from 'viem/accounts';
-import { getNPCIdentityService } from './NPCIdentityService';
+} from 'viem'
+import { privateKeyToAccount } from 'viem/accounts'
+import { getNPCIdentityService } from './NPCIdentityService'
+
+// =============================================================================
+// ABI DEFINITIONS
+// =============================================================================
+
+const BALANCE_OF_ABI = [
+  {
+    name: 'balanceOf',
+    type: 'function',
+    inputs: [{ type: 'address', name: 'account' }],
+    outputs: [{ type: 'uint256', name: '' }],
+    stateMutability: 'view',
+  },
+] as const
+
+const GET_BALANCE_ABI = [
+  {
+    name: 'getBalance',
+    type: 'function',
+    inputs: [{ type: 'address', name: 'account' }],
+    outputs: [{ type: 'uint256', name: '' }],
+    stateMutability: 'view',
+  },
+] as const
+
+const TRANSFER_ABI = [
+  {
+    name: 'transfer',
+    type: 'function',
+    inputs: [
+      { type: 'address', name: 'to' },
+      { type: 'uint256', name: 'amount' },
+    ],
+    outputs: [{ type: 'bool', name: '' }],
+    stateMutability: 'nonpayable',
+  },
+] as const
+
+const APPROVE_ABI = [
+  {
+    name: 'approve',
+    type: 'function',
+    inputs: [
+      { type: 'address', name: 'spender' },
+      { type: 'uint256', name: 'amount' },
+    ],
+    outputs: [{ type: 'bool', name: '' }],
+    stateMutability: 'nonpayable',
+  },
+] as const
+
+const PREDICTION_MARKET_ABI = [
+  {
+    name: 'buyShares',
+    type: 'function',
+    inputs: [
+      { name: '_marketId', type: 'bytes32' },
+      { name: '_outcome', type: 'uint8' },
+      { name: '_numShares', type: 'uint256' },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    name: 'sellShares',
+    type: 'function',
+    inputs: [
+      { name: '_marketId', type: 'bytes32' },
+      { name: '_outcome', type: 'uint8' },
+      { name: '_numShares', type: 'uint256' },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+] as const
+
+const OPEN_POSITION_ABI = [
+  {
+    name: 'openPosition',
+    type: 'function',
+    inputs: [
+      { name: '_marketId', type: 'bytes32' },
+      { name: '_side', type: 'uint8' },
+      { name: '_size', type: 'uint256' },
+      { name: '_collateral', type: 'uint256' },
+      { name: '_maxPrice', type: 'uint256' },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+] as const
+
+const CLOSE_POSITION_ABI = [
+  {
+    name: 'closePosition',
+    type: 'function',
+    inputs: [
+      { name: '_marketId', type: 'bytes32' },
+      { name: '_minPrice', type: 'uint256' },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+] as const
 
 // =============================================================================
 // CONFIGURATION
@@ -49,7 +154,7 @@ export const NPC_TIER_ALLOCATIONS = {
   TIER_2: parseUnits('100000', 18),
   /** Minor characters (tier 3) - 10K BBLN */
   TIER_3: parseUnits('10000', 18),
-} as const;
+} as const
 
 /** Stop-loss thresholds */
 export const STOP_LOSS_CONFIG = {
@@ -61,37 +166,39 @@ export const STOP_LOSS_CONFIG = {
   MIN_BALANCE: parseUnits('100', 18),
   /** Check interval in milliseconds */
   CHECK_INTERVAL_MS: 60_000, // 1 minute
-} as const;
+} as const
 
 /** Map actor tier to allocation amount */
 function getTierAllocation(tier: ActorTier | null | undefined): bigint {
   switch (tier) {
     case 'S_TIER':
-      return NPC_TIER_ALLOCATIONS.TIER_1;
+      return NPC_TIER_ALLOCATIONS.TIER_1
     case 'A_TIER':
-      return NPC_TIER_ALLOCATIONS.TIER_2;
-    case 'B_TIER':
-    case 'C_TIER':
+      return NPC_TIER_ALLOCATIONS.TIER_2
     default:
-      return NPC_TIER_ALLOCATIONS.TIER_3;
+      return NPC_TIER_ALLOCATIONS.TIER_3
   }
 }
 
 /** Contract addresses - loaded from env */
 interface ContractAddresses {
-  babylonToken: Address;
-  diamond: Address;
-  treasury: Address;
-  feeRecipient: Address;
+  babylonToken: Address
+  diamond: Address
+  treasury: Address
+  feeRecipient: Address
 }
+
+const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000' as const
 
 function getContractAddresses(): ContractAddresses {
   return {
-    babylonToken: (process.env.BBLN_TOKEN_ADDRESS ?? '0x0') as Address,
-    diamond: (process.env.DIAMOND_ADDRESS ?? '0x0') as Address,
-    treasury: (process.env.TREASURY_ADDRESS ?? '0x0') as Address,
-    feeRecipient: (process.env.FEE_RECIPIENT_ADDRESS ?? '0x0') as Address,
-  };
+    babylonToken:
+      toAddressOrNull(process.env.BBLN_TOKEN_ADDRESS) ?? ZERO_ADDRESS,
+    diamond: toAddressOrNull(process.env.DIAMOND_ADDRESS) ?? ZERO_ADDRESS,
+    treasury: toAddressOrNull(process.env.TREASURY_ADDRESS) ?? ZERO_ADDRESS,
+    feeRecipient:
+      toAddressOrNull(process.env.FEE_RECIPIENT_ADDRESS) ?? ZERO_ADDRESS,
+  }
 }
 
 // =============================================================================
@@ -99,35 +206,35 @@ function getContractAddresses(): ContractAddresses {
 // =============================================================================
 
 export interface NPCTokenBalance {
-  actorId: string;
-  walletAddress: Address;
+  actorId: string
+  walletAddress: Address
   /** On-chain BBLN balance (wei) */
-  tokenBalance: bigint;
+  tokenBalance: bigint
   /** Diamond contract deposited balance (wei) */
-  depositedBalance: bigint;
+  depositedBalance: bigint
   /** Total value (token + deposited) */
-  totalValue: bigint;
+  totalValue: bigint
   /** Last synced block */
-  lastSyncedBlock: bigint;
+  lastSyncedBlock: bigint
 }
 
 export interface NPCPosition {
-  positionId: Hex;
-  marketId: Hex;
-  marketType: 'prediction' | 'perp';
-  side: 'long' | 'short' | 'yes' | 'no';
-  size: bigint;
-  entryPrice: bigint;
-  currentPrice: bigint;
-  unrealizedPnL: bigint;
-  pnlPercent: number;
+  positionId: Hex
+  marketId: Hex
+  marketType: 'prediction' | 'perp'
+  side: 'long' | 'short' | 'yes' | 'no'
+  size: bigint
+  entryPrice: bigint
+  currentPrice: bigint
+  unrealizedPnL: bigint
+  pnlPercent: number
 }
 
 export interface StopLossResult {
-  triggered: boolean;
-  reason: string;
-  positionsClosed: number;
-  totalLossAvoided: bigint;
+  triggered: boolean
+  reason: string
+  positionsClosed: number
+  totalLossAvoided: bigint
 }
 
 // =============================================================================
@@ -139,29 +246,29 @@ export interface StopLossResult {
 // =============================================================================
 
 export class NPCTokenWalletService {
-  private rpcUrl: string;
-  private publicClient: ReturnType<typeof createPublicClient>;
-  private paymasterClient: PaymasterClient | null = null;
-  private addresses: ContractAddresses;
-  private stopLossEnabled = false;
-  private stopLossInterval: ReturnType<typeof setInterval> | null = null;
-  private chain: Chain;
+  private rpcUrl: string
+  private publicClient
+  private paymasterClient: PaymasterClient | null = null
+  private addresses: ContractAddresses
+  private stopLossEnabled = false
+  private stopLossInterval: ReturnType<typeof setInterval> | null = null
+  private chain: Chain
 
   constructor() {
-    this.rpcUrl = process.env.JEJU_RPC_URL ?? 'http://localhost:9545';
+    this.rpcUrl = process.env.JEJU_RPC_URL ?? 'http://localhost:6546'
     this.chain = {
-      id: parseInt(process.env.JEJU_CHAIN_ID ?? '31337'),
+      id: parseInt(process.env.JEJU_CHAIN_ID ?? '31337', 10),
       name: 'Jeju',
       nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
       rpcUrls: {
         default: { http: [this.rpcUrl] },
       },
-    };
+    }
     this.publicClient = createPublicClient({
       chain: this.chain,
       transport: http(this.rpcUrl),
-    });
-    this.addresses = getContractAddresses();
+    })
+    this.addresses = getContractAddresses()
   }
 
   // ---------------------------------------------------------------------------
@@ -172,16 +279,16 @@ export class NPCTokenWalletService {
    * Get the allocation amount for an actor based on their tier
    */
   getAllocationForActor(actorId: string): bigint {
-    const actor = StaticDataRegistry.getActor(actorId);
+    const actor = StaticDataRegistry.getActor(actorId)
     if (!actor) {
       logger.warn(
         `Actor ${actorId} not found in registry, using default tier 3`,
         { actorId },
-        'NPCTokenWalletService'
-      );
-      return NPC_TIER_ALLOCATIONS.TIER_3;
+        'NPCTokenWalletService',
+      )
+      return NPC_TIER_ALLOCATIONS.TIER_3
     }
-    return getTierAllocation(actor.tier);
+    return getTierAllocation(actor.tier)
   }
 
   // ---------------------------------------------------------------------------
@@ -194,30 +301,30 @@ export class NPCTokenWalletService {
    * @param paymasterClientGetter - Optional function that returns a PaymasterClient
    */
   async initialize(
-    paymasterClientGetter?: () => PaymasterClient
+    paymasterClientGetter?: () => PaymasterClient,
   ): Promise<void> {
     if (paymasterClientGetter) {
       try {
-        this.paymasterClient = paymasterClientGetter();
-        await this.paymasterClient.initialize();
+        this.paymasterClient = paymasterClientGetter()
+        await this.paymasterClient.initialize()
         logger.info(
           'NPCTokenWalletService initialized with paymaster',
           undefined,
-          'NPCTokenWalletService'
-        );
+          'NPCTokenWalletService',
+        )
       } catch (error) {
         logger.warn(
           'Paymaster not available, NPC trades will require gas',
           { error },
-          'NPCTokenWalletService'
-        );
+          'NPCTokenWalletService',
+        )
       }
     } else {
       logger.info(
         'NPCTokenWalletService initialized without paymaster',
         undefined,
-        'NPCTokenWalletService'
-      );
+        'NPCTokenWalletService',
+      )
     }
   }
 
@@ -229,48 +336,32 @@ export class NPCTokenWalletService {
    * Get NPC's complete token balance (wallet + deposited)
    */
   async getBalance(actorId: string): Promise<NPCTokenBalance> {
-    const identityService = getNPCIdentityService();
-    const identity = await identityService.getNPCIdentity(actorId);
+    const identityService = getNPCIdentityService()
+    const identity = await identityService.getNPCIdentity(actorId)
 
     if (!identity?.walletAddress) {
-      throw new Error(`NPC ${actorId} has no wallet`);
+      throw new Error(`NPC ${actorId} has no wallet`)
     }
 
-    const walletAddress = identity.walletAddress;
+    const walletAddress = identity.walletAddress
 
     // Get token balance
-    const tokenBalance = (await this.publicClient.readContract({
+    const tokenBalance = await this.publicClient.readContract({
       address: this.addresses.babylonToken,
-      abi: [
-        {
-          name: 'balanceOf',
-          type: 'function',
-          inputs: [{ type: 'address' }],
-          outputs: [{ type: 'uint256' }],
-          stateMutability: 'view',
-        },
-      ],
+      abi: BALANCE_OF_ABI,
       functionName: 'balanceOf',
       args: [walletAddress],
-    })) as bigint;
+    })
 
     // Get deposited balance in Diamond contract
-    const depositedBalance = (await this.publicClient.readContract({
+    const depositedBalance = await this.publicClient.readContract({
       address: this.addresses.diamond,
-      abi: [
-        {
-          name: 'getBalance',
-          type: 'function',
-          inputs: [{ type: 'address' }],
-          outputs: [{ type: 'uint256' }],
-          stateMutability: 'view',
-        },
-      ],
+      abi: GET_BALANCE_ABI,
       functionName: 'getBalance',
       args: [walletAddress],
-    })) as bigint;
+    })
 
-    const blockNumber = await this.publicClient.getBlockNumber();
+    const blockNumber = await this.publicClient.getBlockNumber()
 
     return {
       actorId,
@@ -279,14 +370,14 @@ export class NPCTokenWalletService {
       depositedBalance,
       totalValue: tokenBalance + depositedBalance,
       lastSyncedBlock: blockNumber,
-    };
+    }
   }
 
   /**
    * Sync NPC balance to database (for fast queries)
    */
   async syncBalanceToDb(actorId: string): Promise<void> {
-    const balance = await this.getBalance(actorId);
+    const balance = await this.getBalance(actorId)
 
     await db.actorState.update({
       where: { id: actorId },
@@ -294,7 +385,7 @@ export class NPCTokenWalletService {
         tradingBalance: formatUnits(balance.totalValue, 18),
         updatedAt: new Date(),
       },
-    });
+    })
 
     logger.info(
       `Synced NPC balance`,
@@ -303,8 +394,8 @@ export class NPCTokenWalletService {
         tokenBalance: formatUnits(balance.tokenBalance, 18),
         depositedBalance: formatUnits(balance.depositedBalance, 18),
       },
-      'NPCTokenWalletService'
-    );
+      'NPCTokenWalletService',
+    )
   }
 
   /**
@@ -312,55 +403,49 @@ export class NPCTokenWalletService {
    */
   async fundNPCFromTreasury(
     actorId: string,
-    treasuryPrivateKey: Hex
+    treasuryPrivateKey: Hex,
   ): Promise<{ txHash: Hex; amount: bigint }> {
-    const identityService = getNPCIdentityService();
-    const identity = await identityService.getNPCIdentity(actorId);
+    const identityService = getNPCIdentityService()
+    const identity = await identityService.getNPCIdentity(actorId)
 
     if (!identity?.walletAddress) {
-      throw new Error(`NPC ${actorId} has no wallet`);
+      throw new Error(`NPC ${actorId} has no wallet`)
     }
 
     // Get tier from static registry
-    const amount = this.getAllocationForActor(actorId);
+    const amount = this.getAllocationForActor(actorId)
 
     // Check current balance
-    const currentBalance = await this.getBalance(actorId);
+    const currentBalance = await this.getBalance(actorId)
     if (currentBalance.totalValue >= amount) {
       logger.info(
         `NPC ${actorId} already funded`,
         { currentBalance: formatUnits(currentBalance.totalValue, 18) },
-        'NPCTokenWalletService'
-      );
-      return { txHash: '0x0' as Hex, amount: 0n };
+        'NPCTokenWalletService',
+      )
+      const zeroHash: Hex = '0x0'
+      return { txHash: zeroHash, amount: 0n }
     }
 
-    const amountToFund = amount - currentBalance.totalValue;
+    const amountToFund = amount - currentBalance.totalValue
 
     // Create wallet client for treasury
-    const treasuryAccount = privateKeyToAccount(treasuryPrivateKey);
+    const treasuryAccount = privateKeyToAccount(treasuryPrivateKey)
     const walletClient = createWalletClient({
       account: treasuryAccount,
       chain: this.chain,
       transport: http(this.rpcUrl),
-    });
+    })
 
     // Transfer tokens from treasury
     const txHash = await walletClient.writeContract({
       chain: this.chain,
       address: this.addresses.babylonToken,
-      abi: [
-        {
-          name: 'transfer',
-          type: 'function',
-          inputs: [{ type: 'address' }, { type: 'uint256' }],
-          outputs: [{ type: 'bool' }],
-          stateMutability: 'nonpayable',
-        },
-      ] as const,
+      abi: TRANSFER_ABI,
       functionName: 'transfer',
       args: [identity.walletAddress, amountToFund],
-    });
+      account: treasuryAccount,
+    })
 
     logger.info(
       `Funded NPC from treasury`,
@@ -369,50 +454,50 @@ export class NPCTokenWalletService {
         amount: formatUnits(amountToFund, 18),
         txHash,
       },
-      'NPCTokenWalletService'
-    );
+      'NPCTokenWalletService',
+    )
 
     // Sync to database
-    await this.syncBalanceToDb(actorId);
+    await this.syncBalanceToDb(actorId)
 
-    return { txHash, amount: amountToFund };
+    return { txHash, amount: amountToFund }
   }
 
   /**
    * Fund all NPCs from treasury
    */
   async fundAllNPCsFromTreasury(treasuryPrivateKey: Hex): Promise<{
-    funded: number;
-    skipped: number;
-    totalAmount: bigint;
-    errors: Array<{ actorId: string; error: string }>;
+    funded: number
+    skipped: number
+    totalAmount: bigint
+    errors: Array<{ actorId: string; error: string }>
   }> {
-    const allActors = await db.actorState.findMany();
+    const allActors = await db.actorState.findMany()
     const result = {
       funded: 0,
       skipped: 0,
       totalAmount: 0n,
       errors: [] as Array<{ actorId: string; error: string }>,
-    };
+    }
 
     for (const actor of allActors) {
-      const actorId = String(actor.id);
+      const actorId = String(actor.id)
       try {
         const { amount } = await this.fundNPCFromTreasury(
           actorId,
-          treasuryPrivateKey
-        );
+          treasuryPrivateKey,
+        )
         if (amount > 0n) {
-          result.funded++;
-          result.totalAmount += amount;
+          result.funded++
+          result.totalAmount += amount
         } else {
-          result.skipped++;
+          result.skipped++
         }
       } catch (error) {
         result.errors.push({
           actorId,
           error: error instanceof Error ? error.message : String(error),
-        });
+        })
       }
     }
 
@@ -424,10 +509,10 @@ export class NPCTokenWalletService {
         totalAmount: formatUnits(result.totalAmount, 18),
         errorCount: result.errors.length,
       },
-      'NPCTokenWalletService'
-    );
+      'NPCTokenWalletService',
+    )
 
-    return result;
+    return result
   }
 
   // ---------------------------------------------------------------------------
@@ -440,39 +525,32 @@ export class NPCTokenWalletService {
   async depositTokensForTrading(
     actorId: string,
     amount: bigint,
-    privateKey: Hex
+    privateKey: Hex,
   ): Promise<Hex> {
-    const identity = await getNPCIdentityService().getNPCIdentity(actorId);
+    const identity = await getNPCIdentityService().getNPCIdentity(actorId)
     if (!identity?.walletAddress) {
-      throw new Error(`NPC ${actorId} has no wallet`);
+      throw new Error(`NPC ${actorId} has no wallet`)
     }
 
-    const account = privateKeyToAccount(privateKey);
+    const account = privateKeyToAccount(privateKey)
     const walletClient = createWalletClient({
       account,
       chain: this.chain,
       transport: http(this.rpcUrl),
-    });
+    })
 
     // First approve Diamond to spend tokens
     const approveTx = await walletClient.writeContract({
       chain: this.chain,
       address: this.addresses.babylonToken,
-      abi: [
-        {
-          name: 'approve',
-          type: 'function',
-          inputs: [{ type: 'address' }, { type: 'uint256' }],
-          outputs: [{ type: 'bool' }],
-          stateMutability: 'nonpayable',
-        },
-      ] as const,
+      abi: APPROVE_ABI,
       functionName: 'approve',
       args: [this.addresses.diamond, amount],
-    });
+      account,
+    })
 
     // Wait for approval
-    await this.publicClient.waitForTransactionReceipt({ hash: approveTx });
+    await this.publicClient.waitForTransactionReceipt({ hash: approveTx })
 
     // Note: The current Diamond contracts use native ETH, not ERC20
     // This would need a TokenMarketFacet to be added to the Diamond
@@ -480,10 +558,10 @@ export class NPCTokenWalletService {
     logger.info(
       `Deposited tokens for trading`,
       { actorId, amount: formatUnits(amount, 18), approveTx },
-      'NPCTokenWalletService'
-    );
+      'NPCTokenWalletService',
+    )
 
-    return approveTx;
+    return approveTx
   }
 
   /**
@@ -496,73 +574,49 @@ export class NPCTokenWalletService {
     outcome: 0 | 1,
     shares: bigint,
     action: 'buy' | 'sell',
-    privateKey: Hex
+    privateKey: Hex,
   ): Promise<Hex> {
-    const identity = await getNPCIdentityService().getNPCIdentity(actorId);
+    const identity = await getNPCIdentityService().getNPCIdentity(actorId)
     if (!identity?.walletAddress) {
-      throw new Error(`NPC ${actorId} has no wallet`);
+      throw new Error(`NPC ${actorId} has no wallet`)
     }
 
-    const account = privateKeyToAccount(privateKey);
-    const functionName = action === 'buy' ? 'buyShares' : 'sellShares';
+    const account = privateKeyToAccount(privateKey)
+    const functionName = action === 'buy' ? 'buyShares' : 'sellShares'
 
     // Create wallet client with chain
     const walletClient = createWalletClient({
       account,
       chain: this.chain,
       transport: http(this.rpcUrl),
-    });
+    })
 
     // If paymaster available, log gasless intent (would execute via bundler)
     if (this.paymasterClient) {
       logger.info(
         `Executing gasless prediction trade`,
         { actorId, marketId, action, shares: shares.toString() },
-        'NPCTokenWalletService'
-      );
+        'NPCTokenWalletService',
+      )
     }
 
     // Execute transaction
-    const abi = [
-      {
-        name: 'buyShares',
-        type: 'function',
-        inputs: [
-          { name: '_marketId', type: 'bytes32' },
-          { name: '_outcome', type: 'uint8' },
-          { name: '_numShares', type: 'uint256' },
-        ],
-        outputs: [],
-        stateMutability: 'nonpayable',
-      },
-      {
-        name: 'sellShares',
-        type: 'function',
-        inputs: [
-          { name: '_marketId', type: 'bytes32' },
-          { name: '_outcome', type: 'uint8' },
-          { name: '_numShares', type: 'uint256' },
-        ],
-        outputs: [],
-        stateMutability: 'nonpayable',
-      },
-    ] as const;
-
     const txHash = await walletClient.writeContract({
       chain: this.chain,
       address: this.addresses.diamond,
-      abi,
+      abi: PREDICTION_MARKET_ABI,
       functionName,
       args: [marketId, outcome, shares],
-    });
+      account,
+    })
 
     logger.info(
       `Executed prediction trade`,
       { actorId, marketId, action, shares: shares.toString(), txHash },
-      'NPCTokenWalletService'
-    );
+      'NPCTokenWalletService',
+    )
 
-    return txHash;
+    return txHash
   }
 
   /**
@@ -575,83 +629,56 @@ export class NPCTokenWalletService {
     size: bigint,
     collateral: bigint,
     action: 'open' | 'close',
-    privateKey: Hex
+    privateKey: Hex,
   ): Promise<Hex> {
-    const identity = await getNPCIdentityService().getNPCIdentity(actorId);
+    const identity = await getNPCIdentityService().getNPCIdentity(actorId)
     if (!identity?.walletAddress) {
-      throw new Error(`NPC ${actorId} has no wallet`);
+      throw new Error(`NPC ${actorId} has no wallet`)
     }
 
-    const account = privateKeyToAccount(privateKey);
+    const account = privateKeyToAccount(privateKey)
     const walletClient = createWalletClient({
       account,
       chain: this.chain,
       transport: http(this.rpcUrl),
-    });
-
-    const openPositionAbi = [
-      {
-        name: 'openPosition',
-        type: 'function',
-        inputs: [
-          { name: '_marketId', type: 'bytes32' },
-          { name: '_side', type: 'uint8' },
-          { name: '_size', type: 'uint256' },
-          { name: '_collateral', type: 'uint256' },
-          { name: '_maxPrice', type: 'uint256' },
-        ],
-        outputs: [],
-        stateMutability: 'nonpayable',
-      },
-    ] as const;
-
-    const closePositionAbi = [
-      {
-        name: 'closePosition',
-        type: 'function',
-        inputs: [
-          { name: '_marketId', type: 'bytes32' },
-          { name: '_minPrice', type: 'uint256' },
-        ],
-        outputs: [],
-        stateMutability: 'nonpayable',
-      },
-    ] as const;
+    })
 
     if (action === 'open') {
-      const maxPrice = BigInt(2) ** BigInt(128) - BigInt(1); // Max uint128
+      const maxPrice = BigInt(2) ** BigInt(128) - BigInt(1) // Max uint128
       const txHash = await walletClient.writeContract({
         chain: this.chain,
         address: this.addresses.diamond,
-        abi: openPositionAbi,
+        abi: OPEN_POSITION_ABI,
         functionName: 'openPosition',
         args: [marketId, side, size, collateral, maxPrice],
-      });
+        account,
+      })
 
       logger.info(
         `Opened perp position`,
         { actorId, marketId, side, size: size.toString(), txHash },
-        'NPCTokenWalletService'
-      );
+        'NPCTokenWalletService',
+      )
 
-      return txHash;
+      return txHash
     } else {
-      const minPrice = 0n;
+      const minPrice = 0n
       const txHash = await walletClient.writeContract({
         chain: this.chain,
         address: this.addresses.diamond,
-        abi: closePositionAbi,
+        abi: CLOSE_POSITION_ABI,
         functionName: 'closePosition',
         args: [marketId, minPrice],
-      });
+        account,
+      })
 
       logger.info(
         `Closed perp position`,
         { actorId, marketId, txHash },
-        'NPCTokenWalletService'
-      );
+        'NPCTokenWalletService',
+      )
 
-      return txHash;
+      return txHash
     }
   }
 
@@ -663,19 +690,19 @@ export class NPCTokenWalletService {
    * Start stop-loss monitoring for all NPCs
    */
   startStopLossMonitoring(): void {
-    if (this.stopLossEnabled) return;
+    if (this.stopLossEnabled) return
 
-    this.stopLossEnabled = true;
+    this.stopLossEnabled = true
     this.stopLossInterval = setInterval(
       () => this.runStopLossCheck(),
-      STOP_LOSS_CONFIG.CHECK_INTERVAL_MS
-    );
+      STOP_LOSS_CONFIG.CHECK_INTERVAL_MS,
+    )
 
     logger.info(
       'Started NPC stop-loss monitoring',
       undefined,
-      'NPCTokenWalletService'
-    );
+      'NPCTokenWalletService',
+    )
   }
 
   /**
@@ -683,33 +710,33 @@ export class NPCTokenWalletService {
    */
   stopStopLossMonitoring(): void {
     if (this.stopLossInterval) {
-      clearInterval(this.stopLossInterval);
-      this.stopLossInterval = null;
+      clearInterval(this.stopLossInterval)
+      this.stopLossInterval = null
     }
-    this.stopLossEnabled = false;
+    this.stopLossEnabled = false
     logger.info(
       'Stopped NPC stop-loss monitoring',
       undefined,
-      'NPCTokenWalletService'
-    );
+      'NPCTokenWalletService',
+    )
   }
 
   /**
    * Run stop-loss check for all NPCs
    */
   private async runStopLossCheck(): Promise<void> {
-    const allActors = await db.actorState.findMany();
+    const allActors = await db.actorState.findMany()
 
     for (const actor of allActors) {
-      const actorId = String(actor.id);
+      const actorId = String(actor.id)
       try {
-        await this.checkStopLossForNPC(actorId);
+        await this.checkStopLossForNPC(actorId)
       } catch (error) {
         logger.warn(
           `Stop-loss check failed for NPC ${actorId}`,
           { error },
-          'NPCTokenWalletService'
-        );
+          'NPCTokenWalletService',
+        )
       }
     }
   }
@@ -723,56 +750,51 @@ export class NPCTokenWalletService {
       reason: '',
       positionsClosed: 0,
       totalLossAvoided: 0n,
-    };
+    }
 
     // Get current balance
-    const balance = await this.getBalance(actorId);
+    const balance = await this.getBalance(actorId)
 
     // Check if below minimum
     if (balance.totalValue < STOP_LOSS_CONFIG.MIN_BALANCE) {
-      result.triggered = true;
-      result.reason = 'Below minimum balance';
+      result.triggered = true
+      result.reason = 'Below minimum balance'
       // Would close all positions here
-      return result;
+      return result
     }
 
     // Get daily starting balance from database
     const actorStateRow = await db.actorState.findUnique({
       where: { id: actorId },
-    });
+    })
 
-    if (!actorStateRow) return result;
+    if (!actorStateRow) return result
 
-    const startingBalance = parseUnits(
-      String(actorStateRow.tradingBalance),
-      18
-    );
-    const currentBalance = balance.totalValue;
+    const startingBalance = parseUnits(String(actorStateRow.tradingBalance), 18)
+    const currentBalance = balance.totalValue
 
     // Calculate daily loss percentage
     if (startingBalance > 0n) {
       const loss =
-        startingBalance > currentBalance
-          ? startingBalance - currentBalance
-          : 0n;
-      const lossPercent = Number((loss * 100n) / startingBalance);
+        startingBalance > currentBalance ? startingBalance - currentBalance : 0n
+      const lossPercent = Number((loss * 100n) / startingBalance)
 
       if (lossPercent >= STOP_LOSS_CONFIG.DAILY_LOSS_LIMIT_PCT) {
-        result.triggered = true;
-        result.reason = `Daily loss limit reached: ${lossPercent.toFixed(2)}%`;
-        result.totalLossAvoided = loss;
+        result.triggered = true
+        result.reason = `Daily loss limit reached: ${lossPercent.toFixed(2)}%`
+        result.totalLossAvoided = loss
 
         logger.warn(
           `Stop-loss triggered for NPC ${actorId}`,
           { lossPercent, loss: formatUnits(loss, 18) },
-          'NPCTokenWalletService'
-        );
+          'NPCTokenWalletService',
+        )
 
         // Would close all positions here
       }
     }
 
-    return result;
+    return result
   }
 }
 
@@ -780,26 +802,26 @@ export class NPCTokenWalletService {
 // SINGLETON
 // =============================================================================
 
-let npcTokenWalletService: NPCTokenWalletService | null = null;
+let npcTokenWalletService: NPCTokenWalletService | null = null
 
 export function getNPCTokenWalletService(): NPCTokenWalletService {
   if (!npcTokenWalletService) {
-    npcTokenWalletService = new NPCTokenWalletService();
+    npcTokenWalletService = new NPCTokenWalletService()
   }
-  return npcTokenWalletService;
+  return npcTokenWalletService
 }
 
 export async function initializeNPCTokenWalletService(
-  paymasterClientGetter?: () => PaymasterClient
+  paymasterClientGetter?: () => PaymasterClient,
 ): Promise<NPCTokenWalletService> {
-  const service = getNPCTokenWalletService();
-  await service.initialize(paymasterClientGetter);
-  return service;
+  const service = getNPCTokenWalletService()
+  await service.initialize(paymasterClientGetter)
+  return service
 }
 
 export function resetNPCTokenWalletService(): void {
   if (npcTokenWalletService) {
-    npcTokenWalletService.stopStopLossMonitoring();
+    npcTokenWalletService.stopStopLossMonitoring()
   }
-  npcTokenWalletService = null;
+  npcTokenWalletService = null
 }

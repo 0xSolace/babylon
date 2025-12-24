@@ -5,18 +5,18 @@
  * from Agent0 registry and subgraph data.
  */
 
-import { AgentCapabilitiesSchema } from '@babylon/shared';
+import { AgentCapabilitiesSchema } from '@babylon/shared'
 
 /**
  * Parsed capabilities with all required fields populated
  */
 export interface ParsedCapabilities {
-  strategies: string[];
-  markets: string[];
-  actions: string[];
-  version: string;
-  skills: string[];
-  domains: string[];
+  strategies: string[]
+  markets: string[]
+  actions: string[]
+  version: string
+  skills: string[]
+  domains: string[]
 }
 
 /**
@@ -29,7 +29,7 @@ const DEFAULT_CAPABILITIES: ParsedCapabilities = {
   version: '1.0.0',
   skills: [],
   domains: [],
-};
+}
 
 /**
  * Parse and validate capabilities with defaults
@@ -40,12 +40,12 @@ const DEFAULT_CAPABILITIES: ParsedCapabilities = {
  */
 export function parseCapabilities(
   capabilities: unknown,
-  defaults: ParsedCapabilities = DEFAULT_CAPABILITIES
+  defaults: ParsedCapabilities = DEFAULT_CAPABILITIES,
 ): ParsedCapabilities {
-  const validation = AgentCapabilitiesSchema.safeParse(capabilities);
+  const validation = AgentCapabilitiesSchema.safeParse(capabilities)
 
   if (!validation.success) {
-    return defaults;
+    return defaults
   }
 
   return {
@@ -55,5 +55,5 @@ export function parseCapabilities(
     version: validation.data.version ?? defaults.version,
     skills: validation.data.skills ?? defaults.skills,
     domains: validation.data.domains ?? defaults.domains,
-  };
+  }
 }

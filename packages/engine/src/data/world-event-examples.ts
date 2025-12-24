@@ -130,4 +130,4 @@ Major platforms (MetAI, AIpple, GoogAI) officially adopt the "Spatial Web" rebra
 An AI-generated artwork wins the prestigious Turner Prize, sparking controversy in the art world.
 A VR documentary wins an Emmy Award, marking the first time a fully immersive experience receives major recognition.
 A-list celebrity announces they're "going fully digital" and will live exclusively in VR, streaming their virtual life 24/7.
-Coachella announces its 2026 festival will be held entirely in virtual reality, with physical attendance optional.`;
+Coachella announces its 2026 festival will be held entirely in virtual reality, with physical attendance optional.`

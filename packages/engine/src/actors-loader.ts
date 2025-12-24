@@ -16,16 +16,16 @@
  * - Single entity loads: Direct import (fastest)
  */
 
-import { actors } from './data/actors';
-import { organizations } from './data/organizations';
-import type { ActorData, ActorsDatabase, Organization } from './types/shared';
+import { actors } from './data/actors'
+import { organizations } from './data/organizations'
+import type { ActorData, ActorsDatabase, Organization } from './types/shared'
 
 /**
  * Options for selective data loading
  */
 export interface LoadActorsOptions {
-  includeActors?: boolean;
-  includeOrganizations?: boolean;
+  includeActors?: boolean
+  includeOrganizations?: boolean
 }
 
 /**
@@ -33,25 +33,25 @@ export interface LoadActorsOptions {
  * Cleared on module reload, persists during runtime
  */
 const dataCache: {
-  actors: Map<string, ActorData>;
-  organizations: Map<string, Organization>;
-  allActors: ActorData[] | null;
-  allOrganizations: Organization[] | null;
+  actors: Map<string, ActorData>
+  organizations: Map<string, Organization>
+  allActors: ActorData[] | null
+  allOrganizations: Organization[] | null
 } = {
   actors: new Map(),
   organizations: new Map(),
   allActors: null,
   allOrganizations: null,
-};
+}
 
 /**
  * Clear the data cache (useful for testing or when data changes)
  */
 export function clearDataCache(): void {
-  dataCache.actors.clear();
-  dataCache.organizations.clear();
-  dataCache.allActors = null;
-  dataCache.allOrganizations = null;
+  dataCache.actors.clear()
+  dataCache.organizations.clear()
+  dataCache.allActors = null
+  dataCache.allOrganizations = null
 }
 
 /**
@@ -63,10 +63,10 @@ function initializeCache(): void {
     // The actors array contains readonly objects, so we need to create new objects
     dataCache.allActors = actors.map((actor) => {
       // Create a mutable copy of the actor data
-      const actorData = { ...actor } as ActorData;
-      dataCache.actors.set(actorData.id, actorData);
-      return actorData;
-    });
+      const actorData = { ...actor } as ActorData
+      dataCache.actors.set(actorData.id, actorData)
+      return actorData
+    })
   }
 
   if (dataCache.allOrganizations === null) {
@@ -74,10 +74,10 @@ function initializeCache(): void {
     // The organizations array contains readonly objects, so we need to create new objects
     dataCache.allOrganizations = organizations.map((org) => {
       // Create a mutable copy of the organization data
-      const orgData = { ...org } as Organization;
-      dataCache.organizations.set(orgData.id, orgData);
-      return orgData;
-    });
+      const orgData = { ...org } as Organization
+      dataCache.organizations.set(orgData.id, orgData)
+      return orgData
+    })
   }
 }
 
@@ -101,11 +101,11 @@ function initializeCache(): void {
  * @returns ActorsDatabase with requested data
  */
 export function loadActorsData(options?: LoadActorsOptions): ActorsDatabase {
-  initializeCache();
+  initializeCache()
 
   // Default to loading everything if no options provided
-  const includeActors = options?.includeActors !== false;
-  const includeOrganizations = options?.includeOrganizations !== false;
+  const includeActors = options?.includeActors !== false
+  const includeOrganizations = options?.includeOrganizations !== false
 
   return {
     actors: includeActors ? [...(dataCache.allActors ?? [])] : [],
@@ -113,7 +113,7 @@ export function loadActorsData(options?: LoadActorsOptions): ActorsDatabase {
       ? [...(dataCache.allOrganizations ?? [])]
       : [],
     relationships: [], // Relationships are now dynamic, stored in DB
-  };
+  }
 }
 
 /**
@@ -126,14 +126,17 @@ export function loadActorsData(options?: LoadActorsOptions): ActorsDatabase {
  * @returns Actor data or null if not found
  */
 export function loadActorById(actorId: string): ActorData | null {
-  initializeCache();
+  initializeCache()
 
   // Check cache first (fastest - no I/O)
   if (dataCache.actors.has(actorId)) {
-    return dataCache.actors.get(actorId)!;
+    const actor = dataCache.actors.get(actorId)
+    if (actor !== undefined) {
+      return actor
+    }
   }
 
-  return null;
+  return null
 }
 
 /**
@@ -146,14 +149,17 @@ export function loadActorById(actorId: string): ActorData | null {
  * @returns Organization data or null if not found
  */
 export function loadOrganizationById(orgId: string): Organization | null {
-  initializeCache();
+  initializeCache()
 
   // Check cache first (fastest - no I/O)
   if (dataCache.organizations.has(orgId)) {
-    return dataCache.organizations.get(orgId)!;
+    const org = dataCache.organizations.get(orgId)
+    if (org !== undefined) {
+      return org
+    }
   }
 
-  return null;
+  return null
 }
 
 /**
@@ -163,8 +169,8 @@ export function loadOrganizationById(orgId: string): Organization | null {
  * @returns Array of actor IDs
  */
 export function getActorIds(): string[] {
-  initializeCache();
-  return dataCache.allActors?.map((actor) => actor.id) ?? [];
+  initializeCache()
+  return dataCache.allActors?.map((actor) => actor.id) ?? []
 }
 
 /**
@@ -174,6 +180,6 @@ export function getActorIds(): string[] {
  * @returns Array of organization IDs
  */
 export function getOrganizationIds(): string[] {
-  initializeCache();
-  return dataCache.allOrganizations?.map((org) => org.id) ?? [];
+  initializeCache()
+  return dataCache.allOrganizations?.map((org) => org.id) ?? []
 }

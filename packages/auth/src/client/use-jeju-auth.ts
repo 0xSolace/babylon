@@ -4,9 +4,7 @@
  * Main hook for accessing decentralized authentication.
  */
 
-'use client';
-
-import { useJejuAuthContext } from './provider';
+import { useJejuAuthContext } from './provider'
 
 /**
  * Hook for accessing Jeju authentication
@@ -23,7 +21,7 @@ import { useJejuAuthContext } from './provider';
  * ```
  */
 export function useJejuAuth() {
-  const context = useJejuAuthContext();
+  const context = useJejuAuthContext()
 
   return {
     // State
@@ -59,5 +57,5 @@ export function useJejuAuth() {
 
     // Session
     getSession: context.getSession,
-  };
+  }
 }

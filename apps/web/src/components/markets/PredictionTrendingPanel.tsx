@@ -1,23 +1,21 @@
-'use client';
-
-import { cn } from '@babylon/shared';
-import { Flame } from 'lucide-react';
-import { useMemo } from 'react';
-import { Skeleton } from '@/components/shared/Skeleton';
+import { cn } from '@babylon/shared'
+import { Flame } from 'lucide-react'
+import { useMemo } from 'react'
+import { Skeleton } from '@/components/shared/Skeleton'
 import {
   usePredictionMarkets,
   usePredictionMarketsPolling,
-} from '@/stores/predictionMarketsStore';
+} from '@/stores/predictionMarketsStore'
 
 /**
  * Prediction market summary structure for trending panel.
  */
 interface PredictionSummary {
-  id: string;
-  text: string;
-  yesShares: number;
-  noShares: number;
-  resolutionDate?: string;
+  id: string
+  text: string
+  yesShares: number
+  noShares: number
+  resolutionDate?: string
 }
 
 /**
@@ -37,40 +35,40 @@ interface PredictionSummary {
  * @returns Prediction trending panel element
  */
 interface PredictionTrendingPanelProps {
-  onMarketClick?: (marketId: string) => void;
+  onMarketClick?: (marketId: string) => void
 }
 
 export function PredictionTrendingPanel({
   onMarketClick,
 }: PredictionTrendingPanelProps) {
   // Use shared prediction markets store
-  const { markets: rawMarkets, loading } = usePredictionMarkets();
-  usePredictionMarketsPolling(60000); // Enable 60s polling
+  const { markets: rawMarkets, loading } = usePredictionMarkets()
+  usePredictionMarketsPolling(60000) // Enable 60s polling
 
   // Transform and sort markets in one pass
   const sortedMarkets = useMemo(() => {
     return rawMarkets
       .filter((m) => (m.yesShares ?? 0) + (m.noShares ?? 0) > 0)
       .map((m) => {
-        const yesShares = m.yesShares ?? 0;
-        const noShares = m.noShares ?? 0;
+        const yesShares = m.yesShares ?? 0
+        const noShares = m.noShares ?? 0
         return {
           id: m.id.toString(),
           text: m.text,
           yesShares,
           noShares,
           resolutionDate: m.resolutionDate,
-        };
+        }
       })
       .sort((a, b) => b.yesShares + b.noShares - (a.yesShares + a.noShares))
-      .slice(0, 4);
-  }, [rawMarkets]);
+      .slice(0, 4)
+  }, [rawMarkets])
 
   const renderProbability = (market: PredictionSummary) => {
-    const total = market.yesShares + market.noShares;
-    const yesPercent = total > 0 ? (market.yesShares / total) * 100 : 50;
-    return yesPercent.toFixed(1);
-  };
+    const total = market.yesShares + market.noShares
+    const yesPercent = total > 0 ? (market.yesShares / total) * 100 : 50
+    return yesPercent.toFixed(1)
+  }
 
   return (
     <div className="flex flex-1 flex-col rounded-2xl bg-sidebar px-4 py-3">
@@ -93,10 +91,11 @@ export function PredictionTrendingPanel({
         <div className="flex flex-1 flex-col gap-2">
           {sortedMarkets.map((market) => (
             <button
+              type="button"
               key={market.id}
               onClick={() => onMarketClick?.(market.id)}
               className={cn(
-                'w-full cursor-pointer rounded-lg p-2 text-left transition-colors hover:bg-muted/50'
+                'w-full cursor-pointer rounded-lg p-2 text-left transition-colors hover:bg-muted/50',
               )}
             >
               <div className="line-clamp-2 font-medium text-foreground text-sm">
@@ -116,5 +115,5 @@ export function PredictionTrendingPanel({
         </div>
       )}
     </div>
-  );
+  )
 }

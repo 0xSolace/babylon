@@ -1,8 +1,9 @@
 {
   "extends": "../tsconfig.base.json",
   "compilerOptions": {
-    "outDir": "./dist",
     "composite": false,
+    "declaration": false,
+    "declarationMap": false,
     "noEmit": true,
     "noUnusedLocals": false,
     "noUnusedParameters": false,
@@ -35,13 +36,13 @@
       "@babylon/a2a": ["../a2a/src/index.ts"],
       "@babylon/a2a/*": ["../a2a/src/*"],
       "@babylon/mcp": ["../mcp/src/index.ts"],
-      "@babylon/contracts": ["../contracts/src/index.ts"],
-      "@babylon/contracts/*": ["../contracts/src/*"],
       "@babylon/training": ["../training/src/index.ts"],
       "@babylon/training/*": ["../training/src/*"],
       "@babylon/messaging": ["../messaging/src/index.ts"],
       "@babylon/messaging/*": ["../messaging/src/*"],
-      "@babylon/auth/server": ["../shared/src/auth/server-auth.ts"],
+      "@babylon/core": ["../core/markets/index.ts"],
+      "@babylon/core/*": ["../core/*"],
+      "@babylon/auth": ["../auth/src/index.ts"],
       "@babylon/testing": ["./src/index.ts"],
       "@babylon/testing/*": ["./*"]
     }
@@ -70,11 +71,5 @@
     "integration/decentralized-stack.integration.test.ts",
     "unit/cron/agent-tick-db.test.ts",
     "integration/game-feedback-reputation.integration.test.ts"
-  ],
-  "references": [
-    { "path": "../shared" },
-    { "path": "../db" },
-    { "path": "../a2a" },
-    { "path": "../contracts" }
   ]
 }

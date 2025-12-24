@@ -26,22 +26,20 @@
  * />
  * ```
  */
-'use client';
-
-import { cn } from '@babylon/shared';
-import { Minus, TrendingDown, TrendingUp } from 'lucide-react';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { cn } from '@babylon/shared'
+import { Minus, TrendingDown, TrendingUp } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 interface ScoreSliderProps {
-  value?: number; // 0-100
-  onChange?: (score: number) => void;
-  min?: number;
-  max?: number;
-  step?: number;
-  showValue?: boolean;
-  showLabels?: boolean;
-  readonly?: boolean;
-  className?: string;
+  value?: number // 0-100
+  onChange?: (score: number) => void
+  min?: number
+  max?: number
+  step?: number
+  showValue?: boolean
+  showLabels?: boolean
+  readonly?: boolean
+  className?: string
 }
 
 export function ScoreSlider({
@@ -55,78 +53,78 @@ export function ScoreSlider({
   readonly = false,
   className = '',
 }: ScoreSliderProps) {
-  const [isDragging, setIsDragging] = useState(false);
-  const sliderRef = useRef<HTMLDivElement>(null);
+  const [isDragging, setIsDragging] = useState(false)
+  const sliderRef = useRef<HTMLDivElement>(null)
 
-  const clampedValue = Math.max(min, Math.min(max, value));
-  const percentage = ((clampedValue - min) / (max - min)) * 100;
+  const clampedValue = Math.max(min, Math.min(max, value))
+  const percentage = ((clampedValue - min) / (max - min)) * 100
 
   const getColorClass = (score: number): string => {
-    if (score >= 80) return 'bg-green-500';
-    if (score >= 60) return 'bg-blue-500';
-    if (score >= 40) return 'bg-yellow-500';
-    if (score >= 20) return 'bg-orange-500';
-    return 'bg-red-500';
-  };
+    if (score >= 80) return 'bg-green-500'
+    if (score >= 60) return 'bg-blue-500'
+    if (score >= 40) return 'bg-yellow-500'
+    if (score >= 20) return 'bg-orange-500'
+    return 'bg-red-500'
+  }
 
   const getScoreLabel = (
-    score: number
+    score: number,
   ): { label: string; Icon: typeof TrendingUp } => {
-    if (score >= 80) return { label: 'Excellent', Icon: TrendingUp };
-    if (score >= 60) return { label: 'Good', Icon: TrendingUp };
-    if (score >= 40) return { label: 'Average', Icon: Minus };
-    if (score >= 20) return { label: 'Below Average', Icon: TrendingDown };
-    return { label: 'Poor', Icon: TrendingDown };
-  };
+    if (score >= 80) return { label: 'Excellent', Icon: TrendingUp }
+    if (score >= 60) return { label: 'Good', Icon: TrendingUp }
+    if (score >= 40) return { label: 'Average', Icon: Minus }
+    if (score >= 20) return { label: 'Below Average', Icon: TrendingDown }
+    return { label: 'Poor', Icon: TrendingDown }
+  }
 
   const updateValue = useCallback(
     (clientX: number) => {
-      if (!sliderRef.current || readonly || !onChange) return;
+      if (!sliderRef.current || readonly || !onChange) return
 
-      const rect = sliderRef.current.getBoundingClientRect();
-      const offsetX = clientX - rect.left;
-      const percentage = Math.max(0, Math.min(1, offsetX / rect.width));
-      const rawValue = min + percentage * (max - min);
-      const steppedValue = Math.round(rawValue / step) * step;
-      const newValue = Math.max(min, Math.min(max, steppedValue));
+      const rect = sliderRef.current.getBoundingClientRect()
+      const offsetX = clientX - rect.left
+      const percentage = Math.max(0, Math.min(1, offsetX / rect.width))
+      const rawValue = min + percentage * (max - min)
+      const steppedValue = Math.round(rawValue / step) * step
+      const newValue = Math.max(min, Math.min(max, steppedValue))
 
-      onChange(newValue);
+      onChange(newValue)
     },
-    [readonly, onChange, min, max, step]
-  );
+    [readonly, onChange, min, max, step],
+  )
 
   const handleMouseDown = (e: React.MouseEvent) => {
-    if (readonly) return;
-    setIsDragging(true);
-    updateValue(e.clientX);
-  };
+    if (readonly) return
+    setIsDragging(true)
+    updateValue(e.clientX)
+  }
 
   const handleMouseMove = useCallback(
     (e: MouseEvent) => {
-      if (!isDragging) return;
-      updateValue(e.clientX);
+      if (!isDragging) return
+      updateValue(e.clientX)
     },
-    [isDragging, updateValue]
-  );
+    [isDragging, updateValue],
+  )
 
   const handleMouseUp = useCallback(() => {
-    setIsDragging(false);
-  }, []);
+    setIsDragging(false)
+  }, [])
 
   useEffect(() => {
     if (isDragging) {
-      window.addEventListener('mousemove', handleMouseMove);
-      window.addEventListener('mouseup', handleMouseUp);
+      window.addEventListener('mousemove', handleMouseMove)
+      window.addEventListener('mouseup', handleMouseUp)
 
       return () => {
-        window.removeEventListener('mousemove', handleMouseMove);
-        window.removeEventListener('mouseup', handleMouseUp);
-      };
+        window.removeEventListener('mousemove', handleMouseMove)
+        window.removeEventListener('mouseup', handleMouseUp)
+      }
     }
-    return undefined;
-  }, [isDragging, handleMouseMove, handleMouseUp]);
+    return undefined
+  }, [isDragging, handleMouseMove, handleMouseUp])
 
-  const { label, Icon } = getScoreLabel(clampedValue);
+  const { label, Icon } = getScoreLabel(clampedValue)
 
   return (
     <div className={cn('space-y-3', className)}>
@@ -152,10 +150,16 @@ export function ScoreSlider({
       <div
         ref={sliderRef}
         onMouseDown={handleMouseDown}
+        role="slider"
+        aria-valuemin={min}
+        aria-valuemax={max}
+        aria-valuenow={clampedValue}
+        aria-readonly={readonly}
+        tabIndex={readonly ? -1 : 0}
         className={cn(
           'relative h-3 overflow-hidden rounded-full bg-gray-700',
           !readonly && 'cursor-pointer',
-          isDragging && 'cursor-grabbing'
+          isDragging && 'cursor-grabbing',
         )}
       >
         {/* Filled Track */}
@@ -163,7 +167,7 @@ export function ScoreSlider({
           className={cn(
             'absolute top-0 left-0 h-full transition-all',
             getColorClass(clampedValue),
-            isDragging ? 'duration-0' : 'duration-200'
+            isDragging ? 'duration-0' : 'duration-200',
           )}
           style={{ width: `${percentage}%` }}
         />
@@ -174,7 +178,7 @@ export function ScoreSlider({
             className={cn(
               'absolute top-1/2 h-5 w-5 -translate-y-1/2 rounded-full bg-white shadow-lg transition-transform',
               isDragging ? 'scale-110 duration-0' : 'duration-200',
-              !readonly && 'hover:scale-110'
+              !readonly && 'hover:scale-110',
             )}
             style={{ left: `calc(${percentage}% - 10px)` }}
           />
@@ -190,7 +194,7 @@ export function ScoreSlider({
         </div>
       )}
     </div>
-  );
+  )
 }
 
 /**
@@ -199,10 +203,10 @@ export function ScoreSlider({
  * Minimal slider without labels or value display
  */
 interface ScoreSliderCompactProps {
-  value: number;
-  onChange?: (score: number) => void;
-  readonly?: boolean;
-  className?: string;
+  value: number
+  onChange?: (score: number) => void
+  readonly?: boolean
+  className?: string
 }
 
 export function ScoreSliderCompact({
@@ -220,7 +224,7 @@ export function ScoreSliderCompact({
       readonly={readonly}
       className={className}
     />
-  );
+  )
 }
 
 /**
@@ -229,11 +233,11 @@ export function ScoreSliderCompact({
  * Slider formatted as percentage
  */
 interface PercentageSliderProps {
-  value: number; // 0-100
-  onChange?: (value: number) => void;
-  label?: string;
-  readonly?: boolean;
-  className?: string;
+  value: number // 0-100
+  onChange?: (value: number) => void
+  label?: string
+  readonly?: boolean
+  className?: string
 }
 
 export function PercentageSlider({
@@ -262,5 +266,5 @@ export function PercentageSlider({
         readonly={readonly}
       />
     </div>
-  );
+  )
 }

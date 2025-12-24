@@ -1,5 +1,5 @@
-import type { PortfolioPnLSnapshot } from '@/hooks/usePortfolioPnL';
-import type { User } from '@/stores/authStore';
+import type { PortfolioPnLSnapshot } from '@/hooks/usePortfolioPnL'
+import type { User } from '@/stores/authStore'
 
 /**
  * Portfolio PnL share card component for generating shareable images.
@@ -27,9 +27,9 @@ import type { User } from '@/stores/authStore';
  * ```
  */
 interface PortfolioPnLShareCardProps {
-  data: PortfolioPnLSnapshot;
-  user: User;
-  className?: string;
+  data: PortfolioPnLSnapshot
+  user: User
+  className?: string
 }
 
 /**
@@ -39,7 +39,7 @@ const formatter = new Intl.NumberFormat('en-US', {
   style: 'currency',
   currency: 'USD',
   maximumFractionDigits: 2,
-});
+})
 
 /**
  * Format currency value safely.
@@ -50,7 +50,7 @@ const formatter = new Intl.NumberFormat('en-US', {
  * @returns Formatted currency string
  */
 function formatCurrency(value: number) {
-  return formatter.format(Number.isFinite(value) ? value : 0);
+  return formatter.format(Number.isFinite(value) ? value : 0)
 }
 
 export function PortfolioPnLShareCard({
@@ -58,13 +58,13 @@ export function PortfolioPnLShareCard({
   user,
   className,
 }: PortfolioPnLShareCardProps) {
-  const displayName = user.displayName || 'Babylon Trader';
+  const displayName = user.displayName || 'Babylon Trader'
   const handle =
     user.username ||
     user.farcasterUsername ||
     user.twitterUsername ||
     user.walletAddress ||
-    'anon';
+    'anon'
 
   return (
     <div
@@ -180,6 +180,7 @@ export function PortfolioPnLShareCard({
             fill="none"
             xmlns="http://www.w3.org/2000/svg"
           >
+            <title>Babylon Logo</title>
             <circle cx="327" cy="306" r="226" fill="rgba(255,255,255,0.15)" />
             <path
               d="M195.856 521.991C143.813 492.214 105.51 450.989 85.2624 394.551C81.7814 384.848 78.2199 381.194 67.2479 379.908C42.2936 376.985 23.7953 362.404 12.5111 339.927C-5.49172 304.067 -4.67259 268.852 18.9285 235.552C29.6249 220.46 44.4759 210.593 62.8058 207.128C69.6663 205.831 73.2934 202.732 76.0755 196.436C93.2212 157.634 118.777 125.104 151.575 98.381C181.171 74.2683 214.975 58.349 251.886 48.9084C253.253 48.5588 256.658 47.7802 258.049 47.4999C268.255 45.4444 274.866 43.9212 281.201 33.011C292.954 12.7711 311.199 -0.0206842 335.972 2.51077e-05C356.031 0.0167943 366.85 17.3623 358.581 35.7055C357.617 37.8438 356.07 39.7834 356.295 43.176C362.858 44.8043 369.647 46.5946 376.485 48.168C427.965 60.0126 472.317 84.525 508.475 123.174C528.324 144.391 543.582 168.756 554.858 195.534C557.038 200.71 559.817 203.791 565.719 205.226C596.286 212.66 613.383 233.672 620.4 263.098C628.638 297.647 621.324 329.26 598.431 356.575C587.247 369.919 572.422 377.924 555.081 380.693C551.974 381.189 549.98 381.698 549.148 385.367C541.108 420.834 521.743 450.043 496.996 475.688C465.154 508.686 427.063 531.719 382.607 544.051C337.717 556.504 292.884 556.221 248.131 544.075C229.964 539.145 212.727 531.57 195.856 521.991ZM385.623 153.737C365.592 157.758 348.796 167.679 334.851 182.346C329.882 187.571 326.23 187.352 321.203 182.488C312.298 173.871 302.763 165.766 291.233 160.897C254.377 145.333 218.457 147.342 184.011 168.027C140.65 194.067 126.29 239.174 133.157 284.709C136.707 308.248 149.087 327.862 165.274 344.867C171.092 350.977 171.925 355.784 168.137 363.593C157.106 386.334 157.884 409.312 168.914 432.199C184.627 464.805 211.559 484.755 243.836 497.97C280.712 513.068 319.358 515.817 358.773 511.586C399.006 507.266 434.685 493.617 463.79 464.353C491.704 436.287 500.937 403.628 489.249 365.84C486.403 356.638 487.494 350.55 493.98 343.557C519.238 316.322 526.277 282.927 522.133 247.411C518.545 216.664 503.432 191.854 477.938 173.022C450.185 152.521 419.874 147.415 385.623 153.737Z"
@@ -267,5 +268,5 @@ export function PortfolioPnLShareCard({
         </p>
       </footer>
     </div>
-  );
+  )
 }

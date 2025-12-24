@@ -7,66 +7,61 @@
  * This module provides Redis-compatible API using the decentralized cache.
  */
 
-import { logger } from '@babylon/shared';
-import {
-  type DecentralizedRedis,
-  getDecentralizedRedis,
-} from './decentralized-redis';
+import { logger } from '@babylon/shared'
+import { getRedis as getRedisFromImpl, type Redis } from './redis'
 
 // Type for compatibility with existing code
-export type RedisInstance = DecentralizedRedis;
+export type RedisInstance = Redis
 
 // Redis client state
-let redisClient: DecentralizedRedis | null = null;
-let isInitialized = false;
-const isBuildTime = process.env.NEXT_PHASE === 'phase-production-build';
+let redisClient: Redis | null = null
+let isInitialized = false
+const isBuildTime = process.env.BUILD_PHASE === 'phase-production-build'
 
 /**
  * Initialize Redis client (now using decentralized cache)
  */
 async function initializeRedis(): Promise<void> {
   if (isBuildTime) {
-    logger.debug('[Redis] Skipping initialization during build');
-    return;
+    logger.debug('[Redis] Skipping initialization during build')
+    return
   }
 
   if (isInitialized && redisClient) {
-    return;
+    return
   }
 
-  logger.info('[Redis] Initializing decentralized Redis replacement');
+  logger.info('[Redis] Initializing decentralized Redis replacement')
 
-  redisClient = await getDecentralizedRedis();
-  isInitialized = true;
+  redisClient = await getRedisFromImpl()
+  isInitialized = true
 
-  logger.info('[Redis] Decentralized cache backend ready');
+  logger.info('[Redis] Decentralized cache backend ready')
 }
 
 /**
  * Get or initialize Redis client
  */
-export async function getRedis(): Promise<DecentralizedRedis> {
+export async function getRedis(): Promise<Redis> {
   if (!isInitialized || !redisClient) {
-    await initializeRedis();
+    await initializeRedis()
   }
 
   if (!redisClient) {
-    throw new Error(
-      '[Redis] Decentralized cache is required but not available'
-    );
+    throw new Error('[Redis] Decentralized cache is required but not available')
   }
 
-  return redisClient;
+  return redisClient
 }
 
 /**
  * Synchronous getter - throws if not initialized
  */
-export function getRedisClient(): DecentralizedRedis {
+export function getRedisClient(): Redis {
   if (!redisClient) {
-    throw new Error('[Redis] Client not initialized. Call getRedis() first.');
+    throw new Error('[Redis] Client not initialized. Call getRedis() first.')
   }
-  return redisClient;
+  return redisClient
 }
 
 /**
@@ -74,11 +69,11 @@ export function getRedisClient(): DecentralizedRedis {
  */
 export async function isRedisAvailable(): Promise<boolean> {
   try {
-    const client = await getRedis();
-    await client.ping();
-    return true;
+    const client = await getRedis()
+    await client.ping()
+    return true
   } catch {
-    return false;
+    return false
   }
 }
 
@@ -87,10 +82,10 @@ export async function isRedisAvailable(): Promise<boolean> {
  */
 export async function closeRedis(): Promise<void> {
   if (redisClient) {
-    await redisClient.quit();
-    redisClient = null;
-    isInitialized = false;
-    logger.info('[Redis] Connection closed');
+    await redisClient.quit()
+    redisClient = null
+    isInitialized = false
+    logger.info('[Redis] Connection closed')
   }
 }
 
@@ -99,7 +94,7 @@ export async function closeRedis(): Promise<void> {
  * @deprecated Use getRedis() instead
  */
 export const redis = {
-  async getInstance(): Promise<DecentralizedRedis> {
-    return getRedis();
+  async getInstance(): Promise<Redis> {
+    return getRedis()
   },
-};
+}

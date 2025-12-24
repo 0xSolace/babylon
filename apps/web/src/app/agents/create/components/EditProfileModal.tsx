@@ -1,35 +1,33 @@
-'use client';
-
-import { cn } from '@babylon/shared';
-import { useMutation } from '@tanstack/react-query';
-import { ChevronLeft, ChevronRight, Upload, X as XIcon } from 'lucide-react';
-import { useCallback, useMemo, useRef, useState } from 'react';
-import { toast } from 'sonner';
-import { useAuth } from '@/hooks/useAuth';
-import type { ProfileFormData } from '../hooks/useAgentForm';
+import { cn } from '@babylon/shared'
+import { useMutation } from '@tanstack/react-query'
+import { ChevronLeft, ChevronRight, Upload, X as XIcon } from 'lucide-react'
+import { useCallback, useMemo, useRef, useState } from 'react'
+import { toast } from 'sonner'
+import { useAuth } from '@/hooks/useAuth'
+import type { ProfileFormData } from '../hooks/useAgentForm'
 
 interface UploadImageResponse {
-  success: boolean;
-  url: string;
-  key: string;
-  size: number;
-  filename: string;
+  success: boolean
+  url: string
+  key: string
+  size: number
+  filename: string
 }
 
 interface UploadParams {
-  type: 'profile' | 'cover';
-  file: File;
-  token: string;
+  type: 'profile' | 'cover'
+  file: File
+  token: string
 }
 
-const TOTAL_PROFILE_PICTURES = 100;
-const TOTAL_BANNERS = 100;
+const TOTAL_PROFILE_PICTURES = 100
+const TOTAL_BANNERS = 100
 
 interface EditProfileModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  profileData: ProfileFormData;
-  onSave: (data: ProfileFormData) => void;
+  isOpen: boolean
+  onClose: () => void
+  profileData: ProfileFormData
+  onSave: (data: ProfileFormData) => void
 }
 
 export function EditProfileModal({
@@ -38,36 +36,36 @@ export function EditProfileModal({
   profileData,
   onSave,
 }: EditProfileModalProps) {
-  const { getAccessToken } = useAuth();
-  const [localData, setLocalData] = useState<ProfileFormData>(profileData);
+  const { getAccessToken } = useAuth()
+  const [localData, setLocalData] = useState<ProfileFormData>(profileData)
   const [profilePictureIndex, setProfilePictureIndex] = useState(() => {
     // Extract index from URL if it's a local asset
-    const match = profileData.profileImageUrl?.match(/profile-(\d+)\.jpg/);
-    return match?.[1] ? parseInt(match[1], 10) : 1;
-  });
+    const match = profileData.profileImageUrl?.match(/profile-(\d+)\.jpg/)
+    return match?.[1] ? parseInt(match[1], 10) : 1
+  })
   const [bannerIndex, setBannerIndex] = useState(() => {
     // Extract index from URL if it's a local asset
-    const match = profileData.coverImageUrl?.match(/banner-(\d+)\.jpg/);
-    return match?.[1] ? parseInt(match[1], 10) : 1;
-  });
+    const match = profileData.coverImageUrl?.match(/banner-(\d+)\.jpg/)
+    return match?.[1] ? parseInt(match[1], 10) : 1
+  })
   const [uploadedProfileImage, setUploadedProfileImage] = useState<
     string | null
   >(
     profileData.profileImageUrl?.startsWith('/assets/')
       ? null
-      : profileData.profileImageUrl || null
-  );
+      : profileData.profileImageUrl || null,
+  )
   const [uploadedBanner, setUploadedBanner] = useState<string | null>(
     profileData.coverImageUrl?.startsWith('/assets/')
       ? null
-      : profileData.coverImageUrl || null
-  );
+      : profileData.coverImageUrl || null,
+  )
   const [uploadingType, setUploadingType] = useState<
     'profile' | 'cover' | null
-  >(null);
+  >(null)
 
-  const profileInputRef = useRef<HTMLInputElement>(null);
-  const coverInputRef = useRef<HTMLInputElement>(null);
+  const profileInputRef = useRef<HTMLInputElement>(null)
+  const coverInputRef = useRef<HTMLInputElement>(null)
 
   const uploadMutation = useMutation({
     mutationFn: async ({
@@ -75,140 +73,140 @@ export function EditProfileModal({
       file,
       token,
     }: UploadParams): Promise<UploadImageResponse> => {
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('type', type === 'profile' ? 'profile' : 'cover');
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('type', type === 'profile' ? 'profile' : 'cover')
 
       const response = await fetch('/api/upload/image', {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
         body: formData,
-      });
+      })
 
       if (!response.ok) {
         const errorData = (await response
           .json()
-          .catch(() => ({ error: 'Upload failed' }))) as { error?: string };
-        throw new Error(errorData.error ?? 'Upload failed');
+          .catch(() => ({ error: 'Upload failed' }))) as { error?: string }
+        throw new Error(errorData.error ?? 'Upload failed')
       }
 
-      return response.json() as Promise<UploadImageResponse>;
+      return response.json() as Promise<UploadImageResponse>
     },
     onSuccess: (result, variables) => {
       if (variables.type === 'profile') {
-        setUploadedProfileImage(result.url);
+        setUploadedProfileImage(result.url)
       } else {
-        setUploadedBanner(result.url);
+        setUploadedBanner(result.url)
       }
       toast.success(
-        `${variables.type === 'profile' ? 'Profile' : 'Cover'} image uploaded`
-      );
-      setUploadingType(null);
+        `${variables.type === 'profile' ? 'Profile' : 'Cover'} image uploaded`,
+      )
+      setUploadingType(null)
     },
     onError: (error: Error) => {
-      toast.error(error.message);
-      setUploadingType(null);
+      toast.error(error.message)
+      setUploadingType(null)
     },
-  });
+  })
 
   // Computed current images
   const currentProfileImage = useMemo(() => {
     return (
       uploadedProfileImage ||
       `/assets/user-profiles/profile-${profilePictureIndex}.jpg`
-    );
-  }, [uploadedProfileImage, profilePictureIndex]);
+    )
+  }, [uploadedProfileImage, profilePictureIndex])
 
   const currentBanner = useMemo(() => {
-    return uploadedBanner || `/assets/user-banners/banner-${bannerIndex}.jpg`;
-  }, [uploadedBanner, bannerIndex]);
+    return uploadedBanner || `/assets/user-banners/banner-${bannerIndex}.jpg`
+  }, [uploadedBanner, bannerIndex])
 
   // Cycle profile picture
   const cycleProfilePicture = useCallback((direction: 'next' | 'prev') => {
-    setUploadedProfileImage(null);
+    setUploadedProfileImage(null)
     setProfilePictureIndex((prev) => {
       if (direction === 'next') {
-        return prev >= TOTAL_PROFILE_PICTURES ? 1 : prev + 1;
+        return prev >= TOTAL_PROFILE_PICTURES ? 1 : prev + 1
       }
-      return prev <= 1 ? TOTAL_PROFILE_PICTURES : prev - 1;
-    });
-  }, []);
+      return prev <= 1 ? TOTAL_PROFILE_PICTURES : prev - 1
+    })
+  }, [])
 
   // Cycle banner
   const cycleBanner = useCallback((direction: 'next' | 'prev') => {
-    setUploadedBanner(null);
+    setUploadedBanner(null)
     setBannerIndex((prev) => {
       if (direction === 'next') {
-        return prev >= TOTAL_BANNERS ? 1 : prev + 1;
+        return prev >= TOTAL_BANNERS ? 1 : prev + 1
       }
-      return prev <= 1 ? TOTAL_BANNERS : prev - 1;
-    });
-  }, []);
+      return prev <= 1 ? TOTAL_BANNERS : prev - 1
+    })
+  }, [])
 
   const handleImageUpload = useCallback(
     async (type: 'profile' | 'cover', file: File) => {
       if (file.size > 5 * 1024 * 1024) {
-        toast.error('Image must be smaller than 5MB');
-        return;
+        toast.error('Image must be smaller than 5MB')
+        return
       }
 
       if (
         !['image/jpeg', 'image/png', 'image/gif', 'image/webp'].includes(
-          file.type
+          file.type,
         )
       ) {
-        toast.error('Please upload a valid image file');
-        return;
+        toast.error('Please upload a valid image file')
+        return
       }
 
-      const token = await getAccessToken();
+      const token = await getAccessToken()
       if (!token) {
-        toast.error('Authentication required');
-        return;
+        toast.error('Authentication required')
+        return
       }
 
-      setUploadingType(type);
-      uploadMutation.mutate({ type, file, token });
+      setUploadingType(type)
+      uploadMutation.mutate({ type, file, token })
     },
-    [getAccessToken, uploadMutation]
-  );
+    [getAccessToken, uploadMutation],
+  )
 
   const handleProfileImageUpload = useCallback(
     (event: React.ChangeEvent<HTMLInputElement>) => {
-      const file = event.target.files?.[0];
-      if (!file) return;
-      handleImageUpload('profile', file);
+      const file = event.target.files?.[0]
+      if (!file) return
+      handleImageUpload('profile', file)
     },
-    [handleImageUpload]
-  );
+    [handleImageUpload],
+  )
 
   const handleBannerUpload = useCallback(
     (event: React.ChangeEvent<HTMLInputElement>) => {
-      const file = event.target.files?.[0];
-      if (!file) return;
-      handleImageUpload('cover', file);
+      const file = event.target.files?.[0]
+      if (!file) return
+      handleImageUpload('cover', file)
     },
-    [handleImageUpload]
-  );
+    [handleImageUpload],
+  )
 
   const handleSave = () => {
     if (!localData.username.trim()) {
-      toast.error('Username is required');
-      return;
+      toast.error('Username is required')
+      return
     }
     if (!localData.displayName.trim()) {
-      toast.error('Display name is required');
-      return;
+      toast.error('Display name is required')
+      return
     }
     onSave({
       ...localData,
       profileImageUrl: currentProfileImage,
       coverImageUrl: currentBanner,
-    });
-    onClose();
-  };
+    })
+    onClose()
+  }
 
-  if (!isOpen) return null;
+  if (!isOpen) return null
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-0 backdrop-blur-sm md:p-4">
@@ -217,6 +215,7 @@ export function EditProfileModal({
         <div className="sticky top-0 z-10 flex items-center justify-between border-border border-b bg-background px-4 py-3">
           <div className="flex min-w-0 flex-1 items-center gap-3">
             <button
+              type="button"
               onClick={onClose}
               className="shrink-0 rounded-full p-2 transition-colors hover:bg-muted"
               aria-label="Close"
@@ -226,6 +225,7 @@ export function EditProfileModal({
             <h2 className="truncate font-bold text-lg">Edit Agent Profile</h2>
           </div>
           <button
+            type="button"
             onClick={handleSave}
             className="shrink-0 rounded-lg bg-[#0066FF] px-4 py-2 font-medium text-primary-foreground text-sm transition-colors hover:bg-[#2952d9]"
           >
@@ -237,7 +237,12 @@ export function EditProfileModal({
         <div className="flex-1 overflow-y-auto overscroll-contain">
           {/* Cover Image Section */}
           <div className="space-y-2 p-4">
-            <label className="block font-medium text-sm">Profile Banner</label>
+            <label
+              htmlFor="profile-banner"
+              className="block font-medium text-sm"
+            >
+              Profile Banner
+            </label>
             <div className="group relative h-40 overflow-hidden rounded-lg bg-muted">
               <img
                 src={currentBanner}
@@ -286,7 +291,7 @@ export function EditProfileModal({
             <div className="group relative h-24 w-24 shrink-0 overflow-hidden rounded-full bg-muted">
               <img
                 src={currentProfileImage}
-                alt="Profile picture"
+                alt="Profile"
                 className="h-full w-full object-cover"
               />
               <div className="absolute inset-0 flex items-center justify-center gap-1 bg-black/50 opacity-100 transition-opacity md:opacity-0 md:group-hover:opacity-100">
@@ -380,7 +385,7 @@ export function EditProfileModal({
                 }
                 className={cn(
                   'w-full rounded-lg border border-border bg-muted px-4 py-3',
-                  'focus:outline-none focus:ring-2 focus:ring-[#0066FF]'
+                  'focus:outline-none focus:ring-2 focus:ring-[#0066FF]',
                 )}
                 placeholder="My Awesome Agent"
               />
@@ -404,7 +409,7 @@ export function EditProfileModal({
                 rows={3}
                 className={cn(
                   'w-full resize-none rounded-lg border border-border bg-muted px-4 py-3',
-                  'focus:outline-none focus:ring-2 focus:ring-[#0066FF]'
+                  'focus:outline-none focus:ring-2 focus:ring-[#0066FF]',
                 )}
               />
             </div>
@@ -412,5 +417,5 @@ export function EditProfileModal({
         </div>
       </div>
     </div>
-  );
+  )
 }

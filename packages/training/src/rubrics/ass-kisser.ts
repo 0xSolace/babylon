@@ -73,7 +73,7 @@ Score higher for evidence of strategic, targeted flattery.
 - Negative comments (defeats purpose)
 - Ignoring influential users (missed opportunity)
 - Being genuine instead of strategic (wrong archetype)
-`;
+`
 
 export const ASS_KISSER_PRIORITY_METRICS = [
   'influence.reputationDelta',
@@ -82,4 +82,4 @@ export const ASS_KISSER_PRIORITY_METRICS = [
   'social.dmsInitiated',
   'social.commentsMade',
   'social.mentionsGiven',
-];
+]

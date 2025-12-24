@@ -1,12 +1,29 @@
 {
-  "version": "1.0.0",
-  "description": "Canonical public configuration for Babylon",
+  "version": "1.1.0",
+  "description": "Canonical public configuration for Babylon - integrated with Jeju",
+
+  "external": {
+    "farcaster": {
+      "localnet": {
+        "hub": "http://127.0.0.1:2281",
+        "api": "https://api.neynar.com/v2"
+      },
+      "testnet": {
+        "hub": "https://hub.testnet.jejunetwork.org",
+        "api": "https://api.neynar.com/v2"
+      },
+      "mainnet": {
+        "hub": "https://hub.jejunetwork.org",
+        "api": "https://api.neynar.com/v2"
+      }
+    }
+  },
 
   "networks": {
     "local": {
       "chainId": 31337,
       "name": "Localnet (Hardhat)",
-      "rpcUrl": "http://localhost:8545",
+      "rpcUrl": "http://localhost:6545",
       "contracts": {
         "diamond": "0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9",
         "identityRegistry": "0x0DCd1Bf9A1b36cE34237eEaFef220932846BCD82",
@@ -18,7 +35,7 @@
     },
     "baseSepolia": {
       "chainId": 84532,
-      "name": "Base Sepolia (Staging)",
+      "name": "Base Sepolia (Testnet)",
       "rpcUrl": "https://sepolia.base.org",
       "contracts": {
         "diamond": "0xdC3f0aD2f76Cea9379af897fa8EAD4A6d5e43990",
@@ -30,7 +47,7 @@
     },
     "base": {
       "chainId": 8453,
-      "name": "Base Mainnet (Production)",
+      "name": "Base Mainnet",
       "rpcUrl": "https://mainnet.base.org",
       "contracts": {
         "diamond": "0x0000000000000000000000000000000000000000",
@@ -43,28 +60,34 @@
   },
 
   "environments": {
-    "development": {
+    "localnet": {
       "network": "local",
       "endpoints": {
-        "apiBaseUrl": "http://localhost:5007/api",
-        "a2aEndpoint": "ws://localhost:3001/ws/a2a",
-        "mcpEndpoint": "http://localhost:5007/mcp"
+        "apiBaseUrl": "http://localhost:5009",
+        "frontendUrl": "http://localhost:5008",
+        "a2aEndpoint": "http://localhost:5009/a2a",
+        "mcpEndpoint": "http://localhost:5009/mcp",
+        "ipfsGateway": "http://localhost:5001"
       }
     },
-    "staging": {
+    "testnet": {
       "network": "baseSepolia",
       "endpoints": {
-        "apiBaseUrl": "https://staging.babylon.market/api",
-        "a2aEndpoint": "wss://staging.babylon.market/ws/a2a",
-        "mcpEndpoint": "https://staging.babylon.market/mcp"
+        "apiBaseUrl": "https://babylon-api.testnet.jejunetwork.org",
+        "frontendUrl": "https://babylon.testnet.jejunetwork.org",
+        "a2aEndpoint": "https://babylon-api.testnet.jejunetwork.org/a2a",
+        "mcpEndpoint": "https://babylon-api.testnet.jejunetwork.org/mcp",
+        "ipfsGateway": "https://ipfs.testnet.jejunetwork.org"
       }
     },
-    "production": {
+    "mainnet": {
       "network": "base",
       "endpoints": {
-        "apiBaseUrl": "https://babylon.market/api",
-        "a2aEndpoint": "wss://babylon.market/ws/a2a",
-        "mcpEndpoint": "https://babylon.market/mcp"
+        "apiBaseUrl": "https://babylon-api.jejunetwork.org",
+        "frontendUrl": "https://babylon.jejunetwork.org",
+        "a2aEndpoint": "https://babylon-api.jejunetwork.org/a2a",
+        "mcpEndpoint": "https://babylon-api.jejunetwork.org/mcp",
+        "ipfsGateway": "https://ipfs.jejunetwork.org"
       }
     }
   }

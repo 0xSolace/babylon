@@ -10,29 +10,29 @@
  */
 export interface SocialMetrics {
   /** Number of group chats the agent joined */
-  groupChatsJoined: number;
+  groupChatsJoined: number
   /** Number of group chats the agent created */
-  groupChatsCreated: number;
+  groupChatsCreated: number
   /** Total messages sent in group chats */
-  groupMessagesSent: number;
+  groupMessagesSent: number
   /** DMs initiated by the agent */
-  dmsInitiated: number;
+  dmsInitiated: number
   /** DMs received by the agent */
-  dmsReceived: number;
+  dmsReceived: number
   /** Percentage of received DMs that were replied to (0-1) */
-  dmResponseRate: number;
+  dmResponseRate: number
   /** Number of unique users the agent interacted with */
-  uniqueUsersInteracted: number;
+  uniqueUsersInteracted: number
   /** Social posts created */
-  postsCreated: number;
+  postsCreated: number
   /** Comments made on others' posts */
-  commentsMade: number;
+  commentsMade: number
   /** Times the agent @mentioned others */
-  mentionsGiven: number;
+  mentionsGiven: number
   /** Times the agent was @mentioned */
-  mentionsReceived: number;
+  mentionsReceived: number
   /** Invitations sent to others */
-  invitationsSent: number;
+  invitationsSent: number
 }
 
 /**
@@ -40,31 +40,31 @@ export interface SocialMetrics {
  */
 export interface TradingMetrics {
   /** Total number of trades executed */
-  tradesExecuted: number;
+  tradesExecuted: number
   /** Number of profitable trades */
-  profitableTrades: number;
+  profitableTrades: number
   /** Win rate as a decimal (0-1) */
-  winRate: number;
+  winRate: number
   /** Final profit/loss in dollars */
-  totalPnL: number;
+  totalPnL: number
   /** Maximum peak-to-trough drawdown */
-  maxDrawdown: number;
+  maxDrawdown: number
   /** Sharpe ratio (risk-adjusted returns) */
-  sharpeRatio: number;
+  sharpeRatio: number
   /** Average position size */
-  avgPositionSize: number;
+  avgPositionSize: number
   /** Average time holding a position (in ticks) */
-  avgHoldingPeriod: number;
+  avgHoldingPeriod: number
   /** Number of unique markets traded */
-  marketsTraded: number;
+  marketsTraded: number
   /** Buy trades */
-  buyTrades: number;
+  buyTrades: number
   /** Sell trades */
-  sellTrades: number;
+  sellTrades: number
   /** Largest single win */
-  largestWin: number;
+  largestWin: number
   /** Largest single loss */
-  largestLoss: number;
+  largestLoss: number
 }
 
 /**
@@ -72,19 +72,19 @@ export interface TradingMetrics {
  */
 export interface InfluenceMetrics {
   /** Net new followers gained */
-  followersGained: number;
+  followersGained: number
   /** Change in reputation score */
-  reputationDelta: number;
+  reputationDelta: number
   /** Change in trust level */
-  trustLevelDelta: number;
+  trustLevelDelta: number
   /** Composite influence score */
-  influenceScore: number;
+  influenceScore: number
   /** How widely information spread (reshares, etc.) */
-  informationSpread: number;
+  informationSpread: number
   /** Positive reactions received */
-  positiveReactions: number;
+  positiveReactions: number
   /** Negative reactions received */
-  negativeReactions: number;
+  negativeReactions: number
 }
 
 /**
@@ -92,25 +92,25 @@ export interface InfluenceMetrics {
  */
 export interface BehaviorMetrics {
   /** Average actions taken per game tick */
-  actionsPerTick: number;
+  actionsPerTick: number
   /** Ratio of social actions to trading actions */
-  socialToTradeRatio: number;
+  socialToTradeRatio: number
   /** Average time to respond to messages (in ms) */
-  avgResponseTime: number;
+  avgResponseTime: number
   /** Consistency of behavior (0-1, higher = more consistent) */
-  consistencyScore: number;
+  consistencyScore: number
   /** Total number of actions taken */
-  totalActions: number;
+  totalActions: number
   /** Number of failed actions */
-  failedActions: number;
+  failedActions: number
   /** Action success rate (0-1) */
-  actionSuccessRate: number;
+  actionSuccessRate: number
   /** Episode length in ticks */
-  episodeLength: number;
+  episodeLength: number
   /** Types of actions used */
-  actionTypesUsed: string[];
+  actionTypesUsed: string[]
   /** Most common action type */
-  dominantActionType: string;
+  dominantActionType: string
 }
 
 /**
@@ -118,21 +118,21 @@ export interface BehaviorMetrics {
  */
 export interface InformationMetrics {
   /** Number of research actions taken */
-  researchActions: number;
+  researchActions: number
   /** News items read/analyzed */
-  newsConsumed: number;
+  newsConsumed: number
   /** Market data queries made */
-  marketDataQueries: number;
+  marketDataQueries: number
   /** Information requests made to others */
-  infoRequestsSent: number;
+  infoRequestsSent: number
   /** Information shared with others */
-  infoShared: number;
+  infoShared: number
   /** Predictions made */
-  predictionsMade: number;
+  predictionsMade: number
   /** Correct predictions */
-  correctPredictions: number;
+  correctPredictions: number
   /** Prediction accuracy (0-1) */
-  predictionAccuracy: number;
+  predictionAccuracy: number
 }
 
 /**
@@ -141,24 +141,24 @@ export interface InformationMetrics {
  */
 export interface BehavioralMetrics {
   /** Social interaction metrics */
-  social: SocialMetrics;
+  social: SocialMetrics
   /** Trading performance metrics */
-  trading: TradingMetrics;
+  trading: TradingMetrics
   /** Influence and reputation metrics */
-  influence: InfluenceMetrics;
+  influence: InfluenceMetrics
   /** Behavioral pattern metrics */
-  behavior: BehaviorMetrics;
+  behavior: BehaviorMetrics
   /** Information gathering metrics */
-  information: InformationMetrics;
+  information: InformationMetrics
 
   /** Timestamp when metrics were extracted */
-  extractedAt: Date;
+  extractedAt: Date
   /** Trajectory ID these metrics belong to */
-  trajectoryId: string;
+  trajectoryId: string
   /** Agent ID */
-  agentId: string;
+  agentId: string
   /** Scenario ID if applicable */
-  scenarioId?: string;
+  scenarioId?: string
 }
 
 /**
@@ -166,21 +166,21 @@ export interface BehavioralMetrics {
  */
 export interface MetricsSummary {
   /** Total P&L */
-  totalPnL: number;
+  totalPnL: number
   /** Win rate */
-  winRate: number;
+  winRate: number
   /** Total trades */
-  tradesExecuted: number;
+  tradesExecuted: number
   /** Unique users interacted */
-  uniqueUsersInteracted: number;
+  uniqueUsersInteracted: number
   /** Social to trade ratio */
-  socialToTradeRatio: number;
+  socialToTradeRatio: number
   /** Action success rate */
-  actionSuccessRate: number;
+  actionSuccessRate: number
   /** Reputation change */
-  reputationDelta: number;
+  reputationDelta: number
   /** Episode length */
-  episodeLength: number;
+  episodeLength: number
 }
 
 /**
@@ -196,5 +196,5 @@ export function getMetricsSummary(metrics: BehavioralMetrics): MetricsSummary {
     actionSuccessRate: metrics.behavior.actionSuccessRate,
     reputationDelta: metrics.influence.reputationDelta,
     episodeLength: metrics.behavior.episodeLength,
-  };
+  }
 }

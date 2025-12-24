@@ -7,9 +7,9 @@
  * - Manages tag statistics and trending calculations
  */
 
-import { db } from '@babylon/db';
-import { isPromptLoggingEnabled, logPrompt } from '@babylon/engine';
-import { generateSnowflakeId, logger } from '@babylon/shared';
+import { db } from '@babylon/db'
+import { generateSnowflakeId, logger } from '@babylon/shared'
+import { isPromptLoggingEnabled, logPrompt } from '../utils/prompt-logger'
 
 // =============================================================================
 // Types
@@ -19,40 +19,66 @@ import { generateSnowflakeId, logger } from '@babylon/shared';
  * Generated tag structure
  */
 export interface GeneratedTag {
-  name: string; // lowercase, normalized (e.g., "nfc-north")
-  displayName: string; // original display format (e.g., "NFC North")
-  category?: string; // auto-detected category (e.g., "Sports", "Politics", "Tech")
+  name: string // lowercase, normalized (e.g., "nfc-north")
+  displayName: string // original display format (e.g., "NFC North")
+  category?: string // auto-detected category (e.g., "Sports", "Politics", "Tech")
 }
 
 // =============================================================================
 // LLM Client Setup - Routes through Jeju Compute
 // =============================================================================
 
-const JEJU_COMPUTE_ENDPOINT =
-  process.env.JEJU_COMPUTE_ENDPOINT ||
-  process.env.JEJU_DWS_ENDPOINT ||
-  'http://localhost:4100';
+// Port configuration via env var
+const COMPUTE_PORT = process.env.JEJU_COMPUTE_PORT ?? '5010'
+
+/**
+ * Get Jeju Compute endpoint based on network configuration
+ * Uses decentralized compute marketplace for LLM inference
+ */
+function getJejuComputeEndpoint(): string {
+  // Explicit override takes precedence
+  if (process.env.JEJU_COMPUTE_ENDPOINT) {
+    return process.env.JEJU_COMPUTE_ENDPOINT
+  }
+  if (process.env.JEJU_DWS_ENDPOINT) {
+    return process.env.JEJU_DWS_ENDPOINT
+  }
+
+  // Network-based configuration
+  const network = process.env.JEJU_NETWORK
+  if (network === 'mainnet') {
+    return 'https://compute.jeju.network'
+  }
+  if (network === 'testnet') {
+    return 'https://compute.testnet.jeju.network'
+  }
+
+  // Localnet default
+  return `http://localhost:${COMPUTE_PORT}`
+}
+
+const JEJU_COMPUTE_ENDPOINT = getJejuComputeEndpoint()
 
 interface JejuInferenceClient {
   chat: {
     completions: {
       create: (params: {
-        model: string;
-        messages: Array<{ role: string; content: string }>;
-        max_tokens?: number;
-        temperature?: number;
+        model: string
+        messages: Array<{ role: string; content: string }>
+        max_tokens?: number
+        temperature?: number
       }) => Promise<{
-        choices: Array<{ message: { content: string } }>;
-      }>;
-    };
-  };
+        choices: Array<{ message: { content: string } }>
+      }>
+    }
+  }
 }
 
-let jejuClient: JejuInferenceClient | null = null;
+let jejuClient: JejuInferenceClient | null = null
 
 async function getJejuClient(): Promise<JejuInferenceClient | null> {
   if (jejuClient) {
-    return jejuClient;
+    return jejuClient
   }
 
   jejuClient = {
@@ -70,20 +96,20 @@ async function getJejuClient(): Promise<JejuInferenceClient | null> {
                 max_tokens: params.max_tokens || 1024,
                 temperature: params.temperature ?? 0.3,
               }),
-            }
-          );
+            },
+          )
 
           if (!response.ok) {
-            throw new Error(`Jeju Compute error: ${response.status}`);
+            throw new Error(`Jeju Compute error: ${response.status}`)
           }
 
-          return response.json();
+          return response.json()
         },
       },
     },
-  };
+  }
 
-  return jejuClient;
+  return jejuClient
 }
 
 // =============================================================================
@@ -94,17 +120,17 @@ async function getJejuClient(): Promise<JejuInferenceClient | null> {
  * Generate 1-3 organic tags from post content using LLM
  */
 export async function generateTagsFromPost(
-  content: string
+  content: string,
 ): Promise<GeneratedTag[]> {
-  const client = await getJejuClient();
+  const client = await getJejuClient()
 
   if (!client) {
     logger.warn(
       'Tag generation skipped - Jeju Compute not available',
       undefined,
-      'TagService'
-    );
-    return [];
+      'TagService',
+    )
+    return []
   }
 
   const prompt = `Extract 1-3 trending tags from this social media post. Tags should be topics people would search for on X/Twitter.
@@ -153,9 +179,9 @@ Return ONLY valid XML:
   </tags>
 </response>
 
-If no good tags, return: <response><tags></tags></response>`;
+If no good tags, return: <response><tags></tags></response>`
 
-  const model = 'llama-3.1-8b-instant'; // Jeju Compute default model
+  const model = 'llama-3.1-8b-instant' // Jeju Compute default model
 
   const response = await client.chat.completions.create({
     model,
@@ -172,9 +198,9 @@ If no good tags, return: <response><tags></tags></response>`;
     ],
     temperature: 0.3,
     max_tokens: 500,
-  });
+  })
 
-  const contentText = response.choices[0]?.message?.content?.trim();
+  const contentText = response.choices[0]?.message?.content?.trim()
 
   if (isPromptLoggingEnabled()) {
     await logPrompt({
@@ -187,38 +213,38 @@ If no good tags, return: <response><tags></tags></response>`;
         temperature: 0.3,
         maxTokens: 500,
       },
-    });
+    })
   }
 
   if (!contentText) {
     logger.warn(
       'No content in tag generation response',
       { content },
-      'TagService'
-    );
-    return [];
+      'TagService',
+    )
+    return []
   }
 
   const xmlContent = contentText
     .replace(/```xml\n?/g, '')
     .replace(/```\n?/g, '')
-    .trim();
+    .trim()
 
-  const parsedTags: Array<{ displayName: string; category?: string }> = [];
+  const parsedTags: Array<{ displayName: string; category?: string }> = []
 
-  const tagMatches = xmlContent.matchAll(/<tag>([\s\S]*?)<\/tag>/g);
+  const tagMatches = xmlContent.matchAll(/<tag>([\s\S]*?)<\/tag>/g)
 
   for (const tagMatch of tagMatches) {
-    const tagContent = tagMatch[1];
-    if (!tagContent) continue;
+    const tagContent = tagMatch[1]
+    if (!tagContent) continue
 
     const displayNameMatch = tagContent.match(
-      /<displayName>(.*?)<\/displayName>/
-    );
-    const categoryMatch = tagContent.match(/<category>(.*?)<\/category>/);
+      /<displayName>(.*?)<\/displayName>/,
+    )
+    const categoryMatch = tagContent.match(/<category>(.*?)<\/category>/)
 
-    if (displayNameMatch && displayNameMatch[1]) {
-      const displayName = displayNameMatch[1].trim();
+    if (displayNameMatch?.[1]) {
+      const displayName = displayNameMatch[1].trim()
       const genericTags = [
         'ai',
         'tech',
@@ -227,16 +253,16 @@ If no good tags, return: <response><tags></tags></response>`;
         'market',
         'update',
         'latest',
-      ];
+      ]
       if (genericTags.includes(displayName.toLowerCase())) {
-        logger.debug('Skipping generic tag', { displayName }, 'TagService');
-        continue;
+        logger.debug('Skipping generic tag', { displayName }, 'TagService')
+        continue
       }
 
       parsedTags.push({
         displayName,
         category: categoryMatch?.[1]?.trim(),
-      });
+      })
     }
   }
 
@@ -247,28 +273,28 @@ If no good tags, return: <response><tags></tags></response>`;
         xmlPreview: xmlContent.substring(0, 200),
         contentPreview: content.substring(0, 100),
       },
-      'TagService'
-    );
+      'TagService',
+    )
   }
 
   const generatedTags: GeneratedTag[] = parsedTags
     .filter((tag) => tag.displayName && typeof tag.displayName === 'string')
     .map((tag) => {
-      const displayName = tag.displayName.trim();
+      const displayName = tag.displayName.trim()
       const name = displayName
         .toLowerCase()
         .replace(/[^\w\s-]/g, '')
         .replace(/\s+/g, '-')
         .replace(/-+/g, '-')
-        .trim();
+        .trim()
 
       return {
         name,
         displayName,
         category: tag.category,
-      };
+      }
     })
-    .filter((tag) => tag.name.length > 0 && tag.displayName.length <= 50);
+    .filter((tag) => tag.name.length > 0 && tag.displayName.length <= 50)
 
   logger.debug(
     'Generated tags from post',
@@ -277,39 +303,39 @@ If no good tags, return: <response><tags></tags></response>`;
       tagsCount: generatedTags.length,
       tags: generatedTags,
     },
-    'TagService'
-  );
+    'TagService',
+  )
 
-  return generatedTags;
+  return generatedTags
 }
 
 /**
  * Generate tags in batch for multiple posts
  */
 export async function generateTagsForPosts(
-  posts: Array<{ id: string; content: string }>
+  posts: Array<{ id: string; content: string }>,
 ): Promise<Map<string, GeneratedTag[]>> {
-  const results = new Map<string, GeneratedTag[]>();
+  const results = new Map<string, GeneratedTag[]>()
 
-  const BATCH_SIZE = 5;
+  const BATCH_SIZE = 5
   for (let i = 0; i < posts.length; i += BATCH_SIZE) {
-    const batch = posts.slice(i, i + BATCH_SIZE);
+    const batch = posts.slice(i, i + BATCH_SIZE)
     const promises = batch.map(async (post) => {
-      const tagList = await generateTagsFromPost(post.content);
-      return { postId: post.id, tags: tagList };
-    });
+      const tagList = await generateTagsFromPost(post.content)
+      return { postId: post.id, tags: tagList }
+    })
 
-    const batchResults = await Promise.all(promises);
+    const batchResults = await Promise.all(promises)
     for (const { postId, tags: tagList } of batchResults) {
-      results.set(postId, tagList);
+      results.set(postId, tagList)
     }
 
     if (i + BATCH_SIZE < posts.length) {
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await new Promise((resolve) => setTimeout(resolve, 100))
     }
   }
 
-  return results;
+  return results
 }
 
 // =============================================================================
@@ -323,23 +349,23 @@ export async function generateTagsForPosts(
  */
 export async function storeTagsForPost(
   postId: string,
-  generatedTags: GeneratedTag[]
+  generatedTags: GeneratedTag[],
 ): Promise<void> {
   if (generatedTags.length === 0) {
-    return;
+    return
   }
 
-  const tagNames = generatedTags.map((t) => t.name);
+  const tagNames = generatedTags.map((t) => t.name)
   const existingTagsList = await db.tag.findMany({
     where: { name: { in: tagNames } },
-  });
+  })
 
-  const existingTagMap = new Map(existingTagsList.map((t) => [t.name, t]));
+  const existingTagMap = new Map(existingTagsList.map((t) => [t.name, t]))
 
-  const tagsToCreate = generatedTags.filter((t) => !existingTagMap.has(t.name));
+  const tagsToCreate = generatedTags.filter((t) => !existingTagMap.has(t.name))
 
   if (tagsToCreate.length > 0) {
-    const now = new Date();
+    const now = new Date()
     const tagsToInsert = await Promise.all(
       tagsToCreate.map(async (tag) => ({
         id: await generateSnowflakeId(),
@@ -347,45 +373,47 @@ export async function storeTagsForPost(
         displayName: tag.displayName,
         category: tag.category ?? null,
         updatedAt: now,
-      }))
-    );
+      })),
+    )
 
-    await db.tag.createMany({ data: tagsToInsert, skipDuplicates: true });
+    await db.tag.createMany({ data: tagsToInsert, skipDuplicates: true })
 
     const createdTags = await db.tag.findMany({
       where: { name: { in: tagsToCreate.map((t) => t.name) } },
-    });
+    })
 
-    createdTags.forEach((t) => existingTagMap.set(t.name, t));
+    createdTags.forEach((t) => {
+      existingTagMap.set(t.name, t)
+    })
     logger.debug(
       'Created/fetched new tags',
       { count: createdTags.length },
-      'TagService'
-    );
+      'TagService',
+    )
   }
 
   const postTagsToInsert = await Promise.all(
     generatedTags.map(async (tag, _idx) => {
-      const dbTag = existingTagMap.get(tag.name);
+      const dbTag = existingTagMap.get(tag.name)
       if (!dbTag) {
-        throw new Error(`Tag ${tag.name} not found in existing tags`);
+        throw new Error(`Tag ${tag.name} not found in existing tags`)
       }
 
       return {
         id: await generateSnowflakeId(),
         postId,
         tagId: dbTag.id,
-      };
-    })
-  );
+      }
+    }),
+  )
 
-  await db.postTag.createMany({ data: postTagsToInsert, skipDuplicates: true });
+  await db.postTag.createMany({ data: postTagsToInsert, skipDuplicates: true })
 
   logger.debug(
     'Stored tags for post',
     { postId, tagCount: generatedTags.length },
-    'TagService'
-  );
+    'TagService',
+  )
 }
 
 /**
@@ -395,16 +423,16 @@ export async function getTagsForPost(postId: string) {
   const postTags = await db.postTag.findMany({
     where: { postId },
     orderBy: { createdAt: 'asc' },
-  });
+  })
 
-  const tagIds = [...new Set(postTags.map((pt) => pt.tagId))];
+  const tagIds = [...new Set(postTags.map((pt) => pt.tagId))]
   const tags =
     tagIds.length > 0
       ? await db.tag.findMany({ where: { id: { in: tagIds } } })
-      : [];
-  const tagsById = new Map(tags.map((t) => [t.id, t]));
+      : []
+  const tagsById = new Map(tags.map((t) => [t.id, t]))
 
-  return postTags.map((pt) => ({ ...pt, tag: tagsById.get(pt.tagId) ?? null }));
+  return postTags.map((pt) => ({ ...pt, tag: tagsById.get(pt.tagId) ?? null }))
 }
 
 /**
@@ -412,16 +440,16 @@ export async function getTagsForPost(postId: string) {
  */
 export async function getPostsByTag(
   tagName: string,
-  options: { limit?: number; offset?: number } = {}
+  options: { limit?: number; offset?: number } = {},
 ) {
-  const { limit = 20, offset = 0 } = options;
+  const { limit = 20, offset = 0 } = options
 
   const tag = await db.tag.findFirst({
     where: { name: tagName.toLowerCase() },
-  });
+  })
 
   if (!tag) {
-    return { tag: null, posts: [], total: 0 };
+    return { tag: null, posts: [], total: 0 }
   }
 
   const [postTagsList, total] = await Promise.all([
@@ -432,17 +460,17 @@ export async function getPostsByTag(
       take: limit,
     }),
     db.postTag.count({ where: { tagId: tag.id } }),
-  ]);
+  ])
 
-  const postIds = postTagsList.map((pt) => pt.postId);
+  const postIds = postTagsList.map((pt) => pt.postId)
   const posts =
     postIds.length > 0
       ? await db.post.findMany({
           where: { id: { in: postIds } },
         })
-      : [];
+      : []
 
-  const postsById = new Map(posts.map((p) => [p.id, p]));
+  const postsById = new Map(posts.map((p) => [p.id, p]))
 
   return {
     tag,
@@ -450,7 +478,7 @@ export async function getPostsByTag(
       .map((id) => postsById.get(id))
       .filter((post): post is NonNullable<typeof post> => post !== undefined),
     total,
-  };
+  }
 }
 
 /**
@@ -458,20 +486,20 @@ export async function getPostsByTag(
  */
 export async function getTagStatistics(
   windowStart: Date,
-  windowEnd: Date
+  windowEnd: Date,
 ): Promise<
   Array<{
-    tagId: string;
-    tagName: string;
-    tagDisplayName: string;
-    tagCategory: string | null;
-    postCount: number;
-    recentPostCount: number;
-    oldestPostDate: Date;
-    newestPostDate: Date;
+    tagId: string
+    tagName: string
+    tagDisplayName: string
+    tagCategory: string | null
+    postCount: number
+    recentPostCount: number
+    oldestPostDate: Date
+    newestPostDate: Date
   }>
 > {
-  const last24Hours = new Date(windowEnd.getTime() - 24 * 60 * 60 * 1000);
+  const last24Hours = new Date(windowEnd.getTime() - 24 * 60 * 60 * 1000)
 
   // Query postTags within time window, then filter out deleted posts
   const allPostTags = await db.postTag.findMany({
@@ -482,21 +510,21 @@ export async function getTagStatistics(
       ],
     },
     orderBy: { createdAt: 'asc' },
-  });
+  })
 
-  const postIds = [...new Set(allPostTags.map((pt) => pt.postId))];
-  const tagIds = [...new Set(allPostTags.map((pt) => pt.tagId))];
+  const postIds = [...new Set(allPostTags.map((pt) => pt.postId))]
+  const tagIds = [...new Set(allPostTags.map((pt) => pt.tagId))]
 
   type PostRecord = {
-    id: string;
-    deletedAt: Date | null;
-  };
+    id: string
+    deletedAt: Date | null
+  }
   type TagRecord = {
-    id: string;
-    name: string;
-    displayName: string;
-    category: string | null;
-  };
+    id: string
+    name: string
+    displayName: string
+    category: string | null
+  }
   const [posts, tags] = await Promise.all([
     postIds.length > 0
       ? (db.post.findMany({ where: { id: { in: postIds } } }) as Promise<
@@ -508,49 +536,49 @@ export async function getTagStatistics(
           TagRecord[]
         >)
       : ([] as TagRecord[]),
-  ]);
+  ])
 
-  const postsById = new Map(posts.map((p) => [p.id, p]));
-  const tagsById = new Map(tags.map((t) => [t.id, t]));
+  const postsById = new Map(posts.map((p) => [p.id, p]))
+  const tagsById = new Map(tags.map((t) => [t.id, t]))
 
   // Filter out postTags where the post is deleted
   const postTagsList = allPostTags.filter((pt) => {
-    const post = postsById.get(pt.postId);
-    return post !== undefined && post.deletedAt === null;
-  });
+    const post = postsById.get(pt.postId)
+    return post !== undefined && post.deletedAt === null
+  })
 
   const tagStats = new Map<
     string,
     {
       tag: {
-        id: string;
-        name: string;
-        displayName: string;
-        category: string | null;
-      };
-      postCount: number;
-      recentPostCount: number;
-      oldestPostDate: Date;
-      newestPostDate: Date;
+        id: string
+        name: string
+        displayName: string
+        category: string | null
+      }
+      postCount: number
+      recentPostCount: number
+      oldestPostDate: Date
+      newestPostDate: Date
     }
-  >();
+  >()
 
   for (const pt of postTagsList) {
-    const tag = tagsById.get(pt.tagId);
+    const tag = tagsById.get(pt.tagId)
     if (!tag) {
-      throw new Error(`Tag ${pt.tagId} not found for postTag ${pt.id}`);
+      throw new Error(`Tag ${pt.tagId} not found for postTag ${pt.id}`)
     }
 
-    const existing = tagStats.get(pt.tagId);
-    const isRecent = pt.createdAt >= last24Hours;
+    const existing = tagStats.get(pt.tagId)
+    const isRecent = pt.createdAt >= last24Hours
 
     if (existing) {
-      existing.postCount++;
-      if (isRecent) existing.recentPostCount++;
+      existing.postCount++
+      if (isRecent) existing.recentPostCount++
       if (pt.createdAt < existing.oldestPostDate)
-        existing.oldestPostDate = pt.createdAt;
+        existing.oldestPostDate = pt.createdAt
       if (pt.createdAt > existing.newestPostDate)
-        existing.newestPostDate = pt.createdAt;
+        existing.newestPostDate = pt.createdAt
     } else {
       tagStats.set(pt.tagId, {
         tag: {
@@ -563,7 +591,7 @@ export async function getTagStatistics(
         recentPostCount: isRecent ? 1 : 0,
         oldestPostDate: pt.createdAt,
         newestPostDate: pt.createdAt,
-      });
+      })
     }
   }
 
@@ -579,7 +607,7 @@ export async function getTagStatistics(
       oldestPostDate: stats.oldestPostDate,
       newestPostDate: stats.newestPostDate,
     }))
-    .sort((a, b) => b.postCount - a.postCount);
+    .sort((a, b) => b.postCount - a.postCount)
 }
 
 /**
@@ -587,16 +615,16 @@ export async function getTagStatistics(
  */
 export async function storeTrendingTags(
   tagsList: Array<{
-    tagId: string;
-    score: number;
-    postCount: number;
-    rank: number;
-    relatedContext?: string;
+    tagId: string
+    score: number
+    postCount: number
+    rank: number
+    relatedContext?: string
   }>,
   windowStart: Date,
-  windowEnd: Date
+  windowEnd: Date,
 ): Promise<void> {
-  const calculatedAt = new Date();
+  const calculatedAt = new Date()
   const rows = await Promise.all(
     tagsList.map(async (tag) => ({
       id: await generateSnowflakeId(),
@@ -608,16 +636,16 @@ export async function storeTrendingTags(
       windowStart,
       windowEnd,
       relatedContext: tag.relatedContext ?? null,
-    }))
-  );
+    })),
+  )
 
-  await db.trendingTag.createMany({ data: rows, skipDuplicates: true });
+  await db.trendingTag.createMany({ data: rows, skipDuplicates: true })
 
   logger.info(
     'Stored trending tags',
     { count: tagsList.length, windowStart, windowEnd },
-    'TagService'
-  );
+    'TagService',
+  )
 }
 
 /**
@@ -626,28 +654,28 @@ export async function storeTrendingTags(
 export async function getCurrentTrendingTags(limit = 10) {
   const latestCalculation = await db.trendingTag.findFirst({
     orderBy: { calculatedAt: 'desc' },
-  });
+  })
 
   if (!latestCalculation) {
-    return [];
+    return []
   }
 
-  const cutoffTime = new Date(latestCalculation.calculatedAt.getTime() - 1000);
+  const cutoffTime = new Date(latestCalculation.calculatedAt.getTime() - 1000)
 
   const trending = await db.trendingTag.findMany({
     where: { calculatedAt: { gte: cutoffTime } },
     orderBy: { rank: 'asc' },
     take: limit,
-  });
+  })
 
-  const tagIds = [...new Set(trending.map((t) => t.tagId))];
+  const tagIds = [...new Set(trending.map((t) => t.tagId))]
   const tags =
     tagIds.length > 0
       ? await db.tag.findMany({ where: { id: { in: tagIds } } })
-      : [];
-  const tagsById = new Map(tags.map((t) => [t.id, t]));
+      : []
+  const tagsById = new Map(tags.map((t) => [t.id, t]))
 
-  return trending.map((t) => ({ ...t, tag: tagsById.get(t.tagId) ?? null }));
+  return trending.map((t) => ({ ...t, tag: tagsById.get(t.tagId) ?? null }))
 }
 
 /**
@@ -655,46 +683,46 @@ export async function getCurrentTrendingTags(limit = 10) {
  */
 export async function getRelatedTags(
   tagId: string,
-  limit = 3
+  limit = 3,
 ): Promise<string[]> {
   const postsWithTagResult = await db.postTag.findMany({
     where: { tagId },
     orderBy: { createdAt: 'desc' },
     take: 100,
-  });
+  })
 
-  const postIds = [...new Set(postsWithTagResult.map((pt) => pt.postId))];
+  const postIds = [...new Set(postsWithTagResult.map((pt) => pt.postId))]
 
   if (postIds.length === 0) {
-    return [];
+    return []
   }
 
   const coOccurringPostTags = await db.postTag.findMany({
     where: { AND: [{ postId: { in: postIds } }, { tagId: { not: tagId } }] },
-  });
+  })
 
-  const tagCounts = new Map<string, number>();
+  const tagCounts = new Map<string, number>()
   coOccurringPostTags.forEach((pt) => {
-    tagCounts.set(pt.tagId, (tagCounts.get(pt.tagId) || 0) + 1);
-  });
+    tagCounts.set(pt.tagId, (tagCounts.get(pt.tagId) || 0) + 1)
+  })
 
   const sortedTagIds = Array.from(tagCounts.entries())
     .sort((a, b) => b[1] - a[1])
     .slice(0, limit)
-    .map(([id]) => id);
+    .map(([id]) => id)
 
   if (sortedTagIds.length === 0) {
-    return [];
+    return []
   }
 
   const tagsList = await db.tag.findMany({
     where: { id: { in: sortedTagIds } },
-  });
+  })
 
-  const tagMap = new Map(tagsList.map((t) => [t.id, t.displayName ?? t.name]));
+  const tagMap = new Map(tagsList.map((t) => [t.id, t.displayName ?? t.name]))
   return sortedTagIds
     .map((id) => tagMap.get(id))
     .filter(
-      (name): name is string => typeof name === 'string' && name.length > 0
-    );
+      (name): name is string => typeof name === 'string' && name.length > 0,
+    )
 }

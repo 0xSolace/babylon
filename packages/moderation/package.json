@@ -1,6 +1,6 @@
 {
   "name": "@babylon/moderation",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "description": "Moderation system with Jeju futarchy marketplace integration",
   "type": "module",
   "main": "dist/index.js",
@@ -8,28 +8,19 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "default": "./dist/index.js"
-    },
-    "./client": {
-      "types": "./dist/client.d.ts",
-      "default": "./dist/client.js"
-    },
-    "./types": {
-      "types": "./dist/types.d.ts",
-      "default": "./dist/types.js"
+      "import": "./dist/index.js"
     }
   },
   "scripts": {
     "build": "tsc",
-    "dev": "tsc --watch",
-    "clean": "rm -rf dist"
+    "test": "bun test"
   },
   "dependencies": {
-    "viem": "^2.43.2",
-    "zod": "^4.1.12"
+    "viem": "2.43.3",
+    "zod": "4.2.1"
   },
   "devDependencies": {
-    "typescript": "^5.9.3"
+    "typescript": "5.9.3"
   },
   "peerDependencies": {
     "@babylon/a2a": "workspace:*",

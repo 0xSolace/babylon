@@ -4,7 +4,7 @@
  * Interface definition for the autonomy service that controls agent autonomous behavior.
  */
 
-import type { AutonomyStatus } from './types';
+import type { AutonomyStatus } from './types'
 
 /**
  * Autonomy service interface for ElizaOS runtime
@@ -16,20 +16,20 @@ export interface AutonomyService {
   /**
    * Get current autonomy status
    */
-  getStatus(): AutonomyStatus;
+  getStatus(): AutonomyStatus
 
   /**
    * Enable autonomous behavior
    */
-  enableAutonomy(): Promise<void>;
+  enableAutonomy(): Promise<void>
 
   /**
    * Disable autonomous behavior
    */
-  disableAutonomy(): Promise<void>;
+  disableAutonomy(): Promise<void>
 
   /**
    * Set the autonomous loop interval in milliseconds
    */
-  setLoopInterval(intervalMs: number): void;
+  setLoopInterval(intervalMs: number): void
 }

@@ -10,13 +10,14 @@
  * @packageDocumentation
  */
 
-import { db, type JsonValue, type User } from '@babylon/db';
-import { getAgent0Client } from '../agent0/Agent0Client';
-import { syncAfterAgent0Registration } from '../agent0/reputation/agent0-reputation-sync';
-import { getAgentConfig } from '../shared/agent-config';
-import { logger } from '../shared/logger';
-import { generateSnowflakeId } from '../shared/snowflake';
-import { agentWalletService } from './AgentWalletService';
+import type { User } from '@babylon/db'
+import { db, type JsonValue } from '@babylon/db'
+import { generateSnowflakeId, toNull } from '@babylon/shared'
+import { getAgent0Client } from '../agent0/Agent0Client'
+import { syncAfterAgent0Registration } from '../agent0/reputation/agent0-reputation-sync'
+import { getAgentConfig } from '../shared/agent-config'
+import { logger } from '../shared/logger'
+import { agentWalletService } from './AgentWalletService'
 
 /**
  * Service for agent identity management
@@ -32,65 +33,65 @@ export class AgentIdentityService {
    * @throws Error if agent user not found
    */
   async createAgentWallet(agentUserId: string): Promise<{
-    walletAddress: string;
-    kmsKeyId: string;
+    walletAddress: string
+    kmsKeyId: string
   }> {
     logger.info(
       `Creating wallet for agent user ${agentUserId}`,
       undefined,
-      'AgentIdentityService'
-    );
+      'AgentIdentityService',
+    )
 
     const agentUser = await db.user.findUnique({
       where: { id: agentUserId },
-    });
+    })
 
     if (!agentUser || !agentUser.isAgent) {
-      throw new Error('Agent user not found');
+      throw new Error('Agent user not found')
     }
 
     // Use Jeju KMS for decentralized key management
     const result =
-      await agentWalletService.createAgentEmbeddedWallet(agentUserId);
+      await agentWalletService.createAgentEmbeddedWallet(agentUserId)
 
     logger.info(
       `Wallet created for agent ${agentUserId}: ${result.walletAddress}`,
       undefined,
-      'AgentIdentityService'
-    );
+      'AgentIdentityService',
+    )
     return {
       walletAddress: result.walletAddress,
       kmsKeyId: result.kmsKeyId,
-    };
+    }
   }
 
   /**
    * Register agent user on Agent0 network
    */
   async registerOnAgent0(agentUserId: string): Promise<{
-    agent0TokenId: number;
-    metadataCID?: string;
-    txHash?: string;
+    agent0TokenId: number
+    metadataCID?: string
+    txHash?: string
   }> {
     logger.info(
       `Registering agent user ${agentUserId} on Agent0`,
       undefined,
-      'AgentIdentityService'
-    );
+      'AgentIdentityService',
+    )
 
     const agentUser = await db.user.findUnique({
       where: { id: agentUserId },
-    });
+    })
 
     if (!agentUser || !agentUser.isAgent)
-      throw new Error('Agent user not found');
+      throw new Error('Agent user not found')
     if (!agentUser.walletAddress)
-      throw new Error('Agent must have wallet before Agent0 registration');
+      throw new Error('Agent must have wallet before Agent0 registration')
 
     // Get agent config for capabilities
-    const config = await getAgentConfig(agentUserId);
+    const config = await getAgentConfig(agentUserId)
 
-    const agent0Client = getAgent0Client();
+    const agent0Client = getAgent0Client()
     const capabilities = {
       strategies: config?.tradingStrategy
         ? ['autonomous-trading', 'prediction-markets', 'social-interaction']
@@ -114,11 +115,13 @@ export class AgentIdentityService {
       autonomousPosting: config?.autonomousPosting ?? false,
       skills: [],
       domains: [],
-    };
+    }
 
     // Use individual agent's A2A endpoint, not the game's endpoint
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:5007';
-    const individualAgentA2AEndpoint = `${baseUrl}/api/agents/${agentUserId}/a2a`;
+    const BABYLON_API_PORT = process.env.BABYLON_API_PORT ?? '5009'
+    const baseUrl =
+      process.env.PUBLIC_APP_URL || `http://localhost:${BABYLON_API_PORT}`
+    const individualAgentA2AEndpoint = `${baseUrl}/api/agents/${agentUserId}/a2a`
 
     const registration = await agent0Client.registerAgent({
       name: agentUser.displayName
@@ -135,17 +138,17 @@ export class AgentIdentityService {
       walletAddress: String(agentUser.walletAddress),
       a2aEndpoint: individualAgentA2AEndpoint,
       capabilities,
-    });
+    })
 
     await db.user.update({
       where: { id: agentUserId },
       data: {
         agent0TokenId: registration.tokenId,
-        agent0MetadataCID: registration.metadataCID ?? null,
+        agent0MetadataCID: toNull(registration.metadataCID),
         registrationTxHash: registration.txHash,
         onChainRegistered: true,
       },
-    });
+    })
 
     // Fire-and-forget reputation sync; log but do not block registration
     syncAfterAgent0Registration(agentUserId, registration.tokenId).catch(
@@ -153,10 +156,10 @@ export class AgentIdentityService {
         logger.warn(
           'Agent0 reputation sync failed after registration',
           { agentUserId, tokenId: registration.tokenId, error },
-          'AgentIdentityService'
-        );
-      }
-    );
+          'AgentIdentityService',
+        )
+      },
+    )
 
     await db.agentLog.create({
       data: {
@@ -164,25 +167,25 @@ export class AgentIdentityService {
         agentUserId,
         type: 'system',
         level: 'info',
-        message: `Agent registered on Agent0: Token ID ${registration.tokenId}`,
+        content: `Agent registered on Agent0: Token ID ${registration.tokenId}`,
         metadata: {
           tokenId: registration.tokenId,
           metadataCID: registration.metadataCID,
           txHash: registration.txHash,
         } as JsonValue,
       },
-    });
+    })
 
     logger.info(
       `Agent ${agentUserId} registered on Agent0: Token ID ${registration.tokenId}`,
       undefined,
-      'AgentIdentityService'
-    );
+      'AgentIdentityService',
+    )
     return {
       agent0TokenId: registration.tokenId,
       metadataCID: registration.metadataCID,
       txHash: registration.txHash,
-    };
+    }
   }
 
   /**
@@ -192,16 +195,16 @@ export class AgentIdentityService {
   async setupAgentIdentity(
     agentUserId: string,
     options?: {
-      skipAgent0Registration?: boolean;
-    }
+      skipAgent0Registration?: boolean
+    },
   ): Promise<User> {
     logger.info(
       `Setting up identity for agent user ${agentUserId}`,
       undefined,
-      'AgentIdentityService'
-    );
+      'AgentIdentityService',
+    )
 
-    await this.createAgentWallet(agentUserId);
+    await this.createAgentWallet(agentUserId)
 
     // Agent0 registration is optional and can be skipped
     if (!options?.skipAgent0Registration) {
@@ -210,29 +213,29 @@ export class AgentIdentityService {
           logger.warn(
             `Agent0 registration failed for ${agentUserId}, continuing without on-chain registration`,
             { error },
-            'AgentIdentityService'
-          );
-          return null;
-        }
-      );
+            'AgentIdentityService',
+          )
+          return null
+        },
+      )
 
       if (registrationResult) {
         logger.info(
           `Agent ${agentUserId} registered on Agent0`,
           { tokenId: registrationResult.agent0TokenId },
-          'AgentIdentityService'
-        );
+          'AgentIdentityService',
+        )
       }
     }
 
     const agent = await db.user.findUnique({
       where: { id: agentUserId },
-    });
+    })
 
     if (!agent) {
-      throw new Error('Agent not found after identity setup');
+      throw new Error('Agent not found after identity setup')
     }
-    return agent as User;
+    return agent as User
   }
 
   /**
@@ -242,18 +245,18 @@ export class AgentIdentityService {
   async verifyAgentIdentity(agentUserId: string): Promise<boolean> {
     const agent = await db.user.findUnique({
       where: { id: agentUserId },
-    });
+    })
 
     if (!agent || !agent.isAgent || !agent.agent0TokenId) {
       logger.debug(
         `Agent ${agentUserId} not found or not registered on Agent0`,
         undefined,
-        'AgentIdentityService'
-      );
-      return false;
+        'AgentIdentityService',
+      )
+      return false
     }
 
-    const agent0TokenId = Number(agent.agent0TokenId);
+    const agent0TokenId = Number(agent.agent0TokenId)
     // Verification is a non-critical check operation - catch errors and return false
     const verificationResult = await getAgent0Client()
       .getAgentProfile(agent0TokenId)
@@ -262,21 +265,21 @@ export class AgentIdentityService {
         logger.warn(
           `Failed to verify agent identity for ${agentUserId} on Agent0`,
           { error },
-          'AgentIdentityService'
-        );
-        return false;
-      });
+          'AgentIdentityService',
+        )
+        return false
+      })
 
     if (verificationResult) {
       logger.info(
         `Agent ${agentUserId} verified on Agent0`,
         { tokenId: agent0TokenId },
-        'AgentIdentityService'
-      );
+        'AgentIdentityService',
+      )
     }
 
-    return verificationResult;
+    return verificationResult
   }
 }
 
-export const agentIdentityService = new AgentIdentityService();
+export const agentIdentityService = new AgentIdentityService()

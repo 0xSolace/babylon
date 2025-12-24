@@ -1,33 +1,31 @@
-'use client';
-
-import { IDENTITY_REGISTRY_BASE_SEPOLIA } from '@babylon/shared';
-import { useQuery } from '@tanstack/react-query';
-import { Award, Medal, Target, Trophy } from 'lucide-react';
-import { PageContainer } from '@/components/shared/PageContainer';
-import { useAuth } from '@/hooks/useAuth';
+import { IDENTITY_REGISTRY_BASE_SEPOLIA } from '@babylon/shared'
+import { useQuery } from '@tanstack/react-query'
+import { Award, Medal, Target, Trophy } from 'lucide-react'
+import { PageContainer } from '@/components/shared/PageContainer'
+import { useAuth } from '@/hooks/useAuth'
 
 interface ReputationStats {
-  currentReputation: number;
-  totalWins: number;
-  totalLosses: number;
-  winRate: number;
-  averageGameScore: number;
-  averageFeedbackScore: number;
-  totalFeedbackReceived: number;
-  trustLevel: string;
+  currentReputation: number
+  totalWins: number
+  totalLosses: number
+  winRate: number
+  averageGameScore: number
+  averageFeedbackScore: number
+  totalFeedbackReceived: number
+  trustLevel: string
 }
 
 interface ReputationApiResponse {
-  reputationPoints?: number;
+  reputationPoints?: number
   performance?: {
-    gamesPlayed?: number;
-    gamesWon?: number;
-    winRate?: number;
-    averageGameScore?: number;
-  };
-  averageFeedbackScore?: number;
-  totalFeedbackReceived?: number;
-  trustLevel?: string;
+    gamesPlayed?: number
+    gamesWon?: number
+    winRate?: number
+    averageGameScore?: number
+  }
+  averageFeedbackScore?: number
+  totalFeedbackReceived?: number
+  trustLevel?: string
 }
 
 const emptyStats: ReputationStats = {
@@ -39,26 +37,26 @@ const emptyStats: ReputationStats = {
   averageFeedbackScore: 0,
   totalFeedbackReceived: 0,
   trustLevel: 'UNRATED',
-};
+}
 
 export default function ReputationPage() {
-  const { user, authenticated } = useAuth();
+  const { user, authenticated } = useAuth()
 
   const { data: stats = emptyStats, isLoading: loading } = useQuery({
     queryKey: ['reputation', user?.id],
     queryFn: async (): Promise<ReputationStats> => {
       const response = await fetch(
-        `/api/reputation/${encodeURIComponent(user!.id)}`
-      );
+        `/api/reputation/${encodeURIComponent(user?.id)}`,
+      )
       if (!response.ok) {
-        return emptyStats;
+        return emptyStats
       }
 
-      const data = (await response.json()) as ReputationApiResponse;
-      const gamesPlayed = data.performance?.gamesPlayed ?? 0;
-      const gamesWon = data.performance?.gamesWon ?? 0;
-      const wins = Math.max(0, gamesWon);
-      const losses = Math.max(0, gamesPlayed - gamesWon);
+      const data = (await response.json()) as ReputationApiResponse
+      const gamesPlayed = data.performance?.gamesPlayed ?? 0
+      const gamesWon = data.performance?.gamesWon ?? 0
+      const wins = Math.max(0, gamesWon)
+      const losses = Math.max(0, gamesPlayed - gamesWon)
 
       return {
         currentReputation: Math.round(data.reputationPoints ?? 0),
@@ -69,13 +67,13 @@ export default function ReputationPage() {
         averageFeedbackScore: data.averageFeedbackScore ?? 0,
         totalFeedbackReceived: data.totalFeedbackReceived ?? 0,
         trustLevel: data.trustLevel ?? 'UNRATED',
-      };
+      }
     },
     enabled: authenticated && !!user?.id,
     refetchInterval: 30000, // Poll every 30 seconds
-  });
+  })
 
-  const hasNft = Boolean(user?.nftTokenId || user?.onChainRegistered);
+  const hasNft = Boolean(user?.nftTokenId || user?.onChainRegistered)
 
   if (!authenticated) {
     return (
@@ -88,7 +86,7 @@ export default function ReputationPage() {
           </p>
         </div>
       </PageContainer>
-    );
+    )
   }
 
   if (!loading && !hasNft) {
@@ -102,7 +100,7 @@ export default function ReputationPage() {
           </p>
         </div>
       </PageContainer>
-    );
+    )
   }
 
   if (loading) {
@@ -112,7 +110,7 @@ export default function ReputationPage() {
           <p className="text-muted-foreground">Loading reputation...</p>
         </div>
       </PageContainer>
-    );
+    )
   }
 
   return (
@@ -192,17 +190,17 @@ export default function ReputationPage() {
           <h2 className="mb-4 font-semibold text-lg">Your Reputation NFT</h2>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div>
-              <label className="mb-1 block text-muted-foreground text-sm">
+              <div className="mb-1 block text-muted-foreground text-sm">
                 Token ID
-              </label>
+              </div>
               <p className="font-mono text-foreground">
                 #{user?.nftTokenId ?? 'N/A'}
               </p>
             </div>
             <div>
-              <label className="mb-1 block text-muted-foreground text-sm">
+              <div className="mb-1 block text-muted-foreground text-sm">
                 Contract Address
-              </label>
+              </div>
               <p className="truncate font-mono text-foreground text-sm">
                 {IDENTITY_REGISTRY_BASE_SEPOLIA}
               </p>
@@ -242,5 +240,5 @@ export default function ReputationPage() {
         </div>
       </div>
     </PageContainer>
-  );
+  )
 }

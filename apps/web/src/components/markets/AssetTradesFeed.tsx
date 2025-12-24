@@ -1,7 +1,5 @@
-'use client';
-
-import { cn } from '@babylon/shared';
-import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
+import { cn } from '@babylon/shared'
+import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query'
 
 import {
   AlertCircle,
@@ -10,111 +8,111 @@ import {
   TrendingDown,
   TrendingUp,
   User as UserIcon,
-} from 'lucide-react';
-import Link from 'next/link';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Skeleton } from '@/components/shared/Skeleton';
-import { usePredictionMarketStream } from '@/hooks/usePredictionMarketStream';
+} from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
+import { Skeleton } from '@/components/shared/Skeleton'
+import { usePredictionMarketStream } from '@/hooks/usePredictionMarketStream'
 
 /**
  * Page size for pagination in trades feed.
  */
-const PAGE_SIZE = 20;
+const PAGE_SIZE = 20
 /**
  * Polling interval for fetching new trades (10 seconds).
  */
-const POLL_INTERVAL = 30000; // 30 seconds
+const POLL_INTERVAL = 30000 // 30 seconds
 /**
  * Scroll threshold in pixels from top to consider "at top" for auto-polling.
  */
-const SCROLL_THRESHOLD = 100; // pixels from top to consider "at top"
+const SCROLL_THRESHOLD = 100 // pixels from top to consider "at top"
 
 /**
  * Base trade user structure shared across trade types.
  */
 interface BaseTradeUser {
-  id: string;
-  username: string | null;
-  displayName: string | null;
-  profileImageUrl: string | null;
-  isActor: boolean;
+  id: string
+  username: string | null
+  displayName: string | null
+  profileImageUrl: string | null
+  isActor: boolean
 }
 
 /**
  * Prediction market position trade structure.
  */
 interface PositionTrade {
-  id: string;
-  type: 'position';
-  user: BaseTradeUser;
-  side: string;
-  shares: number;
-  avgPrice: number;
-  amount: number;
-  timestamp: string;
-  marketId: string;
+  id: string
+  type: 'position'
+  user: BaseTradeUser
+  side: string
+  shares: number
+  avgPrice: number
+  amount: number
+  timestamp: string
+  marketId: string
 }
 
 /**
  * Perpetual market trade structure.
  */
 interface PerpTrade {
-  id: string;
-  type: 'perp';
-  user: BaseTradeUser;
-  side: string;
-  size: number;
-  leverage: number;
-  entryPrice: number;
-  currentPrice: number;
-  unrealizedPnL: number;
-  liquidationPrice: number;
-  timestamp: string;
-  closedAt: string | null;
-  ticker: string;
+  id: string
+  type: 'perp'
+  user: BaseTradeUser
+  side: string
+  size: number
+  leverage: number
+  entryPrice: number
+  currentPrice: number
+  unrealizedPnL: number
+  liquidationPrice: number
+  timestamp: string
+  closedAt: string | null
+  ticker: string
 }
 
 /**
  * NPC trade structure for automated trading.
  */
 interface NPCTrade {
-  id: string;
-  type: 'npc';
-  user: BaseTradeUser | null;
-  marketType: string;
-  ticker: string;
-  action: string;
-  side: string | null;
-  amount: number;
-  price: number;
-  sentiment: number | null;
-  reason: string | null;
-  timestamp: string;
+  id: string
+  type: 'npc'
+  user: BaseTradeUser | null
+  marketType: string
+  ticker: string
+  action: string
+  side: string | null
+  amount: number
+  price: number
+  sentiment: number | null
+  reason: string | null
+  timestamp: string
 }
 
 /**
  * Balance transaction trade structure.
  */
 interface BalanceTrade {
-  id: string;
-  type: 'balance';
-  user: BaseTradeUser | null;
-  transactionType: string;
-  amount: number;
-  side?: string | null;
-  shares?: number | null;
-  price?: number | null;
-  size?: number | null;
-  leverage?: number | null;
-  ticker?: string;
-  marketId?: string;
-  timestamp: string;
+  id: string
+  type: 'balance'
+  user: BaseTradeUser | null
+  transactionType: string
+  amount: number
+  side?: string | null
+  shares?: number | null
+  price?: number | null
+  size?: number | null
+  leverage?: number | null
+  ticker?: string
+  marketId?: string
+  timestamp: string
 }
 
 /**
  * Union type for all trade types.
  */
-type Trade = PositionTrade | PerpTrade | NPCTrade | BalanceTrade;
+type Trade = PositionTrade | PerpTrade | NPCTrade | BalanceTrade
 
 /**
  * Asset trades feed component for displaying recent trades for a market.
@@ -144,17 +142,17 @@ type Trade = PositionTrade | PerpTrade | NPCTrade | BalanceTrade;
  * ```
  */
 interface AssetTradesFeedProps {
-  marketType: 'prediction' | 'perp';
-  assetId: string; // marketId for predictions, ticker for perps
-  containerRef?: React.RefObject<HTMLDivElement | null>;
+  marketType: 'prediction' | 'perp'
+  assetId: string // marketId for predictions, ticker for perps
+  containerRef?: React.RefObject<HTMLDivElement | null>
 }
 
 /**
  * API response structure for trades endpoint.
  */
 interface TradesApiResponse {
-  trades: Trade[];
-  hasMore: boolean;
+  trades: Trade[]
+  hasMore: boolean
 }
 
 export function AssetTradesFeed({
@@ -162,19 +160,19 @@ export function AssetTradesFeed({
   assetId,
   containerRef,
 }: AssetTradesFeedProps) {
-  const [isAtTop, setIsAtTop] = useState(true);
-  const [needsRefresh, setNeedsRefresh] = useState(false);
+  const [isAtTop, setIsAtTop] = useState(true)
+  const [needsRefresh, setNeedsRefresh] = useState(false)
 
-  const loadMoreRef = useRef<HTMLDivElement | null>(null);
-  const queryClient = useQueryClient();
+  const loadMoreRef = useRef<HTMLDivElement | null>(null)
+  const queryClient = useQueryClient()
 
   // Build API endpoint based on market type
   const apiEndpoint = useMemo(() => {
     if (marketType === 'prediction') {
-      return `/api/markets/predictions/${assetId}/trades`;
+      return `/api/markets/predictions/${assetId}/trades`
     }
-    return `/api/markets/perps/trades/${assetId}`;
-  }, [marketType, assetId]);
+    return `/api/markets/perps/trades/${assetId}`
+  }, [marketType, assetId])
 
   // Use infinite query for paginated trades
   const {
@@ -191,137 +189,138 @@ export function AssetTradesFeed({
       const params = new URLSearchParams({
         limit: PAGE_SIZE.toString(),
         offset: pageParam.toString(),
-      });
+      })
 
-      const response = await fetch(`${apiEndpoint}?${params.toString()}`);
+      const response = await fetch(`${apiEndpoint}?${params.toString()}`)
       if (!response.ok) {
-        throw new Error(`Failed to load trades: ${response.status}`);
+        throw new Error(`Failed to load trades: ${response.status}`)
       }
 
-      return response.json() as Promise<TradesApiResponse>;
+      const data: TradesApiResponse = await response.json()
+      return data
     },
     initialPageParam: 0,
     getNextPageParam: (lastPage, allPages) => {
-      if (!lastPage.hasMore) return undefined;
+      if (!lastPage.hasMore) return undefined
       const totalLoaded = allPages.reduce(
         (acc, page) => acc + page.trades.length,
-        0
-      );
-      return totalLoaded;
+        0,
+      )
+      return totalLoaded
     },
     refetchInterval: isAtTop ? POLL_INTERVAL : false,
     enabled: !!assetId,
-  });
+  })
 
   // Flatten paginated trades and deduplicate
   const trades = useMemo(() => {
-    if (!data?.pages) return [];
-    const allTrades = data.pages.flatMap((page) => page?.trades ?? []);
+    if (!data?.pages) return []
+    const allTrades = data.pages.flatMap((page) => page?.trades ?? [])
     // Deduplicate by ID
-    const seen = new Set<string>();
+    const seen = new Set<string>()
     return allTrades.filter((trade) => {
-      if (seen.has(trade.id)) return false;
-      seen.add(trade.id);
-      return true;
-    });
-  }, [data?.pages]);
+      if (seen.has(trade.id)) return false
+      seen.add(trade.id)
+      return true
+    })
+  }, [data?.pages])
 
   // Refresh trades
   const refreshTrades = useCallback(async () => {
     await queryClient.invalidateQueries({
       queryKey: ['markets', 'trades', marketType, assetId],
-    });
-  }, [queryClient, marketType, assetId]);
+    })
+  }, [queryClient, marketType, assetId])
 
   // Handle scroll to detect if user is at top
   useEffect(() => {
-    const container = containerRef?.current;
-    if (!container) return;
+    const container = containerRef?.current
+    if (!container) return
 
     const handleScroll = () => {
-      const scrollTop = container.scrollTop;
-      const isNearTop = scrollTop <= SCROLL_THRESHOLD;
-      setIsAtTop(isNearTop);
-    };
+      const scrollTop = container.scrollTop
+      const isNearTop = scrollTop <= SCROLL_THRESHOLD
+      setIsAtTop(isNearTop)
+    }
 
-    container.addEventListener('scroll', handleScroll);
-    return () => container.removeEventListener('scroll', handleScroll);
-  }, [containerRef]);
+    container.addEventListener('scroll', handleScroll)
+    return () => container.removeEventListener('scroll', handleScroll)
+  }, [containerRef])
 
   // Infinite scroll observer
   useEffect(() => {
-    if (!loadMoreRef.current || !hasNextPage || isFetchingNextPage) return;
+    if (!loadMoreRef.current || !hasNextPage || isFetchingNextPage) return
 
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0]?.isIntersecting) {
-          void fetchNextPage();
+          void fetchNextPage()
         }
       },
-      { threshold: 0.1 }
-    );
+      { threshold: 0.1 },
+    )
 
-    observer.observe(loadMoreRef.current);
-    return () => observer.disconnect();
-  }, [hasNextPage, isFetchingNextPage, fetchNextPage]);
+    observer.observe(loadMoreRef.current)
+    return () => observer.disconnect()
+  }, [hasNextPage, isFetchingNextPage, fetchNextPage])
 
   // Refresh when at top and needs refresh
   useEffect(() => {
     if (isAtTop && needsRefresh) {
-      setNeedsRefresh(false);
-      void refreshTrades();
+      setNeedsRefresh(false)
+      void refreshTrades()
     }
-  }, [isAtTop, needsRefresh, refreshTrades]);
+  }, [isAtTop, needsRefresh, refreshTrades])
 
   usePredictionMarketStream(marketType === 'prediction' ? assetId : null, {
     onTrade: () => {
       if (isAtTop) {
-        void refreshTrades();
+        void refreshTrades()
       } else {
-        setNeedsRefresh(true);
+        setNeedsRefresh(true)
       }
     },
     onResolution: () => {
       if (isAtTop) {
-        void refreshTrades();
+        void refreshTrades()
       } else {
-        setNeedsRefresh(true);
+        setNeedsRefresh(true)
       }
     },
-  });
+  })
 
   const formatCurrency = (value: string | number) => {
-    const num = typeof value === 'string' ? Number.parseFloat(value) : value;
+    const num = typeof value === 'string' ? Number.parseFloat(value) : value
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: 'USD',
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
-    }).format(num);
-  };
+    }).format(num)
+  }
 
   const formatTime = (timestamp: string) => {
-    const date = new Date(timestamp);
-    const now = Date.now();
-    const diff = now - date.getTime();
+    const date = new Date(timestamp)
+    const now = Date.now()
+    const diff = now - date.getTime()
 
-    const minutes = Math.floor(diff / 60000);
-    const hours = Math.floor(diff / 3600000);
-    const days = Math.floor(diff / 86400000);
+    const minutes = Math.floor(diff / 60000)
+    const hours = Math.floor(diff / 3600000)
+    const days = Math.floor(diff / 86400000)
 
-    if (minutes < 1) return 'Just now';
-    if (minutes < 60) return `${minutes}m ago`;
-    if (hours < 24) return `${hours}h ago`;
-    if (days < 7) return `${days}d ago`;
+    if (minutes < 1) return 'Just now'
+    if (minutes < 60) return `${minutes}m ago`
+    if (hours < 24) return `${hours}h ago`
+    if (days < 7) return `${days}d ago`
 
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  };
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  }
 
   if (isLoading) {
     return (
       <div className="space-y-3">
-        {[...Array(5)].map((_, i) => (
-          <div key={i} className="rounded-lg bg-muted/30 p-4">
+        {['trade-1', 'trade-2', 'trade-3', 'trade-4', 'trade-5'].map((id) => (
+          <div key={id} className="rounded-lg bg-muted/30 p-4">
             <div className="flex items-start gap-3">
               <Skeleton className="h-10 w-10 rounded-full" />
               <div className="flex-1 space-y-2">
@@ -333,7 +332,7 @@ export function AssetTradesFeed({
           </div>
         ))}
       </div>
-    );
+    )
   }
 
   if (error) {
@@ -347,13 +346,14 @@ export function AssetTradesFeed({
         </p>
         <p className="mb-4 text-muted-foreground text-xs">{error.message}</p>
         <button
+          type="button"
           onClick={() => void refetch()}
           className="rounded-lg bg-primary px-4 py-2 font-medium text-primary-foreground text-sm transition-colors hover:bg-primary/90"
         >
           Try Again
         </button>
       </div>
-    );
+    )
   }
 
   if (trades.length === 0) {
@@ -361,7 +361,7 @@ export function AssetTradesFeed({
       <div className="py-12 text-center">
         <p className="text-muted-foreground">No trades yet for this market</p>
       </div>
-    );
+    )
   }
 
   return (
@@ -370,8 +370,8 @@ export function AssetTradesFeed({
         <button
           type="button"
           onClick={() => {
-            setNeedsRefresh(false);
-            void refreshTrades();
+            setNeedsRefresh(false)
+            void refreshTrades()
           }}
           className="w-full rounded bg-primary/10 px-3 py-2 font-medium text-primary text-xs transition-colors hover:bg-primary/20"
         >
@@ -404,28 +404,28 @@ export function AssetTradesFeed({
         </div>
       )}
     </div>
-  );
+  )
 }
 
 interface TradeCardProps {
-  trade: Trade;
-  formatCurrency: (value: string | number) => string;
-  formatTime: (timestamp: string) => string;
+  trade: Trade
+  formatCurrency: (value: string | number) => string
+  formatTime: (timestamp: string) => string
 }
 
 function TradeCard({ trade, formatCurrency, formatTime }: TradeCardProps) {
-  const user = trade.user;
+  const user = trade.user
   const profileUrl = user?.isActor
     ? `/profile/${user.id}`
     : user?.username
       ? `/profile/${user.username}`
-      : '#';
+      : '#'
 
   return (
     <div className="rounded-lg bg-muted/30 p-4 transition-colors hover:bg-muted/50">
       <div className="flex items-start gap-3">
         {/* User Avatar */}
-        <Link href={user ? profileUrl : '#'} className="flex-shrink-0">
+        <Link to={user ? profileUrl : '#'} className="flex-shrink-0">
           {user?.profileImageUrl ? (
             <img
               src={user.profileImageUrl}
@@ -444,7 +444,7 @@ function TradeCard({ trade, formatCurrency, formatTime }: TradeCardProps) {
           {/* User Name and Time */}
           <div className="mb-1 flex items-center gap-2">
             <Link
-              href={user ? profileUrl : '#'}
+              to={user ? profileUrl : '#'}
               className="truncate font-medium text-sm hover:underline"
             >
               {user?.displayName ?? user?.username ?? 'Unknown'}
@@ -482,17 +482,17 @@ function TradeCard({ trade, formatCurrency, formatTime }: TradeCardProps) {
         </div>
       </div>
     </div>
-  );
+  )
 }
 
 function PositionTradeContent({
   trade,
   formatCurrency,
 }: {
-  trade: PositionTrade;
-  formatCurrency: (v: number) => string;
+  trade: PositionTrade
+  formatCurrency: (v: number) => string
 }) {
-  const isYes = trade.side === 'YES';
+  const isYes = trade.side === 'YES'
 
   return (
     <div className="text-sm">
@@ -502,7 +502,7 @@ function PositionTradeContent({
             'rounded px-2 py-0.5 font-medium text-xs',
             isYes
               ? 'bg-green-600/20 text-green-600'
-              : 'bg-red-600/20 text-red-600'
+              : 'bg-red-600/20 text-red-600',
           )}
         >
           {trade.side}
@@ -515,18 +515,18 @@ function PositionTradeContent({
         Total: {formatCurrency(trade.amount)}
       </div>
     </div>
-  );
+  )
 }
 
 function PerpTradeContent({
   trade,
   formatCurrency,
 }: {
-  trade: PerpTrade;
-  formatCurrency: (v: number) => string;
+  trade: PerpTrade
+  formatCurrency: (v: number) => string
 }) {
-  const isLong = trade.side === 'long';
-  const isProfitable = trade.unrealizedPnL >= 0;
+  const isLong = trade.side === 'long'
+  const isProfitable = trade.unrealizedPnL >= 0
 
   return (
     <div className="text-sm">
@@ -536,7 +536,7 @@ function PerpTradeContent({
             'flex items-center gap-1 rounded px-2 py-0.5 font-medium text-xs',
             isLong
               ? 'bg-green-600/20 text-green-600'
-              : 'bg-red-600/20 text-red-600'
+              : 'bg-red-600/20 text-red-600',
           )}
         >
           {isLong ? (
@@ -558,7 +558,7 @@ function PerpTradeContent({
           <span
             className={cn(
               'font-medium',
-              isProfitable ? 'text-green-600' : 'text-red-600'
+              isProfitable ? 'text-green-600' : 'text-red-600',
             )}
           >
             {isProfitable ? '+' : ''}
@@ -574,15 +574,15 @@ function PerpTradeContent({
         <div className="text-muted-foreground text-xs">Position closed</div>
       )}
     </div>
-  );
+  )
 }
 
 function NPCTradeContent({
   trade,
   formatCurrency,
 }: {
-  trade: NPCTrade;
-  formatCurrency: (v: number) => string;
+  trade: NPCTrade
+  formatCurrency: (v: number) => string
 }) {
   return (
     <div className="text-sm">
@@ -608,7 +608,7 @@ function NPCTradeContent({
                 ? 'text-green-600'
                 : trade.sentiment < 0
                   ? 'text-red-600'
-                  : 'text-muted-foreground'
+                  : 'text-muted-foreground',
             )}
           >
             {trade.sentiment > 0 ? '🟢' : trade.sentiment < 0 ? '🔴' : '⚪'}{' '}
@@ -617,32 +617,32 @@ function NPCTradeContent({
         </div>
       )}
     </div>
-  );
+  )
 }
 
 function BalanceTradeContent({
   trade,
   formatCurrency,
 }: {
-  trade: BalanceTrade;
-  formatCurrency: (v: number) => string;
+  trade: BalanceTrade
+  formatCurrency: (v: number) => string
 }) {
   const getActionLabel = (type: string) => {
     switch (type) {
       case 'pred_buy':
-        return 'Bought prediction shares';
+        return 'Bought prediction shares'
       case 'pred_sell':
-        return 'Sold prediction shares';
+        return 'Sold prediction shares'
       case 'perp_open':
-        return 'Opened perp position';
+        return 'Opened perp position'
       case 'perp_close':
-        return 'Closed perp position';
+        return 'Closed perp position'
       case 'perp_liquidation':
-        return 'Liquidated';
+        return 'Liquidated'
       default:
-        return type;
+        return type
     }
-  };
+  }
 
   return (
     <div className="text-sm">
@@ -661,7 +661,7 @@ function BalanceTradeContent({
                 'font-medium',
                 trade.side === 'YES' || trade.side === 'long'
                   ? 'text-green-600'
-                  : 'text-red-600'
+                  : 'text-red-600',
               )}
             >
               {trade.side}
@@ -682,5 +682,5 @@ function BalanceTradeContent({
         )}
       </div>
     </div>
-  );
+  )
 }

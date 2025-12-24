@@ -1,7 +1,5 @@
-import AgentDetailClient from './AgentDetailClient';
-
-export const dynamic = 'force-dynamic';
+import AgentDetailClient from './AgentDetailClient'
 
 export default function AgentDetailPage() {
-  return <AgentDetailClient />;
+  return <AgentDetailClient />
 }

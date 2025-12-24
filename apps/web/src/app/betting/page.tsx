@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * On-Chain Betting Page
  *
@@ -7,57 +5,57 @@
  * Transactions execute on blockchain via smart wallet
  */
 
-import { getContractAddresses } from '@babylon/contracts';
-import { cn } from '@babylon/shared';
-import { useMutation } from '@tanstack/react-query';
+import { cn, getContractAddresses } from '@babylon/shared'
+import { useMutation } from '@tanstack/react-query'
 import {
   Clock,
   ExternalLink,
   TrendingDown,
   TrendingUp,
   Wallet,
-} from 'lucide-react';
-import { useRouter } from 'next/navigation';
-import { useMemo, useState } from 'react';
-import { toast } from 'sonner';
-import { PageContainer } from '@/components/shared/PageContainer';
-import { Skeleton } from '@/components/shared/Skeleton';
-import { useAuth } from '@/hooks/useAuth';
-import { useOnChainBetting } from '@/hooks/useOnChainBetting';
-import { usePerpMarkets } from '@/hooks/usePerpMarkets';
-import { useSmartWallet } from '@/hooks/useSmartWallet';
+} from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { toast } from 'sonner'
+import { PageContainer } from '@/components/shared/PageContainer'
+import { Skeleton } from '@/components/shared/Skeleton'
+import { getChainId } from '@/config'
+import { useAuth } from '@/hooks/useAuth'
+import { useOnChainBetting } from '@/hooks/useOnChainBetting'
+import { usePerpMarkets } from '@/hooks/usePerpMarkets'
+import { useSmartWallet } from '@/hooks/useSmartWallet'
+import { useRouter } from '@/lib/navigation'
 import {
   type PredictionMarket,
   usePredictionMarkets,
-} from '@/stores/predictionMarketsStore';
+} from '@/stores/predictionMarketsStore'
 
 /**
  * Payload for verifying an on-chain bet with the backend.
  */
 interface VerifyOnChainBetPayload {
-  marketId: string;
-  side: 'yes' | 'no';
-  numShares: number;
-  txHash: string;
-  walletAddress: string;
+  marketId: string
+  side: 'yes' | 'no'
+  numShares: number
+  txHash: string
+  walletAddress: string
 }
 
 export default function OnChainBettingPage() {
-  const router = useRouter();
-  const { authenticated, login } = useAuth();
-  const { smartWalletReady, smartWalletAddress } = useSmartWallet();
-  const { buyShares, loading: txLoading } = useOnChainBetting();
+  const router = useRouter()
+  const { authenticated, login } = useAuth()
+  const { smartWalletReady, smartWalletAddress } = useSmartWallet()
+  const { buyShares, loading: txLoading } = useOnChainBetting()
 
   // Use shared stores
-  const { markets: perpMarkets, loading: perpLoading } = usePerpMarkets();
+  const { markets: perpMarkets, loading: perpLoading } = usePerpMarkets()
   const { markets: questions, loading: questionsLoading } =
-    usePredictionMarkets();
+    usePredictionMarkets()
 
   const [selectedMarket, setSelectedMarket] = useState<PredictionMarket | null>(
-    null
-  );
-  const [betAmount, setBetAmount] = useState('');
-  const [betSide, setBetSide] = useState<'YES' | 'NO'>('YES');
+    null,
+  )
+  const [betAmount, setBetAmount] = useState('')
+  const [betSide, setBetSide] = useState<'YES' | 'NO'>('YES')
 
   // Mutation for verifying on-chain bets with backend
   const verifyBetMutation = useMutation({
@@ -79,48 +77,49 @@ export default function OnChainBettingPage() {
             txHash,
             walletAddress,
           }),
-        }
-      );
+        },
+      )
       if (!response.ok) {
-        throw new Error(`Failed to verify bet: ${response.status}`);
+        throw new Error(`Failed to verify bet: ${response.status}`)
       }
     },
-  });
+  })
 
   // Show loading only on initial fetch
   const loading =
     (perpLoading && perpMarkets.length === 0) ||
-    (questionsLoading && questions.length === 0);
+    (questionsLoading && questions.length === 0)
 
   // Memoize active questions
   const activeQuestions = useMemo(
     () => questions.filter((q) => q.status === 'active'),
-    [questions]
-  );
+    [questions],
+  )
 
   // Get network info
-  const { network, diamond, chainId } = getContractAddresses();
-  const isLocal = chainId === 31337;
+  const addresses = getContractAddresses()
+  const chainId = getChainId()
+  const isLocal = chainId === 31337
   const explorerUrl = isLocal
     ? null // No explorer for localnet
     : chainId === 84532
       ? 'https://sepolia.basescan.org'
-      : 'https://basescan.org';
+      : 'https://basescan.org'
 
   const handleBet = async () => {
-    if (!selectedMarket || !betAmount || !smartWalletAddress) return;
+    if (!selectedMarket || !betAmount || !smartWalletAddress) return
 
-    const shares = Number.parseFloat(betAmount);
-    if (isNaN(shares) || shares <= 0) {
-      toast.error('Invalid bet amount');
-      return;
+    const shares = Number.parseFloat(betAmount)
+    if (Number.isNaN(shares) || shares <= 0) {
+      toast.error('Invalid bet amount')
+      return
     }
 
     const result = await buyShares(
       selectedMarket.id.toString(),
       betSide,
-      shares
-    );
+      shares,
+    )
 
     toast.success('Bet placed on-chain!', {
       description: isLocal
@@ -133,7 +132,7 @@ export default function OnChainBettingPage() {
               window.open(`${explorerUrl}/tx/${result.txHash}`, '_blank'),
           }
         : undefined,
-    });
+    })
 
     // Verify with backend using mutation
     verifyBetMutation.mutate({
@@ -142,21 +141,21 @@ export default function OnChainBettingPage() {
       numShares: shares,
       txHash: result.txHash,
       walletAddress: smartWalletAddress,
-    });
+    })
 
-    setSelectedMarket(null);
-    setBetAmount('');
-  };
+    setSelectedMarket(null)
+    setBetAmount('')
+  }
 
-  const formatPrice = (price: number) => `$${price.toFixed(2)}`;
+  const formatPrice = (price: number) => `$${price.toFixed(2)}`
 
   const getDaysLeft = (date?: string) => {
-    if (!date) return null;
+    if (!date) return null
     const diff = Math.ceil(
-      (new Date(date).getTime() - Date.now()) / (1000 * 60 * 60 * 24)
-    );
-    return Math.max(0, diff);
-  };
+      (new Date(date).getTime() - Date.now()) / (1000 * 60 * 60 * 24),
+    )
+    return Math.max(0, diff)
+  }
 
   if (!authenticated) {
     return (
@@ -171,6 +170,7 @@ export default function OnChainBettingPage() {
             </p>
           </div>
           <button
+            type="button"
             onClick={login}
             className="rounded-lg bg-[#0066FF] px-8 py-3 font-medium text-primary-foreground transition-colors hover:bg-[#2952d9]"
           >
@@ -178,7 +178,7 @@ export default function OnChainBettingPage() {
           </button>
         </div>
       </PageContainer>
-    );
+    )
   }
 
   if (!smartWalletReady) {
@@ -190,7 +190,7 @@ export default function OnChainBettingPage() {
           <Skeleton className="h-4 w-48" />
         </div>
       </PageContainer>
-    );
+    )
   }
 
   if (loading) {
@@ -205,7 +205,7 @@ export default function OnChainBettingPage() {
           </div>
         </div>
       </PageContainer>
-    );
+    )
   }
 
   return (
@@ -214,6 +214,7 @@ export default function OnChainBettingPage() {
         {/* Header */}
         <div>
           <button
+            type="button"
             onClick={() => router.push('/markets')}
             className="mb-4 text-muted-foreground text-sm hover:text-foreground"
           >
@@ -228,8 +229,10 @@ export default function OnChainBettingPage() {
               : 'Base Sepolia ETH • All transactions on blockchain'}
           </p>
           <div className="mt-1 text-muted-foreground text-xs">
-            Network: {network} • Diamond: {diamond.slice(0, 10)}...
-            {diamond.slice(-6)}
+            Network:{' '}
+            {isLocal ? 'localnet' : chainId === 84532 ? 'testnet' : 'mainnet'} •
+            Diamond: {addresses.diamond.slice(0, 10)}...
+            {addresses.diamond.slice(-6)}
           </div>
           <div className="mt-2 flex items-center gap-2 text-sm">
             <Wallet className="h-4 w-4 text-green-600" />
@@ -259,18 +262,18 @@ export default function OnChainBettingPage() {
           </h2>
           <div className="space-y-3">
             {activeQuestions.map((question) => {
-              const yesShares = question.yesShares || 0;
-              const noShares = question.noShares || 0;
-              const totalShares = yesShares + noShares;
+              const yesShares = question.yesShares || 0
+              const noShares = question.noShares || 0
+              const totalShares = yesShares + noShares
               const yesPercent =
                 totalShares > 0
                   ? ((yesShares / totalShares) * 100).toFixed(1)
-                  : '50.0';
+                  : '50.0'
               const noPercent =
                 totalShares > 0
                   ? ((noShares / totalShares) * 100).toFixed(1)
-                  : '50.0';
-              const daysLeft = getDaysLeft(question.resolutionDate);
+                  : '50.0'
+              const daysLeft = getDaysLeft(question.resolutionDate)
 
               return (
                 <div
@@ -315,18 +318,20 @@ export default function OnChainBettingPage() {
 
                   <div className="flex gap-2">
                     <button
+                      type="button"
                       onClick={() => {
-                        setSelectedMarket(question);
-                        setBetSide('YES');
+                        setSelectedMarket(question)
+                        setBetSide('YES')
                       }}
                       className="flex-1 rounded-lg bg-green-600/20 px-4 py-2 font-medium text-green-600 transition-colors hover:bg-green-600/30"
                     >
                       Bet YES On-Chain
                     </button>
                     <button
+                      type="button"
                       onClick={() => {
-                        setSelectedMarket(question);
-                        setBetSide('NO');
+                        setSelectedMarket(question)
+                        setBetSide('NO')
                       }}
                       className="flex-1 rounded-lg bg-red-600/20 px-4 py-2 font-medium text-red-600 transition-colors hover:bg-red-600/30"
                     >
@@ -334,7 +339,7 @@ export default function OnChainBettingPage() {
                     </button>
                   </div>
                 </div>
-              );
+              )
             })}
 
             {activeQuestions.length === 0 && (
@@ -375,7 +380,7 @@ export default function OnChainBettingPage() {
                         'flex items-center justify-end gap-1 font-bold text-sm',
                         market.change24h >= 0
                           ? 'text-green-600'
-                          : 'text-red-600'
+                          : 'text-red-600',
                       )}
                     >
                       {market.change24h >= 0 ? (
@@ -412,7 +417,10 @@ export default function OnChainBettingPage() {
               </div>
 
               <div>
-                <label className="mb-2 block font-medium text-sm">
+                <label
+                  htmlFor="bet-amount"
+                  className="mb-2 block font-medium text-sm"
+                >
                   Betting:{' '}
                   <span
                     className={
@@ -423,6 +431,7 @@ export default function OnChainBettingPage() {
                   </span>
                 </label>
                 <input
+                  id="bet-amount"
                   type="number"
                   value={betAmount}
                   onChange={(e) => setBetAmount(e.target.value)}
@@ -446,9 +455,10 @@ export default function OnChainBettingPage() {
 
               <div className="flex gap-2">
                 <button
+                  type="button"
                   onClick={() => {
-                    setSelectedMarket(null);
-                    setBetAmount('');
+                    setSelectedMarket(null)
+                    setBetAmount('')
                   }}
                   disabled={txLoading}
                   className="flex-1 rounded-lg bg-muted px-4 py-2 font-medium text-foreground transition-colors hover:bg-muted/80 disabled:opacity-50"
@@ -456,6 +466,7 @@ export default function OnChainBettingPage() {
                   Cancel
                 </button>
                 <button
+                  type="button"
                   onClick={handleBet}
                   disabled={txLoading || !betAmount}
                   className="flex-1 rounded-lg bg-[#0066FF] px-4 py-2 font-medium text-primary-foreground transition-colors hover:bg-[#2952d9] disabled:opacity-50"
@@ -475,5 +486,5 @@ export default function OnChainBettingPage() {
         )}
       </div>
     </PageContainer>
-  );
+  )
 }

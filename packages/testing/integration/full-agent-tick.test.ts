@@ -32,149 +32,171 @@ import {
   expect,
   setDefaultTimeout,
   test,
-} from 'bun:test';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { logger } from '@babylon/shared';
+} from 'bun:test'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
+import { AgentStatus, AgentType, agentRegistry } from '@babylon/agents'
+import type { Comment, Message, NPCTrade, Post } from '@babylon/db'
+import {
+  chats,
+  comments,
+  db,
+  desc,
+  eq,
+  messages,
+  npcTrades,
+  perpPositions,
+  poolPositions,
+  pools,
+  posts,
+} from '@babylon/db'
+import {
+  NPCGroupDynamicsService,
+  NPCInvestmentManager,
+  NPCPortfolioStrategy,
+  StaticDataRegistry,
+  TradeExecutionService,
+} from '@babylon/engine'
+import { logger } from '@babylon/shared'
 
 // Set timeout to 10 minutes for real LLM calls
-setDefaultTimeout(600000);
+setDefaultTimeout(600000)
 
 // Output directory setup
-const OUTPUT_DIR = join(process.cwd(), '.output');
-const TIMESTAMP = new Date().toISOString().replace(/[:.]/g, '-');
+const OUTPUT_DIR = join(process.cwd(), '.output')
+const TIMESTAMP = new Date().toISOString().replace(/[:.]/g, '-')
 
 // Load environment variables
 const loadEnvFile = (filePath: string) => {
-  if (!existsSync(filePath)) return;
-  const envContent = readFileSync(filePath, 'utf-8');
+  if (!existsSync(filePath)) return
+  const envContent = readFileSync(filePath, 'utf-8')
   for (const line of envContent.split('\n')) {
-    const trimmed = line.trim();
+    const trimmed = line.trim()
     if (trimmed && !trimmed.startsWith('#')) {
-      const [key, ...valueParts] = trimmed.split('=');
+      const [key, ...valueParts] = trimmed.split('=')
       if (key && valueParts.length > 0) {
-        const value = valueParts.join('=').replace(/^["']|["']$/g, '');
+        const value = valueParts.join('=').replace(/^["']|["']$/g, '')
         if (!process.env[key]) {
-          process.env[key] = value;
+          process.env[key] = value
         }
       }
     }
   }
-};
+}
 
-loadEnvFile('.env');
-loadEnvFile('.env.test');
-loadEnvFile('.env.local');
+loadEnvFile('.env')
+loadEnvFile('.env.test')
+loadEnvFile('.env.local')
 
 const hasLLMKey = !!(
   (process.env.GROQ_API_KEY?.trim() ?? '') !== '' ||
   (process.env.ANTHROPIC_API_KEY?.trim() ?? '') !== '' ||
   (process.env.OPENAI_API_KEY?.trim() ?? '') !== ''
-);
+)
 
 // Helper functions
 function ensureOutputDir() {
   if (!existsSync(OUTPUT_DIR)) {
-    mkdirSync(OUTPUT_DIR, { recursive: true });
+    mkdirSync(OUTPUT_DIR, { recursive: true })
   }
 }
 
 function writeOutput(filename: string, data: unknown) {
-  ensureOutputDir();
-  const filepath = join(OUTPUT_DIR, `${filename}-${TIMESTAMP}.json`);
-  writeFileSync(filepath, JSON.stringify(data, null, 2));
-  logger.info(`Output written to ${filepath}`, undefined, 'AgentTickTest');
-  return filepath;
+  ensureOutputDir()
+  const filepath = join(OUTPUT_DIR, `${filename}-${TIMESTAMP}.json`)
+  writeFileSync(filepath, JSON.stringify(data, null, 2))
+  logger.info(`Output written to ${filepath}`, undefined, 'AgentTickTest')
+  return filepath
 }
 
 // Comprehensive test results tracking
 interface AgentTickResults {
-  timestamp: string;
-  duration: number;
+  timestamp: string
+  duration: number
 
   // Agent discovery
   discovery: {
-    totalRegistered: number;
-    userAgents: number;
-    npcAgents: number;
-    eligibleAgents: number;
+    totalRegistered: number
+    userAgents: number
+    npcAgents: number
+    eligibleAgents: number
     agentSamples: Array<{
-      id: string;
-      name: string;
-      type: string;
-      status: string;
-    }>;
-  };
+      id: string
+      name: string
+      type: string
+      status: string
+    }>
+  }
 
   // Autonomous actions
   actions: {
-    totalActions: number;
-    trades: number;
-    posts: number;
-    comments: number;
-    dms: number;
-    groupMessages: number;
+    totalActions: number
+    trades: number
+    posts: number
+    comments: number
+    dms: number
+    groupMessages: number
     actionSamples: Array<{
-      agentId: string;
-      agentName: string;
-      actionType: string;
-      success: boolean;
-      duration: number;
-    }>;
-  };
+      agentId: string
+      agentName: string
+      actionType: string
+      success: boolean
+      duration: number
+    }>
+  }
 
   // Trading
   trading: {
-    decisionsGenerated: number;
-    tradesExecuted: number;
-    predictionTrades: number;
-    perpTrades: number;
-    profitLoss: number;
+    decisionsGenerated: number
+    tradesExecuted: number
+    predictionTrades: number
+    perpTrades: number
+    profitLoss: number
     tradeSamples: Array<{
-      agentId: string;
-      market: string;
-      side: string;
-      size: number;
-      price: number;
-      pnl: number;
-    }>;
-  };
+      agentId: string
+      market: string
+      side: string
+      size: number
+      price: number
+      pnl: number
+    }>
+  }
 
   // Communication
   communication: {
-    dmsSent: number;
-    groupMessagesSent: number;
-    postsMade: number;
-    commentsMade: number;
+    dmsSent: number
+    groupMessagesSent: number
+    postsMade: number
+    commentsMade: number
     messageSamples: Array<{
-      agentId: string;
-      messageType: string;
-      content: string;
-      recipientId?: string;
-    }>;
-  };
+      agentId: string
+      messageType: string
+      content: string
+      recipientId?: string
+    }>
+  }
 
   // Validation
   validation: {
-    allAgentsProcessed: boolean;
-    noErrors: boolean;
-    errorCount: number;
-    errors: string[];
-  };
+    allAgentsProcessed: boolean
+    noErrors: boolean
+    errorCount: number
+    errors: string[]
+  }
 }
 
 describe('Full Agent Tick Integration Test', () => {
-  let results: AgentTickResults;
-  const startTime = Date.now();
+  let results: AgentTickResults
+  const startTime = Date.now()
 
   beforeAll(async () => {
-    ensureOutputDir();
+    ensureOutputDir()
     logger.info(
       `Starting full agent tick test. Output dir: ${OUTPUT_DIR}`,
       undefined,
-      'AgentTickTest'
-    );
-    logger.info(`LLM Key available: ${hasLLMKey}`, undefined, 'AgentTickTest');
+      'AgentTickTest',
+    )
+    logger.info(`LLM Key available: ${hasLLMKey}`, undefined, 'AgentTickTest')
 
     results = {
       timestamp: TIMESTAMP,
@@ -216,15 +238,11 @@ describe('Full Agent Tick Integration Test', () => {
         errorCount: 0,
         errors: [],
       },
-    };
-  });
+    }
+  })
 
   describe('1. Agent Registry Discovery', () => {
     test('discovers registered agents', async () => {
-      const { AgentStatus, AgentType, agentRegistry } = await import(
-        '@babylon/agents'
-      );
-
       const registeredAgents = await agentRegistry.discoverAgents({
         types: [AgentType.USER_CONTROLLED, AgentType.NPC],
         statuses: [
@@ -233,15 +251,15 @@ describe('Full Agent Tick Integration Test', () => {
           AgentStatus.REGISTERED,
         ],
         limit: 100,
-      });
+      })
 
-      results.discovery.totalRegistered = registeredAgents.length;
+      results.discovery.totalRegistered = registeredAgents.length
       results.discovery.userAgents = registeredAgents.filter(
-        (a) => a.type === AgentType.USER_CONTROLLED
-      ).length;
+        (a) => a.type === AgentType.USER_CONTROLLED,
+      ).length
       results.discovery.npcAgents = registeredAgents.filter(
-        (a) => a.type === AgentType.NPC
-      ).length;
+        (a) => a.type === AgentType.NPC,
+      ).length
 
       results.discovery.agentSamples = registeredAgents
         .slice(0, 10)
@@ -250,41 +268,37 @@ describe('Full Agent Tick Integration Test', () => {
           name: a.name,
           type: a.type,
           status: a.status,
-        }));
+        }))
 
-      writeOutput('agent-tick-discovery', results.discovery);
+      writeOutput('agent-tick-discovery', results.discovery)
 
       logger.info(
         `Found ${registeredAgents.length} registered agents (${results.discovery.userAgents} USER, ${results.discovery.npcAgents} NPC)`,
         undefined,
-        'AgentTickTest'
-      );
+        'AgentTickTest',
+      )
 
-      expect(registeredAgents.length).toBeGreaterThanOrEqual(0);
-    });
-  });
+      expect(registeredAgents.length).toBeGreaterThanOrEqual(0)
+    })
+  })
 
   describe('2. NPC Portfolio Strategy', () => {
     test('validates NPC portfolio strategies', async () => {
-      const { NPCPortfolioStrategy, StaticDataRegistry } = await import(
-        '@babylon/engine'
-      );
-
-      const actors = StaticDataRegistry.getAllActors().slice(0, 5);
+      const actors = StaticDataRegistry.getAllActors().slice(0, 5)
 
       const strategies: Array<{
-        actorId: string;
-        actorName: string;
-        strategyName: string;
-        perpAllocation: number;
-        predictionAllocation: number;
-        maxLeverage: number;
-      }> = [];
+        actorId: string
+        actorName: string
+        strategyName: string
+        perpAllocation: number
+        predictionAllocation: number
+        maxLeverage: number
+      }> = []
 
       for (const actor of actors) {
         const strategy = NPCPortfolioStrategy.getStrategy(
-          actor.personality ?? null
-        );
+          actor.personality ?? null,
+        )
 
         strategies.push({
           actorId: actor.id,
@@ -293,68 +307,60 @@ describe('Full Agent Tick Integration Test', () => {
           perpAllocation: strategy.assetAllocation.perps,
           predictionAllocation: strategy.assetAllocation.predictions,
           maxLeverage: strategy.riskParameters.maxLeverage,
-        });
+        })
       }
 
-      writeOutput('agent-tick-strategies', strategies);
+      writeOutput('agent-tick-strategies', strategies)
 
-      expect(strategies.length).toBeGreaterThan(0);
-    });
-  });
+      expect(strategies.length).toBeGreaterThan(0)
+    })
+  })
 
   describe('3. NPC Investment Manager', () => {
     test('validates NPC portfolio metrics', async () => {
-      const { NPCInvestmentManager } = await import('@babylon/engine');
-      const { db, pools } = await import('@babylon/db');
-
       // Get NPC pools
-      const npcPools = await db.select().from(pools).limit(10);
+      const npcPools = await db.select().from(pools).limit(10)
 
       const portfolioMetrics: Array<{
-        poolId: string;
-        totalValue: number;
-        positionCount: number;
-        utilization: number;
-      }> = [];
+        poolId: string
+        totalValue: number
+        positionCount: number
+        utilization: number
+      }> = []
 
       for (const pool of npcPools) {
         // Wrap in try-catch in case pool doesn't exist or has no data
-        const metrics = await NPCInvestmentManager.getPortfolioMetrics(pool.id);
+        const poolId = typeof pool.id === 'string' ? pool.id : String(pool.id)
+        const metrics = await NPCInvestmentManager.getPortfolioMetrics(poolId)
         portfolioMetrics.push({
-          poolId: pool.id,
+          poolId,
           totalValue: metrics.totalValue,
           positionCount: metrics.positionCount,
           utilization: metrics.utilization,
-        });
+        })
       }
 
-      writeOutput('agent-tick-portfolios', portfolioMetrics);
+      writeOutput('agent-tick-portfolios', portfolioMetrics)
 
-      expect(portfolioMetrics.length).toBeGreaterThanOrEqual(0);
-    });
-  });
+      expect(portfolioMetrics.length).toBeGreaterThanOrEqual(0)
+    })
+  })
 
   describe('4. Autonomous Trading Service', () => {
     test('validates trading components exist', async () => {
-      const {
-        StaticDataRegistry,
-        TradeExecutionService,
-        NPCInvestmentManager,
-      } = await import('@babylon/engine');
-
       // Verify trading components exist
-      expect(TradeExecutionService).toBeDefined();
-      expect(NPCInvestmentManager).toBeDefined();
+      expect(TradeExecutionService).toBeDefined()
+      expect(NPCInvestmentManager).toBeDefined()
 
       // Get a sample actor
-      const actors = StaticDataRegistry.getAllActors().slice(0, 5);
+      const actors = StaticDataRegistry.getAllActors().slice(0, 5)
       if (actors.length === 0) {
         logger.warn(
           'No actors found for trading test',
           undefined,
-          'AgentTickTest'
-        );
-        return;
+          'AgentTickTest',
+        )
+        return
       }
 
       // Get actors with different personalities for varied strategies
@@ -363,79 +369,78 @@ describe('Full Agent Tick Integration Test', () => {
         name: actor.name,
         personality: actor.personality ?? 'balanced',
         tier: actor.tier,
-      }));
+      }))
 
-      writeOutput('agent-tick-trading-actors', tradingActors);
+      writeOutput('agent-tick-trading-actors', tradingActors)
 
-      expect(actors.length).toBeGreaterThan(0);
-    });
-  });
+      expect(actors.length).toBeGreaterThan(0)
+    })
+  })
 
   describe('5. Autonomous Posting Service', () => {
     test('validates feed posts in database', async () => {
-      const { db, posts, desc } = await import('@babylon/db');
-      const { StaticDataRegistry } = await import('@babylon/engine');
-
       // Get recent NPC posts
       const recentPosts = await db
         .select()
         .from(posts)
         .orderBy(desc(posts.timestamp))
-        .limit(20);
+        .limit(20)
 
       // Filter for NPC posts (actors in static registry)
-      const npcPosts = recentPosts.filter((p) =>
-        StaticDataRegistry.getActor(p.authorId)
-      );
+      const npcPosts = recentPosts.filter((p) => {
+        const typedP = p as unknown as Post
+        return StaticDataRegistry.getActor(typedP.authorId)
+      })
 
-      results.communication.postsMade = npcPosts.length;
+      results.communication.postsMade = npcPosts.length
 
       for (const post of npcPosts.slice(0, 5)) {
-        const actor = StaticDataRegistry.getActor(post.authorId);
+        const typedPost = post as unknown as Post
+        const actor = StaticDataRegistry.getActor(typedPost.authorId)
         results.communication.messageSamples.push({
-          agentId: post.authorId,
+          agentId: typedPost.authorId,
           messageType: 'post',
-          content: post.content.substring(0, 100),
-        });
+          content: typedPost.content.substring(0, 100),
+        })
 
         results.actions.actionSamples.push({
-          agentId: post.authorId,
-          agentName: actor?.name ?? post.authorId,
+          agentId: typedPost.authorId,
+          agentName: actor?.name ?? typedPost.authorId,
           actionType: 'post',
           success: true,
           duration: 0,
-        });
+        })
       }
 
-      results.actions.posts = npcPosts.length;
+      results.actions.posts = npcPosts.length
 
       writeOutput(
         'agent-tick-posts',
-        npcPosts.slice(0, 10).map((p) => ({
-          id: p.id,
-          authorId: p.authorId,
-          content: p.content.substring(0, 200),
-          timestamp: p.timestamp.toISOString(),
-        }))
-      );
+        npcPosts.slice(0, 10).map((p) => {
+          const typedP = p as unknown as Post
+          return {
+            id: typedP.id,
+            authorId: typedP.authorId,
+            content: typedP.content.substring(0, 200),
+            timestamp: typedP.timestamp.toISOString(),
+          }
+        }),
+      )
 
-      expect(npcPosts.length).toBeGreaterThanOrEqual(0);
-    });
-  });
+      expect(npcPosts.length).toBeGreaterThanOrEqual(0)
+    })
+  })
 
   describe('6. Autonomous DM Service', () => {
     test('validates DMs in database', async () => {
-      const { db, messages, chats, desc, eq } = await import('@babylon/db');
-      const { StaticDataRegistry } = await import('@babylon/engine');
-
       // Get DM chats (non-group chats)
       const dmChats = await db
         .select()
         .from(chats)
         .where(eq(chats.isGroup, false))
-        .limit(20);
+        .limit(20)
 
-      const dmChatIds = dmChats.map((c) => c.id);
+      const dmChatIds = dmChats.map((c) => c.id)
 
       // Get messages from DM chats
       const recentDMs =
@@ -445,83 +450,82 @@ describe('Full Agent Tick Integration Test', () => {
               .from(messages)
               .orderBy(desc(messages.createdAt))
               .limit(50)
-          : [];
+          : []
 
       // Filter for NPC DMs
-      const npcDMs = recentDMs.filter((msg) =>
-        StaticDataRegistry.getActor(msg.senderId)
-      );
+      const npcDMs = recentDMs.filter((msg) => {
+        const typedMsg = msg as unknown as Message
+        return StaticDataRegistry.getActor(typedMsg.senderId)
+      })
 
-      results.communication.dmsSent = npcDMs.length;
-      results.actions.dms = npcDMs.length;
+      results.communication.dmsSent = npcDMs.length
+      results.actions.dms = npcDMs.length
 
       for (const dm of npcDMs.slice(0, 5)) {
-        const actor = StaticDataRegistry.getActor(dm.senderId);
+        const typedDm = dm as unknown as Message
+        const actor = StaticDataRegistry.getActor(typedDm.senderId)
         results.communication.messageSamples.push({
-          agentId: dm.senderId,
+          agentId: typedDm.senderId,
           messageType: 'dm',
-          content: dm.content.substring(0, 100),
-        });
+          content: typedDm.content.substring(0, 100),
+        })
 
         results.actions.actionSamples.push({
-          agentId: dm.senderId,
-          agentName: actor?.name ?? dm.senderId,
+          agentId: typedDm.senderId,
+          agentName: actor?.name ?? typedDm.senderId,
           actionType: 'dm',
           success: true,
           duration: 0,
-        });
+        })
       }
 
       writeOutput(
         'agent-tick-dms',
-        npcDMs.slice(0, 10).map((dm) => ({
-          id: dm.id,
-          senderId: dm.senderId,
-          chatId: dm.chatId,
-          content: dm.content.substring(0, 200),
-          createdAt: dm.createdAt.toISOString(),
-        }))
-      );
+        npcDMs.slice(0, 10).map((dm) => {
+          const typedDm = dm as unknown as Message
+          return {
+            id: typedDm.id,
+            senderId: typedDm.senderId,
+            chatId: typedDm.chatId,
+            content: typedDm.content.substring(0, 200),
+            createdAt: typedDm.createdAt.toISOString(),
+          }
+        }),
+      )
 
-      expect(npcDMs.length).toBeGreaterThanOrEqual(0);
-    });
-  });
+      expect(npcDMs.length).toBeGreaterThanOrEqual(0)
+    })
+  })
 
   describe('7. Autonomous Group Chat Service', () => {
     test.skipIf(!hasLLMKey)('triggers NPC group dynamics', async () => {
-      const { NPCGroupDynamicsService } = await import('@babylon/engine');
-
       // Trigger NPC group dynamics (creates groups, posts messages)
-      const dynamicsResult =
-        await NPCGroupDynamicsService.processTickDynamics();
+      const dynamicsResult = await NPCGroupDynamicsService.processTickDynamics()
 
-      writeOutput('agent-tick-group-dynamics', dynamicsResult);
+      writeOutput('agent-tick-group-dynamics', dynamicsResult)
 
       logger.info(
         `NPC group dynamics: ${dynamicsResult.groupsCreated} groups, ${dynamicsResult.messagesPosted} messages`,
         undefined,
-        'AgentTickTest'
-      );
+        'AgentTickTest',
+      )
 
       // Update results with any messages posted
-      results.communication.groupMessagesSent += dynamicsResult.messagesPosted;
-      results.actions.groupMessages += dynamicsResult.messagesPosted;
+      results.communication.groupMessagesSent += dynamicsResult.messagesPosted
+      results.actions.groupMessages += dynamicsResult.messagesPosted
 
-      expect(dynamicsResult).toBeDefined();
-    });
+      expect(dynamicsResult).toBeDefined()
+    })
 
     test('validates group chat messages in database', async () => {
-      const { db, messages, chats, desc, eq } = await import('@babylon/db');
-      const { StaticDataRegistry } = await import('@babylon/engine');
-
       // Get group chats
-      const groupChats = await db
+      const groupChatsResult = await db
         .select()
         .from(chats)
         .where(eq(chats.isGroup, true))
-        .limit(20);
+        .limit(20)
 
-      const groupChatIds = groupChats.map((c) => c.id);
+      const groupChatIds = groupChatsResult.map((c) => String(c.id))
 
       // Get messages from group chats
       const recentGroupMessages =
@@ -531,152 +535,162 @@ describe('Full Agent Tick Integration Test', () => {
               .from(messages)
               .orderBy(desc(messages.createdAt))
               .limit(50)
-          : [];
+          : []
 
       // Filter for NPC messages
-      const npcMessages = recentGroupMessages.filter((msg) =>
-        StaticDataRegistry.getActor(msg.senderId)
-      );
+      const npcMessages = recentGroupMessages.filter((msg) => {
+        const typedMsg = msg as unknown as Message
+        return StaticDataRegistry.getActor(typedMsg.senderId)
+      })
 
-      results.communication.groupMessagesSent = npcMessages.length;
-      results.actions.groupMessages = npcMessages.length;
+      results.communication.groupMessagesSent = npcMessages.length
+      results.actions.groupMessages = npcMessages.length
 
       for (const msg of npcMessages.slice(0, 5)) {
-        const actor = StaticDataRegistry.getActor(msg.senderId);
+        const typedMsg = msg as unknown as Message
+        const actor = StaticDataRegistry.getActor(typedMsg.senderId)
         results.communication.messageSamples.push({
-          agentId: msg.senderId,
+          agentId: typedMsg.senderId,
           messageType: 'group_chat',
-          content: msg.content.substring(0, 100),
-        });
+          content: typedMsg.content.substring(0, 100),
+        })
 
         results.actions.actionSamples.push({
-          agentId: msg.senderId,
-          agentName: actor?.name ?? msg.senderId,
+          agentId: typedMsg.senderId,
+          agentName: actor?.name ?? typedMsg.senderId,
           actionType: 'group_chat',
           success: true,
           duration: 0,
-        });
+        })
       }
 
       writeOutput(
         'agent-tick-group-messages',
-        npcMessages.slice(0, 10).map((msg) => ({
-          id: msg.id,
-          senderId: msg.senderId,
-          chatId: msg.chatId,
-          content: msg.content.substring(0, 200),
-          createdAt: msg.createdAt.toISOString(),
-        }))
-      );
+        npcMessages.slice(0, 10).map((msg) => {
+          const typedMsg = msg as unknown as Message
+          return {
+            id: typedMsg.id,
+            senderId: typedMsg.senderId,
+            chatId: typedMsg.chatId,
+            content: typedMsg.content.substring(0, 200),
+            createdAt: typedMsg.createdAt.toISOString(),
+          }
+        }),
+      )
 
-      expect(npcMessages.length).toBeGreaterThanOrEqual(0);
-    });
-  });
+      expect(npcMessages.length).toBeGreaterThanOrEqual(0)
+    })
+  })
 
   describe('8. Autonomous Commenting Service', () => {
     test('validates comments in database', async () => {
-      const { db, comments, desc } = await import('@babylon/db');
-      const { StaticDataRegistry } = await import('@babylon/engine');
-
       const recentComments = await db
         .select()
         .from(comments)
         .orderBy(desc(comments.createdAt))
-        .limit(20);
+        .limit(20)
 
       // Filter for NPC comments
-      const npcComments = recentComments.filter((c) =>
-        StaticDataRegistry.getActor(c.authorId)
-      );
+      const npcComments = recentComments.filter((c) => {
+        const typedC = c as unknown as Comment
+        return StaticDataRegistry.getActor(typedC.authorId)
+      })
 
-      results.communication.commentsMade = npcComments.length;
-      results.actions.comments = npcComments.length;
+      results.communication.commentsMade = npcComments.length
+      results.actions.comments = npcComments.length
 
       for (const comment of npcComments.slice(0, 5)) {
-        const actor = StaticDataRegistry.getActor(comment.authorId);
+        const typedComment = comment as unknown as Comment
+        const actor = StaticDataRegistry.getActor(typedComment.authorId)
         results.communication.messageSamples.push({
-          agentId: comment.authorId,
+          agentId: typedComment.authorId,
           messageType: 'comment',
-          content: comment.content.substring(0, 100),
-        });
+          content: typedComment.content.substring(0, 100),
+        })
 
         results.actions.actionSamples.push({
-          agentId: comment.authorId,
-          agentName: actor?.name ?? comment.authorId,
+          agentId: typedComment.authorId,
+          agentName: actor?.name ?? typedComment.authorId,
           actionType: 'comment',
           success: true,
           duration: 0,
-        });
+        })
       }
 
       writeOutput(
         'agent-tick-comments',
-        npcComments.slice(0, 10).map((c) => ({
-          id: c.id,
-          authorId: c.authorId,
-          postId: c.postId,
-          content: c.content.substring(0, 200),
-          createdAt: c.createdAt.toISOString(),
-        }))
-      );
+        npcComments.slice(0, 10).map((c) => {
+          const typedC = c as unknown as Comment
+          return {
+            id: typedC.id,
+            authorId: typedC.authorId,
+            postId: typedC.postId,
+            content: typedC.content.substring(0, 200),
+            createdAt: typedC.createdAt.toISOString(),
+          }
+        }),
+      )
 
-      expect(npcComments.length).toBeGreaterThanOrEqual(0);
-    });
-  });
+      expect(npcComments.length).toBeGreaterThanOrEqual(0)
+    })
+  })
 
   describe('9. NPC Trades Validation', () => {
     test('validates NPC trades with P&L', async () => {
-      const { db, npcTrades, desc } = await import('@babylon/db');
-
       const recentTrades = await db
         .select()
         .from(npcTrades)
         .orderBy(desc(npcTrades.executedAt))
-        .limit(50);
+        .limit(50)
 
-      results.trading.tradesExecuted = recentTrades.length;
+      results.trading.tradesExecuted = recentTrades.length
 
       for (const trade of recentTrades) {
         if (trade.marketType === 'prediction') {
-          results.trading.predictionTrades++;
+          results.trading.predictionTrades++
         } else {
-          results.trading.perpTrades++;
+          results.trading.perpTrades++
         }
 
         if (results.trading.tradeSamples.length < 10) {
+          const typedTrade = trade as unknown as NPCTrade
           results.trading.tradeSamples.push({
-            agentId: trade.npcActorId,
-            market: trade.ticker ?? trade.marketId ?? 'unknown',
-            side: trade.side ?? 'unknown',
-            size: Number(trade.amount ?? 0),
-            price: Number(trade.price ?? 0),
+            agentId: typedTrade.npcActorId ?? 'unknown',
+            market:
+              (typeof typedTrade.ticker === 'string'
+                ? typedTrade.ticker
+                : typeof typedTrade.marketId === 'string'
+                  ? typedTrade.marketId
+                  : 'unknown') || 'unknown',
+            side:
+              typeof typedTrade.side === 'string' ? typedTrade.side : 'unknown',
+            size: Number(typedTrade.amount ?? 0),
+            price: Number(typedTrade.price ?? 0),
             pnl: 0, // PnL calculated at position level, not trade level
-          });
+          })
         }
       }
 
-      results.actions.trades = recentTrades.length;
+      results.actions.trades = recentTrades.length
 
       writeOutput('agent-tick-trades', {
         totalTrades: recentTrades.length,
         predictionTrades: results.trading.predictionTrades,
         perpTrades: results.trading.perpTrades,
         samples: results.trading.tradeSamples,
-      });
+      })
 
-      expect(recentTrades.length).toBeGreaterThanOrEqual(0);
-    });
-  });
+      expect(recentTrades.length).toBeGreaterThanOrEqual(0)
+    })
+  })
 
   describe('10. Perp Positions Validation', () => {
     test('validates open perp positions', async () => {
-      const { db, perpPositions, desc } = await import('@babylon/db');
-
       const openPositions = await db
         .select()
         .from(perpPositions)
         .orderBy(desc(perpPositions.openedAt))
-        .limit(20);
+        .limit(20)
 
       const perpData = openPositions.map((p) => ({
         id: p.id,
@@ -687,23 +701,21 @@ describe('Full Agent Tick Integration Test', () => {
         entryPrice: Number(p.entryPrice ?? 0),
         leverage: Number(p.leverage ?? 1),
         unrealizedPnL: Number(p.unrealizedPnL ?? 0),
-      }));
+      }))
 
-      writeOutput('agent-tick-perps', perpData);
+      writeOutput('agent-tick-perps', perpData)
 
-      expect(openPositions.length).toBeGreaterThanOrEqual(0);
-    });
-  });
+      expect(openPositions.length).toBeGreaterThanOrEqual(0)
+    })
+  })
 
   describe('11. Pool Positions Validation', () => {
     test('validates pool positions (prediction markets)', async () => {
-      const { db, poolPositions, desc } = await import('@babylon/db');
-
       const positions = await db
         .select()
         .from(poolPositions)
         .orderBy(desc(poolPositions.openedAt))
-        .limit(20);
+        .limit(20)
 
       const positionData = positions.map((p) => ({
         id: p.id,
@@ -715,16 +727,16 @@ describe('Full Agent Tick Integration Test', () => {
         entryPrice: Number(p.entryPrice ?? 0),
         currentPrice: Number(p.currentPrice ?? 0),
         unrealizedPnL: Number(p.unrealizedPnL ?? 0),
-      }));
+      }))
 
-      writeOutput('agent-tick-positions', positionData);
+      writeOutput('agent-tick-positions', positionData)
 
-      expect(positions.length).toBeGreaterThanOrEqual(0);
-    });
-  });
+      expect(positions.length).toBeGreaterThanOrEqual(0)
+    })
+  })
 
   afterAll(() => {
-    results.duration = Date.now() - startTime;
+    results.duration = Date.now() - startTime
 
     // Calculate totals
     results.actions.totalActions =
@@ -732,51 +744,51 @@ describe('Full Agent Tick Integration Test', () => {
       results.actions.posts +
       results.actions.comments +
       results.actions.dms +
-      results.actions.groupMessages;
+      results.actions.groupMessages
 
     // Write final summary
-    writeOutput('agent-tick-summary', results);
+    writeOutput('agent-tick-summary', results)
 
     logger.info(
       `Agent tick test completed in ${results.duration}ms`,
       undefined,
-      'AgentTickTest'
-    );
+      'AgentTickTest',
+    )
 
     // Log summary
-    console.log('\n📊 AGENT TICK TEST SUMMARY');
-    console.log('==========================');
-    console.log(`Duration: ${results.duration}ms`);
-    console.log(`\nAgent Discovery:`);
-    console.log(`  - Total registered: ${results.discovery.totalRegistered}`);
-    console.log(`  - User agents: ${results.discovery.userAgents}`);
-    console.log(`  - NPC agents: ${results.discovery.npcAgents}`);
-    console.log(`\nActions:`);
-    console.log(`  - Total: ${results.actions.totalActions}`);
-    console.log(`  - Trades: ${results.actions.trades}`);
-    console.log(`  - Posts: ${results.actions.posts}`);
-    console.log(`  - Comments: ${results.actions.comments}`);
-    console.log(`  - DMs: ${results.actions.dms}`);
-    console.log(`  - Group messages: ${results.actions.groupMessages}`);
-    console.log(`\nTrading:`);
-    console.log(`  - Trades executed: ${results.trading.tradesExecuted}`);
-    console.log(`  - Prediction trades: ${results.trading.predictionTrades}`);
-    console.log(`  - Perp trades: ${results.trading.perpTrades}`);
-    console.log(`  - Total P&L: $${results.trading.profitLoss.toFixed(2)}`);
-    console.log(`\nCommunication:`);
-    console.log(`  - DMs sent: ${results.communication.dmsSent}`);
+    console.log('\n📊 AGENT TICK TEST SUMMARY')
+    console.log('==========================')
+    console.log(`Duration: ${results.duration}ms`)
+    console.log(`\nAgent Discovery:`)
+    console.log(`  - Total registered: ${results.discovery.totalRegistered}`)
+    console.log(`  - User agents: ${results.discovery.userAgents}`)
+    console.log(`  - NPC agents: ${results.discovery.npcAgents}`)
+    console.log(`\nActions:`)
+    console.log(`  - Total: ${results.actions.totalActions}`)
+    console.log(`  - Trades: ${results.actions.trades}`)
+    console.log(`  - Posts: ${results.actions.posts}`)
+    console.log(`  - Comments: ${results.actions.comments}`)
+    console.log(`  - DMs: ${results.actions.dms}`)
+    console.log(`  - Group messages: ${results.actions.groupMessages}`)
+    console.log(`\nTrading:`)
+    console.log(`  - Trades executed: ${results.trading.tradesExecuted}`)
+    console.log(`  - Prediction trades: ${results.trading.predictionTrades}`)
+    console.log(`  - Perp trades: ${results.trading.perpTrades}`)
+    console.log(`  - Total P&L: $${results.trading.profitLoss.toFixed(2)}`)
+    console.log(`\nCommunication:`)
+    console.log(`  - DMs sent: ${results.communication.dmsSent}`)
     console.log(
-      `  - Group messages: ${results.communication.groupMessagesSent}`
-    );
-    console.log(`  - Posts made: ${results.communication.postsMade}`);
-    console.log(`  - Comments made: ${results.communication.commentsMade}`);
-    console.log(`\nValidation:`);
+      `  - Group messages: ${results.communication.groupMessagesSent}`,
+    )
+    console.log(`  - Posts made: ${results.communication.postsMade}`)
+    console.log(`  - Comments made: ${results.communication.commentsMade}`)
+    console.log(`\nValidation:`)
     console.log(
-      `  - All processed: ${results.validation.allAgentsProcessed ? '✅' : '❌'}`
-    );
-    console.log(`  - No errors: ${results.validation.noErrors ? '✅' : '❌'}`);
+      `  - All processed: ${results.validation.allAgentsProcessed ? '✅' : '❌'}`,
+    )
+    console.log(`  - No errors: ${results.validation.noErrors ? '✅' : '❌'}`)
     if (results.validation.errorCount > 0) {
-      console.log(`  - Errors: ${results.validation.errorCount}`);
+      console.log(`  - Errors: ${results.validation.errorCount}`)
     }
-  });
-});
+  })
+})

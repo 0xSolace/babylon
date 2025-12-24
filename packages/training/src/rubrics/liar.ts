@@ -92,7 +92,7 @@ A liar might lie just to see if they can, without clear profit motive. Score bas
 - Transparent communication
 
 If these dominate, score low regardless of other metrics.
-`;
+`
 
 export const LIAR_PRIORITY_METRICS = [
   'influence.informationSpread',
@@ -101,4 +101,4 @@ export const LIAR_PRIORITY_METRICS = [
   'social.postsCreated',
   'social.groupMessagesSent',
   'social.dmsInitiated',
-];
+]

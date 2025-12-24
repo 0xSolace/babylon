@@ -1,17 +1,15 @@
-'use client';
-
-import { logger } from '@babylon/shared';
+import { logger } from '@babylon/shared'
 import {
   AlertCircle,
   Download,
   ExternalLink,
   Shield,
   Trash2,
-} from 'lucide-react';
-import { useState } from 'react';
-import { toast } from 'sonner';
-import { useAuth } from '@/hooks/useAuth';
-import { apiFetch } from '@/utils/api-fetch';
+} from 'lucide-react'
+import { useState } from 'react'
+import { toast } from 'sonner'
+import { useAuth } from '@/hooks/useAuth'
+import { apiFetch } from '@/utils/api-fetch'
 
 /**
  * Privacy tab component for managing user privacy and data rights.
@@ -30,47 +28,47 @@ import { apiFetch } from '@/utils/api-fetch';
  * @returns Privacy tab element
  */
 export function PrivacyTab() {
-  const { user, logout } = useAuth();
-  const [isExporting, setIsExporting] = useState(false);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [deleteConfirmation, setDeleteConfirmation] = useState('');
-  const [deleteReason, setDeleteReason] = useState('');
-  const [isDeleting, setIsDeleting] = useState(false);
+  const { user, logout } = useAuth()
+  const [isExporting, setIsExporting] = useState(false)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [deleteConfirmation, setDeleteConfirmation] = useState('')
+  const [deleteReason, setDeleteReason] = useState('')
+  const [isDeleting, setIsDeleting] = useState(false)
 
   const handleExportData = async () => {
-    setIsExporting(true);
+    setIsExporting(true)
 
-    const response = await apiFetch('/api/users/export-data');
+    const response = await apiFetch('/api/users/export-data')
 
     if (!response.ok) {
-      setIsExporting(false);
-      toast.error('Failed to export data. Please try again.');
-      return;
+      setIsExporting(false)
+      toast.error('Failed to export data. Please try again.')
+      return
     }
 
     // Get the JSON data and create a download
-    const blob = await response.blob();
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `babylon-data-export-${Date.now()}.json`;
-    document.body.appendChild(a);
-    a.click();
-    window.URL.revokeObjectURL(url);
-    document.body.removeChild(a);
+    const blob = await response.blob()
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `babylon-data-export-${Date.now()}.json`
+    document.body.appendChild(a)
+    a.click()
+    window.URL.revokeObjectURL(url)
+    document.body.removeChild(a)
 
-    toast.success('Data exported successfully');
-    logger.info('User exported their data', undefined, 'PrivacyTab');
-    setIsExporting(false);
-  };
+    toast.success('Data exported successfully')
+    logger.info('User exported their data', undefined, 'PrivacyTab')
+    setIsExporting(false)
+  }
 
   const handleDeleteAccount = async () => {
     if (deleteConfirmation !== 'DELETE MY ACCOUNT') {
-      toast.error('Please type the confirmation text exactly');
-      return;
+      toast.error('Please type the confirmation text exactly')
+      return
     }
 
-    setIsDeleting(true);
+    setIsDeleting(true)
 
     const response = await apiFetch('/api/users/delete-account', {
       method: 'POST',
@@ -79,27 +77,27 @@ export function PrivacyTab() {
         confirmation: 'DELETE MY ACCOUNT',
         reason: deleteReason || undefined,
       }),
-    });
+    })
 
     if (!response.ok) {
-      setIsDeleting(false);
+      setIsDeleting(false)
       toast.error(
-        'Failed to delete account. Please try again or contact support.'
-      );
-      return;
+        'Failed to delete account. Please try again or contact support.',
+      )
+      return
     }
 
-    toast.success('Account deleted successfully');
-    logger.info('User deleted their account', undefined, 'PrivacyTab');
+    toast.success('Account deleted successfully')
+    logger.info('User deleted their account', undefined, 'PrivacyTab')
 
     // Logout after a brief delay to show success message
     setTimeout(async () => {
-      await logout();
+      await logout()
       // After logout, redirect to home page
-      window.location.href = '/';
-    }, 2000);
-    setIsDeleting(false);
-  };
+      window.location.href = '/'
+    }, 2000)
+    setIsDeleting(false)
+  }
 
   return (
     <div className="space-y-6">
@@ -158,6 +156,7 @@ export function PrivacyTab() {
               under GDPR Article 15 (Right to Access) and CCPA.
             </p>
             <button
+              type="button"
               onClick={handleExportData}
               disabled={isExporting}
               className="mt-3 rounded-lg bg-[#0066FF] px-4 py-2 text-primary-foreground hover:bg-[#0066FF]/90 disabled:cursor-not-allowed disabled:opacity-50"
@@ -207,6 +206,7 @@ export function PrivacyTab() {
 
             {!showDeleteConfirm ? (
               <button
+                type="button"
                 onClick={() => setShowDeleteConfirm(true)}
                 className="mt-3 rounded-lg bg-red-500 px-4 py-2 text-primary-foreground hover:bg-red-600"
               >
@@ -215,10 +215,14 @@ export function PrivacyTab() {
             ) : (
               <div className="mt-4 space-y-3 rounded-lg border border-border bg-background p-4">
                 <div className="space-y-2">
-                  <label className="font-medium text-sm">
+                  <label
+                    htmlFor="delete-reason-textarea"
+                    className="font-medium text-sm"
+                  >
                     Reason for deletion (optional):
                   </label>
                   <textarea
+                    id="delete-reason-textarea"
                     value={deleteReason}
                     onChange={(e) => setDeleteReason(e.target.value)}
                     placeholder="Help us improve by telling us why you're leaving..."
@@ -228,7 +232,10 @@ export function PrivacyTab() {
                 </div>
 
                 <div className="space-y-2">
-                  <label className="font-medium text-sm">
+                  <label
+                    htmlFor="delete-confirmation-input"
+                    className="font-medium text-sm"
+                  >
                     Type{' '}
                     <code className="rounded bg-muted px-2 py-1">
                       DELETE MY ACCOUNT
@@ -236,6 +243,7 @@ export function PrivacyTab() {
                     to confirm:
                   </label>
                   <input
+                    id="delete-confirmation-input"
                     type="text"
                     value={deleteConfirmation}
                     onChange={(e) => setDeleteConfirmation(e.target.value)}
@@ -268,6 +276,7 @@ export function PrivacyTab() {
 
                 <div className="flex gap-2">
                   <button
+                    type="button"
                     onClick={handleDeleteAccount}
                     disabled={
                       isDeleting || deleteConfirmation !== 'DELETE MY ACCOUNT'
@@ -277,10 +286,11 @@ export function PrivacyTab() {
                     {isDeleting ? 'Deleting...' : 'Confirm Deletion'}
                   </button>
                   <button
+                    type="button"
                     onClick={() => {
-                      setShowDeleteConfirm(false);
-                      setDeleteConfirmation('');
-                      setDeleteReason('');
+                      setShowDeleteConfirm(false)
+                      setDeleteConfirmation('')
+                      setDeleteReason('')
                     }}
                     disabled={isDeleting}
                     className="rounded-lg bg-muted px-4 py-2 text-foreground hover:bg-muted/80"
@@ -313,5 +323,5 @@ export function PrivacyTab() {
         </p>
       </div>
     </div>
-  );
+  )
 }

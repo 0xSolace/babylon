@@ -5,7 +5,7 @@
  * Using Zod ensures type safety at runtime when parsing untrusted LLM output.
  */
 
-import { z } from 'zod';
+import { z } from 'zod'
 
 // =============================================================================
 // Trade Decision Schemas (AutonomousTradingService)
@@ -20,7 +20,7 @@ export const PredictionTradeSchema = z.object({
   action: z.enum(['buy_yes', 'buy_no']),
   amount: z.number().positive(),
   reasoning: z.string().optional(),
-});
+})
 
 /**
  * Trade details for perpetual markets
@@ -31,7 +31,7 @@ export const PerpTradeSchema = z.object({
   action: z.enum(['open_long', 'open_short']),
   amount: z.number().positive(),
   reasoning: z.string().optional(),
-});
+})
 
 /**
  * Combined trade schema
@@ -39,7 +39,7 @@ export const PerpTradeSchema = z.object({
 export const TradeDetailsSchema = z.discriminatedUnion('type', [
   PredictionTradeSchema,
   PerpTradeSchema,
-]);
+])
 
 /**
  * Trade decision from LLM (AutonomousTradingService)
@@ -57,9 +57,9 @@ export const TradeDecisionSchema = z.object({
       reasoning: z.string().optional(),
     })
     .optional(),
-});
+})
 
-export type TradeDecision = z.infer<typeof TradeDecisionSchema>;
+export type TradeDecision = z.infer<typeof TradeDecisionSchema>
 
 // =============================================================================
 // A2A Trade Decision Schemas (AutonomousA2AService)
@@ -74,7 +74,7 @@ export const A2APredictionTradeSchema = z.object({
   outcome: z.enum(['YES', 'NO']),
   amount: z.number().positive(),
   reasoning: z.string(),
-});
+})
 
 /**
  * A2A trade decision for perp markets
@@ -86,7 +86,7 @@ export const A2APerpTradeSchema = z.object({
   size: z.number().positive(),
   leverage: z.number().min(1).max(10).optional(),
   reasoning: z.string(),
-});
+})
 
 /**
  * A2A trade decision from LLM (AutonomousA2AService)
@@ -107,9 +107,9 @@ export const A2ATradeDecisionSchema = z.object({
       reasoning: z.string(),
     })
     .optional(),
-});
+})
 
-export type A2ATradeDecision = z.infer<typeof A2ATradeDecisionSchema>;
+export type A2ATradeDecision = z.infer<typeof A2ATradeDecisionSchema>
 
 // =============================================================================
 // Multi-Step Decision Schemas (MultiStepExecutor)
@@ -118,7 +118,7 @@ export type A2ATradeDecision = z.infer<typeof A2ATradeDecisionSchema>;
 /**
  * Multi-step decision parameters schema
  */
-export const MultiStepParametersSchema = z.record(z.string(), z.unknown());
+export const MultiStepParametersSchema = z.record(z.string(), z.unknown())
 
 /**
  * Multi-step decision from LLM (MultiStepExecutor)
@@ -128,9 +128,9 @@ export const MultiStepDecisionSchema = z.object({
   action: z.string().optional().default(''),
   parameters: MultiStepParametersSchema.optional().default({}),
   thought: z.string().optional().default(''),
-});
+})
 
-export type MultiStepDecisionParsed = z.infer<typeof MultiStepDecisionSchema>;
+export type MultiStepDecisionParsed = z.infer<typeof MultiStepDecisionSchema>
 
 // =============================================================================
 // Planning Response Schemas (AutonomousPlanningCoordinator)
@@ -146,7 +146,7 @@ export const PlannedActionSchema = z.object({
   reasoning: z.string(),
   estimatedImpact: z.number().min(0).max(1),
   params: z.record(z.string(), z.unknown()).optional().default({}),
-});
+})
 
 /**
  * Action plan response from LLM (AutonomousPlanningCoordinator)
@@ -154,9 +154,9 @@ export const PlannedActionSchema = z.object({
 export const ActionPlanResponseSchema = z.object({
   reasoning: z.string(),
   actions: z.array(PlannedActionSchema),
-});
+})
 
-export type ActionPlanResponse = z.infer<typeof ActionPlanResponseSchema>;
+export type ActionPlanResponse = z.infer<typeof ActionPlanResponseSchema>
 
 // =============================================================================
 // Helper Functions
@@ -171,19 +171,19 @@ export type ActionPlanResponse = z.infer<typeof ActionPlanResponseSchema>;
  */
 export function parseLLMResponse<T>(
   response: string,
-  schema: z.ZodType<T>
+  schema: z.ZodType<T>,
 ): T | null {
-  const jsonMatch = response.match(/\{[\s\S]*\}/);
+  const jsonMatch = response.match(/\{[\s\S]*\}/)
   if (!jsonMatch) {
-    return null;
+    return null
   }
 
-  const parseResult = schema.safeParse(JSON.parse(jsonMatch[0]));
+  const parseResult = schema.safeParse(JSON.parse(jsonMatch[0]))
   if (!parseResult.success) {
-    return null;
+    return null
   }
 
-  return parseResult.data;
+  return parseResult.data
 }
 
 /**
@@ -198,8 +198,8 @@ export function parseLLMResponse<T>(
 export function parseLLMResponseWithDefault<T>(
   response: string,
   schema: z.ZodType<T>,
-  defaultValue: T
+  defaultValue: T,
 ): T {
-  const result = parseLLMResponse(response, schema);
-  return result ?? defaultValue;
+  const result = parseLLMResponse(response, schema)
+  return result ?? defaultValue
 }

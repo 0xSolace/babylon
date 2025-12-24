@@ -1,15 +1,13 @@
-'use client';
-
-import type { CommentInputProps } from '@babylon/shared';
-import { cn } from '@babylon/shared';
-import { Send, X } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
-import { useInteractionStore } from '@/stores/interactionStore';
+import type { CommentInputProps } from '@babylon/shared'
+import { cn } from '@babylon/shared'
+import { Send, X } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { useInteractionStore } from '@/stores/interactionStore'
 
 /**
  * Maximum allowed length for comment content.
  */
-const MAX_COMMENT_LENGTH = 5000;
+const MAX_COMMENT_LENGTH = 5000
 
 /**
  * Comment input component for writing and submitting comments.
@@ -42,96 +40,96 @@ export function CommentInput({
   className,
   replyingToName,
 }: CommentInputProps & { replyingToName?: string }) {
-  const [content, setContent] = useState('');
-  const [isFocused, setIsFocused] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [content, setContent] = useState('')
+  const [isFocused, setIsFocused] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
   const [optimisticComment, setOptimisticComment] = useState<string | null>(
-    null
-  );
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+    null,
+  )
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
 
-  const { addComment } = useInteractionStore();
+  const { addComment } = useInteractionStore()
 
   useEffect(() => {
     if (autoFocus && textareaRef.current) {
-      textareaRef.current.focus();
+      textareaRef.current.focus()
     }
-  }, [autoFocus]);
+  }, [autoFocus])
 
   // Auto-resize textarea
   useEffect(() => {
-    const textarea = textareaRef.current;
+    const textarea = textareaRef.current
     if (textarea) {
-      textarea.style.height = 'auto';
-      textarea.style.height = `${textarea.scrollHeight}px`;
+      textarea.style.height = 'auto'
+      textarea.style.height = `${textarea.scrollHeight}px`
     }
-  }, []);
+  }, [])
 
   const handleSubmit = async () => {
-    const trimmedContent = content.trim();
+    const trimmedContent = content.trim()
 
     if (!trimmedContent || isSubmitting) {
-      return;
+      return
     }
 
     if (trimmedContent.length > MAX_COMMENT_LENGTH) {
-      return;
+      return
     }
 
-    setIsSubmitting(true);
+    setIsSubmitting(true)
 
     // Show optimistic comment immediately
-    setOptimisticComment(trimmedContent);
+    setOptimisticComment(trimmedContent)
 
     // Clear input optimistically
-    const originalContent = content;
-    setContent('');
-    setIsFocused(false);
+    const originalContent = content
+    setContent('')
+    setIsFocused(false)
 
-    const comment = await addComment(postId, trimmedContent, parentCommentId);
+    const comment = await addComment(postId, trimmedContent, parentCommentId)
 
     if (comment) {
       // Clear optimistic state on success
-      setOptimisticComment(null);
+      setOptimisticComment(null)
 
       // Call onSubmit callback if provided (await if it returns a promise)
       if (onSubmit) {
-        await Promise.resolve(onSubmit(comment));
+        await Promise.resolve(onSubmit(comment))
       }
     } else {
       // Restore content if failed
-      setContent(originalContent);
-      setOptimisticComment(null);
+      setContent(originalContent)
+      setOptimisticComment(null)
     }
 
-    setIsSubmitting(false);
-  };
+    setIsSubmitting(false)
+  }
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     // Submit on Enter (without Shift)
     if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSubmit();
+      e.preventDefault()
+      handleSubmit()
     }
 
     // Cancel on Escape
     if (e.key === 'Escape' && onCancel) {
-      e.preventDefault();
-      onCancel();
+      e.preventDefault()
+      onCancel()
     }
-  };
+  }
 
   const handleCancel = () => {
-    setContent('');
-    setIsFocused(false);
+    setContent('')
+    setIsFocused(false)
     if (onCancel) {
-      onCancel();
+      onCancel()
     }
-  };
+  }
 
-  const remainingChars = MAX_COMMENT_LENGTH - content.length;
-  const isOverLimit = remainingChars < 0;
-  const showCharCount = content.length > MAX_COMMENT_LENGTH * 0.8;
+  const remainingChars = MAX_COMMENT_LENGTH - content.length
+  const isOverLimit = remainingChars < 0
+  const showCharCount = content.length > MAX_COMMENT_LENGTH * 0.8
 
   return (
     <>
@@ -161,7 +159,7 @@ export function CommentInput({
           isFocused
             ? 'border-primary bg-muted/50'
             : 'border-border bg-background',
-          className
+          className,
         )}
       >
         {/* Textarea */}
@@ -176,7 +174,7 @@ export function CommentInput({
             'w-full resize-none bg-transparent',
             'text-sm placeholder:text-muted-foreground',
             'focus:outline-none',
-            'max-h-[200px] min-h-[60px]'
+            'max-h-[200px] min-h-[60px]',
           )}
           disabled={isSubmitting}
         />
@@ -207,7 +205,7 @@ export function CommentInput({
                     'rounded-md px-3 py-1.5 text-sm',
                     'text-muted-foreground hover:text-foreground',
                     'transition-colors hover:bg-muted',
-                    'disabled:cursor-not-allowed disabled:opacity-50'
+                    'disabled:cursor-not-allowed disabled:opacity-50',
                   )}
                 >
                   <X size={16} />
@@ -224,13 +222,11 @@ export function CommentInput({
                   'bg-primary text-primary-foreground',
                   'transition-colors hover:bg-primary/90',
                   'font-medium text-sm',
-                  'disabled:cursor-not-allowed disabled:opacity-50'
+                  'disabled:cursor-not-allowed disabled:opacity-50',
                 )}
               >
                 {isSubmitting ? (
-                  <>
-                    <span>Posting...</span>
-                  </>
+                  <span>Posting...</span>
                 ) : (
                   <>
                     <Send size={16} />
@@ -243,5 +239,5 @@ export function CommentInput({
         )}
       </div>
     </>
-  );
+  )
 }

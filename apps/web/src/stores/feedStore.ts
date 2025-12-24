@@ -24,29 +24,29 @@
  * ```
  */
 
-import type { FeedPost } from '@babylon/shared';
-import { create } from 'zustand';
+import type { FeedPost } from '@babylon/shared'
+import { create } from 'zustand'
 
-type OptimisticPostCallback = (post: FeedPost) => void;
+type OptimisticPostCallback = (post: FeedPost) => void
 
 interface FeedStore {
   /** Currently registered callback for optimistic post updates */
-  optimisticPostCallback: OptimisticPostCallback | null;
+  optimisticPostCallback: OptimisticPostCallback | null
   /** Set of optimistic post IDs (for deduplication when server responds) */
-  optimisticPostIds: Set<string>;
+  optimisticPostIds: Set<string>
 
   /** Register a callback to be called when an optimistic post is added */
-  registerOptimisticPostCallback: (callback: OptimisticPostCallback) => void;
+  registerOptimisticPostCallback: (callback: OptimisticPostCallback) => void
   /** Unregister the optimistic post callback */
-  unregisterOptimisticPostCallback: () => void;
+  unregisterOptimisticPostCallback: () => void
   /** Add an optimistic post - triggers the callback if registered */
-  addOptimisticPost: (post: FeedPost) => void;
+  addOptimisticPost: (post: FeedPost) => void
   /** Check if a post ID is optimistic (not yet confirmed by server) */
-  isOptimisticPost: (postId: string) => boolean;
+  isOptimisticPost: (postId: string) => boolean
   /** Remove an optimistic post ID (when server confirms) */
-  confirmPost: (postId: string) => void;
+  confirmPost: (postId: string) => void
   /** Clear all optimistic post tracking */
-  clearOptimisticPosts: () => void;
+  clearOptimisticPosts: () => void
 }
 
 export const useFeedStore = create<FeedStore>((set, get) => ({
@@ -54,39 +54,39 @@ export const useFeedStore = create<FeedStore>((set, get) => ({
   optimisticPostIds: new Set(),
 
   registerOptimisticPostCallback: (callback: OptimisticPostCallback) => {
-    set({ optimisticPostCallback: callback });
+    set({ optimisticPostCallback: callback })
   },
 
   unregisterOptimisticPostCallback: () => {
-    set({ optimisticPostCallback: null });
+    set({ optimisticPostCallback: null })
   },
 
   addOptimisticPost: (post: FeedPost) => {
-    const { optimisticPostCallback, optimisticPostIds } = get();
+    const { optimisticPostCallback, optimisticPostIds } = get()
 
     // Track this as an optimistic post
-    const newIds = new Set(optimisticPostIds);
-    newIds.add(post.id);
-    set({ optimisticPostIds: newIds });
+    const newIds = new Set(optimisticPostIds)
+    newIds.add(post.id)
+    set({ optimisticPostIds: newIds })
 
     // Trigger the callback if registered
     if (optimisticPostCallback) {
-      optimisticPostCallback(post);
+      optimisticPostCallback(post)
     }
   },
 
   isOptimisticPost: (postId: string) => {
-    return get().optimisticPostIds.has(postId);
+    return get().optimisticPostIds.has(postId)
   },
 
   confirmPost: (postId: string) => {
-    const { optimisticPostIds } = get();
-    const newIds = new Set(optimisticPostIds);
-    newIds.delete(postId);
-    set({ optimisticPostIds: newIds });
+    const { optimisticPostIds } = get()
+    const newIds = new Set(optimisticPostIds)
+    newIds.delete(postId)
+    set({ optimisticPostIds: newIds })
   },
 
   clearOptimisticPosts: () => {
-    set({ optimisticPostIds: new Set() });
+    set({ optimisticPostIds: new Set() })
   },
-}));
+}))

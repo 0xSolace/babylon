@@ -1,4 +1,4 @@
-import { definePrompt } from '../define-prompt';
+import { definePrompt } from '../define-prompt'
 
 /**
  * Prompt for generating humorous profile banners for new users.
@@ -49,4 +49,4 @@ IMPORTANT:
 - Avoid specific people or copyrighted characters
 - Focus on aesthetic and vibe over detailed elements
 `.trim(),
-});
+})

@@ -5,33 +5,37 @@
  * Similar to X/Twitter trending topics
  */
 
-import { db, desc, trendingTags } from '@babylon/db';
-import { logger } from '@babylon/shared';
+import { db, desc, inArray, tags, trendingTags } from '@babylon/db'
+import { logger } from '@babylon/shared'
 import {
   getRelatedTags,
   getTagStatistics,
   storeTrendingTags,
-} from './tag-service';
+} from './tag-service'
 
-const CALCULATION_INTERVAL_MS = 4 * 60 * 60 * 1000; // 4 hours (6x per day)
-const TRENDING_WINDOW_DAYS = 7; // Look at last 7 days
+const CALCULATION_INTERVAL_MS = 4 * 60 * 60 * 1000 // 4 hours (6x per day)
+const TRENDING_WINDOW_DAYS = 7 // Look at last 7 days
 
 /**
  * Check if we should recalculate trending tags
  */
 export async function shouldRecalculateTrending(): Promise<boolean> {
-  const [lastCalculation] = await db
+  const lastCalculationResult = await db
     .select({ calculatedAt: trendingTags.calculatedAt })
     .from(trendingTags)
     .orderBy(desc(trendingTags.calculatedAt))
-    .limit(1);
+    .limit(1)
+
+  const lastCalculation = lastCalculationResult[0] as
+    | { calculatedAt: Date }
+    | undefined
 
   if (!lastCalculation) {
-    return true; // Never calculated before
+    return true // Never calculated before
   }
 
-  const timeSinceLastCalc = Date.now() - lastCalculation.calculatedAt.getTime();
-  return timeSinceLastCalc >= CALCULATION_INTERVAL_MS;
+  const timeSinceLastCalc = Date.now() - lastCalculation.calculatedAt.getTime()
+  return timeSinceLastCalc >= CALCULATION_INTERVAL_MS
 }
 
 /**
@@ -47,63 +51,63 @@ function calculateTrendingScore(
   recentPostCount: number,
   oldestPostDate: Date,
   newestPostDate: Date,
-  windowEnd: Date
+  windowEnd: Date,
 ): number {
   // Base score from total post count
-  let score = postCount;
+  let score = postCount
 
   // Time decay factor (exponential decay over 7 days)
-  const avgPostAge = (windowEnd.getTime() - oldestPostDate.getTime()) / 2;
-  const daysSinceAvgPost = avgPostAge / (1000 * 60 * 60 * 24);
-  const decayFactor = Math.exp(-daysSinceAvgPost / 3); // Decay half-life of 3 days
-  score *= decayFactor;
+  const avgPostAge = (windowEnd.getTime() - oldestPostDate.getTime()) / 2
+  const daysSinceAvgPost = avgPostAge / (1000 * 60 * 60 * 24)
+  const decayFactor = Math.exp(-daysSinceAvgPost / 3) // Decay half-life of 3 days
+  score *= decayFactor
 
   // Velocity boost (recent activity)
   if (postCount > 0) {
-    const recentRatio = recentPostCount / postCount;
-    const velocityBoost = 1 + recentRatio * 2; // Up to 3x multiplier for very recent activity
-    score *= velocityBoost;
+    const recentRatio = recentPostCount / postCount
+    const velocityBoost = 1 + recentRatio * 2 // Up to 3x multiplier for very recent activity
+    score *= velocityBoost
   }
 
   // Recency boost (how fresh is the newest post)
   const hoursSinceNewest =
-    (windowEnd.getTime() - newestPostDate.getTime()) / (1000 * 60 * 60);
+    (windowEnd.getTime() - newestPostDate.getTime()) / (1000 * 60 * 60)
   if (hoursSinceNewest < 1) {
-    score *= 1.5; // 50% boost for posts in last hour
+    score *= 1.5 // 50% boost for posts in last hour
   } else if (hoursSinceNewest < 6) {
-    score *= 1.2; // 20% boost for posts in last 6 hours
+    score *= 1.2 // 20% boost for posts in last 6 hours
   }
 
-  return score;
+  return score
 }
 
 /**
  * Calculate trending tags
  */
 export async function calculateTrendingTags(): Promise<void> {
-  const startTime = Date.now();
+  const startTime = Date.now()
   logger.info(
     'Starting trending tags calculation',
     undefined,
-    'TrendingCalculationService'
-  );
+    'TrendingCalculationService',
+  )
 
   // Define time window (last 7 days)
-  const windowEnd = new Date();
+  const windowEnd = new Date()
   const windowStart = new Date(
-    windowEnd.getTime() - TRENDING_WINDOW_DAYS * 24 * 60 * 60 * 1000
-  );
+    windowEnd.getTime() - TRENDING_WINDOW_DAYS * 24 * 60 * 60 * 1000,
+  )
 
   // Get tag statistics
-  const tagStats = await getTagStatistics(windowStart, windowEnd);
+  const tagStats = await getTagStatistics(windowStart, windowEnd)
 
   if (tagStats.length === 0) {
     logger.info(
       'No tags to calculate trending for',
       undefined,
-      'TrendingCalculationService'
-    );
-    return;
+      'TrendingCalculationService',
+    )
+    return
   }
 
   logger.debug(
@@ -111,8 +115,8 @@ export async function calculateTrendingTags(): Promise<void> {
     {
       tagCount: tagStats.length,
     },
-    'TrendingCalculationService'
-  );
+    'TrendingCalculationService',
+  )
 
   // Calculate scores for each tag
   const scoredTags = tagStats.map((tag) => ({
@@ -126,25 +130,25 @@ export async function calculateTrendingTags(): Promise<void> {
       tag.recentPostCount,
       tag.oldestPostDate,
       tag.newestPostDate,
-      windowEnd
+      windowEnd,
     ),
-  }));
+  }))
 
   // Sort by score and assign ranks
-  scoredTags.sort((a, b) => b.score - a.score);
+  scoredTags.sort((a, b) => b.score - a.score)
 
   // Take top 20 trending tags
-  const topTrending = scoredTags.slice(0, 20);
+  const topTrending = scoredTags.slice(0, 20)
 
   // Get related tags for context (async)
   const trendingWithContext = await Promise.all(
     topTrending.map(async (tag, index) => {
       // Only add "Trending with" context for some tags
-      let relatedContext: string | undefined;
+      let relatedContext: string | undefined
       if (index < 10 && Math.random() > 0.5) {
-        const relatedTags = await getRelatedTags(tag.tagId, 1);
+        const relatedTags = await getRelatedTags(tag.tagId, 1)
         if (relatedTags.length > 0) {
-          relatedContext = `Trending with ${relatedTags[0]}`;
+          relatedContext = `Trending with ${relatedTags[0]}`
         }
       }
 
@@ -154,14 +158,14 @@ export async function calculateTrendingTags(): Promise<void> {
         postCount: tag.postCount,
         rank: index + 1,
         relatedContext,
-      };
-    })
-  );
+      }
+    }),
+  )
 
   // Store trending tags
-  await storeTrendingTags(trendingWithContext, windowStart, windowEnd);
+  await storeTrendingTags(trendingWithContext, windowStart, windowEnd)
 
-  const duration = Date.now() - startTime;
+  const duration = Date.now() - startTime
   logger.info(
     'Trending tags calculation completed',
     {
@@ -169,27 +173,27 @@ export async function calculateTrendingTags(): Promise<void> {
       tagsCalculated: topTrending.length,
       topTag: topTrending[0]?.tagDisplayName,
     },
-    'TrendingCalculationService'
-  );
+    'TrendingCalculationService',
+  )
 }
 
 /**
  * Calculate trending tags if needed (called from cron)
  */
 export async function calculateTrendingIfNeeded(): Promise<boolean> {
-  const shouldCalculate = await shouldRecalculateTrending();
+  const shouldCalculate = await shouldRecalculateTrending()
 
   if (!shouldCalculate) {
     logger.debug(
       'Trending calculation not needed yet',
       undefined,
-      'TrendingCalculationService'
-    );
-    return false;
+      'TrendingCalculationService',
+    )
+    return false
   }
 
-  await calculateTrendingTags();
-  return true;
+  await calculateTrendingTags()
+  return true
 }
 
 /**
@@ -199,7 +203,7 @@ export async function calculateTrendingIfNeeded(): Promise<boolean> {
  * injected into agent prompts to make posts more relevant and timely.
  */
 export async function getTrendingPromptContext(): Promise<string> {
-  const topTrending = await db
+  const topTrendingResult = await db
     .select({
       tagId: trendingTags.tagId,
       score: trendingTags.score,
@@ -208,25 +212,33 @@ export async function getTrendingPromptContext(): Promise<string> {
       relatedContext: trendingTags.relatedContext,
     })
     .from(trendingTags)
-    .orderBy(trendingTags.rank)
-    .limit(10);
+    .orderBy(desc(trendingTags.rank))
+    .limit(10)
+
+  const topTrending = topTrendingResult as Array<{
+    tagId: string
+    score: number
+    postCount: number
+    rank: number
+    relatedContext: string | null
+  }>
 
   if (topTrending.length === 0) {
-    return '';
+    return ''
   }
 
   // Get tag names from tag service
-  const tagIds = topTrending.map((t) => t.tagId);
-  const tagDetails = await getTagDetails(tagIds);
+  const tagIds = topTrending.map((t) => t.tagId)
+  const tagDetails = await getTagDetails(tagIds)
 
   const trendingLines = topTrending.map((trend) => {
-    const tag = tagDetails.get(trend.tagId);
-    const name = tag?.displayName || tag?.name || `#tag-${trend.tagId}`;
-    const context = trend.relatedContext ? ` (${trend.relatedContext})` : '';
+    const tag = tagDetails.get(trend.tagId)
+    const name = tag?.displayName || tag?.name || `#tag-${trend.tagId}`
+    const context = trend.relatedContext ? ` (${trend.relatedContext})` : ''
     const postInfo =
-      trend.postCount > 1 ? ` - ${trend.postCount} posts` : ' - 1 post';
-    return `${trend.rank}. ${name}${context}${postInfo}`;
-  });
+      trend.postCount > 1 ? ` - ${trend.postCount} posts` : ' - 1 post'
+    return `${trend.rank}. ${name}${context}${postInfo}`
+  })
 
   return `
 === TRENDING TOPICS (What people are talking about) ===
@@ -234,37 +246,37 @@ ${trendingLines.join('\n')}
 
 Consider referencing these trends in your post if relevant to your perspective.
 =======================================================
-`;
+`
 }
 
 /**
  * Get tag details by IDs (helper for trending context)
  */
 async function getTagDetails(
-  tagIds: string[]
+  tagIds: string[],
 ): Promise<Map<string, { name: string; displayName: string | null }>> {
   if (tagIds.length === 0) {
-    return new Map();
+    return new Map()
   }
 
-  // Import tags table dynamically to avoid circular imports
-  const { tags, inArray } = await import('@babylon/db');
-
-  const tagRows = await db
+  const tagRowsResult = await db
     .select({
       id: tags.id,
       name: tags.name,
       displayName: tags.displayName,
     })
     .from(tags)
-    .where(inArray(tags.id, tagIds));
+    .where(inArray(tags.id, tagIds))
 
-  const result = new Map<
-    string,
-    { name: string; displayName: string | null }
-  >();
+  const tagRows = tagRowsResult as Array<{
+    id: string
+    name: string
+    displayName: string | null
+  }>
+
+  const result = new Map<string, { name: string; displayName: string | null }>()
   for (const row of tagRows) {
-    result.set(row.id, { name: row.name, displayName: row.displayName });
+    result.set(row.id, { name: row.name, displayName: row.displayName })
   }
-  return result;
+  return result
 }

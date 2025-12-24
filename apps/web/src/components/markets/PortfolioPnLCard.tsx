@@ -1,5 +1,5 @@
-import { Share2, Sparkles } from 'lucide-react';
-import type { PortfolioPnLSnapshot } from '@/hooks/usePortfolioPnL';
+import { Share2, Sparkles } from 'lucide-react'
+import type { PortfolioPnLSnapshot } from '@/hooks/usePortfolioPnL'
 
 /**
  * Portfolio PnL card component for displaying overall portfolio summary.
@@ -30,11 +30,11 @@ import type { PortfolioPnLSnapshot } from '@/hooks/usePortfolioPnL';
  * ```
  */
 interface PortfolioPnLCardProps {
-  data: PortfolioPnLSnapshot | null;
-  loading: boolean;
-  error: string | null;
-  onShare: () => void;
-  setShowBuyPointsModal: (show: boolean) => void;
+  data: PortfolioPnLSnapshot | null
+  loading: boolean
+  error: string | null
+  onShare: () => void
+  setShowBuyPointsModal: (show: boolean) => void
 }
 
 /**
@@ -44,7 +44,7 @@ const formatter = new Intl.NumberFormat('en-US', {
   style: 'currency',
   currency: 'USD',
   maximumFractionDigits: 2,
-});
+})
 
 /**
  * Format currency value safely.
@@ -56,8 +56,8 @@ const formatter = new Intl.NumberFormat('en-US', {
  */
 function formatCurrency(value: number | null | undefined) {
   const safeValue =
-    typeof value === 'number' && Number.isFinite(value) ? value : 0;
-  return formatter.format(safeValue);
+    typeof value === 'number' && Number.isFinite(value) ? value : 0
+  return formatter.format(safeValue)
 }
 
 export function PortfolioPnLCard({
@@ -93,6 +93,7 @@ export function PortfolioPnLCard({
             Share P&amp;L
           </button>
           <button
+            type="button"
             onClick={() => setShowBuyPointsModal(true)}
             className="flex items-center gap-2 rounded-lg bg-gradient-to-r from-yellow-500 to-amber-600 px-4 py-2.5 font-medium text-primary-foreground shadow-md transition-all hover:from-yellow-600 hover:to-amber-700 hover:shadow-lg"
           >
@@ -144,5 +145,5 @@ export function PortfolioPnLCard({
         )}
       </section>
     </>
-  );
+  )
 }

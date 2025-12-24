@@ -1,23 +1,23 @@
-import { PredictionHistoryApiResponseSchema } from '@babylon/shared';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { PredictionHistoryApiResponseSchema } from '@babylon/shared'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
-import { usePredictionMarketStream } from '@/hooks/usePredictionMarketStream';
+import { usePredictionMarketStream } from '@/hooks/usePredictionMarketStream'
 
 /**
  * Represents a single point in prediction market price history.
  */
 export interface PredictionHistoryPoint {
   /** Timestamp in milliseconds */
-  time: number;
+  time: number
   /** Current YES outcome price (0-1) */
-  yesPrice: number;
+  yesPrice: number
   /** Current NO outcome price (0-1) */
-  noPrice: number;
+  noPrice: number
   /** Trading volume since last point */
-  volume: number;
+  volume: number
   /** Total liquidity in the market */
-  liquidity: number;
+  liquidity: number
 }
 
 /**
@@ -25,11 +25,11 @@ export interface PredictionHistoryPoint {
  */
 interface SeedSnapshot {
   /** Initial YES shares */
-  yesShares?: number;
+  yesShares?: number
   /** Initial NO shares */
-  noShares?: number;
+  noShares?: number
   /** Initial liquidity */
-  liquidity?: number;
+  liquidity?: number
 }
 
 /**
@@ -37,16 +37,16 @@ interface SeedSnapshot {
  */
 interface UsePredictionHistoryOptions {
   /** Maximum number of history points to keep (default: 200) */
-  limit?: number;
+  limit?: number
   /** Seed data to use if API fails or returns no data */
-  seed?: SeedSnapshot;
+  seed?: SeedSnapshot
 }
 
 interface HistoryApiPoint {
-  yesPrice: number;
-  noPrice: number;
-  liquidity?: number;
-  timestamp: string;
+  yesPrice: number
+  noPrice: number
+  liquidity?: number
+  timestamp: string
 }
 
 /**
@@ -78,37 +78,35 @@ interface HistoryApiPoint {
  */
 export function usePredictionHistory(
   marketId: string | null,
-  options?: UsePredictionHistoryOptions
+  options?: UsePredictionHistoryOptions,
 ) {
-  const limit = options?.limit ?? 100;
-  const seedRef = useRef<SeedSnapshot | undefined>(options?.seed);
-  const queryClient = useQueryClient();
+  const limit = options?.limit ?? 100
+  const seedRef = useRef<SeedSnapshot | undefined>(options?.seed)
+  const queryClient = useQueryClient()
 
   // Local state for SSE-updated history
-  const [localHistory, setLocalHistory] = useState<PredictionHistoryPoint[]>(
-    []
-  );
+  const [localHistory, setLocalHistory] = useState<PredictionHistoryPoint[]>([])
 
   // Keep seed ref in sync with options
   useEffect(() => {
-    seedRef.current = options?.seed;
+    seedRef.current = options?.seed
   }, [
     options?.seed?.yesShares,
     options?.seed?.noShares,
     options?.seed?.liquidity,
     options?.seed,
-  ]);
+  ])
 
   // If seed arrives after an empty load, ensure we render a minimal chart.
   useEffect(() => {
-    const seed = options?.seed;
-    if (!marketId || !seed) return;
-    if (localHistory.length > 0) return;
-    const yesShares = seed.yesShares ?? 0;
-    const noShares = seed.noShares ?? 0;
-    const totalShares = yesShares + noShares;
-    const yesPrice = totalShares === 0 ? 0.5 : yesShares / totalShares;
-    const now = Date.now();
+    const seed = options?.seed
+    if (!marketId || !seed) return
+    if (localHistory.length > 0) return
+    const yesShares = seed.yesShares ?? 0
+    const noShares = seed.noShares ?? 0
+    const totalShares = yesShares + noShares
+    const yesPrice = totalShares === 0 ? 0.5 : yesShares / totalShares
+    const now = Date.now()
     setLocalHistory([
       {
         time: now - 60_000,
@@ -124,8 +122,8 @@ export function usePredictionHistory(
         volume: 0,
         liquidity: seed.liquidity ?? 0,
       },
-    ]);
-  }, [marketId, options?.seed, localHistory.length]);
+    ])
+  }, [marketId, options?.seed, localHistory.length])
 
   /**
    * Transform API response to history point format.
@@ -133,34 +131,34 @@ export function usePredictionHistory(
    */
   const formatHistory = useCallback(
     (points: HistoryApiPoint[]): PredictionHistoryPoint[] => {
-      let prevLiquidity: number | null = null;
+      let prevLiquidity: number | null = null
       return points.map((point) => {
-        const liquidity = Number(point.liquidity ?? prevLiquidity ?? 0);
+        const liquidity = Number(point.liquidity ?? prevLiquidity ?? 0)
         const volume =
           prevLiquidity === null
             ? 0
-            : Math.max(0, Math.abs(liquidity - prevLiquidity));
-        prevLiquidity = liquidity;
+            : Math.max(0, Math.abs(liquidity - prevLiquidity))
+        prevLiquidity = liquidity
         return {
           time: new Date(point.timestamp).getTime(),
           yesPrice: point.yesPrice,
           noPrice: point.noPrice,
           volume,
           liquidity,
-        };
-      });
+        }
+      })
     },
-    []
-  );
+    [],
+  )
 
   const fallbackFromSeed = useCallback((): PredictionHistoryPoint[] => {
-    const seed = seedRef.current;
-    if (!seed) return [];
-    const yesShares = seed.yesShares ?? 0;
-    const noShares = seed.noShares ?? 0;
-    const totalShares = yesShares + noShares;
-    const yesPrice = totalShares === 0 ? 0.5 : yesShares / totalShares;
-    const now = Date.now();
+    const seed = seedRef.current
+    if (!seed) return []
+    const yesShares = seed.yesShares ?? 0
+    const noShares = seed.noShares ?? 0
+    const totalShares = yesShares + noShares
+    const yesPrice = totalShares === 0 ? 0.5 : yesShares / totalShares
+    const now = Date.now()
     return [
       {
         time: now - 60_000,
@@ -176,44 +174,44 @@ export function usePredictionHistory(
         volume: 0,
         liquidity: seed.liquidity ?? 0,
       },
-    ];
-  }, []);
+    ]
+  }, [])
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['predictionHistory', marketId, limit],
     queryFn: async (): Promise<PredictionHistoryPoint[]> => {
       const response = await fetch(
-        `/api/markets/predictions/${marketId}/history?limit=${limit}`
-      );
-      const json: unknown = await response.json();
-      const responseData = PredictionHistoryApiResponseSchema.parse(json);
+        `/api/markets/predictions/${marketId}/history?limit=${limit}`,
+      )
+      const json = await response.json()
+      const responseData = PredictionHistoryApiResponseSchema.parse(json)
 
       if (
         response.ok &&
         Array.isArray(responseData.history) &&
         responseData.history.length > 0
       ) {
-        return formatHistory(responseData.history as HistoryApiPoint[]);
+        return formatHistory(responseData.history as HistoryApiPoint[])
       }
-      return fallbackFromSeed();
+      return fallbackFromSeed()
     },
     enabled: !!marketId,
     staleTime: 30000,
-  });
+  })
 
   // Sync query data to local state when it changes
   useEffect(() => {
     if (data) {
-      setLocalHistory(data);
+      setLocalHistory(data)
     }
-  }, [data]);
+  }, [data])
 
   // Clear history when marketId changes to null
   useEffect(() => {
     if (!marketId) {
-      setLocalHistory([]);
+      setLocalHistory([])
     }
-  }, [marketId]);
+  }, [marketId])
 
   /**
    * Append a new price point to the history.
@@ -224,61 +222,61 @@ export function usePredictionHistory(
       yesPrice: number,
       noPrice: number,
       liquidity: number | undefined,
-      timestamp: number
+      timestamp: number,
     ) => {
       setLocalHistory((prev) => {
-        const lastPoint = prev.length > 0 ? prev[prev.length - 1] : null;
+        const lastPoint = prev.length > 0 ? prev[prev.length - 1] : null
         const normalizedLiquidity = Number.isFinite(liquidity)
           ? Number(liquidity)
-          : (lastPoint?.liquidity ?? 0);
-        const lastLiquidity = lastPoint?.liquidity ?? normalizedLiquidity;
+          : (lastPoint?.liquidity ?? 0)
+        const lastLiquidity = lastPoint?.liquidity ?? normalizedLiquidity
         const volume = Math.max(
           0,
-          Math.abs(normalizedLiquidity - lastLiquidity)
-        );
+          Math.abs(normalizedLiquidity - lastLiquidity),
+        )
         const point: PredictionHistoryPoint = {
           time: timestamp,
           yesPrice,
           noPrice,
           volume,
           liquidity: normalizedLiquidity,
-        };
-        const next = [...prev, point];
-        if (next.length > limit) {
-          next.shift();
         }
-        return next;
-      });
+        const next = [...prev, point]
+        if (next.length > limit) {
+          next.shift()
+        }
+        return next
+      })
     },
-    [limit]
-  );
+    [limit],
+  )
 
   // Subscribe to real-time updates via SSE
   usePredictionMarketStream(marketId, {
     onTrade: (event) => {
       const timestamp = new Date(
-        event.trade.timestamp ?? new Date().toISOString()
-      ).getTime();
-      appendPoint(event.yesPrice, event.noPrice, event.liquidity, timestamp);
+        event.trade.timestamp ?? new Date().toISOString(),
+      ).getTime()
+      appendPoint(event.yesPrice, event.noPrice, event.liquidity, timestamp)
     },
     onResolution: (event) => {
-      const timestamp = new Date(event.timestamp).getTime();
-      appendPoint(event.yesPrice, event.noPrice, event.liquidity, timestamp);
+      const timestamp = new Date(event.timestamp).getTime()
+      appendPoint(event.yesPrice, event.noPrice, event.liquidity, timestamp)
     },
-  });
+  })
 
   const refresh = useCallback(() => {
     if (marketId) {
       void queryClient.invalidateQueries({
         queryKey: ['predictionHistory', marketId, limit],
-      });
+      })
     }
-  }, [queryClient, marketId, limit]);
+  }, [queryClient, marketId, limit])
 
   return {
     history: localHistory,
     loading: isLoading,
     error: error ? (error as Error).message : null,
     refresh,
-  };
+  }
 }

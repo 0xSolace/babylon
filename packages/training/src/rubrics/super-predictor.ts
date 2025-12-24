@@ -85,7 +85,7 @@ Look for evidence of domain expertise:
 - Multiple factors considered
 - Historical context referenced
 - Uncertainty acknowledged appropriately
-`;
+`
 
 export const SUPER_PREDICTOR_PRIORITY_METRICS = [
   'information.predictionAccuracy',
@@ -94,4 +94,4 @@ export const SUPER_PREDICTOR_PRIORITY_METRICS = [
   'information.researchActions',
   'information.predictionsMade',
   'information.correctPredictions',
-];
+]

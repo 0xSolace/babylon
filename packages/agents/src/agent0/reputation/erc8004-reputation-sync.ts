@@ -4,45 +4,44 @@
  * Continuously syncs reputation scores to ERC-8004 via Agent0 SDK.
  */
 
-import { db } from '@babylon/db';
-import { recalculateReputation } from '@babylon/engine';
-import { logger } from '@babylon/shared';
-import { generateSnowflakeId } from '../../shared/snowflake';
-import { getAgent0Client } from '../Agent0Client';
-import { getCachedAgent0ReputationScore } from './agent0-reputation-cache';
+import { db } from '@babylon/db'
+import { recalculateReputation } from '@babylon/engine'
+import { generateSnowflakeId, logger } from '@babylon/shared'
+import { getAgent0Client } from '../Agent0Client'
+import { getCachedAgent0ReputationScore } from './agent0-reputation-cache'
 
 interface ReputationSyncResult {
-  userId: string;
-  agent0TokenId: number | null;
-  reputationScore: number;
-  synced: boolean;
-  error?: string;
-  onChainSubmitted?: boolean;
-  onChainError?: string;
+  userId: string
+  agent0TokenId: number | null
+  reputationScore: number
+  synced: boolean
+  error?: string
+  onChainSubmitted?: boolean
+  onChainError?: string
 }
 
 interface BatchSyncResult {
-  total: number;
-  synced: number;
-  failed: number;
-  skipped: number;
-  results: ReputationSyncResult[];
+  total: number
+  synced: number
+  failed: number
+  skipped: number
+  results: ReputationSyncResult[]
 }
 
 interface UserWithMetrics {
-  id: string;
-  agent0TokenId: number | null;
-  username: string | null;
-  displayName: string | null;
-  isBanned: boolean;
-  isScammer: boolean;
-  isCSAM: boolean;
-  createdAt: Date;
+  id: string
+  agent0TokenId: number | null
+  username: string | null
+  displayName: string | null
+  isBanned: boolean
+  isScammer: boolean
+  isCSAM: boolean
+  createdAt: Date
   AgentPerformanceMetrics: {
-    updatedAt: Date;
-    lastActivityAt: Date | null;
-    reputationScore: number;
-  } | null;
+    updatedAt: Date
+    lastActivityAt: Date | null
+    reputationScore: number
+  } | null
 }
 
 /**
@@ -50,7 +49,7 @@ interface UserWithMetrics {
  */
 export async function syncUserReputationToERC8004(
   userId: string,
-  forceRecalculate = false
+  forceRecalculate = false,
 ): Promise<ReputationSyncResult> {
   // Get user data
   const user = await db.user.findUnique({
@@ -66,7 +65,7 @@ export async function syncUserReputationToERC8004(
       createdAt: true,
       walletAddress: true,
     },
-  });
+  })
 
   if (!user) {
     return {
@@ -75,10 +74,10 @@ export async function syncUserReputationToERC8004(
       reputationScore: 0,
       synced: false,
       error: 'User not found',
-    };
+    }
   }
 
-  const agent0TokenId = user.agent0TokenId ? Number(user.agent0TokenId) : null;
+  const agent0TokenId = user.agent0TokenId ? Number(user.agent0TokenId) : null
 
   if (!agent0TokenId) {
     return {
@@ -87,7 +86,7 @@ export async function syncUserReputationToERC8004(
       reputationScore: 0,
       synced: false,
       error: 'No Agent0 token ID',
-    };
+    }
   }
 
   // Get performance metrics separately
@@ -98,7 +97,7 @@ export async function syncUserReputationToERC8004(
       updatedAt: true,
       lastActivityAt: true,
     },
-  });
+  })
 
   const userWithMetrics: UserWithMetrics = {
     id: String(user.id),
@@ -126,48 +125,48 @@ export async function syncUserReputationToERC8004(
             : null,
         }
       : null,
-  };
+  }
 
   // Recalculate reputation if forced or if metrics are stale
-  let reputationScore: number;
+  let reputationScore: number
   if (forceRecalculate) {
-    const recalcMetrics = await recalculateReputation(userId);
+    const recalcMetrics = await recalculateReputation(userId)
     reputationScore = recalcMetrics?.reputationScore
       ? Number(recalcMetrics.reputationScore)
-      : 50;
+      : 50
   } else {
-    reputationScore = await getCachedAgent0ReputationScore(userId);
+    reputationScore = await getCachedAgent0ReputationScore(userId)
   }
 
   // Convert to ERC-8004 feedback score (0-100)
-  const feedbackScore = Math.round(Math.max(0, Math.min(100, reputationScore)));
+  const feedbackScore = Math.round(Math.max(0, Math.min(100, reputationScore)))
 
   // Determine tags based on user status
-  const tags: string[] = [];
+  const tags: string[] = []
   if (userWithMetrics.isBanned) {
-    tags.push('banned');
+    tags.push('banned')
   }
   if (userWithMetrics.isScammer) {
-    tags.push('scammer');
+    tags.push('scammer')
   }
   if (userWithMetrics.isCSAM) {
-    tags.push('csam');
+    tags.push('csam')
   }
   if (
     !userWithMetrics.isBanned &&
     !userWithMetrics.isScammer &&
     !userWithMetrics.isCSAM
   ) {
-    tags.push('active');
+    tags.push('active')
   }
 
   // Check if we should sync (avoid spamming on-chain)
-  const lastSync = await getLastReputationSync(userId);
+  const lastSync = await getLastReputationSync(userId)
   const shouldSync = shouldSyncReputation(
     userWithMetrics,
     lastSync,
-    forceRecalculate
-  );
+    forceRecalculate,
+  )
 
   if (!shouldSync) {
     return {
@@ -176,7 +175,7 @@ export async function syncUserReputationToERC8004(
       reputationScore,
       synced: false,
       error: 'Sync not needed (too recent)',
-    };
+    }
   }
 
   logger.info(
@@ -188,13 +187,13 @@ export async function syncUserReputationToERC8004(
       feedbackScore,
       tags,
     },
-    'ERC8004ReputationSync'
-  );
+    'ERC8004ReputationSync',
+  )
 
   // Update local metrics with latest reputation (upsert pattern)
   const existingMetrics = await db.agentPerformanceMetrics.findUnique({
     where: { userId },
-  });
+  })
 
   if (existingMetrics) {
     await db.agentPerformanceMetrics.update({
@@ -203,7 +202,7 @@ export async function syncUserReputationToERC8004(
         reputationScore,
         updatedAt: new Date(),
       },
-    });
+    })
   } else {
     await db.agentPerformanceMetrics.create({
       data: {
@@ -212,15 +211,15 @@ export async function syncUserReputationToERC8004(
         reputationScore,
         updatedAt: new Date(),
       },
-    });
+    })
   }
 
   // Record sync timestamp
-  await recordReputationSync(userId, feedbackScore, tags);
+  await recordReputationSync(userId, feedbackScore, tags)
 
   // Attempt to submit feedback to ERC-8004 via Agent0 SDK
-  let onChainSubmitted = false;
-  let onChainError: string | undefined;
+  let onChainSubmitted = false
+  let onChainError: string | undefined
 
   // Check if Agent0 SDK is configured for feedback submission
   const feedbackPrivateKey =
@@ -228,7 +227,7 @@ export async function syncUserReputationToERC8004(
     process.env.BABYLON_AGENT0_PRIVATE_KEY ||
     (process.env.AGENT0_NETWORK === 'localnet'
       ? '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80'
-      : undefined);
+      : undefined)
 
   if (!feedbackPrivateKey) {
     logger.debug(
@@ -237,13 +236,11 @@ export async function syncUserReputationToERC8004(
         userId,
         agent0TokenId,
       },
-      'ERC8004ReputationSync'
-    );
-    onChainError = 'Feedback private key not configured';
+      'ERC8004ReputationSync',
+    )
+    onChainError = 'Feedback private key not configured'
   } else {
-    const walletAddress = user.walletAddress
-      ? String(user.walletAddress)
-      : null;
+    const walletAddress = user.walletAddress ? String(user.walletAddress) : null
 
     if (!walletAddress) {
       logger.debug(
@@ -252,36 +249,36 @@ export async function syncUserReputationToERC8004(
           userId,
           agent0TokenId,
         },
-        'ERC8004ReputationSync'
-      );
-      onChainError = 'Agent has no wallet address';
+        'ERC8004ReputationSync',
+      )
+      onChainError = 'Agent has no wallet address'
     } else {
-      const agent0Client = getAgent0Client();
+      const agent0Client = getAgent0Client()
 
       // Verify client is available and not in read-only mode
-      const isAvailable = await agent0Client.ensureAvailable();
+      const isAvailable = await agent0Client.ensureAvailable()
       if (!isAvailable) {
-        onChainError = 'Agent0Client not available or in read-only mode';
+        onChainError = 'Agent0Client not available or in read-only mode'
         logger.debug(
           'Agent0Client not available for feedback submission',
           {
             userId,
             agent0TokenId,
           },
-          'ERC8004ReputationSync'
-        );
+          'ERC8004ReputationSync',
+        )
       } else {
         // Submit feedback via Agent0 SDK
-        const rating = Math.round((feedbackScore / 100) * 10 - 5);
+        const rating = Math.round((feedbackScore / 100) * 10 - 5)
 
         await agent0Client.submitFeedback({
           targetAgentId: agent0TokenId,
           rating,
           comment: `System reputation update: ${feedbackScore}/100. Tags: ${tags.join(', ')}`,
           transactionId: `reputation-sync-${userId}-${Date.now()}`,
-        });
+        })
 
-        onChainSubmitted = true;
+        onChainSubmitted = true
         logger.info(
           'Reputation synced to ERC-8004 on-chain',
           {
@@ -291,8 +288,8 @@ export async function syncUserReputationToERC8004(
             rating,
             tags,
           },
-          'ERC8004ReputationSync'
-        );
+          'ERC8004ReputationSync',
+        )
       }
     }
   }
@@ -304,7 +301,7 @@ export async function syncUserReputationToERC8004(
     synced: true,
     onChainSubmitted,
     onChainError,
-  };
+  }
 }
 
 /**
@@ -312,25 +309,25 @@ export async function syncUserReputationToERC8004(
  */
 export async function batchSyncReputationsToERC8004(
   options: {
-    limit?: number;
-    offset?: number;
-    forceRecalculate?: boolean;
-    prioritizeNew?: boolean;
-  } = {}
+    limit?: number
+    offset?: number
+    forceRecalculate?: boolean
+    prioritizeNew?: boolean
+  } = {},
 ): Promise<BatchSyncResult> {
   const {
     limit = 100,
     offset = 0,
     forceRecalculate = false,
     prioritizeNew = true,
-  } = options;
+  } = options
 
   // Query users with Agent0 token IDs
-  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
 
   const whereCondition = prioritizeNew
     ? { agent0TokenId: { not: null }, createdAt: { gte: sevenDaysAgo } }
-    : { agent0TokenId: { not: null } };
+    : { agent0TokenId: { not: null } }
 
   const usersResult = await db.user.findMany({
     where: whereCondition,
@@ -342,7 +339,7 @@ export async function batchSyncReputationsToERC8004(
     orderBy: prioritizeNew ? { createdAt: 'desc' } : { createdAt: 'asc' },
     take: limit,
     skip: offset,
-  });
+  })
 
   logger.info(
     `Batch syncing ${usersResult.length} user reputations`,
@@ -351,31 +348,31 @@ export async function batchSyncReputationsToERC8004(
       offset,
       prioritizeNew,
     },
-    'ERC8004ReputationSync'
-  );
+    'ERC8004ReputationSync',
+  )
 
-  const results: ReputationSyncResult[] = [];
-  let synced = 0;
-  let failed = 0;
-  let skipped = 0;
+  const results: ReputationSyncResult[] = []
+  let synced = 0
+  let failed = 0
+  let skipped = 0
 
   for (const u of usersResult) {
     const result = await syncUserReputationToERC8004(
       String(u.id),
-      forceRecalculate
-    );
-    results.push(result);
+      forceRecalculate,
+    )
+    results.push(result)
 
     if (result.synced) {
-      synced++;
+      synced++
     } else if (result.error?.includes('not needed')) {
-      skipped++;
+      skipped++
     } else {
-      failed++;
+      failed++
     }
 
     // Small delay to avoid rate limiting
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    await new Promise((resolve) => setTimeout(resolve, 100))
   }
 
   return {
@@ -384,7 +381,7 @@ export async function batchSyncReputationsToERC8004(
     failed,
     skipped,
     results,
-  };
+  }
 }
 
 /**
@@ -393,38 +390,38 @@ export async function batchSyncReputationsToERC8004(
 function shouldSyncReputation(
   user: UserWithMetrics,
   lastSync: Date | null,
-  forceRecalculate: boolean
+  forceRecalculate: boolean,
 ): boolean {
   if (forceRecalculate) {
-    return true;
+    return true
   }
 
   if (!lastSync) {
-    return true; // Never synced
+    return true // Never synced
   }
 
-  const now = Date.now();
-  const lastSyncTime = lastSync.getTime();
-  const accountAge = now - user.createdAt.getTime();
-  const daysSinceSync = (now - lastSyncTime) / (24 * 60 * 60 * 1000);
+  const now = Date.now()
+  const lastSyncTime = lastSync.getTime()
+  const accountAge = now - user.createdAt.getTime()
+  const daysSinceSync = (now - lastSyncTime) / (24 * 60 * 60 * 1000)
 
   // New accounts (< 7 days): Sync daily
   if (accountAge < 7 * 24 * 60 * 60 * 1000) {
-    return daysSinceSync >= 1;
+    return daysSinceSync >= 1
   }
 
   // Active accounts: Sync weekly
-  const lastActivity = user.AgentPerformanceMetrics?.lastActivityAt;
+  const lastActivity = user.AgentPerformanceMetrics?.lastActivityAt
   if (lastActivity) {
     const daysSinceActivity =
-      (now - lastActivity.getTime()) / (24 * 60 * 60 * 1000);
+      (now - lastActivity.getTime()) / (24 * 60 * 60 * 1000)
     if (daysSinceActivity < 7) {
-      return daysSinceSync >= 7; // Weekly for active users
+      return daysSinceSync >= 7 // Weekly for active users
     }
   }
 
   // Inactive accounts: Sync monthly
-  return daysSinceSync >= 30;
+  return daysSinceSync >= 30
 }
 
 /**
@@ -436,14 +433,14 @@ async function getLastReputationSync(userId: string): Promise<Date | null> {
     orderBy: { createdAt: 'desc' },
     take: 1,
     select: { createdAt: true },
-  });
+  })
 
   if (!syncResult[0]?.createdAt) {
-    return null;
+    return null
   }
 
-  const createdAt = syncResult[0].createdAt;
-  return createdAt instanceof Date ? createdAt : new Date(String(createdAt));
+  const createdAt = syncResult[0].createdAt
+  return createdAt instanceof Date ? createdAt : new Date(String(createdAt))
 }
 
 /**
@@ -452,18 +449,18 @@ async function getLastReputationSync(userId: string): Promise<Date | null> {
 async function recordReputationSync(
   userId: string,
   score: number,
-  tags: string[]
+  tags: string[],
 ): Promise<void> {
-  const key = `reputation_sync_${userId}`;
+  const key = `reputation_sync_${userId}`
   const value = {
     score,
     tags,
     syncedAt: new Date().toISOString(),
-  };
+  }
 
   const existing = await db.gameConfig.findUnique({
     where: { key },
-  });
+  })
 
   if (existing) {
     await db.gameConfig.update({
@@ -472,7 +469,7 @@ async function recordReputationSync(
         value,
         updatedAt: new Date(),
       },
-    });
+    })
   } else {
     await db.gameConfig.create({
       data: {
@@ -482,7 +479,7 @@ async function recordReputationSync(
         createdAt: new Date(),
         updatedAt: new Date(),
       },
-    });
+    })
   }
 }
 
@@ -493,33 +490,33 @@ export async function syncAllReputationsToERC8004(): Promise<BatchSyncResult> {
   logger.info(
     'Starting full reputation sync to ERC-8004',
     undefined,
-    'ERC8004ReputationSync'
-  );
+    'ERC8004ReputationSync',
+  )
 
-  const batchSize = 50;
-  let offset = 0;
-  let totalSynced = 0;
-  let totalFailed = 0;
-  let totalSkipped = 0;
-  const allResults: ReputationSyncResult[] = [];
+  const batchSize = 50
+  let offset = 0
+  let totalSynced = 0
+  let totalFailed = 0
+  let totalSkipped = 0
+  const allResults: ReputationSyncResult[] = []
 
   while (true) {
     const batch = await batchSyncReputationsToERC8004({
       limit: batchSize,
       offset,
       prioritizeNew: offset === 0,
-    });
+    })
 
-    totalSynced += batch.synced;
-    totalFailed += batch.failed;
-    totalSkipped += batch.skipped;
-    allResults.push(...batch.results);
+    totalSynced += batch.synced
+    totalFailed += batch.failed
+    totalSkipped += batch.skipped
+    allResults.push(...batch.results)
 
     if (batch.total < batchSize) {
-      break; // Last batch
+      break // Last batch
     }
 
-    offset += batchSize;
+    offset += batchSize
   }
 
   logger.info(
@@ -530,8 +527,8 @@ export async function syncAllReputationsToERC8004(): Promise<BatchSyncResult> {
       failed: totalFailed,
       skipped: totalSkipped,
     },
-    'ERC8004ReputationSync'
-  );
+    'ERC8004ReputationSync',
+  )
 
   return {
     total: allResults.length,
@@ -539,5 +536,5 @@ export async function syncAllReputationsToERC8004(): Promise<BatchSyncResult> {
     failed: totalFailed,
     skipped: totalSkipped,
     results: allResults,
-  };
+  }
 }

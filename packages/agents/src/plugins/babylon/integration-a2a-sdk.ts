@@ -9,14 +9,15 @@
  * - Lazy header injection per-request (not per-client initialization)
  */
 
-import type { Message, Task } from '@a2a-js/sdk';
-import { A2AClient } from '@a2a-js/sdk/client';
-import { db } from '@babylon/db';
-import type { JsonValue } from '@babylon/shared';
-import type { AgentRuntime, Plugin } from '@elizaos/core';
-import { agentWalletService } from '../../identity/AgentWalletService';
-import { logger } from '../../shared/logger';
-import type { BabylonRuntime } from './types';
+import type { Message, Task } from '@a2a-js/sdk'
+import { A2AClient } from '@a2a-js/sdk/client'
+import { db } from '@babylon/db'
+import type { JsonValue } from '@babylon/shared'
+import { isJsonValue } from '@babylon/shared'
+import type { AgentRuntime, Plugin } from '@elizaos/core'
+import { agentWalletService } from '../../identity/AgentWalletService'
+import { logger } from '../../shared/logger'
+import { toBabylonRuntime } from './types'
 
 // =============================================================================
 // Agent Identity Cache - Redis/Memory fallback for 300k+ users
@@ -27,20 +28,20 @@ import type { BabylonRuntime } from './types';
  * TTL: 5 minutes (agents rarely change identity)
  */
 interface CachedAgentIdentity {
-  agentUserId: string;
-  walletAddress: string | null;
-  agent0TokenId: number | null;
-  displayName: string | null;
-  cachedAt: number;
+  agentUserId: string
+  walletAddress: string | null
+  agent0TokenId: number | null
+  displayName: string | null
+  cachedAt: number
 }
 
 /**
  * In-memory LRU cache for agent identities
  * Max 10,000 entries with 5-minute TTL
  */
-const AGENT_IDENTITY_CACHE = new Map<string, CachedAgentIdentity>();
-const AGENT_IDENTITY_TTL_MS = 5 * 60 * 1000; // 5 minutes
-const AGENT_IDENTITY_MAX_SIZE = 10000;
+const AGENT_IDENTITY_CACHE = new Map<string, CachedAgentIdentity>()
+const AGENT_IDENTITY_TTL_MS = 5 * 60 * 1000 // 5 minutes
+const AGENT_IDENTITY_MAX_SIZE = 10000
 
 /**
  * Get agent identity from cache or database
@@ -48,14 +49,14 @@ const AGENT_IDENTITY_MAX_SIZE = 10000;
  * Supports both USER_CONTROLLED agents (User table) and NPCs (Actor table)
  */
 async function getCachedAgentIdentity(
-  agentUserId: string
+  agentUserId: string,
 ): Promise<CachedAgentIdentity | null> {
-  const now = Date.now();
-  const cached = AGENT_IDENTITY_CACHE.get(agentUserId);
+  const now = Date.now()
+  const cached = AGENT_IDENTITY_CACHE.get(agentUserId)
 
   // Return cached if valid
   if (cached && now - cached.cachedAt < AGENT_IDENTITY_TTL_MS) {
-    return cached;
+    return cached
   }
 
   // First try User table (USER_CONTROLLED agents)
@@ -68,28 +69,28 @@ async function getCachedAgentIdentity(
       agent0TokenId: true,
       displayName: true,
     },
-  });
+  })
 
-  if (user && user.isAgent) {
+  if (user?.isAgent) {
     const identity: CachedAgentIdentity = {
       agentUserId,
       walletAddress: user.walletAddress,
       agent0TokenId: user.agent0TokenId,
       displayName: user.displayName,
       cachedAt: now,
-    };
+    }
 
-    cacheIdentity(agentUserId, identity);
-    return identity;
+    cacheIdentity(agentUserId, identity)
+    return identity
   }
 
   // Fall back to Actor table (NPC agents) using raw SQL
-  // Actor table is a legacy table not in Drizzle schema
+  // Actor table is a legacy table not in CQL schema
   const actorResult = await db.$queryRaw<{ id: string; name: string }>`
     SELECT id, name FROM "Actor" WHERE id = ${agentUserId} LIMIT 1
-  `;
+  `
 
-  const actor = actorResult[0];
+  const actor = actorResult[0]
   if (actor) {
     // NPCs don't have wallets or tokens - create minimal identity
     const identity: CachedAgentIdentity = {
@@ -98,13 +99,13 @@ async function getCachedAgentIdentity(
       agent0TokenId: null,
       displayName: actor.name,
       cachedAt: now,
-    };
+    }
 
-    cacheIdentity(agentUserId, identity);
-    return identity;
+    cacheIdentity(agentUserId, identity)
+    return identity
   }
 
-  return null;
+  return null
 }
 
 /**
@@ -112,24 +113,24 @@ async function getCachedAgentIdentity(
  */
 function cacheIdentity(
   agentUserId: string,
-  identity: CachedAgentIdentity
+  identity: CachedAgentIdentity,
 ): void {
   // LRU eviction if at capacity
   if (AGENT_IDENTITY_CACHE.size >= AGENT_IDENTITY_MAX_SIZE) {
-    const oldestKey = AGENT_IDENTITY_CACHE.keys().next().value;
+    const oldestKey = AGENT_IDENTITY_CACHE.keys().next().value
     if (oldestKey) {
-      AGENT_IDENTITY_CACHE.delete(oldestKey);
+      AGENT_IDENTITY_CACHE.delete(oldestKey)
     }
   }
 
-  AGENT_IDENTITY_CACHE.set(agentUserId, identity);
+  AGENT_IDENTITY_CACHE.set(agentUserId, identity)
 }
 
 /**
  * Invalidate agent identity cache (call after wallet provisioning)
  */
 function invalidateAgentIdentityCache(agentUserId: string): void {
-  AGENT_IDENTITY_CACHE.delete(agentUserId);
+  AGENT_IDENTITY_CACHE.delete(agentUserId)
 }
 
 // =============================================================================
@@ -141,69 +142,70 @@ function invalidateAgentIdentityCache(agentUserId: string): void {
  * The agent card is the same for all agents
  */
 interface CachedAgentCard {
-  cardJson: unknown;
-  baseUrl: string;
-  fetchedAt: number;
+  cardJson: unknown
+  baseUrl: string
+  fetchedAt: number
 }
 
-let cachedAgentCard: CachedAgentCard | null = null;
-let agentCardFetchPromise: Promise<CachedAgentCard | null> | null = null;
-const AGENT_CARD_TTL_MS = 30 * 60 * 1000; // 30 minutes
+let cachedAgentCard: CachedAgentCard | null = null
+let agentCardFetchPromise: Promise<CachedAgentCard | null> | null = null
+const AGENT_CARD_TTL_MS = 30 * 60 * 1000 // 30 minutes
 
 /**
  * Get or fetch the agent card JSON (singleton with TTL)
  */
 async function getCachedAgentCard(): Promise<CachedAgentCard | null> {
-  const now = Date.now();
+  const now = Date.now()
 
   // Return cached if valid
   if (cachedAgentCard && now - cachedAgentCard.fetchedAt < AGENT_CARD_TTL_MS) {
-    return cachedAgentCard;
+    return cachedAgentCard
   }
 
   // Prevent multiple concurrent fetches
   if (agentCardFetchPromise) {
-    return agentCardFetchPromise;
+    return agentCardFetchPromise
   }
 
-  agentCardFetchPromise = fetchAgentCard();
-  const card = await agentCardFetchPromise;
-  agentCardFetchPromise = null;
-  return card;
+  agentCardFetchPromise = fetchAgentCard()
+  const card = await agentCardFetchPromise
+  agentCardFetchPromise = null
+  return card
 }
 
 /**
  * Fetch the agent card JSON from the server
  */
 async function fetchAgentCard(): Promise<CachedAgentCard | null> {
+  const BABYLON_API_PORT = process.env.BABYLON_API_PORT ?? '5009'
   const baseUrl =
     process.env.BABYLON_A2A_ENDPOINT ||
-    process.env.NEXT_PUBLIC_APP_URL ||
-    'http://localhost:5007';
-  const agentCardUrl = `${baseUrl}/.well-known/agent-card.json`;
+    process.env.PUBLIC_APP_URL ||
+    `http://localhost:${BABYLON_API_PORT}`
+  const agentCardUrl = `${baseUrl}/.well-known/agent-card.json`
 
   try {
     logger.info(
       'Fetching agent card (cached for 30 minutes)',
       { agentCardUrl },
-      'BabylonIntegration'
-    );
+      'BabylonIntegration',
+    )
 
-    const response = await fetch(agentCardUrl);
+    const response = await fetch(agentCardUrl)
     if (!response.ok) {
-      throw new Error(`Failed to fetch agent card: ${response.status}`);
+      throw new Error(`Failed to fetch agent card: ${response.status}`)
     }
 
-    const cardJson = await response.json();
+    const cardJson = await response.json()
     cachedAgentCard = {
       cardJson,
       baseUrl,
       fetchedAt: Date.now(),
-    };
+    }
 
-    logger.info('✅ Agent card cached', { agentCardUrl }, 'BabylonIntegration');
+    logger.info('✅ Agent card cached', { agentCardUrl }, 'BabylonIntegration')
 
-    return cachedAgentCard;
+    return cachedAgentCard
   } catch (error) {
     logger.error(
       'Failed to fetch agent card',
@@ -211,9 +213,9 @@ async function fetchAgentCard(): Promise<CachedAgentCard | null> {
         agentCardUrl,
         error: error instanceof Error ? error.message : String(error),
       },
-      'BabylonIntegration'
-    );
-    return null;
+      'BabylonIntegration',
+    )
+    return null
   }
 }
 
@@ -226,38 +228,41 @@ async function fetchAgentCard(): Promise<CachedAgentCard | null> {
  * Headers come from cached identity (refreshed every 5 minutes max)
  */
 function createAuthenticatedFetchForAgent(
-  identity: CachedAgentIdentity
+  identity: CachedAgentIdentity,
 ): typeof fetch {
   const customFetch = async (
     url: string | URL | Request,
-    init?: RequestInit
+    init?: RequestInit,
   ): Promise<Response> => {
-    const headers = new Headers(init?.headers);
+    const headers = new Headers(init?.headers)
 
     // Always set agent ID for request correlation
-    headers.set('x-agent-id', identity.agentUserId);
+    headers.set('x-agent-id', identity.agentUserId)
 
     // Add ERC-8004 identity headers if available (for Agent0 integration)
     if (identity.walletAddress) {
-      headers.set('x-agent-address', identity.walletAddress);
+      headers.set('x-agent-address', identity.walletAddress)
     }
     if (identity.agent0TokenId !== null) {
-      headers.set('x-agent-token-id', identity.agent0TokenId.toString());
+      headers.set('x-agent-token-id', identity.agent0TokenId.toString())
     }
 
     // Add API key if configured
-    const apiKey = process.env.BABYLON_A2A_API_KEY;
+    const apiKey = process.env.BABYLON_A2A_API_KEY
     if (apiKey) {
-      headers.set('x-babylon-api-key', apiKey);
+      headers.set('x-babylon-api-key', apiKey)
     }
 
-    return fetch(url, { ...init, headers });
-  };
+    return fetch(url, { ...init, headers })
+  }
 
   // Bun's fetch has a preconnect property that must be preserved for type compatibility
-  (customFetch as unknown as typeof fetch).preconnect = fetch.preconnect;
+  // Type assertion needed because custom fetch function doesn't have preconnect in its type
+  if ('preconnect' in fetch && typeof fetch.preconnect === 'function') {
+    ;(customFetch as typeof fetch).preconnect = fetch.preconnect
+  }
 
-  return customFetch as typeof fetch;
+  return customFetch as typeof fetch
 }
 
 /**
@@ -265,27 +270,27 @@ function createAuthenticatedFetchForAgent(
  * Each agent gets its own client with identity-specific headers
  */
 async function createA2AClientForAgent(
-  identity: CachedAgentIdentity
+  identity: CachedAgentIdentity,
 ): Promise<A2AClient | null> {
-  const card = await getCachedAgentCard();
+  const card = await getCachedAgentCard()
   if (!card) {
-    return null;
+    return null
   }
 
   // Create client with custom fetch that injects this agent's identity headers
-  const fetchImpl = createAuthenticatedFetchForAgent(identity);
+  const fetchImpl = createAuthenticatedFetchForAgent(identity)
 
   type A2AClientOptions = {
-    fetchImpl?: typeof fetch;
-  };
-  const options: A2AClientOptions = { fetchImpl };
+    fetchImpl?: typeof fetch
+  }
+  const options: A2AClientOptions = { fetchImpl }
 
   // Use fromCardUrl but with our cached base URL and custom fetch
-  const agentCardUrl = `${card.baseUrl}/.well-known/agent-card.json`;
+  const agentCardUrl = `${card.baseUrl}/.well-known/agent-card.json`
   return A2AClient.fromCardUrl(
     agentCardUrl,
-    options as Parameters<typeof A2AClient.fromCardUrl>[1]
-  );
+    options as Parameters<typeof A2AClient.fromCardUrl>[1],
+  )
 }
 
 // =============================================================================
@@ -293,7 +298,7 @@ async function createA2AClientForAgent(
 // =============================================================================
 
 function shouldAutoProvisionWallets(): boolean {
-  return process.env.AUTO_CREATE_AGENT_WALLETS !== 'false';
+  return process.env.AUTO_CREATE_AGENT_WALLETS !== 'false'
 }
 
 /**
@@ -302,15 +307,15 @@ function shouldAutoProvisionWallets(): boolean {
  */
 async function ensureAgentWallet(
   agentUserId: string,
-  identity: CachedAgentIdentity
+  identity: CachedAgentIdentity,
 ): Promise<CachedAgentIdentity> {
   if (identity.walletAddress || !shouldAutoProvisionWallets()) {
-    return identity;
+    return identity
   }
 
   try {
     const walletResult =
-      await agentWalletService.createAgentEmbeddedWallet(agentUserId);
+      await agentWalletService.createAgentEmbeddedWallet(agentUserId)
 
     logger.info(
       'Auto-provisioned embedded wallet for agent',
@@ -318,16 +323,16 @@ async function ensureAgentWallet(
         agentUserId,
         walletAddress: walletResult.walletAddress,
       },
-      'BabylonIntegration'
-    );
+      'BabylonIntegration',
+    )
 
     // Invalidate cache and return updated identity
-    invalidateAgentIdentityCache(agentUserId);
+    invalidateAgentIdentityCache(agentUserId)
     return {
       ...identity,
       walletAddress: walletResult.walletAddress,
       cachedAt: Date.now(),
-    };
+    }
   } catch (error) {
     logger.warn(
       'Failed to auto-provision wallet for agent',
@@ -335,9 +340,9 @@ async function ensureAgentWallet(
         agentUserId,
         error: error instanceof Error ? error.message : String(error),
       },
-      'BabylonIntegration'
-    );
-    return identity;
+      'BabylonIntegration',
+    )
+    return identity
   }
 }
 
@@ -350,21 +355,21 @@ async function ensureAgentWallet(
  * - Per-agent client with identity-specific headers
  */
 async function initializeA2ASdkClient(
-  agentUserId: string
+  agentUserId: string,
 ): Promise<{ client: A2AClient; identity: CachedAgentIdentity } | null> {
   // Get cached agent identity (or fetch from DB)
-  const identity = await getCachedAgentIdentity(agentUserId);
+  const identity = await getCachedAgentIdentity(agentUserId)
 
   if (!identity) {
-    throw new Error(`Agent user ${agentUserId} not found or not an agent`);
+    throw new Error(`Agent user ${agentUserId} not found or not an agent`)
   }
 
   // Auto-provision wallet if needed
-  const updatedIdentity = await ensureAgentWallet(agentUserId, identity);
+  const updatedIdentity = await ensureAgentWallet(agentUserId, identity)
 
   // Log ERC-8004 identity status (only on first init, not on cache hit)
   const hasFullIdentity =
-    updatedIdentity.walletAddress && updatedIdentity.agent0TokenId !== null;
+    updatedIdentity.walletAddress && updatedIdentity.agent0TokenId !== null
 
   if (!hasFullIdentity) {
     logger.debug(
@@ -374,29 +379,29 @@ async function initializeA2ASdkClient(
         hasWallet: !!updatedIdentity.walletAddress,
         hasTokenId: updatedIdentity.agent0TokenId !== null,
       },
-      'BabylonIntegration'
-    );
+      'BabylonIntegration',
+    )
   }
 
   // Create A2A client with cached agent card and identity-specific headers
-  const client = await createA2AClientForAgent(updatedIdentity);
+  const client = await createA2AClientForAgent(updatedIdentity)
 
   if (!client) {
     logger.warn(
       'A2A client creation failed - agent card not available',
       { agentUserId },
-      'BabylonIntegration'
-    );
-    return null;
+      'BabylonIntegration',
+    )
+    return null
   }
 
   logger.debug('A2A client ready for agent', {
     agentUserId,
     agentName: updatedIdentity.displayName,
     hasErc8004Identity: hasFullIdentity,
-  });
+  })
 
-  return { client, identity: updatedIdentity };
+  return { client, identity: updatedIdentity }
 }
 
 /**
@@ -414,17 +419,17 @@ async function initializeA2ASdkClient(
  * the agent's on-chain identity for authenticated operations.
  */
 export class BabylonA2AClient {
-  public readonly agentId: string;
-  private sdkClient: A2AClient | null;
+  public readonly agentId: string
+  private sdkClient: A2AClient | null
 
   constructor(
     sdkClient: A2AClient | null,
     agentId: string,
-    _agentAddress?: string,
-    _agentTokenId?: number
+    _agentAddress?: string | null,
+    _agentTokenId?: number | null,
   ) {
-    this.sdkClient = sdkClient;
-    this.agentId = agentId;
+    this.sdkClient = sdkClient
+    this.agentId = agentId
     // agentAddress and agentTokenId stored for potential future ERC-8004 integration
   }
 
@@ -435,7 +440,7 @@ export class BabylonA2AClient {
   isConnected(): boolean {
     // Check if underlying SDK client exists
     // If sdkClient is null, A2A is not available
-    return this.sdkClient !== null && this.sdkClient !== undefined;
+    return this.sdkClient !== null && this.sdkClient !== undefined
   }
 
   /**
@@ -444,10 +449,10 @@ export class BabylonA2AClient {
    */
   private async executeViaA2A(
     action: string,
-    params: Record<string, JsonValue>
+    params: Record<string, JsonValue>,
   ): Promise<JsonValue> {
     if (!this.sdkClient) {
-      throw new Error('A2A client not available - use database fallback');
+      throw new Error('A2A client not available - use database fallback')
     }
     // Map action to skill ID - comprehensive mapping for all 69+ A2A methods
     const skillMap: Record<string, string> = {
@@ -536,9 +541,9 @@ export class BabylonA2AClient {
       getMutes: 'user-social-graph',
       checkBlockStatus: 'user-social-graph',
       checkMuteStatus: 'user-social-graph',
-    };
+    }
 
-    const skillId = skillMap[action] || 'portfolio-balance';
+    const skillId = skillMap[action] || 'portfolio-balance'
 
     // Map camelCase actions to category.snake_case operation names
     // This follows the executor's convention (e.g., 'social.create_post', 'stats.leaderboard')
@@ -556,10 +561,10 @@ export class BabylonA2AClient {
       getPredictions: 'markets.list_prediction',
       // Users operations
       searchUsers: 'users.search',
-    };
+    }
 
     // Use mapped operation name if available, otherwise use original action
-    const operationName = operationMap[action] || action;
+    const operationName = operationMap[action] || action
 
     const response = await this.sdkClient.sendMessage({
       message: {
@@ -576,76 +581,76 @@ export class BabylonA2AClient {
           },
         ],
       },
-    });
+    })
 
     // Type for data part in A2A messages
     interface DataPart {
-      kind: 'data';
-      data: JsonValue;
+      kind: 'data'
+      data: JsonValue
     }
 
     function isDataPart(part: { kind: string }): part is DataPart {
-      return part.kind === 'data' && 'data' in part;
+      return part.kind === 'data' && 'data' in part
     }
 
     // Handle response - extract Task or Message
-    let task: Task | undefined;
+    let task: Task | undefined
     if ('result' in response && response.result) {
-      const result = response.result;
+      const result = response.result
       if (typeof result === 'object' && result !== null && 'kind' in result) {
         if (result.kind === 'task') {
-          task = result as Task;
+          task = result as Task
         } else if (result.kind === 'message') {
           // Direct message response
-          const msg = result as Message;
-          const dataPart = msg.parts.find((p) => isDataPart(p));
-          return dataPart && isDataPart(dataPart) ? dataPart.data : {};
+          const msg = result as Message
+          const dataPart = msg.parts.find((p) => isDataPart(p))
+          return dataPart && isDataPart(dataPart) ? dataPart.data : {}
         }
       }
     }
 
     if (!task) {
-      throw new Error('Expected task response from A2A');
+      throw new Error('Expected task response from A2A')
     }
 
     // Poll for completion
-    const maxWaitMs = 30000;
-    const startTime = Date.now();
+    const maxWaitMs = 30000
+    const startTime = Date.now()
     while (Date.now() - startTime < maxWaitMs) {
-      const taskResponse = await this.sdkClient.getTask({ id: task.id });
+      const taskResponse = await this.sdkClient.getTask({ id: task.id })
 
       if ('result' in taskResponse && taskResponse.result) {
-        const result = taskResponse.result as { task?: Task };
+        const result = taskResponse.result as { task?: Task }
         if (result.task) {
-          task = result.task;
+          task = result.task
         }
       }
 
-      const state = task.status?.state;
+      const state = task.status?.state
       if (state === 'completed') {
         if (task.artifacts && task.artifacts.length > 0) {
-          const artifact = task.artifacts[0];
+          const artifact = task.artifacts[0]
           if (artifact) {
-            const dataPart = artifact.parts.find((p) => isDataPart(p));
-            return dataPart && isDataPart(dataPart) ? dataPart.data : {};
+            const dataPart = artifact.parts.find((p) => isDataPart(p))
+            return dataPart && isDataPart(dataPart) ? dataPart.data : {}
           }
         }
-        return {};
+        return {}
       }
 
       if (state === 'failed' || state === 'canceled' || state === 'rejected') {
-        const messagePart = task.status?.message?.parts?.[0];
+        const messagePart = task.status?.message?.parts?.[0]
         const errorText =
           messagePart && 'text' in messagePart
             ? messagePart.text
-            : 'Unknown error';
-        throw new Error(`Task ${state}: ${errorText}`);
+            : 'Unknown error'
+        throw new Error(`Task ${state}: ${errorText}`)
       }
 
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      await new Promise((resolve) => setTimeout(resolve, 500))
     }
 
-    throw new Error('Task did not complete within timeout');
+    throw new Error('Task did not complete within timeout')
   }
 
   /**
@@ -655,349 +660,352 @@ export class BabylonA2AClient {
    */
   async request(
     method: string,
-    params?: Record<string, JsonValue | undefined>
+    params?: Record<string, JsonValue | undefined>,
   ): Promise<JsonValue> {
     if (method.startsWith('a2a.')) {
       // Map a2a.* methods to actions
       const action = method
         .replace('a2a.', '')
         .replace(/([A-Z])/g, '_$1')
-        .toLowerCase();
+        .toLowerCase()
       // Convert back to camelCase for skill mapping
       const camelAction = action
         .split('_')
         .map((w, i) => (i === 0 ? w : w.charAt(0).toUpperCase() + w.slice(1)))
-        .join('');
+        .join('')
       // Filter out undefined values from params and convert to JsonValue
-      const cleanParams: Record<string, JsonValue> = {};
+      const cleanParams: Record<string, JsonValue> = {}
       if (params) {
         for (const [key, value] of Object.entries(params)) {
-          if (value !== undefined && value !== null) {
-            // Value is known to be defined, safe to cast to JsonValue
-            cleanParams[key] = value as JsonValue;
-          } else if (value === null) {
-            cleanParams[key] = null;
+          if (value !== undefined && isJsonValue(value)) {
+            cleanParams[key] = value
           }
         }
       }
-      return this.executeViaA2A(camelAction, cleanParams);
+      return this.executeViaA2A(camelAction, cleanParams)
     }
-    throw new Error(`Method ${method} must use A2A protocol`);
+    throw new Error(`Method ${method} must use A2A protocol`)
   }
 
   /**
    * Alias for request() for backward compatibility with providers
+   * Generic version allows callers to specify expected response type
    */
-  async sendRequest(
+  async sendRequest<T = JsonValue>(
     method: string,
-    params?: Record<string, JsonValue | undefined>
-  ): Promise<JsonValue> {
-    return this.request(method, params);
+    params?: Record<string, JsonValue | undefined>,
+  ): Promise<T> {
+    return this.request(method, params) as Promise<T>
   }
 
   // ==================== Market Data Methods ====================
   async getMarketData(marketId: string) {
-    return this.request('a2a.getMarketData', { marketId });
+    return this.request('a2a.getMarketData', { marketId })
   }
 
   async getMarketPrices(marketId: string) {
-    return this.request('a2a.getMarketPrices', { marketId });
+    return this.request('a2a.getMarketPrices', { marketId })
   }
 
   async subscribeMarket(marketId: string) {
-    return this.request('a2a.subscribeMarket', { marketId });
+    return this.request('a2a.subscribeMarket', { marketId })
   }
 
   // ==================== Portfolio Methods ====================
   async getBalance(userId?: string) {
-    return this.request('a2a.getBalance', userId ? { userId } : {});
+    return this.request('a2a.getBalance', userId ? { userId } : {})
   }
 
   async getPositions(userId?: string) {
-    return this.request('a2a.getPositions', userId ? { userId } : {});
+    return this.request('a2a.getPositions', userId ? { userId } : {})
   }
 
   async getUserWallet(userId: string) {
-    return this.request('a2a.getUserWallet', { userId });
+    return this.request('a2a.getUserWallet', { userId })
   }
 
   // ==================== Agent Discovery Methods ====================
   async discoverAgents(
     filters?: {
-      strategies?: string[];
-      markets?: string[];
-      minReputation?: number;
+      strategies?: string[]
+      markets?: string[]
+      minReputation?: number
     },
-    limit?: number
+    limit?: number,
   ) {
-    return this.request('a2a.discover', {
-      filters: filters as JsonValue,
-      limit,
-    });
+    const requestParams: Record<string, JsonValue | undefined> = {
+      ...(filters && { filters: filters as JsonValue }),
+      ...(limit !== undefined && { limit }),
+    }
+    return this.request('a2a.discover', requestParams)
   }
 
   async getAgentInfo(agentId: string) {
-    return this.request('a2a.getInfo', { agentId });
+    return this.request('a2a.getInfo', { agentId })
   }
 
   // ==================== Trading Methods ====================
   async getPredictions(params?: {
-    userId?: string;
-    status?: 'active' | 'resolved';
+    userId?: string
+    status?: 'active' | 'resolved'
   }) {
-    return this.request('a2a.getPredictions', params || {});
+    return this.request('a2a.getPredictions', params || {})
   }
 
   async getPerpetuals() {
-    return this.request('a2a.getPerpetuals', {});
+    return this.request('a2a.getPerpetuals', {})
   }
 
   async buyShares(marketId: string, outcome: 'YES' | 'NO', amount: number) {
-    return this.request('a2a.buyShares', { marketId, outcome, amount });
+    return this.request('a2a.buyShares', { marketId, outcome, amount })
   }
 
   async sellShares(positionId: string, shares: number) {
-    return this.request('a2a.sellShares', { positionId, shares });
+    return this.request('a2a.sellShares', { positionId, shares })
   }
 
   async openPosition(
     ticker: string,
     side: 'LONG' | 'SHORT',
     amount: number,
-    leverage: number
+    leverage: number,
   ) {
-    return this.request('a2a.openPosition', { ticker, side, amount, leverage });
+    return this.request('a2a.openPosition', { ticker, side, amount, leverage })
   }
 
   async closePosition(positionId: string) {
-    return this.request('a2a.closePosition', { positionId });
+    return this.request('a2a.closePosition', { positionId })
   }
 
   async getTrades(params?: { limit?: number; marketId?: string }) {
-    return this.request('a2a.getTrades', params || {});
+    return this.request('a2a.getTrades', params || {})
   }
 
   async getTradeHistory(userId: string, limit?: number) {
-    return this.request('a2a.getTradeHistory', { userId, limit });
+    return this.request('a2a.getTradeHistory', { userId, limit })
   }
 
   // ==================== Social Features ====================
   async getFeed(params?: {
-    limit?: number;
-    offset?: number;
-    following?: boolean;
-    type?: 'post' | 'article';
+    limit?: number
+    offset?: number
+    following?: boolean
+    type?: 'post' | 'article'
   }) {
-    return this.request('a2a.getFeed', params || {});
+    return this.request('a2a.getFeed', params || {})
   }
 
   async getPost(postId: string) {
-    return this.request('a2a.getPost', { postId });
+    return this.request('a2a.getPost', { postId })
   }
 
   async createPost(content: string, type: 'post' | 'article' = 'post') {
-    return this.request('a2a.createPost', { content, type });
+    return this.request('a2a.createPost', { content, type })
   }
 
   async deletePost(postId: string) {
-    return this.request('a2a.deletePost', { postId });
+    return this.request('a2a.deletePost', { postId })
   }
 
   async likePost(postId: string) {
-    return this.request('a2a.likePost', { postId });
+    return this.request('a2a.likePost', { postId })
   }
 
   async unlikePost(postId: string) {
-    return this.request('a2a.unlikePost', { postId });
+    return this.request('a2a.unlikePost', { postId })
   }
 
   async sharePost(postId: string, comment?: string) {
-    return this.request('a2a.sharePost', { postId, comment });
+    return this.request('a2a.sharePost', { postId, comment })
   }
 
   async getComments(postId: string, limit?: number) {
-    return this.request('a2a.getComments', { postId, limit });
+    return this.request('a2a.getComments', { postId, limit })
   }
 
   async createComment(postId: string, content: string) {
-    return this.request('a2a.createComment', { postId, content });
+    return this.request('a2a.createComment', { postId, content })
   }
 
   async deleteComment(commentId: string) {
-    return this.request('a2a.deleteComment', { commentId });
+    return this.request('a2a.deleteComment', { commentId })
   }
 
   async likeComment(commentId: string) {
-    return this.request('a2a.likeComment', { commentId });
+    return this.request('a2a.likeComment', { commentId })
   }
 
   // ==================== User Management ====================
   async getUserProfile(userId: string) {
-    return this.request('a2a.getUserProfile', { userId });
+    return this.request('a2a.getUserProfile', { userId })
   }
 
   async updateProfile(params: {
-    displayName?: string;
-    bio?: string;
-    username?: string;
-    profileImageUrl?: string;
+    displayName?: string
+    bio?: string
+    username?: string
+    profileImageUrl?: string
   }) {
-    return this.request('a2a.updateProfile', params);
+    return this.request('a2a.updateProfile', params)
   }
 
   async followUser(userId: string) {
-    return this.request('a2a.followUser', { userId });
+    return this.request('a2a.followUser', { userId })
   }
 
   async unfollowUser(userId: string) {
-    return this.request('a2a.unfollowUser', { userId });
+    return this.request('a2a.unfollowUser', { userId })
   }
 
   async getFollowers(userId: string, limit?: number) {
-    return this.request('a2a.getFollowers', { userId, limit });
+    return this.request('a2a.getFollowers', { userId, limit })
   }
 
   async getFollowing(userId: string, limit?: number) {
-    return this.request('a2a.getFollowing', { userId, limit });
+    return this.request('a2a.getFollowing', { userId, limit })
   }
 
   async searchUsers(query: string, limit?: number) {
-    return this.request('a2a.searchUsers', { query, limit });
+    return this.request('a2a.searchUsers', { query, limit })
   }
 
   // ==================== Messaging ====================
   async getChats(filter?: 'all' | 'dms' | 'groups') {
-    return this.request('a2a.getChats', filter ? { filter } : {});
+    return this.request('a2a.getChats', filter ? { filter } : {})
   }
 
   async getChatMessages(chatId: string, limit?: number, offset?: number) {
-    return this.request('a2a.getChatMessages', { chatId, limit, offset });
+    return this.request('a2a.getChatMessages', { chatId, limit, offset })
   }
 
   async sendMessage(chatId: string, content: string) {
-    return this.request('a2a.sendMessage', { chatId, content });
+    return this.request('a2a.sendMessage', { chatId, content })
   }
 
   async createGroup(name: string, memberIds: string[], description?: string) {
-    return this.request('a2a.createGroup', { name, memberIds, description });
+    return this.request('a2a.createGroup', { name, memberIds, description })
   }
 
   async leaveChat(chatId: string) {
-    return this.request('a2a.leaveChat', { chatId });
+    return this.request('a2a.leaveChat', { chatId })
   }
 
   async getUnreadCount() {
-    return this.request('a2a.getUnreadCount', {});
+    return this.request('a2a.getUnreadCount', {})
   }
 
   // ==================== Notifications ====================
   async getNotifications(limit?: number) {
-    return this.request('a2a.getNotifications', { limit });
+    return this.request('a2a.getNotifications', { limit })
   }
 
   async markNotificationsRead(notificationIds: string[]) {
-    return this.request('a2a.markNotificationsRead', { notificationIds });
+    return this.request('a2a.markNotificationsRead', { notificationIds })
   }
 
   async getGroupInvites() {
-    return this.request('a2a.getGroupInvites', {});
+    return this.request('a2a.getGroupInvites', {})
   }
 
   async acceptGroupInvite(inviteId: string) {
-    return this.request('a2a.acceptGroupInvite', { inviteId });
+    return this.request('a2a.acceptGroupInvite', { inviteId })
   }
 
   async declineGroupInvite(inviteId: string) {
-    return this.request('a2a.declineGroupInvite', { inviteId });
+    return this.request('a2a.declineGroupInvite', { inviteId })
   }
 
   // ==================== Stats & Discovery ====================
   async getLeaderboard(params?: {
-    page?: number;
-    pageSize?: number;
-    pointsType?: 'all' | 'earned' | 'referral';
-    minPoints?: number;
+    page?: number
+    pageSize?: number
+    pointsType?: 'all' | 'earned' | 'referral'
+    minPoints?: number
   }) {
-    return this.request('a2a.getLeaderboard', params || {});
+    return this.request('a2a.getLeaderboard', params || {})
   }
 
   async getUserStats(userId: string) {
-    return this.request('a2a.getUserStats', { userId });
+    return this.request('a2a.getUserStats', { userId })
   }
 
   async getSystemStats() {
-    return this.request('a2a.getSystemStats', {});
+    return this.request('a2a.getSystemStats', {})
   }
 
   async getReferrals() {
-    return this.request('a2a.getReferrals', {});
+    return this.request('a2a.getReferrals', {})
   }
 
   async getReferralStats() {
-    return this.request('a2a.getReferralStats', {});
+    return this.request('a2a.getReferralStats', {})
   }
 
   async getReferralCode() {
-    return this.request('a2a.getReferralCode', {});
+    return this.request('a2a.getReferralCode', {})
   }
 
   async getReputation(userId?: string) {
-    return this.request('a2a.getReputation', userId ? { userId } : {});
+    return this.request('a2a.getReputation', userId ? { userId } : {})
   }
 
   async getReputationBreakdown(userId: string) {
-    return this.request('a2a.getReputationBreakdown', { userId });
+    return this.request('a2a.getReputationBreakdown', { userId })
   }
 
   async getTrendingTags(limit?: number) {
-    return this.request('a2a.getTrendingTags', { limit });
+    return this.request('a2a.getTrendingTags', { limit })
   }
 
   async getPostsByTag(tag: string, limit?: number, offset?: number) {
-    return this.request('a2a.getPostsByTag', { tag, limit, offset });
+    return this.request('a2a.getPostsByTag', { tag, limit, offset })
   }
 
   async getOrganizations(limit?: number) {
-    return this.request('a2a.getOrganizations', { limit });
+    return this.request('a2a.getOrganizations', { limit })
   }
 
   // ==================== Payments (x402) ====================
   async paymentRequest(params: {
-    to: string;
-    amount: string;
-    service: string;
-    metadata?: Record<string, JsonValue>;
-    from?: string;
+    to: string
+    amount: string
+    service: string
+    metadata?: Record<string, JsonValue>
+    from?: string
   }) {
-    return this.request(
-      'a2a.paymentRequest',
-      params as Record<string, JsonValue>
-    );
+    const requestParams: Record<string, JsonValue | undefined> = {
+      to: params.to,
+      amount: params.amount,
+      service: params.service,
+      ...(params.metadata && { metadata: params.metadata }),
+      ...(params.from && { from: params.from }),
+    }
+    return this.request('a2a.paymentRequest', requestParams)
   }
 
   async paymentReceipt(requestId: string, txHash: string) {
-    return this.request('a2a.paymentReceipt', { requestId, txHash });
+    return this.request('a2a.paymentReceipt', { requestId, txHash })
   }
 
   // ==================== Moderation Methods ====================
   async blockUser(userId: string, reason?: string) {
-    return this.request('a2a.blockUser', { userId, reason });
+    return this.request('a2a.blockUser', { userId, reason })
   }
 
   async unblockUser(userId: string) {
-    return this.request('a2a.unblockUser', { userId });
+    return this.request('a2a.unblockUser', { userId })
   }
 
   async muteUser(userId: string, reason?: string) {
-    return this.request('a2a.muteUser', { userId, reason });
+    return this.request('a2a.muteUser', { userId, reason })
   }
 
   async unmuteUser(userId: string) {
-    return this.request('a2a.unmuteUser', { userId });
+    return this.request('a2a.unmuteUser', { userId })
   }
 
   async reportUser(params: {
-    userId: string;
+    userId: string
     category:
       | 'spam'
       | 'harassment'
@@ -1007,15 +1015,15 @@ export class BabylonA2AClient {
       | 'inappropriate'
       | 'impersonation'
       | 'self_harm'
-      | 'other';
-    reason: string;
-    evidence?: string;
+      | 'other'
+    reason: string
+    evidence?: string
   }) {
-    return this.request('a2a.reportUser', params);
+    return this.request('a2a.reportUser', params)
   }
 
   async reportPost(params: {
-    postId: string;
+    postId: string
     category:
       | 'spam'
       | 'harassment'
@@ -1025,49 +1033,49 @@ export class BabylonA2AClient {
       | 'inappropriate'
       | 'impersonation'
       | 'self_harm'
-      | 'other';
-    reason: string;
-    evidence?: string;
+      | 'other'
+    reason: string
+    evidence?: string
   }) {
-    return this.request('a2a.reportPost', params);
+    return this.request('a2a.reportPost', params)
   }
 
   async getBlocks(params?: { limit?: number; offset?: number }) {
-    return this.request('a2a.getBlocks', params || {});
+    return this.request('a2a.getBlocks', params || {})
   }
 
   async getMutes(params?: { limit?: number; offset?: number }) {
-    return this.request('a2a.getMutes', params || {});
+    return this.request('a2a.getMutes', params || {})
   }
 
   async checkBlockStatus(userId: string) {
-    return this.request('a2a.checkBlockStatus', { userId });
+    return this.request('a2a.checkBlockStatus', { userId })
   }
 
   async checkMuteStatus(userId: string) {
-    return this.request('a2a.checkMuteStatus', { userId });
+    return this.request('a2a.checkMuteStatus', { userId })
   }
 
   // ==================== Points Transfer ====================
   async transferPoints(recipientId: string, amount: number, message?: string) {
-    return this.request('a2a.transferPoints', { recipientId, amount, message });
+    return this.request('a2a.transferPoints', { recipientId, amount, message })
   }
 
   // ==================== Favorites ====================
   async favoriteProfile(userId: string) {
-    return this.request('a2a.favoriteProfile', { userId });
+    return this.request('a2a.favoriteProfile', { userId })
   }
 
   async unfavoriteProfile(userId: string) {
-    return this.request('a2a.unfavoriteProfile', { userId });
+    return this.request('a2a.unfavoriteProfile', { userId })
   }
 
   async getFavorites(params?: { limit?: number; offset?: number }) {
-    return this.request('a2a.getFavorites', params || {});
+    return this.request('a2a.getFavorites', params || {})
   }
 
   async getFavoritePosts(params?: { limit?: number; offset?: number }) {
-    return this.request('a2a.getFavoritePosts', params || {});
+    return this.request('a2a.getFavoritePosts', params || {})
   }
 
   async close(): Promise<void> {
@@ -1084,22 +1092,22 @@ export class BabylonA2AClient {
  * - Returns null if A2A is not available (for graceful fallback)
  */
 export async function initializeAgentA2AClient(
-  agentUserId: string
+  agentUserId: string,
 ): Promise<BabylonA2AClient | null> {
-  const result = await initializeA2ASdkClient(agentUserId);
+  const result = await initializeA2ASdkClient(agentUserId)
 
   // If SDK client is null, A2A is not available
   if (!result) {
-    return null;
+    return null
   }
 
   // Create client with cached identity - headers injected per-request
   return new BabylonA2AClient(
     result.client,
     agentUserId,
-    result.identity.walletAddress ?? undefined,
-    result.identity.agent0TokenId ?? undefined
-  );
+    result.identity.walletAddress,
+    result.identity.agent0TokenId,
+  )
 }
 
 /**
@@ -1112,12 +1120,12 @@ export async function initializeAgentA2AClient(
 export async function enhanceRuntimeWithBabylon(
   runtime: AgentRuntime,
   agentUserId: string,
-  plugin: Plugin
+  plugin: Plugin,
 ): Promise<void> {
-  const babylonRuntime = runtime as BabylonRuntime;
+  const babylonRuntime = toBabylonRuntime(runtime)
 
   // Initialize A2A client with cached identity and shared base client
-  const result = await initializeA2ASdkClient(agentUserId);
+  const result = await initializeA2ASdkClient(agentUserId)
 
   if (!result) {
     logger.warn(
@@ -1125,20 +1133,20 @@ export async function enhanceRuntimeWithBabylon(
       {
         agentUserId,
         pluginName: plugin.name,
-      }
-    );
+      },
+    )
     // Create a disconnected client for graceful degradation
-    babylonRuntime.a2aClient = new BabylonA2AClient(null, agentUserId);
+    babylonRuntime.a2aClient = new BabylonA2AClient(null, agentUserId)
   } else {
     babylonRuntime.a2aClient = new BabylonA2AClient(
       result.client,
       agentUserId,
-      result.identity.walletAddress ?? undefined,
-      result.identity.agent0TokenId ?? undefined
-    );
+      result.identity.walletAddress,
+      result.identity.agent0TokenId,
+    )
   }
 
-  const a2aConnected = babylonRuntime.a2aClient.isConnected();
+  const a2aConnected = babylonRuntime.a2aClient.isConnected()
 
   logger.info('✅ Babylon plugin registered with A2A client', {
     agentUserId,
@@ -1146,43 +1154,51 @@ export async function enhanceRuntimeWithBabylon(
     providersCount: plugin.providers?.length || 0,
     actionsCount: plugin.actions?.length || 0,
     a2aConnected,
-    a2aEndpoint: process.env.BABYLON_A2A_ENDPOINT || 'http://localhost:5007',
-  });
+    a2aEndpoint:
+      process.env.BABYLON_A2A_ENDPOINT ||
+      `http://localhost:${process.env.BABYLON_API_PORT ?? '5009'}`,
+  })
 
-  runtime.registerPlugin(plugin);
+  runtime.registerPlugin(plugin)
 
-  const a2aMode = a2aConnected ? 'a2a' : 'database-fallback';
+  const a2aMode = a2aConnected ? 'a2a' : 'database-fallback'
   logger.info('Babylon plugin registered', {
     agentUserId,
     mode: a2aMode,
     a2aEnabled: a2aConnected,
-  });
+  })
 }
 
 /**
  * Disconnect A2A client for an agent
  */
 export async function disconnectAgentA2AClient(
-  runtime: AgentRuntime
+  runtime: AgentRuntime,
 ): Promise<void> {
-  const babylonRuntime = runtime as BabylonRuntime;
+  const babylonRuntime = toBabylonRuntime(runtime)
 
   if (!babylonRuntime.a2aClient?.isConnected()) {
-    return;
+    return
   }
 
-  if (babylonRuntime.a2aClient && 'close' in babylonRuntime.a2aClient) {
-    await (babylonRuntime.a2aClient as { close: () => Promise<void> }).close();
+  // Check for close method dynamically (SDK clients may have it)
+  const client = babylonRuntime.a2aClient
+  if (
+    client &&
+    'close' in client &&
+    typeof (client as { close?: () => Promise<void> }).close === 'function'
+  ) {
+    await (client as { close: () => Promise<void> }).close()
   }
-  babylonRuntime.a2aClient = undefined;
+  babylonRuntime.a2aClient = undefined
 
-  logger.info('A2A client disconnected', { agentId: runtime.agentId });
+  logger.info('A2A client disconnected', { agentId: runtime.agentId })
 }
 
 /**
  * Check if agent runtime has active A2A connection
  */
 export function hasActiveA2AConnection(runtime: AgentRuntime): boolean {
-  const babylonRuntime = runtime as BabylonRuntime;
-  return !!babylonRuntime.a2aClient?.isConnected();
+  const babylonRuntime = toBabylonRuntime(runtime)
+  return !!babylonRuntime.a2aClient?.isConnected()
 }

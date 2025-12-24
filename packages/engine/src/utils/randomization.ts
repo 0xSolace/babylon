@@ -27,14 +27,14 @@
  * ```
  */
 export function shuffleArray<T>(array: T[]): T[] {
-  const shuffled = [...array];
+  const shuffled = [...array]
   for (let i = shuffled.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    const temp = shuffled[i]!;
-    shuffled[i] = shuffled[j]!;
-    shuffled[j] = temp;
+    const j = Math.floor(Math.random() * (i + 1))
+    const temp = shuffled[i] as T
+    shuffled[i] = shuffled[j] as T
+    shuffled[j] = temp
   }
-  return shuffled;
+  return shuffled
 }
 
 /**
@@ -54,8 +54,8 @@ export function shuffleArray<T>(array: T[]): T[] {
  * ```
  */
 export function sampleRandom<T>(array: T[], count: number): T[] {
-  const shuffled = shuffleArray(array);
-  return shuffled.slice(0, Math.min(count, array.length));
+  const shuffled = shuffleArray(array)
+  return shuffled.slice(0, Math.min(count, array.length))
 }
 
 /**
@@ -71,8 +71,8 @@ export function sampleRandom<T>(array: T[], count: number): T[] {
  * ```
  */
 export function pickRandom<T>(array: T[]): T | undefined {
-  if (array.length === 0) return undefined;
-  return array[Math.floor(Math.random() * array.length)];
+  if (array.length === 0) return undefined
+  return array[Math.floor(Math.random() * array.length)]
 }
 
 /**
@@ -92,7 +92,7 @@ export function pickRandom<T>(array: T[]): T | undefined {
  * ```
  */
 export function randomChance(probability: number): boolean {
-  return Math.random() < probability;
+  return Math.random() < probability
 }
 
 /**
@@ -109,5 +109,5 @@ export function randomChance(probability: number): boolean {
  * ```
  */
 export function randomInt(min: number, max: number): number {
-  return Math.floor(Math.random() * (max - min)) + min;
+  return Math.floor(Math.random() * (max - min)) + min
 }

@@ -76,7 +76,7 @@ jobs:
           # Wait for services to be ready
           echo "Waiting for Jeju services..."
           for i in {1..60}; do
-            if curl -s http://localhost:4300/health > /dev/null; then
+            if curl -s http://localhost:4030/health > /dev/null; then
               echo "Jeju gateway is ready"
               break
             fi
@@ -84,7 +84,7 @@ jobs:
           done
 
           # Verify all services
-          curl -s http://localhost:4300/v1/services || echo "Services check failed"
+          curl -s http://localhost:4030/v1/services || echo "Services check failed"
 
       - name: Deploy Babylon contracts to devnet
         working-directory: babylon
@@ -98,27 +98,27 @@ jobs:
       - name: Run Jeju integration tests
         working-directory: babylon
         env:
-          JEJU_GATEWAY_URL: http://localhost:4300
+          JEJU_GATEWAY_URL: http://localhost:4030
           JEJU_RPC_URL: http://localhost:9545
-          CQL_BLOCK_PRODUCER_ENDPOINT: http://localhost:4300
-          JEJU_CACHE_SERVICE_URL: http://localhost:4300/v1/cache
-          JEJU_STORAGE_SERVICE_URL: http://localhost:4300/v1/storage
-          JEJU_KMS_SERVICE_URL: http://localhost:4300/v1/kms
+          CQL_BLOCK_PRODUCER_ENDPOINT: http://localhost:4661
+          JEJU_CACHE_SERVICE_URL: http://localhost:4030/v1/cache
+          JEJU_STORAGE_SERVICE_URL: http://localhost:4030/v1/storage
+          JEJU_KMS_SERVICE_URL: http://localhost:4030/v1/kms
         run: |
           bun test packages/testing/integration/jeju-e2e.integration.test.ts
 
       - name: Run decentralized stack tests
         working-directory: babylon
         env:
-          JEJU_GATEWAY_URL: http://localhost:4300
-          CQL_BLOCK_PRODUCER_ENDPOINT: http://localhost:4300
+          JEJU_GATEWAY_URL: http://localhost:4030
+          CQL_BLOCK_PRODUCER_ENDPOINT: http://localhost:4661
         run: |
           bun test packages/testing/integration/decentralized-stack.integration.test.ts
 
       - name: Run messaging E2E tests
         working-directory: babylon
         env:
-          JEJU_GATEWAY_URL: http://localhost:4300
+          JEJU_GATEWAY_URL: http://localhost:4030
         run: |
           bun test packages/testing/integration/messaging-e2e.integration.test.ts || true
 
@@ -126,7 +126,7 @@ jobs:
         if: failure()
         run: |
           echo "=== Jeju Gateway Logs ==="
-          curl -s http://localhost:4300/v1/logs 2>/dev/null || echo "Could not get logs"
+          curl -s http://localhost:4030/v1/logs 2>/dev/null || echo "Could not get logs"
 
       - name: Stop Jeju services
         if: always()

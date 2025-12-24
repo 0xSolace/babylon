@@ -4,8 +4,8 @@
  * Schemas for decentralized end-to-end encrypted messaging between users.
  */
 
-import { z } from 'zod';
-import { WalletAddressSchema } from './common';
+import { z } from 'zod'
+import { WalletAddressSchema } from './common'
 
 // ============================================================================
 // Encryption Key Schemas
@@ -16,7 +16,7 @@ import { WalletAddressSchema } from './common';
  */
 export const MessagingPublicKeySchema = z
   .string()
-  .regex(/^0x[a-fA-F0-9]{64}$/, 'Invalid public key format');
+  .regex(/^0x[a-fA-F0-9]{64}$/, 'Invalid public key format')
 
 /**
  * Register encryption keys schema for decentralized messaging
@@ -25,8 +25,8 @@ export const RegisterKeysSchema = z.object({
   publicKey: MessagingPublicKeySchema,
   signedPreKey: MessagingPublicKeySchema.optional(),
   signature: z.string().optional(), // For on-chain registration verification
-});
-export type RegisterKeys = z.infer<typeof RegisterKeysSchema>;
+})
+export type RegisterKeys = z.infer<typeof RegisterKeysSchema>
 
 /**
  * User messaging key response schema
@@ -38,8 +38,8 @@ export const UserMessagingKeySchema = z.object({
   isActive: z.boolean(),
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
-});
-export type UserMessagingKey = z.infer<typeof UserMessagingKeySchema>;
+})
+export type UserMessagingKey = z.infer<typeof UserMessagingKeySchema>
 
 // ============================================================================
 // Message Schemas
@@ -52,8 +52,8 @@ export const SendMessageSchema = z.object({
   to: z.string().min(1, 'Recipient address required'),
   encryptedContent: z.string().min(1, 'Encrypted content required'),
   timestamp: z.number().optional(),
-});
-export type SendMessage = z.infer<typeof SendMessageSchema>;
+})
+export type SendMessage = z.infer<typeof SendMessageSchema>
 
 /**
  * Relay message schema - message from the relay network
@@ -66,8 +66,8 @@ export const RelayMessageSchema = z.object({
   timestamp: z.number(),
   cid: z.string(), // IPFS/content ID
   receivedAt: z.number(),
-});
-export type RelayMessage = z.infer<typeof RelayMessageSchema>;
+})
+export type RelayMessage = z.infer<typeof RelayMessageSchema>
 
 /**
  * Inbox query parameters schema
@@ -76,8 +76,8 @@ export const InboxQuerySchema = z.object({
   limit: z.coerce.number().min(1).max(100).default(50),
   since: z.coerce.number().optional(), // Timestamp to fetch messages since
   before: z.coerce.number().optional(), // Timestamp to fetch messages before
-});
-export type InboxQuery = z.infer<typeof InboxQuerySchema>;
+})
+export type InboxQuery = z.infer<typeof InboxQuerySchema>
 
 /**
  * Inbox response schema
@@ -85,8 +85,8 @@ export type InboxQuery = z.infer<typeof InboxQuerySchema>;
 export const InboxResponseSchema = z.object({
   messages: z.array(RelayMessageSchema),
   hasMore: z.boolean(),
-});
-export type InboxResponse = z.infer<typeof InboxResponseSchema>;
+})
+export type InboxResponse = z.infer<typeof InboxResponseSchema>
 
 // ============================================================================
 // Key Lookup Schemas
@@ -97,8 +97,8 @@ export type InboxResponse = z.infer<typeof InboxResponseSchema>;
  */
 export const GetPublicKeyParamsSchema = z.object({
   address: WalletAddressSchema,
-});
-export type GetPublicKeyParams = z.infer<typeof GetPublicKeyParamsSchema>;
+})
+export type GetPublicKeyParams = z.infer<typeof GetPublicKeyParamsSchema>
 
 /**
  * Public key response schema
@@ -107,8 +107,8 @@ export const PublicKeyResponseSchema = z.object({
   address: WalletAddressSchema,
   publicKey: MessagingPublicKeySchema,
   signedPreKey: MessagingPublicKeySchema.optional(),
-});
-export type PublicKeyResponse = z.infer<typeof PublicKeyResponseSchema>;
+})
+export type PublicKeyResponse = z.infer<typeof PublicKeyResponseSchema>
 
 // ============================================================================
 // Conversation Schemas
@@ -124,10 +124,10 @@ export const ConversationParticipantSchema = z.object({
   displayName: z.string().nullable(),
   profileImageUrl: z.string().nullable(),
   publicKey: MessagingPublicKeySchema.optional(),
-});
+})
 export type ConversationParticipant = z.infer<
   typeof ConversationParticipantSchema
->;
+>
 
 /**
  * Conversation schema
@@ -137,5 +137,5 @@ export const ConversationSchema = z.object({
   participants: z.array(ConversationParticipantSchema),
   lastMessageAt: z.string().datetime().nullable(),
   unreadCount: z.number(),
-});
-export type Conversation = z.infer<typeof ConversationSchema>;
+})
+export type Conversation = z.infer<typeof ConversationSchema>

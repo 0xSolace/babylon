@@ -7,28 +7,28 @@
 
 export interface ModelConfig {
   /** Unique identifier for the model */
-  id: string;
+  id: string
 
   /** Display name for reports */
-  displayName: string;
+  displayName: string
 
   /** Provider (groq, openai, anthropic, etc.) */
-  provider: 'groq' | 'openai' | 'anthropic' | 'together' | 'local';
+  provider: 'groq' | 'openai' | 'anthropic' | 'together' | 'local'
 
   /** Model identifier for the provider's API */
-  modelId: string;
+  modelId: string
 
   /** Model tier (lite, standard, pro) */
-  tier: 'lite' | 'standard' | 'pro';
+  tier: 'lite' | 'standard' | 'pro'
 
   /** Approximate parameters in billions */
-  parametersBillions?: number;
+  parametersBillions?: number
 
   /** Whether this is a baseline model */
-  isBaseline: boolean;
+  isBaseline: boolean
 
   /** Additional metadata */
-  metadata?: Record<string, string | number | boolean>;
+  metadata?: Record<string, string | number | boolean>
 }
 
 /**
@@ -103,56 +103,56 @@ export const MODEL_REGISTRY: ModelConfig[] = [
     tier: 'lite',
     isBaseline: false,
   },
-];
+]
 
 /**
  * Get a model config by ID
  */
 export function getModelById(id: string): ModelConfig | undefined {
-  return MODEL_REGISTRY.find((m) => m.id === id);
+  return MODEL_REGISTRY.find((m) => m.id === id)
 }
 
 /**
  * Get a model config by model ID (API identifier)
  */
 export function getModelByModelId(modelId: string): ModelConfig | undefined {
-  return MODEL_REGISTRY.find((m) => m.modelId === modelId);
+  return MODEL_REGISTRY.find((m) => m.modelId === modelId)
 }
 
 /**
  * Get all baseline models
  */
 export function getBaselineModels(): ModelConfig[] {
-  return MODEL_REGISTRY.filter((m) => m.isBaseline);
+  return MODEL_REGISTRY.filter((m) => m.isBaseline)
 }
 
 /**
  * Get models by provider
  */
 export function getModelsByProvider(
-  provider: ModelConfig['provider']
+  provider: ModelConfig['provider'],
 ): ModelConfig[] {
-  return MODEL_REGISTRY.filter((m) => m.provider === provider);
+  return MODEL_REGISTRY.filter((m) => m.provider === provider)
 }
 
 /**
  * Get models by tier
  */
 export function getModelsByTier(tier: ModelConfig['tier']): ModelConfig[] {
-  return MODEL_REGISTRY.filter((m) => m.tier === tier);
+  return MODEL_REGISTRY.filter((m) => m.tier === tier)
 }
 
 /**
  * Validate that a model ID exists
  */
 export function validateModelId(id: string): boolean {
-  return MODEL_REGISTRY.some((m) => m.id === id || m.modelId === id);
+  return MODEL_REGISTRY.some((m) => m.id === id || m.modelId === id)
 }
 
 /**
  * Get model display name (supports both id and modelId)
  */
 export function getModelDisplayName(idOrModelId: string): string {
-  const model = getModelById(idOrModelId) ?? getModelByModelId(idOrModelId);
-  return model?.displayName ?? idOrModelId;
+  const model = getModelById(idOrModelId) ?? getModelByModelId(idOrModelId)
+  return model?.displayName ?? idOrModelId
 }

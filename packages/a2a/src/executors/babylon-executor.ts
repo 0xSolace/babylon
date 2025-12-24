@@ -12,218 +12,282 @@ import type {
   TaskArtifactUpdateEvent,
   TaskStatusUpdateEvent,
   TextPart,
-} from '@a2a-js/sdk';
+} from '@a2a-js/sdk'
 import type {
   AgentExecutor,
   ExecutionEventBus,
   RequestContext,
-} from '@a2a-js/sdk/server';
-import { db } from '@babylon/db';
-import type { JsonValue } from '@babylon/shared';
-import { generateSnowflakeId, JsonValueSchema, logger } from '@babylon/shared';
-import { v4 as uuidv4 } from 'uuid';
-import { z } from 'zod';
+} from '@a2a-js/sdk/server'
+import { db } from '@babylon/db'
+import type { JsonValue } from '@babylon/shared'
 import {
+  generateSnowflakeId,
+  isJsonRecord,
+  JsonValueSchema,
+  logger,
+} from '@babylon/shared'
+import { v4 as uuidv4 } from 'uuid'
+import { z } from 'zod'
+import {
+  type AppealBanWithEscrowResult,
+  type CreateEscrowPaymentResult,
   handleAppealBanWithEscrow,
   handleCreateEscrowPayment,
   handleListEscrowPayments,
   handleRefundEscrowPayment,
   handleVerifyEscrowPayment,
-} from '../handlers/escrow-handlers';
-import type { JsonRpcRequest } from '../types/a2a';
+  type ListEscrowPaymentsResult,
+  type RefundEscrowPaymentResult,
+  type VerifyEscrowPaymentResult,
+} from '../handlers/escrow-handlers'
+import type { JsonRpcRequest } from '../types/a2a'
 
 // Schema for validating command parameters
-const CommandParamsSchema = z.record(z.string(), JsonValueSchema);
+const CommandParamsSchema = z.record(z.string(), JsonValueSchema)
 const CommandDataSchema = z.object({
   operation: z.string(),
   params: CommandParamsSchema.optional(),
-});
+})
+
+/**
+ * A2A SDK DataPart data type - accepts any JSON-serializable record.
+ * This is the type expected by DataPart.data in @a2a-js/sdk.
+ */
+type A2ADataPartData = { [k: string]: JsonValue }
+
+/**
+ * Convert ExecutorOperationResult to A2A DataPart data format.
+ * Handles null/undefined by returning an empty success object.
+ *
+ * ExecutorOperationResult is a union of specific response interfaces (PostCreatedResponse,
+ * FeedResponse, etc.) which are all plain objects with string keys and JsonValue values.
+ * A2ADataPartData requires an index signature { [k: string]: JsonValue }.
+ *
+ * The type assertion is safe because:
+ * 1. All ExecutorOperationResult variants are plain objects
+ * 2. Their values are JSON-serializable (required by A2A protocol)
+ * 3. isJsonRecord validates the runtime structure
+ */
+function toDataPartData(
+  result: ExecutorOperationResult | null,
+): A2ADataPartData {
+  if (result === null || result === undefined) {
+    return { success: true }
+  }
+  // Runtime validation: ensure result is a plain object (not array, null, etc.)
+  if (!isJsonRecord(result)) {
+    // Defensive: wrap non-objects in a result property
+    return { success: true }
+  }
+  // Type assertion: ExecutorOperationResult interfaces don't have index signatures
+  // but are structurally compatible with A2ADataPartData at runtime.
+  // The isJsonRecord check above confirms the runtime shape.
+  return result as A2ADataPartData
+}
+
+/**
+ * Wrap JSON-RPC response result into ExecutorOperationResult.
+ * Handles null/undefined results and primitive values.
+ * Note: The parameter type allows ExecutorOperationResult types which are
+ * structurally compatible with JsonValue but don't have the index signature.
+ */
+function wrapResult(
+  result: JsonValue | ExecutorOperationResult | null | undefined,
+): ExecutorOperationResult {
+  const value = result ?? { success: true }
+  // Use isJsonRecord to check for plain objects (not arrays)
+  if (isJsonRecord(value)) {
+    return value as ExecutorOperationResult
+  }
+  // Wrap primitive values in an object
+  return { result: value as JsonValue }
+}
 
 /**
  * Main executor implementing all Babylon game operations
  * via A2A protocol
  */
 interface BabylonCommand {
-  operation: string;
-  params: Record<string, JsonValue>;
+  operation: string
+  params: Record<string, JsonValue>
 }
 
 /**
  * Common response types for executor operations
  */
 interface SuccessResponse {
-  success: boolean;
-  message?: string;
+  success: boolean
+  message?: string
 }
 
 interface PostCreatedResponse extends SuccessResponse {
-  postId: string;
-  content: string;
+  postId: string
+  content: string
 }
 
 interface FeedResponse {
   posts: Array<{
-    id: string;
-    content: string;
-    authorId: string;
-    timestamp: Date;
-  }>;
+    id: string
+    content: string
+    authorId: string
+    timestamp: Date
+  }>
 }
 
 interface MarketsResponse {
   markets: Array<{
-    id: number | string;
-    question: string;
-    yesShares: number;
-    noShares: number;
-  }>;
+    id: number | string
+    question: string
+    yesShares: number
+    noShares: number
+  }>
 }
 
 interface UsersSearchResponse {
   users: Array<{
-    id: string;
-    username: string | null;
-    displayName: string | null;
-    reputationPoints: number;
-  }>;
+    id: string
+    username: string | null
+    displayName: string | null
+    reputationPoints: number
+  }>
 }
 
 interface SystemStatsResponse {
-  users: number;
-  posts: number;
-  markets: number;
+  users: number
+  posts: number
+  markets: number
 }
 
 interface LeaderboardResponse {
   leaderboard: Array<{
-    id: string;
-    username: string | null;
-    displayName: string | null;
-    reputationPoints: number;
-  }>;
+    id: string
+    username: string | null
+    displayName: string | null
+    reputationPoints: number
+  }>
 }
 
 interface BlockMuteResponse extends SuccessResponse {
   block?: {
-    id: string;
-    blockerId: string;
-    blockedId: string;
-    reason: string | null;
-    createdAt: Date;
-  };
+    id: string
+    blockerId: string
+    blockedId: string
+    reason: string | null
+    createdAt: Date
+  }
   mute?: {
-    id: string;
-    muterId: string;
-    mutedId: string;
-    reason: string | null;
-    createdAt: Date;
-  };
+    id: string
+    muterId: string
+    mutedId: string
+    reason: string | null
+    createdAt: Date
+  }
 }
 
 interface ReportResponse extends SuccessResponse {
   report: {
-    id: string;
-    reporterId: string;
-    reportedUserId?: string | null;
-    reportedPostId?: string | null;
-    reportType: string;
-    category: string;
-    reason: string;
-    evidence: string | null;
-    priority: string;
-    status: string;
-    createdAt: Date;
-    updatedAt: Date;
-    resolution?: string | null;
-    resolvedAt?: Date | null;
-    resolvedBy?: string | null;
-  };
+    id: string
+    reporterId: string
+    reportedUserId?: string | null
+    reportedPostId?: string | null
+    reportType: string
+    category: string
+    reason: string
+    evidence: string | null
+    priority: string
+    status: string
+    createdAt: Date
+    updatedAt: Date
+    resolution?: string | null
+    resolvedAt?: Date | null
+    resolvedBy?: string | null
+  }
 }
 
 interface BlockedUserInfo {
-  id: string;
-  username: string | null;
-  displayName: string | null;
-  profileImageUrl: string | null;
+  id: string
+  username: string | null
+  displayName: string | null
+  profileImageUrl: string | null
 }
 
 interface BlockEntry {
-  id: string;
-  blockerId: string;
-  blockedId: string;
-  reason: string | null;
-  createdAt: Date;
-  blocked?: BlockedUserInfo;
+  id: string
+  blockerId: string
+  blockedId: string
+  reason: string | null
+  createdAt: Date
+  blocked?: BlockedUserInfo
 }
 
 interface BlocksListResponse {
-  blocks: BlockEntry[];
+  blocks: BlockEntry[]
   pagination: {
-    limit: number;
-    offset: number;
-    total: number;
-  };
+    limit: number
+    offset: number
+    total: number
+  }
 }
 
 interface MutedUserInfo {
-  id: string;
-  username: string | null;
-  displayName: string | null;
-  profileImageUrl: string | null;
+  id: string
+  username: string | null
+  displayName: string | null
+  profileImageUrl: string | null
 }
 
 interface MuteEntry {
-  id: string;
-  muterId: string;
-  mutedId: string;
-  reason: string | null;
-  createdAt: Date;
-  muted?: MutedUserInfo;
+  id: string
+  muterId: string
+  mutedId: string
+  reason: string | null
+  createdAt: Date
+  muted?: MutedUserInfo
 }
 
 interface MutesListResponse {
-  mutes: MuteEntry[];
+  mutes: MuteEntry[]
   pagination: {
-    limit: number;
-    offset: number;
-    total: number;
-  };
+    limit: number
+    offset: number
+    total: number
+  }
 }
 
 interface BlockStatusResponse {
-  isBlocked: boolean;
+  isBlocked: boolean
   block: {
-    id: string;
-    createdAt: Date;
-    reason: string | null;
-  } | null;
+    id: string
+    createdAt: Date
+    reason: string | null
+  } | null
 }
 
 interface MuteStatusResponse {
-  isMuted: boolean;
+  isMuted: boolean
   mute: {
-    id: string;
-    createdAt: Date;
-    reason: string | null;
-  } | null;
+    id: string
+    createdAt: Date
+    reason: string | null
+  } | null
 }
 
 interface TrendingTagsResponse {
   tags: Array<{
-    name: string;
-    displayName: string;
-    category: string;
-    postCount: number;
-  }>;
+    name: string
+    displayName: string
+    category: string
+    postCount: number
+  }>
 }
 
 interface PostsByTagResponse {
   posts: Array<{
-    id: string;
-    content: string;
-    authorId: string;
-    timestamp: Date;
-  }>;
+    id: string
+    content: string
+    authorId: string
+    timestamp: Date
+  }>
 }
 
 type ExecutorOperationResult =
@@ -241,22 +305,28 @@ type ExecutorOperationResult =
   | MutesListResponse
   | BlockStatusResponse
   | MuteStatusResponse
-  | JsonValue;
+  | CreateEscrowPaymentResult
+  | VerifyEscrowPaymentResult
+  | RefundEscrowPaymentResult
+  | ListEscrowPaymentsResult
+  | AppealBanWithEscrowResult
+  // Allow any JSON-compatible return value for flexibility
+  | { [key: string]: JsonValue }
 
 export class BabylonAgentExecutor implements AgentExecutor {
   async execute(
     requestContext: RequestContext,
-    eventBus: ExecutionEventBus
+    eventBus: ExecutionEventBus,
   ): Promise<void> {
-    const { taskId, contextId, userMessage, task } = requestContext;
+    const { taskId, contextId, userMessage, task } = requestContext
 
     // Extract message text
     const textParts = userMessage.parts.filter(
-      (p): p is TextPart => p.kind === 'text'
-    );
-    const messageText = textParts.map((p) => p.text).join(' ');
+      (p): p is TextPart => p.kind === 'text',
+    )
+    const messageText = textParts.map((p) => p.text).join(' ')
 
-    logger.info('Babylon processing A2A message', { taskId, messageText });
+    logger.info('Babylon processing A2A message', { taskId, messageText })
 
     // Create initial task if needed
     if (!task) {
@@ -269,8 +339,8 @@ export class BabylonAgentExecutor implements AgentExecutor {
           timestamp: new Date().toISOString(),
         },
         history: [userMessage],
-      };
-      eventBus.publish(initialTask);
+      }
+      eventBus.publish(initialTask)
     }
 
     // Update to working state
@@ -283,11 +353,11 @@ export class BabylonAgentExecutor implements AgentExecutor {
         timestamp: new Date().toISOString(),
       },
       final: false,
-    };
-    eventBus.publish(workingUpdate);
+    }
+    eventBus.publish(workingUpdate)
 
-    const command = this.parseCommand(userMessage);
-    const result = await this.executeOperation(command, requestContext);
+    const command = this.parseCommand(userMessage)
+    const result = await this.executeOperation(command, requestContext)
 
     // Create artifact with result
     const artifactUpdate: TaskArtifactUpdateEvent = {
@@ -300,12 +370,12 @@ export class BabylonAgentExecutor implements AgentExecutor {
         parts: [
           {
             kind: 'data',
-            data: (result ?? {}) as { [k: string]: JsonValue },
+            data: toDataPartData(result),
           },
         ],
       },
-    };
-    eventBus.publish(artifactUpdate);
+    }
+    eventBus.publish(artifactUpdate)
 
     // Mark completed
     const completedUpdate: TaskStatusUpdateEvent = {
@@ -317,121 +387,121 @@ export class BabylonAgentExecutor implements AgentExecutor {
         timestamp: new Date().toISOString(),
       },
       final: true,
-    };
-    eventBus.publish(completedUpdate);
-    eventBus.finished();
+    }
+    eventBus.publish(completedUpdate)
+    eventBus.finished()
   }
 
   private async executeOperation(
     command: BabylonCommand,
-    context: RequestContext
+    context: RequestContext,
   ): Promise<ExecutorOperationResult> {
     switch (command.operation) {
       case 'social.create_post':
-        return this.createPost(command.params, context);
+        return this.createPost(command.params, context)
       case 'social.get_feed':
-        return this.getFeed(command.params);
+        return this.getFeed(command.params)
       case 'social.like_post':
-        return this.likePost(command.params, context);
+        return this.likePost(command.params, context)
       case 'markets.list_prediction':
-        return this.listPredictionMarkets(command.params);
+        return this.listPredictionMarkets(command.params)
       case 'users.search':
-        return this.searchUsers(command.params);
+        return this.searchUsers(command.params)
       case 'stats.system':
-        return this.getSystemStats();
+        return this.getSystemStats()
       case 'stats.leaderboard':
-        return this.getLeaderboard(command.params);
+        return this.getLeaderboard(command.params)
       case 'stats.trending_tags':
-        return this.getTrendingTags(command.params);
+        return this.getTrendingTags(command.params)
       case 'stats.posts_by_tag':
-        return this.getPostsByTag(command.params);
+        return this.getPostsByTag(command.params)
       case 'moderation.create_escrow_payment':
-        return this.createEscrowPayment(command.params, context);
+        return this.createEscrowPayment(command.params, context)
       case 'moderation.verify_escrow_payment':
-        return this.verifyEscrowPayment(command.params, context);
+        return this.verifyEscrowPayment(command.params, context)
       case 'moderation.refund_escrow_payment':
-        return this.refundEscrowPayment(command.params, context);
+        return this.refundEscrowPayment(command.params, context)
       case 'moderation.list_escrow_payments':
-        return this.listEscrowPayments(command.params, context);
+        return this.listEscrowPayments(command.params, context)
       case 'moderation.appeal_ban_with_escrow':
-        return this.appealBanWithEscrow(command.params, context);
+        return this.appealBanWithEscrow(command.params, context)
       // Basic moderation operations
       case 'moderation.block_user':
-        return this.blockUser(command.params, context);
+        return this.blockUser(command.params, context)
       case 'moderation.unblock_user':
-        return this.unblockUser(command.params, context);
+        return this.unblockUser(command.params, context)
       case 'moderation.mute_user':
-        return this.muteUser(command.params, context);
+        return this.muteUser(command.params, context)
       case 'moderation.unmute_user':
-        return this.unmuteUser(command.params, context);
+        return this.unmuteUser(command.params, context)
       case 'moderation.report_user':
-        return this.reportUser(command.params, context);
+        return this.reportUser(command.params, context)
       case 'moderation.report_post':
-        return this.reportPost(command.params, context);
+        return this.reportPost(command.params, context)
       case 'moderation.get_blocks':
-        return this.getBlocks(command.params, context);
+        return this.getBlocks(command.params, context)
       case 'moderation.get_mutes':
-        return this.getMutes(command.params, context);
+        return this.getMutes(command.params, context)
       case 'moderation.check_block_status':
-        return this.checkBlockStatus(command.params, context);
+        return this.checkBlockStatus(command.params, context)
       case 'moderation.check_mute_status':
-        return this.checkMuteStatus(command.params, context);
+        return this.checkMuteStatus(command.params, context)
       default:
-        throw new Error(`Unsupported operation: ${command.operation}`);
+        throw new Error(`Unsupported operation: ${command.operation}`)
     }
   }
 
   private parseCommand(message: Message): BabylonCommand {
     const dataPart = message.parts.find(
-      (part): part is DataPart => part.kind === 'data'
-    );
+      (part): part is DataPart => part.kind === 'data',
+    )
 
-    if (dataPart && dataPart.data && typeof dataPart.data === 'object') {
-      const result = CommandDataSchema.safeParse(dataPart.data);
+    if (dataPart?.data && typeof dataPart.data === 'object') {
+      const result = CommandDataSchema.safeParse(dataPart.data)
       if (!result.success) {
         throw new Error(
-          `Invalid data part: ${result.error.issues.map((e) => e.message).join(', ')}`
-        );
+          `Invalid data part: ${result.error.issues.map((e) => e.message).join(', ')}`,
+        )
       }
       return {
         operation: result.data.operation,
         params: result.data.params ?? {},
-      };
+      }
     }
 
     const textPayload = message.parts
       .filter((part): part is TextPart => part.kind === 'text')
       .map((part) => part.text)
       .join(' ')
-      .trim();
+      .trim()
 
     if (textPayload.length > 0) {
-      const parsed = JSON.parse(textPayload) as Record<string, unknown>;
-      const result = CommandDataSchema.safeParse(parsed);
+      // JSON.parse result is validated by zod safeParse which accepts unknown input
+      const result = CommandDataSchema.safeParse(JSON.parse(textPayload))
       if (!result.success) {
         throw new Error(
-          `Invalid command JSON: ${result.error.issues.map((e) => e.message).join(', ')}`
-        );
+          `Invalid command JSON: ${result.error.issues.map((e) => e.message).join(', ')}`,
+        )
       }
       return {
         operation: result.data.operation,
         params: result.data.params ?? {},
-      };
+      }
     }
 
     throw new Error(
-      'Structured command required. Provide a data part with { "operation": "...", "params": {...} }'
-    );
+      'Structured command required. Provide a data part with { "operation": "...", "params": {...} }',
+    )
   }
 
   private async createPost(
     params: Record<string, JsonValue>,
-    context: RequestContext
+    context: RequestContext,
   ) {
     const content =
-      typeof params.content === 'string' ? params.content.trim() : '';
+      typeof params.content === 'string' ? params.content.trim() : ''
     if (!content) {
-      throw new Error('content is required');
+      throw new Error('content is required')
     }
 
     const post = await db.post.create({
@@ -441,12 +511,12 @@ export class BabylonAgentExecutor implements AgentExecutor {
         authorId: context.contextId || context.taskId,
         timestamp: new Date(),
       },
-    });
-    return { success: true, postId: post.id, content: post.content };
+    })
+    return { success: true, postId: post.id, content: post.content }
   }
 
   private async getFeed(params: Record<string, JsonValue>) {
-    const limit = this.parsePositiveInt(params.limit, 20, 100);
+    const limit = this.parsePositiveInt(params.limit, 20, 100)
     const posts = await db.post.findMany({
       take: limit,
       orderBy: { timestamp: 'desc' },
@@ -456,7 +526,7 @@ export class BabylonAgentExecutor implements AgentExecutor {
         authorId: true,
         timestamp: true,
       },
-    });
+    })
     return {
       posts: posts.map((p) => ({
         id: p.id,
@@ -464,32 +534,32 @@ export class BabylonAgentExecutor implements AgentExecutor {
         authorId: p.authorId,
         timestamp: p.timestamp,
       })),
-    };
+    }
   }
 
   private async likePost(
     params: Record<string, JsonValue>,
-    context: RequestContext
+    context: RequestContext,
   ): Promise<SuccessResponse> {
-    const postId = typeof params.postId === 'string' ? params.postId : '';
+    const postId = typeof params.postId === 'string' ? params.postId : ''
     if (!postId) {
-      throw new Error('postId is required');
+      throw new Error('postId is required')
     }
 
     // Check if post exists
     const post = await db.post.findFirst({
       where: { id: postId, deletedAt: null },
-    });
+    })
 
     if (!post) {
-      throw new Error('Post not found');
+      throw new Error('Post not found')
     }
 
     // Use userId from params first (actual agent user ID), fall back to context
     const userId =
       typeof params.userId === 'string' && params.userId
         ? params.userId
-        : context.contextId || context.taskId;
+        : context.contextId || context.taskId
 
     // Check if already liked
     const existingLike = await db.reaction.findFirst({
@@ -498,10 +568,10 @@ export class BabylonAgentExecutor implements AgentExecutor {
         userId,
         type: 'like',
       },
-    });
+    })
 
     if (existingLike) {
-      return { success: true, message: 'Already liked' };
+      return { success: true, message: 'Already liked' }
     }
 
     // Create the like
@@ -512,35 +582,35 @@ export class BabylonAgentExecutor implements AgentExecutor {
         userId,
         type: 'like',
       },
-    });
+    })
 
-    return { success: true, message: 'Post liked' };
+    return { success: true, message: 'Post liked' }
   }
 
   private async listPredictionMarkets(params: Record<string, JsonValue>) {
-    const limit = this.parsePositiveInt(params.limit, 20, 50);
+    const limit = this.parsePositiveInt(params.limit, 20, 50)
     const markets = await db.market.findMany({
       take: limit,
-      where: { resolved: false },
+      where: { isResolved: false },
       orderBy: { createdAt: 'desc' },
-    });
+    })
     return {
       markets: markets.map((m) => ({
         id: m.id,
-        question: m.question,
-        yesShares: Number(m.yesShares),
-        noShares: Number(m.noShares),
+        question: m.title,
+        volume: Number(m.volume),
+        liquidity: Number(m.liquidity),
       })),
-    };
+    }
   }
 
   private async searchUsers(params: Record<string, JsonValue>) {
-    const query = typeof params.query === 'string' ? params.query.trim() : '';
+    const query = typeof params.query === 'string' ? params.query.trim() : ''
     if (!query) {
-      throw new Error('query is required');
+      throw new Error('query is required')
     }
 
-    const limit = this.parsePositiveInt(params.limit, 20, 50);
+    const limit = this.parsePositiveInt(params.limit, 20, 50)
     const users = await db.user.findMany({
       where: {
         OR: [
@@ -555,8 +625,8 @@ export class BabylonAgentExecutor implements AgentExecutor {
         displayName: true,
         reputationPoints: true,
       },
-    });
-    return { users };
+    })
+    return { users }
   }
 
   private async getSystemStats() {
@@ -564,12 +634,12 @@ export class BabylonAgentExecutor implements AgentExecutor {
       db.user.count(),
       db.post.count(),
       db.market.count(),
-    ]);
-    return { users: userCount, posts: postCount, markets: marketCount };
+    ])
+    return { users: userCount, posts: postCount, markets: marketCount }
   }
 
   private async getLeaderboard(params: Record<string, JsonValue>) {
-    const limit = this.parsePositiveInt(params.limit, 10, 50);
+    const limit = this.parsePositiveInt(params.limit, 10, 50)
     const users = await db.user.findMany({
       take: limit,
       orderBy: { reputationPoints: 'desc' },
@@ -579,23 +649,23 @@ export class BabylonAgentExecutor implements AgentExecutor {
         displayName: true,
         reputationPoints: true,
       },
-    });
-    return { leaderboard: users };
+    })
+    return { leaderboard: users }
   }
 
   private async getTrendingTags(
-    params: Record<string, JsonValue>
+    params: Record<string, JsonValue>,
   ): Promise<TrendingTagsResponse> {
-    const limit = this.parsePositiveInt(params.limit, 10, 50);
+    const limit = this.parsePositiveInt(params.limit, 10, 50)
 
     // Get trending tags with their tag info via query
     const trendingTagsList = await db.trendingTag.findMany({
       take: limit,
       orderBy: { score: 'desc' },
-    });
+    })
 
     // Get tag IDs
-    const tagIds = trendingTagsList.map((tt) => tt.tagId);
+    const tagIds = trendingTagsList.map((tt) => tt.tagId)
 
     // Fetch actual tag info
     const tags =
@@ -603,42 +673,42 @@ export class BabylonAgentExecutor implements AgentExecutor {
         ? await db.tag.findMany({
             where: { id: { in: tagIds } },
           })
-        : [];
+        : []
 
     // Create a map for quick lookup
-    const tagMap = new Map(tags.map((t) => [t.id, t]));
+    const tagMap = new Map(tags.map((t) => [t.id, t]))
 
     return {
       tags: trendingTagsList.map((tt) => {
-        const tag = tagMap.get(tt.tagId);
+        const tag = tagMap.get(tt.tagId)
         return {
           name: tag?.name ?? '',
-          displayName: tag?.displayName ?? tag?.name ?? '',
-          category: tag?.category ?? 'general',
-          postCount: tt.postCount,
-        };
+          displayName: tag?.name ?? '',
+          category: 'general',
+          postCount: tag?.postCount ?? 0,
+        }
       }),
-    };
+    }
   }
 
   private async getPostsByTag(
-    params: Record<string, JsonValue>
+    params: Record<string, JsonValue>,
   ): Promise<PostsByTagResponse> {
-    const tagName = typeof params.tag === 'string' ? params.tag.trim() : '';
+    const tagName = typeof params.tag === 'string' ? params.tag.trim() : ''
     if (!tagName) {
-      throw new Error('tag is required');
+      throw new Error('tag is required')
     }
 
-    const limit = this.parsePositiveInt(params.limit, 20, 50);
-    const offset = this.parsePositiveInt(params.offset, 0, 1000);
+    const limit = this.parsePositiveInt(params.limit, 20, 50)
+    const offset = this.parsePositiveInt(params.offset, 0, 1000)
 
     // Find the tag by name
     const tag = await db.tag.findFirst({
       where: { name: tagName },
-    });
+    })
 
     if (!tag) {
-      return { posts: [] };
+      return { posts: [] }
     }
 
     // Find posts with this tag via PostTag join table
@@ -647,12 +717,12 @@ export class BabylonAgentExecutor implements AgentExecutor {
       orderBy: { createdAt: 'desc' },
       take: limit,
       skip: offset,
-    });
+    })
 
-    const postIds = postTagEntries.map((pt) => pt.postId);
+    const postIds = postTagEntries.map((pt) => pt.postId)
 
     if (postIds.length === 0) {
-      return { posts: [] };
+      return { posts: [] }
     }
 
     // Fetch the actual posts
@@ -663,7 +733,7 @@ export class BabylonAgentExecutor implements AgentExecutor {
         type: 'post',
       },
       orderBy: { timestamp: 'desc' },
-    });
+    })
 
     return {
       posts: posts.map((p) => ({
@@ -672,28 +742,28 @@ export class BabylonAgentExecutor implements AgentExecutor {
         authorId: p.authorId,
         timestamp: p.timestamp,
       })),
-    };
+    }
   }
 
   private parsePositiveInt(
-    value: unknown,
+    value: JsonValue | undefined,
     fallback: number,
-    max: number
+    max: number,
   ): number {
     const parsed =
       typeof value === 'number'
         ? value
         : typeof value === 'string'
           ? Number.parseInt(value, 10)
-          : Number.NaN;
+          : Number.NaN
     if (!Number.isFinite(parsed) || parsed <= 0) {
-      return fallback;
+      return fallback
     }
-    return Math.min(parsed, max);
+    return Math.min(parsed, max)
   }
 
   async cancelTask(taskId: string, eventBus: ExecutionEventBus): Promise<void> {
-    logger.info('Task cancellation', { taskId });
+    logger.info('Task cancellation', { taskId })
 
     const cancelUpdate: TaskStatusUpdateEvent = {
       kind: 'status-update',
@@ -704,43 +774,43 @@ export class BabylonAgentExecutor implements AgentExecutor {
         timestamp: new Date().toISOString(),
       },
       final: true,
-    };
-    eventBus.publish(cancelUpdate);
-    eventBus.finished();
+    }
+    eventBus.publish(cancelUpdate)
+    eventBus.finished()
   }
 
   // Escrow operations
   private async createEscrowPayment(
     params: Record<string, JsonValue>,
-    context: RequestContext
+    context: RequestContext,
   ): Promise<ExecutorOperationResult> {
-    const agentId = context.contextId || context.taskId;
+    const agentId = context.contextId || context.taskId
     const requestParams: Record<string, JsonValue> = {
       recipientId: String(params.recipientId ?? ''),
       amountUSD: Number(params.amountUSD ?? 0),
       recipientWalletAddress: String(params.recipientWalletAddress ?? ''),
-    };
+    }
     if (params.reason) {
-      requestParams.reason = String(params.reason);
+      requestParams.reason = String(params.reason)
     }
     const request: JsonRpcRequest = {
       jsonrpc: '2.0',
       method: 'a2a.createEscrowPayment',
       params: requestParams,
       id: 1,
-    };
-    const response = await handleCreateEscrowPayment(agentId, request);
-    if (response.error) {
-      throw new Error(response.error.message);
     }
-    return (response.result as JsonValue) ?? { success: true };
+    const response = await handleCreateEscrowPayment(agentId, request)
+    if (response.error) {
+      throw new Error(response.error.message)
+    }
+    return wrapResult(response.result)
   }
 
   private async verifyEscrowPayment(
     params: Record<string, JsonValue>,
-    context: RequestContext
+    context: RequestContext,
   ): Promise<ExecutorOperationResult> {
-    const agentId = context.contextId || context.taskId;
+    const agentId = context.contextId || context.taskId
     const request = {
       jsonrpc: '2.0' as const,
       method: 'a2a.verifyEscrowPayment',
@@ -752,69 +822,69 @@ export class BabylonAgentExecutor implements AgentExecutor {
         amount: String(params.amount || ''),
       },
       id: 1,
-    };
-    const response = await handleVerifyEscrowPayment(agentId, request);
-    if (response.error) {
-      throw new Error(response.error.message);
     }
-    return (response.result as JsonValue) ?? { success: true };
+    const response = await handleVerifyEscrowPayment(agentId, request)
+    if (response.error) {
+      throw new Error(response.error.message)
+    }
+    return wrapResult(response.result)
   }
 
   private async refundEscrowPayment(
     params: Record<string, JsonValue>,
-    context: RequestContext
+    context: RequestContext,
   ): Promise<ExecutorOperationResult> {
-    const agentId = context.contextId || context.taskId;
+    const agentId = context.contextId || context.taskId
     const requestParams: Record<string, JsonValue> = {
       escrowId: String(params.escrowId ?? ''),
       refundTxHash: String(params.refundTxHash ?? ''),
-    };
+    }
     if (params.reason) {
-      requestParams.reason = String(params.reason);
+      requestParams.reason = String(params.reason)
     }
     const request: JsonRpcRequest = {
       jsonrpc: '2.0',
       method: 'a2a.refundEscrowPayment',
       params: requestParams,
       id: 1,
-    };
-    const response = await handleRefundEscrowPayment(agentId, request);
-    if (response.error) {
-      throw new Error(response.error.message);
     }
-    return (response.result as JsonValue) ?? { success: true };
+    const response = await handleRefundEscrowPayment(agentId, request)
+    if (response.error) {
+      throw new Error(response.error.message)
+    }
+    return wrapResult(response.result)
   }
 
   private async listEscrowPayments(
     params: Record<string, JsonValue>,
-    context: RequestContext
+    context: RequestContext,
   ): Promise<ExecutorOperationResult> {
-    const agentId = context.contextId || context.taskId;
-    const requestParams: Record<string, JsonValue> = {};
+    const agentId = context.contextId || context.taskId
+    const requestParams: Record<string, JsonValue> = {}
     if (params.recipientId)
-      requestParams.recipientId = String(params.recipientId);
-    if (params.adminId) requestParams.adminId = String(params.adminId);
-    if (params.status) requestParams.status = String(params.status);
-    if (params.limit) requestParams.limit = Number(params.limit);
-    if (params.offset) requestParams.offset = Number(params.offset);
+      requestParams.recipientId = String(params.recipientId)
+    if (params.adminId) requestParams.adminId = String(params.adminId)
+    if (params.status) requestParams.status = String(params.status)
+    if (params.limit) requestParams.limit = Number(params.limit)
+    if (params.offset) requestParams.offset = Number(params.offset)
     const request: JsonRpcRequest = {
       jsonrpc: '2.0',
       method: 'a2a.listEscrowPayments',
       params: requestParams,
       id: 1,
-    };
-    const response = await handleListEscrowPayments(agentId, request);
-    if (response.error) {
-      throw new Error(response.error.message);
     }
-    return (response.result as JsonValue) ?? { success: true };
+    const response = await handleListEscrowPayments(agentId, request)
+    if (response.error) {
+      throw new Error(response.error.message)
+    }
+    return wrapResult(response.result)
   }
 
   private async appealBanWithEscrow(
     params: Record<string, JsonValue>,
-    context: RequestContext
+    context: RequestContext,
   ): Promise<ExecutorOperationResult> {
-    const agentId = context.contextId || context.taskId;
+    const agentId = context.contextId || context.taskId
     const request = {
       jsonrpc: '2.0' as const,
       method: 'a2a.appealBanWithEscrow',
@@ -823,32 +893,32 @@ export class BabylonAgentExecutor implements AgentExecutor {
         escrowPaymentTxHash: String(params.escrowPaymentTxHash || ''),
       },
       id: 1,
-    };
-    const response = await handleAppealBanWithEscrow(agentId, request);
-    if (response.error) {
-      throw new Error(response.error.message);
     }
-    return (response.result as JsonValue) ?? { success: true };
+    const response = await handleAppealBanWithEscrow(agentId, request)
+    if (response.error) {
+      throw new Error(response.error.message)
+    }
+    return wrapResult(response.result)
   }
 
   // Basic Moderation Operations
 
   private async blockUser(
     params: Record<string, JsonValue>,
-    context: RequestContext
+    context: RequestContext,
   ): Promise<ExecutorOperationResult> {
-    const agentId = context.contextId || context.taskId;
-    const targetUserId = String(params.userId ?? '');
-    const reason = params.reason ? String(params.reason) : null;
+    const agentId = context.contextId || context.taskId
+    const targetUserId = String(params.userId ?? '')
+    const reason = params.reason ? String(params.reason) : null
 
     // Check if target user exists
     const targetUser = await db.user.findUnique({
       where: { id: targetUserId },
       select: { id: true, username: true, displayName: true },
-    });
+    })
 
     if (!targetUser) {
-      throw new Error(`User ${targetUserId} not found`);
+      throw new Error(`User ${targetUserId} not found`)
     }
 
     // Check if already blocked
@@ -857,10 +927,10 @@ export class BabylonAgentExecutor implements AgentExecutor {
         blockerId: agentId,
         blockedId: targetUserId,
       },
-    });
+    })
 
     if (existingBlock) {
-      return { success: false, message: 'User is already blocked' };
+      return { success: false, message: 'User is already blocked' }
     }
 
     // Create block
@@ -871,7 +941,7 @@ export class BabylonAgentExecutor implements AgentExecutor {
         blockedId: targetUserId,
         reason: reason || null,
       },
-    });
+    })
 
     // Unfollow if following (bidirectional - delete both directions)
     await Promise.all([
@@ -887,48 +957,48 @@ export class BabylonAgentExecutor implements AgentExecutor {
           followingId: agentId,
         },
       }),
-    ]);
+    ])
 
-    return { success: true, message: 'User blocked successfully', block };
+    return { success: true, message: 'User blocked successfully', block }
   }
 
   private async unblockUser(
     params: Record<string, JsonValue>,
-    context: RequestContext
+    context: RequestContext,
   ): Promise<ExecutorOperationResult> {
-    const agentId = context.contextId || context.taskId;
-    const targetUserId = String(params.userId ?? '');
+    const agentId = context.contextId || context.taskId
+    const targetUserId = String(params.userId ?? '')
 
     const deleted = await db.userBlock.deleteMany({
       where: {
         blockerId: agentId,
         blockedId: targetUserId,
       },
-    });
+    })
 
     if (deleted.count === 0) {
-      return { success: false, message: 'User is not blocked' };
+      return { success: false, message: 'User is not blocked' }
     }
 
-    return { success: true, message: 'User unblocked successfully' };
+    return { success: true, message: 'User unblocked successfully' }
   }
 
   private async muteUser(
     params: Record<string, JsonValue>,
-    context: RequestContext
+    context: RequestContext,
   ): Promise<ExecutorOperationResult> {
-    const agentId = context.contextId || context.taskId;
-    const targetUserId = String(params.userId ?? '');
-    const reason = params.reason ? String(params.reason) : null;
+    const agentId = context.contextId || context.taskId
+    const targetUserId = String(params.userId ?? '')
+    const reason = params.reason ? String(params.reason) : null
 
     // Check if target user exists
     const targetUser = await db.user.findUnique({
       where: { id: targetUserId },
       select: { id: true },
-    });
+    })
 
     if (!targetUser) {
-      throw new Error(`User ${targetUserId} not found`);
+      throw new Error(`User ${targetUserId} not found`)
     }
 
     // Check if already muted
@@ -937,10 +1007,10 @@ export class BabylonAgentExecutor implements AgentExecutor {
         muterId: agentId,
         mutedId: targetUserId,
       },
-    });
+    })
 
     if (existingMute) {
-      return { success: false, message: 'User is already muted' };
+      return { success: false, message: 'User is already muted' }
     }
 
     // Create mute
@@ -949,60 +1019,69 @@ export class BabylonAgentExecutor implements AgentExecutor {
         id: await generateSnowflakeId(),
         muterId: agentId,
         mutedId: targetUserId,
-        reason: reason || null,
       },
-    });
+    })
 
-    return { success: true, message: 'User muted successfully', mute };
+    return {
+      success: true,
+      message: 'User muted successfully',
+      mute: {
+        id: mute.id,
+        muterId: mute.muterId,
+        mutedId: mute.mutedId,
+        reason: reason || null,
+        createdAt: mute.createdAt,
+      },
+    }
   }
 
   private async unmuteUser(
     params: Record<string, JsonValue>,
-    context: RequestContext
+    context: RequestContext,
   ): Promise<ExecutorOperationResult> {
-    const agentId = context.contextId || context.taskId;
-    const targetUserId = String(params.userId ?? '');
+    const agentId = context.contextId || context.taskId
+    const targetUserId = String(params.userId ?? '')
 
     const deleted = await db.userMute.deleteMany({
       where: {
         muterId: agentId,
         mutedId: targetUserId,
       },
-    });
+    })
 
     if (deleted.count === 0) {
-      return { success: false, message: 'User is not muted' };
+      return { success: false, message: 'User is not muted' }
     }
 
-    return { success: true, message: 'User unmuted successfully' };
+    return { success: true, message: 'User unmuted successfully' }
   }
 
   private async reportUser(
     params: Record<string, JsonValue>,
-    context: RequestContext
+    context: RequestContext,
   ): Promise<ExecutorOperationResult> {
-    const agentId = context.contextId || context.taskId;
-    const targetUserId = String(params.userId ?? '');
-    const category = String(params.category ?? 'other');
-    const reason = String(params.reason ?? '');
-    const evidence = params.evidence ? String(params.evidence) : null;
+    const agentId = context.contextId || context.taskId
+    const targetUserId = String(params.userId ?? '')
+    const category = String(params.category ?? 'other')
+    const reason = String(params.reason ?? '')
+    const evidence = params.evidence ? String(params.evidence) : null
 
     // Check if target user exists
     const targetUser = await db.user.findUnique({
       where: { id: targetUserId },
       select: { id: true },
-    });
+    })
 
     if (!targetUser) {
-      throw new Error(`User ${targetUserId} not found`);
+      throw new Error(`User ${targetUserId} not found`)
     }
 
     // Determine priority based on category
-    let priority = 'normal';
+    let priority = 'normal'
     if (['hate_speech', 'violence', 'self_harm'].includes(category)) {
-      priority = 'high';
+      priority = 'high'
     } else if (category === 'spam') {
-      priority = 'low';
+      priority = 'low'
     }
 
     // Create report
@@ -1011,45 +1090,62 @@ export class BabylonAgentExecutor implements AgentExecutor {
         id: await generateSnowflakeId(),
         reporterId: agentId,
         reportedUserId: targetUserId,
+        reason: `[${category}] ${reason}`,
+        description: evidence || null,
+        status: 'pending',
+        metadata: { reportType: 'user', category, priority },
+      },
+    })
+
+    return {
+      success: true,
+      message: 'Report submitted successfully',
+      report: {
+        id: report.id,
+        reporterId: report.reporterId,
+        reportedUserId: report.reportedUserId,
+        reportedPostId: report.reportedPostId,
         reportType: 'user',
         category,
-        reason,
+        reason: report.reason,
         evidence: evidence || null,
         priority,
-        status: 'pending',
+        status: report.status,
+        createdAt: report.createdAt,
         updatedAt: new Date(),
+        resolution: null,
+        resolvedAt: null,
+        resolvedBy: null,
       },
-    });
-
-    return { success: true, message: 'Report submitted successfully', report };
+    }
   }
 
   private async reportPost(
     params: Record<string, JsonValue>,
-    context: RequestContext
+    context: RequestContext,
   ): Promise<ExecutorOperationResult> {
-    const agentId = context.contextId || context.taskId;
-    const postId = String(params.postId ?? '');
-    const category = String(params.category ?? 'other');
-    const reason = String(params.reason ?? '');
-    const evidence = params.evidence ? String(params.evidence) : null;
+    const agentId = context.contextId || context.taskId
+    const postId = String(params.postId ?? '')
+    const category = String(params.category ?? 'other')
+    const reason = String(params.reason ?? '')
+    const evidence = params.evidence ? String(params.evidence) : null
 
     // Check if post exists
     const post = await db.post.findUnique({
       where: { id: postId },
       select: { id: true, authorId: true },
-    });
+    })
 
     if (!post) {
-      throw new Error(`Post ${postId} not found`);
+      throw new Error(`Post ${postId} not found`)
     }
 
     // Determine priority based on category
-    let priority = 'normal';
+    let priority = 'normal'
     if (['hate_speech', 'violence', 'self_harm'].includes(category)) {
-      priority = 'high';
+      priority = 'high'
     } else if (category === 'spam') {
-      priority = 'low';
+      priority = 'low'
     }
 
     // Create report
@@ -1058,26 +1154,43 @@ export class BabylonAgentExecutor implements AgentExecutor {
         id: await generateSnowflakeId(),
         reporterId: agentId,
         reportedPostId: postId,
+        reason: `[${category}] ${reason}`,
+        description: evidence || null,
+        status: 'pending',
+        metadata: { reportType: 'post', category, priority },
+      },
+    })
+
+    return {
+      success: true,
+      message: 'Report submitted successfully',
+      report: {
+        id: report.id,
+        reporterId: report.reporterId,
+        reportedUserId: report.reportedUserId,
+        reportedPostId: report.reportedPostId,
         reportType: 'post',
         category,
-        reason,
+        reason: report.reason,
         evidence: evidence || null,
         priority,
-        status: 'pending',
+        status: report.status,
+        createdAt: report.createdAt,
         updatedAt: new Date(),
+        resolution: null,
+        resolvedAt: null,
+        resolvedBy: null,
       },
-    });
-
-    return { success: true, message: 'Report submitted successfully', report };
+    }
   }
 
   private async getBlocks(
     params: Record<string, JsonValue>,
-    context: RequestContext
+    context: RequestContext,
   ): Promise<ExecutorOperationResult> {
-    const agentId = context.contextId || context.taskId;
-    const limit = params.limit ? Number(params.limit) : 20;
-    const offset = params.offset ? Number(params.offset) : 0;
+    const agentId = context.contextId || context.taskId
+    const limit = params.limit ? Number(params.limit) : 20
+    const offset = params.offset ? Number(params.offset) : 0
 
     const [blocks, total] = await Promise.all([
       db.userBlock.findMany({
@@ -1099,7 +1212,7 @@ export class BabylonAgentExecutor implements AgentExecutor {
       db.userBlock.count({
         where: { blockerId: agentId },
       }),
-    ]);
+    ])
 
     return {
       blocks,
@@ -1108,16 +1221,16 @@ export class BabylonAgentExecutor implements AgentExecutor {
         offset,
         total,
       },
-    };
+    }
   }
 
   private async getMutes(
     params: Record<string, JsonValue>,
-    context: RequestContext
+    context: RequestContext,
   ): Promise<ExecutorOperationResult> {
-    const agentId = context.contextId || context.taskId;
-    const limit = params.limit ? Number(params.limit) : 20;
-    const offset = params.offset ? Number(params.offset) : 0;
+    const agentId = context.contextId || context.taskId
+    const limit = params.limit ? Number(params.limit) : 20
+    const offset = params.offset ? Number(params.offset) : 0
 
     const [mutes, total] = await Promise.all([
       db.userMute.findMany({
@@ -1139,24 +1252,30 @@ export class BabylonAgentExecutor implements AgentExecutor {
       db.userMute.count({
         where: { muterId: agentId },
       }),
-    ]);
+    ])
 
     return {
-      mutes,
+      mutes: mutes.map((m) => ({
+        id: m.id,
+        muterId: m.muterId,
+        mutedId: m.mutedId,
+        createdAt: m.createdAt,
+        reason: null,
+      })),
       pagination: {
         limit,
         offset,
         total,
       },
-    };
+    }
   }
 
   private async checkBlockStatus(
     params: Record<string, JsonValue>,
-    context: RequestContext
+    context: RequestContext,
   ): Promise<ExecutorOperationResult> {
-    const agentId = context.contextId || context.taskId;
-    const targetUserId = String(params.userId ?? '');
+    const agentId = context.contextId || context.taskId
+    const targetUserId = String(params.userId ?? '')
 
     const block = await db.userBlock.findFirst({
       where: {
@@ -1168,20 +1287,20 @@ export class BabylonAgentExecutor implements AgentExecutor {
         createdAt: true,
         reason: true,
       },
-    });
+    })
 
     return {
       isBlocked: !!block,
       block,
-    };
+    }
   }
 
   private async checkMuteStatus(
     params: Record<string, JsonValue>,
-    context: RequestContext
+    context: RequestContext,
   ): Promise<ExecutorOperationResult> {
-    const agentId = context.contextId || context.taskId;
-    const targetUserId = String(params.userId ?? '');
+    const agentId = context.contextId || context.taskId
+    const targetUserId = String(params.userId ?? '')
 
     const mute = await db.userMute.findFirst({
       where: {
@@ -1191,13 +1310,14 @@ export class BabylonAgentExecutor implements AgentExecutor {
       select: {
         id: true,
         createdAt: true,
-        reason: true,
       },
-    });
+    })
 
     return {
       isMuted: !!mute,
-      mute,
-    };
+      mute: mute
+        ? { id: mute.id, createdAt: mute.createdAt, reason: null }
+        : null,
+    }
   }
 }

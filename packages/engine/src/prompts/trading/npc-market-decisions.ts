@@ -9,8 +9,8 @@
  * - Their personality and tier
  */
 
-import { shuffleArray } from '../../utils/randomization';
-import { definePrompt } from '../define-prompt';
+import { shuffleArray } from '../../utils/randomization'
+import { definePrompt } from '../define-prompt'
 
 /**
  * Example trading decisions for the prompt.
@@ -18,17 +18,17 @@ import { definePrompt } from '../define-prompt';
  * from over-fitting to a fixed order.
  */
 interface TradingExample {
-  title: string;
-  npcId: string;
-  npcName: string;
-  reasoning: string;
-  action: string;
-  marketType: string;
-  ticker: string;
-  marketId: string;
-  positionId: string;
-  amount: number;
-  confidence: number;
+  title: string
+  npcId: string
+  npcName: string
+  reasoning: string
+  action: string
+  marketType: string
+  ticker: string
+  marketId: string
+  positionId: string
+  amount: number
+  confidence: number
 }
 
 const TRADING_EXAMPLES: TradingExample[] = [
@@ -112,7 +112,7 @@ const TRADING_EXAMPLES: TradingExample[] = [
     amount: 2500,
     confidence: 0.6,
   },
-];
+]
 
 /**
  * Formats a single trading example into XML format for the prompt.
@@ -132,7 +132,7 @@ function formatExample(example: TradingExample, index: number): string {
     <amount>${example.amount}</amount>
     <confidence>${example.confidence}</confidence>
   </decision>
-</decisions>`;
+</decisions>`
 }
 
 /**
@@ -149,8 +149,8 @@ function formatExample(example: TradingExample, index: number): string {
  * ```
  */
 export function getShuffledExamplesText(): string {
-  const shuffled = shuffleArray(TRADING_EXAMPLES);
-  return shuffled.map((ex, i) => formatExample(ex, i)).join('\n\n');
+  const shuffled = shuffleArray(TRADING_EXAMPLES)
+  return shuffled.map((ex, i) => formatExample(ex, i)).join('\n\n')
 }
 
 /**
@@ -257,4 +257,4 @@ TRADERS:
 {{npcsList}}
 
 Generate {{npcCount}} decisions as XML (each decision must include narrativeConnection explaining why):`,
-});
+})

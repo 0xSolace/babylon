@@ -1,59 +1,62 @@
 /**
  * Snowflake ID Generator
  *
- * @description Generates unique 64-bit IDs similar to Twitter's Snowflake system.
- * Provides distributed ID generation with timestamp ordering and worker isolation.
+ * Generates unique 64-bit IDs similar to Twitter's Snowflake system.
  *
  * Structure (64 bits total):
  * - 1 bit: Always 0 (sign bit for compatibility)
  * - 41 bits: Timestamp in milliseconds since custom epoch (2024-01-01)
  * - 10 bits: Worker/Machine ID (0-1023)
  * - 12 bits: Sequence number (0-4095)
- *
- * This allows for:
- * - 69 years of timestamps (from epoch)
- * - 1024 different workers/machines
- * - 4096 IDs per millisecond per worker
- * - Total: ~4 million IDs per second per worker
  */
 
 // Custom epoch: January 1, 2024 00:00:00 UTC
-const EPOCH = 1704067200000n; // BigInt for precision
+const EPOCH = 1704067200000n
 
 // Bit lengths
-const WORKER_BITS = 10n;
-const SEQUENCE_BITS = 12n;
+const WORKER_BITS = 10n
+const SEQUENCE_BITS = 12n
 
 // Maximum values
-const MAX_WORKER_ID = (1n << WORKER_BITS) - 1n; // 1023
-const MAX_SEQUENCE = (1n << SEQUENCE_BITS) - 1n; // 4095
+const MAX_WORKER_ID = (1n << WORKER_BITS) - 1n // 1023
+const MAX_SEQUENCE = (1n << SEQUENCE_BITS) - 1n // 4095
 
 // Bit shifts
-const TIMESTAMP_SHIFT = WORKER_BITS + SEQUENCE_BITS; // 22
-const WORKER_SHIFT = SEQUENCE_BITS; // 12
+const TIMESTAMP_SHIFT = WORKER_BITS + SEQUENCE_BITS // 22
+const WORKER_SHIFT = SEQUENCE_BITS // 12
+
+/**
+ * Parsed snowflake ID components
+ */
+export interface SnowflakeParsed {
+  timestamp: Date
+  workerId: number
+  sequence: number
+}
+
+/**
+ * Queue item for async ID generation
+ */
+interface QueueItem {
+  resolve: (value: string) => void
+  reject: (error: Error) => void
+}
 
 /**
  * Snowflake ID Generator Class
- *
- * @description Generates unique, ordered IDs using the Snowflake algorithm.
- * Thread-safe with async queue for concurrent ID generation. Ensures IDs are
- * always increasing and unique across workers.
  */
-class SnowflakeGenerator {
-  private workerId: bigint;
-  private sequence = 0n;
-  private lastTimestamp = 0n;
-  private generating = false;
-  private queue: Array<{
-    resolve: (value: string) => void;
-    reject: (error: Error) => void;
-  }> = [];
+export class SnowflakeGenerator {
+  private workerId: bigint
+  private sequence = 0n
+  private lastTimestamp = 0n
+  private generating = false
+  private queue: QueueItem[] = []
 
   constructor(workerId = 0) {
     if (workerId < 0 || workerId > Number(MAX_WORKER_ID)) {
-      throw new Error(`Worker ID must be between 0 and ${MAX_WORKER_ID}`);
+      throw new Error(`Worker ID must be between 0 and ${MAX_WORKER_ID}`)
     }
-    this.workerId = BigInt(workerId);
+    this.workerId = BigInt(workerId)
   }
 
   /**
@@ -61,9 +64,9 @@ class SnowflakeGenerator {
    */
   async generate(): Promise<string> {
     return new Promise((resolve, reject) => {
-      this.queue.push({ resolve, reject });
-      this.processQueue();
-    });
+      this.queue.push({ resolve, reject })
+      this.processQueue()
+    })
   }
 
   /**
@@ -71,134 +74,110 @@ class SnowflakeGenerator {
    */
   private processQueue(): void {
     if (this.generating || this.queue.length === 0) {
-      return;
+      return
     }
 
-    this.generating = true;
-    const request = this.queue.shift()!;
+    this.generating = true
+    const request = this.queue.shift()
+    if (!request) {
+      this.generating = false
+      return
+    }
 
-    const id = this.generateSync();
-    request.resolve(id);
-    this.generating = false;
+    const id = this.generateSync()
+    request.resolve(id)
+    this.generating = false
+
     // Process next item in queue
-    queueMicrotask(() => this.processQueue());
+    if (this.queue.length > 0) {
+      setImmediate(() => this.processQueue())
+    }
   }
 
   /**
-   * Generate a new Snowflake ID (synchronous internal method)
+   * Generate a new Snowflake ID (synchronous, internal use)
    */
   private generateSync(): string {
-    let timestamp = BigInt(Date.now()) - EPOCH;
+    let timestamp = BigInt(Date.now()) - EPOCH
 
-    // If same millisecond, increment sequence
     if (timestamp === this.lastTimestamp) {
-      this.sequence = (this.sequence + 1n) & MAX_SEQUENCE;
-
-      // If sequence overflow, wait for next millisecond
+      this.sequence = (this.sequence + 1n) & MAX_SEQUENCE
       if (this.sequence === 0n) {
-        timestamp = this.waitNextMillis(timestamp);
+        // Sequence exhausted, wait for next millisecond
+        while (timestamp <= this.lastTimestamp) {
+          timestamp = BigInt(Date.now()) - EPOCH
+        }
       }
     } else {
-      // New millisecond, reset sequence
-      this.sequence = 0n;
+      this.sequence = 0n
     }
 
-    // Timestamp should never go backwards
-    if (timestamp < this.lastTimestamp) {
-      throw new Error('Clock moved backwards. Refusing to generate ID.');
-    }
+    this.lastTimestamp = timestamp
 
-    this.lastTimestamp = timestamp;
-
-    // Construct the ID
     const id =
       (timestamp << TIMESTAMP_SHIFT) |
       (this.workerId << WORKER_SHIFT) |
-      this.sequence;
+      this.sequence
 
-    return id.toString();
+    return id.toString()
   }
 
   /**
-   * Wait for the next millisecond
+   * Parse a Snowflake ID into its components
    */
-  private waitNextMillis(lastTimestamp: bigint): bigint {
-    let timestamp = BigInt(Date.now()) - EPOCH;
-    while (timestamp <= lastTimestamp) {
-      timestamp = BigInt(Date.now()) - EPOCH;
-    }
-    return timestamp;
-  }
+  static parse(id: string): SnowflakeParsed {
+    const idBigInt = BigInt(id)
 
-  /**
-   * Parse a Snowflake ID to extract its components
-   */
-  static parse(id: string | bigint): {
-    timestamp: Date;
-    workerId: number;
-    sequence: number;
-  } {
-    const idBigInt = typeof id === 'string' ? BigInt(id) : id;
-
-    const timestamp = (idBigInt >> TIMESTAMP_SHIFT) + EPOCH;
-    const workerId = (idBigInt >> WORKER_SHIFT) & MAX_WORKER_ID;
-    const sequence = idBigInt & MAX_SEQUENCE;
+    const timestamp = Number((idBigInt >> TIMESTAMP_SHIFT) + EPOCH)
+    const workerId = Number((idBigInt >> WORKER_SHIFT) & MAX_WORKER_ID)
+    const sequence = Number(idBigInt & MAX_SEQUENCE)
 
     return {
-      timestamp: new Date(Number(timestamp)),
-      workerId: Number(workerId),
-      sequence: Number(sequence),
-    };
-  }
-
-  /**
-   * Check if a string is a valid Snowflake ID
-   */
-  static isValid(id: string): boolean {
-    const idBigInt = BigInt(id);
-    if (idBigInt < 0n || idBigInt >= 1n << 63n) {
-      return false;
+      timestamp: new Date(timestamp),
+      workerId,
+      sequence,
     }
-    SnowflakeGenerator.parse(idBigInt);
-    return true;
   }
 }
 
-// Singleton instance - uses worker ID from environment or defaults to 0
-let instance: SnowflakeGenerator | null = null;
+// Default generator instance
+let defaultGenerator: SnowflakeGenerator | null = null
 
 /**
- * Get or create the global Snowflake generator instance
+ * Get or create the default generator
  */
-function getGenerator(): SnowflakeGenerator {
-  if (!instance) {
-    const workerId = process.env.WORKER_ID
-      ? Number.parseInt(process.env.WORKER_ID, 10)
-      : 0;
-    instance = new SnowflakeGenerator(workerId);
+function getDefaultGenerator(): SnowflakeGenerator {
+  if (!defaultGenerator) {
+    // Use process ID as worker ID (mod 1024 for safety)
+    const workerId = (process.pid || 0) % 1024
+    defaultGenerator = new SnowflakeGenerator(workerId)
   }
-  return instance;
+  return defaultGenerator
 }
 
 /**
- * Generate a new Snowflake ID (convenience function)
+ * Generate a new Snowflake ID using the default generator
  */
 export async function generateSnowflakeId(): Promise<string> {
-  return await getGenerator().generate();
+  return getDefaultGenerator().generate()
 }
 
 /**
- * Parse a Snowflake ID (convenience function)
+ * Parse a Snowflake ID into its components
  */
-export function parseSnowflakeId(id: string | bigint) {
-  return SnowflakeGenerator.parse(id);
+export function parseSnowflakeId(id: string): SnowflakeParsed {
+  return SnowflakeGenerator.parse(id)
 }
 
 /**
- * Check if a string is a valid Snowflake ID (convenience function)
+ * Validate a Snowflake ID
  */
 export function isValidSnowflakeId(id: string): boolean {
-  return SnowflakeGenerator.isValid(id);
+  try {
+    const idBigInt = BigInt(id)
+    // Must be positive and fit in 64 bits
+    return idBigInt > 0n && idBigInt < 2n ** 64n
+  } catch {
+    return false
+  }
 }
-
-export { SnowflakeGenerator };

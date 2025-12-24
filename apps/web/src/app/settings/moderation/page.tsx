@@ -4,160 +4,158 @@
  * Manage blocked and muted users
  */
 
-'use client';
-
-import { cn } from '@babylon/shared';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Ban, Trash2, UserX, VolumeX } from 'lucide-react';
-import { useState } from 'react';
-import { toast } from 'sonner';
-import { Avatar } from '@/components/shared/Avatar';
-import { PageContainer } from '@/components/shared/PageContainer';
-import { Skeleton } from '@/components/shared/Skeleton';
-import { useAuth } from '@/hooks/useAuth';
+import { cn } from '@babylon/shared'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Ban, Trash2, UserX, VolumeX } from 'lucide-react'
+import { useState } from 'react'
+import { toast } from 'sonner'
+import { Avatar } from '@/components/shared/Avatar'
+import { PageContainer } from '@/components/shared/PageContainer'
+import { Skeleton } from '@/components/shared/Skeleton'
+import { useAuth } from '@/hooks/useAuth'
 
 interface BlockedUser {
-  id: string;
-  createdAt: string;
-  reason: string | null;
+  id: string
+  createdAt: string
+  reason: string | null
   blocked: {
-    id: string;
-    username: string | null;
-    displayName: string | null;
-    profileImageUrl: string | null;
-  };
+    id: string
+    username: string | null
+    displayName: string | null
+    profileImageUrl: string | null
+  }
 }
 
 interface MutedUser {
-  id: string;
-  createdAt: string;
-  reason: string | null;
+  id: string
+  createdAt: string
+  reason: string | null
   muted: {
-    id: string;
-    username: string | null;
-    displayName: string | null;
-    profileImageUrl: string | null;
-  };
+    id: string
+    username: string | null
+    displayName: string | null
+    profileImageUrl: string | null
+  }
 }
 
 interface BlocksResponse {
-  blocks: BlockedUser[];
+  blocks: BlockedUser[]
 }
 
 interface MutesResponse {
-  mutes: MutedUser[];
+  mutes: MutedUser[]
 }
 
-type Tab = 'blocked' | 'muted';
+type Tab = 'blocked' | 'muted'
 
 export default function ModerationSettingsPage() {
-  const { authenticated } = useAuth();
-  const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState<Tab>('blocked');
+  const { authenticated } = useAuth()
+  const queryClient = useQueryClient()
+  const [activeTab, setActiveTab] = useState<Tab>('blocked')
 
   const { data: blockedUsers = [], isLoading: blockedLoading } = useQuery({
     queryKey: ['moderation', 'blocks'],
     queryFn: async (): Promise<BlockedUser[]> => {
-      const response = await fetch('/api/moderation/blocks');
+      const response = await fetch('/api/moderation/blocks')
       if (!response.ok) {
-        throw new Error('Failed to load blocked users');
+        throw new Error('Failed to load blocked users')
       }
-      const data = (await response.json()) as BlocksResponse;
-      return data.blocks || [];
+      const data = (await response.json()) as BlocksResponse
+      return data.blocks || []
     },
     enabled: authenticated,
-  });
+  })
 
   const { data: mutedUsers = [], isLoading: mutedLoading } = useQuery({
     queryKey: ['moderation', 'mutes'],
     queryFn: async (): Promise<MutedUser[]> => {
-      const response = await fetch('/api/moderation/mutes');
+      const response = await fetch('/api/moderation/mutes')
       if (!response.ok) {
-        throw new Error('Failed to load muted users');
+        throw new Error('Failed to load muted users')
       }
-      const data = (await response.json()) as MutesResponse;
-      return data.mutes || [];
+      const data = (await response.json()) as MutesResponse
+      return data.mutes || []
     },
     enabled: authenticated,
-  });
+  })
 
-  const loading = blockedLoading || mutedLoading;
+  const loading = blockedLoading || mutedLoading
 
   const unblockMutation = useMutation({
     mutationFn: async ({
       userId,
       displayName,
     }: {
-      userId: string;
-      displayName: string;
+      userId: string
+      displayName: string
     }) => {
       const response = await fetch(`/api/users/${userId}/block`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'unblock' }),
-      });
+      })
 
       if (!response.ok) {
-        throw new Error('Failed to unblock user');
+        throw new Error('Failed to unblock user')
       }
 
-      return displayName;
+      return displayName
     },
     onSuccess: (displayName) => {
-      toast.success(`Unblocked ${displayName}`);
+      toast.success(`Unblocked ${displayName}`)
       void queryClient.invalidateQueries({
         queryKey: ['moderation', 'blocks'],
-      });
+      })
     },
     onError: () => {
-      toast.error('Failed to unblock user');
+      toast.error('Failed to unblock user')
     },
-  });
+  })
 
   const unmuteMutation = useMutation({
     mutationFn: async ({
       userId,
       displayName,
     }: {
-      userId: string;
-      displayName: string;
+      userId: string
+      displayName: string
     }) => {
       const response = await fetch(`/api/users/${userId}/mute`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'unmute' }),
-      });
+      })
 
       if (!response.ok) {
-        throw new Error('Failed to unmute user');
+        throw new Error('Failed to unmute user')
       }
 
-      return displayName;
+      return displayName
     },
     onSuccess: (displayName) => {
-      toast.success(`Unmuted ${displayName}`);
-      void queryClient.invalidateQueries({ queryKey: ['moderation', 'mutes'] });
+      toast.success(`Unmuted ${displayName}`)
+      void queryClient.invalidateQueries({ queryKey: ['moderation', 'mutes'] })
     },
     onError: () => {
-      toast.error('Failed to unmute user');
+      toast.error('Failed to unmute user')
     },
-  });
+  })
 
   const handleUnblock = (userId: string, displayName: string) => {
-    unblockMutation.mutate({ userId, displayName });
-  };
+    unblockMutation.mutate({ userId, displayName })
+  }
 
   const handleUnmute = (userId: string, displayName: string) => {
-    unmuteMutation.mutate({ userId, displayName });
-  };
+    unmuteMutation.mutate({ userId, displayName })
+  }
 
   const formatDate = (date: string) => {
     return new Date(date).toLocaleDateString('en-US', {
       month: 'short',
       day: 'numeric',
       year: 'numeric',
-    });
-  };
+    })
+  }
 
   if (!authenticated) {
     return (
@@ -168,7 +166,7 @@ export default function ModerationSettingsPage() {
           </p>
         </div>
       </PageContainer>
-    );
+    )
   }
 
   return (
@@ -185,24 +183,26 @@ export default function ModerationSettingsPage() {
         {/* Tabs */}
         <div className="mb-6 flex gap-2 border-border border-b">
           <button
+            type="button"
             onClick={() => setActiveTab('blocked')}
             className={cn(
               '-mb-[1px] flex items-center gap-2 border-b-2 px-4 py-2 font-medium transition-colors',
               activeTab === 'blocked'
                 ? 'border-primary text-primary'
-                : 'border-transparent text-muted-foreground hover:text-foreground'
+                : 'border-transparent text-muted-foreground hover:text-foreground',
             )}
           >
             <Ban className="h-4 w-4" />
             Blocked ({blockedUsers.length})
           </button>
           <button
+            type="button"
             onClick={() => setActiveTab('muted')}
             className={cn(
               '-mb-[1px] flex items-center gap-2 border-b-2 px-4 py-2 font-medium transition-colors',
               activeTab === 'muted'
                 ? 'border-primary text-primary'
-                : 'border-transparent text-muted-foreground hover:text-foreground'
+                : 'border-transparent text-muted-foreground hover:text-foreground',
             )}
           >
             <VolumeX className="h-4 w-4" />
@@ -232,9 +232,9 @@ export default function ModerationSettingsPage() {
                   </div>
                 ) : (
                   blockedUsers.map((block) => {
-                    const user = block.blocked;
+                    const user = block.blocked
                     const displayName =
-                      user.displayName || user.username || 'User';
+                      user.displayName || user.username || 'User'
 
                     return (
                       <div
@@ -265,6 +265,7 @@ export default function ModerationSettingsPage() {
                         </div>
 
                         <button
+                          type="button"
                           onClick={() => handleUnblock(user.id, displayName)}
                           className="flex items-center gap-2 rounded-lg bg-muted px-4 py-2 transition-colors hover:bg-muted/80"
                         >
@@ -272,7 +273,7 @@ export default function ModerationSettingsPage() {
                           Unblock
                         </button>
                       </div>
-                    );
+                    )
                   })
                 )}
               </div>
@@ -291,9 +292,9 @@ export default function ModerationSettingsPage() {
                   </div>
                 ) : (
                   mutedUsers.map((mute) => {
-                    const user = mute.muted;
+                    const user = mute.muted
                     const displayName =
-                      user.displayName || user.username || 'User';
+                      user.displayName || user.username || 'User'
 
                     return (
                       <div
@@ -324,6 +325,7 @@ export default function ModerationSettingsPage() {
                         </div>
 
                         <button
+                          type="button"
                           onClick={() => handleUnmute(user.id, displayName)}
                           className="flex items-center gap-2 rounded-lg bg-muted px-4 py-2 transition-colors hover:bg-muted/80"
                         >
@@ -331,7 +333,7 @@ export default function ModerationSettingsPage() {
                           Unmute
                         </button>
                       </div>
-                    );
+                    )
                   })
                 )}
               </div>
@@ -340,5 +342,5 @@ export default function ModerationSettingsPage() {
         )}
       </div>
     </PageContainer>
-  );
+  )
 }

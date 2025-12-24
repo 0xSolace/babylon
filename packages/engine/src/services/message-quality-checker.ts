@@ -6,39 +6,33 @@
  * chat invite chances, and risk of being booted from group chats.
  */
 
-import {
-  comments,
-  db,
-  desc,
-  eq,
-  messages,
-  userInteractions,
-} from '@babylon/db';
+import { comments, db, desc, eq, messages, userInteractions } from '@babylon/db'
 
 /**
  * Message quality check result
  */
 export interface QualityCheckResult {
-  score: number; // 0-1, where 1 is perfect
-  passed: boolean; // Whether message meets minimum standards
-  warnings: string[]; // Non-blocking issues
-  errors: string[]; // Blocking issues
+  score: number // 0-1, where 1 is perfect
+  passed: boolean // Whether message meets minimum standards
+  warnings: string[] // Non-blocking issues
+  errors: string[] // Blocking issues
   factors: {
-    length: number; // 0-1
-    uniqueness: number; // 0-1
-    contentQuality: number; // 0-1
-  };
+    length: number // 0-1
+    uniqueness: number // 0-1
+    contentQuality: number // 0-1
+  }
 }
 
 /**
  * Message Quality Checker Class
  */
+// biome-ignore lint/complexity/noStaticOnlyClass: Service pattern uses static methods for stateless operations
 export class MessageQualityChecker {
-  private static readonly MIN_LENGTH = 1;
-  private static readonly IDEAL_MIN_LENGTH = 30;
-  private static readonly IDEAL_MAX_LENGTH = 200;
-  private static readonly MAX_LENGTH = 500;
-  private static readonly DUPLICATE_THRESHOLD = 0.85;
+  private static readonly MIN_LENGTH = 1
+  private static readonly IDEAL_MIN_LENGTH = 30
+  private static readonly IDEAL_MAX_LENGTH = 200
+  private static readonly MAX_LENGTH = 500
+  private static readonly DUPLICATE_THRESHOLD = 0.85
 
   /**
    * Check message quality
@@ -47,18 +41,18 @@ export class MessageQualityChecker {
     message: string,
     userId: string,
     contextType: 'reply' | 'groupchat' | 'dm',
-    contextId: string
+    contextId: string,
   ): Promise<QualityCheckResult> {
-    const errors: string[] = [];
-    const warnings: string[] = [];
+    const errors: string[] = []
+    const warnings: string[] = []
 
     // 1. Check length
     const lengthScore = MessageQualityChecker.checkLength(
       message,
       contextType,
       errors,
-      warnings
-    );
+      warnings,
+    )
 
     // 2. Check for duplicates
     const uniquenessScore = await MessageQualityChecker.checkUniqueness(
@@ -67,20 +61,19 @@ export class MessageQualityChecker {
       contextType,
       contextId,
       errors,
-      warnings
-    );
+      warnings,
+    )
 
     // 3. Check content quality
     const contentScore = MessageQualityChecker.checkContent(
       message,
       contextType,
       errors,
-      warnings
-    );
+      warnings,
+    )
 
     // Calculate overall score (weighted average)
-    const score =
-      lengthScore * 0.3 + uniquenessScore * 0.4 + contentScore * 0.3;
+    const score = lengthScore * 0.3 + uniquenessScore * 0.4 + contentScore * 0.3
 
     return {
       score,
@@ -92,7 +85,7 @@ export class MessageQualityChecker {
         uniqueness: uniquenessScore,
         contentQuality: contentScore,
       },
-    };
+    }
   }
 
   /**
@@ -102,39 +95,39 @@ export class MessageQualityChecker {
     message: string,
     contextType: 'reply' | 'groupchat' | 'dm',
     errors: string[],
-    warnings: string[]
+    warnings: string[],
   ): number {
-    const length = message.trim().length;
+    const length = message.trim().length
 
     if (length < MessageQualityChecker.MIN_LENGTH) {
-      errors.push('Message cannot be empty');
-      return 0;
+      errors.push('Message cannot be empty')
+      return 0
     }
 
     if (length > MessageQualityChecker.MAX_LENGTH) {
       errors.push(
-        `Message too long (max ${MessageQualityChecker.MAX_LENGTH} characters)`
-      );
-      return 0;
+        `Message too long (max ${MessageQualityChecker.MAX_LENGTH} characters)`,
+      )
+      return 0
     }
 
     // DMs: allow any non-empty length without soft warnings
     if (contextType === 'dm') {
-      return 1.0;
+      return 1.0
     }
 
     if (length < MessageQualityChecker.IDEAL_MIN_LENGTH) {
-      warnings.push('Message is short (still allowed)');
-      return 0.6;
+      warnings.push('Message is short (still allowed)')
+      return 0.6
     }
 
     if (length > MessageQualityChecker.IDEAL_MAX_LENGTH) {
-      warnings.push('Message is a bit long for best quality score');
-      return 0.8;
+      warnings.push('Message is a bit long for best quality score')
+      return 0.8
     }
 
     // Perfect length
-    return 1.0;
+    return 1.0
   }
 
   /**
@@ -146,15 +139,15 @@ export class MessageQualityChecker {
     contextType: 'reply' | 'groupchat' | 'dm',
     contextId: string,
     errors: string[],
-    warnings: string[]
+    warnings: string[],
   ): Promise<number> {
     // Skip uniqueness check for game chats (empty contextId)
     if (!contextId) {
-      return 1.0;
+      return 1.0
     }
 
     // Get recent messages from this user
-    let recentMessages: string[] = [];
+    let recentMessages: string[] = []
 
     if (contextType === 'reply') {
       // Check comments from this user on any post
@@ -163,8 +156,8 @@ export class MessageQualityChecker {
         .from(comments)
         .where(eq(comments.authorId, userId))
         .orderBy(desc(comments.createdAt))
-        .limit(20);
-      recentMessages = recentComments.map((c) => c.content);
+        .limit(20)
+      recentMessages = recentComments.map((c) => String(c.content ?? ''))
     } else if (contextType === 'dm' || contextType === 'groupchat') {
       // Check messages from this user in this chat
       const recentChatMessages = await db
@@ -172,33 +165,33 @@ export class MessageQualityChecker {
         .from(messages)
         .where(eq(messages.senderId, userId))
         .orderBy(desc(messages.createdAt))
-        .limit(20);
-      recentMessages = recentChatMessages.map((m) => m.content);
+        .limit(20)
+      recentMessages = recentChatMessages.map((m) => String(m.content ?? ''))
     }
 
     // Check similarity with recent messages
-    const normalizedMessage = MessageQualityChecker.normalizeText(message);
-    let highestSimilarity = 0;
+    const normalizedMessage = MessageQualityChecker.normalizeText(message)
+    let highestSimilarity = 0
 
     for (const recentMessage of recentMessages) {
       const similarity = MessageQualityChecker.calculateSimilarity(
         normalizedMessage,
-        MessageQualityChecker.normalizeText(recentMessage)
-      );
-      highestSimilarity = Math.max(highestSimilarity, similarity);
+        MessageQualityChecker.normalizeText(recentMessage),
+      )
+      highestSimilarity = Math.max(highestSimilarity, similarity)
 
       if (similarity >= MessageQualityChecker.DUPLICATE_THRESHOLD) {
-        errors.push('Message is too similar to a recent message you posted');
-        return 0;
+        errors.push('Message is too similar to a recent message you posted')
+        return 0
       }
     }
 
     if (highestSimilarity > 0.7) {
-      warnings.push('Message is somewhat similar to a recent message');
-      return 0.7;
+      warnings.push('Message is somewhat similar to a recent message')
+      return 0.7
     }
 
-    return 1.0;
+    return 1.0
   }
 
   /**
@@ -208,48 +201,48 @@ export class MessageQualityChecker {
     message: string,
     contextType: 'reply' | 'groupchat' | 'dm',
     errors: string[],
-    warnings: string[]
+    warnings: string[],
   ): number {
-    const trimmed = message.trim();
+    const trimmed = message.trim()
 
     // Check for all caps (spam indicator)
-    const capsRatio = (trimmed.match(/[A-Z]/g) || []).length / trimmed.length;
+    const capsRatio = (trimmed.match(/[A-Z]/g) || []).length / trimmed.length
     if (capsRatio > 0.7 && trimmed.length > 20) {
-      warnings.push('Excessive caps usage may lower quality score');
-      return 0.6;
+      warnings.push('Excessive caps usage may lower quality score')
+      return 0.6
     }
 
     // Check for repeated characters (spammy)
     if (/(.)\1{4,}/.test(trimmed)) {
-      warnings.push('Repeated characters detected');
-      return 0.7;
+      warnings.push('Repeated characters detected')
+      return 0.7
     }
 
     // Check for excessive punctuation
     const punctuationRatio =
-      (trimmed.match(/[!?.,;:]/g) || []).length / trimmed.length;
+      (trimmed.match(/[!?.,;:]/g) || []).length / trimmed.length
     if (punctuationRatio > 0.3) {
-      warnings.push('Excessive punctuation usage');
-      return 0.7;
+      warnings.push('Excessive punctuation usage')
+      return 0.7
     }
 
     // Skip word-count softness for DMs
     if (contextType !== 'dm') {
-      const words = trimmed.split(/\s+/).filter((w) => w.length > 0);
+      const words = trimmed.split(/\s+/).filter((w) => w.length > 0)
       if (words.length < 3) {
-        warnings.push('Message has very few words (still allowed)');
-        return 0.6;
+        warnings.push('Message has very few words (still allowed)')
+        return 0.6
       }
     }
 
     // Check for URL spam (multiple URLs)
-    const urlCount = (trimmed.match(/https?:\/\//gi) || []).length;
+    const urlCount = (trimmed.match(/https?:\/\//gi) || []).length
     if (urlCount > 2) {
-      errors.push('Too many URLs in message');
-      return 0;
+      errors.push('Too many URLs in message')
+      return 0
     }
 
-    return 1.0;
+    return 1.0
   }
 
   /**
@@ -260,20 +253,20 @@ export class MessageQualityChecker {
       .toLowerCase()
       .replace(/[^\w\s]/g, '')
       .replace(/\s+/g, ' ')
-      .trim();
+      .trim()
   }
 
   /**
    * Calculate similarity between two texts (Jaccard similarity)
    */
   private static calculateSimilarity(text1: string, text2: string): number {
-    const words1 = new Set(text1.split(/\s+/));
-    const words2 = new Set(text2.split(/\s+/));
+    const words1 = new Set(text1.split(/\s+/))
+    const words2 = new Set(text2.split(/\s+/))
 
-    const intersection = new Set([...words1].filter((w) => words2.has(w)));
-    const union = new Set([...words1, ...words2]);
+    const intersection = new Set([...words1].filter((w) => words2.has(w)))
+    const union = new Set([...words1, ...words2])
 
-    return intersection.size / union.size;
+    return intersection.size / union.size
   }
 
   /**
@@ -283,7 +276,7 @@ export class MessageQualityChecker {
     const interactions = await db
       .select({ qualityScore: userInteractions.qualityScore })
       .from(userInteractions)
-      .where(eq(userInteractions.userId, userId));
+      .where(eq(userInteractions.userId, userId))
 
     if (interactions.length === 0) {
       return {
@@ -291,24 +284,24 @@ export class MessageQualityChecker {
         totalMessages: 0,
         highQualityCount: 0,
         lowQualityCount: 0,
-      };
+      }
     }
 
     const averageScore =
-      interactions.reduce((sum, i) => sum + i.qualityScore, 0) /
-      interactions.length;
+      interactions.reduce((sum, i) => sum + Number(i.qualityScore ?? 0), 0) /
+      interactions.length
     const highQualityCount = interactions.filter(
-      (i) => i.qualityScore >= 0.8
-    ).length;
+      (i) => Number(i.qualityScore ?? 0) >= 0.8,
+    ).length
     const lowQualityCount = interactions.filter(
-      (i) => i.qualityScore < 0.5
-    ).length;
+      (i) => Number(i.qualityScore ?? 0) < 0.5,
+    ).length
 
     return {
       averageScore,
       totalMessages: interactions.length,
       highQualityCount,
       lowQualityCount,
-    };
+    }
   }
 }

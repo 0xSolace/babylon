@@ -1,24 +1,22 @@
-'use client';
-
-import type { LikeButtonProps } from '@babylon/shared';
-import { cn } from '@babylon/shared';
-import { Frown, Heart, Laugh } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
-import { Skeleton } from '@/components/shared/Skeleton';
-import { useSocialTracking } from '@/hooks/usePostHog';
-import { useInteractionStore } from '@/stores/interactionStore';
+import type { LikeButtonProps } from '@babylon/shared'
+import { cn } from '@babylon/shared'
+import { Frown, Heart, Laugh } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { Skeleton } from '@/components/shared/Skeleton'
+import { useSocialTracking } from '@/hooks/usePostHog'
+import { useInteractionStore } from '@/stores/interactionStore'
 
 /**
  * Reaction configuration type for like button reactions.
  */
 type ReactionConfig = {
-  readonly icon: React.ComponentType<{ size?: number; className?: string }>;
-  readonly color: string;
-  readonly bgColor: string;
-  readonly hoverColor: string;
-  readonly label: string;
-  readonly fill: boolean;
-};
+  readonly icon: React.ComponentType<{ size?: number; className?: string }>
+  readonly color: string
+  readonly bgColor: string
+  readonly hoverColor: string
+  readonly label: string
+  readonly fill: boolean
+}
 
 /**
  * Available reaction types with icons, colors, and labels.
@@ -56,12 +54,12 @@ const REACTION_TYPES: Record<string, ReactionConfig> = {
     label: 'Sad',
     fill: false,
   },
-};
+}
 
 /**
  * Type for reaction type keys.
  */
-type ReactionType = keyof typeof REACTION_TYPES;
+type ReactionType = keyof typeof REACTION_TYPES
 
 /**
  * Like button component for posts and comments with reaction picker.
@@ -94,19 +92,19 @@ const sizeClasses = {
   sm: 'h-8 px-2 text-xs gap-1',
   md: 'h-10 px-3 text-sm gap-1.5',
   lg: 'h-12 px-4 text-base gap-2',
-};
+}
 
 const iconSizes = {
   sm: 18,
   md: 20,
   lg: 22,
-};
+}
 
 const skeletonSizes = {
   sm: 'w-4 h-4',
   md: 'w-5 h-5',
   lg: 'w-5 h-5',
-};
+}
 
 export function LikeButton({
   targetId,
@@ -119,14 +117,14 @@ export function LikeButton({
   className,
 }: LikeButtonProps & { initialReactionType?: ReactionType }) {
   // Ensure size is properly typed for index access
-  const sizeKey: 'sm' | 'md' | 'lg' = size;
+  const sizeKey: 'sm' | 'md' | 'lg' = size
   const [currentReaction, setCurrentReaction] =
-    useState<ReactionType>(initialReactionType);
-  const [showReactionPicker, setShowReactionPicker] = useState(false);
-  const [isAnimating, setIsAnimating] = useState(false);
+    useState<ReactionType>(initialReactionType)
+  const [showReactionPicker, setShowReactionPicker] = useState(false)
+  const [isAnimating, setIsAnimating] = useState(false)
 
-  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const longPressStartTime = useRef<number>(0);
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const longPressStartTime = useRef<number>(0)
 
   const {
     toggleLike,
@@ -134,95 +132,95 @@ export function LikeButton({
     postInteractions,
     commentInteractions,
     loadingStates,
-  } = useInteractionStore();
-  const { trackPostLike } = useSocialTracking();
+  } = useInteractionStore()
+  const { trackPostLike } = useSocialTracking()
 
   // Get state from store instead of local state
   const storeData =
     targetType === 'post'
       ? postInteractions.get(targetId)
-      : commentInteractions.get(targetId);
+      : commentInteractions.get(targetId)
 
-  const isLiked = storeData?.isLiked ?? initialLiked;
-  const likeCount = storeData?.likeCount ?? initialCount;
-  const isLoading = loadingStates.get(targetId) ?? false;
+  const isLiked = storeData?.isLiked ?? initialLiked
+  const likeCount = storeData?.likeCount ?? initialCount
+  const isLoading = loadingStates.get(targetId) ?? false
 
   // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (longPressTimer.current) {
-        clearTimeout(longPressTimer.current);
+        clearTimeout(longPressTimer.current)
       }
-    };
-  }, []);
+    }
+  }, [])
 
   const handleClick = async () => {
     // Trigger animation
-    setIsAnimating(true);
-    setTimeout(() => setIsAnimating(false), 300);
+    setIsAnimating(true)
+    setTimeout(() => setIsAnimating(false), 300)
 
-    const willBeLiked = !isLiked;
+    const willBeLiked = !isLiked
     if (targetType === 'post') {
-      await toggleLike(targetId);
+      await toggleLike(targetId)
       // Track like action (client-side for instant feedback)
       if (willBeLiked) {
-        trackPostLike(targetId, true);
+        trackPostLike(targetId, true)
       }
     } else {
-      await toggleCommentLike(targetId);
+      await toggleCommentLike(targetId)
     }
-  };
+  }
 
   const handleReactionSelect = async (reactionType: ReactionType) => {
-    setShowReactionPicker(false);
-    setCurrentReaction(reactionType);
+    setShowReactionPicker(false)
+    setCurrentReaction(reactionType)
 
     // Trigger animation
-    setIsAnimating(true);
-    setTimeout(() => setIsAnimating(false), 300);
+    setIsAnimating(true)
+    setTimeout(() => setIsAnimating(false), 300)
 
     if (targetType === 'post') {
-      await toggleLike(targetId);
+      await toggleLike(targetId)
     } else {
-      await toggleCommentLike(targetId);
+      await toggleCommentLike(targetId)
     }
-  };
+  }
 
   const handleMouseDown = () => {
-    longPressStartTime.current = Date.now();
+    longPressStartTime.current = Date.now()
     longPressTimer.current = setTimeout(() => {
-      setShowReactionPicker(true);
-    }, 500); // 500ms long press
-  };
+      setShowReactionPicker(true)
+    }, 500) // 500ms long press
+  }
 
   const handleMouseUp = () => {
     if (longPressTimer.current) {
-      clearTimeout(longPressTimer.current);
+      clearTimeout(longPressTimer.current)
     }
 
-    const pressDuration = Date.now() - longPressStartTime.current;
+    const pressDuration = Date.now() - longPressStartTime.current
 
     // If it was a short press and reaction picker isn't showing, treat as click
     if (pressDuration < 500 && !showReactionPicker) {
-      handleClick();
+      handleClick()
     }
-  };
+  }
 
   const handleMouseLeave = () => {
     if (longPressTimer.current) {
-      clearTimeout(longPressTimer.current);
+      clearTimeout(longPressTimer.current)
     }
-  };
+  }
 
-  const reaction = REACTION_TYPES[currentReaction];
+  const reaction = REACTION_TYPES[currentReaction]
   if (!reaction) {
     // Fallback to 'like' if reaction type is invalid
-    const fallbackReaction = REACTION_TYPES.like;
+    const fallbackReaction = REACTION_TYPES.like
     if (!fallbackReaction) {
       // This should never happen, but handle it gracefully
-      return null;
+      return null
     }
-    const FallbackIcon = fallbackReaction.icon;
+    const FallbackIcon = fallbackReaction.icon
     return (
       <div className="relative">
         <button
@@ -234,7 +232,7 @@ export function LikeButton({
             isLiked ? fallbackReaction.color : 'text-muted-foreground',
             sizeClasses[sizeKey],
             isLoading && 'cursor-wait opacity-50',
-            className
+            className,
           )}
         >
           {isLoading ? (
@@ -250,9 +248,9 @@ export function LikeButton({
           )}
         </button>
       </div>
-    );
+    )
   }
-  const Icon = reaction.icon;
+  const Icon = reaction.icon
 
   return (
     <div className="relative">
@@ -272,7 +270,7 @@ export function LikeButton({
           sizeClasses[sizeKey],
           isAnimating && 'scale-110',
           isLoading && 'cursor-wait opacity-50',
-          className
+          className,
         )}
       >
         {isLoading ? (
@@ -283,7 +281,7 @@ export function LikeButton({
             className={cn(
               'transition-all duration-200',
               isLiked && reaction.fill && 'fill-current',
-              isAnimating && 'animate-bounce'
+              isAnimating && 'animate-bounce',
             )}
           />
         )}
@@ -296,9 +294,16 @@ export function LikeButton({
       {showReactionPicker && (
         <>
           {/* Backdrop */}
-          <div
+          <button
+            type="button"
             className="fixed inset-0 z-40"
             onClick={() => setShowReactionPicker(false)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === 'Escape') {
+                e.preventDefault()
+                setShowReactionPicker(false)
+              }
+            }}
           />
 
           {/* Reaction Options */}
@@ -307,13 +312,13 @@ export function LikeButton({
               'absolute bottom-full left-1/2 z-50 mb-2 -translate-x-1/2',
               'flex items-center gap-2 p-2',
               'rounded-full border border-border bg-popover shadow-lg',
-              'fade-in slide-in-from-bottom-2 animate-in duration-200'
+              'fade-in slide-in-from-bottom-2 animate-in duration-200',
             )}
           >
             {(Object.keys(REACTION_TYPES) as ReactionType[]).map((type) => {
-              const reactionOption = REACTION_TYPES[type]!;
-              const OptionIcon = reactionOption.icon;
-              const isSelected = isLiked && currentReaction === type;
+              const reactionOption = REACTION_TYPES[type]
+              const OptionIcon = reactionOption.icon
+              const isSelected = isLiked && currentReaction === type
 
               return (
                 <button
@@ -324,7 +329,7 @@ export function LikeButton({
                     'rounded-full p-2 transition-all duration-200',
                     'hover:scale-125 active:scale-110',
                     reactionOption.hoverColor,
-                    isSelected && cn(reactionOption.bgColor, 'scale-110')
+                    isSelected && cn(reactionOption.bgColor, 'scale-110'),
                   )}
                   title={reactionOption.label}
                 >
@@ -332,15 +337,15 @@ export function LikeButton({
                     size={20}
                     className={cn(
                       reactionOption.color,
-                      reactionOption.fill && isSelected && 'fill-current'
+                      reactionOption.fill && isSelected && 'fill-current',
                     )}
                   />
                 </button>
-              );
+              )
             })}
           </div>
         </>
       )}
     </div>
-  );
+  )
 }

@@ -11,6 +11,8 @@
  *   ollama         - Manage Ollama local models (list, pull, delete)
  */
 
+import { promises as fs } from 'node:fs'
+import * as path from 'node:path'
 import {
   benchmarkResults,
   closeDatabase,
@@ -18,15 +20,24 @@ import {
   desc,
   eq,
   gte,
+  type TrainedModelSchema as TrainedModel,
   trainedModels,
   trajectories,
-} from '@babylon/db';
-import { HuggingFaceModelUploader } from '@babylon/training';
-import { promises as fs } from 'fs';
-import * as path from 'path';
-import { z } from 'zod';
-import { getFlag, getOption, parseArgs, wantsHelp } from '../lib/args.js';
-import { logger } from '../lib/logger.js';
+} from '@babylon/db'
+import { HuggingFaceModelUploader } from '@babylon/training'
+import { z } from 'zod'
+import { getFlag, getOption, parseArgs, wantsHelp } from '../lib/args.js'
+import { logger } from '../lib/logger.js'
+
+/** Type for trained model DB row */
+interface TrainedModelRow {
+  modelId: string
+  baseModel: string | null
+  status: string
+  createdAt: Date
+  huggingFaceRepo: string | null
+  benchmarkScore: number | null
+}
 
 // Zod schemas for Ollama API responses
 const OllamaModelDetailsSchema = z.object({
@@ -34,7 +45,7 @@ const OllamaModelDetailsSchema = z.object({
   family: z.string().optional(),
   parameter_size: z.string().optional(),
   quantization_level: z.string().optional(),
-});
+})
 
 const OllamaModelSchema = z.object({
   name: z.string(),
@@ -42,15 +53,15 @@ const OllamaModelSchema = z.object({
   digest: z.string(),
   modified_at: z.string(),
   details: OllamaModelDetailsSchema.optional(),
-});
+})
 
 const OllamaListResponseSchema = z.object({
   models: z.array(OllamaModelSchema).optional(),
-});
+})
 
 const OllamaPullResponseSchema = z.object({
   status: z.string().optional(),
-});
+})
 
 function printHelp(): void {
   console.log(`
@@ -103,7 +114,7 @@ EXAMPLES:
 
 ADVANCED:
   For full RL pipeline: babylon train pipeline --archetype <name>
-`);
+`)
 }
 
 /**
@@ -114,37 +125,37 @@ ADVANCED:
  * @internal
  */
 async function listModels(): Promise<void> {
-  logger.header('Trained Models');
+  logger.header('Trained Models')
 
-  const models = await db
+  const models = (await db
     .select()
     .from(trainedModels)
     .orderBy(desc(trainedModels.createdAt))
-    .limit(20);
+    .limit(20)) as unknown as TrainedModel[]
 
   if (models.length === 0) {
-    console.log('No trained models found in database.');
-    console.log('\nTo train a model:');
-    console.log('  babylon train archetype -a <archetype>');
-    return;
+    console.log('No trained models found in database.')
+    console.log('\nTo train a model:')
+    console.log('  babylon train archetype -a <archetype>')
+    return
   }
 
-  console.log(`Found ${models.length} model(s):\n`);
+  console.log(`Found ${models.length} model(s):\n`)
 
   for (const model of models) {
-    console.log(`${'─'.repeat(60)}`);
-    console.log(`Model ID:    ${model.modelId}`);
-    console.log(`Base Model:  ${model.baseModel || 'N/A'}`);
-    console.log(`Status:      ${model.status}`);
-    console.log(`Created:     ${model.createdAt.toISOString()}`);
+    console.log(`${'─'.repeat(60)}`)
+    console.log(`Model ID:    ${model.modelId}`)
+    console.log(`Base Model:  ${model.baseModel || 'N/A'}`)
+    console.log(`Status:      ${model.status}`)
+    console.log(`Created:     ${model.createdAt.toISOString()}`)
     if (model.huggingFaceRepo) {
-      console.log(`HuggingFace: ${model.huggingFaceRepo}`);
+      console.log(`HuggingFace: ${model.huggingFaceRepo}`)
     }
     if (model.benchmarkScore !== null) {
-      console.log(`Benchmark:   ${model.benchmarkScore.toFixed(2)}`);
+      console.log(`Benchmark:   ${model.benchmarkScore.toFixed(2)}`)
     }
   }
-  console.log(`${'─'.repeat(60)}`);
+  console.log(`${'─'.repeat(60)}`)
 }
 
 /**
@@ -157,68 +168,68 @@ async function listModels(): Promise<void> {
  * @internal
  */
 async function collectGameData(
-  args: ReturnType<typeof parseArgs>
+  args: ReturnType<typeof parseArgs>,
 ): Promise<void> {
-  const outputDir = getOption(args, 'output') || 'data/huggingface';
-  const daysParam = getOption(args, 'days');
-  const days = daysParam ? parseInt(daysParam, 10) : 30;
+  const outputDir = getOption(args, 'output') || 'data/huggingface'
+  const daysParam = getOption(args, 'days')
+  const days = daysParam ? parseInt(daysParam, 10) : 30
 
-  logger.header('Collecting Training Data for HuggingFace');
-  console.log(`Output Directory: ${outputDir}`);
-  console.log(`Days to collect: ${days}\n`);
+  logger.header('Collecting Training Data for HuggingFace')
+  console.log(`Output Directory: ${outputDir}`)
+  console.log(`Days to collect: ${days}\n`)
 
   // Create output directory
-  await fs.mkdir(outputDir, { recursive: true });
+  await fs.mkdir(outputDir, { recursive: true })
 
-  const cutoffDate = new Date();
-  cutoffDate.setDate(cutoffDate.getDate() - days);
+  const cutoffDate = new Date()
+  cutoffDate.setDate(cutoffDate.getDate() - days)
 
-  logger.step('Collecting trajectories...');
+  logger.step('Collecting trajectories...')
   const trajectoryResults = await db
     .select()
     .from(trajectories)
     .where(gte(trajectories.createdAt, cutoffDate))
-    .orderBy(desc(trajectories.createdAt));
-  console.log(`  Found ${trajectoryResults.length} trajectories`);
+    .orderBy(desc(trajectories.createdAt))
+  console.log(`  Found ${trajectoryResults.length} trajectories`)
 
-  logger.step('Collecting benchmark results...');
+  logger.step('Collecting benchmark results...')
   const benchmarks = await db
     .select()
     .from(benchmarkResults)
     .where(gte(benchmarkResults.runAt, cutoffDate))
-    .orderBy(desc(benchmarkResults.runAt));
-  console.log(`  Found ${benchmarks.length} benchmark results`);
+    .orderBy(desc(benchmarkResults.runAt))
+  console.log(`  Found ${benchmarks.length} benchmark results`)
 
-  logger.step('Collecting trained models...');
+  logger.step('Collecting trained models...')
   const models = await db
     .select()
     .from(trainedModels)
     .where(gte(trainedModels.createdAt, cutoffDate))
-    .orderBy(desc(trainedModels.createdAt));
-  console.log(`  Found ${models.length} trained models`);
+    .orderBy(desc(trainedModels.createdAt))
+  console.log(`  Found ${models.length} trained models`)
 
   // Write data files
-  const timestamp = new Date().toISOString().split('T')[0];
+  const timestamp = new Date().toISOString().split('T')[0]
 
-  logger.step('Writing data files...');
+  logger.step('Writing data files...')
 
   const trajectoriesPath = path.join(
     outputDir,
-    `trajectories-${timestamp}.json`
-  );
+    `trajectories-${timestamp}.json`,
+  )
   await fs.writeFile(
     trajectoriesPath,
-    JSON.stringify(trajectoryResults, null, 2)
-  );
-  console.log(`  Wrote ${trajectoriesPath}`);
+    JSON.stringify(trajectoryResults, null, 2),
+  )
+  console.log(`  Wrote ${trajectoriesPath}`)
 
-  const benchmarksPath = path.join(outputDir, `benchmarks-${timestamp}.json`);
-  await fs.writeFile(benchmarksPath, JSON.stringify(benchmarks, null, 2));
-  console.log(`  Wrote ${benchmarksPath}`);
+  const benchmarksPath = path.join(outputDir, `benchmarks-${timestamp}.json`)
+  await fs.writeFile(benchmarksPath, JSON.stringify(benchmarks, null, 2))
+  console.log(`  Wrote ${benchmarksPath}`)
 
-  const modelsPath = path.join(outputDir, `models-${timestamp}.json`);
-  await fs.writeFile(modelsPath, JSON.stringify(models, null, 2));
-  console.log(`  Wrote ${modelsPath}`);
+  const modelsPath = path.join(outputDir, `models-${timestamp}.json`)
+  await fs.writeFile(modelsPath, JSON.stringify(models, null, 2))
+  console.log(`  Wrote ${modelsPath}`)
 
   // Write metadata
   const metadata = {
@@ -229,19 +240,19 @@ async function collectGameData(
       benchmarks: benchmarks.length,
       models: models.length,
     },
-  };
-  const metadataPath = path.join(outputDir, `metadata-${timestamp}.json`);
-  await fs.writeFile(metadataPath, JSON.stringify(metadata, null, 2));
+  }
+  const metadataPath = path.join(outputDir, `metadata-${timestamp}.json`)
+  await fs.writeFile(metadataPath, JSON.stringify(metadata, null, 2))
 
-  logger.success('Data collection complete!');
-  console.log(`\nTotal files: 4`);
+  logger.success('Data collection complete!')
+  console.log(`\nTotal files: 4`)
   console.log(
-    `Total records: ${trajectoryResults.length + benchmarks.length + models.length}`
-  );
-  console.log(`\nTo upload to HuggingFace:`);
+    `Total records: ${trajectoryResults.length + benchmarks.length + models.length}`,
+  )
+  console.log(`\nTo upload to HuggingFace:`)
   console.log(
-    `  babylon model upload-dataset --source=${outputDir} --repo=<your-repo>`
-  );
+    `  babylon model upload-dataset --source=${outputDir} --repo=<your-repo>`,
+  )
 }
 
 /**
@@ -255,67 +266,65 @@ async function collectGameData(
  * @internal
  */
 async function uploadDataset(
-  args: ReturnType<typeof parseArgs>
+  args: ReturnType<typeof parseArgs>,
 ): Promise<void> {
-  const sourceDir = getOption(args, 'source') || 'data/huggingface';
-  const repoName = getOption(args, 'repo');
-  const isPrivate = getFlag(args, 'private');
+  const sourceDir = getOption(args, 'source') || 'data/huggingface'
+  const repoName = getOption(args, 'repo')
+  const isPrivate = getFlag(args, 'private')
 
   if (!repoName) {
-    logger.fail('--repo argument is required');
-    printHelp();
-    process.exit(1);
+    logger.fail('--repo argument is required')
+    printHelp()
+    process.exit(1)
   }
 
   // Check token
-  const token = process.env.HUGGING_FACE_TOKEN || process.env.HF_TOKEN;
+  const token = process.env.HUGGING_FACE_TOKEN || process.env.HF_TOKEN
   if (!token) {
-    logger.fail('HUGGING_FACE_TOKEN or HF_TOKEN environment variable required');
-    console.log('\nSet your token:');
-    console.log('  export HUGGING_FACE_TOKEN=your_token_here');
-    console.log(
-      '\nOr get a token from: https://huggingface.co/settings/tokens'
-    );
-    process.exit(1);
+    logger.fail('HUGGING_FACE_TOKEN or HF_TOKEN environment variable required')
+    console.log('\nSet your token:')
+    console.log('  export HUGGING_FACE_TOKEN=your_token_here')
+    console.log('\nOr get a token from: https://huggingface.co/settings/tokens')
+    process.exit(1)
   }
 
-  logger.header('Uploading Dataset to HuggingFace');
-  console.log(`Source: ${sourceDir}`);
-  console.log(`Repo: ${repoName}`);
-  console.log(`Private: ${isPrivate ? 'yes' : 'no'}\n`);
+  logger.header('Uploading Dataset to HuggingFace')
+  console.log(`Source: ${sourceDir}`)
+  console.log(`Repo: ${repoName}`)
+  console.log(`Private: ${isPrivate ? 'yes' : 'no'}\n`)
 
   // Check source directory exists
   const dirExists = await fs.access(sourceDir).then(
     () => true,
-    () => false
-  );
+    () => false,
+  )
   if (!dirExists) {
-    logger.fail(`Source directory not found: ${sourceDir}`);
-    console.log('\nCollect data first with:');
-    console.log(`  babylon model collect-data --output=${sourceDir}`);
-    process.exit(1);
+    logger.fail(`Source directory not found: ${sourceDir}`)
+    console.log('\nCollect data first with:')
+    console.log(`  babylon model collect-data --output=${sourceDir}`)
+    process.exit(1)
   }
 
   // Get all JSON files in source directory
-  const files = await fs.readdir(sourceDir);
-  const jsonFiles = files.filter((f) => f.endsWith('.json'));
+  const files = await fs.readdir(sourceDir)
+  const jsonFiles = files.filter((f) => f.endsWith('.json'))
 
   if (jsonFiles.length === 0) {
-    logger.fail('No JSON files found in source directory');
-    process.exit(1);
+    logger.fail('No JSON files found in source directory')
+    process.exit(1)
   }
 
-  console.log(`Found ${jsonFiles.length} files to upload:`);
+  console.log(`Found ${jsonFiles.length} files to upload:`)
   for (const file of jsonFiles) {
-    const stat = await fs.stat(path.join(sourceDir, file));
-    console.log(`  - ${file} (${(stat.size / 1024).toFixed(1)} KB)`);
+    const stat = await fs.stat(path.join(sourceDir, file))
+    console.log(`  - ${file} (${(stat.size / 1024).toFixed(1)} KB)`)
   }
-  console.log('');
+  console.log('')
 
-  const HF_API_URL = 'https://huggingface.co/api';
+  const HF_API_URL = 'https://huggingface.co/api'
 
   // Create repository using HuggingFace API
-  logger.step('Creating/updating repository...');
+  logger.step('Creating/updating repository...')
 
   const createRepoResponse = await fetch(`${HF_API_URL}/repos/create`, {
     method: 'POST',
@@ -329,24 +338,24 @@ async function uploadDataset(
       type: 'dataset',
       private: isPrivate,
     }),
-  });
+  })
 
   if (createRepoResponse.ok) {
-    console.log(`  Created repository: ${repoName}`);
+    console.log(`  Created repository: ${repoName}`)
   } else if (createRepoResponse.status === 409) {
-    console.log(`  Using existing repository: ${repoName}`);
+    console.log(`  Using existing repository: ${repoName}`)
   } else {
-    const errorText = await createRepoResponse.text();
-    logger.fail(`Failed to create repository: ${errorText}`);
-    process.exit(1);
+    const errorText = await createRepoResponse.text()
+    logger.fail(`Failed to create repository: ${errorText}`)
+    process.exit(1)
   }
 
   // Upload files
-  logger.step('Uploading files...');
+  logger.step('Uploading files...')
 
   for (const file of jsonFiles) {
-    const filePath = path.join(sourceDir, file);
-    const content = await fs.readFile(filePath, 'utf-8');
+    const filePath = path.join(sourceDir, file)
+    const content = await fs.readFile(filePath, 'utf-8')
 
     const uploadResponse = await fetch(
       `${HF_API_URL}/datasets/${repoName}/upload/main/${file}`,
@@ -357,19 +366,19 @@ async function uploadDataset(
           'Content-Type': 'application/json',
         },
         body: content,
-      }
-    );
+      },
+    )
 
     if (uploadResponse.ok) {
-      console.log(`  Uploaded: ${file}`);
+      console.log(`  Uploaded: ${file}`)
     } else {
-      const errorText = await uploadResponse.text();
-      logger.warn(`  Failed to upload ${file}: ${errorText}`);
+      const errorText = await uploadResponse.text()
+      logger.warn(`  Failed to upload ${file}: ${errorText}`)
     }
   }
 
-  logger.success('Dataset upload complete!');
-  console.log(`\n🔗 Dataset URL: https://huggingface.co/datasets/${repoName}`);
+  logger.success('Dataset upload complete!')
+  console.log(`\n🔗 Dataset URL: https://huggingface.co/datasets/${repoName}`)
 }
 
 /**
@@ -383,67 +392,72 @@ async function uploadDataset(
  * @internal
  */
 async function uploadModel(args: ReturnType<typeof parseArgs>): Promise<void> {
-  const modelId = getOption(args, 'model');
-  const hfModelName = getOption(args, 'hf-name');
-  const description = getOption(args, 'description');
-  const isPrivate = getFlag(args, 'private');
-  const includeWeights = !getFlag(args, 'no-weights');
+  const modelId = getOption(args, 'model')
+  const hfModelName = getOption(args, 'hf-name')
+  const description = getOption(args, 'description')
+  const isPrivate = getFlag(args, 'private')
+  const includeWeights = !getFlag(args, 'no-weights')
 
   if (!modelId || !hfModelName) {
-    logger.fail('--model and --hf-name arguments are required');
-    printHelp();
-    process.exit(1);
+    logger.fail('--model and --hf-name arguments are required')
+    printHelp()
+    process.exit(1)
   }
 
   // Check token
   if (!process.env.HUGGING_FACE_TOKEN && !process.env.HF_TOKEN) {
-    logger.fail('HUGGING_FACE_TOKEN or HF_TOKEN environment variable required');
-    console.log('\nSet your token:');
-    console.log('  export HUGGING_FACE_TOKEN=your_token_here');
-    console.log(
-      '\nOr get a token from: https://huggingface.co/settings/tokens'
-    );
-    process.exit(1);
+    logger.fail('HUGGING_FACE_TOKEN or HF_TOKEN environment variable required')
+    console.log('\nSet your token:')
+    console.log('  export HUGGING_FACE_TOKEN=your_token_here')
+    console.log('\nOr get a token from: https://huggingface.co/settings/tokens')
+    process.exit(1)
   }
 
-  logger.header('HuggingFace Model Upload');
+  logger.header('HuggingFace Model Upload')
 
-  console.log(`Model ID: ${modelId}`);
-  console.log(`HuggingFace Name: ${hfModelName}`);
-  console.log(`Private: ${isPrivate ? 'yes' : 'no'}`);
-  console.log(`Include Weights: ${includeWeights ? 'yes' : 'no'}\n`);
+  console.log(`Model ID: ${modelId}`)
+  console.log(`HuggingFace Name: ${hfModelName}`)
+  console.log(`Private: ${isPrivate ? 'yes' : 'no'}`)
+  console.log(`Include Weights: ${includeWeights ? 'yes' : 'no'}\n`)
 
   // Check if model exists
-  const modelResults = await db
+  const modelResults = (await db
     .select()
     .from(trainedModels)
     .where(eq(trainedModels.modelId, modelId))
-    .limit(1);
-  const model = modelResults[0];
+    .limit(1)) as unknown as TrainedModel[]
+  const model = modelResults[0]
 
   if (!model) {
-    logger.fail(`Model not found: ${modelId}`);
-    console.log('\nAvailable models:');
-    const availableModels = await db
+    logger.fail(`Model not found: ${modelId}`)
+    console.log('\nAvailable models:')
+    const availableModels = (await db
       .select()
       .from(trainedModels)
       .orderBy(desc(trainedModels.createdAt))
-      .limit(5);
+      .limit(5)) as unknown as TrainedModel[]
     for (const m of availableModels) {
-      console.log(`  - ${m.modelId}`);
+      console.log(`  - ${m.modelId}`)
     }
-    process.exit(1);
+    process.exit(1)
   }
 
-  logger.success(`Found model: ${model.modelId}`);
-  console.log(`  Base model: ${model.baseModel}`);
-  console.log(`  Status: ${model.status}`);
-  console.log(`  Created: ${model.createdAt.toISOString()}`);
+  const modelCreatedAt = (model as TrainedModelRow).createdAt
+  const modelCreatedAtStr =
+    modelCreatedAt instanceof Date
+      ? modelCreatedAt.toISOString()
+      : modelCreatedAt
+        ? new Date(String(modelCreatedAt)).toISOString()
+        : 'N/A'
+  logger.success(`Found model: ${model.modelId}`)
+  console.log(`  Base model: ${model.baseModel}`)
+  console.log(`  Status: ${model.status}`)
+  console.log(`  Created: ${modelCreatedAtStr}`)
 
   // Upload to HuggingFace
-  logger.step('Uploading to HuggingFace...');
+  logger.step('Uploading to HuggingFace...')
 
-  const uploader = new HuggingFaceModelUploader();
+  const uploader = new HuggingFaceModelUploader()
 
   const result = await uploader.uploadModel({
     modelId,
@@ -451,20 +465,20 @@ async function uploadModel(args: ReturnType<typeof parseArgs>): Promise<void> {
     description: description || `Babylon RL agent model: ${modelId}`,
     private: isPrivate,
     includeWeights,
-  });
+  })
 
   if (result.success && result.modelUrl) {
-    logger.success('Upload complete!');
-    console.log(`\n🔗 Model URL: ${result.modelUrl}`);
+    logger.success('Upload complete!')
+    console.log(`\n🔗 Model URL: ${result.modelUrl}`)
 
     // Update database with HuggingFace repo
     await db
       .update(trainedModels)
       .set({ huggingFaceRepo: hfModelName })
-      .where(eq(trainedModels.modelId, modelId));
+      .where(eq(trainedModels.modelId, modelId))
   } else {
-    logger.fail(`Upload failed: ${result.error || 'Unknown error'}`);
-    process.exit(1);
+    logger.fail(`Upload failed: ${result.error || 'Unknown error'}`)
+    process.exit(1)
   }
 }
 
@@ -472,7 +486,7 @@ async function uploadModel(args: ReturnType<typeof parseArgs>): Promise<void> {
 // Ollama Management Commands
 // ============================================================================
 
-const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
+const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL || 'http://localhost:11434'
 
 /**
  * Lists all Ollama models installed locally.
@@ -480,66 +494,66 @@ const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
  * @internal
  */
 async function ollamaList(): Promise<void> {
-  logger.header('Ollama Models');
+  logger.header('Ollama Models')
 
   const response = await fetch(`${OLLAMA_BASE_URL}/api/tags`, {
     signal: AbortSignal.timeout(10000),
-  });
+  })
 
   if (!response.ok) {
-    logger.fail(`Ollama API error: ${response.status}`);
-    process.exit(1);
+    logger.fail(`Ollama API error: ${response.status}`)
+    process.exit(1)
   }
 
-  const rawData = await response.json();
-  const data = OllamaListResponseSchema.parse(rawData);
+  const rawData = await response.json()
+  const data = OllamaListResponseSchema.parse(rawData)
 
   if (!data.models) {
     throw new Error(
-      'Ollama API returned invalid response: models field missing'
-    );
+      'Ollama API returned invalid response: models field missing',
+    )
   }
 
-  const models = data.models;
+  const models = data.models
 
   if (models.length === 0) {
-    console.log('No models installed.\n');
-    console.log('To install a model:');
-    console.log('  babylon model ollama pull --name=qwen2.5:7b-instruct');
-    console.log('  ollama pull qwen2.5:7b-instruct');
-    return;
+    console.log('No models installed.\n')
+    console.log('To install a model:')
+    console.log('  babylon model ollama pull --name=qwen2.5:7b-instruct')
+    console.log('  ollama pull qwen2.5:7b-instruct')
+    return
   }
 
-  console.log(`Found ${models.length} model(s):\n`);
+  console.log(`Found ${models.length} model(s):\n`)
 
   for (const model of models) {
-    const sizeGB = (model.size / 1024 / 1024 / 1024).toFixed(2);
-    const modified = new Date(model.modified_at).toLocaleDateString();
+    const sizeGB = (model.size / 1024 / 1024 / 1024).toFixed(2)
+    const modified = new Date(model.modified_at).toLocaleDateString()
 
-    console.log(`${'─'.repeat(60)}`);
-    console.log(`Model:     ${model.name}`);
-    console.log(`Size:      ${sizeGB} GB`);
-    console.log(`Modified:  ${modified}`);
+    console.log(`${'─'.repeat(60)}`)
+    console.log(`Model:     ${model.name}`)
+    console.log(`Size:      ${sizeGB} GB`)
+    console.log(`Modified:  ${modified}`)
     if (model.details) {
       if (model.details.parameter_size) {
-        console.log(`Params:    ${model.details.parameter_size}`);
+        console.log(`Params:    ${model.details.parameter_size}`)
       }
       if (model.details.quantization_level) {
-        console.log(`Quant:     ${model.details.quantization_level}`);
+        console.log(`Quant:     ${model.details.quantization_level}`)
       }
     }
   }
-  console.log(`${'─'.repeat(60)}`);
+  console.log(`${'─'.repeat(60)}`)
 
   // Show archetype-specific models
-  const archetypeModels = models.filter((m) => m.name.startsWith('babylon-'));
+  const archetypeModels = models.filter((m) => m.name.startsWith('babylon-'))
   if (archetypeModels.length > 0) {
-    console.log('\n🎯 Babylon Trained Models:');
+    console.log('\n🎯 Babylon Trained Models:')
     for (const model of archetypeModels) {
       const archetype = model.name
         .replace('babylon-', '')
-        .replace(':latest', '');
-      console.log(`  - ${archetype}: ${model.name}`);
+        .replace(':latest', '')
+      console.log(`  - ${archetype}: ${model.name}`)
     }
   }
 }
@@ -551,40 +565,40 @@ async function ollamaList(): Promise<void> {
  * @internal
  */
 async function ollamaPull(args: ReturnType<typeof parseArgs>): Promise<void> {
-  const modelName = getOption(args, 'name');
+  const modelName = getOption(args, 'name')
 
   if (!modelName) {
-    logger.fail('--name is required');
+    logger.fail('--name is required')
     console.log(
-      '\nExample: babylon model ollama pull --name=qwen2.5:7b-instruct'
-    );
-    process.exit(1);
+      '\nExample: babylon model ollama pull --name=qwen2.5:7b-instruct',
+    )
+    process.exit(1)
   }
 
-  logger.header(`Pulling Model: ${modelName}`);
+  logger.header(`Pulling Model: ${modelName}`)
 
-  console.log('Downloading... (this may take a while)\n');
+  console.log('Downloading... (this may take a while)\n')
 
   const response = await fetch(`${OLLAMA_BASE_URL}/api/pull`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ name: modelName, stream: false }),
-  });
+  })
 
   if (!response.ok) {
-    const errorText = await response.text();
-    logger.fail(`Failed to pull model: ${errorText}`);
-    process.exit(1);
+    const errorText = await response.text()
+    logger.fail(`Failed to pull model: ${errorText}`)
+    process.exit(1)
   }
 
-  const rawResult = await response.json();
-  const result = OllamaPullResponseSchema.parse(rawResult);
-  logger.success(`Model ${modelName} pulled successfully`);
-  console.log(`Status: ${result.status || 'completed'}`);
+  const rawResult = await response.json()
+  const result = OllamaPullResponseSchema.parse(rawResult)
+  logger.success(`Model ${modelName} pulled successfully`)
+  console.log(`Status: ${result.status || 'completed'}`)
 
   // Verify the model is available
-  console.log('\nVerifying model...');
-  await ollamaList();
+  console.log('\nVerifying model...')
+  await ollamaList()
 }
 
 /**
@@ -594,31 +608,31 @@ async function ollamaPull(args: ReturnType<typeof parseArgs>): Promise<void> {
  * @internal
  */
 async function ollamaDelete(args: ReturnType<typeof parseArgs>): Promise<void> {
-  const modelName = getOption(args, 'name');
+  const modelName = getOption(args, 'name')
 
   if (!modelName) {
-    logger.fail('--name is required');
+    logger.fail('--name is required')
     console.log(
-      '\nExample: babylon model ollama delete --name=qwen2.5:7b-instruct'
-    );
-    process.exit(1);
+      '\nExample: babylon model ollama delete --name=qwen2.5:7b-instruct',
+    )
+    process.exit(1)
   }
 
-  logger.header(`Deleting Model: ${modelName}`);
+  logger.header(`Deleting Model: ${modelName}`)
 
   const response = await fetch(`${OLLAMA_BASE_URL}/api/delete`, {
     method: 'DELETE',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ name: modelName }),
-  });
+  })
 
   if (!response.ok) {
-    const errorText = await response.text();
-    logger.fail(`Failed to delete model: ${errorText}`);
-    process.exit(1);
+    const errorText = await response.text()
+    logger.fail(`Failed to delete model: ${errorText}`)
+    process.exit(1)
   }
 
-  logger.success(`Model ${modelName} deleted`);
+  logger.success(`Model ${modelName} deleted`)
 }
 
 /**
@@ -627,51 +641,50 @@ async function ollamaDelete(args: ReturnType<typeof parseArgs>): Promise<void> {
  * @internal
  */
 async function ollamaStatus(): Promise<void> {
-  logger.header('Ollama Status');
+  logger.header('Ollama Status')
 
-  console.log(`Server URL: ${OLLAMA_BASE_URL}\n`);
+  console.log(`Server URL: ${OLLAMA_BASE_URL}\n`)
 
   const response = await fetch(`${OLLAMA_BASE_URL}/api/tags`, {
     signal: AbortSignal.timeout(5000),
-  });
+  })
 
   if (response.ok) {
-    const rawData = await response.json();
-    const data = OllamaListResponseSchema.parse(rawData);
+    const rawData = await response.json()
+    const data = OllamaListResponseSchema.parse(rawData)
 
     if (!data.models) {
       throw new Error(
-        'Ollama API returned invalid response: models field missing'
-      );
+        'Ollama API returned invalid response: models field missing',
+      )
     }
 
-    const modelCount = data.models.length;
+    const modelCount = data.models.length
 
-    logger.success('Ollama is running');
-    console.log(`\n  Models installed: ${modelCount}`);
+    logger.success('Ollama is running')
+    console.log(`\n  Models installed: ${modelCount}`)
 
     // Check if recommended models are available
     const recommendedModels = [
       'qwen2.5:7b-instruct',
       'llama3.2:3b',
       'mistral:7b',
-    ];
+    ]
 
-    const modelNames = data.models.map((m) => m.name);
-    console.log('\n  Recommended models:');
+    const modelNames = data.models.map((m) => m.name)
+    console.log('\n  Recommended models:')
     for (const model of recommendedModels) {
-      const installed = modelNames.some((m) =>
-        m.includes(model.split(':')[0]!)
-      );
-      console.log(`    ${installed ? '✅' : '❌'} ${model}`);
+      const modelBaseName = model.split(':')[0] ?? model
+      const installed = modelNames.some((m) => m.includes(modelBaseName))
+      console.log(`    ${installed ? '✅' : '❌'} ${model}`)
     }
 
     if (modelCount === 0) {
-      console.log('\n📥 To install the default model:');
-      console.log('  babylon model ollama pull --name=qwen2.5:7b-instruct');
+      console.log('\n📥 To install the default model:')
+      console.log('  babylon model ollama pull --name=qwen2.5:7b-instruct')
     }
   } else {
-    logger.fail(`Ollama returned status ${response.status}`);
+    logger.fail(`Ollama returned status ${response.status}`)
   }
 }
 
@@ -682,27 +695,27 @@ async function ollamaStatus(): Promise<void> {
  * @internal
  */
 async function runOllamaCommand(
-  args: ReturnType<typeof parseArgs>
+  args: ReturnType<typeof parseArgs>,
 ): Promise<void> {
-  const subCommand = args.positional[0] || 'status';
+  const subCommand = args.positional[0] || 'status'
 
   switch (subCommand) {
     case 'list':
-      await ollamaList();
-      break;
+      await ollamaList()
+      break
     case 'pull':
-      await ollamaPull(args);
-      break;
+      await ollamaPull(args)
+      break
     case 'delete':
-      await ollamaDelete(args);
-      break;
+      await ollamaDelete(args)
+      break
     case 'status':
-      await ollamaStatus();
-      break;
+      await ollamaStatus()
+      break
     default:
-      logger.fail(`Unknown ollama command: ${subCommand}`);
-      console.log('\nAvailable commands: list, pull, delete, status');
-      process.exit(1);
+      logger.fail(`Unknown ollama command: ${subCommand}`)
+      console.log('\nAvailable commands: list, pull, delete, status')
+      process.exit(1)
   }
 }
 
@@ -714,50 +727,50 @@ async function runOllamaCommand(
  * @param args - Raw command-line arguments for the model domain
  */
 export async function runModelCommand(args: string[]): Promise<void> {
-  const parsed = parseArgs(args);
+  const parsed = parseArgs(args)
 
   if (wantsHelp(parsed)) {
-    printHelp();
-    process.exit(0);
+    printHelp()
+    process.exit(0)
   }
 
   // Commands that don't need database
-  const noDatabaseCommands = ['ollama', 'upload-dataset'];
+  const noDatabaseCommands = ['ollama', 'upload-dataset']
 
-  const needsDatabase = !noDatabaseCommands.includes(parsed.command || '');
+  const needsDatabase = !noDatabaseCommands.includes(parsed.command || '')
 
   try {
     switch (parsed.command) {
       case 'list':
-        await listModels();
-        break;
+        await listModels()
+        break
 
       case 'upload':
-        await uploadModel(parsed);
-        break;
+        await uploadModel(parsed)
+        break
 
       case 'collect-data':
-        await collectGameData(parsed);
-        break;
+        await collectGameData(parsed)
+        break
 
       case 'upload-dataset':
-        await uploadDataset(parsed);
-        break;
+        await uploadDataset(parsed)
+        break
 
       case 'ollama':
-        await runOllamaCommand(parsed);
-        break;
+        await runOllamaCommand(parsed)
+        break
 
       default:
         if (parsed.command) {
-          logger.fail(`Unknown command: ${parsed.command}`);
+          logger.fail(`Unknown command: ${parsed.command}`)
         }
-        printHelp();
-        process.exit(parsed.command ? 1 : 0);
+        printHelp()
+        process.exit(parsed.command ? 1 : 0)
     }
   } finally {
     if (needsDatabase) {
-      await closeDatabase();
+      await closeDatabase()
     }
   }
 }

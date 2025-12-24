@@ -1,8 +1,6 @@
-'use client';
+import { cn } from '@babylon/shared'
 
-import { cn } from '@babylon/shared';
-
-export type LeaderboardTab = 'all' | 'earned' | 'referral';
+export type LeaderboardTab = 'all' | 'earned' | 'referral'
 
 /**
  * Leaderboard toggle component for switching between leaderboard views.
@@ -22,8 +20,8 @@ export type LeaderboardTab = 'all' | 'earned' | 'referral';
  * ```
  */
 interface LeaderboardToggleProps {
-  activeTab: LeaderboardTab;
-  onTabChange: (tab: LeaderboardTab) => void;
+  activeTab: LeaderboardTab
+  onTabChange: (tab: LeaderboardTab) => void
 }
 
 export function LeaderboardToggle({
@@ -33,10 +31,11 @@ export function LeaderboardToggle({
   return (
     <div className="flex w-full items-center border-border border-b">
       <button
+        type="button"
         onClick={() => onTabChange('all')}
         className={cn(
           'relative flex-1 py-3.5 font-semibold transition-all hover:bg-muted/20',
-          activeTab === 'all' ? 'text-foreground' : 'text-muted-foreground'
+          activeTab === 'all' ? 'text-foreground' : 'text-muted-foreground',
         )}
       >
         All Points
@@ -45,10 +44,11 @@ export function LeaderboardToggle({
         )}
       </button>
       <button
+        type="button"
         onClick={() => onTabChange('earned')}
         className={cn(
           'relative flex-1 py-3.5 font-semibold transition-all hover:bg-muted/20',
-          activeTab === 'earned' ? 'text-foreground' : 'text-muted-foreground'
+          activeTab === 'earned' ? 'text-foreground' : 'text-muted-foreground',
         )}
       >
         Earned
@@ -57,10 +57,13 @@ export function LeaderboardToggle({
         )}
       </button>
       <button
+        type="button"
         onClick={() => onTabChange('referral')}
         className={cn(
           'relative flex-1 py-3.5 font-semibold transition-all hover:bg-muted/20',
-          activeTab === 'referral' ? 'text-foreground' : 'text-muted-foreground'
+          activeTab === 'referral'
+            ? 'text-foreground'
+            : 'text-muted-foreground',
         )}
       >
         Referral
@@ -69,5 +72,5 @@ export function LeaderboardToggle({
         )}
       </button>
     </div>
-  );
+  )
 }

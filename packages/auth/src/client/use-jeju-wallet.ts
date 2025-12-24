@@ -4,24 +4,23 @@
  * Hook for wallet operations using MPC threshold signatures.
  */
 
-'use client';
-
-import { useCallback, useMemo, useState } from 'react';
-import type { Address, Hex } from 'viem';
-import { useJejuAuthContext } from './provider';
+import type { JsonValue } from '@babylon/shared'
+import { useCallback, useMemo, useState } from 'react'
+import type { Address, Hex } from 'viem'
+import { useJejuAuthContext } from './provider'
 
 export interface TransactionRequest {
-  to: Address;
-  value?: bigint;
-  data?: Hex;
-  gasLimit?: bigint;
+  to: Address
+  value?: bigint
+  data?: Hex
+  gasLimit?: bigint
 }
 
 export interface WalletState {
-  address: Address | null;
-  ready: boolean;
-  signing: boolean;
-  error: string | null;
+  address: Address | null
+  ready: boolean
+  signing: boolean
+  error: string | null
 }
 
 /**
@@ -38,84 +37,84 @@ export interface WalletState {
  * ```
  */
 export function useJejuWallet() {
-  const context = useJejuAuthContext();
-  const [signing, setSigning] = useState(false);
-  const [txError, setTxError] = useState<string | null>(null);
+  const context = useJejuAuthContext()
+  const [signing, setSigning] = useState(false)
+  const [txError, setTxError] = useState<string | null>(null)
 
-  const address = context.walletAddress;
-  const ready = context.authenticated && address !== null;
+  const address = context.walletAddress
+  const ready = context.authenticated && address !== null
 
   const signMessage = useCallback(
     async (message: string): Promise<Hex> => {
       if (!ready) {
-        throw new Error('Wallet not ready');
+        throw new Error('Wallet not ready')
       }
 
-      setSigning(true);
-      setTxError(null);
+      setSigning(true)
+      setTxError(null)
 
       try {
-        return await context.signMessage(message);
+        return await context.signMessage(message)
       } finally {
-        setSigning(false);
+        setSigning(false)
       }
     },
-    [ready, context.signMessage]
-  );
+    [ready, context.signMessage],
+  )
 
   const signTypedData = useCallback(
-    async (typedData: unknown): Promise<Hex> => {
+    async (typedData: Record<string, JsonValue>): Promise<Hex> => {
       if (!ready) {
-        throw new Error('Wallet not ready');
+        throw new Error('Wallet not ready')
       }
 
-      setSigning(true);
-      setTxError(null);
+      setSigning(true)
+      setTxError(null)
 
       try {
-        return await context.signTypedData(typedData);
+        return await context.signTypedData(typedData)
       } finally {
-        setSigning(false);
+        setSigning(false)
       }
     },
-    [ready, context.signTypedData]
-  );
+    [ready, context.signTypedData],
+  )
 
   const sendTransaction = useCallback(
     async (tx: TransactionRequest): Promise<Hex> => {
       if (!ready) {
-        throw new Error('Wallet not ready');
+        throw new Error('Wallet not ready')
       }
 
-      setSigning(true);
+      setSigning(true)
 
       try {
         // Check if user has gas
-        const hasUserGas = await context.hasGas();
+        const hasUserGas = await context.hasGas()
 
         if (!hasUserGas) {
           // Request gas from treasury
-          await context.requestGas();
+          await context.requestGas()
         }
 
         // Sign the transaction
         // In production, would build and submit the transaction
-        const txHash = await context.signMessage(JSON.stringify(tx));
-        return txHash;
+        const txHash = await context.signMessage(JSON.stringify(tx))
+        return txHash
       } finally {
-        setSigning(false);
+        setSigning(false)
       }
     },
-    [ready, context.hasGas, context.requestGas, context.signMessage]
-  );
+    [ready, context.hasGas, context.requestGas, context.signMessage],
+  )
 
   const hasGas = useCallback(async (): Promise<boolean> => {
-    return context.hasGas();
-  }, [context.hasGas]);
+    return context.hasGas()
+  }, [context.hasGas])
 
   const requestGas = useCallback(async (): Promise<boolean> => {
-    return context.requestGas();
-  }, [context.requestGas]);
+    return context.requestGas()
+  }, [context.requestGas])
 
   const state: WalletState = useMemo(
     () => ({
@@ -124,8 +123,8 @@ export function useJejuWallet() {
       signing,
       error: txError,
     }),
-    [address, ready, signing, txError]
-  );
+    [address, ready, signing, txError],
+  )
 
   return {
     ...state,
@@ -134,5 +133,5 @@ export function useJejuWallet() {
     sendTransaction,
     hasGas,
     requestGas,
-  };
+  }
 }

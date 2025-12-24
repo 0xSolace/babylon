@@ -10,27 +10,27 @@
  */
 export interface LLMCallTokenUsage {
   /** Unique identifier for this call */
-  callId: string;
+  callId: string
   /** Provider used (jeju, groq, claude, openai) */
-  provider: 'jeju' | 'groq' | 'claude' | 'openai';
+  provider: 'jeju' | 'groq' | 'claude' | 'openai'
   /** Model used for the call */
-  model: string;
+  model: string
   /** Number of input/prompt tokens */
-  inputTokens: number;
+  inputTokens: number
   /** Number of output/completion tokens */
-  outputTokens: number;
+  outputTokens: number
   /** Total tokens (input + output) */
-  totalTokens: number;
+  totalTokens: number
   /** Type of prompt/operation (e.g., 'npc-market-decisions', 'generate_post') */
-  promptType: string;
+  promptType: string
   /** Duration of the call in milliseconds */
-  durationMs: number;
+  durationMs: number
   /** Whether the call succeeded */
-  success: boolean;
+  success: boolean
   /** Error message if failed */
-  error?: string;
+  error?: string
   /** Timestamp of the call */
-  timestamp: Date;
+  timestamp: Date
 }
 
 /**
@@ -38,23 +38,23 @@ export interface LLMCallTokenUsage {
  */
 export interface PromptTypeStats {
   /** Type of prompt */
-  promptType: string;
+  promptType: string
   /** Number of calls made */
-  callCount: number;
+  callCount: number
   /** Total input tokens across all calls */
-  totalInputTokens: number;
+  totalInputTokens: number
   /** Total output tokens across all calls */
-  totalOutputTokens: number;
+  totalOutputTokens: number
   /** Total tokens across all calls */
-  totalTokens: number;
+  totalTokens: number
   /** Average input tokens per call */
-  avgInputTokens: number;
+  avgInputTokens: number
   /** Average output tokens per call */
-  avgOutputTokens: number;
+  avgOutputTokens: number
   /** Average duration per call in milliseconds */
-  avgDurationMs: number;
+  avgDurationMs: number
   /** Success rate (0-1) */
-  successRate: number;
+  successRate: number
 }
 
 /**
@@ -62,21 +62,21 @@ export interface PromptTypeStats {
  */
 export interface ModelStats {
   /** Provider */
-  provider: 'jeju' | 'groq' | 'claude' | 'openai';
+  provider: 'jeju' | 'groq' | 'claude' | 'openai'
   /** Model name */
-  model: string;
+  model: string
   /** Number of calls made */
-  callCount: number;
+  callCount: number
   /** Total input tokens */
-  totalInputTokens: number;
+  totalInputTokens: number
   /** Total output tokens */
-  totalOutputTokens: number;
+  totalOutputTokens: number
   /** Total tokens */
-  totalTokens: number;
+  totalTokens: number
   /** Average tokens per call */
-  avgTokensPerCall: number;
+  avgTokensPerCall: number
   /** Success rate (0-1) */
-  successRate: number;
+  successRate: number
 }
 
 /**
@@ -84,35 +84,35 @@ export interface ModelStats {
  */
 export interface TickTokenStats {
   /** Tick identifier (timestamp-based) */
-  tickId: string;
+  tickId: string
   /** Timestamp when tick started */
-  tickStartedAt: Date;
+  tickStartedAt: Date
   /** Timestamp when tick completed */
-  tickCompletedAt: Date;
+  tickCompletedAt: Date
   /** Duration of the tick in milliseconds */
-  tickDurationMs: number;
+  tickDurationMs: number
 
   // Aggregate totals
   /** Total number of LLM calls made */
-  totalCalls: number;
+  totalCalls: number
   /** Total input tokens used */
-  totalInputTokens: number;
+  totalInputTokens: number
   /** Total output tokens used */
-  totalOutputTokens: number;
+  totalOutputTokens: number
   /** Total tokens used */
-  totalTokens: number;
+  totalTokens: number
 
   // Breakdown by prompt type
   /** Statistics per prompt type */
-  byPromptType: PromptTypeStats[];
+  byPromptType: PromptTypeStats[]
 
   // Breakdown by model
   /** Statistics per model */
-  byModel: ModelStats[];
+  byModel: ModelStats[]
 
   // Individual calls (for detailed analysis)
   /** All individual LLM calls during this tick */
-  calls: LLMCallTokenUsage[];
+  calls: LLMCallTokenUsage[]
 }
 
 /**
@@ -120,47 +120,47 @@ export interface TickTokenStats {
  */
 export interface TokenStatsSummary {
   /** Period start timestamp */
-  periodStart: Date;
+  periodStart: Date
   /** Period end timestamp */
-  periodEnd: Date;
+  periodEnd: Date
   /** Number of ticks in period */
-  tickCount: number;
+  tickCount: number
 
   // Aggregate totals
   /** Total LLM calls */
-  totalCalls: number;
+  totalCalls: number
   /** Total input tokens */
-  totalInputTokens: number;
+  totalInputTokens: number
   /** Total output tokens */
-  totalOutputTokens: number;
+  totalOutputTokens: number
   /** Total tokens */
-  totalTokens: number;
+  totalTokens: number
 
   // Averages per tick
   /** Average calls per tick */
-  avgCallsPerTick: number;
+  avgCallsPerTick: number
   /** Average input tokens per tick */
-  avgInputTokensPerTick: number;
+  avgInputTokensPerTick: number
   /** Average output tokens per tick */
-  avgOutputTokensPerTick: number;
+  avgOutputTokensPerTick: number
   /** Average total tokens per tick */
-  avgTotalTokensPerTick: number;
+  avgTotalTokensPerTick: number
 
   // Breakdown by prompt type (aggregated)
   /** Statistics per prompt type (aggregated across all ticks) */
-  byPromptType: PromptTypeStats[];
+  byPromptType: PromptTypeStats[]
 
   // Breakdown by model (aggregated)
   /** Statistics per model (aggregated across all ticks) */
-  byModel: ModelStats[];
+  byModel: ModelStats[]
 
   // Estimated costs (USD, approximate)
   /** Estimated cost for input tokens */
-  estimatedInputCostUSD: number;
+  estimatedInputCostUSD: number
   /** Estimated cost for output tokens */
-  estimatedOutputCostUSD: number;
+  estimatedOutputCostUSD: number
   /** Estimated total cost */
-  estimatedTotalCostUSD: number;
+  estimatedTotalCostUSD: number
 }
 
 /**
@@ -168,16 +168,16 @@ export interface TokenStatsSummary {
  */
 export interface TokenUsageCollector {
   /** Record a completed LLM call */
-  recordCall(usage: Omit<LLMCallTokenUsage, 'callId' | 'timestamp'>): void;
+  recordCall(usage: Omit<LLMCallTokenUsage, 'callId' | 'timestamp'>): void
   /** Get all recorded calls */
-  getCalls(): LLMCallTokenUsage[];
+  getCalls(): LLMCallTokenUsage[]
   /** Get aggregated statistics */
   getStats(): Omit<
     TickTokenStats,
     'tickId' | 'tickStartedAt' | 'tickCompletedAt' | 'tickDurationMs'
-  >;
+  >
   /** Reset the collector for a new tick */
-  reset(): void;
+  reset(): void
 }
 
 /**
@@ -206,7 +206,7 @@ export const TOKEN_COST_PER_MILLION: Record<
 
   // Default fallback
   default: { input: 1.0, output: 3.0 },
-};
+}
 
 /**
  * Calculate estimated cost for token usage
@@ -214,19 +214,19 @@ export const TOKEN_COST_PER_MILLION: Record<
 export function calculateEstimatedCost(
   model: string,
   inputTokens: number,
-  outputTokens: number
+  outputTokens: number,
 ): { inputCostUSD: number; outputCostUSD: number; totalCostUSD: number } {
-  const defaultCosts = { input: 1.0, output: 3.0 };
+  const defaultCosts = { input: 1.0, output: 3.0 }
   const costs =
     TOKEN_COST_PER_MILLION[model] ??
     TOKEN_COST_PER_MILLION.default ??
-    defaultCosts;
-  const inputCostUSD = (inputTokens / 1_000_000) * costs.input;
-  const outputCostUSD = (outputTokens / 1_000_000) * costs.output;
+    defaultCosts
+  const inputCostUSD = (inputTokens / 1_000_000) * costs.input
+  const outputCostUSD = (outputTokens / 1_000_000) * costs.output
 
   return {
     inputCostUSD,
     outputCostUSD,
     totalCostUSD: inputCostUSD + outputCostUSD,
-  };
+  }
 }

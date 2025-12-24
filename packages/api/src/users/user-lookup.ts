@@ -4,8 +4,8 @@
  * @description Utilities for finding users by various identifiers (ID, oauth3Id, username).
  */
 
-import { db, type User } from '@babylon/db';
-import { NotFoundError } from '../errors';
+import { db, type User } from '@babylon/db'
+import { NotFoundError } from '@babylon/shared'
 
 /**
  * Find user by identifier (ID, oauth3Id, or username)
@@ -27,11 +27,11 @@ import { NotFoundError } from '../errors';
  */
 export async function findUserByIdentifier(
   identifier: string,
-  _select?: Record<string, boolean>
+  _select?: Record<string, boolean>,
 ): Promise<User | null> {
   // `_select` kept for backward compatibility. CQL repositories currently
   // return full rows.
-  void _select;
+  void _select
   return (await db.user.findFirst({
     where: {
       OR: [
@@ -40,7 +40,7 @@ export async function findUserByIdentifier(
         { username: identifier },
       ],
     },
-  })) as User | null;
+  })) as User | null
 }
 
 /**
@@ -62,10 +62,10 @@ export async function findUserByIdentifier(
  */
 export async function findUserByIdentifierWithSelect(
   identifier: string,
-  _select: Record<string, boolean>
+  _select: Record<string, boolean>,
 ): Promise<User | null> {
-  void _select;
-  return findUserByIdentifier(identifier);
+  void _select
+  return findUserByIdentifier(identifier)
 }
 
 /**
@@ -90,11 +90,11 @@ export async function findUserByIdentifierWithSelect(
  */
 export async function requireUserByIdentifier(
   identifier: string,
-  _select?: Record<string, boolean>
+  _select?: Record<string, boolean>,
 ): Promise<User> {
-  const user = await findUserByIdentifier(identifier);
+  const user = await findUserByIdentifier(identifier)
   if (!user) {
-    throw new NotFoundError('User', identifier);
+    throw new NotFoundError('User', identifier)
   }
-  return user;
+  return user
 }

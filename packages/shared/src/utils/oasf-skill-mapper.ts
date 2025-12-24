@@ -11,7 +11,7 @@
  * @see https://sdk.ag0.xyz/ for Agent0 SDK documentation
  */
 
-import type { ActorData } from '../game-types';
+import type { ActorData } from '../game-types'
 
 /**
  * OASF Skill Categories
@@ -59,7 +59,7 @@ export const OASFSkillCategories = {
   // Workflow & Automation
   WORKFLOW: 'workflow_automation',
   TASK_PLANNING: 'task_planning_and_scheduling',
-} as const;
+} as const
 
 /**
  * OASF Domain Categories
@@ -81,7 +81,7 @@ export const OASFDomainCategories = {
 
   EDUCATION: 'education_and_learning',
   RESEARCH: 'research_and_development',
-} as const;
+} as const
 
 /**
  * NPC Type to OASF Skills Mapping
@@ -155,7 +155,7 @@ export const NPCTypeSkillMap: Record<string, string[]> = {
     OASFSkillCategories.NLP,
     OASFSkillCategories.REASONING,
   ],
-};
+}
 
 /**
  * NPC Type to OASF Domains Mapping
@@ -215,7 +215,7 @@ export const NPCTypeDomainMap: Record<string, string[]> = {
     OASFDomainCategories.GAMING,
     OASFDomainCategories.SOCIAL_NETWORKING,
   ],
-};
+}
 
 /**
  * Map ActorData to OASF skills based on NPC characteristics
@@ -237,52 +237,49 @@ export const NPCTypeDomainMap: Record<string, string[]> = {
  * ```
  */
 export function mapActorToOASFSkills(actorData: ActorData): string[] {
-  const skills: string[] = [];
+  const skills: string[] = []
 
   // Determine NPC type from role field
-  const npcType = actorData.role?.toLowerCase() || 'default';
+  const npcType = actorData.role?.toLowerCase() || 'default'
 
   // Get skills for this NPC type
-  const typeSkills = NPCTypeSkillMap[npcType] || NPCTypeSkillMap.default;
+  const typeSkills = NPCTypeSkillMap[npcType] || NPCTypeSkillMap.default
   if (typeSkills) {
-    skills.push(...typeSkills);
+    skills.push(...typeSkills)
   }
 
   // Add skills based on description keywords
-  const description = (actorData.description || '').toLowerCase();
+  const description = (actorData.description || '').toLowerCase()
 
   if (description.includes('trade') || description.includes('trading')) {
-    skills.push(OASFSkillCategories.TRADING);
+    skills.push(OASFSkillCategories.TRADING)
   }
 
   if (description.includes('invest') || description.includes('portfolio')) {
-    skills.push(OASFSkillCategories.INVESTMENT);
+    skills.push(OASFSkillCategories.INVESTMENT)
   }
 
   if (description.includes('analyz') || description.includes('predict')) {
     skills.push(
       OASFSkillCategories.DATA_ANALYSIS,
-      OASFSkillCategories.PREDICTION
-    );
+      OASFSkillCategories.PREDICTION,
+    )
   }
 
   if (description.includes('social') || description.includes('community')) {
-    skills.push(
-      OASFSkillCategories.SOCIAL_MEDIA,
-      OASFSkillCategories.COMMUNITY
-    );
+    skills.push(OASFSkillCategories.SOCIAL_MEDIA, OASFSkillCategories.COMMUNITY)
   }
 
   if (description.includes('content') || description.includes('post')) {
-    skills.push(OASFSkillCategories.CONTENT_CREATION);
+    skills.push(OASFSkillCategories.CONTENT_CREATION)
   }
 
   if (description.includes('moderate') || description.includes('moderation')) {
-    skills.push(OASFSkillCategories.CONTENT_MODERATION);
+    skills.push(OASFSkillCategories.CONTENT_MODERATION)
   }
 
   // Remove duplicates
-  return Array.from(new Set(skills));
+  return Array.from(new Set(skills))
 }
 
 /**
@@ -305,34 +302,34 @@ export function mapActorToOASFSkills(actorData: ActorData): string[] {
  * ```
  */
 export function mapActorToOASFDomains(actorData: ActorData): string[] {
-  const domains: string[] = [];
+  const domains: string[] = []
 
   // Determine NPC type from role field
-  const npcType = actorData.role?.toLowerCase() || 'default';
+  const npcType = actorData.role?.toLowerCase() || 'default'
 
   // Get domains for this NPC type
-  const typeDomains = NPCTypeDomainMap[npcType] || NPCTypeDomainMap.default;
+  const typeDomains = NPCTypeDomainMap[npcType] || NPCTypeDomainMap.default
   if (typeDomains) {
-    domains.push(...typeDomains);
+    domains.push(...typeDomains)
   }
 
   // Add domains based on description keywords
-  const description = (actorData.description || '').toLowerCase();
+  const description = (actorData.description || '').toLowerCase()
 
   if (description.includes('finance') || description.includes('financial')) {
-    domains.push(OASFDomainCategories.FINANCE);
+    domains.push(OASFDomainCategories.FINANCE)
   }
 
   if (description.includes('invest')) {
-    domains.push(OASFDomainCategories.INVESTMENT);
+    domains.push(OASFDomainCategories.INVESTMENT)
   }
 
   if (description.includes('market') || description.includes('trading')) {
-    domains.push(OASFDomainCategories.TRADING_MARKETS);
+    domains.push(OASFDomainCategories.TRADING_MARKETS)
   }
 
   if (description.includes('social')) {
-    domains.push(OASFDomainCategories.SOCIAL_NETWORKING);
+    domains.push(OASFDomainCategories.SOCIAL_NETWORKING)
   }
 
   if (
@@ -340,11 +337,11 @@ export function mapActorToOASFDomains(actorData: ActorData): string[] {
     description.includes('gaming') ||
     description.includes('prediction market')
   ) {
-    domains.push(OASFDomainCategories.GAMING);
+    domains.push(OASFDomainCategories.GAMING)
   }
 
   // Remove duplicates
-  return Array.from(new Set(domains));
+  return Array.from(new Set(domains))
 }
 
 /**
@@ -364,8 +361,8 @@ export function mapActorToOASFDomains(actorData: ActorData): string[] {
  */
 export function validateOASFSkillPath(skillPath: string): boolean {
   // Basic format validation: alphanumeric + underscores, separated by forward slashes
-  const validPathRegex = /^[a-z0-9_]+(?:\/[a-z0-9_]+)*$/;
-  return validPathRegex.test(skillPath);
+  const validPathRegex = /^[a-z0-9_]+(?:\/[a-z0-9_]+)*$/
+  return validPathRegex.test(skillPath)
 }
 
 /**
@@ -385,8 +382,8 @@ export function validateOASFSkillPath(skillPath: string): boolean {
  */
 export function validateOASFDomainPath(domainPath: string): boolean {
   // Same format as skill paths
-  const validPathRegex = /^[a-z0-9_]+(?:\/[a-z0-9_]+)*$/;
-  return validPathRegex.test(domainPath);
+  const validPathRegex = /^[a-z0-9_]+(?:\/[a-z0-9_]+)*$/
+  return validPathRegex.test(domainPath)
 }
 
 /**
@@ -398,7 +395,7 @@ export function validateOASFDomainPath(domainPath: string): boolean {
  * @returns {string[]} Array of skill category identifiers
  */
 export function getAllSkillCategories(): string[] {
-  return Object.values(OASFSkillCategories);
+  return Object.values(OASFSkillCategories)
 }
 
 /**
@@ -410,7 +407,7 @@ export function getAllSkillCategories(): string[] {
  * @returns {string[]} Array of domain category identifiers
  */
 export function getAllDomainCategories(): string[] {
-  return Object.values(OASFDomainCategories);
+  return Object.values(OASFDomainCategories)
 }
 
 /**
@@ -430,38 +427,38 @@ export function getAllDomainCategories(): string[] {
  * ```
  */
 export function suggestSkillsFromKeywords(keywords: string[]): string[] {
-  const suggestions = new Set<string>();
+  const suggestions = new Set<string>()
 
-  const lowerKeywords = keywords.map((k) => k.toLowerCase());
+  const lowerKeywords = keywords.map((k) => k.toLowerCase())
 
   for (const keyword of lowerKeywords) {
     if (keyword.includes('trade') || keyword.includes('trading')) {
-      suggestions.add(OASFSkillCategories.TRADING);
+      suggestions.add(OASFSkillCategories.TRADING)
     }
     if (keyword.includes('invest')) {
-      suggestions.add(OASFSkillCategories.INVESTMENT);
+      suggestions.add(OASFSkillCategories.INVESTMENT)
     }
     if (keyword.includes('analyz') || keyword.includes('analysis')) {
-      suggestions.add(OASFSkillCategories.DATA_ANALYSIS);
+      suggestions.add(OASFSkillCategories.DATA_ANALYSIS)
     }
     if (keyword.includes('predict')) {
-      suggestions.add(OASFSkillCategories.PREDICTION);
+      suggestions.add(OASFSkillCategories.PREDICTION)
     }
     if (keyword.includes('dialogue') || keyword.includes('conversation')) {
-      suggestions.add(OASFSkillCategories.DIALOGUE);
+      suggestions.add(OASFSkillCategories.DIALOGUE)
     }
     if (keyword.includes('nlp') || keyword.includes('language')) {
-      suggestions.add(OASFSkillCategories.NLP);
+      suggestions.add(OASFSkillCategories.NLP)
     }
     if (keyword.includes('social')) {
-      suggestions.add(OASFSkillCategories.SOCIAL_MEDIA);
+      suggestions.add(OASFSkillCategories.SOCIAL_MEDIA)
     }
     if (keyword.includes('content')) {
-      suggestions.add(OASFSkillCategories.CONTENT_CREATION);
+      suggestions.add(OASFSkillCategories.CONTENT_CREATION)
     }
   }
 
-  return Array.from(suggestions);
+  return Array.from(suggestions)
 }
 
 /**
@@ -481,30 +478,30 @@ export function suggestSkillsFromKeywords(keywords: string[]): string[] {
  * ```
  */
 export function suggestDomainsFromKeywords(keywords: string[]): string[] {
-  const suggestions = new Set<string>();
+  const suggestions = new Set<string>()
 
-  const lowerKeywords = keywords.map((k) => k.toLowerCase());
+  const lowerKeywords = keywords.map((k) => k.toLowerCase())
 
   for (const keyword of lowerKeywords) {
     if (keyword.includes('finance') || keyword.includes('financial')) {
-      suggestions.add(OASFDomainCategories.FINANCE);
+      suggestions.add(OASFDomainCategories.FINANCE)
     }
     if (keyword.includes('invest')) {
-      suggestions.add(OASFDomainCategories.INVESTMENT);
+      suggestions.add(OASFDomainCategories.INVESTMENT)
     }
     if (keyword.includes('market') || keyword.includes('trading')) {
-      suggestions.add(OASFDomainCategories.TRADING_MARKETS);
+      suggestions.add(OASFDomainCategories.TRADING_MARKETS)
     }
     if (keyword.includes('social')) {
-      suggestions.add(OASFDomainCategories.SOCIAL_NETWORKING);
+      suggestions.add(OASFDomainCategories.SOCIAL_NETWORKING)
     }
     if (keyword.includes('game') || keyword.includes('gaming')) {
-      suggestions.add(OASFDomainCategories.GAMING);
+      suggestions.add(OASFDomainCategories.GAMING)
     }
     if (keyword.includes('education') || keyword.includes('learning')) {
-      suggestions.add(OASFDomainCategories.EDUCATION);
+      suggestions.add(OASFDomainCategories.EDUCATION)
     }
   }
 
-  return Array.from(suggestions);
+  return Array.from(suggestions)
 }

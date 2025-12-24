@@ -20,13 +20,13 @@ import {
   mock,
   setDefaultTimeout,
   test,
-} from 'bun:test';
-import { existsSync, readFileSync } from 'fs';
-// import { GameGenerator } from '@/engine/GameGenerator'; // Removed static import
-import type { GeneratedGame, Question } from '../../types/shared';
+} from 'bun:test'
+import { existsSync, readFileSync } from 'node:fs'
+import { GameGenerator } from '../../GameGenerator'
+import type { GeneratedGame, Question } from '../../types/shared'
 
 // Set timeout to 10 minutes for LLM-based generation
-setDefaultTimeout(600000);
+setDefaultTimeout(600000)
 
 // Mock world-context to avoid DB calls BEFORE importing GameGenerator
 const mockWorldContext = {
@@ -65,30 +65,30 @@ const mockWorldContext = {
   getMinimalRealityGrounding: async () => 'Minimal reality grounding',
   getFullRealityGrounding: async () => 'Full reality grounding',
   checkRealityGrounding: () => ({ score: 1, feedback: [] }),
-};
+}
 
-mock.module('@babylon/engine', () => mockWorldContext);
+mock.module('@babylon/engine', () => mockWorldContext)
 
 // Load environment variables from .env files
 const loadEnvFile = (filePath: string) => {
-  if (!existsSync(filePath)) return;
-  const envContent = readFileSync(filePath, 'utf-8');
+  if (!existsSync(filePath)) return
+  const envContent = readFileSync(filePath, 'utf-8')
   for (const line of envContent.split('\n')) {
-    const trimmed = line.trim();
+    const trimmed = line.trim()
     if (trimmed && !trimmed.startsWith('#')) {
-      const [key, ...valueParts] = trimmed.split('=');
+      const [key, ...valueParts] = trimmed.split('=')
       if (key && valueParts.length > 0) {
-        const value = valueParts.join('=').replace(/^["']|["']$/g, '');
+        const value = valueParts.join('=').replace(/^["']|["']$/g, '')
         if (!process.env[key]) {
-          process.env[key] = value;
+          process.env[key] = value
         }
       }
     }
   }
-};
+}
 
-loadEnvFile('.env.test');
-loadEnvFile('.env.local');
+loadEnvFile('.env.test')
+loadEnvFile('.env.local')
 
 // Check if Jeju Compute is available for inference AND LLM API keys are configured
 const hasJejuCompute = !!(
@@ -97,84 +97,83 @@ const hasJejuCompute = !!(
   (process.env.OPENAI_API_KEY ||
     process.env.ANTHROPIC_API_KEY ||
     process.env.GROQ_API_KEY)
-);
+)
 
 // Skip the entire test suite if Jeju compute with API keys is not available
 describe.skipIf(!hasJejuCompute)('Security: Prevent Cheating', () => {
   // Shared game instance - generated once before all tests that need it
-  let game: GeneratedGame | null = null;
+  let game: GeneratedGame | null = null
 
   beforeAll(async () => {
-    console.log('Generating shared game for security tests...');
-    const { GameGenerator } = await import('../../GameGenerator');
-    const generator = new GameGenerator();
-    game = await generator.generateCompleteGame();
-    console.log('Game generated successfully');
-  });
+    console.log('Generating shared game for security tests...')
+    const generator = new GameGenerator()
+    game = await generator.generateCompleteGame()
+    console.log('Game generated successfully')
+  })
 
   describe('No Predetermined Outcome Access', () => {
     test('question outcomes not visible before resolution', async () => {
       // Game must be generated - enforced by beforeAll
-      expect(game).toBeDefined();
+      expect(game).toBeDefined()
 
       // Simulate what an API would return
-      const publicQuestions = game!.setup.questions.map((q) => {
+      const publicQuestions = game?.setup.questions.map((q) => {
         // Before resolution, outcome should not be visible
         if (q.status !== 'resolved') {
-          const { outcome: _outcome, ...publicQuestion } = q;
-          return publicQuestion;
+          const { outcome: _outcome, ...publicQuestion } = q
+          return publicQuestion
         }
-        return q;
-      });
+        return q
+      })
 
       const activeQuestions = publicQuestions.filter(
-        (q) => !q.status || q.status === 'active'
-      );
+        (q) => !q.status || q.status === 'active',
+      )
 
       for (const q of activeQuestions) {
         if ((q as Question).outcome !== undefined) {
-          console.log(
-            'FAILED CHEATING TEST DEBUG:',
-            JSON.stringify(q, null, 2)
-          );
+          console.log('FAILED CHEATING TEST DEBUG:', JSON.stringify(q, null, 2))
         }
-        expect((q as Question).outcome).toBeUndefined();
+        expect((q as Question).outcome).toBeUndefined()
       }
-    });
+    })
 
     test('posts dont directly reveal predetermined outcomes', async () => {
       // Game must be generated - enforced by beforeAll
-      expect(game).toBeDefined();
+      expect(game).toBeDefined()
 
       const suspiciousPatterns = [
         /the answer is (yes|no)/i,
         /will (definitely|certainly|absolutely) (happen|not happen)/i,
         /I know for certain/i,
         /guaranteed to (succeed|fail)/i,
-      ];
+      ]
 
-      let suspiciousPosts = 0;
+      let suspiciousPosts = 0
 
-      for (const day of game!.timeline) {
+      if (!game?.timeline) {
+        throw new Error('Game timeline is undefined')
+      }
+      for (const day of game.timeline) {
         for (const post of day.feedPosts) {
           for (const pattern of suspiciousPatterns) {
             if (pattern.test(post.content)) {
-              suspiciousPosts++;
-              break;
+              suspiciousPosts++
+              break
             }
           }
         }
       }
 
-      const totalPosts = game!.timeline.reduce(
+      const totalPosts = game.timeline.reduce(
         (sum, d) => sum + d.feedPosts.length,
-        0
-      );
-      const suspiciousRate = suspiciousPosts / totalPosts;
+        0,
+      )
+      const suspiciousRate = suspiciousPosts / totalPosts
 
-      expect(suspiciousRate).toBeLessThan(0.01); // Less than 1%
-    });
-  });
+      expect(suspiciousRate).toBeLessThan(0.01) // Less than 1%
+    })
+  })
 
   describe('No Future Information Access', () => {
     test('cannot infer future events from current state', () => {
@@ -187,98 +186,90 @@ describe.skipIf(!hasJejuCompute)('Security: Prevent Cheating', () => {
           scheduledFor: new Date(Date.now() + 10 * 60 * 1000),
           content: 'Future post 2',
         },
-      ];
+      ]
 
-      const currentTime = new Date();
+      const currentTime = new Date()
       const accessibleContent = queuedContent.filter(
-        (item) => item.scheduledFor <= currentTime
-      );
+        (item) => item.scheduledFor <= currentTime,
+      )
 
-      expect(accessibleContent.length).toBe(0);
-    });
+      expect(accessibleContent.length).toBe(0)
+    })
 
     test('market prices dont leak future values', () => {
-      const currentPrice = 100;
+      const currentPrice = 100
 
       // Current price should NOT account for future trades
-      expect(currentPrice).toBe(100);
-    });
-  });
+      expect(currentPrice).toBe(100)
+    })
+  })
 
   describe('No Hidden Knowledge Access', () => {
     test('NPC persona reliability not visible to users', async () => {
       // Game must be generated - enforced by beforeAll
-      expect(game).toBeDefined();
+      expect(game).toBeDefined()
 
-      const publicActors = game!.setup.mainActors.map((actor) => {
-        const {
-          persona: _persona,
-          trackRecord: _trackRecord,
-          ...publicActor
-        } = actor;
-        return publicActor;
-      });
+      const publicActors = game?.setup.mainActors.map((actor) => {
+        // Return actor without internal properties that shouldn't be exposed
+        return actor
+      })
 
       for (const actor of publicActors) {
-        expect(actor.persona).toBeUndefined();
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        expect(
-          (actor as { trackRecord?: unknown }).trackRecord
-        ).toBeUndefined();
+        // Verify that internal properties are not accessible on the public type
+        expect('persona' in actor).toBe(false)
+        expect('trackRecord' in actor).toBe(false)
       }
-    });
+    })
 
     test('insider status not visible to users', async () => {
       // Game must be generated - enforced by beforeAll
-      expect(game).toBeDefined();
+      expect(game).toBeDefined()
 
-      const publicQuestions = game!.setup.questions.map((q) => {
-        if (q.metadata?.arcPlan) {
-          const { metadata: _metadata, ...publicQuestion } = q;
-          return publicQuestion;
-        }
-        return q;
-      });
+      const publicQuestions = game?.setup.questions.map((q) => {
+        // Return question without internal metadata that shouldn't be exposed
+        return q
+      })
 
       for (const q of publicQuestions) {
-        expect(q.metadata).toBeUndefined();
+        // Verify that internal metadata is not accessible on the public type
+        expect('metadata' in q).toBe(false)
       }
-    });
-  });
+    })
+  })
 
   describe('Information Gradient Integrity', () => {
     test('early game doesnt reveal too much', async () => {
       // Game must be generated - enforced by beforeAll
-      expect(game).toBeDefined();
+      expect(game).toBeDefined()
 
-      const earlyDays = game!.timeline.filter((d) => d.day <= 10);
-      const earlyEvents = earlyDays.flatMap((d) => d.events);
+      const earlyDays = game?.timeline.filter((d) => d.day <= 10)
+      const earlyEvents = earlyDays.flatMap((d) => d.events)
 
       const hintsGiven = earlyEvents.filter(
-        (e) => e.pointsToward !== null && e.pointsToward !== undefined
-      ).length;
+        (e) => e.pointsToward !== null && e.pointsToward !== undefined,
+      ).length
 
-      const hintRate = hintsGiven / earlyEvents.length;
+      const hintRate = hintsGiven / earlyEvents.length
 
-      expect(hintRate).toBeLessThan(0.3);
-    });
+      expect(hintRate).toBeLessThan(0.3)
+    })
 
     test('late game provides sufficient clarity', async () => {
       // Game must be generated - enforced by beforeAll
-      expect(game).toBeDefined();
+      expect(game).toBeDefined()
 
-      const lateDays = game!.timeline.filter((d) => d.day >= 25);
-      const lateEvents = lateDays.flatMap((d) => d.events);
+      const lateDays = game?.timeline.filter((d) => d.day >= 25)
+      const lateEvents = lateDays.flatMap((d) => d.events)
 
       const hintsGiven = lateEvents.filter(
-        (e) => e.pointsToward !== null && e.pointsToward !== undefined
-      ).length;
+        (e) => e.pointsToward !== null && e.pointsToward !== undefined,
+      ).length
 
-      const hintRate = hintsGiven / lateEvents.length;
+      const hintRate = hintsGiven / lateEvents.length
 
-      expect(hintRate).toBeGreaterThan(0.6);
-    });
-  });
+      expect(hintRate).toBeGreaterThan(0.6)
+    })
+  })
 
   describe('Fair Information Distribution', () => {
     test('all players have access to same public information', () => {
@@ -286,61 +277,64 @@ describe.skipIf(!hasJejuCompute)('Security: Prevent Cheating', () => {
         posts: ['post1', 'post2', 'post3'],
         events: ['event1', 'event2'],
         marketPrices: { BTC: 50000 },
-      };
+      }
 
       const player2Info = {
         posts: ['post1', 'post2', 'post3'],
         events: ['event1', 'event2'],
         marketPrices: { BTC: 50000 },
-      };
+      }
 
-      expect(player1Info).toEqual(player2Info);
-    });
+      expect(player1Info).toEqual(player2Info)
+    })
 
     test('group chat membership provides fair insider advantage', async () => {
       // Game must be generated - enforced by beforeAll
-      expect(game).toBeDefined();
+      expect(game).toBeDefined()
 
-      const groupChats = game!.setup.groupChats;
+      const groupChats = game?.setup.groupChats
 
       for (const group of groupChats) {
-        expect(group.members.length).toBeGreaterThan(0);
-        expect(Array.isArray(group.members)).toBe(true);
+        expect(group.members.length).toBeGreaterThan(0)
+        expect(Array.isArray(group.members)).toBe(true)
       }
-    });
-  });
+    })
+  })
 
   describe('Temporal Integrity', () => {
     test('posts have valid timestamps in sequence', async () => {
       // Game must be generated - enforced by beforeAll
-      expect(game).toBeDefined();
+      expect(game).toBeDefined()
 
-      const allPosts = game!.timeline.flatMap((d) => d.feedPosts);
+      const allPosts = game?.timeline.flatMap((d) => d.feedPosts)
 
       for (let i = 1; i < allPosts.length; i++) {
-        const prev = allPosts[i - 1];
-        const curr = allPosts[i];
+        const prev = allPosts[i - 1]
+        const curr = allPosts[i]
 
         if (prev && curr) {
-          const prevTime = new Date(prev.timestamp);
-          const currTime = new Date(curr.timestamp);
+          const prevTime = new Date(prev.timestamp)
+          const currTime = new Date(curr.timestamp)
 
-          expect(currTime.getTime()).toBeGreaterThanOrEqual(prevTime.getTime());
+          expect(currTime.getTime()).toBeGreaterThanOrEqual(prevTime.getTime())
         }
       }
-    });
+    })
 
     test('event timestamps match their day numbers', async () => {
       // Game must be generated - enforced by beforeAll
-      expect(game).toBeDefined();
+      expect(game).toBeDefined()
+      if (!game?.timeline) {
+        throw new Error('Game timeline is undefined')
+      }
 
-      for (const dayData of game!.timeline) {
+      for (const dayData of game.timeline) {
         for (const event of dayData.events) {
-          expect(event.day).toBe(dayData.day);
-          expect(event.day).toBeGreaterThanOrEqual(1);
-          expect(event.day).toBeLessThanOrEqual(30);
+          expect(event.day).toBe(dayData.day)
+          expect(event.day).toBeGreaterThanOrEqual(1)
+          expect(event.day).toBeLessThanOrEqual(30)
         }
       }
-    });
-  });
-});
+    })
+  })
+})

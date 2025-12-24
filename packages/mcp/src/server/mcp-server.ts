@@ -5,15 +5,15 @@
  * Uses Zod schemas as single source of truth for tool input validation
  */
 
-import { toJSONSchema, type ZodObject, type ZodRawShape } from 'zod';
+import { toJSONSchema, type ZodObject, type ZodRawShape } from 'zod'
 import type {
   Implementation,
   InitializeResult,
   MCPProtocolVersion,
   MCPTool,
   ServerCapabilities,
-} from '../types/mcp';
-import { MCP_PROTOCOL_VERSIONS } from '../types/mcp';
+} from '../types/mcp'
+import { MCP_PROTOCOL_VERSIONS } from '../types/mcp'
 import {
   AcceptGroupInviteArgsSchema,
   AppealBanArgsSchema,
@@ -91,22 +91,36 @@ import {
   UnmuteUserArgsSchema,
   UpdateProfileArgsSchema,
   VerifyEscrowPaymentArgsSchema,
-} from '../utils/tool-args-validation';
+} from '../utils/tool-args-validation'
 
 /**
  * Convert Zod schema to MCP-compatible inputSchema
+ * toJSONSchema returns a compatible structure but with different type
  */
 function schemaToInputSchema(
-  schema: ZodObject<ZodRawShape>
+  schema: ZodObject<ZodRawShape>,
 ): MCPTool['inputSchema'] {
-  const jsonSchema = toJSONSchema(schema);
-  return jsonSchema as MCPTool['inputSchema'];
+  const jsonSchema = toJSONSchema(schema)
+  // The JSON schema from Zod is structurally compatible with MCPTool's inputSchema
+  // but TypeScript doesn't know this, so we validate the structure
+  if (
+    typeof jsonSchema === 'object' &&
+    jsonSchema !== null &&
+    'type' in jsonSchema &&
+    jsonSchema.type === 'object' &&
+    'properties' in jsonSchema &&
+    typeof jsonSchema.properties === 'object'
+  ) {
+    return jsonSchema as MCPTool['inputSchema']
+  }
+  // Fallback for edge cases - return minimal valid schema
+  return { type: 'object', properties: {} }
 }
 
 /**
  * Default MCP protocol version
  */
-export const DEFAULT_MCP_PROTOCOL_VERSION: MCPProtocolVersion = '2024-11-05';
+export const DEFAULT_MCP_PROTOCOL_VERSION: MCPProtocolVersion = '2024-11-05'
 
 /**
  * Get MCP server information
@@ -116,7 +130,7 @@ export function getMCPServerInfo(): Implementation {
     name: 'Babylon Prediction Markets',
     version: '1.0.0',
     title: 'Babylon MCP Server',
-  };
+  }
 }
 
 /**
@@ -135,22 +149,22 @@ export function getServerCapabilities(): ServerCapabilities {
       listChanged: false,
     },
     logging: {},
-  };
+  }
 }
 
 /**
  * Get initialize result for protocol negotiation
  */
 export function getInitializeResult(
-  requestedVersion: MCPProtocolVersion
+  requestedVersion: MCPProtocolVersion,
 ): InitializeResult {
-  const serverInfo = getMCPServerInfo();
-  const capabilities = getServerCapabilities();
+  const serverInfo = getMCPServerInfo()
+  const capabilities = getServerCapabilities()
 
   // Negotiate protocol version (use requested if supported, otherwise default)
   const protocolVersion = MCP_PROTOCOL_VERSIONS.includes(requestedVersion)
     ? requestedVersion
-    : DEFAULT_MCP_PROTOCOL_VERSION;
+    : DEFAULT_MCP_PROTOCOL_VERSION
 
   return {
     protocolVersion,
@@ -158,7 +172,7 @@ export function getInitializeResult(
     serverInfo,
     instructions:
       'Babylon MCP Server provides access to prediction markets, trading, social features, and more. Use tools/list to see available tools.',
-  };
+  }
 }
 
 /**
@@ -564,5 +578,5 @@ export function getAvailableTools(): MCPTool[] {
       description: 'Transfer points to another user',
       inputSchema: schemaToInputSchema(TransferPointsArgsSchema),
     },
-  ];
+  ]
 }

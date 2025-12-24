@@ -1,44 +1,32 @@
 {
   "name": "@babylon/auth",
   "version": "0.1.0",
-  "description": "Decentralized authentication for Babylon using TEE and MPC",
+  "description": "Client-side authentication for Babylon using Jeju's decentralized auth",
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "exports": {
-    ".": "./src/index.ts",
-    "./client": "./src/client/index.ts",
-    "./server": "./src/server/index.ts",
-    "./did": "./src/did/index.ts",
-    "./mpc": "./src/mpc/index.ts",
-    "./oauth": "./src/oauth/index.ts",
-    "./oauth3": "./src/oauth3/index.ts",
-    "./recovery": "./src/recovery/index.ts",
-    "./paymaster": "./src/paymaster/index.ts"
+    ".": "./src/index.ts"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit",
     "test": "bun test",
-    "lint": "biome check src/"
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@babylon/shared": "workspace:*",
+    "@jejunetwork/kms": "workspace:*",
+    "@jejunetwork/oauth3": "workspace:*",
     "arctic": "2.3.0",
     "jose": "5.10.0",
-    "viem": "2.43.2",
-    "zod": "^4.1.12"
+    "viem": "2.43.3",
+    "zod": "4.2.1"
   },
   "devDependencies": {
     "@types/bun": "1.3.2",
     "@types/react": "^19.2.2",
-    "typescript": "^5.9.3"
+    "typescript": "5.9.3"
   },
   "peerDependencies": {
-    "react": ">=18.0.0"
-  },
-  "peerDependenciesMeta": {
-    "react": {
-      "optional": true
-    }
+    "react": "^18.0.0 || ^19.0.0"
   }
 }

@@ -1,5 +1,5 @@
-import { definePrompt } from '../define-prompt';
-import { ANTI_REPETITION_RULES, PARODY_NAME_RULES } from '../shared-sections';
+import { definePrompt } from '../define-prompt'
+import { ANTI_REPETITION_RULES, PARODY_NAME_RULES } from '../shared-sections'
 
 /**
  * Prompt for generating trending topic descriptions from clustered posts.
@@ -56,4 +56,4 @@ XML:
     </trend>
   </trends>
 </response>`.trim(),
-});
+})

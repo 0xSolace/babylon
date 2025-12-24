@@ -1,24 +1,22 @@
-'use client';
-
-import { cn } from '@babylon/shared';
-import { Loader2, MessageCircle } from 'lucide-react';
-import React from 'react';
-import { Skeleton } from '@/components/shared/Skeleton';
-import { MessageBubble } from './MessageBubble';
-import type { ChatParticipant, Message } from './types';
+import { cn } from '@babylon/shared'
+import { Loader2, MessageCircle } from 'lucide-react'
+import type React from 'react'
+import { Skeleton } from '@/components/shared/Skeleton'
+import { MessageBubble } from './MessageBubble'
+import type { ChatParticipant, Message } from './types'
 
 interface MessageListProps {
-  messages: Message[];
-  participants: ChatParticipant[];
-  currentUserId: string | undefined;
-  loading: boolean;
-  isLoadingMore: boolean;
-  hasMore: boolean;
-  pullDistance: number;
-  authenticated: boolean;
-  onTagClick?: (tag: string) => void;
-  topSentinelRef: React.RefObject<HTMLDivElement | null>;
-  messagesEndRef: React.RefObject<HTMLDivElement | null>;
+  messages: Message[]
+  participants: ChatParticipant[]
+  currentUserId: string | undefined
+  loading: boolean
+  isLoadingMore: boolean
+  hasMore: boolean
+  pullDistance: number
+  authenticated: boolean
+  onTagClick?: (tag: string) => void
+  topSentinelRef: React.RefObject<HTMLDivElement | null>
+  messagesEndRef: React.RefObject<HTMLDivElement | null>
 }
 
 export function MessageList({
@@ -43,7 +41,7 @@ export function MessageList({
           <Skeleton className="h-16 w-full" />
         </div>
       </div>
-    );
+    )
   }
 
   return (
@@ -62,7 +60,7 @@ export function MessageList({
           <Loader2
             className={cn(
               'h-6 w-6 text-primary',
-              pullDistance > 80 ? 'animate-spin' : ''
+              pullDistance > 80 ? 'animate-spin' : '',
             )}
           />
         </div>
@@ -83,10 +81,10 @@ export function MessageList({
 
       {/* Messages */}
       {messages.map((msg) => {
-        const sender = participants.find((p) => p.id === msg.senderId);
+        const sender = participants.find((p) => p.id === msg.senderId)
         const isCurrentUser = currentUserId
           ? msg.senderId === currentUserId
-          : false;
+          : false
 
         return (
           <MessageBubble
@@ -96,7 +94,7 @@ export function MessageList({
             isCurrentUser={isCurrentUser}
             onTagClick={onTagClick}
           />
-        );
+        )
       })}
 
       {/* Empty state */}
@@ -116,5 +114,5 @@ export function MessageList({
 
       <div ref={messagesEndRef} />
     </>
-  );
+  )
 }

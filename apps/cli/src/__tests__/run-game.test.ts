@@ -3,11 +3,11 @@
  * Tests command-line game simulation interface
  */
 
-import { describe, expect, test } from 'bun:test';
-import { spawnSync } from 'bun';
-import { existsSync, unlinkSync } from 'fs';
+import { describe, expect, test } from 'bun:test'
+import { existsSync, unlinkSync } from 'node:fs'
+import { spawnSync } from 'bun'
 
-const CLI_PATH = 'src/index.ts';
+const CLI_PATH = 'src/index.ts'
 
 describe('CLI Game Runner', () => {
   describe('Basic Execution', () => {
@@ -16,34 +16,34 @@ describe('CLI Game Runner', () => {
         ['bun', 'run', CLI_PATH, 'game', 'simulate', '--fast'],
         {
           cwd: process.cwd(),
-        }
-      );
+        },
+      )
 
-      expect(result.exitCode).toBe(0);
-      expect(result.stdout.toString()).toContain('Game complete');
-    });
+      expect(result.exitCode).toBe(0)
+      expect(result.stdout.toString()).toContain('Game complete')
+    })
 
     test('exits with code 0 on success', () => {
       const result = spawnSync(
         ['bun', 'run', CLI_PATH, 'game', 'simulate', '--fast'],
         {
           cwd: process.cwd(),
-        }
-      );
+        },
+      )
 
-      expect(result.exitCode).toBe(0);
-    });
+      expect(result.exitCode).toBe(0)
+    })
 
     test('completes quickly in fast mode', () => {
-      const start = Date.now();
+      const start = Date.now()
       spawnSync(['bun', 'run', CLI_PATH, 'game', 'simulate', '--fast'], {
         cwd: process.cwd(),
-      });
-      const duration = Date.now() - start;
+      })
+      const duration = Date.now() - start
 
-      expect(duration).toBeLessThan(3000); // Under 3 seconds
-    });
-  });
+      expect(duration).toBeLessThan(3000) // Under 3 seconds
+    })
+  })
 
   describe('Outcome Flag', () => {
     test('respects --outcome=YES flag', () => {
@@ -58,12 +58,12 @@ describe('CLI Game Runner', () => {
           '--fast',
           '--json',
         ],
-        { cwd: process.cwd() }
-      );
+        { cwd: process.cwd() },
+      )
 
-      const output = JSON.parse(result.stdout.toString());
-      expect(output.outcome).toBe(true);
-    });
+      const output = JSON.parse(result.stdout.toString())
+      expect(output.outcome).toBe(true)
+    })
 
     test('respects --outcome=NO flag', () => {
       const result = spawnSync(
@@ -77,32 +77,32 @@ describe('CLI Game Runner', () => {
           '--fast',
           '--json',
         ],
-        { cwd: process.cwd() }
-      );
+        { cwd: process.cwd() },
+      )
 
-      const output = JSON.parse(result.stdout.toString());
-      expect(output.outcome).toBe(false);
-    });
+      const output = JSON.parse(result.stdout.toString())
+      expect(output.outcome).toBe(false)
+    })
 
     test('defaults to random outcome without flag', () => {
       const result = spawnSync(
         ['bun', 'run', CLI_PATH, 'game', 'simulate', '--fast', '--json'],
         {
           cwd: process.cwd(),
-        }
-      );
+        },
+      )
 
-      const output = JSON.parse(result.stdout.toString());
-      expect(typeof output.outcome).toBe('boolean');
-    });
-  });
+      const output = JSON.parse(result.stdout.toString())
+      expect(typeof output.outcome).toBe('boolean')
+    })
+  })
 
   describe('Save Functionality', () => {
-    const testFile = 'test-game-cli.json';
+    const testFile = 'test-game-cli.json'
 
     test('creates save file with --save flag', async () => {
       // Clean up if exists
-      if (existsSync(testFile)) unlinkSync(testFile);
+      if (existsSync(testFile)) unlinkSync(testFile)
 
       const result = spawnSync(
         [
@@ -114,18 +114,18 @@ describe('CLI Game Runner', () => {
           `--save=${testFile}`,
           '--fast',
         ],
-        { cwd: process.cwd() }
-      );
+        { cwd: process.cwd() },
+      )
 
-      expect(result.exitCode).toBe(0);
-      expect(existsSync(testFile)).toBe(true);
+      expect(result.exitCode).toBe(0)
+      expect(existsSync(testFile)).toBe(true)
 
       // Clean up
-      unlinkSync(testFile);
-    });
+      unlinkSync(testFile)
+    })
 
     test('saved file contains valid game data', async () => {
-      if (existsSync(testFile)) unlinkSync(testFile);
+      if (existsSync(testFile)) unlinkSync(testFile)
 
       spawnSync(
         [
@@ -139,24 +139,24 @@ describe('CLI Game Runner', () => {
         ],
         {
           cwd: process.cwd(),
-        }
-      );
+        },
+      )
 
-      const file = Bun.file(testFile);
-      const data = await file.json();
+      const file = Bun.file(testFile)
+      const data = await file.json()
 
-      expect(data.id).toBeDefined();
-      expect(data.question).toBeDefined();
-      expect(data.events).toBeDefined();
-      expect(Array.isArray(data.events)).toBe(true);
-      expect(data.outcome).toBeDefined();
-      expect(data.agents).toBeDefined();
-      expect(data.market).toBeDefined();
+      expect(data.id).toBeDefined()
+      expect(data.question).toBeDefined()
+      expect(data.events).toBeDefined()
+      expect(Array.isArray(data.events)).toBe(true)
+      expect(data.outcome).toBeDefined()
+      expect(data.agents).toBeDefined()
+      expect(data.market).toBeDefined()
 
       // Clean up
-      unlinkSync(testFile);
-    });
-  });
+      unlinkSync(testFile)
+    })
+  })
 
   describe('Batch Mode', () => {
     test('runs multiple games with --count flag', () => {
@@ -164,41 +164,41 @@ describe('CLI Game Runner', () => {
         ['bun', 'run', CLI_PATH, 'game', 'simulate', '--count=5', '--fast'],
         {
           cwd: process.cwd(),
-        }
-      );
+        },
+      )
 
-      expect(result.exitCode).toBe(0);
-      expect(result.stdout.toString()).toContain('5 games completed');
-    });
+      expect(result.exitCode).toBe(0)
+      expect(result.stdout.toString()).toContain('5 games completed')
+    })
 
     test('batch mode completes quickly', () => {
-      const start = Date.now();
+      const start = Date.now()
 
       spawnSync(
         ['bun', 'run', CLI_PATH, 'game', 'simulate', '--count=10', '--fast'],
         {
           cwd: process.cwd(),
-        }
-      );
+        },
+      )
 
-      const duration = Date.now() - start;
-      expect(duration).toBeLessThan(10000); // 10 games in under 10s
-    });
+      const duration = Date.now() - start
+      expect(duration).toBeLessThan(10000) // 10 games in under 10s
+    })
 
     test('batch mode provides statistics', () => {
       const result = spawnSync(
         ['bun', 'run', CLI_PATH, 'game', 'simulate', '--count=10', '--fast'],
         {
           cwd: process.cwd(),
-        }
-      );
+        },
+      )
 
-      const output = result.stdout.toString();
-      expect(output).toContain('Avg time');
-      expect(output).toContain('YES outcomes');
-      expect(output).toContain('NO outcomes');
-    });
-  });
+      const output = result.stdout.toString()
+      expect(output).toContain('Avg time')
+      expect(output).toContain('YES outcomes')
+      expect(output).toContain('NO outcomes')
+    })
+  })
 
   describe('JSON Output', () => {
     test('produces parseable JSON with --json flag', () => {
@@ -206,30 +206,30 @@ describe('CLI Game Runner', () => {
         ['bun', 'run', CLI_PATH, 'game', 'simulate', '--fast', '--json'],
         {
           cwd: process.cwd(),
-        }
-      );
+        },
+      )
 
-      expect(() => JSON.parse(result.stdout.toString())).not.toThrow();
-    });
+      expect(() => JSON.parse(result.stdout.toString())).not.toThrow()
+    })
 
     test('JSON output contains all required fields', () => {
       const result = spawnSync(
         ['bun', 'run', CLI_PATH, 'game', 'simulate', '--fast', '--json'],
         {
           cwd: process.cwd(),
-        }
-      );
+        },
+      )
 
-      const data = JSON.parse(result.stdout.toString());
+      const data = JSON.parse(result.stdout.toString())
 
-      expect(data.id).toBeDefined();
-      expect(data.question).toBeDefined();
-      expect(data.outcome).toBeDefined();
-      expect(data.events).toBeDefined();
-      expect(data.agents).toBeDefined();
-      expect(data.winners).toBeDefined();
-    });
-  });
+      expect(data.id).toBeDefined()
+      expect(data.question).toBeDefined()
+      expect(data.outcome).toBeDefined()
+      expect(data.events).toBeDefined()
+      expect(data.agents).toBeDefined()
+      expect(data.winners).toBeDefined()
+    })
+  })
 
   describe('Error Handling', () => {
     test('handles invalid flags gracefully', () => {
@@ -243,11 +243,11 @@ describe('CLI Game Runner', () => {
           '--invalid-flag',
           '--fast',
         ],
-        { cwd: process.cwd() }
-      );
+        { cwd: process.cwd() },
+      )
 
       // Should still run (ignore unknown flags)
-      expect(result.exitCode).toBe(0);
-    });
-  });
-});
+      expect(result.exitCode).toBe(0)
+    })
+  })
+})

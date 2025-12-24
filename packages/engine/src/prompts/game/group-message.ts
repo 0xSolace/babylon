@@ -1,5 +1,5 @@
-import { definePrompt } from '../define-prompt';
-import { ANTI_REPETITION_RULES, PARODY_NAME_RULES } from '../shared-sections';
+import { definePrompt } from '../define-prompt'
+import { ANTI_REPETITION_RULES, PARODY_NAME_RULES } from '../shared-sections'
 
 /**
  * Prompt for generating individual private group chat messages with insider info.
@@ -76,4 +76,4 @@ Write a private message (max 200 chars) with ACTIONABLE insider info.
 
 Write ONLY the message text (plain text, no XML needed for this prompt):
 `.trim(),
-});
+})

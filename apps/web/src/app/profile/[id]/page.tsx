@@ -1,7 +1,5 @@
-import ProfileDetailClient from './ProfileDetailClient';
-
-export const dynamic = 'force-dynamic';
+import ProfileDetailClient from './ProfileDetailClient'
 
 export default function ProfileDetailPage() {
-  return <ProfileDetailClient />;
+  return <ProfileDetailClient />
 }

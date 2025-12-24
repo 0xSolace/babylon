@@ -1,32 +1,30 @@
-'use client';
-
-import { cn } from '@babylon/shared';
+import { cn } from '@babylon/shared'
 import {
   Activity,
   BarChart3,
   DollarSign,
   TrendingDown,
   TrendingUp,
-} from 'lucide-react';
-import { useMemo } from 'react';
-import { Skeleton } from '@/components/shared/Skeleton';
-import { type PerpMarket, usePerpMarkets } from '@/hooks/usePerpMarkets';
+} from 'lucide-react'
+import { useMemo } from 'react'
+import { Skeleton } from '@/components/shared/Skeleton'
+import { type PerpMarket, usePerpMarkets } from '@/hooks/usePerpMarkets'
 import {
   usePredictionMarkets,
   usePredictionMarketsPolling,
-} from '@/stores/predictionMarketsStore';
-import { MARKETS_CONFIG } from '@/types/markets';
+} from '@/stores/predictionMarketsStore'
+import { MARKETS_CONFIG } from '@/types/markets'
 
 /**
  * Market overview statistics structure.
  */
 interface MarketOverview {
-  totalMarkets: number;
-  totalVolume24h: number;
-  totalOpenInterest: number;
-  avgChange24h: number;
-  marketsUp: number;
-  marketsDown: number;
+  totalMarkets: number
+  totalVolume24h: number
+  totalOpenInterest: number
+  avgChange24h: number
+  marketsUp: number
+  marketsDown: number
 }
 
 /**
@@ -49,38 +47,38 @@ export function MarketOverviewPanel() {
   // Use react-query with polling for perp markets
   const { markets: perpMarkets, loading: perpLoading } = usePerpMarkets({
     pollingInterval: MARKETS_CONFIG.DEFAULT_POLLING_INTERVAL_MS,
-  });
+  })
 
   // Use shared prediction markets store
   const { markets: predictionMarkets, loading: predictionsLoading } =
-    usePredictionMarkets();
-  usePredictionMarketsPolling(30000); // Enable 30s polling
+    usePredictionMarkets()
+  usePredictionMarketsPolling(30000) // Enable 30s polling
 
   // Calculate overview from perp markets
   const overview = useMemo<MarketOverview | null>(() => {
-    if (perpMarkets.length === 0) return null;
+    if (perpMarkets.length === 0) return null
 
     const totalVolume = perpMarkets.reduce(
       (sum: number, m: PerpMarket) => sum + (m.volume24h || 0),
-      0
-    );
+      0,
+    )
     const totalOI = perpMarkets.reduce(
       (sum: number, m: PerpMarket) => sum + (m.openInterest || 0),
-      0
-    );
+      0,
+    )
     const avgChange =
       perpMarkets.length > 0
         ? perpMarkets.reduce(
             (sum: number, m: PerpMarket) => sum + (m.changePercent24h || 0),
-            0
+            0,
           ) / perpMarkets.length
-        : 0;
+        : 0
     const marketsUp = perpMarkets.filter(
-      (m: PerpMarket) => (m.changePercent24h || 0) > 0
-    ).length;
+      (m: PerpMarket) => (m.changePercent24h || 0) > 0,
+    ).length
     const marketsDown = perpMarkets.filter(
-      (m: PerpMarket) => (m.changePercent24h || 0) < 0
-    ).length;
+      (m: PerpMarket) => (m.changePercent24h || 0) < 0,
+    ).length
 
     return {
       totalMarkets: perpMarkets.length,
@@ -89,35 +87,33 @@ export function MarketOverviewPanel() {
       avgChange24h: avgChange,
       marketsUp,
       marketsDown,
-    };
-  }, [perpMarkets]);
+    }
+  }, [perpMarkets])
 
   // Show loading only on initial fetch (when we have no data yet)
   const loading =
     (perpLoading && perpMarkets.length === 0) ||
-    (predictionsLoading && predictionMarkets.length === 0);
+    (predictionsLoading && predictionMarkets.length === 0)
 
   // Calculate prediction overview from store data
   const predictionOverview = useMemo(() => {
-    const activeMarkets = predictionMarkets.filter(
-      (m) => m.status === 'active'
-    );
+    const activeMarkets = predictionMarkets.filter((m) => m.status === 'active')
     const totalVolume = activeMarkets.reduce(
       (sum, m) => sum + (m.yesShares || 0) + (m.noShares || 0),
-      0
-    );
+      0,
+    )
 
     return {
       activeCount: activeMarkets.length,
       totalVolume,
-    };
-  }, [predictionMarkets]);
+    }
+  }, [predictionMarkets])
 
   const formatVolume = (v: number) => {
-    if (v >= 1e9) return `$${(v / 1e9).toFixed(2)}B`;
-    if (v >= 1e6) return `$${(v / 1e6).toFixed(2)}M`;
-    return `$${(v / 1e3).toFixed(2)}K`;
-  };
+    if (v >= 1e9) return `$${(v / 1e9).toFixed(2)}B`
+    if (v >= 1e6) return `$${(v / 1e6).toFixed(2)}M`
+    return `$${(v / 1e3).toFixed(2)}K`
+  }
 
   return (
     <div className="flex flex-1 flex-col rounded-2xl bg-sidebar p-4">
@@ -173,7 +169,9 @@ export function MarketOverviewPanel() {
               <div
                 className={cn(
                   'flex items-center gap-1 font-semibold text-sm',
-                  overview.avgChange24h >= 0 ? 'text-green-600' : 'text-red-600'
+                  overview.avgChange24h >= 0
+                    ? 'text-green-600'
+                    : 'text-red-600',
                 )}
               >
                 {overview.avgChange24h >= 0 ? (
@@ -226,5 +224,5 @@ export function MarketOverviewPanel() {
         </div>
       )}
     </div>
-  );
+  )
 }

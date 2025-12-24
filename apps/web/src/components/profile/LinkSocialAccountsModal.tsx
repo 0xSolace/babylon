@@ -1,10 +1,8 @@
-'use client';
-
-import { cn, signInWithFarcaster } from '@babylon/shared';
-import { Check, ExternalLink, Shield, X as XIcon } from 'lucide-react';
-import { useState } from 'react';
-import { toast } from 'sonner';
-import { useAuthStore } from '@/stores/authStore';
+import { cn, signInWithFarcaster } from '@babylon/shared'
+import { Check, ExternalLink, Shield, X as XIcon } from 'lucide-react'
+import { useState } from 'react'
+import { toast } from 'sonner'
+import { useAuthStore } from '@/stores/authStore'
 
 /**
  * Link social accounts modal component for connecting social accounts.
@@ -34,46 +32,46 @@ import { useAuthStore } from '@/stores/authStore';
  * ```
  */
 interface LinkSocialAccountsModalProps {
-  isOpen: boolean;
-  onClose: () => void;
+  isOpen: boolean
+  onClose: () => void
 }
 
 export function LinkSocialAccountsModal({
   isOpen,
   onClose,
 }: LinkSocialAccountsModalProps) {
-  const { user, setUser } = useAuthStore();
-  const [linking, setLinking] = useState<string | null>(null);
+  const { user, setUser } = useAuthStore()
+  const [linking, setLinking] = useState<string | null>(null)
 
-  if (!isOpen) return null;
+  if (!isOpen) return null
 
   const handleTwitterOAuth = async () => {
-    if (!user?.id) return;
+    if (!user?.id) return
 
-    setLinking('twitter');
+    setLinking('twitter')
 
     // Redirect to OAuth initiation endpoint
-    const initiateUrl = `/api/auth/twitter/initiate`;
+    const initiateUrl = `/api/auth/twitter/initiate`
 
     // Store current URL to return to
-    sessionStorage.setItem('oauth_return_url', window.location.pathname);
+    sessionStorage.setItem('oauth_return_url', window.location.pathname)
 
-    window.location.href = initiateUrl;
-  };
+    window.location.href = initiateUrl
+  }
 
   const handleFarcasterAuth = async () => {
-    if (!user?.id) return;
+    if (!user?.id) return
 
-    setLinking('farcaster');
+    setLinking('farcaster')
 
     // Use the proper SIWF protocol via relay.farcaster.xyz
     const result = await signInWithFarcaster({
       userId: user.id,
-    });
+    })
 
     // Send authentication data to backend for verification and linking
     const token =
-      typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
+      typeof window !== 'undefined' ? window.__oauth3AccessToken : null
     const response = await fetch('/api/auth/farcaster/callback', {
       method: 'POST',
       headers: {
@@ -89,9 +87,9 @@ export function LinkSocialAccountsModal({
         pfpUrl: result.pfpUrl,
         state: result.state,
       }),
-    });
+    })
 
-    const data = await response.json();
+    const data = await response.json()
 
     if (response.ok && data.success) {
       setUser({
@@ -99,34 +97,32 @@ export function LinkSocialAccountsModal({
         hasFarcaster: true,
         farcasterUsername: result.username,
         reputationPoints: data.newTotal || user.reputationPoints,
-      });
+      })
 
       // Dispatch event to notify other components (like UserMenu) to refresh
-      window.dispatchEvent(new CustomEvent('rewards-updated'));
+      window.dispatchEvent(new CustomEvent('rewards-updated'))
 
       if (data.pointsAwarded > 0) {
-        toast.success(
-          `Farcaster linked! +${data.pointsAwarded} points awarded`
-        );
+        toast.success(`Farcaster linked! +${data.pointsAwarded} points awarded`)
       } else {
-        toast.success('Farcaster account linked successfully!');
+        toast.success('Farcaster account linked successfully!')
       }
 
-      onClose();
+      onClose()
     } else {
-      const errorMessage = data.error || 'Failed to link Farcaster account';
+      const errorMessage = data.error || 'Failed to link Farcaster account'
       if (response.status === 409) {
         toast.error(
           errorMessage.includes('already linked')
             ? errorMessage
-            : 'This Farcaster account is already linked to another user'
-        );
+            : 'This Farcaster account is already linked to another user',
+        )
       } else {
-        toast.error(errorMessage);
+        toast.error(errorMessage)
       }
     }
-    setLinking(null);
-  };
+    setLinking(null)
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
@@ -138,6 +134,7 @@ export function LinkSocialAccountsModal({
             <h2 className="font-bold text-xl">Link Social Accounts</h2>
           </div>
           <button
+            type="button"
             onClick={onClose}
             className="rounded-lg p-2 transition-colors hover:bg-muted"
           >
@@ -150,7 +147,13 @@ export function LinkSocialAccountsModal({
           {/* Twitter/X */}
           <div className="space-y-3">
             <div className="flex items-center gap-2">
-              <svg className="h-5 w-5" viewBox="0 0 24 24" fill="currentColor">
+              <svg
+                className="h-5 w-5"
+                viewBox="0 0 24 24"
+                fill="currentColor"
+                aria-label="X (Twitter) logo"
+              >
+                <title>X (Twitter)</title>
                 <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
               </svg>
               <h3 className="font-semibold">X</h3>
@@ -187,19 +190,18 @@ export function LinkSocialAccountsModal({
                   </p>
                 </div>
                 <button
+                  type="button"
                   onClick={handleTwitterOAuth}
                   disabled={linking === 'twitter'}
                   className={cn(
                     'w-full rounded-lg px-4 py-2 font-semibold transition-colors',
                     'bg-[#0066FF] text-primary-foreground hover:bg-[#2952d9]',
                     'disabled:cursor-not-allowed disabled:opacity-50',
-                    'flex items-center justify-center gap-2'
+                    'flex items-center justify-center gap-2',
                   )}
                 >
                   {linking === 'twitter' ? (
-                    <>
-                      <span>Connecting...</span>
-                    </>
+                    <span>Connecting...</span>
                   ) : (
                     <>
                       <Shield className="h-4 w-4" />
@@ -218,7 +220,9 @@ export function LinkSocialAccountsModal({
                 className="h-5 w-5"
                 viewBox="0 0 1000 1000"
                 fill="currentColor"
+                aria-label="Farcaster logo"
               >
+                <title>Farcaster</title>
                 <path d="M257.778 155.556H742.222V844.444H671.111V528.889H670.414C662.554 441.677 589.258 373.333 500 373.333C410.742 373.333 337.446 441.677 329.586 528.889H328.889V844.444H257.778V155.556Z" />
                 <path d="M128.889 253.333L157.778 351.111H182.222V844.444H128.889V253.333Z" />
                 <path d="M871.111 253.333L842.222 351.111H817.778V844.444H871.111V253.333Z" />
@@ -257,19 +261,18 @@ export function LinkSocialAccountsModal({
                   </p>
                 </div>
                 <button
+                  type="button"
                   onClick={handleFarcasterAuth}
                   disabled={linking === 'farcaster'}
                   className={cn(
                     'w-full rounded-lg px-4 py-2 font-semibold transition-colors',
                     'bg-[#8A63D2] text-foreground hover:bg-[#7952c4]',
                     'disabled:cursor-not-allowed disabled:opacity-50',
-                    'flex items-center justify-center gap-2'
+                    'flex items-center justify-center gap-2',
                   )}
                 >
                   {linking === 'farcaster' ? (
-                    <>
-                      <span>Connecting...</span>
-                    </>
+                    <span>Connecting...</span>
                   ) : (
                     <>
                       <Shield className="h-4 w-4" />
@@ -296,6 +299,7 @@ export function LinkSocialAccountsModal({
         {/* Footer */}
         <div className="border-border border-t p-6">
           <button
+            type="button"
             onClick={onClose}
             className="w-full rounded-lg bg-muted px-4 py-2 font-semibold transition-colors hover:bg-muted/70"
           >
@@ -304,5 +308,5 @@ export function LinkSocialAccountsModal({
         </div>
       </div>
     </div>
-  );
+  )
 }

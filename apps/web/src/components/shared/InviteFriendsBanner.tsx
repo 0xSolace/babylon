@@ -1,11 +1,9 @@
-'use client';
-
-import { getReferralUrl } from '@babylon/shared';
-import { useMutation } from '@tanstack/react-query';
-import { Check, Copy, ExternalLink, Trophy, X } from 'lucide-react';
-import Link from 'next/link';
-import { useEffect, useRef, useState } from 'react';
-import { useAuthStore } from '@/stores/authStore';
+import { getReferralUrl } from '@babylon/shared'
+import { useMutation } from '@tanstack/react-query'
+import { Check, Copy, ExternalLink, Trophy, X } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
+import { useAuthStore } from '@/stores/authStore'
 
 /**
  * Invite friends banner component for referral program.
@@ -23,22 +21,22 @@ import { useAuthStore } from '@/stores/authStore';
  * ```
  */
 interface InviteFriendsBannerProps {
-  onDismiss?: () => void;
+  onDismiss?: () => void
 }
 
 interface ProfileUpdatePayload {
-  bannerLastShown?: string;
-  bannerDismissCount?: number;
+  bannerLastShown?: string
+  bannerDismissCount?: number
 }
 
 async function updateUserProfile(
   userId: string,
-  payload: ProfileUpdatePayload
+  payload: ProfileUpdatePayload,
 ): Promise<void> {
   const token =
-    typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
+    typeof window !== 'undefined' ? window.__oauth3AccessToken : null
   if (!token) {
-    throw new Error('Not authenticated');
+    throw new Error('Not authenticated')
   }
 
   const response = await fetch(
@@ -50,33 +48,33 @@ async function updateUserProfile(
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(payload),
-    }
-  );
+    },
+  )
 
   if (!response.ok) {
-    throw new Error('Failed to update profile');
+    throw new Error('Failed to update profile')
   }
 }
 
 export function InviteFriendsBanner({ onDismiss }: InviteFriendsBannerProps) {
-  const { user, setUser } = useAuthStore();
-  const [copiedReferral, setCopiedReferral] = useState(false);
-  const hasTrackedView = useRef(false);
+  const { user, setUser } = useAuthStore()
+  const [copiedReferral, setCopiedReferral] = useState(false)
+  const hasTrackedView = useRef(false)
 
   const trackViewMutation = useMutation({
     mutationFn: (userId: string) =>
       updateUserProfile(userId, {
         bannerLastShown: new Date().toISOString(),
       }),
-  });
+  })
 
   const dismissMutation = useMutation({
     mutationFn: ({
       userId,
       dismissCount,
     }: {
-      userId: string;
-      dismissCount: number;
+      userId: string
+      dismissCount: number
     }) =>
       updateUserProfile(userId, {
         bannerDismissCount: dismissCount,
@@ -86,67 +84,69 @@ export function InviteFriendsBanner({ onDismiss }: InviteFriendsBannerProps) {
         setUser({
           ...user,
           bannerDismissCount: dismissCount,
-        });
+        })
       }
-      onDismiss?.();
+      onDismiss?.()
     },
-  });
+  })
 
   useEffect(() => {
-    if (!user?.id || hasTrackedView.current) return;
+    if (!user?.id || hasTrackedView.current) return
 
-    const viewKey = `banner_view_${user.id}`;
-    const lastView = localStorage.getItem(viewKey);
-    const now = Date.now();
+    const viewKey = `banner_view_${user.id}`
+    const lastView = localStorage.getItem(viewKey)
+    const now = Date.now()
 
-    localStorage.setItem(viewKey, now.toString());
+    localStorage.setItem(viewKey, now.toString())
 
     // Update server if more than 1 day since last tracked
-    if (!lastView || now - parseInt(lastView) > 86400000) {
-      hasTrackedView.current = true;
-      trackViewMutation.mutate(user.id);
+    if (!lastView || now - parseInt(lastView, 10) > 86400000) {
+      hasTrackedView.current = true
+      trackViewMutation.mutate(user.id)
     }
-  }, [user?.id, trackViewMutation]);
+  }, [user?.id, trackViewMutation])
 
   const handleCopyReferral = async (e: React.MouseEvent) => {
-    e.preventDefault();
-    if (!user?.referralCode) return;
-    const referralUrl = getReferralUrl(user.referralCode);
-    await navigator.clipboard.writeText(referralUrl);
-    setCopiedReferral(true);
-    setTimeout(() => setCopiedReferral(false), 2000);
-  };
+    e.preventDefault()
+    if (!user?.referralCode) return
+    const referralUrl = getReferralUrl(user.referralCode)
+    await navigator.clipboard.writeText(referralUrl)
+    setCopiedReferral(true)
+    setTimeout(() => setCopiedReferral(false), 2000)
+  }
 
   const handleDismiss = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
+    e.preventDefault()
+    e.stopPropagation()
 
-    if (!user?.id) return;
+    if (!user?.id) return
 
-    const dismissKey = `banner_dismiss_${user.id}`;
-    const dismissCount = parseInt(localStorage.getItem(dismissKey) ?? '0') + 1;
-    localStorage.setItem(dismissKey, dismissCount.toString());
+    const dismissKey = `banner_dismiss_${user.id}`
+    const dismissCount =
+      parseInt(localStorage.getItem(dismissKey) ?? '0', 10) + 1
+    localStorage.setItem(dismissKey, dismissCount.toString())
     localStorage.setItem(
       `banner_dismiss_time_${user.id}`,
-      Date.now().toString()
-    );
+      Date.now().toString(),
+    )
 
-    dismissMutation.mutate({ userId: user.id, dismissCount });
-  };
+    dismissMutation.mutate({ userId: user.id, dismissCount })
+  }
 
   if (!user?.referralCode) {
-    return null;
+    return null
   }
 
   return (
     <Link
-      href="/rewards"
+      to="/rewards"
       className="group block border-border border-b transition-colors hover:bg-muted/30"
     >
       <div className="mx-auto max-w-feed p-4">
         <div className="relative rounded-xl border border-purple-500/20 bg-gradient-to-br from-purple-500/10 to-pink-500/10 p-4 transition-colors hover:border-purple-500/40">
           {/* Dismiss button */}
           <button
+            type="button"
             onClick={handleDismiss}
             className="absolute top-2 right-2 rounded-full p-1 opacity-0 transition-colors hover:bg-background/50 group-hover:opacity-100"
             title="Dismiss"
@@ -166,6 +166,7 @@ export function InviteFriendsBanner({ onDismiss }: InviteFriendsBannerProps) {
           </p>
           <div className="flex items-center justify-between">
             <button
+              type="button"
               onClick={handleCopyReferral}
               className="flex items-center gap-2 rounded-lg bg-sidebar-accent px-3 py-2 text-foreground transition-colors hover:bg-sidebar-accent/70"
             >
@@ -189,5 +190,5 @@ export function InviteFriendsBanner({ onDismiss }: InviteFriendsBannerProps) {
         </div>
       </div>
     </Link>
-  );
+  )
 }

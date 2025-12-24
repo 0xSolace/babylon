@@ -3,168 +3,168 @@
  * when navigating between pages
  */
 
-import type { A2AReputationResponse } from '@babylon/agents/client';
+import { create } from 'zustand'
 import type {
+  A2AReputationResponse,
   PerpPositionFromAPI,
   PredictionPosition,
   UserBalanceData,
   UserProfileStats,
-} from '@babylon/shared';
-import { create } from 'zustand';
+} from '../types/widgets'
 
 /**
  * Trending item structure for trending panel (supports grouped trends).
  * Used by the trending panel widget and cache store.
  */
 export interface TrendingItem {
-  id: string;
-  tags: string[]; // Array of tag names (e.g., ["OpenAI", "Sam Altman"])
-  tagSlugs: string[]; // Array of tag slugs for routing
-  tagIds: string[]; // Array of tag IDs
-  category?: string | null;
-  totalPostCount: number;
-  summary?: string | null;
-  rank: number;
+  id: string
+  tags: string[] // Array of tag names (e.g., ["OpenAI", "Sam Altman"])
+  tagSlugs: string[] // Array of tag slugs for routing
+  tagIds: string[] // Array of tag IDs
+  category?: string | null
+  totalPostCount: number
+  summary?: string | null
+  rank: number
 }
 
 export interface BreakingNewsItem {
-  id: string;
-  title: string;
-  description: string;
-  icon: 'chart' | 'calendar' | 'dollar' | 'trending';
-  timestamp: string;
-  trending?: boolean;
-  source?: string;
-  fullDescription?: string;
-  imageUrl?: string;
-  relatedQuestion?: number;
-  relatedActorId?: string;
-  relatedOrganizationId?: string;
+  id: string
+  title: string
+  description: string
+  icon: 'chart' | 'calendar' | 'dollar' | 'trending'
+  timestamp: string
+  trending?: boolean
+  source?: string
+  fullDescription?: string
+  imageUrl?: string
+  relatedQuestion?: number
+  relatedActorId?: string
+  relatedOrganizationId?: string
 }
 
 export interface ArticleItem {
-  id: string;
-  title: string;
-  summary: string;
-  authorOrgName: string;
-  byline?: string;
-  sentiment?: string;
-  category?: string;
-  publishedAt: string;
-  relatedQuestion?: number;
-  slant?: string;
-  biasScore?: number;
+  id: string
+  title: string
+  summary: string
+  authorOrgName: string
+  byline?: string | null
+  sentiment?: string | number | null
+  category?: string | null
+  publishedAt: string
+  relatedQuestion?: number
+  slant?: string | null
+  biasScore?: number | null
 }
 
 export interface MarketsWidgetData {
   topPerpGainers: Array<{
-    ticker: string;
-    organizationId: string;
-    name: string;
-    currentPrice: number;
-    changePercent24h: number;
-    volume24h: number;
-  }>;
+    ticker: string
+    organizationId: string
+    name: string
+    currentPrice: number
+    changePercent24h: number
+    volume24h: number
+  }>
   topPoolGainers: Array<{
-    id: string;
-    name: string;
-    npcActorName: string;
-    totalReturn: number;
-    totalValue: number;
-  }>;
+    id: string
+    name: string
+    npcActorName: string
+    totalReturn: number
+    totalValue: number
+  }>
   topVolumeQuestions: Array<{
-    id: number;
-    text: string;
-    totalVolume: number;
-    yesPrice: number;
-    timeWeightedScore: number;
-  }>;
-  lastUpdated: string;
+    id: number
+    text: string
+    totalVolume: number
+    yesPrice: number
+    timeWeightedScore: number
+  }>
+  lastUpdated: string
 }
 
 export interface UpcomingEvent {
-  id: string;
-  title: string;
-  date: string;
-  time?: string;
-  isLive?: boolean;
-  hint?: string;
-  fullDescription?: string;
-  source?: string;
-  relatedQuestion?: number;
-  imageUrl?: string;
-  relatedActorId?: string;
-  relatedOrganizationId?: string;
+  id: string
+  title: string
+  date: string
+  time?: string
+  isLive?: boolean
+  hint?: string
+  fullDescription?: string
+  source?: string
+  relatedQuestion?: number
+  imageUrl?: string
+  relatedActorId?: string
+  relatedOrganizationId?: string
 }
 
 export interface BabylonStats {
-  activePlayers: number;
-  aiAgents: number;
-  totalHoots: number;
-  pointsInCirculation: string;
+  activePlayers: number
+  aiAgents: number
+  totalHoots: number
+  pointsInCirculation: string
 }
 
 interface ProfileWidgetData {
-  balance: UserBalanceData | null;
-  predictions: PredictionPosition[];
-  perps: PerpPositionFromAPI[];
-  stats: UserProfileStats | null;
+  balance: UserBalanceData | null
+  predictions: PredictionPosition[]
+  perps: PerpPositionFromAPI[]
+  stats: UserProfileStats | null
 }
 
 interface CacheEntry<T> {
-  data: T;
-  timestamp: number;
+  data: T
+  timestamp: number
 }
 
 interface WidgetCacheState {
-  breakingNews: CacheEntry<BreakingNewsItem[]> | null;
-  latestNews: CacheEntry<ArticleItem[]> | null;
-  upcomingEvents: CacheEntry<UpcomingEvent[]> | null;
-  trending: CacheEntry<TrendingItem[]> | null;
-  stats: CacheEntry<BabylonStats> | null;
-  markets: CacheEntry<MarketsWidgetData> | null;
-  profileWidget: Map<string, CacheEntry<ProfileWidgetData>>; // Keyed by userId
-  reputationWidget: Map<string, CacheEntry<A2AReputationResponse>>; // Keyed by userId
+  breakingNews: CacheEntry<BreakingNewsItem[]> | null
+  latestNews: CacheEntry<ArticleItem[]> | null
+  upcomingEvents: CacheEntry<UpcomingEvent[]> | null
+  trending: CacheEntry<TrendingItem[]> | null
+  stats: CacheEntry<BabylonStats> | null
+  markets: CacheEntry<MarketsWidgetData> | null
+  profileWidget: Map<string, CacheEntry<ProfileWidgetData>> // Keyed by userId
+  reputationWidget: Map<string, CacheEntry<A2AReputationResponse>> // Keyed by userId
 
   // TTL in milliseconds (default: 30 seconds)
-  ttl: number;
+  ttl: number
 
   // Set cache entry
-  setBreakingNews: (data: BreakingNewsItem[]) => void;
-  setLatestNews: (data: ArticleItem[]) => void;
-  setUpcomingEvents: (data: UpcomingEvent[]) => void;
-  setTrending: (data: TrendingItem[]) => void;
-  setStats: (data: BabylonStats) => void;
-  setMarkets: (data: MarketsWidgetData) => void;
-  setProfileWidget: (userId: string, data: ProfileWidgetData) => void;
-  setReputationWidget: (userId: string, data: A2AReputationResponse) => void;
+  setBreakingNews: (data: BreakingNewsItem[]) => void
+  setLatestNews: (data: ArticleItem[]) => void
+  setUpcomingEvents: (data: UpcomingEvent[]) => void
+  setTrending: (data: TrendingItem[]) => void
+  setStats: (data: BabylonStats) => void
+  setMarkets: (data: MarketsWidgetData) => void
+  setProfileWidget: (userId: string, data: ProfileWidgetData) => void
+  setReputationWidget: (userId: string, data: A2AReputationResponse) => void
 
   // Get cache entry (returns null if stale or missing)
-  getBreakingNews: () => BreakingNewsItem[] | null;
-  getLatestNews: () => ArticleItem[] | null;
-  getUpcomingEvents: () => UpcomingEvent[] | null;
-  getTrending: () => TrendingItem[] | null;
-  getStats: () => BabylonStats | null;
-  getMarkets: () => MarketsWidgetData | null;
-  getProfileWidget: (userId: string) => ProfileWidgetData | null;
-  getReputationWidget: (userId: string) => A2AReputationResponse | null;
+  getBreakingNews: () => BreakingNewsItem[] | null
+  getLatestNews: () => ArticleItem[] | null
+  getUpcomingEvents: () => UpcomingEvent[] | null
+  getTrending: () => TrendingItem[] | null
+  getStats: () => BabylonStats | null
+  getMarkets: () => MarketsWidgetData | null
+  getProfileWidget: (userId: string) => ProfileWidgetData | null
+  getReputationWidget: (userId: string) => A2AReputationResponse | null
 
   // Check if cache is fresh
-  isFresh: <T>(entry: CacheEntry<T> | null) => boolean;
+  isFresh: <T>(entry: CacheEntry<T> | null) => boolean
 
   // Clear specific cache
-  clearBreakingNews: () => void;
-  clearLatestNews: () => void;
-  clearUpcomingEvents: () => void;
-  clearTrending: () => void;
-  clearStats: () => void;
-  clearMarkets: () => void;
-  clearProfileWidget: (userId: string) => void;
-  clearReputationWidget: (userId: string) => void;
-  clearAll: () => void;
+  clearBreakingNews: () => void
+  clearLatestNews: () => void
+  clearUpcomingEvents: () => void
+  clearTrending: () => void
+  clearStats: () => void
+  clearMarkets: () => void
+  clearProfileWidget: (userId: string) => void
+  clearReputationWidget: (userId: string) => void
+  clearAll: () => void
 }
 
-const DEFAULT_TTL = 30000; // 30 seconds
+const DEFAULT_TTL = 30000 // 30 seconds
 
 export const useWidgetCacheStore = create<WidgetCacheState>((set, get) => ({
   breakingNews: null,
@@ -178,9 +178,9 @@ export const useWidgetCacheStore = create<WidgetCacheState>((set, get) => ({
   ttl: DEFAULT_TTL,
 
   isFresh: <T>(entry: CacheEntry<T> | null) => {
-    if (!entry) return false;
-    const age = Date.now() - entry.timestamp;
-    return age < get().ttl;
+    if (!entry) return false
+    const age = Date.now() - entry.timestamp
+    return age < get().ttl
   },
 
   setBreakingNews: (data: BreakingNewsItem[]) => {
@@ -189,7 +189,7 @@ export const useWidgetCacheStore = create<WidgetCacheState>((set, get) => ({
         data,
         timestamp: Date.now(),
       },
-    });
+    })
   },
 
   setLatestNews: (data: ArticleItem[]) => {
@@ -198,7 +198,7 @@ export const useWidgetCacheStore = create<WidgetCacheState>((set, get) => ({
         data,
         timestamp: Date.now(),
       },
-    });
+    })
   },
 
   setUpcomingEvents: (data: UpcomingEvent[]) => {
@@ -207,7 +207,7 @@ export const useWidgetCacheStore = create<WidgetCacheState>((set, get) => ({
         data,
         timestamp: Date.now(),
       },
-    });
+    })
   },
 
   setTrending: (data: TrendingItem[]) => {
@@ -216,7 +216,7 @@ export const useWidgetCacheStore = create<WidgetCacheState>((set, get) => ({
         data,
         timestamp: Date.now(),
       },
-    });
+    })
   },
 
   setStats: (data: BabylonStats) => {
@@ -225,7 +225,7 @@ export const useWidgetCacheStore = create<WidgetCacheState>((set, get) => ({
         data,
         timestamp: Date.now(),
       },
-    });
+    })
   },
 
   setMarkets: (data: MarketsWidgetData) => {
@@ -234,67 +234,67 @@ export const useWidgetCacheStore = create<WidgetCacheState>((set, get) => ({
         data,
         timestamp: Date.now(),
       },
-    });
+    })
   },
 
   setProfileWidget: (userId: string, data: ProfileWidgetData) => {
-    const profileWidget = new Map(get().profileWidget);
+    const profileWidget = new Map(get().profileWidget)
     profileWidget.set(userId, {
       data,
       timestamp: Date.now(),
-    });
-    set({ profileWidget });
+    })
+    set({ profileWidget })
   },
 
   setReputationWidget: (userId: string, data: A2AReputationResponse) => {
-    const reputationWidget = new Map(get().reputationWidget);
+    const reputationWidget = new Map(get().reputationWidget)
     reputationWidget.set(userId, {
       data,
       timestamp: Date.now(),
-    });
-    set({ reputationWidget });
+    })
+    set({ reputationWidget })
   },
 
   getBreakingNews: () => {
-    const entry = get().breakingNews;
-    return entry && get().isFresh(entry) ? entry.data : null;
+    const entry = get().breakingNews
+    return entry && get().isFresh(entry) ? entry.data : null
   },
 
   getLatestNews: () => {
-    const entry = get().latestNews;
-    return entry && get().isFresh(entry) ? entry.data : null;
+    const entry = get().latestNews
+    return entry && get().isFresh(entry) ? entry.data : null
   },
 
   getUpcomingEvents: () => {
-    const entry = get().upcomingEvents;
-    return entry && get().isFresh(entry) ? entry.data : null;
+    const entry = get().upcomingEvents
+    return entry && get().isFresh(entry) ? entry.data : null
   },
 
   getTrending: () => {
-    const entry = get().trending;
-    return entry && get().isFresh(entry) ? entry.data : null;
+    const entry = get().trending
+    return entry && get().isFresh(entry) ? entry.data : null
   },
 
   getStats: () => {
-    const entry = get().stats;
-    return entry && get().isFresh(entry) ? entry.data : null;
+    const entry = get().stats
+    return entry && get().isFresh(entry) ? entry.data : null
   },
 
   getMarkets: () => {
-    const entry = get().markets;
-    return entry && get().isFresh(entry) ? entry.data : null;
+    const entry = get().markets
+    return entry && get().isFresh(entry) ? entry.data : null
   },
 
   getProfileWidget: (userId: string) => {
-    const profileWidget = get().profileWidget;
-    const entry = profileWidget.get(userId);
-    return entry && get().isFresh(entry) ? entry.data : null;
+    const profileWidget = get().profileWidget
+    const entry = profileWidget.get(userId)
+    return entry && get().isFresh(entry) ? entry.data : null
   },
 
   getReputationWidget: (userId: string) => {
-    const reputationWidget = get().reputationWidget;
-    const entry = reputationWidget.get(userId);
-    return entry && get().isFresh(entry) ? entry.data : null;
+    const reputationWidget = get().reputationWidget
+    const entry = reputationWidget.get(userId)
+    return entry && get().isFresh(entry) ? entry.data : null
   },
 
   clearBreakingNews: () => set({ breakingNews: null }),
@@ -304,14 +304,14 @@ export const useWidgetCacheStore = create<WidgetCacheState>((set, get) => ({
   clearStats: () => set({ stats: null }),
   clearMarkets: () => set({ markets: null }),
   clearProfileWidget: (userId: string) => {
-    const profileWidget = new Map(get().profileWidget);
-    profileWidget.delete(userId);
-    set({ profileWidget });
+    const profileWidget = new Map(get().profileWidget)
+    profileWidget.delete(userId)
+    set({ profileWidget })
   },
   clearReputationWidget: (userId: string) => {
-    const reputationWidget = new Map(get().reputationWidget);
-    reputationWidget.delete(userId);
-    set({ reputationWidget });
+    const reputationWidget = new Map(get().reputationWidget)
+    reputationWidget.delete(userId)
+    set({ reputationWidget })
   },
   clearAll: () =>
     set({
@@ -324,4 +324,4 @@ export const useWidgetCacheStore = create<WidgetCacheState>((set, get) => ({
       profileWidget: new Map(),
       reputationWidget: new Map(),
     }),
-}));
+}))

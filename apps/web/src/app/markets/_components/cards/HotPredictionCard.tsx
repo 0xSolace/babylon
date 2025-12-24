@@ -1,13 +1,11 @@
-'use client';
-
-import { Clock } from 'lucide-react';
-import { memo } from 'react';
-import type { PredictionMarket } from '@/types/markets';
-import { calculateSharePercentages, getDaysLeft } from '../../_lib/formatters';
+import { Clock } from 'lucide-react'
+import { memo } from 'react'
+import type { PredictionMarket } from '@/types/markets'
+import { calculateSharePercentages, getDaysLeft } from '../../_lib/formatters'
 
 interface HotPredictionCardProps {
-  prediction: PredictionMarket;
-  onClick: (prediction: PredictionMarket) => void;
+  prediction: PredictionMarket
+  onClick: (prediction: PredictionMarket) => void
 }
 
 /**
@@ -20,9 +18,9 @@ export const HotPredictionCard = memo(function HotPredictionCard({
 }: HotPredictionCardProps) {
   const { yesPercent, noPercent } = calculateSharePercentages(
     prediction.yesShares,
-    prediction.noShares
-  );
-  const daysLeft = getDaysLeft(prediction.resolutionDate);
+    prediction.noShares,
+  )
+  const daysLeft = getDaysLeft(prediction.resolutionDate)
 
   return (
     <button
@@ -59,5 +57,5 @@ export const HotPredictionCard = memo(function HotPredictionCard({
         )}
       </div>
     </button>
-  );
-});
+  )
+})

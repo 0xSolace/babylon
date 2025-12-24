@@ -1,4 +1,4 @@
-import type { Organization } from '../../types/shared';
+import type { Organization } from '../../types/shared'
 
 export const data = {
   id: 'techcrainch',
@@ -25,4 +25,4 @@ export const data = {
     "Breaking tech news and startup coverage. TechCrunch Disrupt. The startup ecosystem's paper of record. Funding rounds, product launches, founder stories.",
   originalName: 'TechCrunch',
   originalHandle: 'techcrunch',
-} as const satisfies Organization;
+} as const satisfies Organization

@@ -7,35 +7,35 @@
  * 3. Performance of previous models
  */
 
-import { db } from '@babylon/db';
-import { logger } from '@babylon/shared';
+import { db } from '@babylon/db'
+import { logger } from '@babylon/shared'
 
 export interface ModelSelectionResult {
-  modelId: string;
-  modelPath: string;
-  strategy: 'base' | 'continue' | 'force_first';
-  reason: string;
+  modelId: string
+  modelPath: string
+  strategy: 'base' | 'continue' | 'force_first'
+  reason: string
   metadata?: {
-    bundleCount?: number;
-    bestModelScore?: number;
-    baseModel?: string;
-  };
+    bundleCount?: number
+    bestModelScore?: number
+    baseModel?: string
+  }
 }
 
 export interface TrainingBundle {
-  id: string;
-  trajectoryCount: number;
-  scenarioId: string | null;
-  createdAt: Date;
+  id: string
+  trajectoryCount: number
+  scenarioId: string | null
+  createdAt: Date
 }
 
 export class ModelSelectionService {
   /** Default base model - uses Qwen3-4B-128K (4B params, 128K context). Scale up via MODEL_TIER or AVAILABLE_VRAM_GB env vars */
   private readonly BASE_MODEL =
-    process.env.BASE_MODEL || 'unsloth/Qwen3-4B-128K';
-  private readonly BUNDLE_THRESHOLD = 1000;
-  private readonly MIN_BUNDLES_FOR_TRAINING = 100;
-  private readonly MAX_TRAINING_EXAMPLES = 2000;
+    process.env.BASE_MODEL || 'unsloth/Qwen3-4B-128K'
+  private readonly BUNDLE_THRESHOLD = 1000
+  private readonly MIN_BUNDLES_FOR_TRAINING = 100
+  private readonly MAX_TRAINING_EXAMPLES = 2000
 
   /**
    * Select base model for training
@@ -63,21 +63,21 @@ export class ModelSelectionService {
     logger.info(
       'Selecting base model for training...',
       undefined,
-      'ModelSelectionService'
-    );
+      'ModelSelectionService',
+    )
 
     // Count available training bundles (always fetch for accurate metrics)
-    const bundleCount = await this.countTrainingBundles();
+    const bundleCount = await this.countTrainingBundles()
 
     // Check if any models exist
-    const forceFirst = await this.shouldForceFirstModel();
+    const forceFirst = await this.shouldForceFirstModel()
 
     if (forceFirst) {
       logger.info(
         'No models exist - forcing first model creation',
         undefined,
-        'ModelSelectionService'
-      );
+        'ModelSelectionService',
+      )
       return {
         modelId: this.BASE_MODEL,
         modelPath: this.BASE_MODEL,
@@ -87,20 +87,20 @@ export class ModelSelectionService {
           baseModel: this.BASE_MODEL,
           bundleCount, // Use actual count, not 0
         },
-      };
+      }
     }
     logger.info(
       `Found ${bundleCount} training bundles`,
       undefined,
-      'ModelSelectionService'
-    );
+      'ModelSelectionService',
+    )
 
     // Not enough data yet
     if (bundleCount < this.MIN_BUNDLES_FOR_TRAINING) {
       throw new Error(
         `Insufficient training data: ${bundleCount} bundles ` +
-          `(need ${this.MIN_BUNDLES_FOR_TRAINING} minimum)`
-      );
+          `(need ${this.MIN_BUNDLES_FOR_TRAINING} minimum)`,
+      )
     }
 
     // Less than threshold: train from base model
@@ -108,8 +108,8 @@ export class ModelSelectionService {
       logger.info(
         `Bundle count ${bundleCount} < ${this.BUNDLE_THRESHOLD} - using base model`,
         undefined,
-        'ModelSelectionService'
-      );
+        'ModelSelectionService',
+      )
       return {
         modelId: this.BASE_MODEL,
         modelPath: this.BASE_MODEL,
@@ -119,18 +119,18 @@ export class ModelSelectionService {
           bundleCount,
           baseModel: this.BASE_MODEL,
         },
-      };
+      }
     }
 
     // Above threshold: train from best performing model
-    const bestModel = await this.getBestPerformingModel();
+    const bestModel = await this.getBestPerformingModel()
 
     if (!bestModel) {
       logger.warn(
         'No best model found despite bundle threshold - using base model',
         undefined,
-        'ModelSelectionService'
-      );
+        'ModelSelectionService',
+      )
       return {
         modelId: this.BASE_MODEL,
         modelPath: this.BASE_MODEL,
@@ -140,7 +140,7 @@ export class ModelSelectionService {
           bundleCount,
           baseModel: this.BASE_MODEL,
         },
-      };
+      }
     }
 
     logger.info(
@@ -149,23 +149,24 @@ export class ModelSelectionService {
         bestModelId: bestModel.modelId,
         bestScore: bestModel.benchmarkScore,
       },
-      'ModelSelectionService'
-    );
+      'ModelSelectionService',
+    )
 
     // Use storagePath for model path (e.g., HuggingFace URL)
-    const modelStoragePath = bestModel.storagePath || bestModel.modelId;
+    const modelId = bestModel.modelId || this.BASE_MODEL
+    const modelStoragePath = bestModel.storagePath || modelId
 
     return {
-      modelId: bestModel.modelId,
+      modelId,
       modelPath: modelStoragePath,
       strategy: 'continue',
       reason: `Continuing from best model (score: ${bestModel.benchmarkScore?.toFixed(3) || 'N/A'})`,
       metadata: {
         bundleCount,
         bestModelScore: bestModel.benchmarkScore || undefined,
-        baseModel: bestModel.baseModel,
+        baseModel: bestModel.baseModel || undefined,
       },
-    };
+    }
   }
 
   /**
@@ -187,15 +188,15 @@ export class ModelSelectionService {
         benchmarkScore: { not: null },
       },
       orderBy: { benchmarkScore: 'desc' },
-    });
+    })
 
     if (!model) {
       logger.warn(
         'No benchmarked models found',
         undefined,
-        'ModelSelectionService'
-      );
-      return null;
+        'ModelSelectionService',
+      )
+      return null
     }
 
     logger.info(
@@ -206,10 +207,10 @@ export class ModelSelectionService {
         benchmarkScore: model.benchmarkScore,
         avgReward: model.avgReward,
       },
-      'ModelSelectionService'
-    );
+      'ModelSelectionService',
+    )
 
-    return model;
+    return model
   }
 
   /**
@@ -234,7 +235,7 @@ export class ModelSelectionService {
           { stepsJson: { not: '[]' } },
         ],
       },
-    });
+    })
   }
 
   /**
@@ -246,8 +247,8 @@ export class ModelSelectionService {
    * @returns True if no models exist, false otherwise
    */
   async shouldForceFirstModel(): Promise<boolean> {
-    const modelCount = await this.countTrainedModels();
-    return modelCount === 0;
+    const modelCount = await this.countTrainedModels()
+    return modelCount === 0
   }
 
   /**
@@ -258,26 +259,26 @@ export class ModelSelectionService {
       where: {
         status: { in: ['training', 'ready', 'deployed'] },
       },
-    });
+    })
   }
 
   /**
    * Get training data limit based on bundle count
    *
    * Determines how many trajectories to use for training:
-   * - < 1000 bundles: Use all available (returns null)
+   * - < 1000 bundles: Use all available (returns undefined)
    * - ≥ 1000 bundles: Cap at 2000 most recent
    *
-   * @returns Limit number (2000) or null to use all available
+   * @returns Limit number (2000) or undefined to use all available
    */
-  async getTrainingDataLimit(): Promise<number | null> {
-    const bundleCount = await this.countTrainingBundles();
+  async getTrainingDataLimit(): Promise<number | undefined> {
+    const bundleCount = await this.countTrainingBundles()
 
     if (bundleCount < this.BUNDLE_THRESHOLD) {
-      return null; // Use all available
+      return undefined // Use all available
     }
 
-    return this.MAX_TRAINING_EXAMPLES; // Cap at 2000
+    return this.MAX_TRAINING_EXAMPLES // Cap at 2000
   }
 
   /**
@@ -296,7 +297,7 @@ export class ModelSelectionService {
    * - aiJudgeReward: not null
    * - Valid stepsJson (not 'null' or '[]')
    */
-  async getTrainingTrajectories(limit?: number | null) {
+  async getTrainingTrajectories(limit?: number) {
     const result = await db.trajectory.findMany({
       where: {
         AND: [
@@ -308,16 +309,16 @@ export class ModelSelectionService {
         ],
       },
       orderBy: { createdAt: 'desc' },
-      take: limit ?? undefined,
-    });
+      take: limit,
+    })
 
     logger.info(
       `Retrieved ${result.length} trajectories for training`,
       { limit, available: result.length },
-      'ModelSelectionService'
-    );
+      'ModelSelectionService',
+    )
 
-    return result;
+    return result
   }
 
   /**
@@ -336,25 +337,25 @@ export class ModelSelectionService {
    * ```
    */
   async getSelectionSummary(): Promise<{
-    bundleCount: number;
-    trainedModelCount: number;
-    bestModel: string | null;
-    bestScore: number | null;
-    recommendation: string;
+    bundleCount: number
+    trainedModelCount: number
+    bestModel: string | null
+    bestScore: number | null
+    recommendation: string
   }> {
-    const bundleCount = await this.countTrainingBundles();
-    const trainedModelCount = await this.countTrainedModels();
-    const bestModel = await this.getBestPerformingModel();
+    const bundleCount = await this.countTrainingBundles()
+    const trainedModelCount = await this.countTrainedModels()
+    const bestModel = await this.getBestPerformingModel()
 
-    let recommendation = '';
+    let recommendation = ''
     if (trainedModelCount === 0) {
-      recommendation = 'Force first model creation';
+      recommendation = 'Force first model creation'
     } else if (bundleCount < this.MIN_BUNDLES_FOR_TRAINING) {
-      recommendation = 'Not ready - need more data';
+      recommendation = 'Not ready - need more data'
     } else if (bundleCount < this.BUNDLE_THRESHOLD) {
-      recommendation = 'Train from base model';
+      recommendation = 'Train from base model'
     } else {
-      recommendation = 'Train from best performing model';
+      recommendation = 'Train from best performing model'
     }
 
     return {
@@ -363,9 +364,9 @@ export class ModelSelectionService {
       bestModel: bestModel?.modelId || null,
       bestScore: bestModel?.benchmarkScore || null,
       recommendation,
-    };
+    }
   }
 }
 
 // Export singleton instance
-export const modelSelectionService = new ModelSelectionService();
+export const modelSelectionService = new ModelSelectionService()

@@ -9,68 +9,71 @@
  *   await initializeTrainingPackage();
  */
 
-import { logger } from '@babylon/shared';
+import {
+  agentRuntimeManager,
+  agentService,
+  autonomousCoordinator,
+} from '@babylon/agents'
+import { logger } from '@babylon/shared'
 import {
   configureTrainingDependencies,
   type IAgentRuntimeManager,
   type IAgentService,
   type IAutonomousCoordinator,
   type ILLMCaller,
-} from './dependencies';
+} from './dependencies'
 
-let initialized = false;
+/** OpenAI/vLLM compatible chat completion response */
+interface ChatCompletionResponse {
+  choices: Array<{ message: { content: string } }>
+}
+
+let initialized = false
 
 /**
  * Initialize training package with dependencies from @babylon/agents
- *
- * This dynamically imports @babylon/agents to avoid circular dependencies
- * at module load time.
  */
 export async function initializeTrainingPackage(): Promise<void> {
   if (initialized) {
-    logger.debug('Training package already initialized', {}, 'TrainingInit');
-    return;
+    logger.debug('Training package already initialized', {}, 'TrainingInit')
+    return
   }
 
-  logger.info('Initializing training package...', {}, 'TrainingInit');
-
-  // Dynamically import @babylon/agents to get real implementations
-  // @ts-ignore - Dynamic import of @babylon/agents (not a compile-time dependency)
-  const agentsModule = await import('@babylon/agents');
+  logger.info('Initializing training package...', {}, 'TrainingInit')
 
   // Get the agentService (implements IAgentService)
   // The agentService from @babylon/agents has createAgent method matching IAgentService
-  const agentService = agentsModule.agentService as IAgentService;
+  const agentServiceInstance = agentService as IAgentService
 
   // Get the agentRuntimeManager (implements IAgentRuntimeManager)
-  const runtimeManager = agentsModule.agentRuntimeManager;
-  const agentRuntimeManager: IAgentRuntimeManager = {
+  const runtimeManager = agentRuntimeManager
+  const agentRuntimeManagerInstance: IAgentRuntimeManager = {
     getRuntime: (agentId: string) => runtimeManager.getRuntime(agentId),
     resetRuntime: async (agentId: string) => {
-      await runtimeManager.clearRuntime(agentId);
+      await runtimeManager.clearRuntime(agentId)
     },
-  };
+  }
 
   // Get the autonomousCoordinator (implements IAutonomousCoordinator)
-  const coordinator = agentsModule.autonomousCoordinator;
-  const autonomousCoordinator: IAutonomousCoordinator = {
+  const coordinatorInstance = autonomousCoordinator
+  const autonomousCoordinatorInstance: IAutonomousCoordinator = {
     executeAutonomousTick: async (
       agentUserId,
       agentRuntime,
-      recordTrajectories
+      recordTrajectories,
     ) => {
-      const result = await coordinator.executeAutonomousTick(
+      const result = await coordinatorInstance.executeAutonomousTick(
         agentUserId,
         agentRuntime,
-        recordTrajectories
-      );
+        recordTrajectories,
+      )
       return {
         success: result.success,
         actionsExecuted: result.actionsExecuted,
         trajectoryId: result.trajectoryId,
-      };
+      }
     },
-  };
+  }
 
   // Get the LLM caller from agents (uses Jeju Compute)
   const llmCaller: ILLMCaller = {
@@ -79,15 +82,15 @@ export async function initializeTrainingPackage(): Promise<void> {
       const jejuEndpoint =
         process.env.JEJU_COMPUTE_API_URL ||
         process.env.JEJU_COMPUTE_ENDPOINT ||
-        'http://localhost:4500';
+        'http://localhost:4500'
 
       const modelMap = {
         small: 'llama-3.1-8b-instant',
         medium: 'llama-3.1-70b-versatile',
         large: 'llama-3.1-70b-versatile',
-      };
+      }
 
-      const model = modelMap[params.modelSize || 'medium'];
+      const model = modelMap[params.modelSize || 'medium']
 
       const response = await fetch(`${jejuEndpoint}/v1/chat/completions`, {
         method: 'POST',
@@ -103,41 +106,39 @@ export async function initializeTrainingPackage(): Promise<void> {
           temperature: params.temperature ?? 0.7,
           max_tokens: params.maxTokens ?? 1024,
         }),
-      });
+      })
 
       if (!response.ok) {
-        throw new Error(`Jeju Compute error: ${response.status}`);
+        throw new Error(`Jeju Compute error: ${response.status}`)
       }
 
-      const data = (await response.json()) as {
-        choices: Array<{ message: { content: string } }>;
-      };
-      return data.choices[0]?.message.content || '';
+      const data: ChatCompletionResponse = await response.json()
+      return data.choices[0]?.message.content || ''
     },
-  };
+  }
 
   // Configure all dependencies
   configureTrainingDependencies({
-    agentService,
-    agentRuntimeManager,
-    autonomousCoordinator,
+    agentService: agentServiceInstance,
+    agentRuntimeManager: agentRuntimeManagerInstance,
+    autonomousCoordinator: autonomousCoordinatorInstance,
     llmCaller,
-  });
+  })
 
-  initialized = true;
-  logger.info('Training package initialized successfully', {}, 'TrainingInit');
+  initialized = true
+  logger.info('Training package initialized successfully', {}, 'TrainingInit')
 }
 
 /**
  * Check if training package is initialized
  */
 export function isTrainingInitialized(): boolean {
-  return initialized;
+  return initialized
 }
 
 /**
  * Reset initialization state (for testing)
  */
 export function resetTrainingInitialization(): void {
-  initialized = false;
+  initialized = false
 }

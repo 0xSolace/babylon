@@ -14,13 +14,13 @@ import type {
   JsonRpcResult,
   JsonValue,
   PaymentRequest,
-} from '@babylon/shared';
+} from '@babylon/shared'
 import {
   AgentCapabilitiesSchema,
   GameNetworkInfoSchema,
   JsonValueSchema,
   PaymentRequestSchema,
-} from '@babylon/shared';
+} from '@babylon/shared'
 
 export type {
   AgentCapabilities,
@@ -29,50 +29,51 @@ export type {
   JsonRpcResult,
   JsonValue,
   PaymentRequest,
-};
+}
 export {
   AgentCapabilitiesSchema,
   GameNetworkInfoSchema,
   JsonValueSchema,
   PaymentRequestSchema,
-};
+}
 
 /**
  * JSON-RPC 2.0 request structure
  */
 export interface JsonRpcRequest {
-  jsonrpc: '2.0';
-  method: string;
-  params?: JsonRpcParams;
-  id: string | number;
+  jsonrpc: '2.0'
+  method: string
+  params?: JsonRpcParams
+  id: string | number
 }
 
 /**
  * JSON-RPC 2.0 response structure
+ * Generic T allows for typed results while maintaining compatibility with JsonValue
  */
-export interface JsonRpcResponse {
-  jsonrpc: '2.0';
-  result?: JsonRpcResult;
-  error?: JsonRpcError;
-  id: string | number | null;
+export interface JsonRpcResponse<T = JsonValue> {
+  jsonrpc: '2.0'
+  result?: JsonRpcResult<T>
+  error?: JsonRpcError
+  id: string | number | null
 }
 
 /**
  * JSON-RPC 2.0 error structure
  */
 export interface JsonRpcError {
-  code: number;
-  message: string;
-  data?: JsonValue;
+  code: number
+  message: string
+  data?: JsonValue
 }
 
 /**
  * JSON-RPC 2.0 notification structure
  */
 export interface JsonRpcNotification {
-  jsonrpc: '2.0';
-  method: string;
-  params?: JsonRpcParams;
+  jsonrpc: '2.0'
+  method: string
+  params?: JsonRpcParams
 }
 
 /**
@@ -166,78 +167,78 @@ export enum A2AMethod {
  * Agent authentication credentials
  */
 export interface AgentCredentials {
-  address: string; // Ethereum address
-  tokenId: number; // ERC-8004 token ID
-  signature: string; // Signed message proving ownership
-  timestamp: number;
+  address: string // Ethereum address
+  tokenId: number // ERC-8004 token ID
+  signature: string // Signed message proving ownership
+  timestamp: number
 }
 
 /**
  * Agent profile with capabilities and reputation
  */
 export interface AgentProfile {
-  agentId?: string; // Optional agent ID for registry tracking
-  tokenId: number;
-  address: string;
-  name: string;
-  endpoint: string;
-  capabilities: AgentCapabilities;
-  reputation: AgentReputation;
-  isActive: boolean;
+  agentId?: string // Optional agent ID for registry tracking
+  tokenId: number
+  address: string
+  name: string
+  endpoint: string
+  capabilities: AgentCapabilities
+  reputation: AgentReputation
+  isActive: boolean
 }
 
 /**
  * Agent reputation metrics
  */
 export interface AgentReputation {
-  totalBets: number;
-  winningBets: number;
-  accuracyScore: number;
-  trustScore: number;
-  totalVolume: string;
-  profitLoss: number;
-  isBanned: boolean;
+  totalBets: number
+  winningBets: number
+  accuracyScore: number
+  trustScore: number
+  totalVolume: string
+  profitLoss: number
+  isBanned: boolean
 }
 
 /**
  * Active agent connection information
  */
 export interface AgentConnection {
-  agentId: string;
-  address: string;
-  tokenId: number;
-  capabilities: AgentCapabilities;
-  authenticated: boolean;
-  connectedAt: number;
-  lastActivity: number;
+  agentId: string
+  address: string
+  tokenId: number
+  capabilities: AgentCapabilities
+  authenticated: boolean
+  connectedAt: number
+  lastActivity: number
 }
 
 /**
  * Market data structure
  */
 export interface MarketData {
-  marketId: string;
-  question: string;
-  outcomes: string[];
-  prices: number[];
-  volume: string;
-  liquidity: string;
-  resolveAt: number;
-  resolved: boolean;
-  winningOutcome?: number;
+  marketId: string
+  question: string
+  outcomes: string[]
+  prices: number[]
+  volume: string
+  liquidity: string
+  resolveAt: number
+  resolved: boolean
+  winningOutcome?: number
 }
 
 /**
  * Payment receipt structure
  */
 export interface PaymentReceipt {
-  requestId: string;
-  txHash: string;
-  from: string;
-  to: string;
-  amount: string;
-  timestamp: number;
-  confirmed: boolean;
+  requestId: string
+  txHash: string
+  from: string
+  to: string
+  amount: string
+  timestamp: number
+  confirmed: boolean
 }
 
 /**
@@ -267,9 +268,9 @@ export enum ErrorCode {
  * A2A protocol event structure
  */
 export interface A2AEvent {
-  type: string;
-  data: JsonValue | Record<string, JsonValue>;
-  timestamp: number;
+  type: string
+  data: JsonValue | Record<string, JsonValue>
+  timestamp: number
 }
 
 /**
@@ -286,19 +287,19 @@ export enum A2AEventType {
  * Handshake request structure
  */
 export interface HandshakeRequest {
-  credentials: AgentCredentials;
-  capabilities: AgentCapabilities;
-  endpoint: string;
+  credentials: AgentCredentials
+  capabilities: AgentCapabilities
+  endpoint: string
 }
 
 /**
  * Handshake response structure
  */
 export interface HandshakeResponse {
-  agentId: string;
-  sessionToken: string;
-  serverCapabilities: string[];
-  expiresAt: number;
+  agentId: string
+  sessionToken: string
+  serverCapabilities: string[]
+  expiresAt: number
 }
 
 /**
@@ -306,26 +307,26 @@ export interface HandshakeResponse {
  */
 export interface DiscoverRequest {
   filters?: {
-    strategies?: string[];
-    minReputation?: number;
-    markets?: string[];
-  };
-  limit?: number;
+    strategies?: string[]
+    minReputation?: number
+    markets?: string[]
+  }
+  limit?: number
 }
 
 /**
  * Agent discovery response structure
  */
 export interface DiscoverResponse {
-  agents: AgentProfile[];
-  total: number;
+  agents: AgentProfile[]
+  total: number
 }
 
 /**
  * Market subscription information
  */
 export interface MarketSubscription {
-  marketId: string;
-  agentId: string;
-  subscribedAt: number;
+  marketId: string
+  agentId: string
+  subscribedAt: number
 }

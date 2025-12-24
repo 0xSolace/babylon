@@ -52,7 +52,6 @@ jobs:
           OAUTH3_TEST_PHONE: ${{ secrets.OAUTH3_TEST_PHONE || '' }}
           OAUTH3_TEST_OTP: ${{ secrets.OAUTH3_TEST_OTP || '' }}
           OAUTH3_TEST_PASSWORD: ${{ secrets.OAUTH3_TEST_PASSWORD || '' }}
-          WANDB_API_KEY: ${{ secrets.WANDB_API_KEY || '' }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY || '' }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY || '' }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY || '' }}
@@ -99,7 +98,7 @@ jobs:
           CQL_BLOCK_PRODUCER_ENDPOINT: ${{ secrets.TEST_CQL_ENDPOINT }}
           CQL_DATABASE_ID: test_babylon
           REDIS_URL: redis://localhost:6379
-          NEXT_PUBLIC_APP_URL: http://localhost:3000
+          PUBLIC_APP_URL: http://localhost:3000
           PORT: 3000
           JEJU_OAUTH3_SERVICE_URL: ${{ secrets.JEJU_OAUTH3_SERVICE_URL || '' }}
           BABYLON_OAUTH3_APP_ID: ${{ secrets.BABYLON_OAUTH3_APP_ID || '' }}
@@ -148,7 +147,6 @@ jobs:
           REDIS_URL: redis://localhost:6379
           TEST_API_URL: http://localhost:3000
           NODE_ENV: test
-          WANDB_API_KEY: ${{ secrets.WANDB_API_KEY || '' }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY || '' }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY || '' }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY || '' }}

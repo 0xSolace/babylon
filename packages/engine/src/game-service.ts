@@ -9,15 +9,15 @@
  * Vercel-compatible: No filesystem access, all data from database.
  */
 
-import { db, eq, getDbInstance, markets } from '@babylon/db';
-import { StaticDataRegistry } from './services/static-data-registry';
+import { db, eq, getDbInstance, markets } from '@babylon/db'
+import { StaticDataRegistry } from './services/static-data-registry'
 
 /**
  * Active market summary for NPC context (lightweight)
  */
 export interface ActiveMarketSummary {
-  id: string;
-  question: string;
+  id: string
+  question: string
 }
 
 /**
@@ -29,19 +29,19 @@ export interface ActiveMarketSummary {
  */
 class GameService {
   async getRecentPosts(limit = 100, offset = 0) {
-    return await getDbInstance().getRecentPosts(limit, offset);
+    return await getDbInstance().getRecentPosts(limit, offset)
   }
 
   async getPostsByActor(actorId: string, limit = 100) {
-    return await getDbInstance().getPostsByActor(actorId, limit);
+    return await getDbInstance().getPostsByActor(actorId, limit)
   }
 
   async getCompanies() {
     // Get static organization data from registry
-    const staticOrgs = StaticDataRegistry.getAllOrganizations();
+    const staticOrgs = StaticDataRegistry.getAllOrganizations()
     // Get dynamic price data from database
-    const orgStates = await getDbInstance().getAllOrganizationStates();
-    const priceMap = new Map(orgStates.map((s) => [s.id, s.currentPrice]));
+    const orgStates = await getDbInstance().getAllOrganizationStates()
+    const priceMap = new Map(orgStates.map((s) => [s.id, s.currentPrice]))
 
     // Combine static and dynamic data, filter to companies
     return staticOrgs
@@ -55,11 +55,11 @@ class GameService {
         initialPrice: org.initialPrice,
         currentPrice: priceMap.get(org.id) ?? org.initialPrice,
       }))
-      .sort((a, b) => (b.currentPrice ?? 0) - (a.currentPrice ?? 0));
+      .sort((a, b) => Number(b.currentPrice ?? 0) - Number(a.currentPrice ?? 0))
   }
 
   async getActiveQuestions() {
-    return await getDbInstance().getActiveQuestions();
+    return await getDbInstance().getActiveQuestions()
   }
 
   /**
@@ -67,14 +67,14 @@ class GameService {
    * Works even if engine is not running (daemon writes to database).
    */
   async getStats() {
-    return await getDbInstance().getStats();
+    return await getDbInstance().getStats()
   }
 
   /**
    * Get all games from database
    */
   async getAllGames() {
-    return await getDbInstance().getAllGames();
+    return await getDbInstance().getAllGames()
   }
 
   /**
@@ -83,15 +83,15 @@ class GameService {
    */
   async getStatus() {
     // Check game state from database
-    const gameState = await getDbInstance().getGameState();
+    const gameState = await getDbInstance().getGameState()
     return {
       isRunning: false,
       initialized: false,
       currentDay: gameState?.currentDay || 0,
-      currentDate: gameState?.currentDate?.toISOString(),
+      currentDate: undefined,
       speed: 60000,
-      lastTickAt: gameState?.lastTickAt?.toISOString(),
-    };
+      lastTickAt: undefined,
+    }
   }
 
   async getRealtimePosts(limit = 100, offset = 0, actorId?: string) {
@@ -99,10 +99,10 @@ class GameService {
     // The daemon writes posts to database, so we can query them directly
     const posts = actorId
       ? await getDbInstance().getPostsByActor(actorId, limit)
-      : await getDbInstance().getRecentPosts(limit, offset);
+      : await getDbInstance().getRecentPosts(limit, offset)
 
     if (!posts || posts.length === 0) {
-      return null;
+      return null
     }
 
     return {
@@ -117,7 +117,7 @@ class GameService {
         dayNumber: post.dayNumber,
       })),
       total: posts.length,
-    };
+    }
   }
 
   /**
@@ -128,21 +128,21 @@ class GameService {
     const game = await db.game.findFirst({
       where: { isContinuous: true, isRunning: true },
       select: { currentDay: true, startedAt: true },
-    });
+    })
 
     // Use currentDay from DB if available
     if (game?.currentDay !== undefined && game.currentDay !== null) {
-      return game.currentDay;
+      return game.currentDay
     }
 
     // Fall back to calculating from startedAt
     if (!game?.startedAt) {
-      return 0;
+      return 0
     }
 
-    const now = new Date();
-    const dayMs = 24 * 60 * 60 * 1000;
-    return Math.floor((now.getTime() - game.startedAt.getTime()) / dayMs);
+    const now = new Date()
+    const dayMs = 24 * 60 * 60 * 1000
+    return Math.floor((now.getTime() - game.startedAt.getTime()) / dayMs)
   }
 
   /**
@@ -157,10 +157,10 @@ class GameService {
       })
       .from(markets)
       .where(eq(markets.resolved, false))
-      .limit(limit);
+      .limit(limit)
 
-    return activeMarkets;
+    return activeMarkets as ActiveMarketSummary[]
   }
 }
 
-export const gameService = new GameService();
+export const gameService = new GameService()

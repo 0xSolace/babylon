@@ -5,4 +5,4 @@
  * Used to ground content generation in the game's reality.
  */
 
-export const worldFactsContent = ``;
+export const worldFactsContent = ``

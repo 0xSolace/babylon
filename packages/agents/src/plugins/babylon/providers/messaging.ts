@@ -11,10 +11,9 @@ import type {
   Provider,
   ProviderResult,
   State,
-} from '@elizaos/core';
-import { logger } from '../../../shared/logger';
-import type { BabylonRuntime } from '../types';
-// import type { A2AChatsResponse, A2AUnreadCountResponse, A2ANotificationsResponse } from '../../../types/a2a-responses' // Commented out - not needed
+} from '@elizaos/core'
+import { logger } from '../../../shared/logger'
+import { toBabylonRuntime } from '../types'
 
 /**
  * Provider: Unread Messages
@@ -27,63 +26,63 @@ export const messagesProvider: Provider = {
   get: async (
     runtime: IAgentRuntime,
     _message: Memory,
-    _state: State
+    _state: State,
   ): Promise<ProviderResult> => {
-    const babylonRuntime = runtime as BabylonRuntime;
+    const babylonRuntime = toBabylonRuntime(runtime)
 
     // A2A is REQUIRED
     if (!babylonRuntime.a2aClient?.isConnected()) {
       logger.error(
         'A2A client not connected - messages provider requires A2A protocol',
         undefined,
-        runtime.agentId
-      );
+        runtime.agentId,
+      )
       return {
         text: 'ERROR: A2A client not connected. Cannot fetch messages. Please ensure A2A server is running.',
-      };
+      }
     }
 
     // Define chat participant type
     interface ChatParticipant {
-      id: string;
-      username?: string;
-      displayName?: string;
+      id: string
+      username?: string
+      displayName?: string
     }
 
     // Define chat type
     interface Chat {
-      id: string;
-      name: string | null;
-      isGroup: boolean;
-      participants: ChatParticipant[];
+      id: string
+      name: string | null
+      isGroup: boolean
+      participants: ChatParticipant[]
     }
 
     const [chatsResult, unreadResult] = await Promise.all([
       babylonRuntime.a2aClient.getChats(),
       babylonRuntime.a2aClient.getUnreadCount(),
-    ]);
+    ])
 
-    const chatsData = chatsResult as { chats?: Chat[] };
-    const unreadData = unreadResult as { unreadCount?: number };
+    const chatsData = chatsResult as { chats?: Chat[] }
+    const unreadData = unreadResult as { unreadCount?: number }
 
-    const chats = chatsData.chats || [];
-    const unreadCount = unreadData.unreadCount || 0;
+    const chats = chatsData.chats || []
+    const unreadCount = unreadData.unreadCount || 0
 
     const chatsText =
       chats.length > 0
         ? `Chats:\n${chats
             .map(
               (c) =>
-                `- ${c.name || 'Unnamed'} (${c.isGroup ? 'Group' : 'DM'}) | ID: ${c.id} | Participants: ${c.participants.length}`
+                `- ${c.name || 'Unnamed'} (${c.isGroup ? 'Group' : 'DM'}) | ID: ${c.id} | Participants: ${c.participants.length}`,
             )
             .join('\n')}`
-        : 'No chats available.';
+        : 'No chats available.'
 
     return {
       text: `${chatsText}\n\nUnread messages: ${unreadCount}`,
-    };
+    }
   },
-};
+}
 
 /**
  * Provider: Notifications
@@ -96,50 +95,50 @@ export const notificationsProvider: Provider = {
   get: async (
     runtime: IAgentRuntime,
     _message: Memory,
-    _state: State
+    _state: State,
   ): Promise<ProviderResult> => {
-    const babylonRuntime = runtime as BabylonRuntime;
+    const babylonRuntime = toBabylonRuntime(runtime)
 
     // A2A is REQUIRED
     if (!babylonRuntime.a2aClient?.isConnected()) {
       logger.error(
         'A2A client not connected - notifications provider requires A2A protocol',
         undefined,
-        runtime.agentId
-      );
+        runtime.agentId,
+      )
       return {
         text: 'ERROR: A2A client not connected. Cannot fetch notifications. Please ensure A2A server is running.',
-      };
+      }
     }
 
     const notificationsResult =
-      await babylonRuntime.a2aClient.getNotifications(20);
+      await babylonRuntime.a2aClient.getNotifications(20)
     const notifications =
       (
         notificationsResult as {
           notifications?: Array<{
-            id: string;
-            type: string;
-            message: string;
-            read: boolean;
-            createdAt: string | Date;
-          }>;
+            id: string
+            type: string
+            message: string
+            read: boolean
+            createdAt: string | Date
+          }>
         }
-      )?.notifications || [];
+      )?.notifications || []
     const unreadCount =
-      (notificationsResult as { unreadCount?: number })?.unreadCount || 0;
+      (notificationsResult as { unreadCount?: number })?.unreadCount || 0
 
     if (notifications.length === 0) {
-      return { text: 'No notifications available.' };
+      return { text: 'No notifications available.' }
     }
 
     const notificationsText = `Notifications (${unreadCount} unread):\n${notifications
       .map(
         (n, idx) =>
-          `${idx + 1}. [${n.read ? 'READ' : 'UNREAD'}] ${n.type}: ${n.message} (ID: ${n.id})`
+          `${idx + 1}. [${n.read ? 'READ' : 'UNREAD'}] ${n.type}: ${n.message} (ID: ${n.id})`,
       )
-      .join('\n\n')}`;
+      .join('\n\n')}`
 
-    return { text: notificationsText };
+    return { text: notificationsText }
   },
-};
+}

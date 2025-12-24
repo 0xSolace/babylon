@@ -1,15 +1,13 @@
-'use client';
-
-import { cn } from '@babylon/shared';
-import { useMutation } from '@tanstack/react-query';
-import { Copy, ExternalLink, Save, Trash2 } from 'lucide-react';
-import { useRouter } from 'next/navigation';
-import { useState } from 'react';
-import { toast } from 'sonner';
-import { Input } from '@/components/ui/input';
-import { Switch } from '@/components/ui/switch';
-import { Textarea } from '@/components/ui/textarea';
-import { useAuth } from '@/hooks/useAuth';
+import { cn } from '@babylon/shared'
+import { useMutation } from '@tanstack/react-query'
+import { Copy, ExternalLink, Save, Trash2 } from 'lucide-react'
+import { useState } from 'react'
+import { toast } from 'sonner'
+import { Input } from '@/components/ui/input'
+import { Switch } from '@/components/ui/switch'
+import { Textarea } from '@/components/ui/textarea'
+import { useAuth } from '@/hooks/useAuth'
+import { useRouter } from '@/lib/navigation'
 
 /**
  * Agent settings component for configuring agent properties.
@@ -44,37 +42,37 @@ import { useAuth } from '@/hooks/useAuth';
  */
 interface AgentSettingsProps {
   agent: {
-    id: string;
-    name: string;
-    description?: string;
-    profileImageUrl?: string;
-    system: string;
-    bio?: string[];
-    personality?: string;
-    tradingStrategy?: string;
-    modelTier: 'free' | 'pro';
-    isActive: boolean;
-    autonomousEnabled: boolean;
-    autonomousPosting?: boolean;
-    autonomousCommenting?: boolean;
-    autonomousDMs?: boolean;
-    autonomousGroupChats?: boolean;
-    a2aEnabled?: boolean;
-  };
-  onUpdate: () => void;
+    id: string
+    name: string
+    description?: string
+    profileImageUrl?: string
+    system: string
+    bio?: string[]
+    personality?: string
+    tradingStrategy?: string
+    modelTier: 'free' | 'pro'
+    isActive: boolean
+    autonomousEnabled: boolean
+    autonomousPosting?: boolean
+    autonomousCommenting?: boolean
+    autonomousDMs?: boolean
+    autonomousGroupChats?: boolean
+    a2aEnabled?: boolean
+  }
+  onUpdate: () => void
 }
 
 interface UpdateAgentError {
-  error?: string;
+  error?: string
 }
 
 interface DeleteAgentError {
-  error?: string;
+  error?: string
 }
 
 export function AgentSettings({ agent, onUpdate }: AgentSettingsProps) {
-  const router = useRouter();
-  const { getAccessToken } = useAuth();
+  const router = useRouter()
+  const { getAccessToken } = useAuth()
   const [formData, setFormData] = useState({
     name: agent.name,
     description: agent.description || '',
@@ -93,14 +91,14 @@ export function AgentSettings({ agent, onUpdate }: AgentSettingsProps) {
     autonomousDMs: agent.autonomousDMs || false,
     autonomousGroupChats: agent.autonomousGroupChats || false,
     a2aEnabled: agent.a2aEnabled || false,
-  });
+  })
 
   // Save mutation
   const saveMutation = useMutation({
     mutationFn: async () => {
-      const token = await getAccessToken();
+      const token = await getAccessToken()
       if (!token) {
-        throw new Error('Authentication required');
+        throw new Error('Authentication required')
       }
 
       const res = await fetch(`/api/agents/${agent.id}`, {
@@ -117,33 +115,33 @@ export function AgentSettings({ agent, onUpdate }: AgentSettingsProps) {
             ? `${formData.system}\n\nTrading Strategy: ${formData.tradingStrategy}`
             : formData.system,
         }),
-      });
+      })
 
       if (!res.ok) {
-        const error: UpdateAgentError = await res.json();
-        throw new Error(error.error || 'Failed to update agent');
+        const error: UpdateAgentError = await res.json()
+        throw new Error(error.error || 'Failed to update agent')
       }
 
-      return res.json();
+      return res.json()
     },
     onSuccess: () => {
-      toast.success('Agent updated successfully');
-      onUpdate();
+      toast.success('Agent updated successfully')
+      onUpdate()
     },
     onError: (error) => {
       toast.error(
-        error instanceof Error ? error.message : 'Failed to update agent'
-      );
+        error instanceof Error ? error.message : 'Failed to update agent',
+      )
     },
-  });
+  })
 
   // Delete mutation
   const deleteMutation = useMutation({
     mutationFn: async () => {
-      const token = await getAccessToken();
+      const token = await getAccessToken()
 
       if (!token) {
-        throw new Error('Authentication required');
+        throw new Error('Authentication required')
       }
 
       const res = await fetch(`/api/agents/${agent.id}`, {
@@ -151,41 +149,41 @@ export function AgentSettings({ agent, onUpdate }: AgentSettingsProps) {
         headers: {
           Authorization: `Bearer ${token}`,
         },
-      });
+      })
 
       if (!res.ok) {
-        const error: DeleteAgentError = await res.json();
-        throw new Error(error.error || 'Failed to delete agent');
+        const error: DeleteAgentError = await res.json()
+        throw new Error(error.error || 'Failed to delete agent')
       }
 
-      return res.json();
+      return res.json()
     },
     onSuccess: () => {
-      toast.success('Agent deleted successfully');
-      router.push('/agents');
+      toast.success('Agent deleted successfully')
+      router.push('/agents')
     },
     onError: (error) => {
       toast.error(
-        error instanceof Error ? error.message : 'Failed to delete agent'
-      );
+        error instanceof Error ? error.message : 'Failed to delete agent',
+      )
     },
-  });
+  })
 
   const handleSave = () => {
-    saveMutation.mutate();
-  };
+    saveMutation.mutate()
+  }
 
   const handleDelete = () => {
     if (
       !confirm(
-        `Are you sure you want to delete ${agent.name}? This cannot be undone.`
+        `Are you sure you want to delete ${agent.name}? This cannot be undone.`,
       )
     ) {
-      return;
+      return
     }
 
-    deleteMutation.mutate();
-  };
+    deleteMutation.mutate()
+  }
 
   return (
     <div className="space-y-4 sm:space-y-6">
@@ -196,8 +194,14 @@ export function AgentSettings({ agent, onUpdate }: AgentSettingsProps) {
 
         <div className="space-y-4">
           <div>
-            <label className="mb-2 block font-medium text-sm">Name</label>
+            <label
+              htmlFor="agent-name-input"
+              className="mb-2 block font-medium text-sm"
+            >
+              Name
+            </label>
             <Input
+              id="agent-name-input"
               value={formData.name}
               onChange={(e) =>
                 setFormData({ ...formData, name: e.target.value })
@@ -208,10 +212,14 @@ export function AgentSettings({ agent, onUpdate }: AgentSettingsProps) {
           </div>
 
           <div>
-            <label className="mb-2 block font-medium text-sm">
+            <label
+              htmlFor="agent-description-textarea"
+              className="mb-2 block font-medium text-sm"
+            >
               Description
             </label>
             <Textarea
+              id="agent-description-textarea"
               value={formData.description}
               onChange={(e) =>
                 setFormData({ ...formData, description: e.target.value })
@@ -223,10 +231,14 @@ export function AgentSettings({ agent, onUpdate }: AgentSettingsProps) {
           </div>
 
           <div>
-            <label className="mb-2 block font-medium text-sm">
+            <label
+              htmlFor="agent-profile-image-input"
+              className="mb-2 block font-medium text-sm"
+            >
               Profile Image URL
             </label>
             <Input
+              id="agent-profile-image-input"
               value={formData.profileImageUrl}
               onChange={(e) =>
                 setFormData({ ...formData, profileImageUrl: e.target.value })
@@ -243,10 +255,14 @@ export function AgentSettings({ agent, onUpdate }: AgentSettingsProps) {
 
         <div className="space-y-4">
           <div>
-            <label className="mb-2 block font-medium text-sm">
+            <label
+              htmlFor="agent-system-textarea"
+              className="mb-2 block font-medium text-sm"
+            >
               Important Directions
             </label>
             <Textarea
+              id="agent-system-textarea"
               value={formData.system}
               onChange={(e) =>
                 setFormData({ ...formData, system: e.target.value })
@@ -258,10 +274,14 @@ export function AgentSettings({ agent, onUpdate }: AgentSettingsProps) {
           </div>
 
           <div>
-            <label className="mb-2 block font-medium text-sm">
+            <label
+              htmlFor="agent-personality-textarea"
+              className="mb-2 block font-medium text-sm"
+            >
               Personality (maps to bio array)
             </label>
             <Textarea
+              id="agent-personality-textarea"
               value={formData.personality}
               onChange={(e) =>
                 setFormData({ ...formData, personality: e.target.value })
@@ -273,10 +293,14 @@ export function AgentSettings({ agent, onUpdate }: AgentSettingsProps) {
           </div>
 
           <div>
-            <label className="mb-2 block font-medium text-sm">
+            <label
+              htmlFor="agent-trading-strategy-textarea"
+              className="mb-2 block font-medium text-sm"
+            >
               Trading Strategy
             </label>
             <Textarea
+              id="agent-trading-strategy-textarea"
               value={formData.tradingStrategy}
               onChange={(e) =>
                 setFormData({ ...formData, tradingStrategy: e.target.value })
@@ -299,15 +323,16 @@ export function AgentSettings({ agent, onUpdate }: AgentSettingsProps) {
 
         <div className="space-y-4">
           <div>
-            <label className="mb-2 block font-medium text-sm">Model Tier</label>
+            <div className="mb-2 block font-medium text-sm">Model Tier</div>
             <div className="flex flex-col gap-3 sm:flex-row sm:gap-4">
               <button
+                type="button"
                 onClick={() => setFormData({ ...formData, modelTier: 'free' })}
                 className={cn(
                   'flex-1 rounded-lg border p-3 text-left transition-colors sm:p-4',
                   formData.modelTier === 'free'
                     ? 'border-[#0066FF] bg-[#0066FF]/10'
-                    : 'border-border hover:border-[#0066FF]/50'
+                    : 'border-border hover:border-[#0066FF]/50',
                 )}
               >
                 <div className="font-medium text-sm sm:text-base">
@@ -318,12 +343,13 @@ export function AgentSettings({ agent, onUpdate }: AgentSettingsProps) {
                 </div>
               </button>
               <button
+                type="button"
                 onClick={() => setFormData({ ...formData, modelTier: 'pro' })}
                 className={cn(
                   'flex-1 rounded-lg border p-3 text-left transition-colors sm:p-4',
                   formData.modelTier === 'pro'
                     ? 'border-[#0066FF] bg-[#0066FF]/10'
-                    : 'border-border hover:border-[#0066FF]/50'
+                    : 'border-border hover:border-[#0066FF]/50',
                 )}
               >
                 <div className="font-medium text-sm sm:text-base">
@@ -467,13 +493,14 @@ export function AgentSettings({ agent, onUpdate }: AgentSettingsProps) {
                       : `/api/agents/${agent.id}/a2a`}
                   </code>
                   <button
+                    type="button"
                     onClick={() => {
                       const url =
                         typeof window !== 'undefined'
                           ? `${window.location.origin}/api/agents/${agent.id}/a2a`
-                          : `/api/agents/${agent.id}/a2a`;
-                      navigator.clipboard.writeText(url);
-                      toast.success('Link copied to clipboard');
+                          : `/api/agents/${agent.id}/a2a`
+                      navigator.clipboard.writeText(url)
+                      toast.success('Link copied to clipboard')
                     }}
                     className="shrink-0 rounded p-1.5 transition-colors hover:bg-muted"
                     title="Copy link"
@@ -510,6 +537,7 @@ export function AgentSettings({ agent, onUpdate }: AgentSettingsProps) {
 
       <div className="flex justify-end">
         <button
+          type="button"
           onClick={handleSave}
           disabled={saveMutation.isPending}
           className="flex items-center gap-2 rounded-lg bg-[#0066FF] px-6 py-2 font-medium text-primary-foreground transition-all hover:bg-[#2952d9] disabled:cursor-not-allowed disabled:opacity-50"
@@ -529,6 +557,7 @@ export function AgentSettings({ agent, onUpdate }: AgentSettingsProps) {
         </p>
 
         <button
+          type="button"
           onClick={handleDelete}
           disabled={deleteMutation.isPending}
           className="flex items-center gap-2 rounded-lg border border-red-500/20 bg-red-500/10 px-6 py-2 font-medium text-red-400 transition-all hover:border-red-500/30 hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-50"
@@ -538,5 +567,5 @@ export function AgentSettings({ agent, onUpdate }: AgentSettingsProps) {
         </button>
       </div>
     </div>
-  );
+  )
 }

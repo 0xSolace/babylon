@@ -23,9 +23,9 @@
  * MPC Party endpoint configuration
  */
 export interface MPCParty {
-  id: string;
-  endpoint: string;
-  publicKey?: string;
+  id: string
+  endpoint: string
+  publicKey?: string
 }
 
 /**
@@ -33,13 +33,13 @@ export interface MPCParty {
  */
 export interface MPCCoordinatorConfig {
   /** Number of parties required to reconstruct */
-  threshold: number;
+  threshold: number
   /** Total number of parties */
-  totalParties: number;
+  totalParties: number
   /** Timeout for key generation (ms) */
-  keyGenerationTimeout?: number;
+  keyGenerationTimeout?: number
   /** Timeout for signature operations (ms) */
-  signatureTimeout?: number;
+  signatureTimeout?: number
 }
 
 /**
@@ -47,35 +47,35 @@ export interface MPCCoordinatorConfig {
  */
 export interface BabylonMPCConfig extends MPCCoordinatorConfig {
   /** Party endpoints (TEE enclaves) */
-  partyEndpoints: string[];
+  partyEndpoints: string[]
   /** TEE attestation verification enabled */
-  verifyAttestation: boolean;
+  verifyAttestation: boolean
   /** Key rotation interval (ms) */
-  rotationIntervalMs: number;
+  rotationIntervalMs: number
   /** Max retries for party communication */
-  maxRetries: number;
+  maxRetries: number
   /** Timeout for signing operations (ms) */
-  signingTimeoutMs: number;
+  signingTimeoutMs: number
 }
 
 /**
  * Access control condition for encryption policies
  */
 export interface AccessCondition {
-  type: 'agent' | 'address' | 'contract' | 'role';
-  chainId?: string;
-  address?: string;
-  agentId?: number;
-  role?: string;
-  value?: string;
+  type: 'agent' | 'address' | 'contract' | 'role'
+  chainId?: string
+  address?: string
+  agentId?: number
+  role?: string
+  value?: string
 }
 
 /**
  * Access control policy for encrypted data
  */
 export interface AccessControlPolicy {
-  conditions: AccessCondition[];
-  operator: 'and' | 'or';
+  conditions: AccessCondition[]
+  operator: 'and' | 'or'
 }
 
 // ============================================================================
@@ -105,7 +105,7 @@ export const PRODUCTION_MPC_CONFIG: BabylonMPCConfig = {
   // Communication settings
   maxRetries: 3,
   signingTimeoutMs: 10000,
-};
+}
 
 // ============================================================================
 // Development Configuration
@@ -131,7 +131,7 @@ export const DEVELOPMENT_MPC_CONFIG: BabylonMPCConfig = {
   // Communication settings
   maxRetries: 1,
   signingTimeoutMs: 5000,
-};
+}
 
 // ============================================================================
 // Testnet Configuration
@@ -157,7 +157,7 @@ export const TESTNET_MPC_CONFIG: BabylonMPCConfig = {
   // Communication settings
   maxRetries: 2,
   signingTimeoutMs: 8000,
-};
+}
 
 // ============================================================================
 // Environment Detection
@@ -167,18 +167,18 @@ export const TESTNET_MPC_CONFIG: BabylonMPCConfig = {
  * Get the appropriate MPC configuration based on environment
  */
 export function getMPCConfig(): BabylonMPCConfig {
-  const env = process.env.NODE_ENV ?? 'development';
-  const network = process.env.JEJU_NETWORK ?? 'localnet';
+  const env = process.env.NODE_ENV ?? 'development'
+  const network = process.env.JEJU_NETWORK ?? 'localnet'
 
   if (env === 'production' || network === 'mainnet') {
-    return PRODUCTION_MPC_CONFIG;
+    return PRODUCTION_MPC_CONFIG
   }
 
   if (network === 'testnet') {
-    return TESTNET_MPC_CONFIG;
+    return TESTNET_MPC_CONFIG
   }
 
-  return DEVELOPMENT_MPC_CONFIG;
+  return DEVELOPMENT_MPC_CONFIG
 }
 
 // ============================================================================
@@ -186,26 +186,26 @@ export function getMPCConfig(): BabylonMPCConfig {
 // ============================================================================
 
 export interface KeyRotationSchedule {
-  lastRotation: number;
-  nextRotation: number;
-  rotationInProgress: boolean;
-  currentKeyVersion: number;
+  lastRotation: number
+  nextRotation: number
+  rotationInProgress: boolean
+  currentKeyVersion: number
 }
 
 export function getRotationSchedule(
   config: BabylonMPCConfig,
-  lastRotation: number
+  lastRotation: number,
 ): KeyRotationSchedule {
-  const nextRotation = lastRotation + config.rotationIntervalMs;
+  const nextRotation = lastRotation + config.rotationIntervalMs
 
   return {
     lastRotation,
     nextRotation,
     rotationInProgress: false,
     currentKeyVersion: Math.floor(
-      (Date.now() - lastRotation) / config.rotationIntervalMs
+      (Date.now() - lastRotation) / config.rotationIntervalMs,
     ),
-  };
+  }
 }
 
 // ============================================================================
@@ -217,7 +217,7 @@ export function getRotationSchedule(
  */
 export function getTrajectoryEncryptionPolicy(
   chainId: string,
-  trainingOrchestratorAddress: string
+  trainingOrchestratorAddress: string,
 ): AccessControlPolicy {
   return {
     conditions: [
@@ -229,7 +229,7 @@ export function getTrajectoryEncryptionPolicy(
       },
     ],
     operator: 'and',
-  };
+  }
 }
 
 /**
@@ -237,7 +237,7 @@ export function getTrajectoryEncryptionPolicy(
  */
 export function getModelEncryptionPolicy(
   chainId: string,
-  modelRegistryAddress: string
+  modelRegistryAddress: string,
 ): AccessControlPolicy {
   return {
     conditions: [
@@ -249,7 +249,7 @@ export function getModelEncryptionPolicy(
       },
     ],
     operator: 'and',
-  };
+  }
 }
 
 /**
@@ -258,7 +258,7 @@ export function getModelEncryptionPolicy(
 export function getAgentOwnerPolicy(
   chainId: string,
   agentVaultAddress: string,
-  agentId: number
+  agentId: number,
 ): AccessControlPolicy {
   return {
     conditions: [
@@ -270,5 +270,5 @@ export function getAgentOwnerPolicy(
       },
     ],
     operator: 'and',
-  };
+  }
 }

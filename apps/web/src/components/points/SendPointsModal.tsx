@@ -1,26 +1,24 @@
-'use client';
-
-import { cn } from '@babylon/shared';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Check, Loader2, Send, X } from 'lucide-react';
-import { useState } from 'react';
-import { useAuth } from '@/hooks/useAuth';
+import { cn } from '@babylon/shared'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { Check, Loader2, Send, X } from 'lucide-react'
+import { useState } from 'react'
+import { useAuth } from '@/hooks/useAuth'
 
 /**
  * Transfer points request payload.
  */
 interface TransferPointsPayload {
-  recipientId: string;
-  amount: number;
-  message?: string;
+  recipientId: string
+  amount: number
+  message?: string
 }
 
 /**
  * Transfer points response structure.
  */
 interface TransferPointsResponse {
-  success: boolean;
-  error?: string;
+  success: boolean
+  error?: string
 }
 
 /**
@@ -55,12 +53,12 @@ interface TransferPointsResponse {
  * ```
  */
 interface SendPointsModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  recipientId: string;
-  recipientName: string;
-  recipientUsername?: string | null;
-  onSuccess?: () => void;
+  isOpen: boolean
+  onClose: () => void
+  recipientId: string
+  recipientName: string
+  recipientUsername?: string | null
+  onSuccess?: () => void
 }
 
 export function SendPointsModal({
@@ -71,17 +69,17 @@ export function SendPointsModal({
   recipientUsername,
   onSuccess,
 }: SendPointsModalProps) {
-  const { getAccessToken } = useAuth();
-  const queryClient = useQueryClient();
-  const [amount, setAmount] = useState('');
-  const [message, setMessage] = useState('');
-  const [success, setSuccess] = useState(false);
+  const { getAccessToken } = useAuth()
+  const queryClient = useQueryClient()
+  const [amount, setAmount] = useState('')
+  const [message, setMessage] = useState('')
+  const [success, setSuccess] = useState(false)
 
   const transferMutation = useMutation({
     mutationFn: async (
-      payload: TransferPointsPayload
+      payload: TransferPointsPayload,
     ): Promise<TransferPointsResponse> => {
-      const token = await getAccessToken();
+      const token = await getAccessToken()
       const response = await fetch('/api/points/transfer', {
         method: 'POST',
         headers: {
@@ -89,68 +87,76 @@ export function SendPointsModal({
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify(payload),
-      });
+      })
 
-      const data: TransferPointsResponse = await response.json();
+      const data: TransferPointsResponse = await response.json()
 
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to send points');
+        throw new Error(data.error || 'Failed to send points')
       }
 
-      return data;
+      return data
     },
     onSuccess: () => {
-      setSuccess(true);
+      setSuccess(true)
       // Invalidate balance queries
-      queryClient.invalidateQueries({ queryKey: ['balance'] });
-      queryClient.invalidateQueries({ queryKey: ['user'] });
+      queryClient.invalidateQueries({ queryKey: ['balance'] })
+      queryClient.invalidateQueries({ queryKey: ['user'] })
 
       // Wait a moment to show success state
       setTimeout(() => {
-        onSuccess?.();
-        handleClose();
-      }, 1500);
+        onSuccess?.()
+        handleClose()
+      }, 1500)
     },
-  });
+  })
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+    e.preventDefault()
 
-    const numAmount = Number.parseInt(amount);
-    if (isNaN(numAmount) || numAmount <= 0) {
-      return;
+    const numAmount = Number.parseInt(amount, 10)
+    if (Number.isNaN(numAmount) || numAmount <= 0) {
+      return
     }
 
     transferMutation.mutate({
       recipientId,
       amount: numAmount,
       message: message.trim() || undefined,
-    });
-  };
+    })
+  }
 
   const handleClose = () => {
-    if (transferMutation.isPending) return;
-    setAmount('');
-    setMessage('');
-    setSuccess(false);
-    transferMutation.reset();
-    onClose();
-  };
+    if (transferMutation.isPending) return
+    setAmount('')
+    setMessage('')
+    setSuccess(false)
+    transferMutation.reset()
+    onClose()
+  }
 
-  if (!isOpen) return null;
+  if (!isOpen) return null
 
-  const isSubmitting = transferMutation.isPending;
+  const isSubmitting = transferMutation.isPending
   const error =
     transferMutation.error instanceof Error
       ? transferMutation.error.message
-      : null;
+      : null
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       {/* Backdrop */}
-      <div
+      <button
+        type="button"
         className="absolute inset-0 bg-black/50 backdrop-blur-sm"
         onClick={handleClose}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault()
+            handleClose()
+          }
+        }}
+        aria-label="Close modal"
       />
 
       {/* Modal */}
@@ -164,6 +170,7 @@ export function SendPointsModal({
             </p>
           </div>
           <button
+            type="button"
             onClick={handleClose}
             disabled={isSubmitting}
             className="rounded-full p-2 transition-colors hover:bg-muted/50 disabled:opacity-50"
@@ -190,10 +197,14 @@ export function SendPointsModal({
             <>
               {/* Amount Input */}
               <div className="mb-4">
-                <label className="mb-2 block font-medium text-foreground text-sm">
+                <label
+                  htmlFor="amount-input"
+                  className="mb-2 block font-medium text-foreground text-sm"
+                >
                   Amount (points)
                 </label>
                 <input
+                  id="amount-input"
                   type="number"
                   min="1"
                   step="1"
@@ -203,7 +214,6 @@ export function SendPointsModal({
                   disabled={isSubmitting}
                   className="w-full rounded-lg border border-border bg-background px-4 py-3 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-50"
                   required
-                  autoFocus
                 />
               </div>
 
@@ -218,7 +228,7 @@ export function SendPointsModal({
                       'rounded-lg border px-4 py-2 transition-colors',
                       amount === amt.toString()
                         ? 'border-primary bg-primary text-primary-foreground'
-                        : 'border-border bg-background hover:border-primary hover:bg-muted/50'
+                        : 'border-border bg-background hover:border-primary hover:bg-muted/50',
                     )}
                     disabled={isSubmitting}
                   >
@@ -229,10 +239,14 @@ export function SendPointsModal({
 
               {/* Optional Message */}
               <div className="mb-6">
-                <label className="mb-2 block font-medium text-foreground text-sm">
+                <label
+                  htmlFor="message-textarea"
+                  className="mb-2 block font-medium text-foreground text-sm"
+                >
                   Message (optional)
                 </label>
                 <textarea
+                  id="message-textarea"
                   value={message}
                   onChange={(e) => setMessage(e.target.value)}
                   placeholder="Add a message..."
@@ -268,12 +282,12 @@ export function SendPointsModal({
                 <button
                   type="submit"
                   disabled={
-                    isSubmitting || !amount || Number.parseInt(amount) <= 0
+                    isSubmitting || !amount || Number.parseInt(amount, 10) <= 0
                   }
                   className={cn(
                     'flex-1 rounded-lg px-4 py-3 font-semibold transition-all disabled:cursor-not-allowed disabled:opacity-50',
                     'bg-primary text-primary-foreground hover:bg-primary/90',
-                    'flex items-center justify-center gap-2'
+                    'flex items-center justify-center gap-2',
                   )}
                 >
                   {isSubmitting ? (
@@ -294,5 +308,5 @@ export function SendPointsModal({
         </form>
       </div>
     </div>
-  );
+  )
 }

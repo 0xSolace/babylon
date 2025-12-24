@@ -1,9 +1,9 @@
-import { definePrompt } from '../define-prompt';
+import { definePrompt } from '../define-prompt'
 import {
   ANTI_REPETITION_RULES,
   characterVoiceGuidance,
   PARODY_NAME_RULES,
-} from '../shared-sections';
+} from '../shared-sections'
 
 /**
  * Prompt for generating private group chat messages for the day.
@@ -122,4 +122,4 @@ Respond with ONLY this XML:
 Return EXACTLY {{groupCount}} groups. Each must have distinct themes and advance relationships.
 No other text.
 `.trim(),
-});
+})

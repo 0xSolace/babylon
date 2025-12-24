@@ -27,9 +27,7 @@
  * ```
  */
 
-'use client';
-
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   AlertCircle,
   Cpu,
@@ -37,85 +35,85 @@ import {
   Loader2,
   PlayCircle,
   TrendingUp,
-} from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+} from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-} from '@/components/ui/card';
+} from '@/components/ui/card'
 
 /**
  * Training job information
  */
 interface TrainingJob {
-  id: string;
-  modelVersion: string;
-  status: string;
-  createdAt: string | Date;
+  id: string
+  modelVersion: string
+  status: string
+  createdAt: string | Date
 }
 
 /**
  * Training model information
  */
 interface TrainingModel {
-  id: string;
-  version: string;
-  status: string;
+  id: string
+  version: string
+  status: string
 }
 
 /**
  * Complete training system status
  */
 interface TrainingStatus {
-  status: string;
+  status: string
   automation: {
     dataCollection: {
-      last24h: number;
-      last7d: number;
-      ratePerHour: number;
-    };
+      last24h: number
+      last7d: number
+      ratePerHour: number
+    }
     training: {
-      currentJob: string | null;
-      lastCompleted: Date | null;
-      nextScheduled: Date | null;
-    };
+      currentJob: string | null
+      lastCompleted: Date | null
+      nextScheduled: Date | null
+    }
     models: {
-      latest: string | null;
-      deployed: number;
-      training: number;
-    };
+      latest: string | null
+      deployed: number
+      training: number
+    }
     health: {
-      database: boolean;
-      storage: boolean;
-    };
-  };
+      database: boolean
+      storage: boolean
+    }
+  }
   readiness: {
-    ready: boolean;
-    reason: string;
+    ready: boolean
+    reason: string
     stats: {
-      totalTrajectories: number;
-      unscoredTrajectories: number;
-      scenarioGroups: number;
-      dataQuality: number;
-    };
-  };
-  recentJobs: TrainingJob[];
-  models: TrainingModel[];
+      totalTrajectories: number
+      unscoredTrajectories: number
+      scenarioGroups: number
+      dataQuality: number
+    }
+  }
+  recentJobs: TrainingJob[]
+  models: TrainingModel[]
   trajectoryStats: {
-    last1h?: number;
-    last24h?: number;
-    last7d?: number;
-  };
+    last1h?: number
+    last24h?: number
+    last7d?: number
+  }
 }
 
 interface TrainingTriggerResponse {
-  success: boolean;
-  jobId?: string;
-  error?: string;
+  success: boolean
+  jobId?: string
+  error?: string
 }
 
 /**
@@ -128,22 +126,22 @@ interface TrainingTriggerResponse {
  * @returns {JSX.Element} Training dashboard page
  */
 export default function TrainingDashboard() {
-  const queryClient = useQueryClient();
+  const queryClient = useQueryClient()
 
   const { data: status, isLoading: loading } = useQuery({
     queryKey: ['admin', 'training', 'status'],
     queryFn: async (): Promise<TrainingStatus | null> => {
-      const res = await fetch('/api/admin/training/status');
+      const res = await fetch('/api/admin/training/status')
 
       if (!res.ok) {
-        console.error('Failed to load status: Failed to load training status');
-        return null;
+        console.error('Failed to load status: Failed to load training status')
+        return null
       }
 
-      return (await res.json()) as TrainingStatus;
+      return (await res.json()) as TrainingStatus
     },
     refetchInterval: 5000, // Refresh every 5s
-  });
+  })
 
   const triggerMutation = useMutation({
     mutationFn: async () => {
@@ -151,36 +149,36 @@ export default function TrainingDashboard() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ force: false }),
-      });
+      })
 
       if (!res.ok) {
         const errorData = (await res.json().catch(() => ({}))) as {
-          error?: string;
-        };
-        throw new Error(errorData.error || 'Failed to trigger training');
+          error?: string
+        }
+        throw new Error(errorData.error || 'Failed to trigger training')
       }
 
-      return (await res.json()) as TrainingTriggerResponse;
+      return (await res.json()) as TrainingTriggerResponse
     },
     onSuccess: (result) => {
       if (result.success) {
-        alert(`Training started! Job ID: ${result.jobId}`);
+        alert(`Training started! Job ID: ${result.jobId}`)
         void queryClient.invalidateQueries({
           queryKey: ['admin', 'training', 'status'],
-        });
+        })
       } else {
-        alert(`Failed to start training: ${result.error || 'Unknown error'}`);
+        alert(`Failed to start training: ${result.error || 'Unknown error'}`)
       }
     },
     onError: (error: Error) => {
-      alert(`Error: ${error.message}`);
+      alert(`Error: ${error.message}`)
     },
-  });
+  })
 
-  const training = triggerMutation.isPending;
+  const training = triggerMutation.isPending
 
   function triggerTraining() {
-    triggerMutation.mutate();
+    triggerMutation.mutate()
   }
 
   if (loading) {
@@ -188,7 +186,7 @@ export default function TrainingDashboard() {
       <div className="flex min-h-screen items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin" />
       </div>
-    );
+    )
   }
 
   if (!status) {
@@ -196,10 +194,10 @@ export default function TrainingDashboard() {
       <div className="p-8">
         <div className="text-red-500">Failed to load training status</div>
       </div>
-    );
+    )
   }
 
-  const { automation, readiness } = status;
+  const { automation, readiness } = status
 
   return (
     <div className="space-y-6 p-8">
@@ -431,5 +429,5 @@ export default function TrainingDashboard() {
         </CardContent>
       </Card>
     </div>
-  );
+  )
 }

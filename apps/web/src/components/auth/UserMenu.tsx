@@ -1,20 +1,18 @@
-'use client';
-
-import { getDisplayReferralUrl, getReferralUrl } from '@babylon/shared';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Check, Copy, Key, LogOut, Settings } from 'lucide-react';
-import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
-import { Avatar } from '@/components/shared/Avatar';
-import { Dropdown, DropdownItem } from '@/components/shared/Dropdown';
-import { useAuth } from '@/hooks/useAuth';
-import { useAuthStore } from '@/stores/authStore';
+import { getDisplayReferralUrl, getReferralUrl } from '@babylon/shared'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { Check, Copy, Key, LogOut, Settings } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Avatar } from '@/components/shared/Avatar'
+import { Dropdown, DropdownItem } from '@/components/shared/Dropdown'
+import { useAuth } from '@/hooks/useAuth'
+import { useRouter } from '@/lib/navigation'
+import { useAuthStore } from '@/stores/authStore'
 
 /**
  * Balance API response.
  */
 interface BalanceResponse {
-  balance: number | string;
+  balance: number | string
 }
 
 /**
@@ -22,8 +20,8 @@ interface BalanceResponse {
  */
 interface ProfileResponse {
   user?: {
-    reputationPoints?: number;
-  };
+    reputationPoints?: number
+  }
 }
 
 /**
@@ -42,20 +40,20 @@ interface ProfileResponse {
  * @returns User menu dropdown element or null if no user
  */
 export function UserMenu() {
-  const { logout, refresh } = useAuth();
-  const { user, setUser } = useAuthStore();
-  const router = useRouter();
-  const queryClient = useQueryClient();
-  const [copiedCode, setCopiedCode] = useState(false);
+  const { logout, refresh } = useAuth()
+  const { user, setUser } = useAuthStore()
+  const router = useRouter()
+  const queryClient = useQueryClient()
+  const [copiedCode, setCopiedCode] = useState(false)
 
   // Fetch trading balance
   const { data: balanceData } = useQuery({
     queryKey: ['userMenu', 'balance', user?.id],
     queryFn: async (): Promise<BalanceResponse> => {
       const token =
-        typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
+        typeof window !== 'undefined' ? window.__oauth3AccessToken : null
       if (!token || !user?.id) {
-        return { balance: 0 };
+        return { balance: 0 }
       }
 
       const response = await fetch(
@@ -65,27 +63,27 @@ export function UserMenu() {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${token}`,
           },
-        }
-      );
+        },
+      )
 
       if (!response.ok) {
-        return { balance: 0 };
+        return { balance: 0 }
       }
 
-      return response.json() as Promise<BalanceResponse>;
+      return response.json() as Promise<BalanceResponse>
     },
     enabled: !!user?.id,
     refetchInterval: 30000, // Refresh every 30 seconds
-  });
+  })
 
   // Fetch profile for reputation points
   const { data: profileData } = useQuery({
     queryKey: ['userMenu', 'profile', user?.id],
     queryFn: async (): Promise<ProfileResponse> => {
       const token =
-        typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
+        typeof window !== 'undefined' ? window.__oauth3AccessToken : null
       if (!token || !user?.id) {
-        return {};
+        return {}
       }
 
       const response = await fetch(
@@ -95,67 +93,67 @@ export function UserMenu() {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${token}`,
           },
-        }
-      );
+        },
+      )
 
       if (!response.ok) {
-        return {};
+        return {}
       }
 
-      return response.json() as Promise<ProfileResponse>;
+      return response.json() as Promise<ProfileResponse>
     },
     enabled: !!user?.id,
     refetchInterval: 30000, // Refresh every 30 seconds
-  });
+  })
 
-  const tradingBalance = Number(balanceData?.balance ?? 0);
+  const tradingBalance = Number(balanceData?.balance ?? 0)
 
   // Update reputation points in auth store when profile data changes
   useEffect(() => {
     if (profileData?.user?.reputationPoints !== undefined && user) {
       if (!profileData.user) {
-        throw new Error('Profile data user is missing');
+        throw new Error('Profile data user is missing')
       }
       if (profileData.user.reputationPoints !== user.reputationPoints) {
         setUser({
           ...user,
           reputationPoints: profileData.user.reputationPoints,
-        });
+        })
       }
     }
-  }, [profileData?.user?.reputationPoints, user, setUser, profileData?.user]);
+  }, [profileData?.user?.reputationPoints, user, setUser, profileData?.user])
 
   // Listen for rewards-updated events to refresh auth state
   // This ensures the sidebar updates when rewards are claimed elsewhere
   useEffect(() => {
     const handleRewardsUpdated = () => {
       // Refresh the auth state to get latest reputation points
-      refresh();
+      refresh()
       // Also invalidate queries
-      queryClient.invalidateQueries({ queryKey: ['userMenu'] });
-    };
+      queryClient.invalidateQueries({ queryKey: ['userMenu'] })
+    }
 
-    window.addEventListener('rewards-updated', handleRewardsUpdated);
+    window.addEventListener('rewards-updated', handleRewardsUpdated)
     return () => {
-      window.removeEventListener('rewards-updated', handleRewardsUpdated);
-    };
-  }, [refresh, queryClient]);
+      window.removeEventListener('rewards-updated', handleRewardsUpdated)
+    }
+  }, [refresh, queryClient])
 
   const handleCopyReferralCode = async () => {
-    if (!user?.referralCode) return;
-    const referralUrl = getReferralUrl(user.referralCode);
-    await navigator.clipboard.writeText(referralUrl);
-    setCopiedCode(true);
-    setTimeout(() => setCopiedCode(false), 2000);
-  };
+    if (!user?.referralCode) return
+    const referralUrl = getReferralUrl(user.referralCode)
+    await navigator.clipboard.writeText(referralUrl)
+    setCopiedCode(true)
+    setTimeout(() => setCopiedCode(false), 2000)
+  }
 
   if (!user) {
-    return null;
+    return null
   }
 
   const displayName =
-    user.displayName || user.email?.split('@')[0] || 'Anonymous';
-  const username = user.username || `user${user.id.slice(0, 8)}`;
+    user.displayName || user.email?.split('@')[0] || 'Anonymous'
+  const username = user.username || `user${user.id.slice(0, 8)}`
 
   const trigger = (
     <div
@@ -179,11 +177,11 @@ export function UserMenu() {
         </p>
       </div>
     </div>
-  );
+  )
 
   // Use reputation points from authStore (synced when rewards are claimed)
-  const reputationPoints = user.reputationPoints ?? 0;
-  const tradingBalanceValue = tradingBalance;
+  const reputationPoints = user.reputationPoints ?? 0
+  const tradingBalanceValue = tradingBalance
 
   return (
     <Dropdown trigger={trigger} placement="top-right" width="default">
@@ -257,5 +255,5 @@ export function UserMenu() {
         </div>
       </DropdownItem>
     </Dropdown>
-  );
+  )
 }

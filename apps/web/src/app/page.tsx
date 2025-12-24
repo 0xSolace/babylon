@@ -1,44 +1,41 @@
-'use client';
-
-import { useRouter, useSearchParams } from 'next/navigation';
-import { Suspense, useEffect } from 'react';
-import { ComingSoon } from '@/components/shared/ComingSoon';
-import { Skeleton } from '@/components/shared/Skeleton';
-import { useAuth } from '@/hooks/useAuth';
-import { useLoginModal } from '@/hooks/useLoginModal';
-
-const waitlistModeEnabled = process.env.NEXT_PUBLIC_WAITLIST_MODE === 'true';
+import { Suspense, useEffect } from 'react'
+import { ComingSoon } from '@/components/shared/ComingSoon'
+import { Skeleton } from '@/components/shared/Skeleton'
+import { isWaitlistMode } from '@/config'
+import { useAuth } from '@/hooks/useAuth'
+import { useLoginModal } from '@/hooks/useLoginModal'
+import { useRouter, useSearchParams } from '@/lib/navigation'
 
 function HomePageContent() {
-  const router = useRouter();
-  const { authenticated } = useAuth();
-  const { showLoginModal } = useLoginModal();
-  const searchParams = useSearchParams();
+  const router = useRouter()
+  const { authenticated } = useAuth()
+  const searchParams = useSearchParams()
 
   useEffect(() => {
     // Skip redirect logic if waitlist mode is enabled
-    if (waitlistModeEnabled) {
-      return;
+    if (isWaitlistMode()) {
+      return
     }
 
     // Show login modal if not authenticated
+    // Use getState() to avoid subscription-based re-renders that cause infinite loops
     if (!authenticated) {
-      showLoginModal({
+      useLoginModal.getState().showLoginModal({
         title: 'Welcome to Babylon',
         message:
           'Log in to start trading prediction markets, replying to NPCs, and earning rewards in this satirical game.',
-      });
+      })
     }
 
     // Redirect to feed, preserving referral code if present
-    const ref = searchParams.get('ref');
-    const feedUrl = ref ? `/feed?ref=${ref}` : '/feed';
-    router.push(feedUrl);
-  }, [authenticated, router, showLoginModal, searchParams]);
+    const ref = searchParams.get('ref')
+    const feedUrl = ref ? `/feed?ref=${ref}` : '/feed'
+    router.push(feedUrl)
+  }, [authenticated, router, searchParams])
 
-  // Show coming soon page if WAITLIST_MODE is enabled
-  if (waitlistModeEnabled) {
-    return <ComingSoon />;
+  // Show coming soon page if waitlist mode is enabled
+  if (isWaitlistMode()) {
+    return <ComingSoon />
   }
 
   // Show loading while redirecting to feed
@@ -49,7 +46,7 @@ function HomePageContent() {
         <Skeleton className="h-4 w-64" />
       </div>
     </div>
-  );
+  )
 }
 
 export default function HomePage() {
@@ -66,5 +63,5 @@ export default function HomePage() {
     >
       <HomePageContent />
     </Suspense>
-  );
+  )
 }

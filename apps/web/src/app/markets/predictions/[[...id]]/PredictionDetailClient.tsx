@@ -1,11 +1,5 @@
-'use client';
-
-import {
-  calculateExpectedPayout,
-  PredictionPricing,
-} from '@babylon/engine/client';
-import { cn } from '@babylon/shared';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { calculateExpectedPayout, cn, PredictionPricing } from '@babylon/shared'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   ArrowLeft,
   CheckCircle,
@@ -15,120 +9,116 @@ import {
   TrendingUp,
   Users,
   XCircle,
-} from 'lucide-react';
-import { useParams, useRouter, useSearchParams } from 'next/navigation';
-
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { toast } from 'sonner';
-import { AssetTradesFeed } from '@/components/markets/AssetTradesFeed';
-import { PredictionPositionsList } from '@/components/markets/PredictionPositionsList';
-import { PredictionProbabilityChart } from '@/components/markets/PredictionProbabilityChart';
+} from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useParams } from 'react-router-dom'
+import { toast } from 'sonner'
+import { AssetTradesFeed } from '@/components/markets/AssetTradesFeed'
+import { PredictionPositionsList } from '@/components/markets/PredictionPositionsList'
+import { PredictionProbabilityChart } from '@/components/markets/PredictionProbabilityChart'
 import {
   type BuyPredictionDetails,
   TradeConfirmationDialog,
-} from '@/components/markets/TradeConfirmationDialog';
-import { PageContainer } from '@/components/shared/PageContainer';
-import { Skeleton } from '@/components/shared/Skeleton';
-import { useAuth } from '@/hooks/useAuth';
-import { useMarketTracking } from '@/hooks/usePostHog';
-import { usePredictionHistory } from '@/hooks/usePredictionHistory';
+} from '@/components/markets/TradeConfirmationDialog'
+import { PageContainer } from '@/components/shared/PageContainer'
+import { Skeleton } from '@/components/shared/Skeleton'
+import { useAuth } from '@/hooks/useAuth'
+import { useMarketTracking } from '@/hooks/usePostHog'
+import { usePredictionHistory } from '@/hooks/usePredictionHistory'
 import type {
   PredictionResolutionSSE,
   PredictionTradeSSE,
-} from '@/hooks/usePredictionMarketStream';
-import { usePredictionMarketStream } from '@/hooks/usePredictionMarketStream';
+} from '@/hooks/usePredictionMarketStream'
+import { usePredictionMarketStream } from '@/hooks/usePredictionMarketStream'
+import { useRouter, useSearchParams } from '@/lib/navigation'
 
 interface PredictionPosition {
-  id: string;
-  marketId: string;
-  question: string;
-  side: 'YES' | 'NO';
-  shares: number;
-  avgPrice: number;
-  currentPrice: number;
-  currentValue: number;
-  costBasis: number;
-  unrealizedPnL: number;
-  resolved: boolean;
-  resolution?: boolean | null;
+  id: string
+  marketId: string
+  question: string
+  side: 'YES' | 'NO'
+  shares: number
+  avgPrice: number
+  currentPrice: number
+  currentValue: number
+  costBasis: number
+  unrealizedPnL: number
+  resolved: boolean
+  resolution?: boolean | null
 }
 
 interface PredictionMarket {
-  id: number | string;
-  text: string;
-  status: 'active' | 'resolved' | 'cancelled';
-  createdDate?: string;
-  resolutionDate?: string;
-  resolvedOutcome?: boolean;
-  scenario: number;
-  yesShares?: number;
-  noShares?: number;
-  liquidity?: number;
-  resolved?: boolean;
-  resolution?: boolean | null;
-  resolutionProofUrl?: string | null;
-  resolutionDescription?: string | null;
-  yesProbability?: number;
-  noProbability?: number;
-  userPosition?: PredictionPosition | null;
-  userPositions?: PredictionPosition[];
+  id: number | string
+  text: string
+  status: 'active' | 'resolved' | 'cancelled'
+  createdDate?: string
+  resolutionDate?: string
+  resolvedOutcome?: boolean
+  scenario: number
+  yesShares?: number
+  noShares?: number
+  liquidity?: number
+  resolved?: boolean
+  resolution?: boolean | null
+  resolutionProofUrl?: string | null
+  resolutionDescription?: string | null
+  yesProbability?: number
+  noProbability?: number
+  userPosition?: PredictionPosition | null
+  userPositions?: PredictionPosition[]
 }
 
 export default function PredictionDetailClient() {
-  const params = useParams();
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const queryClient = useQueryClient();
-  const { user, authenticated, login, getAccessToken } = useAuth();
+  const params = useParams()
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const queryClient = useQueryClient()
+  const { user, authenticated, login, getAccessToken } = useAuth()
   // Catch-all route: params.id is string[] or undefined
-  const idParam = params.id;
-  const marketId = Array.isArray(idParam) ? idParam[0] : idParam;
-  const { trackMarketView } = useMarketTracking();
+  const idParam = params.id
+  const marketId = Array.isArray(idParam) ? idParam[0] : idParam
+  const { trackMarketView } = useMarketTracking()
 
   // Redirect to markets list if no market ID provided
   useEffect(() => {
     if (!marketId) {
-      router.replace('/markets/predictions');
+      router.replace('/markets/predictions')
     }
-  }, [marketId, router]);
+  }, [marketId, router])
 
-  // Don't render with missing marketId - redirect will happen via useEffect
-  if (!marketId) {
-    return null;
-  }
-  const from = searchParams.get('from');
+  const from = searchParams.get('from')
 
-  const [side, setSide] = useState<'yes' | 'no'>('yes');
-  const [amount, setAmount] = useState('10');
-  const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
-  const pageContainerRef = useRef<HTMLDivElement | null>(null);
+  const [side, setSide] = useState<'yes' | 'no'>('yes')
+  const [amount, setAmount] = useState('10')
+  const [confirmDialogOpen, setConfirmDialogOpen] = useState(false)
+  const pageContainerRef = useRef<HTMLDivElement | null>(null)
 
   const recalculatePositionMetrics = useCallback(
     (
       positions: PredictionPosition[],
       nextYesShares: number,
-      nextNoShares: number
+      nextNoShares: number,
     ) => {
       if (!positions.length || nextYesShares <= 0 || nextNoShares <= 0) {
-        return positions;
+        return positions
       }
 
       return positions.map((position) => {
         if (position.shares <= 0) {
-          return position;
+          return position
         }
 
         const sellPreview = PredictionPricing.calculateSell(
           nextYesShares,
           nextNoShares,
           position.side === 'YES' ? 'yes' : 'no',
-          position.shares
-        );
-        const currentValue = sellPreview.totalCost;
-        const currentPrice = currentValue / position.shares;
+          position.shares,
+        )
+        const currentValue = sellPreview.totalCost
+        const currentPrice = currentValue / position.shares
         const costBasis =
-          position.costBasis ?? position.shares * position.avgPrice;
-        const unrealizedPnL = currentValue - costBasis;
+          position.costBasis ?? position.shares * position.avgPrice
+        const unrealizedPnL = currentValue - costBasis
 
         return {
           ...position,
@@ -136,11 +126,11 @@ export default function PredictionDetailClient() {
           currentValue,
           costBasis,
           unrealizedPnL,
-        };
-      });
+        }
+      })
     },
-    []
-  );
+    [],
+  )
 
   // Query for market data - must be defined before effectiveShares
   const {
@@ -150,17 +140,17 @@ export default function PredictionDetailClient() {
   } = useQuery({
     queryKey: ['predictionMarket', marketId, user?.id],
     queryFn: async () => {
-      const userId = authenticated && user?.id ? `?userId=${user.id}` : '';
-      const response = await fetch(`/api/markets/predictions${userId}`);
-      const data = await response.json();
+      const userId = authenticated && user?.id ? `?userId=${user.id}` : ''
+      const response = await fetch(`/api/markets/predictions${userId}`)
+      const data = await response.json()
       const foundMarket = data.questions?.find(
-        (q: PredictionMarket) => q.id.toString() === marketId
-      );
+        (q: PredictionMarket) => q.id.toString() === marketId,
+      )
 
       if (!foundMarket) {
-        toast.error('Market not found');
-        router.push(from === 'dashboard' ? '/markets' : '/markets/predictions');
-        throw new Error('Market not found');
+        toast.error('Market not found')
+        router.push(from === 'dashboard' ? '/markets' : '/markets/predictions')
+        throw new Error('Market not found')
       }
 
       const positions =
@@ -168,26 +158,26 @@ export default function PredictionDetailClient() {
           ? (foundMarket.userPositions as PredictionPosition[])
           : foundMarket.userPosition
             ? [foundMarket.userPosition as PredictionPosition]
-            : [];
+            : []
 
       return {
         market: foundMarket as PredictionMarket,
         positions,
-      };
+      }
     },
     enabled: !!marketId,
-  });
+  })
 
-  const market = marketData?.market ?? null;
-  const userPositions = marketData?.positions ?? [];
+  const market = marketData?.market ?? null
+  const userPositions = marketData?.positions ?? []
 
   const effectiveShares = useMemo(() => {
     if (!market) {
-      return null;
+      return null
     }
 
-    const yes = Number(market.yesShares ?? 0);
-    const no = Number(market.noShares ?? 0);
+    const yes = Number(market.yesShares ?? 0)
+    const no = Number(market.noShares ?? 0)
 
     if (yes > 0 && no > 0) {
       return {
@@ -195,16 +185,16 @@ export default function PredictionDetailClient() {
         noShares: no,
         liquidity:
           market.liquidity !== undefined ? Number(market.liquidity) : yes + no,
-      };
+      }
     }
 
-    const seeded = PredictionPricing.initializeMarket();
+    const seeded = PredictionPricing.initializeMarket()
     return {
       yesShares: seeded.yesShares,
       noShares: seeded.noShares,
       liquidity: seeded.yesShares + seeded.noShares,
-    };
-  }, [market?.yesShares, market?.noShares, market?.liquidity, market]);
+    }
+  }, [market?.yesShares, market?.noShares, market?.liquidity, market])
 
   const historySeed = useMemo(
     () =>
@@ -215,25 +205,25 @@ export default function PredictionDetailClient() {
             liquidity: effectiveShares.liquidity,
           }
         : undefined,
-    [market, effectiveShares]
-  );
+    [market, effectiveShares],
+  )
   const { history: priceHistory } = usePredictionHistory(marketId || null, {
     seed: historySeed,
-  });
-  const amountNum = Number.parseFloat(amount) || 0;
+  })
+  const amountNum = Number.parseFloat(amount) || 0
   const calculation =
     amountNum > 0 && effectiveShares
       ? PredictionPricing.calculateBuy(
           effectiveShares.yesShares,
           effectiveShares.noShares,
           side,
-          amountNum
+          amountNum,
         )
-      : null;
+      : null
   const expectedPayout = calculation
     ? calculateExpectedPayout(calculation.sharesBought, calculation.avgPrice)
-    : 0;
-  const expectedProfit = expectedPayout - amountNum;
+    : 0
+  const expectedProfit = expectedPayout - amountNum
 
   const handleTradeEvent = useCallback(
     (event: PredictionTradeSSE) => {
@@ -242,10 +232,10 @@ export default function PredictionDetailClient() {
         (
           prev:
             | { market: PredictionMarket; positions: PredictionPosition[] }
-            | undefined
+            | undefined,
         ) => {
           if (!prev || prev.market.id.toString() !== event.marketId) {
-            return prev;
+            return prev
           }
           return {
             market: {
@@ -259,14 +249,14 @@ export default function PredictionDetailClient() {
             positions: recalculatePositionMetrics(
               prev.positions,
               event.yesShares,
-              event.noShares
+              event.noShares,
             ),
-          };
-        }
-      );
+          }
+        },
+      )
     },
-    [queryClient, marketId, user?.id, recalculatePositionMetrics]
-  );
+    [queryClient, marketId, user?.id, recalculatePositionMetrics],
+  )
 
   const handleResolutionEvent = useCallback(
     (event: PredictionResolutionSSE) => {
@@ -275,10 +265,10 @@ export default function PredictionDetailClient() {
         (
           prev:
             | { market: PredictionMarket; positions: PredictionPosition[] }
-            | undefined
+            | undefined,
         ) => {
           if (!prev || prev.market.id.toString() !== event.marketId) {
-            return prev;
+            return prev
           }
           return {
             market: {
@@ -294,26 +284,26 @@ export default function PredictionDetailClient() {
             positions: recalculatePositionMetrics(
               prev.positions,
               event.yesShares,
-              event.noShares
+              event.noShares,
             ),
-          };
-        }
-      );
+          }
+        },
+      )
     },
-    [queryClient, marketId, user?.id, recalculatePositionMetrics]
-  );
+    [queryClient, marketId, user?.id, recalculatePositionMetrics],
+  )
 
   usePredictionMarketStream(marketId || null, {
     onTrade: handleTradeEvent,
     onResolution: handleResolutionEvent,
-  });
+  })
 
   // Track market view
   useEffect(() => {
     if (marketId && market) {
-      trackMarketView(marketId, 'prediction');
+      trackMarketView(marketId, 'prediction')
     }
-  }, [marketId, market, trackMarketView]);
+  }, [marketId, market, trackMarketView])
 
   // Mutation for buying shares
   const buyMutation = useMutation({
@@ -322,13 +312,13 @@ export default function PredictionDetailClient() {
       buyingSide,
       buyingAmount,
     }: {
-      marketIdToUse: number | string;
-      buyingSide: 'yes' | 'no';
-      buyingAmount: number;
+      marketIdToUse: number | string
+      buyingSide: 'yes' | 'no'
+      buyingAmount: number
     }) => {
-      const token = await getAccessToken();
+      const token = await getAccessToken()
       if (!token) {
-        throw new Error('Authentication required. Please log in.');
+        throw new Error('Authentication required. Please log in.')
       }
 
       const response = await fetch(
@@ -343,80 +333,82 @@ export default function PredictionDetailClient() {
             side: buyingSide,
             amount: buyingAmount,
           }),
-        }
-      );
+        },
+      )
 
-      const data = await response.json();
+      const data = await response.json()
 
       if (!response.ok) {
         const errorMessage =
           typeof data.error === 'object'
             ? data.error.message || 'Failed to buy shares'
-            : data.error || data.message || 'Failed to buy shares';
-        throw new Error(errorMessage);
+            : data.error || data.message || 'Failed to buy shares'
+        throw new Error(errorMessage)
       }
 
-      return data.calculation;
+      return data.calculation
     },
-    onSuccess: (calculation) => {
+    onSuccess: (
+      calculation: { sharesBought: number; avgPrice: number } | undefined,
+    ) => {
       if (!calculation) {
-        throw new Error('Calculation data missing');
+        throw new Error('Calculation data missing')
       }
       toast.success(`Bought ${side.toUpperCase()} shares!`, {
         description: `${calculation.sharesBought.toFixed(2)} shares at ${calculation.avgPrice.toFixed(3)} each`,
-      });
+      })
       // Refresh data
-      fetchMarketData();
+      fetchMarketData()
     },
     onError: (error: Error) => {
-      toast.error(error.message);
+      toast.error(error.message)
     },
-  });
+  })
 
-  const submitting = buyMutation.isPending;
+  const submitting = buyMutation.isPending
 
   const handleSubmit = () => {
     if (!authenticated) {
-      login();
-      return;
+      login()
+      return
     }
 
-    if (!market || !user) return;
+    if (!market || !user) return
 
     const isExpired =
       market.resolutionDate &&
-      new Date(market.resolutionDate).getTime() < Date.now();
+      new Date(market.resolutionDate).getTime() < Date.now()
     if (isExpired) {
-      toast.error('This market has expired.');
-      return;
+      toast.error('This market has expired.')
+      return
     }
     if (market.resolved) {
-      toast.error('This market is already resolved.');
-      return;
+      toast.error('This market is already resolved.')
+      return
     }
 
-    const amountNum = Number.parseFloat(amount) || 0;
+    const amountNum = Number.parseFloat(amount) || 0
     if (amountNum < 1) {
-      toast.error('Minimum bet is $1');
-      return;
+      toast.error('Minimum bet is $1')
+      return
     }
 
     // Open confirmation dialog
-    setConfirmDialogOpen(true);
-  };
+    setConfirmDialogOpen(true)
+  }
 
   const handleConfirmBuy = async () => {
-    if (!market) return;
+    if (!market) return
 
-    const amountNum = Number.parseFloat(amount) || 0;
-    setConfirmDialogOpen(false);
+    const amountNum = Number.parseFloat(amount) || 0
+    setConfirmDialogOpen(false)
 
     buyMutation.mutate({
       marketIdToUse: market.id,
       buyingSide: side,
       buyingAmount: amountNum,
-    });
-  };
+    })
+  }
 
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat('en-US', {
@@ -424,30 +416,30 @@ export default function PredictionDetailClient() {
       currency: 'USD',
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
-    }).format(price);
-  };
+    }).format(price)
+  }
 
   const getTimeUntilResolution = () => {
-    if (!market || !market.resolutionDate) return null;
-    const now = Date.now();
-    const resolutionTime = new Date(market.resolutionDate).getTime();
-    const diff = resolutionTime - now;
+    if (!market || !market.resolutionDate) return null
+    const now = Date.now()
+    const resolutionTime = new Date(market.resolutionDate).getTime()
+    const diff = resolutionTime - now
 
-    if (diff < 0) return 'Ended';
+    if (diff < 0) return 'Ended'
 
-    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-    const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+    const days = Math.floor(diff / (1000 * 60 * 60 * 24))
+    const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60))
 
     if (days > 0) {
-      return hours > 0 ? `${days}d ${hours}h left` : `${days}d left`;
+      return hours > 0 ? `${days}d ${hours}h left` : `${days}d left`
     }
     if (hours > 0) {
-      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-      return minutes > 0 ? `${hours}h ${minutes}m left` : `${hours}h left`;
+      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))
+      return minutes > 0 ? `${hours}h ${minutes}m left` : `${hours}h left`
     }
-    const minutes = Math.floor(diff / (1000 * 60));
-    return `${minutes}m left`;
-  };
+    const minutes = Math.floor(diff / (1000 * 60))
+    return `${minutes}m left`
+  }
 
   if (loading) {
     return (
@@ -460,37 +452,43 @@ export default function PredictionDetailClient() {
           </div>
         </div>
       </PageContainer>
-    );
+    )
   }
 
-  if (!market) return null;
+  if (!market) return null
 
-  const yesShares = effectiveShares?.yesShares ?? 0;
-  const noShares = effectiveShares?.noShares ?? 0;
+  const yesShares = effectiveShares?.yesShares ?? 0
+  const noShares = effectiveShares?.noShares ?? 0
   const currentYesPrice = PredictionPricing.getCurrentPrice(
     yesShares,
     noShares,
-    'yes'
-  );
+    'yes',
+  )
   const currentNoPrice = PredictionPricing.getCurrentPrice(
     yesShares,
     noShares,
-    'no'
-  );
-  const timeLeft = getTimeUntilResolution();
-  const totalVolume = yesShares + noShares;
-  const totalTrades = Math.floor(totalVolume / 10); // Rough estimate
+    'no',
+  )
+  // Don't render with missing marketId - redirect will happen via useEffect
+  if (!marketId) {
+    return null
+  }
+
+  const timeLeft = getTimeUntilResolution()
+  const totalVolume = yesShares + noShares
+  const totalTrades = Math.floor(totalVolume / 10) // Rough estimate
 
   return (
     <PageContainer className="mx-auto max-w-7xl" ref={pageContainerRef}>
       {/* Header */}
       <div className="mb-6">
         <button
+          type="button"
           onClick={() => {
             if (from === 'dashboard') {
-              router.push('/markets');
+              router.push('/markets')
             } else {
-              router.push('/markets/predictions');
+              router.push('/markets/predictions')
             }
           }}
           className="mb-4 flex items-center gap-2 text-muted-foreground transition-colors hover:text-foreground"
@@ -607,7 +605,7 @@ export default function PredictionDetailClient() {
                         month: 'long',
                         day: 'numeric',
                         year: 'numeric',
-                      }
+                      },
                     )}
                   </span>
                 </div>
@@ -623,7 +621,7 @@ export default function PredictionDetailClient() {
                         minute: '2-digit',
                         second: '2-digit',
                         timeZoneName: 'short',
-                      }
+                      },
                     )}
                   </span>
                 </div>
@@ -675,24 +673,26 @@ export default function PredictionDetailClient() {
             {/* YES/NO Tabs */}
             <div className="mb-4 flex gap-3">
               <button
+                type="button"
                 onClick={() => setSide('yes')}
                 className={cn(
                   'flex flex-1 cursor-pointer items-center justify-center gap-3 rounded py-3 font-bold transition-all',
                   side === 'yes'
                     ? 'bg-green-600 text-primary-foreground'
-                    : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                    : 'bg-muted text-muted-foreground hover:bg-muted/80',
                 )}
               >
                 <CheckCircle size={18} />
                 YES
               </button>
               <button
+                type="button"
                 onClick={() => setSide('no')}
                 className={cn(
                   'flex flex-1 cursor-pointer items-center justify-center gap-3 rounded py-3 font-bold transition-all',
                   side === 'no'
                     ? 'bg-red-600 text-primary-foreground'
-                    : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                    : 'bg-muted text-muted-foreground hover:bg-muted/80',
                 )}
               >
                 <XCircle size={18} />
@@ -702,10 +702,14 @@ export default function PredictionDetailClient() {
 
             {/* Amount Input */}
             <div className="mb-4">
-              <label className="mb-2 block font-medium text-muted-foreground text-sm">
+              <label
+                htmlFor="prediction-amount"
+                className="mb-2 block font-medium text-muted-foreground text-sm"
+              >
                 Amount (USD)
               </label>
               <input
+                id="prediction-amount"
                 type="number"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
@@ -774,7 +778,7 @@ export default function PredictionDetailClient() {
                           'font-bold',
                           expectedProfit >= 0
                             ? 'text-green-600'
-                            : 'text-red-600'
+                            : 'text-red-600',
                         )}
                       >
                         {expectedProfit >= 0 ? '+' : ''}
@@ -788,6 +792,7 @@ export default function PredictionDetailClient() {
 
             {/* Submit Button */}
             <button
+              type="button"
               onClick={handleSubmit}
               disabled={submitting || amountNum < 1}
               className={cn(
@@ -795,7 +800,8 @@ export default function PredictionDetailClient() {
                 side === 'yes'
                   ? 'bg-green-600 hover:bg-green-700'
                   : 'bg-red-600 hover:bg-red-700',
-                (submitting || amountNum < 1) && 'cursor-not-allowed opacity-50'
+                (submitting || amountNum < 1) &&
+                  'cursor-not-allowed opacity-50',
               )}
             >
               {submitting ? (
@@ -839,5 +845,5 @@ export default function PredictionDetailClient() {
         }
       />
     </PageContainer>
-  );
+  )
 }

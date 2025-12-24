@@ -8,101 +8,101 @@
  * - PnL calculations
  */
 
-import { MARKET_CONFIG } from '../config/fees';
+import { MARKET_CONFIG } from '../config/fees'
 
 export interface PerpPosition {
-  id: string;
-  userId: string;
-  ticker: string;
-  organizationId: string;
-  side: 'long' | 'short';
-  entryPrice: number;
-  currentPrice: number;
-  size: number;
-  leverage: number;
-  liquidationPrice: number;
-  unrealizedPnL: number;
-  unrealizedPnLPercent: number;
-  fundingPaid: number;
-  openedAt: string;
-  lastUpdated: string;
+  id: string
+  userId: string
+  ticker: string
+  organizationId: string
+  side: 'long' | 'short'
+  entryPrice: number
+  currentPrice: number
+  size: number
+  leverage: number
+  liquidationPrice: number
+  unrealizedPnL: number
+  unrealizedPnLPercent: number
+  fundingPaid: number
+  openedAt: string
+  lastUpdated: string
 }
 
 export interface FundingRate {
-  ticker: string;
-  rate: number;
-  nextFundingTime: string;
-  predictedRate: number;
+  ticker: string
+  rate: number
+  nextFundingTime: string
+  predictedRate: number
 }
 
 export interface PerpMarket {
-  ticker: string;
-  organizationId: string;
-  name: string;
-  currentPrice: number;
-  change24h: number;
-  changePercent24h: number;
-  high24h: number;
-  low24h: number;
-  volume24h: number;
-  openInterest: number;
-  fundingRate: FundingRate;
-  maxLeverage: number;
-  minOrderSize: number;
-  maxPositionSize: number; // Maximum single position size (based on liquidity)
-  markPrice: number;
-  indexPrice: number;
+  ticker: string
+  organizationId: string
+  name: string
+  currentPrice: number
+  change24h: number
+  changePercent24h: number
+  high24h: number
+  low24h: number
+  volume24h: number
+  openInterest: number
+  fundingRate: FundingRate
+  maxLeverage: number
+  minOrderSize: number
+  maxPositionSize: number // Maximum single position size (based on liquidity)
+  markPrice: number
+  indexPrice: number
 }
 
 export interface OrderRequest {
-  ticker: string;
-  side: 'long' | 'short';
-  size: number;
-  leverage: number;
-  orderType: 'market' | 'limit';
-  limitPrice?: number;
+  ticker: string
+  side: 'long' | 'short'
+  size: number
+  leverage: number
+  orderType: 'market' | 'limit'
+  limitPrice?: number
 }
 
 export interface PositionUpdate {
-  positionId: string;
-  action: 'increase' | 'decrease' | 'close';
-  amount?: number;
-  newLeverage?: number;
+  positionId: string
+  action: 'increase' | 'decrease' | 'close'
+  amount?: number
+  newLeverage?: number
 }
 
 export interface Liquidation {
-  positionId: string;
-  ticker: string;
-  side: 'long' | 'short';
-  liquidationPrice: number;
-  actualPrice: number;
-  loss: number;
-  timestamp: string;
+  positionId: string
+  ticker: string
+  side: 'long' | 'short'
+  liquidationPrice: number
+  actualPrice: number
+  loss: number
+  timestamp: string
 }
 
 export interface DailyPriceSnapshot {
-  date: string;
-  ticker: string;
-  organizationId: string;
-  openPrice: number;
-  closePrice: number;
-  highPrice: number;
-  lowPrice: number;
-  volume: number;
-  timestamp: string;
+  date: string
+  ticker: string
+  organizationId: string
+  openPrice: number
+  closePrice: number
+  highPrice: number
+  lowPrice: number
+  volume: number
+  timestamp: string
 }
 
 export interface TradingStats {
-  totalVolume: number;
-  totalTrades: number;
-  totalPnL: number;
-  winRate: number;
-  avgWin: number;
-  avgLoss: number;
-  largestWin: number;
-  largestLoss: number;
-  totalFundingPaid: number;
-  totalLiquidations: number;
+  totalVolume: number
+  totalTrades: number
+  totalPnL: number
+  winRate: number
+  avgWin: number
+  avgLoss: number
+  largestWin: number
+  largestLoss: number
+  totalFundingPaid: number
+  totalLiquidations: number
 }
 
 /**
@@ -111,14 +111,14 @@ export interface TradingStats {
 export function calculateLiquidationPrice(
   entryPrice: number,
   side: 'long' | 'short',
-  leverage: number
+  leverage: number,
 ): number {
-  const liquidationThreshold = 0.9 / leverage;
+  const liquidationThreshold = 0.9 / leverage
 
   if (side === 'long') {
-    return entryPrice * (1 - liquidationThreshold);
+    return entryPrice * (1 - liquidationThreshold)
   }
-  return entryPrice * (1 + liquidationThreshold);
+  return entryPrice * (1 + liquidationThreshold)
 }
 
 /**
@@ -128,19 +128,19 @@ export function calculateUnrealizedPnL(
   entryPrice: number,
   currentPrice: number,
   side: 'long' | 'short',
-  size: number
+  size: number,
 ): { pnl: number; pnlPercent: number } {
-  let pnl: number;
+  let pnl: number
 
   if (side === 'long') {
-    pnl = ((currentPrice - entryPrice) / entryPrice) * size;
+    pnl = ((currentPrice - entryPrice) / entryPrice) * size
   } else {
-    pnl = ((entryPrice - currentPrice) / entryPrice) * size;
+    pnl = ((entryPrice - currentPrice) / entryPrice) * size
   }
 
-  const pnlPercent = (pnl / size) * 100;
+  const pnlPercent = (pnl / size) * 100
 
-  return { pnl, pnlPercent };
+  return { pnl, pnlPercent }
 }
 
 /**
@@ -148,10 +148,10 @@ export function calculateUnrealizedPnL(
  */
 export function calculateFundingPayment(
   positionSize: number,
-  fundingRate: number
+  fundingRate: number,
 ): number {
-  const fundingPerPeriod = fundingRate / 1095.75;
-  return positionSize * fundingPerPeriod;
+  const fundingPerPeriod = fundingRate / 1095.75
+  return positionSize * fundingPerPeriod
 }
 
 /**
@@ -160,12 +160,12 @@ export function calculateFundingPayment(
 export function shouldLiquidate(
   currentPrice: number,
   liquidationPrice: number,
-  side: 'long' | 'short'
+  side: 'long' | 'short',
 ): boolean {
   if (side === 'long') {
-    return currentPrice <= liquidationPrice;
+    return currentPrice <= liquidationPrice
   }
-  return currentPrice >= liquidationPrice;
+  return currentPrice >= liquidationPrice
 }
 
 /**
@@ -174,11 +174,11 @@ export function shouldLiquidate(
 export function calculateMarkPrice(
   indexPrice: number,
   lastPrice: number,
-  fundingRate: number
+  fundingRate: number,
 ): number {
-  const baseMarkPrice = indexPrice * 0.7 + lastPrice * 0.3;
-  const fundingAdjustment = fundingRate * 0.01;
-  return baseMarkPrice * (1 + fundingAdjustment);
+  const baseMarkPrice = indexPrice * 0.7 + lastPrice * 0.3
+  const fundingAdjustment = fundingRate * 0.01
+  return baseMarkPrice * (1 + fundingAdjustment)
 }
 
 /**
@@ -187,6 +187,6 @@ export function calculateMarkPrice(
  */
 export function calculateMaxPositionSize(openInterest: number): number {
   const openInterestLimit =
-    openInterest * MARKET_CONFIG.OPEN_INTEREST_LIMIT_RATIO;
-  return Math.max(openInterestLimit, MARKET_CONFIG.MIN_MAX_POSITION_SIZE);
+    openInterest * MARKET_CONFIG.OPEN_INTEREST_LIMIT_RATIO
+  return Math.max(openInterestLimit, MARKET_CONFIG.MIN_MAX_POSITION_SIZE)
 }

@@ -15,8 +15,14 @@ import {
   describe,
   expect,
   it,
-} from 'bun:test';
-import { WaitlistService } from '@babylon/api';
+} from 'bun:test'
+import {
+  awardWalletBonus,
+  generateInviteCode,
+  getTopWaitlistUsers,
+  getWaitlistPosition,
+  markAsWaitlisted,
+} from '@babylon/api'
 import {
   db,
   eq,
@@ -24,77 +30,75 @@ import {
   pointsTransactions,
   referrals,
   users,
-} from '@babylon/db';
-import { generateSnowflakeId } from '@babylon/shared';
+} from '@babylon/db'
+import { generateSnowflakeId } from '@babylon/shared'
 
 // Skip tests if DATABASE_URL is not set
-const shouldSkip = !process.env.DATABASE_URL;
-const describeWaitlist = shouldSkip ? describe.skip : describe;
+const shouldSkip = !process.env.DATABASE_URL
+const describeWaitlist = shouldSkip ? describe.skip : describe
 
 describeWaitlist('WaitlistService', () => {
   // Test data cleanup
-  const testUserIds: string[] = [];
-  let dbAvailable = true;
+  const testUserIds: string[] = []
+  let dbAvailable = true
 
   beforeAll(async () => {
     // Verify database connectivity before running tests
-    await db.select().from(users).limit(1);
-    dbAvailable = true;
-  });
+    await db.select().from(users).limit(1)
+    dbAvailable = true
+  })
 
   beforeEach(() => {
     if (!dbAvailable) {
-      throw new Error('Database not available - skipping test');
+      throw new Error('Database not available - skipping test')
     }
-  });
+  })
 
   afterEach(async () => {
-    if (!dbAvailable) return;
+    if (!dbAvailable) return
     // Clean up test users and related data
     if (testUserIds.length > 0) {
       // Delete referrals first (foreign key constraint)
       await db
         .delete(referrals)
-        .where(inArray(referrals.referrerId, testUserIds));
+        .where(inArray(referrals.referrerId, testUserIds))
       await db
         .delete(referrals)
-        .where(inArray(referrals.referredUserId, testUserIds));
+        .where(inArray(referrals.referredUserId, testUserIds))
 
       // Delete points transactions
       await db
         .delete(pointsTransactions)
-        .where(inArray(pointsTransactions.userId, testUserIds));
+        .where(inArray(pointsTransactions.userId, testUserIds))
 
       // Delete test users
-      await db.delete(users).where(inArray(users.id, testUserIds));
+      await db.delete(users).where(inArray(users.id, testUserIds))
 
-      testUserIds.length = 0;
+      testUserIds.length = 0
     }
-  });
+  })
 
   describe('generateInviteCode', () => {
     it('should generate unique 8-character uppercase code', () => {
       // Generate multiple codes to test uniqueness
-      const codes = Array.from({ length: 10 }, () =>
-        WaitlistService.generateInviteCode()
-      );
+      const codes = Array.from({ length: 10 }, () => generateInviteCode())
 
       // All should be 8 characters
       codes.forEach((code) => {
-        expect(code).toHaveLength(8);
-        expect(code).toMatch(/^[A-Z0-9_-]{8}$/);
-      });
+        expect(code).toHaveLength(8)
+        expect(code).toMatch(/^[A-Z0-9_-]{8}$/)
+      })
 
       // At least some should be unique (nanoid has tiny collision probability)
-      const uniqueCodes = new Set(codes);
-      expect(uniqueCodes.size).toBeGreaterThan(1);
-    });
-  });
+      const uniqueCodes = new Set(codes)
+      expect(uniqueCodes.size).toBeGreaterThan(1)
+    })
+  })
 
   describe('markAsWaitlisted', () => {
     it('should mark an existing user as waitlisted', async () => {
       // Create a test user first
-      const userId = await generateSnowflakeId();
+      const userId = await generateSnowflakeId()
       await db.insert(users).values({
         id: userId,
         oauth3Id: `test-oauth3-${Date.now()}`,
@@ -104,16 +108,16 @@ describeWaitlist('WaitlistService', () => {
         profileComplete: true,
         isTest: true,
         updatedAt: new Date(),
-      });
-      testUserIds.push(userId);
+      })
+      testUserIds.push(userId)
 
       // Mark as waitlisted
-      const result = await WaitlistService.markAsWaitlisted(userId);
+      const result = await markAsWaitlisted(userId)
 
-      expect(result.success).toBe(true);
-      expect(result.waitlistPosition).toBeGreaterThan(0);
-      expect(result.inviteCode).toHaveLength(8);
-      expect(result.points).toBe(100);
+      expect(result.success).toBe(true)
+      expect(result.waitlistPosition).toBeGreaterThan(0)
+      expect(result.inviteCode).toHaveLength(8)
+      expect(result.points).toBe(100)
 
       // Verify in database
       const [updatedUser] = await db
@@ -124,15 +128,15 @@ describeWaitlist('WaitlistService', () => {
         })
         .from(users)
         .where(eq(users.id, userId))
-        .limit(1);
+        .limit(1)
 
-      expect(updatedUser?.isWaitlistActive).toBe(true);
-      expect(updatedUser?.waitlistPosition).toBeGreaterThan(0);
-      expect(updatedUser?.referralCode).toBeTruthy();
-    });
+      expect(updatedUser?.isWaitlistActive).toBe(true)
+      expect(updatedUser?.waitlistPosition).toBeGreaterThan(0)
+      expect(updatedUser?.referralCode).toBeTruthy()
+    })
 
     it('should prevent self-referral', async () => {
-      const userId = await generateSnowflakeId();
+      const userId = await generateSnowflakeId()
       await db.insert(users).values({
         id: userId,
         oauth3Id: `test-oauth3-${Date.now()}`,
@@ -143,28 +147,28 @@ describeWaitlist('WaitlistService', () => {
         referralCode: 'SELFREF1',
         isTest: true,
         updatedAt: new Date(),
-      });
-      testUserIds.push(userId);
+      })
+      testUserIds.push(userId)
 
       // Try to use own referral code
-      const result = await WaitlistService.markAsWaitlisted(userId, 'SELFREF1');
+      const result = await markAsWaitlisted(userId, 'SELFREF1')
 
-      expect(result.success).toBe(true);
-      expect(result.referrerRewarded).toBe(false); // Should not reward self
+      expect(result.success).toBe(true)
+      expect(result.referrerRewarded).toBe(false) // Should not reward self
 
       // Verify no invite points awarded
       const [updatedUser] = await db
         .select({ invitePoints: users.invitePoints })
         .from(users)
         .where(eq(users.id, userId))
-        .limit(1);
+        .limit(1)
 
-      expect(updatedUser?.invitePoints).toBe(0);
-    });
+      expect(updatedUser?.invitePoints).toBe(0)
+    })
 
     it('should prevent double-referral', async () => {
       // Create referrer
-      const referrerId = await generateSnowflakeId();
+      const referrerId = await generateSnowflakeId()
       await db.insert(users).values({
         id: referrerId,
         oauth3Id: `test-oauth3-ref-${Date.now()}`,
@@ -175,11 +179,11 @@ describeWaitlist('WaitlistService', () => {
         referralCode: 'REF12345',
         isTest: true,
         updatedAt: new Date(),
-      });
-      testUserIds.push(referrerId);
+      })
+      testUserIds.push(referrerId)
 
       // Create user already referred by someone else
-      const userId = await generateSnowflakeId();
+      const userId = await generateSnowflakeId()
       await db.insert(users).values({
         id: userId,
         oauth3Id: `test-oauth3-${Date.now()}`,
@@ -190,14 +194,14 @@ describeWaitlist('WaitlistService', () => {
         referredBy: 'someone-else-id',
         isTest: true,
         updatedAt: new Date(),
-      });
-      testUserIds.push(userId);
+      })
+      testUserIds.push(userId)
 
       // Try to refer again with different code
-      const result = await WaitlistService.markAsWaitlisted(userId, 'REF12345');
+      const result = await markAsWaitlisted(userId, 'REF12345')
 
-      expect(result.success).toBe(true);
-      expect(result.referrerRewarded).toBe(false); // Should not reward (already referred)
+      expect(result.success).toBe(true)
+      expect(result.referrerRewarded).toBe(false) // Should not reward (already referred)
 
       // Referrer should not get points
       const [updatedReferrer] = await db
@@ -207,15 +211,15 @@ describeWaitlist('WaitlistService', () => {
         })
         .from(users)
         .where(eq(users.id, referrerId))
-        .limit(1);
+        .limit(1)
 
-      expect(updatedReferrer?.invitePoints).toBe(0);
-      expect(updatedReferrer?.referralCount).toBe(0);
-    });
+      expect(updatedReferrer?.invitePoints).toBe(0)
+      expect(updatedReferrer?.referralCount).toBe(0)
+    })
 
     it('should award +100 points to referrer on valid referral', async () => {
       // Create referrer
-      const referrerId = await generateSnowflakeId();
+      const referrerId = await generateSnowflakeId()
       await db.insert(users).values({
         id: referrerId,
         oauth3Id: `test-oauth3-ref-${Date.now()}`,
@@ -228,11 +232,11 @@ describeWaitlist('WaitlistService', () => {
         waitlistPosition: 1,
         isTest: true,
         updatedAt: new Date(),
-      });
-      testUserIds.push(referrerId);
+      })
+      testUserIds.push(referrerId)
 
       // Create new user
-      const userId = await generateSnowflakeId();
+      const userId = await generateSnowflakeId()
       await db.insert(users).values({
         id: userId,
         oauth3Id: `test-oauth3-${Date.now()}`,
@@ -242,14 +246,14 @@ describeWaitlist('WaitlistService', () => {
         profileComplete: true,
         isTest: true,
         updatedAt: new Date(),
-      });
-      testUserIds.push(userId);
+      })
+      testUserIds.push(userId)
 
       // Mark as waitlisted with referral code
-      const result = await WaitlistService.markAsWaitlisted(userId, 'VALIDREF');
+      const result = await markAsWaitlisted(userId, 'VALIDREF')
 
-      expect(result.success).toBe(true);
-      expect(result.referrerRewarded).toBe(true);
+      expect(result.success).toBe(true)
+      expect(result.referrerRewarded).toBe(true)
 
       // Verify referrer got points (REFERRAL_SIGNUP is 100 points)
       const [updatedReferrer] = await db
@@ -260,18 +264,18 @@ describeWaitlist('WaitlistService', () => {
         })
         .from(users)
         .where(eq(users.id, referrerId))
-        .limit(1);
+        .limit(1)
 
-      expect(updatedReferrer?.invitePoints).toBe(100); // REFERRAL_SIGNUP is 100 points
-      expect(updatedReferrer?.reputationPoints).toBe(200); // 100 + 100
-      expect(updatedReferrer?.referralCount).toBe(1);
-    });
-  });
+      expect(updatedReferrer?.invitePoints).toBe(100) // REFERRAL_SIGNUP is 100 points
+      expect(updatedReferrer?.reputationPoints).toBe(200) // 100 + 100
+      expect(updatedReferrer?.referralCount).toBe(1)
+    })
+  })
 
   describe('getWaitlistPosition', () => {
     it('should calculate dynamic leaderboard rank based on invite points', async () => {
       // Create users with different invite points
-      const userAId = await generateSnowflakeId();
+      const userAId = await generateSnowflakeId()
       await db.insert(users).values({
         id: userAId,
         oauth3Id: `test-a-${Date.now()}`,
@@ -284,10 +288,10 @@ describeWaitlist('WaitlistService', () => {
         waitlistJoinedAt: new Date(Date.now() - 10000),
         isTest: true,
         updatedAt: new Date(),
-      });
-      testUserIds.push(userAId);
+      })
+      testUserIds.push(userAId)
 
-      const userBId = await generateSnowflakeId();
+      const userBId = await generateSnowflakeId()
       await db.insert(users).values({
         id: userBId,
         oauth3Id: `test-b-${Date.now()}`,
@@ -300,32 +304,37 @@ describeWaitlist('WaitlistService', () => {
         waitlistJoinedAt: new Date(Date.now() - 5000),
         isTest: true,
         updatedAt: new Date(),
-      });
-      testUserIds.push(userBId);
+      })
+      testUserIds.push(userBId)
 
       // Get positions
-      const positionA = await WaitlistService.getWaitlistPosition(userAId);
-      const positionB = await WaitlistService.getWaitlistPosition(userBId);
+      const positionA = await getWaitlistPosition(userAId)
+      const positionB = await getWaitlistPosition(userBId)
 
       // User B should rank higher than User A (more invite points)
-      expect(positionB).not.toBeNull();
-      expect(positionA).not.toBeNull();
-      expect(positionB!.leaderboardRank).toBeLessThan(
-        positionA!.leaderboardRank
-      );
-      expect(positionB?.invitePoints).toBe(50);
-      expect(positionA?.invitePoints).toBe(0);
+      expect(positionB).not.toBeNull()
+      expect(positionA).not.toBeNull()
+      if (
+        positionB?.leaderboardRank !== undefined &&
+        positionA?.leaderboardRank !== undefined
+      ) {
+        expect(positionB.leaderboardRank).toBeLessThan(
+          positionA.leaderboardRank,
+        )
+      }
+      expect(positionB?.invitePoints).toBe(50)
+      expect(positionA?.invitePoints).toBe(0)
 
       // Verify historical positions are different
-      expect(positionA?.waitlistPosition).toBe(1);
-      expect(positionB?.waitlistPosition).toBe(2);
-    });
+      expect(positionA?.waitlistPosition).toBe(1)
+      expect(positionB?.waitlistPosition).toBe(2)
+    })
 
     it('should handle tie-breaking by signup date', async () => {
-      const now = Date.now();
+      const now = Date.now()
 
       // Create two users with same invite points
-      const user1Id = await generateSnowflakeId();
+      const user1Id = await generateSnowflakeId()
       await db.insert(users).values({
         id: user1Id,
         oauth3Id: `test-1-${now}`,
@@ -337,10 +346,10 @@ describeWaitlist('WaitlistService', () => {
         waitlistJoinedAt: new Date(now - 10000), // Earlier
         isTest: true,
         updatedAt: new Date(),
-      });
-      testUserIds.push(user1Id);
+      })
+      testUserIds.push(user1Id)
 
-      const user2Id = await generateSnowflakeId();
+      const user2Id = await generateSnowflakeId()
       await db.insert(users).values({
         id: user2Id,
         oauth3Id: `test-2-${now}`,
@@ -352,23 +361,28 @@ describeWaitlist('WaitlistService', () => {
         waitlistJoinedAt: new Date(now - 5000), // Later
         isTest: true,
         updatedAt: new Date(),
-      });
-      testUserIds.push(user2Id);
+      })
+      testUserIds.push(user2Id)
 
-      const position1 = await WaitlistService.getWaitlistPosition(user1Id);
-      const position2 = await WaitlistService.getWaitlistPosition(user2Id);
+      const position1 = await getWaitlistPosition(user1Id)
+      const position2 = await getWaitlistPosition(user2Id)
 
       // User 1 should rank higher than User 2 (joined earlier with same points)
-      expect(position1).not.toBeNull();
-      expect(position2).not.toBeNull();
-      expect(position1!.leaderboardRank).toBeLessThan(
-        position2!.leaderboardRank
-      );
-      expect(position1?.invitePoints).toBe(position2?.invitePoints); // Same points
-    });
+      expect(position1).not.toBeNull()
+      expect(position2).not.toBeNull()
+      if (
+        position1?.leaderboardRank !== undefined &&
+        position2?.leaderboardRank !== undefined
+      ) {
+        expect(position1.leaderboardRank).toBeLessThan(
+          position2.leaderboardRank,
+        )
+      }
+      expect(position1?.invitePoints).toBe(position2?.invitePoints) // Same points
+    })
 
     it('should calculate percentile correctly', async () => {
-      const userId = await generateSnowflakeId();
+      const userId = await generateSnowflakeId()
       await db.insert(users).values({
         id: userId,
         oauth3Id: `test-perc-${Date.now()}`,
@@ -379,20 +393,20 @@ describeWaitlist('WaitlistService', () => {
         waitlistPosition: 1,
         isTest: true,
         updatedAt: new Date(),
-      });
-      testUserIds.push(userId);
+      })
+      testUserIds.push(userId)
 
-      const position = await WaitlistService.getWaitlistPosition(userId);
+      const position = await getWaitlistPosition(userId)
 
-      expect(position?.percentile).toBeGreaterThanOrEqual(0);
-      expect(position?.percentile).toBeLessThanOrEqual(100);
-      expect(position?.totalCount).toBeGreaterThan(0);
-    });
-  });
+      expect(position?.percentile).toBeGreaterThanOrEqual(0)
+      expect(position?.percentile).toBeLessThanOrEqual(100)
+      expect(position?.totalCount).toBeGreaterThan(0)
+    })
+  })
 
   describe('bonuses', () => {
     it('should award wallet bonus only once', async () => {
-      const userId = await generateSnowflakeId();
+      const userId = await generateSnowflakeId()
       await db.insert(users).values({
         id: userId,
         oauth3Id: `test-wallet-${Date.now()}`,
@@ -402,16 +416,16 @@ describeWaitlist('WaitlistService', () => {
         bonusPoints: 0,
         isTest: true,
         updatedAt: new Date(),
-      });
-      testUserIds.push(userId);
+      })
+      testUserIds.push(userId)
 
       // Award first time
-      const awarded1 = await WaitlistService.awardWalletBonus(userId, '0x1234');
-      expect(awarded1).toBe(true);
+      const awarded1 = await awardWalletBonus(userId, '0x1234')
+      expect(awarded1).toBe(true)
 
       // Try to award again
-      const awarded2 = await WaitlistService.awardWalletBonus(userId, '0x5678');
-      expect(awarded2).toBe(false); // Should not award twice
+      const awarded2 = await awardWalletBonus(userId, '0x5678')
+      expect(awarded2).toBe(false) // Should not award twice
 
       // Verify only 300 points awarded (wallet bonus amount)
       const [updatedUser] = await db
@@ -421,19 +435,19 @@ describeWaitlist('WaitlistService', () => {
         })
         .from(users)
         .where(eq(users.id, userId))
-        .limit(1);
+        .limit(1)
 
-      expect(updatedUser?.bonusPoints).toBe(300);
-      expect(updatedUser?.reputationPoints).toBe(400);
-    });
-  });
+      expect(updatedUser?.bonusPoints).toBe(300)
+      expect(updatedUser?.reputationPoints).toBe(400)
+    })
+  })
 
   describe('getTopWaitlistUsers', () => {
     it('should return users sorted by invite points', async () => {
-      const timestamp = Date.now();
+      const timestamp = Date.now()
 
       // Create users with different invite points
-      const user1Id = await generateSnowflakeId();
+      const user1Id = await generateSnowflakeId()
       await db.insert(users).values({
         id: user1Id,
         oauth3Id: `test-top1-${timestamp}`,
@@ -443,10 +457,10 @@ describeWaitlist('WaitlistService', () => {
         isWaitlistActive: true,
         isTest: true,
         updatedAt: new Date(),
-      });
-      testUserIds.push(user1Id);
+      })
+      testUserIds.push(user1Id)
 
-      const user2Id = await generateSnowflakeId();
+      const user2Id = await generateSnowflakeId()
       await db.insert(users).values({
         id: user2Id,
         oauth3Id: `test-top2-${timestamp}`,
@@ -456,10 +470,10 @@ describeWaitlist('WaitlistService', () => {
         isWaitlistActive: true,
         isTest: true,
         updatedAt: new Date(),
-      });
-      testUserIds.push(user2Id);
+      })
+      testUserIds.push(user2Id)
 
-      const user3Id = await generateSnowflakeId();
+      const user3Id = await generateSnowflakeId()
       await db.insert(users).values({
         id: user3Id,
         oauth3Id: `test-top3-${timestamp}`,
@@ -469,37 +483,39 @@ describeWaitlist('WaitlistService', () => {
         isWaitlistActive: true,
         isTest: true,
         updatedAt: new Date(),
-      });
-      testUserIds.push(user3Id);
+      })
+      testUserIds.push(user3Id)
 
-      const topUsers = await WaitlistService.getTopWaitlistUsers(100);
+      const topUsers = await getTopWaitlistUsers(100)
 
-      expect(topUsers.length).toBeGreaterThanOrEqual(3);
+      expect(topUsers.length).toBeGreaterThanOrEqual(3)
 
       // Verify sorting is correct (descending by invite points)
       for (let i = 0; i < topUsers.length - 1; i++) {
-        expect(topUsers[i]!.invitePoints).toBeGreaterThanOrEqual(
-          topUsers[i + 1]!.invitePoints
-        );
+        const currentPoints = topUsers[i]?.invitePoints
+        const nextPoints = topUsers[i + 1]?.invitePoints
+        if (currentPoints !== undefined && nextPoints !== undefined) {
+          expect(currentPoints).toBeGreaterThanOrEqual(nextPoints)
+        }
       }
 
       // Find our test users and verify their relative ordering
       const testUser150 = topUsers.find(
-        (u) => u.invitePoints === 150 && testUserIds.includes(u.id)
-      );
+        (u) => u.invitePoints === 150 && testUserIds.includes(u.id),
+      )
       const testUser100 = topUsers.find(
-        (u) => u.invitePoints === 100 && testUserIds.includes(u.id)
-      );
+        (u) => u.invitePoints === 100 && testUserIds.includes(u.id),
+      )
       const testUser50 = topUsers.find(
-        (u) => u.invitePoints === 50 && testUserIds.includes(u.id)
-      );
+        (u) => u.invitePoints === 50 && testUserIds.includes(u.id),
+      )
 
       if (testUser150 && testUser100) {
-        expect(testUser150.rank).toBeLessThan(testUser100.rank);
+        expect(testUser150.rank).toBeLessThan(testUser100.rank)
       }
       if (testUser100 && testUser50) {
-        expect(testUser100.rank).toBeLessThan(testUser50.rank);
+        expect(testUser100.rank).toBeLessThan(testUser50.rank)
       }
-    });
-  });
-});
+    })
+  })
+})

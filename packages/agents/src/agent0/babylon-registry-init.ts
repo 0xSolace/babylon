@@ -6,12 +6,15 @@
  * Publishes game metadata, capabilities, and endpoints for agent discovery.
  */
 
-import { db } from '@babylon/db';
-import type { JsonValue } from '@babylon/shared';
-import { getA2AEndpoint, getMCPEndpoint } from '@babylon/shared';
-import { logger } from '../shared/logger';
-import { generateSnowflakeId } from '../shared/snowflake';
-import { getAgent0Client } from './index';
+import { db } from '@babylon/db'
+import type { JsonValue } from '@babylon/shared'
+import {
+  generateSnowflakeId,
+  getA2AEndpoint,
+  getMCPEndpoint,
+} from '@babylon/shared'
+import { logger } from '../shared/logger'
+import { getAgent0Client } from './index'
 
 /**
  * Babylon registration result
@@ -20,9 +23,9 @@ import { getAgent0Client } from './index';
  * Babylon in the Agent0 registry.
  */
 export interface BabylonRegistrationResult {
-  tokenId: number;
-  metadataCID: string;
-  registeredAt: string;
+  tokenId: number
+  metadataCID: string
+  registeredAt: string
 }
 
 /**
@@ -48,59 +51,59 @@ export async function registerBabylonGame(): Promise<BabylonRegistrationResult |
     logger.info(
       'Babylon already registered, skipping registration...',
       undefined,
-      'BabylonRegistry'
-    );
+      'BabylonRegistry',
+    )
 
     const config = await db.gameConfig.findUnique({
       where: { key: 'agent0_registration' },
-    });
+    })
 
     if (config?.value) {
-      const value = config.value as Record<string, JsonValue>;
+      const value = config.value as Record<string, JsonValue>
       return {
         tokenId: Number(value.tokenId),
         metadataCID: String(value.metadataCID || ''),
         registeredAt: String(value.registeredAt || new Date().toISOString()),
-      };
+      }
     }
 
-    return null;
+    return null
   }
 
   if (process.env.AGENT0_ENABLED !== 'true') {
     logger.info(
       'Agent0 integration disabled, skipping Babylon registration',
       undefined,
-      'BabylonRegistry'
-    );
-    return null;
+      'BabylonRegistry',
+    )
+    return null
   }
 
-  const gameWalletAddress = process.env.BABYLON_GAME_WALLET_ADDRESS;
-  const gamePrivateKey = process.env.BABYLON_GAME_PRIVATE_KEY;
+  const gameWalletAddress = process.env.BABYLON_GAME_WALLET_ADDRESS
+  const gamePrivateKey = process.env.BABYLON_GAME_PRIVATE_KEY
 
   if (!gameWalletAddress || !gamePrivateKey) {
     logger.warn(
       'BABYLON_GAME_WALLET_ADDRESS or BABYLON_GAME_PRIVATE_KEY not configured, skipping registration',
       undefined,
-      'BabylonRegistry'
-    );
-    return null;
+      'BabylonRegistry',
+    )
+    return null
   }
 
   // 2. Register with Agent0 SDK (which handles IPFS publishing internally)
   logger.info(
     'Registering Babylon with Agent0 SDK on Ethereum Sepolia...',
     undefined,
-    'BabylonRegistry'
-  );
+    'BabylonRegistry',
+  )
   logger.info(
     'Game operates on Base network with cross-chain discovery via agent0',
     undefined,
-    'BabylonRegistry'
-  );
+    'BabylonRegistry',
+  )
 
-  const agent0Client = getAgent0Client();
+  const agent0Client = getAgent0Client()
 
   // Register Babylon directly with registerAgent to provide full metadata payload
   // - Game metadata and capabilities
@@ -151,38 +154,38 @@ export async function registerBabylonGame(): Promise<BabylonRegistrationResult |
       skills: [],
       domains: [],
     },
-  });
+  })
 
   logger.info(
     '✅ Babylon registered on agent0 (Ethereum Sepolia)',
     undefined,
-    'BabylonRegistry'
-  );
+    'BabylonRegistry',
+  )
   logger.info(
     '   Discovery: External agents can find Babylon via agent0',
     undefined,
-    'BabylonRegistry'
-  );
+    'BabylonRegistry',
+  )
   logger.info(
     `   Game Network: Base ${process.env.BASE_CHAIN_ID || '8453'}`,
     undefined,
-    'BabylonRegistry'
-  );
+    'BabylonRegistry',
+  )
   logger.info(
     `   Registry: ${process.env.BASE_IDENTITY_REGISTRY_ADDRESS}`,
     undefined,
-    'BabylonRegistry'
-  );
+    'BabylonRegistry',
+  )
 
-  const metadataCID = result.metadataCID || '';
+  const metadataCID = result.metadataCID || ''
 
   logger.info(
     '✅ Babylon registered in Agent0 registry!',
     undefined,
-    'BabylonRegistry'
-  );
-  logger.info(`   Token ID: ${result.tokenId}`, undefined, 'BabylonRegistry');
-  logger.info(`   Metadata CID: ${metadataCID}`, undefined, 'BabylonRegistry');
+    'BabylonRegistry',
+  )
+  logger.info(`   Token ID: ${result.tokenId}`, undefined, 'BabylonRegistry')
+  logger.info(`   Metadata CID: ${metadataCID}`, undefined, 'BabylonRegistry')
 
   await db.gameConfig.upsert({
     where: { key: 'agent0_registration' },
@@ -207,11 +210,11 @@ export async function registerBabylonGame(): Promise<BabylonRegistrationResult |
         registeredAt: new Date().toISOString(),
       },
     },
-  });
+  })
 
   return {
     tokenId: result.tokenId,
     metadataCID,
     registeredAt: new Date().toISOString(),
-  };
+  }
 }

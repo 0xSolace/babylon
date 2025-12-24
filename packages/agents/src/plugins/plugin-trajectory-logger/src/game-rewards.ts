@@ -8,8 +8,8 @@
  * post quality metrics, user engagement, and long-term trajectory outcomes.
  */
 
-import type { JsonValue } from '@babylon/shared';
-import type { Trajectory, TrajectoryStep } from './types';
+import type { JsonValue } from '@babylon/shared'
+import type { Trajectory, TrajectoryStep } from './types'
 
 /**
  * Compute trajectory reward using game knowledge
@@ -21,7 +21,7 @@ import type { Trajectory, TrajectoryStep } from './types';
  * @returns Reward value computed from trajectory outcomes
  */
 export function computeTrajectoryReward(trajectory: Trajectory): number {
-  return trajectory.totalReward;
+  return trajectory.totalReward
 }
 
 /**
@@ -34,7 +34,7 @@ export function computeTrajectoryReward(trajectory: Trajectory): number {
  * @returns Reward value for the step
  */
 export function computeStepReward(step: TrajectoryStep): number {
-  return step.reward || 0;
+  return step.reward || 0
 }
 
 /**
@@ -47,9 +47,9 @@ export function computeStepReward(step: TrajectoryStep): number {
  * @returns Game state object with market conditions and NPC relationships
  */
 export async function buildGameStateFromDB(
-  _trajectoryId: string
+  _trajectoryId: string,
 ): Promise<Record<string, JsonValue>> {
-  return {};
+  return {}
 }
 
 /**
@@ -61,7 +61,7 @@ export async function buildGameStateFromDB(
  * @param _trajectoryIds - Array of trajectory IDs to recompute rewards for
  */
 export async function recomputeTrajectoryRewards(
-  _trajectoryIds: string[]
+  _trajectoryIds: string[],
 ): Promise<void> {
   // Implementation pending: Reward recomputation logic
 }

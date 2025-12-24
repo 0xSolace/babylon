@@ -1,2 +1,2 @@
-export { useFeedPosts } from './useFeedPosts';
-export { useFollowingPosts } from './useFollowingPosts';
+export { useFeedPosts } from './useFeedPosts'
+export { useFollowingPosts } from './useFollowingPosts'

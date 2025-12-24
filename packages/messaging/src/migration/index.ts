@@ -2,4 +2,4 @@
  * Migration utilities for Babylon messaging
  */
 
-export { createMigrationService, MigrationService } from './migration-service';
+export { createMigrationService, MigrationService } from './migration-service'

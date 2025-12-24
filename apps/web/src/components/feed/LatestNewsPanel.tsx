@@ -1,227 +1,72 @@
-'use client';
-
-import { logger } from '@babylon/shared';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertCircle, Newspaper, TrendingUp } from 'lucide-react';
-import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useMemo } from 'react';
-import { Skeleton } from '@/components/shared/Skeleton';
-import { useWidgetRefresh } from '@/contexts/WidgetRefreshContext';
-import { useSSEChannel } from '@/hooks/useSSE';
-import { useWidgetCacheStore } from '@/stores/widgetCacheStore';
+import { useQuery } from '@tanstack/react-query'
+import { useCallback, useMemo } from 'react'
+import { Link } from 'react-router-dom'
+import { Skeleton } from '@/components/shared/Skeleton'
+import { useWidgetRefresh } from '@/contexts/WidgetRefreshContext'
+import { useSSEChannel } from '@/hooks/useSSE'
+import { api, extractDataOrNull } from '@/lib/eden-client'
+import { useWidgetCacheStore } from '@/stores/widgetCacheStore'
 
 /**
  * Article item structure for latest news panel.
  */
 interface ArticleItem {
-  id: string;
-  title: string;
-  summary: string;
-  authorOrgName: string;
-  byline?: string;
-  sentiment?: string;
-  category?: string;
-  publishedAt: string;
-  relatedQuestion?: number;
-  slant?: string;
-  biasScore?: number;
+  id: string
+  title: string
+  summary: string
+  authorOrgName: string
+  byline?: string | null
+  sentiment?: string | number | null
+  category?: string | null
+  publishedAt: string
+  slant?: string | null
+  biasScore?: number | null
 }
 
-interface PostFromAPI {
-  id: string;
-  type?: string;
-  articleTitle?: string | null;
-  authorId: string;
-  authorName?: string;
-  byline?: string | null;
-  sentiment?: string | null;
-  category?: string | null;
-  timestamp: string;
-  biasScore?: number | null;
-  slant?: string | null;
-  content: string;
-}
+/**
+ * Deduplicate articles based on similarity.
+ * Removes duplicate articles about the same event.
+ */
+function deduplicateArticles(articles: ArticleItem[]): ArticleItem[] {
+  const uniqueArticles: ArticleItem[] = []
+  const seenTitles = new Set<string>()
 
-interface ArticlesResponse {
-  posts?: PostFromAPI[];
+  for (const article of articles) {
+    const normalizedTitle = article.title
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, '')
+    if (!seenTitles.has(normalizedTitle)) {
+      seenTitles.add(normalizedTitle)
+      uniqueArticles.push(article)
+    }
+  }
+
+  return uniqueArticles
 }
 
 /**
  * Latest news panel component for displaying recent articles.
- *
- * Displays a list of the latest articles from the feed. Uses widget cache
- * for performance and supports manual refresh via WidgetRefreshContext.
- * Fetches articles from posts API filtered by type=article.
- *
- * Features:
- * - Article list with metadata
- * - Widget caching
- * - Manual refresh support
- * - Loading states
- * - Empty state handling
- *
- * @returns Latest news panel element
+ * Fetches articles from API and displays in a compact format.
  */
 export function LatestNewsPanel() {
-  const router = useRouter();
-  const queryClient = useQueryClient();
-  const { getLatestNews, setLatestNews } = useWidgetCacheStore();
-  const { registerRefresh, unregisterRefresh } = useWidgetRefresh();
+  const { setLatestNews } = useWidgetCacheStore()
+  const { registerRefresh } = useWidgetRefresh()
 
-  /**
-   * Deduplicate articles about the same event
-   * Uses improved heuristics: combines category, title similarity, and publish time proximity
-   */
-  const deduplicateArticles = useCallback(
-    (articles: ArticleItem[]): ArticleItem[] => {
-      if (articles.length <= 1) return articles;
-
-      const uniqueArticles: ArticleItem[] = [];
-      const seenArticles: Array<{
-        article: ArticleItem;
-        titleWords: Set<string>;
-        timestamp: number;
-      }> = [];
-
-      // Sort by published date (most recent first)
-      const sorted = [...articles].sort(
-        (a, b) =>
-          new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
-      );
-
-      for (const article of sorted) {
-        // Extract significant words from title (3+ chars, excluding common words)
-        const commonWords = new Set([
-          'the',
-          'and',
-          'for',
-          'are',
-          'but',
-          'not',
-          'you',
-          'all',
-          'can',
-          'her',
-          'was',
-          'one',
-          'our',
-          'out',
-          'day',
-          'has',
-        ]);
-        const titleWords = new Set(
-          article.title
-            .toLowerCase()
-            .replace(/[^a-z0-9\s]/g, '')
-            .split(' ')
-            .filter((w) => w.length > 3 && !commonWords.has(w))
-        );
-
-        const timestamp = new Date(article.publishedAt).getTime();
-
-        // Check if this is a duplicate of an existing article
-        let isDuplicate = false;
-        for (const seen of seenArticles) {
-          // Rule 1: Same category + significant title overlap + published within 6 hours
-          const timeDiff = Math.abs(timestamp - seen.timestamp);
-          const isSameTimeWindow = timeDiff < 6 * 60 * 60 * 1000; // 6 hours
-
-          if (isSameTimeWindow && article.category === seen.article.category) {
-            // Calculate word overlap
-            const intersection = new Set(
-              [...titleWords].filter((w) => seen.titleWords.has(w))
-            );
-            const union = new Set([...titleWords, ...seen.titleWords]);
-            const jaccardSimilarity = intersection.size / union.size;
-
-            // If 40%+ similar titles in same category and time window, it's likely the same event
-            if (jaccardSimilarity >= 0.4) {
-              isDuplicate = true;
-              logger.debug(
-                'Duplicate article detected',
-                {
-                  kept: seen.article.title,
-                  discarded: article.title,
-                  similarity: jaccardSimilarity,
-                  timeDiffMinutes: Math.round(timeDiff / 60000),
-                },
-                'LatestNewsPanel'
-              );
-              break;
-            }
-          }
-
-          // Rule 2: Very high title similarity (70%+) regardless of category = same event
-          const intersection = new Set(
-            [...titleWords].filter((w) => seen.titleWords.has(w))
-          );
-          const union = new Set([...titleWords, ...seen.titleWords]);
-          const jaccardSimilarity = intersection.size / union.size;
-
-          if (jaccardSimilarity >= 0.7) {
-            isDuplicate = true;
-            logger.debug(
-              'Duplicate article detected (high similarity)',
-              {
-                kept: seen.article.title,
-                discarded: article.title,
-                similarity: jaccardSimilarity,
-              },
-              'LatestNewsPanel'
-            );
-            break;
-          }
-        }
-
-        if (!isDuplicate) {
-          uniqueArticles.push(article);
-          seenArticles.push({ article, titleWords, timestamp });
-        }
-      }
-
-      logger.debug(
-        'Deduplicated articles',
-        {
-          before: articles.length,
-          after: uniqueArticles.length,
-          removed: articles.length - uniqueArticles.length,
-        },
-        'LatestNewsPanel'
-      );
-
-      return uniqueArticles;
-    },
-    []
-  );
-
-  const { data: articles = [], isLoading } = useQuery({
+  const {
+    data: articles = [],
+    isLoading,
+    refetch,
+  } = useQuery({
     queryKey: ['feed', 'latest-news'],
     queryFn: async (): Promise<ArticleItem[]> => {
-      const response = await fetch('/api/posts?type=article&limit=15');
+      const response = await api.posts.get({ type: 'article', limit: '15' })
+      const data = extractDataOrNull(response)
 
-      if (!response.ok) {
-        logger.error(
-          'Failed to fetch articles:',
-          { status: response.status },
-          'LatestNewsPanel'
-        );
-        return [];
+      if (!data?.posts) {
+        return []
       }
 
-      const data: ArticlesResponse = await response.json();
-
-      logger.info(
-        'Articles API response:',
-        {
-          hasPosts: !!data.posts,
-          count: data.posts?.length || 0,
-          firstPost: data.posts?.[0],
-        },
-        'LatestNewsPanel'
-      );
-
       if (data.posts && Array.isArray(data.posts) && data.posts.length > 0) {
-        // Transform posts to ArticleItem format
         const articlesData: ArticleItem[] = data.posts
           .filter((post) => post.type === 'article')
           .map((post) => ({
@@ -229,139 +74,115 @@ export function LatestNewsPanel() {
             title: post.articleTitle || 'Untitled Article',
             summary: post.content,
             authorOrgName: post.authorName || post.authorId,
-            byline: post.byline || undefined,
-            sentiment: post.sentiment || undefined,
-            category: post.category || undefined,
+            byline: post.byline,
+            sentiment: post.sentiment,
+            category: post.category,
             publishedAt: post.timestamp,
-            slant: post.slant || undefined,
-            biasScore: post.biasScore !== null ? post.biasScore : undefined,
-          }));
+            slant: post.slant,
+            biasScore: post.biasScore,
+          }))
 
-        // Deduplicate articles about the same event
-        const uniqueArticles = deduplicateArticles(articlesData).slice(0, 5);
-
-        logger.info(
-          'Articles processed:',
-          { count: uniqueArticles.length, articles: uniqueArticles },
-          'LatestNewsPanel'
-        );
-        setLatestNews(uniqueArticles);
-        return uniqueArticles;
+        const uniqueArticles = deduplicateArticles(articlesData).slice(0, 5)
+        setLatestNews(uniqueArticles)
+        return uniqueArticles
       }
 
-      logger.warn(
-        'No articles in response',
-        {
-          hasData: !!data,
-          hasPosts: !!data.posts,
-          isArray: Array.isArray(data.posts),
-          length: data.posts?.length,
-        },
-        'LatestNewsPanel'
-      );
-      return [];
+      return []
     },
-    initialData: () => {
-      const cached = getLatestNews();
-      return cached && Array.isArray(cached) && cached.length > 0
-        ? (cached as ArticleItem[])
-        : undefined;
-    },
+    refetchInterval: 60000,
     staleTime: 30000,
-  });
+  })
 
-  const refetch = useCallback(() => {
-    queryClient.invalidateQueries({ queryKey: ['feed', 'latest-news'] });
-  }, [queryClient]);
+  // Register for SSE updates on feed channel
+  useSSEChannel('feed', () => {
+    refetch()
+  })
 
-  // Register refresh function
-  useEffect(() => {
-    registerRefresh('latest-news', refetch);
-    return () => unregisterRefresh('latest-news');
-  }, [registerRefresh, unregisterRefresh, refetch]);
+  // Register for manual refresh
+  const handleRefresh = useCallback(async () => {
+    await refetch()
+  }, [refetch])
 
-  // Real-time refresh on feed/breaking-news events
-  useSSEChannel('feed', refetch);
-  useSSEChannel('breaking-news', refetch);
+  registerRefresh('latest-news', handleRefresh)
 
-  const getSentimentIcon = useMemo(
-    () => (sentiment?: string) => {
-      switch (sentiment) {
-        case 'positive':
-          return <TrendingUp className="h-4 w-4 text-green-500" />;
-        case 'negative':
-          return <AlertCircle className="h-4 w-4 text-red-500" />;
-        default:
-          return <Newspaper className="h-4 w-4 text-[#0066FF]" />;
-      }
+  // Format relative time
+  const formatTime = useMemo(
+    () => (dateStr: string) => {
+      const date = new Date(dateStr)
+      const now = new Date()
+      const diffMs = now.getTime() - date.getTime()
+      const diffMins = Math.floor(diffMs / 60000)
+      const diffHours = Math.floor(diffMins / 60)
+      const diffDays = Math.floor(diffHours / 24)
+
+      if (diffMins < 1) return 'Just now'
+      if (diffMins < 60) return `${diffMins}m ago`
+      if (diffHours < 24) return `${diffHours}h ago`
+      return `${diffDays}d ago`
     },
-    []
-  );
+    [],
+  )
 
-  const getTimeAgo = (timestamp: string) => {
-    const now = Date.now();
-    const diff = now - new Date(timestamp).getTime();
-    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-    const hours = Math.floor(diff / (1000 * 60 * 60));
-    const minutes = Math.floor(diff / (1000 * 60));
+  if (isLoading) {
+    return (
+      <div className="rounded-xl border border-border bg-card p-4">
+        <h3 className="mb-3 font-semibold text-foreground text-sm">
+          Latest News
+        </h3>
+        <div className="space-y-3">
+          {[1, 2, 3, 4, 5].map((i) => (
+            <div key={i} className="space-y-1">
+              <Skeleton className="h-4 w-3/4" />
+              <Skeleton className="h-3 w-1/2" />
+            </div>
+          ))}
+        </div>
+      </div>
+    )
+  }
 
-    if (days > 0) {
-      return `${days}d ago`;
-    }
-    if (hours > 0) {
-      return `${hours}h ago`;
-    }
-    if (minutes > 0) {
-      return `${minutes}m ago`;
-    }
-    return 'Just now';
-  };
-
-  const handleArticleClick = (articleId: string) => {
-    // Navigate directly to article page (LatestNewsPanel only shows article-type posts)
-    router.push(`/article/${articleId}`);
-  };
+  if (articles.length === 0) {
+    return (
+      <div className="rounded-xl border border-border bg-card p-4">
+        <h3 className="mb-3 font-semibold text-foreground text-sm">
+          Latest News
+        </h3>
+        <p className="text-muted-foreground text-sm">No articles available</p>
+      </div>
+    )
+  }
 
   return (
-    <>
-      <div className="flex flex-1 flex-col rounded-2xl bg-sidebar p-4">
-        <h2 className="mb-3 text-left font-bold text-foreground text-lg">
-          Latest News
-        </h2>
-        {isLoading ? (
-          <div className="flex-1 space-y-3 pl-3">
-            <Skeleton className="h-16 w-full" />
-            <Skeleton className="h-16 w-full" />
-            <Skeleton className="h-16 w-full" />
-          </div>
-        ) : articles.length === 0 ? (
-          <div className="flex-1 pl-3 text-muted-foreground text-sm">
-            No articles available yet.
-          </div>
-        ) : (
-          <div className="flex-1 space-y-2 pl-3">
-            {articles.map((article) => (
-              <div
-                key={article.id}
-                onClick={() => handleArticleClick(article.id)}
-                className="-ml-1.5 flex cursor-pointer items-start gap-3 rounded-lg p-1.5 transition-colors duration-200 hover:bg-muted/50"
-              >
-                <div className="mt-0.5 shrink-0">
-                  {getSentimentIcon(article.sentiment)}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="font-semibold text-foreground text-sm leading-snug">
-                    {article.title}
-                  </p>
-                  <p className="mt-0.5 text-muted-foreground text-xs">
-                    {article.authorOrgName} · {getTimeAgo(article.publishedAt)}
-                  </p>
-                </div>
+    <div className="rounded-xl border border-border bg-card p-4">
+      <h3 className="mb-3 font-semibold text-foreground text-sm">
+        Latest News
+      </h3>
+      <div className="space-y-3">
+        {articles.map((article) => (
+          <Link
+            key={article.id}
+            to={`/post/${article.id}`}
+            className="group block"
+          >
+            <div className="space-y-0.5">
+              <h4 className="line-clamp-2 font-medium text-foreground text-sm transition-colors group-hover:text-primary">
+                {article.title}
+              </h4>
+              <div className="flex items-center gap-2 text-muted-foreground text-xs">
+                <span>{article.authorOrgName}</span>
+                <span>·</span>
+                <span>{formatTime(article.publishedAt)}</span>
+                {article.category && (
+                  <>
+                    <span>·</span>
+                    <span className="text-primary">{article.category}</span>
+                  </>
+                )}
               </div>
-            ))}
-          </div>
-        )}
+            </div>
+          </Link>
+        ))}
       </div>
-    </>
-  );
+    </div>
+  )
 }

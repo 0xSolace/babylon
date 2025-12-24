@@ -13,7 +13,7 @@
  * @packageDocumentation
  */
 
-import { logger } from '@babylon/shared';
+import { logger, safeReadContract, safeWriteContract } from '@babylon/shared'
 import {
   type Address,
   type Chain,
@@ -22,13 +22,11 @@ import {
   formatEther,
   formatUnits,
   http,
-  type PublicClient,
   parseEther,
-  type WalletClient,
   zeroAddress,
-} from 'viem';
-import { privateKeyToAccount } from 'viem/accounts';
-import { base, bsc, mainnet } from 'viem/chains';
+} from 'viem'
+import { privateKeyToAccount } from 'viem/accounts'
+import { base, bsc, mainnet } from 'viem/chains'
 
 // =============================================================================
 // CHAIN CONFIGURATION
@@ -39,7 +37,7 @@ export const SUPPORTED_CHAINS = {
     id: 31337, // Local, will be replaced with actual Jeju chain ID
     name: 'Jeju',
     isHomeChain: true,
-    rpcUrl: process.env.JEJU_RPC_URL ?? 'http://localhost:9545',
+    rpcUrl: process.env.JEJU_RPC_URL ?? 'http://localhost:6546',
     hyperlaneMailbox: zeroAddress as Address,
     warpRoute: zeroAddress as Address,
   },
@@ -75,52 +73,52 @@ export const SUPPORTED_CHAINS = {
     // Uses Wormhole instead of Hyperlane
     wormholePortal: 'wormDTUJ6AWPNvk59vGQbDvGJmqbDTdgWgAqcLBCgUb' as Address,
   },
-} as const;
+} as const
 
-export type SupportedChainKey = keyof typeof SUPPORTED_CHAINS;
+export type SupportedChainKey = keyof typeof SUPPORTED_CHAINS
 
 // =============================================================================
 // TYPES
 // =============================================================================
 
 export interface BridgeConfig {
-  sourceChain: SupportedChainKey;
-  destChain: SupportedChainKey;
-  tokenAddress: Address;
-  warpRouteAddress: Address;
-  deployerPrivateKey: `0x${string}`;
+  sourceChain: SupportedChainKey
+  destChain: SupportedChainKey
+  tokenAddress: Address
+  warpRouteAddress: Address
+  deployerPrivateKey: `0x${string}`
 }
 
 export interface BridgeQuote {
-  sourceChain: SupportedChainKey;
-  destChain: SupportedChainKey;
-  amount: bigint;
-  fee: bigint;
-  estimatedTime: number; // seconds
-  route: 'hyperlane' | 'wormhole';
+  sourceChain: SupportedChainKey
+  destChain: SupportedChainKey
+  amount: bigint
+  fee: bigint
+  estimatedTime: number // seconds
+  route: 'hyperlane' | 'wormhole'
 }
 
 export interface BridgeTransaction {
-  id: string;
-  sourceChain: SupportedChainKey;
-  destChain: SupportedChainKey;
-  amount: bigint;
-  sender: Address;
-  recipient: Address;
-  sourceTxHash: `0x${string}`;
-  destTxHash?: `0x${string}`;
-  status: 'pending' | 'confirmed' | 'completed' | 'failed';
-  createdAt: Date;
-  completedAt?: Date;
-  messageId?: `0x${string}`;
+  id: string
+  sourceChain: SupportedChainKey
+  destChain: SupportedChainKey
+  amount: bigint
+  sender: Address
+  recipient: Address
+  sourceTxHash: `0x${string}`
+  destTxHash?: `0x${string}`
+  status: 'pending' | 'confirmed' | 'completed' | 'failed'
+  createdAt: Date
+  completedAt?: Date
+  messageId?: `0x${string}`
 }
 
 export interface ChainLiquidity {
-  chain: SupportedChainKey;
-  tokenBalance: bigint;
-  ethBalance: bigint;
-  lpTokens: bigint;
-  poolAddress: Address;
+  chain: SupportedChainKey
+  tokenBalance: bigint
+  ethBalance: bigint
+  lpTokens: bigint
+  poolAddress: Address
 }
 
 // =============================================================================
@@ -153,7 +151,7 @@ const HYPERLANE_WARP_ROUTE_ABI = [
     inputs: [{ name: 'account', type: 'address' }],
     outputs: [{ type: 'uint256' }],
   },
-] as const;
+] as const
 
 const HYPERLANE_MAILBOX_ABI = [
   {
@@ -185,7 +183,7 @@ const HYPERLANE_MAILBOX_ABI = [
     inputs: [{ name: '_id', type: 'bytes32' }],
     outputs: [{ type: 'bool' }],
   },
-] as const;
+] as const
 
 const ERC20_ABI = [
   {
@@ -215,7 +213,7 @@ const ERC20_ABI = [
     ],
     outputs: [{ type: 'uint256' }],
   },
-] as const;
+] as const
 
 // =============================================================================
 // HYPERLANE DOMAIN IDs
@@ -227,36 +225,42 @@ const HYPERLANE_DOMAINS: Record<SupportedChainKey, number> = {
   base: 8453,
   bsc: 56,
   solana: 1399811149, // Wormhole uses different mechanism
-};
+}
 
 // =============================================================================
 // SERVICE
 // =============================================================================
 
 export class CrossChainBridgeService {
-  private clients: Map<SupportedChainKey, PublicClient> = new Map();
-  private walletClients: Map<SupportedChainKey, WalletClient> = new Map();
-  private chains: Map<SupportedChainKey, Chain> = new Map();
-  private account: ReturnType<typeof privateKeyToAccount>;
-  private tokenAddress: Address;
-  private warpRoutes: Map<SupportedChainKey, Address> = new Map();
-  private pendingBridges: Map<string, BridgeTransaction> = new Map();
+  private clients: Map<
+    SupportedChainKey,
+    ReturnType<typeof createPublicClient>
+  > = new Map()
+  private walletClients: Map<
+    SupportedChainKey,
+    ReturnType<typeof createWalletClient>
+  > = new Map()
+  private chains: Map<SupportedChainKey, Chain> = new Map()
+  private account: ReturnType<typeof privateKeyToAccount>
+  private tokenAddress: Address
+  private warpRoutes: Map<SupportedChainKey, Address> = new Map()
+  private pendingBridges: Map<string, BridgeTransaction> = new Map()
 
   constructor(config: Partial<BridgeConfig> = {}) {
     this.tokenAddress =
       config.tokenAddress ??
       (process.env.BBLN_TOKEN_ADDRESS as Address) ??
-      zeroAddress;
+      zeroAddress
 
     const privateKey =
       config.deployerPrivateKey ??
       (process.env.DEPLOYER_PRIVATE_KEY as `0x${string}`) ??
-      '0x0';
+      '0x0'
 
-    this.account = privateKeyToAccount(privateKey);
+    this.account = privateKeyToAccount(privateKey)
 
     // Initialize clients for each chain
-    this.initializeClients();
+    this.initializeClients()
   }
 
   private initializeClients(): void {
@@ -270,34 +274,31 @@ export class CrossChainBridgeService {
       mainnet,
       base,
       bsc,
-    };
+    }
 
     for (const [key, chainConfig] of Object.entries(SUPPORTED_CHAINS)) {
-      if (key === 'solana') continue; // Solana uses different client
+      if (key === 'solana') continue // Solana uses different client
 
-      const chain = chainDefs[key];
-      if (!chain) continue;
+      const chain = chainDefs[key]
+      if (!chain) continue
 
       const publicClient = createPublicClient({
         chain,
         transport: http(chainConfig.rpcUrl),
-      }) as PublicClient;
+      })
 
       const walletClient = createWalletClient({
         account: this.account,
         chain,
         transport: http(chainConfig.rpcUrl),
-      }) as WalletClient;
+      })
 
-      this.clients.set(key as SupportedChainKey, publicClient as PublicClient);
-      this.walletClients.set(
-        key as SupportedChainKey,
-        walletClient as WalletClient
-      );
-      this.chains.set(key as SupportedChainKey, chain as Chain);
+      this.clients.set(key as SupportedChainKey, publicClient)
+      this.walletClients.set(key as SupportedChainKey, walletClient)
+      this.chains.set(key as SupportedChainKey, chain)
 
       if ('warpRoute' in chainConfig && chainConfig.warpRoute !== zeroAddress) {
-        this.warpRoutes.set(key as SupportedChainKey, chainConfig.warpRoute);
+        this.warpRoutes.set(key as SupportedChainKey, chainConfig.warpRoute)
       }
     }
   }
@@ -307,11 +308,11 @@ export class CrossChainBridgeService {
   // ===========================================================================
 
   setWarpRoute(chain: SupportedChainKey, address: Address): void {
-    this.warpRoutes.set(chain, address);
+    this.warpRoutes.set(chain, address)
   }
 
   getWarpRoute(chain: SupportedChainKey): Address | undefined {
-    return this.warpRoutes.get(chain);
+    return this.warpRoutes.get(chain)
   }
 
   // ===========================================================================
@@ -321,7 +322,7 @@ export class CrossChainBridgeService {
   async getBridgeQuote(
     sourceChain: SupportedChainKey,
     destChain: SupportedChainKey,
-    amount: bigint
+    amount: bigint,
   ): Promise<BridgeQuote> {
     if (destChain === 'solana') {
       // Wormhole route
@@ -332,12 +333,12 @@ export class CrossChainBridgeService {
         fee: parseEther('0.01'), // Approximate Wormhole fee
         estimatedTime: 900, // ~15 minutes
         route: 'wormhole',
-      };
+      }
     }
 
     // Hyperlane route
-    const client = this.clients.get(sourceChain);
-    const warpRoute = this.warpRoutes.get(sourceChain);
+    const client = this.clients.get(sourceChain)
+    const warpRoute = this.warpRoutes.get(sourceChain)
 
     if (!client || !warpRoute || warpRoute === zeroAddress) {
       return {
@@ -347,17 +348,17 @@ export class CrossChainBridgeService {
         fee: parseEther('0.001'), // Default estimate
         estimatedTime: 300, // ~5 minutes
         route: 'hyperlane',
-      };
+      }
     }
 
-    const destDomain = HYPERLANE_DOMAINS[destChain];
+    const destDomain = HYPERLANE_DOMAINS[destChain]
 
-    const fee = await client.readContract({
+    const fee = await safeReadContract<bigint>(client, {
       address: warpRoute,
       abi: HYPERLANE_WARP_ROUTE_ABI,
       functionName: 'quoteGasPayment',
       args: [destDomain],
-    });
+    })
 
     return {
       sourceChain,
@@ -366,40 +367,40 @@ export class CrossChainBridgeService {
       fee,
       estimatedTime: 300,
       route: 'hyperlane',
-    };
+    }
   }
 
   async bridgeTokens(
     sourceChain: SupportedChainKey,
     destChain: SupportedChainKey,
     amount: bigint,
-    recipient: Address
+    recipient: Address,
   ): Promise<BridgeTransaction> {
-    const quote = await this.getBridgeQuote(sourceChain, destChain, amount);
+    const quote = await this.getBridgeQuote(sourceChain, destChain, amount)
 
     if (quote.route === 'wormhole') {
-      return this.bridgeViawormhole(sourceChain, destChain, amount, recipient);
+      return this.bridgeViawormhole(sourceChain, destChain, amount, recipient)
     }
 
-    return this.bridgeViaHyperlane(sourceChain, destChain, amount, recipient);
+    return this.bridgeViaHyperlane(sourceChain, destChain, amount, recipient)
   }
 
   private async bridgeViaHyperlane(
     sourceChain: SupportedChainKey,
     destChain: SupportedChainKey,
     amount: bigint,
-    recipient: Address
+    recipient: Address,
   ): Promise<BridgeTransaction> {
-    const client = this.clients.get(sourceChain);
-    const walletClient = this.walletClients.get(sourceChain);
-    const warpRoute = this.warpRoutes.get(sourceChain);
+    const client = this.clients.get(sourceChain)
+    const walletClient = this.walletClients.get(sourceChain)
+    const warpRoute = this.warpRoutes.get(sourceChain)
 
     if (!client || !walletClient) {
-      throw new Error(`Client not initialized for ${sourceChain}`);
+      throw new Error(`Client not initialized for ${sourceChain}`)
     }
 
     if (!warpRoute || warpRoute === zeroAddress) {
-      throw new Error(`Warp route not configured for ${sourceChain}`);
+      throw new Error(`Warp route not configured for ${sourceChain}`)
     }
 
     logger.info(
@@ -410,49 +411,49 @@ export class CrossChainBridgeService {
         amount: formatUnits(amount, 18),
         recipient,
       },
-      'CrossChainBridge'
-    );
+      'CrossChainBridge',
+    )
 
     // Get gas quote
-    const destDomain = HYPERLANE_DOMAINS[destChain];
-    const fee = await client.readContract({
+    const destDomain = HYPERLANE_DOMAINS[destChain]
+    const fee = await safeReadContract<bigint>(client, {
       address: warpRoute,
       abi: HYPERLANE_WARP_ROUTE_ABI,
       functionName: 'quoteGasPayment',
       args: [destDomain],
-    });
+    })
 
     // Approve warp route to spend tokens
-    const currentAllowance = await client.readContract({
+    const currentAllowance = await safeReadContract<bigint>(client, {
       address: this.tokenAddress,
       abi: ERC20_ABI,
       functionName: 'allowance',
       args: [this.account.address, warpRoute],
-    });
+    })
 
-    const chain = this.chains.get(sourceChain);
+    const chain = this.chains.get(sourceChain)
     if (!chain) {
-      throw new Error(`Chain not configured for ${sourceChain}`);
+      throw new Error(`Chain not configured for ${sourceChain}`)
     }
 
     if (currentAllowance < amount) {
-      const approveTx = await walletClient.writeContract({
+      const approveTx = await safeWriteContract(walletClient, {
         address: this.tokenAddress,
         abi: ERC20_ABI,
         functionName: 'approve',
         args: [warpRoute, amount],
         chain,
         account: this.account,
-      });
-      await client.waitForTransactionReceipt({ hash: approveTx });
+      })
+      await client.waitForTransactionReceipt({ hash: approveTx })
     }
 
     // Convert recipient address to bytes32
     const recipientBytes32 =
-      `0x000000000000000000000000${recipient.slice(2)}` as `0x${string}`;
+      `0x000000000000000000000000${recipient.slice(2)}` as `0x${string}`
 
     // Execute bridge transfer
-    const txHash = await walletClient.writeContract({
+    const txHash = await safeWriteContract(walletClient, {
       address: warpRoute,
       abi: HYPERLANE_WARP_ROUTE_ABI,
       functionName: 'transferRemote',
@@ -460,9 +461,9 @@ export class CrossChainBridgeService {
       value: fee,
       chain,
       account: this.account,
-    });
+    })
 
-    const receipt = await client.waitForTransactionReceipt({ hash: txHash });
+    const receipt = await client.waitForTransactionReceipt({ hash: txHash })
 
     const bridgeTx: BridgeTransaction = {
       id: `bridge-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
@@ -474,9 +475,9 @@ export class CrossChainBridgeService {
       sourceTxHash: txHash,
       status: 'confirmed',
       createdAt: new Date(),
-    };
+    }
 
-    this.pendingBridges.set(bridgeTx.id, bridgeTx);
+    this.pendingBridges.set(bridgeTx.id, bridgeTx)
 
     logger.info(
       'Bridge transaction submitted',
@@ -485,25 +486,25 @@ export class CrossChainBridgeService {
         sourceTxHash: txHash,
         gasUsed: receipt.gasUsed.toString(),
       },
-      'CrossChainBridge'
-    );
+      'CrossChainBridge',
+    )
 
-    return bridgeTx;
+    return bridgeTx
   }
 
   private async bridgeViawormhole(
     sourceChain: SupportedChainKey,
     destChain: SupportedChainKey,
     amount: bigint,
-    recipient: Address
+    recipient: Address,
   ): Promise<BridgeTransaction> {
     // Wormhole bridging to Solana
     // This would require the Wormhole SDK for full implementation
     logger.info(
       'Wormhole bridge not fully implemented',
       { sourceChain, destChain, amount: formatUnits(amount, 18) },
-      'CrossChainBridge'
-    );
+      'CrossChainBridge',
+    )
 
     const bridgeTx: BridgeTransaction = {
       id: `wormhole-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`,
@@ -515,11 +516,11 @@ export class CrossChainBridgeService {
       sourceTxHash: '0x0' as `0x${string}`,
       status: 'pending',
       createdAt: new Date(),
-    };
+    }
 
-    this.pendingBridges.set(bridgeTx.id, bridgeTx);
+    this.pendingBridges.set(bridgeTx.id, bridgeTx)
 
-    return bridgeTx;
+    return bridgeTx
   }
 
   // ===========================================================================
@@ -527,39 +528,39 @@ export class CrossChainBridgeService {
   // ===========================================================================
 
   async checkBridgeStatus(bridgeId: string): Promise<BridgeTransaction | null> {
-    const bridge = this.pendingBridges.get(bridgeId);
-    if (!bridge) return null;
+    const bridge = this.pendingBridges.get(bridgeId)
+    if (!bridge) return null
 
     if (bridge.status === 'completed' || bridge.status === 'failed') {
-      return bridge;
+      return bridge
     }
 
     // Check if message has been delivered on destination chain
-    const destClient = this.clients.get(bridge.destChain);
-    const destMailbox = SUPPORTED_CHAINS[bridge.destChain];
+    const destClient = this.clients.get(bridge.destChain)
+    const destMailbox = SUPPORTED_CHAINS[bridge.destChain]
 
     if (destClient && 'hyperlaneMailbox' in destMailbox && bridge.messageId) {
-      const delivered = await destClient.readContract({
+      const delivered = await safeReadContract<boolean>(destClient, {
         address: destMailbox.hyperlaneMailbox as Address,
         abi: HYPERLANE_MAILBOX_ABI,
         functionName: 'delivered',
         args: [bridge.messageId],
-      });
+      })
 
       if (delivered) {
-        bridge.status = 'completed';
-        bridge.completedAt = new Date();
-        this.pendingBridges.set(bridgeId, bridge);
+        bridge.status = 'completed'
+        bridge.completedAt = new Date()
+        this.pendingBridges.set(bridgeId, bridge)
       }
     }
 
-    return bridge;
+    return bridge
   }
 
   async getPendingBridges(): Promise<BridgeTransaction[]> {
     return Array.from(this.pendingBridges.values()).filter(
-      (b) => b.status === 'pending' || b.status === 'confirmed'
-    );
+      (b) => b.status === 'pending' || b.status === 'confirmed',
+    )
   }
 
   // ===========================================================================
@@ -567,7 +568,7 @@ export class CrossChainBridgeService {
   // ===========================================================================
 
   async getChainLiquidity(chain: SupportedChainKey): Promise<ChainLiquidity> {
-    const client = this.clients.get(chain);
+    const client = this.clients.get(chain)
     if (!client) {
       return {
         chain,
@@ -575,24 +576,24 @@ export class CrossChainBridgeService {
         ethBalance: 0n,
         lpTokens: 0n,
         poolAddress: zeroAddress,
-      };
+      }
     }
 
-    const warpRoute = this.warpRoutes.get(chain);
-    let tokenBalance = 0n;
+    const warpRoute = this.warpRoutes.get(chain)
+    let tokenBalance = 0n
 
     if (warpRoute && warpRoute !== zeroAddress) {
-      tokenBalance = await client.readContract({
+      tokenBalance = await safeReadContract<bigint>(client, {
         address: warpRoute,
         abi: HYPERLANE_WARP_ROUTE_ABI,
         functionName: 'balanceOf',
         args: [this.account.address],
-      });
+      })
     }
 
     const ethBalance = await client.getBalance({
       address: this.account.address,
-    });
+    })
 
     return {
       chain,
@@ -600,15 +601,15 @@ export class CrossChainBridgeService {
       ethBalance,
       lpTokens: 0n, // Would query LP pool
       poolAddress: zeroAddress, // Would need LP pool address
-    };
+    }
   }
 
   async getAllChainLiquidity(): Promise<ChainLiquidity[]> {
-    const chains: SupportedChainKey[] = ['jeju', 'mainnet', 'base', 'bsc'];
+    const chains: SupportedChainKey[] = ['jeju', 'mainnet', 'base', 'bsc']
     const results = await Promise.all(
-      chains.map((chain) => this.getChainLiquidity(chain))
-    );
-    return results;
+      chains.map((chain) => this.getChainLiquidity(chain)),
+    )
+    return results
   }
 
   // ===========================================================================
@@ -618,7 +619,7 @@ export class CrossChainBridgeService {
   async deployLiquidityToChain(
     chain: SupportedChainKey,
     tokenAmount: bigint,
-    ethAmount: bigint
+    ethAmount: bigint,
   ): Promise<{ txHash: `0x${string}` }> {
     // First bridge tokens to the target chain
     if (chain !== 'jeju') {
@@ -626,8 +627,8 @@ export class CrossChainBridgeService {
         'jeju',
         chain,
         tokenAmount,
-        this.account.address
-      );
+        this.account.address,
+      )
 
       logger.info(
         'Bridging tokens for liquidity deployment',
@@ -636,8 +637,8 @@ export class CrossChainBridgeService {
           bridgeId: bridgeTx.id,
           amount: formatUnits(tokenAmount, 18),
         },
-        'CrossChainBridge'
-      );
+        'CrossChainBridge',
+      )
     }
 
     // Add liquidity on target chain via XLPRouter (similar to liquidity-pool-service)
@@ -649,10 +650,10 @@ export class CrossChainBridgeService {
         tokenAmount: formatUnits(tokenAmount, 18),
         ethAmount: formatEther(ethAmount),
       },
-      'CrossChainBridge'
-    );
+      'CrossChainBridge',
+    )
 
-    return { txHash: '0x0' as `0x${string}` };
+    return { txHash: '0x0' as `0x${string}` }
   }
 
   // ===========================================================================
@@ -663,24 +664,24 @@ export class CrossChainBridgeService {
     logger.info(
       'Initializing Cross-Chain Bridge Service',
       undefined,
-      'CrossChainBridge'
-    );
+      'CrossChainBridge',
+    )
 
     // Verify connectivity to each chain
     for (const [chain, client] of this.clients) {
-      const blockNumber = await client.getBlockNumber();
+      const blockNumber = await client.getBlockNumber()
       logger.info(
         `Connected to ${chain}`,
         { blockNumber: blockNumber.toString() },
-        'CrossChainBridge'
-      );
+        'CrossChainBridge',
+      )
     }
 
     logger.info(
       'Cross-Chain Bridge Service initialized',
       undefined,
-      'CrossChainBridge'
-    );
+      'CrossChainBridge',
+    )
   }
 
   // ===========================================================================
@@ -688,11 +689,11 @@ export class CrossChainBridgeService {
   // ===========================================================================
 
   getSupportedChains(): SupportedChainKey[] {
-    return Object.keys(SUPPORTED_CHAINS) as SupportedChainKey[];
+    return Object.keys(SUPPORTED_CHAINS) as SupportedChainKey[]
   }
 
   getChainConfig(chain: SupportedChainKey) {
-    return SUPPORTED_CHAINS[chain];
+    return SUPPORTED_CHAINS[chain]
   }
 }
 
@@ -700,25 +701,25 @@ export class CrossChainBridgeService {
 // SINGLETON
 // =============================================================================
 
-let crossChainBridgeService: CrossChainBridgeService | null = null;
+let crossChainBridgeService: CrossChainBridgeService | null = null
 
 export function getCrossChainBridgeService(
-  config?: Partial<BridgeConfig>
+  config?: Partial<BridgeConfig>,
 ): CrossChainBridgeService {
   if (!crossChainBridgeService) {
-    crossChainBridgeService = new CrossChainBridgeService(config);
+    crossChainBridgeService = new CrossChainBridgeService(config)
   }
-  return crossChainBridgeService;
+  return crossChainBridgeService
 }
 
 export async function initializeCrossChainBridge(
-  config?: Partial<BridgeConfig>
+  config?: Partial<BridgeConfig>,
 ): Promise<CrossChainBridgeService> {
-  const service = getCrossChainBridgeService(config);
-  await service.initialize();
-  return service;
+  const service = getCrossChainBridgeService(config)
+  await service.initialize()
+  return service
 }
 
 export function resetCrossChainBridgeService(): void {
-  crossChainBridgeService = null;
+  crossChainBridgeService = null
 }

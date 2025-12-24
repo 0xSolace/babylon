@@ -26,19 +26,17 @@
  * />
  * ```
  */
-'use client';
-
-import { cn } from '@babylon/shared';
-import { Star } from 'lucide-react';
-import { useState } from 'react';
+import { cn } from '@babylon/shared'
+import { Star } from 'lucide-react'
+import { useState } from 'react'
 
 interface StarRatingProps {
-  value?: number; // 0-100 score
-  onChange?: (score: number) => void;
-  size?: 'sm' | 'md' | 'lg';
-  readonly?: boolean;
-  showLabel?: boolean;
-  className?: string;
+  value?: number // 0-100 score
+  onChange?: (score: number) => void
+  size?: 'sm' | 'md' | 'lg'
+  readonly?: boolean
+  showLabel?: boolean
+  className?: string
 }
 
 /**
@@ -50,7 +48,7 @@ interface StarRatingProps {
  * @returns Star rating from 0-5 (rounded to 0.5)
  */
 function scoreToStars(score: number): number {
-  return Math.round((score / 100) * 5 * 2) / 2; // Round to nearest 0.5
+  return Math.round((score / 100) * 5 * 2) / 2 // Round to nearest 0.5
 }
 
 /**
@@ -60,7 +58,7 @@ function scoreToStars(score: number): number {
  * @returns Score from 0-100
  */
 function starsToScore(stars: number): number {
-  return Math.round((stars / 5) * 100);
+  return Math.round((stars / 5) * 100)
 }
 
 export function StarRating({
@@ -71,48 +69,52 @@ export function StarRating({
   showLabel = true,
   className = '',
 }: StarRatingProps) {
-  const currentStars = scoreToStars(value);
-  const [hoveredStars, setHoveredStars] = useState<number | null>(null);
+  const currentStars = scoreToStars(value)
+  const [hoveredStars, setHoveredStars] = useState<number | null>(null)
 
   const displayStars =
-    hoveredStars !== null && !readonly ? hoveredStars : currentStars;
+    hoveredStars !== null && !readonly ? hoveredStars : currentStars
 
   const handleClick = (stars: number) => {
-    if (readonly || !onChange) return;
-    const newScore = starsToScore(stars);
-    onChange(newScore);
-  };
+    if (readonly || !onChange) return
+    const newScore = starsToScore(stars)
+    onChange(newScore)
+  }
 
   const handleMouseEnter = (stars: number) => {
-    if (readonly) return;
-    setHoveredStars(stars);
-  };
+    if (readonly) return
+    setHoveredStars(stars)
+  }
 
   const handleMouseLeave = () => {
-    if (readonly) return;
-    setHoveredStars(null);
-  };
+    if (readonly) return
+    setHoveredStars(null)
+  }
 
   // Size classes
   const sizeClasses = {
     sm: 'w-4 h-4',
     md: 'w-6 h-6',
     lg: 'w-8 h-8',
-  };
+  }
 
   const textSizeClasses = {
     sm: 'text-xs',
     md: 'text-sm',
     lg: 'text-base',
-  };
+  }
 
   return (
     <div className={cn('flex items-center gap-2', className)}>
       {/* Stars */}
-      <div className="flex items-center gap-1" onMouseLeave={handleMouseLeave}>
+      <fieldset
+        className="flex items-center gap-1 border-0 p-0"
+        onMouseLeave={handleMouseLeave}
+        aria-label="Star rating"
+      >
         {[1, 2, 3, 4, 5].map((star) => {
-          const isFilled = star <= Math.floor(displayStars);
-          const isHalfFilled = !isFilled && star - 0.5 === displayStars;
+          const isFilled = star <= Math.floor(displayStars)
+          const isHalfFilled = !isFilled && star - 0.5 === displayStars
 
           return (
             <button
@@ -124,7 +126,7 @@ export function StarRating({
               className={cn(
                 'relative transition-transform',
                 !readonly && 'cursor-pointer hover:scale-110',
-                readonly && 'cursor-default'
+                readonly && 'cursor-default',
               )}
               aria-label={`Rate ${star} star${star !== 1 ? 's' : ''}`}
             >
@@ -136,22 +138,22 @@ export function StarRating({
                     ? 'text-yellow-500'
                     : isHalfFilled
                       ? 'text-yellow-500/50'
-                      : 'text-gray-600'
+                      : 'text-gray-600',
                 )}
                 fill={isFilled || isHalfFilled ? 'currentColor' : 'none'}
                 strokeWidth={2}
               />
             </button>
-          );
+          )
         })}
-      </div>
+      </fieldset>
 
       {/* Label */}
       {showLabel && (
         <span
           className={cn(
             'font-medium text-muted-foreground',
-            textSizeClasses[size]
+            textSizeClasses[size],
           )}
         >
           {displayStars > 0 ? (
@@ -165,7 +167,7 @@ export function StarRating({
         </span>
       )}
     </div>
-  );
+  )
 }
 
 /**
@@ -174,9 +176,9 @@ export function StarRating({
  * Read-only compact star display without label
  */
 interface StarRatingCompactProps {
-  score: number; // 0-100
-  size?: 'sm' | 'md' | 'lg';
-  className?: string;
+  score: number // 0-100
+  size?: 'sm' | 'md' | 'lg'
+  className?: string
 }
 
 export function StarRatingCompact({
@@ -184,19 +186,19 @@ export function StarRatingCompact({
   size = 'sm',
   className = '',
 }: StarRatingCompactProps) {
-  const stars = scoreToStars(score);
+  const stars = scoreToStars(score)
 
   const sizeClasses = {
     sm: 'w-3 h-3',
     md: 'w-4 h-4',
     lg: 'w-5 h-5',
-  };
+  }
 
   return (
     <div className={cn('inline-flex items-center gap-0.5', className)}>
       {[1, 2, 3, 4, 5].map((star) => {
-        const isFilled = star <= Math.floor(stars);
-        const isHalfFilled = !isFilled && star - 0.5 === stars;
+        const isFilled = star <= Math.floor(stars)
+        const isHalfFilled = !isFilled && star - 0.5 === stars
 
         return (
           <Star
@@ -207,14 +209,14 @@ export function StarRatingCompact({
                 ? 'text-yellow-500'
                 : isHalfFilled
                   ? 'text-yellow-500/50'
-                  : 'text-gray-600'
+                  : 'text-gray-600',
             )}
             fill={isFilled || isHalfFilled ? 'currentColor' : 'none'}
           />
-        );
+        )
       })}
     </div>
-  );
+  )
 }
 
 /**
@@ -223,10 +225,10 @@ export function StarRatingCompact({
  * Star rating with text description labels
  */
 interface StarRatingInputProps {
-  value?: number;
-  onChange?: (score: number) => void;
-  showDescriptions?: boolean;
-  className?: string;
+  value?: number
+  onChange?: (score: number) => void
+  showDescriptions?: boolean
+  className?: string
 }
 
 const RATING_DESCRIPTIONS: Record<number, string> = {
@@ -235,7 +237,7 @@ const RATING_DESCRIPTIONS: Record<number, string> = {
   3: 'Average',
   4: 'Good',
   5: 'Excellent',
-};
+}
 
 export function StarRatingInput({
   value = 0,
@@ -243,35 +245,39 @@ export function StarRatingInput({
   showDescriptions = true,
   className = '',
 }: StarRatingInputProps) {
-  const currentStars = scoreToStars(value);
-  const [hoveredStars, setHoveredStars] = useState<number | null>(null);
+  const currentStars = scoreToStars(value)
+  const [hoveredStars, setHoveredStars] = useState<number | null>(null)
 
   // Show description for hovered stars, or current stars if not hovering
-  const displayStars = hoveredStars !== null ? hoveredStars : currentStars;
+  const displayStars = hoveredStars !== null ? hoveredStars : currentStars
   const description =
-    displayStars > 0 ? RATING_DESCRIPTIONS[Math.ceil(displayStars)] : '';
+    displayStars > 0 ? RATING_DESCRIPTIONS[Math.ceil(displayStars)] : ''
 
   const handleChange = (newScore: number) => {
     if (onChange) {
-      onChange(newScore);
+      onChange(newScore)
     }
-  };
+  }
 
   const handleMouseEnter = (stars: number) => {
-    setHoveredStars(stars);
-  };
+    setHoveredStars(stars)
+  }
 
   const handleMouseLeave = () => {
-    setHoveredStars(null);
-  };
+    setHoveredStars(null)
+  }
 
   return (
     <div className={cn('space-y-2', className)}>
-      <div onMouseLeave={handleMouseLeave} className="inline-block">
+      <fieldset
+        onMouseLeave={handleMouseLeave}
+        className="inline-block border-0 p-0"
+        aria-label="Star rating input"
+      >
         <div className="flex items-center gap-1">
           {[1, 2, 3, 4, 5].map((star) => {
-            const isFilled = star <= Math.floor(displayStars);
-            const isHalfFilled = !isFilled && star - 0.5 === displayStars;
+            const isFilled = star <= Math.floor(displayStars)
+            const isHalfFilled = !isFilled && star - 0.5 === displayStars
 
             return (
               <button
@@ -289,19 +295,19 @@ export function StarRatingInput({
                       ? 'text-yellow-500'
                       : isHalfFilled
                         ? 'text-yellow-500/50'
-                        : 'text-gray-600'
+                        : 'text-gray-600',
                   )}
                   fill={isFilled || isHalfFilled ? 'currentColor' : 'none'}
                   strokeWidth={2}
                 />
               </button>
-            );
+            )
           })}
         </div>
-      </div>
+      </fieldset>
       {showDescriptions && description && (
         <div className="font-medium text-foreground text-sm">{description}</div>
       )}
     </div>
-  );
+  )
 }

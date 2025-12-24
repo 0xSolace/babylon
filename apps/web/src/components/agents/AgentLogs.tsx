@@ -1,29 +1,27 @@
-'use client';
-
-import { cn, logger } from '@babylon/shared';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { FileText, Filter } from 'lucide-react';
-import { useState } from 'react';
-import { useAuth } from '@/hooks/useAuth';
+import { cn, logger } from '@babylon/shared'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { FileText, Filter } from 'lucide-react'
+import { useState } from 'react'
+import { useAuth } from '@/hooks/useAuth'
 
 /**
  * Log structure for agent logs.
  */
 interface Log {
-  id: string;
-  type: string;
-  level: string;
-  message: string;
-  prompt?: string;
-  completion?: string;
-  thinking?: string;
-  metadata?: Record<string, unknown>;
-  createdAt: string;
+  id: string
+  type: string
+  level: string
+  message: string
+  prompt?: string
+  completion?: string
+  thinking?: string
+  metadata?: Record<string, unknown>
+  createdAt: string
 }
 
 interface LogsResponse {
-  success: boolean;
-  logs: Log[];
+  success: boolean
+  logs: Log[]
 }
 
 /**
@@ -51,86 +49,86 @@ interface LogsResponse {
  * ```
  */
 interface AgentLogsProps {
-  agentId: string;
+  agentId: string
 }
 
 export function AgentLogs({ agentId }: AgentLogsProps) {
-  const { getAccessToken } = useAuth();
-  const queryClient = useQueryClient();
-  const [typeFilter, setTypeFilter] = useState<string>('all');
-  const [levelFilter, setLevelFilter] = useState<string>('all');
-  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const { getAccessToken } = useAuth()
+  const queryClient = useQueryClient()
+  const [typeFilter, setTypeFilter] = useState<string>('all')
+  const [levelFilter, setLevelFilter] = useState<string>('all')
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
 
   const { data: logs = [], isLoading } = useQuery({
     queryKey: ['agent', 'logs', agentId, typeFilter, levelFilter],
     queryFn: async (): Promise<Log[]> => {
-      const token = await getAccessToken();
-      if (!token) return [];
+      const token = await getAccessToken()
+      if (!token) return []
 
-      let url = `/api/agents/${agentId}/logs?limit=100`;
-      if (typeFilter !== 'all') url += `&type=${typeFilter}`;
-      if (levelFilter !== 'all') url += `&level=${levelFilter}`;
+      let url = `/api/agents/${agentId}/logs?limit=100`
+      if (typeFilter !== 'all') url += `&type=${typeFilter}`
+      if (levelFilter !== 'all') url += `&level=${levelFilter}`
 
       const res = await fetch(url, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
-      });
+      })
 
       if (!res.ok) {
-        logger.error('Failed to fetch logs', undefined, 'AgentLogs');
-        return [];
+        logger.error('Failed to fetch logs', undefined, 'AgentLogs')
+        return []
       }
 
-      const data: LogsResponse = await res.json();
-      return data.success && data.logs ? data.logs : [];
+      const data: LogsResponse = await res.json()
+      return data.success && data.logs ? data.logs : []
     },
     refetchInterval: 5000,
-  });
+  })
 
   const refetch = () => {
     queryClient.invalidateQueries({
       queryKey: ['agent', 'logs', agentId, typeFilter, levelFilter],
-    });
-  };
+    })
+  }
 
   const toggleExpanded = (logId: string) => {
-    const newExpanded = new Set(expanded);
+    const newExpanded = new Set(expanded)
     if (newExpanded.has(logId)) {
-      newExpanded.delete(logId);
+      newExpanded.delete(logId)
     } else {
-      newExpanded.add(logId);
+      newExpanded.add(logId)
     }
-    setExpanded(newExpanded);
-  };
+    setExpanded(newExpanded)
+  }
 
   const getLevelColor = (level: string) => {
     switch (level) {
       case 'error':
-        return 'text-red-600';
+        return 'text-red-600'
       case 'warn':
-        return 'text-yellow-600';
+        return 'text-yellow-600'
       case 'debug':
-        return 'text-muted-foreground';
+        return 'text-muted-foreground'
       default:
-        return 'text-blue-600';
+        return 'text-blue-600'
     }
-  };
+  }
 
   const getTypeColor = (type: string) => {
     switch (type) {
       case 'error':
-        return 'bg-red-500/10 border-red-500/20';
+        return 'bg-red-500/10 border-red-500/20'
       case 'trade':
-        return 'bg-green-500/10 border-green-500/20';
+        return 'bg-green-500/10 border-green-500/20'
       case 'chat':
-        return 'bg-blue-500/10 border-blue-500/20';
+        return 'bg-blue-500/10 border-blue-500/20'
       case 'tick':
-        return 'bg-purple-500/10 border-purple-500/20';
+        return 'bg-purple-500/10 border-purple-500/20'
       default:
-        return 'bg-muted/30 border-border/50';
+        return 'bg-muted/30 border-border/50'
     }
-  };
+  }
 
   return (
     <div className="space-y-4">
@@ -162,6 +160,7 @@ export function AgentLogs({ agentId }: AgentLogsProps) {
             <option value="debug">Debug</option>
           </select>
           <button
+            type="button"
             onClick={refetch}
             disabled={isLoading}
             className="rounded-lg bg-muted px-4 py-2 font-medium text-foreground transition-all hover:bg-muted/80 disabled:cursor-not-allowed disabled:opacity-50"
@@ -191,7 +190,7 @@ export function AgentLogs({ agentId }: AgentLogsProps) {
                       <span
                         className={cn(
                           'font-mono font-semibold text-xs uppercase',
-                          getLevelColor(log.level)
+                          getLevelColor(log.level),
                         )}
                       >
                         {log.level}
@@ -212,6 +211,7 @@ export function AgentLogs({ agentId }: AgentLogsProps) {
                       log.thinking ||
                       log.metadata) && (
                       <button
+                        type="button"
                         onClick={() => toggleExpanded(log.id)}
                         className="mt-2 rounded bg-muted px-3 py-1 text-xs transition-all hover:bg-muted/80"
                       >
@@ -271,5 +271,5 @@ export function AgentLogs({ agentId }: AgentLogsProps) {
         )}
       </div>
     </div>
-  );
+  )
 }

@@ -1,5 +1,3 @@
-'use client';
-
 import {
   ArrowLeft,
   Loader2,
@@ -7,26 +5,26 @@ import {
   MoreVertical,
   Settings,
   Users,
-} from 'lucide-react';
-import Link from 'next/link';
-import { Avatar } from '@/components/shared/Avatar';
-import { Button } from '@/components/ui/button';
+} from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { Avatar } from '@/components/shared/Avatar'
+import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu';
-import type { ChatDetails } from './types';
-import { getProfilePath } from './types';
+} from '@/components/ui/dropdown-menu'
+import type { ChatDetails } from './types'
+import { getProfilePath } from './types'
 
 interface ChatViewHeaderProps {
-  chatDetails: ChatDetails;
-  sseConnected: boolean;
-  showBackButton?: boolean;
-  onBack?: () => void;
-  onManageGroup: () => void;
-  onLeaveChat: () => void;
+  chatDetails: ChatDetails
+  sseConnected: boolean
+  showBackButton?: boolean
+  onBack?: () => void
+  onManageGroup: () => void
+  onLeaveChat: () => void
 }
 
 export function ChatViewHeader({
@@ -42,6 +40,7 @@ export function ChatViewHeader({
       <div className="flex items-center gap-3">
         {showBackButton && (
           <button
+            type="button"
             onClick={onBack}
             className="flex items-center gap-2 rounded-md px-3 py-1.5 font-medium text-foreground text-sm transition-colors hover:bg-sidebar-accent/50 lg:hidden"
           >
@@ -57,7 +56,7 @@ export function ChatViewHeader({
           </div>
         ) : chatDetails.chat.otherUser ? (
           <Link
-            href={getProfilePath(chatDetails.chat.otherUser)}
+            to={getProfilePath(chatDetails.chat.otherUser)}
             className="transition-opacity hover:opacity-80"
           >
             <Avatar
@@ -81,7 +80,7 @@ export function ChatViewHeader({
               </h3>
             ) : chatDetails.chat.otherUser ? (
               <Link
-                href={getProfilePath(chatDetails.chat.otherUser)}
+                to={getProfilePath(chatDetails.chat.otherUser)}
                 className="font-bold text-foreground text-lg transition-colors hover:text-primary"
               >
                 {chatDetails.chat.otherUser.displayName || 'Chat'}
@@ -148,5 +147,5 @@ export function ChatViewHeader({
         )}
       </div>
     </div>
-  );
+  )
 }

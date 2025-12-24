@@ -1,40 +1,40 @@
-import type { JsonValue } from '@babylon/shared';
-import type { IAgentRuntime, Route } from '@elizaos/core';
-import type { AutonomyService } from './service';
-import { AutonomousServiceType } from './types';
+import type { JsonValue } from '@babylon/shared'
+import type { IAgentRuntime, Route } from '@elizaos/core'
+import type { AutonomyService } from './service'
+import { AutonomousServiceType } from './types'
 
 // Route handler types compatible with ElizaOS
 interface RouteRequest {
-  body?: unknown;
-  params?: Record<string, string>;
-  query?: Record<string, string | string[]>;
+  body?: unknown
+  params?: Record<string, string>
+  query?: Record<string, string | string[]>
 }
 
 interface RouteResponse {
-  status?: (code: number) => RouteResponse;
-  json?: (data: unknown) => void;
+  status?: (code: number) => RouteResponse
+  json?: (data: unknown) => void
 }
 
 // Helper to safely send JSON responses
 function sendJson(res: RouteResponse, data: unknown, statusCode = 200): void {
   if (statusCode !== 200 && res.status) {
-    res.status(statusCode).json?.(data);
+    res.status(statusCode).json?.(data)
   } else {
-    res.json?.(data);
+    res.json?.(data)
   }
 }
 
 // Type guard to check if service is AutonomyService
 function isAutonomyService(service: unknown): service is AutonomyService {
+  if (service === null || typeof service !== 'object') return false
+  const obj = service as Record<string, unknown>
   return (
-    service !== null &&
-    typeof service === 'object' &&
-    'getStatus' in service &&
-    'enableAutonomy' in service &&
-    'disableAutonomy' in service &&
-    'setLoopInterval' in service &&
-    typeof (service as { getStatus: unknown }).getStatus === 'function'
-  );
+    'getStatus' in obj &&
+    'enableAutonomy' in obj &&
+    'disableAutonomy' in obj &&
+    'setLoopInterval' in obj &&
+    typeof obj.getStatus === 'function'
+  )
 }
 
 /**
@@ -47,24 +47,24 @@ export const autonomyRoutes: Route[] = [
     handler: async (
       req: RouteRequest,
       res: RouteResponse,
-      runtime: IAgentRuntime
+      runtime: IAgentRuntime,
     ) => {
-      void req;
+      void req
 
       const autonomyService = runtime.getService(
-        AutonomousServiceType.AUTONOMOUS
-      );
+        AutonomousServiceType.AUTONOMOUS,
+      )
 
       if (!autonomyService || !isAutonomyService(autonomyService)) {
         sendJson(
           res,
           { success: false, error: 'Autonomy service not available' },
-          503
-        );
-        return;
+          503,
+        )
+        return
       }
 
-      const status = autonomyService.getStatus();
+      const status = autonomyService.getStatus()
 
       sendJson(res, {
         success: true,
@@ -77,7 +77,7 @@ export const autonomyRoutes: Route[] = [
           agentId: runtime.agentId,
           characterName: runtime.character?.name || 'Agent',
         },
-      });
+      })
     },
   },
 
@@ -87,25 +87,25 @@ export const autonomyRoutes: Route[] = [
     handler: async (
       req: RouteRequest,
       res: RouteResponse,
-      runtime: IAgentRuntime
+      runtime: IAgentRuntime,
     ) => {
-      void req;
+      void req
 
       const autonomyService = runtime.getService(
-        AutonomousServiceType.AUTONOMOUS
-      );
+        AutonomousServiceType.AUTONOMOUS,
+      )
 
       if (!autonomyService || !isAutonomyService(autonomyService)) {
         sendJson(
           res,
           { success: false, error: 'Autonomy service not available' },
-          503
-        );
-        return;
+          503,
+        )
+        return
       }
 
-      await autonomyService.enableAutonomy();
-      const status = autonomyService.getStatus();
+      await autonomyService.enableAutonomy()
+      const status = autonomyService.getStatus()
 
       sendJson(res, {
         success: true,
@@ -115,7 +115,7 @@ export const autonomyRoutes: Route[] = [
           running: status.running,
           interval: status.interval,
         },
-      });
+      })
     },
   },
 
@@ -125,25 +125,25 @@ export const autonomyRoutes: Route[] = [
     handler: async (
       req: RouteRequest,
       res: RouteResponse,
-      runtime: IAgentRuntime
+      runtime: IAgentRuntime,
     ) => {
-      void req;
+      void req
 
       const autonomyService = runtime.getService(
-        AutonomousServiceType.AUTONOMOUS
-      );
+        AutonomousServiceType.AUTONOMOUS,
+      )
 
       if (!autonomyService || !isAutonomyService(autonomyService)) {
         sendJson(
           res,
           { success: false, error: 'Autonomy service not available' },
-          503
-        );
-        return;
+          503,
+        )
+        return
       }
 
-      await autonomyService.disableAutonomy();
-      const status = autonomyService.getStatus();
+      await autonomyService.disableAutonomy()
+      const status = autonomyService.getStatus()
 
       sendJson(res, {
         success: true,
@@ -153,7 +153,7 @@ export const autonomyRoutes: Route[] = [
           running: status.running,
           interval: status.interval,
         },
-      });
+      })
     },
   },
 
@@ -163,32 +163,32 @@ export const autonomyRoutes: Route[] = [
     handler: async (
       req: RouteRequest,
       res: RouteResponse,
-      runtime: IAgentRuntime
+      runtime: IAgentRuntime,
     ) => {
-      void req;
+      void req
 
       const autonomyService = runtime.getService(
-        AutonomousServiceType.AUTONOMOUS
-      );
+        AutonomousServiceType.AUTONOMOUS,
+      )
 
       if (!autonomyService || !isAutonomyService(autonomyService)) {
         sendJson(
           res,
           { success: false, error: 'Autonomy service not available' },
-          503
-        );
-        return;
+          503,
+        )
+        return
       }
 
-      const currentStatus = autonomyService.getStatus();
+      const currentStatus = autonomyService.getStatus()
 
       if (currentStatus.enabled) {
-        await autonomyService.disableAutonomy();
+        await autonomyService.disableAutonomy()
       } else {
-        await autonomyService.enableAutonomy();
+        await autonomyService.enableAutonomy()
       }
 
-      const newStatus = autonomyService.getStatus();
+      const newStatus = autonomyService.getStatus()
 
       sendJson(res, {
         success: true,
@@ -198,7 +198,7 @@ export const autonomyRoutes: Route[] = [
           running: newStatus.running,
           interval: newStatus.interval,
         },
-      });
+      })
     },
   },
 
@@ -208,22 +208,22 @@ export const autonomyRoutes: Route[] = [
     handler: async (
       req: RouteRequest,
       res: RouteResponse,
-      runtime: IAgentRuntime
+      runtime: IAgentRuntime,
     ) => {
       const autonomyService = runtime.getService(
-        AutonomousServiceType.AUTONOMOUS
-      );
+        AutonomousServiceType.AUTONOMOUS,
+      )
 
       if (!autonomyService || !isAutonomyService(autonomyService)) {
         sendJson(
           res,
           { success: false, error: 'Autonomy service not available' },
-          503
-        );
-        return;
+          503,
+        )
+        return
       }
 
-      const { interval } = req.body as { interval?: JsonValue };
+      const { interval } = req.body as { interval?: JsonValue }
 
       if (
         typeof interval !== 'number' ||
@@ -237,13 +237,13 @@ export const autonomyRoutes: Route[] = [
             error:
               'Interval must be a number between 5000ms (5s) and 600000ms (10m)',
           },
-          400
-        );
-        return;
+          400,
+        )
+        return
       }
 
-      autonomyService.setLoopInterval(interval);
-      const status = autonomyService.getStatus();
+      autonomyService.setLoopInterval(interval)
+      const status = autonomyService.getStatus()
 
       sendJson(res, {
         success: true,
@@ -252,7 +252,7 @@ export const autonomyRoutes: Route[] = [
           interval: status.interval,
           intervalSeconds: Math.round(status.interval / 1000),
         },
-      });
+      })
     },
   },
-];
+]

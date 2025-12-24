@@ -1,0 +1,127 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "workspaces": {
+    ".": {
+      "entry": ["scripts/**/*.ts"],
+      "project": ["scripts/**/*.ts"],
+      "ignore": ["**/dist/**", "**/node_modules/**"]
+    },
+    "apps/cli": {
+      "entry": ["src/index.ts", "src/commands/*.ts"],
+      "project": ["src/**/*.ts"]
+    },
+    "apps/docs": {
+      "entry": ["pages/**/*.{ts,tsx,mdx}", "vocs.config.ts", "scripts/**/*.ts"],
+      "project": ["**/*.{ts,tsx}"],
+      "ignore": ["pages/_generated/**"]
+    },
+    "apps/server": {
+      "entry": ["src/index.ts", "src/app.ts"],
+      "project": ["src/**/*.ts"]
+    },
+    "apps/web": {
+      "entry": ["src/main.tsx", "src/App.tsx", "vite.config.ts", "tailwind.config.ts", "scripts/**/*.ts"],
+      "project": ["src/**/*.{ts,tsx}"]
+    },
+    "packages/a2a": {
+      "entry": ["src/index.ts"],
+      "project": ["src/**/*.ts"]
+    },
+    "packages/agents": {
+      "entry": ["src/index.ts", "scripts/**/*.ts"],
+      "project": ["src/**/*.ts"]
+    },
+    "packages/api": {
+      "entry": ["src/index.ts"],
+      "project": ["src/**/*.ts"]
+    },
+    "packages/auth": {
+      "entry": ["src/index.ts"],
+      "project": ["src/**/*.{ts,tsx}"]
+    },
+    "packages/client": {
+      "entry": ["src/index.ts"],
+      "project": ["src/**/*.ts"]
+    },
+    "packages/db": {
+      "entry": ["src/index.ts"],
+      "project": ["src/**/*.ts"]
+    },
+    "packages/engine": {
+      "entry": ["src/index.ts", "examples/**/*.ts"],
+      "project": ["src/**/*.ts"]
+    },
+    "packages/mcp": {
+      "entry": ["src/index.ts"],
+      "project": ["src/**/*.ts"]
+    },
+    "packages/messaging": {
+      "entry": ["src/index.ts"],
+      "project": ["src/**/*.ts"]
+    },
+    "packages/moderation": {
+      "entry": ["src/index.ts"],
+      "project": ["src/**/*.ts"]
+    },
+    "packages/plugin-babylon": {
+      "entry": ["src/index.ts", "build.ts"],
+      "project": ["src/**/*.ts"]
+    },
+    "packages/shared": {
+      "entry": ["src/index.ts"],
+      "project": ["src/**/*.ts"]
+    },
+    "packages/testing": {
+      "entry": [
+        "src/**/*.ts",
+        "unit/**/*.ts",
+        "integration/**/*.ts",
+        "e2e/**/*.ts",
+        "synpress/**/*.ts",
+        "playwright.config.ts",
+        "helpers/**/*.{ts,tsx}",
+        "shared/**/*.ts",
+        "types/**/*.ts"
+      ],
+      "project": ["**/*.{ts,tsx}"]
+    },
+    "packages/training": {
+      "entry": ["src/index.ts"],
+      "project": ["src/**/*.ts"]
+    }
+  },
+  "ignore": [
+    "**/dist/**",
+    "**/node_modules/**",
+    "**/*.d.ts",
+    "**/coverage/**",
+    "**/test-results/**",
+    "**/benchmark-output/**",
+    "**/training-data/**"
+  ],
+  "ignoreDependencies": [
+    "@types/*",
+    "husky",
+    "lint-staged",
+    "@biomejs/biome",
+    "tsx",
+    "@nomicfoundation/hardhat-toolbox",
+    "hardhat",
+    "csv-parse",
+    "@prb/math",
+    "posthog-node",
+    "@jejunetwork/*",
+    "elysia",
+    "@elysiajs/*",
+    "jose",
+    "arctic",
+    "@tanstack/react-query",
+    "react-dom",
+    "@farcaster/hub-nodejs",
+    "@elizaos/cli",
+    "dotenv",
+    "prettier",
+    "swagger-jsdoc"
+  ],
+  "ignoreExportsUsedInFile": true
+}

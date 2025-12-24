@@ -11,10 +11,10 @@
  * Parsed command-line arguments structure.
  */
 export interface ParsedArgs {
-  command: string;
-  positional: string[];
-  flags: Record<string, boolean>;
-  options: Record<string, string>;
+  command: string
+  positional: string[]
+  flags: Record<string, boolean>
+  options: Record<string, string>
 }
 
 /**
@@ -41,44 +41,44 @@ export function parseArgs(args: string[]): ParsedArgs {
     positional: [],
     flags: {},
     options: {},
-  };
+  }
 
   for (let i = 0; i < args.length; i++) {
-    const arg = args[i];
-    if (!arg) continue;
+    const arg = args[i]
+    if (!arg) continue
 
     if (arg.startsWith('--')) {
-      const [key, value] = arg.slice(2).split('=');
+      const [key, value] = arg.slice(2).split('=')
       if (key) {
         if (value !== undefined) {
-          result.options[key] = value;
+          result.options[key] = value
         } else {
-          const nextArg = args[i + 1];
+          const nextArg = args[i + 1]
           if (nextArg && !nextArg.startsWith('-')) {
-            result.options[key] = nextArg;
-            i++;
+            result.options[key] = nextArg
+            i++
           } else {
-            result.flags[key] = true;
+            result.flags[key] = true
           }
         }
       }
     } else if (arg.startsWith('-') && arg.length === 2) {
-      const key = arg.slice(1);
-      const nextArg = args[i + 1];
+      const key = arg.slice(1)
+      const nextArg = args[i + 1]
       if (nextArg && !nextArg.startsWith('-')) {
-        result.options[key] = nextArg;
-        i++;
+        result.options[key] = nextArg
+        i++
       } else {
-        result.flags[key] = true;
+        result.flags[key] = true
       }
     } else if (!result.command) {
-      result.command = arg;
+      result.command = arg
     } else {
-      result.positional.push(arg);
+      result.positional.push(arg)
     }
   }
 
-  return result;
+  return result
 }
 
 /**
@@ -89,10 +89,8 @@ export function parseArgs(args: string[]): ParsedArgs {
  */
 export function wantsHelp(args: ParsedArgs): boolean {
   return (
-    args.flags['help'] === true ||
-    args.flags['h'] === true ||
-    args.command === 'help'
-  );
+    args.flags.help === true || args.flags.h === true || args.command === 'help'
+  )
 }
 
 /**
@@ -112,9 +110,9 @@ export function wantsHelp(args: ParsedArgs): boolean {
 export function getOption(
   args: ParsedArgs,
   long: string,
-  short?: string
+  short?: string,
 ): string | undefined {
-  return args.options[long] ?? (short ? args.options[short] : undefined);
+  return args.options[long] ?? (short ? args.options[short] : undefined)
 }
 
 /**
@@ -134,9 +132,9 @@ export function getOption(
 export function getFlag(
   args: ParsedArgs,
   long: string,
-  short?: string
+  short?: string,
 ): boolean {
   return (
     args.flags[long] === true || (short ? args.flags[short] === true : false)
-  );
+  )
 }

@@ -10,7 +10,7 @@
  * @packageDocumentation
  */
 
-import { logger } from '@babylon/shared';
+import { logger } from '@babylon/shared'
 import {
   type Address,
   type Chain,
@@ -19,12 +19,10 @@ import {
   formatEther,
   formatUnits,
   http,
-  type PublicClient,
-  type WalletClient,
   zeroAddress,
-} from 'viem';
-import { privateKeyToAccount } from 'viem/accounts';
-import { base, bsc, mainnet, sepolia } from 'viem/chains';
+} from 'viem'
+import { privateKeyToAccount } from 'viem/accounts'
+import { base, bsc, mainnet, sepolia } from 'viem/chains'
 
 // =============================================================================
 // TYPES
@@ -32,59 +30,59 @@ import { base, bsc, mainnet, sepolia } from 'viem/chains';
 
 export interface LiquidityConfig {
   // Network
-  chainId: number;
-  rpcUrl: string;
+  chainId: number
+  rpcUrl: string
 
   // Contracts
-  tokenAddress: Address;
-  wethAddress: Address;
-  xlpV2FactoryAddress: Address;
-  xlpRouterAddress: Address;
-  lpLockerAddress: Address;
-  feeDistributorAddress: Address;
-  ethUsdPriceFeedAddress?: Address; // Chainlink ETH/USD aggregator
+  tokenAddress: Address
+  wethAddress: Address
+  xlpV2FactoryAddress: Address
+  xlpRouterAddress: Address
+  lpLockerAddress: Address
+  feeDistributorAddress: Address
+  ethUsdPriceFeedAddress?: Address // Chainlink ETH/USD aggregator
 
   // Keys
-  deployerPrivateKey: `0x${string}`;
-  treasuryAddress: Address;
+  deployerPrivateKey: `0x${string}`
+  treasuryAddress: Address
 
   // LP Settings
-  lpTokensToLock: number; // % of LP tokens to lock (0-100)
-  lpLockDuration: number; // seconds
-  teamFeeBps: number; // % of trading fees to team (bps)
-  holdersFeeBps: number; // % of trading fees to holders (bps)
+  lpTokensToLock: number // % of LP tokens to lock (0-100)
+  lpLockDuration: number // seconds
+  teamFeeBps: number // % of trading fees to team (bps)
+  holdersFeeBps: number // % of trading fees to holders (bps)
 }
 
 export interface PoolInfo {
-  pairAddress: Address;
-  token0: Address;
-  token1: Address;
-  reserve0: bigint;
-  reserve1: bigint;
-  lpTotalSupply: bigint;
-  price: number; // token price in ETH
+  pairAddress: Address
+  token0: Address
+  token1: Address
+  reserve0: bigint
+  reserve1: bigint
+  lpTotalSupply: bigint
+  price: number // token price in ETH
 }
 
 export interface LPPosition {
-  lpBalance: bigint;
-  token0Amount: bigint;
-  token1Amount: bigint;
-  shareOfPool: number; // bps
+  lpBalance: bigint
+  token0Amount: bigint
+  token1Amount: bigint
+  shareOfPool: number // bps
 }
 
 export interface LockedLPInfo {
-  lockId: bigint;
-  lpAmount: bigint;
-  unlockTime: number;
-  beneficiary: Address;
-  isPermanent: boolean;
+  lockId: bigint
+  lpAmount: bigint
+  unlockTime: number
+  beneficiary: Address
+  isPermanent: boolean
 }
 
 export interface FeeDistribution {
-  totalFees: bigint;
-  teamShare: bigint;
-  holdersShare: bigint;
-  distributedAt: number;
+  totalFees: bigint
+  teamShare: bigint
+  holdersShare: bigint
+  distributedAt: number
 }
 
 // =============================================================================
@@ -112,7 +110,7 @@ const XLP_V2_FACTORY_ABI = [
     ],
     outputs: [{ name: 'pair', type: 'address' }],
   },
-] as const;
+] as const
 
 const XLP_V2_PAIR_ABI = [
   {
@@ -174,7 +172,7 @@ const XLP_V2_PAIR_ABI = [
     ],
     outputs: [{ type: 'bool' }],
   },
-] as const;
+] as const
 
 const XLP_ROUTER_ABI = [
   {
@@ -247,7 +245,7 @@ const XLP_ROUTER_ABI = [
     ],
     outputs: [{ name: 'amounts', type: 'uint256[]' }],
   },
-] as const;
+] as const
 
 const LP_LOCKER_ABI = [
   {
@@ -306,7 +304,7 @@ const LP_LOCKER_ABI = [
     inputs: [],
     outputs: [{ type: 'uint256' }],
   },
-] as const;
+] as const
 
 const ERC20_ABI = [
   {
@@ -346,7 +344,7 @@ const ERC20_ABI = [
     ],
     outputs: [{ type: 'uint256' }],
   },
-] as const;
+] as const
 
 const CHAINLINK_AGGREGATOR_ABI = [
   {
@@ -369,7 +367,7 @@ const CHAINLINK_AGGREGATOR_ABI = [
     inputs: [],
     outputs: [{ type: 'uint8' }],
   },
-] as const;
+] as const
 
 // Chainlink ETH/USD price feed addresses by chain
 const CHAINLINK_ETH_USD_FEEDS: Record<number, Address> = {
@@ -377,28 +375,28 @@ const CHAINLINK_ETH_USD_FEEDS: Record<number, Address> = {
   8453: '0x71041dddad3595F9CEd3DcCFBe3D1F4b0a16Bb70', // Base
   56: '0x9ef1B8c0E4F7dc8bF5719Ea496883DC6401d5b2e', // BSC
   11155111: '0x694AA1769357215DE4FAC081bf1f309aDC325306', // Sepolia
-};
+}
 
 // =============================================================================
 // LIQUIDITY POOL SERVICE
 // =============================================================================
 
 export class LiquidityPoolService {
-  private config: LiquidityConfig;
-  private chain: Chain;
-  private publicClient: PublicClient;
-  private walletClient: WalletClient;
-  private account: ReturnType<typeof privateKeyToAccount>;
-  private pairAddress: Address | null = null;
+  private config: LiquidityConfig
+  private chain: Chain
+  private publicClient
+  private walletClient
+  private account: ReturnType<typeof privateKeyToAccount>
+  private pairAddress: Address | null = null
 
   constructor(config: Partial<LiquidityConfig> = {}) {
-    const chainId = config.chainId ?? parseInt(process.env.CHAIN_ID ?? '1');
-    this.chain = LiquidityPoolService.getChainFromId(chainId);
+    const chainId = config.chainId ?? parseInt(process.env.CHAIN_ID ?? '1', 10)
+    this.chain = LiquidityPoolService.getChainFromId(chainId)
 
     this.config = {
       chainId,
       rpcUrl:
-        config.rpcUrl ?? process.env.ETH_RPC_URL ?? 'http://localhost:8545',
+        config.rpcUrl ?? process.env.ETH_RPC_URL ?? 'http://localhost:6545',
       tokenAddress:
         config.tokenAddress ??
         (process.env.BBLN_TOKEN_ADDRESS as Address) ??
@@ -435,34 +433,34 @@ export class LiquidityPoolService {
       lpLockDuration: config.lpLockDuration ?? 180 * 24 * 60 * 60, // 180 days
       teamFeeBps: config.teamFeeBps ?? 5000, // 50%
       holdersFeeBps: config.holdersFeeBps ?? 5000, // 50%
-    };
+    }
 
-    this.account = privateKeyToAccount(this.config.deployerPrivateKey);
+    this.account = privateKeyToAccount(this.config.deployerPrivateKey)
 
     this.publicClient = createPublicClient({
       chain: this.chain,
       transport: http(this.config.rpcUrl),
-    }) as PublicClient;
+    })
 
     this.walletClient = createWalletClient({
       account: this.account,
       chain: this.chain,
       transport: http(this.config.rpcUrl),
-    }) as WalletClient;
+    })
   }
 
   private static getChainFromId(chainId: number): Chain {
     switch (chainId) {
       case 1:
-        return mainnet;
+        return mainnet
       case 11155111:
-        return sepolia;
+        return sepolia
       case 8453:
-        return base;
+        return base
       case 56:
-        return bsc;
+        return bsc
       default:
-        return mainnet;
+        return mainnet
     }
   }
 
@@ -477,8 +475,8 @@ export class LiquidityPoolService {
         token: this.config.tokenAddress,
         weth: this.config.wethAddress,
       },
-      'LiquidityPool'
-    );
+      'LiquidityPool',
+    )
 
     // Check if pair already exists
     const existingPair = await this.publicClient.readContract({
@@ -486,16 +484,16 @@ export class LiquidityPoolService {
       abi: XLP_V2_FACTORY_ABI,
       functionName: 'getPair',
       args: [this.config.tokenAddress, this.config.wethAddress],
-    });
+    })
 
     if (existingPair !== zeroAddress) {
       logger.info(
         'Pool already exists',
         { pairAddress: existingPair },
-        'LiquidityPool'
-      );
-      this.pairAddress = existingPair;
-      return existingPair;
+        'LiquidityPool',
+      )
+      this.pairAddress = existingPair
+      return existingPair
     }
 
     // Create new pair
@@ -506,9 +504,9 @@ export class LiquidityPoolService {
       args: [this.config.tokenAddress, this.config.wethAddress],
       chain: this.chain,
       account: this.account,
-    });
+    })
 
-    await this.publicClient.waitForTransactionReceipt({ hash: txHash });
+    await this.publicClient.waitForTransactionReceipt({ hash: txHash })
 
     // Get the created pair address
     const pairAddress = await this.publicClient.readContract({
@@ -516,17 +514,17 @@ export class LiquidityPoolService {
       abi: XLP_V2_FACTORY_ABI,
       functionName: 'getPair',
       args: [this.config.tokenAddress, this.config.wethAddress],
-    });
+    })
 
-    this.pairAddress = pairAddress;
+    this.pairAddress = pairAddress
 
     logger.info(
       'Pool created successfully',
       { pairAddress, txHash },
-      'LiquidityPool'
-    );
+      'LiquidityPool',
+    )
 
-    return pairAddress;
+    return pairAddress
   }
 
   // ===========================================================================
@@ -536,7 +534,7 @@ export class LiquidityPoolService {
   async addLiquidity(
     tokenAmount: bigint,
     ethAmount: bigint,
-    slippageBps: number = 100 // 1% default slippage
+    slippageBps: number = 100, // 1% default slippage
   ): Promise<{ txHash: `0x${string}`; lpTokens: bigint }> {
     logger.info(
       'Adding liquidity',
@@ -544,8 +542,8 @@ export class LiquidityPoolService {
         tokenAmount: formatUnits(tokenAmount, 18),
         ethAmount: formatEther(ethAmount),
       },
-      'LiquidityPool'
-    );
+      'LiquidityPool',
+    )
 
     // Approve token spend
     const currentAllowance = await this.publicClient.readContract({
@@ -553,7 +551,7 @@ export class LiquidityPoolService {
       abi: ERC20_ABI,
       functionName: 'allowance',
       args: [this.account.address, this.config.xlpRouterAddress],
-    });
+    })
 
     if (currentAllowance < tokenAmount) {
       const approveTx = await this.walletClient.writeContract({
@@ -563,16 +561,16 @@ export class LiquidityPoolService {
         args: [this.config.xlpRouterAddress, tokenAmount],
         chain: this.chain,
         account: this.account,
-      });
-      await this.publicClient.waitForTransactionReceipt({ hash: approveTx });
+      })
+      await this.publicClient.waitForTransactionReceipt({ hash: approveTx })
     }
 
     // Calculate minimum amounts with slippage
     const minTokenAmount =
-      (tokenAmount * (10000n - BigInt(slippageBps))) / 10000n;
-    const minEthAmount = (ethAmount * (10000n - BigInt(slippageBps))) / 10000n;
+      (tokenAmount * (10000n - BigInt(slippageBps))) / 10000n
+    const minEthAmount = (ethAmount * (10000n - BigInt(slippageBps))) / 10000n
 
-    const deadline = Math.floor(Date.now() / 1000) + 3600; // 1 hour deadline
+    const deadline = Math.floor(Date.now() / 1000) + 3600 // 1 hour deadline
 
     // Add liquidity
     const txHash = await this.walletClient.writeContract({
@@ -590,20 +588,20 @@ export class LiquidityPoolService {
       value: ethAmount,
       chain: this.chain,
       account: this.account,
-    });
+    })
 
     const receipt = await this.publicClient.waitForTransactionReceipt({
       hash: txHash,
-    });
+    })
 
     // Get LP token balance after adding liquidity
-    const pairAddress = await this.getPairAddress();
+    const pairAddress = await this.getPairAddress()
     const lpBalance = await this.publicClient.readContract({
       address: pairAddress,
       abi: XLP_V2_PAIR_ABI,
       functionName: 'balanceOf',
       args: [this.account.address],
-    });
+    })
 
     logger.info(
       'Liquidity added successfully',
@@ -612,21 +610,21 @@ export class LiquidityPoolService {
         lpTokens: formatUnits(lpBalance, 18),
         gasUsed: receipt.gasUsed.toString(),
       },
-      'LiquidityPool'
-    );
+      'LiquidityPool',
+    )
 
-    return { txHash, lpTokens: lpBalance };
+    return { txHash, lpTokens: lpBalance }
   }
 
   async removeLiquidity(
     lpTokens: bigint,
-    _slippageBps = 100 // Unused for now, would be used for min amounts calculation
+    _slippageBps = 100, // Unused for now, would be used for min amounts calculation
   ): Promise<{
-    txHash: `0x${string}`;
-    tokenAmount: bigint;
-    ethAmount: bigint;
+    txHash: `0x${string}`
+    tokenAmount: bigint
+    ethAmount: bigint
   }> {
-    const pairAddress = await this.getPairAddress();
+    const pairAddress = await this.getPairAddress()
 
     // Approve LP token spend
     const approveTx = await this.walletClient.writeContract({
@@ -636,10 +634,10 @@ export class LiquidityPoolService {
       args: [this.config.xlpRouterAddress, lpTokens],
       chain: this.chain,
       account: this.account,
-    });
-    await this.publicClient.waitForTransactionReceipt({ hash: approveTx });
+    })
+    await this.publicClient.waitForTransactionReceipt({ hash: approveTx })
 
-    const deadline = Math.floor(Date.now() / 1000) + 3600;
+    const deadline = Math.floor(Date.now() / 1000) + 3600
 
     // Remove liquidity (set min amounts to 0 for simplicity, in production calculate from reserves)
     const txHash = await this.walletClient.writeContract({
@@ -656,17 +654,17 @@ export class LiquidityPoolService {
       ],
       chain: this.chain,
       account: this.account,
-    });
+    })
 
-    await this.publicClient.waitForTransactionReceipt({ hash: txHash });
+    await this.publicClient.waitForTransactionReceipt({ hash: txHash })
 
     logger.info(
       'Liquidity removed',
       { txHash, lpTokens: formatUnits(lpTokens, 18) },
-      'LiquidityPool'
-    );
+      'LiquidityPool',
+    )
 
-    return { txHash, tokenAmount: 0n, ethAmount: 0n }; // Would need to parse events for actual amounts
+    return { txHash, tokenAmount: 0n, ethAmount: 0n } // Would need to parse events for actual amounts
   }
 
   // ===========================================================================
@@ -677,9 +675,9 @@ export class LiquidityPoolService {
     lpAmount: bigint,
     durationSeconds: number,
     beneficiary: Address,
-    permanent: boolean = false
+    permanent: boolean = false,
   ): Promise<{ txHash: `0x${string}`; lockId: bigint }> {
-    const pairAddress = await this.getPairAddress();
+    const pairAddress = await this.getPairAddress()
 
     logger.info(
       'Locking LP tokens',
@@ -689,8 +687,8 @@ export class LiquidityPoolService {
         beneficiary,
         permanent,
       },
-      'LiquidityPool'
-    );
+      'LiquidityPool',
+    )
 
     // Approve LP tokens for locker
     const approveTx = await this.walletClient.writeContract({
@@ -700,17 +698,17 @@ export class LiquidityPoolService {
       args: [this.config.lpLockerAddress, lpAmount],
       chain: this.chain,
       account: this.account,
-    });
-    await this.publicClient.waitForTransactionReceipt({ hash: approveTx });
+    })
+    await this.publicClient.waitForTransactionReceipt({ hash: approveTx })
 
     // Get permanent lock constant if needed
-    let duration = BigInt(durationSeconds);
+    let duration = BigInt(durationSeconds)
     if (permanent) {
       duration = await this.publicClient.readContract({
         address: this.config.lpLockerAddress,
         abi: LP_LOCKER_ABI,
         functionName: 'PERMANENT_LOCK',
-      });
+      })
     }
 
     // Lock LP tokens
@@ -721,22 +719,22 @@ export class LiquidityPoolService {
       args: [pairAddress, lpAmount, duration, beneficiary],
       chain: this.chain,
       account: this.account,
-    });
+    })
 
     await this.publicClient.waitForTransactionReceipt({
       hash: txHash,
-    });
+    })
 
     // Parse lockId from events (simplified - would need proper event parsing)
-    const lockId = 0n; // Would extract from Transfer event
+    const lockId = 0n // Would extract from Transfer event
 
     logger.info(
       'LP tokens locked successfully',
       { txHash, lockId: lockId.toString() },
-      'LiquidityPool'
-    );
+      'LiquidityPool',
+    )
 
-    return { txHash, lockId };
+    return { txHash, lockId }
   }
 
   async getLockedLPInfo(lockId: bigint): Promise<LockedLPInfo> {
@@ -745,21 +743,15 @@ export class LiquidityPoolService {
       abi: LP_LOCKER_ABI,
       functionName: 'getLock',
       args: [lockId],
-    });
+    })
 
-    const [_lpToken, amount, unlockTime, beneficiary, _withdrawn] = lock as [
-      Address,
-      bigint,
-      bigint,
-      Address,
-      boolean,
-    ];
+    const [_lpToken, amount, unlockTime, beneficiary, _withdrawn] = lock
 
     const permanentLock = await this.publicClient.readContract({
       address: this.config.lpLockerAddress,
       abi: LP_LOCKER_ABI,
       functionName: 'PERMANENT_LOCK',
-    });
+    })
 
     return {
       lockId,
@@ -767,7 +759,7 @@ export class LiquidityPoolService {
       unlockTime: Number(unlockTime),
       beneficiary,
       isPermanent: unlockTime === permanentLock,
-    };
+    }
   }
 
   async getLocksForAddress(address: Address): Promise<readonly bigint[]> {
@@ -776,7 +768,7 @@ export class LiquidityPoolService {
       abi: LP_LOCKER_ABI,
       functionName: 'getLocksForBeneficiary',
       args: [address],
-    });
+    })
   }
 
   // ===========================================================================
@@ -785,7 +777,7 @@ export class LiquidityPoolService {
 
   async getPairAddress(): Promise<Address> {
     if (this.pairAddress && this.pairAddress !== zeroAddress) {
-      return this.pairAddress;
+      return this.pairAddress
     }
 
     // If factory or token address is zero, no pair exists
@@ -793,7 +785,7 @@ export class LiquidityPoolService {
       this.config.xlpV2FactoryAddress === zeroAddress ||
       this.config.tokenAddress === zeroAddress
     ) {
-      return zeroAddress;
+      return zeroAddress
     }
 
     const pairAddress = await this.publicClient.readContract({
@@ -801,14 +793,14 @@ export class LiquidityPoolService {
       abi: XLP_V2_FACTORY_ABI,
       functionName: 'getPair',
       args: [this.config.tokenAddress, this.config.wethAddress],
-    });
+    })
 
-    this.pairAddress = pairAddress;
-    return pairAddress;
+    this.pairAddress = pairAddress
+    return pairAddress
   }
 
   async getPoolInfo(): Promise<PoolInfo> {
-    const pairAddress = await this.getPairAddress();
+    const pairAddress = await this.getPairAddress()
 
     if (pairAddress === zeroAddress) {
       return {
@@ -819,7 +811,7 @@ export class LiquidityPoolService {
         reserve1: 0n,
         lpTotalSupply: 0n,
         price: 0,
-      };
+      }
     }
 
     const [reserves, token0, token1, totalSupply] = await Promise.all([
@@ -843,21 +835,21 @@ export class LiquidityPoolService {
         abi: XLP_V2_PAIR_ABI,
         functionName: 'totalSupply',
       }),
-    ]);
+    ])
 
-    const [reserve0, reserve1] = reserves as [bigint, bigint, number];
+    const [reserve0, reserve1] = reserves
 
     // Calculate price (BBLN in ETH terms)
-    let price = 0;
+    let price = 0
     if (reserve0 > 0n && reserve1 > 0n) {
       // If token0 is BBLN, price = reserve1 / reserve0
       // If token0 is WETH, price = reserve0 / reserve1
       const isToken0BBLN =
-        token0.toLowerCase() === this.config.tokenAddress.toLowerCase();
+        token0.toLowerCase() === this.config.tokenAddress.toLowerCase()
       if (isToken0BBLN) {
-        price = Number(reserve1) / Number(reserve0);
+        price = Number(reserve1) / Number(reserve0)
       } else {
-        price = Number(reserve0) / Number(reserve1);
+        price = Number(reserve0) / Number(reserve1)
       }
     }
 
@@ -869,11 +861,11 @@ export class LiquidityPoolService {
       reserve1,
       lpTotalSupply: totalSupply,
       price,
-    };
+    }
   }
 
   async getLPPosition(address: Address): Promise<LPPosition> {
-    const pairAddress = await this.getPairAddress();
+    const pairAddress = await this.getPairAddress()
 
     if (pairAddress === zeroAddress) {
       return {
@@ -881,7 +873,7 @@ export class LiquidityPoolService {
         token0Amount: 0n,
         token1Amount: 0n,
         shareOfPool: 0,
-      };
+      }
     }
 
     const [lpBalance, totalSupply, reserves] = await Promise.all([
@@ -901,24 +893,26 @@ export class LiquidityPoolService {
         abi: XLP_V2_PAIR_ABI,
         functionName: 'getReserves',
       }),
-    ]);
+    ])
 
-    const [reserve0, reserve1] = reserves as [bigint, bigint, number];
+    const [reserve0Raw, reserve1Raw] = reserves
+    const reserve0 = BigInt(reserve0Raw)
+    const reserve1 = BigInt(reserve1Raw)
 
     const shareOfPool =
-      totalSupply > 0n ? Number((lpBalance * 10000n) / totalSupply) : 0;
+      totalSupply > 0n ? Number((lpBalance * 10000n) / totalSupply) : 0
 
     const token0Amount =
-      totalSupply > 0n ? (reserve0 * lpBalance) / totalSupply : 0n;
+      totalSupply > 0n ? (reserve0 * lpBalance) / totalSupply : 0n
     const token1Amount =
-      totalSupply > 0n ? (reserve1 * lpBalance) / totalSupply : 0n;
+      totalSupply > 0n ? (reserve1 * lpBalance) / totalSupply : 0n
 
     return {
       lpBalance,
       token0Amount,
       token1Amount,
       shareOfPool,
-    };
+    }
   }
 
   // ===========================================================================
@@ -926,13 +920,13 @@ export class LiquidityPoolService {
   // ===========================================================================
 
   async getTokenPrice(): Promise<{ priceInEth: number; priceInUsd: number }> {
-    const poolInfo = await this.getPoolInfo();
-    const ethUsdPrice = await this.getEthUsdPrice();
+    const poolInfo = await this.getPoolInfo()
+    const ethUsdPrice = await this.getEthUsdPrice()
 
     return {
       priceInEth: poolInfo.price,
       priceInUsd: poolInfo.price * ethUsdPrice,
-    };
+    }
   }
 
   /**
@@ -941,65 +935,49 @@ export class LiquidityPoolService {
   async getEthUsdPrice(): Promise<number> {
     const feedAddress =
       this.config.ethUsdPriceFeedAddress ??
-      CHAINLINK_ETH_USD_FEEDS[this.config.chainId];
+      CHAINLINK_ETH_USD_FEEDS[this.config.chainId]
 
     if (!feedAddress) {
-      logger.warn(
-        'No Chainlink price feed configured for chain',
-        { chainId: this.config.chainId },
-        'LiquidityPoolService'
-      );
-      return 3600; // Fallback price
+      throw new Error(
+        `No Chainlink ETH/USD price feed configured for chain ${this.config.chainId}`,
+      )
     }
 
     const [roundData, decimals] = await Promise.all([
-      this.publicClient
-        .readContract({
-          address: feedAddress,
-          abi: CHAINLINK_AGGREGATOR_ABI,
-          functionName: 'latestRoundData',
-        })
-        .catch(() => null),
-      this.publicClient
-        .readContract({
-          address: feedAddress,
-          abi: CHAINLINK_AGGREGATOR_ABI,
-          functionName: 'decimals',
-        })
-        .catch(() => 8),
-    ]);
+      this.publicClient.readContract({
+        address: feedAddress,
+        abi: CHAINLINK_AGGREGATOR_ABI,
+        functionName: 'latestRoundData',
+      }),
+      this.publicClient.readContract({
+        address: feedAddress,
+        abi: CHAINLINK_AGGREGATOR_ABI,
+        functionName: 'decimals',
+      }),
+    ])
 
-    if (!roundData) {
-      logger.warn(
-        'Failed to read Chainlink price feed',
-        { feedAddress },
-        'LiquidityPoolService'
-      );
-      return 3600;
-    }
-
-    const price = Number(roundData[1]) / Math.pow(10, decimals);
-    return price;
+    const price = Number(roundData[1]) / 10 ** decimals
+    return price
   }
 
   async getQuote(amountIn: bigint, tokenIn: 'bbln' | 'eth'): Promise<bigint> {
     const path =
       tokenIn === 'eth'
         ? [this.config.wethAddress, this.config.tokenAddress]
-        : [this.config.tokenAddress, this.config.wethAddress];
+        : [this.config.tokenAddress, this.config.wethAddress]
 
     const amounts = await this.publicClient.readContract({
       address: this.config.xlpRouterAddress,
       abi: XLP_ROUTER_ABI,
       functionName: 'getAmountsOut',
       args: [amountIn, path],
-    });
+    })
 
-    const outputAmount = amounts[1];
+    const outputAmount = amounts[1]
     if (outputAmount === undefined) {
-      throw new Error('Invalid quote: output amount not found');
+      throw new Error('Invalid quote: output amount not found')
     }
-    return outputAmount;
+    return outputAmount
   }
 
   // ===========================================================================
@@ -1010,15 +988,15 @@ export class LiquidityPoolService {
     ethAmount: bigint,
     tokenAmount: bigint,
     lockPercentage: number = 100,
-    lockDuration: number = 180 * 24 * 60 * 60 // 180 days
+    lockDuration: number = 180 * 24 * 60 * 60, // 180 days
   ): Promise<{
-    pairAddress: Address;
-    lpTokensReceived: bigint;
-    lpTokensLocked: bigint;
-    lockId: bigint;
-    txHashes: `0x${string}`[];
+    pairAddress: Address
+    lpTokensReceived: bigint
+    lpTokensLocked: bigint
+    lockId: bigint
+    txHashes: `0x${string}`[]
   }> {
-    const txHashes: `0x${string}`[] = [];
+    const txHashes: `0x${string}`[] = []
 
     logger.info(
       'Setting up initial liquidity',
@@ -1028,32 +1006,32 @@ export class LiquidityPoolService {
         lockPercentage,
         lockDuration,
       },
-      'LiquidityPool'
-    );
+      'LiquidityPool',
+    )
 
     // 1. Create pool if doesn't exist
-    const pairAddress = await this.createPool();
+    const pairAddress = await this.createPool()
 
     // 2. Add liquidity
     const { txHash: addLiqTx, lpTokens } = await this.addLiquidity(
       tokenAmount,
-      ethAmount
-    );
-    txHashes.push(addLiqTx);
+      ethAmount,
+    )
+    txHashes.push(addLiqTx)
 
     // 3. Lock LP tokens
-    const lpToLock = (lpTokens * BigInt(lockPercentage)) / 100n;
-    let lockId = 0n;
+    const lpToLock = (lpTokens * BigInt(lockPercentage)) / 100n
+    let lockId = 0n
 
     if (lpToLock > 0n) {
       const { txHash: lockTx, lockId: newLockId } = await this.lockLPTokens(
         lpToLock,
         lockDuration,
         this.config.treasuryAddress,
-        false // Not permanent
-      );
-      txHashes.push(lockTx);
-      lockId = newLockId;
+        false, // Not permanent
+      )
+      txHashes.push(lockTx)
+      lockId = newLockId
     }
 
     logger.info(
@@ -1064,8 +1042,8 @@ export class LiquidityPoolService {
         lpTokensLocked: formatUnits(lpToLock, 18),
         lockId: lockId.toString(),
       },
-      'LiquidityPool'
-    );
+      'LiquidityPool',
+    )
 
     return {
       pairAddress,
@@ -1073,7 +1051,7 @@ export class LiquidityPoolService {
       lpTokensLocked: lpToLock,
       lockId,
       txHashes,
-    };
+    }
   }
 
   // ===========================================================================
@@ -1081,7 +1059,7 @@ export class LiquidityPoolService {
   // ===========================================================================
 
   getConfig(): LiquidityConfig {
-    return { ...this.config };
+    return { ...this.config }
   }
 }
 
@@ -1089,17 +1067,17 @@ export class LiquidityPoolService {
 // SINGLETON
 // =============================================================================
 
-let liquidityPoolService: LiquidityPoolService | null = null;
+let liquidityPoolService: LiquidityPoolService | null = null
 
 export function getLiquidityPoolService(
-  config?: Partial<LiquidityConfig>
+  config?: Partial<LiquidityConfig>,
 ): LiquidityPoolService {
   if (!liquidityPoolService) {
-    liquidityPoolService = new LiquidityPoolService(config);
+    liquidityPoolService = new LiquidityPoolService(config)
   }
-  return liquidityPoolService;
+  return liquidityPoolService
 }
 
 export function resetLiquidityPoolService(): void {
-  liquidityPoolService = null;
+  liquidityPoolService = null
 }

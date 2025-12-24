@@ -5,13 +5,11 @@
  * Provides actions, providers, and services for agent integration.
  */
 
-import type { Plugin } from '@elizaos/core';
+import type { Plugin } from '@elizaos/core'
 
 // Actions
-export * from './actions';
-// Integration
-// Re-export integration helpers
-// Alias for backwards compatibility
+export * from './actions'
+// Integration helpers
 export {
   BabylonA2AClient,
   disconnectAgentA2AClient,
@@ -19,13 +17,12 @@ export {
   hasActiveA2AConnection,
   initializeAgentA2AClient,
   initializeAgentA2AClient as initializeBabylonPlugin,
-} from './integration-a2a-sdk';
+} from './integration-a2a-sdk'
 // Providers
-export * from './providers';
-// Services
-export * from './services';
+export * from './providers'
+// Services - import from ./integration-a2a-sdk or ../../autonomous/AutonomousA2AService directly
 // Types
-export * from './types';
+export * from './types'
 
 /**
  * Babylon plugin definition for ElizaOS
@@ -37,6 +34,6 @@ export const babylonPlugin: Plugin = {
   providers: [],
   evaluators: [],
   services: [],
-};
+}
 
-export default babylonPlugin;
+export default babylonPlugin

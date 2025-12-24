@@ -10,27 +10,29 @@
  * @packageDocumentation
  */
 
+import { resolve } from 'node:path'
 // Load environment variables from project root before any other imports
-import { config } from 'dotenv';
-import { resolve } from 'path';
+import { config } from 'dotenv'
 
-config({ path: resolve(process.cwd(), '.env') });
-config({ path: resolve(process.cwd(), '.env.local') });
+config({ path: resolve(process.cwd(), '.env') })
+config({ path: resolve(process.cwd(), '.env.local') })
 
-import { runAdminCommand } from './commands/admin.js';
-import { runAgentCommand } from './commands/agent.js';
-import { runDbCommand } from './commands/db.js';
-import { runDeployCommand } from './commands/deploy.js';
-import { runDevCommand } from './commands/dev.js';
-import { runGameCommand } from './commands/game.js';
-import { runICOCommand } from './commands/ico.js';
-import { runModelCommand } from './commands/model.js';
-import { runStatusCommand } from './commands/status.js';
-import { runTestCommand } from './commands/test.js';
-import tokenCommand from './commands/token.js';
-import { runTrainCommand } from './commands/train.js';
+import { runAdminCommand } from './commands/admin.js'
+import { runAgentCommand } from './commands/agent.js'
+import { runDbCommand } from './commands/db.js'
+import { runDeployCommand } from './commands/deploy.js'
+import { runDevCommand } from './commands/dev.js'
+import { runDocsCommand } from './commands/docs.js'
+import { runGameCommand } from './commands/game.js'
+import { runICOCommand } from './commands/ico.js'
+import { runInitCommand } from './commands/init.js'
+import { runModelCommand } from './commands/model.js'
+import { runStatusCommand } from './commands/status.js'
+import { runTestCommand } from './commands/test.js'
+import tokenCommand from './commands/token.js'
+import { runTrainCommand } from './commands/train.js'
 
-const VERSION = '0.2.0';
+const VERSION = '0.2.0'
 
 /**
  * Prints the main CLI help text with all available domains and commands.
@@ -45,8 +47,10 @@ USAGE:
   babylon <domain> <command> [options]
 
 DOMAINS:
+  init      Initialize environment (creates .env.local from template)
   dev       Start development environment (chain, contracts, web app)
   db        Database management (start, stop, status, migrate, reset)
+  docs      Documentation generation (vendors, api)
   admin     Admin user management (check, grant, revoke, list)
   status    System status (game, wallet, agent0, all)
   train     Training operations (list, pipeline, archetype, collect)
@@ -77,7 +81,7 @@ OPTIONS:
   -v, --version   Show version number
 
 Run 'babylon <domain> --help' for domain-specific help.
-`);
+`)
 }
 
 /**
@@ -86,7 +90,7 @@ Run 'babylon <domain> --help' for domain-specific help.
  * @internal
  */
 function printVersion(): void {
-  console.log(`babylon v${VERSION}`);
+  console.log(`babylon v${VERSION}`)
 }
 
 /**
@@ -98,79 +102,87 @@ function printVersion(): void {
  * @throws Exits process with code 1 on error, 0 on success
  */
 async function main(): Promise<void> {
-  const args = process.argv.slice(2);
-  const domain = args[0];
-  const commandArgs = args.slice(1);
+  const args = process.argv.slice(2)
+  const domain = args[0]
+  const commandArgs = args.slice(1)
 
   if (!domain || domain === '-h' || domain === '--help') {
-    printHelp();
-    process.exit(0);
+    printHelp()
+    process.exit(0)
   }
 
   if (domain === '-v' || domain === '--version') {
-    printVersion();
-    process.exit(0);
+    printVersion()
+    process.exit(0)
   }
 
   switch (domain) {
+    case 'init':
+      await runInitCommand(commandArgs)
+      break
+
     case 'dev':
-      await runDevCommand(commandArgs);
-      break;
+      await runDevCommand(commandArgs)
+      break
+
+    case 'docs':
+      await runDocsCommand(commandArgs)
+      break
 
     case 'db':
-      await runDbCommand(commandArgs);
-      break;
+      await runDbCommand(commandArgs)
+      break
 
     case 'admin':
-      await runAdminCommand(commandArgs);
-      break;
+      await runAdminCommand(commandArgs)
+      break
 
     case 'status':
-      await runStatusCommand(commandArgs);
-      break;
+      await runStatusCommand(commandArgs)
+      break
 
     case 'train':
-      await runTrainCommand(commandArgs);
-      break;
+      await runTrainCommand(commandArgs)
+      break
 
     case 'model':
-      await runModelCommand(commandArgs);
-      break;
+      await runModelCommand(commandArgs)
+      break
 
     case 'game':
-      await runGameCommand(commandArgs);
-      break;
+      await runGameCommand(commandArgs)
+      break
 
     case 'agent':
-      await runAgentCommand(commandArgs);
-      break;
+      await runAgentCommand(commandArgs)
+      break
 
     case 'deploy':
-      await runDeployCommand(commandArgs);
-      break;
+      await runDeployCommand(commandArgs)
+      break
 
     case 'ico':
-      await runICOCommand(commandArgs);
-      break;
+      await runICOCommand(commandArgs)
+      break
 
     case 'test':
-      await runTestCommand(commandArgs);
-      break;
+      await runTestCommand(commandArgs)
+      break
 
     case 'token':
-      await tokenCommand.parseAsync(['node', 'babylon', ...commandArgs]);
-      break;
+      await tokenCommand.parseAsync(['node', 'babylon', ...commandArgs])
+      break
 
     default:
-      console.error(`Unknown domain: ${domain}`);
-      console.log("\nRun 'babylon --help' for usage information.");
-      process.exit(1);
+      console.error(`Unknown domain: ${domain}`)
+      console.log("\nRun 'babylon --help' for usage information.")
+      process.exit(1)
   }
-  process.exit(0);
+  process.exit(0)
 }
 
 if (import.meta.main) {
-  main();
+  main()
 }
 
-export { main };
+export { main }

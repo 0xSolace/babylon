@@ -1,7 +1,5 @@
-'use client';
-
-import { cn } from '@babylon/shared';
-import { useMemo } from 'react';
+import { cn } from '@babylon/shared'
+import { useMemo } from 'react'
 import {
   Area,
   AreaChart,
@@ -9,26 +7,26 @@ import {
   Tooltip,
   XAxis,
   YAxis,
-} from 'recharts';
+} from 'recharts'
 
 interface PricePoint {
-  time: number;
-  price: number;
+  time: number
+  price: number
 }
 
 interface PerpPriceChartProps {
-  data: PricePoint[];
-  currentPrice: number;
-  ticker: string;
+  data: PricePoint[]
+  currentPrice: number
+  ticker: string
 }
 
 function formatTime(timestamp: number): string {
-  const date = new Date(timestamp);
+  const date = new Date(timestamp)
   return date.toLocaleTimeString('en-US', {
     hour: '2-digit',
     minute: '2-digit',
     hour12: false,
-  });
+  })
 }
 
 function formatPrice(price: number): string {
@@ -37,7 +35,7 @@ function formatPrice(price: number): string {
     currency: 'USD',
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  }).format(price);
+  }).format(price)
 }
 
 export function PerpPriceChart({
@@ -46,7 +44,7 @@ export function PerpPriceChart({
   ticker,
 }: PerpPriceChartProps) {
   // Use currentPrice as fallback for display (e.g., when no historical data)
-  void currentPrice;
+  void currentPrice
 
   const { chartData, priceChange, isPositive, domain } = useMemo(() => {
     if (data.length < 2) {
@@ -55,27 +53,27 @@ export function PerpPriceChart({
         priceChange: 0,
         isPositive: true,
         domain: [0, 100] as [number, number],
-      };
+      }
     }
 
-    const firstPoint = data.at(0);
-    const lastPoint = data.at(-1);
+    const firstPoint = data.at(0)
+    const lastPoint = data.at(-1)
     if (!firstPoint || !lastPoint) {
       return {
         chartData: [],
         priceChange: 0,
         isPositive: true,
         domain: [0, 100] as [number, number],
-      };
+      }
     }
-    const firstPrice = firstPoint.price;
-    const lastPrice = lastPoint.price;
-    const change = ((lastPrice - firstPrice) / firstPrice) * 100;
+    const firstPrice = firstPoint.price
+    const lastPrice = lastPoint.price
+    const change = ((lastPrice - firstPrice) / firstPrice) * 100
 
-    const prices = data.map((d) => d.price);
-    const minPrice = Math.min(...prices);
-    const maxPrice = Math.max(...prices);
-    const padding = (maxPrice - minPrice) * 0.1;
+    const prices = data.map((d) => d.price)
+    const minPrice = Math.min(...prices)
+    const maxPrice = Math.max(...prices)
+    const padding = (maxPrice - minPrice) * 0.1
 
     return {
       chartData: data.map((point) => ({
@@ -86,15 +84,15 @@ export function PerpPriceChart({
       priceChange: change,
       isPositive: change >= 0,
       domain: [minPrice - padding, maxPrice + padding] as [number, number],
-    };
-  }, [data]);
+    }
+  }, [data])
 
   if (chartData.length === 0) {
     return (
       <div className="flex h-64 items-center justify-center text-muted-foreground">
         Loading chart data...
       </div>
-    );
+    )
   }
 
   return (
@@ -142,8 +140,8 @@ export function PerpPriceChart({
           />
           <Tooltip
             content={({ active, payload }) => {
-              if (!active || !payload?.length) return null;
-              const point = payload[0].payload as (typeof chartData)[0];
+              if (!active || !payload?.length) return null
+              const point = payload[0].payload as (typeof chartData)[0]
               return (
                 <div className="rounded-lg border border-border bg-background p-2 shadow-lg">
                   <p className="font-medium text-sm">
@@ -153,7 +151,7 @@ export function PerpPriceChart({
                     {point.formattedTime}
                   </p>
                 </div>
-              );
+              )
             }}
           />
           <Area
@@ -170,7 +168,7 @@ export function PerpPriceChart({
         <span
           className={cn(
             'font-medium',
-            isPositive ? 'text-green-600' : 'text-red-600'
+            isPositive ? 'text-green-600' : 'text-red-600',
           )}
         >
           {isPositive ? '+' : ''}
@@ -178,5 +176,5 @@ export function PerpPriceChart({
         </span>
       </div>
     </div>
-  );
+  )
 }

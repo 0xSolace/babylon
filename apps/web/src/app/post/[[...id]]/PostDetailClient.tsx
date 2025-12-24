@@ -1,66 +1,65 @@
-'use client';
-
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowLeft, MessageCircle } from 'lucide-react';
-import { useParams, useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
-import { FeedCommentSection } from '@/components/feed/FeedCommentSection';
-import { InteractionBar } from '@/components/interactions';
-import { PostCard } from '@/components/posts/PostCard';
-import { PageContainer } from '@/components/shared/PageContainer';
-import { Skeleton } from '@/components/shared/Skeleton';
-import { useInteractionStore } from '@/stores/interactionStore';
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { ArrowLeft, MessageCircle } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { useParams } from 'react-router-dom'
+import { FeedCommentSection } from '@/components/feed/FeedCommentSection'
+import { InteractionBar } from '@/components/interactions'
+import { PostCard } from '@/components/posts/PostCard'
+import { PageContainer } from '@/components/shared/PageContainer'
+import { Skeleton } from '@/components/shared/Skeleton'
+import { useRouter } from '@/lib/navigation'
+import { useInteractionStore } from '@/stores/interactionStore'
 
 interface PostData {
-  id: string;
-  type?: string;
-  content: string;
-  fullContent?: string | null;
-  articleTitle?: string | null;
-  byline?: string | null;
-  biasScore?: number | null;
-  sentiment?: string | null;
-  slant?: string | null;
-  category?: string | null;
-  authorId: string;
-  authorName: string;
-  authorUsername?: string | null;
-  authorProfileImageUrl?: string | null;
-  timestamp: string;
-  likeCount: number;
-  commentCount: number;
-  shareCount: number;
-  isLiked: boolean;
-  isShared: boolean;
+  id: string
+  type?: string
+  content: string
+  fullContent?: string | null
+  articleTitle?: string | null
+  byline?: string | null
+  biasScore?: number | null
+  sentiment?: string | null
+  slant?: string | null
+  category?: string | null
+  authorId: string
+  authorName: string
+  authorUsername?: string | null
+  authorProfileImageUrl?: string | null
+  timestamp: string
+  likeCount: number
+  commentCount: number
+  shareCount: number
+  isLiked: boolean
+  isShared: boolean
   // Repost metadata (new clean structure)
-  isRepost?: boolean;
-  isQuote?: boolean;
-  quoteComment?: string | null;
-  originalPostId?: string | null;
+  isRepost?: boolean
+  isQuote?: boolean
+  quoteComment?: string | null
+  originalPostId?: string | null
   originalPost?: {
-    id: string;
-    content: string;
-    authorId: string;
-    authorName: string;
-    authorUsername: string | null;
-    authorProfileImageUrl: string | null;
-    timestamp: string;
-  } | null;
+    id: string
+    content: string
+    authorId: string
+    authorName: string
+    authorUsername: string | null
+    authorProfileImageUrl: string | null
+    timestamp: string
+  } | null
 }
 
 export default function PostDetailClient() {
-  const params = useParams();
-  const router = useRouter();
-  const queryClient = useQueryClient();
+  const params = useParams()
+  const router = useRouter()
+  const queryClient = useQueryClient()
   // Catch-all route: params.id is string[] or undefined
-  const idParam = params.id;
-  const postId = Array.isArray(idParam) ? idParam[0] : idParam;
-  const [isCommentModalOpen, setIsCommentModalOpen] = useState(false);
+  const idParam = params.id
+  const postId = Array.isArray(idParam) ? idParam[0] : idParam
+  const [isCommentModalOpen, setIsCommentModalOpen] = useState(false)
 
   // Function to open comment modal when comment button is clicked
   const handleCommentClick = () => {
-    setIsCommentModalOpen(true);
-  };
+    setIsCommentModalOpen(true)
+  }
 
   // Fetch post data with react-query
   const {
@@ -70,14 +69,14 @@ export default function PostDetailClient() {
   } = useQuery({
     queryKey: ['post', postId],
     queryFn: async () => {
-      const response = await fetch(`/api/posts/${postId}`);
-      const result = await response.json();
-      const postData = result.data || result;
+      const response = await fetch(`/api/posts/${postId}`)
+      const result = await response.json()
+      const postData = result.data || result
 
       // If this is an article-type post, redirect to /article/[id]
       if (postData.type === 'article' && postData.fullContent) {
-        router.replace(`/article/${postId}`);
-        throw new Error('Redirecting to article');
+        router.replace(`/article/${postId}`)
+        throw new Error('Redirecting to article')
       }
 
       const formattedPost: PostData = {
@@ -108,21 +107,21 @@ export default function PostDetailClient() {
         quoteComment: postData.quoteComment || null,
         originalPostId: postData.originalPostId || null,
         originalPost: postData.originalPost || null,
-      };
+      }
 
       // Update the interaction store with fresh API data
       // For reposts, use the original post ID to match InteractionBar's behavior
-      const interactionPostId = postData.originalPostId || postId;
-      const { postInteractions } = useInteractionStore.getState();
-      const storeData = postInteractions.get(interactionPostId);
+      const interactionPostId = postData.originalPostId || postId
+      const { postInteractions } = useInteractionStore.getState()
+      const storeData = postInteractions.get(interactionPostId)
 
       // Only update store if likeCount or commentCount changed to avoid overwriting isLiked/isShared
       if (
         postData.likeCount !== undefined ||
         postData.commentCount !== undefined
       ) {
-        const store = useInteractionStore.getState();
-        const updatedInteractions = new Map(store.postInteractions);
+        const store = useInteractionStore.getState()
+        const updatedInteractions = new Map(store.postInteractions)
         updatedInteractions.set(interactionPostId, {
           postId: interactionPostId,
           likeCount: postData.likeCount ?? 0,
@@ -131,28 +130,28 @@ export default function PostDetailClient() {
           // Preserve existing isLiked/isShared from store, don't overwrite with API
           isLiked: storeData?.isLiked ?? postData.isLiked ?? false,
           isShared: storeData?.isShared ?? postData.isShared ?? false,
-        });
-        useInteractionStore.setState({ postInteractions: updatedInteractions });
+        })
+        useInteractionStore.setState({ postInteractions: updatedInteractions })
       }
 
-      return formattedPost;
+      return formattedPost
     },
     enabled: !!postId,
-  });
+  })
 
-  const error = queryError && queryError.message ? queryError.message : null;
+  const error = queryError?.message ? queryError.message : null
 
   // Subscribe to interaction store changes and update query data
   useEffect(() => {
-    if (!postId) return;
+    if (!postId) return
 
     const unsubscribe = useInteractionStore.subscribe((state) => {
-      const storeData = state.postInteractions.get(postId);
+      const storeData = state.postInteractions.get(postId)
       if (storeData) {
         queryClient.setQueryData(
           ['post', postId],
           (prev: PostData | undefined) => {
-            if (!prev) return undefined;
+            if (!prev) return undefined
 
             // Only update if values actually changed to avoid unnecessary re-renders
             if (
@@ -162,7 +161,7 @@ export default function PostDetailClient() {
               prev.isLiked === storeData.isLiked &&
               prev.isShared === storeData.isShared
             ) {
-              return prev;
+              return prev
             }
 
             return {
@@ -172,25 +171,25 @@ export default function PostDetailClient() {
               shareCount: storeData.shareCount,
               isLiked: storeData.isLiked,
               isShared: storeData.isShared,
-            };
-          }
-        );
+            }
+          },
+        )
       }
-    });
+    })
 
-    return () => unsubscribe();
-  }, [postId, queryClient]);
+    return () => unsubscribe()
+  }, [postId, queryClient])
 
   // Redirect to feed if no post ID provided
   useEffect(() => {
     if (!postId) {
-      router.replace('/');
+      router.replace('/')
     }
-  }, [postId, router]);
+  }, [postId, router])
 
   // Don't render with missing postId - redirect will happen via useEffect
   if (!postId) {
-    return null;
+    return null
   }
 
   if (isLoading) {
@@ -202,7 +201,7 @@ export default function PostDetailClient() {
           <Skeleton className="h-32 w-full" />
         </div>
       </div>
-    );
+    )
   }
 
   if (error || !post) {
@@ -214,6 +213,7 @@ export default function PostDetailClient() {
             {error || 'The post you are looking for does not exist.'}
           </p>
           <button
+            type="button"
             onClick={() => router.push('/feed')}
             className="rounded-md bg-primary px-4 py-2 text-primary-foreground transition-colors hover:bg-primary/90"
           >
@@ -221,7 +221,7 @@ export default function PostDetailClient() {
           </button>
         </div>
       </div>
-    );
+    )
   }
 
   return (
@@ -235,6 +235,7 @@ export default function PostDetailClient() {
             <div className="px-6 py-4">
               <div className="flex items-center gap-4">
                 <button
+                  type="button"
                   onClick={() => router.back()}
                   className="rounded-md p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                 >
@@ -297,7 +298,7 @@ export default function PostDetailClient() {
                     <div className="prose prose-lg prose-invert mb-6 max-w-none">
                       {post.fullContent.split('\n\n').map((paragraph, i) => (
                         <p
-                          key={i}
+                          key={paragraph || `paragraph-${i}`}
                           className="mb-4 text-base text-foreground leading-relaxed sm:text-lg"
                         >
                           {paragraph}
@@ -348,6 +349,7 @@ export default function PostDetailClient() {
         <div className="sticky top-0 z-10 shrink-0 border-border border-b bg-background">
           <div className="flex items-center gap-4 px-4 py-3">
             <button
+              type="button"
               onClick={() => router.back()}
               className="rounded-md p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             >
@@ -407,7 +409,7 @@ export default function PostDetailClient() {
                 <div className="prose prose-invert mb-4 max-w-none">
                   {post.fullContent.split('\n\n').map((paragraph, i) => (
                     <p
-                      key={i}
+                      key={paragraph || `paragraph-mobile-${i}`}
                       className="mb-4 text-base text-foreground leading-relaxed"
                     >
                       {paragraph}
@@ -459,5 +461,5 @@ export default function PostDetailClient() {
         />
       )}
     </PageContainer>
-  );
+  )
 }

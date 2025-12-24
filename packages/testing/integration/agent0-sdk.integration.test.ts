@@ -9,42 +9,42 @@
  * - Agent profile retrieval
  */
 
-import { beforeAll, describe, expect, test } from 'bun:test';
-import { Agent0FeedbackService } from '@babylon/agents';
-import { getAgent0Client } from '@babylon/agents/agent0/Agent0Client';
-import { SubgraphClient } from '@babylon/agents/agent0/SubgraphClient';
+import { beforeAll, describe, expect, test } from 'bun:test'
+import { Agent0FeedbackService } from '@babylon/agents'
+import { getAgent0Client } from '@babylon/agents/agent0/Agent0Client'
+import { SubgraphClient } from '@babylon/agents/agent0/SubgraphClient'
 
 describe('Agent0 SDK Complete Integration', () => {
-  let agent0Client: ReturnType<typeof getAgent0Client> | undefined;
-  let feedbackService: Agent0FeedbackService | undefined;
-  let subgraphClient: SubgraphClient | undefined;
-  let sdkAvailable = false;
+  let agent0Client: ReturnType<typeof getAgent0Client> | undefined
+  let feedbackService: Agent0FeedbackService | undefined
+  let subgraphClient: SubgraphClient | undefined
+  let sdkAvailable = false
 
   beforeAll(async () => {
     // Initialize clients
     try {
-      agent0Client = getAgent0Client();
-      feedbackService = new Agent0FeedbackService();
-      subgraphClient = new SubgraphClient();
+      agent0Client = getAgent0Client()
+      feedbackService = new Agent0FeedbackService()
+      subgraphClient = new SubgraphClient()
       if (agent0Client) {
         // Must await ensureAvailable() to initialize the SDK before checking availability
-        sdkAvailable = await agent0Client.ensureAvailable();
+        sdkAvailable = await agent0Client.ensureAvailable()
       }
     } catch (error) {
       // SDK not configured - tests will be skipped
       console.warn(
         'Agent0 SDK not configured:',
-        error instanceof Error ? error.message : String(error)
-      );
-      sdkAvailable = false;
+        error instanceof Error ? error.message : String(error),
+      )
+      sdkAvailable = false
     }
-  });
+  })
 
   describe('Agent Registration', () => {
     test('should register an agent with all required fields', async () => {
       if (!sdkAvailable || !agent0Client) {
-        console.log('   ⚠️  Skipping - SDK not available');
-        return;
+        console.log('   ⚠️  Skipping - SDK not available')
+        return
       }
 
       const result = await agent0Client.registerAgent({
@@ -60,17 +60,17 @@ describe('Agent0 SDK Complete Integration', () => {
           skills: [],
           domains: [],
         },
-      });
+      })
 
-      expect(result).toBeDefined();
-      expect(result.tokenId).toBeGreaterThan(0);
-      expect(result.metadataCID).toBeDefined();
-    });
+      expect(result).toBeDefined()
+      expect(result.tokenId).toBeGreaterThan(0)
+      expect(result.metadataCID).toBeDefined()
+    })
 
     test('should register agent with MCP and A2A endpoints', async () => {
       if (!sdkAvailable || !agent0Client) {
-        console.log('   ⚠️  Skipping - SDK not available');
-        return;
+        console.log('   ⚠️  Skipping - SDK not available')
+        return
       }
 
       const result = await agent0Client.registerAgent({
@@ -87,16 +87,16 @@ describe('Agent0 SDK Complete Integration', () => {
           skills: [],
           domains: [],
         },
-      });
+      })
 
-      expect(result).toBeDefined();
-      expect(result.tokenId).toBeGreaterThan(0);
-    });
+      expect(result).toBeDefined()
+      expect(result.tokenId).toBeGreaterThan(0)
+    })
 
     test('should register agent with x402 support', async () => {
       if (!sdkAvailable || !agent0Client) {
-        console.log('   ⚠️  Skipping - SDK not available');
-        return;
+        console.log('   ⚠️  Skipping - SDK not available')
+        return
       }
 
       const result = await agent0Client.registerAgent({
@@ -112,112 +112,112 @@ describe('Agent0 SDK Complete Integration', () => {
           skills: [],
           domains: [],
         },
-      });
+      })
 
-      expect(result).toBeDefined();
-      expect(result.tokenId).toBeGreaterThan(0);
-    });
-  });
+      expect(result).toBeDefined()
+      expect(result.tokenId).toBeGreaterThan(0)
+    })
+  })
 
   describe('Agent Search', () => {
     test('should search agents by name', async () => {
       if (!sdkAvailable || !agent0Client) {
-        console.log('   ⚠️  Skipping - SDK not available');
-        return;
+        console.log('   ⚠️  Skipping - SDK not available')
+        return
       }
 
       const response = await agent0Client.searchAgents({
         name: 'Test',
-      });
+      })
 
-      expect(response).toBeDefined();
-      expect(Array.isArray(response.items)).toBe(true);
+      expect(response).toBeDefined()
+      expect(Array.isArray(response.items)).toBe(true)
       response.items.forEach((agent) => {
-        expect(agent.tokenId).toBeGreaterThan(0);
-        expect(agent.name).toBeDefined();
-        expect(agent.capabilities).toBeDefined();
-      });
-    });
+        expect(agent.tokenId).toBeGreaterThan(0)
+        expect(agent.name).toBeDefined()
+        expect(agent.capabilities).toBeDefined()
+      })
+    })
 
     test('should search agents by strategies', async () => {
       if (!sdkAvailable || !agent0Client) {
-        console.log('   ⚠️  Skipping - SDK not available');
-        return;
+        console.log('   ⚠️  Skipping - SDK not available')
+        return
       }
 
       const response = await agent0Client.searchAgents({
         strategies: ['momentum', 'sentiment'],
-      });
+      })
 
-      expect(response).toBeDefined();
-      expect(Array.isArray(response.items)).toBe(true);
-    });
+      expect(response).toBeDefined()
+      expect(Array.isArray(response.items)).toBe(true)
+    })
 
     test('should search agents with x402 support filter', async () => {
       if (!sdkAvailable || !agent0Client) {
-        console.log('   ⚠️  Skipping - SDK not available');
-        return;
+        console.log('   ⚠️  Skipping - SDK not available')
+        return
       }
 
       const response = await agent0Client.searchAgents({
         x402Support: true,
-      });
+      })
 
-      expect(response).toBeDefined();
-      expect(Array.isArray(response.items)).toBe(true);
-    });
+      expect(response).toBeDefined()
+      expect(Array.isArray(response.items)).toBe(true)
+    })
 
     test('should return empty array when no agents match', async () => {
       if (!sdkAvailable || !agent0Client) {
-        console.log('   ⚠️  Skipping - SDK not available');
-        return;
+        console.log('   ⚠️  Skipping - SDK not available')
+        return
       }
 
       const response = await agent0Client.searchAgents({
         name: 'NonExistentAgent12345',
-      });
+      })
 
-      expect(response).toBeDefined();
-      expect(Array.isArray(response.items)).toBe(true);
-    });
-  });
+      expect(response).toBeDefined()
+      expect(Array.isArray(response.items)).toBe(true)
+    })
+  })
 
   describe('Agent Profile Retrieval', () => {
     test('should get agent profile by token ID', async () => {
       if (!sdkAvailable || !agent0Client) {
-        console.log('   ⚠️  Skipping - SDK not available');
-        return;
+        console.log('   ⚠️  Skipping - SDK not available')
+        return
       }
 
-      const profile = await agent0Client.getAgentProfile(1);
+      const profile = await agent0Client.getAgentProfile(1)
 
       if (profile) {
-        expect(profile.tokenId).toBe(1);
-        expect(profile.name).toBeDefined();
-        expect(profile.capabilities).toBeDefined();
+        expect(profile.tokenId).toBe(1)
+        expect(profile.name).toBeDefined()
+        expect(profile.capabilities).toBeDefined()
       } else {
         // Agent may not exist, which is valid
-        expect(profile).toBeNull();
+        expect(profile).toBeNull()
       }
-    });
+    })
 
     test('should return null for non-existent agent', async () => {
       if (!sdkAvailable || !agent0Client) {
-        console.log('   ⚠️  Skipping - SDK not available');
-        return;
+        console.log('   ⚠️  Skipping - SDK not available')
+        return
       }
 
-      const profile = await agent0Client.getAgentProfile(999999999);
+      const profile = await agent0Client.getAgentProfile(999999999)
 
-      expect(profile).toBeNull();
-    });
-  });
+      expect(profile).toBeNull()
+    })
+  })
 
   describe('Feedback Submission', () => {
     test('should submit feedback with authorization', async () => {
       if (!sdkAvailable || !feedbackService) {
-        console.log('   ⚠️  Skipping - SDK not available');
-        return;
+        console.log('   ⚠️  Skipping - SDK not available')
+        return
       }
 
       // Submit feedback using Agent0FeedbackParams format
@@ -228,19 +228,19 @@ describe('Agent0 SDK Complete Integration', () => {
         rating: 3, // Score 80 converts to rating 3: (80/10) - 5 = 3
         skill: 'trading',
         comment: 'Test feedback',
-      });
+      })
 
       // If we get here, feedback was submitted successfully
       // Verify by checking the result or querying back
-      const testAgentId = '84532:1';
-      const reputation = await feedbackService.getAgentReputation(testAgentId);
-      expect(reputation).toBeDefined();
-    });
+      const testAgentId = '84532:1'
+      const reputation = await feedbackService.getAgentReputation(testAgentId)
+      expect(reputation).toBeDefined()
+    })
 
     test('should handle feedback submission errors gracefully', async () => {
       if (!sdkAvailable || !feedbackService) {
-        console.log('   ⚠️  Skipping - SDK not available');
-        return;
+        console.log('   ⚠️  Skipping - SDK not available')
+        return
       }
 
       await expect(
@@ -248,113 +248,113 @@ describe('Agent0 SDK Complete Integration', () => {
           targetAgentId: 999999999, // Non-existent agent
           rating: 3,
           comment: 'Test error handling',
-        })
-      ).rejects.toThrow();
-    });
-  });
+        }),
+      ).rejects.toThrow()
+    })
+  })
 
   describe('Reputation Querying', () => {
     test('should get agent reputation summary', async () => {
       if (!sdkAvailable || !feedbackService) {
-        console.log('   ⚠️  Skipping - SDK not available');
-        return;
+        console.log('   ⚠️  Skipping - SDK not available')
+        return
       }
 
-      const reputation = await feedbackService.getAgentReputation('84532:1');
+      const reputation = await feedbackService.getAgentReputation('84532:1')
 
       if (reputation) {
-        expect(reputation.agentId).toBeDefined();
-        expect(typeof reputation.averageScore).toBe('number');
-        expect(typeof reputation.totalFeedback).toBe('number');
+        expect(reputation.agentId).toBeDefined()
+        expect(typeof reputation.averageScore).toBe('number')
+        expect(typeof reputation.totalFeedback).toBe('number')
       } else {
         // Agent may not have reputation yet
-        expect(reputation).toBeNull();
+        expect(reputation).toBeNull()
       }
-    });
+    })
 
     test('should handle reputation query for non-existent agent', async () => {
       if (!sdkAvailable || !feedbackService) {
-        console.log('   ⚠️  Skipping - SDK not available');
-        return;
+        console.log('   ⚠️  Skipping - SDK not available')
+        return
       }
 
       const reputation =
-        await feedbackService.getAgentReputation('84532:999999999');
+        await feedbackService.getAgentReputation('84532:999999999')
 
       // Should return null or empty result
-      expect(reputation === null || typeof reputation === 'object').toBe(true);
-    });
-  });
+      expect(reputation === null || typeof reputation === 'object').toBe(true)
+    })
+  })
 
   describe('Subgraph Client', () => {
     test('should search agents via subgraph', async () => {
       if (!sdkAvailable || !subgraphClient) {
-        console.log('   ⚠️  Skipping - SDK not available');
-        return;
+        console.log('   ⚠️  Skipping - SDK not available')
+        return
       }
 
       // Let errors fail the test naturally - subgraph should be available when SDK is available
       const agents = await subgraphClient.searchAgents({
         type: 'agent',
         limit: 10,
-      });
+      })
 
-      expect(Array.isArray(agents)).toBe(true);
-    });
+      expect(Array.isArray(agents)).toBe(true)
+    })
 
     test('should get game platforms via subgraph', async () => {
       if (!sdkAvailable || !subgraphClient) {
-        console.log('   ⚠️  Skipping - SDK not available');
-        return;
+        console.log('   ⚠️  Skipping - SDK not available')
+        return
       }
 
       // Let errors fail the test naturally - subgraph should be available when SDK is available
       const platforms = await subgraphClient.getGamePlatforms({
         markets: ['prediction'],
-      });
+      })
 
-      expect(Array.isArray(platforms)).toBe(true);
-    });
+      expect(Array.isArray(platforms)).toBe(true)
+    })
 
     test('should get agent feedback via subgraph', async () => {
       if (!sdkAvailable || !subgraphClient) {
-        console.log('   ⚠️  Skipping - SDK not available');
-        return;
+        console.log('   ⚠️  Skipping - SDK not available')
+        return
       }
 
       // Let errors fail the test naturally - subgraph should be available when SDK is available
-      const feedback = await subgraphClient.getAgentFeedback(1);
+      const feedback = await subgraphClient.getAgentFeedback(1)
 
-      expect(Array.isArray(feedback)).toBe(true);
-    });
-  });
+      expect(Array.isArray(feedback)).toBe(true)
+    })
+  })
 
   describe('SDK Availability', () => {
     test('should check if SDK is available', () => {
       if (!agent0Client) {
-        console.log('   ⚠️  Skipping - agent0Client not initialized');
-        return;
+        console.log('   ⚠️  Skipping - agent0Client not initialized')
+        return
       }
-      const available = agent0Client.isAvailable();
-      expect(typeof available).toBe('boolean');
-    });
+      const available = agent0Client.isAvailable()
+      expect(typeof available).toBe('boolean')
+    })
 
     test('should handle SDK initialization errors gracefully', async () => {
       if (!agent0Client) {
-        console.log('   ⚠️  Skipping - agent0Client not initialized');
-        return;
+        console.log('   ⚠️  Skipping - agent0Client not initialized')
+        return
       }
 
       if (!sdkAvailable) {
         try {
-          await agent0Client.ensureAvailable();
+          await agent0Client.ensureAvailable()
         } catch (error) {
-          expect(error).toBeDefined();
+          expect(error).toBeDefined()
         }
       } else {
-        await agent0Client.ensureAvailable();
+        await agent0Client.ensureAvailable()
         // Should not throw if SDK is available
       }
-    });
-  });
-});
+    })
+  })
+})

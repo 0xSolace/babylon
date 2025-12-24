@@ -5,7 +5,11 @@
  * Provides fully decentralized authentication via Jeju's MPC network.
  */
 
-import type { Address, Hex } from 'viem';
+import type { JsonValue } from '@babylon/shared'
+import type { Address, Hex } from 'viem'
+
+// Re-export type guards and utilities
+export * from './guards'
 
 // ============================================================================
 // DID (Decentralized Identifier)
@@ -15,31 +19,31 @@ import type { Address, Hex } from 'viem';
  * Decentralized Identifier for a user
  * Format: did:jeju:<network>:<publicKey>
  */
-export type DID = `did:jeju:${string}:${string}`;
+export type DID = `did:jeju:${string}:${string}`
 
 /**
  * DID Document containing user's public information
  */
 export interface DIDDocument {
   /** The DID string */
-  id: DID;
+  id: DID
   /** Verification methods (public keys) */
-  verificationMethod: VerificationMethod[];
+  verificationMethod: VerificationMethod[]
   /** Authentication methods */
-  authentication: string[];
+  authentication: string[]
   /** Linked accounts (social, wallet) */
-  linkedAccounts: LinkedAccount[];
+  linkedAccounts: LinkedAccount[]
   /** Creation timestamp */
-  created: number;
+  created: number
   /** Last update timestamp */
-  updated: number;
+  updated: number
 }
 
 export interface VerificationMethod {
-  id: string;
-  type: 'EcdsaSecp256k1VerificationKey2019';
-  controller: DID;
-  publicKeyHex: Hex;
+  id: string
+  type: 'EcdsaSecp256k1VerificationKey2019'
+  controller: DID
+  publicKeyHex: Hex
 }
 
 // ============================================================================
@@ -51,56 +55,56 @@ export type AuthMethod =
   | WalletAuth
   | FarcasterAuth
   | TwitterAuth
-  | DiscordAuth;
+  | DiscordAuth
 
 export interface EmailAuth {
-  type: 'email';
-  email: string;
+  type: 'email'
+  email: string
   /** HMAC of verification code */
-  codeHash: Hex;
+  codeHash: Hex
 }
 
 export interface WalletAuth {
-  type: 'wallet';
-  address: Address;
+  type: 'wallet'
+  address: Address
   /** EIP-191 or EIP-712 signature */
-  signature: Hex;
+  signature: Hex
   /** Message that was signed */
-  message: string;
+  message: string
   /** Timestamp to prevent replay */
-  timestamp: number;
+  timestamp: number
 }
 
 export interface FarcasterAuth {
-  type: 'farcaster';
-  fid: number;
+  type: 'farcaster'
+  fid: number
   /** Farcaster custody address signature */
-  signature: Hex;
+  signature: Hex
   /** Message that was signed */
-  message: string;
-  username?: string;
-  displayName?: string;
-  pfpUrl?: string;
+  message: string
+  username?: string
+  displayName?: string
+  pfpUrl?: string
 }
 
 export interface TwitterAuth {
-  type: 'twitter';
+  type: 'twitter'
   /** OAuth code from PKCE flow */
-  code: string;
+  code: string
   /** PKCE code verifier */
-  codeVerifier: string;
+  codeVerifier: string
   /** State parameter for CSRF protection */
-  state: string;
+  state: string
 }
 
 export interface DiscordAuth {
-  type: 'discord';
+  type: 'discord'
   /** OAuth code from PKCE flow */
-  code: string;
+  code: string
   /** PKCE code verifier */
-  codeVerifier: string;
+  codeVerifier: string
   /** State parameter for CSRF protection */
-  state: string;
+  state: string
 }
 
 // ============================================================================
@@ -108,26 +112,26 @@ export interface DiscordAuth {
 // ============================================================================
 
 export interface LinkedAccount {
-  type: 'email' | 'wallet' | 'farcaster' | 'twitter' | 'discord';
-  identifier: string;
-  verifiedAt: number;
-  metadata?: LinkedAccountMetadata;
+  type: 'email' | 'wallet' | 'farcaster' | 'twitter' | 'discord'
+  identifier: string
+  verifiedAt: number
+  metadata?: LinkedAccountMetadata
 }
 
 export interface LinkedAccountMetadata {
   // Farcaster
-  fid?: number;
-  username?: string;
-  displayName?: string;
-  pfpUrl?: string;
+  fid?: number
+  username?: string
+  displayName?: string
+  pfpUrl?: string
   // Twitter
-  twitterId?: string;
-  twitterUsername?: string;
+  twitterId?: string
+  twitterUsername?: string
   // Discord
-  discordId?: string;
-  discordUsername?: string;
+  discordId?: string
+  discordUsername?: string
   // Wallet
-  chainId?: number;
+  chainId?: number
 }
 
 // ============================================================================
@@ -139,17 +143,17 @@ export interface LinkedAccountMetadata {
  */
 export interface MPCNode {
   /** Node identifier */
-  nodeId: string;
+  nodeId: string
   /** Node's public endpoint */
-  endpoint: string;
+  endpoint: string
   /** TEE attestation quote */
-  attestation: AttestationQuote;
+  attestation: AttestationQuote
   /** Node's public key for encrypted communication */
-  publicKey: Hex;
+  publicKey: Hex
   /** Whether this node is healthy */
-  healthy: boolean;
+  healthy: boolean
   /** Last heartbeat timestamp */
-  lastHeartbeat: number;
+  lastHeartbeat: number
 }
 
 /**
@@ -157,19 +161,19 @@ export interface MPCNode {
  */
 export interface AttestationQuote {
   /** Measurement of enclave code */
-  mrEnclave: Hex;
+  mrEnclave: Hex
   /** Report data (includes operator address) */
-  reportData: Hex;
+  reportData: Hex
   /** CPU attestation signature */
-  cpuSignature: Hex;
+  cpuSignature: Hex
   /** GPU attestation signature (if applicable) */
-  gpuSignature?: Hex;
+  gpuSignature?: Hex
   /** Quote timestamp */
-  timestamp: number;
+  timestamp: number
   /** Operator address derived in TEE */
-  operatorAddress: Address;
+  operatorAddress: Address
   /** Whether this is simulated (dev mode) */
-  isSimulated: boolean;
+  isSimulated: boolean
 }
 
 /**
@@ -177,17 +181,17 @@ export interface AttestationQuote {
  */
 export interface EncryptedKeyShare {
   /** Node that holds this share */
-  nodeId: string;
+  nodeId: string
   /** User's DID */
-  userId: DID;
+  userId: DID
   /** Encrypted share data */
-  ciphertext: Hex;
+  ciphertext: Hex
   /** IV for AES-GCM */
-  iv: Hex;
+  iv: Hex
   /** Auth tag for AES-GCM */
-  authTag: Hex;
+  authTag: Hex
   /** Key version (for rotation) */
-  version: number;
+  version: number
 }
 
 /**
@@ -195,15 +199,15 @@ export interface EncryptedKeyShare {
  */
 export interface ThresholdSignature {
   /** The signature bytes */
-  signature: Hex;
+  signature: Hex
   /** Which nodes participated */
-  participants: string[];
+  participants: string[]
   /** Threshold used (e.g., 2 of 3) */
-  threshold: number;
+  threshold: number
   /** Total nodes in network */
-  totalNodes: number;
+  totalNodes: number
   /** Recovery ID for signature */
-  recoveryId: number;
+  recoveryId: number
 }
 
 // ============================================================================
@@ -215,19 +219,19 @@ export interface ThresholdSignature {
  */
 export interface JejuAuthClaims {
   /** Subject - the user's DID */
-  sub: DID;
+  sub: DID
   /** Issuer - the MPC network identifier */
-  iss: string;
+  iss: string
   /** Audience - the application */
-  aud: string;
+  aud: string
   /** Issued at timestamp */
-  iat: number;
+  iat: number
   /** Expiration timestamp */
-  exp: number;
+  exp: number
   /** User's primary wallet address */
-  walletAddress?: Address;
+  walletAddress?: Address
   /** Linked account types */
-  linkedTypes: string[];
+  linkedTypes: string[]
 }
 
 /**
@@ -235,11 +239,11 @@ export interface JejuAuthClaims {
  */
 export interface SessionToken {
   /** The JWT string */
-  token: string;
+  token: string
   /** When the token expires */
-  expiresAt: number;
+  expiresAt: number
   /** User's DID */
-  userId: DID;
+  userId: DID
 }
 
 // ============================================================================
@@ -251,53 +255,53 @@ export interface SessionToken {
  */
 export interface KeyBackup {
   /** Backup version */
-  version: number;
+  version: number
   /** User's DID */
-  userId: DID;
+  userId: DID
   /** Encrypted master key */
-  encryptedKey: Hex;
+  encryptedKey: Hex
   /** Salt for key derivation */
-  salt: Hex;
+  salt: Hex
   /** IV for encryption */
-  iv: Hex;
+  iv: Hex
   /** Key derivation iterations */
-  iterations: number;
+  iterations: number
   /** Backup creation timestamp */
-  createdAt: number;
+  createdAt: number
 }
 
 /**
  * Recovery proof (used to recover access)
  */
 export interface RecoveryProof {
-  type: 'social' | 'backup' | 'oauth';
+  type: 'social' | 'backup' | 'oauth'
   /** Proof data depends on type */
-  data: SocialRecoveryProof | BackupRecoveryProof | OAuthRecoveryProof;
+  data: SocialRecoveryProof | BackupRecoveryProof | OAuthRecoveryProof
 }
 
 export interface SocialRecoveryProof {
   /** Guardians who approved recovery */
-  guardians: Address[];
+  guardians: Address[]
   /** Their signatures */
-  signatures: Hex[];
+  signatures: Hex[]
   /** Recovery request hash */
-  requestHash: Hex;
+  requestHash: Hex
 }
 
 export interface BackupRecoveryProof {
   /** The encrypted backup */
-  backup: KeyBackup;
+  backup: KeyBackup
   /** Decrypted backup (user provides password) */
-  decryptedKey: Hex;
+  decryptedKey: Hex
 }
 
 export interface OAuthRecoveryProof {
   /** OAuth provider */
-  provider: 'twitter' | 'discord' | 'farcaster';
+  provider: 'twitter' | 'discord' | 'farcaster'
   /** Fresh OAuth token */
-  token: string;
+  token: string
   /** User's identifier on that platform */
-  identifier: string;
+  identifier: string
 }
 
 // ============================================================================
@@ -309,40 +313,40 @@ export interface OAuthRecoveryProof {
  */
 export interface PaymasterDecision {
   /** Whether to sponsor */
-  sponsor: boolean;
+  sponsor: boolean
   /** Reason for decision */
-  reason: string;
+  reason: string
   /** Maximum gas to sponsor */
-  maxGas?: bigint;
+  maxGas?: bigint
   /** Validity period (seconds) */
-  validUntil?: number;
+  validUntil?: number
 }
 
 /**
  * User Operation (ERC-4337)
  */
 export interface UserOperation {
-  sender: Address;
-  nonce: bigint;
-  initCode: Hex;
-  callData: Hex;
-  callGasLimit: bigint;
-  verificationGasLimit: bigint;
-  preVerificationGas: bigint;
-  maxFeePerGas: bigint;
-  maxPriorityFeePerGas: bigint;
-  paymasterAndData: Hex;
-  signature: Hex;
+  sender: Address
+  nonce: bigint
+  initCode: Hex
+  callData: Hex
+  callGasLimit: bigint
+  verificationGasLimit: bigint
+  preVerificationGas: bigint
+  maxFeePerGas: bigint
+  maxPriorityFeePerGas: bigint
+  paymasterAndData: Hex
+  signature: Hex
 }
 
 /**
  * Paymaster data for sponsored operations
  */
 export interface PaymasterData {
-  paymaster: Address;
-  paymasterData: Hex;
-  validUntil: number;
-  validAfter: number;
+  paymaster: Address
+  paymasterData: Hex
+  validUntil: number
+  validAfter: number
 }
 
 // ============================================================================
@@ -351,29 +355,29 @@ export interface PaymasterData {
 
 export interface PKCEChallenge {
   /** Code verifier (random, kept client-side) */
-  codeVerifier: string;
+  codeVerifier: string
   /** Code challenge (S256 hash of verifier) */
-  codeChallenge: string;
+  codeChallenge: string
   /** State parameter */
-  state: string;
+  state: string
   /** Nonce for additional security */
-  nonce: string;
+  nonce: string
   /** When this challenge expires */
-  expiresAt: number;
+  expiresAt: number
 }
 
 export interface OAuthConfig {
-  clientId: string;
-  redirectUri: string;
-  scopes: string[];
+  clientId: string
+  redirectUri: string
+  scopes: string[]
 }
 
 export interface OAuthTokenResponse {
-  accessToken: string;
-  tokenType: string;
-  expiresIn: number;
-  refreshToken?: string;
-  scope: string;
+  accessToken: string
+  tokenType: string
+  expiresIn: number
+  refreshToken?: string
+  scope: string
 }
 
 // ============================================================================
@@ -382,41 +386,41 @@ export interface OAuthTokenResponse {
 
 export interface AuthState {
   /** Whether auth is ready */
-  ready: boolean;
+  ready: boolean
   /** Whether user is authenticated */
-  authenticated: boolean;
+  authenticated: boolean
   /** Current user's DID */
-  userId: DID | null;
+  userId: DID | null
   /** User's primary wallet address */
-  walletAddress: Address | null;
+  walletAddress: Address | null
   /** Linked accounts */
-  linkedAccounts: LinkedAccount[];
+  linkedAccounts: LinkedAccount[]
   /** Whether profile is loading */
-  loading: boolean;
+  loading: boolean
 }
 
 export interface AuthActions {
   /** Login with any supported method */
-  login: (method: AuthMethod) => Promise<SessionToken>;
+  login: (method: AuthMethod) => Promise<SessionToken>
   /** Logout and clear session */
-  logout: () => Promise<void>;
+  logout: () => Promise<void>
   /** Link an additional auth method */
-  linkAccount: (method: AuthMethod) => Promise<void>;
+  linkAccount: (method: AuthMethod) => Promise<void>
   /** Unlink an auth method */
   unlinkAccount: (
     type: LinkedAccount['type'],
-    identifier: string
-  ) => Promise<void>;
+    identifier: string,
+  ) => Promise<void>
   /** Refresh the session token */
-  refreshToken: () => Promise<SessionToken>;
+  refreshToken: () => Promise<SessionToken>
   /** Get current access token */
-  getAccessToken: () => Promise<string | null>;
+  getAccessToken: () => Promise<string | null>
   /** Sign a message with MPC wallet */
-  signMessage: (message: string) => Promise<Hex>;
+  signMessage: (message: string) => Promise<Hex>
   /** Sign typed data (EIP-712) */
-  signTypedData: (typedData: unknown) => Promise<Hex>;
+  signTypedData: (typedData: Record<string, JsonValue>) => Promise<Hex>
   /** Export key backup */
-  exportBackup: (password: string) => Promise<KeyBackup>;
+  exportBackup: (password: string) => Promise<KeyBackup>
   /** Recover with backup */
-  recoverWithBackup: (backup: KeyBackup, password: string) => Promise<void>;
+  recoverWithBackup: (backup: KeyBackup, password: string) => Promise<void>
 }

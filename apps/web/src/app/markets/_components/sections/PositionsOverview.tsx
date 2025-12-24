@@ -1,14 +1,12 @@
-'use client';
-
-import type { PerpPosition, UserPredictionPosition } from '@babylon/shared';
-import { PerpPositionsList } from '@/components/markets/PerpPositionsList';
-import { PredictionPositionsList } from '@/components/markets/PredictionPositionsList';
+import type { PerpPosition, UserPredictionPosition } from '@babylon/shared'
+import { PerpPositionsList } from '@/components/markets/PerpPositionsList'
+import { PredictionPositionsList } from '@/components/markets/PredictionPositionsList'
 
 interface PositionsOverviewProps {
-  perpPositions: PerpPosition[];
-  predictionPositions: UserPredictionPosition[];
-  onPositionClosed: () => Promise<void>;
-  onPositionSold: () => Promise<void>;
+  perpPositions: PerpPosition[]
+  predictionPositions: UserPredictionPosition[]
+  onPositionClosed: () => Promise<void>
+  onPositionSold: () => Promise<void>
 }
 
 /**
@@ -22,9 +20,9 @@ export function PositionsOverview({
   onPositionSold,
 }: PositionsOverviewProps) {
   const hasPositions =
-    perpPositions.length > 0 || predictionPositions.length > 0;
+    perpPositions.length > 0 || predictionPositions.length > 0
 
-  if (!hasPositions) return null;
+  if (!hasPositions) return null
 
   return (
     <div className="rounded-lg border border-[#0066FF]/20 bg-gradient-to-br from-[#0066FF]/10 to-purple-500/10 p-4">
@@ -57,5 +55,5 @@ export function PositionsOverview({
         </div>
       )}
     </div>
-  );
+  )
 }

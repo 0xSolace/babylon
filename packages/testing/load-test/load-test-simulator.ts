@@ -5,104 +5,107 @@
  * and measuring system performance under various load conditions.
  */
 
-import { logger } from '@babylon/shared';
+import { logger } from '@babylon/shared'
+
+// Centralized port configuration
+const BABYLON_API_PORT = process.env.BABYLON_API_PORT ?? '5009'
 
 export interface EndpointConfig {
   /** API path to test */
-  path: string;
+  path: string
   /** HTTP method */
-  method: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
+  method: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH'
   /** Weight for endpoint selection (0-1, should sum to 1) */
-  weight: number;
+  weight: number
   /** Optional request headers */
-  headers?: Record<string, string>;
+  headers?: Record<string, string>
   /** Optional request body */
-  body?: unknown;
+  body?: unknown
 }
 
 export interface LoadTestConfig {
   /** Number of concurrent users to simulate */
-  concurrentUsers: number;
+  concurrentUsers: number
   /** Total test duration in seconds */
-  durationSeconds: number;
+  durationSeconds: number
   /** Ramp-up time in seconds (optional) */
-  rampUpSeconds?: number;
+  rampUpSeconds?: number
   /** Think time between requests in ms (optional) */
-  thinkTimeMs?: number;
+  thinkTimeMs?: number
   /** Maximum requests per second (optional) */
-  maxRps?: number;
+  maxRps?: number
   /** Endpoints to test */
-  endpoints: EndpointConfig[];
+  endpoints: EndpointConfig[]
 }
 
 export interface ResponseTimeStats {
-  min: number;
-  max: number;
-  mean: number;
-  median: number;
-  p95: number;
-  p99: number;
+  min: number
+  max: number
+  mean: number
+  median: number
+  p95: number
+  p99: number
 }
 
 export interface ThroughputStats {
-  requestsPerSecond: number;
-  successRate: number;
+  requestsPerSecond: number
+  successRate: number
 }
 
 export interface EndpointStats {
-  count: number;
-  successCount: number;
-  avgResponseTime: number;
-  errorCount: number;
+  count: number
+  successCount: number
+  avgResponseTime: number
+  errorCount: number
 }
 
 export interface LoadTestError {
-  endpoint: string;
-  error: string;
-  count: number;
+  endpoint: string
+  error: string
+  count: number
 }
 
 export interface LoadTestResult {
-  config: LoadTestConfig;
-  startTime: Date;
-  endTime: Date;
-  durationMs: number;
-  totalRequests: number;
-  successfulRequests: number;
-  failedRequests: number;
-  responseTime: ResponseTimeStats;
-  throughput: ThroughputStats;
-  errors: LoadTestError[];
-  endpointStats: Record<string, EndpointStats>;
+  config: LoadTestConfig
+  startTime: Date
+  endTime: Date
+  durationMs: number
+  totalRequests: number
+  successfulRequests: number
+  failedRequests: number
+  responseTime: ResponseTimeStats
+  throughput: ThroughputStats
+  errors: LoadTestError[]
+  endpointStats: Record<string, EndpointStats>
 }
 
 interface RequestResult {
-  endpoint: string;
-  startTime: number;
-  endTime: number;
-  responseTime: number;
-  statusCode: number;
+  endpoint: string
+  startTime: number
+  endTime: number
+  responseTime: number
+  statusCode: number
 }
 
 export class LoadTestSimulator {
-  private baseUrl: string;
-  private results: RequestResult[] = [];
-  private isRunning = false;
-  private startTime: Date = new Date();
-  private errorCounts: Map<string, number> = new Map();
+  private baseUrl: string
+  private results: RequestResult[] = []
+  private isRunning = false
+  private startTime: Date = new Date()
+  private errorCounts: Map<string, number> = new Map()
 
-  constructor(baseUrl = 'http://localhost:5007') {
-    this.baseUrl = baseUrl;
+  constructor(baseUrl = `http://localhost:${BABYLON_API_PORT}`) {
+    this.baseUrl = baseUrl
   }
 
   /**
    * Run a load test with the given configuration
    */
   async runTest(config: LoadTestConfig): Promise<LoadTestResult> {
-    this.results = [];
-    this.errorCounts = new Map();
-    this.isRunning = true;
-    this.startTime = new Date();
+    this.results = []
+    this.errorCounts = new Map()
+    this.isRunning = true
+    this.startTime = new Date()
 
     logger.info(
       'Starting load test',
@@ -111,32 +114,32 @@ export class LoadTestSimulator {
         duration: `${config.durationSeconds}s`,
         endpoints: config.endpoints.length,
       },
-      'LoadTestSimulator'
-    );
+      'LoadTestSimulator',
+    )
 
-    const endTime = Date.now() + config.durationSeconds * 1000;
-    const workers: Promise<void>[] = [];
+    const endTime = Date.now() + config.durationSeconds * 1000
+    const workers: Promise<void>[] = []
 
     // Create worker promises for each concurrent user
     for (let i = 0; i < config.concurrentUsers; i++) {
-      const worker = this.simulateUser(config, endTime, i);
-      workers.push(worker);
+      const worker = this.simulateUser(config, endTime, i)
+      workers.push(worker)
 
       // Ramp-up: stagger worker starts
       if (config.rampUpSeconds && config.rampUpSeconds > 0) {
-        const delayMs = (config.rampUpSeconds * 1000) / config.concurrentUsers;
-        await this.sleep(delayMs);
+        const delayMs = (config.rampUpSeconds * 1000) / config.concurrentUsers
+        await this.sleep(delayMs)
       }
     }
 
     // Wait for all workers to complete
-    await Promise.all(workers);
+    await Promise.all(workers)
 
-    this.isRunning = false;
-    const testEndTime = new Date();
+    this.isRunning = false
+    const testEndTime = new Date()
 
     // Analyze results
-    const result = this.analyzeResults(config, testEndTime);
+    const result = this.analyzeResults(config, testEndTime)
 
     logger.info(
       'Load test completed',
@@ -146,10 +149,10 @@ export class LoadTestSimulator {
         avgResponseTime: `${result.responseTime.mean.toFixed(2)}ms`,
         p95ResponseTime: `${result.responseTime.p95.toFixed(2)}ms`,
       },
-      'LoadTestSimulator'
-    );
+      'LoadTestSimulator',
+    )
 
-    return result;
+    return result
   }
 
   /**
@@ -158,32 +161,32 @@ export class LoadTestSimulator {
   private async simulateUser(
     config: LoadTestConfig,
     endTime: number,
-    _userId: number
+    _userId: number,
   ): Promise<void> {
-    let requestCount = 0;
+    let requestCount = 0
 
     while (Date.now() < endTime && this.isRunning) {
       // Rate limiting
       if (config.maxRps) {
         const expectedRequests = Math.floor(
-          ((Date.now() - this.startTime.getTime()) / 1000) * config.maxRps
-        );
+          ((Date.now() - this.startTime.getTime()) / 1000) * config.maxRps,
+        )
         if (requestCount >= expectedRequests / config.concurrentUsers) {
-          await this.sleep(10);
-          continue;
+          await this.sleep(10)
+          continue
         }
       }
 
       // Select endpoint based on weights
-      const endpoint = this.selectEndpoint(config.endpoints);
+      const endpoint = this.selectEndpoint(config.endpoints)
 
       // Make request
-      await this.makeRequest(endpoint);
-      requestCount++;
+      await this.makeRequest(endpoint)
+      requestCount++
 
       // Think time (simulate user reading/processing)
       if (config.thinkTimeMs) {
-        await this.sleep(config.thinkTimeMs);
+        await this.sleep(config.thinkTimeMs)
       }
     }
   }
@@ -193,28 +196,32 @@ export class LoadTestSimulator {
    */
   private selectEndpoint(endpoints: EndpointConfig[]): EndpointConfig {
     if (endpoints.length === 0) {
-      throw new Error('No endpoints provided for load testing');
+      throw new Error('No endpoints provided for load testing')
     }
 
-    const rand = Math.random();
-    let cumulative = 0;
+    const rand = Math.random()
+    let cumulative = 0
 
     for (const endpoint of endpoints) {
-      cumulative += endpoint.weight;
+      cumulative += endpoint.weight
       if (rand <= cumulative) {
-        return endpoint;
+        return endpoint
       }
     }
 
-    return endpoints[endpoints.length - 1]!;
+    const lastEndpoint = endpoints[endpoints.length - 1]
+    if (!lastEndpoint) {
+      throw new Error('No endpoints available')
+    }
+    return lastEndpoint
   }
 
   /**
    * Make a request to an endpoint
    */
   private async makeRequest(endpoint: EndpointConfig): Promise<void> {
-    const startTime = Date.now();
-    const url = `${this.baseUrl}${endpoint.path}`;
+    const startTime = Date.now()
+    const url = `${this.baseUrl}${endpoint.path}`
 
     const response = await fetch(url, {
       method: endpoint.method,
@@ -223,17 +230,17 @@ export class LoadTestSimulator {
         ...endpoint.headers,
       },
       body: endpoint.body ? JSON.stringify(endpoint.body) : undefined,
-    });
+    })
 
-    const statusCode = response.status;
-    const success = response.ok;
+    const statusCode = response.status
+    const success = response.ok
 
     if (!success) {
-      const errorKey = `${endpoint.path}:${response.status}`;
-      this.errorCounts.set(errorKey, (this.errorCounts.get(errorKey) || 0) + 1);
+      const errorKey = `${endpoint.path}:${response.status}`
+      this.errorCounts.set(errorKey, (this.errorCounts.get(errorKey) || 0) + 1)
     }
 
-    const responseTime = Date.now() - startTime;
+    const responseTime = Date.now() - startTime
 
     this.results.push({
       endpoint: endpoint.path,
@@ -241,7 +248,7 @@ export class LoadTestSimulator {
       endTime: Date.now(),
       responseTime,
       statusCode,
-    });
+    })
   }
 
   /**
@@ -249,23 +256,23 @@ export class LoadTestSimulator {
    */
   private analyzeResults(
     config: LoadTestConfig,
-    endTime: Date
+    endTime: Date,
   ): LoadTestResult {
     const successfulResults = this.results.filter(
-      (r) => r.statusCode >= 200 && r.statusCode < 300
-    );
+      (r) => r.statusCode >= 200 && r.statusCode < 300,
+    )
     const responseTimes = successfulResults
       .map((r) => r.responseTime)
-      .sort((a, b) => a - b);
-    const durationMs = endTime.getTime() - this.startTime.getTime();
+      .sort((a, b) => a - b)
+    const durationMs = endTime.getTime() - this.startTime.getTime()
 
     // Calculate percentiles
-    const p95Index = Math.floor(responseTimes.length * 0.95);
-    const p99Index = Math.floor(responseTimes.length * 0.99);
-    const medianIndex = Math.floor(responseTimes.length * 0.5);
+    const p95Index = Math.floor(responseTimes.length * 0.95)
+    const p99Index = Math.floor(responseTimes.length * 0.99)
+    const medianIndex = Math.floor(responseTimes.length * 0.5)
 
     // Aggregate endpoint stats
-    const endpointStats: Record<string, EndpointStats> = {};
+    const endpointStats: Record<string, EndpointStats> = {}
 
     for (const result of this.results) {
       if (!endpointStats[result.endpoint]) {
@@ -274,35 +281,41 @@ export class LoadTestSimulator {
           successCount: 0,
           avgResponseTime: 0,
           errorCount: 0,
-        };
+        }
       }
 
-      const stats = endpointStats[result.endpoint]!;
-      stats.count++;
+      const stats = endpointStats[result.endpoint]
+      if (!stats) {
+        throw new Error(`Stats not found for endpoint: ${result.endpoint}`)
+      }
+      stats.count++
 
-      const success = result.statusCode >= 200 && result.statusCode < 300;
+      const success = result.statusCode >= 200 && result.statusCode < 300
       if (success) {
-        stats.successCount++;
+        stats.successCount++
         stats.avgResponseTime =
           (stats.avgResponseTime * (stats.successCount - 1) +
             result.responseTime) /
-          stats.successCount;
+          stats.successCount
       } else {
-        stats.errorCount++;
+        stats.errorCount++
       }
     }
 
     // Aggregate errors
     const errors: LoadTestError[] = Array.from(this.errorCounts.entries()).map(
       ([key, count]) => {
-        const parts = key.split(':');
+        const parts = key.split(':')
         if (parts.length < 2) {
-          throw new Error(`Invalid error key format: ${key}`);
+          throw new Error(`Invalid error key format: ${key}`)
         }
-        const [endpoint, ...errorParts] = parts;
-        return { endpoint: endpoint!, error: errorParts.join(':'), count };
-      }
-    );
+        const [endpoint, ...errorParts] = parts
+        if (!endpoint) {
+          throw new Error(`Invalid error key format: ${key}`)
+        }
+        return { endpoint, error: errorParts.join(':'), count }
+      },
+    )
 
     return {
       config,
@@ -332,21 +345,21 @@ export class LoadTestSimulator {
       },
       errors,
       endpointStats,
-    };
+    }
   }
 
   /**
    * Stop the running test
    */
   stop(): void {
-    this.isRunning = false;
+    this.isRunning = false
   }
 
   /**
    * Sleep for a given duration
    */
   private sleep(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
+    return new Promise((resolve) => setTimeout(resolve, ms))
   }
 }
 
@@ -411,4 +424,4 @@ export const TEST_SCENARIOS = {
       { path: '/api/health', method: 'GET' as const, weight: 0.2 },
     ],
   },
-} as const;
+} as const

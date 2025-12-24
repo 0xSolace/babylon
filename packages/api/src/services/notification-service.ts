@@ -13,8 +13,8 @@ import {
   hasBlocked,
   notifications,
   users,
-} from '@babylon/db';
-import { generateSnowflakeId, logger } from '@babylon/shared';
+} from '@babylon/db'
+import { generateSnowflakeId, logger } from '@babylon/shared'
 
 export type NotificationType =
   | 'comment'
@@ -27,31 +27,31 @@ export type NotificationType =
   | 'report_evaluated'
   | 'appeal_status'
   | 'points_received'
-  | 'group_invite';
+  | 'group_invite'
 
 interface CreateNotificationParams {
-  userId: string; // Who receives the notification
-  type: NotificationType;
-  actorId?: string; // Who performed the action
-  postId?: string;
-  commentId?: string;
-  chatId?: string; // For DM/chat message notifications
-  title: string;
-  message: string;
+  userId: string // Who receives the notification
+  type: NotificationType
+  actorId?: string // Who performed the action
+  postId?: string
+  commentId?: string
+  chatId?: string // For DM/chat message notifications
+  title: string
+  message: string
 }
 
 /**
  * Deduplication window in milliseconds for notifications
  * This prevents duplicate notifications from being created within this time window
  */
-const DEDUP_WINDOW_MS = 5 * 60 * 1000; // 5 minutes
+const DEDUP_WINDOW_MS = 5 * 60 * 1000 // 5 minutes
 
 /**
  * Check if a similar notification already exists within the deduplication window
  * Returns true if a duplicate exists and we should skip creation
  */
 async function isDuplicateNotification(
-  params: CreateNotificationParams
+  params: CreateNotificationParams,
 ): Promise<boolean> {
   // Only deduplicate for notification types that could have duplicates from the same actor
   // System notifications and some others don't have actorId and are handled differently
@@ -62,13 +62,13 @@ async function isDuplicateNotification(
     'reply',
     'share',
     'mention',
-  ];
+  ]
 
   if (!typesToDeduplicate.includes(params.type) || !params.actorId) {
-    return false;
+    return false
   }
 
-  const cutoffTime = new Date(Date.now() - DEDUP_WINDOW_MS);
+  const cutoffTime = new Date(Date.now() - DEDUP_WINDOW_MS)
 
   // Build conditions for duplicate check
   const conditions = [
@@ -76,14 +76,14 @@ async function isDuplicateNotification(
     eq(notifications.type, params.type),
     eq(notifications.actorId, params.actorId),
     gt(notifications.createdAt, cutoffTime),
-  ];
+  ]
 
   // For post/comment-related notifications, also check the specific content
   if (params.postId) {
-    conditions.push(eq(notifications.postId, params.postId));
+    conditions.push(eq(notifications.postId, params.postId))
   }
   if (params.commentId) {
-    conditions.push(eq(notifications.commentId, params.commentId));
+    conditions.push(eq(notifications.commentId, params.commentId))
   }
 
   const [existingNotification] = await db
@@ -91,16 +91,16 @@ async function isDuplicateNotification(
     .from(notifications)
     .where(and(...conditions))
     .orderBy(desc(notifications.createdAt))
-    .limit(1);
+    .limit(1)
 
-  return !!existingNotification;
+  return !!existingNotification
 }
 
 /**
  * Create a notification
  */
 export async function createNotification(
-  params: CreateNotificationParams
+  params: CreateNotificationParams,
 ): Promise<void> {
   // Verify that the userId exists in the User table before creating notification
   // This prevents foreign key constraint errors
@@ -108,15 +108,15 @@ export async function createNotification(
     .select({ id: users.id })
     .from(users)
     .where(eq(users.id, params.userId))
-    .limit(1);
+    .limit(1)
 
   if (userExists.length === 0) {
     logger.warn(
       `Skipping notification creation: userId ${params.userId} does not exist in User table (may be an Actor)`,
       undefined,
-      'NotificationService'
-    );
-    return;
+      'NotificationService',
+    )
+    return
   }
 
   // Check if users have blocked each other (if actorId is provided)
@@ -124,27 +124,27 @@ export async function createNotification(
     const [isBlocked, hasBlockedMe] = await Promise.all([
       hasBlocked(params.userId, params.actorId),
       hasBlocked(params.actorId, params.userId),
-    ]);
+    ])
 
     if (isBlocked || hasBlockedMe) {
       logger.debug(
         'Skipping notification creation: users have blocked each other',
         { userId: params.userId, actorId: params.actorId },
-        'NotificationService'
-      );
-      return;
+        'NotificationService',
+      )
+      return
     }
   }
 
   // Check for duplicate notifications within the deduplication window
-  const isDuplicate = await isDuplicateNotification(params);
+  const isDuplicate = await isDuplicateNotification(params)
   if (isDuplicate) {
     logger.debug(
       'Skipping duplicate notification',
       { userId: params.userId, type: params.type, actorId: params.actorId },
-      'NotificationService'
-    );
-    return;
+      'NotificationService',
+    )
+    return
   }
 
   await db.insert(notifications).values({
@@ -157,7 +157,7 @@ export async function createNotification(
     chatId: params.chatId,
     title: params.title,
     message: params.message,
-  });
+  })
 }
 
 /**
@@ -167,11 +167,11 @@ export async function notifyCommentOnPost(
   postAuthorId: string,
   commentAuthorId: string,
   postId: string,
-  commentId: string
+  commentId: string,
 ): Promise<void> {
   // Don't notify if user commented on their own post
   if (postAuthorId === commentAuthorId) {
-    return;
+    return
   }
 
   // Get comment author info for message
@@ -182,12 +182,12 @@ export async function notifyCommentOnPost(
     })
     .from(users)
     .where(eq(users.id, commentAuthorId))
-    .limit(1);
+    .limit(1)
 
-  const commentAuthor = result[0];
+  const commentAuthor = result[0]
   const authorName =
-    commentAuthor?.displayName || commentAuthor?.username || 'Someone';
-  const message = `${authorName} commented on your post`;
+    commentAuthor?.displayName || commentAuthor?.username || 'Someone'
+  const message = `${authorName} commented on your post`
 
   await createNotification({
     userId: postAuthorId,
@@ -197,7 +197,7 @@ export async function notifyCommentOnPost(
     commentId,
     title: 'New Comment',
     message,
-  });
+  })
 }
 
 /**
@@ -207,11 +207,11 @@ export async function notifyReactionOnPost(
   postAuthorId: string,
   reactionUserId: string,
   postId: string,
-  reactionType = 'like'
+  reactionType = 'like',
 ): Promise<void> {
   // Don't notify if user reacted to their own post
   if (postAuthorId === reactionUserId) {
-    return;
+    return
   }
 
   const result = await db
@@ -221,13 +221,13 @@ export async function notifyReactionOnPost(
     })
     .from(users)
     .where(eq(users.id, reactionUserId))
-    .limit(1);
+    .limit(1)
 
-  const reactionUser = result[0];
+  const reactionUser = result[0]
   const userName =
-    reactionUser?.displayName || reactionUser?.username || 'Someone';
-  const action = reactionType === 'like' ? 'liked' : reactionType;
-  const message = `${userName} ${action} your post`;
+    reactionUser?.displayName || reactionUser?.username || 'Someone'
+  const action = reactionType === 'like' ? 'liked' : reactionType
+  const message = `${userName} ${action} your post`
 
   await createNotification({
     userId: postAuthorId,
@@ -236,7 +236,7 @@ export async function notifyReactionOnPost(
     postId,
     title: 'New Reaction',
     message,
-  });
+  })
 }
 
 /**
@@ -244,11 +244,11 @@ export async function notifyReactionOnPost(
  */
 export async function notifyFollow(
   followedUserId: string,
-  followerId: string
+  followerId: string,
 ): Promise<void> {
   // Don't notify if user followed themselves
   if (followedUserId === followerId) {
-    return;
+    return
   }
 
   const result = await db
@@ -258,11 +258,11 @@ export async function notifyFollow(
     })
     .from(users)
     .where(eq(users.id, followerId))
-    .limit(1);
+    .limit(1)
 
-  const follower = result[0];
-  const userName = follower?.displayName || follower?.username || 'Someone';
-  const message = `${userName} started following you`;
+  const follower = result[0]
+  const userName = follower?.displayName || follower?.username || 'Someone'
+  const message = `${userName} started following you`
 
   await createNotification({
     userId: followedUserId,
@@ -270,7 +270,7 @@ export async function notifyFollow(
     actorId: followerId,
     title: 'New Follower',
     message,
-  });
+  })
 }
 
 /**
@@ -281,11 +281,11 @@ export async function notifyReplyToComment(
   replyAuthorId: string,
   postId: string,
   commentId: string,
-  replyCommentId: string
+  replyCommentId: string,
 ): Promise<void> {
   // Don't notify if user replied to their own comment
   if (commentAuthorId === replyAuthorId) {
-    return;
+    return
   }
 
   // Use commentId to create notification context
@@ -293,7 +293,7 @@ export async function notifyReplyToComment(
     commentId,
     replyCommentId,
     postId,
-  };
+  }
 
   const result = await db
     .select({
@@ -302,12 +302,12 @@ export async function notifyReplyToComment(
     })
     .from(users)
     .where(eq(users.id, replyAuthorId))
-    .limit(1);
+    .limit(1)
 
-  const replyAuthor = result[0];
+  const replyAuthor = result[0]
   const userName =
-    replyAuthor?.displayName || replyAuthor?.username || 'Someone';
-  const message = `${userName} replied to your comment`;
+    replyAuthor?.displayName || replyAuthor?.username || 'Someone'
+  const message = `${userName} replied to your comment`
 
   // Use notificationContext when creating the notification
   await createNotification({
@@ -318,7 +318,7 @@ export async function notifyReplyToComment(
     commentId: notificationContext.commentId,
     title: 'New Reply',
     message,
-  });
+  })
 }
 
 /**
@@ -327,11 +327,11 @@ export async function notifyReplyToComment(
 export async function notifyShare(
   postAuthorId: string,
   sharerId: string,
-  postId: string
+  postId: string,
 ): Promise<void> {
   // Don't notify if user shared their own post
   if (postAuthorId === sharerId) {
-    return;
+    return
   }
 
   const result = await db
@@ -341,11 +341,11 @@ export async function notifyShare(
     })
     .from(users)
     .where(eq(users.id, sharerId))
-    .limit(1);
+    .limit(1)
 
-  const sharer = result[0];
-  const userName = sharer?.displayName || sharer?.username || 'Someone';
-  const message = `${userName} shared your post`;
+  const sharer = result[0]
+  const userName = sharer?.displayName || sharer?.username || 'Someone'
+  const message = `${userName} shared your post`
 
   await createNotification({
     userId: postAuthorId,
@@ -354,7 +354,7 @@ export async function notifyShare(
     postId,
     title: 'Post Shared',
     message,
-  });
+  })
 }
 
 /**
@@ -364,11 +364,11 @@ export async function notifyMention(
   mentionedUserId: string,
   mentionerUserId: string,
   postId?: string,
-  commentId?: string
+  commentId?: string,
 ): Promise<void> {
   // Don't notify if user mentioned themselves
   if (mentionedUserId === mentionerUserId) {
-    return;
+    return
   }
 
   const result = await db
@@ -378,14 +378,14 @@ export async function notifyMention(
     })
     .from(users)
     .where(eq(users.id, mentionerUserId))
-    .limit(1);
+    .limit(1)
 
-  const mentioner = result[0];
+  const mentioner = result[0]
   const mentionerName =
-    mentioner?.displayName || mentioner?.username || 'Someone';
+    mentioner?.displayName || mentioner?.username || 'Someone'
   const message = commentId
     ? `${mentionerName} mentioned you in a comment`
-    : `${mentionerName} mentioned you in a post`;
+    : `${mentionerName} mentioned you in a post`
 
   await createNotification({
     userId: mentionedUserId,
@@ -395,7 +395,7 @@ export async function notifyMention(
     commentId,
     title: 'Mention',
     message,
-  });
+  })
 }
 
 /**
@@ -403,14 +403,14 @@ export async function notifyMention(
  */
 export async function notifyNewAccount(userId: string): Promise<void> {
   const message =
-    '🎉 Welcome to Babylon! Edit your profile details to earn free points and unlock rewards.';
+    '🎉 Welcome to Babylon! Edit your profile details to earn free points and unlock rewards.'
 
   await createNotification({
     userId,
     type: 'system',
     title: 'Welcome to Babylon',
     message,
-  });
+  })
 }
 
 /**
@@ -418,16 +418,16 @@ export async function notifyNewAccount(userId: string): Promise<void> {
  */
 export async function notifyProfileComplete(
   userId: string,
-  pointsAwarded: number
+  pointsAwarded: number,
 ): Promise<void> {
-  const message = `🎊 Congratulations! You've completed your profile and earned ${pointsAwarded} points!`;
+  const message = `🎊 Congratulations! You've completed your profile and earned ${pointsAwarded} points!`
 
   await createNotification({
     userId,
     type: 'system',
     title: 'Profile Complete',
     message,
-  });
+  })
 }
 
 /**
@@ -438,11 +438,11 @@ export async function notifyReactionOnComment(
   reactionUserId: string,
   commentId: string,
   postId: string,
-  reactionType = 'like'
+  reactionType = 'like',
 ): Promise<void> {
   // Don't notify if user reacted to their own comment
   if (commentAuthorId === reactionUserId) {
-    return;
+    return
   }
 
   const result = await db
@@ -452,13 +452,13 @@ export async function notifyReactionOnComment(
     })
     .from(users)
     .where(eq(users.id, reactionUserId))
-    .limit(1);
+    .limit(1)
 
-  const reactionUser = result[0];
+  const reactionUser = result[0]
   const userName =
-    reactionUser?.displayName || reactionUser?.username || 'Someone';
-  const action = reactionType === 'like' ? 'liked' : reactionType;
-  const message = `${userName} ${action} your comment`;
+    reactionUser?.displayName || reactionUser?.username || 'Someone'
+  const action = reactionType === 'like' ? 'liked' : reactionType
+  const message = `${userName} ${action} your comment`
 
   await createNotification({
     userId: commentAuthorId,
@@ -468,7 +468,7 @@ export async function notifyReactionOnComment(
     commentId,
     title: 'New Reaction',
     message,
-  });
+  })
 }
 
 /**
@@ -478,11 +478,11 @@ export async function notifyGroupChatInvite(
   userId: string,
   inviterId: string,
   _chatId: string,
-  chatName: string
+  chatName: string,
 ): Promise<void> {
   // Don't notify if user invited themselves (shouldn't happen but safety check)
   if (userId === inviterId) {
-    return;
+    return
   }
 
   const result = await db
@@ -492,11 +492,11 @@ export async function notifyGroupChatInvite(
     })
     .from(users)
     .where(eq(users.id, inviterId))
-    .limit(1);
+    .limit(1)
 
-  const inviter = result[0];
-  const inviterName = inviter?.displayName || inviter?.username || 'Someone';
-  const message = `${inviterName} invited you to "${chatName}"`;
+  const inviter = result[0]
+  const inviterName = inviter?.displayName || inviter?.username || 'Someone'
+  const message = `${inviterName} invited you to "${chatName}"`
 
   await createNotification({
     userId,
@@ -504,7 +504,7 @@ export async function notifyGroupChatInvite(
     actorId: inviterId,
     title: 'Group Chat Invite',
     message,
-  });
+  })
 }
 
 /**
@@ -515,11 +515,11 @@ export async function notifyUserGroupInvite(
   inviterId: string,
   groupId: string,
   groupName: string,
-  inviteId?: string
+  inviteId?: string,
 ): Promise<void> {
   // Don't notify if user invited themselves
   if (userId === inviterId) {
-    return;
+    return
   }
 
   const result = await db
@@ -529,11 +529,11 @@ export async function notifyUserGroupInvite(
     })
     .from(users)
     .where(eq(users.id, inviterId))
-    .limit(1);
+    .limit(1)
 
-  const inviter = result[0];
-  const inviterName = inviter?.displayName || inviter?.username || 'Someone';
-  const message = `${inviterName} invited you to join ${groupName}`;
+  const inviter = result[0]
+  const inviterName = inviter?.displayName || inviter?.username || 'Someone'
+  const message = `${inviterName} invited you to join ${groupName}`
 
   // Create notification with groupId and inviteId for proper linking
   await db.insert(notifications).values({
@@ -545,7 +545,7 @@ export async function notifyUserGroupInvite(
     message,
     groupId,
     inviteId,
-  });
+  })
 }
 
 /**
@@ -555,11 +555,11 @@ export async function notifyDMMessage(
   recipientUserId: string,
   senderUserId: string,
   chatId: string,
-  messagePreview: string
+  messagePreview: string,
 ): Promise<void> {
   // Don't notify if user sent message to themselves
   if (recipientUserId === senderUserId) {
-    return;
+    return
   }
 
   const result = await db
@@ -569,18 +569,18 @@ export async function notifyDMMessage(
     })
     .from(users)
     .where(eq(users.id, senderUserId))
-    .limit(1);
+    .limit(1)
 
-  const sender = result[0];
-  const senderName = sender?.displayName || sender?.username || 'Someone';
+  const sender = result[0]
+  const senderName = sender?.displayName || sender?.username || 'Someone'
 
   // Truncate message preview to 50 characters
   const preview =
     messagePreview.length > 50
-      ? messagePreview.substring(0, 50) + '...'
-      : messagePreview;
+      ? `${messagePreview.substring(0, 50)}...`
+      : messagePreview
 
-  const message = `${senderName}: ${preview}`;
+  const message = `${senderName}: ${preview}`
 
   await createNotification({
     userId: recipientUserId,
@@ -589,7 +589,7 @@ export async function notifyDMMessage(
     chatId,
     title: 'New Message',
     message,
-  });
+  })
 }
 
 /**
@@ -600,7 +600,7 @@ export async function notifyGroupChatMessage(
   senderUserId: string,
   chatId: string,
   chatName: string,
-  messagePreview: string
+  messagePreview: string,
 ): Promise<void> {
   const result = await db
     .select({
@@ -609,18 +609,18 @@ export async function notifyGroupChatMessage(
     })
     .from(users)
     .where(eq(users.id, senderUserId))
-    .limit(1);
+    .limit(1)
 
-  const sender = result[0];
-  const senderName = sender?.displayName || sender?.username || 'Someone';
+  const sender = result[0]
+  const senderName = sender?.displayName || sender?.username || 'Someone'
 
   // Truncate message preview to 50 characters
   const preview =
     messagePreview.length > 50
-      ? messagePreview.substring(0, 50) + '...'
-      : messagePreview;
+      ? `${messagePreview.substring(0, 50)}...`
+      : messagePreview
 
-  const message = `${senderName} in "${chatName}": ${preview}`;
+  const message = `${senderName} in "${chatName}": ${preview}`
 
   // Send notification to all participants except the sender
   const notificationPromises = recipientUserIds
@@ -633,8 +633,8 @@ export async function notifyGroupChatMessage(
         chatId,
         title: 'New Group Message',
         message,
-      })
-    );
+      }),
+    )
 
-  await Promise.all(notificationPromises);
+  await Promise.all(notificationPromises)
 }

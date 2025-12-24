@@ -10,10 +10,10 @@
  * ```
  */
 
-export { CommentCard } from './CommentCard';
-export { CommentInput } from './CommentInput';
-export { DeleteButton } from './DeleteButton';
-export { FollowButton } from './FollowButton';
-export { InteractionBar } from './InteractionBar';
-export { LikeButton } from './LikeButton';
-export { RepostButton } from './RepostButton';
+export { CommentCard } from './CommentCard'
+export { CommentInput } from './CommentInput'
+export { DeleteButton } from './DeleteButton'
+export { FollowButton } from './FollowButton'
+export { InteractionBar } from './InteractionBar'
+export { LikeButton } from './LikeButton'
+export { RepostButton } from './RepostButton'

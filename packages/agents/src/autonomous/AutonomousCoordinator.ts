@@ -12,33 +12,33 @@
  * 5. Optional trajectory recording for RL training
  */
 
-import { db } from '@babylon/db';
-import { trajectoryRecorder } from '@babylon/training';
-import type { IAgentRuntime } from '@elizaos/core';
-import { setTrajectoryContext } from '../plugins/plugin-trajectory-logger/src/action-interceptor';
-import { agentRuntimeManager } from '../runtime/AgentRuntimeManager';
-import { getAgentConfig } from '../shared/agent-config';
-import { logger } from '../shared/logger';
+import { db } from '@babylon/db'
+import { trajectoryRecorder } from '@babylon/training'
+import type { IAgentRuntime } from '@elizaos/core'
+import { setTrajectoryContext } from '../plugins/plugin-trajectory-logger/src/action-interceptor'
+import { agentRuntimeManager } from '../runtime/AgentRuntimeManager'
+import { getAgentConfig } from '../shared/agent-config'
+import { logger } from '../shared/logger'
 
 // Import services
-import { autonomousGroupChatService } from './AutonomousGroupChatService';
-import { autonomousPlanningCoordinator } from './AutonomousPlanningCoordinator';
-import { multiStepExecutor } from './MultiStepExecutor';
-import { topicDiversityService } from './TopicDiversityService';
+import { autonomousGroupChatService } from './AutonomousGroupChatService'
+import { autonomousPlanningCoordinator } from './AutonomousPlanningCoordinator'
+import { multiStepExecutor } from './MultiStepExecutor'
+import { topicDiversityService } from './TopicDiversityService'
 
 export interface AutonomousTickResult {
-  success: boolean;
+  success: boolean
   actionsExecuted: {
-    trades: number;
-    posts: number;
-    comments: number;
-    messages: number;
-    groupMessages: number;
-    engagements: number;
-  };
-  method: 'a2a' | 'database' | 'planning_coordinator' | 'multi_step';
-  duration: number;
-  trajectoryId?: string;
+    trades: number
+    posts: number
+    comments: number
+    messages: number
+    groupMessages: number
+    engagements: number
+  }
+  method: 'a2a' | 'database' | 'planning_coordinator' | 'multi_step'
+  duration: number
+  trajectoryId?: string
 }
 
 export class AutonomousCoordinator {
@@ -55,12 +55,12 @@ export class AutonomousCoordinator {
     agentUserId: string,
     runtime: IAgentRuntime,
     recordTrajectories = false,
-    isNpc = false
+    isNpc = false,
   ): Promise<AutonomousTickResult> {
-    const startTime = Date.now();
+    const startTime = Date.now()
 
     // Initialize trajectory recording if enabled
-    let trajId: string | undefined;
+    let trajId: string | undefined
     if (recordTrajectories) {
       trajId = await trajectoryRecorder.startTrajectory({
         agentId: agentUserId,
@@ -68,16 +68,16 @@ export class AutonomousCoordinator {
           tickType: 'autonomous',
           startTime,
         },
-      });
+      })
 
       // Set trajectory context on runtime for action/provider logging
       const trajectoryLogger =
-        agentRuntimeManager.getTrajectoryLogger(agentUserId);
+        agentRuntimeManager.getTrajectoryLogger(agentUserId)
       if (trajectoryLogger && trajId) {
-        setTrajectoryContext(runtime, trajId, trajectoryLogger);
+        setTrajectoryContext(runtime, trajId, trajectoryLogger)
         // Also set current trajectory ID on runtime for LLM call logging
-        (runtime as { currentTrajectoryId?: string }).currentTrajectoryId =
-          trajId;
+        ;(runtime as { currentTrajectoryId?: string }).currentTrajectoryId =
+          trajId
       }
     }
 
@@ -94,26 +94,26 @@ export class AutonomousCoordinator {
       method: 'database',
       duration: 0,
       trajectoryId: trajId,
-    };
+    }
 
     logger.info(
       `Starting autonomous tick for agent ${agentUserId}`,
       undefined,
-      'AutonomousCoordinator'
-    );
+      'AutonomousCoordinator',
+    )
 
     // Get agent user
     const agent = await db.user.findUnique({
       where: { id: agentUserId },
       select: { id: true, isAgent: true },
-    });
+    })
 
     if (!agent || !agent.isAgent) {
-      throw new Error('Agent not found or not an agent');
+      throw new Error('Agent not found or not an agent')
     }
 
     // Get agent config (only for USER_CONTROLLED agents, NPCs don't have UserAgentConfig)
-    const config = isNpc ? null : await getAgentConfig(agentUserId);
+    const config = isNpc ? null : await getAgentConfig(agentUserId)
 
     // Check if agent has goals configured
     const hasGoals =
@@ -122,53 +122,53 @@ export class AutonomousCoordinator {
           agentUserId,
           status: 'active',
         },
-      })) > 0;
+      })) > 0
 
     // Use planning coordinator if agent has goals and multi-action planning enabled
     if (hasGoals && config?.planningHorizon === 'multi') {
       logger.info(
         'Using goal-oriented planning coordinator',
         undefined,
-        'AutonomousCoordinator'
-      );
+        'AutonomousCoordinator',
+      )
 
       // Generate comprehensive action plan
       const plan = await autonomousPlanningCoordinator.generateActionPlan(
         agentUserId,
-        runtime
-      );
+        runtime,
+      )
 
       // Execute the plan
       const executionResult = await autonomousPlanningCoordinator.executePlan(
         agentUserId,
         runtime,
-        plan
-      );
+        plan,
+      )
 
       // Map results to standard format
       for (const actionResult of executionResult.results) {
         if (actionResult.success) {
           switch (actionResult.action.type) {
             case 'trade':
-              result.actionsExecuted.trades++;
-              break;
+              result.actionsExecuted.trades++
+              break
             case 'post':
-              result.actionsExecuted.posts++;
-              break;
+              result.actionsExecuted.posts++
+              break
             case 'comment':
             case 'respond':
-              result.actionsExecuted.comments++;
-              break;
+              result.actionsExecuted.comments++
+              break
             case 'message':
-              result.actionsExecuted.messages++;
-              break;
+              result.actionsExecuted.messages++
+              break
           }
         }
       }
 
-      result.success = executionResult.successful > 0;
-      result.method = 'planning_coordinator';
-      result.duration = Date.now() - startTime;
+      result.success = executionResult.successful > 0
+      result.method = 'planning_coordinator'
+      result.duration = Date.now() - startTime
 
       logger.info(
         'Completed autonomous tick via planning coordinator',
@@ -179,10 +179,10 @@ export class AutonomousCoordinator {
           successful: executionResult.successful,
           duration: result.duration,
         },
-        'AutonomousCoordinator'
-      );
+        'AutonomousCoordinator',
+      )
 
-      return result;
+      return result
     }
 
     // === USE MULTI-STEP EXECUTOR (Default Mode) ===
@@ -191,37 +191,37 @@ export class AutonomousCoordinator {
     logger.info(
       'Using multi-step executor for autonomous actions',
       undefined,
-      'AutonomousCoordinator'
-    );
+      'AutonomousCoordinator',
+    )
 
     const multiStepResult = await multiStepExecutor.execute(
       agentUserId,
       runtime,
-      isNpc
-    );
+      isNpc,
+    )
 
     // Map multi-step results to standard format
-    result.actionsExecuted.trades = multiStepResult.actionsExecuted.trades;
-    result.actionsExecuted.posts = multiStepResult.actionsExecuted.posts;
-    result.actionsExecuted.comments = multiStepResult.actionsExecuted.comments;
-    result.actionsExecuted.messages = multiStepResult.actionsExecuted.messages;
-    result.method = 'multi_step';
-    result.success = multiStepResult.success;
-    result.duration = multiStepResult.duration;
+    result.actionsExecuted.trades = multiStepResult.actionsExecuted.trades
+    result.actionsExecuted.posts = multiStepResult.actionsExecuted.posts
+    result.actionsExecuted.comments = multiStepResult.actionsExecuted.comments
+    result.actionsExecuted.messages = multiStepResult.actionsExecuted.messages
+    result.method = 'multi_step'
+    result.success = multiStepResult.success
+    result.duration = multiStepResult.duration
 
     // Handle group chats separately (not yet in multi-step)
     if (config?.autonomousGroupChats) {
       const groupMessages =
         await autonomousGroupChatService.participateInGroupChats(
           agentUserId,
-          runtime
-        );
-      result.actionsExecuted.groupMessages += groupMessages;
+          runtime,
+        )
+      result.actionsExecuted.groupMessages += groupMessages
     }
 
     // End trajectory recording if enabled
     if (recordTrajectories && trajId) {
-      const finalState = await this.captureEnvironmentState(agentUserId);
+      const finalState = await this.captureEnvironmentState(agentUserId)
       await trajectoryRecorder.endTrajectory(trajId, {
         finalBalance: finalState.agentBalance,
         finalPnL: finalState.agentPnL,
@@ -229,7 +229,7 @@ export class AutonomousCoordinator {
           trueProbabilities: {},
           actualOutcomes: {},
         },
-      });
+      })
     }
 
     logger.info(
@@ -240,29 +240,29 @@ export class AutonomousCoordinator {
         method: result.method,
         trajectoryId: trajId,
       },
-      'AutonomousCoordinator'
-    );
+      'AutonomousCoordinator',
+    )
 
-    return result;
+    return result
   }
 
   /**
    * Execute autonomous tick for all active agents
    */
   async executeTickForAllAgents(runtime: IAgentRuntime): Promise<{
-    agentsProcessed: number;
-    totalActions: number;
-    errors: number;
+    agentsProcessed: number
+    totalActions: number
+    errors: number
   }> {
     // Get all agents with autonomous features enabled
     // First get all agent users, then filter by config
     const agentUsers = await db.user.findMany({
       where: { isAgent: true },
       select: { id: true, displayName: true },
-    });
+    })
 
     // Get configs for these agents to filter by autonomous settings
-    const activeAgentResults: { id: string; displayName: string }[] = [];
+    const activeAgentResults: { id: string; displayName: string }[] = []
     for (const agentUser of agentUsers) {
       const config = await db.userAgentConfig.findUnique({
         where: { userId: String(agentUser.id) },
@@ -273,7 +273,7 @@ export class AutonomousCoordinator {
           autonomousDMs: true,
           autonomousGroupChats: true,
         },
-      });
+      })
       if (
         config?.autonomousTrading ||
         config?.autonomousPosting ||
@@ -286,53 +286,53 @@ export class AutonomousCoordinator {
           displayName: agentUser.displayName
             ? String(agentUser.displayName)
             : 'Agent',
-        });
+        })
       }
     }
 
     logger.info(
       `Processing ${activeAgentResults.length} active agents`,
       undefined,
-      'AutonomousCoordinator'
-    );
+      'AutonomousCoordinator',
+    )
 
     // TOPIC DIVERSITY: Seed tracker and assign topics before processing
-    await this.initializeTopicDiversity(activeAgentResults.map((a) => a.id));
+    await this.initializeTopicDiversity(activeAgentResults.map((a) => a.id))
 
-    let totalActions = 0;
-    let errors = 0;
+    let totalActions = 0
+    let errors = 0
 
     for (const activeAgent of activeAgentResults) {
       const tickResult = await this.executeAutonomousTick(
         activeAgent.id,
-        runtime
-      );
+        runtime,
+      )
 
       if (tickResult.success) {
         const actionCount = Object.values(tickResult.actionsExecuted).reduce(
           (sum, count) => sum + count,
-          0
-        );
-        totalActions += actionCount;
+          0,
+        )
+        totalActions += actionCount
 
         logger.info(
           `Agent ${activeAgent.displayName}: ${actionCount} actions in ${tickResult.duration}ms`,
           undefined,
-          'AutonomousCoordinator'
-        );
+          'AutonomousCoordinator',
+        )
       } else {
-        errors++;
+        errors++
       }
 
       // Small delay between agents to avoid overwhelming system
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      await new Promise((resolve) => setTimeout(resolve, 1000))
     }
 
     return {
       agentsProcessed: activeAgentResults.length,
       totalActions,
       errors,
-    };
+    }
   }
 
   /**
@@ -340,7 +340,7 @@ export class AutonomousCoordinator {
    */
   private async initializeTopicDiversity(agentIds: string[]): Promise<void> {
     // Seed the topic tracker with recent posts
-    await topicDiversityService.seedFromRecentPosts();
+    await topicDiversityService.seedFromRecentPosts()
 
     // Get active prediction markets for topic assignment
     const activeMarkets = await db.market.findMany({
@@ -355,29 +355,26 @@ export class AutonomousCoordinator {
         noShares: true,
       },
       take: 20,
-    });
+    })
 
     // Convert to format expected by diversity service
     const marketsForTopics = activeMarkets.map((m) => {
-      const yesShares = Number(m.yesShares || 1);
-      const noShares = Number(m.noShares || 1);
-      const total = yesShares + noShares;
+      const yesShares = Number(m.yesShares || 1)
+      const noShares = Number(m.noShares || 1)
+      const total = yesShares + noShares
       return {
         id: String(m.id),
         question: String(m.question),
         yesPrice: yesShares / total,
         noPrice: noShares / total,
-      };
-    });
+      }
+    })
 
     // Assign topics to agents
-    await topicDiversityService.assignTopicsToAgents(
-      agentIds,
-      marketsForTopics
-    );
+    await topicDiversityService.assignTopicsToAgents(agentIds, marketsForTopics)
 
     // Log stats
-    const stats = topicDiversityService.getTopicStats();
+    const stats = topicDiversityService.getTopicStats()
     logger.info(
       `Topic diversity initialized`,
       {
@@ -386,8 +383,8 @@ export class AutonomousCoordinator {
         topicsTracked: stats.topicsTracked,
         mostCovered: stats.mostCovered.slice(0, 3),
       },
-      'AutonomousCoordinator'
-    );
+      'AutonomousCoordinator',
+    )
   }
 
   /**
@@ -397,7 +394,7 @@ export class AutonomousCoordinator {
     const agent = await db.user.findUnique({
       where: { id: agentUserId },
       select: { virtualBalance: true, lifetimePnL: true },
-    });
+    })
 
     // Get open positions count
     const positionsCount = await db.perpPosition.count({
@@ -405,14 +402,14 @@ export class AutonomousCoordinator {
         userId: agentUserId,
         closedAt: null,
       },
-    });
+    })
 
     // Get active markets count
     const marketsCount = await db.market.count({
       where: {
         resolved: false,
       },
-    });
+    })
 
     return {
       agentBalance: agent ? Number(agent.virtualBalance) : 0,
@@ -420,8 +417,8 @@ export class AutonomousCoordinator {
       openPositions: positionsCount,
       activeMarkets: marketsCount,
       timestamp: Date.now(),
-    };
+    }
   }
 }
 
-export const autonomousCoordinator = new AutonomousCoordinator();
+export const autonomousCoordinator = new AutonomousCoordinator()

@@ -4,9 +4,12 @@
  * @module testing/synpress/helpers/page-helpers
  */
 
-import type { Page } from '@playwright/test';
+import type { Page } from '@playwright/test'
 
-const BASE_URL = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:5007';
+// Centralized port configuration
+const WEB_PORT = process.env.BABYLON_WEB_PORT ?? '5008'
+const BASE_URL =
+  process.env.PLAYWRIGHT_BASE_URL ?? `http://localhost:${WEB_PORT}`
 
 /**
  * Waits for the server to be responsive before proceeding.
@@ -20,42 +23,42 @@ const BASE_URL = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:5007';
  */
 export async function waitForServerHealthy(
   maxRetries = 10,
-  retryDelay = 3000
+  retryDelay = 3000,
 ): Promise<void> {
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       const response = await fetch(`${BASE_URL}/`, {
         method: 'GET',
         signal: AbortSignal.timeout(10000),
-      });
+      })
       // Accept any non-5xx response as "server is up"
       if (response.status < 500) {
-        return;
+        return
       }
       // Only log 5xx errors occasionally to reduce noise
       if (attempt === 1 || attempt === maxRetries) {
         console.log(
-          `⚠️ Server returned 5xx (attempt ${attempt}/${maxRetries}): ${response.status}`
-        );
+          `⚠️ Server returned 5xx (attempt ${attempt}/${maxRetries}): ${response.status}`,
+        )
       }
     } catch (error) {
       // Only log errors occasionally to reduce noise
       if (attempt === 1 || attempt === maxRetries) {
         console.log(
-          `⚠️ Server not reachable (attempt ${attempt}/${maxRetries}): ${error instanceof Error ? error.message : String(error)}`
-        );
+          `⚠️ Server not reachable (attempt ${attempt}/${maxRetries}): ${error instanceof Error ? error.message : String(error)}`,
+        )
       }
     }
 
     if (attempt < maxRetries) {
-      await new Promise((resolve) => setTimeout(resolve, retryDelay));
+      await new Promise((resolve) => setTimeout(resolve, retryDelay))
     }
   }
 
   // Instead of throwing, log warning and continue - let the actual test fail if needed
   console.warn(
-    `⚠️ Server may not be fully responsive after ${maxRetries} attempts, continuing anyway...`
-  );
+    `⚠️ Server may not be fully responsive after ${maxRetries} attempts, continuing anyway...`,
+  )
 }
 
 /**
@@ -68,27 +71,27 @@ export async function waitForServerHealthy(
  * @throws Error if navigation fails after all retries
  */
 export async function navigateTo(page: Page, route: string): Promise<void> {
-  await waitForServerHealthy(3, 1000);
-  let lastError: Error | null = null;
+  await waitForServerHealthy(3, 1000)
+  let lastError: Error | null = null
   for (let attempt = 1; attempt <= 3; attempt++) {
     try {
       await page.goto(`${BASE_URL}${route}`, {
         waitUntil: 'domcontentloaded',
         timeout: 30000,
-      });
-      return;
+      })
+      return
     } catch (error) {
-      lastError = error instanceof Error ? error : new Error(String(error));
+      lastError = error instanceof Error ? error : new Error(String(error))
       console.log(
-        `⚠️ Navigation attempt ${attempt} failed: ${lastError.message}`
-      );
+        `⚠️ Navigation attempt ${attempt} failed: ${lastError.message}`,
+      )
       if (attempt < 3) {
-        await page.waitForTimeout(1000);
+        await page.waitForTimeout(1000)
       }
     }
   }
 
-  throw lastError ?? new Error('Navigation failed');
+  throw lastError ?? new Error('Navigation failed')
 }
 
 /**
@@ -101,18 +104,18 @@ export async function navigateTo(page: Page, route: string): Promise<void> {
  */
 export async function hideNextDevOverlay(page: Page): Promise<void> {
   await page.evaluate(() => {
-    const overlay = document.querySelector('nextjs-portal');
+    const overlay = document.querySelector('nextjs-portal')
     if (overlay instanceof HTMLElement) {
-      overlay.style.pointerEvents = 'none';
-      overlay.style.display = 'none';
+      overlay.style.pointerEvents = 'none'
+      overlay.style.display = 'none'
     }
     // Also hide any error overlays
     document.querySelectorAll('[data-nextjs-dev-overlay]').forEach((el) => {
       if (el instanceof HTMLElement) {
-        el.style.pointerEvents = 'none';
+        el.style.pointerEvents = 'none'
       }
-    });
-  });
+    })
+  })
 }
 
 /**
@@ -123,34 +126,34 @@ export async function hideNextDevOverlay(page: Page): Promise<void> {
  */
 export async function waitForPageLoad(
   page: Page,
-  timeout = 20000
+  timeout = 20000,
 ): Promise<void> {
   try {
-    await page.waitForLoadState('domcontentloaded', { timeout });
+    await page.waitForLoadState('domcontentloaded', { timeout })
 
     // Hide Next.js dev overlay to prevent test interference
-    await hideNextDevOverlay(page);
+    await hideNextDevOverlay(page)
 
     // Wait for page to have interactive elements
-    let hasButtons = false;
+    let hasButtons = false
     for (let i = 0; i < 20; i++) {
       const buttonCount = await page
         .locator('button')
         .count()
-        .catch(() => 0);
+        .catch(() => 0)
       if (buttonCount > 0) {
-        hasButtons = true;
-        break;
+        hasButtons = true
+        break
       }
-      await page.waitForTimeout(500);
+      await page.waitForTimeout(500)
     }
 
     if (!hasButtons) {
       // Try reloading the page once
-      await page.reload({ waitUntil: 'domcontentloaded' });
-      await page.waitForTimeout(2000);
+      await page.reload({ waitUntil: 'domcontentloaded' })
+      await page.waitForTimeout(2000)
       // Hide overlay again after reload
-      await hideNextDevOverlay(page);
+      await hideNextDevOverlay(page)
     }
   } catch {
     // waitForLoadState timeout is acceptable - page may still be functional
@@ -165,5 +168,5 @@ export async function waitForPageLoad(
  * @param page - Playwright page instance
  */
 export async function cooldownBetweenTests(page: Page): Promise<void> {
-  await page.waitForTimeout(500);
+  await page.waitForTimeout(500)
 }

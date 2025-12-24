@@ -1,155 +1,821 @@
 /**
  * Contract ABIs for ERC-8004 and Prediction Market interactions
  *
- * These ABIs are shared across the Babylon codebase for interacting with
- * on-chain contracts. ERC-8004 operations should primarily use the Agent0 SDK
- * (@babylon/agents/agent0), but these ABIs are available for direct contract
- * interactions when needed.
+ * These ABIs match the Jeju Network contract ABIs from @jejunetwork/contracts.
+ * For direct contract interactions, these ABIs are provided locally to avoid
+ * TypeScript rootDir issues with path mappings.
  */
 
-// ERC-8004 Identity Registry ABI
+// ERC-8004 Identity Registry ABI (matches Jeju IdentityRegistryAbi)
 export const IDENTITY_REGISTRY_ABI = [
   // ERC-721 standard functions
-  'function balanceOf(address owner) external view returns (uint256)',
-  'function ownerOf(uint256 tokenId) external view returns (address)',
+  {
+    type: 'function',
+    name: 'balanceOf',
+    inputs: [{ name: 'owner', type: 'address' }],
+    outputs: [{ name: '', type: 'uint256' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'ownerOf',
+    inputs: [{ name: 'tokenId', type: 'uint256' }],
+    outputs: [{ name: '', type: 'address' }],
+    stateMutability: 'view',
+  },
 
   // Agent registration
-  'function registerAgent(string calldata _name, string calldata _endpoint, bytes32 _capabilitiesHash, string calldata _metadata) external returns (uint256 tokenId)',
-  'function updateAgent(string calldata _endpoint, bytes32 _capabilitiesHash, string calldata _metadata) external',
-  'function deactivateAgent() external',
-  'function reactivateAgent() external',
+  {
+    type: 'function',
+    name: 'registerAgent',
+    inputs: [
+      { name: '_name', type: 'string' },
+      { name: '_endpoint', type: 'string' },
+      { name: '_capabilitiesHash', type: 'bytes32' },
+      { name: '_metadata', type: 'string' },
+    ],
+    outputs: [{ name: 'tokenId', type: 'uint256' }],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'updateAgent',
+    inputs: [
+      { name: '_endpoint', type: 'string' },
+      { name: '_capabilitiesHash', type: 'bytes32' },
+      { name: '_metadata', type: 'string' },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'deactivateAgent',
+    inputs: [],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'reactivateAgent',
+    inputs: [],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
 
   // Profile queries
-  'function getAgentProfile(uint256 _tokenId) external view returns (string memory name, string memory endpoint, bytes32 capabilitiesHash, uint256 registeredAt, bool isActive, string memory metadata)',
-  'function getTokenId(address _address) external view returns (uint256)',
-  'function isRegistered(address _address) external view returns (bool)',
-  'function verifyAgent(address _address, uint256 _tokenId) external view returns (bool)',
-  'function getAllActiveAgents() external view returns (uint256[] memory)',
-  'function isEndpointActive(string memory endpoint) external view returns (bool)',
-  'function getAgentsByCapability(bytes32 capabilityHash) external view returns (uint256[] memory)',
-
-  // Agent0 linking (cross-chain discovery)
-  'function linkAgent0Identity(uint256 _agent0ChainId, uint256 _agent0TokenId) external',
-  'function unlinkAgent0Identity() external',
-  'function getAgent0Link(uint256 _tokenId) external view returns (string memory)',
-  'function hasAgent0Link(uint256 _tokenId) external view returns (bool)',
+  {
+    type: 'function',
+    name: 'getAgentProfile',
+    inputs: [{ name: '_tokenId', type: 'uint256' }],
+    outputs: [
+      { name: 'name', type: 'string' },
+      { name: 'endpoint', type: 'string' },
+      { name: 'capabilitiesHash', type: 'bytes32' },
+      { name: 'registeredAt', type: 'uint256' },
+      { name: 'isActive', type: 'bool' },
+      { name: 'metadata', type: 'string' },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'getTokenId',
+    inputs: [{ name: '_address', type: 'address' }],
+    outputs: [{ name: '', type: 'uint256' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'isRegistered',
+    inputs: [{ name: '_address', type: 'address' }],
+    outputs: [{ name: '', type: 'bool' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'verifyAgent',
+    inputs: [
+      { name: '_address', type: 'address' },
+      { name: '_tokenId', type: 'uint256' },
+    ],
+    outputs: [{ name: '', type: 'bool' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'getAllActiveAgents',
+    inputs: [],
+    outputs: [{ name: '', type: 'uint256[]' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'isEndpointActive',
+    inputs: [{ name: 'endpoint', type: 'string' }],
+    outputs: [{ name: '', type: 'bool' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'getAgentsByCapability',
+    inputs: [{ name: 'capabilityHash', type: 'bytes32' }],
+    outputs: [{ name: '', type: 'uint256[]' }],
+    stateMutability: 'view',
+  },
 
   // Events
-  'event AgentRegistered(uint256 indexed tokenId, address indexed owner, string name, string endpoint)',
-  'event AgentUpdated(uint256 indexed tokenId, string endpoint, bytes32 capabilitiesHash)',
-  'event AgentDeactivated(uint256 indexed tokenId)',
-  'event AgentReactivated(uint256 indexed tokenId)',
-  'event Agent0Linked(uint256 indexed tokenId, uint256 indexed agent0ChainId, uint256 indexed agent0TokenId)',
-  'event Agent0Unlinked(uint256 indexed tokenId)',
-] as const;
+  {
+    type: 'event',
+    name: 'AgentRegistered',
+    inputs: [
+      { name: 'tokenId', type: 'uint256', indexed: true },
+      { name: 'owner', type: 'address', indexed: true },
+      { name: 'name', type: 'string', indexed: false },
+      { name: 'endpoint', type: 'string', indexed: false },
+    ],
+  },
+  {
+    type: 'event',
+    name: 'AgentUpdated',
+    inputs: [
+      { name: 'tokenId', type: 'uint256', indexed: true },
+      { name: 'endpoint', type: 'string', indexed: false },
+      { name: 'capabilitiesHash', type: 'bytes32', indexed: false },
+    ],
+  },
+  {
+    type: 'event',
+    name: 'AgentDeactivated',
+    inputs: [{ name: 'tokenId', type: 'uint256', indexed: true }],
+  },
+  {
+    type: 'event',
+    name: 'AgentReactivated',
+    inputs: [{ name: 'tokenId', type: 'uint256', indexed: true }],
+  },
+] as const
 
-// ERC-8004 Reputation System ABI
+// ERC-8004 Reputation System ABI (matches Jeju ReputationRegistryAbi)
 export const REPUTATION_SYSTEM_ABI = [
   // Reputation queries
-  'function getReputation(uint256 _tokenId) external view returns (uint256 totalBets, uint256 winningBets, uint256 totalVolume, uint256 profitLoss, uint256 accuracyScore, uint256 trustScore, bool isBanned)',
-  'function getFeedbackCount(uint256 _tokenId) external view returns (uint256)',
-  'function getFeedback(uint256 _tokenId, uint256 _index) external view returns (address from, int8 rating, string memory comment, uint256 timestamp)',
-  'function getAgentsByMinScore(uint256 minScore) external view returns (uint256[] memory)',
+  {
+    type: 'function',
+    name: 'getReputation',
+    inputs: [{ name: '_tokenId', type: 'uint256' }],
+    outputs: [
+      { name: 'totalBets', type: 'uint256' },
+      { name: 'winningBets', type: 'uint256' },
+      { name: 'totalVolume', type: 'uint256' },
+      { name: 'profitLoss', type: 'uint256' },
+      { name: 'accuracyScore', type: 'uint256' },
+      { name: 'trustScore', type: 'uint256' },
+      { name: 'isBanned', type: 'bool' },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'getFeedbackCount',
+    inputs: [{ name: '_tokenId', type: 'uint256' }],
+    outputs: [{ name: '', type: 'uint256' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'getFeedback',
+    inputs: [
+      { name: '_tokenId', type: 'uint256' },
+      { name: '_index', type: 'uint256' },
+    ],
+    outputs: [
+      { name: 'from', type: 'address' },
+      { name: 'rating', type: 'int8' },
+      { name: 'comment', type: 'string' },
+      { name: 'timestamp', type: 'uint256' },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'getAgentsByMinScore',
+    inputs: [{ name: 'minScore', type: 'uint256' }],
+    outputs: [{ name: '', type: 'uint256[]' }],
+    stateMutability: 'view',
+  },
 
   // Reputation updates (only by authorized contracts)
-  'function recordBet(uint256 _tokenId, uint256 _amount) external',
-  'function recordWin(uint256 _tokenId, uint256 _profit) external',
-  'function recordLoss(uint256 _tokenId, uint256 _loss) external',
-  'function submitFeedback(uint256 _tokenId, int8 _rating, string calldata _comment) external',
+  {
+    type: 'function',
+    name: 'recordBet',
+    inputs: [
+      { name: '_tokenId', type: 'uint256' },
+      { name: '_amount', type: 'uint256' },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'recordWin',
+    inputs: [
+      { name: '_tokenId', type: 'uint256' },
+      { name: '_profit', type: 'uint256' },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'recordLoss',
+    inputs: [
+      { name: '_tokenId', type: 'uint256' },
+      { name: '_loss', type: 'uint256' },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'submitFeedback',
+    inputs: [
+      { name: '_tokenId', type: 'uint256' },
+      { name: '_rating', type: 'int8' },
+      { name: '_comment', type: 'string' },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
 
   // Agent management (owner only)
-  'function banAgent(uint256 _tokenId) external',
-  'function unbanAgent(uint256 _tokenId) external',
+  {
+    type: 'function',
+    name: 'banAgent',
+    inputs: [{ name: '_tokenId', type: 'uint256' }],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'unbanAgent',
+    inputs: [{ name: '_tokenId', type: 'uint256' }],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
 
   // Events
-  'event ReputationUpdated(uint256 indexed tokenId, uint256 accuracyScore, uint256 trustScore)',
-  'event FeedbackSubmitted(uint256 indexed tokenId, address indexed from, int8 rating)',
-  'event AgentBanned(uint256 indexed tokenId)',
-  'event AgentUnbanned(uint256 indexed tokenId)',
-] as const;
+  {
+    type: 'event',
+    name: 'ReputationUpdated',
+    inputs: [
+      { name: 'tokenId', type: 'uint256', indexed: true },
+      { name: 'accuracyScore', type: 'uint256', indexed: false },
+      { name: 'trustScore', type: 'uint256', indexed: false },
+    ],
+  },
+  {
+    type: 'event',
+    name: 'FeedbackSubmitted',
+    inputs: [
+      { name: 'tokenId', type: 'uint256', indexed: true },
+      { name: 'from', type: 'address', indexed: true },
+      { name: 'rating', type: 'int8', indexed: false },
+    ],
+  },
+  {
+    type: 'event',
+    name: 'AgentBanned',
+    inputs: [{ name: 'tokenId', type: 'uint256', indexed: true }],
+  },
+  {
+    type: 'event',
+    name: 'AgentUnbanned',
+    inputs: [{ name: 'tokenId', type: 'uint256', indexed: true }],
+  },
+] as const
+
+// Ban Manager ABI (matches Jeju BanManagerAbi)
+export const BAN_MANAGER_ABI = [
+  {
+    type: 'function',
+    name: 'isNetworkBanned',
+    inputs: [{ name: 'user', type: 'address' }],
+    outputs: [{ name: '', type: 'bool' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'isAppBanned',
+    inputs: [
+      { name: 'user', type: 'address' },
+      { name: 'appId', type: 'bytes32' },
+    ],
+    outputs: [{ name: '', type: 'bool' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'getBanReason',
+    inputs: [
+      { name: 'user', type: 'address' },
+      { name: 'appId', type: 'bytes32' },
+    ],
+    outputs: [{ name: '', type: 'string' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'getBanStatus',
+    inputs: [{ name: 'user', type: 'address' }],
+    outputs: [{ name: '', type: 'uint8' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'event',
+    name: 'NetworkBanApplied',
+    inputs: [
+      { name: 'user', type: 'address', indexed: true },
+      { name: 'reason', type: 'string', indexed: false },
+      { name: 'timestamp', type: 'uint256', indexed: false },
+    ],
+  },
+  {
+    type: 'event',
+    name: 'NetworkBanRemoved',
+    inputs: [
+      { name: 'user', type: 'address', indexed: true },
+      { name: 'timestamp', type: 'uint256', indexed: false },
+    ],
+  },
+  {
+    type: 'event',
+    name: 'AppBanApplied',
+    inputs: [
+      { name: 'user', type: 'address', indexed: true },
+      { name: 'appId', type: 'bytes32', indexed: true },
+      { name: 'reason', type: 'string', indexed: false },
+      { name: 'timestamp', type: 'uint256', indexed: false },
+    ],
+  },
+  {
+    type: 'event',
+    name: 'AppBanRemoved',
+    inputs: [
+      { name: 'user', type: 'address', indexed: true },
+      { name: 'appId', type: 'bytes32', indexed: true },
+      { name: 'timestamp', type: 'uint256', indexed: false },
+    ],
+  },
+] as const
+
+// Moderation Marketplace ABI (matches Jeju ModerationMarketplaceAbi)
+export const MODERATION_MARKETPLACE_ABI = [
+  {
+    type: 'function',
+    name: 'stake',
+    inputs: [],
+    outputs: [],
+    stateMutability: 'payable',
+  },
+  {
+    type: 'function',
+    name: 'unstake',
+    inputs: [{ name: 'amount', type: 'uint256' }],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'openCase',
+    inputs: [
+      { name: 'target', type: 'address' },
+      { name: 'reason', type: 'string' },
+      { name: 'evidenceHash', type: 'bytes32' },
+    ],
+    outputs: [{ name: 'caseId', type: 'bytes32' }],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'challengeCase',
+    inputs: [{ name: 'caseId', type: 'bytes32' }],
+    outputs: [],
+    stateMutability: 'payable',
+  },
+  {
+    type: 'function',
+    name: 'vote',
+    inputs: [
+      { name: 'caseId', type: 'bytes32' },
+      { name: 'position', type: 'uint8' },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'resolveCase',
+    inputs: [{ name: 'caseId', type: 'bytes32' }],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'requestReReview',
+    inputs: [{ name: 'caseId', type: 'bytes32' }],
+    outputs: [],
+    stateMutability: 'payable',
+  },
+  {
+    type: 'function',
+    name: 'claimRewards',
+    inputs: [{ name: 'caseId', type: 'bytes32' }],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'getStake',
+    inputs: [{ name: 'user', type: 'address' }],
+    outputs: [
+      {
+        name: '',
+        type: 'tuple',
+        components: [
+          { name: 'amount', type: 'uint256' },
+          { name: 'stakedAt', type: 'uint256' },
+          { name: 'stakedBlock', type: 'uint256' },
+          { name: 'lastActivityBlock', type: 'uint256' },
+          { name: 'isStaked', type: 'bool' },
+        ],
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'getCase',
+    inputs: [{ name: 'caseId', type: 'bytes32' }],
+    outputs: [
+      {
+        name: '',
+        type: 'tuple',
+        components: [
+          { name: 'caseId', type: 'bytes32' },
+          { name: 'reporter', type: 'address' },
+          { name: 'target', type: 'address' },
+          { name: 'reporterStake', type: 'uint256' },
+          { name: 'targetStake', type: 'uint256' },
+          { name: 'reason', type: 'string' },
+          { name: 'evidenceHash', type: 'bytes32' },
+          { name: 'status', type: 'uint8' },
+          { name: 'createdAt', type: 'uint256' },
+          { name: 'marketOpenUntil', type: 'uint256' },
+          { name: 'yesVotes', type: 'uint256' },
+          { name: 'noVotes', type: 'uint256' },
+          { name: 'totalPot', type: 'uint256' },
+          { name: 'resolved', type: 'bool' },
+          { name: 'outcome', type: 'uint8' },
+          { name: 'appealCount', type: 'uint256' },
+        ],
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'isBanned',
+    inputs: [{ name: 'user', type: 'address' }],
+    outputs: [{ name: '', type: 'bool' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'activeCase',
+    inputs: [{ name: 'target', type: 'address' }],
+    outputs: [{ name: '', type: 'bytes32' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'getVote',
+    inputs: [
+      { name: 'caseId', type: 'bytes32' },
+      { name: 'voter', type: 'address' },
+    ],
+    outputs: [
+      {
+        name: '',
+        type: 'tuple',
+        components: [
+          { name: 'position', type: 'uint8' },
+          { name: 'weight', type: 'uint256' },
+          { name: 'stakedAt', type: 'uint256' },
+          { name: 'hasVoted', type: 'bool' },
+          { name: 'hasClaimed', type: 'bool' },
+        ],
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'canReport',
+    inputs: [{ name: 'user', type: 'address' }],
+    outputs: [{ name: '', type: 'bool' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'getAllCaseIds',
+    inputs: [],
+    outputs: [{ name: '', type: 'bytes32[]' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'minReporterStake',
+    inputs: [],
+    outputs: [{ name: '', type: 'uint256' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'minChallengeStake',
+    inputs: [],
+    outputs: [{ name: '', type: 'uint256' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'event',
+    name: 'CaseOpened',
+    inputs: [
+      { name: 'caseId', type: 'bytes32', indexed: true },
+      { name: 'reporter', type: 'address', indexed: true },
+      { name: 'target', type: 'address', indexed: true },
+      { name: 'reporterStake', type: 'uint256', indexed: false },
+      { name: 'reason', type: 'string', indexed: false },
+      { name: 'evidenceHash', type: 'bytes32', indexed: false },
+    ],
+  },
+  {
+    type: 'event',
+    name: 'CaseResolved',
+    inputs: [
+      { name: 'caseId', type: 'bytes32', indexed: true },
+      { name: 'outcome', type: 'uint8', indexed: false },
+      { name: 'yesVotes', type: 'uint256', indexed: false },
+      { name: 'noVotes', type: 'uint256', indexed: false },
+    ],
+  },
+] as const
 
 // Prediction Market Facet ABI
 export const PREDICTION_MARKET_ABI = [
-  // Market creation
-  'function createMarket(string calldata _question, string[] calldata _outcomeNames, uint256 _resolveAt, address _oracle) external returns (bytes32)',
-  'function resolveMarket(bytes32 _marketId, uint8 _winningOutcome) external',
-
-  // Trading
-  'function buyShares(bytes32 _marketId, uint8 _outcome, uint256 _numShares) external payable',
-  'function sellShares(bytes32 _marketId, uint8 _outcome, uint256 _numShares) external',
-  'function claimWinnings(bytes32 _marketId) external',
-  'function calculateCost(bytes32 _marketId, uint8 _outcome, uint256 _numShares) external view returns (uint256)',
-  'function calculateSellPayout(bytes32 _marketId, uint8 _outcome, uint256 _numShares) external view returns (uint256)',
-
-  // Balance management
-  'function deposit() external payable',
-  'function withdraw(uint256 _amount) external',
-  'function getBalance(address _user) external view returns (uint256)',
-
-  // Market queries
-  'function getMarket(bytes32 _marketId) external view returns (string memory question, uint8 numOutcomes, uint256 liquidity, bool resolved, uint8 winningOutcome)',
-  'function getMarketShares(bytes32 _marketId, uint8 _outcome) external view returns (uint256)',
-  'function getPosition(address _user, bytes32 _marketId, uint8 _outcome) external view returns (uint256)',
-
-  // Events
-  'event MarketCreated(bytes32 indexed marketId, string question, uint8 numOutcomes, uint256 liquidity)',
-  'event SharesPurchased(bytes32 indexed marketId, address indexed buyer, uint8 outcome, uint256 shares, uint256 cost)',
-  'event SharesSold(bytes32 indexed marketId, address indexed seller, uint8 outcome, uint256 shares, uint256 payout)',
-  'event MarketResolved(bytes32 indexed marketId, uint8 winningOutcome)',
-  'event PositionClaimed(bytes32 indexed marketId, address indexed claimer, uint256 payout)',
-  'event Deposited(address indexed user, uint256 amount)',
-  'event Withdrawn(address indexed user, uint256 amount)',
-] as const;
+  {
+    type: 'function',
+    name: 'createMarket',
+    inputs: [
+      { name: '_question', type: 'string' },
+      { name: '_outcomeNames', type: 'string[]' },
+      { name: '_resolveAt', type: 'uint256' },
+      { name: '_oracle', type: 'address' },
+    ],
+    outputs: [{ name: '', type: 'bytes32' }],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'resolveMarket',
+    inputs: [
+      { name: '_marketId', type: 'bytes32' },
+      { name: '_winningOutcome', type: 'uint8' },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'buyShares',
+    inputs: [
+      { name: '_marketId', type: 'bytes32' },
+      { name: '_outcome', type: 'uint8' },
+      { name: '_numShares', type: 'uint256' },
+    ],
+    outputs: [],
+    stateMutability: 'payable',
+  },
+  {
+    type: 'function',
+    name: 'sellShares',
+    inputs: [
+      { name: '_marketId', type: 'bytes32' },
+      { name: '_outcome', type: 'uint8' },
+      { name: '_numShares', type: 'uint256' },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'claimWinnings',
+    inputs: [{ name: '_marketId', type: 'bytes32' }],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'calculateCost',
+    inputs: [
+      { name: '_marketId', type: 'bytes32' },
+      { name: '_outcome', type: 'uint8' },
+      { name: '_numShares', type: 'uint256' },
+    ],
+    outputs: [{ name: '', type: 'uint256' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'getMarket',
+    inputs: [{ name: '_marketId', type: 'bytes32' }],
+    outputs: [
+      { name: 'question', type: 'string' },
+      { name: 'numOutcomes', type: 'uint8' },
+      { name: 'liquidity', type: 'uint256' },
+      { name: 'resolved', type: 'bool' },
+      { name: 'winningOutcome', type: 'uint8' },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'event',
+    name: 'MarketCreated',
+    inputs: [
+      { name: 'marketId', type: 'bytes32', indexed: true },
+      { name: 'question', type: 'string', indexed: false },
+      { name: 'numOutcomes', type: 'uint8', indexed: false },
+      { name: 'liquidity', type: 'uint256', indexed: false },
+    ],
+  },
+  {
+    type: 'event',
+    name: 'SharesPurchased',
+    inputs: [
+      { name: 'marketId', type: 'bytes32', indexed: true },
+      { name: 'buyer', type: 'address', indexed: true },
+      { name: 'outcome', type: 'uint8', indexed: false },
+      { name: 'shares', type: 'uint256', indexed: false },
+      { name: 'cost', type: 'uint256', indexed: false },
+    ],
+  },
+  {
+    type: 'event',
+    name: 'MarketResolved',
+    inputs: [
+      { name: 'marketId', type: 'bytes32', indexed: true },
+      { name: 'winningOutcome', type: 'uint8', indexed: false },
+    ],
+  },
+] as const
 
 // Oracle Facet ABI
 export const ORACLE_ABI = [
-  // Oracle resolution requests
-  'function requestChainlinkResolution(bytes32 _marketId) external payable',
-  'function requestMockResolution(bytes32 _marketId, uint8 _proposedOutcome) external payable',
-
-  // Oracle callbacks
-  'function oracleCallback(bytes32 _requestId, bytes32 _marketId, uint8 _outcome) external',
-  'function mockOracleCallback(bytes32 _marketId, uint8 _outcome) external',
-
-  // Oracle management
-  'function setChainlinkOracle(address _oracle) external',
-  'function setMockOracle(address _oracle) external',
-  'function manualResolve(bytes32 _marketId, uint8 _outcome) external',
-  'function getOracleAddresses() external view returns (address chainlinkOracle, address mockOracle)',
-
-  // Events
-  'event OracleRequested(bytes32 indexed marketId, bytes32 indexed requestId, string oracleType)',
-  'event OracleResponseReceived(bytes32 indexed marketId, bytes32 indexed requestId, uint8 outcome)',
-] as const;
+  {
+    type: 'function',
+    name: 'requestChainlinkResolution',
+    inputs: [{ name: '_marketId', type: 'bytes32' }],
+    outputs: [],
+    stateMutability: 'payable',
+  },
+  {
+    type: 'function',
+    name: 'oracleCallback',
+    inputs: [
+      { name: '_requestId', type: 'bytes32' },
+      { name: '_marketId', type: 'bytes32' },
+      { name: '_outcome', type: 'uint8' },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'manualResolve',
+    inputs: [
+      { name: '_marketId', type: 'bytes32' },
+      { name: '_outcome', type: 'uint8' },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'event',
+    name: 'OracleRequested',
+    inputs: [
+      { name: 'marketId', type: 'bytes32', indexed: true },
+      { name: 'requestId', type: 'bytes32', indexed: true },
+      { name: 'oracleType', type: 'string', indexed: false },
+    ],
+  },
+  {
+    type: 'event',
+    name: 'OracleResponseReceived',
+    inputs: [
+      { name: 'marketId', type: 'bytes32', indexed: true },
+      { name: 'requestId', type: 'bytes32', indexed: true },
+      { name: 'outcome', type: 'uint8', indexed: false },
+    ],
+  },
+] as const
 
 // Diamond Loupe ABI (for facet discovery)
 export const DIAMOND_LOUPE_ABI = [
-  'function facets() external view returns (tuple(address facetAddress, bytes4[] functionSelectors)[] memory)',
-  'function facetFunctionSelectors(address facet) external view returns (bytes4[] memory)',
-  'function facetAddresses() external view returns (address[] memory)',
-  'function facetAddress(bytes4 functionSelector) external view returns (address)',
-] as const;
+  {
+    type: 'function',
+    name: 'facets',
+    inputs: [],
+    outputs: [
+      {
+        name: '',
+        type: 'tuple[]',
+        components: [
+          { name: 'facetAddress', type: 'address' },
+          { name: 'functionSelectors', type: 'bytes4[]' },
+        ],
+      },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'facetFunctionSelectors',
+    inputs: [{ name: 'facet', type: 'address' }],
+    outputs: [{ name: '', type: 'bytes4[]' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'facetAddresses',
+    inputs: [],
+    outputs: [{ name: '', type: 'address[]' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'facetAddress',
+    inputs: [{ name: 'functionSelector', type: 'bytes4' }],
+    outputs: [{ name: '', type: 'address' }],
+    stateMutability: 'view',
+  },
+] as const
 
 // Price Storage Facet ABI
 export const PRICE_STORAGE_FACET_ABI = [
-  // Price updates
-  'function updatePrices(bytes32[] calldata _marketIds, uint256 _tick, uint256[] calldata _prices) external',
-  'function updatePrice(bytes32 _marketId, uint256 _tick, uint256 _price) external',
-  'function submitPriceBatch(bytes32 _marketId, uint256 _startTick, uint256 _endTick, bytes32 _merkleRoot) external',
+  {
+    type: 'function',
+    name: 'updatePrices',
+    inputs: [
+      { name: '_marketIds', type: 'bytes32[]' },
+      { name: '_tick', type: 'uint256' },
+      { name: '_prices', type: 'uint256[]' },
+    ],
+    outputs: [],
+    stateMutability: 'nonpayable',
+  },
+  {
+    type: 'function',
+    name: 'getLatestPrice',
+    inputs: [{ name: '_marketId', type: 'bytes32' }],
+    outputs: [
+      { name: 'price', type: 'uint256' },
+      { name: 'timestamp', type: 'uint256' },
+      { name: 'tick', type: 'uint256' },
+    ],
+    stateMutability: 'view',
+  },
+  {
+    type: 'function',
+    name: 'getGlobalTickCounter',
+    inputs: [],
+    outputs: [{ name: '', type: 'uint256' }],
+    stateMutability: 'view',
+  },
+  {
+    type: 'event',
+    name: 'PriceUpdated',
+    inputs: [
+      { name: 'marketId', type: 'bytes32', indexed: true },
+      { name: 'tick', type: 'uint256', indexed: true },
+      { name: 'price', type: 'uint256', indexed: false },
+      { name: 'timestamp', type: 'uint256', indexed: false },
+    ],
+  },
+] as const
 
-  // Price queries
-  'function getLatestPrice(bytes32 _marketId) external view returns (uint256 price, uint256 timestamp, uint256 tick)',
-  'function getPriceAtTick(bytes32 _marketId, uint256 _tick) external view returns (uint256 price, uint256 timestamp)',
-  'function getGlobalTickCounter() external view returns (uint256)',
-
-  // Authorization
-  'function incrementTickCounter() external returns (uint256)',
-  'function setAuthorizedUpdater(bytes32 _marketId, address _updater) external',
-  'function getAuthorizedUpdater(bytes32 _marketId) external view returns (address)',
-
-  // Events
-  'event PriceUpdated(bytes32 indexed marketId, uint256 indexed tick, uint256 price, uint256 timestamp)',
-  'event PricesBatchUpdated(bytes32[] marketIds, uint256 tick, uint256 timestamp)',
-  'event PriceBatchSubmitted(bytes32 indexed marketId, uint256 startTick, uint256 endTick, bytes32 merkleRoot)',
-  'event AuthorizedUpdaterSet(bytes32 indexed marketId, address indexed updater, bool authorized)',
-] as const;
+// Typed ABI exports for viem compatibility
+export const identityRegistryAbi = IDENTITY_REGISTRY_ABI
+export const reputationSystemAbi = REPUTATION_SYSTEM_ABI
+export const banManagerAbi = BAN_MANAGER_ABI
+export const moderationMarketplaceAbi = MODERATION_MARKETPLACE_ABI
+export const predictionMarketAbi = PREDICTION_MARKET_ABI
+export const oracleAbi = ORACLE_ABI

@@ -11,11 +11,45 @@
  */
 
 // Archetypes
-export * from './archetypes';
-// Re-export all sub-modules
-export * from './benchmark';
+export * from './archetypes'
+// Sub-modules
+export * from './benchmark'
+export type {
+  BabylonRLAIFConfig,
+  ComputeTrainingConfig,
+  TrainingConfig as PsycheTrainingConfig,
+  TrainingJob,
+  TrainingJobRequest,
+  TrainingJobResult,
+  TrainingJobStatus,
+  TrainingProgress,
+  TrainingRecord,
+  TreasuryConfig,
+} from './compute'
 // Compute integration (Jeju marketplace)
-export * from './compute';
+// Note: TrainingConfig is also exported from ./training, so we use explicit exports
+// and rename compute's TrainingConfig to avoid conflict
+export {
+  areBabylonRubricsRegistered,
+  BabylonJejuAdapter,
+  BabylonTreasuryClient,
+  ComputeTrainingClient,
+  createBabylonJejuAdapter,
+  createComputeTrainingClient,
+  createTrainingClient,
+  GPUTier,
+  getBabylonRubricId,
+  getTreasuryClient,
+  isTrainingAvailable,
+  isTreasuryAvailable,
+  PrivacyMode,
+  RunState,
+  recordTrainingOnChain,
+  registerBabylonRubrics,
+  sendHeartbeat,
+  TrainingClient,
+  trainWithJejuRLAIF,
+} from './compute'
 export type {
   CreateAgentParams,
   ExportGroupedForGRPOFn,
@@ -28,7 +62,7 @@ export type {
   TrainingMessage,
   TrajectoryForTraining,
   TrajectoryStepForTraining,
-} from './dependencies';
+} from './dependencies'
 // Dependencies configuration
 export {
   areAgentDependenciesConfigured,
@@ -41,37 +75,33 @@ export {
   getExportToHuggingFace,
   getLLMCaller,
   getToTrainingMessages,
-} from './dependencies';
+} from './dependencies'
 // Generation
-export * from './generation';
-export * from './huggingface';
+export * from './generation'
+export * from './huggingface'
 // Training initialization
 export {
   initializeTrainingPackage,
   isTrainingInitialized,
   resetTrainingInitialization,
-} from './init-training';
-// Metrics (re-export for backwards compatibility, prefer import from './metrics')
-export * from './metrics';
-export * from './rubrics';
-export * from './scoring';
-export * from './training';
+} from './init-training'
+// Metrics
+export * from './metrics'
+export * from './rubrics'
+export * from './scoring'
+export * from './training'
 // Utilities
-export * from './utils';
+export * from './utils'
 
 // =============================================================================
 // DECENTRALIZED TRAINING INFRASTRUCTURE
 // =============================================================================
 
-// Jeju RLAIF Integration
-export {
-  BabylonJejuAdapter,
-  createBabylonJejuAdapter,
-  trainWithJejuRLAIF,
-} from './compute/jeju-rlaif-adapter';
+// Note: Jeju RLAIF exports (BabylonJejuAdapter, createBabylonJejuAdapter, trainWithJejuRLAIF)
+// are already included in ./compute exports above
 // MPC Configuration
-export * from './mpc';
+export * from './mpc'
 // Encrypted Storage
-export * from './storage';
+export * from './storage'
 // TEE Training Workers
-export * from './tee';
+export * from './tee'

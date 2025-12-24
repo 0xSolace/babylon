@@ -1,16 +1,16 @@
-import { useJejuAuth } from '@babylon/auth/client';
-import { UnreadMessagesApiResponseSchema } from '@babylon/shared';
-import { useQuery } from '@tanstack/react-query';
-import { useAuth } from '@/hooks/useAuth';
+import { useJejuAuth } from '@babylon/auth'
+import { UnreadMessagesApiResponseSchema } from '@babylon/shared'
+import { useQuery } from '@tanstack/react-query'
+import { useAuth } from '@/hooks/useAuth'
 
 /**
  * Represents unread message counts.
  */
 interface UnreadCounts {
   /** Number of pending DM requests from anonymous users */
-  pendingDMs: number;
+  pendingDMs: number
   /** Whether there are new messages in existing chats */
-  hasNewMessages: boolean;
+  hasNewMessages: boolean
 }
 
 /**
@@ -42,44 +42,44 @@ interface UnreadCounts {
  * ```
  */
 export function useUnreadMessages() {
-  const { authenticated } = useAuth();
-  const { getAccessToken } = useJejuAuth();
+  const { authenticated } = useAuth()
+  const { getAccessToken } = useJejuAuth()
 
   const { data: counts = { pendingDMs: 0, hasNewMessages: false }, isLoading } =
     useQuery({
       queryKey: ['unreadMessages'],
       queryFn: async (): Promise<UnreadCounts> => {
-        const token = await getAccessToken();
+        const token = await getAccessToken()
         if (!token) {
-          return { pendingDMs: 0, hasNewMessages: false };
+          return { pendingDMs: 0, hasNewMessages: false }
         }
 
         const response = await fetch('/api/chats/unread-count', {
           headers: {
             Authorization: `Bearer ${token}`,
           },
-        });
+        })
 
         if (!response.ok) {
-          throw new Error(`Failed to fetch unread count: ${response.status}`);
+          throw new Error(`Failed to fetch unread count: ${response.status}`)
         }
 
-        const json: unknown = await response.json();
-        const data = UnreadMessagesApiResponseSchema.parse(json);
+        const json = await response.json()
+        const data = UnreadMessagesApiResponseSchema.parse(json)
 
         return {
           pendingDMs: data.pendingDMs,
           hasNewMessages: data.hasNewMessages,
-        };
+        }
       },
       enabled: authenticated,
       refetchInterval: 30000,
       staleTime: 15000,
-    });
+    })
 
   return {
     ...counts,
     totalUnread: counts.pendingDMs + (counts.hasNewMessages ? 1 : 0),
     isLoading,
-  };
+  }
 }

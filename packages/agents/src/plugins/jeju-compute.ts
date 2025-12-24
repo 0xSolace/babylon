@@ -12,47 +12,46 @@
 
 import type {
   DetokenizeTextParams,
-  GenerateTextParams,
   IAgentRuntime,
   ModelTypeName,
   ObjectGenerationParams,
   Plugin,
   TokenizeTextParams,
-} from '@elizaos/core';
-import { ModelType } from '@elizaos/core';
-import { encodingForModel, type TiktokenModel } from 'js-tiktoken';
-import type { Address } from 'viem';
-import { logger } from '../shared/logger';
-import { isPromptLoggingEnabled, logPrompt } from '../utils/prompt-logger';
-import type { TrajectoryLoggerService } from './plugin-trajectory-logger/src/TrajectoryLoggerService';
+} from '@elizaos/core'
+import { ModelType } from '@elizaos/core'
+import { encodingForModel, type TiktokenModel } from 'js-tiktoken'
+import type { Address } from 'viem'
+import { logger } from '../shared/logger'
+import { isPromptLoggingEnabled, logPrompt } from '../utils/prompt-logger'
+import type { TrajectoryLoggerService } from './plugin-trajectory-logger/src/TrajectoryLoggerService'
 
 // Jeju Compute gateway URLs by network
 const JEJU_GATEWAY_URLS: Record<'localnet' | 'testnet' | 'mainnet', string> = {
   localnet: 'http://localhost:4200',
   testnet: 'https://gateway.testnet.jeju.network',
   mainnet: 'https://gateway.jeju.network',
-};
+}
 
 // Default models for small/large inference
 const DEFAULT_MODELS = {
   small: 'llama-3.1-8b-instant',
   large: 'llama-3.1-70b-versatile',
-};
+}
 
 interface JejuComputeResponse {
-  id: string;
-  model: string;
-  choices: Array<{ message: { content: string } }>;
+  id: string
+  model: string
+  choices: Array<{ message: { content: string } }>
   usage: {
-    prompt_tokens: number;
-    completion_tokens: number;
-    total_tokens: number;
-  };
+    prompt_tokens: number
+    completion_tokens: number
+    total_tokens: number
+  }
   settlement?: {
-    provider: Address;
-    requestHash: string;
-    signature: string;
-  };
+    provider: Address
+    requestHash: string
+    signature: string
+  }
 }
 
 /**
@@ -60,30 +59,30 @@ interface JejuComputeResponse {
  */
 function getGatewayUrl(): string {
   if (process.env.JEJU_COMPUTE_GATEWAY_URL) {
-    return process.env.JEJU_COMPUTE_GATEWAY_URL;
+    return process.env.JEJU_COMPUTE_GATEWAY_URL
   }
   const network = (process.env.JEJU_NETWORK ?? 'localnet') as
     | 'localnet'
     | 'testnet'
-    | 'mainnet';
-  return JEJU_GATEWAY_URLS[network];
+    | 'mainnet'
+  return JEJU_GATEWAY_URLS[network]
 }
 
 /**
  * Get user address for billing
  */
 function getUserAddress(runtime: IAgentRuntime): string {
-  const address = runtime.getSetting('JEJU_WALLET_ADDRESS');
+  const address = runtime.getSetting('JEJU_WALLET_ADDRESS')
   if (typeof address === 'string' && address) {
-    return address;
+    return address
   }
   if (process.env.JEJU_WALLET_ADDRESS) {
-    return process.env.JEJU_WALLET_ADDRESS;
+    return process.env.JEJU_WALLET_ADDRESS
   }
   throw new Error(
     '[JejuCompute] JEJU_WALLET_ADDRESS is required for billing. ' +
-      'Set it in runtime settings or environment.'
-  );
+      'Set it in runtime settings or environment.',
+  )
 }
 
 /**
@@ -93,8 +92,8 @@ function findModelName(model: ModelTypeName): TiktokenModel {
   const name =
     model === ModelType.TEXT_SMALL
       ? (process.env.JEJU_SMALL_MODEL ?? DEFAULT_MODELS.small)
-      : (process.env.JEJU_LARGE_MODEL ?? DEFAULT_MODELS.large);
-  return name as TiktokenModel;
+      : (process.env.JEJU_LARGE_MODEL ?? DEFAULT_MODELS.large)
+  return name as TiktokenModel
 }
 
 /**
@@ -102,10 +101,10 @@ function findModelName(model: ModelTypeName): TiktokenModel {
  */
 async function tokenizeText(
   model: ModelTypeName,
-  prompt: string
+  prompt: string,
 ): Promise<number[]> {
-  const encoding = encodingForModel(findModelName(model));
-  return encoding.encode(prompt);
+  const encoding = encodingForModel(findModelName(model))
+  return encoding.encode(prompt)
 }
 
 /**
@@ -113,41 +112,41 @@ async function tokenizeText(
  */
 async function detokenizeText(
   model: ModelTypeName,
-  tokens: number[]
+  tokens: number[],
 ): Promise<string> {
-  const encoding = encodingForModel(findModelName(model));
-  return encoding.decode(tokens);
+  const encoding = encodingForModel(findModelName(model))
+  return encoding.decode(tokens)
 }
 
 /**
  * Call Jeju Compute for text generation
  */
 async function generateJejuText(params: {
-  runtime: IAgentRuntime;
-  model: string;
-  prompt: string;
-  system?: string;
-  temperature: number;
-  maxTokens: number;
-  frequencyPenalty?: number;
-  presencePenalty?: number;
-  stopSequences?: string[];
-  trajectoryLogger?: TrajectoryLoggerService;
-  trajectoryId?: string;
-  purpose?: 'action' | 'reasoning' | 'evaluation' | 'response' | 'other';
-  actionType?: string;
-  modelVersion?: string;
+  runtime: IAgentRuntime
+  model: string
+  prompt: string
+  system?: string | null
+  temperature: number
+  maxTokens: number
+  frequencyPenalty?: number
+  presencePenalty?: number
+  stopSequences?: string[]
+  trajectoryLogger?: TrajectoryLoggerService
+  trajectoryId?: string
+  purpose?: 'action' | 'reasoning' | 'evaluation' | 'response' | 'other'
+  actionType?: string
+  modelVersion?: string
 }): Promise<string> {
-  const startTime = Date.now();
-  const gatewayUrl = getGatewayUrl();
-  const userAddress = getUserAddress(params.runtime);
+  const startTime = Date.now()
+  const gatewayUrl = getGatewayUrl()
+  const userAddress = getUserAddress(params.runtime)
 
   // Build messages array
-  const messages: Array<{ role: string; content: string }> = [];
+  const messages: Array<{ role: string; content: string }> = []
   if (params.system) {
-    messages.push({ role: 'system', content: params.system });
+    messages.push({ role: 'system', content: params.system })
   }
-  messages.push({ role: 'user', content: params.prompt });
+  messages.push({ role: 'user', content: params.prompt })
 
   const response = await fetch(`${gatewayUrl}/v1/chat/completions`, {
     method: 'POST',
@@ -164,19 +163,19 @@ async function generateJejuText(params: {
       presence_penalty: params.presencePenalty,
       stop: params.stopSequences,
     }),
-  });
+  })
 
   if (!response.ok) {
-    const errorText = await response.text();
+    const errorText = await response.text()
     throw new Error(
       `[JejuCompute] Inference failed (${response.status}): ${errorText}. ` +
-        'Ensure Jeju Compute is running: cd /path/to/jeju && bun run dev'
-    );
+        'Ensure Jeju Compute is running: cd /path/to/jeju && bun run dev',
+    )
   }
 
-  const data = (await response.json()) as JejuComputeResponse;
-  const content = data.choices[0]?.message?.content ?? '';
-  const latencyMs = Date.now() - startTime;
+  const data = (await response.json()) as JejuComputeResponse
+  const content = data.choices[0]?.message?.content ?? ''
+  const latencyMs = Date.now() - startTime
 
   // Log prompt if enabled
   if (isPromptLoggingEnabled()) {
@@ -192,14 +191,12 @@ async function generateJejuText(params: {
         latencyMs,
         settlement: data.settlement,
       },
-    });
+    })
   }
 
   // Log to trajectory if available
   if (params.trajectoryLogger && params.trajectoryId) {
-    const stepId = params.trajectoryLogger.getCurrentStepId(
-      params.trajectoryId
-    );
+    const stepId = params.trajectoryLogger.getCurrentStepId(params.trajectoryId)
     if (stepId) {
       params.trajectoryLogger.logLLMCall(stepId, {
         model: params.model,
@@ -214,7 +211,7 @@ async function generateJejuText(params: {
         latencyMs,
         promptTokens: data.usage.prompt_tokens,
         completionTokens: data.usage.completion_tokens,
-      });
+      })
     }
   }
 
@@ -227,10 +224,10 @@ async function generateJejuText(params: {
       completionTokens: data.usage.completion_tokens,
       provider: data.settlement?.provider ?? 'local',
     },
-    'JejuComputePlugin'
-  );
+    'JejuComputePlugin',
+  )
 
-  return content;
+  return content
 }
 
 /**
@@ -239,10 +236,10 @@ async function generateJejuText(params: {
 async function generateJejuObject(
   runtime: IAgentRuntime,
   model: string,
-  params: ObjectGenerationParams
+  params: ObjectGenerationParams,
 ): Promise<unknown> {
-  const gatewayUrl = getGatewayUrl();
-  const userAddress = getUserAddress(runtime);
+  const gatewayUrl = getGatewayUrl()
+  const userAddress = getUserAddress(runtime)
 
   // For object generation, we request JSON output
   const response = await fetch(`${gatewayUrl}/v1/chat/completions`, {
@@ -257,17 +254,17 @@ async function generateJejuObject(
       temperature: params.temperature ?? 0.7,
       response_format: { type: 'json_object' },
     }),
-  });
+  })
 
   if (!response.ok) {
-    const errorText = await response.text();
+    const errorText = await response.text()
     throw new Error(
-      `[JejuCompute] Object generation failed (${response.status}): ${errorText}`
-    );
+      `[JejuCompute] Object generation failed (${response.status}): ${errorText}`,
+    )
   }
 
-  const data = (await response.json()) as JejuComputeResponse;
-  const content = data.choices[0]?.message?.content ?? '{}';
+  const data = (await response.json()) as JejuComputeResponse
+  const content = data.choices[0]?.message?.content ?? '{}'
 
   if (isPromptLoggingEnabled()) {
     await logPrompt({
@@ -279,19 +276,114 @@ async function generateJejuObject(
         model,
         temperature: params.temperature,
       },
-    });
+    })
   }
 
-  return JSON.parse(content);
+  return JSON.parse(content)
 }
 
 /**
  * Extended runtime with trajectory logging
  */
 interface RuntimeWithTrajectory extends IAgentRuntime {
-  trajectoryLogger?: TrajectoryLoggerService;
-  currentTrajectoryId?: string;
-  currentModelVersion?: string;
+  trajectoryLogger?: TrajectoryLoggerService
+  currentTrajectoryId?: string
+  currentModelVersion?: string
+}
+
+// ============================================================================
+// Type Validators for ElizaOS Plugin Params
+// ============================================================================
+
+/**
+ * Validates that params has the required structure for tokenization.
+ * Returns a narrowed type or throws an error.
+ */
+function validateTokenizeParams(params: unknown): TokenizeTextParams {
+  const p = params as Record<string, unknown>
+  if (typeof p.prompt !== 'string') {
+    throw new Error(
+      '[JejuCompute] Invalid params for tokenize: prompt must be a string',
+    )
+  }
+  // Construct a valid TokenizeTextParams from the validated fields
+  // modelType defaults to TEXT_LARGE if not provided
+  return {
+    prompt: p.prompt as string,
+    modelType:
+      (p.modelType as ModelTypeName | undefined) ?? ModelType.TEXT_LARGE,
+  }
+}
+
+/**
+ * Validates that params has the required structure for detokenization.
+ */
+function validateDetokenizeParams(params: unknown): DetokenizeTextParams {
+  const p = params as Record<string, unknown>
+  if (!Array.isArray(p.tokens)) {
+    throw new Error(
+      '[JejuCompute] Invalid params for detokenize: tokens must be an array',
+    )
+  }
+  // modelType defaults to TEXT_LARGE if not provided
+  const result: DetokenizeTextParams = {
+    tokens: p.tokens as number[],
+    modelType:
+      (p.modelType as ModelTypeName | undefined) ?? ModelType.TEXT_LARGE,
+  }
+  return result
+}
+
+/**
+ * Validates and extracts GenerateTextParams fields.
+ * Uses partial extraction since the type has many optional fields.
+ */
+function validateGenerateTextParams(params: Record<string, unknown>): {
+  prompt: string
+  stopSequences: string[]
+  maxTokens: number
+  temperature: number
+  frequencyPenalty: number
+  presencePenalty: number
+} {
+  if (typeof params.prompt !== 'string') {
+    throw new Error(
+      '[JejuCompute] Invalid params for generate: prompt must be a string',
+    )
+  }
+  return {
+    prompt: params.prompt,
+    stopSequences: Array.isArray(params.stopSequences)
+      ? params.stopSequences
+      : [],
+    maxTokens: typeof params.maxTokens === 'number' ? params.maxTokens : 8192,
+    temperature:
+      typeof params.temperature === 'number' ? params.temperature : 0.7,
+    frequencyPenalty:
+      typeof params.frequencyPenalty === 'number'
+        ? params.frequencyPenalty
+        : 0.7,
+    presencePenalty:
+      typeof params.presencePenalty === 'number' ? params.presencePenalty : 0.7,
+  }
+}
+
+/**
+ * Validates that params has the required structure for object generation.
+ */
+function validateObjectGenerationParams(
+  params: unknown,
+): ObjectGenerationParams {
+  const p = params as Record<string, unknown>
+  if (typeof p.prompt !== 'string') {
+    throw new Error(
+      '[JejuCompute] Invalid params for object generation: prompt must be a string',
+    )
+  }
+  return {
+    prompt: p.prompt,
+    temperature: typeof p.temperature === 'number' ? p.temperature : undefined,
+  }
 }
 
 /**
@@ -311,64 +403,67 @@ export const jejuComputePlugin: Plugin = {
   },
 
   async init() {
-    const gatewayUrl = getGatewayUrl();
+    const gatewayUrl = getGatewayUrl()
     logger.info(
       `Jeju Compute plugin initialized`,
       { gateway: gatewayUrl, network: process.env.JEJU_NETWORK ?? 'localnet' },
-      'JejuComputePlugin'
-    );
+      'JejuComputePlugin',
+    )
 
     // Verify gateway is reachable
-    const healthCheck = await fetch(`${gatewayUrl}/health`).catch(() => null);
+    const healthCheck = await fetch(`${gatewayUrl}/health`).catch(() => null)
     if (!healthCheck?.ok) {
       throw new Error(
         `[JejuCompute] Gateway not reachable at ${gatewayUrl}. ` +
-          'Ensure Jeju is running: cd /path/to/jeju && bun run dev'
-      );
+          'Ensure Jeju is running: cd /path/to/jeju && bun run dev',
+      )
     }
   },
 
+  // ElizaOS Plugin.models expects handlers with signature:
+  // (runtime: IAgentRuntime, params: Record<string, unknown>) => Promise<unknown>
+  // We use validator functions to parse params at runtime and ensure type safety.
   models: {
     // Tokenizer encode
     [ModelType.TEXT_TOKENIZER_ENCODE]: (async (
       _runtime: IAgentRuntime,
-      params: Record<string, unknown>
+      params: Record<string, unknown>,
     ) => {
-      const { prompt, modelType = ModelType.TEXT_LARGE } =
-        params as unknown as TokenizeTextParams;
-      return await tokenizeText(modelType ?? ModelType.TEXT_LARGE, prompt);
+      const validated = validateTokenizeParams(params)
+      const { prompt, modelType = ModelType.TEXT_LARGE } = validated
+      return await tokenizeText(modelType ?? ModelType.TEXT_LARGE, prompt)
     }) as never,
 
     // Tokenizer decode
     [ModelType.TEXT_TOKENIZER_DECODE]: (async (
       _runtime: IAgentRuntime,
-      params: Record<string, unknown>
+      params: Record<string, unknown>,
     ) => {
-      const { tokens, modelType = ModelType.TEXT_LARGE } =
-        params as unknown as DetokenizeTextParams;
-      return await detokenizeText(modelType ?? ModelType.TEXT_LARGE, tokens);
+      const validated = validateDetokenizeParams(params)
+      const { tokens, modelType = ModelType.TEXT_LARGE } = validated
+      return await detokenizeText(modelType ?? ModelType.TEXT_LARGE, tokens)
     }) as never,
 
     // Small text model
     [ModelType.TEXT_SMALL]: (async (
       runtime: IAgentRuntime,
-      params: Record<string, unknown>
+      params: Record<string, unknown>,
     ) => {
-      const { prompt, stopSequences = [] } =
-        params as unknown as GenerateTextParams;
+      const validated = validateGenerateTextParams(params)
+      const { prompt, stopSequences } = validated
 
-      const extendedRuntime = runtime as RuntimeWithTrajectory;
+      const extendedRuntime = runtime as RuntimeWithTrajectory
       const modelSetting =
         runtime.getSetting('JEJU_SMALL_MODEL') ??
-        runtime.getSetting('SMALL_MODEL');
+        runtime.getSetting('SMALL_MODEL')
       const model =
-        typeof modelSetting === 'string' ? modelSetting : DEFAULT_MODELS.small;
+        typeof modelSetting === 'string' ? modelSetting : DEFAULT_MODELS.small
 
       return await generateJejuText({
         runtime,
         model,
         prompt,
-        system: runtime.character.system ?? undefined,
+        system: runtime.character.system,
         temperature: 0.7,
         maxTokens: 8000,
         frequencyPenalty: 0.7,
@@ -378,41 +473,42 @@ export const jejuComputePlugin: Plugin = {
         trajectoryId: extendedRuntime.currentTrajectoryId,
         purpose: 'action',
         modelVersion: extendedRuntime.currentModelVersion,
-      });
+      })
     }) as never,
 
     // Large text model
     [ModelType.TEXT_LARGE]: (async (
       runtime: IAgentRuntime,
-      params: Record<string, unknown>
+      params: Record<string, unknown>,
     ) => {
+      const validated = validateGenerateTextParams(params)
       const {
         prompt,
-        stopSequences = [],
-        maxTokens = 8192,
-        temperature = 0.7,
-        frequencyPenalty = 0.7,
-        presencePenalty = 0.7,
-      } = params as unknown as GenerateTextParams;
+        stopSequences,
+        maxTokens,
+        temperature,
+        frequencyPenalty,
+        presencePenalty,
+      } = validated
 
-      const extendedRuntime = runtime as RuntimeWithTrajectory;
+      const extendedRuntime = runtime as RuntimeWithTrajectory
       const modelSetting =
         runtime.getSetting('JEJU_LARGE_MODEL') ??
-        runtime.getSetting('LARGE_MODEL');
+        runtime.getSetting('LARGE_MODEL')
       const model =
-        typeof modelSetting === 'string' ? modelSetting : DEFAULT_MODELS.large;
+        typeof modelSetting === 'string' ? modelSetting : DEFAULT_MODELS.large
 
       logger.debug(
         'Using Jeju Compute for inference',
         { model, modelSource: 'jeju-compute' },
-        'JejuComputePlugin'
-      );
+        'JejuComputePlugin',
+      )
 
       return await generateJejuText({
         runtime,
         model,
         prompt,
-        system: runtime.character.system ?? undefined,
+        system: runtime.character.system,
         temperature,
         maxTokens,
         frequencyPenalty,
@@ -422,45 +518,39 @@ export const jejuComputePlugin: Plugin = {
         trajectoryId: extendedRuntime.currentTrajectoryId,
         purpose: 'action',
         modelVersion: extendedRuntime.currentModelVersion,
-      });
+      })
     }) as never,
 
     // Small object model
     [ModelType.OBJECT_SMALL]: (async (
       runtime: IAgentRuntime,
-      params: Record<string, unknown>
+      params: Record<string, unknown>,
     ) => {
+      const validated = validateObjectGenerationParams(params)
       const modelSetting =
         runtime.getSetting('JEJU_SMALL_MODEL') ??
-        runtime.getSetting('SMALL_MODEL');
+        runtime.getSetting('SMALL_MODEL')
       const model =
-        typeof modelSetting === 'string' ? modelSetting : DEFAULT_MODELS.small;
+        typeof modelSetting === 'string' ? modelSetting : DEFAULT_MODELS.small
 
-      return await generateJejuObject(
-        runtime,
-        model,
-        params as unknown as ObjectGenerationParams
-      );
+      return await generateJejuObject(runtime, model, validated)
     }) as never,
 
     // Large object model
     [ModelType.OBJECT_LARGE]: (async (
       runtime: IAgentRuntime,
-      params: Record<string, unknown>
+      params: Record<string, unknown>,
     ) => {
+      const validated = validateObjectGenerationParams(params)
       const modelSetting =
         runtime.getSetting('JEJU_LARGE_MODEL') ??
-        runtime.getSetting('LARGE_MODEL');
+        runtime.getSetting('LARGE_MODEL')
       const model =
-        typeof modelSetting === 'string' ? modelSetting : DEFAULT_MODELS.large;
+        typeof modelSetting === 'string' ? modelSetting : DEFAULT_MODELS.large
 
-      return await generateJejuObject(
-        runtime,
-        model,
-        params as unknown as ObjectGenerationParams
-      );
+      return await generateJejuObject(runtime, model, validated)
     }) as never,
   },
-};
+}
 
-export default jejuComputePlugin;
+export default jejuComputePlugin

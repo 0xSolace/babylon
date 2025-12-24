@@ -1,7 +1,5 @@
-'use client';
-
-import { cn } from '@babylon/shared';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { cn } from '@babylon/shared'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Activity,
   Clock,
@@ -14,90 +12,90 @@ import {
   RefreshCw,
   Users,
   Zap,
-} from 'lucide-react';
-import { useState } from 'react';
-import { Skeleton } from '@/components/shared/Skeleton';
-import { WorldFactsSection } from './WorldFactsSection';
+} from 'lucide-react'
+import { useState } from 'react'
+import { Skeleton } from '@/components/shared/Skeleton'
+import { WorldFactsSection } from './WorldFactsSection'
 
 /**
  * Game state structure for game control tab.
  */
 interface GameState {
-  id: string;
-  isRunning: boolean;
-  currentDay: number;
-  currentDate: string;
-  startedAt: string | null;
-  pausedAt: string | null;
-  lastTickAt: string | null;
-  timeSinceLastTickMs: number | null;
-  tickIntervalMs: number;
-  uptimeMs: number;
-  uptimeMinutes: number;
-  uptimeHours: number;
-  estimatedTotalTicks: number;
+  id: string
+  isRunning: boolean
+  currentDay: number
+  currentDate: string
+  startedAt: string | null
+  pausedAt: string | null
+  lastTickAt: string | null
+  timeSinceLastTickMs: number | null
+  tickIntervalMs: number
+  uptimeMs: number
+  uptimeMinutes: number
+  uptimeHours: number
+  estimatedTotalTicks: number
 }
 
 /**
  * Game statistics structure for game control tab.
  */
 interface GameStats {
-  gameState: GameState;
+  gameState: GameState
   totals: {
-    posts: number;
-    articles: number;
-    groupChats: number;
-    chatMessages: number;
-    llmCalls: number;
-    avgMessagesPerChat: number;
-  };
+    posts: number
+    articles: number
+    groupChats: number
+    chatMessages: number
+    llmCalls: number
+    avgMessagesPerChat: number
+  }
   last24Hours: {
-    posts: number;
-    articles: number;
-    groupChats: number;
-    messages: number;
-    llmCalls: number;
-  };
+    posts: number
+    articles: number
+    groupChats: number
+    messages: number
+    llmCalls: number
+  }
   lastHour: {
-    posts: number;
-    articles: number;
-    groupChats: number;
-    messages: number;
-    llmCalls: number;
-  };
+    posts: number
+    articles: number
+    groupChats: number
+    messages: number
+    llmCalls: number
+  }
   last5Minutes: {
-    posts: number;
-    articles: number;
-    messages: number;
-    llmCalls: number;
-  };
+    posts: number
+    articles: number
+    messages: number
+    llmCalls: number
+  }
   lastMinute: {
-    posts: number;
-    articles: number;
-    messages: number;
-    llmCalls: number;
-  };
+    posts: number
+    articles: number
+    messages: number
+    llmCalls: number
+  }
   rates: {
-    postsPerMinute: number;
-    articlesPerMinute: number;
-    messagesPerMinute: number;
-    llmCallsPerMinute: number;
-    postsPerMinuteAvgHour: number;
-    articlesPerMinuteAvgHour: number;
-    messagesPerMinuteAvgHour: number;
-    llmCallsPerMinuteAvgHour: number;
-    postsPerMinuteAvgDay: number;
-    articlesPerMinuteAvgDay: number;
-    messagesPerMinuteAvgDay: number;
-    llmCallsPerMinuteAvgDay: number;
-  };
+    postsPerMinute: number
+    articlesPerMinute: number
+    messagesPerMinute: number
+    llmCallsPerMinute: number
+    postsPerMinuteAvgHour: number
+    articlesPerMinuteAvgHour: number
+    messagesPerMinuteAvgHour: number
+    llmCallsPerMinuteAvgHour: number
+    postsPerMinuteAvgDay: number
+    articlesPerMinuteAvgDay: number
+    messagesPerMinuteAvgDay: number
+    llmCallsPerMinuteAvgDay: number
+  }
   llmStats: {
-    totalCalls24h: number;
-    totalPromptTokens24h: number;
-    totalCompletionTokens24h: number;
-    totalTokens24h: number;
-    avgLatencyMs24h: number | null;
-  };
+    totalCalls24h: number
+    totalPromptTokens24h: number
+    totalCompletionTokens24h: number
+    totalTokens24h: number
+    avgLatencyMs24h: number | null
+  }
 }
 
 /**
@@ -122,8 +120,8 @@ interface GameStats {
  * @returns Game control tab element
  */
 export function GameControlTab() {
-  const queryClient = useQueryClient();
-  const [autoRefresh, setAutoRefresh] = useState(true);
+  const queryClient = useQueryClient()
+  const [autoRefresh, setAutoRefresh] = useState(true)
 
   const {
     data: stats,
@@ -134,14 +132,14 @@ export function GameControlTab() {
   } = useQuery<GameStats>({
     queryKey: ['admin', 'game-stats'],
     queryFn: async () => {
-      const response = await fetch('/api/admin/game-stats');
+      const response = await fetch('/api/admin/game-stats')
       if (!response.ok) {
-        throw new Error('Failed to load stats');
+        throw new Error('Failed to load stats')
       }
-      return response.json();
+      return response.json()
     },
     refetchInterval: autoRefresh ? 5000 : false, // Refresh every 5 seconds if enabled
-  });
+  })
 
   const gameControlMutation = useMutation({
     mutationFn: async (action: 'start' | 'pause') => {
@@ -149,35 +147,35 @@ export function GameControlTab() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action }),
-      });
+      })
 
       if (!response.ok) {
-        throw new Error(`Failed to ${action} game`);
+        throw new Error(`Failed to ${action} game`)
       }
 
-      return response.json();
+      return response.json()
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['admin', 'game-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'game-stats'] })
     },
-  });
+  })
 
   const formatUptime = (minutes: number) => {
-    if (minutes < 1) return '< 1 min';
-    if (minutes < 60) return `${Math.round(minutes)} min`;
-    const hours = Math.floor(minutes / 60);
-    const mins = Math.round(minutes % 60);
-    if (hours < 24) return `${hours}h ${mins}m`;
-    const days = Math.floor(hours / 24);
-    const remainingHours = hours % 24;
-    return `${days}d ${remainingHours}h`;
-  };
+    if (minutes < 1) return '< 1 min'
+    if (minutes < 60) return `${Math.round(minutes)} min`
+    const hours = Math.floor(minutes / 60)
+    const mins = Math.round(minutes % 60)
+    if (hours < 24) return `${hours}h ${mins}m`
+    const days = Math.floor(hours / 24)
+    const remainingHours = hours % 24
+    return `${days}d ${remainingHours}h`
+  }
 
   const formatNumber = (value: number) => {
-    if (value >= 1000000) return `${(value / 1000000).toFixed(2)}M`;
-    if (value >= 1000) return `${(value / 1000).toFixed(2)}K`;
-    return value.toLocaleString();
-  };
+    if (value >= 1000000) return `${(value / 1000000).toFixed(2)}M`
+    if (value >= 1000) return `${(value / 1000).toFixed(2)}K`
+    return value.toLocaleString()
+  }
 
   const StatCard = ({
     icon: Icon,
@@ -186,11 +184,11 @@ export function GameControlTab() {
     subValue,
     color = 'blue',
   }: {
-    icon: React.ComponentType<{ className?: string }>;
-    label: string;
-    value: string | number;
-    subValue?: string;
-    color?: 'blue' | 'green' | 'purple' | 'orange' | 'red' | 'yellow';
+    icon: React.ComponentType<{ className?: string }>
+    label: string
+    value: string | number
+    subValue?: string
+    color?: 'blue' | 'green' | 'purple' | 'orange' | 'red' | 'yellow'
   }) => {
     const colorClasses = {
       blue: 'text-blue-500 bg-blue-500/10',
@@ -199,7 +197,7 @@ export function GameControlTab() {
       orange: 'text-orange-500 bg-orange-500/10',
       red: 'text-red-500 bg-red-500/10',
       yellow: 'text-yellow-500 bg-yellow-500/10',
-    };
+    }
 
     return (
       <div className="rounded-lg border border-border bg-card p-4 transition-shadow hover:shadow-md">
@@ -219,8 +217,8 @@ export function GameControlTab() {
           <div className="mt-1 text-muted-foreground text-xs">{subValue}</div>
         )}
       </div>
-    );
-  };
+    )
+  }
 
   if (isLoading) {
     return (
@@ -228,7 +226,7 @@ export function GameControlTab() {
         <Skeleton className="h-24 w-full" />
         <Skeleton className="h-64 w-full" />
       </div>
-    );
+    )
   }
 
   if (error || !stats) {
@@ -238,10 +236,10 @@ export function GameControlTab() {
           ? error.message
           : 'Failed to load game statistics'}
       </div>
-    );
+    )
   }
 
-  const { gameState, totals, rates, llmStats, lastMinute } = stats;
+  const { gameState, totals, rates, llmStats, lastMinute } = stats
 
   return (
     <div className="space-y-6">
@@ -256,12 +254,13 @@ export function GameControlTab() {
           </div>
           <div className="flex items-center gap-2">
             <button
+              type="button"
               onClick={() => setAutoRefresh(!autoRefresh)}
               className={cn(
                 'rounded-lg px-3 py-2 text-sm transition-colors',
                 autoRefresh
                   ? 'bg-green-500/20 text-green-500'
-                  : 'bg-gray-500/20 text-gray-500'
+                  : 'bg-gray-500/20 text-gray-500',
               )}
             >
               <RefreshCw
@@ -269,6 +268,7 @@ export function GameControlTab() {
               />
             </button>
             <button
+              type="button"
               onClick={() => refetch()}
               disabled={isFetching}
               className="rounded-lg bg-blue-500/20 px-4 py-2 text-blue-500 transition-colors hover:bg-blue-500/30 disabled:opacity-50"
@@ -281,13 +281,14 @@ export function GameControlTab() {
         {/* Control Buttons */}
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <button
+            type="button"
             onClick={() => gameControlMutation.mutate('start')}
             disabled={gameControlMutation.isPending || gameState.isRunning}
             className={cn(
               'flex items-center justify-center gap-3 rounded-lg px-6 py-4 font-semibold transition-all',
               gameState.isRunning
                 ? 'cursor-default border-2 border-green-500/50 bg-green-500/20 text-green-500'
-                : 'bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50'
+                : 'bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50',
             )}
           >
             {gameState.isRunning ? (
@@ -304,13 +305,14 @@ export function GameControlTab() {
           </button>
 
           <button
+            type="button"
             onClick={() => gameControlMutation.mutate('pause')}
             disabled={gameControlMutation.isPending || !gameState.isRunning}
             className={cn(
               'flex items-center justify-center gap-3 rounded-lg px-6 py-4 font-semibold transition-all',
               !gameState.isRunning
                 ? 'cursor-default border-2 border-gray-500/50 bg-gray-500/20 text-gray-500'
-                : 'bg-red-600 text-white hover:bg-red-700 disabled:opacity-50'
+                : 'bg-red-600 text-white hover:bg-red-700 disabled:opacity-50',
             )}
           >
             <Pause className="h-5 w-5" />
@@ -599,5 +601,5 @@ export function GameControlTab() {
       {/* World Facts Section */}
       <WorldFactsSection />
     </div>
-  );
+  )
 }

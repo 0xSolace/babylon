@@ -1,8 +1,6 @@
-'use client';
-
-import { cn } from '@babylon/shared';
-import { Wallet } from 'lucide-react';
-import { useAuth } from '@/hooks/useAuth';
+import { cn } from '@babylon/shared'
+import { Wallet } from 'lucide-react'
+import { useAuth } from '@/hooks/useAuth'
 
 /**
  * Login button component for wallet connection.
@@ -19,10 +17,11 @@ import { useAuth } from '@/hooks/useAuth';
  * ```
  */
 export function LoginButton() {
-  const { ready, login } = useAuth();
+  const { ready, login } = useAuth()
 
   return (
     <button
+      type="button"
       onClick={login}
       disabled={!ready}
       className={cn(
@@ -31,11 +30,11 @@ export function LoginButton() {
         'hover:bg-sidebar-primary/90',
         'transition-colors duration-200',
         'disabled:cursor-not-allowed disabled:opacity-50',
-        'text-[15px] leading-5'
+        'text-[15px] leading-5',
       )}
     >
       <Wallet className="h-5 w-5" />
       <span>Connect Wallet</span>
     </button>
-  );
+  )
 }

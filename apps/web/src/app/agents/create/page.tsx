@@ -1,57 +1,51 @@
-'use client';
-
-import { cn } from '@babylon/shared';
-import { useMutation } from '@tanstack/react-query';
-import { ArrowLeft, Bot, Loader2, Wallet } from 'lucide-react';
-import { useRouter } from 'next/navigation';
-import { useCallback, useState } from 'react';
-import { toast } from 'sonner';
-import { LoginButton } from '@/components/auth/LoginButton';
-import { PageContainer } from '@/components/shared/PageContainer';
-import { Skeleton } from '@/components/shared/Skeleton';
-import { useAuth } from '@/hooks/useAuth';
-import { useAuthStore } from '@/stores/authStore';
+import { cn } from '@babylon/shared'
+import { useMutation } from '@tanstack/react-query'
+import { ArrowLeft, Bot, Loader2, Wallet } from 'lucide-react'
+import { useCallback, useState } from 'react'
+import { toast } from 'sonner'
+import { LoginButton } from '@/components/auth/LoginButton'
+import { PageContainer } from '@/components/shared/PageContainer'
+import { Skeleton } from '@/components/shared/Skeleton'
+import { useAuth } from '@/hooks/useAuth'
+import { useRouter } from '@/lib/navigation'
+import { useAuthStore } from '@/stores/authStore'
 import {
   AgentConfigForm,
   EditProfileModal,
   ProfilePreviewCard,
-} from './components';
-import {
-  type AgentFormData,
-  type ProfileFormData,
-  useAgentForm,
-} from './hooks';
+} from './components'
+import { type AgentFormData, type ProfileFormData, useAgentForm } from './hooks'
 
-const TOTAL_PROFILE_PICTURES = 100;
-const TOTAL_BANNERS = 100;
-const DEFAULT_MAX_DEPOSIT = 10000;
+const TOTAL_PROFILE_PICTURES = 100
+const TOTAL_BANNERS = 100
+const DEFAULT_MAX_DEPOSIT = 10000
 
 interface CreateAgentPayload {
-  name: string;
-  description: string;
-  profileImageUrl: string;
-  coverImageUrl: string;
-  system: string;
-  bio: string[];
-  personality: string;
-  tradingStrategy: string;
-  initialDeposit: number;
+  name: string
+  description: string
+  profileImageUrl: string
+  coverImageUrl: string
+  system: string
+  bio: string[]
+  personality: string
+  tradingStrategy: string
+  initialDeposit: number
 }
 
 interface CreateAgentResponse {
   agent: {
-    id: string;
-  };
+    id: string
+  }
 }
 
 export default function CreateAgentPage() {
-  const router = useRouter();
-  const { user } = useAuthStore();
-  const { ready, authenticated, getAccessToken } = useAuth();
+  const router = useRouter()
+  const { user } = useAuthStore()
+  const { ready, authenticated, getAccessToken } = useAuth()
 
-  const balance = user?.reputationPoints ?? 0;
+  const balance = user?.reputationPoints ?? 0
 
-  const [showEditModal, setShowEditModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false)
 
   const {
     profileData,
@@ -63,13 +57,13 @@ export default function CreateAgentPage() {
     setProfileData,
     regenerateField,
     clearDraft,
-  } = useAgentForm();
+  } = useAgentForm()
 
   // User balance for max deposit - default to 10k if balance not available
   const maxDeposit = Math.max(
     100,
-    Math.min(balance ?? DEFAULT_MAX_DEPOSIT, DEFAULT_MAX_DEPOSIT)
-  );
+    Math.min(balance ?? DEFAULT_MAX_DEPOSIT, DEFAULT_MAX_DEPOSIT),
+  )
 
   // Create agent mutation
   const createAgentMutation = useMutation({
@@ -77,23 +71,21 @@ export default function CreateAgentPage() {
       profileData,
       agentData,
     }: {
-      profileData: ProfileFormData;
-      agentData: AgentFormData;
+      profileData: ProfileFormData
+      agentData: AgentFormData
     }): Promise<CreateAgentResponse> => {
-      const token = await getAccessToken();
+      const token = await getAccessToken()
       if (!token) {
-        throw new Error('Please sign in to create an agent');
+        throw new Error('Please sign in to create an agent')
       }
 
       // Split personality by newlines for bio array (original behavior)
-      const bioArray = agentData.personality
-        .split('\n')
-        .filter((b) => b.trim());
+      const bioArray = agentData.personality.split('\n').filter((b) => b.trim())
 
       // Append trading strategy to system prompt (original behavior)
       const systemPrompt = agentData.tradingStrategy.trim()
         ? `${agentData.system}\n\nTrading Strategy: ${agentData.tradingStrategy}`
-        : agentData.system;
+        : agentData.system
 
       const payload: CreateAgentPayload = {
         // API expects 'name', not 'displayName'
@@ -109,7 +101,7 @@ export default function CreateAgentPage() {
         personality: agentData.personality,
         tradingStrategy: agentData.tradingStrategy,
         initialDeposit: agentData.initialDeposit,
-      };
+      }
 
       const response = await fetch('/api/agents', {
         method: 'POST',
@@ -118,26 +110,26 @@ export default function CreateAgentPage() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(payload),
-      });
+      })
 
       if (!response.ok) {
         const errorData: { error?: string } = await response
           .json()
-          .catch(() => ({}));
-        throw new Error(errorData.error ?? 'Failed to create agent');
+          .catch(() => ({}))
+        throw new Error(errorData.error ?? 'Failed to create agent')
       }
 
-      return response.json() as Promise<CreateAgentResponse>;
+      return response.json() as Promise<CreateAgentResponse>
     },
     onSuccess: (result) => {
-      clearDraft();
-      toast.success('Agent created successfully!');
-      router.push(`/agents/${result.agent.id}`);
+      clearDraft()
+      toast.success('Agent created successfully!')
+      router.push(`/agents/${result.agent.id}`)
     },
     onError: (error: Error) => {
-      toast.error(error.message);
+      toast.error(error.message)
     },
-  });
+  })
 
   // Cycle through pre-made images with direction (next/prev)
   const cycleImage = useCallback(
@@ -145,54 +137,58 @@ export default function CreateAgentPage() {
       const basePath =
         type === 'profile'
           ? '/assets/user-profiles/profile-'
-          : '/assets/user-banners/banner-';
+          : '/assets/user-banners/banner-'
       const totalImages =
-        type === 'profile' ? TOTAL_PROFILE_PICTURES : TOTAL_BANNERS;
+        type === 'profile' ? TOTAL_PROFILE_PICTURES : TOTAL_BANNERS
       const current =
         type === 'profile'
           ? profileData.profileImageUrl
-          : profileData.coverImageUrl;
+          : profileData.coverImageUrl
 
       // Get current index from URL
-      let currentIndex = 1;
+      let currentIndex = 1
       if (current?.includes(basePath)) {
-        const match = current.match(/-(\d+)\.jpg/);
+        const match = current.match(/-(\d+)\.jpg/)
         if (match) {
-          currentIndex = parseInt(match[1]!, 10);
+          currentIndex = parseInt(match[1], 10)
         }
       }
 
       // Calculate next index based on direction
-      let nextIndex: number;
+      let nextIndex: number
       if (direction === 'next') {
-        nextIndex = currentIndex >= totalImages ? 1 : currentIndex + 1;
+        nextIndex = currentIndex >= totalImages ? 1 : currentIndex + 1
       } else {
-        nextIndex = currentIndex <= 1 ? totalImages : currentIndex - 1;
+        nextIndex = currentIndex <= 1 ? totalImages : currentIndex - 1
       }
 
-      const newUrl = `${basePath}${nextIndex}.jpg`;
+      const newUrl = `${basePath}${nextIndex}.jpg`
       updateProfileField(
         type === 'profile' ? 'profileImageUrl' : 'coverImageUrl',
-        newUrl
-      );
+        newUrl,
+      )
     },
-    [profileData.profileImageUrl, profileData.coverImageUrl, updateProfileField]
-  );
+    [
+      profileData.profileImageUrl,
+      profileData.coverImageUrl,
+      updateProfileField,
+    ],
+  )
 
   // Handle agent creation
   const handleCreate = useCallback(() => {
     // Validation
     if (!profileData.displayName.trim()) {
-      toast.error('Agent name is required');
-      return;
+      toast.error('Agent name is required')
+      return
     }
     if (!agentData.system.trim()) {
-      toast.error('System prompt is required');
-      return;
+      toast.error('System prompt is required')
+      return
     }
 
-    createAgentMutation.mutate({ profileData, agentData });
-  }, [profileData, agentData, createAgentMutation]);
+    createAgentMutation.mutate({ profileData, agentData })
+  }, [profileData, agentData, createAgentMutation])
 
   // Show sign-in prompt for unauthenticated users
   if (!ready || !authenticated) {
@@ -212,10 +208,10 @@ export default function CreateAgentPage() {
           </div>
         </div>
       </PageContainer>
-    );
+    )
   }
 
-  const isCreating = createAgentMutation.isPending;
+  const isCreating = createAgentMutation.isPending
 
   return (
     <PageContainer>
@@ -223,6 +219,7 @@ export default function CreateAgentPage() {
         {/* Header */}
         <div className="mb-8">
           <button
+            type="button"
             onClick={() => router.back()}
             className="mb-4 flex items-center gap-3 text-muted-foreground transition-colors hover:text-foreground"
           >
@@ -292,23 +289,25 @@ export default function CreateAgentPage() {
                 {/* Actions */}
                 <div className="flex justify-end gap-3 border-border border-t pt-6">
                   <button
+                    type="button"
                     onClick={() => router.push('/agents')}
                     disabled={isCreating}
                     className={cn(
                       'rounded-lg border border-border px-6 py-3 font-medium transition-colors',
                       'text-muted-foreground hover:bg-muted hover:text-foreground',
-                      'disabled:cursor-not-allowed disabled:opacity-50'
+                      'disabled:cursor-not-allowed disabled:opacity-50',
                     )}
                   >
                     Cancel
                   </button>
                   <button
+                    type="button"
                     onClick={handleCreate}
                     disabled={isCreating || !isInitialized}
                     className={cn(
                       'flex items-center gap-2 rounded-lg px-6 py-3 font-medium transition-all',
                       'bg-[#0066FF] text-primary-foreground hover:bg-[#2952d9]',
-                      'disabled:cursor-not-allowed disabled:opacity-50'
+                      'disabled:cursor-not-allowed disabled:opacity-50',
                     )}
                   >
                     {isCreating ? (
@@ -357,5 +356,5 @@ export default function CreateAgentPage() {
         />
       )}
     </PageContainer>
-  );
+  )
 }

@@ -1,71 +1,63 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.33;
 
-import {Token} from "@jeju/contracts/tokens/Token.sol";
+import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import {ERC20Burnable} from "@openzeppelin/contracts/token/ERC20/extensions/ERC20Burnable.sol";
+import {ERC20Permit} from "@openzeppelin/contracts/token/ERC20/extensions/ERC20Permit.sol";
+import {Ownable2Step, Ownable} from "@openzeppelin/contracts/access/Ownable2Step.sol";
 
 /**
  * @title BBLNToken
- * @author Babylon Labs
- * @notice The official Babylon (BBLN) token deployed on Ethereum mainnet
- * @dev Inherits from Jeju's canonical Token contract with BBLN-specific configuration
+ * @author Babylon Network
+ * @notice BBLN governance token for Babylon prediction markets and AI training coordination
+ * @dev ERC20 token with permit, burning, and minting capabilities
  *
- * Features inherited from Token:
- * - ERC20 with Permit (EIP-2612)
- * - EIP-3009 gasless transfers
- * - Trading fees (creator, holder, treasury, burn)
- * - Cross-chain via Hyperlane
- * - Ban enforcement
- * - Anti-whale limits
- *
- * Configuration: After deployment, owner must call setFees() and setConfig()
- * - Fees: 0% creator, 80% holder (XLP), 10% treasury, 10% burn
- * - Limits: 2% max wallet, 1% max tx for anti-whale
+ * Features:
+ * - ERC20 with Permit (EIP-2612) for gasless approvals
+ * - Burnable for deflationary mechanics
+ * - Controlled minting by owner
+ * - Max supply cap
  */
-contract BBLNToken is Token {
-    // ═══════════════════════════════════════════════════════════════════════════
-    //                              CONSTANTS
-    // ═══════════════════════════════════════════════════════════════════════════
+contract BBLNToken is ERC20, ERC20Burnable, ERC20Permit, Ownable2Step {
+    uint256 public constant MAX_SUPPLY = 1_000_000_000 * 10 ** 18; // 1 billion tokens
+    uint256 public constant INITIAL_SUPPLY = 100_000_000 * 10 ** 18; // 100 million initial
 
-    uint256 public constant TOTAL_SUPPLY = 1_000_000_000 * 10 ** 18; // 1 billion
+    error ExceedsMaxSupply();
+    error ZeroAddress();
 
-    // Allocation
-    uint256 public constant BABYLON_LABS_ALLOCATION = 200_000_000 * 10 ** 18; // 20%
-    uint256 public constant PUBLIC_SALE_ALLOCATION = 100_000_000 * 10 ** 18; // 10%
-    uint256 public constant AIRDROP_ALLOCATION = 100_000_000 * 10 ** 18; // 10%
-    uint256 public constant LIQUIDITY_ALLOCATION = 100_000_000 * 10 ** 18; // 10%
-    uint256 public constant TREASURY_ALLOCATION = 500_000_000 * 10 ** 18; // 50%
-
-    // ═══════════════════════════════════════════════════════════════════════════
-    //                              CONSTRUCTOR
-    // ═══════════════════════════════════════════════════════════════════════════
-
-    /**
-     * @notice Deploy BBLN token
-     * @dev After deployment, owner must call setFees() and setConfig() to configure the token
-     * @param owner Initial owner address (Babylon Labs multisig)
-     */
-    constructor(address owner)
-        Token("Babylon", "BBLN", TOTAL_SUPPLY, owner, TOTAL_SUPPLY, true)
-    {
-        // Token is deployed with default settings
-        // Owner must call setFees() and setConfig() post-deployment
+    constructor(address owner_) ERC20("Babylon Token", "BBLN") ERC20Permit("Babylon Token") Ownable(owner_) {
+        _mint(owner_, INITIAL_SUPPLY);
     }
 
-    // ═══════════════════════════════════════════════════════════════════════════
-    //                              VIEW FUNCTIONS
-    // ═══════════════════════════════════════════════════════════════════════════
+    /**
+     * @notice Mint new tokens (only owner)
+     * @param to Recipient address
+     * @param amount Amount to mint
+     */
+    function mint(address to, uint256 amount) external onlyOwner {
+        if (to == address(0)) revert ZeroAddress();
+        if (totalSupply() + amount > MAX_SUPPLY) revert ExceedsMaxSupply();
+        _mint(to, amount);
+    }
 
     /**
-     * @notice Get deflation stats for analytics
+     * @notice Get the maximum supply
      */
-    function getDeflationaryStats()
-        external
-        view
-        returns (uint256 burned, uint256 xlpFees, uint256 protocolFees, uint256 burnRate)
-    {
-        burned = totalBurned;
-        xlpFees = totalFeesCollected * 80 / 100;
-        protocolFees = totalFeesCollected * 10 / 100;
-        burnRate = totalSupply() > 0 ? (totalBurned * 10000) / TOTAL_SUPPLY : 0;
+    function maxSupply() external pure returns (uint256) {
+        return MAX_SUPPLY;
+    }
+
+    /**
+     * @notice Get remaining mintable supply
+     */
+    function remainingMintableSupply() external view returns (uint256) {
+        return MAX_SUPPLY - totalSupply();
+    }
+
+    /**
+     * @notice Contract version
+     */
+    function version() external pure returns (string memory) {
+        return "1.0.0";
     }
 }

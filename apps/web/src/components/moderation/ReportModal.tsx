@@ -26,19 +26,17 @@
  * />
  * ```
  */
-'use client';
-
-import { Flag, X } from 'lucide-react';
-import { useState, useTransition } from 'react';
-import { toast } from 'sonner';
+import { Flag, X } from 'lucide-react'
+import { useState, useTransition } from 'react'
+import { toast } from 'sonner'
 
 interface ReportModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  targetUserId: string;
-  targetDisplayName: string;
-  postId?: string;
-  onSuccess?: () => void;
+  isOpen: boolean
+  onClose: () => void
+  targetUserId: string
+  targetDisplayName: string
+  postId?: string
+  onSuccess?: () => void
 }
 
 type ReportReason =
@@ -48,12 +46,12 @@ type ReportReason =
   | 'misinformation'
   | 'inappropriate_content'
   | 'impersonation'
-  | 'other';
+  | 'other'
 
 const reportReasons: {
-  value: ReportReason;
-  label: string;
-  description: string;
+  value: ReportReason
+  label: string
+  description: string
 }[] = [
   {
     value: 'spam',
@@ -90,7 +88,7 @@ const reportReasons: {
     label: 'Other',
     description: 'Other reason not listed above',
   },
-];
+]
 
 export function ReportModal({
   isOpen,
@@ -100,14 +98,14 @@ export function ReportModal({
   postId,
   onSuccess,
 }: ReportModalProps) {
-  const [reason, setReason] = useState<ReportReason | null>(null);
-  const [details, setDetails] = useState('');
-  const [isReporting, startReporting] = useTransition();
+  const [reason, setReason] = useState<ReportReason | null>(null)
+  const [details, setDetails] = useState('')
+  const [isReporting, startReporting] = useTransition()
 
   const handleReport = () => {
     if (!reason) {
-      toast.error('Please select a reason');
-      return;
+      toast.error('Please select a reason')
+      return
     }
 
     startReporting(async () => {
@@ -120,27 +118,27 @@ export function ReportModal({
           reason,
           details: details || undefined,
         }),
-      });
+      })
 
       if (!response.ok) {
-        const error = (await response.json()) as { message?: string };
-        toast.error(error.message ?? 'Failed to submit report');
-        return;
+        const error = (await response.json()) as { message?: string }
+        toast.error(error.message ?? 'Failed to submit report')
+        return
       }
 
       toast.success(
-        'Report submitted. Thank you for helping keep the community safe.'
-      );
-      setReason(null);
-      setDetails('');
-      onClose();
-      onSuccess?.();
-    });
-  };
+        'Report submitted. Thank you for helping keep the community safe.',
+      )
+      setReason(null)
+      setDetails('')
+      onClose()
+      onSuccess?.()
+    })
+  }
 
-  if (!isOpen) return null;
+  if (!isOpen) return null
 
-  const reportType = postId ? 'post' : 'user';
+  const reportType = postId ? 'post' : 'user'
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
@@ -151,6 +149,7 @@ export function ReportModal({
             Report {reportType === 'post' ? 'Post' : 'User'}
           </h2>
           <button
+            type="button"
             onClick={onClose}
             className="rounded-lg p-1 transition-colors hover:bg-muted"
           >
@@ -165,10 +164,16 @@ export function ReportModal({
         </p>
 
         <div className="mb-4">
-          <label className="mb-2 block font-medium text-sm">
+          <label
+            htmlFor="report-reason-buttons"
+            className="mb-2 block font-medium text-sm"
+          >
             What&apos;s the issue?
           </label>
-          <div className="max-h-64 space-y-2 overflow-y-auto">
+          <div
+            id="report-reason-buttons"
+            className="max-h-64 space-y-2 overflow-y-auto"
+          >
             {reportReasons.map((option) => (
               <button
                 key={option.value}
@@ -190,10 +195,14 @@ export function ReportModal({
         </div>
 
         <div className="mb-4">
-          <label className="mb-2 block font-medium text-sm">
+          <label
+            htmlFor="report-details-textarea"
+            className="mb-2 block font-medium text-sm"
+          >
             Additional details (optional)
           </label>
           <textarea
+            id="report-details-textarea"
             value={details}
             onChange={(e) => setDetails(e.target.value)}
             placeholder="Provide any additional context that might help our moderation team"
@@ -212,6 +221,7 @@ export function ReportModal({
 
         <div className="flex gap-3">
           <button
+            type="button"
             onClick={onClose}
             disabled={isReporting}
             className="flex-1 rounded-lg bg-muted px-4 py-2 text-foreground transition-colors hover:bg-muted/80 disabled:opacity-50"
@@ -219,6 +229,7 @@ export function ReportModal({
             Cancel
           </button>
           <button
+            type="button"
             onClick={handleReport}
             disabled={isReporting || !reason}
             className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-white transition-colors hover:bg-red-700 disabled:opacity-50"
@@ -235,5 +246,5 @@ export function ReportModal({
         </div>
       </div>
     </div>
-  );
+  )
 }

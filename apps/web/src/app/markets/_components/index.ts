@@ -1,8 +1,8 @@
 // Cards
-export * from './cards';
+export * from './cards'
 
 // Sections
-export * from './sections';
+export * from './sections'
 
 // Tabs
-export * from './tabs';
+export * from './tabs'

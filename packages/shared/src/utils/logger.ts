@@ -6,21 +6,21 @@
  * automatic level filtering based on environment.
  */
 
-import type { JsonValue } from '../types/common';
+import type { JsonValue } from '../types/common'
 
 /**
  * Log data payload - structured data for logging
  * Accepts JsonValue, Error, or any object that can be serialized
  */
 // biome-ignore lint/suspicious/noExplicitAny: LogData must accept arbitrary objects for logging
-export type LogData = Record<string, any> | Error | JsonValue;
+export type LogData = Record<string, any> | Error | JsonValue
 
 /**
  * Log level type
  *
  * @description Valid log levels ordered by severity: debug < info < warn < error
  */
-export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
+export type LogLevel = 'debug' | 'info' | 'warn' | 'error'
 
 /**
  * Log entry structure
@@ -28,11 +28,11 @@ export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
  * @description Internal structure for log entries before formatting.
  */
 interface LogEntry {
-  timestamp: string;
-  level: LogLevel;
-  message: string;
-  data?: LogData;
-  context?: string;
+  timestamp: string
+  level: LogLevel
+  message: string
+  data?: LogData
+  context?: string
 }
 
 /**
@@ -43,71 +43,95 @@ interface LogEntry {
  * and Error objects gracefully.
  */
 export class Logger {
-  private level: LogLevel;
+  private level: LogLevel
   private levelPriority: Record<LogLevel, number> = {
     debug: 0,
     info: 1,
     warn: 2,
     error: 3,
-  };
+  }
 
   constructor(level?: LogLevel) {
     // Allow explicit level override (for A2A compatibility)
     if (level && this.levelPriority[level] !== undefined) {
-      this.level = level;
+      this.level = level
     } else {
       // Set log level based on environment
-      const envLevel = process.env.LOG_LEVEL as LogLevel | undefined;
+      // Browser-safe: handle cases where process.env may not be available
+      // Note: Bun may replace process.env.NODE_ENV at build time with a string literal
+      let envLevel: LogLevel | undefined
+      let nodeEnv: string | undefined
+
+      // Try to get LOG_LEVEL (typically not replaced by bundler)
+      try {
+        if (typeof process !== 'undefined' && process.env) {
+          envLevel = process.env.LOG_LEVEL as LogLevel | undefined
+        }
+      } catch {
+        // process.env may not be accessible in browser
+      }
+
+      // Try to get NODE_ENV (may be replaced by bundler at build time)
+      // If replaced, it becomes a string literal and won't throw
+      // If not replaced and process doesn't exist, we catch and use default
+      try {
+        nodeEnv = process.env.NODE_ENV
+      } catch {
+        // process doesn't exist in browser, use default
+        nodeEnv = undefined
+      }
+
       if (envLevel && this.levelPriority[envLevel] !== undefined) {
-        this.level = envLevel;
+        this.level = envLevel
       } else {
         // Default: debug in development, info in production
-        this.level = process.env.NODE_ENV === 'production' ? 'info' : 'debug';
+        // If nodeEnv is undefined (process doesn't exist), default to development (debug level)
+        this.level = nodeEnv === 'production' ? 'info' : 'debug'
       }
     }
   }
 
   private shouldLog(level: LogLevel): boolean {
-    return this.levelPriority[level] >= this.levelPriority[this.level];
+    return this.levelPriority[level] >= this.levelPriority[this.level]
   }
 
   private formatLog(entry: LogEntry): string {
-    const contextStr = entry.context ? `[${entry.context}]` : '';
-    let dataStr = '';
+    const contextStr = entry.context ? `[${entry.context}]` : ''
+    let dataStr = ''
     if (entry.data) {
       // Handle cyclic structures and errors safely
       // Create a replacer function with persistent seen set
-      const seen = new Set<JsonValue>();
+      const seen = new Set<JsonValue>()
       const replacer = (_key: string, value: JsonValue): JsonValue => {
         // Handle Error objects specially
         if (value instanceof Error) {
           return {
             name: value.name,
             message: value.message,
-            stack: value.stack ?? null,
-          } satisfies Record<string, JsonValue>;
+            stack: value.stack !== undefined ? value.stack : null,
+          } satisfies Record<string, JsonValue>
         }
         // Handle cyclic references
         if (typeof value === 'object' && value !== null) {
           if (seen.has(value)) {
-            return '[Circular]';
+            return '[Circular]'
           }
-          seen.add(value);
+          seen.add(value)
         }
-        return value;
-      };
-      dataStr = ` ${JSON.stringify(entry.data, replacer)}`;
+        return value
+      }
+      dataStr = ` ${JSON.stringify(entry.data, replacer)}`
     }
-    return `[${entry.timestamp}] ${contextStr} [${entry.level.toUpperCase()}] ${entry.message}${dataStr}`;
+    return `[${entry.timestamp}] ${contextStr} [${entry.level.toUpperCase()}] ${entry.message}${dataStr}`
   }
 
   private log(
     level: LogLevel,
     message: string,
     data?: LogData,
-    context?: string
+    context?: string,
   ): void {
-    if (!this.shouldLog(level)) return;
+    if (!this.shouldLog(level)) return
 
     const entry: LogEntry = {
       timestamp: new Date().toISOString(),
@@ -115,23 +139,23 @@ export class Logger {
       message,
       data,
       context,
-    };
+    }
 
-    const formatted = this.formatLog(entry);
+    const formatted = this.formatLog(entry)
 
     // In production, we might want to send errors to external logging service
     // For now, use console methods but through a structured logger
     switch (level) {
       case 'debug':
       case 'info':
-        console.log(formatted);
-        break;
+        console.log(formatted)
+        break
       case 'warn':
-        console.warn(formatted);
-        break;
+        console.warn(formatted)
+        break
       case 'error':
-        console.error(formatted);
-        break;
+        console.error(formatted)
+        break
     }
   }
 
@@ -145,7 +169,7 @@ export class Logger {
    * @param {string} [context] - Optional context identifier
    */
   debug(message: string, data?: LogData, context?: string): void {
-    this.log('debug', message, data, context);
+    this.log('debug', message, data, context)
   }
 
   /**
@@ -158,7 +182,7 @@ export class Logger {
    * @param {string} [context] - Optional context identifier
    */
   info(message: string, data?: LogData, context?: string): void {
-    this.log('info', message, data, context);
+    this.log('info', message, data, context)
   }
 
   /**
@@ -171,7 +195,7 @@ export class Logger {
    * @param {string} [context] - Optional context identifier
    */
   warn(message: string, data?: LogData, context?: string): void {
-    this.log('warn', message, data, context);
+    this.log('warn', message, data, context)
   }
 
   /**
@@ -184,7 +208,7 @@ export class Logger {
    * @param {string} [context] - Optional context identifier
    */
   error(message: string, data?: LogData, context?: string): void {
-    this.log('error', message, data, context);
+    this.log('error', message, data, context)
   }
 
   /**
@@ -196,7 +220,7 @@ export class Logger {
    * @param {LogLevel} level - New log level
    */
   setLevel(level: LogLevel): void {
-    this.level = level;
+    this.level = level
   }
 
   /**
@@ -207,7 +231,7 @@ export class Logger {
    * @returns {LogLevel} Current log level
    */
   getLevel(): LogLevel {
-    return this.level;
+    return this.level
   }
 }
 
@@ -218,4 +242,4 @@ export class Logger {
  * Configured based on LOG_LEVEL environment variable or defaults to 'debug'
  * in development and 'info' in production.
  */
-export const logger = new Logger();
+export const logger = new Logger()

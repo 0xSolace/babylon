@@ -1,4 +1,4 @@
-import type React from 'react';
+import type React from 'react'
 
 /**
  * Dropdown menu component (placeholder implementation).
@@ -13,8 +13,8 @@ export const DropdownMenu = ({
   children,
   ...props
 }: React.HTMLAttributes<HTMLDivElement> & {
-  children: React.ReactNode;
-}) => <div {...props}>{children}</div>;
+  children: React.ReactNode
+}) => <div {...props}>{children}</div>
 
 /**
  * Dropdown menu content container component.
@@ -29,9 +29,9 @@ export const DropdownMenuContent = ({
   align: _align,
   ...props
 }: React.HTMLAttributes<HTMLDivElement> & {
-  children: React.ReactNode;
-  align?: 'start' | 'center' | 'end';
-}) => <div {...props}>{children}</div>;
+  children: React.ReactNode
+  align?: 'start' | 'center' | 'end'
+}) => <div {...props}>{children}</div>
 
 /**
  * Dropdown menu item component.
@@ -45,8 +45,8 @@ export const DropdownMenuItem = ({
   children,
   ...props
 }: React.HTMLAttributes<HTMLDivElement> & {
-  children: React.ReactNode;
-}) => <div {...props}>{children}</div>;
+  children: React.ReactNode
+}) => <div {...props}>{children}</div>
 
 /**
  * Dropdown menu trigger component.
@@ -61,6 +61,6 @@ export const DropdownMenuTrigger = ({
   asChild: _asChild,
   ...props
 }: React.HTMLAttributes<HTMLDivElement> & {
-  children: React.ReactNode;
-  asChild?: boolean;
-}) => <div {...props}>{children}</div>;
+  children: React.ReactNode
+  asChild?: boolean
+}) => <div {...props}>{children}</div>

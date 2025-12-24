@@ -7,13 +7,14 @@
  * @public
  */
 
-import type { AgentCard } from '@a2a-js/sdk';
+import type { AgentCard } from '@a2a-js/sdk'
 
+const BABYLON_API_PORT = process.env.BABYLON_API_PORT ?? '5009'
 const BASE_URL =
   process.env.BABYLON_A2A_ENDPOINT ||
-  process.env.NEXT_PUBLIC_APP_URL ||
-  'http://localhost:5007';
-const SECURITY_SCHEME_NAME = 'babylonApiKey';
+  process.env.PUBLIC_APP_URL ||
+  `http://localhost:${BABYLON_API_PORT}`
+const SECURITY_SCHEME_NAME = 'babylonApiKey'
 
 export const babylonAgentCard: AgentCard = {
   protocolVersion: '0.3.0',
@@ -174,4 +175,4 @@ export const babylonAgentCard: AgentCard = {
   ],
 
   supportsAuthenticatedExtendedCard: false,
-};
+}

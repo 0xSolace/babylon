@@ -1,23 +1,21 @@
-'use client';
-
-import { useJejuAuth } from '@babylon/auth/client';
-import { cn, logger, WALLET_ERROR_MESSAGES } from '@babylon/shared';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useJejuAuth } from '@babylon/auth'
+import { cn, logger, WALLET_ERROR_MESSAGES } from '@babylon/shared'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   AlertCircle,
   CheckCircle2,
   DollarSign,
   Sparkles,
   X,
-} from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
-import { toast } from 'sonner';
-import type { Address } from 'viem';
-import { formatEther } from 'viem';
-import { Skeleton } from '@/components/shared/Skeleton';
-import { useAuth } from '@/hooks/useAuth';
-import { useBuyPointsTx } from '@/hooks/useBuyPointsTx';
-import { useSmartWalletBalance } from '@/hooks/useSmartWalletBalance';
+} from 'lucide-react'
+import { useCallback, useEffect, useState } from 'react'
+import { toast } from 'sonner'
+import type { Address } from 'viem'
+import { formatEther } from 'viem'
+import { Skeleton } from '@/components/shared/Skeleton'
+import { useAuth } from '@/hooks/useAuth'
+import { useBuyPointsTx } from '@/hooks/useBuyPointsTx'
+import { useSmartWalletBalance } from '@/hooks/useSmartWalletBalance'
 
 /**
  * Buy points modal component for purchasing points with ETH.
@@ -51,42 +49,42 @@ import { useSmartWalletBalance } from '@/hooks/useSmartWalletBalance';
  * ```
  */
 interface BuyPointsModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  onSuccess?: () => void;
+  isOpen: boolean
+  onClose: () => void
+  onSuccess?: () => void
 }
 
 /**
  * Payment step type for buy points flow.
  */
-type PaymentStep = 'input' | 'payment' | 'verifying' | 'success' | 'error';
+type PaymentStep = 'input' | 'payment' | 'verifying' | 'success' | 'error'
 
 /**
  * Payment request structure for point purchase.
  */
 interface PaymentRequest {
-  requestId: string;
-  to: string;
-  from: string;
-  amount: string;
+  requestId: string
+  to: string
+  from: string
+  amount: string
 }
 
 /**
  * Create payment API response.
  */
 interface CreatePaymentResponse {
-  success: boolean;
-  paymentRequest?: PaymentRequest;
-  error?: string;
+  success: boolean
+  paymentRequest?: PaymentRequest
+  error?: string
 }
 
 /**
  * Verify payment API response.
  */
 interface VerifyPaymentResponse {
-  success: boolean;
-  pointsAwarded?: number;
-  error?: string;
+  success: boolean
+  pointsAwarded?: number
+  error?: string
 }
 
 export function BuyPointsModal({
@@ -94,61 +92,57 @@ export function BuyPointsModal({
   onClose,
   onSuccess,
 }: BuyPointsModalProps) {
-  const { user, smartWalletAddress, smartWalletReady } = useAuth();
-  const { getAccessToken } = useJejuAuth();
-  const { sendPointsPayment } = useBuyPointsTx();
-  const { balance, refreshBalance } = useSmartWalletBalance();
-  const queryClient = useQueryClient();
+  const { user, smartWalletAddress, smartWalletReady } = useAuth()
+  const { getAccessToken } = useJejuAuth()
+  const { sendPointsPayment } = useBuyPointsTx()
+  const { balance, refreshBalance } = useSmartWalletBalance()
+  const queryClient = useQueryClient()
 
-  const [amountUSD, setAmountUSD] = useState('10');
-  const [step, setStep] = useState<PaymentStep>('input');
-  const [_paymentRequestId, setPaymentRequestId] = useState<string | null>(
-    null
-  );
-  const [txHash, setTxHash] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [pointsAwarded, setPointsAwarded] = useState(0);
+  const [amountUSD, setAmountUSD] = useState('10')
+  const [step, setStep] = useState<PaymentStep>('input')
+  const [_paymentRequestId, setPaymentRequestId] = useState<string | null>(null)
+  const [txHash, setTxHash] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [pointsAwarded, setPointsAwarded] = useState(0)
 
   const ensureFunds = useCallback(
     async (requiredAmountWei: bigint) => {
       if (!smartWalletAddress) {
-        throw new Error(WALLET_ERROR_MESSAGES.NO_EMBEDDED_WALLET);
+        throw new Error(WALLET_ERROR_MESSAGES.NO_EMBEDDED_WALLET)
       }
 
-      const currentBalance = balance ?? (await refreshBalance());
+      const currentBalance = balance ?? (await refreshBalance())
       if (currentBalance === null) {
-        throw new Error(
-          'Unable to determine wallet balance. Please try again.'
-        );
+        throw new Error('Unable to determine wallet balance. Please try again.')
       }
 
       if (currentBalance >= requiredAmountWei) {
-        return true;
+        return true
       }
 
       const deficit =
         requiredAmountWei - currentBalance > 0n
           ? requiredAmountWei - currentBalance
-          : requiredAmountWei;
+          : requiredAmountWei
 
       // Show user they need to fund their wallet manually
-      const deficitETH = formatEther(deficit);
+      const deficitETH = formatEther(deficit)
       toast.error(
-        `Insufficient balance. Please add at least ${deficitETH} ETH to your wallet.`
-      );
+        `Insufficient balance. Please add at least ${deficitETH} ETH to your wallet.`,
+      )
       throw new Error(
-        `Insufficient funds. Please deposit at least ${deficitETH} ETH to continue.`
-      );
+        `Insufficient funds. Please deposit at least ${deficitETH} ETH to continue.`,
+      )
     },
-    [balance, refreshBalance, smartWalletAddress]
-  );
+    [balance, refreshBalance, smartWalletAddress],
+  )
 
   // Create payment mutation
   const createPaymentMutation = useMutation({
     mutationFn: async (amountNum: number): Promise<PaymentRequest> => {
-      const token = await getAccessToken();
+      const token = await getAccessToken()
       if (!token) {
-        throw new Error('Authentication required');
+        throw new Error('Authentication required')
       }
 
       const response = await fetch('/api/points/purchase/create-payment', {
@@ -161,17 +155,17 @@ export function BuyPointsModal({
           amountUSD: amountNum,
           fromAddress: smartWalletAddress,
         }),
-      });
+      })
 
-      const data: CreatePaymentResponse = await response.json();
+      const data: CreatePaymentResponse = await response.json()
 
       if (!response.ok || !data.success || !data.paymentRequest) {
-        throw new Error(data.error || 'Failed to create payment request');
+        throw new Error(data.error || 'Failed to create payment request')
       }
 
-      return data.paymentRequest;
+      return data.paymentRequest
     },
-  });
+  })
 
   // Verify payment mutation
   const verifyPaymentMutation = useMutation({
@@ -180,18 +174,18 @@ export function BuyPointsModal({
       transactionHash,
       paymentRequest,
     }: {
-      requestId: string;
-      transactionHash: string;
-      paymentRequest: PaymentRequest;
+      requestId: string
+      transactionHash: string
+      paymentRequest: PaymentRequest
     }): Promise<number> => {
       const token =
-        typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
+        typeof window !== 'undefined' ? window.__oauth3AccessToken : null
       if (!token) {
-        throw new Error('Authentication required');
+        throw new Error('Authentication required')
       }
 
       // Wait a bit for transaction to be confirmed
-      await new Promise((resolve) => setTimeout(resolve, 3000));
+      await new Promise((resolve) => setTimeout(resolve, 3000))
 
       const response = await fetch('/api/points/purchase/verify-payment', {
         method: 'POST',
@@ -206,171 +200,170 @@ export function BuyPointsModal({
           toAddress: paymentRequest.to,
           amount: paymentRequest.amount,
         }),
-      });
+      })
 
-      const data: VerifyPaymentResponse = await response.json();
+      const data: VerifyPaymentResponse = await response.json()
 
       if (!response.ok || !data.success) {
-        throw new Error(data.error || 'Failed to verify payment');
+        throw new Error(data.error || 'Failed to verify payment')
       }
 
-      return data.pointsAwarded || 0;
+      return data.pointsAwarded || 0
     },
     onSuccess: (points) => {
-      setPointsAwarded(points);
-      setStep('success');
-      toast.success(`Successfully purchased ${points} points!`);
-      queryClient.invalidateQueries({ queryKey: ['balance'] });
-      queryClient.invalidateQueries({ queryKey: ['user'] });
-      onSuccess?.();
+      setPointsAwarded(points)
+      setStep('success')
+      toast.success(`Successfully purchased ${points} points!`)
+      queryClient.invalidateQueries({ queryKey: ['balance'] })
+      queryClient.invalidateQueries({ queryKey: ['user'] })
+      onSuccess?.()
     },
     onError: (err: Error) => {
       logger.error(
         'Payment verification failed',
         { error: err.message },
-        'BuyPointsModal'
-      );
-      setError(err.message);
-      setStep('error');
-      toast.error('Failed to verify payment');
+        'BuyPointsModal',
+      )
+      setError(err.message)
+      setStep('error')
+      toast.error('Failed to verify payment')
     },
-  });
+  })
 
   // Reset state when modal closes
   useEffect(() => {
     if (!isOpen) {
       setTimeout(() => {
-        setAmountUSD('10');
-        setStep('input');
-        setPaymentRequestId(null);
-        setTxHash(null);
-        setError(null);
-        setPointsAwarded(0);
-        createPaymentMutation.reset();
-        verifyPaymentMutation.reset();
-      }, 300);
+        setAmountUSD('10')
+        setStep('input')
+        setPaymentRequestId(null)
+        setTxHash(null)
+        setError(null)
+        setPointsAwarded(0)
+        createPaymentMutation.reset()
+        verifyPaymentMutation.reset()
+      }, 300)
     }
-  }, [isOpen, createPaymentMutation.reset, verifyPaymentMutation.reset]);
+  }, [isOpen, createPaymentMutation.reset, verifyPaymentMutation.reset])
 
   // Handle escape key and body scroll lock
   const loading =
-    createPaymentMutation.isPending || verifyPaymentMutation.isPending;
+    createPaymentMutation.isPending || verifyPaymentMutation.isPending
   useEffect(() => {
     if (!isOpen) {
-      document.body.style.overflow = '';
-      return;
+      document.body.style.overflow = ''
+      return
     }
 
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && !loading && step === 'input') {
-        onClose();
+        onClose()
       }
-    };
+    }
 
-    document.addEventListener('keydown', handleEscape);
-    document.body.style.overflow = 'hidden';
+    document.addEventListener('keydown', handleEscape)
+    document.body.style.overflow = 'hidden'
 
     return () => {
-      document.removeEventListener('keydown', handleEscape);
-      document.body.style.overflow = '';
-    };
-  }, [isOpen, onClose, loading, step]);
+      document.removeEventListener('keydown', handleEscape)
+      document.body.style.overflow = ''
+    }
+  }, [isOpen, onClose, loading, step])
 
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      document.body.style.overflow = '';
-    };
-  }, []);
+      document.body.style.overflow = ''
+    }
+  }, [])
 
-  if (!isOpen) return null;
+  if (!isOpen) return null
 
-  const amountNum = Number.parseFloat(amountUSD) || 0;
-  const pointsAmount = Math.floor(amountNum * 100);
+  const amountNum = Number.parseFloat(amountUSD) || 0
+  const pointsAmount = Math.floor(amountNum * 100)
 
   const handleCreatePayment = async () => {
     if (!user || !smartWalletAddress || !smartWalletReady) {
-      toast.error(WALLET_ERROR_MESSAGES.NO_EMBEDDED_WALLET);
-      return;
+      toast.error(WALLET_ERROR_MESSAGES.NO_EMBEDDED_WALLET)
+      return
     }
 
     if (amountNum < 1) {
-      toast.error('Minimum purchase is $1');
-      return;
+      toast.error('Minimum purchase is $1')
+      return
     }
 
     if (amountNum > 1000) {
-      toast.error('Maximum purchase is $1000');
-      return;
+      toast.error('Maximum purchase is $1000')
+      return
     }
 
-    setError(null);
+    setError(null)
 
     try {
-      const paymentRequest = await createPaymentMutation.mutateAsync(amountNum);
-      setPaymentRequestId(paymentRequest.requestId);
-      setStep('payment');
-      await handleSendPayment(paymentRequest);
+      const paymentRequest = await createPaymentMutation.mutateAsync(amountNum)
+      setPaymentRequestId(paymentRequest.requestId)
+      setStep('payment')
+      await handleSendPayment(paymentRequest)
     } catch (err) {
       const errorMessage =
-        err instanceof Error ? err.message : 'Failed to create payment request';
+        err instanceof Error ? err.message : 'Failed to create payment request'
       logger.error(
         'Failed to create payment',
         { error: errorMessage },
-        'BuyPointsModal'
-      );
-      setError(errorMessage);
-      setStep('error');
-      toast.error('Failed to create payment request');
+        'BuyPointsModal',
+      )
+      setError(errorMessage)
+      setStep('error')
+      toast.error('Failed to create payment request')
     }
-  };
+  }
 
   const handleSendPayment = async (paymentRequest: PaymentRequest) => {
-    setStep('payment');
+    setStep('payment')
 
     if (!smartWalletReady || !smartWalletAddress) {
-      const errorMessage = WALLET_ERROR_MESSAGES.NO_EMBEDDED_WALLET;
-      logger.error('Payment failed', { error: errorMessage }, 'BuyPointsModal');
-      setError(errorMessage);
-      setStep('error');
-      toast.error('Payment transaction failed');
-      return;
+      const errorMessage = WALLET_ERROR_MESSAGES.NO_EMBEDDED_WALLET
+      logger.error('Payment failed', { error: errorMessage }, 'BuyPointsModal')
+      setError(errorMessage)
+      setStep('error')
+      toast.error('Payment transaction failed')
+      return
     }
 
     try {
-      const requiredAmountWei = BigInt(paymentRequest.amount);
-      await ensureFunds(requiredAmountWei);
+      const requiredAmountWei = BigInt(paymentRequest.amount)
+      await ensureFunds(requiredAmountWei)
 
       const hash = await sendPointsPayment({
         to: paymentRequest.to as Address,
         amountWei: requiredAmountWei,
-      });
+      })
 
-      setTxHash(hash);
-      setStep('verifying');
+      setTxHash(hash)
+      setStep('verifying')
 
       // Verify payment and credit points
       verifyPaymentMutation.mutate({
         requestId: paymentRequest.requestId,
         transactionHash: hash,
         paymentRequest,
-      });
+      })
     } catch (err) {
-      const errorMessage =
-        err instanceof Error ? err.message : 'Payment failed';
-      logger.error('Payment failed', { error: errorMessage }, 'BuyPointsModal');
-      setError(errorMessage);
-      setStep('error');
-      toast.error('Payment transaction failed');
+      const errorMessage = err instanceof Error ? err.message : 'Payment failed'
+      logger.error('Payment failed', { error: errorMessage }, 'BuyPointsModal')
+      setError(errorMessage)
+      setStep('error')
+      toast.error('Payment transaction failed')
     }
-  };
+  }
 
   const handleClose = () => {
     if (loading || step === 'payment' || step === 'verifying') {
-      return; // Prevent closing during payment
+      return // Prevent closing during payment
     }
-    onClose();
-  };
+    onClose()
+  }
 
   const renderContent = () => {
     switch (step) {
@@ -380,12 +373,16 @@ export function BuyPointsModal({
             <div className="space-y-4">
               {/* Amount Input */}
               <div>
-                <label className="mb-2 block font-medium text-sm">
+                <label
+                  htmlFor="points-amount-input"
+                  className="mb-2 block font-medium text-sm"
+                >
                   Amount (USD)
                 </label>
                 <div className="relative">
                   <DollarSign className="absolute top-1/2 left-3 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
                   <input
+                    id="points-amount-input"
                     data-testid="points-amount-input"
                     type="number"
                     min="1"
@@ -407,13 +404,14 @@ export function BuyPointsModal({
               <div className="grid grid-cols-4 gap-2">
                 {[10, 25, 50, 100].map((amt) => (
                   <button
+                    type="button"
                     key={amt}
                     onClick={() => setAmountUSD(amt.toString())}
                     className={cn(
                       'rounded-lg border px-4 py-2 transition-colors',
                       amountNum === amt
                         ? 'border-primary bg-primary text-primary-foreground'
-                        : 'border-border bg-sidebar hover:border-primary'
+                        : 'border-border bg-sidebar hover:border-primary',
                     )}
                     disabled={loading}
                   >
@@ -466,6 +464,7 @@ export function BuyPointsModal({
             {/* Action Buttons */}
             <div className="mt-6 flex gap-3">
               <button
+                type="button"
                 onClick={handleClose}
                 className="flex-1 rounded-lg border border-border bg-sidebar px-4 py-3 transition-colors hover:bg-accent"
                 disabled={loading}
@@ -473,20 +472,21 @@ export function BuyPointsModal({
                 Cancel
               </button>
               <button
+                type="button"
                 data-testid="buy-points-submit-button"
                 onClick={handleCreatePayment}
                 disabled={loading || amountNum < 1 || amountNum > 1000}
                 className={cn(
                   'flex-1 rounded-lg px-4 py-3 font-medium transition-colors',
                   'bg-primary text-primary-foreground hover:bg-primary/90',
-                  'disabled:cursor-not-allowed disabled:opacity-50'
+                  'disabled:cursor-not-allowed disabled:opacity-50',
                 )}
               >
                 {loading ? 'Processing...' : `Buy ${pointsAmount} Points`}
               </button>
             </div>
           </>
-        );
+        )
 
       case 'payment':
       case 'verifying':
@@ -517,7 +517,7 @@ export function BuyPointsModal({
               </a>
             )}
           </div>
-        );
+        )
 
       case 'success':
         return (
@@ -550,13 +550,14 @@ export function BuyPointsModal({
               </a>
             )}
             <button
+              type="button"
               onClick={handleClose}
               className="w-full rounded-lg bg-primary px-4 py-3 text-primary-foreground transition-colors hover:bg-primary/90"
             >
               Done
             </button>
           </div>
-        );
+        )
 
       case 'error':
         return (
@@ -571,15 +572,17 @@ export function BuyPointsModal({
             </p>
             <div className="flex gap-3">
               <button
+                type="button"
                 onClick={handleClose}
                 className="flex-1 rounded-lg border border-border bg-sidebar px-4 py-3 transition-colors hover:bg-accent"
               >
                 Cancel
               </button>
               <button
+                type="button"
                 onClick={() => {
-                  setStep('input');
-                  setError(null);
+                  setStep('input')
+                  setError(null)
                 }}
                 className="flex-1 rounded-lg bg-primary px-4 py-3 text-primary-foreground transition-colors hover:bg-primary/90"
               >
@@ -587,24 +590,32 @@ export function BuyPointsModal({
               </button>
             </div>
           </div>
-        );
+        )
     }
-  };
+  }
 
   return (
     <div
       data-testid="buy-points-modal-overlay"
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm"
-      onClick={(e) => {
-        if (e.target === e.currentTarget) {
-          handleClose();
-        }
-      }}
     >
+      <button
+        type="button"
+        className="absolute inset-0 -z-10"
+        onClick={handleClose}
+        aria-label="Close modal"
+      />
       <div
+        role="dialog"
         data-testid="buy-points-modal"
         className="w-full max-w-md rounded-xl border border-border bg-background shadow-2xl"
         onClick={(e) => e.stopPropagation()}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') {
+            e.stopPropagation()
+            handleClose()
+          }
+        }}
       >
         {/* Header */}
         <div className="flex items-center justify-between border-border border-b p-6">
@@ -613,6 +624,7 @@ export function BuyPointsModal({
             <h2 className="font-bold text-xl">Buy Points</h2>
           </div>
           <button
+            type="button"
             onClick={handleClose}
             className="text-muted-foreground transition-colors hover:text-foreground"
             disabled={loading || step === 'payment' || step === 'verifying'}
@@ -625,5 +637,5 @@ export function BuyPointsModal({
         <div className="p-6">{renderContent()}</div>
       </div>
     </div>
-  );
+  )
 }

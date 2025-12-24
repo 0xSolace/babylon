@@ -19,15 +19,21 @@
  * Target: <1 hour downtime recovery
  */
 
-import type { Address, Chain, Hex, PublicClient, WalletClient } from 'viem';
-import { keccak256, parseEther, toBytes } from 'viem';
+import {
+  type BabylonPublicClient,
+  type BabylonWalletClient,
+  safeReadContract,
+  safeWriteContract,
+} from '@babylon/shared'
+import type { Address, Hex } from 'viem'
+import { keccak256, parseEther, toBytes } from 'viem'
 
 // Simple logger for keepalive
 const log = (
   level: 'log' | 'warn' | 'error',
   msg: string,
-  data?: Record<string, unknown>
-) => console[level](`[Keepalive] ${msg}`, data ?? '');
+  data?: Record<string, unknown>,
+) => console[level](`[Keepalive] ${msg}`, data ?? '')
 
 const logger = {
   info: (msg: string, data?: Record<string, unknown>) => log('log', msg, data),
@@ -36,7 +42,7 @@ const logger = {
     log('error', msg, data),
   debug: (msg: string, data?: Record<string, unknown>) =>
     process.env.DEBUG && log('log', msg, data),
-};
+}
 
 // ============================================================================
 // Types
@@ -60,42 +66,42 @@ export enum HealthStatus {
 }
 
 export interface ResourceConfig {
-  type: ResourceType;
-  identifier: string;
-  healthEndpoint: string;
-  minBalance: bigint;
-  required: boolean;
+  type: ResourceType
+  identifier: string
+  healthEndpoint: string
+  minBalance: bigint
+  required: boolean
 }
 
 export interface KeepaliveConfig {
   /** JNS name node (e.g., babylon.jeju) */
-  jnsNode: Hex;
+  jnsNode: Hex
   /** ERC-8004 agent ID for AI CEO */
-  agentId: bigint;
+  agentId: bigint
   /** Babylon Agent Vault address */
-  vaultAddress: Address;
+  vaultAddress: Address
   /** Minimum balance to maintain */
-  globalMinBalance: bigint;
+  globalMinBalance: bigint
   /** Health check interval (seconds) */
-  checkInterval: number;
+  checkInterval: number
   /** Amount to auto-fund when low */
-  autoFundAmount: bigint;
+  autoFundAmount: bigint
   /** Enable auto-funding */
-  autoFundEnabled: boolean;
+  autoFundEnabled: boolean
   /** Resources to monitor */
-  resources: ResourceConfig[];
+  resources: ResourceConfig[]
   /** Dependencies (other keepalives) */
-  dependencies: Hex[];
+  dependencies: Hex[]
 }
 
 export interface HealthCheckResult {
-  status: HealthStatus;
-  balance: bigint;
-  healthyResources: number;
-  totalResources: number;
-  failedResources: string[];
-  latencyMs: number;
-  timestamp: number;
+  status: HealthStatus
+  balance: bigint
+  healthyResources: number
+  totalResources: number
+  failedResources: string[]
+  latencyMs: number
+  timestamp: number
 }
 
 // ============================================================================
@@ -158,7 +164,7 @@ const KEEPALIVE_REGISTRY_ABI = [
     ],
     stateMutability: 'view',
   },
-] as const;
+] as const
 
 // ============================================================================
 // Default Babylon Configuration
@@ -166,7 +172,7 @@ const KEEPALIVE_REGISTRY_ABI = [
 
 export function getDefaultBabylonKeepaliveConfig(): KeepaliveConfig {
   // JNS node hash for "babylon.jeju"
-  const jnsNode = keccak256(toBytes('babylon.jeju')) as Hex;
+  const jnsNode = keccak256(toBytes('babylon.jeju')) as Hex
 
   return {
     jnsNode,
@@ -221,7 +227,7 @@ export function getDefaultBabylonKeepaliveConfig(): KeepaliveConfig {
       },
     ],
     dependencies: [],
-  };
+  }
 }
 
 // ============================================================================
@@ -229,27 +235,24 @@ export function getDefaultBabylonKeepaliveConfig(): KeepaliveConfig {
 // ============================================================================
 
 export class BabylonKeepalive {
-  private config: KeepaliveConfig;
-  private keepaliveId: Hex | null = null;
-  private registryAddress: Address;
-  private publicClient: PublicClient;
-  private walletClient: WalletClient | null = null;
-  private chain: Chain | undefined;
-  private healthCheckInterval: ReturnType<typeof setInterval> | null = null;
-  private isRunning: boolean = false;
+  private config: KeepaliveConfig
+  private keepaliveId: Hex | null = null
+  private registryAddress: Address
+  private publicClient: BabylonPublicClient
+  private walletClient: BabylonWalletClient | null = null
+  private healthCheckInterval: ReturnType<typeof setInterval> | null = null
+  private isRunning: boolean = false
 
   constructor(
     registryAddress: Address,
-    publicClient: PublicClient,
-    walletClient?: WalletClient,
+    publicClient: BabylonPublicClient,
+    walletClient: BabylonWalletClient | null = null,
     config?: Partial<KeepaliveConfig>,
-    chain?: Chain
   ) {
-    this.registryAddress = registryAddress;
-    this.publicClient = publicClient;
-    this.walletClient = walletClient ?? null;
-    this.chain = chain;
-    this.config = { ...getDefaultBabylonKeepaliveConfig(), ...config };
+    this.registryAddress = registryAddress
+    this.publicClient = publicClient
+    this.walletClient = walletClient
+    this.config = { ...getDefaultBabylonKeepaliveConfig(), ...config }
   }
 
   // --------------------------------------------------------------------------
@@ -261,12 +264,12 @@ export class BabylonKeepalive {
    */
   async register(): Promise<Hex> {
     if (!this.walletClient) {
-      throw new Error('Wallet client required for registration');
+      throw new Error('Wallet client required for registration')
     }
 
-    logger.info('[Keepalive] Registering Babylon keepalive');
+    logger.info('[Keepalive] Registering Babylon keepalive')
 
-    const hash = await this.walletClient.writeContract({
+    const hash = await safeWriteContract(this.walletClient, {
       address: this.registryAddress,
       abi: KEEPALIVE_REGISTRY_ABI,
       functionName: 'registerKeepalive',
@@ -279,30 +282,30 @@ export class BabylonKeepalive {
         this.config.autoFundAmount,
         this.config.autoFundEnabled,
       ],
-      chain: this.chain,
-      account: this.walletClient.account!,
-    });
+      chain: this.walletClient.chain,
+      account: this.walletClient.account,
+    })
 
-    const receipt = await this.publicClient.waitForTransactionReceipt({ hash });
+    const receipt = await this.publicClient.waitForTransactionReceipt({ hash })
 
     // Extract keepaliveId from logs
     // In production, decode from KeepaliveRegistered event
     this.keepaliveId = keccak256(
       toBytes(
-        `${this.walletClient.account?.address}:${this.config.jnsNode}:${Date.now()}`
-      )
-    ) as Hex;
+        `${this.walletClient.account?.address}:${this.config.jnsNode}:${Date.now()}`,
+      ),
+    ) as Hex
 
     logger.info('[Keepalive] Registered', {
       keepaliveId: this.keepaliveId,
       txHash: hash,
       blockNumber: receipt.blockNumber,
-    });
+    })
 
     // Add resources
-    await this.addResources();
+    await this.addResources()
 
-    return this.keepaliveId;
+    return this.keepaliveId
   }
 
   /**
@@ -310,13 +313,13 @@ export class BabylonKeepalive {
    */
   private async addResources(): Promise<void> {
     if (!this.walletClient || !this.keepaliveId) {
-      throw new Error('Must register before adding resources');
+      throw new Error('Must register before adding resources')
     }
 
     for (const resource of this.config.resources) {
-      if (!resource.identifier) continue;
+      if (!resource.identifier) continue
 
-      const hash = await this.walletClient.writeContract({
+      const hash = await safeWriteContract(this.walletClient, {
         address: this.registryAddress,
         abi: KEEPALIVE_REGISTRY_ABI,
         functionName: 'addResource',
@@ -328,16 +331,16 @@ export class BabylonKeepalive {
           resource.minBalance,
           resource.required,
         ],
-        chain: this.chain,
-        account: this.walletClient.account!,
-      });
+        chain: this.walletClient.chain,
+        account: this.walletClient.account,
+      })
 
-      await this.publicClient.waitForTransactionReceipt({ hash });
+      await this.publicClient.waitForTransactionReceipt({ hash })
 
       logger.info('[Keepalive] Added resource', {
         type: ResourceType[resource.type],
         identifier: resource.identifier,
-      });
+      })
     }
   }
 
@@ -349,22 +352,22 @@ export class BabylonKeepalive {
    * Start automatic health checking
    */
   startHealthChecking(intervalMs: number = 60_000): void {
-    if (this.isRunning) return;
+    if (this.isRunning) return
 
-    this.isRunning = true;
-    logger.info('[Keepalive] Starting health check loop', { intervalMs });
+    this.isRunning = true
+    logger.info('[Keepalive] Starting health check loop', { intervalMs })
 
     // Initial check
     this.performHealthCheck().catch((err) =>
-      logger.error('[Keepalive] Health check failed', { error: err })
-    );
+      logger.error('[Keepalive] Health check failed', { error: err }),
+    )
 
     // Periodic checks
     this.healthCheckInterval = setInterval(async () => {
       await this.performHealthCheck().catch((err) =>
-        logger.error('[Keepalive] Health check failed', { error: err })
-      );
-    }, intervalMs);
+        logger.error('[Keepalive] Health check failed', { error: err }),
+      )
+    }, intervalMs)
   }
 
   /**
@@ -372,47 +375,47 @@ export class BabylonKeepalive {
    */
   stopHealthChecking(): void {
     if (this.healthCheckInterval) {
-      clearInterval(this.healthCheckInterval);
-      this.healthCheckInterval = null;
+      clearInterval(this.healthCheckInterval)
+      this.healthCheckInterval = null
     }
-    this.isRunning = false;
-    logger.info('[Keepalive] Stopped health check loop');
+    this.isRunning = false
+    logger.info('[Keepalive] Stopped health check loop')
   }
 
   /**
    * Perform a health check
    */
   async performHealthCheck(): Promise<HealthCheckResult> {
-    const start = Date.now();
-    const failedResources: string[] = [];
-    let healthyCount = 0;
+    const start = Date.now()
+    const failedResources: string[] = []
+    let healthyCount = 0
 
     // Check each resource
     for (const resource of this.config.resources) {
-      const healthy = await this.checkResource(resource);
+      const healthy = await this.checkResource(resource)
       if (healthy) {
-        healthyCount++;
+        healthyCount++
       } else {
-        failedResources.push(resource.identifier);
+        failedResources.push(resource.identifier)
       }
     }
 
     // Get vault balance
-    const balance = await this.getVaultBalance();
+    const balance = await this.getVaultBalance()
 
     // Determine overall status
-    let status = HealthStatus.HEALTHY;
+    let status = HealthStatus.HEALTHY
 
     if (balance < this.config.globalMinBalance) {
-      status = HealthStatus.UNFUNDED;
+      status = HealthStatus.UNFUNDED
     } else if (failedResources.length > 0) {
       const requiredFailed = this.config.resources.filter(
-        (r) => r.required && failedResources.includes(r.identifier)
-      );
+        (r) => r.required && failedResources.includes(r.identifier),
+      )
       status =
         requiredFailed.length > 0
           ? HealthStatus.UNHEALTHY
-          : HealthStatus.DEGRADED;
+          : HealthStatus.DEGRADED
     }
 
     const result: HealthCheckResult = {
@@ -423,11 +426,11 @@ export class BabylonKeepalive {
       failedResources,
       latencyMs: Date.now() - start,
       timestamp: Date.now(),
-    };
+    }
 
     // Report to chain if we have wallet and keepaliveId
     if (this.walletClient && this.keepaliveId) {
-      await this.reportHealthCheck(result);
+      await this.reportHealthCheck(result)
     }
 
     logger.info('[Keepalive] Health check complete', {
@@ -437,9 +440,9 @@ export class BabylonKeepalive {
       failed: failedResources,
       balance: balance.toString(),
       latencyMs: result.latencyMs,
-    });
+    })
 
-    return result;
+    return result
   }
 
   /**
@@ -451,42 +454,42 @@ export class BabylonKeepalive {
       resource.type === ResourceType.CUSTOM &&
       resource.identifier === 'agent-vault-balance'
     ) {
-      return (await this.getVaultBalance()) >= resource.minBalance;
+      return (await this.getVaultBalance()) >= resource.minBalance
     }
 
     // IPFS content check
     if (resource.type === ResourceType.IPFS_CONTENT) {
-      return !resource.identifier || this.checkIPFSContent(resource.identifier);
+      return !resource.identifier || this.checkIPFSContent(resource.identifier)
     }
 
     // HTTP health check
-    if (!resource.healthEndpoint) return true;
+    if (!resource.healthEndpoint) return true
 
-    const separator = resource.identifier.endsWith('/') ? '' : '/';
-    const endpoint = resource.healthEndpoint.replace(/^\//, '');
-    const url = `${resource.identifier}${separator}${endpoint}`;
+    const separator = resource.identifier.endsWith('/') ? '' : '/'
+    const endpoint = resource.healthEndpoint.replace(/^\//, '')
+    const url = `${resource.identifier}${separator}${endpoint}`
 
     const response = await fetch(url, {
       signal: AbortSignal.timeout(5000),
-    }).catch(() => null);
-    return response?.ok ?? false;
+    }).catch(() => null)
+    return response?.ok ?? false
   }
 
   /**
    * Check IPFS content is pinned
    */
   private async checkIPFSContent(cid: string): Promise<boolean> {
-    const gatewayUrl = process.env.IPFS_GATEWAY ?? 'https://ipfs.io/ipfs';
+    const gatewayUrl = process.env.IPFS_GATEWAY ?? 'https://ipfs.io/ipfs'
     const response = await fetch(`${gatewayUrl}/${cid}`, {
       method: 'HEAD',
       signal: AbortSignal.timeout(10000),
-    }).catch(() => null);
+    }).catch(() => null)
 
-    return response?.ok ?? false;
+    return response?.ok ?? false
   }
 
   private readonly ZERO_ADDRESS =
-    '0x0000000000000000000000000000000000000000' as Address;
+    '0x0000000000000000000000000000000000000000' as Address
 
   /**
    * Get agent vault balance
@@ -496,18 +499,18 @@ export class BabylonKeepalive {
       !this.config.vaultAddress ||
       this.config.vaultAddress === this.ZERO_ADDRESS
     ) {
-      return 0n;
+      return 0n
     }
-    return this.publicClient.getBalance({ address: this.config.vaultAddress });
+    return this.publicClient.getBalance({ address: this.config.vaultAddress })
   }
 
   /**
    * Report health check to chain
    */
   private async reportHealthCheck(result: HealthCheckResult): Promise<void> {
-    if (!this.walletClient || !this.keepaliveId) return;
+    if (!this.walletClient || !this.keepaliveId) return
 
-    const hash = await this.walletClient.writeContract({
+    const hash = await safeWriteContract(this.walletClient, {
       address: this.registryAddress,
       abi: KEEPALIVE_REGISTRY_ABI,
       functionName: 'recordHealthCheck',
@@ -519,16 +522,16 @@ export class BabylonKeepalive {
         result.totalResources,
         result.failedResources,
       ],
-      chain: this.chain,
-      account: this.walletClient.account!,
-    });
+      chain: this.walletClient.chain,
+      account: this.walletClient.account,
+    })
 
-    await this.publicClient.waitForTransactionReceipt({ hash });
+    await this.publicClient.waitForTransactionReceipt({ hash })
 
     logger.debug('[Keepalive] Reported health check', {
       txHash: hash,
       status: HealthStatus[result.status],
-    });
+    })
   }
 
   // --------------------------------------------------------------------------
@@ -539,46 +542,47 @@ export class BabylonKeepalive {
    * Get current status from chain
    */
   async getStatus(): Promise<{
-    funded: boolean;
-    status: HealthStatus;
-    lastCheck: bigint;
-    balance: bigint;
+    funded: boolean
+    status: HealthStatus
+    lastCheck: bigint
+    balance: bigint
   } | null> {
-    if (!this.keepaliveId) return null;
+    if (!this.keepaliveId) return null
 
-    const [funded, status, lastCheck, balance] =
-      await this.publicClient.readContract({
-        address: this.registryAddress,
-        abi: KEEPALIVE_REGISTRY_ABI,
-        functionName: 'getStatus',
-        args: [this.keepaliveId],
-      });
+    const [funded, status, lastCheck, balance] = await safeReadContract<
+      [boolean, number, bigint, bigint]
+    >(this.publicClient, {
+      address: this.registryAddress,
+      abi: KEEPALIVE_REGISTRY_ABI,
+      functionName: 'getStatus',
+      args: [this.keepaliveId],
+    })
 
     return {
       funded,
       status: status as HealthStatus,
       lastCheck,
       balance,
-    };
+    }
   }
 
   getKeepaliveId(): Hex | null {
-    return this.keepaliveId;
+    return this.keepaliveId
   }
 
   getConfig(): KeepaliveConfig {
-    return this.config;
+    return this.config
   }
 
   isHealthChecking(): boolean {
-    return this.isRunning;
+    return this.isRunning
   }
 
   /**
    * Set keepalive ID (for existing registrations)
    */
   setKeepaliveId(id: Hex): void {
-    this.keepaliveId = id;
+    this.keepaliveId = id
   }
 }
 
@@ -586,32 +590,30 @@ export class BabylonKeepalive {
 // Factory
 // ============================================================================
 
-let _instance: BabylonKeepalive | null = null;
+let _instance: BabylonKeepalive | null = null
 
 export function getBabylonKeepalive(): BabylonKeepalive | null {
-  return _instance;
+  return _instance
 }
 
 export function initBabylonKeepalive(
   registryAddress: Address,
-  publicClient: PublicClient,
-  walletClient?: WalletClient,
+  publicClient: BabylonPublicClient,
+  walletClient?: BabylonWalletClient,
   config?: Partial<KeepaliveConfig>,
-  chain?: Chain
 ): BabylonKeepalive {
   _instance = new BabylonKeepalive(
     registryAddress,
     publicClient,
     walletClient,
     config,
-    chain
-  );
-  return _instance;
+  )
+  return _instance
 }
 
 export function resetBabylonKeepalive(): void {
   if (_instance) {
-    _instance.stopHealthChecking();
-    _instance = null;
+    _instance.stopHealthChecking()
+    _instance = null
   }
 }

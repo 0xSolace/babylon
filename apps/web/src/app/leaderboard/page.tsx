@@ -1,78 +1,73 @@
-'use client';
-
-import { formatCurrency } from '@babylon/shared';
-import { useQuery } from '@tanstack/react-query';
+import { formatCurrency } from '@babylon/shared'
+import { useQuery } from '@tanstack/react-query'
 import {
   ChevronLeft,
   ChevronRight,
   TrendingUp,
   Trophy,
   Users,
-} from 'lucide-react';
-import dynamic from 'next/dynamic';
-import Link from 'next/link';
-import { useState } from 'react';
-import type { SelectedUser } from '@/components/leaderboard/LeaderboardWidgetSidebar';
-import { OnChainBadge } from '@/components/profile/OnChainBadge';
-import { Avatar } from '@/components/shared/Avatar';
-import type { LeaderboardTab } from '@/components/shared/LeaderboardToggle';
-import { LeaderboardToggle } from '@/components/shared/LeaderboardToggle';
-import { PageContainer } from '@/components/shared/PageContainer';
-import { RankBadge, RankNumber } from '@/components/shared/RankBadge';
-import { LeaderboardSkeleton } from '@/components/shared/Skeleton';
-import { VerifiedBadge } from '@/components/shared/VerifiedBadge';
-import { useAuth } from '@/hooks/useAuth';
+} from 'lucide-react'
+import { lazy, useState } from 'react'
+import { Link } from 'react-router-dom'
+import type { SelectedUser } from '@/components/leaderboard/LeaderboardWidgetSidebar'
+import { OnChainBadge } from '@/components/profile/OnChainBadge'
+import { Avatar } from '@/components/shared/Avatar'
+import type { LeaderboardTab } from '@/components/shared/LeaderboardToggle'
+import { LeaderboardToggle } from '@/components/shared/LeaderboardToggle'
+import { PageContainer } from '@/components/shared/PageContainer'
+import { RankBadge, RankNumber } from '@/components/shared/RankBadge'
+import { LeaderboardSkeleton } from '@/components/shared/Skeleton'
+import { VerifiedBadge } from '@/components/shared/VerifiedBadge'
+import { useAuth } from '@/hooks/useAuth'
 
 // Lazy load sidebar - only needed on desktop
-const LeaderboardWidgetSidebar = dynamic(
-  () =>
-    import('@/components/leaderboard/LeaderboardWidgetSidebar').then((m) => ({
-      default: m.LeaderboardWidgetSidebar,
-    })),
-  { ssr: false }
-);
+const LeaderboardWidgetSidebar = lazy(() =>
+  import('@/components/leaderboard/LeaderboardWidgetSidebar').then((m) => ({
+    default: m.LeaderboardWidgetSidebar,
+  })),
+)
 
 interface LeaderboardUser {
-  id: string;
-  username: string | null;
-  displayName: string | null;
-  profileImageUrl: string | null;
-  allPoints: number;
-  invitePoints: number;
-  earnedPoints: number;
-  bonusPoints: number;
-  referralCount: number;
-  balance: number;
-  lifetimePnL: number;
-  createdAt: Date;
-  rank: number;
-  isActor?: boolean;
-  tier?: string | null;
-  onChainRegistered?: boolean;
-  nftTokenId?: number | null;
+  id: string
+  username: string | null
+  displayName: string | null
+  profileImageUrl: string | null
+  allPoints: number
+  invitePoints: number
+  earnedPoints: number
+  bonusPoints: number
+  referralCount: number
+  balance: number
+  lifetimePnL: number
+  createdAt: Date
+  rank: number
+  isActor?: boolean
+  tier?: string | null
+  onChainRegistered?: boolean
+  nftTokenId?: number | null
 }
 
 interface LeaderboardData {
-  leaderboard: LeaderboardUser[];
+  leaderboard: LeaderboardUser[]
   pagination: {
-    page: number;
-    pageSize: number;
-    totalCount: number;
-    totalPages: number;
-  };
-  minPoints: number;
-  pointsCategory: LeaderboardTab;
+    page: number
+    pageSize: number
+    totalCount: number
+    totalPages: number
+  }
+  minPoints: number
+  pointsCategory: LeaderboardTab
 }
 
 export default function LeaderboardPage() {
-  const { authenticated, user } = useAuth();
-  const [currentPage, setCurrentPage] = useState(1);
-  const [selectedTab, setSelectedTab] = useState<LeaderboardTab>('all');
-  const [selectedUser, setSelectedUser] = useState<SelectedUser | null>(null);
+  const { authenticated, user } = useAuth()
+  const [currentPage, setCurrentPage] = useState(1)
+  const [selectedTab, setSelectedTab] = useState<LeaderboardTab>('all')
+  const [selectedUser, setSelectedUser] = useState<SelectedUser | null>(null)
 
-  const pageSize = 100;
-  const baseMinPoints = 500;
-  const minPoints = selectedTab === 'all' ? baseMinPoints : 0;
+  const pageSize = 100
+  const baseMinPoints = 500
+  const minPoints = selectedTab === 'all' ? baseMinPoints : 0
 
   const {
     data: leaderboardData,
@@ -82,51 +77,51 @@ export default function LeaderboardPage() {
     queryKey: ['leaderboard', currentPage, minPoints, selectedTab],
     queryFn: async (): Promise<LeaderboardData> => {
       const response = await fetch(
-        `/api/leaderboard?page=${currentPage}&pageSize=${pageSize}&minPoints=${minPoints}&pointsType=${selectedTab}`
-      );
+        `/api/leaderboard?page=${currentPage}&pageSize=${pageSize}&minPoints=${minPoints}&pointsType=${selectedTab}`,
+      )
 
       if (!response.ok) {
-        throw new Error('Failed to fetch leaderboard');
+        throw new Error('Failed to fetch leaderboard')
       }
 
-      return (await response.json()) as LeaderboardData;
+      return (await response.json()) as LeaderboardData
     },
-  });
+  })
 
-  const error = queryError ? (queryError as Error).message : null;
+  const error = queryError ? (queryError as Error).message : null
 
   const handleTabChange = (tab: LeaderboardTab) => {
     if (tab === selectedTab) {
-      return;
+      return
     }
 
-    setSelectedTab(tab);
-    setCurrentPage(1);
-    setSelectedUser(null);
-  };
+    setSelectedTab(tab)
+    setCurrentPage(1)
+    setSelectedUser(null)
+  }
 
   const handlePreviousPage = () => {
     if (currentPage > 1) {
-      setCurrentPage(currentPage - 1);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      setCurrentPage(currentPage - 1)
+      window.scrollTo({ top: 0, behavior: 'smooth' })
     }
-  };
+  }
 
   const handleNextPage = () => {
     if (
       leaderboardData &&
       currentPage < leaderboardData.pagination.totalPages
     ) {
-      setCurrentPage(currentPage + 1);
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      setCurrentPage(currentPage + 1)
+      window.scrollTo({ top: 0, behavior: 'smooth' })
     }
-  };
+  }
 
   const handleUserClick = (
     player: LeaderboardUser,
-    e: React.MouseEvent<HTMLButtonElement>
+    e: React.MouseEvent<HTMLButtonElement>,
   ) => {
-    e.preventDefault();
+    e.preventDefault()
     setSelectedUser({
       id: player.id,
       username: player.username,
@@ -144,24 +139,24 @@ export default function LeaderboardPage() {
       tier: player.tier,
       onChainRegistered: player.onChainRegistered,
       nftTokenId: player.nftTokenId,
-    });
-  };
+    })
+  }
 
   const activePointsLabel =
     selectedTab === 'all'
       ? 'All Points'
       : selectedTab === 'earned'
         ? 'Earned Points'
-        : 'Referral Points';
+        : 'Referral Points'
 
   const tabDescriptions: Record<LeaderboardTab, string> = {
     all: 'Total reputation including invites and bonuses',
     earned: 'Points from trading P&L across all markets',
     referral: 'Points from inviting and onboarding friends',
-  };
+  }
 
   const renderEmptyState = () => {
-    if (!leaderboardData) return null;
+    if (!leaderboardData) return null
 
     return (
       <div className="flex flex-1 items-center justify-center p-8">
@@ -206,8 +201,8 @@ export default function LeaderboardPage() {
           )}
         </div>
       </div>
-    );
-  };
+    )
+  }
 
   const renderLeaderboardContent = () => {
     if (loading) {
@@ -215,7 +210,7 @@ export default function LeaderboardPage() {
         <div className="flex-1 overflow-y-auto p-4">
           <LeaderboardSkeleton count={15} />
         </div>
-      );
+      )
     }
 
     if (error) {
@@ -228,11 +223,11 @@ export default function LeaderboardPage() {
             <p className="text-muted-foreground text-sm">{error}</p>
           </div>
         </div>
-      );
+      )
     }
 
     if (!leaderboardData || leaderboardData.leaderboard.length === 0) {
-      return renderEmptyState();
+      return renderEmptyState()
     }
 
     return (
@@ -248,34 +243,34 @@ export default function LeaderboardPage() {
 
         <div className="space-y-0">
           {leaderboardData.leaderboard.map((player) => {
-            const isCurrentUser =
-              authenticated && user && player.id === user.id;
-            const isSelected = selectedUser?.id === player.id;
-            const profileUrl = `/profile/${player.username || player.id}`;
+            const isCurrentUser = authenticated && user && player.id === user.id
+            const isSelected = selectedUser?.id === player.id
+            const profileUrl = `/profile/${player.username || player.id}`
             const displayPoints =
               selectedTab === 'all'
                 ? player.allPoints
                 : selectedTab === 'earned'
                   ? player.earnedPoints
-                  : player.invitePoints;
-            const formattedPoints = (displayPoints ?? 0).toLocaleString();
-            const absolutePnL = Math.abs(player.lifetimePnL);
-            const formattedPnL = formatCurrency(absolutePnL);
+                  : player.invitePoints
+            const formattedPoints = (displayPoints ?? 0).toLocaleString()
+            const absolutePnL = Math.abs(player.lifetimePnL)
+            const formattedPnL = formatCurrency(absolutePnL)
             const pnlDisplay =
               player.lifetimePnL === 0
                 ? formatCurrency(0)
-                : `${player.lifetimePnL > 0 ? '+' : '-'}${formattedPnL}`;
+                : `${player.lifetimePnL > 0 ? '+' : '-'}${formattedPnL}`
             const pnlColor =
               player.lifetimePnL === 0
                 ? 'text-muted-foreground'
                 : player.lifetimePnL > 0
                   ? 'text-green-500'
-                  : 'text-red-500';
+                  : 'text-red-500'
 
             return (
               <div key={player.id} className="flex items-stretch">
                 {/* Clickable area for widget (desktop) */}
                 <button
+                  type="button"
                   onClick={(e) => handleUserClick(player, e)}
                   data-testid={
                     player.isActor ? 'npc-entry' : 'leaderboard-entry'
@@ -409,7 +404,7 @@ export default function LeaderboardPage() {
 
                 {/* Mobile/Tablet: Direct link to profile */}
                 <Link
-                  href={profileUrl}
+                  to={profileUrl}
                   data-testid={
                     player.isActor ? 'npc-entry' : 'leaderboard-entry'
                   }
@@ -513,7 +508,7 @@ export default function LeaderboardPage() {
                   </div>
                 </Link>
               </div>
-            );
+            )
           })}
         </div>
 
@@ -522,6 +517,7 @@ export default function LeaderboardPage() {
           <div className="sticky bottom-0 bg-background/95 px-4 py-3 backdrop-blur-sm">
             <div className="flex items-center justify-between">
               <button
+                type="button"
                 onClick={handlePreviousPage}
                 disabled={currentPage === 1}
                 className="flex items-center gap-3 rounded-lg bg-sidebar-accent px-4 py-3 text-foreground transition-colors hover:bg-sidebar-accent/80 disabled:cursor-not-allowed disabled:opacity-50"
@@ -535,6 +531,7 @@ export default function LeaderboardPage() {
               </div>
 
               <button
+                type="button"
                 onClick={handleNextPage}
                 disabled={currentPage === leaderboardData.pagination.totalPages}
                 className="flex items-center gap-3 rounded-lg bg-sidebar-accent px-4 py-3 text-foreground transition-colors hover:bg-sidebar-accent/80 disabled:cursor-not-allowed disabled:opacity-50"
@@ -546,8 +543,8 @@ export default function LeaderboardPage() {
           </div>
         )}
       </div>
-    );
-  };
+    )
+  }
 
   return (
     <PageContainer noPadding className="!overflow-visible flex w-full flex-col">
@@ -598,5 +595,5 @@ export default function LeaderboardPage() {
         {renderLeaderboardContent()}
       </div>
     </PageContainer>
-  );
+  )
 }

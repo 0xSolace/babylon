@@ -1,12 +1,10 @@
-'use client';
-
-import { cn } from '@babylon/shared';
-import Image from 'next/image';
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { memo } from 'react';
-import { z } from 'zod';
-import { Avatar } from '@/components/shared/Avatar';
+import { cn } from '@babylon/shared'
+import { memo } from 'react'
+import { Link } from 'react-router-dom'
+import { z } from 'zod'
+import { Avatar } from '@/components/shared/Avatar'
+import Image from '@/components/shared/Image'
+import { useRouter } from '@/lib/navigation'
 
 /**
  * Article card post schema for validation.
@@ -26,7 +24,7 @@ const _ArticleCardPostSchema = z.object({
   authorUsername: z.string().nullable().optional(),
   authorProfileImageUrl: z.string().nullable().optional(),
   timestamp: z.string(),
-});
+})
 
 /**
  * Article card component for displaying article posts.
@@ -56,30 +54,30 @@ const _ArticleCardPostSchema = z.object({
  * ```
  */
 export type ArticleCardProps = {
-  post: z.infer<typeof _ArticleCardPostSchema>;
-  className?: string;
-  onClick?: () => void;
-};
+  post: z.infer<typeof _ArticleCardPostSchema>
+  className?: string
+  onClick?: () => void
+}
 
 export const ArticleCard = memo(function ArticleCard({
   post,
   className,
   onClick,
 }: ArticleCardProps) {
-  const router = useRouter();
-  const publishedDate = new Date(post.timestamp);
-  const now = new Date();
-  const diffMs = now.getTime() - publishedDate.getTime();
-  const diffMinutes = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMs / 3600000);
+  const router = useRouter()
+  const publishedDate = new Date(post.timestamp)
+  const now = new Date()
+  const diffMs = now.getTime() - publishedDate.getTime()
+  const diffMinutes = Math.floor(diffMs / 60000)
+  const diffHours = Math.floor(diffMs / 3600000)
 
-  let timeAgo: string;
+  let timeAgo: string
   if (diffMinutes < 1) {
-    timeAgo = 'Just now';
+    timeAgo = 'Just now'
   } else if (diffMinutes < 60) {
-    timeAgo = `${diffMinutes}m ago`;
+    timeAgo = `${diffMinutes}m ago`
   } else if (diffHours < 24) {
-    timeAgo = `${diffHours}h ago`;
+    timeAgo = `${diffHours}h ago`
   } else {
     // Show date for articles older than 24 hours
     timeAgo = publishedDate.toLocaleDateString('en-US', {
@@ -89,17 +87,17 @@ export const ArticleCard = memo(function ArticleCard({
         publishedDate.getFullYear() !== now.getFullYear()
           ? 'numeric'
           : undefined,
-    });
+    })
   }
 
   const handleClick = () => {
     if (onClick) {
-      onClick();
+      onClick()
     } else {
       // Navigate directly to article page (ArticleCard is only used for article-type posts)
-      router.push(`/article/${post.id}`);
+      router.push(`/article/${post.id}`)
     }
-  };
+  }
 
   return (
     <article
@@ -108,15 +106,21 @@ export const ArticleCard = memo(function ArticleCard({
         'cursor-pointer transition-all duration-200 hover:bg-muted/30',
         'w-full overflow-hidden',
         'border-border/5 border-b',
-        className
+        className,
       )}
       onClick={handleClick}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          handleClick()
+        }
+      }}
     >
       {/* Header: Avatar + Author + Timestamp */}
       <div className="mb-3 flex w-full items-start gap-3">
         {/* Avatar */}
         <Link
-          href={`/profile/${post.authorId}`}
+          to={`/profile/${post.authorId}`}
           className="shrink-0 transition-opacity hover:opacity-80"
           onClick={(e) => e.stopPropagation()}
         >
@@ -133,7 +137,7 @@ export const ArticleCard = memo(function ArticleCard({
         <div className="flex min-w-0 flex-1 items-start justify-between gap-3">
           <div className="flex min-w-0 flex-col">
             <Link
-              href={`/profile/${post.authorId}`}
+              to={`/profile/${post.authorId}`}
               className="truncate font-semibold text-foreground text-lg hover:underline sm:text-xl"
               onClick={(e) => e.stopPropagation()}
             >
@@ -200,5 +204,5 @@ export const ArticleCard = memo(function ArticleCard({
         </div>
       </div>
     </article>
-  );
-});
+  )
+})

@@ -9,7 +9,7 @@
 /**
  * Supported log data types.
  */
-type LogData = string | string[] | Record<string, unknown> | Error;
+type LogData = string | string[] | Record<string, unknown> | Error
 
 /**
  * CLI logger with structured output methods.
@@ -26,9 +26,9 @@ export const logger = {
    */
   info: (msg: string, data?: LogData): void => {
     if (data) {
-      console.log(`[INFO] ${msg}`, data);
+      console.log(`[INFO] ${msg}`, data)
     } else {
-      console.log(`[INFO] ${msg}`);
+      console.log(`[INFO] ${msg}`)
     }
   },
 
@@ -40,9 +40,9 @@ export const logger = {
    */
   error: (msg: string, data?: LogData): void => {
     if (data) {
-      console.error(`[ERROR] ${msg}`, data);
+      console.error(`[ERROR] ${msg}`, data)
     } else {
-      console.error(`[ERROR] ${msg}`);
+      console.error(`[ERROR] ${msg}`)
     }
   },
 
@@ -54,9 +54,9 @@ export const logger = {
    */
   warn: (msg: string, data?: LogData): void => {
     if (data) {
-      console.warn(`[WARN] ${msg}`, data);
+      console.warn(`[WARN] ${msg}`, data)
     } else {
-      console.warn(`[WARN] ${msg}`);
+      console.warn(`[WARN] ${msg}`)
     }
   },
 
@@ -69,9 +69,9 @@ export const logger = {
   debug: (msg: string, data?: LogData): void => {
     if (process.env.DEBUG) {
       if (data) {
-        console.log(`[DEBUG] ${msg}`, data);
+        console.log(`[DEBUG] ${msg}`, data)
       } else {
-        console.log(`[DEBUG] ${msg}`);
+        console.log(`[DEBUG] ${msg}`)
       }
     }
   },
@@ -82,7 +82,7 @@ export const logger = {
    * @param msg - Success message to log
    */
   success: (msg: string): void => {
-    console.log(`✅ ${msg}`);
+    console.log(`✅ ${msg}`)
   },
 
   /**
@@ -91,7 +91,7 @@ export const logger = {
    * @param msg - Failure message to log
    */
   fail: (msg: string): void => {
-    console.log(`❌ ${msg}`);
+    console.log(`❌ ${msg}`)
   },
 
   /**
@@ -100,7 +100,7 @@ export const logger = {
    * @param msg - Step message to log
    */
   step: (msg: string): void => {
-    console.log(`→ ${msg}`);
+    console.log(`→ ${msg}`)
   },
 
   /**
@@ -109,8 +109,8 @@ export const logger = {
    * @param title - Header title to display
    */
   header: (title: string): void => {
-    console.log(`\n${'═'.repeat(60)}`);
-    console.log(`  ${title}`);
-    console.log(`${'═'.repeat(60)}\n`);
+    console.log(`\n${'═'.repeat(60)}`)
+    console.log(`  ${title}`)
+    console.log(`${'═'.repeat(60)}\n`)
   },
-};
+}

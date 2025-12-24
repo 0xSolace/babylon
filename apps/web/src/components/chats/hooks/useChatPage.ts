@@ -1,119 +1,117 @@
-'use client';
-
-import { useJejuAuth } from '@babylon/auth/client';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { useAuth } from '@/hooks/useAuth';
-import { useChatMessages } from '@/hooks/useChatMessages';
-import { usePullToRefresh } from '@/hooks/usePullToRefresh';
-import { useAuthStore } from '@/stores/authStore';
-import type { Chat, ChatDetails, ChatFilter } from '../types';
+import { useJejuAuth } from '@babylon/auth'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { useAuth } from '@/hooks/useAuth'
+import { usePullToRefresh } from '@/hooks/usePullToRefresh'
+import { useAuthStore } from '@/stores/authStore'
+import { useChatMessages } from '../../../hooks/useChatMessages'
+import type { Chat, ChatDetails, ChatFilter } from '../types'
 
 interface ChatsApiResponse {
-  groupChats?: Chat[];
-  directChats?: Chat[];
-  chats?: Chat[];
+  groupChats?: Chat[]
+  directChats?: Chat[]
+  chats?: Chat[]
 }
 
 interface ChatDetailsApiResponse {
   chat?: {
-    id: string;
-    name: string | null;
-    isGroup: boolean;
-    createdAt: string;
-    updatedAt: string;
-  };
+    id: string
+    name: string | null
+    isGroup: boolean
+    createdAt: string
+    updatedAt: string
+  }
   messages?: Array<{
-    id: string;
-    content: string;
-    chatId: string;
-    senderId: string;
-    createdAt: string;
-  }>;
+    id: string
+    content: string
+    chatId: string
+    senderId: string
+    createdAt: string
+  }>
   participants?: Array<{
-    id: string;
-    displayName: string;
-    username: string | null;
-    profileImageUrl: string | null;
-  }>;
+    id: string
+    displayName: string
+    username: string | null
+    profileImageUrl: string | null
+  }>
 }
 
 interface SendMessageResponse {
   message?: {
-    id: string;
-    content: string;
-    chatId: string;
-    senderId: string;
-    createdAt: string | Date;
-  };
-  warnings?: string[];
-  error?: string;
+    id: string
+    content: string
+    chatId: string
+    senderId: string
+    createdAt: string | Date
+  }
+  warnings?: string[]
+  error?: string
 }
 
 interface GroupIdResponse {
-  groupId: string;
+  groupId: string
 }
 
 interface UserProfileResponse {
   user: {
-    id: string;
-    displayName?: string;
-    username?: string;
-    profileImageUrl?: string;
-  };
+    id: string
+    displayName?: string
+    username?: string
+    profileImageUrl?: string
+  }
 }
 
 export function useChatPage() {
-  const { ready, authenticated } = useAuth();
-  const { user } = useAuthStore();
-  const { getAccessToken } = useJejuAuth();
-  const queryClient = useQueryClient();
+  const { ready, authenticated } = useAuth()
+  const { user } = useAuthStore()
+  const { getAccessToken } = useJejuAuth()
+  const queryClient = useQueryClient()
 
   // UI state
-  const [activeFilter, setActiveFilter] = useState<ChatFilter>('all');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedChatId, setSelectedChatId] = useState<string | null>(null);
+  const [activeFilter, setActiveFilter] = useState<ChatFilter>('all')
+  const [searchQuery, setSearchQuery] = useState('')
+  const [selectedChatId, setSelectedChatId] = useState<string | null>(null)
 
   // Message input state
-  const [messageInput, setMessageInput] = useState('');
-  const [sendError, setSendError] = useState<string | null>(null);
-  const [sendWarning, setSendWarning] = useState<string | null>(null);
-  const [sendSuccess, setSendSuccess] = useState(false);
+  const [messageInput, setMessageInput] = useState('')
+  const [sendError, setSendError] = useState<string | null>(null)
+  const [sendWarning, setSendWarning] = useState<string | null>(null)
+  const [sendSuccess, setSendSuccess] = useState(false)
 
   // Leave chat state
-  const [isLeaveConfirmOpen, setLeaveConfirmOpen] = useState(false);
-  const [leaveChatError, setLeaveChatError] = useState<string | null>(null);
+  const [isLeaveConfirmOpen, setLeaveConfirmOpen] = useState(false)
+  const [leaveChatError, setLeaveChatError] = useState<string | null>(null)
 
   // Group modals
-  const [isCreateGroupModalOpen, setIsCreateGroupModalOpen] = useState(false);
+  const [isCreateGroupModalOpen, setIsCreateGroupModalOpen] = useState(false)
   const [isGroupManagementModalOpen, setIsGroupManagementModalOpen] =
-    useState(false);
-  const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
+    useState(false)
+  const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null)
 
   // New DM state
   const [pendingDM, setPendingDM] = useState<{
-    chatId: string;
-    targetUserId: string;
-  } | null>(null);
+    chatId: string
+    targetUserId: string
+  } | null>(null)
 
   // Scroll state
-  const [isAtBottom, setIsAtBottom] = useState(true);
+  const [isAtBottom, setIsAtBottom] = useState(true)
 
   // Refs
-  const messagesEndRef = useRef<HTMLDivElement | null>(null);
-  const chatContainerRef = useRef<HTMLDivElement | null>(null);
-  const topSentinelRef = useRef<HTMLDivElement | null>(null);
+  const messagesEndRef = useRef<HTMLDivElement | null>(null)
+  const chatContainerRef = useRef<HTMLDivElement | null>(null)
+  const topSentinelRef = useRef<HTMLDivElement | null>(null)
   const pendingScrollAdjustRef = useRef<{
-    previousHeight: number;
-    previousTop: number;
-  } | null>(null);
-  const lastMessageIdRef = useRef<string | null>(null);
+    previousHeight: number
+    previousTop: number
+  } | null>(null)
+  const lastMessageIdRef = useRef<string | null>(null)
 
   // Debug mode
   const isDebugMode =
     typeof window !== 'undefined' &&
     (window.location.hostname === 'localhost' ||
-      window.location.hostname === '127.0.0.1');
+      window.location.hostname === '127.0.0.1')
 
   // SSE for real-time messages
   const {
@@ -123,7 +121,7 @@ export function useChatPage() {
     hasMore,
     loadMore,
     addMessage,
-  } = useChatMessages(selectedChatId);
+  } = useChatMessages(selectedChatId)
 
   // Query for all chats
   const {
@@ -134,12 +132,12 @@ export function useChatPage() {
     queryKey: ['chats'],
     queryFn: async (): Promise<Chat[]> => {
       if (!isDebugMode && (!ready || !authenticated)) {
-        return [];
+        return []
       }
 
-      const token = await getAccessToken();
+      const token = await getAccessToken()
       if (!token && !isDebugMode) {
-        return [];
+        return []
       }
 
       const [personalResponse, gameResponse] = await Promise.all([
@@ -147,18 +145,18 @@ export function useChatPage() {
           headers: { Authorization: `Bearer ${token}` },
         }),
         isDebugMode ? fetch('/api/chats?all=true') : Promise.resolve(null),
-      ]);
+      ])
 
       if (!personalResponse.ok) {
-        return [];
+        return []
       }
 
-      const personalData = (await personalResponse.json()) as ChatsApiResponse;
+      const personalData = (await personalResponse.json()) as ChatsApiResponse
 
-      let gameChats: Chat[] = [];
+      let gameChats: Chat[] = []
       if (gameResponse?.ok) {
-        const gameData = (await gameResponse.json()) as ChatsApiResponse;
-        gameChats = gameData.chats ?? [];
+        const gameData = (await gameResponse.json()) as ChatsApiResponse
+        gameChats = gameData.chats ?? []
       }
 
       const combined = [
@@ -166,16 +164,16 @@ export function useChatPage() {
         ...(personalData.directChats ?? []),
         ...gameChats,
       ].sort((a, b) => {
-        const aTime = a.lastMessage?.createdAt || a.updatedAt;
-        const bTime = b.lastMessage?.createdAt || b.updatedAt;
-        return new Date(bTime).getTime() - new Date(aTime).getTime();
-      });
+        const aTime = a.lastMessage?.createdAt || a.updatedAt
+        const bTime = b.lastMessage?.createdAt || b.updatedAt
+        return new Date(bTime).getTime() - new Date(aTime).getTime()
+      })
 
-      return combined;
+      return combined
     },
     enabled: (ready && authenticated) || isDebugMode,
     staleTime: 30000,
-  });
+  })
 
   // Query for chat details
   const {
@@ -186,12 +184,12 @@ export function useChatPage() {
     queryKey: ['chatDetails', selectedChatId],
     queryFn: async (): Promise<ChatDetails | null> => {
       if (isDebugMode) {
-        const response = await fetch(`/api/chats/${selectedChatId}?debug=true`);
-        const data = (await response.json()) as ChatDetailsApiResponse;
+        const response = await fetch(`/api/chats/${selectedChatId}?debug=true`)
+        const data = (await response.json()) as ChatDetailsApiResponse
         return {
           ...data,
           chat: data.chat ?? {
-            id: selectedChatId!,
+            id: selectedChatId,
             name: null,
             isGroup: false,
             createdAt: new Date().toISOString(),
@@ -199,27 +197,27 @@ export function useChatPage() {
           },
           messages: data.messages ?? [],
           participants: data.participants ?? [],
-        } as ChatDetails;
+        } as ChatDetails
       }
 
-      const token = await getAccessToken();
+      const token = await getAccessToken()
       if (!token) {
-        return null;
+        return null
       }
 
       const response = await fetch(`/api/chats/${selectedChatId}`, {
         headers: { Authorization: `Bearer ${token}` },
-      });
+      })
 
       if (response.status === 404 || !response.ok) {
-        return null;
+        return null
       }
 
-      const data = (await response.json()) as ChatDetailsApiResponse;
+      const data = (await response.json()) as ChatDetailsApiResponse
       return {
         ...data,
         chat: data.chat ?? {
-          id: selectedChatId!,
+          id: selectedChatId,
           name: null,
           isGroup: false,
           createdAt: new Date().toISOString(),
@@ -227,18 +225,18 @@ export function useChatPage() {
         },
         messages: data.messages ?? [],
         participants: data.participants ?? [],
-      } as ChatDetails;
+      } as ChatDetails
     },
     enabled: !!selectedChatId,
     staleTime: 30000,
-  });
+  })
 
   // Mutation for sending messages
   const sendMessageMutation = useMutation({
     mutationFn: async (): Promise<SendMessageResponse> => {
-      const token = await getAccessToken();
+      const token = await getAccessToken()
       if (!token) {
-        throw new Error('Authentication required. Please log in again.');
+        throw new Error('Authentication required. Please log in again.')
       }
 
       const response = await fetch(`/api/chats/${selectedChatId}/message`, {
@@ -248,27 +246,27 @@ export function useChatPage() {
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({ content: messageInput.trim() }),
-      });
+      })
 
-      const data = (await response.json()) as SendMessageResponse;
+      const data = (await response.json()) as SendMessageResponse
 
       if (!response.ok) {
         throw new Error(
-          data.error ?? 'Failed to send message. Please try again.'
-        );
+          data.error ?? 'Failed to send message. Please try again.',
+        )
       }
 
-      return data;
+      return data
     },
     onSuccess: (data) => {
-      const warnings = Array.isArray(data.warnings) ? data.warnings : [];
+      const warnings = Array.isArray(data.warnings) ? data.warnings : []
       if (warnings.length > 0) {
-        setSendWarning(warnings.join('. '));
-        setTimeout(() => setSendWarning(null), 5000);
+        setSendWarning(warnings.join('. '))
+        setTimeout(() => setSendWarning(null), 5000)
       }
 
-      setSendSuccess(true);
-      setTimeout(() => setSendSuccess(false), 2000);
+      setSendSuccess(true)
+      setTimeout(() => setSendSuccess(false), 2000)
 
       if (data.message) {
         addMessage({
@@ -280,23 +278,23 @@ export function useChatPage() {
             typeof data.message.createdAt === 'string'
               ? data.message.createdAt
               : new Date(data.message.createdAt).toISOString(),
-        });
+        })
       }
 
-      setMessageInput('');
-      void refetchChats();
+      setMessageInput('')
+      void refetchChats()
     },
     onError: (error) => {
-      setSendError((error as Error).message);
+      setSendError((error as Error).message)
     },
-  });
+  })
 
   // Mutation for leaving chat
   const leaveChatMutation = useMutation({
     mutationFn: async (): Promise<void> => {
-      const accessToken = await getAccessToken();
+      const accessToken = await getAccessToken()
       if (!accessToken) {
-        throw new Error('Authentication failed. Please try again.');
+        throw new Error('Authentication failed. Please try again.')
       }
 
       const response = await fetch(
@@ -304,23 +302,23 @@ export function useChatPage() {
         {
           method: 'DELETE',
           headers: { Authorization: `Bearer ${accessToken}` },
-        }
-      );
+        },
+      )
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message ?? 'Failed to leave chat');
+        const errorData = await response.json()
+        throw new Error(errorData.message ?? 'Failed to leave chat')
       }
     },
     onSuccess: () => {
-      setLeaveConfirmOpen(false);
-      setSelectedChatId(null);
-      void refetchChats();
+      setLeaveConfirmOpen(false)
+      setSelectedChatId(null)
+      void refetchChats()
     },
     onError: (error) => {
-      setLeaveChatError((error as Error).message);
+      setLeaveChatError((error as Error).message)
     },
-  });
+  })
 
   const sendMessage = useCallback(async () => {
     if (
@@ -328,73 +326,73 @@ export function useChatPage() {
       !messageInput.trim() ||
       sendMessageMutation.isPending
     )
-      return;
+      return
 
-    setSendError(null);
-    setSendWarning(null);
-    setSendSuccess(false);
+    setSendError(null)
+    setSendWarning(null)
+    setSendSuccess(false)
 
-    await sendMessageMutation.mutateAsync();
-  }, [selectedChatId, messageInput, sendMessageMutation]);
+    await sendMessageMutation.mutateAsync()
+  }, [selectedChatId, messageInput, sendMessageMutation])
 
   const handleLeaveChat = useCallback(async () => {
-    if (!selectedChatId) return;
-    setLeaveChatError(null);
-    await leaveChatMutation.mutateAsync();
-  }, [selectedChatId, leaveChatMutation]);
+    if (!selectedChatId) return
+    setLeaveChatError(null)
+    await leaveChatMutation.mutateAsync()
+  }, [selectedChatId, leaveChatMutation])
 
   // Group handlers
   const handleGroupCreated = useCallback(
     async (groupId: string, chatId: string) => {
-      await refetchChats();
-      await new Promise((resolve) => setTimeout(resolve, 500));
-      setSelectedGroupId(groupId);
-      setSelectedChatId(chatId);
-      await refetchChatDetails();
+      await refetchChats()
+      await new Promise((resolve) => setTimeout(resolve, 500))
+      setSelectedGroupId(groupId)
+      setSelectedChatId(chatId)
+      await refetchChatDetails()
     },
-    [refetchChats, refetchChatDetails]
-  );
+    [refetchChats, refetchChatDetails],
+  )
 
   const handleGroupUpdated = useCallback(async () => {
-    await refetchChats();
+    await refetchChats()
     if (selectedChatId) {
-      await refetchChatDetails();
+      await refetchChatDetails()
     }
-  }, [refetchChats, selectedChatId, refetchChatDetails]);
+  }, [refetchChats, selectedChatId, refetchChatDetails])
 
   const handleManageGroup = useCallback(async () => {
-    if (!chatDetails?.chat.id) return;
+    if (!chatDetails?.chat.id) return
 
-    const token = await getAccessToken();
+    const token = await getAccessToken()
     const response = await fetch(`/api/chats/${chatDetails.chat.id}/group`, {
       headers: { Authorization: `Bearer ${token}` },
-    });
+    })
 
     if (response.ok) {
-      const data = (await response.json()) as GroupIdResponse;
-      setSelectedGroupId(data.groupId);
-      setIsGroupManagementModalOpen(true);
+      const data = (await response.json()) as GroupIdResponse
+      setSelectedGroupId(data.groupId)
+      setIsGroupManagementModalOpen(true)
     }
-  }, [chatDetails?.chat.id, getAccessToken]);
+  }, [chatDetails?.chat.id, getAccessToken])
 
   // Load new DM chat
   const loadNewDMChat = useCallback(
     async (chatId: string, targetUserId: string) => {
-      const token = await getAccessToken();
+      const token = await getAccessToken()
       if (!token) {
-        return;
+        return
       }
 
       const response = await fetch(`/api/users/${targetUserId}/profile`, {
         headers: { Authorization: `Bearer ${token}` },
-      });
+      })
 
       if (!response.ok) {
-        return;
+        return
       }
 
-      const userData = (await response.json()) as UserProfileResponse;
-      const targetUser = userData.user;
+      const userData = (await response.json()) as UserProfileResponse
+      const targetUser = userData.user
 
       // Update chat details cache directly
       queryClient.setQueryData<ChatDetails>(['chatDetails', chatId], {
@@ -408,10 +406,10 @@ export function useChatPage() {
         messages: [],
         participants: [
           {
-            id: user!.id,
-            displayName: user!.displayName || user!.username || 'You',
-            username: user!.username,
-            profileImageUrl: user!.profileImageUrl,
+            id: user?.id,
+            displayName: user?.displayName || user?.username || 'You',
+            username: user?.username,
+            profileImageUrl: user?.profileImageUrl,
           },
           {
             id: targetUser.id,
@@ -421,7 +419,7 @@ export function useChatPage() {
             profileImageUrl: targetUser.profileImageUrl,
           },
         ],
-      });
+      })
 
       const newChat: Chat = {
         id: chatId,
@@ -435,46 +433,46 @@ export function useChatPage() {
           username: targetUser.username ?? null,
           profileImageUrl: targetUser.profileImageUrl ?? null,
         },
-      };
+      }
 
       queryClient.setQueryData<Chat[]>(['chats'], (prev) => {
-        if (!prev) return [newChat];
+        if (!prev) return [newChat]
         if (prev.some((c) => c.id === chatId)) {
-          return prev;
+          return prev
         }
-        return [newChat, ...prev];
-      });
+        return [newChat, ...prev]
+      })
     },
-    [getAccessToken, user, queryClient]
-  );
+    [getAccessToken, user, queryClient],
+  )
 
   // Scroll to bottom
   const scrollToBottom = useCallback((behavior: ScrollBehavior = 'auto') => {
-    const container = chatContainerRef.current;
+    const container = chatContainerRef.current
     if (container) {
       requestAnimationFrame(() => {
-        container.scrollTop = container.scrollHeight;
-      });
+        container.scrollTop = container.scrollHeight
+      })
     } else {
-      messagesEndRef.current?.scrollIntoView({ behavior, block: 'end' });
+      messagesEndRef.current?.scrollIntoView({ behavior, block: 'end' })
     }
-  }, []);
+  }, [])
 
   // Pull-to-refresh
   const { pullDistance, containerRef: setPullToRefreshRef } = usePullToRefresh({
     onRefresh: async () => {
-      if (!selectedChatId) return;
-      await refetchChatDetails();
+      if (!selectedChatId) return
+      await refetchChatDetails()
     },
-  });
+  })
 
   const setRefs = useCallback(
     (node: HTMLDivElement | null) => {
-      chatContainerRef.current = node;
-      setPullToRefreshRef(node);
+      chatContainerRef.current = node
+      setPullToRefreshRef(node)
     },
-    [setPullToRefreshRef]
-  );
+    [setPullToRefreshRef],
+  )
 
   // Filter chats
   const filteredByType =
@@ -482,13 +480,13 @@ export function useChatPage() {
       ? allChats
       : activeFilter === 'dms'
         ? allChats.filter((c) => !c.isGroup)
-        : allChats.filter((c) => c.isGroup);
+        : allChats.filter((c) => c.isGroup)
 
   const filteredChats = searchQuery
     ? filteredByType.filter((chat) =>
-        chat.name.toLowerCase().includes(searchQuery.toLowerCase())
+        chat.name.toLowerCase().includes(searchQuery.toLowerCase()),
       )
-    : filteredByType;
+    : filteredByType
 
   // Combined chat details with realtime messages
   const chatDetailsWithRealtimeMessages: ChatDetails | null = chatDetails
@@ -497,49 +495,49 @@ export function useChatPage() {
         messages:
           realtimeMessages.length > 0 ? realtimeMessages : chatDetails.messages,
       }
-    : null;
+    : null
 
   // Load selected chat details
   useEffect(() => {
     if (selectedChatId) {
-      lastMessageIdRef.current = null;
-      setIsAtBottom(true);
+      lastMessageIdRef.current = null
+      setIsAtBottom(true)
     }
-  }, [selectedChatId]);
+  }, [selectedChatId])
 
   // Scroll to bottom on new messages
   useEffect(() => {
-    const msgs = chatDetailsWithRealtimeMessages?.messages ?? [];
-    const lastId = msgs.length > 0 ? msgs[msgs.length - 1]?.id : null;
-    if (!lastId) return;
+    const msgs = chatDetailsWithRealtimeMessages?.messages ?? []
+    const lastId = msgs.length > 0 ? msgs[msgs.length - 1]?.id : null
+    if (!lastId) return
 
-    const isNewMessage = lastId !== lastMessageIdRef.current;
-    const shouldForce = lastMessageIdRef.current === null;
-    lastMessageIdRef.current = lastId;
+    const isNewMessage = lastId !== lastMessageIdRef.current
+    const shouldForce = lastMessageIdRef.current === null
+    lastMessageIdRef.current = lastId
 
     if (shouldForce) {
-      scrollToBottom('auto');
-      setIsAtBottom(true);
-      return;
+      scrollToBottom('auto')
+      setIsAtBottom(true)
+      return
     }
 
     if (isNewMessage && isAtBottom) {
-      scrollToBottom('smooth');
-      setIsAtBottom(true);
+      scrollToBottom('smooth')
+      setIsAtBottom(true)
     }
-  }, [chatDetailsWithRealtimeMessages?.messages, isAtBottom, scrollToBottom]);
+  }, [chatDetailsWithRealtimeMessages?.messages, isAtBottom, scrollToBottom])
 
   // Intersection observer for infinite scroll
   useEffect(() => {
-    const container = chatContainerRef.current;
-    const sentinel = topSentinelRef.current;
+    const container = chatContainerRef.current
+    const sentinel = topSentinelRef.current
 
-    if (!container || !sentinel || !selectedChatId) return;
+    if (!container || !sentinel || !selectedChatId) return
 
     const observer = new IntersectionObserver(
       (entries) => {
-        const entry = entries[0];
-        if (!entry) return;
+        const entry = entries[0]
+        if (!entry) return
         if (
           entry.isIntersecting &&
           container.scrollTop < 200 &&
@@ -549,78 +547,78 @@ export function useChatPage() {
           pendingScrollAdjustRef.current = {
             previousHeight: container.scrollHeight,
             previousTop: container.scrollTop,
-          };
-          loadMore();
+          }
+          loadMore()
         }
       },
-      { root: container, rootMargin: '0px 0px 0px 0px', threshold: 0.1 }
-    );
+      { root: container, rootMargin: '0px 0px 0px 0px', threshold: 0.1 },
+    )
 
-    observer.observe(sentinel);
-    return () => observer.disconnect();
-  }, [selectedChatId, hasMore, isLoadingMore, loadMore]);
+    observer.observe(sentinel)
+    return () => observer.disconnect()
+  }, [selectedChatId, hasMore, isLoadingMore, loadMore])
 
   // Maintain scroll position after loading older messages
   useEffect(() => {
-    if (isLoadingMore || !pendingScrollAdjustRef.current) return;
-    const container = chatContainerRef.current;
-    if (!container) return;
+    if (isLoadingMore || !pendingScrollAdjustRef.current) return
+    const container = chatContainerRef.current
+    if (!container) return
 
-    const { previousHeight, previousTop } = pendingScrollAdjustRef.current;
-    const newHeight = container.scrollHeight;
-    const delta = newHeight - previousHeight;
-    container.scrollTop = previousTop + delta;
-    pendingScrollAdjustRef.current = null;
-  }, [isLoadingMore]);
+    const { previousHeight, previousTop } = pendingScrollAdjustRef.current
+    const newHeight = container.scrollHeight
+    const delta = newHeight - previousHeight
+    container.scrollTop = previousTop + delta
+    pendingScrollAdjustRef.current = null
+  }, [isLoadingMore])
 
   // Track scroll position
   useEffect(() => {
-    const container = chatContainerRef.current;
-    if (!container) return;
+    const container = chatContainerRef.current
+    if (!container) return
 
     const handleScroll = () => {
-      const threshold = 50;
+      const threshold = 50
       const atBottom =
         container.scrollTop + container.clientHeight >=
-        container.scrollHeight - threshold;
-      setIsAtBottom(atBottom);
-    };
+        container.scrollHeight - threshold
+      setIsAtBottom(atBottom)
+    }
 
-    container.addEventListener('scroll', handleScroll);
-    handleScroll();
-    return () => container.removeEventListener('scroll', handleScroll);
-  }, []);
+    container.addEventListener('scroll', handleScroll)
+    handleScroll()
+    return () => container.removeEventListener('scroll', handleScroll)
+  }, [])
 
   // Check for chat ID in URL
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      const params = new URLSearchParams(window.location.search);
-      const chatParam = params.get('chat');
-      const newDMParam = params.get('newDM');
+      const params = new URLSearchParams(window.location.search)
+      const chatParam = params.get('chat')
+      const newDMParam = params.get('newDM')
 
       if (chatParam && chatParam !== selectedChatId) {
-        setSelectedChatId(chatParam);
+        setSelectedChatId(chatParam)
 
         if (newDMParam && chatParam.startsWith('dm-')) {
-          setPendingDM({ chatId: chatParam, targetUserId: newDMParam });
+          setPendingDM({ chatId: chatParam, targetUserId: newDMParam })
         }
 
-        window.history.replaceState({}, '', '/chats');
+        window.history.replaceState({}, '', '/chats')
       }
     }
-  }, [selectedChatId]);
+  }, [selectedChatId])
 
   // Load pending DM once user is available
   useEffect(() => {
     if (pendingDM && user) {
-      void loadNewDMChat(pendingDM.chatId, pendingDM.targetUserId);
-      setPendingDM(null);
+      void loadNewDMChat(pendingDM.chatId, pendingDM.targetUserId)
+      setPendingDM(null)
     }
-  }, [pendingDM, user, loadNewDMChat]);
+  }, [pendingDM, user, loadNewDMChat])
 
   const loadChats = useCallback(async () => {
-    await refetchChats();
-  }, [refetchChats]);
+    await refetchChats()
+  }, [refetchChats])
 
   return {
     // Auth
@@ -685,5 +683,5 @@ export function useChatPage() {
     // Actions
     sendMessage,
     loadChats,
-  };
+  }
 }

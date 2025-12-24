@@ -1,8 +1,7 @@
 /**
  * API Package Types
  *
- * Re-exports shared types for API middleware and utilities.
- * These types are defined in @babylon/shared for consistency across packages.
+ * Types used in API middleware and utilities.
  */
 
-export type { ErrorLike, JsonValue, StringRecord } from '@babylon/shared';
+export type { ErrorLike, JsonValue, StringRecord } from '@babylon/shared'

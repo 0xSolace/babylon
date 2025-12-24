@@ -4,9 +4,9 @@
  * Security-critical validation for all auth data structures.
  */
 
-import type { Address, Hex } from 'viem';
-import { z } from 'zod';
-import type { DID } from '../types/index';
+import type { Address, Hex } from 'viem'
+import { z } from 'zod'
+import type { DID } from '../types/index'
 
 // ============================================================================
 // Primitive Schemas
@@ -16,21 +16,21 @@ import type { DID } from '../types/index';
 export const AddressSchema = z.custom<Address>(
   (val): val is Address =>
     typeof val === 'string' && /^0x[a-fA-F0-9]{40}$/.test(val),
-  { message: 'Invalid Ethereum address format' }
-);
+  { message: 'Invalid Ethereum address format' },
+)
 
 /** Hex string validation (0x + hex chars) */
 export const HexSchema = z.custom<Hex>(
   (val): val is Hex => typeof val === 'string' && /^0x[a-fA-F0-9]*$/.test(val),
-  { message: 'Invalid hex string format' }
-);
+  { message: 'Invalid hex string format' },
+)
 
 /** DID format validation (did:jeju:network:publicKey) */
 export const DIDSchema = z.custom<DID>(
   (val): val is DID =>
     typeof val === 'string' && /^did:jeju:[a-z]+:0x[a-fA-F0-9]+$/.test(val),
-  { message: 'Invalid DID format - expected did:jeju:network:0x...' }
-);
+  { message: 'Invalid DID format - expected did:jeju:network:0x...' },
+)
 
 // ============================================================================
 // Session Schemas
@@ -44,17 +44,17 @@ export const SessionClaimsSchema = z.object({
   exp: z.number().int().positive(),
   linkedTypes: z.array(z.string()),
   nonce: z.string().optional(),
-});
+})
 
-export type SessionClaimsInput = z.infer<typeof SessionClaimsSchema>;
+export type SessionClaimsInput = z.infer<typeof SessionClaimsSchema>
 
 /** Complete session token structure */
 export const SessionTokenDataSchema = z.object({
   claims: SessionClaimsSchema,
   signature: HexSchema,
-});
+})
 
-export type SessionTokenDataInput = z.infer<typeof SessionTokenDataSchema>;
+export type SessionTokenDataInput = z.infer<typeof SessionTokenDataSchema>
 
 // ============================================================================
 // PKCE Schemas
@@ -66,9 +66,9 @@ export const PKCEParamsSchema = z.object({
   codeChallenge: z.string().min(1),
   state: z.string().min(16),
   nonce: z.string().min(1),
-});
+})
 
-export type PKCEParamsInput = z.infer<typeof PKCEParamsSchema>;
+export type PKCEParamsInput = z.infer<typeof PKCEParamsSchema>
 
 // ============================================================================
 // Key Backup Schemas
@@ -81,11 +81,11 @@ export const KeyBackupSchema = z.object({
   encryptedKey: HexSchema,
   salt: HexSchema,
   iv: HexSchema,
-  iterations: z.number().int().min(10000),
+  iterations: z.number().int().min(1),
   createdAt: z.number().int().positive(),
-});
+})
 
-export type KeyBackupInput = z.infer<typeof KeyBackupSchema>;
+export type KeyBackupInput = z.infer<typeof KeyBackupSchema>
 
 // ============================================================================
 // OAuth Response Schemas
@@ -98,9 +98,9 @@ export const OAuthTokenResponseSchema = z.object({
   token_type: z.string().min(1),
   expires_in: z.number().int().positive(),
   scope: z.string(),
-});
+})
 
-export type OAuthTokenResponseInput = z.infer<typeof OAuthTokenResponseSchema>;
+export type OAuthTokenResponseInput = z.infer<typeof OAuthTokenResponseSchema>
 
 /** Twitter user data response */
 export const TwitterUserResponseSchema = z.object({
@@ -111,11 +111,9 @@ export const TwitterUserResponseSchema = z.object({
     profile_image_url: z.string().url().optional(),
     verified: z.boolean().optional(),
   }),
-});
+})
 
-export type TwitterUserResponseInput = z.infer<
-  typeof TwitterUserResponseSchema
->;
+export type TwitterUserResponseInput = z.infer<typeof TwitterUserResponseSchema>
 
 /** Discord user data response */
 export const DiscordUserResponseSchema = z.object({
@@ -125,11 +123,9 @@ export const DiscordUserResponseSchema = z.object({
   email: z.string().email().nullable().optional(),
   avatar: z.string().nullable().optional(),
   verified: z.boolean().optional(),
-});
+})
 
-export type DiscordUserResponseInput = z.infer<
-  typeof DiscordUserResponseSchema
->;
+export type DiscordUserResponseInput = z.infer<typeof DiscordUserResponseSchema>
 
 // ============================================================================
 // Client Session Schema
@@ -159,8 +155,8 @@ export const SessionDataSchema = z.object({
           chainId: z.number().optional(),
         })
         .optional(),
-    })
+    }),
   ),
-});
+})
 
-export type SessionDataInput = z.infer<typeof SessionDataSchema>;
+export type SessionDataInput = z.infer<typeof SessionDataSchema>

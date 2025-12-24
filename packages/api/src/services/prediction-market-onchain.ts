@@ -6,20 +6,29 @@
  * pattern for buying and selling shares in prediction markets.
  */
 
-import { getContractAddresses, getRpcUrl } from '@babylon/contracts';
-import { CHAIN, logger } from '@babylon/shared';
+import {
+  BadRequestError,
+  CHAIN,
+  getContractAddresses,
+  logger,
+} from '@babylon/shared'
 import {
   type Address,
   createPublicClient,
   createWalletClient,
   http,
   type WalletClient,
-} from 'viem';
-import { privateKeyToAccount } from 'viem/accounts';
-import { BadRequestError } from '../errors';
+} from 'viem'
+import { privateKeyToAccount } from 'viem/accounts'
 
 // Get contract addresses for current network
-const { diamond: DIAMOND_ADDRESS } = getContractAddresses();
+const addresses = getContractAddresses()
+const DIAMOND_ADDRESS =
+  addresses.diamond ?? '0x0000000000000000000000000000000000000000'
+
+function getRpcUrl(): string {
+  return process.env.RPC_URL ?? 'http://localhost:6545'
+}
 
 // Prediction Market Facet ABI (minimal for buy/sell)
 const PREDICTION_MARKET_ABI = [
@@ -97,19 +106,19 @@ const PREDICTION_MARKET_ABI = [
     outputs: [{ name: 'cost', type: 'uint256' }],
     stateMutability: 'view',
   },
-] as const;
+] as const
 
 export class OnChainPredictionMarketService {
-  private publicClient;
-  private rpcUrl: string;
+  private publicClient
+  private rpcUrl: string
 
   constructor(rpcUrl?: string) {
-    this.rpcUrl = rpcUrl || getRpcUrl();
+    this.rpcUrl = rpcUrl || getRpcUrl()
 
     this.publicClient = createPublicClient({
       chain: CHAIN,
       transport: http(this.rpcUrl),
-    });
+    })
   }
 
   /**
@@ -125,13 +134,13 @@ export class OnChainPredictionMarketService {
     marketId: string,
     outcome: 'YES' | 'NO',
     numShares: number,
-    userWalletClient: WalletClient
+    userWalletClient: WalletClient,
   ): Promise<{ txHash: string; sharesBought: number }> {
     if (!userWalletClient.account) {
-      throw new BadRequestError('Wallet client must have an account');
+      throw new BadRequestError('Wallet client must have an account')
     }
 
-    const outcomeIndex = outcome === 'YES' ? 1 : 0;
+    const outcomeIndex = outcome === 'YES' ? 1 : 0
 
     // First calculate cost
     const cost = (await this.publicClient.readContract({
@@ -143,14 +152,14 @@ export class OnChainPredictionMarketService {
         outcomeIndex,
         BigInt(Math.floor(numShares * 1e18)),
       ],
-    })) as bigint;
+    })) as bigint
 
     logger.info('Calculated on-chain cost', {
       marketId,
       outcome,
       numShares,
       cost: cost.toString(),
-    });
+    })
 
     // Execute buy transaction
     const hash = await userWalletClient.writeContract({
@@ -164,25 +173,25 @@ export class OnChainPredictionMarketService {
       ],
       chain: CHAIN,
       account: userWalletClient.account,
-    });
+    })
 
     // Wait for confirmation
     const receipt = await this.publicClient.waitForTransactionReceipt({
       hash,
       confirmations: 1,
-    });
+    })
 
     logger.info('Shares purchased on-chain', {
       marketId,
       outcome,
       txHash: receipt.transactionHash,
       gasUsed: receipt.gasUsed.toString(),
-    });
+    })
 
     return {
       txHash: receipt.transactionHash,
       sharesBought: numShares,
-    };
+    }
   }
 
   /**
@@ -192,13 +201,13 @@ export class OnChainPredictionMarketService {
     marketId: string,
     outcome: 'YES' | 'NO',
     numShares: number,
-    userWalletClient: WalletClient
+    userWalletClient: WalletClient,
   ): Promise<{ txHash: string; sharesSold: number }> {
     if (!userWalletClient.account) {
-      throw new BadRequestError('Wallet client must have an account');
+      throw new BadRequestError('Wallet client must have an account')
     }
 
-    const outcomeIndex = outcome === 'YES' ? 1 : 0;
+    const outcomeIndex = outcome === 'YES' ? 1 : 0
 
     // Execute sell transaction
     const hash = await userWalletClient.writeContract({
@@ -212,25 +221,25 @@ export class OnChainPredictionMarketService {
       ],
       chain: CHAIN,
       account: userWalletClient.account,
-    });
+    })
 
     // Wait for confirmation
     const receipt = await this.publicClient.waitForTransactionReceipt({
       hash,
       confirmations: 1,
-    });
+    })
 
     logger.info('Shares sold on-chain', {
       marketId,
       outcome,
       txHash: receipt.transactionHash,
       gasUsed: receipt.gasUsed.toString(),
-    });
+    })
 
     return {
       txHash: receipt.transactionHash,
       sharesSold: numShares,
-    };
+    }
   }
 
   /**
@@ -242,9 +251,9 @@ export class OnChainPredictionMarketService {
       abi: PREDICTION_MARKET_ABI,
       functionName: 'getMarket',
       args: [marketId as `0x${string}`],
-    });
+    })
 
-    return market;
+    return market
   }
 
   /**
@@ -256,9 +265,9 @@ export class OnChainPredictionMarketService {
       abi: PREDICTION_MARKET_ABI,
       functionName: 'getPosition',
       args: [userAddress, marketId as `0x${string}`],
-    });
+    })
 
-    return position;
+    return position
   }
 
   /**
@@ -266,26 +275,26 @@ export class OnChainPredictionMarketService {
    */
   static createBackendWalletClient(
     privateKey: string,
-    rpcUrl?: string
+    rpcUrl?: string,
   ): WalletClient {
-    const account = privateKeyToAccount(privateKey as `0x${string}`);
+    const account = privateKeyToAccount(privateKey as `0x${string}`)
 
     return createWalletClient({
       account,
       chain: CHAIN,
       transport: http(rpcUrl || getRpcUrl()),
-    });
+    })
   }
 }
 
 /**
  * Singleton instance for reuse
  */
-let instance: OnChainPredictionMarketService | null = null;
+let instance: OnChainPredictionMarketService | null = null
 
 export function getOnChainPredictionMarketService(): OnChainPredictionMarketService {
   if (!instance) {
-    instance = new OnChainPredictionMarketService();
+    instance = new OnChainPredictionMarketService()
   }
-  return instance;
+  return instance
 }

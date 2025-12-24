@@ -72,7 +72,7 @@ The information trader must balance both sides:
 - Too much social, not enough trading = Social Butterfly, not Info Trader
 - Too much trading, not enough social = Trader, not Info Trader
 - Balance with info-to-trade pipeline = Excellent Info Trader
-`;
+`
 
 export const INFORMATION_TRADER_PRIORITY_METRICS = [
   'trading.totalPnL',
@@ -81,4 +81,4 @@ export const INFORMATION_TRADER_PRIORITY_METRICS = [
   'behavior.socialToTradeRatio',
   'information.infoRequestsSent',
   'trading.winRate',
-];
+]

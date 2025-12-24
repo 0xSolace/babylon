@@ -22,8 +22,6 @@ updates:
           - "patch"
     ignore:
       # Ignore major version bumps for core frameworks (review manually)
-      - dependency-name: "next"
-        update-types: ["version-update:semver-major"]
       - dependency-name: "react"
         update-types: ["version-update:semver-major"]
       - dependency-name: "react-dom"

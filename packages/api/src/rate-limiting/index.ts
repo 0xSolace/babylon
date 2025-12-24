@@ -12,7 +12,7 @@ export {
   clearDuplicates,
   DUPLICATE_DETECTION_CONFIGS,
   getDuplicateStats,
-} from '../utils/duplicate-detector';
+} from '../utils/duplicate-detector'
 // Middleware
 export {
   addRateLimitHeaders,
@@ -21,7 +21,7 @@ export {
   checkRateLimitAndDuplicates,
   duplicateContentError,
   rateLimitError,
-} from './middleware';
+} from './middleware'
 // Rate limiting (moved from @babylon/shared)
 export {
   checkRateLimit,
@@ -30,4 +30,4 @@ export {
   getRateLimitStatus,
   RATE_LIMIT_CONFIGS,
   resetRateLimit,
-} from './user-rate-limiter';
+} from './user-rate-limiter'

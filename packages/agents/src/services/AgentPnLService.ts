@@ -6,10 +6,10 @@
  * @packageDocumentation
  */
 
-import { db, type JsonValue } from '@babylon/db';
-import { v4 as uuidv4 } from 'uuid';
-import { logger } from '../shared/logger';
-import { generateSnowflakeId } from '../shared/snowflake';
+import { db, type JsonValue } from '@babylon/db'
+import { generateSnowflakeId } from '@babylon/shared'
+import { v4 as uuidv4 } from 'uuid'
+import { logger } from '../shared/logger'
 
 /**
  * Service for agent profit and loss tracking
@@ -32,17 +32,17 @@ export class AgentPnLService {
    * @param params.reasoning - Trade reasoning
    */
   async recordTrade(params: {
-    agentId: string;
-    userId: string;
-    marketType: 'prediction' | 'perp';
-    marketId?: string;
-    ticker?: string;
-    action: 'open' | 'close';
-    side?: 'long' | 'short' | 'yes' | 'no';
-    amount: number;
-    price: number;
-    pnl?: number;
-    reasoning?: string;
+    agentId: string
+    userId: string
+    marketType: 'prediction' | 'perp'
+    marketId?: string
+    ticker?: string
+    action: 'open' | 'close'
+    side?: 'long' | 'short' | 'yes' | 'no'
+    amount: number
+    price: number
+    pnl?: number
+    reasoning?: string
   }): Promise<void> {
     const {
       agentId,
@@ -55,35 +55,41 @@ export class AgentPnLService {
       price,
       pnl,
       reasoning,
-    } = params;
+    } = params
 
     // Create trade record
+    // Note: marketType, ticker, action, reasoning stored in metadata
     await db.agentTrade.create({
       data: {
         id: uuidv4(),
+        agentId,
         agentUserId: agentId,
-        marketType,
-        marketId: marketId ?? null,
-        ticker: ticker ?? null,
-        action,
-        side: side ?? null,
-        amount,
-        price,
-        pnl: pnl ?? null,
-        reasoning: reasoning ?? null,
+        marketId: marketId ?? `${marketType}:${ticker ?? 'unknown'}`,
+        side: side ?? 'long',
+        amount: String(amount),
+        price: String(price),
+        pnl: String(pnl ?? 0),
+        status: 'executed',
+        executedAt: new Date(),
+        metadata: {
+          marketType,
+          ticker,
+          action,
+          reasoning,
+        } as JsonValue,
       },
-    });
+    })
 
     // Update agent P&L if provided
     if (pnl !== undefined && pnl !== null) {
       // Get current lifetimePnL
       const agent = await db.user.findFirst({
         where: { id: agentId },
-      });
+      })
 
       const currentPnL = agent?.lifetimePnL
         ? Number.parseFloat(String(agent.lifetimePnL))
-        : 0;
+        : 0
 
       await db.user.update({
         where: { id: agentId },
@@ -91,7 +97,7 @@ export class AgentPnLService {
           lifetimePnL: String(currentPnL + pnl),
           updatedAt: new Date(),
         },
-      });
+      })
     }
 
     // Log the trade
@@ -101,7 +107,7 @@ export class AgentPnLService {
         agentUserId: agentId,
         type: 'trade',
         level: 'info',
-        message: `Trade executed: ${action} ${side || ''} ${amount} @ ${price}`,
+        content: `Trade executed: ${action} ${side || ''} ${amount} @ ${price}`,
         metadata: {
           marketType,
           marketId,
@@ -110,13 +116,13 @@ export class AgentPnLService {
           reasoning,
         } as JsonValue,
       },
-    });
+    })
 
     logger.info(
       `Trade recorded for agent ${agentId}`,
       undefined,
-      'AgentPnLService'
-    );
+      'AgentPnLService',
+    )
   }
 
   /**
@@ -124,10 +130,10 @@ export class AgentPnLService {
    */
   async getAgentTrades(agentUserId: string, limit = 50) {
     return db.agentTrade.findMany({
-      where: { agentUserId },
+      where: { agentId: agentUserId },
       orderBy: { executedAt: 'desc' },
       take: limit,
-    });
+    })
   }
 
   /**
@@ -136,15 +142,15 @@ export class AgentPnLService {
   async getUserAgentPnL(userId: string): Promise<number> {
     const agents = await db.user.findMany({
       where: { managedBy: userId },
-    });
+    })
 
     return agents.reduce((sum, agent) => {
       return (
         sum +
         (agent.lifetimePnL ? Number.parseFloat(String(agent.lifetimePnL)) : 0)
-      );
-    }, 0);
+      )
+    }, 0)
   }
 }
 
-export const agentPnLService = new AgentPnLService();
+export const agentPnLService = new AgentPnLService()

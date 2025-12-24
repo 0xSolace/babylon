@@ -6,6 +6,7 @@
     "declarationMap": false,
     "noEmit": true,
     "skipLibCheck": true,
+    "jsx": "react-jsx",
     "types": ["bun-types"],
     "baseUrl": ".",
     "paths": {
@@ -22,8 +23,12 @@
       "@babylon/api/*": ["../api/src/*"],
       "@babylon/a2a": ["../a2a/src/index.ts"],
       "@babylon/a2a/*": ["../a2a/src/*"],
+      "@babylon/auth": ["../auth/src/index.ts"],
+      "@babylon/auth/*": ["../auth/src/*"],
       "@babylon/training": ["../training/src/index.ts"],
-      "@babylon/training/*": ["../training/src/*"]
+      "@babylon/training/*": ["../training/src/*"],
+      "@babylon/agents": ["./src/index.ts"],
+      "@babylon/agents/*": ["./src/*"]
     }
   },
   "include": ["src/**/*"],

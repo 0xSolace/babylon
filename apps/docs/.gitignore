@@ -6,15 +6,9 @@ node_modules
 # Testing
 coverage
 
-# Next.js
-.next/
-out/
+# Vocs build output
 dist/
-build/
-_pagefind/
-
-# Production
-build
+.vocs/
 
 # Misc
 .DS_Store
@@ -36,7 +30,5 @@ yarn-error.log*
 typedoc-output/
 
 # Generated docs
-pages/api-reference/_generated/
-pages/reference/_generated/
-pages/deployments/_generated/
+pages/_generated/
 

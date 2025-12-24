@@ -1,4 +1,4 @@
-import { definePrompt } from '../define-prompt';
+import { definePrompt } from '../define-prompt'
 
 /**
  * Prompt for generating article cover images.
@@ -40,4 +40,4 @@ IMPORTANT:
 - Focus on objects, environments, abstract concepts, or symbolic representations
 - Keep it sophisticated and newsworthy
 `.trim(),
-});
+})

@@ -1,9 +1,5 @@
-import PostDetailClient from './PostDetailClient';
-
-export function generateStaticParams(): Array<{ id?: string[] }> {
-  return [{ id: [] }];
-}
+import PostDetailClient from './PostDetailClient'
 
 export default function PostDetailPage() {
-  return <PostDetailClient />;
+  return <PostDetailClient />
 }

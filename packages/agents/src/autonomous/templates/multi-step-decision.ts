@@ -6,89 +6,89 @@
  * Services are "dumb executors" - all reasoning happens here.
  */
 
-import { NPC_POST_QUALITY_RULES } from '@babylon/engine';
+import { NPC_POST_QUALITY_RULES } from '@babylon/engine'
 
 // =============================================================================
 // Types
 // =============================================================================
 
 export interface ActionTraceResult {
-  actionType: string;
-  success: boolean;
-  summary?: string;
-  error?: string;
+  actionType: string
+  success: boolean
+  summary?: string
+  error?: string
   result?: {
-    [key: string]: string | number | boolean | null | undefined;
-  };
-  parameters?: Record<string, unknown>;
-  timestamp: number;
+    [key: string]: string | number | boolean | null | undefined
+  }
+  parameters?: Record<string, unknown>
+  timestamp: number
 }
 
 export interface PredictionMarketContext {
-  id: string;
-  question: string;
-  yesPrice: number; // 0-1
-  noPrice: number; // 0-1
-  volume: number;
-  endDate: string;
+  id: string
+  question: string
+  yesPrice: number // 0-1
+  noPrice: number // 0-1
+  volume: number
+  endDate: string
 }
 
 export interface PerpMarketContext {
-  ticker: string;
-  name: string;
-  currentPrice: number;
-  initialPrice: number;
-  changePercent: number;
+  ticker: string
+  name: string
+  currentPrice: number
+  initialPrice: number
+  changePercent: number
 }
 
 export interface PostContext {
-  id: string;
-  authorName: string;
-  content: string;
-  commentCount: number;
-  timeAgo: string;
+  id: string
+  authorName: string
+  content: string
+  commentCount: number
+  timeAgo: string
   /** Agent's existing comment on this post, if any */
-  agentComment?: string;
+  agentComment?: string
 }
 
 export interface PendingInteraction {
-  type: 'comment_reply' | 'dm' | 'mention';
-  author: string;
-  content: string;
-  postId?: string;
+  type: 'comment_reply' | 'dm' | 'mention'
+  author: string
+  content: string
+  postId?: string
 }
 
 export interface AgentTickContext {
-  balance: number;
-  pnl: number;
-  openPositions: number;
-  pendingInteractions: number;
-  pendingInteractionDetails: PendingInteraction[];
-  enabledFeatures: string[];
+  balance: number
+  pnl: number
+  openPositions: number
+  pendingInteractions: number
+  pendingInteractionDetails: PendingInteraction[]
+  enabledFeatures: string[]
   // Rich context for actionable decisions
-  predictionMarkets: PredictionMarketContext[];
-  perpMarkets: PerpMarketContext[];
-  recentPosts: PostContext[];
+  predictionMarkets: PredictionMarketContext[]
+  perpMarkets: PerpMarketContext[]
+  recentPosts: PostContext[]
   agentPositions: {
     predictions: {
-      marketId: string;
-      question: string;
-      side: string;
-      shares: number;
-    }[];
-    perps: { ticker: string; side: string; size: number; pnl: number }[];
-  };
+      marketId: string
+      question: string
+      side: string
+      shares: number
+    }[]
+    perps: { ticker: string; side: string; size: number; pnl: number }[]
+  }
   // Topic diversity guidance
-  diversityInstructions?: string;
-  assignedMarketId?: string;
-  suggestedAngle?: string;
+  diversityInstructions?: string
+  assignedMarketId?: string
+  suggestedAngle?: string
 }
 
 export interface MultiStepDecision {
-  thought: string;
-  action: string;
-  parameters: Record<string, unknown>;
-  isFinish: boolean;
+  thought: string
+  action: string
+  parameters: Record<string, unknown>
+  isFinish: boolean
 }
 
 // =============================================================================
@@ -104,13 +104,13 @@ export interface MultiStepDecision {
  * - Anti-slop quality rules for authentic social media voice
  */
 export function buildMultiStepDecisionPrompt(params: {
-  agentName: string;
-  iterationCount: number;
-  maxIterations: number;
-  traceActionResults: ActionTraceResult[];
-  context: AgentTickContext;
-  isNpc?: boolean;
-  npcGameContext?: string;
+  agentName: string
+  iterationCount: number
+  maxIterations: number
+  traceActionResults: ActionTraceResult[]
+  context: AgentTickContext
+  isNpc?: boolean
+  npcGameContext?: string
 }): string {
   const {
     agentName,
@@ -120,17 +120,17 @@ export function buildMultiStepDecisionPrompt(params: {
     context,
     isNpc = false,
     npcGameContext = '',
-  } = params;
+  } = params
 
   const actionsCompletedText =
     traceActionResults.length > 0
       ? traceActionResults
           .map(
             (r, i) =>
-              `${i + 1}. ${r.actionType}: ${r.success ? '✓' : '✗'} ${r.summary || ''}${r.error ? ` (Error: ${r.error})` : ''}`
+              `${i + 1}. ${r.actionType}: ${r.success ? '✓' : '✗'} ${r.summary || ''}${r.error ? ` (Error: ${r.error})` : ''}`,
           )
           .join('\n')
-      : 'No actions taken yet this tick.';
+      : 'No actions taken yet this tick.'
 
   // NPC-specific sections
   const npcContextSection =
@@ -139,7 +139,7 @@ export function buildMultiStepDecisionPrompt(params: {
 ${npcGameContext}
 
 `
-      : '';
+      : ''
 
   const npcQualityRulesSection = isNpc
     ? `
@@ -153,7 +153,7 @@ ${NPC_POST_QUALITY_RULES}
 - Sound like a PERSON on social media, not an AI
 
 `
-    : '';
+    : ''
 
   return `You are ${agentName}, an autonomous agent on Babylon prediction markets.
 ${npcContextSection}
@@ -276,7 +276,7 @@ FINISH (empty action):
   "isFinish": true
 }
 
-Your decision (JSON only):`;
+Your decision (JSON only):`
 }
 
 // =============================================================================
@@ -284,115 +284,115 @@ Your decision (JSON only):`;
 // =============================================================================
 
 function formatAgentPositions(
-  positions: AgentTickContext['agentPositions']
+  positions: AgentTickContext['agentPositions'],
 ): string {
-  const lines: string[] = [];
+  const lines: string[] = []
 
   if (positions.predictions.length > 0) {
-    lines.push('Prediction positions:');
+    lines.push('Prediction positions:')
     for (const p of positions.predictions) {
       lines.push(
-        `  - ${p.side} on "${p.question.substring(0, 50)}..." (${p.shares} shares)`
-      );
+        `  - ${p.side} on "${p.question.substring(0, 50)}..." (${p.shares} shares)`,
+      )
     }
   }
 
   if (positions.perps.length > 0) {
-    lines.push('Perp positions:');
+    lines.push('Perp positions:')
     for (const p of positions.perps) {
       lines.push(
-        `  - ${p.side} ${p.ticker}: $${p.size} (P&L: ${p.pnl >= 0 ? '+' : ''}$${p.pnl.toFixed(2)})`
-      );
+        `  - ${p.side} ${p.ticker}: $${p.size} (P&L: ${p.pnl >= 0 ? '+' : ''}$${p.pnl.toFixed(2)})`,
+      )
     }
   }
 
-  return lines.length > 0 ? lines.join('\n') : 'No open positions.';
+  return lines.length > 0 ? lines.join('\n') : 'No open positions.'
 }
 
 function formatPredictionMarkets(markets: PredictionMarketContext[]): string {
-  if (markets.length === 0) return 'No active prediction markets.';
+  if (markets.length === 0) return 'No active prediction markets.'
 
   return markets
     .map((m, idx) => {
-      const yesPct = (m.yesPrice * 100).toFixed(0);
-      const noPct = (m.noPrice * 100).toFixed(0);
+      const yesPct = (m.yesPrice * 100).toFixed(0)
+      const noPct = (m.noPrice * 100).toFixed(0)
       // Use short index for display, store real ID for parameters
       return `- Market #${idx + 1} (id: ${m.id}): "${m.question.substring(0, 60)}${m.question.length > 60 ? '...' : ''}"
-    YES: ${yesPct}% | NO: ${noPct}% | Ends: ${m.endDate}`;
+    YES: ${yesPct}% | NO: ${noPct}% | Ends: ${m.endDate}`
     })
-    .join('\n');
+    .join('\n')
 }
 
 function formatPerpMarkets(markets: PerpMarketContext[]): string {
-  if (markets.length === 0) return 'No perp markets available.';
+  if (markets.length === 0) return 'No perp markets available.'
 
   return markets
     .map((m) => {
       const direction =
-        m.changePercent > 0 ? '📈' : m.changePercent < 0 ? '📉' : '➡️';
-      return `- ${m.ticker}: ${m.name} @ $${m.currentPrice.toFixed(2)} ${direction} ${m.changePercent > 0 ? '+' : ''}${m.changePercent.toFixed(1)}%`;
+        m.changePercent > 0 ? '📈' : m.changePercent < 0 ? '📉' : '➡️'
+      return `- ${m.ticker}: ${m.name} @ $${m.currentPrice.toFixed(2)} ${direction} ${m.changePercent > 0 ? '+' : ''}${m.changePercent.toFixed(1)}%`
     })
-    .join('\n');
+    .join('\n')
 }
 
 function formatRecentPosts(posts: PostContext[]): string {
-  if (posts.length === 0) return 'No recent posts to engage with.';
+  if (posts.length === 0) return 'No recent posts to engage with.'
 
   return posts
     .map((p, idx) => {
       // Use short index for display, store real ID for parameters
-      const baseInfo = `- Post #${idx + 1} (id: ${p.id}) @${p.authorName} (${p.timeAgo}): "${p.content.substring(0, 80)}${p.content.length > 80 ? '...' : ''}" (${p.commentCount} comments)`;
+      const baseInfo = `- Post #${idx + 1} (id: ${p.id}) @${p.authorName} (${p.timeAgo}): "${p.content.substring(0, 80)}${p.content.length > 80 ? '...' : ''}" (${p.commentCount} comments)`
 
       // Show agent's existing comment if any
       if (p.agentComment) {
         const truncatedComment =
           p.agentComment.length > 60
             ? `${p.agentComment.substring(0, 60)}...`
-            : p.agentComment;
-        return `${baseInfo}\n    [Already commented: "${truncatedComment}"]`;
+            : p.agentComment
+        return `${baseInfo}\n    [Already commented: "${truncatedComment}"]`
       }
 
-      return baseInfo;
+      return baseInfo
     })
-    .join('\n');
+    .join('\n')
 }
 
 function formatPendingInteractions(interactions: PendingInteraction[]): string {
-  if (interactions.length === 0) return 'No pending interactions.';
+  if (interactions.length === 0) return 'No pending interactions.'
 
   return interactions
     .slice(0, 5)
     .map(
       (i) =>
-        `- [${i.type}] @${i.author}: "${i.content.substring(0, 60)}${i.content.length > 60 ? '...' : ''}"`
+        `- [${i.type}] @${i.author}: "${i.content.substring(0, 60)}${i.content.length > 60 ? '...' : ''}"`,
     )
-    .join('\n');
+    .join('\n')
 }
 
 function formatAvailableActions(enabledFeatures: string[]): string {
-  const actions: string[] = [];
+  const actions: string[] = []
 
   if (enabledFeatures.includes('trading')) {
     actions.push(
-      '- TRADE: Buy/sell on prediction markets (buy_yes/buy_no) or perps (open_long/open_short)'
-    );
+      '- TRADE: Buy/sell on prediction markets (buy_yes/buy_no) or perps (open_long/open_short)',
+    )
   }
 
   if (enabledFeatures.includes('posting')) {
-    actions.push('- POST: Create a new post (provide content)');
+    actions.push('- POST: Create a new post (provide content)')
   }
 
   if (enabledFeatures.includes('commenting')) {
-    actions.push('- COMMENT: Reply to a post (provide postId and content)');
+    actions.push('- COMMENT: Reply to a post (provide postId and content)')
   }
 
   if (enabledFeatures.includes('DMs')) {
-    actions.push('- RESPOND: Batch respond to pending DMs/mentions');
+    actions.push('- RESPOND: Batch respond to pending DMs/mentions')
   }
 
-  actions.push('- (empty action with isFinish=true): Finish this tick');
+  actions.push('- (empty action with isFinish=true): Finish this tick')
 
-  return actions.join('\n');
+  return actions.join('\n')
 }
 
 // =============================================================================
@@ -400,20 +400,20 @@ function formatAvailableActions(enabledFeatures: string[]): string {
 // =============================================================================
 
 export function buildMultiStepSummaryPrompt(params: {
-  agentName: string;
-  traceActionResults: ActionTraceResult[];
-  context: AgentTickContext;
+  agentName: string
+  traceActionResults: ActionTraceResult[]
+  context: AgentTickContext
 }): string {
-  const { agentName, traceActionResults, context } = params;
+  const { agentName, traceActionResults, context } = params
 
   const resultsText = traceActionResults
     .map(
       (r, i) =>
         `${i + 1}. ${r.actionType}: ${r.success ? 'Success' : 'Failed'}
    ${r.summary || 'No details'}
-   ${r.result ? `Result: ${JSON.stringify(r.result)}` : ''}`
+   ${r.result ? `Result: ${JSON.stringify(r.result)}` : ''}`,
     )
-    .join('\n\n');
+    .join('\n\n')
 
   return `You are ${agentName}. You just completed an autonomous tick with the following actions:
 
@@ -432,5 +432,5 @@ Respond with JSON:
 {
   "summary": "Brief summary of actions taken and outcomes",
   "nextTickPriority": "trading | social | research"
-}`;
+}`
 }

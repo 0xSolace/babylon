@@ -1,20 +1,20 @@
-'use client';
-
-import { useEffect } from 'react';
-import { setupGlobalFetch } from '@/lib/api-fetch';
+import { useEffect } from 'react'
+import { getApiBaseUrl, isBrowser, isStaticBuild } from '@/config'
+import { setupGlobalFetch } from '@/lib/api-fetch'
 
 /**
  * Patches window.fetch to rewrite /api/ URLs for static deployments
  */
 export function ApiFetchProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
+    // Only setup global fetch if we're in a static build or have a different API base URL
     if (
-      process.env.NEXT_PUBLIC_STATIC_BUILD === 'true' ||
-      process.env.NEXT_PUBLIC_API_BASE_URL
+      isStaticBuild() ||
+      (isBrowser() && getApiBaseUrl() !== window.location.origin)
     ) {
-      setupGlobalFetch();
+      setupGlobalFetch()
     }
-  }, []);
+  }, [])
 
-  return <>{children}</>;
+  return <>{children}</>
 }

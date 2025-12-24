@@ -4,10 +4,10 @@
  * Provides evaluators for agent experience and learning.
  */
 
-import type { Plugin } from '@elizaos/core';
-import { marketOutcomeEvaluator } from './evaluators/marketOutcomeEvaluator';
+import type { Plugin } from '@elizaos/core'
+import { marketOutcomeEvaluator } from './evaluators/marketOutcomeEvaluator'
 
-export { marketOutcomeEvaluator };
+export { marketOutcomeEvaluator }
 
 /**
  * Experience plugin for ElizaOS
@@ -21,4 +21,4 @@ export const experiencePlugin: Plugin = {
   providers: [],
   evaluators: [marketOutcomeEvaluator],
   services: [],
-};
+}

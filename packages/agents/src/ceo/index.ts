@@ -10,4 +10,4 @@ export {
   type MonkeyKingConfig,
   ProposalStatus,
   ProposalType,
-} from './MonkeyKing';
+} from './MonkeyKing'

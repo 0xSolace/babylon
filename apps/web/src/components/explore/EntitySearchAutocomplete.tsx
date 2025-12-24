@@ -1,52 +1,50 @@
-'use client';
-
-import { cn } from '@babylon/shared';
-import { useQuery } from '@tanstack/react-query';
-import { ArrowRight, Search, X } from 'lucide-react';
-import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { Avatar } from '@/components/shared/Avatar';
+import { cn } from '@babylon/shared'
+import { useQuery } from '@tanstack/react-query'
+import { ArrowRight, Search, X } from 'lucide-react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { Avatar } from '@/components/shared/Avatar'
+import { useRouter } from '@/lib/navigation'
 
 /**
  * API user structure from registry API.
  */
 interface ApiUser {
-  id: string;
-  name: string;
-  username?: string;
-  bio?: string;
-  imageUrl?: string;
+  id: string
+  name: string
+  username?: string
+  bio?: string
+  imageUrl?: string
 }
 
 /**
  * API actor structure from registry API.
  */
 interface ApiActor {
-  id: string;
-  name: string;
-  description?: string;
-  imageUrl?: string;
-  role?: string;
+  id: string
+  name: string
+  description?: string
+  imageUrl?: string
+  role?: string
 }
 
 /**
  * Registry entity structure for search results.
  */
 interface RegistryEntity {
-  id: string;
-  name: string;
-  username?: string;
-  bio?: string;
-  imageUrl?: string;
-  type: 'user' | 'actor';
+  id: string
+  name: string
+  username?: string
+  bio?: string
+  imageUrl?: string
+  type: 'user' | 'actor'
 }
 
 /**
  * Registry search API response.
  */
 interface RegistrySearchResponse {
-  users?: ApiUser[];
-  actors?: ApiActor[];
+  users?: ApiUser[]
+  actors?: ApiActor[]
 }
 
 /**
@@ -79,13 +77,13 @@ interface RegistrySearchResponse {
  * ```
  */
 interface EntitySearchAutocompleteProps {
-  value: string;
-  onChange: (value: string) => void;
-  placeholder?: string;
-  className?: string;
-  compact?: boolean;
-  onNavigate?: () => void;
-  searchType?: 'all' | 'users' | 'actors' | 'agents' | 'apps';
+  value: string
+  onChange: (value: string) => void
+  placeholder?: string
+  className?: string
+  compact?: boolean
+  onNavigate?: () => void
+  searchType?: 'all' | 'users' | 'actors' | 'agents' | 'apps'
 }
 
 export function EntitySearchAutocomplete({
@@ -97,38 +95,38 @@ export function EntitySearchAutocomplete({
   onNavigate,
   searchType = 'all',
 }: EntitySearchAutocompleteProps) {
-  const router = useRouter();
-  const [debouncedValue, setDebouncedValue] = useState(value);
-  const [isOpen, setIsOpen] = useState(false);
-  const [selectedIndex, setSelectedIndex] = useState(-1);
-  const wrapperRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const router = useRouter()
+  const [debouncedValue, setDebouncedValue] = useState(value)
+  const [isOpen, setIsOpen] = useState(false)
+  const [selectedIndex, setSelectedIndex] = useState(-1)
+  const wrapperRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
 
   // Debounce the search value
   useEffect(() => {
     const timer = setTimeout(() => {
-      setDebouncedValue(value);
-    }, 250);
-    return () => clearTimeout(timer);
-  }, [value]);
+      setDebouncedValue(value)
+    }, 250)
+    return () => clearTimeout(timer)
+  }, [value])
 
   const { data: suggestions = [], isLoading: loading } = useQuery({
     queryKey: ['entitySearch', debouncedValue, searchType],
     queryFn: async (): Promise<RegistryEntity[]> => {
       if (!debouncedValue.trim()) {
-        return [];
+        return []
       }
 
       const params = new URLSearchParams({
         search: debouncedValue,
         type: searchType,
-      });
-      const response = await fetch(`/api/registry/all?${params.toString()}`);
+      })
+      const response = await fetch(`/api/registry/all?${params.toString()}`)
       if (!response.ok) {
-        return [];
+        return []
       }
 
-      const data: RegistrySearchResponse = await response.json();
+      const data: RegistrySearchResponse = await response.json()
       const users: RegistryEntity[] = (data.users || []).map((u: ApiUser) => ({
         id: u.id,
         name: u.name,
@@ -136,7 +134,7 @@ export function EntitySearchAutocomplete({
         bio: u.bio,
         imageUrl: u.imageUrl,
         type: 'user' as const,
-      }));
+      }))
       const actors: RegistryEntity[] = (data.actors || []).map(
         (a: ApiActor) => ({
           id: a.id,
@@ -145,23 +143,23 @@ export function EntitySearchAutocomplete({
           bio: a.description || a.role,
           imageUrl: a.imageUrl,
           type: 'actor' as const,
-        })
-      );
-      return [...users, ...actors].slice(0, 10);
+        }),
+      )
+      return [...users, ...actors].slice(0, 10)
     },
     enabled: !!debouncedValue.trim(),
-  });
+  })
 
   // Handle opening/closing dropdown based on suggestions
   useEffect(() => {
     if (suggestions.length > 0 && debouncedValue.trim()) {
-      setIsOpen(true);
-      setSelectedIndex(0);
+      setIsOpen(true)
+      setSelectedIndex(0)
     } else {
-      setIsOpen(false);
-      setSelectedIndex(-1);
+      setIsOpen(false)
+      setSelectedIndex(-1)
     }
-  }, [suggestions, debouncedValue]);
+  }, [suggestions, debouncedValue])
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -169,79 +167,79 @@ export function EntitySearchAutocomplete({
         wrapperRef.current &&
         !wrapperRef.current.contains(event.target as Node)
       ) {
-        setIsOpen(false);
-        setSelectedIndex(-1);
+        setIsOpen(false)
+        setSelectedIndex(-1)
       }
-    };
+    }
 
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
 
   const navigateToEntity = useCallback(
     (entity: RegistryEntity) => {
       // For users, use username if available, otherwise use ID
       // For actors, always use ID
-      const identifier = entity.username || entity.id;
-      router.push(`/profile/${identifier}`);
-      onNavigate?.();
-      setIsOpen(false);
-      setSelectedIndex(-1);
-      onChange('');
+      const identifier = entity.username || entity.id
+      router.push(`/profile/${identifier}`)
+      onNavigate?.()
+      setIsOpen(false)
+      setSelectedIndex(-1)
+      onChange('')
     },
-    [router, onNavigate, onChange]
-  );
+    [router, onNavigate, onChange],
+  )
 
   const handleKeyDown = useCallback(
     (event: React.KeyboardEvent<HTMLInputElement>) => {
       if (!isOpen) {
         if (event.key === 'Enter' && suggestions.length > 0 && suggestions[0]) {
-          event.preventDefault();
-          navigateToEntity(suggestions[0]);
+          event.preventDefault()
+          navigateToEntity(suggestions[0])
         }
-        return;
+        return
       }
 
       switch (event.key) {
         case 'ArrowDown':
-          event.preventDefault();
+          event.preventDefault()
           setSelectedIndex((prev) =>
-            prev < suggestions.length - 1 ? prev + 1 : suggestions.length - 1
-          );
-          break;
+            prev < suggestions.length - 1 ? prev + 1 : suggestions.length - 1,
+          )
+          break
         case 'ArrowUp':
-          event.preventDefault();
-          setSelectedIndex((prev) => (prev > 0 ? prev - 1 : 0));
-          break;
+          event.preventDefault()
+          setSelectedIndex((prev) => (prev > 0 ? prev - 1 : 0))
+          break
         case 'Enter':
-          event.preventDefault();
+          event.preventDefault()
           if (selectedIndex >= 0 && selectedIndex < suggestions.length) {
-            const entity = suggestions[selectedIndex];
+            const entity = suggestions[selectedIndex]
             if (entity) {
-              navigateToEntity(entity);
+              navigateToEntity(entity)
             }
           } else if (suggestions.length > 0) {
-            const entity = suggestions[0];
+            const entity = suggestions[0]
             if (entity) {
-              navigateToEntity(entity);
+              navigateToEntity(entity)
             }
           }
-          break;
+          break
         case 'Escape':
-          setIsOpen(false);
-          setSelectedIndex(-1);
-          break;
+          setIsOpen(false)
+          setSelectedIndex(-1)
+          break
       }
     },
-    [isOpen, suggestions, selectedIndex, navigateToEntity]
-  );
+    [isOpen, suggestions, selectedIndex, navigateToEntity],
+  )
 
   return (
     <div ref={wrapperRef} className={cn('relative', className)}>
       <div
         className={cn(
           'pointer-events-none absolute top-1/2 z-10 -translate-y-1/2',
-          compact ? 'left-3' : 'left-4'
+          compact ? 'left-3' : 'left-4',
         )}
       >
         <Search
@@ -256,7 +254,7 @@ export function EntitySearchAutocomplete({
         onChange={(event) => onChange(event.target.value)}
         onFocus={() => {
           if (value.trim() && suggestions.length > 0) {
-            setIsOpen(true);
+            setIsOpen(true)
           }
         }}
         onKeyDown={handleKeyDown}
@@ -267,26 +265,28 @@ export function EntitySearchAutocomplete({
           'transition-all duration-200',
           'text-foreground',
           compact ? 'py-1.5 pr-9 pl-9 text-sm' : 'py-2.5 pr-10 pl-11',
-          'rounded-full'
+          'rounded-full',
         )}
       />
       {value && (
         <button
+          type="button"
           onClick={() => {
-            onChange('');
-            setDebouncedValue('');
-            setIsOpen(false);
-            setSelectedIndex(-1);
+            onChange('')
+            setDebouncedValue('')
+            setIsOpen(false)
+            setSelectedIndex(-1)
           }}
           className={cn(
             'absolute top-1/2 z-10 -translate-y-1/2 p-1 transition-colors hover:bg-muted/50',
-            compact ? 'right-2' : 'right-3'
+            compact ? 'right-2' : 'right-3',
           )}
+          aria-label="Clear search"
         >
           <X
             className={cn(
               compact ? 'h-3.5 w-3.5' : 'h-4 w-4',
-              'text-muted-foreground'
+              'text-muted-foreground',
             )}
           />
         </button>
@@ -313,11 +313,12 @@ export function EntitySearchAutocomplete({
               </div>
               {suggestions.map((entity, index) => (
                 <button
+                  type="button"
                   key={entity.id}
                   onClick={() => navigateToEntity(entity)}
                   className={cn(
                     'flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50',
-                    selectedIndex === index && 'bg-muted/50'
+                    selectedIndex === index && 'bg-muted/50',
                   )}
                 >
                   <Avatar
@@ -358,5 +359,5 @@ export function EntitySearchAutocomplete({
         }
       `}</style>
     </div>
-  );
+  )
 }

@@ -11,14 +11,14 @@ import {
   countTokensSync,
   getModelTokenLimit,
   truncateToTokenLimitSync,
-} from '@babylon/api';
-import { logger } from '../shared/logger';
+} from '@babylon/api'
+import { logger } from '../shared/logger'
 
 export interface PromptSection {
-  name: string;
-  content: string;
-  priority: number; // Higher = more important, kept if truncation needed
-  minTokens?: number; // Minimum tokens to keep (for critical sections)
+  name: string
+  content: string
+  priority: number // Higher = more important, kept if truncation needed
+  minTokens?: number // Minimum tokens to keep (for critical sections)
 }
 
 /**
@@ -32,25 +32,25 @@ export interface PromptSection {
 export function buildSafePrompt(
   sections: PromptSection[],
   model = 'unsloth/Qwen3-4B-128K',
-  safetyMargin = 2000
+  safetyMargin = 2000,
 ): {
-  prompt: string;
-  truncated: boolean;
-  originalTokens: number;
-  finalTokens: number;
+  prompt: string
+  truncated: boolean
+  originalTokens: number
+  finalTokens: number
 } {
   // Get model limit
-  const modelLimit = getModelTokenLimit(model);
-  const maxPromptTokens = modelLimit - safetyMargin;
+  const modelLimit = getModelTokenLimit(model)
+  const maxPromptTokens = modelLimit - safetyMargin
 
   // Build initial prompt
   const fullPrompt = sections
     .sort((a, b) => b.priority - a.priority) // Highest priority first
     .map((s) => s.content)
-    .join('\n\n');
+    .join('\n\n')
 
   // Count tokens
-  const estimatedTokens = countTokensSync(fullPrompt);
+  const estimatedTokens = countTokensSync(fullPrompt)
 
   // Check if within limit
   if (estimatedTokens <= maxPromptTokens) {
@@ -59,7 +59,7 @@ export function buildSafePrompt(
       truncated: false,
       originalTokens: estimatedTokens,
       finalTokens: estimatedTokens,
-    };
+    }
   }
 
   // Need to truncate - use priority-based approach
@@ -69,53 +69,53 @@ export function buildSafePrompt(
       model,
       estimatedTokens,
       limit: maxPromptTokens,
-    }
-  );
+    },
+  )
 
   // Keep high-priority sections, truncate low-priority
-  const sortedSections = [...sections].sort((a, b) => b.priority - a.priority);
-  let currentTokens = 0;
-  const keptSections: string[] = [];
+  const sortedSections = [...sections].sort((a, b) => b.priority - a.priority)
+  let currentTokens = 0
+  const keptSections: string[] = []
 
   for (const section of sortedSections) {
-    const sectionTokens = countTokensSync(section.content);
-    const minRequired = section.minTokens || 0;
+    const sectionTokens = countTokensSync(section.content)
+    const minRequired = section.minTokens || 0
 
     if (currentTokens + sectionTokens <= maxPromptTokens) {
       // Fits completely
-      keptSections.push(section.content);
-      currentTokens += sectionTokens;
+      keptSections.push(section.content)
+      currentTokens += sectionTokens
     } else if (currentTokens + minRequired <= maxPromptTokens) {
       // Truncate this section to fit
-      const available = maxPromptTokens - currentTokens;
+      const available = maxPromptTokens - currentTokens
       const truncated = truncateToTokenLimitSync(section.content, available, {
         ellipsis: true,
-      });
-      keptSections.push(truncated.text);
-      currentTokens += truncated.tokens;
-      break; // Stop here
+      })
+      keptSections.push(truncated.text)
+      currentTokens += truncated.tokens
+      break // Stop here
     } else {
       // Can't fit even minimum - skip lower priority sections
-      break;
+      break
     }
   }
 
-  const finalPrompt = keptSections.join('\n\n');
-  const finalTokens = countTokensSync(finalPrompt);
+  const finalPrompt = keptSections.join('\n\n')
+  const finalTokens = countTokensSync(finalPrompt)
 
   logger.info('Prompt truncated successfully', {
     original: estimatedTokens,
     final: finalTokens,
     sectionsKept: keptSections.length,
     sectionsTotal: sections.length,
-  });
+  })
 
   return {
     prompt: finalPrompt,
     truncated: true,
     originalTokens: estimatedTokens,
     finalTokens,
-  };
+  }
 }
 
 /**
@@ -125,23 +125,23 @@ export function buildSafePrompt(
 export function buildPrompt(
   systemPrompt: string,
   userPrompt: string,
-  model = 'unsloth/Qwen3-4B-128K'
+  model = 'unsloth/Qwen3-4B-128K',
 ): string {
   const result = buildSafePrompt(
     [
       { name: 'system', content: systemPrompt, priority: 100, minTokens: 500 },
       { name: 'user', content: userPrompt, priority: 90, minTokens: 1000 },
     ],
-    model
-  );
+    model,
+  )
 
   if (result.truncated) {
     logger.warn(
-      `Prompt was truncated from ${result.originalTokens} to ${result.finalTokens} tokens`
-    );
+      `Prompt was truncated from ${result.originalTokens} to ${result.finalTokens} tokens`,
+    )
   }
 
-  return result.prompt;
+  return result.prompt
 }
 
 /**
@@ -150,14 +150,14 @@ export function buildPrompt(
 export function willPromptFit(
   prompt: string,
   model = 'unsloth/Qwen3-4B-128K',
-  safetyMargin = 2000
+  safetyMargin = 2000,
 ): { fits: boolean; tokens: number; limit: number } {
-  const tokens = countTokensSync(prompt);
-  const limit = getModelTokenLimit(model) - safetyMargin;
+  const tokens = countTokensSync(prompt)
+  const limit = getModelTokenLimit(model) - safetyMargin
 
   return {
     fits: tokens <= limit,
     tokens,
     limit,
-  };
+  }
 }

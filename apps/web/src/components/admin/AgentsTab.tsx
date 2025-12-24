@@ -1,7 +1,5 @@
-'use client';
-
-import { cn, logger } from '@babylon/shared';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { cn, logger } from '@babylon/shared'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Activity,
   AlertCircle,
@@ -16,78 +14,78 @@ import {
   Star,
   User,
   Zap,
-} from 'lucide-react';
-import { useState } from 'react';
-import { toast } from 'sonner';
+} from 'lucide-react'
+import { useState } from 'react'
+import { toast } from 'sonner'
 
 /**
  * Running agent structure for agents tab.
  */
 interface RunningAgent {
-  id: string;
-  name: string;
-  displayName: string;
-  description: string | null;
-  profileImageUrl: string | null;
-  creatorId: string;
-  creatorName: string | null;
-  modelTier: 'free' | 'pro' | 'external';
-  pointsBalance: number;
+  id: string
+  name: string
+  displayName: string
+  description: string | null
+  profileImageUrl: string | null
+  creatorId: string
+  creatorName: string | null
+  modelTier: 'free' | 'pro' | 'external'
+  pointsBalance: number
 
   // External agent specific
-  type?: 'EXTERNAL';
-  protocol?: string;
-  endpoint?: string | null;
-  isHealthy?: boolean;
-  lastHealthCheck?: Date | null;
+  type?: 'EXTERNAL'
+  protocol?: string
+  endpoint?: string | null
+  isHealthy?: boolean
+  lastHealthCheck?: Date | null
 
   // Autonomous status
-  autonomousEnabled: boolean;
-  autonomousTrading: boolean;
-  autonomousPosting: boolean;
-  autonomousCommenting: boolean;
-  autonomousDMs: boolean;
-  autonomousGroupChats: boolean;
+  autonomousEnabled: boolean
+  autonomousTrading: boolean
+  autonomousPosting: boolean
+  autonomousCommenting: boolean
+  autonomousDMs: boolean
+  autonomousGroupChats: boolean
 
   // Performance
-  lifetimePnL: number;
-  totalTrades: number;
-  winRate: number;
-  reputationScore: number;
-  averageFeedbackScore: number;
-  totalFeedbackCount: number;
+  lifetimePnL: number
+  totalTrades: number
+  winRate: number
+  reputationScore: number
+  averageFeedbackScore: number
+  totalFeedbackCount: number
 
   // Status
-  agentStatus: string | null;
-  errorMessage: string | null;
-  lastTickAt: Date | null;
-  lastChatAt: Date | null;
+  agentStatus: string | null
+  errorMessage: string | null
+  lastTickAt: Date | null
+  lastChatAt: Date | null
 
   // Timing
-  createdAt: Date;
-  updatedAt: Date;
+  createdAt: Date
+  updatedAt: Date
 
   // Recent logs count
-  recentLogsCount: number;
-  recentErrorsCount: number;
+  recentLogsCount: number
+  recentErrorsCount: number
 }
 
 /**
  * Agent statistics structure for agents tab.
  */
 interface AgentStats {
-  total: number;
-  running: number;
-  paused: number;
-  error: number;
-  totalActions24h: number;
-  external?: number;
-  externalHealthy?: number;
+  total: number
+  running: number
+  paused: number
+  error: number
+  totalActions24h: number
+  external?: number
+  externalHealthy?: number
 }
 
 interface AgentsResponse {
-  agents: RunningAgent[];
-  stats: AgentStats;
+  agents: RunningAgent[]
+  stats: AgentStats
 }
 
 /**
@@ -111,65 +109,65 @@ interface AgentsResponse {
  * @returns Agents tab element
  */
 export function AgentsTab() {
-  const queryClient = useQueryClient();
-  const [searchQuery, setSearchQuery] = useState('');
+  const queryClient = useQueryClient()
+  const [searchQuery, setSearchQuery] = useState('')
   const [filterStatus, setFilterStatus] = useState<
     'all' | 'running' | 'paused' | 'error'
-  >('all');
+  >('all')
   const [sortBy, setSortBy] = useState<
     'reputation' | 'pnl' | 'trades' | 'winRate' | 'name'
-  >('reputation');
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  >('reputation')
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
 
   const { data, isLoading, refetch, isFetching } = useQuery<AgentsResponse>({
     queryKey: ['admin', 'agents'],
     queryFn: async () => {
       const token =
-        typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
+        typeof window !== 'undefined' ? window.__oauth3AccessToken : null
       if (!token) {
-        logger.error('Not authenticated', undefined, 'AgentsTab');
-        throw new Error('Not authenticated');
+        logger.error('Not authenticated', undefined, 'AgentsTab')
+        throw new Error('Not authenticated')
       }
 
       const response = await fetch('/api/admin/agents', {
         headers: {
           Authorization: `Bearer ${token}`,
         },
-      });
+      })
 
       if (!response.ok) {
         logger.error(
           'Failed to fetch agents',
           { status: response.status },
-          'AgentsTab'
-        );
-        throw new Error('Failed to load agents');
+          'AgentsTab',
+        )
+        throw new Error('Failed to load agents')
       }
 
-      const result = await response.json();
-      return result.data;
+      const result = await response.json()
+      return result.data
     },
     refetchInterval: 30000, // Refresh every 30 seconds
-  });
+  })
 
   if (!data) {
-    throw new Error('Failed to load agents data');
+    throw new Error('Failed to load agents data')
   }
-  const agents = data.agents;
-  const stats = data.stats;
+  const agents = data.agents
+  const stats = data.stats
 
   const toggleAgentMutation = useMutation({
     mutationFn: async ({
       agentId,
       enable,
     }: {
-      agentId: string;
-      enable: boolean;
+      agentId: string
+      enable: boolean
     }) => {
       const token =
-        typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
+        typeof window !== 'undefined' ? window.__oauth3AccessToken : null
       if (!token) {
-        throw new Error('Not authenticated');
+        throw new Error('Not authenticated')
       }
 
       const response = await fetch(`/api/admin/agents/${agentId}/toggle`, {
@@ -179,29 +177,29 @@ export function AgentsTab() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ enabled: enable }),
-      });
+      })
 
       if (!response.ok) {
-        throw new Error('Failed to toggle agent');
+        throw new Error('Failed to toggle agent')
       }
 
-      return response.json();
+      return response.json()
     },
     onSuccess: (_, variables) => {
-      toast.success(`Agent ${variables.enable ? 'enabled' : 'paused'}`);
-      queryClient.invalidateQueries({ queryKey: ['admin', 'agents'] });
+      toast.success(`Agent ${variables.enable ? 'enabled' : 'paused'}`)
+      queryClient.invalidateQueries({ queryKey: ['admin', 'agents'] })
     },
     onError: () => {
-      toast.error('Failed to toggle agent');
+      toast.error('Failed to toggle agent')
     },
-  });
+  })
 
   const pauseAllMutation = useMutation({
     mutationFn: async () => {
       const token =
-        typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
+        typeof window !== 'undefined' ? window.__oauth3AccessToken : null
       if (!token) {
-        throw new Error('Not authenticated');
+        throw new Error('Not authenticated')
       }
 
       const response = await fetch('/api/admin/agents/pause-all', {
@@ -209,29 +207,29 @@ export function AgentsTab() {
         headers: {
           Authorization: `Bearer ${token}`,
         },
-      });
+      })
 
       if (!response.ok) {
-        throw new Error('Failed to pause all agents');
+        throw new Error('Failed to pause all agents')
       }
 
-      return response.json();
+      return response.json()
     },
     onSuccess: (result) => {
-      toast.success(`Paused ${result.data.paused} agents`);
-      queryClient.invalidateQueries({ queryKey: ['admin', 'agents'] });
+      toast.success(`Paused ${result.data.paused} agents`)
+      queryClient.invalidateQueries({ queryKey: ['admin', 'agents'] })
     },
     onError: () => {
-      toast.error('Failed to pause all agents');
+      toast.error('Failed to pause all agents')
     },
-  });
+  })
 
   const resumeAllMutation = useMutation({
     mutationFn: async () => {
       const token =
-        typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
+        typeof window !== 'undefined' ? window.__oauth3AccessToken : null
       if (!token) {
-        throw new Error('Not authenticated');
+        throw new Error('Not authenticated')
       }
 
       const response = await fetch('/api/admin/agents/resume-all', {
@@ -239,149 +237,136 @@ export function AgentsTab() {
         headers: {
           Authorization: `Bearer ${token}`,
         },
-      });
+      })
 
       if (!response.ok) {
-        throw new Error('Failed to resume all agents');
+        throw new Error('Failed to resume all agents')
       }
 
-      return response.json();
+      return response.json()
     },
     onSuccess: (result) => {
-      toast.success(`Resumed ${result.data.resumed} agents`);
-      queryClient.invalidateQueries({ queryKey: ['admin', 'agents'] });
+      toast.success(`Resumed ${result.data.resumed} agents`)
+      queryClient.invalidateQueries({ queryKey: ['admin', 'agents'] })
     },
     onError: () => {
-      toast.error('Failed to resume all agents');
+      toast.error('Failed to resume all agents')
     },
-  });
+  })
 
   const handlePauseAll = () => {
     if (
       !confirm(
-        '⚠️ EMERGENCY: Pause ALL autonomous agents? This will stop all autonomous trading, posting, and messaging immediately.'
+        '⚠️ EMERGENCY: Pause ALL autonomous agents? This will stop all autonomous trading, posting, and messaging immediately.',
       )
     ) {
-      return;
+      return
     }
-    pauseAllMutation.mutate();
-  };
+    pauseAllMutation.mutate()
+  }
 
   const handleResumeAll = () => {
     if (
       !confirm(
-        'Resume ALL autonomous agents? They will start trading, posting, and messaging again.'
+        'Resume ALL autonomous agents? They will start trading, posting, and messaging again.',
       )
     ) {
-      return;
+      return
     }
-    resumeAllMutation.mutate();
-  };
+    resumeAllMutation.mutate()
+  }
 
   const filteredAgents = agents
     .filter((a) => {
       if (filterStatus === 'running')
-        return a.autonomousEnabled && a.agentStatus === 'running';
+        return a.autonomousEnabled && a.agentStatus === 'running'
       if (filterStatus === 'paused')
-        return !a.autonomousEnabled || a.agentStatus === 'paused';
+        return !a.autonomousEnabled || a.agentStatus === 'paused'
       if (filterStatus === 'error')
-        return a.agentStatus === 'error' || a.recentErrorsCount > 0;
-      return true;
+        return a.agentStatus === 'error' || a.recentErrorsCount > 0
+      return true
     })
     .filter(
       (a) =>
         searchQuery === '' ||
         a.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         a.displayName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (a.creatorName &&
-          a.creatorName.toLowerCase().includes(searchQuery.toLowerCase()))
+        a.creatorName?.toLowerCase().includes(searchQuery.toLowerCase()),
     )
     .sort((a, b) => {
-      let aValue: number | string;
-      let bValue: number | string;
+      const compareNumbers = (aNum: number, bNum: number): number =>
+        sortOrder === 'asc' ? aNum - bNum : bNum - aNum
+
+      const compareStrings = (aStr: string, bStr: string): number =>
+        sortOrder === 'asc'
+          ? aStr.localeCompare(bStr)
+          : bStr.localeCompare(aStr)
 
       switch (sortBy) {
         case 'reputation':
-          aValue = a.reputationScore;
-          bValue = b.reputationScore;
-          break;
+          return compareNumbers(a.reputationScore, b.reputationScore)
         case 'pnl':
-          aValue = a.lifetimePnL;
-          bValue = b.lifetimePnL;
-          break;
+          return compareNumbers(a.lifetimePnL, b.lifetimePnL)
         case 'trades':
-          aValue = a.totalTrades;
-          bValue = b.totalTrades;
-          break;
+          return compareNumbers(a.totalTrades, b.totalTrades)
         case 'winRate':
-          aValue = a.winRate;
-          bValue = b.winRate;
-          break;
+          return compareNumbers(a.winRate, b.winRate)
         case 'name':
-          aValue = a.displayName.toLowerCase();
-          bValue = b.displayName.toLowerCase();
-          break;
+          return compareStrings(
+            a.displayName.toLowerCase(),
+            b.displayName.toLowerCase(),
+          )
         default:
-          return 0;
+          return 0
       }
-
-      if (typeof aValue === 'string' && typeof bValue === 'string') {
-        return sortOrder === 'asc'
-          ? aValue.localeCompare(bValue)
-          : bValue.localeCompare(aValue);
-      }
-
-      return sortOrder === 'asc'
-        ? (aValue as number) - (bValue as number)
-        : (bValue as number) - (aValue as number);
-    });
+    })
 
   const getStatusColor = (agent: RunningAgent) => {
     if (agent.agentStatus === 'error' || agent.recentErrorsCount > 0)
-      return 'text-red-500';
+      return 'text-red-500'
     if (agent.autonomousEnabled && agent.agentStatus === 'running')
-      return 'text-green-500';
-    return 'text-yellow-500';
-  };
+      return 'text-green-500'
+    return 'text-yellow-500'
+  }
 
   const getStatusIcon = (agent: RunningAgent) => {
     if (agent.agentStatus === 'error' || agent.recentErrorsCount > 0)
-      return <AlertCircle className="h-4 w-4" />;
+      return <AlertCircle className="h-4 w-4" />
     if (agent.autonomousEnabled && agent.agentStatus === 'running')
-      return <CheckCircle className="h-4 w-4" />;
-    return <Pause className="h-4 w-4" />;
-  };
+      return <CheckCircle className="h-4 w-4" />
+    return <Pause className="h-4 w-4" />
+  }
 
   const getStatusText = (agent: RunningAgent) => {
-    if (agent.agentStatus === 'error') return 'Error';
-    if (agent.recentErrorsCount > 0) return `${agent.recentErrorsCount} errors`;
+    if (agent.agentStatus === 'error') return 'Error'
+    if (agent.recentErrorsCount > 0) return `${agent.recentErrorsCount} errors`
     if (agent.autonomousEnabled && agent.agentStatus === 'running')
-      return 'Running';
-    if (agent.autonomousEnabled) return 'Enabled';
-    return 'Paused';
-  };
+      return 'Running'
+    if (agent.autonomousEnabled) return 'Enabled'
+    return 'Paused'
+  }
 
   const getRunDuration = (agent: RunningAgent) => {
-    if (!agent.lastTickAt) return 'Never run';
-    const now = new Date();
-    const lastTick = new Date(agent.lastTickAt);
-    const diffMs = now.getTime() - lastTick.getTime();
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMins / 60);
-    const diffDays = Math.floor(diffHours / 24);
+    if (!agent.lastTickAt) return 'Never run'
+    const now = new Date()
+    const lastTick = new Date(agent.lastTickAt)
+    const diffMs = now.getTime() - lastTick.getTime()
+    const diffMins = Math.floor(diffMs / 60000)
+    const diffHours = Math.floor(diffMins / 60)
+    const diffDays = Math.floor(diffHours / 24)
 
-    if (diffDays > 0) return `${diffDays}d ago`;
-    if (diffHours > 0) return `${diffHours}h ago`;
-    if (diffMins > 0) return `${diffMins}m ago`;
-    return 'Just now';
-  };
+    if (diffDays > 0) return `${diffDays}d ago`
+    if (diffHours > 0) return `${diffHours}h ago`
+    if (diffMins > 0) return `${diffMins}m ago`
+    return 'Just now'
+  }
 
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
         <div className="h-8 w-8 animate-spin rounded-full border-primary border-b-2" />
       </div>
-    );
+    )
   }
 
   return (
@@ -396,6 +381,7 @@ export function AgentsTab() {
         </div>
         <div className="flex items-center gap-2">
           <button
+            type="button"
             onClick={handlePauseAll}
             disabled={pauseAllMutation.isPending}
             className="flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 font-medium text-white transition-colors hover:bg-red-700 disabled:opacity-50"
@@ -404,6 +390,7 @@ export function AgentsTab() {
             Emergency: Pause All
           </button>
           <button
+            type="button"
             onClick={handleResumeAll}
             disabled={resumeAllMutation.isPending}
             className="flex items-center gap-2 rounded-lg bg-green-600 px-4 py-2 font-medium text-white transition-colors hover:bg-green-700 disabled:opacity-50"
@@ -412,6 +399,7 @@ export function AgentsTab() {
             Resume All
           </button>
           <button
+            type="button"
             onClick={() => refetch()}
             disabled={isFetching}
             className="rounded-lg p-2 transition-colors hover:bg-accent"
@@ -503,13 +491,14 @@ export function AgentsTab() {
           <div className="flex gap-2">
             {(['all', 'running', 'paused', 'error'] as const).map((status) => (
               <button
+                type="button"
                 key={status}
                 onClick={() => setFilterStatus(status)}
                 className={cn(
                   'rounded-lg px-4 py-2 font-medium text-sm transition-all',
                   filterStatus === status
                     ? 'bg-primary text-primary-foreground'
-                    : 'bg-muted hover:bg-muted/80'
+                    : 'bg-muted hover:bg-muted/80',
                 )}
               >
                 {status.charAt(0).toUpperCase() + status.slice(1)}
@@ -525,20 +514,21 @@ export function AgentsTab() {
             {(['reputation', 'pnl', 'trades', 'winRate', 'name'] as const).map(
               (sort) => (
                 <button
+                  type="button"
                   key={sort}
                   onClick={() => {
                     if (sortBy === sort) {
-                      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+                      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc')
                     } else {
-                      setSortBy(sort);
-                      setSortOrder(sort === 'name' ? 'asc' : 'desc');
+                      setSortBy(sort)
+                      setSortOrder(sort === 'name' ? 'asc' : 'desc')
                     }
                   }}
                   className={cn(
                     'flex items-center gap-1 rounded-lg px-3 py-1.5 font-medium text-sm transition-all',
                     sortBy === sort
                       ? 'bg-primary text-primary-foreground'
-                      : 'bg-muted hover:bg-muted/80'
+                      : 'bg-muted hover:bg-muted/80',
                   )}
                 >
                   {sort === 'reputation' && <Star className="h-3 w-3" />}
@@ -550,7 +540,7 @@ export function AgentsTab() {
                       <ArrowDown className="h-3 w-3" />
                     ))}
                 </button>
-              )
+              ),
             )}
           </div>
         </div>
@@ -589,7 +579,7 @@ export function AgentsTab() {
                     <div
                       className={cn(
                         'flex items-center gap-2 rounded-full px-3 py-1 font-medium text-sm',
-                        getStatusColor(agent)
+                        getStatusColor(agent),
                       )}
                     >
                       {getStatusIcon(agent)}
@@ -616,7 +606,7 @@ export function AgentsTab() {
                               'flex items-center gap-1 rounded px-2 py-1 text-xs',
                               agent.isHealthy
                                 ? 'bg-green-500/20 text-green-400'
-                                : 'bg-red-500/20 text-red-400'
+                                : 'bg-red-500/20 text-red-400',
                             )}
                           >
                             {agent.isHealthy ? (
@@ -675,7 +665,7 @@ export function AgentsTab() {
                               ? 'text-yellow-500'
                               : agent.reputationScore >= 40
                                 ? 'text-orange-500'
-                                : 'text-red-500'
+                                : 'text-red-500',
                         )}
                       >
                         {Math.round(agent.reputationScore)}/100
@@ -711,7 +701,7 @@ export function AgentsTab() {
                           'font-mono text-xs',
                           agent.lifetimePnL >= 0
                             ? 'text-green-500'
-                            : 'text-red-500'
+                            : 'text-red-500',
                         )}
                       >
                         {agent.lifetimePnL >= 0 ? '+' : ''}$
@@ -773,19 +763,20 @@ export function AgentsTab() {
                 {/* Actions */}
                 <div className="flex flex-col gap-2">
                   <button
+                    type="button"
                     onClick={(e) => {
-                      e.stopPropagation();
+                      e.stopPropagation()
                       toggleAgentMutation.mutate({
                         agentId: agent.id,
                         enable: !agent.autonomousEnabled,
-                      });
+                      })
                     }}
                     disabled={toggleAgentMutation.isPending}
                     className={cn(
                       'rounded-lg p-2 transition-colors',
                       agent.autonomousEnabled
                         ? 'bg-yellow-500/20 text-yellow-500 hover:bg-yellow-500/30'
-                        : 'bg-green-500/20 text-green-500 hover:bg-green-500/30'
+                        : 'bg-green-500/20 text-green-500 hover:bg-green-500/30',
                     )}
                     title={agent.autonomousEnabled ? 'Pause' : 'Resume'}
                   >
@@ -812,5 +803,5 @@ export function AgentsTab() {
         )}
       </div>
     </div>
-  );
+  )
 }

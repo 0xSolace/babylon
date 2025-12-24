@@ -7,17 +7,20 @@
  * - Agent identity and wallet management
  * - Plugin system for extending agent capabilities
  * - Agent0 integration for on-chain reputation
+ * - TEE configuration for production security
  */
 
 // Agent0 integration (feedback/reputation)
-export * from './agent0';
+export * from './agent0'
 // Autonomous services
-export * from './autonomous';
+export * from './autonomous'
 // Communication
-export * from './communication/CommunicationHub';
-export * from './communication/EventBus';
+export * from './communication/CommunicationHub'
+export * from './communication/EventBus'
+// Configuration (TEE settings)
+export * from './config'
 // Errors
-export * from './errors';
+export * from './errors'
 // External agent adapter
 export {
   type AgentResponse,
@@ -27,48 +30,51 @@ export {
   type ExternalAgentMessage,
   getExternalAgentAdapter,
   type Protocol,
-} from './external/ExternalAgentAdapter';
+} from './external/ExternalAgentAdapter'
 // Farcaster native posting
-export * from './farcaster';
+export * from './farcaster'
 // Identity and wallet management
-export * from './identity/AgentIdentityService';
-export * from './identity/AgentWalletService';
-export * from './identity/NPCIdentityService';
-export * from './identity/NPCTokenWalletService';
+export * from './identity/AgentIdentityService'
+export * from './identity/AgentWalletService'
+export * from './identity/NPCIdentityService'
+export * from './identity/NPCTokenWalletService'
 // LLM integrations
-export * from './llm';
+export * from './llm'
 // Plugins - Babylon plugin is the main export
 export {
   babylonPlugin,
   initializeAgentA2AClient,
-} from './plugins/babylon';
-export type { BabylonRuntime } from './plugins/babylon/types';
+} from './plugins/babylon'
+export type { BabylonRuntime } from './plugins/babylon/types'
 // Plugin utilities - Jeju Compute (decentralized inference)
-export { jejuComputePlugin } from './plugins/jeju-compute';
-export * from './plugins/plugin-autonomy/src';
-export * from './plugins/plugin-experience/src';
+export { jejuComputePlugin } from './plugins/jeju-compute'
+export * from './plugins/plugin-autonomy/src'
+export * from './plugins/plugin-experience/src'
 // Plugin sub-exports for trajectory logging, autonomy, experience
-export * from './plugins/plugin-trajectory-logger/src';
+export * from './plugins/plugin-trajectory-logger/src'
 // Decentralized Agent Runner
-export * from './runner';
+export * from './runner'
 // Runtime
-export * from './runtime/AgentRuntimeManager';
+export * from './runtime/AgentRuntimeManager'
 // Services
-export * from './services';
+export * from './services'
 // Templates loader
-export * from './templates-loader';
+export * from './templates-loader'
 // Training utilities (RL model fetching, config)
-export * from './training';
+export * from './training'
 // Core types
-export * from './types';
-export * from './types/agent-template';
-export * from './types/goals';
+export * from './types'
+export type { AgentDiscoveryFilter } from './types/agent-registry'
+// Explicitly export AgentStatus, AgentType, and AgentDiscoveryFilter for better TypeScript resolution
+export { AgentStatus, AgentType } from './types/agent-registry'
+export * from './types/agent-template'
+export * from './types/goals'
 // Utils
-export * from './utils/createTestAgent';
-export * from './utils/prompt-builder';
+export * from './utils/createTestAgent'
+export * from './utils/prompt-builder'
 
 // =============================================================================
 // AI CEO - MonkeyKing
 // =============================================================================
 
-export * from './ceo';
+export * from './ceo'

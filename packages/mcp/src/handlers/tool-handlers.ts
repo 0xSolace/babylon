@@ -4,17 +4,21 @@
  * Handlers for executing MCP tools
  */
 
-import type { JsonRpcParams, JsonRpcRequest } from '@babylon/a2a';
 import {
   handleAppealBanWithEscrow,
   handleCreateEscrowPayment,
   handleListEscrowPayments,
   handleRefundEscrowPayment,
   handleVerifyEscrowPayment,
-} from '@babylon/a2a';
-import { db, eq, perpMarketSnapshots, users } from '@babylon/db';
-import { StaticDataRegistry } from '@babylon/engine';
-import type { JsonValue, StringRecord } from '@babylon/shared';
+} from '@babylon/a2a'
+import { db, eq, perpMarketSnapshots, users } from '@babylon/db'
+import { StaticDataRegistry } from '@babylon/engine'
+import type {
+  JsonRpcRequest,
+  JsonRpcResponse,
+  JsonValue,
+  StringRecord,
+} from '@babylon/shared'
 import {
   AuthorizationError,
   generateSnowflakeId,
@@ -22,7 +26,21 @@ import {
   logger,
   NotFoundError,
   ValidationError,
-} from '@babylon/shared';
+} from '@babylon/shared'
+
+/**
+ * Helper to extract result from JsonRpcResponse, throwing if error or no result
+ */
+function extractResult<T>(response: JsonRpcResponse<T>): T {
+  if (response.error) {
+    throw new Error(response.error.message)
+  }
+  if (!response.result) {
+    throw new Error('No result in response')
+  }
+  return response.result
+}
+
 import type {
   AcceptGroupInviteArgs,
   AcceptGroupInviteResult,
@@ -177,8 +195,23 @@ import type {
   UpdateProfileResult,
   VerifyEscrowPaymentArgs,
   VerifyEscrowPaymentResult,
-} from '../types/mcp';
+} from '../types/mcp'
 import {
+  AppealBanResponseSchema,
+  BuySharesResponseSchema,
+  ClosePositionResponseSchema,
+  GetFavoritePostsResponseSchema,
+  GetLeaderboardResponseSchema,
+  GetReputationBreakdownResponseSchema,
+  GetReputationResponseSchema,
+  GetTradeHistoryResponseSchema,
+  GetTradesResponseSchema,
+  OpenPositionResponseSchema,
+  PaymentReceiptResponseSchema,
+  PaymentRequestResponseSchema,
+  PlaceBetResponseSchema,
+  SellSharesResponseSchema,
+  TransferPointsResponseSchema,
   validateAcceptGroupInviteArgs,
   validateAppealBanArgs,
   validateAppealBanWithEscrowArgs,
@@ -255,27 +288,27 @@ import {
   validateUnmuteUserArgs,
   validateUpdateProfileArgs,
   validateVerifyEscrowPaymentArgs,
-} from '../utils/tool-args-validation';
+} from '../utils/tool-args-validation'
 
 /**
  * Execute get_markets tool
  */
 export async function executeGetMarkets(
   args: GetMarketsArgs,
-  agent: AuthenticatedAgent
+  agent: AuthenticatedAgent,
 ): Promise<GetMarketsResult> {
   logger.debug(
     `Agent ${agent.agentId} requesting markets (type: ${args.type || 'all'})`,
     undefined,
-    'MCP'
-  );
+    'MCP',
+  )
 
-  const where: { resolved?: boolean } = {};
+  const where: { resolved?: boolean } = {}
   if (args.type === 'prediction') {
     // Only prediction markets
   } else if (args.type === 'perpetuals') {
     // Only perpetuals (not implemented yet)
-    return { markets: [] };
+    return { markets: [] }
   }
 
   const markets = await db.market.findMany({
@@ -285,18 +318,18 @@ export async function executeGetMarkets(
     },
     orderBy: { createdAt: 'desc' },
     take: 50,
-  });
+  })
 
   return {
     markets: markets.map((m) => ({
       id: m.id,
-      question: m.question,
-      yesShares: m.yesShares.toString(),
-      noShares: m.noShares.toString(),
-      liquidity: m.liquidity.toString(),
-      endDate: m.endDate.toISOString(),
+      question: m.question ?? '',
+      yesShares: String(m.yesShares ?? '0'),
+      noShares: String(m.noShares ?? '0'),
+      liquidity: String(m.liquidity),
+      endDate: (m.endDate ?? new Date()).toISOString(),
     })),
-  };
+  }
 }
 
 /**
@@ -304,12 +337,12 @@ export async function executeGetMarkets(
  */
 export async function executePlaceBet(
   agent: AuthenticatedAgent,
-  args: PlaceBetArgs
+  args: PlaceBetArgs,
 ): Promise<PlaceBetResult> {
-  logger.info(`Agent ${agent.agentId} placing bet:`, args, 'MCP');
+  logger.info(`Agent ${agent.agentId} placing bet:`, args, 'MCP')
 
   // Call the existing market API logic
-  const apiBaseUrl = getAPIBaseUrl();
+  const apiBaseUrl = getAPIBaseUrl()
   const response = await fetch(
     `${apiBaseUrl}/api/markets/${args.marketId}/bet`,
     {
@@ -322,18 +355,19 @@ export async function executePlaceBet(
         side: args.side,
         amount: args.amount,
       }),
-    }
-  );
+    },
+  )
 
-  const result = (await response.json()) as PlaceBetResult;
-  return result;
+  const json: unknown = await response.json()
+  const result = PlaceBetResponseSchema.parse(json)
+  return result
 }
 
 /**
  * Execute get_balance tool
  */
 export async function executeGetBalance(
-  agent: AuthenticatedAgent
+  agent: AuthenticatedAgent,
 ): Promise<GetBalanceResult> {
   const [user] = await db
     .select({
@@ -342,16 +376,16 @@ export async function executeGetBalance(
     })
     .from(users)
     .where(eq(users.id, agent.userId))
-    .limit(1);
+    .limit(1)
 
   if (!user) {
-    throw new NotFoundError('User', agent.userId);
+    throw new NotFoundError('User', agent.userId)
   }
 
   return {
     balance: user.virtualBalance.toString(),
     lifetimePnL: user.lifetimePnL.toString(),
-  };
+  }
 }
 
 /**
@@ -359,38 +393,38 @@ export async function executeGetBalance(
  */
 export async function executeGetPositions(
   agent: AuthenticatedAgent,
-  args: GetPositionsArgs
+  args: GetPositionsArgs,
 ): Promise<GetPositionsResult> {
   const where: {
-    userId: { equals: string };
-    marketId?: { equals: string };
+    userId: { equals: string }
+    marketId?: { equals: string }
   } = {
     userId: { equals: agent.userId },
-  };
+  }
 
   if (args.marketId) {
-    where.marketId = { equals: args.marketId };
+    where.marketId = { equals: args.marketId }
   }
 
   const positionsRaw = await db.position.findMany({
     where,
     take: args.limit,
     skip: args.offset,
-  });
+  })
 
   // Get markets separately
   const marketIds = positionsRaw
     .map((p) => p.marketId)
-    .filter((id): id is string => !!id);
+    .filter((id): id is string => !!id)
   const markets =
     marketIds.length > 0
       ? await db.market.findMany({
           where: { id: { in: marketIds } },
           select: { id: true, question: true },
         })
-      : [];
+      : []
 
-  const marketsMap = new Map(markets.map((m) => [m.id, m]));
+  const marketsMap = new Map(markets.map((m) => [m.id, m]))
 
   return {
     positions: positionsRaw.map((p) => ({
@@ -401,7 +435,7 @@ export async function executeGetPositions(
       shares: p.shares.toString(),
       avgPrice: p.avgPrice.toString(),
     })),
-  };
+  }
 }
 
 /**
@@ -409,12 +443,12 @@ export async function executeGetPositions(
  */
 export async function executeClosePosition(
   agent: AuthenticatedAgent,
-  args: ClosePositionArgs
+  args: ClosePositionArgs,
 ): Promise<ClosePositionResult> {
-  logger.info(`Agent ${agent.agentId} closing position:`, args, 'MCP');
+  logger.info(`Agent ${agent.agentId} closing position:`, args, 'MCP')
 
   // Call the existing close position API logic
-  const apiBaseUrl = getAPIBaseUrl();
+  const apiBaseUrl = getAPIBaseUrl()
   const response = await fetch(
     `${apiBaseUrl}/api/positions/${args.positionId}/close`,
     {
@@ -425,11 +459,12 @@ export async function executeClosePosition(
       body: JSON.stringify({
         userId: agent.userId,
       }),
-    }
-  );
+    },
+  )
 
-  const result = (await response.json()) as ClosePositionResult;
-  return result;
+  const json: unknown = await response.json()
+  const result = ClosePositionResponseSchema.parse(json)
+  return result
 }
 
 /**
@@ -437,33 +472,36 @@ export async function executeClosePosition(
  */
 export async function executeGetMarketData(
   agent: AuthenticatedAgent,
-  args: GetMarketDataArgs
+  args: GetMarketDataArgs,
 ): Promise<GetMarketDataResult> {
   logger.debug(
     `Agent ${agent.agentId} requesting market data for ${args.marketId}`,
     undefined,
-    'MCP'
-  );
+    'MCP',
+  )
 
   const market = await db.market.findUnique({
     where: { id: args.marketId },
-  });
+  })
 
   if (!market) {
-    throw new NotFoundError('Market', args.marketId);
+    throw new NotFoundError('Market', args.marketId)
   }
 
   return {
     id: market.id,
-    question: market.question,
-    description: market.description,
-    yesShares: market.yesShares.toString(),
-    noShares: market.noShares.toString(),
-    liquidity: market.liquidity.toString(),
-    resolved: market.resolved,
-    resolution: market.resolution,
-    endDate: market.endDate.toISOString(),
-  };
+    question: market.question ?? '',
+    description: market.description ?? null,
+    yesShares: String(market.yesShares ?? '0'),
+    noShares: String(market.noShares ?? '0'),
+    liquidity: String(market.liquidity),
+    resolved: market.resolved ?? false,
+    resolution:
+      market.resolution === null
+        ? null
+        : market.resolution === 'true' || market.resolution === 'yes',
+    endDate: (market.endDate ?? new Date()).toISOString(),
+  } satisfies GetMarketDataResult
 }
 
 /**
@@ -471,11 +509,11 @@ export async function executeGetMarketData(
  */
 export async function executeQueryFeed(
   agent: AuthenticatedAgent,
-  args: QueryFeedArgs
+  args: QueryFeedArgs,
 ): Promise<QueryFeedResult> {
-  logger.debug(`Agent ${agent.agentId} querying feed`, args, 'MCP');
+  logger.debug(`Agent ${agent.agentId} querying feed`, args, 'MCP')
 
-  const now = new Date();
+  const now = new Date()
   const posts = await db.post.findMany({
     where: args.questionId
       ? {
@@ -490,7 +528,7 @@ export async function executeQueryFeed(
         },
     orderBy: { timestamp: 'desc' },
     take: args.limit || 20,
-  });
+  })
 
   return {
     posts: posts.map((p) => ({
@@ -499,7 +537,7 @@ export async function executeQueryFeed(
       authorId: p.authorId,
       timestamp: p.timestamp.toISOString(),
     })),
-  };
+  }
 }
 
 // ============================================================================
@@ -511,9 +549,9 @@ export async function executeQueryFeed(
  */
 export async function executeBuyShares(
   agent: AuthenticatedAgent,
-  args: BuySharesArgs
+  args: BuySharesArgs,
 ): Promise<BuySharesResult> {
-  const apiBaseUrl = getAPIBaseUrl();
+  const apiBaseUrl = getAPIBaseUrl()
   const response = await fetch(
     `${apiBaseUrl}/api/markets/predictions/${args.marketId}/buy`,
     {
@@ -524,9 +562,10 @@ export async function executeBuyShares(
         outcome: args.outcome,
         amount: args.amount,
       }),
-    }
-  );
-  return (await response.json()) as BuySharesResult;
+    },
+  )
+  const json: unknown = await response.json()
+  return BuySharesResponseSchema.parse(json)
 }
 
 /**
@@ -534,14 +573,14 @@ export async function executeBuyShares(
  */
 export async function executeSellShares(
   agent: AuthenticatedAgent,
-  args: SellSharesArgs
+  args: SellSharesArgs,
 ): Promise<SellSharesResult> {
-  const apiBaseUrl = getAPIBaseUrl();
+  const apiBaseUrl = getAPIBaseUrl()
   const position = await db.position.findUnique({
     where: { id: args.positionId },
-  });
+  })
   if (!position || position.userId !== agent.userId) {
-    throw new NotFoundError('Position', args.positionId);
+    throw new NotFoundError('Position', args.positionId)
   }
   const response = await fetch(
     `${apiBaseUrl}/api/markets/predictions/${position.marketId}/sell`,
@@ -552,9 +591,10 @@ export async function executeSellShares(
         userId: agent.userId,
         shares: args.shares,
       }),
-    }
-  );
-  return (await response.json()) as SellSharesResult;
+    },
+  )
+  const json: unknown = await response.json()
+  return SellSharesResponseSchema.parse(json)
 }
 
 /**
@@ -562,9 +602,9 @@ export async function executeSellShares(
  */
 export async function executeOpenPosition(
   agent: AuthenticatedAgent,
-  args: OpenPositionArgs
+  args: OpenPositionArgs,
 ): Promise<OpenPositionResult> {
-  const apiBaseUrl = getAPIBaseUrl();
+  const apiBaseUrl = getAPIBaseUrl()
   const response = await fetch(`${apiBaseUrl}/api/markets/perps/open`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -575,8 +615,9 @@ export async function executeOpenPosition(
       amount: args.amount,
       leverage: args.leverage,
     }),
-  });
-  return (await response.json()) as OpenPositionResult;
+  })
+  const json: unknown = await response.json()
+  return OpenPositionResponseSchema.parse(json)
 }
 
 /**
@@ -584,24 +625,25 @@ export async function executeOpenPosition(
  */
 export async function executeGetMarketPrices(
   _agent: AuthenticatedAgent,
-  args: GetMarketPricesArgs
+  args: GetMarketPricesArgs,
 ): Promise<GetMarketPricesResult> {
   const market = await db.market.findUnique({
     where: { id: args.marketId },
-  });
+  })
   if (!market) {
-    throw new NotFoundError('Market', args.marketId);
+    throw new NotFoundError('Market', args.marketId)
   }
-  const totalShares = Number(market.yesShares) + Number(market.noShares);
-  const yesPrice =
-    totalShares > 0 ? Number(market.yesShares) / totalShares : 0.5;
-  const noPrice = totalShares > 0 ? Number(market.noShares) / totalShares : 0.5;
+  const yesShares = market.yesShares ?? 0
+  const noShares = market.noShares ?? 0
+  const totalShares = Number(yesShares) + Number(noShares)
+  const yesPrice = totalShares > 0 ? Number(yesShares) / totalShares : 0.5
+  const noPrice = totalShares > 0 ? Number(noShares) / totalShares : 0.5
   return {
     marketId: market.id,
     yesPrice,
     noPrice,
     timestamp: new Date().toISOString(),
-  };
+  }
 }
 
 /**
@@ -611,18 +653,22 @@ export async function executeGetMarketPrices(
  */
 export async function executeGetPerpetuals(
   _agent: AuthenticatedAgent,
-  _args: GetPerpetualsArgs
+  _args: GetPerpetualsArgs,
 ): Promise<GetPerpetualsResult> {
-  const snapshots = await db.select().from(perpMarketSnapshots);
+  const snapshots = await db.select().from(perpMarketSnapshots)
 
   return {
-    markets: snapshots.map((snapshot) => ({
-      ticker: snapshot.ticker,
-      currentPrice: snapshot.currentPrice,
-      priceChange24h: snapshot.changePercent24h,
-      volume24h: snapshot.volume24h,
+    markets: snapshots.map((snapshot: Record<string, unknown>) => ({
+      ticker: String(snapshot.ticker ?? ''),
+      currentPrice: Number(snapshot.currentPrice ?? 0),
+      priceChange24h:
+        snapshot.changePercent24h != null
+          ? Number(snapshot.changePercent24h)
+          : undefined,
+      volume24h:
+        snapshot.volume24h != null ? Number(snapshot.volume24h) : undefined,
     })),
-  };
+  }
 }
 
 /**
@@ -630,24 +676,15 @@ export async function executeGetPerpetuals(
  */
 export async function executeGetTrades(
   _agent: AuthenticatedAgent,
-  args: GetTradesArgs
+  args: GetTradesArgs,
 ): Promise<GetTradesResult> {
-  const apiBaseUrl = getAPIBaseUrl();
-  const url = new URL(`${apiBaseUrl}/api/trades`);
-  if (args.marketId) url.searchParams.set('marketId', args.marketId);
-  if (args.limit) url.searchParams.set('limit', args.limit.toString());
-  const response = await fetch(url.toString());
-  const data = (await response.json()) as {
-    trades: Array<{
-      id: string;
-      marketId: string;
-      userId: string;
-      side: boolean;
-      shares: string;
-      price: string;
-      timestamp: Date | string;
-    }>;
-  };
+  const apiBaseUrl = getAPIBaseUrl()
+  const url = new URL(`${apiBaseUrl}/api/trades`)
+  if (args.marketId) url.searchParams.set('marketId', args.marketId)
+  if (args.limit) url.searchParams.set('limit', args.limit.toString())
+  const response = await fetch(url.toString())
+  const json: unknown = await response.json()
+  const data = GetTradesResponseSchema.parse(json)
   return {
     trades: data.trades.map((trade) => ({
       id: trade.id,
@@ -661,7 +698,7 @@ export async function executeGetTrades(
           ? trade.timestamp.toISOString()
           : trade.timestamp,
     })),
-  };
+  }
 }
 
 /**
@@ -669,24 +706,16 @@ export async function executeGetTrades(
  */
 export async function executeGetTradeHistory(
   _agent: AuthenticatedAgent,
-  args: GetTradeHistoryArgs
+  args: GetTradeHistoryArgs,
 ): Promise<GetTradeHistoryResult> {
-  const apiBaseUrl = getAPIBaseUrl();
+  const apiBaseUrl = getAPIBaseUrl()
   const url = new URL(
-    `${apiBaseUrl}/api/markets/predictions/${args.userId}/trades`
-  );
-  if (args.limit) url.searchParams.set('limit', args.limit.toString());
-  const response = await fetch(url.toString());
-  const data = (await response.json()) as {
-    trades: Array<{
-      id: string;
-      marketId: string;
-      side: boolean;
-      shares: string;
-      price: string;
-      timestamp: Date | string;
-    }>;
-  };
+    `${apiBaseUrl}/api/markets/predictions/${args.userId}/trades`,
+  )
+  if (args.limit) url.searchParams.set('limit', args.limit.toString())
+  const response = await fetch(url.toString())
+  const json: unknown = await response.json()
+  const data = GetTradeHistoryResponseSchema.parse(json)
   return {
     trades: data.trades.map((trade) => ({
       id: trade.id,
@@ -699,7 +728,7 @@ export async function executeGetTradeHistory(
           ? trade.timestamp.toISOString()
           : trade.timestamp,
     })),
-  };
+  }
 }
 
 // ============================================================================
@@ -711,9 +740,9 @@ export async function executeGetTradeHistory(
  */
 export async function executeCreatePost(
   agent: AuthenticatedAgent,
-  args: CreatePostArgs
+  args: CreatePostArgs,
 ): Promise<CreatePostResult> {
-  const postId = await generateSnowflakeId();
+  const postId = await generateSnowflakeId()
   const post = await db.post.create({
     data: {
       id: postId,
@@ -722,12 +751,12 @@ export async function executeCreatePost(
       type: args.type || 'post',
       timestamp: new Date(),
     },
-  });
+  })
   return {
     success: true,
     postId: post.id,
     content: post.content,
-  };
+  }
 }
 
 /**
@@ -735,24 +764,24 @@ export async function executeCreatePost(
  */
 export async function executeDeletePost(
   agent: AuthenticatedAgent,
-  args: DeletePostArgs
+  args: DeletePostArgs,
 ): Promise<DeletePostResult> {
-  const post = await db.post.findUnique({ where: { id: args.postId } });
+  const post = await db.post.findUnique({ where: { id: args.postId } })
   if (!post) {
-    throw new NotFoundError('Post', args.postId);
+    throw new NotFoundError('Post', args.postId)
   }
   if (post.authorId !== agent.userId) {
     throw new AuthorizationError(
       'You can only delete your own posts',
       'Post',
-      'delete'
-    );
+      'delete',
+    )
   }
   await db.post.update({
     where: { id: args.postId },
     data: { deletedAt: new Date() },
-  });
-  return { success: true };
+  })
+  return { success: true }
 }
 
 /**
@@ -760,7 +789,7 @@ export async function executeDeletePost(
  */
 export async function executeLikePost(
   agent: AuthenticatedAgent,
-  args: LikePostArgs
+  args: LikePostArgs,
 ): Promise<LikePostResult> {
   const existing = await db.reaction.findFirst({
     where: {
@@ -768,9 +797,9 @@ export async function executeLikePost(
       userId: agent.userId,
       type: 'like',
     },
-  });
+  })
   if (existing) {
-    return { success: true, liked: true };
+    return { success: true, liked: true }
   }
   await db.reaction.create({
     data: {
@@ -779,8 +808,8 @@ export async function executeLikePost(
       userId: agent.userId,
       type: 'like',
     },
-  });
-  return { success: true, liked: true };
+  })
+  return { success: true, liked: true }
 }
 
 /**
@@ -788,7 +817,7 @@ export async function executeLikePost(
  */
 export async function executeUnlikePost(
   agent: AuthenticatedAgent,
-  args: UnlikePostArgs
+  args: UnlikePostArgs,
 ): Promise<UnlikePostResult> {
   // agent used implicitly for userId in deleteMany where clause
   await db.reaction.deleteMany({
@@ -797,8 +826,8 @@ export async function executeUnlikePost(
       userId: agent.userId,
       type: 'like',
     },
-  });
-  return { success: true };
+  })
+  return { success: true }
 }
 
 /**
@@ -806,17 +835,17 @@ export async function executeUnlikePost(
  */
 export async function executeSharePost(
   agent: AuthenticatedAgent,
-  args: SharePostArgs
+  args: SharePostArgs,
 ): Promise<SharePostResult> {
-  const shareId = await generateSnowflakeId();
+  const shareId = await generateSnowflakeId()
   await db.share.create({
     data: {
       id: shareId,
       userId: agent.userId,
       postId: args.postId,
     },
-  });
-  return { success: true, shareId };
+  })
+  return { success: true, shareId }
 }
 
 /**
@@ -824,7 +853,7 @@ export async function executeSharePost(
  */
 export async function executeGetComments(
   _agent: AuthenticatedAgent,
-  args: GetCommentsArgs
+  args: GetCommentsArgs,
 ): Promise<GetCommentsResult> {
   const commentsList = await db.comment.findMany({
     where: {
@@ -833,21 +862,21 @@ export async function executeGetComments(
     },
     orderBy: { createdAt: 'desc' },
     take: args.limit || 50,
-  });
-  const commentIds = commentsList.map((c) => c.id);
+  })
+  const commentIds = commentsList.map((c) => c.id)
   const reactionsList = await db.reaction.findMany({
     where: {
       commentId: { in: commentIds },
       type: 'like',
     },
-  });
-  const likesMap = new Map<string, number>();
+  })
+  const likesMap = new Map<string, number>()
   for (const reaction of reactionsList) {
     if (reaction.commentId) {
       likesMap.set(
         reaction.commentId,
-        (likesMap.get(reaction.commentId) || 0) + 1
-      );
+        (likesMap.get(reaction.commentId) || 0) + 1,
+      )
     }
   }
   return {
@@ -859,7 +888,7 @@ export async function executeGetComments(
       timestamp: c.createdAt.toISOString(),
       likes: likesMap.get(c.id) || 0,
     })),
-  };
+  }
 }
 
 /**
@@ -867,9 +896,9 @@ export async function executeGetComments(
  */
 export async function executeCreateComment(
   agent: AuthenticatedAgent,
-  args: CreateCommentArgs
+  args: CreateCommentArgs,
 ): Promise<CreateCommentResult> {
-  const commentId = await generateSnowflakeId();
+  const commentId = await generateSnowflakeId()
   const comment = await db.comment.create({
     data: {
       id: commentId,
@@ -878,12 +907,12 @@ export async function executeCreateComment(
       content: args.content,
       updatedAt: new Date(),
     },
-  });
+  })
   return {
     success: true,
     commentId: comment.id,
     content: comment.content,
-  };
+  }
 }
 
 /**
@@ -891,26 +920,26 @@ export async function executeCreateComment(
  */
 export async function executeDeleteComment(
   agent: AuthenticatedAgent,
-  args: DeleteCommentArgs
+  args: DeleteCommentArgs,
 ): Promise<DeleteCommentResult> {
   const comment = await db.comment.findUnique({
     where: { id: args.commentId },
-  });
+  })
   if (!comment) {
-    throw new NotFoundError('Comment', args.commentId);
+    throw new NotFoundError('Comment', args.commentId)
   }
   if (comment.authorId !== agent.userId) {
     throw new AuthorizationError(
       'You can only delete your own comments',
       'Comment',
-      'delete'
-    );
+      'delete',
+    )
   }
   await db.comment.update({
     where: { id: args.commentId },
     data: { deletedAt: new Date() },
-  });
-  return { success: true };
+  })
+  return { success: true }
 }
 
 /**
@@ -918,7 +947,7 @@ export async function executeDeleteComment(
  */
 export async function executeLikeComment(
   agent: AuthenticatedAgent,
-  args: LikeCommentArgs
+  args: LikeCommentArgs,
 ): Promise<LikeCommentResult> {
   const existing = await db.reaction.findFirst({
     where: {
@@ -926,7 +955,7 @@ export async function executeLikeComment(
       userId: agent.userId,
       type: 'like',
     },
-  });
+  })
   if (!existing) {
     await db.reaction.create({
       data: {
@@ -935,9 +964,9 @@ export async function executeLikeComment(
         userId: agent.userId,
         type: 'like',
       },
-    });
+    })
   }
-  return { success: true };
+  return { success: true }
 }
 
 /**
@@ -945,28 +974,28 @@ export async function executeLikeComment(
  */
 export async function executeGetPostsByTag(
   _agent: AuthenticatedAgent,
-  args: GetPostsByTagArgs
+  args: GetPostsByTagArgs,
 ): Promise<GetPostsByTagResult> {
   const tag = await db.tag.findFirst({
     where: { name: args.tag },
-  });
+  })
   if (!tag) {
-    return { posts: [] };
+    return { posts: [] }
   }
   const postTagsList = await db.postTag.findMany({
     where: { tagId: tag.id },
     take: args.limit || 20,
     skip: args.offset || 0,
     orderBy: { createdAt: 'desc' },
-  });
-  const postIds = postTagsList.map((pt) => pt.postId);
+  })
+  const postIds = postTagsList.map((pt) => pt.postId)
   const postsList = await db.post.findMany({
     where: {
       id: { in: postIds },
       deletedAt: null,
     },
     orderBy: { timestamp: 'desc' },
-  });
+  })
   return {
     posts: postsList.map((p) => ({
       id: p.id,
@@ -974,7 +1003,7 @@ export async function executeGetPostsByTag(
       authorId: p.authorId,
       timestamp: p.timestamp.toISOString(),
     })),
-  };
+  }
 }
 
 // ============================================================================
@@ -986,7 +1015,7 @@ export async function executeGetPostsByTag(
  */
 export async function executeGetUserProfile(
   _agent: AuthenticatedAgent,
-  args: GetUserProfileArgs
+  args: GetUserProfileArgs,
 ): Promise<GetUserProfileResult> {
   const user = await db.user.findUnique({
     where: { id: args.userId },
@@ -999,9 +1028,9 @@ export async function executeGetUserProfile(
       reputationPoints: true,
       virtualBalance: true,
     },
-  });
+  })
   if (!user) {
-    throw new NotFoundError('User', args.userId);
+    throw new NotFoundError('User', args.userId)
   }
   return {
     id: user.id,
@@ -1011,7 +1040,7 @@ export async function executeGetUserProfile(
     profileImageUrl: user.profileImageUrl,
     reputationPoints: Number(user.reputationPoints || 0),
     virtualBalance: user.virtualBalance.toString(),
-  };
+  }
 }
 
 /**
@@ -1019,19 +1048,19 @@ export async function executeGetUserProfile(
  */
 export async function executeUpdateProfile(
   agent: AuthenticatedAgent,
-  args: UpdateProfileArgs
+  args: UpdateProfileArgs,
 ): Promise<UpdateProfileResult> {
   const updateData: {
-    displayName?: string;
-    bio?: string;
-    username?: string;
-    profileImageUrl?: string;
-  } = {};
-  if (args.displayName !== undefined) updateData.displayName = args.displayName;
-  if (args.bio !== undefined) updateData.bio = args.bio;
-  if (args.username !== undefined) updateData.username = args.username;
+    displayName?: string
+    bio?: string
+    username?: string
+    profileImageUrl?: string
+  } = {}
+  if (args.displayName !== undefined) updateData.displayName = args.displayName
+  if (args.bio !== undefined) updateData.bio = args.bio
+  if (args.username !== undefined) updateData.username = args.username
   if (args.profileImageUrl !== undefined)
-    updateData.profileImageUrl = args.profileImageUrl;
+    updateData.profileImageUrl = args.profileImageUrl
   const user = await db.user.update({
     where: { id: agent.userId },
     data: updateData,
@@ -1044,7 +1073,7 @@ export async function executeUpdateProfile(
       reputationPoints: true,
       virtualBalance: true,
     },
-  });
+  })
   return {
     success: true,
     profile: {
@@ -1056,7 +1085,7 @@ export async function executeUpdateProfile(
       reputationPoints: Number(user.reputationPoints || 0),
       virtualBalance: user.virtualBalance.toString(),
     },
-  };
+  }
 }
 
 /**
@@ -1064,19 +1093,19 @@ export async function executeUpdateProfile(
  */
 export async function executeFollowUser(
   agent: AuthenticatedAgent,
-  args: FollowUserArgs
+  args: FollowUserArgs,
 ): Promise<FollowUserResult> {
   if (args.userId === agent.userId) {
-    throw new ValidationError('Cannot follow yourself', ['userId']);
+    throw new ValidationError('Cannot follow yourself', ['userId'])
   }
   const existing = await db.follow.findFirst({
     where: {
       followerId: agent.userId,
       followingId: args.userId,
     },
-  });
+  })
   if (existing) {
-    return { success: true };
+    return { success: true }
   }
   await db.follow.create({
     data: {
@@ -1084,8 +1113,8 @@ export async function executeFollowUser(
       followerId: agent.userId,
       followingId: args.userId,
     },
-  });
-  return { success: true };
+  })
+  return { success: true }
 }
 
 /**
@@ -1093,15 +1122,15 @@ export async function executeFollowUser(
  */
 export async function executeUnfollowUser(
   agent: AuthenticatedAgent,
-  args: UnfollowUserArgs
+  args: UnfollowUserArgs,
 ): Promise<UnfollowUserResult> {
   await db.follow.deleteMany({
     where: {
       followerId: agent.userId,
       followingId: args.userId,
     },
-  });
-  return { success: true };
+  })
+  return { success: true }
 }
 
 /**
@@ -1109,14 +1138,14 @@ export async function executeUnfollowUser(
  */
 export async function executeGetFollowers(
   _agent: AuthenticatedAgent,
-  args: GetFollowersArgs
+  args: GetFollowersArgs,
 ): Promise<GetFollowersResult> {
   const followersList = await db.follow.findMany({
     where: { followingId: args.userId },
     take: args.limit || 50,
     orderBy: { createdAt: 'desc' },
-  });
-  const followerIds = followersList.map((f) => f.followerId);
+  })
+  const followerIds = followersList.map((f) => f.followerId)
   const usersList = await db.user.findMany({
     where: { id: { in: followerIds } },
     select: {
@@ -1125,19 +1154,19 @@ export async function executeGetFollowers(
       displayName: true,
       profileImageUrl: true,
     },
-  });
-  const usersMap = new Map(usersList.map((u) => [u.id, u]));
+  })
+  const usersMap = new Map(usersList.map((u) => [u.id, u]))
   return {
     followers: followersList.map((f) => {
-      const user = usersMap.get(f.followerId);
+      const user = usersMap.get(f.followerId)
       return {
         id: f.followerId,
         username: user?.username || null,
         displayName: user?.displayName || null,
         profileImageUrl: user?.profileImageUrl || null,
-      };
+      }
     }),
-  };
+  }
 }
 
 /**
@@ -1145,14 +1174,14 @@ export async function executeGetFollowers(
  */
 export async function executeGetFollowing(
   _agent: AuthenticatedAgent,
-  args: GetFollowingArgs
+  args: GetFollowingArgs,
 ): Promise<GetFollowingResult> {
   const followingList = await db.follow.findMany({
     where: { followerId: args.userId },
     take: args.limit || 50,
     orderBy: { createdAt: 'desc' },
-  });
-  const followingIds = followingList.map((f) => f.followingId);
+  })
+  const followingIds = followingList.map((f) => f.followingId)
   const usersList = await db.user.findMany({
     where: { id: { in: followingIds } },
     select: {
@@ -1161,19 +1190,19 @@ export async function executeGetFollowing(
       displayName: true,
       profileImageUrl: true,
     },
-  });
-  const usersMap = new Map(usersList.map((u) => [u.id, u]));
+  })
+  const usersMap = new Map(usersList.map((u) => [u.id, u]))
   return {
     following: followingList.map((f) => {
-      const user = usersMap.get(f.followingId);
+      const user = usersMap.get(f.followingId)
       return {
         id: f.followingId,
         username: user?.username || null,
         displayName: user?.displayName || null,
         profileImageUrl: user?.profileImageUrl || null,
-      };
+      }
     }),
-  };
+  }
 }
 
 /**
@@ -1181,7 +1210,7 @@ export async function executeGetFollowing(
  */
 export async function executeSearchUsers(
   _agent: AuthenticatedAgent,
-  args: SearchUsersArgs
+  args: SearchUsersArgs,
 ): Promise<SearchUsersResult> {
   const usersList = await db.user.findMany({
     where: {
@@ -1197,7 +1226,7 @@ export async function executeSearchUsers(
       displayName: true,
       reputationPoints: true,
     },
-  });
+  })
   return {
     users: usersList.map((u) => ({
       id: u.id,
@@ -1205,7 +1234,7 @@ export async function executeSearchUsers(
       displayName: u.displayName,
       reputationPoints: Number(u.reputationPoints || 0),
     })),
-  };
+  }
 }
 
 /**
@@ -1213,7 +1242,7 @@ export async function executeSearchUsers(
  */
 export async function executeGetUserWallet(
   _agent: AuthenticatedAgent,
-  args: GetUserWalletArgs
+  args: GetUserWalletArgs,
 ): Promise<GetUserWalletResult> {
   const user = await db.user.findUnique({
     where: { id: args.userId },
@@ -1223,16 +1252,16 @@ export async function executeGetUserWallet(
       totalDeposited: true,
       totalWithdrawn: true,
     },
-  });
+  })
   if (!user) {
-    throw new NotFoundError('User', args.userId);
+    throw new NotFoundError('User', args.userId)
   }
   return {
     walletAddress: user.walletAddress,
     virtualBalance: user.virtualBalance.toString(),
     totalDeposited: user.totalDeposited.toString(),
     totalWithdrawn: user.totalWithdrawn.toString(),
-  };
+  }
 }
 
 /**
@@ -1240,7 +1269,7 @@ export async function executeGetUserWallet(
  */
 export async function executeGetUserStats(
   _agent: AuthenticatedAgent,
-  args: GetUserStatsArgs
+  args: GetUserStatsArgs,
 ): Promise<GetUserStatsResult> {
   const [user, postsCount, commentsCount, reactionsCount] = await Promise.all([
     db.user.findUnique({
@@ -1260,9 +1289,9 @@ export async function executeGetUserStats(
     db.reaction.count({
       where: { userId: args.userId, type: 'like' },
     }),
-  ]);
+  ])
   if (!user) {
-    throw new NotFoundError('User', args.userId);
+    throw new NotFoundError('User', args.userId)
   }
   return {
     totalPosts: postsCount,
@@ -1271,7 +1300,7 @@ export async function executeGetUserStats(
     reputationPoints: Number(user.reputationPoints || 0),
     virtualBalance: user.virtualBalance.toString(),
     lifetimePnL: user.lifetimePnL.toString(),
-  };
+  }
 }
 
 // ============================================================================
@@ -1283,7 +1312,7 @@ export async function executeGetUserStats(
  */
 export async function executeGetChats(
   agent: AuthenticatedAgent,
-  _args: GetChatsArgs
+  _args: GetChatsArgs,
 ): Promise<GetChatsResult> {
   // Get all chats where user is a participant
   const participants = await db.chatParticipant.findMany({
@@ -1292,39 +1321,38 @@ export async function executeGetChats(
       isActive: true,
     },
     select: { chatId: true },
-  });
-  const participantChatIds = participants.map((p) => p.chatId);
+  })
+  const participantChatIds = participants.map((p) => p.chatId)
   const chatsList =
     participantChatIds.length > 0
       ? await db.chat.findMany({
           where: { id: { in: participantChatIds } },
         })
-      : [];
-  const chatIds = chatsList.map((c) => c.id);
+      : []
+  const chatIds = chatsList.map((c) => c.id)
   const lastMessages = await Promise.all(
     chatIds.map(async (chatId) => {
       const lastMessage = await db.message.findFirst({
         where: { chatId },
         orderBy: { createdAt: 'desc' },
-      });
-      return { chatId, lastMessage };
-    })
-  );
+      })
+      return { chatId, lastMessage }
+    }),
+  )
   // For now, return 0 unread count (read tracking not implemented in schema)
-  const unreadCounts = chatIds.map((chatId) => ({ chatId, count: 0 }));
-  const unreadMap = new Map(unreadCounts.map((u) => [u.chatId, u.count]));
+  const unreadCounts = chatIds.map((chatId) => ({ chatId, count: 0 }))
+  const unreadMap = new Map(unreadCounts.map((u) => [u.chatId, u.count]))
   const lastMessageMap = new Map(
-    lastMessages.map((lm) => [lm.chatId, lm.lastMessage])
-  );
-  return {
-    chats: chatsList.map((c) => ({
-      id: c.id,
-      name: c.name,
-      type: c.isGroup ? ('group' as const) : ('dm' as const),
-      lastMessageAt: lastMessageMap.get(c.id)?.createdAt.toISOString() || null,
-      unreadCount: unreadMap.get(c.id) || 0,
-    })),
-  };
+    lastMessages.map((lm) => [lm.chatId, lm.lastMessage]),
+  )
+  const chats: GetChatsResult['chats'] = chatsList.map((c) => ({
+    id: c.id,
+    name: c.name,
+    type: c.isGroup ? 'group' : 'dm',
+    lastMessageAt: lastMessageMap.get(c.id)?.createdAt.toISOString() || null,
+    unreadCount: unreadMap.get(c.id) || 0,
+  }))
+  return { chats }
 }
 
 /**
@@ -1332,14 +1360,14 @@ export async function executeGetChats(
  */
 export async function executeGetChatMessages(
   _agent: AuthenticatedAgent,
-  args: GetChatMessagesArgs
+  args: GetChatMessagesArgs,
 ): Promise<GetChatMessagesResult> {
   const messagesList = await db.message.findMany({
     where: { chatId: args.chatId },
     orderBy: { createdAt: 'desc' },
     take: args.limit || 50,
     skip: args.offset || 0,
-  });
+  })
   return {
     messages: messagesList.map((m) => ({
       id: m.id,
@@ -1348,7 +1376,7 @@ export async function executeGetChatMessages(
       content: m.content,
       timestamp: m.createdAt.toISOString(),
     })),
-  };
+  }
 }
 
 /**
@@ -1356,21 +1384,29 @@ export async function executeGetChatMessages(
  */
 export async function executeSendMessage(
   agent: AuthenticatedAgent,
-  args: SendMessageArgs
+  args: SendMessageArgs,
 ): Promise<SendMessageResult> {
-  const messageId = await generateSnowflakeId();
+  const messageId = await generateSnowflakeId()
   const message = await db.message.create({
     data: {
       id: messageId,
       chatId: args.chatId,
       senderId: agent.userId,
       content: args.content,
+      isDeleted: false,
+      deletedAt: null,
+      isEdited: false,
+      editedAt: null,
+      replyToId: null,
+      metadata: null,
+      readBy: null,
+      deliveredTo: null,
     },
-  });
+  })
   return {
     success: true,
     messageId: message.id,
-  };
+  }
 }
 
 /**
@@ -1378,38 +1414,48 @@ export async function executeSendMessage(
  */
 export async function executeCreateGroup(
   agent: AuthenticatedAgent,
-  args: CreateGroupArgs
+  args: CreateGroupArgs,
 ): Promise<CreateGroupResult> {
-  const chatId = await generateSnowflakeId();
+  const chatId = await generateSnowflakeId()
   const chat = await db.chat.create({
     data: {
       id: chatId,
       name: args.name,
-      description: args.description,
+      description: args.description ?? null,
+      type: 'group',
       isGroup: true,
+      groupOwnerId: agent.userId,
       createdBy: agent.userId,
-      updatedAt: new Date(),
+      lastMessageAt: null,
+      lastMessagePreview: null,
+      participantCount: args.memberIds.length + 1,
+      metadata: null,
+      isArchived: false,
+      archivedAt: null,
+      imageUrl: null,
+      gameId: null,
+      npcAdminId: null,
     },
-  });
+  })
   const participantIds = await Promise.all([
     generateSnowflakeId(),
     ...args.memberIds.map(() => generateSnowflakeId()),
-  ]);
+  ])
   await db.chatParticipant.createMany({
     data: [
-      { id: participantIds[0]!, chatId, userId: agent.userId },
+      { id: participantIds[0], chatId, userId: agent.userId },
       ...args.memberIds.map((memberId, idx) => ({
-        id: participantIds[idx + 1]!,
+        id: participantIds[idx + 1],
         chatId,
         userId: memberId,
       })),
     ],
-  });
+  })
   return {
     success: true,
     chatId: chat.id,
     name: chat.name || '',
-  };
+  }
 }
 
 /**
@@ -1417,7 +1463,7 @@ export async function executeCreateGroup(
  */
 export async function executeLeaveChat(
   agent: AuthenticatedAgent,
-  args: LeaveChatArgs
+  args: LeaveChatArgs,
 ): Promise<LeaveChatResult> {
   // agent used for userId in updateMany where clause
   await db.chatParticipant.updateMany({
@@ -1426,8 +1472,8 @@ export async function executeLeaveChat(
       userId: agent.userId,
     },
     data: { isActive: false },
-  });
-  return { success: true };
+  })
+  return { success: true }
 }
 
 /**
@@ -1435,10 +1481,10 @@ export async function executeLeaveChat(
  */
 export async function executeGetUnreadCount(
   _agent: AuthenticatedAgent,
-  _args: GetUnreadCountArgs
+  _args: GetUnreadCountArgs,
 ): Promise<GetUnreadCountResult> {
   // Read tracking not implemented in schema yet, return 0
-  return { unreadCount: 0 };
+  return { unreadCount: 0 }
 }
 
 // ============================================================================
@@ -1450,22 +1496,22 @@ export async function executeGetUnreadCount(
  */
 export async function executeGetNotifications(
   agent: AuthenticatedAgent,
-  args: GetNotificationsArgs
+  args: GetNotificationsArgs,
 ): Promise<GetNotificationsResult> {
   const notificationsList = await db.notification.findMany({
     where: { userId: agent.userId },
     orderBy: { createdAt: 'desc' },
     take: args.limit || 100,
-  });
+  })
   return {
     notifications: notificationsList.map((n) => ({
       id: n.id,
       type: n.type,
-      message: n.message,
+      message: n.message ?? '',
       read: n.read,
       timestamp: n.createdAt.toISOString(),
     })),
-  };
+  }
 }
 
 /**
@@ -1473,7 +1519,7 @@ export async function executeGetNotifications(
  */
 export async function executeMarkNotificationsRead(
   agent: AuthenticatedAgent,
-  args: MarkNotificationsReadArgs
+  args: MarkNotificationsReadArgs,
 ): Promise<MarkNotificationsReadResult> {
   await db.notification.updateMany({
     where: {
@@ -1481,11 +1527,11 @@ export async function executeMarkNotificationsRead(
       userId: agent.userId,
     },
     data: { read: true },
-  });
+  })
   return {
     success: true,
     markedCount: args.notificationIds.length,
-  };
+  }
 }
 
 /**
@@ -1493,7 +1539,7 @@ export async function executeMarkNotificationsRead(
  */
 export async function executeGetGroupInvites(
   agent: AuthenticatedAgent,
-  _args: GetGroupInvitesArgs
+  _args: GetGroupInvitesArgs,
 ): Promise<GetGroupInvitesResult> {
   const [chatInvites, npcInvites] = await Promise.all([
     db.chatInvite.findMany({
@@ -1502,14 +1548,14 @@ export async function executeGetGroupInvites(
     db.userGroupInvite.findMany({
       where: { invitedUserId: agent.userId, status: 'pending' },
     }),
-  ]);
+  ])
 
   const allChatIds = [
     ...new Set([
       ...chatInvites.map((i) => i.chatId),
       ...npcInvites.map((i) => i.groupId),
     ]),
-  ];
+  ]
 
   const chatsMap = new Map(
     (
@@ -1517,29 +1563,32 @@ export async function executeGetGroupInvites(
         where: { id: { in: allChatIds } },
         select: { id: true, name: true },
       })
-    ).map((c) => [c.id, c])
-  );
+    ).map((c) => [c.id, c]),
+  )
 
+  const userInvites: GetGroupInvitesResult['invites'] = chatInvites.map(
+    (i) => ({
+      id: i.id,
+      groupId: i.chatId,
+      groupName: chatsMap.get(i.chatId)?.name ?? null,
+      inviterId: i.invitedBy ?? '',
+      timestamp: (i.invitedAt ?? new Date()).toISOString(),
+      source: 'user',
+    }),
+  )
+  const npcInvitesList: GetGroupInvitesResult['invites'] = npcInvites.map(
+    (i) => ({
+      id: i.id,
+      groupId: i.groupId,
+      groupName: chatsMap.get(i.groupId)?.name ?? null,
+      inviterId: i.inviterId ?? '',
+      timestamp: (i.invitedAt ?? new Date()).toISOString(),
+      source: 'npc',
+    }),
+  )
   return {
-    invites: [
-      ...chatInvites.map((i) => ({
-        id: i.id,
-        groupId: i.chatId,
-        groupName: chatsMap.get(i.chatId)?.name ?? null,
-        inviterId: i.invitedBy,
-        timestamp: i.invitedAt.toISOString(),
-        source: 'user' as const,
-      })),
-      ...npcInvites.map((i) => ({
-        id: i.id,
-        groupId: i.groupId,
-        groupName: chatsMap.get(i.groupId)?.name ?? null,
-        inviterId: i.invitedBy,
-        timestamp: i.invitedAt.toISOString(),
-        source: 'npc' as const,
-      })),
-    ],
-  };
+    invites: [...userInvites, ...npcInvitesList],
+  }
 }
 
 /**
@@ -1547,17 +1596,17 @@ export async function executeGetGroupInvites(
  */
 export async function executeAcceptGroupInvite(
   agent: AuthenticatedAgent,
-  args: AcceptGroupInviteArgs
+  args: AcceptGroupInviteArgs,
 ): Promise<AcceptGroupInviteResult> {
   // Try chatInvite (user-initiated)
   const chatInvite = await db.chatInvite.findUnique({
     where: { id: args.inviteId },
-  });
+  })
   if (chatInvite?.invitedUserId === agent.userId) {
     await db.chatInvite.update({
       where: { id: args.inviteId },
       data: { status: 'accepted' },
-    });
+    })
     await db.chatParticipant.create({
       data: {
         id: await generateSnowflakeId(),
@@ -1565,19 +1614,19 @@ export async function executeAcceptGroupInvite(
         userId: agent.userId,
         invitedBy: chatInvite.invitedBy,
       },
-    });
-    return { success: true, chatId: chatInvite.chatId };
+    })
+    return { success: true, chatId: chatInvite.chatId }
   }
 
   // Try userGroupInvite (NPC-initiated)
   const npcInvite = await db.userGroupInvite.findUnique({
     where: { id: args.inviteId },
-  });
+  })
   if (npcInvite?.invitedUserId === agent.userId) {
     await db.userGroupInvite.update({
       where: { id: args.inviteId },
       data: { status: 'accepted', respondedAt: new Date() },
-    });
+    })
     await db.chatParticipant.create({
       data: {
         id: await generateSnowflakeId(),
@@ -1585,7 +1634,7 @@ export async function executeAcceptGroupInvite(
         userId: agent.userId,
         invitedBy: npcInvite.invitedBy,
       },
-    });
+    })
     await db.groupChatMembership.create({
       data: {
         id: await generateSnowflakeId(),
@@ -1597,11 +1646,11 @@ export async function executeAcceptGroupInvite(
         messageCount: 0,
         qualityScore: 1.0,
       },
-    });
-    return { success: true, chatId: npcInvite.groupId };
+    })
+    return { success: true, chatId: npcInvite.groupId }
   }
 
-  throw new NotFoundError('Invite', args.inviteId);
+  throw new NotFoundError('Invite', args.inviteId)
 }
 
 /**
@@ -1609,31 +1658,31 @@ export async function executeAcceptGroupInvite(
  */
 export async function executeDeclineGroupInvite(
   agent: AuthenticatedAgent,
-  args: DeclineGroupInviteArgs
+  args: DeclineGroupInviteArgs,
 ): Promise<DeclineGroupInviteResult> {
   const chatInvite = await db.chatInvite.findUnique({
     where: { id: args.inviteId },
-  });
+  })
   if (chatInvite?.invitedUserId === agent.userId) {
     await db.chatInvite.update({
       where: { id: args.inviteId },
       data: { status: 'declined' },
-    });
-    return { success: true };
+    })
+    return { success: true }
   }
 
   const npcInvite = await db.userGroupInvite.findUnique({
     where: { id: args.inviteId },
-  });
+  })
   if (npcInvite?.invitedUserId === agent.userId) {
     await db.userGroupInvite.update({
       where: { id: args.inviteId },
       data: { status: 'declined', respondedAt: new Date() },
-    });
-    return { success: true };
+    })
+    return { success: true }
   }
 
-  throw new NotFoundError('Invite', args.inviteId);
+  throw new NotFoundError('Invite', args.inviteId)
 }
 
 // ============================================================================
@@ -1645,27 +1694,19 @@ export async function executeDeclineGroupInvite(
  */
 export async function executeGetLeaderboard(
   _agent: AuthenticatedAgent,
-  args: GetLeaderboardArgs
+  args: GetLeaderboardArgs,
 ): Promise<GetLeaderboardResult> {
-  const apiBaseUrl = getAPIBaseUrl();
-  const url = new URL(`${apiBaseUrl}/api/leaderboard`);
-  if (args.page) url.searchParams.set('page', args.page.toString());
-  if (args.pageSize) url.searchParams.set('pageSize', args.pageSize.toString());
-  if (args.pointsType) url.searchParams.set('pointsType', args.pointsType);
+  const apiBaseUrl = getAPIBaseUrl()
+  const url = new URL(`${apiBaseUrl}/api/leaderboard`)
+  if (args.page) url.searchParams.set('page', args.page.toString())
+  if (args.pageSize) url.searchParams.set('pageSize', args.pageSize.toString())
+  if (args.pointsType) url.searchParams.set('pointsType', args.pointsType)
   if (args.minPoints)
-    url.searchParams.set('minPoints', args.minPoints.toString());
-  const response = await fetch(url.toString());
-  const data = (await response.json()) as {
-    leaderboard: Array<{
-      rank: number;
-      userId: string;
-      username: string | null;
-      displayName: string | null;
-      points: number;
-    }>;
-    pagination: { page: number; pageSize: number; total: number };
-  };
-  return data;
+    url.searchParams.set('minPoints', args.minPoints.toString())
+  const response = await fetch(url.toString())
+  const json: unknown = await response.json()
+  const data = GetLeaderboardResponseSchema.parse(json)
+  return data
 }
 
 /**
@@ -1673,7 +1714,7 @@ export async function executeGetLeaderboard(
  */
 export async function executeGetSystemStats(
   _agent: AuthenticatedAgent,
-  _args: GetSystemStatsArgs
+  _args: GetSystemStatsArgs,
 ): Promise<GetSystemStatsResult> {
   const [userCount, postCount, marketCount, activeMarketCount] =
     await Promise.all([
@@ -1681,13 +1722,13 @@ export async function executeGetSystemStats(
       db.post.count({ where: { deletedAt: null } }),
       db.market.count(),
       db.market.count({ where: { resolved: false } }),
-    ]);
+    ])
   return {
     users: userCount,
     posts: postCount,
     markets: marketCount,
     activeMarkets: activeMarketCount,
-  };
+  }
 }
 
 // ============================================================================
@@ -1699,16 +1740,16 @@ export async function executeGetSystemStats(
  */
 export async function executeGetReferralCode(
   agent: AuthenticatedAgent,
-  _args: GetReferralCodeArgs
+  _args: GetReferralCodeArgs,
 ): Promise<GetReferralCodeResult> {
   const user = await db.user.findUnique({
     where: { id: agent.userId },
     select: { referralCode: true },
-  });
+  })
   if (!user || !user.referralCode) {
-    throw new NotFoundError('Referral code', agent.userId);
+    throw new NotFoundError('Referral code', agent.userId)
   }
-  return { referralCode: user.referralCode };
+  return { referralCode: user.referralCode }
 }
 
 /**
@@ -1716,15 +1757,15 @@ export async function executeGetReferralCode(
  */
 export async function executeGetReferrals(
   agent: AuthenticatedAgent,
-  _args: GetReferralsArgs
+  _args: GetReferralsArgs,
 ): Promise<GetReferralsResult> {
   const referralsList = await db.referral.findMany({
     where: { referrerId: agent.userId },
     orderBy: { createdAt: 'desc' },
-  });
+  })
   const referredUserIds = referralsList
     .map((r) => r.referredUserId)
-    .filter((id): id is string => id !== null);
+    .filter((id): id is string => id !== null)
   const usersList = await db.user.findMany({
     where: { id: { in: referredUserIds } },
     select: {
@@ -1732,22 +1773,22 @@ export async function executeGetReferrals(
       username: true,
       displayName: true,
     },
-  });
-  const usersMap = new Map(usersList.map((u) => [u.id, u]));
+  })
+  const usersMap = new Map(usersList.map((u) => [u.id, u]))
   return {
     referrals: referralsList
       .filter((r) => r.referredUserId !== null)
       .map((r) => {
-        const user = usersMap.get(r.referredUserId!);
+        const user = usersMap.get(r.referredUserId)
         return {
           id: r.id,
-          referredUserId: r.referredUserId!,
+          referredUserId: r.referredUserId,
           username: user?.username || null,
           displayName: user?.displayName || null,
           createdAt: r.createdAt.toISOString(),
-        };
+        }
       }),
-  };
+  }
 }
 
 /**
@@ -1755,7 +1796,7 @@ export async function executeGetReferrals(
  */
 export async function executeGetReferralStats(
   agent: AuthenticatedAgent,
-  _args: GetReferralStatsArgs
+  _args: GetReferralStatsArgs,
 ): Promise<GetReferralStatsResult> {
   const [user, referralsList] = await Promise.all([
     db.user.findUnique({
@@ -1765,14 +1806,14 @@ export async function executeGetReferralStats(
     db.referral.findMany({
       where: { referrerId: agent.userId },
     }),
-  ]);
+  ])
   // Referrer earnings not in schema, return 0 for now
-  const totalEarnings = 0;
+  const totalEarnings = 0
   return {
     totalReferrals: referralsList.length,
     totalEarnings,
     referralCode: user?.referralCode || '',
-  };
+  }
 }
 
 // ============================================================================
@@ -1784,13 +1825,14 @@ export async function executeGetReferralStats(
  */
 export async function executeGetReputation(
   agent: AuthenticatedAgent,
-  args: GetReputationArgs
+  args: GetReputationArgs,
 ): Promise<GetReputationResult> {
-  const userId = args.userId || agent.userId;
-  const apiBaseUrl = getAPIBaseUrl();
-  const response = await fetch(`${apiBaseUrl}/api/reputation/${userId}`);
-  const data = (await response.json()) as GetReputationResult;
-  return data;
+  const userId = args.userId || agent.userId
+  const apiBaseUrl = getAPIBaseUrl()
+  const response = await fetch(`${apiBaseUrl}/api/reputation/${userId}`)
+  const json: unknown = await response.json()
+  const data = GetReputationResponseSchema.parse(json)
+  return data
 }
 
 /**
@@ -1798,14 +1840,15 @@ export async function executeGetReputation(
  */
 export async function executeGetReputationBreakdown(
   _agent: AuthenticatedAgent,
-  args: GetReputationBreakdownArgs
+  args: GetReputationBreakdownArgs,
 ): Promise<GetReputationBreakdownResult> {
-  const apiBaseUrl = getAPIBaseUrl();
+  const apiBaseUrl = getAPIBaseUrl()
   const response = await fetch(
-    `${apiBaseUrl}/api/reputation/breakdown/${args.userId}`
-  );
-  const data = (await response.json()) as GetReputationBreakdownResult;
-  return data;
+    `${apiBaseUrl}/api/reputation/breakdown/${args.userId}`,
+  )
+  const json: unknown = await response.json()
+  const data = GetReputationBreakdownResponseSchema.parse(json)
+  return data
 }
 
 // ============================================================================
@@ -1817,25 +1860,25 @@ export async function executeGetReputationBreakdown(
  */
 export async function executeGetTrendingTags(
   _agent: AuthenticatedAgent,
-  args: GetTrendingTagsArgs
+  args: GetTrendingTagsArgs,
 ): Promise<GetTrendingTagsResult> {
   const trendingTagsList = await db.trendingTag.findMany({
     orderBy: { rank: 'asc' },
     take: args.limit || 20,
-  });
-  const tagIds = trendingTagsList.map((tt) => tt.tagId);
+  })
+  const tagIds = trendingTagsList.map((tt) => tt.tagId)
   const tagsList = await db.tag.findMany({
     where: { id: { in: tagIds } },
     select: { id: true, name: true },
-  });
-  const tagsMap = new Map(tagsList.map((t) => [t.id, t]));
+  })
+  const tagsMap = new Map(tagsList.map((t) => [t.id, t]))
   return {
     tags: trendingTagsList.map((tt) => ({
       tag: tagsMap.get(tt.tagId)?.name || '',
-      postCount: tt.postCount,
+      postCount: tt.postCount ?? 0,
       trendScore: tt.score || 0,
     })),
-  };
+  }
 }
 
 // ============================================================================
@@ -1847,20 +1890,20 @@ export async function executeGetTrendingTags(
  */
 export async function executeGetOrganizations(
   _agent: AuthenticatedAgent,
-  args: GetOrganizationsArgs
+  args: GetOrganizationsArgs,
 ): Promise<GetOrganizationsResult> {
   // Get organizations from static registry
   const orgsList = StaticDataRegistry.getAllOrganizations().slice(
     0,
-    args.limit || 50
-  );
+    args.limit || 50,
+  )
   return {
     organizations: orgsList.map((staticOrg) => ({
       id: staticOrg.id,
       name: staticOrg.name,
       description: staticOrg.description,
     })),
-  };
+  }
 }
 
 // ============================================================================
@@ -1872,10 +1915,10 @@ export async function executeGetOrganizations(
  */
 export async function executePaymentRequest(
   agent: AuthenticatedAgent,
-  args: PaymentRequestArgs
+  args: PaymentRequestArgs,
 ): Promise<PaymentRequestResult> {
   // agent used for userId in request body
-  const apiBaseUrl = getAPIBaseUrl();
+  const apiBaseUrl = getAPIBaseUrl()
   const response = await fetch(`${apiBaseUrl}/api/payments/request`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -1886,8 +1929,9 @@ export async function executePaymentRequest(
       service: args.service,
       metadata: args.metadata,
     }),
-  });
-  return (await response.json()) as PaymentRequestResult;
+  })
+  const json: unknown = await response.json()
+  return PaymentRequestResponseSchema.parse(json)
 }
 
 /**
@@ -1895,9 +1939,9 @@ export async function executePaymentRequest(
  */
 export async function executePaymentReceipt(
   _agent: AuthenticatedAgent,
-  args: PaymentReceiptArgs
+  args: PaymentReceiptArgs,
 ): Promise<PaymentReceiptResult> {
-  const apiBaseUrl = getAPIBaseUrl();
+  const apiBaseUrl = getAPIBaseUrl()
   const response = await fetch(`${apiBaseUrl}/api/payments/receipt`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -1905,8 +1949,9 @@ export async function executePaymentReceipt(
       requestId: args.requestId,
       txHash: args.txHash,
     }),
-  });
-  return (await response.json()) as PaymentReceiptResult;
+  })
+  const json: unknown = await response.json()
+  return PaymentReceiptResponseSchema.parse(json)
 }
 
 // ============================================================================
@@ -1918,19 +1963,19 @@ export async function executePaymentReceipt(
  */
 export async function executeBlockUser(
   agent: AuthenticatedAgent,
-  args: BlockUserArgs
+  args: BlockUserArgs,
 ): Promise<BlockUserResult> {
   if (args.userId === agent.userId) {
-    throw new ValidationError('Cannot block yourself', ['userId']);
+    throw new ValidationError('Cannot block yourself', ['userId'])
   }
   const existing = await db.userBlock.findFirst({
     where: {
       blockerId: agent.userId,
       blockedId: args.userId,
     },
-  });
+  })
   if (existing) {
-    return { success: true };
+    return { success: true }
   }
   await db.userBlock.create({
     data: {
@@ -1938,8 +1983,8 @@ export async function executeBlockUser(
       blockerId: agent.userId,
       blockedId: args.userId,
     },
-  });
-  return { success: true };
+  })
+  return { success: true }
 }
 
 /**
@@ -1947,15 +1992,15 @@ export async function executeBlockUser(
  */
 export async function executeUnblockUser(
   agent: AuthenticatedAgent,
-  args: UnblockUserArgs
+  args: UnblockUserArgs,
 ): Promise<UnblockUserResult> {
   await db.userBlock.deleteMany({
     where: {
       blockerId: agent.userId,
       blockedId: args.userId,
     },
-  });
-  return { success: true };
+  })
+  return { success: true }
 }
 
 /**
@@ -1963,19 +2008,19 @@ export async function executeUnblockUser(
  */
 export async function executeMuteUser(
   agent: AuthenticatedAgent,
-  args: MuteUserArgs
+  args: MuteUserArgs,
 ): Promise<MuteUserResult> {
   if (args.userId === agent.userId) {
-    throw new ValidationError('Cannot mute yourself', ['userId']);
+    throw new ValidationError('Cannot mute yourself', ['userId'])
   }
   const existing = await db.userMute.findFirst({
     where: {
       muterId: agent.userId,
       mutedId: args.userId,
     },
-  });
+  })
   if (existing) {
-    return { success: true };
+    return { success: true }
   }
   await db.userMute.create({
     data: {
@@ -1983,8 +2028,8 @@ export async function executeMuteUser(
       muterId: agent.userId,
       mutedId: args.userId,
     },
-  });
-  return { success: true };
+  })
+  return { success: true }
 }
 
 /**
@@ -1992,15 +2037,15 @@ export async function executeMuteUser(
  */
 export async function executeUnmuteUser(
   agent: AuthenticatedAgent,
-  args: UnmuteUserArgs
+  args: UnmuteUserArgs,
 ): Promise<UnmuteUserResult> {
   await db.userMute.deleteMany({
     where: {
       muterId: agent.userId,
       mutedId: args.userId,
     },
-  });
-  return { success: true };
+  })
+  return { success: true }
 }
 
 /**
@@ -2008,9 +2053,9 @@ export async function executeUnmuteUser(
  */
 export async function executeReportUser(
   agent: AuthenticatedAgent,
-  args: ReportUserArgs
+  args: ReportUserArgs,
 ): Promise<ReportUserResult> {
-  const reportId = await generateSnowflakeId();
+  const reportId = await generateSnowflakeId()
   await db.report.create({
     data: {
       id: reportId,
@@ -2021,8 +2066,8 @@ export async function executeReportUser(
       category: 'moderation',
       updatedAt: new Date(),
     },
-  });
-  return { success: true, reportId };
+  })
+  return { success: true, reportId }
 }
 
 /**
@@ -2030,9 +2075,9 @@ export async function executeReportUser(
  */
 export async function executeReportPost(
   agent: AuthenticatedAgent,
-  args: ReportPostArgs
+  args: ReportPostArgs,
 ): Promise<ReportPostResult> {
-  const reportId = await generateSnowflakeId();
+  const reportId = await generateSnowflakeId()
   await db.report.create({
     data: {
       id: reportId,
@@ -2043,8 +2088,8 @@ export async function executeReportPost(
       category: 'moderation',
       updatedAt: new Date(),
     },
-  });
-  return { success: true, reportId };
+  })
+  return { success: true, reportId }
 }
 
 /**
@@ -2052,13 +2097,13 @@ export async function executeReportPost(
  */
 export async function executeGetBlocks(
   agent: AuthenticatedAgent,
-  _args: GetBlocksArgs
+  _args: GetBlocksArgs,
 ): Promise<GetBlocksResult> {
   const blocksList = await db.userBlock.findMany({
     where: { blockerId: agent.userId },
     orderBy: { createdAt: 'desc' },
-  });
-  const blockedIds = blocksList.map((b) => b.blockedId);
+  })
+  const blockedIds = blocksList.map((b) => b.blockedId)
   const usersList = await db.user.findMany({
     where: { id: { in: blockedIds } },
     select: {
@@ -2066,19 +2111,19 @@ export async function executeGetBlocks(
       username: true,
       displayName: true,
     },
-  });
-  const usersMap = new Map(usersList.map((u) => [u.id, u]));
+  })
+  const usersMap = new Map(usersList.map((u) => [u.id, u]))
   return {
     blockedUsers: blocksList.map((b) => {
-      const user = usersMap.get(b.blockedId);
+      const user = usersMap.get(b.blockedId)
       return {
         userId: b.blockedId,
         username: user?.username || null,
         displayName: user?.displayName || null,
         blockedAt: b.createdAt.toISOString(),
-      };
+      }
     }),
-  };
+  }
 }
 
 /**
@@ -2086,13 +2131,13 @@ export async function executeGetBlocks(
  */
 export async function executeGetMutes(
   agent: AuthenticatedAgent,
-  _args: GetMutesArgs
+  _args: GetMutesArgs,
 ): Promise<GetMutesResult> {
   const mutesList = await db.userMute.findMany({
     where: { muterId: agent.userId },
     orderBy: { createdAt: 'desc' },
-  });
-  const mutedIds = mutesList.map((m) => m.mutedId);
+  })
+  const mutedIds = mutesList.map((m) => m.mutedId)
   const usersList = await db.user.findMany({
     where: { id: { in: mutedIds } },
     select: {
@@ -2100,19 +2145,19 @@ export async function executeGetMutes(
       username: true,
       displayName: true,
     },
-  });
-  const usersMap = new Map(usersList.map((u) => [u.id, u]));
+  })
+  const usersMap = new Map(usersList.map((u) => [u.id, u]))
   return {
     mutedUsers: mutesList.map((m) => {
-      const user = usersMap.get(m.mutedId);
+      const user = usersMap.get(m.mutedId)
       return {
         userId: m.mutedId,
         username: user?.username || null,
         displayName: user?.displayName || null,
         mutedAt: m.createdAt.toISOString(),
-      };
+      }
     }),
-  };
+  }
 }
 
 /**
@@ -2120,18 +2165,18 @@ export async function executeGetMutes(
  */
 export async function executeCheckBlockStatus(
   agent: AuthenticatedAgent,
-  args: CheckBlockStatusArgs
+  args: CheckBlockStatusArgs,
 ): Promise<CheckBlockStatusResult> {
   const block = await db.userBlock.findFirst({
     where: {
       blockerId: agent.userId,
       blockedId: args.userId,
     },
-  });
+  })
   return {
     isBlocked: !!block,
     blockedAt: block?.createdAt.toISOString() || null,
-  };
+  }
 }
 
 /**
@@ -2139,18 +2184,18 @@ export async function executeCheckBlockStatus(
  */
 export async function executeCheckMuteStatus(
   agent: AuthenticatedAgent,
-  args: CheckMuteStatusArgs
+  args: CheckMuteStatusArgs,
 ): Promise<CheckMuteStatusResult> {
   const mute = await db.userMute.findFirst({
     where: {
       muterId: agent.userId,
       mutedId: args.userId,
     },
-  });
+  })
   return {
     isMuted: !!mute,
     mutedAt: mute?.createdAt.toISOString() || null,
-  };
+  }
 }
 
 // ============================================================================
@@ -2162,7 +2207,7 @@ export async function executeCheckMuteStatus(
  */
 export async function executeCreateEscrowPayment(
   agent: AuthenticatedAgent,
-  args: CreateEscrowPaymentArgs
+  args: CreateEscrowPaymentArgs,
 ): Promise<CreateEscrowPaymentResult> {
   const request: JsonRpcRequest = {
     jsonrpc: '2.0',
@@ -2170,19 +2215,13 @@ export async function executeCreateEscrowPayment(
     params: {
       recipientId: args.recipientId,
       amountUSD: args.amountUSD,
-      reason: args.reason,
+      reason: args.reason ?? null,
       recipientWalletAddress: args.recipientWalletAddress,
-    } as JsonRpcParams,
+    },
     id: 1,
-  };
-  const response = await handleCreateEscrowPayment(agent.agentId, request);
-  if (response.error) {
-    throw new Error(response.error.message);
   }
-  if (!response.result) {
-    throw new Error('No result in response');
-  }
-  return response.result as unknown as CreateEscrowPaymentResult;
+  const response = await handleCreateEscrowPayment(agent.agentId, request)
+  return extractResult(response)
 }
 
 /**
@@ -2190,7 +2229,7 @@ export async function executeCreateEscrowPayment(
  */
 export async function executeVerifyEscrowPayment(
   agent: AuthenticatedAgent,
-  args: VerifyEscrowPaymentArgs
+  args: VerifyEscrowPaymentArgs,
 ): Promise<VerifyEscrowPaymentResult> {
   const request: JsonRpcRequest = {
     jsonrpc: '2.0',
@@ -2201,17 +2240,11 @@ export async function executeVerifyEscrowPayment(
       fromAddress: args.fromAddress,
       toAddress: args.toAddress,
       amount: args.amount,
-    } as JsonRpcParams,
+    },
     id: 1,
-  };
-  const response = await handleVerifyEscrowPayment(agent.agentId, request);
-  if (response.error) {
-    throw new Error(response.error.message);
   }
-  if (!response.result) {
-    throw new Error('No result in response');
-  }
-  return response.result as unknown as VerifyEscrowPaymentResult;
+  const response = await handleVerifyEscrowPayment(agent.agentId, request)
+  return extractResult(response)
 }
 
 /**
@@ -2219,7 +2252,7 @@ export async function executeVerifyEscrowPayment(
  */
 export async function executeRefundEscrowPayment(
   agent: AuthenticatedAgent,
-  args: RefundEscrowPaymentArgs
+  args: RefundEscrowPaymentArgs,
 ): Promise<RefundEscrowPaymentResult> {
   const request: JsonRpcRequest = {
     jsonrpc: '2.0',
@@ -2227,18 +2260,12 @@ export async function executeRefundEscrowPayment(
     params: {
       escrowId: args.escrowId,
       refundTxHash: args.refundTxHash,
-      reason: args.reason,
-    } as JsonRpcParams,
+      reason: args.reason ?? null,
+    },
     id: 1,
-  };
-  const response = await handleRefundEscrowPayment(agent.agentId, request);
-  if (response.error) {
-    throw new Error(response.error.message);
   }
-  if (!response.result) {
-    throw new Error('No result in response');
-  }
-  return response.result as unknown as RefundEscrowPaymentResult;
+  const response = await handleRefundEscrowPayment(agent.agentId, request)
+  return extractResult(response)
 }
 
 /**
@@ -2246,28 +2273,22 @@ export async function executeRefundEscrowPayment(
  */
 export async function executeListEscrowPayments(
   agent: AuthenticatedAgent,
-  args: ListEscrowPaymentsArgs
+  args: ListEscrowPaymentsArgs,
 ): Promise<ListEscrowPaymentsResult> {
   const request: JsonRpcRequest = {
     jsonrpc: '2.0',
     method: 'a2a.listEscrowPayments',
     params: {
-      recipientId: args.recipientId,
-      adminId: args.adminId,
-      status: args.status,
-      limit: args.limit,
-      offset: args.offset,
-    } as JsonRpcParams,
+      recipientId: args.recipientId ?? null,
+      adminId: args.adminId ?? null,
+      status: args.status ?? null,
+      limit: args.limit ?? null,
+      offset: args.offset ?? null,
+    },
     id: 1,
-  };
-  const response = await handleListEscrowPayments(agent.agentId, request);
-  if (response.error) {
-    throw new Error(response.error.message);
   }
-  if (!response.result) {
-    throw new Error('No result in response');
-  }
-  return response.result as unknown as ListEscrowPaymentsResult;
+  const response = await handleListEscrowPayments(agent.agentId, request)
+  return extractResult(response)
 }
 
 // ============================================================================
@@ -2279,9 +2300,9 @@ export async function executeListEscrowPayments(
  */
 export async function executeAppealBan(
   agent: AuthenticatedAgent,
-  args: AppealBanArgs
+  args: AppealBanArgs,
 ): Promise<AppealBanResult> {
-  const apiBaseUrl = getAPIBaseUrl();
+  const apiBaseUrl = getAPIBaseUrl()
   const response = await fetch(`${apiBaseUrl}/api/moderation/appeal`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -2289,8 +2310,9 @@ export async function executeAppealBan(
       userId: agent.userId,
       reason: args.reason,
     }),
-  });
-  return (await response.json()) as AppealBanResult;
+  })
+  const json: unknown = await response.json()
+  return AppealBanResponseSchema.parse(json)
 }
 
 /**
@@ -2298,7 +2320,7 @@ export async function executeAppealBan(
  */
 export async function executeAppealBanWithEscrow(
   agent: AuthenticatedAgent,
-  args: AppealBanWithEscrowArgs
+  args: AppealBanWithEscrowArgs,
 ): Promise<AppealBanWithEscrowResult> {
   const request: JsonRpcRequest = {
     jsonrpc: '2.0',
@@ -2306,17 +2328,11 @@ export async function executeAppealBanWithEscrow(
     params: {
       reason: args.reason,
       escrowPaymentTxHash: args.escrowPaymentTxHash,
-    } as JsonRpcParams,
+    },
     id: 1,
-  };
-  const response = await handleAppealBanWithEscrow(agent.agentId, request);
-  if (response.error) {
-    throw new Error(response.error.message);
   }
-  if (!response.result) {
-    throw new Error('No result in response');
-  }
-  return response.result as unknown as AppealBanWithEscrowResult;
+  const response = await handleAppealBanWithEscrow(agent.agentId, request)
+  return extractResult(response)
 }
 
 // ============================================================================
@@ -2328,19 +2344,19 @@ export async function executeAppealBanWithEscrow(
  */
 export async function executeFavoriteProfile(
   agent: AuthenticatedAgent,
-  args: FavoriteProfileArgs
+  args: FavoriteProfileArgs,
 ): Promise<FavoriteProfileResult> {
   if (args.userId === agent.userId) {
-    throw new ValidationError('Cannot favorite yourself', ['userId']);
+    throw new ValidationError('Cannot favorite yourself', ['userId'])
   }
   const existing = await db.favorite.findFirst({
     where: {
       userId: agent.userId,
       targetUserId: args.userId,
     },
-  });
+  })
   if (existing) {
-    return { success: true };
+    return { success: true }
   }
   await db.favorite.create({
     data: {
@@ -2348,8 +2364,8 @@ export async function executeFavoriteProfile(
       userId: agent.userId,
       targetUserId: args.userId,
     },
-  });
-  return { success: true };
+  })
+  return { success: true }
 }
 
 /**
@@ -2357,15 +2373,15 @@ export async function executeFavoriteProfile(
  */
 export async function executeUnfavoriteProfile(
   agent: AuthenticatedAgent,
-  args: UnfavoriteProfileArgs
+  args: UnfavoriteProfileArgs,
 ): Promise<UnfavoriteProfileResult> {
   await db.favorite.deleteMany({
     where: {
       userId: agent.userId,
       targetUserId: args.userId,
     },
-  });
-  return { success: true };
+  })
+  return { success: true }
 }
 
 /**
@@ -2373,15 +2389,17 @@ export async function executeUnfavoriteProfile(
  */
 export async function executeGetFavorites(
   agent: AuthenticatedAgent,
-  args: GetFavoritesArgs
+  args: GetFavoritesArgs,
 ): Promise<GetFavoritesResult> {
   const favoritesList = await db.favorite.findMany({
     where: { userId: agent.userId },
     take: args.limit || 50,
     skip: args.offset || 0,
     orderBy: { createdAt: 'desc' },
-  });
-  const targetUserIds = favoritesList.map((f) => f.targetUserId);
+  })
+  const targetUserIds = favoritesList
+    .map((f) => f.targetUserId)
+    .filter((id): id is string => id != null)
   const usersList = await db.user.findMany({
     where: { id: { in: targetUserIds } },
     select: {
@@ -2390,20 +2408,21 @@ export async function executeGetFavorites(
       displayName: true,
       profileImageUrl: true,
     },
-  });
-  const usersMap = new Map(usersList.map((u) => [u.id, u]));
+  })
+  const usersMap = new Map(usersList.map((u) => [u.id, u]))
   return {
     favorites: favoritesList.map((f) => {
-      const user = usersMap.get(f.targetUserId);
+      const targetUserId = f.targetUserId ?? ''
+      const user = usersMap.get(targetUserId)
       return {
-        userId: f.targetUserId,
+        userId: targetUserId,
         username: user?.username || null,
         displayName: user?.displayName || null,
         profileImageUrl: user?.profileImageUrl || null,
         favoritedAt: f.createdAt.toISOString(),
-      };
+      }
     }),
-  };
+  }
 }
 
 /**
@@ -2411,23 +2430,17 @@ export async function executeGetFavorites(
  */
 export async function executeGetFavoritePosts(
   agent: AuthenticatedAgent,
-  args: GetFavoritePostsArgs
+  args: GetFavoritePostsArgs,
 ): Promise<GetFavoritePostsResult> {
-  const apiBaseUrl = getAPIBaseUrl();
-  const url = new URL(`${apiBaseUrl}/api/posts/feed/favorites`);
-  if (args.limit) url.searchParams.set('limit', args.limit.toString());
-  if (args.offset) url.searchParams.set('offset', args.offset.toString());
+  const apiBaseUrl = getAPIBaseUrl()
+  const url = new URL(`${apiBaseUrl}/api/posts/feed/favorites`)
+  if (args.limit) url.searchParams.set('limit', args.limit.toString())
+  if (args.offset) url.searchParams.set('offset', args.offset.toString())
   const response = await fetch(url.toString(), {
     headers: { 'X-User-Id': agent.userId },
-  });
-  const data = (await response.json()) as {
-    posts: Array<{
-      id: string;
-      content: string;
-      authorId: string;
-      timestamp: Date | string;
-    }>;
-  };
+  })
+  const json: unknown = await response.json()
+  const data = GetFavoritePostsResponseSchema.parse(json)
   return {
     posts: data.posts.map((post) => ({
       id: post.id,
@@ -2438,7 +2451,7 @@ export async function executeGetFavoritePosts(
           ? post.timestamp.toISOString()
           : post.timestamp,
     })),
-  };
+  }
 }
 
 // ============================================================================
@@ -2450,9 +2463,9 @@ export async function executeGetFavoritePosts(
  */
 export async function executeTransferPoints(
   agent: AuthenticatedAgent,
-  args: TransferPointsArgs
+  args: TransferPointsArgs,
 ): Promise<TransferPointsResult> {
-  const apiBaseUrl = getAPIBaseUrl();
+  const apiBaseUrl = getAPIBaseUrl()
   const response = await fetch(`${apiBaseUrl}/api/points/transfer`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -2462,9 +2475,10 @@ export async function executeTransferPoints(
       amount: args.amount,
       message: args.message,
     }),
-  });
-  const result = (await response.json()) as TransferPointsResult;
-  return result;
+  })
+  const json: unknown = await response.json()
+  const result = TransferPointsResponseSchema.parse(json)
+  return result
 }
 
 // ============================================================================
@@ -2477,331 +2491,331 @@ export async function executeTransferPoints(
 export async function executeTool(
   toolName: string,
   args: StringRecord<JsonValue>,
-  agent: AuthenticatedAgent
+  agent: AuthenticatedAgent,
 ): Promise<MCPToolResult> {
   switch (toolName) {
     // Existing tools
     case 'get_markets': {
-      const validatedArgs = validateGetMarketsArgs(args);
-      return await executeGetMarkets(validatedArgs, agent);
+      const validatedArgs = validateGetMarketsArgs(args)
+      return await executeGetMarkets(validatedArgs, agent)
     }
     case 'place_bet': {
-      const validatedArgs = validatePlaceBetArgs(args);
-      return await executePlaceBet(agent, validatedArgs);
+      const validatedArgs = validatePlaceBetArgs(args)
+      return await executePlaceBet(agent, validatedArgs)
     }
     case 'get_balance': {
-      validateGetBalanceArgs(args);
-      return await executeGetBalance(agent);
+      validateGetBalanceArgs(args)
+      return await executeGetBalance(agent)
     }
     case 'get_positions': {
-      const validatedArgs = validateGetPositionsArgs(args);
-      return await executeGetPositions(agent, validatedArgs);
+      const validatedArgs = validateGetPositionsArgs(args)
+      return await executeGetPositions(agent, validatedArgs)
     }
     case 'close_position': {
-      const validatedArgs = validateClosePositionArgs(args);
-      return await executeClosePosition(agent, validatedArgs);
+      const validatedArgs = validateClosePositionArgs(args)
+      return await executeClosePosition(agent, validatedArgs)
     }
     case 'get_market_data': {
-      const validatedArgs = validateGetMarketDataArgs(args);
-      return await executeGetMarketData(agent, validatedArgs);
+      const validatedArgs = validateGetMarketDataArgs(args)
+      return await executeGetMarketData(agent, validatedArgs)
     }
     case 'query_feed': {
-      const validatedArgs = validateQueryFeedArgs(args);
-      return await executeQueryFeed(agent, validatedArgs);
+      const validatedArgs = validateQueryFeedArgs(args)
+      return await executeQueryFeed(agent, validatedArgs)
     }
     // Market Operations
     case 'buy_shares': {
-      const validatedArgs = validateBuySharesArgs(args);
-      return await executeBuyShares(agent, validatedArgs);
+      const validatedArgs = validateBuySharesArgs(args)
+      return await executeBuyShares(agent, validatedArgs)
     }
     case 'sell_shares': {
-      const validatedArgs = validateSellSharesArgs(args);
-      return await executeSellShares(agent, validatedArgs);
+      const validatedArgs = validateSellSharesArgs(args)
+      return await executeSellShares(agent, validatedArgs)
     }
     case 'open_position': {
-      const validatedArgs = validateOpenPositionArgs(args);
-      return await executeOpenPosition(agent, validatedArgs);
+      const validatedArgs = validateOpenPositionArgs(args)
+      return await executeOpenPosition(agent, validatedArgs)
     }
     case 'get_market_prices': {
-      const validatedArgs = validateGetMarketPricesArgs(args);
-      return await executeGetMarketPrices(agent, validatedArgs);
+      const validatedArgs = validateGetMarketPricesArgs(args)
+      return await executeGetMarketPrices(agent, validatedArgs)
     }
     case 'get_perpetuals': {
-      validateGetPerpetualsArgs(args);
-      return await executeGetPerpetuals(agent, {} as GetPerpetualsArgs);
+      const validatedArgs = validateGetPerpetualsArgs(args)
+      return await executeGetPerpetuals(agent, validatedArgs)
     }
     case 'get_trades': {
-      const validatedArgs = validateGetTradesArgs(args);
-      return await executeGetTrades(agent, validatedArgs);
+      const validatedArgs = validateGetTradesArgs(args)
+      return await executeGetTrades(agent, validatedArgs)
     }
     case 'get_trade_history': {
-      const validatedArgs = validateGetTradeHistoryArgs(args);
-      return await executeGetTradeHistory(agent, validatedArgs);
+      const validatedArgs = validateGetTradeHistoryArgs(args)
+      return await executeGetTradeHistory(agent, validatedArgs)
     }
     // Social Features
     case 'create_post': {
-      const validatedArgs = validateCreatePostArgs(args);
-      return await executeCreatePost(agent, validatedArgs);
+      const validatedArgs = validateCreatePostArgs(args)
+      return await executeCreatePost(agent, validatedArgs)
     }
     case 'delete_post': {
-      const validatedArgs = validateDeletePostArgs(args);
-      return await executeDeletePost(agent, validatedArgs);
+      const validatedArgs = validateDeletePostArgs(args)
+      return await executeDeletePost(agent, validatedArgs)
     }
     case 'like_post': {
-      const validatedArgs = validateLikePostArgs(args);
-      return await executeLikePost(agent, validatedArgs);
+      const validatedArgs = validateLikePostArgs(args)
+      return await executeLikePost(agent, validatedArgs)
     }
     case 'unlike_post': {
-      const validatedArgs = validateUnlikePostArgs(args);
-      return await executeUnlikePost(agent, validatedArgs);
+      const validatedArgs = validateUnlikePostArgs(args)
+      return await executeUnlikePost(agent, validatedArgs)
     }
     case 'share_post': {
-      const validatedArgs = validateSharePostArgs(args);
-      return await executeSharePost(agent, validatedArgs);
+      const validatedArgs = validateSharePostArgs(args)
+      return await executeSharePost(agent, validatedArgs)
     }
     case 'get_comments': {
-      const validatedArgs = validateGetCommentsArgs(args);
-      return await executeGetComments(agent, validatedArgs);
+      const validatedArgs = validateGetCommentsArgs(args)
+      return await executeGetComments(agent, validatedArgs)
     }
     case 'create_comment': {
-      const validatedArgs = validateCreateCommentArgs(args);
-      return await executeCreateComment(agent, validatedArgs);
+      const validatedArgs = validateCreateCommentArgs(args)
+      return await executeCreateComment(agent, validatedArgs)
     }
     case 'delete_comment': {
-      const validatedArgs = validateDeleteCommentArgs(args);
-      return await executeDeleteComment(agent, validatedArgs);
+      const validatedArgs = validateDeleteCommentArgs(args)
+      return await executeDeleteComment(agent, validatedArgs)
     }
     case 'like_comment': {
-      const validatedArgs = validateLikeCommentArgs(args);
-      return await executeLikeComment(agent, validatedArgs);
+      const validatedArgs = validateLikeCommentArgs(args)
+      return await executeLikeComment(agent, validatedArgs)
     }
     case 'get_posts_by_tag': {
-      const validatedArgs = validateGetPostsByTagArgs(args);
-      return await executeGetPostsByTag(agent, validatedArgs);
+      const validatedArgs = validateGetPostsByTagArgs(args)
+      return await executeGetPostsByTag(agent, validatedArgs)
     }
     // User Management
     case 'get_user_profile': {
-      const validatedArgs = validateGetUserProfileArgs(args);
-      return await executeGetUserProfile(agent, validatedArgs);
+      const validatedArgs = validateGetUserProfileArgs(args)
+      return await executeGetUserProfile(agent, validatedArgs)
     }
     case 'update_profile': {
-      const validatedArgs = validateUpdateProfileArgs(args);
-      return await executeUpdateProfile(agent, validatedArgs);
+      const validatedArgs = validateUpdateProfileArgs(args)
+      return await executeUpdateProfile(agent, validatedArgs)
     }
     case 'follow_user': {
-      const validatedArgs = validateFollowUserArgs(args);
-      return await executeFollowUser(agent, validatedArgs);
+      const validatedArgs = validateFollowUserArgs(args)
+      return await executeFollowUser(agent, validatedArgs)
     }
     case 'unfollow_user': {
-      const validatedArgs = validateUnfollowUserArgs(args);
-      return await executeUnfollowUser(agent, validatedArgs);
+      const validatedArgs = validateUnfollowUserArgs(args)
+      return await executeUnfollowUser(agent, validatedArgs)
     }
     case 'get_followers': {
-      const validatedArgs = validateGetFollowersArgs(args);
-      return await executeGetFollowers(agent, validatedArgs);
+      const validatedArgs = validateGetFollowersArgs(args)
+      return await executeGetFollowers(agent, validatedArgs)
     }
     case 'get_following': {
-      const validatedArgs = validateGetFollowingArgs(args);
-      return await executeGetFollowing(agent, validatedArgs);
+      const validatedArgs = validateGetFollowingArgs(args)
+      return await executeGetFollowing(agent, validatedArgs)
     }
     case 'search_users': {
-      const validatedArgs = validateSearchUsersArgs(args);
-      return await executeSearchUsers(agent, validatedArgs);
+      const validatedArgs = validateSearchUsersArgs(args)
+      return await executeSearchUsers(agent, validatedArgs)
     }
     case 'get_user_wallet': {
-      const validatedArgs = validateGetUserWalletArgs(args);
-      return await executeGetUserWallet(agent, validatedArgs);
+      const validatedArgs = validateGetUserWalletArgs(args)
+      return await executeGetUserWallet(agent, validatedArgs)
     }
     case 'get_user_stats': {
-      const validatedArgs = validateGetUserStatsArgs(args);
-      return await executeGetUserStats(agent, validatedArgs);
+      const validatedArgs = validateGetUserStatsArgs(args)
+      return await executeGetUserStats(agent, validatedArgs)
     }
     // Chats & Messaging
     case 'get_chats': {
-      const validatedArgs = validateGetChatsArgs(args);
-      return await executeGetChats(agent, validatedArgs);
+      const validatedArgs = validateGetChatsArgs(args)
+      return await executeGetChats(agent, validatedArgs)
     }
     case 'get_chat_messages': {
-      const validatedArgs = validateGetChatMessagesArgs(args);
-      return await executeGetChatMessages(agent, validatedArgs);
+      const validatedArgs = validateGetChatMessagesArgs(args)
+      return await executeGetChatMessages(agent, validatedArgs)
     }
     case 'send_message': {
-      const validatedArgs = validateSendMessageArgs(args);
-      return await executeSendMessage(agent, validatedArgs);
+      const validatedArgs = validateSendMessageArgs(args)
+      return await executeSendMessage(agent, validatedArgs)
     }
     case 'create_group': {
-      const validatedArgs = validateCreateGroupArgs(args);
-      return await executeCreateGroup(agent, validatedArgs);
+      const validatedArgs = validateCreateGroupArgs(args)
+      return await executeCreateGroup(agent, validatedArgs)
     }
     case 'leave_chat': {
-      const validatedArgs = validateLeaveChatArgs(args);
-      return await executeLeaveChat(agent, validatedArgs);
+      const validatedArgs = validateLeaveChatArgs(args)
+      return await executeLeaveChat(agent, validatedArgs)
     }
     case 'get_unread_count': {
-      validateGetUnreadCountArgs(args);
-      return await executeGetUnreadCount(agent, {} as GetUnreadCountArgs);
+      const validatedArgs = validateGetUnreadCountArgs(args)
+      return await executeGetUnreadCount(agent, validatedArgs)
     }
     // Notifications
     case 'get_notifications': {
-      const validatedArgs = validateGetNotificationsArgs(args);
-      return await executeGetNotifications(agent, validatedArgs);
+      const validatedArgs = validateGetNotificationsArgs(args)
+      return await executeGetNotifications(agent, validatedArgs)
     }
     case 'mark_notifications_read': {
-      const validatedArgs = validateMarkNotificationsReadArgs(args);
-      return await executeMarkNotificationsRead(agent, validatedArgs);
+      const validatedArgs = validateMarkNotificationsReadArgs(args)
+      return await executeMarkNotificationsRead(agent, validatedArgs)
     }
     case 'get_group_invites': {
-      validateGetGroupInvitesArgs(args);
-      return await executeGetGroupInvites(agent, {} as GetGroupInvitesArgs);
+      const validatedArgs = validateGetGroupInvitesArgs(args)
+      return await executeGetGroupInvites(agent, validatedArgs)
     }
     case 'accept_group_invite': {
-      const validatedArgs = validateAcceptGroupInviteArgs(args);
-      return await executeAcceptGroupInvite(agent, validatedArgs);
+      const validatedArgs = validateAcceptGroupInviteArgs(args)
+      return await executeAcceptGroupInvite(agent, validatedArgs)
     }
     case 'decline_group_invite': {
-      const validatedArgs = validateDeclineGroupInviteArgs(args);
-      return await executeDeclineGroupInvite(agent, validatedArgs);
+      const validatedArgs = validateDeclineGroupInviteArgs(args)
+      return await executeDeclineGroupInvite(agent, validatedArgs)
     }
     // Leaderboard & Stats
     case 'get_leaderboard': {
-      const validatedArgs = validateGetLeaderboardArgs(args);
-      return await executeGetLeaderboard(agent, validatedArgs);
+      const validatedArgs = validateGetLeaderboardArgs(args)
+      return await executeGetLeaderboard(agent, validatedArgs)
     }
     case 'get_system_stats': {
-      validateGetSystemStatsArgs(args);
-      return await executeGetSystemStats(agent, {} as GetSystemStatsArgs);
+      const validatedArgs = validateGetSystemStatsArgs(args)
+      return await executeGetSystemStats(agent, validatedArgs)
     }
     // Referrals & Rewards
     case 'get_referral_code': {
-      validateGetReferralCodeArgs(args);
-      return await executeGetReferralCode(agent, {} as GetReferralCodeArgs);
+      const validatedArgs = validateGetReferralCodeArgs(args)
+      return await executeGetReferralCode(agent, validatedArgs)
     }
     case 'get_referrals': {
-      validateGetReferralsArgs(args);
-      return await executeGetReferrals(agent, {} as GetReferralsArgs);
+      const validatedArgs = validateGetReferralsArgs(args)
+      return await executeGetReferrals(agent, validatedArgs)
     }
     case 'get_referral_stats': {
-      validateGetReferralStatsArgs(args);
-      return await executeGetReferralStats(agent, {} as GetReferralStatsArgs);
+      const validatedArgs = validateGetReferralStatsArgs(args)
+      return await executeGetReferralStats(agent, validatedArgs)
     }
     // Reputation
     case 'get_reputation': {
-      const validatedArgs = validateGetReputationArgs(args);
-      return await executeGetReputation(agent, validatedArgs);
+      const validatedArgs = validateGetReputationArgs(args)
+      return await executeGetReputation(agent, validatedArgs)
     }
     case 'get_reputation_breakdown': {
-      const validatedArgs = validateGetReputationBreakdownArgs(args);
-      return await executeGetReputationBreakdown(agent, validatedArgs);
+      const validatedArgs = validateGetReputationBreakdownArgs(args)
+      return await executeGetReputationBreakdown(agent, validatedArgs)
     }
     // Trending & Discovery
     case 'get_trending_tags': {
-      const validatedArgs = validateGetTrendingTagsArgs(args);
-      return await executeGetTrendingTags(agent, validatedArgs);
+      const validatedArgs = validateGetTrendingTagsArgs(args)
+      return await executeGetTrendingTags(agent, validatedArgs)
     }
     // Organizations
     case 'get_organizations': {
-      const validatedArgs = validateGetOrganizationsArgs(args);
-      return await executeGetOrganizations(agent, validatedArgs);
+      const validatedArgs = validateGetOrganizationsArgs(args)
+      return await executeGetOrganizations(agent, validatedArgs)
     }
     // x402 Micropayments
     case 'payment_request': {
-      const validatedArgs = validatePaymentRequestArgs(args);
-      return await executePaymentRequest(agent, validatedArgs);
+      const validatedArgs = validatePaymentRequestArgs(args)
+      return await executePaymentRequest(agent, validatedArgs)
     }
     case 'payment_receipt': {
-      const validatedArgs = validatePaymentReceiptArgs(args);
-      return await executePaymentReceipt(agent, validatedArgs);
+      const validatedArgs = validatePaymentReceiptArgs(args)
+      return await executePaymentReceipt(agent, validatedArgs)
     }
     // Moderation
     case 'block_user': {
-      const validatedArgs = validateBlockUserArgs(args);
-      return await executeBlockUser(agent, validatedArgs);
+      const validatedArgs = validateBlockUserArgs(args)
+      return await executeBlockUser(agent, validatedArgs)
     }
     case 'unblock_user': {
-      const validatedArgs = validateUnblockUserArgs(args);
-      return await executeUnblockUser(agent, validatedArgs);
+      const validatedArgs = validateUnblockUserArgs(args)
+      return await executeUnblockUser(agent, validatedArgs)
     }
     case 'mute_user': {
-      const validatedArgs = validateMuteUserArgs(args);
-      return await executeMuteUser(agent, validatedArgs);
+      const validatedArgs = validateMuteUserArgs(args)
+      return await executeMuteUser(agent, validatedArgs)
     }
     case 'unmute_user': {
-      const validatedArgs = validateUnmuteUserArgs(args);
-      return await executeUnmuteUser(agent, validatedArgs);
+      const validatedArgs = validateUnmuteUserArgs(args)
+      return await executeUnmuteUser(agent, validatedArgs)
     }
     case 'report_user': {
-      const validatedArgs = validateReportUserArgs(args);
-      return await executeReportUser(agent, validatedArgs);
+      const validatedArgs = validateReportUserArgs(args)
+      return await executeReportUser(agent, validatedArgs)
     }
     case 'report_post': {
-      const validatedArgs = validateReportPostArgs(args);
-      return await executeReportPost(agent, validatedArgs);
+      const validatedArgs = validateReportPostArgs(args)
+      return await executeReportPost(agent, validatedArgs)
     }
     case 'get_blocks': {
-      validateGetBlocksArgs(args);
-      return await executeGetBlocks(agent, {} as GetBlocksArgs);
+      const validatedArgs = validateGetBlocksArgs(args)
+      return await executeGetBlocks(agent, validatedArgs)
     }
     case 'get_mutes': {
-      validateGetMutesArgs(args);
-      return await executeGetMutes(agent, {} as GetMutesArgs);
+      const validatedArgs = validateGetMutesArgs(args)
+      return await executeGetMutes(agent, validatedArgs)
     }
     case 'check_block_status': {
-      const validatedArgs = validateCheckBlockStatusArgs(args);
-      return await executeCheckBlockStatus(agent, validatedArgs);
+      const validatedArgs = validateCheckBlockStatusArgs(args)
+      return await executeCheckBlockStatus(agent, validatedArgs)
     }
     case 'check_mute_status': {
-      const validatedArgs = validateCheckMuteStatusArgs(args);
-      return await executeCheckMuteStatus(agent, validatedArgs);
+      const validatedArgs = validateCheckMuteStatusArgs(args)
+      return await executeCheckMuteStatus(agent, validatedArgs)
     }
     // Moderation Escrow
     case 'create_escrow_payment': {
-      const validatedArgs = validateCreateEscrowPaymentArgs(args);
-      return await executeCreateEscrowPayment(agent, validatedArgs);
+      const validatedArgs = validateCreateEscrowPaymentArgs(args)
+      return await executeCreateEscrowPayment(agent, validatedArgs)
     }
     case 'verify_escrow_payment': {
-      const validatedArgs = validateVerifyEscrowPaymentArgs(args);
-      return await executeVerifyEscrowPayment(agent, validatedArgs);
+      const validatedArgs = validateVerifyEscrowPaymentArgs(args)
+      return await executeVerifyEscrowPayment(agent, validatedArgs)
     }
     case 'refund_escrow_payment': {
-      const validatedArgs = validateRefundEscrowPaymentArgs(args);
-      return await executeRefundEscrowPayment(agent, validatedArgs);
+      const validatedArgs = validateRefundEscrowPaymentArgs(args)
+      return await executeRefundEscrowPayment(agent, validatedArgs)
     }
     case 'list_escrow_payments': {
-      const validatedArgs = validateListEscrowPaymentsArgs(args);
-      return await executeListEscrowPayments(agent, validatedArgs);
+      const validatedArgs = validateListEscrowPaymentsArgs(args)
+      return await executeListEscrowPayments(agent, validatedArgs)
     }
     // Ban Appeals
     case 'appeal_ban': {
-      const validatedArgs = validateAppealBanArgs(args);
-      return await executeAppealBan(agent, validatedArgs);
+      const validatedArgs = validateAppealBanArgs(args)
+      return await executeAppealBan(agent, validatedArgs)
     }
     case 'appeal_ban_with_escrow': {
-      const validatedArgs = validateAppealBanWithEscrowArgs(args);
-      return await executeAppealBanWithEscrow(agent, validatedArgs);
+      const validatedArgs = validateAppealBanWithEscrowArgs(args)
+      return await executeAppealBanWithEscrow(agent, validatedArgs)
     }
     // Favorites
     case 'favorite_profile': {
-      const validatedArgs = validateFavoriteProfileArgs(args);
-      return await executeFavoriteProfile(agent, validatedArgs);
+      const validatedArgs = validateFavoriteProfileArgs(args)
+      return await executeFavoriteProfile(agent, validatedArgs)
     }
     case 'unfavorite_profile': {
-      const validatedArgs = validateUnfavoriteProfileArgs(args);
-      return await executeUnfavoriteProfile(agent, validatedArgs);
+      const validatedArgs = validateUnfavoriteProfileArgs(args)
+      return await executeUnfavoriteProfile(agent, validatedArgs)
     }
     case 'get_favorites': {
-      const validatedArgs = validateGetFavoritesArgs(args);
-      return await executeGetFavorites(agent, validatedArgs);
+      const validatedArgs = validateGetFavoritesArgs(args)
+      return await executeGetFavorites(agent, validatedArgs)
     }
     case 'get_favorite_posts': {
-      const validatedArgs = validateGetFavoritePostsArgs(args);
-      return await executeGetFavoritePosts(agent, validatedArgs);
+      const validatedArgs = validateGetFavoritePostsArgs(args)
+      return await executeGetFavoritePosts(agent, validatedArgs)
     }
     // Points Transfer
     case 'transfer_points': {
-      const validatedArgs = validateTransferPointsArgs(args);
-      return await executeTransferPoints(agent, validatedArgs);
+      const validatedArgs = validateTransferPointsArgs(args)
+      return await executeTransferPoints(agent, validatedArgs)
     }
     default:
-      throw new Error(`Unknown tool: ${toolName}`);
+      throw new Error(`Unknown tool: ${toolName}`)
   }
 }

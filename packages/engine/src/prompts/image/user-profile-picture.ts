@@ -1,4 +1,4 @@
-import { definePrompt } from '../define-prompt';
+import { definePrompt } from '../define-prompt'
 
 /**
  * Prompt for generating humorous profile pictures for new users.
@@ -48,4 +48,4 @@ IMPORTANT:
 - Avoid specific people or copyrighted characters
 - Focus on being memorable and conversation-starting
 `.trim(),
-});
+})

@@ -1,12 +1,10 @@
-'use client';
-
-import { Search } from 'lucide-react';
-import type { MarketTab } from '@/types/markets';
+import { Search } from 'lucide-react'
+import type { MarketTab } from '@/types/markets'
 
 interface MarketsSearchInputProps {
-  value: string;
-  onChange: (value: string) => void;
-  activeTab: MarketTab;
+  value: string
+  onChange: (value: string) => void
+  activeTab: MarketTab
 }
 
 /**
@@ -19,9 +17,9 @@ export function MarketsSearchInput({
   activeTab,
 }: MarketsSearchInputProps) {
   const placeholder =
-    activeTab === 'perps' ? 'Search tickers...' : 'Search questions...';
+    activeTab === 'perps' ? 'Search tickers...' : 'Search questions...'
   const ariaLabel =
-    activeTab === 'perps' ? 'Search tickers' : 'Search questions';
+    activeTab === 'perps' ? 'Search tickers' : 'Search questions'
 
   return (
     <div className="relative">
@@ -38,5 +36,5 @@ export function MarketsSearchInput({
         className="w-full rounded bg-muted/50 py-3 pr-4 pl-10 text-foreground placeholder:text-muted-foreground focus:bg-muted focus:outline-none focus:ring-2 focus:ring-[#0066FF]/30"
       />
     </div>
-  );
+  )
 }

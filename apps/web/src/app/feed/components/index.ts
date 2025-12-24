@@ -1,2 +1,2 @@
-export { EmptyFeed } from './EmptyFeed';
-export { PostList } from './PostList';
+export { EmptyFeed } from './EmptyFeed'
+export { PostList } from './PostList'

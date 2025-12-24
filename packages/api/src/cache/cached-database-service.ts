@@ -13,16 +13,16 @@
  * ```
  */
 
-import { db, getDbInstance, type Post } from '@babylon/db';
-import { StaticDataRegistry } from '@babylon/engine';
-import { logger } from '@babylon/shared';
+import { db, getDbInstance, type Post } from '@babylon/db'
+import { StaticDataRegistry } from '@babylon/engine'
+import { logger } from '@babylon/shared'
 import {
   CACHE_KEYS,
   DEFAULT_TTLS,
   getCacheOrFetch,
   invalidateCache,
   invalidateCachePattern,
-} from './cache-service';
+} from './cache-service'
 
 /**
  * Cached Database Service Class
@@ -45,12 +45,12 @@ class CachedDatabaseService {
    */
   async getRecentPosts(
     limit = 100,
-    cursorOrOffset?: string | number
+    cursorOrOffset?: string | number,
   ): Promise<Post[]> {
-    const isCursor = typeof cursorOrOffset === 'string';
+    const isCursor = typeof cursorOrOffset === 'string'
     const cacheKey = isCursor
       ? `${limit}:cursor:${cursorOrOffset}`
-      : `${limit}:offset:${cursorOrOffset || 0}`;
+      : `${limit}:offset:${cursorOrOffset || 0}`
 
     return getCacheOrFetch(
       cacheKey,
@@ -58,8 +58,8 @@ class CachedDatabaseService {
       {
         namespace: CACHE_KEYS.POSTS_LIST,
         ttl: DEFAULT_TTLS.POSTS_LIST,
-      }
-    );
+      },
+    )
   }
 
   /**
@@ -68,12 +68,12 @@ class CachedDatabaseService {
   async getPostsByActor(
     authorId: string,
     limit = 100,
-    cursorOrOffset?: string | number
+    cursorOrOffset?: string | number,
   ): Promise<Post[]> {
-    const isCursor = typeof cursorOrOffset === 'string';
+    const isCursor = typeof cursorOrOffset === 'string'
     const cacheKey = isCursor
       ? `${authorId}:${limit}:cursor:${cursorOrOffset}`
-      : `${authorId}:${limit}:offset:${cursorOrOffset || 0}`;
+      : `${authorId}:${limit}:offset:${cursorOrOffset || 0}`
 
     return getCacheOrFetch(
       cacheKey,
@@ -81,8 +81,8 @@ class CachedDatabaseService {
       {
         namespace: CACHE_KEYS.POSTS_BY_ACTOR,
         ttl: DEFAULT_TTLS.POSTS_BY_ACTOR,
-      }
-    );
+      },
+    )
   }
 
   /**
@@ -93,12 +93,12 @@ class CachedDatabaseService {
     userId: string,
     followedIds: string[],
     limit = 100,
-    cursorOrOffset?: string | number
+    cursorOrOffset?: string | number,
   ): Promise<Post[]> {
-    const isCursor = typeof cursorOrOffset === 'string';
+    const isCursor = typeof cursorOrOffset === 'string'
     const cacheKey = isCursor
       ? `${userId}:${limit}:cursor:${cursorOrOffset}`
-      : `${userId}:${limit}:offset:${cursorOrOffset || 0}`;
+      : `${userId}:${limit}:offset:${cursorOrOffset || 0}`
 
     return getCacheOrFetch(
       cacheKey,
@@ -109,32 +109,32 @@ class CachedDatabaseService {
             ? await db.user.findMany({
                 where: { AND: [{ id: { in: followedIds } }, { isTest: true }] },
               })
-            : [];
+            : []
 
         // Get test actors from static registry
         const testActorIds = StaticDataRegistry.getAllActors()
           .filter((a) => a.isTest && followedIds.includes(a.id))
-          .map((a) => a.id);
+          .map((a) => a.id)
 
         const testAuthorIds = new Set([
           ...testUsers.map((u) => u.id),
           ...testActorIds,
-        ]);
+        ])
 
         // Remove test users from followedIds
         const nonTestFollowedIds = followedIds.filter(
-          (id) => !testAuthorIds.has(id)
-        );
+          (id) => !testAuthorIds.has(id),
+        )
 
         if (nonTestFollowedIds.length === 0) {
-          return [];
+          return []
         }
 
-        const cursor = isCursor ? (cursorOrOffset as string) : undefined;
+        const cursor = isCursor ? (cursorOrOffset as string) : undefined
         const offset =
-          !isCursor && typeof cursorOrOffset === 'number' ? cursorOrOffset : 0;
+          !isCursor && typeof cursorOrOffset === 'number' ? cursorOrOffset : 0
 
-        const now = new Date();
+        const now = new Date()
 
         // Query posts from database (only from non-test users)
         const result = await db.post.findMany({
@@ -149,33 +149,33 @@ class CachedDatabaseService {
           orderBy: { timestamp: 'desc' },
           take: limit,
           skip: cursor ? 0 : offset,
-        });
+        })
 
-        return result;
+        return result
       },
       {
         namespace: CACHE_KEYS.POSTS_FOLLOWING,
         ttl: DEFAULT_TTLS.POSTS_FOLLOWING,
-      }
-    );
+      },
+    )
   }
 
   /**
    * Get user by ID with caching
    */
   async getUserById(userId: string) {
-    const cacheKey = userId;
+    const cacheKey = userId
 
     return getCacheOrFetch(
       cacheKey,
       async () => {
-        return db.user.findUnique({ where: { id: userId } });
+        return db.user.findUnique({ where: { id: userId } })
       },
       {
         namespace: CACHE_KEYS.USER,
         ttl: DEFAULT_TTLS.USER,
-      }
-    );
+      },
+    )
   }
 
   /**
@@ -184,42 +184,42 @@ class CachedDatabaseService {
   async getUsersByIds(userIds: string[]) {
     // For bulk operations, we still cache individual users
     const usersResult = await Promise.all(
-      userIds.map((id) => this.getUserById(id))
-    );
+      userIds.map((id) => this.getUserById(id)),
+    )
 
-    return usersResult.filter((u) => u !== null);
+    return usersResult.filter((u) => u !== null)
   }
 
   /**
    * Get user balance with caching
    */
   async getUserBalance(userId: string) {
-    const cacheKey = userId;
+    const cacheKey = userId
 
     return getCacheOrFetch(
       cacheKey,
       async () => {
-        const user = await db.user.findUnique({ where: { id: userId } });
-        if (!user) return null;
+        const user = await db.user.findUnique({ where: { id: userId } })
+        if (!user) return null
         return {
           virtualBalance: user.virtualBalance,
           totalDeposited: user.totalDeposited,
           totalWithdrawn: user.totalWithdrawn,
           lifetimePnL: user.lifetimePnL,
-        };
+        }
       },
       {
         namespace: CACHE_KEYS.USER_BALANCE,
         ttl: DEFAULT_TTLS.USER_BALANCE,
-      }
-    );
+      },
+    )
   }
 
   /**
    * Get user profile stats with caching (followers, following, posts)
    */
   async getUserProfileStats(userId: string) {
-    const cacheKey = userId;
+    const cacheKey = userId
 
     return getCacheOrFetch(
       cacheKey,
@@ -240,7 +240,7 @@ class CachedDatabaseService {
           db.comment.count({ where: { authorId: userId } }),
           db.reaction.count({ where: { userId } }),
           db.post.count({ where: { authorId: userId } }),
-        ]);
+        ])
 
         return {
           followers,
@@ -249,13 +249,13 @@ class CachedDatabaseService {
           comments,
           reactions,
           posts,
-        };
+        }
       },
       {
         namespace: 'user:profile:stats',
         ttl: 60, // Cache for 1 minute
-      }
-    );
+      },
+    )
   }
 
   /**
@@ -263,17 +263,17 @@ class CachedDatabaseService {
    */
   async getActorById(actorId: string) {
     // Static data from registry - no caching needed (already in memory)
-    const staticActor = StaticDataRegistry.getActor(actorId);
-    if (!staticActor) return null;
+    const staticActor = StaticDataRegistry.getActor(actorId)
+    if (!staticActor) return null
 
     // Optionally combine with dynamic state
-    const state = await getDbInstance().getActorState(actorId);
+    const state = await getDbInstance().getActorState(actorId)
     return {
       ...staticActor,
       tradingBalance: state?.tradingBalance ?? '10000',
       reputationPoints: state?.reputationPoints ?? 10000,
       hasPool: state?.hasPool ?? false,
-    };
+    }
   }
 
   /**
@@ -281,10 +281,10 @@ class CachedDatabaseService {
    */
   async getActorsByIds(actorIds: string[]) {
     const actorsResult = await Promise.all(
-      actorIds.map((id) => this.getActorById(id))
-    );
+      actorIds.map((id) => this.getActorById(id)),
+    )
 
-    return actorsResult.filter((a) => a !== null);
+    return actorsResult.filter((a) => a !== null)
   }
 
   /**
@@ -292,22 +292,22 @@ class CachedDatabaseService {
    */
   async getOrganizationById(orgId: string) {
     // Static data from registry - no caching needed (already in memory)
-    const staticOrg = StaticDataRegistry.getOrganization(orgId);
-    if (!staticOrg) return null;
+    const staticOrg = StaticDataRegistry.getOrganization(orgId)
+    if (!staticOrg) return null
 
     // Optionally combine with dynamic state
-    const state = await getDbInstance().getOrganizationState(orgId);
+    const state = await getDbInstance().getOrganizationState(orgId)
     return {
       ...staticOrg,
       currentPrice: state?.currentPrice ?? staticOrg.initialPrice,
-    };
+    }
   }
 
   /**
    * Get active markets with caching
    */
   async getActiveMarkets() {
-    const cacheKey = 'active';
+    const cacheKey = 'active'
 
     return getCacheOrFetch(
       cacheKey,
@@ -315,20 +315,20 @@ class CachedDatabaseService {
         return db.market.findMany({
           where: { resolved: false },
           orderBy: { createdAt: 'desc' },
-        });
+        })
       },
       {
         namespace: CACHE_KEYS.MARKETS_LIST,
         ttl: DEFAULT_TTLS.MARKETS_LIST,
-      }
-    );
+      },
+    )
   }
 
   /**
    * Get trending tags with caching
    */
   async getTrendingTags(limit = 10) {
-    const cacheKey = `${limit}`;
+    const cacheKey = `${limit}`
 
     return getCacheOrFetch(
       cacheKey,
@@ -336,20 +336,20 @@ class CachedDatabaseService {
         const trending = await db.trendingTag.findMany({
           orderBy: { rank: 'asc' },
           take: limit,
-        });
+        })
 
-        const tagIds = [...new Set(trending.map((t) => t.tagId))];
+        const tagIds = [...new Set(trending.map((t) => t.tagId))]
         const tags =
           tagIds.length > 0
             ? await db.tag.findMany({
                 where: { id: { in: tagIds } },
               })
-            : [];
+            : []
 
-        const tagsById = new Map(tags.map((t) => [t.id, t]));
+        const tagsById = new Map(tags.map((t) => [t.id, t]))
 
         return trending.map((t) => {
-          const tag = tagsById.get(t.tagId);
+          const tag = tagsById.get(t.tagId)
           return {
             id: t.id,
             tagId: t.tagId,
@@ -365,25 +365,25 @@ class CachedDatabaseService {
                   updatedAt: tag.updatedAt,
                 }
               : null,
-          };
-        });
+          }
+        })
       },
       {
         namespace: CACHE_KEYS.TRENDING_TAGS,
         ttl: DEFAULT_TTLS.TRENDING_TAGS,
-      }
-    );
+      },
+    )
   }
 
   /**
    * Invalidate cache for posts
    */
   async invalidatePostsCache() {
-    logger.info('Invalidating posts cache', undefined, 'CachedDatabaseService');
+    logger.info('Invalidating posts cache', undefined, 'CachedDatabaseService')
     await Promise.all([
       invalidateCachePattern('*', { namespace: CACHE_KEYS.POSTS_LIST }),
       invalidateCachePattern('*', { namespace: CACHE_KEYS.POSTS_FOLLOWING }),
-    ]);
+    ])
   }
 
   /**
@@ -393,18 +393,18 @@ class CachedDatabaseService {
     logger.info(
       'Invalidating actor posts cache',
       { actorId },
-      'CachedDatabaseService'
-    );
+      'CachedDatabaseService',
+    )
     await invalidateCachePattern(`${actorId}:*`, {
       namespace: CACHE_KEYS.POSTS_BY_ACTOR,
-    });
+    })
   }
 
   /**
    * Invalidate cache for user
    */
   async invalidateUserCache(userId: string) {
-    logger.info('Invalidating user cache', { userId }, 'CachedDatabaseService');
+    logger.info('Invalidating user cache', { userId }, 'CachedDatabaseService')
     await Promise.all([
       invalidateCache(userId, { namespace: CACHE_KEYS.USER }),
       invalidateCache(userId, { namespace: CACHE_KEYS.USER_BALANCE }),
@@ -413,7 +413,7 @@ class CachedDatabaseService {
         namespace: CACHE_KEYS.POSTS_FOLLOWING,
       }),
       invalidateCachePattern('*', { namespace: 'user:follows' }), // Invalidate follows cache
-    ]);
+    ])
   }
 
   /**
@@ -423,21 +423,21 @@ class CachedDatabaseService {
     logger.info(
       'Invalidating markets cache',
       undefined,
-      'CachedDatabaseService'
-    );
-    await invalidateCachePattern('*', { namespace: CACHE_KEYS.MARKETS_LIST });
+      'CachedDatabaseService',
+    )
+    await invalidateCachePattern('*', { namespace: CACHE_KEYS.MARKETS_LIST })
   }
 
   /**
-   * Invalidate all caches (use sparingly!)
+   * Invalidate all caches (use sparingly)
    */
   async invalidateAllCaches() {
-    logger.warn('Invalidating all caches', undefined, 'CachedDatabaseService');
+    logger.warn('Invalidating all caches', undefined, 'CachedDatabaseService')
     await Promise.all([
       this.invalidatePostsCache(),
       this.invalidateMarketsCache(),
-    ]);
+    ])
   }
 }
 
-export const cachedDb = new CachedDatabaseService();
+export const cachedDb = new CachedDatabaseService()

@@ -4,7 +4,7 @@
  * Provides trajectory logging for RL training data collection.
  */
 
-import type { Plugin } from '@elizaos/core';
+import type { Plugin } from '@elizaos/core'
 
 // Action interceptor
 export {
@@ -16,23 +16,23 @@ export {
   wrapPluginActions,
   wrapPluginProviders,
   wrapProviderWithLogging,
-} from './action-interceptor';
-export type { ARTLLMCall, ARTStep, ARTTrajectory } from './art-format';
+} from './action-interceptor'
+export type { ARTLLMCall, ARTStep, ARTTrajectory } from './art-format'
 // ART format conversion
-export { groupTrajectories, toARTTrajectory } from './art-format';
+export { groupTrajectories, toARTTrajectory } from './art-format'
 // Export utilities
 export {
   type ExportOptions,
   type ExportResult,
   exportForOpenPipeART,
   exportGroupedForGRPO,
-} from './export';
+} from './export'
 // Game rewards
 export {
   buildGameStateFromDB,
   computeStepReward,
   computeTrajectoryReward,
-} from './game-rewards';
+} from './game-rewards'
 // Integration helpers
 export {
   endAutonomousTick,
@@ -44,9 +44,9 @@ export {
   type TrajectoryMetadata,
   type WrappedFunctionArgs,
   withTrajectoryLogging,
-} from './integration';
+} from './integration'
 // Core service
-export { TrajectoryLoggerService } from './TrajectoryLoggerService';
+export { TrajectoryLoggerService } from './TrajectoryLoggerService'
 // Types
 export type {
   ActionAttempt,
@@ -57,7 +57,7 @@ export type {
   Trajectory,
   TrajectoryMetrics,
   TrajectoryStep,
-} from './types';
+} from './types'
 
 /**
  * Trajectory logger plugin for ElizaOS
@@ -71,4 +71,4 @@ export const trajectoryLoggerPlugin: Plugin = {
   providers: [],
   evaluators: [],
   services: [],
-};
+}

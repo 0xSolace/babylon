@@ -1,4 +1,4 @@
-import { definePrompt } from '../define-prompt';
+import { definePrompt } from '../define-prompt'
 
 /**
  * Prompt for ranking questions by dramatic potential and entertainment value.
@@ -59,4 +59,4 @@ Return XML with ranks:
 
 No other text.
 `.trim(),
-});
+})

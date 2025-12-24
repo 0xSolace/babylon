@@ -1,12 +1,10 @@
-'use client';
-
 import {
   getProfileUrl,
   getReferralShareText,
   getReferralUrl,
   POINTS,
-} from '@babylon/shared';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+} from '@babylon/shared'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Award,
   Check,
@@ -20,94 +18,94 @@ import {
   UserPlus,
   Users,
   Wallet,
-} from 'lucide-react';
-import { useSearchParams } from 'next/navigation';
-import { useEffect, useState } from 'react';
-import { toast } from 'sonner';
-import { AirdropStatusWidget } from '@/components/airdrop';
-import { LoginButton } from '@/components/auth/LoginButton';
-import { LinkSocialAccountsModal } from '@/components/profile/LinkSocialAccountsModal';
-import { RewardsSkeleton } from '@/components/rewards/RewardsSkeleton';
-import { Avatar } from '@/components/shared/Avatar';
-import { ExternalShareButton } from '@/components/shared/ExternalShareButton';
-import { PageContainer } from '@/components/shared/PageContainer';
-import { Separator } from '@/components/shared/Separator';
-import { ShareEarnModal } from '@/components/shared/ShareEarnModal';
-import { useAuth } from '@/hooks/useAuth';
-import { useAuthStore } from '@/stores/authStore';
+} from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { toast } from 'sonner'
+import { AirdropStatusWidget } from '@/components/airdrop'
+import { LoginButton } from '@/components/auth/LoginButton'
+import { LinkSocialAccountsModal } from '@/components/profile/LinkSocialAccountsModal'
+import { RewardsSkeleton } from '@/components/rewards/RewardsSkeleton'
+import { Avatar } from '@/components/shared/Avatar'
+import { ExternalShareButton } from '@/components/shared/ExternalShareButton'
+import { PageContainer } from '@/components/shared/PageContainer'
+import { Separator } from '@/components/shared/Separator'
+import { ShareEarnModal } from '@/components/shared/ShareEarnModal'
+import { useAuth } from '@/hooks/useAuth'
+import { useSearchParams } from '@/lib/navigation'
+import { useAuthStore } from '@/stores/authStore'
 
 interface ReferredUser {
-  id: string;
-  username: string | null;
-  displayName: string | null;
-  profileImageUrl: string | null;
-  createdAt: Date;
-  reputationPoints: number;
-  isFollowing: boolean;
-  joinedAt: Date | null;
+  id: string
+  username: string | null
+  displayName: string | null
+  profileImageUrl: string | null
+  createdAt: Date
+  reputationPoints: number
+  isFollowing: boolean
+  joinedAt: Date | null
 }
 
 interface ReferralStats {
-  totalReferrals: number;
-  totalPointsEarned?: number;
-  totalFeesEarned?: number;
-  pointsPerReferral?: number;
-  feeShareRate?: number;
-  followingCount: number;
-  weeklyReferralCount?: number;
-  weeklyLimit?: number;
+  totalReferrals: number
+  totalPointsEarned?: number
+  totalFeesEarned?: number
+  pointsPerReferral?: number
+  feeShareRate?: number
+  followingCount: number
+  weeklyReferralCount?: number
+  weeklyLimit?: number
 }
 
 interface ReferralData {
   user: {
-    id: string;
-    username: string | null;
-    displayName: string | null;
-    bio: string | null;
-    profileImageUrl: string | null;
-    referralCode: string | null;
-    reputationPoints: number;
-    pointsAwardedForProfile: boolean;
-    pointsAwardedForFarcaster: boolean;
-    pointsAwardedForTwitter: boolean;
-    pointsAwardedForWallet: boolean;
-    farcasterUsername: string | null;
-    twitterUsername: string | null;
-    walletAddress: string | null;
-  };
-  stats: ReferralStats;
-  referredUsers: ReferredUser[];
-  referralUrl: string | null;
+    id: string
+    username: string | null
+    displayName: string | null
+    bio: string | null
+    profileImageUrl: string | null
+    referralCode: string | null
+    reputationPoints: number
+    pointsAwardedForProfile: boolean
+    pointsAwardedForFarcaster: boolean
+    pointsAwardedForTwitter: boolean
+    pointsAwardedForWallet: boolean
+    farcasterUsername: string | null
+    twitterUsername: string | null
+    walletAddress: string | null
+  }
+  stats: ReferralStats
+  referredUsers: ReferredUser[]
+  referralUrl: string | null
 }
 
 export default function RewardsPage() {
-  const { ready, authenticated, getAccessToken, login, refresh } = useAuth();
-  const { user } = useAuthStore();
-  const searchParams = useSearchParams();
-  const queryClient = useQueryClient();
-  const [copiedUrl, setCopiedUrl] = useState(false);
-  const [showLinkSocialModal, setShowLinkSocialModal] = useState(false);
-  const [showShareModal, setShowShareModal] = useState(false);
+  const { ready, authenticated, getAccessToken, login, refresh } = useAuth()
+  const { user } = useAuthStore()
+  const searchParams = useSearchParams()
+  const queryClient = useQueryClient()
+  const [copiedUrl, setCopiedUrl] = useState(false)
+  const [showLinkSocialModal, setShowLinkSocialModal] = useState(false)
+  const [showShareModal, setShowShareModal] = useState(false)
 
   // Handle OAuth callback from Twitter/Discord linking
   useEffect(() => {
-    const success = searchParams.get('success');
-    const points = searchParams.get('points');
-    const errorParam = searchParams.get('error');
+    const success = searchParams.get('success')
+    const points = searchParams.get('points')
+    const errorParam = searchParams.get('error')
 
     if (success === 'twitter_linked' && points) {
-      toast.success(`X account linked! +${points} points awarded`);
+      toast.success(`X account linked! +${points} points awarded`)
       // Dispatch event to notify other components (like UserMenu) to refresh
-      window.dispatchEvent(new CustomEvent('rewards-updated'));
+      window.dispatchEvent(new CustomEvent('rewards-updated'))
       // Refresh auth state to get latest reputation points
-      refresh();
+      refresh()
       // Clean up URL params
-      window.history.replaceState({}, '', '/rewards');
+      window.history.replaceState({}, '', '/rewards')
     } else if (success === 'discord_linked' && points) {
-      toast.success(`Discord account linked! +${points} points awarded`);
-      window.dispatchEvent(new CustomEvent('rewards-updated'));
-      refresh();
-      window.history.replaceState({}, '', '/rewards');
+      toast.success(`Discord account linked! +${points} points awarded`)
+      window.dispatchEvent(new CustomEvent('rewards-updated'))
+      refresh()
+      window.history.replaceState({}, '', '/rewards')
     } else if (errorParam) {
       const errorMessages: Record<string, string> = {
         twitter_already_linked:
@@ -117,13 +115,13 @@ export default function RewardsPage() {
         token_exchange_failed: 'Failed to authenticate. Please try again.',
         invalid_state: 'Session expired. Please try again.',
         state_expired: 'Session expired. Please try again.',
-      };
+      }
       toast.error(
-        errorMessages[errorParam] || 'An error occurred. Please try again.'
-      );
-      window.history.replaceState({}, '', '/rewards');
+        errorMessages[errorParam] || 'An error occurred. Please try again.',
+      )
+      window.history.replaceState({}, '', '/rewards')
     }
-  }, [searchParams, refresh]);
+  }, [searchParams, refresh])
 
   const {
     data: referralData,
@@ -132,67 +130,66 @@ export default function RewardsPage() {
   } = useQuery({
     queryKey: ['referralData', user?.id],
     queryFn: async (): Promise<ReferralData> => {
-      const token = await getAccessToken();
+      const token = await getAccessToken()
       if (!token) {
-        throw new Error('Authentication required');
+        throw new Error('Authentication required')
       }
 
       const response = await fetch(
-        `/api/users/${encodeURIComponent(user!.id)}/referrals`,
+        `/api/users/${encodeURIComponent(user?.id)}/referrals`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
           },
-        }
-      );
+        },
+      )
 
       if (!response.ok) {
-        throw new Error('Failed to fetch referral data');
+        throw new Error('Failed to fetch referral data')
       }
 
-      return (await response.json()) as ReferralData;
+      return (await response.json()) as ReferralData
     },
     enabled: ready && authenticated && !!user?.id,
-  });
+  })
 
-  const loading = !ready || (authenticated && queryLoading);
-  const error = queryError ? (queryError as Error).message : null;
+  const loading = !ready || (authenticated && queryLoading)
+  const error = queryError ? (queryError as Error).message : null
 
   const fetchReferralData = () => {
     void queryClient.invalidateQueries({
       queryKey: ['referralData', user?.id],
-    });
-  };
+    })
+  }
 
   const handleCopyUrl = async () => {
-    if (!referralData?.user.referralCode) return;
-    const referralUrl = getReferralUrl(referralData.user.referralCode);
-    await navigator.clipboard.writeText(referralUrl);
-    setCopiedUrl(true);
-    setTimeout(() => setCopiedUrl(false), 2000);
-  };
+    if (!referralData?.user.referralCode) return
+    const referralUrl = getReferralUrl(referralData.user.referralCode)
+    await navigator.clipboard.writeText(referralUrl)
+    setCopiedUrl(true)
+    setTimeout(() => setCopiedUrl(false), 2000)
+  }
 
   // Calculate total points earned from all sources
   const calculateTotalEarned = () => {
-    if (!referralData) return 0;
-    let total = 0;
+    if (!referralData) return 0
+    let total = 0
 
     // Add referral fees earned (new system)
     if (referralData.stats.totalFeesEarned) {
-      total += referralData.stats.totalFeesEarned;
+      total += referralData.stats.totalFeesEarned
     }
 
     // Add profile completion points
     if (referralData.user.pointsAwardedForProfile)
-      total += POINTS.PROFILE_COMPLETION;
+      total += POINTS.PROFILE_COMPLETION
     if (referralData.user.pointsAwardedForFarcaster)
-      total += POINTS.FARCASTER_LINK;
-    if (referralData.user.pointsAwardedForTwitter) total += POINTS.TWITTER_LINK;
-    if (referralData.user.pointsAwardedForWallet)
-      total += POINTS.WALLET_CONNECT;
+      total += POINTS.FARCASTER_LINK
+    if (referralData.user.pointsAwardedForTwitter) total += POINTS.TWITTER_LINK
+    if (referralData.user.pointsAwardedForWallet) total += POINTS.WALLET_CONNECT
 
-    return total;
-  };
+    return total
+  }
 
   const rewardTasks = referralData
     ? [
@@ -201,14 +198,14 @@ export default function RewardsPage() {
           title: 'Complete Profile',
           description: (() => {
             if (referralData.user.pointsAwardedForProfile) {
-              return 'Username, image, and bio complete! ✓';
+              return 'Username, image, and bio complete! ✓'
             }
-            const missing = [];
-            if (!referralData.user.username) missing.push('username');
-            if (!referralData.user.profileImageUrl) missing.push('image');
+            const missing = []
+            if (!referralData.user.username) missing.push('username')
+            if (!referralData.user.profileImageUrl) missing.push('image')
             if (!referralData.user.bio || referralData.user.bio.length < 50)
-              missing.push('bio (50+ chars)');
-            return `Set ${missing.join(', ')}`;
+              missing.push('bio (50+ chars)')
+            return `Set ${missing.join(', ')}`
           })(),
           points: POINTS.PROFILE_COMPLETION,
           completed: referralData.user.pointsAwardedForProfile,
@@ -253,24 +250,24 @@ export default function RewardsPage() {
           color: 'text-orange-500',
         },
       ]
-    : [];
+    : []
 
   const handleTaskClick = (_taskId: string, action: string) => {
     if (action === 'link-social') {
-      setShowLinkSocialModal(true);
+      setShowLinkSocialModal(true)
     } else if (action === 'profile-settings') {
-      window.location.href = '/settings';
+      window.location.href = '/settings'
     } else if (action === 'wallet-connect') {
       // Trigger login modal for wallet connection
       if (authenticated) {
         // If already authenticated, redirect to settings to connect wallet
-        window.location.href = '/settings';
+        window.location.href = '/settings'
       } else {
         // Trigger login modal
-        login();
+        login()
       }
     }
-  };
+  }
 
   return (
     <PageContainer noPadding className="flex flex-col">
@@ -410,9 +407,10 @@ export default function RewardsPage() {
 
               <div className="grid gap-3">
                 {rewardTasks.map((task) => {
-                  const Icon = task.icon;
+                  const Icon = task.icon
                   return (
                     <button
+                      type="button"
                       key={task.id}
                       onClick={() => handleTaskClick(task.id, task.action)}
                       className={`flex w-full items-center gap-4 rounded-lg border p-4 text-left transition-all ${
@@ -449,7 +447,7 @@ export default function RewardsPage() {
                         </div>
                       </div>
                     </button>
-                  );
+                  )
                 })}
               </div>
             </div>
@@ -470,6 +468,7 @@ export default function RewardsPage() {
                   </div>
                 </div>
                 <button
+                  type="button"
                   onClick={() => setShowShareModal(true)}
                   className="rounded-lg bg-[#0066FF] px-4 py-2 font-medium text-primary-foreground text-sm transition-colors hover:bg-[#0066FF]/80"
                 >
@@ -501,6 +500,7 @@ export default function RewardsPage() {
                       : 'Generating your referral link...'}
                   </div>
                   <button
+                    type="button"
                     onClick={handleCopyUrl}
                     disabled={!referralData.user.referralCode}
                     className="flex items-center gap-1.5 rounded-lg border border-border bg-sidebar-accent/50 px-3 py-2 text-foreground transition-colors hover:bg-sidebar-accent disabled:cursor-not-allowed disabled:opacity-50"
@@ -590,7 +590,7 @@ export default function RewardsPage() {
                         )}
                         <p className="mt-0.5 text-muted-foreground text-xs">
                           {new Date(
-                            referredUser.joinedAt || referredUser.createdAt
+                            referredUser.joinedAt || referredUser.createdAt,
                           ).toLocaleDateString()}
                         </p>
                       </div>
@@ -599,7 +599,7 @@ export default function RewardsPage() {
                       <a
                         href={getProfileUrl(
                           referredUser.id,
-                          referredUser.username
+                          referredUser.username,
                         )}
                         className="p-1.5 text-muted-foreground transition-colors hover:text-foreground"
                         aria-label="View profile"
@@ -726,9 +726,10 @@ export default function RewardsPage() {
 
               <div className="space-y-2">
                 {rewardTasks.map((task) => {
-                  const Icon = task.icon;
+                  const Icon = task.icon
                   return (
                     <button
+                      type="button"
                       key={task.id}
                       onClick={() => handleTaskClick(task.id, task.action)}
                       className={`flex w-full items-center gap-3 rounded-lg border p-3 text-left transition-all ${
@@ -766,7 +767,7 @@ export default function RewardsPage() {
                         </span>
                       </div>
                     </button>
-                  );
+                  )
                 })}
               </div>
             </div>
@@ -783,13 +784,12 @@ export default function RewardsPage() {
               </p>
               <div className="relative">
                 <button
+                  type="button"
                   onClick={() => setShowShareModal(true)}
                   className="flex w-full items-center gap-2 rounded-lg bg-sidebar-accent px-3 py-2 text-foreground transition-colors hover:bg-sidebar-accent/80"
                 >
-                  <>
-                    <Share2 className="h-4 w-4" />
-                    <span className="font-medium text-sm">Share</span>
-                  </>
+                  <Share2 className="h-4 w-4" />
+                  <span className="font-medium text-sm">Share</span>
                 </button>
               </div>
             </div>
@@ -817,6 +817,7 @@ export default function RewardsPage() {
                       : 'Generating your referral link...'}
                   </div>
                   <button
+                    type="button"
                     onClick={handleCopyUrl}
                     disabled={!referralData.user.referralCode}
                     className="flex shrink-0 items-center justify-center rounded-lg border border-border bg-sidebar-accent/50 px-3 py-2 text-foreground transition-colors hover:bg-sidebar-accent disabled:cursor-not-allowed disabled:opacity-50"
@@ -900,7 +901,7 @@ export default function RewardsPage() {
                         )}
                         <p className="mt-0.5 text-muted-foreground text-xs">
                           {new Date(
-                            referredUser.joinedAt || referredUser.createdAt
+                            referredUser.joinedAt || referredUser.createdAt,
                           ).toLocaleDateString()}
                         </p>
                       </div>
@@ -909,7 +910,7 @@ export default function RewardsPage() {
                       <a
                         href={getProfileUrl(
                           referredUser.id,
-                          referredUser.username
+                          referredUser.username,
                         )}
                         className="p-2 text-muted-foreground transition-colors hover:text-foreground"
                         aria-label="View profile"
@@ -929,10 +930,10 @@ export default function RewardsPage() {
       <LinkSocialAccountsModal
         isOpen={showLinkSocialModal}
         onClose={() => {
-          setShowLinkSocialModal(false);
+          setShowLinkSocialModal(false)
           // Refresh data to update the UI
           if (user?.id && authenticated) {
-            fetchReferralData();
+            fetchReferralData()
           }
         }}
       />
@@ -946,5 +947,5 @@ export default function RewardsPage() {
         text="Check out my Babylon profile! 🎮"
       />
     </PageContainer>
-  );
+  )
 }

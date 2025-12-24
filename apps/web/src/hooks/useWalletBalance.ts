@@ -1,17 +1,15 @@
-'use client';
-
-import { WalletBalanceApiResponseSchema } from '@babylon/shared';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useCallback } from 'react';
+import { WalletBalanceApiResponseSchema } from '@babylon/shared'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useCallback } from 'react'
 
 /**
  * Represents wallet balance state.
  */
 interface WalletBalanceState {
   /** Current available balance */
-  balance: number;
+  balance: number
   /** Lifetime profit and loss */
-  lifetimePnL: number;
+  lifetimePnL: number
 }
 
 /**
@@ -19,13 +17,13 @@ interface WalletBalanceState {
  */
 interface UseWalletBalanceOptions {
   /** Whether to enable balance fetching (default: true) */
-  enabled?: boolean;
+  enabled?: boolean
 }
 
 const defaultState: WalletBalanceState = {
   balance: 0,
   lifetimePnL: 0,
-};
+}
 
 /**
  * Hook for fetching and managing user wallet balance.
@@ -60,10 +58,10 @@ const defaultState: WalletBalanceState = {
  */
 export function useWalletBalance(
   userId?: string | null,
-  options: UseWalletBalanceOptions = {}
+  options: UseWalletBalanceOptions = {},
 ) {
-  const { enabled = true } = options;
-  const queryClient = useQueryClient();
+  const { enabled = true } = options
+  const queryClient = useQueryClient()
 
   const {
     data = defaultState,
@@ -73,33 +71,33 @@ export function useWalletBalance(
     queryKey: ['walletBalance', userId],
     queryFn: async (): Promise<WalletBalanceState> => {
       const response = await fetch(
-        `/api/users/${encodeURIComponent(userId!)}/balance`
-      );
+        `/api/users/${encodeURIComponent(userId)}/balance`,
+      )
 
       if (!response.ok) {
-        throw new Error('Failed to fetch wallet balance');
+        throw new Error('Failed to fetch wallet balance')
       }
 
-      const json: unknown = await response.json();
-      const data = WalletBalanceApiResponseSchema.parse(json);
+      const json = await response.json()
+      const data = WalletBalanceApiResponseSchema.parse(json)
 
       return {
         balance: Number(data.balance) || 0,
         lifetimePnL: Number(data.lifetimePnL) || 0,
-      };
+      }
     },
     enabled: enabled && !!userId,
     refetchInterval: 30000,
     staleTime: 10000,
-  });
+  })
 
   const refresh = useCallback(() => {
     if (userId && enabled) {
       void queryClient.invalidateQueries({
         queryKey: ['walletBalance', userId],
-      });
+      })
     }
-  }, [queryClient, userId, enabled]);
+  }, [queryClient, userId, enabled])
 
   return {
     balance: data.balance,
@@ -107,5 +105,5 @@ export function useWalletBalance(
     loading: isLoading,
     error: error as Error | null,
     refresh,
-  };
+  }
 }

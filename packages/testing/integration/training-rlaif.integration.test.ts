@@ -4,45 +4,61 @@
  * End-to-end tests for the Babylon training pipeline with Jeju RLAIF.
  */
 
-import { beforeAll, describe, expect, test } from 'bun:test';
+import { beforeAll, describe, expect, test } from 'bun:test'
+import { responseJson } from '@babylon/shared'
+import { z } from 'zod'
 
-const DWS_URL = process.env.DWS_URL || 'http://localhost:4030';
-const SKIP_IF_NO_DWS = process.env.SKIP_DWS_TESTS === 'true';
+// Response schemas
+const RLAIFHealthSchema = z.object({
+  status: z.string(),
+  service: z.string(),
+})
+const RLAIFRunSchema = z.object({
+  runId: z.string(),
+  status: z.string(),
+})
+const RunIdSchema = z.object({ runId: z.string() })
+const ManifestSchema = z.object({
+  manifestCID: z.string(),
+  trajectoryCount: z.number(),
+})
+const CidSchema = z.object({ cid: z.string() })
+const StateSchema = z.object({ state: z.number() })
+
+const DWS_URL = process.env.DWS_URL || 'http://localhost:4030'
+const SKIP_IF_NO_DWS = process.env.SKIP_DWS_TESTS === 'true'
 
 // Check if DWS is available
 async function isDWSAvailable(): Promise<boolean> {
   try {
     const response = await fetch(`${DWS_URL}/health`, {
       signal: AbortSignal.timeout(3000),
-    });
-    return response.ok;
+    })
+    return response.ok
   } catch {
-    return false;
+    return false
   }
 }
 
 describe('Babylon Training RLAIF Integration', () => {
-  let dwsAvailable = false;
+  let dwsAvailable = false
 
   beforeAll(async () => {
-    dwsAvailable = await isDWSAvailable();
+    dwsAvailable = await isDWSAvailable()
     if (!dwsAvailable && !SKIP_IF_NO_DWS) {
-      console.warn('[Test] DWS not available, some tests will be skipped');
+      console.warn('[Test] DWS not available, some tests will be skipped')
     }
-  });
+  })
 
   describe('RLAIF API Endpoints', () => {
     test.skipIf(!dwsAvailable)('should check RLAIF health', async () => {
-      const response = await fetch(`${DWS_URL}/rlaif/health`);
-      expect(response.ok).toBe(true);
+      const response = await fetch(`${DWS_URL}/rlaif/health`)
+      expect(response.ok).toBe(true)
 
-      const health = (await response.json()) as {
-        status: string;
-        service: string;
-      };
-      expect(health.status).toBe('healthy');
-      expect(health.service).toBe('rlaif');
-    });
+      const health = RLAIFHealthSchema.parse(await responseJson(response))
+      expect(health.status).toBe('healthy')
+      expect(health.service).toBe('rlaif')
+    })
 
     test.skipIf(!dwsAvailable)(
       'should create RLAIF run for Babylon',
@@ -66,18 +82,15 @@ describe('Babylon Training RLAIF Integration', () => {
             targetIterations: 3,
             minTrajectoriesPerIteration: 5,
           }),
-        });
+        })
 
-        expect(response.ok).toBe(true);
+        expect(response.ok).toBe(true)
 
-        const result = (await response.json()) as {
-          runId: string;
-          status: string;
-        };
-        expect(result.runId).toBeDefined();
-        expect(result.status).toBe('created');
-      }
-    );
+        const result = RLAIFRunSchema.parse(await responseJson(response))
+        expect(result.runId).toBeDefined()
+        expect(result.status).toBe('created')
+      },
+    )
 
     test.skipIf(!dwsAvailable)(
       'should submit trajectories to RLAIF run',
@@ -92,9 +105,9 @@ describe('Babylon Training RLAIF Integration', () => {
             targetIterations: 1,
             minTrajectoriesPerIteration: 2,
           }),
-        });
+        })
 
-        const { runId } = (await createResponse.json()) as { runId: string };
+        const { runId } = RunIdSchema.parse(await responseJson(createResponse))
 
         // Submit trajectories
         const trajResponse = await fetch(
@@ -144,19 +157,16 @@ describe('Babylon Training RLAIF Integration', () => {
                 },
               ],
             }),
-          }
-        );
+          },
+        )
 
-        expect(trajResponse.ok).toBe(true);
+        expect(trajResponse.ok).toBe(true)
 
-        const result = (await trajResponse.json()) as {
-          manifestCID: string;
-          trajectoryCount: number;
-        };
-        expect(result.manifestCID).toBeDefined();
-        expect(result.trajectoryCount).toBe(2);
-      }
-    );
+        const result = ManifestSchema.parse(await responseJson(trajResponse))
+        expect(result.manifestCID).toBeDefined()
+        expect(result.trajectoryCount).toBe(2)
+      },
+    )
 
     test.skipIf(!dwsAvailable)(
       'should score trajectories with RULER',
@@ -169,12 +179,12 @@ describe('Babylon Training RLAIF Integration', () => {
             type: 'trajectory-manifest',
             trajectoryCIDs: ['test-cid-1', 'test-cid-2'],
           }),
-        });
+        })
 
         // Storage must be available for this test - fail if not configured
-        expect(trajResponse.ok).toBe(true);
+        expect(trajResponse.ok).toBe(true)
 
-        const { cid } = (await trajResponse.json()) as { cid: string };
+        const { cid } = CidSchema.parse(await responseJson(trajResponse))
 
         // Score with RULER
         const scoreResponse = await fetch(`${DWS_URL}/rlaif/judge`, {
@@ -191,13 +201,13 @@ describe('Babylon Training RLAIF Integration', () => {
             },
             groupSize: 4,
           }),
-        });
+        })
 
         // Judge endpoint must be available - fail if 503
-        expect(scoreResponse.ok).toBe(true);
-      }
-    );
-  });
+        expect(scoreResponse.ok).toBe(true)
+      },
+    )
+  })
 
   describe('Babylon Adapter', () => {
     test('should convert Babylon trajectory to Jeju format', () => {
@@ -227,7 +237,7 @@ describe('Babylon Training RLAIF Integration', () => {
             purpose: 'action',
           },
         ],
-      };
+      }
 
       // Convert to Jeju format
       const jejuStep = {
@@ -255,23 +265,23 @@ describe('Babylon Training RLAIF Integration', () => {
           latencyMs: call.latencyMs,
           purpose: call.purpose as 'action',
         })),
-      };
+      }
 
-      expect(jejuStep.action.type).toBe('buy');
-      expect(jejuStep.observation.balance).toBe(1000);
-      expect(jejuStep.llmCalls).toHaveLength(1);
-      expect(jejuStep.llmCalls[0]?.purpose).toBe('action');
-    });
+      expect(jejuStep.action.type).toBe('buy')
+      expect(jejuStep.observation.balance).toBe(1000)
+      expect(jejuStep.llmCalls).toHaveLength(1)
+      expect(jejuStep.llmCalls[0]?.purpose).toBe('action')
+    })
 
     test('should get rubric for archetype', () => {
-      const archetypes = ['trader', 'degen', 'scammer', 'researcher'];
+      const archetypes = ['trader', 'degen', 'scammer', 'researcher']
 
       for (const archetype of archetypes) {
-        const rubricId = `babylon-${archetype}`;
-        expect(rubricId).toMatch(/^babylon-/);
+        const rubricId = `babylon-${archetype}`
+        expect(rubricId).toMatch(/^babylon-/)
       }
-    });
-  });
+    })
+  })
 
   describe('Training Archetypes', () => {
     test('should have 12 archetypes defined', () => {
@@ -288,26 +298,26 @@ describe('Babylon Training RLAIF Integration', () => {
         'goody-twoshoes',
         'ass-kisser',
         'liar',
-      ];
+      ]
 
-      expect(archetypes).toHaveLength(12);
+      expect(archetypes).toHaveLength(12)
 
       for (const archetype of archetypes) {
-        expect(archetype).toBeDefined();
-        expect(archetype.length).toBeGreaterThan(0);
+        expect(archetype).toBeDefined()
+        expect(archetype.length).toBeGreaterThan(0)
       }
-    });
+    })
 
     test('should map archetypes to rubric IDs', () => {
-      const archetypeToRubric = (archetype: string) => `babylon-${archetype}`;
+      const archetypeToRubric = (archetype: string) => `babylon-${archetype}`
 
-      expect(archetypeToRubric('trader')).toBe('babylon-trader');
-      expect(archetypeToRubric('degen')).toBe('babylon-degen');
+      expect(archetypeToRubric('trader')).toBe('babylon-trader')
+      expect(archetypeToRubric('degen')).toBe('babylon-degen')
       expect(archetypeToRubric('social-butterfly')).toBe(
-        'babylon-social-butterfly'
-      );
-    });
-  });
+        'babylon-social-butterfly',
+      )
+    })
+  })
 
   describe('Full Training Flow', () => {
     test.skipIf(!dwsAvailable)(
@@ -331,10 +341,10 @@ describe('Babylon Training RLAIF Integration', () => {
             targetIterations: 1,
             minTrajectoriesPerIteration: 2,
           }),
-        });
+        })
 
-        expect(createResponse.ok).toBe(true);
-        const { runId } = (await createResponse.json()) as { runId: string };
+        expect(createResponse.ok).toBe(true)
+        const { runId } = RunIdSchema.parse(await responseJson(createResponse))
 
         // 2. Submit trajectories
         const trajResponse = await fetch(
@@ -376,20 +386,20 @@ describe('Babylon Training RLAIF Integration', () => {
                 },
               ],
             }),
-          }
-        );
+          },
+        )
 
-        expect(trajResponse.ok).toBe(true);
+        expect(trajResponse.ok).toBe(true)
 
         // 3. Get run status
-        const statusResponse = await fetch(`${DWS_URL}/rlaif/runs/${runId}`);
-        expect(statusResponse.ok).toBe(true);
+        const statusResponse = await fetch(`${DWS_URL}/rlaif/runs/${runId}`)
+        expect(statusResponse.ok).toBe(true)
 
-        const status = (await statusResponse.json()) as { state: number };
+        const status = StateSchema.parse(await responseJson(statusResponse))
         // Should be in some valid state
-        expect(status.state).toBeGreaterThanOrEqual(0);
-        expect(status.state).toBeLessThan(8);
-      }
-    );
-  });
-});
+        expect(status.state).toBeGreaterThanOrEqual(0)
+        expect(status.state).toBeLessThan(8)
+      },
+    )
+  })
+})

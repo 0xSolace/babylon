@@ -1,11 +1,11 @@
-import { definePrompt } from '../define-prompt';
+import { definePrompt } from '../define-prompt'
 import {
   ANTI_REPETITION_RULES,
   FINAL_REMINDERS,
   STANDARD_FEED_RULES,
   VALUE_RANGES,
   WORLD_CONTEXT_HEADER,
-} from '../shared-sections';
+} from '../shared-sections'
 
 /**
  * Prompt for generating a single ambient post from an actor not directly involved in events.
@@ -115,4 +115,4 @@ CRITICAL: Return exactly ONE post that matches {{characterName}}'s voice/style/e
 
 ${FINAL_REMINDERS}
 `.trim(),
-});
+})

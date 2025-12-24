@@ -1,5 +1,5 @@
 /**
- * Babylon Decentralized Messaging
+ * Babylon Messaging
  *
  * End-to-end encrypted messaging using Jeju L2
  * with Farcaster integration for public social data.
@@ -24,8 +24,28 @@
  * ```
  */
 
-// ABIs
-export { KEY_REGISTRY_ABI, NODE_REGISTRY_ABI } from './abis';
+// Crypto utilities and ABIs from @jejunetwork/messaging
+export {
+  bytes32ToPublicKey,
+  decryptMessage,
+  decryptMessageToString,
+  deriveKeyPairFromWallet,
+  deserializeEncryptedMessage,
+  type EncryptedMessage,
+  encryptMessage,
+  generateKeyPair,
+  generateKeyPairFromSeed,
+  hexToPublicKey,
+  KEY_DERIVATION_MESSAGE,
+  KEY_REGISTRY_ABI,
+  type KeyPair,
+  MESSAGE_NODE_REGISTRY_ABI,
+  publicKeyToBytes32,
+  publicKeyToHex,
+  type SerializedEncryptedMessage,
+  serializeEncryptedMessage,
+} from '@jejunetwork/messaging'
+
 // Cross-Chain Bridge (Base, Optimism)
 export {
   BaseBridgeClient,
@@ -36,24 +56,9 @@ export {
   getBaseBridgeClient,
   MessagingChain,
   resetBaseBridgeClient,
-} from './bridge/base-bridge';
+} from './bridge/base-bridge'
 // Core client
-export { createMessagingClient, DecentralizedMessagingClient } from './client';
-// Crypto utilities
-export {
-  bytes32ToPublicKey,
-  bytesToHex,
-  decryptMessage,
-  decryptMessageToString,
-  deriveKeyPair,
-  deserializeEncryptedMessage,
-  encryptMessage,
-  generateKeyPair,
-  hexToBytes,
-  publicKeyToBytes32,
-  publicKeyToHex,
-  serializeEncryptedMessage,
-} from './crypto';
+export { createMessagingClient, MessagingClient } from './client'
 // Messaging Service (primary entry point)
 export {
   type Conversation as MessagingConversation,
@@ -63,36 +68,28 @@ export {
   MessagingService,
   resetMessaging,
   type SendMessageRequest,
-} from './messaging';
+} from './messaging'
 // Messaging Bridge (Centralized/Decentralized Hybrid)
 export {
   getMessagingBridge,
   MessagingBridge,
   type MessagingMode,
   resetMessagingBridge,
-} from './messaging-bridge';
+} from './messaging-bridge'
 // Migration
-export { createMigrationService, MigrationService } from './migration';
-// Validation schemas
-export {
-  AddressSchema,
-  EncryptedMessageSchema,
-  MessageEnvelopeSchema,
-  SendMessageRequestSchema,
-  WebSocketMessageSchema,
-} from './schemas';
-// Decentralized Storage (CovenantSQL)
+export { createMigrationService, MigrationService } from './migration'
+// Storage (CovenantSQL)
 export {
   type ConsistencyLevel,
   type CQLConfig,
-  createDecentralizedStorage,
-  DecentralizedMessageStorage,
-  getDecentralizedStorage,
-  resetDecentralizedStorage,
+  createStorage,
+  getStorage,
+  MessageStorage,
+  resetStorage,
   type StoredConversation,
   type StoredKeyBundle,
   type StoredMessage,
-} from './storage';
+} from './storage'
 // Types
 export type {
   AnyMessage,
@@ -109,5 +106,5 @@ export type {
   MessagingConfig,
   MigrationStatus,
   RelayNode,
-} from './types';
-export { ErrorCodes, MessagingError } from './types';
+} from './types'
+export { ErrorCodes, MessagingError } from './types'

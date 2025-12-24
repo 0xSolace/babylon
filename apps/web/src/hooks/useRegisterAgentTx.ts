@@ -1,19 +1,19 @@
-import type { OnboardingProfilePayload } from '@babylon/shared';
+import type { OnboardingProfilePayload } from '@babylon/shared'
 import {
   CAPABILITIES_HASH,
   CHAIN,
   getIdentityRegistryAddress,
   identityRegistryAbi,
   WALLET_ERROR_MESSAGES,
-} from '@babylon/shared';
-import { useCallback } from 'react';
+} from '@babylon/shared'
+import { useCallback } from 'react'
 import {
   type Address,
   createPublicClient,
   encodeFunctionData,
   http,
-} from 'viem';
-import { useSmartWallet } from '@/hooks/useSmartWallet';
+} from 'viem'
+import { useSmartWallet } from '@/hooks/useSmartWallet'
 
 /**
  * Hook for registering an agent on-chain via the identity registry.
@@ -51,70 +51,69 @@ import { useSmartWallet } from '@/hooks/useSmartWallet';
  */
 export function useRegisterAgentTx() {
   const { smartWalletAddress, smartWalletReady, sendSmartWalletTransaction } =
-    useSmartWallet();
-  const registryAddress = getIdentityRegistryAddress();
+    useSmartWallet()
+  const registryAddress = getIdentityRegistryAddress()
 
   const registerAgent = useCallback(
     async (profile: OnboardingProfilePayload) => {
       if (!registryAddress) {
-        throw new Error('Identity registry not configured for this chain');
+        throw new Error('Identity registry not configured for this chain')
       }
 
       if (!smartWalletReady || !smartWalletAddress) {
-        throw new Error(WALLET_ERROR_MESSAGES.NO_EMBEDDED_WALLET);
+        throw new Error(WALLET_ERROR_MESSAGES.NO_EMBEDDED_WALLET)
       }
 
       if (!profile.username) {
-        throw new Error('Username is required to complete registration.');
+        throw new Error('Username is required to complete registration.')
       }
 
       const publicClient = createPublicClient({
         chain: CHAIN,
         transport: http(),
-      });
+      })
 
       const isRegistered = await publicClient.readContract({
         address: registryAddress,
         abi: identityRegistryAbi,
         functionName: 'isRegistered',
         args: [smartWalletAddress as Address],
-      });
+      })
 
       if (isRegistered) {
         throw new Error(
-          'Already registered - wallet is already registered on-chain'
-        );
+          'Already registered - wallet is already registered on-chain',
+        )
       }
 
-      const agentEndpoint = `https://babylon.market/agent/${smartWalletAddress.toLowerCase()}`;
+      const agentEndpoint = `https://babylon.market/agent/${smartWalletAddress.toLowerCase()}`
       const metadataUri = JSON.stringify({
         name: profile.displayName ?? profile.username,
         username: profile.username,
         bio: profile.bio ?? '',
         type: 'user',
         registered: new Date().toISOString(),
-      });
+      })
 
       const data = encodeFunctionData({
         abi: identityRegistryAbi,
         functionName: 'registerAgent',
         args: [profile.username, agentEndpoint, CAPABILITIES_HASH, metadataUri],
-      });
+      })
 
       return await sendSmartWalletTransaction({
         to: registryAddress,
         data,
         value: 0n,
-        chain: CHAIN,
-      });
+      })
     },
     [
       smartWalletAddress,
       smartWalletReady,
       sendSmartWalletTransaction,
       registryAddress,
-    ]
-  );
+    ],
+  )
 
-  return { registerAgent, smartWalletAddress, smartWalletReady };
+  return { registerAgent, smartWalletAddress, smartWalletReady }
 }

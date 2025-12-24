@@ -1,8 +1,5 @@
-'use client';
-
-import { useJejuAuth } from '@babylon/auth/client';
-import { logger } from '@babylon/shared';
-import { useEffect, useRef } from 'react';
+import { useJejuAuth } from '@babylon/auth'
+import { useEffect, useRef } from 'react'
 
 /**
  * Login modal component that triggers the Jeju auth login flow.
@@ -25,10 +22,10 @@ import { useEffect, useRef } from 'react';
  * ```
  */
 interface LoginModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  title?: string;
-  message?: string;
+  isOpen: boolean
+  onClose: () => void
+  title?: string
+  message?: string
 }
 
 export function LoginModal({
@@ -37,40 +34,35 @@ export function LoginModal({
   title,
   message,
 }: LoginModalProps) {
-  const { authenticated, ready, loginWithWallet } = useJejuAuth();
-  const attemptedLoginRef = useRef(false);
+  const { authenticated, ready, loginWithWallet } = useJejuAuth()
+  const attemptedLoginRef = useRef(false)
 
   // Close modal when user logs in
   useEffect(() => {
     if (authenticated && isOpen) {
-      onClose();
+      onClose()
     }
-  }, [authenticated, isOpen, onClose]);
+  }, [authenticated, isOpen, onClose])
 
   // Trigger login modal when this component opens
   useEffect(() => {
     if (!isOpen || !ready || authenticated) {
-      attemptedLoginRef.current = false;
-      return;
+      attemptedLoginRef.current = false
+      return
     }
 
     if (!attemptedLoginRef.current) {
-      attemptedLoginRef.current = true;
+      attemptedLoginRef.current = true
       // Trigger wallet-based login (SIWE)
-      loginWithWallet();
+      loginWithWallet()
     }
-  }, [isOpen, ready, authenticated, loginWithWallet]);
+  }, [isOpen, ready, authenticated, loginWithWallet])
 
-  // Log title/message if provided for debugging
-  useEffect(() => {
-    if (title) {
-      logger.debug('LoginModal title:', title, 'LoginModal');
-    }
-    if (message) {
-      logger.debug('LoginModal message:', message, 'LoginModal');
-    }
-  }, [title, message]);
+  // title and message are used for context-specific login prompts
+  // They can be displayed in the auth modal if needed
+  void title
+  void message
 
   // This component triggers the login flow, no custom UI needed
-  return null;
+  return null
 }

@@ -1,22 +1,22 @@
-import { beforeEach, describe, expect, mock, test } from 'bun:test';
+import { beforeEach, describe, expect, mock, test } from 'bun:test'
+import { PredictionMarketService } from '@babylon/engine'
 import type {
   PredictionDbPort,
   PredictionMarketRecord,
   PredictionPositionRecord,
   PredictionServiceDeps,
   QuestionRecord,
-} from '@babylon/core/markets/prediction';
-import { PredictionMarketService } from '@babylon/core/markets/prediction';
+} from '@babylon/shared'
 
 describe('PredictionMarketService broadcast events', () => {
   const mockBroadcast = {
     emit: mock(
-      async (_channel: string, _payload: Record<string, unknown>) => {}
+      async (_channel: string, _payload: Record<string, unknown>) => {},
     ),
-  };
+  }
 
   const createMockMarket = (
-    overrides: Partial<PredictionMarketRecord> = {}
+    overrides: Partial<PredictionMarketRecord> = {},
   ): PredictionMarketRecord => ({
     id: 'market-1',
     question: 'Will BTC reach $100k?',
@@ -26,10 +26,10 @@ describe('PredictionMarketService broadcast events', () => {
     endDate: new Date(Date.now() + 24 * 60 * 60 * 1000), // tomorrow
     resolved: false,
     ...overrides,
-  });
+  })
 
   const createMockPosition = (
-    overrides: Partial<PredictionPositionRecord> = {}
+    overrides: Partial<PredictionPositionRecord> = {},
   ): PredictionPositionRecord => ({
     id: 'pos-1',
     userId: 'user-1',
@@ -39,42 +39,46 @@ describe('PredictionMarketService broadcast events', () => {
     avgPrice: 0.5,
     status: 'active',
     ...overrides,
-  });
+  })
 
-  let mockDb: PredictionDbPort;
-  let mockWallet: PredictionServiceDeps['wallet'];
-  let deps: PredictionServiceDeps;
-  let service: PredictionMarketService;
+  let mockDb: PredictionDbPort
+  let mockWallet: PredictionServiceDeps['wallet']
+  let deps: PredictionServiceDeps
+  let service: PredictionMarketService
 
   beforeEach(() => {
-    mockBroadcast.emit.mockClear();
+    mockBroadcast.emit.mockClear()
 
     mockDb = {
       getMarketById: mock(async () => createMockMarket()),
       getMarketsByIds: mock(async () => [createMockMarket()]),
       createMarketFromQuestion: mock(async (q: QuestionRecord) =>
-        createMockMarket({ id: q.id, question: q.text })
+        createMockMarket({ id: q.id, question: q.text }),
       ),
       updateMarketState: mock(async (id, updates) => ({
         ...createMockMarket({ id }),
         ...updates,
       })),
       getPosition: mock(async () => null),
-      upsertPosition: mock(async (pos) => ({
-        ...pos,
-        id: pos.id ?? 'new-pos-id',
-      })) as PredictionDbPort['upsertPosition'],
+      upsertPosition: mock(
+        async (
+          pos: Omit<PredictionPositionRecord, 'id'> & { id?: string },
+        ): Promise<PredictionPositionRecord> => ({
+          ...pos,
+          id: pos.id ?? 'new-pos-id',
+        }),
+      ),
       deletePosition: mock(async () => {}),
       listPositionsForMarket: mock(async () => []),
       insertPriceSnapshot: mock(async () => {}),
-    };
+    }
 
     mockWallet = {
       debit: mock(async () => {}),
       credit: mock(async () => {}),
       recordPnL: mock(async () => {}),
       getBalance: mock(async () => ({ balance: 10000, lifetimePnL: 0 })),
-    };
+    }
 
     deps = {
       db: mockDb,
@@ -86,10 +90,10 @@ describe('PredictionMarketService broadcast events', () => {
         referrerShare: 0.1,
         minFeeAmount: 0.01,
       },
-    };
+    }
 
-    service = new PredictionMarketService(deps);
-  });
+    service = new PredictionMarketService(deps)
+  })
 
   test('buy() emits prediction_trade broadcast event', async () => {
     await service.buy({
@@ -97,49 +101,57 @@ describe('PredictionMarketService broadcast events', () => {
       marketId: 'market-1',
       side: 'yes',
       amount: 100,
-    });
+    })
 
-    expect(mockBroadcast.emit).toHaveBeenCalledTimes(1);
-    const calls = mockBroadcast.emit.mock.calls;
-    expect(calls.length).toBeGreaterThan(0);
-    const [channel, payload] = calls[0]!;
-    expect(channel).toBe('markets');
-    expect(payload.type).toBe('prediction_trade');
-    expect(payload.marketId).toBe('market-1');
-    expect(payload.trade).toBeDefined();
+    expect(mockBroadcast.emit).toHaveBeenCalledTimes(1)
+    const calls = mockBroadcast.emit.mock.calls
+    expect(calls.length).toBeGreaterThan(0)
+    const firstCall = calls[0]
+    if (!firstCall) {
+      throw new Error('Expected at least one call')
+    }
+    const [channel, payload] = firstCall
+    expect(channel).toBe('markets')
+    expect(payload.type).toBe('prediction_trade')
+    expect(payload.marketId).toBe('market-1')
+    expect(payload.trade).toBeDefined()
 
-    const trade = payload.trade as Record<string, unknown>;
-    expect(trade.actorType).toBe('user');
-    expect(trade.actorId).toBe('user-1');
-    expect(trade.action).toBe('buy');
-    expect(trade.side).toBe('yes');
-  });
+    const trade = payload.trade as Record<string, unknown>
+    expect(trade.actorType).toBe('user')
+    expect(trade.actorId).toBe('user-1')
+    expect(trade.action).toBe('buy')
+    expect(trade.side).toBe('yes')
+  })
 
   test('sell() emits prediction_trade broadcast event', async () => {
     // Setup: user has exactly one position to sell (yes side only)
     mockDb.getPosition = mock(async (_userId, _marketId, side) =>
-      side === 'yes' ? createMockPosition() : null
-    );
+      side === 'yes' ? createMockPosition() : null,
+    )
 
     await service.sell({
       userId: 'user-1',
       marketId: 'market-1',
       shares: 50,
-    });
+    })
 
-    expect(mockBroadcast.emit).toHaveBeenCalledTimes(1);
-    const calls = mockBroadcast.emit.mock.calls;
-    expect(calls.length).toBeGreaterThan(0);
-    const [channel, payload] = calls[0]!;
-    expect(channel).toBe('markets');
-    expect(payload.type).toBe('prediction_trade');
-    expect(payload.marketId).toBe('market-1');
+    expect(mockBroadcast.emit).toHaveBeenCalledTimes(1)
+    const calls = mockBroadcast.emit.mock.calls
+    expect(calls.length).toBeGreaterThan(0)
+    const firstCall = calls[0]
+    if (!firstCall) {
+      throw new Error('Expected at least one call')
+    }
+    const [channel, payload] = firstCall
+    expect(channel).toBe('markets')
+    expect(payload.type).toBe('prediction_trade')
+    expect(payload.marketId).toBe('market-1')
 
-    const trade = payload.trade as Record<string, unknown>;
-    expect(trade.action).toBe('sell');
-    expect(trade.side).toBe('yes');
-    expect(trade.shares).toBe(50);
-  });
+    const trade = payload.trade as Record<string, unknown>
+    expect(trade.action).toBe('sell')
+    expect(trade.side).toBe('yes')
+    expect(trade.shares).toBe(50)
+  })
 
   test('resolve() emits prediction_resolution broadcast event', async () => {
     // Setup: market with positions
@@ -151,31 +163,35 @@ describe('PredictionMarketService broadcast events', () => {
         side: 'no',
         shares: 50,
       }),
-    ];
-    mockDb.listPositionsForMarket = mock(async () => positions);
+    ]
+    mockDb.listPositionsForMarket = mock(async () => positions)
 
     await service.resolve({
       marketId: 'market-1',
       winningSide: 'yes',
       resolutionDescription: 'BTC reached $100k on Dec 14',
-    });
+    })
 
-    expect(mockBroadcast.emit).toHaveBeenCalledTimes(1);
-    const calls = mockBroadcast.emit.mock.calls;
-    expect(calls.length).toBeGreaterThan(0);
-    const [channel, payload] = calls[0]!;
-    expect(channel).toBe('markets');
-    expect(payload.type).toBe('prediction_resolution');
-    expect(payload.marketId).toBe('market-1');
-    expect(payload.winningSide).toBe('yes');
-    expect(payload.totalPayout).toBe(100); // Only winning side (yes) shares
-  });
+    expect(mockBroadcast.emit).toHaveBeenCalledTimes(1)
+    const calls = mockBroadcast.emit.mock.calls
+    expect(calls.length).toBeGreaterThan(0)
+    const firstCall = calls[0]
+    if (!firstCall) {
+      throw new Error('Expected at least one call')
+    }
+    const [channel, payload] = firstCall
+    expect(channel).toBe('markets')
+    expect(payload.type).toBe('prediction_resolution')
+    expect(payload.marketId).toBe('market-1')
+    expect(payload.winningSide).toBe('yes')
+    expect(payload.totalPayout).toBe(100) // Only winning side (yes) shares
+  })
 
   test('no broadcast when broadcast dep is not provided', async () => {
     const serviceWithoutBroadcast = new PredictionMarketService({
       ...deps,
       broadcast: undefined,
-    });
+    })
 
     // Should not throw when broadcast is missing
     await serviceWithoutBroadcast.buy({
@@ -183,8 +199,8 @@ describe('PredictionMarketService broadcast events', () => {
       marketId: 'market-1',
       side: 'yes',
       amount: 100,
-    });
+    })
 
-    expect(mockBroadcast.emit).not.toHaveBeenCalled();
-  });
-});
+    expect(mockBroadcast.emit).not.toHaveBeenCalled()
+  })
+})

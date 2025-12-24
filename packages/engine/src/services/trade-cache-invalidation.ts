@@ -6,7 +6,7 @@
  * client to allow different caching strategies.
  */
 
-import { logger } from '@babylon/shared';
+import { logger } from '@babylon/shared'
 
 /**
  * Cache invalidation client interface
@@ -21,10 +21,10 @@ export interface CacheInvalidationClient {
    * @param {string} pattern - Pattern to match (e.g., "market-trades:*")
    * @returns {Promise<number>} Number of keys deleted
    */
-  deleteByPattern(pattern: string): Promise<number>;
+  deleteByPattern(pattern: string): Promise<number>
 }
 
-let cacheClient: CacheInvalidationClient | null = null;
+let cacheClient: CacheInvalidationClient | null = null
 
 /**
  * Set the cache invalidation client
@@ -41,9 +41,9 @@ let cacheClient: CacheInvalidationClient | null = null;
  * ```
  */
 export function setCacheInvalidationClient(
-  client: CacheInvalidationClient
+  client: CacheInvalidationClient,
 ): void {
-  cacheClient = client;
+  cacheClient = client
 }
 
 /**
@@ -53,33 +53,33 @@ export function setCacheInvalidationClient(
  * @returns {Promise<void>}
  */
 export async function invalidatePredictionTradesCache(
-  marketId: string
+  marketId: string,
 ): Promise<void> {
   if (cacheClient) {
-    const pattern = `market-trades:prediction-trades:${marketId}:*`;
-    const deletedCount = await cacheClient.deleteByPattern(pattern);
+    const pattern = `market-trades:prediction-trades:${marketId}:*`
+    const deletedCount = await cacheClient.deleteByPattern(pattern)
 
     if (deletedCount > 0) {
       logger.debug(
         `Deleted ${deletedCount} cache keys for market ${marketId}`,
         undefined,
-        'TradeCache'
-      );
+        'TradeCache',
+      )
     }
   } else {
     // If no cache client, cache is in-memory and will expire naturally
     logger.debug(
       'No cache client available, cache will expire naturally',
       { marketId },
-      'TradeCache'
-    );
+      'TradeCache',
+    )
   }
 
   logger.info(
     `Invalidated prediction trades cache for market ${marketId}`,
     undefined,
-    'TradeCache'
-  );
+    'TradeCache',
+  )
 }
 
 /**
@@ -90,29 +90,29 @@ export async function invalidatePredictionTradesCache(
  */
 export async function invalidatePerpTradesCache(ticker: string): Promise<void> {
   if (cacheClient) {
-    const pattern = `market-trades:perp-trades:${ticker}:*`;
-    const deletedCount = await cacheClient.deleteByPattern(pattern);
+    const pattern = `market-trades:perp-trades:${ticker}:*`
+    const deletedCount = await cacheClient.deleteByPattern(pattern)
 
     if (deletedCount > 0) {
       logger.debug(
         `Deleted ${deletedCount} cache keys for ticker ${ticker}`,
         undefined,
-        'TradeCache'
-      );
+        'TradeCache',
+      )
     }
   } else {
     logger.debug(
       'No cache client available, cache will expire naturally',
       { ticker },
-      'TradeCache'
-    );
+      'TradeCache',
+    )
   }
 
   logger.info(
     `Invalidated perp trades cache for ticker ${ticker}`,
     undefined,
-    'TradeCache'
-  );
+    'TradeCache',
+  )
 }
 
 /**
@@ -123,9 +123,9 @@ export async function invalidatePerpTradesCache(ticker: string): Promise<void> {
  * @returns {Promise<void>}
  */
 export async function invalidateAfterPredictionTrade(
-  marketId: string
+  marketId: string,
 ): Promise<void> {
-  await invalidatePredictionTradesCache(marketId);
+  await invalidatePredictionTradesCache(marketId)
 }
 
 /**
@@ -136,5 +136,5 @@ export async function invalidateAfterPredictionTrade(
  * @returns {Promise<void>}
  */
 export async function invalidateAfterPerpTrade(ticker: string): Promise<void> {
-  await invalidatePerpTradesCache(ticker);
+  await invalidatePerpTradesCache(ticker)
 }

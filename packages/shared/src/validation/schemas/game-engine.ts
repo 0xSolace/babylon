@@ -1,5 +1,5 @@
-import { z } from 'zod';
-import { FeedPostSchema } from './api-responses';
+import { z } from 'zod'
+import { FeedPostSchema } from './api-responses'
 
 export const ActorTierSchema = z.enum([
   'S_TIER',
@@ -7,7 +7,7 @@ export const ActorTierSchema = z.enum([
   'B_TIER',
   'C_TIER',
   'D_TIER',
-]);
+])
 
 export const ActorSchema = z.object({
   id: z.string(),
@@ -48,14 +48,14 @@ export const ActorSchema = z.object({
       historicalAccuracy: z.number(),
     })
     .optional(),
-});
+})
 
 export const SelectedActorSchema = ActorSchema.extend({
   tier: ActorTierSchema,
   role: z.string(),
   initialLuck: z.enum(['low', 'medium', 'high']),
   initialMood: z.number().min(-1).max(1),
-});
+})
 
 export const OrganizationSchema = z.object({
   id: z.string(),
@@ -83,7 +83,7 @@ export const OrganizationSchema = z.object({
         timestamp: z.string(),
         change: z.number(),
         changePercent: z.number(),
-      })
+      }),
     )
     .optional(),
   markovState: z
@@ -98,7 +98,7 @@ export const OrganizationSchema = z.object({
   username: z.string().optional(),
   pfpDescription: z.string().optional(),
   bannerDescription: z.string().optional(),
-});
+})
 
 export const ScenarioSchema = z.object({
   id: z.number(),
@@ -107,7 +107,7 @@ export const ScenarioSchema = z.object({
   mainActors: z.array(z.string()),
   involvedOrganizations: z.array(z.string()).optional(),
   theme: z.string(),
-});
+})
 
 export const QuestionSchema = z.object({
   id: z.union([z.number(), z.string()]),
@@ -139,7 +139,7 @@ export const QuestionSchema = z.object({
         .optional(),
     })
     .optional(),
-});
+})
 
 export const WorldEventSchema = z.object({
   id: z.string(),
@@ -165,14 +165,14 @@ export const WorldEventSchema = z.object({
   sentimentSignal: z.number().min(-1).max(1).optional(),
   signalClarity: z.number().min(0).max(1).optional(),
   sourceReliability: z.number().min(0).max(1).optional(),
-});
+})
 
 export const GroupChatMessageSchema = z.object({
   from: z.string(),
   message: z.string(),
   timestamp: z.string(),
   clueStrength: z.number(),
-});
+})
 
 export const GroupChatSchema = z.object({
   id: z.string(),
@@ -180,7 +180,7 @@ export const GroupChatSchema = z.object({
   admin: z.string(),
   members: z.array(z.string()),
   theme: z.string(),
-});
+})
 
 // FeedPostSchema is imported from api-responses.ts to avoid duplication
 
@@ -189,14 +189,14 @@ export const LuckChangeSchema = z.object({
   from: z.string(),
   to: z.string(),
   reason: z.string(),
-});
+})
 
 export const MoodChangeSchema = z.object({
   actor: z.string(),
   from: z.number(),
   to: z.number(),
   reason: z.string(),
-});
+})
 
 export const DayTimelineSchema = z.object({
   day: z.number(),
@@ -206,20 +206,20 @@ export const DayTimelineSchema = z.object({
   feedPosts: z.array(FeedPostSchema),
   luckChanges: z.array(LuckChangeSchema),
   moodChanges: z.array(MoodChangeSchema),
-});
+})
 
 export const QuestionOutcomeSchema = z.object({
   questionId: z.union([z.number(), z.string()]),
   answer: z.boolean(),
   explanation: z.string(),
   keyEvents: z.array(z.string()),
-});
+})
 
 export const GameResolutionSchema = z.object({
   day: z.literal(30),
   outcomes: z.array(QuestionOutcomeSchema),
   finalNarrative: z.string(),
-});
+})
 
 export const GameSetupSchema = z.object({
   mainActors: z.array(SelectedActorSchema),
@@ -235,9 +235,9 @@ export const GameSetupSchema = z.object({
       actor2: z.string(),
       relationship: z.string(),
       context: z.string(),
-    })
+    }),
   ),
-});
+})
 
 export const GeneratedGameSchema = z.object({
   id: z.string(),
@@ -264,25 +264,25 @@ export const GeneratedGameSchema = z.object({
           changePercent: z.number(),
           reason: z.string(),
           impact: z.enum(['major', 'moderate', 'minor']),
-        })
+        }),
       ),
       lastGeneratedDate: z.string(),
     })
     .optional(),
-});
+})
 
 export const QuestionInputSchema = z.object({
   text: z.string(),
   resolutionDate: z.union([z.date(), z.string()]),
   scenarioId: z.number().optional(),
-});
+})
 
 export const PostInputSchema = z.object({
   authorId: z.string(),
   content: z.string(),
   type: z.enum(['post', 'article', 'reply']),
   timestamp: z.union([z.date(), z.string()]),
-});
+})
 
 export const EventInputSchema = z.object({
   type: z.string(),
@@ -293,7 +293,7 @@ export const EventInputSchema = z.object({
   visibility: z.enum(['public', 'leaked', 'private']),
   pointsToward: z.enum(['YES', 'NO']).optional(),
   relatedQuestion: z.number().optional(),
-});
+})
 
 export const ArticleInputSchema = z.object({
   title: z.string(),
@@ -302,14 +302,14 @@ export const ArticleInputSchema = z.object({
   authorOrgId: z.string(),
   timestamp: z.union([z.date(), z.string()]),
   category: z.string().optional(),
-});
+})
 
 export const TradeInputSchema = z.object({
   actorId: z.string(),
   marketId: z.string(),
   side: z.enum(['YES', 'NO']),
   amount: z.number(),
-});
+})
 
 export const MarketActionSchema = z.enum([
   'open_long',
@@ -318,9 +318,9 @@ export const MarketActionSchema = z.enum([
   'buy_no',
   'close_position',
   'hold',
-]);
+])
 
-export const MarketTypeSchema = z.enum(['perp', 'prediction']);
+export const MarketTypeSchema = z.enum(['perp', 'prediction'])
 
 export const TradingDecisionSchema = z.object({
   npcId: z.string(),
@@ -334,15 +334,15 @@ export const TradingDecisionSchema = z.object({
   confidence: z.number(),
   reasoning: z.string(),
   timestamp: z.string().optional(),
-});
+})
 
 export const ExecutedTradeSchema = z.object({
   npcId: z.string(),
   npcName: z.string(),
   poolId: z.string(),
   marketType: MarketTypeSchema,
-  ticker: z.string().optional(),
-  marketId: z.string().optional(),
+  ticker: z.string().optional().nullable(),
+  marketId: z.string().optional().nullable(),
   action: MarketActionSchema,
   side: z.string(),
   amount: z.number(),
@@ -353,7 +353,7 @@ export const ExecutedTradeSchema = z.object({
   reasoning: z.string(),
   positionId: z.string(),
   timestamp: z.string(),
-});
+})
 
 export const ArticleSchema = z.object({
   id: z.string(),
@@ -375,7 +375,7 @@ export const ArticleSchema = z.object({
   category: z.string().optional(),
   tags: z.array(z.string()),
   publishedAt: z.union([z.date(), z.string()]),
-});
+})
 
 // Market context schemas for NPC trading decisions
 
@@ -390,7 +390,7 @@ export const PerpMarketSnapshotSchema = z.object({
   low24h: z.number(),
   volume24h: z.number(),
   openInterest: z.number(),
-});
+})
 
 export const PredictionMarketSnapshotSchema = z.object({
   id: z.union([z.number(), z.string()]), // Can be number or string (snowflake ID)
@@ -400,7 +400,7 @@ export const PredictionMarketSnapshotSchema = z.object({
   totalVolume: z.number(),
   resolutionDate: z.string(),
   daysUntilResolution: z.number(),
-});
+})
 
 export const NPCPositionSchema = z.object({
   id: z.string(),
@@ -414,7 +414,7 @@ export const NPCPositionSchema = z.object({
   shares: z.number().optional(),
   unrealizedPnL: z.number(),
   openedAt: z.string(),
-});
+})
 
 export const FeedPostContextSchema = z.object({
   author: z.string(),
@@ -422,7 +422,7 @@ export const FeedPostContextSchema = z.object({
   content: z.string(),
   timestamp: z.string(),
   articleTitle: z.string().optional(),
-});
+})
 
 export const GroupChatContextSchema = z.object({
   chatId: z.string(),
@@ -431,7 +431,7 @@ export const GroupChatContextSchema = z.object({
   fromName: z.string(),
   message: z.string(),
   timestamp: z.string(),
-});
+})
 
 export const EventContextSchema = z.object({
   type: z.string(),
@@ -440,7 +440,7 @@ export const EventContextSchema = z.object({
   relatedQuestion: z.number().optional(),
   pointsToward: z.string().optional(),
   actors: z.array(z.string()).optional(),
-});
+})
 
 export const RelationshipContextSchema = z.object({
   actorId: z.string(),
@@ -449,7 +449,7 @@ export const RelationshipContextSchema = z.object({
   strength: z.number(),
   sentiment: z.number(),
   history: z.string().optional(),
-});
+})
 
 export const MarketSignalContextSchema = z.object({
   marketId: z.string(),
@@ -459,7 +459,7 @@ export const MarketSignalContextSchema = z.object({
   strength: z.number(),
   suggestedOutcome: z.enum(['YES', 'NO', 'UNCERTAIN']),
   confidence: z.number(),
-});
+})
 
 export const NPCMarketContextSchema = z.object({
   npcId: z.string(),
@@ -475,7 +475,7 @@ export const NPCMarketContextSchema = z.object({
   predictionMarkets: z.array(PredictionMarketSnapshotSchema),
   currentPositions: z.array(NPCPositionSchema),
   marketSignals: z.array(MarketSignalContextSchema).optional(),
-});
+})
 
 export const TradingExecutionResultSchema = z.object({
   totalDecisions: z.number(),
@@ -489,21 +489,21 @@ export const TradingExecutionResultSchema = z.object({
       npcId: z.string(),
       decision: TradingDecisionSchema,
       error: z.string(),
-    })
+    }),
   ),
   executedTrades: z.array(ExecutedTradeSchema),
-});
+})
 
 // Trending topics schema for LLM response validation
 
 export const TrendingTopicSchema = z.object({
   trendName: z.string(),
   description: z.string(),
-});
+})
 
 export const TrendingTopicsResponseSchema = z.object({
   trends: z.array(TrendingTopicSchema),
-});
+})
 
 // Relationship evolution schema for LLM response validation
 
@@ -511,7 +511,7 @@ export const RelationshipDescriptionSchema = z.object({
   description: z.string(),
   type: z.string(),
   sentiment: z.number(),
-});
+})
 
 // Type exports
 // Note: Core game types (Actor, Organization, Scenario, Question, etc.) are exported
@@ -519,39 +519,39 @@ export const RelationshipDescriptionSchema = z.object({
 // Only export NEW types that don't exist in game-types.ts.
 
 // Input types for API/validation
-export type QuestionInput = z.infer<typeof QuestionInputSchema>;
-export type PostInput = z.infer<typeof PostInputSchema>;
-export type EventInput = z.infer<typeof EventInputSchema>;
-export type ArticleInput = z.infer<typeof ArticleInputSchema>;
-export type TradeInput = z.infer<typeof TradeInputSchema>;
+export type QuestionInput = z.infer<typeof QuestionInputSchema>
+export type PostInput = z.infer<typeof PostInputSchema>
+export type EventInput = z.infer<typeof EventInputSchema>
+export type ArticleInput = z.infer<typeof ArticleInputSchema>
+export type TradeInput = z.infer<typeof TradeInputSchema>
 
 // Market/trading types (not in game-types.ts)
-export type MarketAction = z.infer<typeof MarketActionSchema>;
-export type MarketType = z.infer<typeof MarketTypeSchema>;
-export type TradingDecision = z.infer<typeof TradingDecisionSchema>;
-export type ExecutedTrade = z.infer<typeof ExecutedTradeSchema>;
+export type MarketAction = z.infer<typeof MarketActionSchema>
+export type MarketType = z.infer<typeof MarketTypeSchema>
+export type TradingDecision = z.infer<typeof TradingDecisionSchema>
+export type ExecutedTrade = z.infer<typeof ExecutedTradeSchema>
 
 // Market context types for NPC trading (not in game-types.ts)
-export type PerpMarketSnapshot = z.infer<typeof PerpMarketSnapshotSchema>;
+export type PerpMarketSnapshot = z.infer<typeof PerpMarketSnapshotSchema>
 export type PredictionMarketSnapshot = z.infer<
   typeof PredictionMarketSnapshotSchema
->;
-export type NPCPosition = z.infer<typeof NPCPositionSchema>;
-export type FeedPostContext = z.infer<typeof FeedPostContextSchema>;
-export type GroupChatContext = z.infer<typeof GroupChatContextSchema>;
-export type EventContext = z.infer<typeof EventContextSchema>;
-export type RelationshipContext = z.infer<typeof RelationshipContextSchema>;
-export type MarketSignalContext = z.infer<typeof MarketSignalContextSchema>;
-export type NPCMarketContext = z.infer<typeof NPCMarketContextSchema>;
+>
+export type NPCPosition = z.infer<typeof NPCPositionSchema>
+export type FeedPostContext = z.infer<typeof FeedPostContextSchema>
+export type GroupChatContext = z.infer<typeof GroupChatContextSchema>
+export type EventContext = z.infer<typeof EventContextSchema>
+export type RelationshipContext = z.infer<typeof RelationshipContextSchema>
+export type MarketSignalContext = z.infer<typeof MarketSignalContextSchema>
+export type NPCMarketContext = z.infer<typeof NPCMarketContextSchema>
 export type TradingExecutionResult = z.infer<
   typeof TradingExecutionResultSchema
->;
+>
 
 // LLM response validation types
-export type TrendingTopic = z.infer<typeof TrendingTopicSchema>;
+export type TrendingTopic = z.infer<typeof TrendingTopicSchema>
 export type TrendingTopicsResponse = z.infer<
   typeof TrendingTopicsResponseSchema
->;
+>
 export type RelationshipDescription = z.infer<
   typeof RelationshipDescriptionSchema
->;
+>

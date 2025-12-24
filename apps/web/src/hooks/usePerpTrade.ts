@@ -1,17 +1,30 @@
-import { useCallback } from 'react';
+import { hasNumberProperty, hasStringProperty } from '@babylon/shared'
+import { useCallback } from 'react'
+
+// Type guard for API response validation
+function isOpenPositionResponse(data: unknown): data is OpenPositionResponse {
+  return (
+    hasStringProperty(data, 'positionId') &&
+    hasNumberProperty(data, 'entryPrice')
+  )
+}
+
+function isClosePositionResponse(data: unknown): data is ClosePositionResponse {
+  return hasNumberProperty(data, 'exitPrice')
+}
 
 /**
  * Parameters for opening a perpetual position.
  */
 interface OpenPositionParams {
   /** Ticker symbol of the market */
-  ticker: string;
+  ticker: string
   /** Trade side: long or short */
-  side: 'long' | 'short';
+  side: 'long' | 'short'
   /** Position size in USD */
-  size: number;
+  size: number
   /** Leverage multiplier */
-  leverage: number;
+  leverage: number
 }
 
 /**
@@ -19,13 +32,13 @@ interface OpenPositionParams {
  */
 interface OpenPositionResponse {
   /** Created position ID */
-  positionId: string;
+  positionId: string
   /** Entry price */
-  entryPrice: number;
+  entryPrice: number
   /** Margin required */
-  margin: number;
+  margin: number
   /** Trading fee charged */
-  fee: number;
+  fee: number
 }
 
 /**
@@ -33,13 +46,13 @@ interface OpenPositionResponse {
  */
 interface ClosePositionResponse {
   /** Realized PnL from the position */
-  pnl?: number;
+  pnl?: number
   /** Alternative field for realized PnL */
-  realizedPnL?: number;
+  realizedPnL?: number
   /** Exit price */
-  exitPrice: number;
+  exitPrice: number
   /** Fee charged for closing */
-  fee: number;
+  fee: number
 }
 
 /**
@@ -47,7 +60,7 @@ interface ClosePositionResponse {
  */
 interface UsePerpTradeOptions {
   /** Function to get access token for authenticated requests */
-  getAccessToken: () => Promise<string | null>;
+  getAccessToken: () => Promise<string | null>
 }
 
 /**
@@ -78,9 +91,9 @@ interface UsePerpTradeOptions {
 export function usePerpTrade({ getAccessToken }: UsePerpTradeOptions) {
   const openPosition = useCallback(
     async (params: OpenPositionParams): Promise<OpenPositionResponse> => {
-      const token = await getAccessToken();
+      const token = await getAccessToken()
       if (!token) {
-        throw new Error('Authentication required');
+        throw new Error('Authentication required')
       }
 
       const response = await fetch('/api/markets/perps/positions', {
@@ -90,23 +103,27 @@ export function usePerpTrade({ getAccessToken }: UsePerpTradeOptions) {
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify(params),
-      });
+      })
 
       if (!response.ok) {
-        const data: { error?: string } = await response.json();
-        throw new Error(data.error ?? 'Failed to open position');
+        const data: { error?: string } = await response.json()
+        throw new Error(data.error ?? 'Failed to open position')
       }
 
-      return response.json() as Promise<OpenPositionResponse>;
+      const data: unknown = await response.json()
+      if (!isOpenPositionResponse(data)) {
+        throw new Error('Invalid response from server')
+      }
+      return data
     },
-    [getAccessToken]
-  );
+    [getAccessToken],
+  )
 
   const closePosition = useCallback(
     async (positionId: string): Promise<ClosePositionResponse> => {
-      const token = await getAccessToken();
+      const token = await getAccessToken()
       if (!token) {
-        throw new Error('Authentication required');
+        throw new Error('Authentication required')
       }
 
       const response = await fetch(
@@ -117,21 +134,25 @@ export function usePerpTrade({ getAccessToken }: UsePerpTradeOptions) {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${token}`,
           },
-        }
-      );
+        },
+      )
 
       if (!response.ok) {
-        const data: { error?: string } = await response.json();
-        throw new Error(data.error ?? 'Failed to close position');
+        const data: { error?: string } = await response.json()
+        throw new Error(data.error ?? 'Failed to close position')
       }
 
-      return response.json() as Promise<ClosePositionResponse>;
+      const data: unknown = await response.json()
+      if (!isClosePositionResponse(data)) {
+        throw new Error('Invalid response from server')
+      }
+      return data
     },
-    [getAccessToken]
-  );
+    [getAccessToken],
+  )
 
   return {
     openPosition,
     closePosition,
-  };
+  }
 }

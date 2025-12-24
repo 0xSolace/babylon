@@ -6,50 +6,78 @@
  * Provides comprehensive feedback management including search, revoke, and append
  */
 
+import { db, gameConfigs, type JsonValue } from '@babylon/db'
 import {
-  db,
-  eq,
-  gameConfigs,
-  type JsonValue,
-  like,
-  userAgentConfigs,
-  users,
-} from '@babylon/db';
-import { SDK } from 'agent0-sdk';
-import { logger } from '../shared/logger';
-import { generateSnowflakeId } from '../shared/snowflake';
-import { getAgent0Client } from './Agent0Client';
+  generateSnowflakeId,
+  toIpfsProvider,
+  toNetworkName,
+  toNull,
+} from '@babylon/shared'
+import { SDK } from 'agent0-sdk'
+import { logger } from '../shared/logger'
+import { getAgent0Client } from './Agent0Client'
 import type {
   Agent0Feedback,
   Agent0FeedbackParams,
   Agent0FeedbackSearchParams,
   Agent0ReputationSummary,
   IAgent0FeedbackService,
-} from './types';
+} from './types'
 
 /**
  * Converts an Agent0 ID string (e.g., "84532:1234") to a token ID number
  */
 function parseTokenId(agentId: string): number {
   if (agentId.includes(':')) {
-    const parts = agentId.split(':');
-    return Number.parseInt(parts[1] || '0', 10);
+    const parts = agentId.split(':')
+    return Number.parseInt(parts[1] || '0', 10)
   }
-  return Number.parseInt(agentId, 10);
+  return Number.parseInt(agentId, 10)
 }
 
 /**
  * Converts a 0-100 score to a -5 to +5 rating
  */
 function scoreToRating(score: number): number {
-  return Math.round(score / 10 - 5);
+  return Math.round(score / 10 - 5)
+}
+
+/** Config value for Agent0 registration */
+interface Agent0RegistrationConfig {
+  agentId?: string
+}
+
+/** Feedback data stored in game config */
+interface FeedbackData {
+  skill?: string
+  score?: number
+}
+
+/** Type guard for Agent0 registration config */
+function isAgent0RegistrationConfig(
+  value: unknown,
+): value is Agent0RegistrationConfig {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    ('agentId' in value || Object.keys(value).length === 0)
+  )
+}
+
+/** Type guard for feedback data */
+function isFeedbackData(value: unknown): value is FeedbackData {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    ('skill' in value || 'score' in value || Object.keys(value).length === 0)
+  )
 }
 
 export interface ReputationSummary {
-  agentId: string;
-  averageScore: number;
-  totalFeedback: number;
-  skillScores: Record<string, { score: number; count: number }>;
+  agentId: string
+  averageScore: number
+  totalFeedback: number
+  skillScores: Record<string, { score: number; count: number }>
 }
 
 /**
@@ -57,21 +85,19 @@ export interface ReputationSummary {
  * Implements IAgent0FeedbackService for comprehensive feedback management
  */
 export class Agent0FeedbackService implements IAgent0FeedbackService {
-  private sdk: SDK;
-  private chainId: number;
+  private sdk: SDK
+  private chainId: number
 
   constructor() {
     // Determine network and chain ID (must match Agent0Client configuration)
-    const network =
-      (process.env.AGENT0_NETWORK as 'sepolia' | 'mainnet' | 'localnet') ||
-      'sepolia';
+    const network = toNetworkName(process.env.AGENT0_NETWORK, 'sepolia')
 
     if (network === 'localnet') {
-      this.chainId = 31337; // Hardhat default chain ID
+      this.chainId = 31337 // Hardhat default chain ID
     } else if (network === 'sepolia') {
-      this.chainId = 11155111; // Ethereum Sepolia (Agent0 is on Ethereum, not Base Sepolia)
+      this.chainId = 11155111 // Ethereum Sepolia (Agent0 is on Ethereum, not Base Sepolia)
     } else {
-      this.chainId = 1; // Ethereum mainnet
+      this.chainId = 1 // Ethereum mainnet
     }
 
     // Use default test key for localnet (first Hardhat account)
@@ -80,20 +106,22 @@ export class Agent0FeedbackService implements IAgent0FeedbackService {
       process.env.BABYLON_AGENT0_PRIVATE_KEY ||
       (network === 'localnet'
         ? '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80'
-        : undefined);
+        : undefined)
 
     // Use 'node' IPFS provider for localnet, 'pinata' for production
-    const isLocalnet = network === 'localnet';
-    const ipfsProvider: 'node' | 'filecoinPin' | 'pinata' =
-      (process.env.AGENT0_IPFS_PROVIDER as 'node' | 'filecoinPin' | 'pinata') ||
-      (isLocalnet ? 'node' : 'pinata');
+    const isLocalnet = network === 'localnet'
+    const defaultProvider = isLocalnet ? 'node' : 'pinata'
+    const ipfsProvider = toIpfsProvider(
+      process.env.AGENT0_IPFS_PROVIDER,
+      defaultProvider,
+    )
 
     // Determine RPC URL based on network
     // Agent0 operates on Ethereum (Sepolia/mainnet) for discovery layer
     // Match Agent0Client RPC URL resolution pattern
-    let rpcUrl: string;
+    let rpcUrl: string
     if (network === 'localnet') {
-      rpcUrl = process.env.AGENT0_RPC_URL || 'http://localhost:8545';
+      rpcUrl = process.env.AGENT0_RPC_URL || 'http://localhost:6545'
     } else {
       // For sepolia/mainnet, prefer AGENT0_RPC_URL, then fallback to Ethereum RPC URLs
       // Agent0 contracts are on Ethereum (Sepolia/mainnet), not Base
@@ -103,19 +131,19 @@ export class Agent0FeedbackService implements IAgent0FeedbackService {
           ? process.env.ETHEREUM_SEPOLIA_RPC_URL ||
             'https://ethereum-sepolia-rpc.publicnode.com'
           : process.env.ETHEREUM_RPC_URL ||
-            'https://ethereum-rpc.publicnode.com');
+            'https://ethereum-rpc.publicnode.com')
     }
 
     // Validate IPFS provider configuration
     if (ipfsProvider === 'pinata' && !process.env.PINATA_JWT) {
       throw new Error(
-        'PINATA_JWT is required when using pinata IPFS provider for Agent0FeedbackService'
-      );
+        'PINATA_JWT is required when using pinata IPFS provider for Agent0FeedbackService',
+      )
     }
     if (ipfsProvider === 'filecoinPin' && !process.env.FILECOIN_PRIVATE_KEY) {
       throw new Error(
-        'FILECOIN_PRIVATE_KEY is required when using filecoinPin IPFS provider for Agent0FeedbackService'
-      );
+        'FILECOIN_PRIVATE_KEY is required when using filecoinPin IPFS provider for Agent0FeedbackService',
+      )
     }
 
     // Initialize SDK with signer for feedback submission
@@ -126,7 +154,7 @@ export class Agent0FeedbackService implements IAgent0FeedbackService {
       ipfs: ipfsProvider,
       pinataJwt: process.env.PINATA_JWT,
       ipfsNodeUrl: isLocalnet ? 'https://ipfs.io' : undefined,
-    });
+    })
   }
 
   /**
@@ -136,11 +164,11 @@ export class Agent0FeedbackService implements IAgent0FeedbackService {
    */
   async submitFeedback(params: Agent0FeedbackParams): Promise<Agent0Feedback> {
     // Convert targetAgentId to string format for SDK
-    const agentId = `${this.chainId}:${params.targetAgentId}`;
+    const agentId = `${this.chainId}:${params.targetAgentId}`
 
     // Convert rating from -5 to +5 scale to 0-100 scale
     // -5 → 0, 0 → 50, +5 → 100
-    const score = Math.round((params.rating + 5) * 10);
+    const score = Math.round((params.rating + 5) * 10)
 
     logger.info('Submitting feedback to Agent0', {
       agentId,
@@ -148,7 +176,7 @@ export class Agent0FeedbackService implements IAgent0FeedbackService {
       rating: params.rating,
       score,
       skill: params.skill,
-    });
+    })
 
     // Prepare feedback using SDK
     const feedback = this.sdk.prepareFeedback(
@@ -159,17 +187,17 @@ export class Agent0FeedbackService implements IAgent0FeedbackService {
       params.capability, // capability
       undefined, // name
       params.skill, // skill being rated
-      params.task || 'game-interaction' // task type
-    );
+      params.task || 'game-interaction', // task type
+    )
 
     // Submit on-chain (SDK will handle authorization)
-    const result = await this.sdk.giveFeedback(agentId, feedback);
+    const result = await this.sdk.giveFeedback(agentId, feedback)
 
     logger.info('Feedback submitted successfully', {
       agentId,
       targetAgentId: params.targetAgentId,
       rating: params.rating,
-    });
+    })
 
     // Store locally for tracking if transactionId provided
     if (params.transactionId) {
@@ -189,11 +217,11 @@ export class Agent0FeedbackService implements IAgent0FeedbackService {
         } as JsonValue,
         createdAt: new Date(),
         updatedAt: new Date(),
-      });
+      })
     }
 
     // Map SDK Feedback to Agent0Feedback
-    return this.mapSdkFeedback(result);
+    return this.mapSdkFeedback(result)
   }
 
   /**
@@ -202,25 +230,25 @@ export class Agent0FeedbackService implements IAgent0FeedbackService {
   async getFeedback(
     agentId: string,
     clientAddress: string,
-    feedbackIndex: number
+    feedbackIndex: number,
   ): Promise<Agent0Feedback> {
     // Try Agent0Client first
-    const agent0Client = getAgent0Client();
+    const agent0Client = getAgent0Client()
     if (agent0Client.isAvailable()) {
       return await agent0Client.getFeedback(
         agentId,
         clientAddress,
-        feedbackIndex
-      );
+        feedbackIndex,
+      )
     }
 
     // Fallback to SDK
     const feedback = await this.sdk.getFeedback(
       agentId,
       clientAddress,
-      feedbackIndex
-    );
-    return this.mapSdkFeedback(feedback);
+      feedbackIndex,
+    )
+    return this.mapSdkFeedback(feedback)
   }
 
   /**
@@ -228,12 +256,12 @@ export class Agent0FeedbackService implements IAgent0FeedbackService {
    */
   async searchFeedback(
     agentId: string,
-    params?: Partial<Agent0FeedbackSearchParams>
+    params?: Partial<Agent0FeedbackSearchParams>,
   ): Promise<Agent0Feedback[]> {
     // Try Agent0Client first
-    const agent0Client = getAgent0Client();
+    const agent0Client = getAgent0Client()
     if (agent0Client.isAvailable()) {
-      return await agent0Client.searchFeedback(agentId, params);
+      return await agent0Client.searchFeedback(agentId, params)
     }
 
     // Fallback to SDK
@@ -243,10 +271,10 @@ export class Agent0FeedbackService implements IAgent0FeedbackService {
       params?.capabilities,
       params?.skills,
       params?.minScore,
-      params?.maxScore
-    );
+      params?.maxScore,
+    )
 
-    return feedbacks.map((f) => this.mapSdkFeedback(f));
+    return feedbacks.map((f) => this.mapSdkFeedback(f))
   }
 
   /**
@@ -254,24 +282,24 @@ export class Agent0FeedbackService implements IAgent0FeedbackService {
    */
   async revokeFeedback(
     agentId: string,
-    feedbackIndex: number
+    feedbackIndex: number,
   ): Promise<string> {
     // Try Agent0Client first
-    const agent0Client = getAgent0Client();
+    const agent0Client = getAgent0Client()
     if (agent0Client.isAvailable()) {
-      return await agent0Client.revokeFeedback(agentId, feedbackIndex);
+      return await agent0Client.revokeFeedback(agentId, feedbackIndex)
     }
 
     // Fallback to SDK
-    const txHash = await this.sdk.revokeFeedback(agentId, feedbackIndex);
+    const txHash = await this.sdk.revokeFeedback(agentId, feedbackIndex)
 
     logger.info('Feedback revoked successfully', {
       agentId,
       feedbackIndex,
       txHash,
-    });
+    })
 
-    return txHash;
+    return txHash
   }
 
   /**
@@ -282,18 +310,18 @@ export class Agent0FeedbackService implements IAgent0FeedbackService {
     clientAddress: string,
     feedbackIndex: number,
     responseUri: string,
-    responseHash: string
+    responseHash: string,
   ): Promise<string> {
     // Try Agent0Client first
-    const agent0Client = getAgent0Client();
+    const agent0Client = getAgent0Client()
     if (agent0Client.isAvailable()) {
       return await agent0Client.appendFeedbackResponse(
         agentId,
         clientAddress,
         feedbackIndex,
         responseUri,
-        responseHash
-      );
+        responseHash,
+      )
     }
 
     // Fallback to SDK
@@ -301,17 +329,17 @@ export class Agent0FeedbackService implements IAgent0FeedbackService {
       agentId,
       clientAddress,
       feedbackIndex,
-      { uri: responseUri, hash: responseHash }
-    );
+      { uri: responseUri, hash: responseHash },
+    )
 
     logger.info('Response appended to feedback successfully', {
       agentId,
       clientAddress,
       feedbackIndex,
       txHash,
-    });
+    })
 
-    return txHash;
+    return txHash
   }
 
   /**
@@ -320,20 +348,20 @@ export class Agent0FeedbackService implements IAgent0FeedbackService {
   async getReputationSummary(
     agentId: string,
     tag1?: string,
-    tag2?: string
+    tag2?: string,
   ): Promise<Agent0ReputationSummary> {
     // Try Agent0Client first
-    const agent0Client = getAgent0Client();
+    const agent0Client = getAgent0Client()
     if (agent0Client.isAvailable()) {
-      return await agent0Client.getReputationSummary(agentId, tag1, tag2);
+      return await agent0Client.getReputationSummary(agentId, tag1, tag2)
     }
 
     // Fallback to SDK
-    const summary = await this.sdk.getReputationSummary(agentId, tag1, tag2);
+    const summary = await this.sdk.getReputationSummary(agentId, tag1, tag2)
     return {
       count: summary.count,
       averageScore: summary.averageScore,
-    };
+    }
   }
 
   /**
@@ -342,78 +370,78 @@ export class Agent0FeedbackService implements IAgent0FeedbackService {
   async getAgentReputation(agentId: string): Promise<ReputationSummary | null> {
     const reputation = await this.sdk.getReputationSummary(
       agentId,
-      undefined // tag filter
-    );
+      undefined, // tag filter
+    )
 
     // Parse skill scores from feedback details if available
-    const skillScores: Record<string, { score: number; count: number }> = {};
+    const skillScores: Record<string, { score: number; count: number }> = {}
 
     // Get detailed feedback to extract skill scores
     // Check if reputation object has feedback details or if we need to fetch them separately
     // The SDK structure may vary, so we'll try multiple approaches
-    const reputationObj = reputation as Record<string, unknown>;
+    const reputationObj = reputation as { feedback?: unknown }
 
     // If feedback array is available, parse skills from it
-    if (Array.isArray(reputationObj.feedback)) {
-      const feedbacks = reputationObj.feedback as Array<{
-        skill?: string;
-        score?: number;
-      }>;
+    if (
+      Array.isArray(reputationObj.feedback) &&
+      reputationObj.feedback.length > 0
+    ) {
+      const feedbacks = reputationObj.feedback as ReadonlyArray<{
+        skill?: string
+        score?: number
+      }>
 
       for (const feedback of feedbacks) {
         if (feedback.skill && typeof feedback.score === 'number') {
-          const skill = feedback.skill;
+          const skill = feedback.skill
           if (!skillScores[skill]) {
-            skillScores[skill] = { score: 0, count: 0 };
+            skillScores[skill] = { score: 0, count: 0 }
           }
-          const skillData = skillScores[skill];
+          const skillData = skillScores[skill]
           if (skillData) {
-            skillData.score += feedback.score;
-            skillData.count += 1;
+            skillData.score += feedback.score
+            skillData.count += 1
           }
         }
       }
 
       // Calculate averages
       for (const skill in skillScores) {
-        const skillData = skillScores[skill];
+        const skillData = skillScores[skill]
         if (skillData && skillData.count > 0) {
-          skillData.score = skillData.score / skillData.count;
+          skillData.score = skillData.score / skillData.count
         }
       }
     }
 
     // Also check local feedback records for skill breakdown
-    const localFeedback = await db
-      .select()
-      .from(gameConfigs)
-      .where(like(gameConfigs.key, `agent0_feedback_${agentId}_%`));
+    const localFeedback = await db.query<{ key: string; value: JsonValue }>(
+      `SELECT key, value FROM "GameConfig" WHERE key LIKE $1`,
+      [`agent0_feedback_${agentId}_%`],
+    )
 
     for (const config of localFeedback) {
-      const feedbackData = config.value as {
-        skill?: string;
-        score?: number;
-      } | null;
+      const feedbackData = isFeedbackData(config.value) ? config.value : null
       if (feedbackData?.skill && typeof feedbackData.score === 'number') {
-        const skill = feedbackData.skill;
+        const skill = feedbackData.skill
         if (!skillScores[skill]) {
-          skillScores[skill] = { score: 0, count: 0 };
+          skillScores[skill] = { score: 0, count: 0 }
         }
-        const skillData = skillScores[skill];
+        const skillData = skillScores[skill]
         if (skillData) {
-          skillData.score += feedbackData.score;
-          skillData.count += 1;
+          skillData.score += feedbackData.score
+          skillData.count += 1
         }
       }
     }
 
     // Calculate averages for local feedback
     for (const skill in skillScores) {
-      const skillData = skillScores[skill];
+      const skillData = skillScores[skill]
       if (skillData && skillData.count > 0) {
-        const totalScore = skillData.score;
-        const count = skillData.count;
-        skillData.score = totalScore / count;
+        const totalScore = skillData.score
+        const count = skillData.count
+        skillData.score = totalScore / count
       }
     }
 
@@ -422,31 +450,28 @@ export class Agent0FeedbackService implements IAgent0FeedbackService {
       averageScore: reputation.averageScore || 0,
       totalFeedback: reputation.count || 0,
       skillScores,
-    };
+    }
   }
 
   /**
    * Get Babylon's own reputation from Agent0
    */
   async getBabylonReputation(): Promise<ReputationSummary | null> {
-    const configResult = await db
-      .select()
-      .from(gameConfigs)
-      .where(eq(gameConfigs.key, 'agent0_registration'))
-      .limit(1);
-    const config = configResult[0];
+    const configResult = await db.query<{ key: string; value: JsonValue }>(
+      `SELECT key, value FROM "GameConfig" WHERE key = $1 LIMIT 1`,
+      ['agent0_registration'],
+    )
+    const config = configResult[0]
 
-    type Agent0Config = {
-      agentId?: string;
-    };
-    const configValue = (config?.value ?? null) as Agent0Config | null;
+    const rawValue = toNull(config?.value)
+    const configValue = isAgent0RegistrationConfig(rawValue) ? rawValue : null
 
     if (!configValue?.agentId) {
-      logger.warn('Babylon not registered on Agent0');
-      return null;
+      logger.warn('Babylon not registered on Agent0')
+      return null
     }
 
-    return await this.getAgentReputation(configValue.agentId);
+    return await this.getAgentReputation(configValue.agentId)
   }
 
   /**
@@ -459,48 +484,51 @@ export class Agent0FeedbackService implements IAgent0FeedbackService {
     fromUserId: string,
     score: number,
     skill: string,
-    comment?: string
+    comment?: string,
   ): Promise<void> {
     // Get agent's Agent0 registration (join with userAgentConfigs for systemPrompt)
-    const agentResult = await db
-      .select({
-        id: users.id,
-        displayName: users.displayName,
-        systemPrompt: userAgentConfigs.systemPrompt,
-      })
-      .from(users)
-      .leftJoin(userAgentConfigs, eq(users.id, userAgentConfigs.userId))
-      .where(eq(users.id, babylonAgentUserId))
-      .limit(1);
-    const agent = agentResult[0];
+    const agentResult = await db.query<{
+      id: string
+      displayName: string | null
+      systemPrompt: string | null
+    }>(
+      `SELECT u.id, u."displayName", uac."systemPrompt"
+       FROM "User" u
+       LEFT JOIN "UserAgentConfig" uac ON u.id = uac."userId"
+       WHERE u.id = $1
+       LIMIT 1`,
+      [babylonAgentUserId],
+    )
+    const agent = agentResult[0]
 
     if (!agent) {
-      throw new Error('Agent not found');
+      throw new Error('Agent not found')
     }
 
     logger.info('Rating Babylon agent', {
       agentUserId: babylonAgentUserId,
       score,
       skill,
-    });
+    })
 
     // Check if agent has Agent0 registration in gameConfig
-    const agent0ConfigResult = await db
-      .select()
-      .from(gameConfigs)
-      .where(eq(gameConfigs.key, `agent0_registration_${babylonAgentUserId}`))
-      .limit(1);
-    const agent0Config = agent0ConfigResult[0];
+    const agent0ConfigResult = await db.query<{
+      key: string
+      value: JsonValue
+    }>(`SELECT key, value FROM "GameConfig" WHERE key = $1 LIMIT 1`, [
+      `agent0_registration_${babylonAgentUserId}`,
+    ])
+    const agent0Config = agent0ConfigResult[0]
 
-    const agent0ConfigValue = agent0Config?.value as {
-      agentId?: string;
-    } | null;
-    const agent0AgentId = agent0ConfigValue?.agentId;
+    const agent0ConfigValue = isAgent0RegistrationConfig(agent0Config?.value)
+      ? agent0Config.value
+      : null
+    const agent0AgentId = agent0ConfigValue?.agentId
 
     // If agent has Agent0 ID, submit feedback to Agent0
     if (agent0AgentId) {
-      const targetAgentId = parseTokenId(agent0AgentId);
-      const rating = scoreToRating(score);
+      const targetAgentId = parseTokenId(agent0AgentId)
+      const rating = scoreToRating(score)
 
       await this.submitFeedback({
         targetAgentId,
@@ -508,11 +536,11 @@ export class Agent0FeedbackService implements IAgent0FeedbackService {
         comment: comment || '',
         skill,
         transactionId: `babylon_rating_${fromUserId}_${Date.now()}`,
-      });
+      })
       logger.info('Agent rating submitted to Agent0', {
         agentUserId: babylonAgentUserId,
         agent0AgentId,
-      });
+      })
     }
 
     // Always store locally for tracking (even if submitted to Agent0)
@@ -530,47 +558,59 @@ export class Agent0FeedbackService implements IAgent0FeedbackService {
       } as JsonValue,
       createdAt: new Date(),
       updatedAt: new Date(),
-    });
+    })
 
-    logger.info('Agent rating stored locally');
+    logger.info('Agent rating stored locally')
   }
 
   /**
    * Get feedback given by a user
    */
   async getUserFeedbackHistory(
-    userId: string
+    userId: string,
   ): Promise<Record<string, unknown>[]> {
-    const feedbackConfigs = await db
-      .select()
-      .from(gameConfigs)
-      .where(like(gameConfigs.key, 'agent0_feedback_%'));
+    const feedbackConfigs = await db.query<{ key: string; value: JsonValue }>(
+      `SELECT key, value FROM "GameConfig" WHERE key LIKE $1`,
+      ['agent0_feedback_%'],
+    )
+
+    const isRecordWithFromUserId = (
+      v: JsonValue,
+    ): v is { [key: string]: JsonValue } & { fromUserId: JsonValue } => {
+      return (
+        typeof v === 'object' &&
+        v !== null &&
+        !Array.isArray(v) &&
+        'fromUserId' in v
+      )
+    }
 
     return feedbackConfigs
-      .map((c) => c.value as Record<string, unknown>)
-      .filter((v: Record<string, unknown>) => v.fromUserId === userId);
+      .map((c) => c.value)
+      .filter(isRecordWithFromUserId)
+      .filter((v) => v.fromUserId === userId)
   }
 
   /**
    * Map SDK Feedback to Agent0Feedback type
    */
   private mapSdkFeedback(feedback: {
-    id: [string, string, number];
-    agentId: string;
-    reviewer: string;
-    score?: number;
-    tags: string[];
-    text?: string;
-    context?: Record<string, unknown>;
-    proofOfPayment?: Record<string, unknown>;
-    fileURI?: string;
-    createdAt: number;
-    answers: Array<Record<string, unknown>>;
-    isRevoked: boolean;
-    capability?: string;
-    name?: string;
-    skill?: string;
-    task?: string;
+    id: [string, string, number]
+    agentId: string
+    reviewer: string
+    score?: number
+    tags: string[]
+    text?: string
+    context?: Record<string, unknown>
+    proofOfPayment?: Record<string, unknown>
+    fileURI?: string
+    createdAt: number
+    answers: Array<Record<string, unknown>>
+    isRevoked: boolean
+    capability?: string
+    name?: string
+    skill?: string
+    task?: string
   }): Agent0Feedback {
     return {
       id: feedback.id,
@@ -589,25 +629,25 @@ export class Agent0FeedbackService implements IAgent0FeedbackService {
       name: feedback.name,
       skill: feedback.skill,
       task: feedback.task,
-    };
+    }
   }
 }
 
 /**
  * Singleton instance
  */
-let feedbackService: Agent0FeedbackService | null = null;
+let feedbackService: Agent0FeedbackService | null = null
 
 export function getAgent0FeedbackService(): Agent0FeedbackService {
   if (!feedbackService) {
-    feedbackService = new Agent0FeedbackService();
+    feedbackService = new Agent0FeedbackService()
   }
-  return feedbackService;
+  return feedbackService
 }
 
 /**
  * Reset the singleton instance (useful for testing)
  */
 export function resetAgent0FeedbackService(): void {
-  feedbackService = null;
+  feedbackService = null
 }

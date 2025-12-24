@@ -11,8 +11,8 @@
  * 4. Use TokenStatsService.getStats() to query historical data
  */
 
-import { logger } from '@babylon/shared';
-import { setTokenUsageCallback } from '../llm/openai-client';
+import { logger } from '@babylon/shared'
+import { setTokenUsageCallback } from '../llm/openai-client'
 import {
   calculateEstimatedCost,
   type LLMCallTokenUsage,
@@ -21,21 +21,21 @@ import {
   type TickTokenStats,
   type TokenStatsSummary,
   type TokenUsageCollector,
-} from '../types/token-stats';
+} from '../types/token-stats'
 
 /**
  * Internal collector for a single tick
  */
 class TickUsageCollector implements TokenUsageCollector {
-  private calls: LLMCallTokenUsage[] = [];
+  private calls: LLMCallTokenUsage[] = []
 
   recordCall(usage: Omit<LLMCallTokenUsage, 'callId' | 'timestamp'>): void {
     const call: LLMCallTokenUsage = {
       ...usage,
       callId: `call-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`,
       timestamp: new Date(),
-    };
-    this.calls.push(call);
+    }
+    this.calls.push(call)
 
     logger.debug(
       'Token usage recorded',
@@ -47,37 +47,37 @@ class TickUsageCollector implements TokenUsageCollector {
         promptType: usage.promptType,
         success: usage.success,
       },
-      'TokenStatsService'
-    );
+      'TokenStatsService',
+    )
   }
 
   getCalls(): LLMCallTokenUsage[] {
-    return [...this.calls];
+    return [...this.calls]
   }
 
   getStats(): Omit<
     TickTokenStats,
     'tickId' | 'tickStartedAt' | 'tickCompletedAt' | 'tickDurationMs'
   > {
-    const calls = this.calls;
+    const calls = this.calls
 
     // Calculate totals
-    const totalCalls = calls.length;
-    const totalInputTokens = calls.reduce((sum, c) => sum + c.inputTokens, 0);
-    const totalOutputTokens = calls.reduce((sum, c) => sum + c.outputTokens, 0);
-    const totalTokens = totalInputTokens + totalOutputTokens;
+    const totalCalls = calls.length
+    const totalInputTokens = calls.reduce((sum, c) => sum + c.inputTokens, 0)
+    const totalOutputTokens = calls.reduce((sum, c) => sum + c.outputTokens, 0)
+    const totalTokens = totalInputTokens + totalOutputTokens
 
     // Aggregate by prompt type
     const promptTypeMap = new Map<
       string,
       {
-        calls: LLMCallTokenUsage[];
-        totalInput: number;
-        totalOutput: number;
-        totalDuration: number;
-        successCount: number;
+        calls: LLMCallTokenUsage[]
+        totalInput: number
+        totalOutput: number
+        totalDuration: number
+        successCount: number
       }
-    >();
+    >()
 
     for (const call of calls) {
       const existing = promptTypeMap.get(call.promptType) ?? {
@@ -86,17 +86,17 @@ class TickUsageCollector implements TokenUsageCollector {
         totalOutput: 0,
         totalDuration: 0,
         successCount: 0,
-      };
-      existing.calls.push(call);
-      existing.totalInput += call.inputTokens;
-      existing.totalOutput += call.outputTokens;
-      existing.totalDuration += call.durationMs;
-      if (call.success) existing.successCount++;
-      promptTypeMap.set(call.promptType, existing);
+      }
+      existing.calls.push(call)
+      existing.totalInput += call.inputTokens
+      existing.totalOutput += call.outputTokens
+      existing.totalDuration += call.durationMs
+      if (call.success) existing.successCount++
+      promptTypeMap.set(call.promptType, existing)
     }
 
     const byPromptType: PromptTypeStats[] = Array.from(
-      promptTypeMap.entries()
+      promptTypeMap.entries(),
     ).map(([promptType, data]) => ({
       promptType,
       callCount: data.calls.length,
@@ -117,39 +117,39 @@ class TickUsageCollector implements TokenUsageCollector {
           : 0,
       successRate:
         data.calls.length > 0 ? data.successCount / data.calls.length : 0,
-    }));
+    }))
 
     // Aggregate by model
     const modelMap = new Map<
       string,
       {
-        provider: 'jeju' | 'groq' | 'claude' | 'openai';
-        calls: LLMCallTokenUsage[];
-        totalInput: number;
-        totalOutput: number;
-        successCount: number;
+        provider: 'jeju' | 'groq' | 'claude' | 'openai'
+        calls: LLMCallTokenUsage[]
+        totalInput: number
+        totalOutput: number
+        successCount: number
       }
-    >();
+    >()
 
     for (const call of calls) {
-      const key = `${call.provider}:${call.model}`;
+      const key = `${call.provider}:${call.model}`
       const existing = modelMap.get(key) ?? {
         provider: call.provider,
         calls: [],
         totalInput: 0,
         totalOutput: 0,
         successCount: 0,
-      };
-      existing.calls.push(call);
-      existing.totalInput += call.inputTokens;
-      existing.totalOutput += call.outputTokens;
-      if (call.success) existing.successCount++;
-      modelMap.set(key, existing);
+      }
+      existing.calls.push(call)
+      existing.totalInput += call.inputTokens
+      existing.totalOutput += call.outputTokens
+      if (call.success) existing.successCount++
+      modelMap.set(key, existing)
     }
 
     const byModel: ModelStats[] = Array.from(modelMap.entries()).map(
       ([key, data]) => {
-        const [, model] = key.split(':');
+        const [, model] = key.split(':')
         return {
           provider: data.provider,
           model: model ?? 'unknown',
@@ -160,14 +160,14 @@ class TickUsageCollector implements TokenUsageCollector {
           avgTokensPerCall:
             data.calls.length > 0
               ? Math.round(
-                  (data.totalInput + data.totalOutput) / data.calls.length
+                  (data.totalInput + data.totalOutput) / data.calls.length,
                 )
               : 0,
           successRate:
             data.calls.length > 0 ? data.successCount / data.calls.length : 0,
-        };
-      }
-    );
+        }
+      },
+    )
 
     return {
       totalCalls,
@@ -177,11 +177,11 @@ class TickUsageCollector implements TokenUsageCollector {
       byPromptType,
       byModel,
       calls,
-    };
+    }
   }
 
   reset(): void {
-    this.calls = [];
+    this.calls = []
   }
 }
 
@@ -190,14 +190,14 @@ class TickUsageCollector implements TokenUsageCollector {
  * Manages token usage collection and aggregation across game ticks
  */
 class TokenStatsServiceImpl {
-  private currentCollector: TickUsageCollector | null = null;
-  private tickStartTime: Date | null = null;
-  private currentTickId: string | null = null;
-  private isCollecting = false;
+  private currentCollector: TickUsageCollector | null = null
+  private tickStartTime: Date | null = null
+  private currentTickId: string | null = null
+  private isCollecting = false
 
   // In-memory storage for recent ticks (for quick access without DB)
-  private recentTicks: TickTokenStats[] = [];
-  private readonly MAX_RECENT_TICKS = 100;
+  private recentTicks: TickTokenStats[] = []
+  private readonly MAX_RECENT_TICKS = 100
 
   /**
    * Start collecting token usage for a new tick
@@ -208,31 +208,31 @@ class TokenStatsServiceImpl {
       logger.warn(
         'TokenStatsService: startTick called while already collecting. Ending previous tick.',
         undefined,
-        'TokenStatsService'
-      );
-      this.endTick();
+        'TokenStatsService',
+      )
+      this.endTick()
     }
 
-    const id = tickId ?? `tick-${Date.now()}`;
-    this.currentCollector = new TickUsageCollector();
-    this.tickStartTime = new Date();
-    this.currentTickId = id;
-    this.isCollecting = true;
+    const id = tickId ?? `tick-${Date.now()}`
+    this.currentCollector = new TickUsageCollector()
+    this.tickStartTime = new Date()
+    this.currentTickId = id
+    this.isCollecting = true
 
     // Register the global callback to collect usage from all LLM calls
     setTokenUsageCallback((usage) => {
       if (this.currentCollector && this.isCollecting) {
-        this.currentCollector.recordCall(usage);
+        this.currentCollector.recordCall(usage)
       }
-    });
+    })
 
     logger.info(
       'Token stats collection started',
       { tickId: id },
-      'TokenStatsService'
-    );
+      'TokenStatsService',
+    )
 
-    return id;
+    return id
   }
 
   /**
@@ -249,16 +249,16 @@ class TokenStatsServiceImpl {
       logger.warn(
         'TokenStatsService: endTick called but no tick in progress',
         undefined,
-        'TokenStatsService'
-      );
-      return null;
+        'TokenStatsService',
+      )
+      return null
     }
 
-    const tickCompletedAt = new Date();
+    const tickCompletedAt = new Date()
     const tickDurationMs =
-      tickCompletedAt.getTime() - this.tickStartTime.getTime();
+      tickCompletedAt.getTime() - this.tickStartTime.getTime()
 
-    const stats = this.currentCollector.getStats();
+    const stats = this.currentCollector.getStats()
 
     const tickStats: TickTokenStats = {
       tickId: this.currentTickId,
@@ -266,22 +266,22 @@ class TokenStatsServiceImpl {
       tickCompletedAt,
       tickDurationMs,
       ...stats,
-    };
+    }
 
     // Store in recent ticks
-    this.recentTicks.unshift(tickStats);
+    this.recentTicks.unshift(tickStats)
     if (this.recentTicks.length > this.MAX_RECENT_TICKS) {
-      this.recentTicks.pop();
+      this.recentTicks.pop()
     }
 
     // Clear the global callback
-    setTokenUsageCallback(null);
+    setTokenUsageCallback(null)
 
     // Reset state
-    this.currentCollector = null;
-    this.tickStartTime = null;
-    this.currentTickId = null;
-    this.isCollecting = false;
+    this.currentCollector = null
+    this.tickStartTime = null
+    this.currentTickId = null
+    this.isCollecting = false
 
     logger.info(
       'Token stats collection ended',
@@ -293,10 +293,10 @@ class TokenStatsServiceImpl {
         outputTokens: tickStats.totalOutputTokens,
         durationMs: tickDurationMs,
       },
-      'TokenStatsService'
-    );
+      'TokenStatsService',
+    )
 
-    return tickStats;
+    return tickStats
   }
 
   /**
@@ -308,14 +308,14 @@ class TokenStatsServiceImpl {
     'tickId' | 'tickCompletedAt' | 'tickDurationMs'
   > | null {
     if (!this.isCollecting || !this.currentCollector || !this.tickStartTime) {
-      return null;
+      return null
     }
 
-    const stats = this.currentCollector.getStats();
+    const stats = this.currentCollector.getStats()
     return {
       tickStartedAt: this.tickStartTime,
       ...stats,
-    };
+    }
   }
 
   /**
@@ -324,7 +324,7 @@ class TokenStatsServiceImpl {
    * @returns Array of recent tick statistics
    */
   getRecentTicks(limit = 10): TickTokenStats[] {
-    return this.recentTicks.slice(0, limit);
+    return this.recentTicks.slice(0, limit)
   }
 
   /**
@@ -333,46 +333,46 @@ class TokenStatsServiceImpl {
    * @returns Aggregated summary statistics
    */
   getSummary(limit = 10): TokenStatsSummary | null {
-    const ticks = this.recentTicks.slice(0, limit);
+    const ticks = this.recentTicks.slice(0, limit)
 
     if (ticks.length === 0) {
-      return null;
+      return null
     }
 
-    const periodStart = ticks[ticks.length - 1]?.tickStartedAt ?? new Date();
-    const periodEnd = ticks[0]?.tickCompletedAt ?? new Date();
+    const periodStart = ticks[ticks.length - 1]?.tickStartedAt ?? new Date()
+    const periodEnd = ticks[0]?.tickCompletedAt ?? new Date()
 
     // Aggregate totals
-    const totalCalls = ticks.reduce((sum, t) => sum + t.totalCalls, 0);
+    const totalCalls = ticks.reduce((sum, t) => sum + t.totalCalls, 0)
     const totalInputTokens = ticks.reduce(
       (sum, t) => sum + t.totalInputTokens,
-      0
-    );
+      0,
+    )
     const totalOutputTokens = ticks.reduce(
       (sum, t) => sum + t.totalOutputTokens,
-      0
-    );
-    const totalTokens = totalInputTokens + totalOutputTokens;
+      0,
+    )
+    const totalTokens = totalInputTokens + totalOutputTokens
 
     // Calculate averages
-    const tickCount = ticks.length;
-    const avgCallsPerTick = Math.round(totalCalls / tickCount);
-    const avgInputTokensPerTick = Math.round(totalInputTokens / tickCount);
-    const avgOutputTokensPerTick = Math.round(totalOutputTokens / tickCount);
-    const avgTotalTokensPerTick = Math.round(totalTokens / tickCount);
+    const tickCount = ticks.length
+    const avgCallsPerTick = Math.round(totalCalls / tickCount)
+    const avgInputTokensPerTick = Math.round(totalInputTokens / tickCount)
+    const avgOutputTokensPerTick = Math.round(totalOutputTokens / tickCount)
+    const avgTotalTokensPerTick = Math.round(totalTokens / tickCount)
 
     // Aggregate by prompt type
-    const promptTypeMap = new Map<string, PromptTypeStats>();
+    const promptTypeMap = new Map<string, PromptTypeStats>()
     for (const tick of ticks) {
       for (const pt of tick.byPromptType) {
-        const existing = promptTypeMap.get(pt.promptType);
+        const existing = promptTypeMap.get(pt.promptType)
         if (existing) {
-          existing.callCount += pt.callCount;
-          existing.totalInputTokens += pt.totalInputTokens;
-          existing.totalOutputTokens += pt.totalOutputTokens;
-          existing.totalTokens += pt.totalTokens;
+          existing.callCount += pt.callCount
+          existing.totalInputTokens += pt.totalInputTokens
+          existing.totalOutputTokens += pt.totalOutputTokens
+          existing.totalTokens += pt.totalTokens
         } else {
-          promptTypeMap.set(pt.promptType, { ...pt });
+          promptTypeMap.set(pt.promptType, { ...pt })
         }
       }
     }
@@ -384,21 +384,21 @@ class TokenStatsServiceImpl {
         pt.callCount > 0 ? Math.round(pt.totalInputTokens / pt.callCount) : 0,
       avgOutputTokens:
         pt.callCount > 0 ? Math.round(pt.totalOutputTokens / pt.callCount) : 0,
-    }));
+    }))
 
     // Aggregate by model
-    const modelMap = new Map<string, ModelStats>();
+    const modelMap = new Map<string, ModelStats>()
     for (const tick of ticks) {
       for (const m of tick.byModel) {
-        const key = `${m.provider}:${m.model}`;
-        const existing = modelMap.get(key);
+        const key = `${m.provider}:${m.model}`
+        const existing = modelMap.get(key)
         if (existing) {
-          existing.callCount += m.callCount;
-          existing.totalInputTokens += m.totalInputTokens;
-          existing.totalOutputTokens += m.totalOutputTokens;
-          existing.totalTokens += m.totalTokens;
+          existing.callCount += m.callCount
+          existing.totalInputTokens += m.totalInputTokens
+          existing.totalOutputTokens += m.totalOutputTokens
+          existing.totalTokens += m.totalTokens
         } else {
-          modelMap.set(key, { ...m });
+          modelMap.set(key, { ...m })
         }
       }
     }
@@ -408,20 +408,20 @@ class TokenStatsServiceImpl {
       ...m,
       avgTokensPerCall:
         m.callCount > 0 ? Math.round(m.totalTokens / m.callCount) : 0,
-    }));
+    }))
 
     // Calculate estimated costs
-    let estimatedInputCostUSD = 0;
-    let estimatedOutputCostUSD = 0;
+    let estimatedInputCostUSD = 0
+    let estimatedOutputCostUSD = 0
 
     for (const m of byModel) {
       const costs = calculateEstimatedCost(
         m.model,
         m.totalInputTokens,
-        m.totalOutputTokens
-      );
-      estimatedInputCostUSD += costs.inputCostUSD;
-      estimatedOutputCostUSD += costs.outputCostUSD;
+        m.totalOutputTokens,
+      )
+      estimatedInputCostUSD += costs.inputCostUSD
+      estimatedOutputCostUSD += costs.outputCostUSD
     }
 
     return {
@@ -441,7 +441,7 @@ class TokenStatsServiceImpl {
       estimatedInputCostUSD,
       estimatedOutputCostUSD,
       estimatedTotalCostUSD: estimatedInputCostUSD + estimatedOutputCostUSD,
-    };
+    }
   }
 
   /**
@@ -449,16 +449,16 @@ class TokenStatsServiceImpl {
    * Useful for tracking calls made outside the normal game tick flow
    */
   recordManualCall(
-    usage: Omit<LLMCallTokenUsage, 'callId' | 'timestamp'>
+    usage: Omit<LLMCallTokenUsage, 'callId' | 'timestamp'>,
   ): void {
     if (this.currentCollector && this.isCollecting) {
-      this.currentCollector.recordCall(usage);
+      this.currentCollector.recordCall(usage)
     } else {
       logger.debug(
         'Manual token usage recorded (no tick in progress)',
         usage,
-        'TokenStatsService'
-      );
+        'TokenStatsService',
+      )
     }
   }
 
@@ -466,24 +466,24 @@ class TokenStatsServiceImpl {
    * Check if currently collecting token usage
    */
   isTickInProgress(): boolean {
-    return this.isCollecting;
+    return this.isCollecting
   }
 
   /**
    * Clear all stored statistics (for testing)
    */
   clearAll(): void {
-    this.recentTicks = [];
+    this.recentTicks = []
     if (this.isCollecting) {
-      setTokenUsageCallback(null);
-      this.currentCollector = null;
-      this.tickStartTime = null;
-      this.currentTickId = null;
-      this.isCollecting = false;
+      setTokenUsageCallback(null)
+      this.currentCollector = null
+      this.tickStartTime = null
+      this.currentTickId = null
+      this.isCollecting = false
     }
-    logger.info('Token stats cleared', undefined, 'TokenStatsService');
+    logger.info('Token stats cleared', undefined, 'TokenStatsService')
   }
 }
 
 // Export singleton instance
-export const TokenStatsService = new TokenStatsServiceImpl();
+export const TokenStatsService = new TokenStatsServiceImpl()

@@ -1,14 +1,14 @@
-import { npcMarketDecisions, renderPrompt } from '../src/prompts';
+import { npcMarketDecisions, renderPrompt } from '../src/prompts'
 
 async function testDashboardRender() {
-  console.log('🧪 Rendering Trader Dashboard...');
+  console.log('🧪 Rendering Trader Dashboard...')
 
   // 1. Mock Market Data Table (Output of formatMarketTable)
   const marketTable = `| Ticker/ID | Type | Price | 24h Change | Volume/Liq |
 |---|---|---|---|---|
 | BTCAI | PERP | $120,000 | +5.20% | Vol: $1000.0k |
 | ETHAI | PERP | $4,000 | -2.10% | Vol: $500.0k |
-| Q123 | PRED | Yes: 65¢ | No: 35¢ | Vol: $50.0k |`;
+| Q123 | PRED | Yes: 65¢ | No: 35¢ | Vol: $50.0k |`
 
   // 2. Mock Trader Dashboard (Output of formatNPCsList)
   const npcsList = `[1] TRADER DASHBOARD
@@ -29,7 +29,7 @@ Total PnL: -$200 | Exposure: 5.0%
 Network: None
 Positions: None
 Current Focus: Value investing | Dividends
-🔒 PRIVATE INTEL: None`;
+🔒 PRIVATE INTEL: None`
 
   // 3. Render
   const prompt = renderPrompt(npcMarketDecisions, {
@@ -43,11 +43,11 @@ Current Focus: Value investing | Dividends
     // Fallbacks
     validNpcIds: 'ailon-musk, warren-buffet-bot',
     validTickers: 'BTCAI, ETHAI, Q123',
-  });
+  })
 
-  console.log('\n================ PROMPT PREVIEW ================\n');
-  console.log(prompt);
-  console.log('\n================================================');
+  console.log('\n================ PROMPT PREVIEW ================\n')
+  console.log(prompt)
+  console.log('\n================================================')
 }
 
-testDashboardRender().catch(console.error);
+testDashboardRender().catch(console.error)

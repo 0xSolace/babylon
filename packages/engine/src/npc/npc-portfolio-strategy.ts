@@ -8,86 +8,87 @@
  * - Modern Portfolio Theory principles
  */
 
-import { logger } from '@babylon/shared';
+import { logger } from '@babylon/shared'
 
 interface MarketConditions {
-  volatility: number; // 0-1, market volatility index
-  sentiment: number; // -1 to 1, overall market sentiment
-  trending: boolean; // Is market trending or ranging
-  volume: number; // Relative volume index (0-1)
+  volatility: number // 0-1, market volatility index
+  sentiment: number // -1 to 1, overall market sentiment
+  trending: boolean // Is market trending or ranging
+  volume: number // Relative volume index (0-1)
 }
 
 interface AssetAllocation {
-  perps: number; // Percentage in perpetuals (0-100)
-  predictions: number; // Percentage in predictions (0-100)
-  cash: number; // Percentage in cash reserve (0-100)
+  perps: number // Percentage in perpetuals (0-100)
+  predictions: number // Percentage in predictions (0-100)
+  cash: number // Percentage in cash reserve (0-100)
 }
 
 interface PositionSizing {
-  maxPositionSize: number; // Max % of portfolio per position
-  minPositionSize: number; // Min % of portfolio per position
-  maxConcentration: number; // Max % in single asset
-  targetPositionCount: number; // Ideal number of positions
+  maxPositionSize: number // Max % of portfolio per position
+  minPositionSize: number // Min % of portfolio per position
+  maxConcentration: number // Max % in single asset
+  targetPositionCount: number // Ideal number of positions
 }
 
 interface RiskParameters {
-  maxDrawdown: number; // Max acceptable portfolio drawdown %
-  maxLeverage: number; // Max leverage allowed
-  stopLoss: number; // Stop loss % per position
-  correlationLimit: number; // Max correlation between positions (0-1)
+  maxDrawdown: number // Max acceptable portfolio drawdown %
+  maxLeverage: number // Max leverage allowed
+  stopLoss: number // Stop loss % per position
+  correlationLimit: number // Max correlation between positions (0-1)
 }
 
 export interface StrategyConfig {
-  name: string;
-  description: string;
-  assetAllocation: AssetAllocation;
-  positionSizing: PositionSizing;
-  riskParameters: RiskParameters;
-  rebalanceThreshold: number; // % deviation before rebalance
-  holdingPeriod: 'short' | 'medium' | 'long';
+  name: string
+  description: string
+  assetAllocation: AssetAllocation
+  positionSizing: PositionSizing
+  riskParameters: RiskParameters
+  rebalanceThreshold: number // % deviation before rebalance
+  holdingPeriod: 'short' | 'medium' | 'long'
 }
 
+// biome-ignore lint/complexity/noStaticOnlyClass: Service pattern uses static methods for stateless operations
 export class NPCPortfolioStrategy {
   /**
    * Get strategy configuration based on personality and conditions
    */
   static getStrategy(
     personality: string | null,
-    marketConditions?: MarketConditions
+    marketConditions?: MarketConditions,
   ): StrategyConfig {
-    const personalityLower = (personality || '').toLowerCase();
+    const personalityLower = (personality || '').toLowerCase()
 
     // Select base strategy from personality
-    let baseStrategy: StrategyConfig;
+    let baseStrategy: StrategyConfig
 
     if (
       personalityLower.includes('erratic') ||
       personalityLower.includes('disaster profiteer')
     ) {
-      baseStrategy = NPCPortfolioStrategy.getAggressiveStrategy();
+      baseStrategy = NPCPortfolioStrategy.getAggressiveStrategy()
     } else if (
       personalityLower.includes('vampire') ||
       personalityLower.includes('yacht')
     ) {
-      baseStrategy = NPCPortfolioStrategy.getConservativeStrategy();
+      baseStrategy = NPCPortfolioStrategy.getConservativeStrategy()
     } else if (
       personalityLower.includes('memecoin') ||
       personalityLower.includes('nft degen')
     ) {
-      baseStrategy = NPCPortfolioStrategy.getHighVolatilityStrategy();
+      baseStrategy = NPCPortfolioStrategy.getHighVolatilityStrategy()
     } else {
-      baseStrategy = NPCPortfolioStrategy.getBalancedStrategy();
+      baseStrategy = NPCPortfolioStrategy.getBalancedStrategy()
     }
 
     // Adjust strategy based on market conditions
     if (marketConditions) {
       return NPCPortfolioStrategy.adjustForMarketConditions(
         baseStrategy,
-        marketConditions
-      );
+        marketConditions,
+      )
     }
 
-    return baseStrategy;
+    return baseStrategy
   }
 
   /**
@@ -120,7 +121,7 @@ export class NPCPortfolioStrategy {
       },
       rebalanceThreshold: 15, // Rebalance when >15% deviation
       holdingPeriod: 'short',
-    };
+    }
   }
 
   /**
@@ -153,7 +154,7 @@ export class NPCPortfolioStrategy {
       },
       rebalanceThreshold: 5, // Rebalance when >5% deviation
       holdingPeriod: 'long',
-    };
+    }
   }
 
   /**
@@ -185,7 +186,7 @@ export class NPCPortfolioStrategy {
       },
       rebalanceThreshold: 10, // Rebalance when >10% deviation
       holdingPeriod: 'medium',
-    };
+    }
   }
 
   /**
@@ -218,7 +219,7 @@ export class NPCPortfolioStrategy {
       },
       rebalanceThreshold: 20, // Rebalance when >20% deviation
       holdingPeriod: 'short',
-    };
+    }
   }
 
   /**
@@ -226,27 +227,27 @@ export class NPCPortfolioStrategy {
    */
   private static adjustForMarketConditions(
     baseStrategy: StrategyConfig,
-    conditions: MarketConditions
+    conditions: MarketConditions,
   ): StrategyConfig {
-    const adjusted = { ...baseStrategy };
+    const adjusted = { ...baseStrategy }
 
     // High volatility → Reduce leverage and increase cash
     if (conditions.volatility > 0.7) {
       adjusted.riskParameters = {
         ...adjusted.riskParameters,
         maxLeverage: Math.max(1, adjusted.riskParameters.maxLeverage * 0.7),
-      };
+      }
       adjusted.assetAllocation = {
         ...adjusted.assetAllocation,
         cash: Math.min(30, adjusted.assetAllocation.cash * 1.5),
         perps: adjusted.assetAllocation.perps * 0.9,
-      };
+      }
 
       logger.debug(
         'Adjusted strategy for high volatility: reduced leverage and increased cash',
         { volatility: conditions.volatility },
-        'NPCPortfolioStrategy'
-      );
+        'NPCPortfolioStrategy',
+      )
     }
 
     // Negative sentiment → More defensive
@@ -255,13 +256,13 @@ export class NPCPortfolioStrategy {
         ...adjusted.assetAllocation,
         predictions: Math.min(60, adjusted.assetAllocation.predictions * 1.2),
         perps: adjusted.assetAllocation.perps * 0.8,
-      };
+      }
 
       logger.debug(
         'Adjusted strategy for negative sentiment: shifted to predictions',
         { sentiment: conditions.sentiment },
-        'NPCPortfolioStrategy'
-      );
+        'NPCPortfolioStrategy',
+      )
     }
 
     // Low volume → Reduce position sizes
@@ -270,18 +271,18 @@ export class NPCPortfolioStrategy {
         ...adjusted.positionSizing,
         maxPositionSize: adjusted.positionSizing.maxPositionSize * 0.8,
         targetPositionCount: Math.floor(
-          adjusted.positionSizing.targetPositionCount * 1.2
+          adjusted.positionSizing.targetPositionCount * 1.2,
         ),
-      };
+      }
 
       logger.debug(
         'Adjusted strategy for low volume: smaller positions, more diversification',
         { volume: conditions.volume },
-        'NPCPortfolioStrategy'
-      );
+        'NPCPortfolioStrategy',
+      )
     }
 
-    return adjusted;
+    return adjusted
   }
 
   /**
@@ -297,25 +298,25 @@ export class NPCPortfolioStrategy {
   static calculateOptimalPositionSize(
     winProbability: number,
     payoutRatio: number,
-    strategy: StrategyConfig
+    strategy: StrategyConfig,
   ): number {
     // Kelly Criterion
-    const p = Math.max(0.01, Math.min(0.99, winProbability)); // Clamp to (0.01, 0.99)
-    const q = 1 - p;
-    const b = payoutRatio;
+    const p = Math.max(0.01, Math.min(0.99, winProbability)) // Clamp to (0.01, 0.99)
+    const q = 1 - p
+    const b = payoutRatio
 
-    const kellyFraction = (b * p - q) / b;
+    const kellyFraction = (b * p - q) / b
 
     // Apply fractional Kelly for risk management (typically use 25-50% of Kelly)
-    const fractionalKelly = kellyFraction * 0.5;
+    const fractionalKelly = kellyFraction * 0.5
 
     // Clamp to strategy limits
-    const minSize = strategy.positionSizing.minPositionSize / 100;
-    const maxSize = strategy.positionSizing.maxPositionSize / 100;
+    const minSize = strategy.positionSizing.minPositionSize / 100
+    const maxSize = strategy.positionSizing.maxPositionSize / 100
 
-    const optimalSize = Math.max(minSize, Math.min(maxSize, fractionalKelly));
+    const optimalSize = Math.max(minSize, Math.min(maxSize, fractionalKelly))
 
-    return optimalSize * 100; // Return as percentage
+    return optimalSize * 100 // Return as percentage
   }
 
   /**
@@ -324,21 +325,21 @@ export class NPCPortfolioStrategy {
   static shouldRebalance(
     currentAllocation: AssetAllocation,
     targetAllocation: AssetAllocation,
-    threshold: number
+    threshold: number,
   ): boolean {
     const perpDeviation = Math.abs(
-      currentAllocation.perps - targetAllocation.perps
-    );
+      currentAllocation.perps - targetAllocation.perps,
+    )
     const predDeviation = Math.abs(
-      currentAllocation.predictions - targetAllocation.predictions
-    );
+      currentAllocation.predictions - targetAllocation.predictions,
+    )
     const cashDeviation = Math.abs(
-      currentAllocation.cash - targetAllocation.cash
-    );
+      currentAllocation.cash - targetAllocation.cash,
+    )
 
-    const maxDeviation = Math.max(perpDeviation, predDeviation, cashDeviation);
+    const maxDeviation = Math.max(perpDeviation, predDeviation, cashDeviation)
 
-    return maxDeviation > threshold;
+    return maxDeviation > threshold
   }
 
   /**
@@ -347,22 +348,22 @@ export class NPCPortfolioStrategy {
   static generateRebalancePlan(
     currentAllocation: AssetAllocation,
     targetAllocation: AssetAllocation,
-    totalPortfolioValue: number
+    totalPortfolioValue: number,
   ): {
-    perpAdjustment: number;
-    predictionAdjustment: number;
-    cashAdjustment: number;
+    perpAdjustment: number
+    predictionAdjustment: number
+    cashAdjustment: number
   } {
-    const perpDiff = targetAllocation.perps - currentAllocation.perps;
+    const perpDiff = targetAllocation.perps - currentAllocation.perps
     const predDiff =
-      targetAllocation.predictions - currentAllocation.predictions;
-    const cashDiff = targetAllocation.cash - currentAllocation.cash;
+      targetAllocation.predictions - currentAllocation.predictions
+    const cashDiff = targetAllocation.cash - currentAllocation.cash
 
     return {
       perpAdjustment: (perpDiff / 100) * totalPortfolioValue,
       predictionAdjustment: (predDiff / 100) * totalPortfolioValue,
       cashAdjustment: (cashDiff / 100) * totalPortfolioValue,
-    };
+    }
   }
 
   /**
@@ -373,9 +374,9 @@ export class NPCPortfolioStrategy {
       short: 24, // 1 day
       medium: 168, // 1 week
       long: 720, // 30 days
-    };
+    }
 
-    return periods[period];
+    return periods[period]
   }
 
   /**
@@ -384,54 +385,54 @@ export class NPCPortfolioStrategy {
   static evaluateStrategy(
     actualReturns: number[],
     benchmarkReturns: number[],
-    riskFreeRate = 0.02 // 2% annual
+    riskFreeRate = 0.02, // 2% annual
   ): {
-    sharpeRatio: number;
-    maxDrawdown: number;
-    winRate: number;
-    alpha: number;
-    beta: number;
+    sharpeRatio: number
+    maxDrawdown: number
+    winRate: number
+    alpha: number
+    beta: number
   } {
     // Calculate Sharpe Ratio
     const avgReturn =
-      actualReturns.reduce((a, b) => a + b, 0) / actualReturns.length;
+      actualReturns.reduce((a, b) => a + b, 0) / actualReturns.length
     const variance =
       actualReturns.reduce((sum, r) => sum + (r - avgReturn) ** 2, 0) /
-      actualReturns.length;
-    const stdDev = Math.sqrt(variance);
-    const sharpeRatio = stdDev > 0 ? (avgReturn - riskFreeRate) / stdDev : 0;
+      actualReturns.length
+    const stdDev = Math.sqrt(variance)
+    const sharpeRatio = stdDev > 0 ? (avgReturn - riskFreeRate) / stdDev : 0
 
     // Calculate Maximum Drawdown
-    let peak = actualReturns[0] || 0;
-    let maxDrawdown = 0;
+    let peak = actualReturns[0] || 0
+    let maxDrawdown = 0
     for (const value of actualReturns) {
-      if (value > peak) peak = value;
-      const drawdown = ((peak - value) / peak) * 100;
-      if (drawdown > maxDrawdown) maxDrawdown = drawdown;
+      if (value > peak) peak = value
+      const drawdown = ((peak - value) / peak) * 100
+      if (drawdown > maxDrawdown) maxDrawdown = drawdown
     }
 
     // Calculate Win Rate
-    const wins = actualReturns.filter((r) => r > 0).length;
+    const wins = actualReturns.filter((r) => r > 0).length
     const winRate =
-      actualReturns.length > 0 ? (wins / actualReturns.length) * 100 : 0;
+      actualReturns.length > 0 ? (wins / actualReturns.length) * 100 : 0
 
     // Calculate Alpha and Beta (vs benchmark)
     const benchmarkAvg =
-      benchmarkReturns.reduce((a, b) => a + b, 0) / benchmarkReturns.length;
+      benchmarkReturns.reduce((a, b) => a + b, 0) / benchmarkReturns.length
     const covariance =
       actualReturns.reduce((sum, r, i) => {
         return (
           sum + (r - avgReturn) * ((benchmarkReturns[i] || 0) - benchmarkAvg)
-        );
-      }, 0) / actualReturns.length;
+        )
+      }, 0) / actualReturns.length
     const benchmarkVariance =
       benchmarkReturns.reduce((sum, r) => {
-        return sum + (r - benchmarkAvg) ** 2;
-      }, 0) / benchmarkReturns.length;
+        return sum + (r - benchmarkAvg) ** 2
+      }, 0) / benchmarkReturns.length
 
-    const beta = benchmarkVariance > 0 ? covariance / benchmarkVariance : 1;
+    const beta = benchmarkVariance > 0 ? covariance / benchmarkVariance : 1
     const alpha =
-      avgReturn - (riskFreeRate + beta * (benchmarkAvg - riskFreeRate));
+      avgReturn - (riskFreeRate + beta * (benchmarkAvg - riskFreeRate))
 
     return {
       sharpeRatio,
@@ -439,6 +440,6 @@ export class NPCPortfolioStrategy {
       winRate,
       alpha,
       beta,
-    };
+    }
   }
 }

@@ -1,10 +1,7 @@
-import { useCallback } from 'react';
-import { posthog } from '@/lib/posthog';
+import { useCallback } from 'react'
+import { posthog } from '@/lib/posthog'
 
-type StringRecord = Record<
-  string,
-  string | number | boolean | null | undefined
->;
+type StringRecord = Record<string, string | number | boolean | null | undefined>
 
 /**
  * Main PostHog analytics hook for tracking events throughout the app.
@@ -35,9 +32,9 @@ export function usePostHog() {
   // Track generic event
   const track = useCallback((event: string, properties?: StringRecord) => {
     if (posthog && typeof window !== 'undefined') {
-      posthog.capture(event, properties);
+      posthog.capture(event, properties)
     }
-  }, []);
+  }, [])
 
   // Track user action (with automatic timestamp)
   const trackAction = useCallback(
@@ -45,10 +42,10 @@ export function usePostHog() {
       track(`user_${action}`, {
         ...(properties || {}),
         timestamp: new Date().toISOString(),
-      });
+      })
     },
-    [track]
-  );
+    [track],
+  )
 
   // Track navigation
   const trackNavigation = useCallback(
@@ -57,10 +54,10 @@ export function usePostHog() {
         destination,
         ...(source && { source }),
         timestamp: new Date().toISOString(),
-      });
+      })
     },
-    [track]
-  );
+    [track],
+  )
 
   // Track button click
   const trackClick = useCallback(
@@ -69,10 +66,10 @@ export function usePostHog() {
         button: buttonName,
         ...properties,
         timestamp: new Date().toISOString(),
-      });
+      })
     },
-    [track]
-  );
+    [track],
+  )
 
   // Track form submission
   const trackFormSubmit = useCallback(
@@ -82,26 +79,26 @@ export function usePostHog() {
         success,
         ...properties,
         timestamp: new Date().toISOString(),
-      });
+      })
     },
-    [track]
-  );
+    [track],
+  )
 
   // Track error
   const trackError = useCallback(
     (error: Error | string, context?: Record<string, unknown>) => {
-      const errorMessage = typeof error === 'string' ? error : error.message;
-      const errorStack = typeof error === 'string' ? undefined : error.stack;
+      const errorMessage = typeof error === 'string' ? error : error.message
+      const errorStack = typeof error === 'string' ? undefined : error.stack
 
       track('$exception', {
         $exception_message: errorMessage,
         ...(errorStack && { $exception_stack: errorStack }),
         ...(context || {}),
         timestamp: new Date().toISOString(),
-      });
+      })
     },
-    [track]
-  );
+    [track],
+  )
 
   return {
     track,
@@ -111,7 +108,7 @@ export function usePostHog() {
     trackFormSubmit,
     trackError,
     posthog,
-  };
+  }
 }
 
 /**
@@ -132,13 +129,13 @@ export function usePostHog() {
  * ```
  */
 export function useSignupTracking() {
-  const { track } = usePostHog();
+  const { track } = usePostHog()
 
   const trackSignupStarted = useCallback(() => {
     track('signup_started', {
       timestamp: new Date().toISOString(),
-    });
-  }, [track]);
+    })
+  }, [track])
 
   const trackSignupCompleted = useCallback(
     (userId: string, properties?: Record<string, unknown>) => {
@@ -146,10 +143,10 @@ export function useSignupTracking() {
         userId,
         ...properties,
         timestamp: new Date().toISOString(),
-      });
+      })
     },
-    [track]
-  );
+    [track],
+  )
 
   const trackOnboardingStep = useCallback(
     (step: string, completed: boolean) => {
@@ -157,10 +154,10 @@ export function useSignupTracking() {
         step,
         completed,
         timestamp: new Date().toISOString(),
-      });
+      })
     },
-    [track]
-  );
+    [track],
+  )
 
   const trackSocialConnect = useCallback(
     (platform: 'farcaster' | 'twitter', username: string) => {
@@ -168,17 +165,17 @@ export function useSignupTracking() {
         platform,
         username,
         timestamp: new Date().toISOString(),
-      });
+      })
     },
-    [track]
-  );
+    [track],
+  )
 
   return {
     trackSignupStarted,
     trackSignupCompleted,
     trackOnboardingStep,
     trackSocialConnect,
-  };
+  }
 }
 
 /**
@@ -199,7 +196,7 @@ export function useSignupTracking() {
  * ```
  */
 export function useMarketTracking() {
-  const { track } = usePostHog();
+  const { track } = usePostHog()
 
   const trackMarketView = useCallback(
     (marketId: string, marketType: 'prediction' | 'perp') => {
@@ -207,17 +204,17 @@ export function useMarketTracking() {
         marketId,
         marketType,
         timestamp: new Date().toISOString(),
-      });
+      })
     },
-    [track]
-  );
+    [track],
+  )
 
   const trackTrade = useCallback(
     (
       action: 'buy' | 'sell' | 'open' | 'close',
       marketId: string,
       amount: number,
-      success: boolean
+      success: boolean,
     ) => {
       track('trade', {
         action,
@@ -225,17 +222,17 @@ export function useMarketTracking() {
         amount,
         success,
         timestamp: new Date().toISOString(),
-      });
+      })
     },
-    [track]
-  );
+    [track],
+  )
 
   const trackPoolAction = useCallback(
     (
       action: 'deposit' | 'withdraw',
       poolId: string,
       amount: number,
-      success: boolean
+      success: boolean,
     ) => {
       track('pool_action', {
         action,
@@ -243,16 +240,16 @@ export function useMarketTracking() {
         amount,
         success,
         timestamp: new Date().toISOString(),
-      });
+      })
     },
-    [track]
-  );
+    [track],
+  )
 
   return {
     trackMarketView,
     trackTrade,
     trackPoolAction,
-  };
+  }
 }
 
 /**
@@ -273,7 +270,7 @@ export function useMarketTracking() {
  * ```
  */
 export function useSocialTracking() {
-  const { track } = usePostHog();
+  const { track } = usePostHog()
 
   const trackPostCreated = useCallback(
     (postId: string, contentLength: number) => {
@@ -281,10 +278,10 @@ export function useSocialTracking() {
         postId,
         contentLength,
         timestamp: new Date().toISOString(),
-      });
+      })
     },
-    [track]
-  );
+    [track],
+  )
 
   const trackPostLike = useCallback(
     (postId: string, liked: boolean) => {
@@ -292,10 +289,10 @@ export function useSocialTracking() {
         postId,
         action: liked ? 'like' : 'unlike',
         timestamp: new Date().toISOString(),
-      });
+      })
     },
-    [track]
-  );
+    [track],
+  )
 
   const trackPostComment = useCallback(
     (postId: string, commentLength: number) => {
@@ -303,10 +300,10 @@ export function useSocialTracking() {
         postId,
         commentLength,
         timestamp: new Date().toISOString(),
-      });
+      })
     },
-    [track]
-  );
+    [track],
+  )
 
   const trackFollow = useCallback(
     (targetUserId: string, followed: boolean) => {
@@ -314,10 +311,10 @@ export function useSocialTracking() {
         targetUserId,
         action: followed ? 'follow' : 'unfollow',
         timestamp: new Date().toISOString(),
-      });
+      })
     },
-    [track]
-  );
+    [track],
+  )
 
   const trackShare = useCallback(
     (contentType: string, contentId: string) => {
@@ -325,10 +322,10 @@ export function useSocialTracking() {
         contentType,
         contentId,
         timestamp: new Date().toISOString(),
-      });
+      })
     },
-    [track]
-  );
+    [track],
+  )
 
   return {
     trackPostCreated,
@@ -336,7 +333,7 @@ export function useSocialTracking() {
     trackPostComment,
     trackFollow,
     trackShare,
-  };
+  }
 }
 
 /**
@@ -359,7 +356,7 @@ export function useSocialTracking() {
  * ```
  */
 export function usePerformanceTracking() {
-  const { track } = usePostHog();
+  const { track } = usePostHog()
 
   const trackPageLoad = useCallback(
     (pageName: string, loadTime: number) => {
@@ -367,10 +364,10 @@ export function usePerformanceTracking() {
         page: pageName,
         loadTime,
         timestamp: new Date().toISOString(),
-      });
+      })
     },
-    [track]
-  );
+    [track],
+  )
 
   const trackAPICall = useCallback(
     (
@@ -378,7 +375,7 @@ export function usePerformanceTracking() {
       method: string,
       duration: number,
       success: boolean,
-      statusCode?: number
+      statusCode?: number,
     ) => {
       track('api_call', {
         endpoint,
@@ -387,13 +384,13 @@ export function usePerformanceTracking() {
         success,
         ...(statusCode !== undefined && { statusCode }),
         timestamp: new Date().toISOString(),
-      });
+      })
     },
-    [track]
-  );
+    [track],
+  )
 
   return {
     trackPageLoad,
     trackAPICall,
-  };
+  }
 }

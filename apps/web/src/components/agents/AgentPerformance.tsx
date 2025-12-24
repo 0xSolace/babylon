@@ -1,6 +1,4 @@
-'use client';
-
-import { cn } from '@babylon/shared';
+import { cn } from '@babylon/shared'
 import {
   Activity,
   Award,
@@ -11,8 +9,8 @@ import {
   TrendingDown,
   TrendingUp,
   Users,
-} from 'lucide-react';
-import { useAgent0Reputation } from '@/hooks/useAgent0Reputation';
+} from 'lucide-react'
+import { useAgent0Reputation } from '@/hooks/useAgent0Reputation'
 
 /**
  * Displays agent trading performance metrics (PnL, trades, win rate).
@@ -20,21 +18,21 @@ import { useAgent0Reputation } from '@/hooks/useAgent0Reputation';
  */
 interface AgentPerformanceProps {
   agent: {
-    lifetimePnL: string;
-    totalTrades: number;
-    profitableTrades: number;
-    winRate: number;
-  };
+    lifetimePnL: string
+    totalTrades: number
+    profitableTrades: number
+    winRate: number
+  }
   /** If provided, fetches and displays Agent0 network reputation */
-  agentId?: string;
+  agentId?: string
 }
 
 export function AgentPerformance({ agent, agentId }: AgentPerformanceProps) {
-  const pnl = parseFloat(agent.lifetimePnL);
-  const isProfitable = pnl >= 0;
-  const totalTrades = agent.totalTrades || 0;
-  const profitableTrades = agent.profitableTrades || 0;
-  const winRate = agent.winRate || 0;
+  const pnl = parseFloat(agent.lifetimePnL)
+  const isProfitable = pnl >= 0
+  const totalTrades = agent.totalTrades || 0
+  const profitableTrades = agent.profitableTrades || 0
+  const winRate = agent.winRate || 0
 
   // Fetch Agent0 network reputation data if agentId is provided
   const {
@@ -42,7 +40,7 @@ export function AgentPerformance({ agent, agentId }: AgentPerformanceProps) {
     reputation: agent0Reputation,
     loading: agent0Loading,
     isAgent0Available,
-  } = useAgent0Reputation(agentId);
+  } = useAgent0Reputation(agentId)
 
   const stats = [
     {
@@ -69,15 +67,15 @@ export function AgentPerformance({ agent, agentId }: AgentPerformanceProps) {
       icon: DollarSign,
       color: 'text-purple-600',
     },
-  ];
+  ]
 
   return (
     <div className="space-y-6">
       {/* Stats Grid */}
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        {stats.map((stat, idx) => (
+        {stats.map((stat) => (
           <div
-            key={idx}
+            key={stat.label}
             className="rounded-lg border border-border bg-card/50 p-6 backdrop-blur transition-all hover:border-[#0066FF]/30"
           >
             <div className="mb-3 flex items-start justify-between">
@@ -149,7 +147,7 @@ export function AgentPerformance({ agent, agentId }: AgentPerformanceProps) {
                 <span
                   className={cn(
                     'font-semibold text-lg',
-                    isProfitable ? 'text-green-600' : 'text-red-600'
+                    isProfitable ? 'text-green-600' : 'text-red-600',
                   )}
                 >
                   {isProfitable ? '+' : ''}
@@ -264,7 +262,7 @@ export function AgentPerformance({ agent, agentId }: AgentPerformanceProps) {
                 <div
                   className={cn(
                     'h-2 w-2 rounded-full',
-                    agent0Profile.active ? 'bg-green-500' : 'bg-gray-400'
+                    agent0Profile.active ? 'bg-green-500' : 'bg-gray-400',
                   )}
                 />
                 <span className="text-muted-foreground">
@@ -286,5 +284,5 @@ export function AgentPerformance({ agent, agentId }: AgentPerformanceProps) {
         </div>
       )}
     </div>
-  );
+  )
 }

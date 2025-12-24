@@ -1,0 +1,53 @@
+# A2A Server Configuration
+
+## Deployment Modes
+
+### HTTP A2A (Recommended)
+
+Works with Vercel and serverless environments.
+
+**Endpoint:** `https://babylon.market/a2a` or `http://localhost:3000/a2a`
+
+```typescript
+const client = new A2AClient({
+  endpoint: 'http://localhost:3000/a2a',
+  credentials: {
+    address: '0x...',
+    privateKey: '0x...',
+    tokenId: 1
+  }
+})
+```
+
+### HTTP A2A with Polling
+
+For custom polling intervals or batch processing.
+
+```typescript
+const client = new A2AClient({
+  endpoint: 'http://localhost:3000/a2a',
+  credentials: { ... }
+})
+
+setInterval(async () => {
+  const updates = await client.sendRequest('a2a.getNotifications', {})
+}, 5000)
+```
+
+## Port Reference
+
+| Service | Port | URL |
+|---------|------|-----|
+| Next.js App | 3000 | `http://localhost:3000` |
+| HTTP A2A | 3000 | `http://localhost:3000/a2a` |
+
+## Environment
+
+```env
+PUBLIC_API_URL="http://localhost:3000"
+```
+
+## Next Steps
+
+- **[Protocol Specification](/a2a/protocol)** - Message format
+- **[Authentication](/a2a/authentication)** - How to authenticate

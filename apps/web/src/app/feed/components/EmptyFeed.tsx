@@ -1,10 +1,8 @@
-'use client';
-
-type EmptyFeedVariant = 'latest' | 'following' | 'default';
+type EmptyFeedVariant = 'latest' | 'following' | 'default'
 
 interface EmptyFeedProps {
-  variant: EmptyFeedVariant;
-  isLoading?: boolean;
+  variant: EmptyFeedVariant
+  isLoading?: boolean
 }
 
 /**
@@ -32,7 +30,7 @@ export function EmptyFeed({ variant, isLoading = false }: EmptyFeedProps) {
           </div>
         </div>
       </div>
-    );
+    )
   }
 
   if (variant === 'following') {
@@ -49,7 +47,7 @@ export function EmptyFeed({ variant, isLoading = false }: EmptyFeedProps) {
           </p>
         </div>
       </div>
-    );
+    )
   }
 
   return (
@@ -64,5 +62,5 @@ export function EmptyFeed({ variant, isLoading = false }: EmptyFeedProps) {
         </p>
       </div>
     </div>
-  );
+  )
 }

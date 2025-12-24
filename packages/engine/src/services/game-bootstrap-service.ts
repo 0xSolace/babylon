@@ -10,17 +10,16 @@ import {
   db,
   eq,
   games,
-  generateSnowflakeId,
   organizationState,
   perpMarketSnapshots,
   pools,
   rssFeedSources,
   sql,
-} from '@babylon/db';
-import type { ActorTier } from '@babylon/shared';
-import { logger } from '@babylon/shared';
-import { CapitalAllocationService } from './capital-allocation-service';
-import { StaticDataRegistry } from './static-data-registry';
+} from '@babylon/db'
+import type { ActorTier } from '@babylon/shared'
+import { generateSnowflakeId, logger } from '@babylon/shared'
+import { CapitalAllocationService } from './capital-allocation-service'
+import { StaticDataRegistry } from './static-data-registry'
 
 // Minimum balance thresholds by tier
 const MINIMUM_BALANCE_BY_TIER: Record<string, number> = {
@@ -28,93 +27,106 @@ const MINIMUM_BALANCE_BY_TIER: Record<string, number> = {
   A_TIER: 25000,
   B_TIER: 10000,
   C_TIER: 5000,
-};
-
-const DEFAULT_MINIMUM_BALANCE = 5000;
-const MAX_TOP_UP_AMOUNT = 100000;
-
-// RSS Feed sources for news generation
-const RSS_FEEDS = [
-  {
-    name: 'New York Times - Technology',
-    feedUrl: 'https://rss.nytimes.com/services/xml/rss/nyt/Technology.xml',
-    category: 'tech',
-  },
-  {
-    name: 'New York Times - Business',
-    feedUrl: 'https://rss.nytimes.com/services/xml/rss/nyt/Business.xml',
-    category: 'business',
-  },
-  {
-    name: 'TechCrunch',
-    feedUrl: 'https://techcrunch.com/feed/',
-    category: 'tech',
-  },
-  {
-    name: 'Ars Technica',
-    feedUrl: 'https://feeds.arstechnica.com/arstechnica/index',
-    category: 'tech',
-  },
-  {
-    name: 'The Verge',
-    feedUrl: 'https://www.theverge.com/rss/index.xml',
-    category: 'tech',
-  },
-  {
-    name: 'Wired',
-    feedUrl: 'https://www.wired.com/feed/rss',
-    category: 'tech',
-  },
-  {
-    name: 'CoinDesk',
-    feedUrl: 'https://www.coindesk.com/arc/outboundfeeds/rss/',
-    category: 'crypto',
-  },
-  {
-    name: 'Cointelegraph',
-    feedUrl: 'https://cointelegraph.com/rss',
-    category: 'crypto',
-  },
-  {
-    name: 'BBC - Technology',
-    feedUrl: 'https://feeds.bbci.co.uk/news/technology/rss.xml',
-    category: 'tech',
-  },
-];
-
-export interface GameBootstrapResult {
-  actorsCreated: number;
-  actorsUpdated: number;
-  actorsToppedUp: number;
-  organizationsCreated: number;
-  organizationsUpdated: number;
-  poolsCreated: number;
-  rssFeedsCreated: number;
-  perpMarketsCreated: number;
-  gameStateInitialized: boolean;
-  totalTopUpAmount: number;
 }
 
+const DEFAULT_MINIMUM_BALANCE = 5000
+const MAX_TOP_UP_AMOUNT = 100000
+
+/**
+ * Check if external RSS feeds are enabled
+ * Set USE_EXTERNAL_RSS=false to use decentralized/cached content only
+ */
+const USE_EXTERNAL_RSS = process.env.USE_EXTERNAL_RSS !== 'false'
+
+// RSS Feed sources for news generation
+// Only used when USE_EXTERNAL_RSS=true
+const RSS_FEEDS = USE_EXTERNAL_RSS
+  ? [
+      {
+        name: 'New York Times - Technology',
+        feedUrl: 'https://rss.nytimes.com/services/xml/rss/nyt/Technology.xml',
+        category: 'tech',
+      },
+      {
+        name: 'New York Times - Business',
+        feedUrl: 'https://rss.nytimes.com/services/xml/rss/nyt/Business.xml',
+        category: 'business',
+      },
+      {
+        name: 'TechCrunch',
+        feedUrl: 'https://techcrunch.com/feed/',
+        category: 'tech',
+      },
+      {
+        name: 'Ars Technica',
+        feedUrl: 'https://feeds.arstechnica.com/arstechnica/index',
+        category: 'tech',
+      },
+      {
+        name: 'The Verge',
+        feedUrl: 'https://www.theverge.com/rss/index.xml',
+        category: 'tech',
+      },
+      {
+        name: 'Wired',
+        feedUrl: 'https://www.wired.com/feed/rss',
+        category: 'tech',
+      },
+      {
+        name: 'CoinDesk',
+        feedUrl: 'https://www.coindesk.com/arc/outboundfeeds/rss/',
+        category: 'crypto',
+      },
+      {
+        name: 'Cointelegraph',
+        feedUrl: 'https://cointelegraph.com/rss',
+        category: 'crypto',
+      },
+      {
+        name: 'BBC - Technology',
+        feedUrl: 'https://feeds.bbci.co.uk/news/technology/rss.xml',
+        category: 'tech',
+      },
+    ]
+  : []
+
+export interface GameBootstrapResult {
+  actorsCreated: number
+  actorsUpdated: number
+  actorsToppedUp: number
+  organizationsCreated: number
+  organizationsUpdated: number
+  poolsCreated: number
+  rssFeedsCreated: number
+  perpMarketsCreated: number
+  gameStateInitialized: boolean
+  totalTopUpAmount: number
+}
+
+// biome-ignore lint/complexity/noStaticOnlyClass: Service pattern uses static methods for stateless operations
 export class GameBootstrapService {
-  private static lastBootstrapTime = 0;
-  private static BOOTSTRAP_COOLDOWN_MS = 60000;
-  private static isBootstrapping = false;
+  private static lastBootstrapTime = 0
+  private static BOOTSTRAP_COOLDOWN_MS = 60000
+  private static isBootstrapping = false
 
   static async bootstrapIfNeeded(): Promise<GameBootstrapResult | null> {
-    const now = Date.now();
+    const now = Date.now()
 
     // Check if we've bootstrapped recently
-    if (now - this.lastBootstrapTime < this.BOOTSTRAP_COOLDOWN_MS) {
-      return null;
+    if (
+      now - GameBootstrapService.lastBootstrapTime <
+      GameBootstrapService.BOOTSTRAP_COOLDOWN_MS
+    ) {
+      return null
     }
 
     // Prevent concurrent bootstrapping
-    if (this.isBootstrapping) {
-      return null;
+    if (GameBootstrapService.isBootstrapping) {
+      return null
     }
 
-    this.isBootstrapping = true;
-    this.lastBootstrapTime = now;
+    GameBootstrapService.isBootstrapping = true
+    GameBootstrapService.lastBootstrapTime = now
 
     const result: GameBootstrapResult = {
       actorsCreated: 0,
@@ -127,53 +139,54 @@ export class GameBootstrapService {
       perpMarketsCreated: 0,
       gameStateInitialized: false,
       totalTopUpAmount: 0,
-    };
+    }
 
     try {
       // Get static data from registry (no file loading needed)
-      const staticActors = StaticDataRegistry.getAllActors();
-      const staticOrgs = StaticDataRegistry.getAllOrganizations();
+      const staticActors = StaticDataRegistry.getAllActors()
+      const staticOrgs = StaticDataRegistry.getAllOrganizations()
 
       // Get existing database state from state tables
       const [existingActorStates, existingOrgStates] = await Promise.all([
         db.select({ id: actorState.id }).from(actorState),
         db.select({ id: organizationState.id }).from(organizationState),
-      ]);
-      const existingActorIds = new Set(existingActorStates.map((a) => a.id));
-      const existingOrgIds = new Set(existingOrgStates.map((o) => o.id));
+      ])
+      const existingActorIds = new Set(existingActorStates.map((a) => a.id))
+      const existingOrgIds = new Set(existingOrgStates.map((o) => o.id))
 
       // 1. Sync actor states (only dynamic data)
       for (const actor of staticActors) {
         if (!existingActorIds.has(actor.id)) {
-          await this.seedActorState(actor);
-          result.actorsCreated++;
+          await GameBootstrapService.seedActorState(actor)
+          result.actorsCreated++
         }
       }
 
       // 2. Sync organization states (only dynamic data)
       for (const org of staticOrgs) {
         if (!existingOrgIds.has(org.id)) {
-          await this.seedOrganizationState(org);
-          result.organizationsCreated++;
+          await GameBootstrapService.seedOrganizationState(org)
+          result.organizationsCreated++
         }
       }
 
       // 3. Ensure minimum balances
-      const topUpResult = await this.ensureMinimumBalances();
-      result.actorsToppedUp = topUpResult.count;
-      result.totalTopUpAmount = topUpResult.totalAmount;
+      const topUpResult = await GameBootstrapService.ensureMinimumBalances()
+      result.actorsToppedUp = topUpResult.count
+      result.totalTopUpAmount = topUpResult.totalAmount
 
       // 4. Ensure pools exist
-      result.poolsCreated = await this.ensureActorPools();
+      result.poolsCreated = await GameBootstrapService.ensureActorPools()
 
       // 5. Ensure game state exists
-      result.gameStateInitialized = await this.ensureGameState();
+      result.gameStateInitialized = await GameBootstrapService.ensureGameState()
 
       // 6. Ensure RSS feeds
-      result.rssFeedsCreated = await this.ensureRSSFeeds();
+      result.rssFeedsCreated = await GameBootstrapService.ensureRSSFeeds()
 
       // 7. Ensure perp market snapshots exist for all tradeable organizations
-      result.perpMarketsCreated = await this.ensurePerpMarketSnapshots();
+      result.perpMarketsCreated =
+        await GameBootstrapService.ensurePerpMarketSnapshots()
 
       // Log summary if anything changed
       const hasChanges =
@@ -183,21 +196,21 @@ export class GameBootstrapService {
         result.poolsCreated > 0 ||
         result.rssFeedsCreated > 0 ||
         result.perpMarketsCreated > 0 ||
-        result.gameStateInitialized;
+        result.gameStateInitialized
 
       if (hasChanges) {
-        logger.info('Game bootstrap complete', result, 'GameBootstrapService');
+        logger.info('Game bootstrap complete', result, 'GameBootstrapService')
       }
 
-      return result;
+      return result
     } finally {
-      this.isBootstrapping = false;
+      GameBootstrapService.isBootstrapping = false
     }
   }
 
   static async forceFullSync(): Promise<GameBootstrapResult> {
-    this.lastBootstrapTime = 0;
-    this.isBootstrapping = false;
+    GameBootstrapService.lastBootstrapTime = 0
+    GameBootstrapService.isBootstrapping = false
 
     const result: GameBootstrapResult = {
       actorsCreated: 0,
@@ -210,54 +223,55 @@ export class GameBootstrapService {
       perpMarketsCreated: 0,
       gameStateInitialized: false,
       totalTopUpAmount: 0,
-    };
+    }
 
     // Get static data from registry
-    const staticActors = StaticDataRegistry.getAllActors();
-    const staticOrgs = StaticDataRegistry.getAllOrganizations();
+    const staticActors = StaticDataRegistry.getAllActors()
+    const staticOrgs = StaticDataRegistry.getAllOrganizations()
 
     // Sync all actor states (update existing, create missing)
     for (const actor of staticActors) {
-      const syncResult = await this.syncActorState(actor);
-      if (syncResult.created) result.actorsCreated++;
-      if (syncResult.updated) result.actorsUpdated++;
+      const syncResult = await GameBootstrapService.syncActorState(actor)
+      if (syncResult.created) result.actorsCreated++
+      if (syncResult.updated) result.actorsUpdated++
     }
 
     // Sync all organization states
     for (const org of staticOrgs) {
-      const syncResult = await this.syncOrganizationState(org);
-      if (syncResult.created) result.organizationsCreated++;
-      if (syncResult.updated) result.organizationsUpdated++;
+      const syncResult = await GameBootstrapService.syncOrganizationState(org)
+      if (syncResult.created) result.organizationsCreated++
+      if (syncResult.updated) result.organizationsUpdated++
     }
 
     // Ensure minimum balances
-    const topUpResult = await this.ensureMinimumBalances();
-    result.actorsToppedUp = topUpResult.count;
-    result.totalTopUpAmount = topUpResult.totalAmount;
+    const topUpResult = await GameBootstrapService.ensureMinimumBalances()
+    result.actorsToppedUp = topUpResult.count
+    result.totalTopUpAmount = topUpResult.totalAmount
 
-    result.poolsCreated = await this.ensureActorPools();
+    result.poolsCreated = await GameBootstrapService.ensureActorPools()
 
-    result.gameStateInitialized = await this.ensureGameState();
-    result.rssFeedsCreated = await this.ensureRSSFeeds();
-    result.perpMarketsCreated = await this.ensurePerpMarketSnapshots();
+    result.gameStateInitialized = await GameBootstrapService.ensureGameState()
+    result.rssFeedsCreated = await GameBootstrapService.ensureRSSFeeds()
+    result.perpMarketsCreated =
+      await GameBootstrapService.ensurePerpMarketSnapshots()
 
-    logger.info('Force full sync complete', result, 'GameBootstrapService');
-    return result;
+    logger.info('Force full sync complete', result, 'GameBootstrapService')
+    return result
   }
 
   private static async seedActorState(actor: {
-    id: string;
-    name: string;
-    tier: ActorTier | null;
-    domain: string[];
+    id: string
+    name: string
+    tier: ActorTier | null
+    domain: string[]
   }): Promise<void> {
     const capital = CapitalAllocationService.calculateCapital({
       id: actor.id,
       name: actor.name,
       description: undefined,
       domain: actor.domain,
-      tier: actor.tier ?? undefined,
-    });
+      tier: actor.tier,
+    })
 
     await db.insert(actorState).values({
       id: actor.id,
@@ -265,20 +279,20 @@ export class GameBootstrapService {
       reputationPoints: capital.reputationPoints,
       hasPool: false,
       updatedAt: new Date(),
-    });
+    })
 
     logger.debug(
       `Seeded actor state ${actor.name} with $${capital.tradingBalance}`,
       { actorId: actor.id },
-      'GameBootstrapService'
-    );
+      'GameBootstrapService',
+    )
   }
 
   private static async syncActorState(actor: {
-    id: string;
-    name: string;
-    tier: ActorTier | null;
-    domain: string[];
+    id: string
+    name: string
+    tier: ActorTier | null
+    domain: string[]
   }): Promise<{ created: boolean; updated: boolean }> {
     const existing = await db
       .select({
@@ -287,20 +301,20 @@ export class GameBootstrapService {
       })
       .from(actorState)
       .where(eq(actorState.id, actor.id))
-      .limit(1);
+      .limit(1)
 
     if (existing.length === 0) {
-      await this.seedActorState(actor);
-      return { created: true, updated: false };
+      await GameBootstrapService.seedActorState(actor)
+      return { created: true, updated: false }
     }
 
-    const existingState = existing[0];
-    if (!existingState) return { created: false, updated: false };
+    const existingState = existing[0]
+    if (!existingState) return { created: false, updated: false }
 
-    const tier = actor.tier || 'C_TIER';
+    const tier = actor.tier || 'C_TIER'
     const minimumBalance =
-      MINIMUM_BALANCE_BY_TIER[tier] || DEFAULT_MINIMUM_BALANCE;
-    const currentBalance = Number(existingState.tradingBalance) || 0;
+      MINIMUM_BALANCE_BY_TIER[tier] || DEFAULT_MINIMUM_BALANCE
+    const currentBalance = Number(existingState.tradingBalance) || 0
 
     // Only update balance if below minimum
     if (currentBalance < minimumBalance) {
@@ -310,34 +324,34 @@ export class GameBootstrapService {
           tradingBalance: minimumBalance.toString(),
           updatedAt: new Date(),
         })
-        .where(eq(actorState.id, actor.id));
+        .where(eq(actorState.id, actor.id))
     }
 
-    return { created: false, updated: true };
+    return { created: false, updated: true }
   }
 
   private static async seedOrganizationState(org: {
-    id: string;
-    name: string;
-    initialPrice: number | null;
+    id: string
+    name: string
+    initialPrice: number | null
   }): Promise<void> {
     await db.insert(organizationState).values({
       id: org.id,
       currentPrice: org.initialPrice,
       updatedAt: new Date(),
-    });
+    })
 
     logger.debug(
       `Seeded organization state ${org.name}`,
       { orgId: org.id },
-      'GameBootstrapService'
-    );
+      'GameBootstrapService',
+    )
   }
 
   private static async syncOrganizationState(org: {
-    id: string;
-    name: string;
-    initialPrice: number | null;
+    id: string
+    name: string
+    initialPrice: number | null
   }): Promise<{ created: boolean; updated: boolean }> {
     const existing = await db
       .select({
@@ -346,48 +360,49 @@ export class GameBootstrapService {
       })
       .from(organizationState)
       .where(eq(organizationState.id, org.id))
-      .limit(1);
+      .limit(1)
 
     if (existing.length === 0) {
-      await this.seedOrganizationState(org);
-      return { created: true, updated: false };
+      await GameBootstrapService.seedOrganizationState(org)
+      return { created: true, updated: false }
     }
 
-    const existingState = existing[0];
-    if (!existingState) return { created: false, updated: false };
+    const existingState = existing[0]
+    if (!existingState) return { created: false, updated: false }
 
     // Organization state only contains currentPrice - no update needed for static data
     // Price updates happen via the normal game tick flow
-    return { created: false, updated: false };
+    return { created: false, updated: false }
   }
 
   private static async ensureMinimumBalances(): Promise<{
-    count: number;
-    totalAmount: number;
+    count: number
+    totalAmount: number
   }> {
     // Get all actor states with their balances
-    const allActorStates = await db
+    type ActorStateRow = { id: string; tradingBalance: string }
+    const allActorStates = (await db
       .select({
         id: actorState.id,
         tradingBalance: actorState.tradingBalance,
       })
-      .from(actorState);
+      .from(actorState)) as ActorStateRow[]
 
-    let toppedUpCount = 0;
-    let totalTopUp = 0;
+    let toppedUpCount = 0
+    let totalTopUp = 0
 
     for (const state of allActorStates) {
       // Get static actor data for tier info
-      const staticActor = StaticDataRegistry.getActor(state.id);
-      const currentBalance = Number(state.tradingBalance) || 0;
-      const tier = staticActor?.tier || 'C_TIER';
+      const staticActor = StaticDataRegistry.getActor(state.id)
+      const currentBalance = Number(state.tradingBalance) || 0
+      const tier = staticActor?.tier || 'C_TIER'
       const minimumBalance =
-        MINIMUM_BALANCE_BY_TIER[tier] || DEFAULT_MINIMUM_BALANCE;
+        MINIMUM_BALANCE_BY_TIER[tier] || DEFAULT_MINIMUM_BALANCE
 
       if (currentBalance < minimumBalance) {
-        const deficit = minimumBalance - currentBalance;
-        const topUpAmount = Math.min(deficit, MAX_TOP_UP_AMOUNT);
-        const newBalance = currentBalance + topUpAmount;
+        const deficit = minimumBalance - currentBalance
+        const topUpAmount = Math.min(deficit, MAX_TOP_UP_AMOUNT)
+        const newBalance = currentBalance + topUpAmount
 
         await db
           .update(actorState)
@@ -395,44 +410,45 @@ export class GameBootstrapService {
             tradingBalance: newBalance.toString(),
             updatedAt: new Date(),
           })
-          .where(eq(actorState.id, state.id));
+          .where(eq(actorState.id, state.id))
 
-        toppedUpCount++;
-        totalTopUp += topUpAmount;
+        toppedUpCount++
+        totalTopUp += topUpAmount
 
         logger.debug(
           `Topped up ${staticActor?.name ?? state.id}: $${currentBalance} → $${newBalance}`,
           { actorId: state.id, topUpAmount },
-          'GameBootstrapService'
-        );
+          'GameBootstrapService',
+        )
       }
     }
 
-    return { count: toppedUpCount, totalAmount: totalTopUp };
+    return { count: toppedUpCount, totalAmount: totalTopUp }
   }
 
   private static async ensureActorPools(): Promise<number> {
     // Get actor states that don't have pools
-    const actorStatesWithoutPools = await db
+    type ActorStateRow = { id: string; tradingBalance: string }
+    const actorStatesWithoutPools = (await db
       .select({
         id: actorState.id,
         tradingBalance: actorState.tradingBalance,
       })
       .from(actorState)
-      .where(eq(actorState.hasPool, false));
+      .where(eq(actorState.hasPool, false))) as ActorStateRow[]
 
-    let created = 0;
+    let created = 0
 
     for (const state of actorStatesWithoutPools) {
-      const poolId = state.id;
-      const balance = Number(state.tradingBalance) || 10000;
-      const staticActor = StaticDataRegistry.getActor(state.id);
+      const poolId = state.id
+      const balance = Number(state.tradingBalance) || 10000
+      const staticActor = StaticDataRegistry.getActor(state.id)
 
       const existingPool = await db
         .select({ id: pools.id })
         .from(pools)
         .where(eq(pools.id, poolId))
-        .limit(1);
+        .limit(1)
 
       if (existingPool.length === 0) {
         await db.insert(pools).values({
@@ -448,18 +464,18 @@ export class GameBootstrapService {
           isActive: true,
           status: 'ACTIVE',
           updatedAt: new Date(),
-        });
+        })
 
         await db
           .update(actorState)
           .set({ hasPool: true, updatedAt: new Date() })
-          .where(eq(actorState.id, state.id));
+          .where(eq(actorState.id, state.id))
 
-        created++;
+        created++
       }
     }
 
-    return created;
+    return created
   }
 
   private static async ensureGameState(): Promise<boolean> {
@@ -467,11 +483,11 @@ export class GameBootstrapService {
       .select()
       .from(games)
       .where(eq(games.isContinuous, true))
-      .limit(1);
+      .limit(1)
 
     if (existingGame.length === 0) {
-      const now = new Date();
-      const gameId = await generateSnowflakeId();
+      const now = new Date()
+      const gameId = await generateSnowflakeId()
 
       await db.insert(games).values({
         id: gameId,
@@ -482,14 +498,14 @@ export class GameBootstrapService {
         speed: 60000,
         startedAt: now,
         updatedAt: now,
-      });
+      })
 
-      logger.info('Game state initialized', undefined, 'GameBootstrapService');
-      return true;
+      logger.info('Game state initialized', undefined, 'GameBootstrapService')
+      return true
     }
 
     // Ensure game is running
-    const game = existingGame[0];
+    const game = existingGame[0]
     if (game && !game.isRunning) {
       await db
         .update(games)
@@ -498,22 +514,22 @@ export class GameBootstrapService {
           startedAt: game.startedAt || new Date(),
           pausedAt: null,
         })
-        .where(eq(games.id, String(game.id)));
-      return true;
+        .where(eq(games.id, String(game.id)))
+      return true
     }
 
-    return false;
+    return false
   }
 
   private static async ensureRSSFeeds(): Promise<number> {
-    let created = 0;
+    let created = 0
 
     for (const feed of RSS_FEEDS) {
       const existing = await db
         .select({ id: rssFeedSources.id })
         .from(rssFeedSources)
         .where(eq(rssFeedSources.feedUrl, feed.feedUrl))
-        .limit(1);
+        .limit(1)
 
       if (existing.length === 0) {
         await db.insert(rssFeedSources).values({
@@ -522,12 +538,12 @@ export class GameBootstrapService {
           feedUrl: feed.feedUrl,
           category: feed.category,
           updatedAt: new Date(),
-        });
-        created++;
+        })
+        created++
       }
     }
 
-    return created;
+    return created
   }
 
   /**
@@ -535,40 +551,43 @@ export class GameBootstrapService {
    * This is required for the perpetual markets to be tradeable.
    */
   private static async ensurePerpMarketSnapshots(): Promise<number> {
-    let created = 0;
+    let created = 0
 
     // Get all organizations with tickers (these are tradeable as perps)
-    const staticOrgs = StaticDataRegistry.getAllOrganizations();
-    const tradeableOrgs = staticOrgs.filter((o) => o.ticker);
+    const staticOrgs = StaticDataRegistry.getAllOrganizations()
+    const tradeableOrgs = staticOrgs.filter((o) => o.ticker)
 
     // Get existing perp market snapshots
     const existingSnapshots = await db
       .select({ ticker: perpMarketSnapshots.ticker })
-      .from(perpMarketSnapshots);
-    const existingTickers = new Set(existingSnapshots.map((s) => s.ticker));
+      .from(perpMarketSnapshots)
+    const existingTickers = new Set(existingSnapshots.map((s) => s.ticker))
 
     // Get organization states for current prices
-    const orgStates = await db.select().from(organizationState);
+    type OrgStateRow = { id: string; currentPrice: number | null }
+    const orgStates = (await db
+      .select()
+      .from(organizationState)) as OrgStateRow[]
     const priceMap = new Map<string, number | null>(
-      orgStates.map((s) => [s.id, s.currentPrice])
-    );
+      orgStates.map((s) => [s.id, s.currentPrice]),
+    )
 
-    const now = new Date();
+    const now = new Date()
     const defaultFundingRate = {
       rate: 0.01, // 1% APR base
       nextFundingTime: new Date(
-        now.getTime() + 8 * 60 * 60 * 1000
+        now.getTime() + 8 * 60 * 60 * 1000,
       ).toISOString(), // 8 hours
       predictedRate: 0.01,
-    };
+    }
 
     for (const org of tradeableOrgs) {
       if (!org.ticker || existingTickers.has(org.ticker)) {
-        continue;
+        continue
       }
 
       // Use current price from state, or initial price, or default
-      const currentPrice = priceMap.get(org.id) ?? org.initialPrice ?? 100;
+      const currentPrice = priceMap.get(org.id) ?? org.initialPrice ?? 100
 
       await db.insert(perpMarketSnapshots).values({
         ticker: org.ticker,
@@ -591,70 +610,77 @@ export class GameBootstrapService {
         indexPrice: currentPrice,
         createdAt: now,
         updatedAt: now,
-      });
+      })
 
-      created++;
+      created++
       logger.debug(
         `Created perp market snapshot for ${org.ticker} (${org.name})`,
         { ticker: org.ticker, price: currentPrice },
-        'GameBootstrapService'
-      );
+        'GameBootstrapService',
+      )
     }
 
     if (created > 0) {
       logger.info(
         `Created ${created} perp market snapshots`,
         { created },
-        'GameBootstrapService'
-      );
+        'GameBootstrapService',
+      )
     }
 
-    return created;
+    return created
   }
 
   static getMinimumBalance(tier: string): number {
-    return MINIMUM_BALANCE_BY_TIER[tier] || DEFAULT_MINIMUM_BALANCE;
+    return MINIMUM_BALANCE_BY_TIER[tier] || DEFAULT_MINIMUM_BALANCE
   }
 
   static async getStats(): Promise<{
-    actors: number;
-    organizations: number;
-    pools: number;
-    characterMappings: number;
-    organizationMappings: number;
-    rssFeedSources: number;
-    perpMarkets: number;
+    actors: number
+    organizations: number
+    pools: number
+    characterMappings: number
+    organizationMappings: number
+    rssFeedSources: number
+    perpMarkets: number
   }> {
-    type CountResult = { count: number }[];
-    const [actorCount, orgCount, poolCount, feedCount, perpMarketCount] =
-      (await Promise.all([
-        db.select({ count: sql<number>`count(*)` }).from(actorState),
-        db.select({ count: sql<number>`count(*)` }).from(organizationState),
-        db.select({ count: sql<number>`count(*)` }).from(pools),
-        db.select({ count: sql<number>`count(*)` }).from(rssFeedSources),
-        db.select({ count: sql<number>`count(*)` }).from(perpMarketSnapshots),
-      ])) as unknown as [
-        CountResult,
-        CountResult,
-        CountResult,
-        CountResult,
-        CountResult,
-      ];
+    // Run count queries in parallel
+    const [
+      actorCountResults,
+      orgCountResults,
+      poolCountResults,
+      feedCountResults,
+      perpMarketCountResults,
+    ] = await Promise.all([
+      db.select({ count: sql`count(*)` }).from(actorState),
+      db.select({ count: sql`count(*)` }).from(organizationState),
+      db.select({ count: sql`count(*)` }).from(pools),
+      db.select({ count: sql`count(*)` }).from(rssFeedSources),
+      db.select({ count: sql`count(*)` }).from(perpMarketSnapshots),
+    ])
+
+    /** Row type for raw SQL count(*) results */
+    type RawCountRow = { count?: string | number | bigint }
+    const getCount = (results: { count: unknown }[]): number => {
+      const first = results[0] as RawCountRow | undefined
+      const val = first?.count
+      return typeof val === 'number' ? val : Number(val ?? 0)
+    }
 
     return {
-      actors: Number(actorCount[0]?.count ?? 0),
-      organizations: Number(orgCount[0]?.count ?? 0),
-      pools: Number(poolCount[0]?.count ?? 0),
+      actors: getCount(actorCountResults),
+      organizations: getCount(orgCountResults),
+      pools: getCount(poolCountResults),
       characterMappings: StaticDataRegistry.getAllCharacterMappings().length,
       organizationMappings:
         StaticDataRegistry.getAllOrganizationMappings().length,
-      rssFeedSources: Number(feedCount[0]?.count ?? 0),
-      perpMarkets: Number(perpMarketCount[0]?.count ?? 0),
-    };
+      rssFeedSources: getCount(feedCountResults),
+      perpMarkets: getCount(perpMarketCountResults),
+    }
   }
 }
 
 // Export convenience function for game tick
 export async function bootstrapGameIfNeeded(): Promise<GameBootstrapResult | null> {
-  return GameBootstrapService.bootstrapIfNeeded();
+  return GameBootstrapService.bootstrapIfNeeded()
 }

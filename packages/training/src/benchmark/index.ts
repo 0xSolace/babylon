@@ -11,16 +11,16 @@ export type {
   MatchupAgentResult,
   MatchupBenchmarkConfig,
   MatchupBenchmarkResult,
-} from './ArchetypeMatchupBenchmark';
+} from './ArchetypeMatchupBenchmark'
 export {
   ArchetypeMatchupBenchmark,
   runQuickMatchupBenchmark,
-} from './ArchetypeMatchupBenchmark';
+} from './ArchetypeMatchupBenchmark'
 export type {
   BenchmarkHistoryEntry,
   ModelComparisonData,
-} from './BenchmarkChartGenerator';
-export { BenchmarkChartGenerator } from './BenchmarkChartGenerator';
+} from './BenchmarkChartGenerator'
+export { BenchmarkChartGenerator } from './BenchmarkChartGenerator'
 export type {
   BenchmarkConfig,
   BenchmarkGameSnapshot,
@@ -29,36 +29,36 @@ export type {
   HiddenNarrativeFact,
   ScheduledCausalEvent,
   VolatilityBucket,
-} from './BenchmarkDataGenerator';
-export { BenchmarkDataGenerator, SeededRandom } from './BenchmarkDataGenerator';
-export { BenchmarkDataViewer } from './BenchmarkDataViewer';
+} from './BenchmarkDataGenerator'
+export { BenchmarkDataGenerator, SeededRandom } from './BenchmarkDataGenerator'
+export { BenchmarkDataViewer } from './BenchmarkDataViewer'
 export type {
   BenchmarkHistoryQuery,
   BenchmarkResultInput,
   BenchmarkTrendData,
-} from './BenchmarkHistoryService';
-export { BenchmarkHistoryService } from './BenchmarkHistoryService';
+} from './BenchmarkHistoryService'
+export { BenchmarkHistoryService } from './BenchmarkHistoryService'
 export type {
   BenchmarkComparisonResult,
   BenchmarkRunConfig,
-} from './BenchmarkRunner';
-export { BenchmarkRunner } from './BenchmarkRunner';
-export { BenchmarkValidator } from './BenchmarkValidator';
-export type { FastEvalConfig, FastEvalResult } from './FastEvalRunner';
-export { FastEvalRunner } from './FastEvalRunner';
+} from './BenchmarkRunner'
+export { BenchmarkRunner } from './BenchmarkRunner'
+export { BenchmarkValidator } from './BenchmarkValidator'
+export type { FastEvalConfig, FastEvalResult } from './FastEvalRunner'
+export { FastEvalRunner } from './FastEvalRunner'
 export type {
   ComparisonData,
   VisualizationOptions,
-} from './MetricsVisualizer';
-export { MetricsVisualizer } from './MetricsVisualizer';
+} from './MetricsVisualizer'
+export { MetricsVisualizer } from './MetricsVisualizer'
 export type {
   AverageMetrics,
   ModelBenchmarkOptions,
   ModelBenchmarkResult,
   ModelComparisonResult,
-} from './ModelBenchmarkService';
-export { ModelBenchmarkService } from './ModelBenchmarkService';
-export type { ModelConfig } from './ModelRegistry';
+} from './ModelBenchmarkService'
+export { ModelBenchmarkService } from './ModelBenchmarkService'
+export type { ModelConfig } from './ModelRegistry'
 export {
   getBaselineModels,
   getModelById,
@@ -68,12 +68,12 @@ export {
   getModelsByTier,
   MODEL_REGISTRY,
   validateModelId,
-} from './ModelRegistry';
+} from './ModelRegistry'
 // Shared utilities
 export {
   type JsonValue,
   parseSimulationMetrics,
-} from './parseSimulationMetrics';
+} from './parseSimulationMetrics'
 export {
   createRulerContext,
   extractMarketOutcomesFromBenchmark,
@@ -82,8 +82,8 @@ export {
   getTrueFacts,
   scoreActionAgainstGroundTruth,
   wasDecisionOptimal,
-} from './RulerBenchmarkIntegration';
-export { SimulationA2AInterface } from './SimulationA2AInterface';
+} from './RulerBenchmarkIntegration'
+export { SimulationA2AInterface } from './SimulationA2AInterface'
 // SimulationEngine class is deprecated but still referenced in some code
 // The stub throws at runtime; prefer game engine simulation instead
 export type {
@@ -91,5 +91,5 @@ export type {
   SimulationConfig,
   SimulationMetrics,
   SimulationResult,
-} from './SimulationEngine';
-export { SimulationEngine } from './SimulationEngine';
+} from './SimulationEngine'
+export { SimulationEngine } from './SimulationEngine'

@@ -1,99 +1,271 @@
 /**
  * Canonical Public Configuration for Babylon
  *
- * Environment-aware configuration for contract addresses and endpoints.
- * Import this instead of reading from environment variables.
+ * Static configuration from public-config.json.
+ * No environment variables in browser builds.
+ *
+ * Server-side code can use process.env to override defaults.
  */
 
-import type { Address } from 'viem';
-import configData from './public-config.json';
+import type { Address, Chain } from 'viem'
+import { isAddress } from 'viem'
+import { base, getChainById, hardhat, isJejuChain } from '../constants/chains'
+import configData from './public-config.json'
 
 // =============================================================================
 // Types
 // =============================================================================
 
+/**
+ * Contract addresses as stored in JSON (plain strings)
+ */
+interface RawContractAddresses {
+  diamond: string
+  identityRegistry: string
+  reputationSystem: string
+  predictionMarketFacet: string
+  oracleFacet: string
+  gameOracle?: string
+}
+
+/**
+ * Raw network config from JSON
+ */
+interface RawNetworkConfig {
+  chainId: number
+  name: string
+  rpcUrl: string
+  contracts: RawContractAddresses
+}
+
+/**
+ * Raw config structure matching public-config.json
+ */
+interface RawPublicConfig {
+  version: string
+  description: string
+  external: ExternalConfig
+  networks: {
+    local: RawNetworkConfig
+    baseSepolia: RawNetworkConfig
+    base: RawNetworkConfig
+  }
+  environments: {
+    localnet: EnvironmentConfig
+    testnet: EnvironmentConfig
+    mainnet: EnvironmentConfig
+  }
+}
+
 export interface CoreContractAddresses {
-  diamond: Address;
-  identityRegistry: Address;
-  reputationSystem: Address;
-  predictionMarketFacet: Address;
-  oracleFacet: Address;
+  diamond: Address
+  identityRegistry: Address
+  reputationSystem: Address
+  predictionMarketFacet: Address
+  oracleFacet: Address
 }
 
 export interface LocalContractAddresses extends CoreContractAddresses {
-  gameOracle: Address;
+  gameOracle: Address
 }
 
 export interface NetworkConfig {
-  chainId: number;
-  name: string;
-  rpcUrl: string;
-  contracts: CoreContractAddresses | LocalContractAddresses;
+  chainId: number
+  name: string
+  rpcUrl: string
+  contracts: CoreContractAddresses | LocalContractAddresses
 }
 
 export interface EndpointsConfig {
-  apiBaseUrl: string;
-  a2aEndpoint: string;
-  mcpEndpoint: string;
+  apiBaseUrl: string
+  frontendUrl: string
+  a2aEndpoint: string
+  mcpEndpoint: string
+  ipfsGateway: string
+}
+
+export interface EnvironmentConfig {
+  network: string
+  endpoints: EndpointsConfig
+}
+
+export interface FarcasterConfig {
+  hub: string
+  api: string
+}
+
+export interface ExternalConfig {
+  farcaster: {
+    localnet: FarcasterConfig
+    testnet: FarcasterConfig
+    mainnet: FarcasterConfig
+  }
 }
 
 export interface PublicConfig {
-  version: string;
+  version: string
+  description: string
+  external: ExternalConfig
   networks: {
-    local: NetworkConfig;
-    baseSepolia: NetworkConfig;
-    base: NetworkConfig;
-  };
+    local: NetworkConfig
+    baseSepolia: NetworkConfig
+    base: NetworkConfig
+  }
   environments: {
-    development: { network: string; endpoints: EndpointsConfig };
-    staging: { network: string; endpoints: EndpointsConfig };
-    production: { network: string; endpoints: EndpointsConfig };
-  };
+    localnet: EnvironmentConfig
+    testnet: EnvironmentConfig
+    mainnet: EnvironmentConfig
+  }
+}
+
+// =============================================================================
+// Address Conversion Helper
+// =============================================================================
+
+/**
+ * Convert a string to Address, throwing if invalid.
+ * Used to properly type addresses from JSON config.
+ */
+function toAddress(value: string): Address {
+  if (!isAddress(value)) {
+    throw new Error(`Invalid address in config: ${value}`)
+  }
+  return value
+}
+
+/**
+ * Convert raw contract addresses from JSON to typed addresses
+ */
+function convertContractAddresses(
+  raw: RawContractAddresses,
+): CoreContractAddresses | LocalContractAddresses {
+  const core: CoreContractAddresses = {
+    diamond: toAddress(raw.diamond),
+    identityRegistry: toAddress(raw.identityRegistry),
+    reputationSystem: toAddress(raw.reputationSystem),
+    predictionMarketFacet: toAddress(raw.predictionMarketFacet),
+    oracleFacet: toAddress(raw.oracleFacet),
+  }
+
+  if (raw.gameOracle) {
+    return {
+      ...core,
+      gameOracle: toAddress(raw.gameOracle),
+    }
+  }
+
+  return core
+}
+
+/**
+ * Convert raw network config to typed network config
+ */
+function convertNetworkConfig(raw: RawNetworkConfig): NetworkConfig {
+  return {
+    chainId: raw.chainId,
+    name: raw.name,
+    rpcUrl: raw.rpcUrl,
+    contracts: convertContractAddresses(raw.contracts),
+  }
+}
+
+/**
+ * Convert raw public config to typed public config
+ */
+function convertPublicConfig(raw: RawPublicConfig): PublicConfig {
+  return {
+    version: raw.version,
+    description: raw.description,
+    external: raw.external,
+    networks: {
+      local: convertNetworkConfig(raw.networks.local),
+      baseSepolia: convertNetworkConfig(raw.networks.baseSepolia),
+      base: convertNetworkConfig(raw.networks.base),
+    },
+    environments: raw.environments,
+  }
 }
 
 // =============================================================================
 // Configuration
 // =============================================================================
 
-export const PUBLIC_CONFIG = configData as PublicConfig;
+const rawConfig = configData as RawPublicConfig
+export const PUBLIC_CONFIG: PublicConfig = convertPublicConfig(rawConfig)
 
-type NetworkId = 'local' | 'baseSepolia' | 'base';
-type EnvironmentName = 'development' | 'staging' | 'production';
+export type NetworkId = 'local' | 'baseSepolia' | 'base'
+export type EnvironmentName = 'localnet' | 'testnet' | 'mainnet'
 
 const CHAIN_ID_TO_NETWORK: Record<number, NetworkId> = {
   31337: 'local',
   84532: 'baseSepolia',
   8453: 'base',
-};
+}
 
-const NETWORK_TO_ENVIRONMENT: Record<NetworkId, EnvironmentName> = {
-  local: 'development',
-  baseSepolia: 'staging',
-  base: 'production',
-};
+const NETWORK_ID_TO_ENVIRONMENT: Record<NetworkId, EnvironmentName> = {
+  local: 'localnet',
+  baseSepolia: 'testnet',
+  base: 'mainnet',
+}
 
+const ENVIRONMENT_TO_NETWORK_ID: Record<EnvironmentName, NetworkId> = {
+  localnet: 'local',
+  testnet: 'baseSepolia',
+  mainnet: 'base',
+}
+
+// Default environment - can be overridden at build time
+let DEFAULT_ENVIRONMENT: EnvironmentName = 'localnet'
+let DEFAULT_CHAIN_ID: number = 31337
+
+/**
+ * Set default environment (for build-time configuration)
+ */
+export function setDefaultEnvironment(env: EnvironmentName): void {
+  DEFAULT_ENVIRONMENT = env
+  const networkId = ENVIRONMENT_TO_NETWORK_ID[env]
+  DEFAULT_CHAIN_ID = PUBLIC_CONFIG.networks[networkId].chainId
+}
+
+/**
+ * Set default chain ID (for build-time configuration)
+ */
+export function setDefaultChainId(chainId: number): void {
+  DEFAULT_CHAIN_ID = chainId
+  const networkId = CHAIN_ID_TO_NETWORK[chainId]
+  if (networkId) {
+    DEFAULT_ENVIRONMENT = NETWORK_ID_TO_ENVIRONMENT[networkId]
+  }
+}
+
+/**
+ * Get current environment name - defaults to localnet
+ */
+export function getCurrentEnvironment(): EnvironmentName {
+  return DEFAULT_ENVIRONMENT
+}
+
+/**
+ * Get current chain ID - defaults to 31337 (local)
+ */
 export function getCurrentChainId(): number {
-  const envChainId = process.env.NEXT_PUBLIC_CHAIN_ID;
-  if (envChainId) return Number.parseInt(envChainId, 10);
-
-  // Default to local for development, Base Sepolia for test
-  if (process.env.NODE_ENV === 'production') return 8453;
-  if (process.env.NODE_ENV === 'test') return 84532;
-  return 31337;
+  return DEFAULT_CHAIN_ID
 }
 
-function getCurrentEnvironment(): EnvironmentName {
-  const networkId = CHAIN_ID_TO_NETWORK[getCurrentChainId()];
-  return networkId ? NETWORK_TO_ENVIRONMENT[networkId] : 'development';
+/**
+ * Get network configuration for current environment
+ */
+export function getCurrentNetwork(): NetworkConfig {
+  const env = getCurrentEnvironment()
+  const networkId = ENVIRONMENT_TO_NETWORK_ID[env]
+  return PUBLIC_CONFIG.networks[networkId]
 }
 
-function getCurrentNetwork(): NetworkConfig {
-  const networkId = CHAIN_ID_TO_NETWORK[getCurrentChainId()] || 'local';
-  return PUBLIC_CONFIG.networks[networkId];
-}
-
-function getCurrentEndpoints(): EndpointsConfig {
-  return PUBLIC_CONFIG.environments[getCurrentEnvironment()].endpoints;
+/**
+ * Get endpoints configuration for current environment
+ */
+export function getCurrentEndpoints(): EndpointsConfig {
+  return PUBLIC_CONFIG.environments[getCurrentEnvironment()].endpoints
 }
 
 // =============================================================================
@@ -103,42 +275,134 @@ function getCurrentEndpoints(): EndpointsConfig {
 export function getCurrentContractAddresses():
   | CoreContractAddresses
   | LocalContractAddresses {
-  return getCurrentNetwork().contracts;
+  return getCurrentNetwork().contracts
+}
+
+/**
+ * Get contract addresses for a specific chain ID
+ */
+export function getContractAddressesForChain(
+  chainId?: number,
+): CoreContractAddresses | LocalContractAddresses {
+  const targetChainId = chainId ?? getCurrentChainId()
+  const networkId = CHAIN_ID_TO_NETWORK[targetChainId] || 'local'
+  return PUBLIC_CONFIG.networks[networkId].contracts
 }
 
 export function areContractsDeployed(chainId: number): boolean {
-  const networkId = CHAIN_ID_TO_NETWORK[chainId] || 'local';
-  const contracts = PUBLIC_CONFIG.networks[networkId].contracts;
+  const networkId = CHAIN_ID_TO_NETWORK[chainId] || 'local'
+  const contracts = PUBLIC_CONFIG.networks[networkId].contracts
   return (
     contracts.identityRegistry !== '0x0000000000000000000000000000000000000000'
-  );
+  )
 }
 
-export const LOCAL_CONTRACT_ADDRESSES = PUBLIC_CONFIG.networks.local
-  .contracts as LocalContractAddresses;
-export const DIAMOND_ADDRESS = LOCAL_CONTRACT_ADDRESSES.diamond;
-export const REPUTATION_SYSTEM_BASE_SEPOLIA = PUBLIC_CONFIG.networks.baseSepolia
-  .contracts.reputationSystem as Address;
-export const IDENTITY_REGISTRY_BASE_SEPOLIA = PUBLIC_CONFIG.networks.baseSepolia
-  .contracts.identityRegistry as Address;
+/**
+ * Check if contracts include gameOracle (local network only)
+ */
+function isLocalContractAddresses(
+  contracts: CoreContractAddresses | LocalContractAddresses,
+): contracts is LocalContractAddresses {
+  return 'gameOracle' in contracts
+}
+
+export const LOCAL_CONTRACT_ADDRESSES: LocalContractAddresses =
+  isLocalContractAddresses(PUBLIC_CONFIG.networks.local.contracts)
+    ? PUBLIC_CONFIG.networks.local.contracts
+    : {
+        ...PUBLIC_CONFIG.networks.local.contracts,
+        gameOracle: toAddress('0x0000000000000000000000000000000000000000'),
+      }
+
+export const DIAMOND_ADDRESS = LOCAL_CONTRACT_ADDRESSES.diamond
+export const REPUTATION_SYSTEM_BASE_SEPOLIA =
+  PUBLIC_CONFIG.networks.baseSepolia.contracts.reputationSystem
+export const IDENTITY_REGISTRY_BASE_SEPOLIA =
+  PUBLIC_CONFIG.networks.baseSepolia.contracts.identityRegistry
 
 // =============================================================================
 // RPC & Endpoints
 // =============================================================================
 
 export function getCurrentRpcUrl(): string {
-  if (process.env.NEXT_PUBLIC_RPC_URL) return process.env.NEXT_PUBLIC_RPC_URL;
-  return getCurrentNetwork().rpcUrl;
+  return getCurrentNetwork().rpcUrl
 }
 
 export function getAPIBaseUrl(): string {
-  return getCurrentEndpoints().apiBaseUrl;
+  return getCurrentEndpoints().apiBaseUrl
+}
+
+export function getFrontendUrl(): string {
+  return getCurrentEndpoints().frontendUrl
 }
 
 export function getA2AEndpoint(): string {
-  return getCurrentEndpoints().a2aEndpoint;
+  return getCurrentEndpoints().a2aEndpoint
 }
 
 export function getMCPEndpoint(): string {
-  return getCurrentEndpoints().mcpEndpoint;
+  return getCurrentEndpoints().mcpEndpoint
 }
+
+export function getIpfsGateway(): string {
+  return getCurrentEndpoints().ipfsGateway
+}
+
+// =============================================================================
+// Farcaster Configuration
+// =============================================================================
+
+/**
+ * Get Farcaster hub URL for current environment
+ * Config-first: uses public-config.json, no env vars in browser
+ */
+export function getFarcasterHubUrl(): string {
+  const env = getCurrentEnvironment()
+  return PUBLIC_CONFIG.external.farcaster[env].hub
+}
+
+/**
+ * Get Farcaster API URL (Neynar) for current environment
+ */
+export function getFarcasterApiUrl(): string {
+  const env = getCurrentEnvironment()
+  return PUBLIC_CONFIG.external.farcaster[env].api
+}
+
+/**
+ * Get full Farcaster config for current environment
+ */
+export function getFarcasterConfig(): FarcasterConfig {
+  const env = getCurrentEnvironment()
+  return PUBLIC_CONFIG.external.farcaster[env]
+}
+
+// =============================================================================
+// Chain Exports (for backwards compatibility)
+// =============================================================================
+
+/**
+ * Current chain ID based on configuration
+ */
+export const CHAIN_ID = getCurrentChainId()
+
+/**
+ * Current chain object based on configuration
+ */
+export const CHAIN: Chain = getChainById(CHAIN_ID) ?? hardhat
+
+/**
+ * Current RPC URL based on configuration
+ */
+export const RPC_URL = getCurrentRpcUrl()
+
+/**
+ * Network type based on chain ID
+ */
+export const NETWORK: 'mainnet' | 'testnet' =
+  CHAIN_ID === base.id || CHAIN_ID === 8453 ? 'mainnet' : 'testnet'
+
+/**
+ * Whether we're on a Jeju network
+ */
+export const IS_JEJU_NETWORK = isJejuChain(CHAIN_ID)

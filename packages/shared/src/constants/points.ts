@@ -30,7 +30,7 @@ export const POINTS = {
   REFERRAL_QUALIFIED: 100, // Bonus for referrer when referred user completes profile
   PRIVATE_GROUP_CREATE: 200, // Reward for creating a private group
   PRIVATE_CHANNEL_CREATE: 200, // Reward for creating a private channel
-} as const;
+} as const
 
 /**
  * Valid reasons for point transactions
@@ -60,4 +60,4 @@ export type PointsReason =
   | 'purchase'
   | 'transfer_sent'
   | 'transfer_received'
-  | 'report_reward'; // Reward for successful reporting of CSAM/scammer
+  | 'report_reward' // Reward for successful reporting of CSAM/scammer

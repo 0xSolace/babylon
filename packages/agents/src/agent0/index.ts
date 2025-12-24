@@ -11,31 +11,37 @@ export {
   getAgent0Client,
   resetAgent0Client,
   setContractAddressesProvider,
-} from './Agent0Client';
+} from './Agent0Client'
 // Agent Discovery
 export {
   AgentDiscoveryService,
   getAgentDiscoveryService,
   resetAgentDiscoveryService,
-} from './AgentDiscovery';
+} from './AgentDiscovery'
 export {
   type BabylonRegistrationResult,
   registerBabylonGame,
-} from './babylon-registry-init';
+} from './babylon-registry-init'
 export {
   Agent0FeedbackService,
   getAgent0FeedbackService,
   type ReputationSummary,
   resetAgent0FeedbackService,
-} from './feedback-service';
+} from './feedback-service'
+// Game Discovery
+export {
+  type DiscoverableGame,
+  GameDiscoveryService,
+  getGameDiscoveryService,
+} from './GameDiscovery'
 // Reputation Bridge
-export { ReputationBridge } from './ReputationBridge';
+export { ReputationBridge } from './ReputationBridge'
 // Reputation utilities
-export * from './reputation';
+export * from './reputation'
 // Resilience utilities
-export * from './resilience';
+export * from './resilience'
 // Subgraph Client
-export { type SubgraphAgent, SubgraphClient } from './SubgraphClient';
+export { type SubgraphAgent, SubgraphClient } from './SubgraphClient'
 
 // Comprehensive type exports
 export type {
@@ -65,4 +71,4 @@ export type {
   IAgent0FeedbackService,
   IAgentDiscoveryService,
   IReputationBridge,
-} from './types';
+} from './types'

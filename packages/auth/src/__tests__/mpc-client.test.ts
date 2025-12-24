@@ -1,224 +1,225 @@
 /**
  * MPC Client Tests
  *
- * Tests for the MPC network client in dev mode.
+ * Tests for the MPC network client via @jejunetwork/kms.
  * MPC-dependent integration tests are skipped unless network is available.
  */
 
-import { describe, expect, it } from 'bun:test';
-import { createMPCClient, MPCClient } from '../mpc/client';
-import type { DID } from '../types/index';
+import { describe, expect, it } from 'bun:test'
+import {
+  getMPCCoordinator,
+  MPCCoordinator,
+  resetMPCCoordinator,
+} from '@jejunetwork/kms'
 
-describe('MPC Client', () => {
-  describe('client creation', () => {
-    it('should create client with default config', () => {
-      const client = createMPCClient();
-      expect(client).toBeInstanceOf(MPCClient);
-    });
+describe('MPC Coordinator (from @jejunetwork/kms)', () => {
+  describe('coordinator creation', () => {
+    it('should create coordinator with default config', () => {
+      resetMPCCoordinator()
+      const coordinator = getMPCCoordinator()
+      expect(coordinator).toBeInstanceOf(MPCCoordinator)
+    })
 
-    it('should create client with custom config', () => {
-      const client = createMPCClient({
-        endpoints: ['http://custom:4010'],
-        networkId: 'custom-network',
+    it('should create coordinator with custom config', () => {
+      resetMPCCoordinator()
+      const coordinator = getMPCCoordinator({
+        network: 'testnet',
         threshold: 2,
-        timeout: 60000,
-        devMode: false,
-      });
-      expect(client).toBeInstanceOf(MPCClient);
-    });
+        sessionTimeout: 60000,
+      })
+      expect(coordinator).toBeInstanceOf(MPCCoordinator)
+    })
 
-    it('should merge config with defaults', () => {
-      const client = createMPCClient({
-        threshold: 3,
-      });
-      expect(client).toBeInstanceOf(MPCClient);
-    });
-  });
+    it('should return singleton instance', () => {
+      resetMPCCoordinator()
+      const coordinator1 = getMPCCoordinator()
+      const coordinator2 = getMPCCoordinator()
+      expect(coordinator1).toBe(coordinator2)
+    })
+  })
 
-  describe('getHealthyNodes', () => {
-    it('should return empty array before initialization', () => {
-      const client = createMPCClient();
-      const healthyNodes = client.getHealthyNodes();
-      expect(healthyNodes).toEqual([]);
-    });
-  });
+  describe('getActiveParties', () => {
+    it('should return empty array before parties registered', () => {
+      resetMPCCoordinator()
+      const coordinator = getMPCCoordinator()
+      const activeParties = coordinator.getActiveParties()
+      expect(activeParties).toEqual([])
+    })
+  })
 
-  describe('dev mode behavior', () => {
-    it('should work in dev mode without external nodes', async () => {
-      const client = createMPCClient({
-        devMode: true,
-        threshold: 0, // No nodes required in dev mode
-      });
+  describe('coordinator behavior', () => {
+    it('should work in localnet mode', () => {
+      resetMPCCoordinator()
+      const coordinator = getMPCCoordinator({ network: 'localnet' })
+      const status = coordinator.getStatus()
+      expect(status.config.network).toBe('localnet')
+    })
+  })
 
-      // Get network status should work
-      const status = await client.getNetworkStatus();
-      expect(status.operational).toBe(true);
-    });
-  });
-
-  describe('signing request types', () => {
-    it('should accept message signature type', () => {
-      // Verify the type system accepts valid signature types
-      const types: Array<'message' | 'transaction' | 'typedData'> = [
-        'message',
-        'transaction',
-        'typedData',
-      ];
-      expect(types).toHaveLength(3);
-    });
-  });
+  describe('signing session types', () => {
+    it('should have valid session statuses', () => {
+      const statuses: Array<
+        'pending' | 'signing' | 'complete' | 'failed' | 'expired'
+      > = ['pending', 'signing', 'complete', 'failed', 'expired']
+      expect(statuses).toHaveLength(5)
+    })
+  })
 
   describe('config validation', () => {
-    it('should handle empty endpoints array', () => {
-      const client = createMPCClient({
-        endpoints: [],
-        threshold: 0,
-      });
-      expect(client).toBeInstanceOf(MPCClient);
-    });
+    it('should handle localnet config', () => {
+      resetMPCCoordinator()
+      const coordinator = getMPCCoordinator({ network: 'localnet' })
+      expect(coordinator).toBeInstanceOf(MPCCoordinator)
+    })
 
-    it('should handle multiple endpoints', () => {
-      const client = createMPCClient({
-        endpoints: [
-          'http://node1:4010',
-          'http://node2:4010',
-          'http://node3:4010',
-        ],
-      });
-      expect(client).toBeInstanceOf(MPCClient);
-    });
+    it('should handle testnet config', () => {
+      resetMPCCoordinator()
+      const coordinator = getMPCCoordinator({ network: 'testnet' })
+      expect(coordinator).toBeInstanceOf(MPCCoordinator)
+    })
 
-    it('should handle zero threshold', () => {
-      const client = createMPCClient({
-        threshold: 0,
-      });
-      expect(client).toBeInstanceOf(MPCClient);
-    });
+    it('should handle mainnet config', () => {
+      resetMPCCoordinator()
+      const coordinator = getMPCCoordinator({ network: 'mainnet' })
+      expect(coordinator).toBeInstanceOf(MPCCoordinator)
+    })
 
-    it('should handle very long timeout', () => {
-      const client = createMPCClient({
-        timeout: 600000, // 10 minutes
-      });
-      expect(client).toBeInstanceOf(MPCClient);
-    });
-  });
+    it('should handle custom session timeout', () => {
+      resetMPCCoordinator()
+      const coordinator = getMPCCoordinator({
+        sessionTimeout: 600000,
+      })
+      expect(coordinator).toBeInstanceOf(MPCCoordinator)
+    })
+  })
 
-  describe('network status structure', () => {
-    it('should return correct status structure', async () => {
-      const client = createMPCClient({
-        devMode: true,
-        threshold: 0,
-      });
+  describe('status structure', () => {
+    it('should return correct status structure', () => {
+      resetMPCCoordinator()
+      const coordinator = getMPCCoordinator({ network: 'localnet' })
+      const status = coordinator.getStatus()
 
-      const status = await client.getNetworkStatus();
+      expect(status).toHaveProperty('activeParties')
+      expect(status).toHaveProperty('totalKeys')
+      expect(status).toHaveProperty('activeSessions')
+      expect(status).toHaveProperty('config')
 
-      expect(status).toHaveProperty('operational');
-      expect(status).toHaveProperty('healthyNodes');
-      expect(status).toHaveProperty('totalNodes');
-      expect(status).toHaveProperty('thresholdMet');
-      expect(status).toHaveProperty('nodes');
-
-      expect(typeof status.operational).toBe('boolean');
-      expect(typeof status.healthyNodes).toBe('number');
-      expect(typeof status.totalNodes).toBe('number');
-      expect(typeof status.thresholdMet).toBe('boolean');
-      expect(Array.isArray(status.nodes)).toBe(true);
-    });
-  });
+      expect(typeof status.activeParties).toBe('number')
+      expect(typeof status.totalKeys).toBe('number')
+      expect(typeof status.activeSessions).toBe('number')
+      expect(typeof status.config).toBe('object')
+    })
+  })
 
   /**
-   * Integration tests requiring live MPC infrastructure.
-   *
-   * Prerequisites:
-   * 1. Start MPC node: `cd apps/compute && bun run dev`
-   * 2. Node must be accessible at http://localhost:4010
-   * 3. Node must respond to /health endpoint with valid attestation
-   *
-   * To run: Remove `.skip` and ensure node is running.
-   * CI: These tests are skipped; run manually during staging validation.
+   * Key generation tests using the MPC Coordinator.
    */
-  describe.skip('with running MPC node', () => {
-    it('should initialize and discover nodes', async () => {
-      const client = createMPCClient({
-        endpoints: ['http://localhost:4010'],
-        threshold: 1,
-        devMode: false,
-      });
+  describe('key generation', () => {
+    it('should generate key with registered parties', async () => {
+      resetMPCCoordinator()
+      const coordinator = getMPCCoordinator({ network: 'localnet' })
 
-      await client.initialize();
-      const nodes = client.getHealthyNodes();
-      expect(nodes.length).toBeGreaterThanOrEqual(1);
-    });
+      // Register parties
+      const partyIds = ['party-1', 'party-2', 'party-3']
+      for (let i = 0; i < partyIds.length; i++) {
+        coordinator.registerParty({
+          id: partyIds[i],
+          index: i + 1,
+          endpoint: 'http://localhost:4010',
+          publicKey: '0x' as `0x${string}`,
+          address: '0x' as `0x${string}`,
+          stake: 0n,
+          registeredAt: Date.now(),
+        })
+      }
 
-    it('should generate key for user', async () => {
-      const client = createMPCClient({
-        endpoints: ['http://localhost:4010'],
-        threshold: 1,
-        devMode: false,
-      });
+      const result = await coordinator.generateKey({
+        keyId: 'test-key-1',
+        threshold: 2,
+        totalParties: 3,
+        partyIds,
+        curve: 'secp256k1',
+      })
 
-      await client.initialize();
+      expect(result.keyId).toBe('test-key-1')
+      expect(result.publicKey).toBeDefined()
+      expect(result.address).toBeDefined()
+      expect(result.threshold).toBe(2)
+    })
+  })
+})
 
-      const result = await client.generateKey(
-        'did:jeju:testnet:0x1234567890abcdef1234567890abcdef12345678' as DID,
-        {
-          type: 'wallet',
-          proof: '0x',
-          identifier: 'test',
-        }
-      );
+describe('MPC Coordinator Error Handling', () => {
+  describe('key generation errors', () => {
+    it('should throw when threshold is less than 2', async () => {
+      resetMPCCoordinator()
+      const coordinator = getMPCCoordinator({ network: 'localnet' })
 
-      expect(result.success).toBe(true);
-      expect(result.walletAddress).toBeDefined();
-    });
+      await expect(
+        coordinator.generateKey({
+          keyId: 'test-key',
+          threshold: 1,
+          totalParties: 3,
+          partyIds: ['party-1', 'party-2', 'party-3'],
+          curve: 'secp256k1',
+        }),
+      ).rejects.toThrow(/Threshold must be at least 2/)
+    })
 
-    it('should sign message for user', async () => {
-      const client = createMPCClient({
-        endpoints: ['http://localhost:4010'],
-        threshold: 1,
-        devMode: false,
-      });
+    it('should throw when key already exists', async () => {
+      resetMPCCoordinator()
+      const coordinator = getMPCCoordinator({ network: 'localnet' })
 
-      await client.initialize();
+      const partyIds = ['party-1', 'party-2', 'party-3']
+      for (let i = 0; i < partyIds.length; i++) {
+        coordinator.registerParty({
+          id: partyIds[i],
+          index: i + 1,
+          endpoint: 'http://localhost:4010',
+          publicKey: '0x' as `0x${string}`,
+          address: '0x' as `0x${string}`,
+          stake: 0n,
+          registeredAt: Date.now(),
+        })
+      }
 
-      const result = await client.sign(
-        'did:jeju:testnet:0x1234567890abcdef1234567890abcdef12345678' as DID,
-        '0x68656c6c6f', // "hello" in hex
-        'message'
-      );
+      await coordinator.generateKey({
+        keyId: 'duplicate-key',
+        threshold: 2,
+        totalParties: 3,
+        partyIds,
+        curve: 'secp256k1',
+      })
 
-      expect(result.success).toBe(true);
-      expect(result.signature).toBeDefined();
-    });
-  });
-});
+      await expect(
+        coordinator.generateKey({
+          keyId: 'duplicate-key',
+          threshold: 2,
+          totalParties: 3,
+          partyIds,
+          curve: 'secp256k1',
+        }),
+      ).rejects.toThrow(/already exists/)
+    })
+  })
 
-describe('MPC Client Error Handling', () => {
-  describe('initialization errors', () => {
-    it('should throw when threshold not met', async () => {
-      const client = createMPCClient({
-        endpoints: ['http://nonexistent:9999'],
-        threshold: 1, // Requires at least 1 node
-        timeout: 1000, // Short timeout
-        devMode: false,
-      });
+  describe('party registration', () => {
+    it('should register parties correctly', () => {
+      resetMPCCoordinator()
+      const coordinator = getMPCCoordinator({ network: 'localnet' })
 
-      await expect(client.initialize()).rejects.toThrow(
-        /Insufficient healthy nodes/
-      );
-    });
-  });
+      const party = coordinator.registerParty({
+        id: 'test-party',
+        index: 1,
+        endpoint: 'http://localhost:4010',
+        publicKey: '0x' as `0x${string}`,
+        address: '0x' as `0x${string}`,
+        stake: 0n,
+        registeredAt: Date.now(),
+      })
 
-  describe('operation before initialization', () => {
-    it('should auto-initialize on first operation', async () => {
-      const client = createMPCClient({
-        devMode: true,
-        threshold: 0,
-      });
-
-      // Should not throw - will auto-initialize
-      const status = await client.getNetworkStatus();
-      expect(status).toBeDefined();
-    });
-  });
-});
+      expect(party.id).toBe('test-party')
+      expect(party.status).toBe('active')
+    })
+  })
+})

@@ -1,43 +1,42 @@
-'use client';
-
-import { useQuery } from '@tanstack/react-query';
-import { ArrowLeft, MessageCircle } from 'lucide-react';
-import { useParams, useRouter } from 'next/navigation';
-import { useEffect } from 'react';
-import { PageContainer } from '@/components/shared/PageContainer';
-import { Skeleton } from '@/components/shared/Skeleton';
+import { useQuery } from '@tanstack/react-query'
+import { ArrowLeft, MessageCircle } from 'lucide-react'
+import { useEffect } from 'react'
+import { useParams } from 'react-router-dom'
+import { PageContainer } from '@/components/shared/PageContainer'
+import { Skeleton } from '@/components/shared/Skeleton'
+import { useRouter } from '@/lib/navigation'
 
 interface ArticlePost {
-  id: string;
-  type: string;
-  content: string;
-  fullContent: string | null;
-  articleTitle: string | null;
-  byline: string | null;
-  biasScore: number | null;
-  sentiment: string | null;
-  slant: string | null;
-  category: string | null;
-  authorId: string;
-  authorName: string;
-  authorUsername: string | null;
-  authorProfileImageUrl: string | null;
-  timestamp: string;
+  id: string
+  type: string
+  content: string
+  fullContent: string | null
+  articleTitle: string | null
+  byline: string | null
+  biasScore: number | null
+  sentiment: string | null
+  slant: string | null
+  category: string | null
+  authorId: string
+  authorName: string
+  authorUsername: string | null
+  authorProfileImageUrl: string | null
+  timestamp: string
 }
 
 export default function ArticleDetailClient() {
-  const params = useParams();
-  const router = useRouter();
+  const params = useParams()
+  const router = useRouter()
   // Catch-all route: params.id is string[] or undefined
-  const idParam = params.id;
-  const articleId = Array.isArray(idParam) ? idParam[0] : idParam;
+  const idParam = params.id
+  const articleId = Array.isArray(idParam) ? idParam[0] : idParam
 
   // Redirect to home if no article ID provided
   useEffect(() => {
     if (!articleId) {
-      router.replace('/');
+      router.replace('/')
     }
-  }, [articleId, router]);
+  }, [articleId, router])
 
   const {
     data: article,
@@ -46,30 +45,30 @@ export default function ArticleDetailClient() {
   } = useQuery({
     queryKey: ['article', articleId],
     queryFn: async () => {
-      const response = await fetch(`/api/posts/${articleId}`);
+      const response = await fetch(`/api/posts/${articleId}`)
 
       if (!response.ok) {
-        const result = await response.json().catch(() => ({}));
-        const errorMsg = result.error?.message || 'Failed to load article';
-        throw new Error(errorMsg);
+        const result = await response.json().catch(() => ({}))
+        const errorMsg = result.error?.message || 'Failed to load article'
+        throw new Error(errorMsg)
       }
 
-      const result = await response.json();
-      const articleData = result.data || result;
+      const result = await response.json()
+      const articleData = result.data || result
 
       // Verify it's actually an article
       if (articleData.type !== 'article') {
         // Redirect to regular post page if not an article
-        router.replace(`/post/${articleId}`);
-        throw new Error('Not an article');
+        router.replace(`/post/${articleId}`)
+        throw new Error('Not an article')
       }
 
-      return articleData as ArticlePost;
+      return articleData as ArticlePost
     },
     enabled: !!articleId,
-  });
+  })
 
-  const error = queryError instanceof Error ? queryError.message : null;
+  const error = queryError instanceof Error ? queryError.message : null
 
   if (isLoading) {
     return (
@@ -80,7 +79,7 @@ export default function ArticleDetailClient() {
           <Skeleton className="h-32 w-full" />
         </div>
       </div>
-    );
+    )
   }
 
   if (error || !article) {
@@ -92,6 +91,7 @@ export default function ArticleDetailClient() {
             {error || 'The article you are looking for does not exist.'}
           </p>
           <button
+            type="button"
             onClick={() => router.push('/feed')}
             className="rounded-md bg-primary px-4 py-2 text-primary-foreground transition-colors hover:bg-primary/90"
           >
@@ -99,10 +99,10 @@ export default function ArticleDetailClient() {
           </button>
         </div>
       </div>
-    );
+    )
   }
 
-  const publishedDate = new Date(article.timestamp);
+  const publishedDate = new Date(article.timestamp)
 
   return (
     <PageContainer>
@@ -115,6 +115,7 @@ export default function ArticleDetailClient() {
             <div className="px-6 py-4">
               <div className="flex items-center gap-4">
                 <button
+                  type="button"
                   onClick={() => router.back()}
                   className="rounded-md p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                 >
@@ -164,7 +165,7 @@ export default function ArticleDetailClient() {
                     .split('\n\n')
                     .map((paragraph, i) => (
                       <p
-                        key={i}
+                        key={`paragraph-${i}-${paragraph.slice(0, 20)}`}
                         className="mb-4 text-base text-foreground leading-relaxed sm:text-lg"
                       >
                         {paragraph}
@@ -183,6 +184,7 @@ export default function ArticleDetailClient() {
         <div className="sticky top-0 z-10 shrink-0 border-border border-b bg-background">
           <div className="flex items-center gap-4 px-4 py-3">
             <button
+              type="button"
               onClick={() => router.back()}
               className="rounded-md p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             >
@@ -229,7 +231,7 @@ export default function ArticleDetailClient() {
                 .split('\n\n')
                 .map((paragraph, i) => (
                   <p
-                    key={i}
+                    key={`paragraph-${i}-${paragraph.slice(0, 20)}`}
                     className="mb-4 text-base text-foreground leading-relaxed"
                   >
                     {paragraph}
@@ -240,5 +242,5 @@ export default function ArticleDetailClient() {
         </div>
       </div>
     </PageContainer>
-  );
+  )
 }

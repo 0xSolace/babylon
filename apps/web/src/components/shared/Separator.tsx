@@ -1,4 +1,4 @@
-import { cn } from '@babylon/shared';
+import { cn } from '@babylon/shared'
 
 /**
  * Separator component for visual division between content sections.
@@ -17,8 +17,8 @@ import { cn } from '@babylon/shared';
  * ```
  */
 interface SeparatorProps {
-  className?: string;
-  orientation?: 'horizontal' | 'vertical';
+  className?: string
+  orientation?: 'horizontal' | 'vertical'
 }
 
 export function Separator({
@@ -37,7 +37,7 @@ export function Separator({
           }}
         />
       </div>
-    );
+    )
   }
 
   return (
@@ -51,5 +51,5 @@ export function Separator({
         }}
       />
     </div>
-  );
+  )
 }

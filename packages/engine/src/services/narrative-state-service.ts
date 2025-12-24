@@ -5,17 +5,17 @@
  * Works with both PostgreSQL and JSON backends.
  */
 
-import { db } from '@babylon/db';
-import { generateSnowflakeId, logger } from '@babylon/shared';
-import type { QuestionArcPlan as ArcPlanType } from './question-arc-planner';
+import { db } from '@babylon/db'
+import { generateSnowflakeId, logger } from '@babylon/shared'
+import type { QuestionArcPlan as ArcPlanType } from './question-arc-planner'
 
 /** Calculate signal ratio from phase targets */
-const ratio = (correct: number, wrong: number) => correct / (correct + wrong);
+const ratio = (correct: number, wrong: number) => correct / (correct + wrong)
 
 /** Save arc plan for a question */
 export async function saveArcPlan(
   questionId: string,
-  arc: ArcPlanType
+  arc: ArcPlanType,
 ): Promise<void> {
   await db.questionArcPlan.create({
     data: {
@@ -29,35 +29,35 @@ export async function saveArcPlan(
       phaseRatios: {
         early: ratio(
           arc.phases.early.targetCorrectSignals,
-          arc.phases.early.targetWrongSignals
+          arc.phases.early.targetWrongSignals,
         ),
         middle: ratio(
           arc.phases.middle.targetCorrectSignals,
-          arc.phases.middle.targetWrongSignals
+          arc.phases.middle.targetWrongSignals,
         ),
         late: ratio(
           arc.phases.late.targetCorrectSignals,
-          arc.phases.late.targetWrongSignals
+          arc.phases.late.targetWrongSignals,
         ),
         climax: 1.0,
       },
       createdAt: new Date(),
     },
-  });
-  logger.info('Saved arc plan', { questionId }, 'NarrativeStateService');
+  })
+  logger.info('Saved arc plan', { questionId }, 'NarrativeStateService')
 }
 
 /** Get arc plan for a question */
 export async function getArcPlan(questionId: string) {
   return db.questionArcPlan.findFirst({
     where: { questionId },
-  });
+  })
 }
 
 /** Type for the database arc plan record */
 export type DatabaseArcPlan = NonNullable<
   Awaited<ReturnType<typeof getArcPlan>>
->;
+>
 
 /**
  * Determine the narrative phase for a given day based on arc plan timing
@@ -68,12 +68,15 @@ export type DatabaseArcPlan = NonNullable<
  */
 export function getPhaseForDay(
   day: number,
-  arcPlan: DatabaseArcPlan
+  arcPlan: DatabaseArcPlan,
 ): 'early' | 'middle' | 'late' | 'climax' {
-  if (day < arcPlan.uncertaintyPeakDay) return 'early';
-  if (day < arcPlan.clarityOnsetDay) return 'middle';
-  if (day < arcPlan.verificationDay) return 'late';
-  return 'climax';
+  if (arcPlan.uncertaintyPeakDay != null && day < arcPlan.uncertaintyPeakDay)
+    return 'early'
+  if (arcPlan.clarityOnsetDay != null && day < arcPlan.clarityOnsetDay)
+    return 'middle'
+  if (arcPlan.verificationDay != null && day < arcPlan.verificationDay)
+    return 'late'
+  return 'climax'
 }
 
 /**
@@ -95,39 +98,49 @@ export function getSignalDirection(
   arcPlan: DatabaseArcPlan,
   phase: 'early' | 'middle' | 'late' | 'climax',
   actorId: string,
-  questionOutcome: boolean
+  questionOutcome: boolean,
 ): {
-  direction: 'YES' | 'NO' | 'NEUTRAL';
-  reason: 'insider' | 'deceiver' | 'phase';
+  direction: 'YES' | 'NO' | 'NEUTRAL'
+  reason: 'insider' | 'deceiver' | 'phase'
 } {
-  const insiderIds = arcPlan.insiderActorIds ?? [];
-  const deceiverIds = arcPlan.deceiverActorIds ?? [];
+  const insiderIds = (
+    Array.isArray(arcPlan.insiderActorIds) ? arcPlan.insiderActorIds : []
+  ) as string[]
+  const deceiverIds = (
+    Array.isArray(arcPlan.deceiverActorIds) ? arcPlan.deceiverActorIds : []
+  ) as string[]
 
   // Insiders always point toward truth
   if (actorId && insiderIds.includes(actorId)) {
-    return { direction: questionOutcome ? 'YES' : 'NO', reason: 'insider' };
+    return { direction: questionOutcome ? 'YES' : 'NO', reason: 'insider' }
   }
 
   // Deceivers always point away from truth
   if (actorId && deceiverIds.includes(actorId)) {
-    return { direction: questionOutcome ? 'NO' : 'YES', reason: 'deceiver' };
+    return { direction: questionOutcome ? 'NO' : 'YES', reason: 'deceiver' }
   }
 
   // Regular NPCs/events follow phase distribution
   // phaseRatios contains the ratio of correct signals for each phase
-  const phaseRatios = arcPlan.phaseRatios ?? {
+  const defaultPhaseRatios = {
     early: 0.43,
     middle: 0.55,
     late: 0.78,
     climax: 1.0,
-  };
-  const correctSignalRatio = phaseRatios[phase];
-
-  const shouldBeCorrect = Math.random() < correctSignalRatio;
-  if (shouldBeCorrect) {
-    return { direction: questionOutcome ? 'YES' : 'NO', reason: 'phase' };
   }
-  return { direction: questionOutcome ? 'NO' : 'YES', reason: 'phase' };
+  const phaseRatios =
+    arcPlan.phaseRatios &&
+    typeof arcPlan.phaseRatios === 'object' &&
+    !Array.isArray(arcPlan.phaseRatios)
+      ? (arcPlan.phaseRatios as Record<string, number>)
+      : defaultPhaseRatios
+  const correctSignalRatio = phaseRatios[phase] ?? defaultPhaseRatios[phase]
+
+  const shouldBeCorrect = Math.random() < correctSignalRatio
+  if (shouldBeCorrect) {
+    return { direction: questionOutcome ? 'YES' : 'NO', reason: 'phase' }
+  }
+  return { direction: questionOutcome ? 'NO' : 'YES', reason: 'phase' }
 }
 
 /**
@@ -137,7 +150,7 @@ export function getSignalDirection(
  * @returns LLM prompt guidance for the phase
  */
 export function getPhaseGuidance(
-  phase: 'early' | 'middle' | 'late' | 'climax'
+  phase: 'early' | 'middle' | 'late' | 'climax',
 ): string {
   const phasePrompts = {
     early:
@@ -147,6 +160,6 @@ export function getPhaseGuidance(
     late: '[INTERNAL: A pattern is becoming clearer. Show growing confidence in your assessment.]',
     climax:
       '[INTERNAL: The answer is becoming obvious. State your position with confidence.]',
-  };
-  return phasePrompts[phase];
+  }
+  return phasePrompts[phase]
 }

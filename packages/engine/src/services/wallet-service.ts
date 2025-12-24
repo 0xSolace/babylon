@@ -20,13 +20,13 @@ import {
   type Transaction,
   users,
   withTransaction,
-} from '@babylon/db';
+} from '@babylon/db'
 import {
   generateSnowflakeId,
   InsufficientFundsError,
   NotFoundError,
-} from '@babylon/shared';
-import { EarnedPointsService } from './earned-points-service';
+} from '@babylon/shared'
+import { EarnedPointsService } from './earned-points-service'
 
 /**
  * User balance information
@@ -34,10 +34,10 @@ import { EarnedPointsService } from './earned-points-service';
  * @description Contains current balance and lifetime statistics.
  */
 export interface BalanceInfo {
-  balance: number;
-  totalDeposited: number;
-  totalWithdrawn: number;
-  lifetimePnL: number;
+  balance: number
+  totalDeposited: number
+  totalWithdrawn: number
+  lifetimePnL: number
 }
 
 /**
@@ -47,14 +47,14 @@ export interface BalanceInfo {
  * balances and metadata.
  */
 export interface TransactionHistoryItem {
-  id: string;
-  type: string;
-  amount: number;
-  balanceBefore: number;
-  balanceAfter: number;
-  description: string | null;
-  relatedId: string | null;
-  createdAt: Date;
+  id: string
+  type: string
+  amount: number
+  balanceBefore: number
+  balanceAfter: number
+  description: string | null
+  relatedId: string | null
+  createdAt: Date
 }
 
 /**
@@ -63,7 +63,7 @@ export interface TransactionHistoryItem {
  * @description Optional callback to invalidate user cache after balance changes.
  * This allows the web app to inject its caching strategy.
  */
-export type CacheInvalidationCallback = (userId: string) => Promise<void>;
+export type CacheInvalidationCallback = (userId: string) => Promise<void>
 
 /**
  * Wallet Service Class
@@ -72,19 +72,20 @@ export type CacheInvalidationCallback = (userId: string) => Promise<void>;
  * Provides methods for checking balances, debiting/crediting funds, and
  * retrieving transaction history.
  */
+// biome-ignore lint/complexity/noStaticOnlyClass: Service pattern uses static methods for stateless operations
 export class WalletService {
   /**
    * Starting balance for new users ($1,000 USD)
    *
    * @private
    */
-  private static readonly STARTING_BALANCE = 1000; // $1,000 USD
+  private static readonly STARTING_BALANCE = 1000 // $1,000 USD
 
   /**
    * Optional cache invalidation callback
    */
   private static cacheInvalidationCallback: CacheInvalidationCallback | null =
-    null;
+    null
 
   /**
    * Set the cache invalidation callback
@@ -94,9 +95,9 @@ export class WalletService {
    * @param {CacheInvalidationCallback} callback - Cache invalidation function
    */
   static setCacheInvalidationCallback(
-    callback: CacheInvalidationCallback
+    callback: CacheInvalidationCallback,
   ): void {
-    WalletService.cacheInvalidationCallback = callback;
+    WalletService.cacheInvalidationCallback = callback
   }
 
   /**
@@ -104,7 +105,7 @@ export class WalletService {
    */
   private static async invalidateCache(userId: string): Promise<void> {
     if (WalletService.cacheInvalidationCallback) {
-      await WalletService.cacheInvalidationCallback(userId);
+      await WalletService.cacheInvalidationCallback(userId)
     }
   }
 
@@ -114,7 +115,7 @@ export class WalletService {
    * @description Internal method to apply a balance change and create a
    * transaction record. Used by debit and credit methods.
    *
-   * @param {Transaction} tx - Drizzle transaction client
+   * @param {Transaction} tx - CQL transaction client
    * @param {string} userId - User ID
    * @param {number} delta - Amount to change (positive for credit, negative for debit)
    * @param {string} type - Transaction type identifier
@@ -129,7 +130,7 @@ export class WalletService {
     delta: number,
     type: string,
     description: string,
-    relatedId?: string
+    relatedId?: string,
   ): Promise<void> {
     const result = await tx
       .select({
@@ -137,25 +138,25 @@ export class WalletService {
       })
       .from(users)
       .where(eq(users.id, userId))
-      .limit(1);
+      .limit(1)
 
-    const [user] = result;
+    const [user] = result
     if (!user) {
-      throw new NotFoundError('User', userId);
+      throw new NotFoundError('User', userId)
     }
 
-    const currentBalance = Number(user.virtualBalance);
-    const newBalance = currentBalance + delta;
+    const currentBalance = Number(user.virtualBalance)
+    const newBalance = currentBalance + delta
 
     // Prevent negative balance on debits
     if (delta < 0 && newBalance < 0) {
-      throw new InsufficientFundsError(Math.abs(delta), currentBalance, 'USD');
+      throw new InsufficientFundsError(Math.abs(delta), currentBalance, 'USD')
     }
 
     await tx
       .update(users)
       .set({ virtualBalance: String(newBalance) })
-      .where(eq(users.id, userId));
+      .where(eq(users.id, userId))
 
     await tx.insert(balanceTransactions).values({
       id: await generateSnowflakeId(),
@@ -166,7 +167,7 @@ export class WalletService {
       balanceAfter: String(newBalance),
       relatedId: relatedId ?? null,
       description,
-    });
+    })
   }
 
   /**
@@ -194,11 +195,11 @@ export class WalletService {
       })
       .from(users)
       .where(eq(users.id, userId))
-      .limit(1);
+      .limit(1)
 
-    const [user] = result;
+    const [user] = result
     if (!user) {
-      throw new Error(`User not found: ${userId}`);
+      throw new Error(`User not found: ${userId}`)
     }
 
     return {
@@ -206,7 +207,7 @@ export class WalletService {
       totalDeposited: Number(user.totalDeposited),
       totalWithdrawn: Number(user.totalWithdrawn),
       lifetimePnL: Number(user.lifetimePnL),
-    };
+    }
   }
 
   /**
@@ -227,7 +228,7 @@ export class WalletService {
    */
   static async hasSufficientBalance(
     userId: string,
-    requiredAmount: number
+    requiredAmount: number,
   ): Promise<boolean> {
     const result = await db
       .select({
@@ -235,14 +236,14 @@ export class WalletService {
       })
       .from(users)
       .where(eq(users.id, userId))
-      .limit(1);
+      .limit(1)
 
-    const [user] = result;
+    const [user] = result
     if (!user) {
-      return false;
+      return false
     }
 
-    return Number(user.virtualBalance) >= requiredAmount;
+    return Number(user.virtualBalance) >= requiredAmount
   }
 
   /**
@@ -271,9 +272,9 @@ export class WalletService {
     type: string,
     description: string,
     relatedId?: string,
-    tx?: Transaction
+    tx?: Transaction,
   ): Promise<void> {
-    const delta = -amount;
+    const delta = -amount
 
     if (tx) {
       await WalletService.applyBalanceChange(
@@ -282,8 +283,8 @@ export class WalletService {
         delta,
         type,
         description,
-        relatedId
-      );
+        relatedId,
+      )
     } else {
       await withTransaction(async (transaction) => {
         await WalletService.applyBalanceChange(
@@ -292,12 +293,12 @@ export class WalletService {
           delta,
           type,
           description,
-          relatedId
-        );
-      });
+          relatedId,
+        )
+      })
     }
 
-    await WalletService.invalidateCache(userId);
+    await WalletService.invalidateCache(userId)
   }
 
   /**
@@ -309,7 +310,7 @@ export class WalletService {
     type: string,
     description: string,
     relatedId?: string,
-    tx?: Transaction
+    tx?: Transaction,
   ): Promise<void> {
     if (tx) {
       await WalletService.applyBalanceChange(
@@ -318,8 +319,8 @@ export class WalletService {
         amount,
         type,
         description,
-        relatedId
-      );
+        relatedId,
+      )
     } else {
       await withTransaction(async (transaction) => {
         await WalletService.applyBalanceChange(
@@ -328,12 +329,12 @@ export class WalletService {
           amount,
           type,
           description,
-          relatedId
-        );
-      });
+          relatedId,
+        )
+      })
     }
 
-    await WalletService.invalidateCache(userId);
+    await WalletService.invalidateCache(userId)
   }
 
   /**
@@ -346,32 +347,34 @@ export class WalletService {
     userId: string,
     pnl: number,
     tradeType: string,
-    relatedId?: string
+    relatedId?: string,
   ): Promise<{
-    previousLifetimePnL: number;
-    newLifetimePnL: number;
-    earnedPointsDelta: number;
+    previousLifetimePnL: number
+    newLifetimePnL: number
+    earnedPointsDelta: number
   }> {
     return await withTransaction(async (tx) => {
       const result = await tx
         .select()
         .from(users)
         .where(eq(users.id, userId))
-        .limit(1);
+        .limit(1)
 
-      const [user] = result;
+      const user = result[0] as
+        | { lifetimePnL: number | string | null }
+        | undefined
       if (!user) {
-        throw new Error(`User not found: ${userId}`);
+        throw new Error(`User not found: ${userId}`)
       }
 
-      const previousLifetimePnL = Number(user.lifetimePnL);
-      const newLifetimePnL = previousLifetimePnL + pnl;
+      const previousLifetimePnL = Number(user.lifetimePnL ?? 0)
+      const newLifetimePnL = previousLifetimePnL + pnl
 
       // Update lifetimePnL first within the transaction
       await tx
         .update(users)
         .set({ lifetimePnL: String(newLifetimePnL) })
-        .where(eq(users.id, userId));
+        .where(eq(users.id, userId))
 
       // Now award earned points within the same transaction
       // This ensures atomicity and prevents race conditions
@@ -380,15 +383,15 @@ export class WalletService {
           userId,
           newLifetimePnL,
           tradeType,
-          relatedId
-        );
+          relatedId,
+        )
 
       return {
         previousLifetimePnL,
         newLifetimePnL,
         earnedPointsDelta,
-      };
-    });
+      }
+    })
   }
 
   /**
@@ -396,14 +399,25 @@ export class WalletService {
    */
   static async getTransactionHistory(
     userId: string,
-    limit = 50
+    limit = 50,
   ): Promise<TransactionHistoryItem[]> {
-    const transactions = await db
+    const transactionsResult = await db
       .select()
       .from(balanceTransactions)
       .where(eq(balanceTransactions.userId, userId))
       .orderBy(desc(balanceTransactions.createdAt))
-      .limit(limit);
+      .limit(limit)
+
+    const transactions = transactionsResult as Array<{
+      id: string
+      type: string
+      amount: string
+      balanceBefore: string
+      balanceAfter: string
+      description: string | null
+      relatedId: string | null
+      createdAt: Date
+    }>
 
     return transactions.map((tx) => ({
       id: tx.id,
@@ -414,7 +428,7 @@ export class WalletService {
       description: tx.description,
       relatedId: tx.relatedId,
       createdAt: tx.createdAt,
-    }));
+    }))
   }
 
   /**
@@ -425,14 +439,16 @@ export class WalletService {
       .select()
       .from(users)
       .where(eq(users.id, userId))
-      .limit(1);
+      .limit(1)
 
-    const [user] = result;
+    const user = result[0] as
+      | { virtualBalance: number | string | null }
+      | undefined
     if (!user) {
-      throw new Error(`User not found: ${userId}`);
+      throw new Error(`User not found: ${userId}`)
     }
 
-    if (Number(user.virtualBalance) === 0) {
+    if (Number(user.virtualBalance ?? 0) === 0) {
       await withTransaction(async (tx) => {
         await tx
           .update(users)
@@ -440,7 +456,7 @@ export class WalletService {
             virtualBalance: String(WalletService.STARTING_BALANCE),
             totalDeposited: String(WalletService.STARTING_BALANCE),
           })
-          .where(eq(users.id, userId));
+          .where(eq(users.id, userId))
 
         await tx.insert(balanceTransactions).values({
           id: await generateSnowflakeId(),
@@ -450,8 +466,8 @@ export class WalletService {
           balanceBefore: '0',
           balanceAfter: String(WalletService.STARTING_BALANCE),
           description: 'Initial deposit - Welcome to Babylon!',
-        });
-      });
+        })
+      })
     }
   }
 }

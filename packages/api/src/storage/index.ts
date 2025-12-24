@@ -2,9 +2,12 @@
  * Storage Module Exports
  *
  * Decentralized storage using Jeju Storage (IPFS/Arweave).
- * NO FALLBACKS - Decentralized storage is required.
  */
 
+// Jeju storage integration
+export * from './jeju-storage'
+export * from './s3-client'
+export * from './sqlite-encrypted-store'
 // Storage (primary storage layer)
 export {
   downloadFile,
@@ -19,12 +22,4 @@ export {
   type UploadResult,
   uploadFile,
   uploadJson,
-} from './storage';
-
-// Legacy aliases for backwards compatibility (deprecated - use storage directly)
-// UnifiedStorage aliases removed - use StorageClient, getStorage, etc. directly
-
-// Legacy exports (retained for compatibility)
-export * from './jeju-storage';
-export * from './s3-client';
-export * from './sqlite-encrypted-store';
+} from './storage'

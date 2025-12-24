@@ -75,7 +75,7 @@ Perps traders should be trading-focused:
 - Low social to trade ratio expected
 - Information gathering for market direction is okay
 - Too much social activity = not focused on perps
-`;
+`
 
 export const PERPS_TRADER_PRIORITY_METRICS = [
   'trading.totalPnL',
@@ -84,4 +84,4 @@ export const PERPS_TRADER_PRIORITY_METRICS = [
   'trading.sharpeRatio',
   'trading.tradesExecuted',
   'behavior.socialToTradeRatio',
-];
+]

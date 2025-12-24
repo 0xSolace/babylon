@@ -1,5 +1,5 @@
-import { definePrompt } from '../define-prompt';
-import { ANTI_REPETITION_RULES, PARODY_NAME_RULES } from '../shared-sections';
+import { definePrompt } from '../define-prompt'
+import { ANTI_REPETITION_RULES, PARODY_NAME_RULES } from '../shared-sections'
 
 /**
  * Prompt for generating normal, mundane baseline events for genesis game.
@@ -44,4 +44,4 @@ Respond with ONLY this XML format:
 
 No other text.
 `.trim(),
-});
+})

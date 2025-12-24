@@ -1,19 +1,17 @@
-'use client';
-
-import { MessageCircle } from 'lucide-react';
-import React from 'react';
-import { Separator } from '@/components/shared/Separator';
-import { ChatListSkeleton } from '@/components/shared/Skeleton';
-import { ChatListItem } from './ChatListItem';
-import type { Chat, ChatFilter } from './types';
+import { MessageCircle } from 'lucide-react'
+import React from 'react'
+import { Separator } from '@/components/shared/Separator'
+import { ChatListSkeleton } from '@/components/shared/Skeleton'
+import { ChatListItem } from './ChatListItem'
+import type { Chat, ChatFilter } from './types'
 
 interface ChatListProps {
-  chats: Chat[];
-  selectedChatId: string | null;
-  onSelectChat: (chatId: string) => void;
-  loading: boolean;
-  activeFilter: ChatFilter;
-  searchQuery: string;
+  chats: Chat[]
+  selectedChatId: string | null
+  onSelectChat: (chatId: string) => void
+  loading: boolean
+  activeFilter: ChatFilter
+  searchQuery: string
 }
 
 export function ChatList({
@@ -25,7 +23,7 @@ export function ChatList({
   searchQuery,
 }: ChatListProps) {
   if (loading) {
-    return <ChatListSkeleton count={10} />;
+    return <ChatListSkeleton count={10} />
   }
 
   if (chats.length === 0) {
@@ -47,7 +45,7 @@ export function ChatList({
           </p>
         )}
       </div>
-    );
+    )
   }
 
   return (
@@ -63,5 +61,5 @@ export function ChatList({
         </React.Fragment>
       ))}
     </>
-  );
+  )
 }

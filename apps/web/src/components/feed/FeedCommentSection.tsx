@@ -1,18 +1,16 @@
-'use client';
-
-import type { CommentData, CommentWithReplies } from '@babylon/shared';
-import { cn } from '@babylon/shared';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { MessageCircle, X } from 'lucide-react';
-import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { CommentCard } from '@/components/interactions/CommentCard';
-import { CommentInput } from '@/components/interactions/CommentInput';
-import { PostCard } from '@/components/posts/PostCard';
-import { EmptyState } from '@/components/shared/EmptyState';
-import { Skeleton } from '@/components/shared/Skeleton';
-import { useAuth } from '@/hooks/useAuth';
-import { useInteractionStore } from '@/stores/interactionStore';
+import type { CommentData, CommentWithReplies } from '@babylon/shared'
+import { cn } from '@babylon/shared'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { MessageCircle, X } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { CommentCard } from '@/components/interactions/CommentCard'
+import { CommentInput } from '@/components/interactions/CommentInput'
+import { PostCard } from '@/components/posts/PostCard'
+import { EmptyState } from '@/components/shared/EmptyState'
+import { Skeleton } from '@/components/shared/Skeleton'
+import { useAuth } from '@/hooks/useAuth'
+import { useRouter } from '@/lib/navigation'
+import { useInteractionStore } from '@/stores/interactionStore'
 
 /**
  * Feed comment section component for displaying post comments.
@@ -43,28 +41,28 @@ import { useInteractionStore } from '@/stores/interactionStore';
  * ```
  */
 interface PostData {
-  id: string;
-  content: string;
-  authorId: string;
-  authorName: string;
-  authorUsername?: string | null;
-  authorProfileImageUrl?: string | null;
-  timestamp: string;
-  likeCount: number;
-  commentCount: number;
-  shareCount: number;
-  isLiked: boolean;
-  isShared: boolean;
+  id: string
+  content: string
+  authorId: string
+  authorName: string
+  authorUsername?: string | null
+  authorProfileImageUrl?: string | null
+  timestamp: string
+  likeCount: number
+  commentCount: number
+  shareCount: number
+  isLiked: boolean
+  isShared: boolean
 }
 
 interface PostResponse {
-  data: PostData;
+  data: PostData
 }
 
 interface FeedCommentSectionProps {
-  postId: string | null;
-  postData?: PostData;
-  onClose?: () => void;
+  postId: string | null
+  postData?: PostData
+  onClose?: () => void
 }
 
 export function FeedCommentSection({
@@ -72,102 +70,102 @@ export function FeedCommentSection({
   postData,
   onClose,
 }: FeedCommentSectionProps) {
-  const { user } = useAuth();
-  const router = useRouter();
-  const queryClient = useQueryClient();
-  const [comments, setComments] = useState<CommentWithReplies[]>([]);
+  const { user } = useAuth()
+  const router = useRouter()
+  const queryClient = useQueryClient()
+  const [comments, setComments] = useState<CommentWithReplies[]>([])
   const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'popular'>(
-    'newest'
-  );
+    'newest',
+  )
 
-  const { loadComments, editComment, deleteComment } = useInteractionStore();
+  const { loadComments, editComment, deleteComment } = useInteractionStore()
 
   // Handle escape key and body scroll lock for modal
   useEffect(() => {
-    if (!onClose) return; // Only for modal mode
+    if (!onClose) return // Only for modal mode
 
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        onClose();
+        onClose()
       }
-    };
+    }
 
-    document.addEventListener('keydown', handleEscape);
-    document.body.style.overflow = 'hidden';
+    document.addEventListener('keydown', handleEscape)
+    document.body.style.overflow = 'hidden'
 
     return () => {
-      document.removeEventListener('keydown', handleEscape);
-      document.body.style.overflow = '';
-    };
-  }, [onClose]);
+      document.removeEventListener('keydown', handleEscape)
+      document.body.style.overflow = ''
+    }
+  }, [onClose])
 
   // Fetch post data
   const { data: post, isLoading: isLoadingPost } = useQuery({
     queryKey: ['post', postId],
     queryFn: async (): Promise<PostData | null> => {
-      if (!postId) return null;
+      if (!postId) return null
       // Use provided postData if available
-      if (postData) return postData;
+      if (postData) return postData
 
-      const response = await fetch(`/api/posts/${postId}`);
+      const response = await fetch(`/api/posts/${postId}`)
       if (!response.ok) {
-        throw new Error('Failed to fetch post');
+        throw new Error('Failed to fetch post')
       }
-      const result: PostResponse = await response.json();
-      return result.data;
+      const result: PostResponse = await response.json()
+      return result.data
     },
     enabled: !!postId,
     initialData: postData || undefined,
-  });
+  })
 
   // Load comments using the interaction store
   const loadCommentsData = useCallback(async () => {
-    if (!postId) return;
-    const loadedComments = await loadComments(postId);
-    setComments(loadedComments);
-  }, [postId, loadComments]);
+    if (!postId) return
+    const loadedComments = await loadComments(postId)
+    setComments(loadedComments)
+  }, [postId, loadComments])
 
   // Query for comments loading state
   const { isLoading: isLoadingComments } = useQuery({
     queryKey: ['comments', postId],
     queryFn: async () => {
-      await loadCommentsData();
-      return true;
+      await loadCommentsData()
+      return true
     },
     enabled: !!postId,
-  });
+  })
 
   // Reload comments when comment count changes (e.g., from SSE updates)
   useEffect(() => {
     if (post?.commentCount !== undefined && postId) {
-      loadCommentsData();
+      loadCommentsData()
     }
-  }, [post?.commentCount, postId, loadCommentsData]);
+  }, [post?.commentCount, postId, loadCommentsData])
 
   // Helper functions
   const removeCommentById = (
     commentList: CommentWithReplies[],
-    commentId: string
+    commentId: string,
   ): CommentWithReplies[] => {
     return commentList
       .filter((comment) => comment.id !== commentId)
       .map((comment) => ({
         ...comment,
         replies: removeCommentById(comment.replies, commentId),
-      }));
-  };
+      }))
+  }
 
   const addReplyToComment = (
     commentList: CommentWithReplies[],
     parentCommentId: string,
-    newReply: CommentWithReplies
+    newReply: CommentWithReplies,
   ): CommentWithReplies[] => {
     return commentList.map((comment) => {
       if (comment.id === parentCommentId) {
         return {
           ...comment,
           replies: [newReply, ...comment.replies],
-        };
+        }
       }
       if (comment.replies.length > 0) {
         return {
@@ -175,48 +173,48 @@ export function FeedCommentSection({
           replies: addReplyToComment(
             comment.replies,
             parentCommentId,
-            newReply
+            newReply,
           ),
-        };
+        }
       }
-      return comment;
-    });
-  };
+      return comment
+    })
+  }
 
   const findParentAuthorName = (
     commentList: CommentWithReplies[],
-    parentCommentId: string
+    parentCommentId: string,
   ): string | undefined => {
     for (const comment of commentList) {
       if (comment.id === parentCommentId) {
-        return comment.userName;
+        return comment.userName
       }
       if (comment.replies.length > 0) {
-        const found = findParentAuthorName(comment.replies, parentCommentId);
-        if (found) return found;
+        const found = findParentAuthorName(comment.replies, parentCommentId)
+        if (found) return found
       }
     }
-    return undefined;
-  };
+    return undefined
+  }
 
   const handleEdit = async (commentId: string, content: string) => {
-    await editComment(commentId, content);
-    await loadCommentsData();
-  };
+    await editComment(commentId, content)
+    await loadCommentsData()
+  }
 
   const handleDelete = async (commentId: string) => {
-    if (!postId) return;
-    await deleteComment(commentId, postId);
-    setComments((prev) => removeCommentById(prev, commentId));
-  };
+    if (!postId) return
+    await deleteComment(commentId, postId)
+    setComments((prev) => removeCommentById(prev, commentId))
+  }
 
   const handleReplySubmit = async (
     replyComment: CommentData,
-    parentCommentId: string
+    parentCommentId: string,
   ) => {
-    if (!postId) return;
+    if (!postId) return
 
-    const parentAuthorName = findParentAuthorName(comments, parentCommentId);
+    const parentAuthorName = findParentAuthorName(comments, parentCommentId)
 
     const optimisticReply: CommentWithReplies = {
       id: replyComment.id,
@@ -241,17 +239,17 @@ export function FeedCommentSection({
       likeCount: replyComment.likeCount ?? 0,
       isLiked: false,
       replies: [],
-    };
+    }
 
     setComments((prev) =>
-      addReplyToComment(prev, parentCommentId, optimisticReply)
-    );
-    await new Promise((resolve) => setTimeout(resolve, 200));
-    await loadCommentsData();
-  };
+      addReplyToComment(prev, parentCommentId, optimisticReply),
+    )
+    await new Promise((resolve) => setTimeout(resolve, 200))
+    await loadCommentsData()
+  }
 
   const handleTopLevelCommentSubmit = async (commentData: CommentData) => {
-    if (!postId) return;
+    if (!postId) return
 
     const optimisticComment: CommentWithReplies = {
       id: commentData.id,
@@ -276,49 +274,49 @@ export function FeedCommentSection({
       likeCount: commentData.likeCount ?? 0,
       isLiked: false,
       replies: [],
-    };
+    }
 
-    setComments((prev) => [optimisticComment, ...prev]);
+    setComments((prev) => [optimisticComment, ...prev])
 
     // If it's a modal, close it and navigate to post page
     if (onClose) {
       // Close modal and navigate - the post page will load fresh data
-      onClose();
-      router.push(`/post/${postId}`);
+      onClose()
+      router.push(`/post/${postId}`)
     }
     // Invalidate queries to refresh data
-    queryClient.invalidateQueries({ queryKey: ['comments', postId] });
-  };
+    queryClient.invalidateQueries({ queryKey: ['comments', postId] })
+  }
 
   const sortedComments = useMemo(() => {
     return [...comments].sort((a, b) => {
       // Always prioritize current user's comments at the top
-      const aIsCurrentUser = user && a.userId === user.id;
-      const bIsCurrentUser = user && b.userId === user.id;
+      const aIsCurrentUser = user && a.userId === user.id
+      const bIsCurrentUser = user && b.userId === user.id
 
-      if (aIsCurrentUser && !bIsCurrentUser) return -1;
-      if (!aIsCurrentUser && bIsCurrentUser) return 1;
+      if (aIsCurrentUser && !bIsCurrentUser) return -1
+      if (!aIsCurrentUser && bIsCurrentUser) return 1
 
       // For non-user comments (or both are user comments), apply the selected sort
       switch (sortBy) {
         case 'newest':
           return (
             new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-          );
+          )
         case 'oldest':
           return (
             new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-          );
+          )
         case 'popular':
-          return b.likeCount - a.likeCount;
+          return b.likeCount - a.likeCount
         default:
-          return 0;
+          return 0
       }
-    });
-  }, [comments, user, sortBy]);
+    })
+  }, [comments, user, sortBy])
 
   if (!postId) {
-    return null;
+    return null
   }
 
   if (isLoadingPost) {
@@ -329,23 +327,25 @@ export function FeedCommentSection({
           <Skeleton className="h-4 w-3/4" />
         </div>
       </div>
-    );
+    )
   }
 
   if (!post) {
-    return null;
+    return null
   }
 
   // If onClose is provided, it's a modal (mobile). Otherwise, it's inline (desktop post page)
-  const isModal = !!onClose;
+  const isModal = !!onClose
 
   return (
     <>
       {/* Backdrop for modal only */}
       {isModal && (
-        <div
+        <button
+          type="button"
           className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm"
           onClick={onClose}
+          aria-label="Close modal"
         />
       )}
 
@@ -353,12 +353,19 @@ export function FeedCommentSection({
       {isModal ? (
         <div className="pointer-events-none fixed inset-0 z-50 flex items-start justify-center px-4 pt-[10vh]">
           <div
+            role="dialog"
             className={cn(
               'pointer-events-auto relative w-full max-w-[700px] rounded-2xl bg-background shadow-2xl',
               'fade-in-0 zoom-in-95 animate-in duration-200',
-              'flex max-h-[85vh] flex-col'
+              'flex max-h-[85vh] flex-col',
             )}
             onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') {
+                e.preventDefault()
+                onClose()
+              }
+            }}
           >
             {/* Header */}
             <div className="flex shrink-0 items-center justify-between gap-4 border-border border-b px-4 py-3">
@@ -436,7 +443,7 @@ export function FeedCommentSection({
                       'rounded px-2 py-0.5 text-xs capitalize transition-colors',
                       sortBy === option
                         ? 'bg-[#0066FF] text-primary-foreground'
-                        : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+                        : 'text-muted-foreground hover:bg-muted hover:text-foreground',
                     )}
                   >
                     {option}
@@ -474,8 +481,8 @@ export function FeedCommentSection({
                       if (replyComment.parentCommentId) {
                         handleReplySubmit(
                           replyComment,
-                          replyComment.parentCommentId
-                        );
+                          replyComment.parentCommentId,
+                        )
                       }
                     }}
                   />
@@ -486,5 +493,5 @@ export function FeedCommentSection({
         </div>
       )}
     </>
-  );
+  )
 }

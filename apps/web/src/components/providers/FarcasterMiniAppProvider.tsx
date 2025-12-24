@@ -1,12 +1,10 @@
-'use client';
-
-import { useJejuAuth } from '@babylon/auth/client';
-import { logger } from '@babylon/shared';
-import { sdk } from '@farcaster/miniapp-sdk';
-import { createContext, useContext, useEffect, useRef, useState } from 'react';
+import { useJejuAuth } from '@babylon/auth'
+import { logger } from '@babylon/shared'
+import { sdk } from '@farcaster/miniapp-sdk'
+import { createContext, useContext, useEffect, useRef, useState } from 'react'
 
 /**
- * Consolidated Farcaster Mini App Provider.
+ * Farcaster Mini App Provider.
  *
  * Handles:
  * 1. Mini App detection
@@ -22,30 +20,30 @@ import { createContext, useContext, useEffect, useRef, useState } from 'react';
  */
 interface MiniAppContext {
   user?: {
-    fid: number;
-    username: string;
-  };
+    fid: number
+    username: string
+  }
 }
 
 /**
  * Farcaster Mini App context type for provider.
  */
 interface FarcasterMiniAppContextType {
-  isMiniApp: boolean;
-  isLoading: boolean;
-  error?: string;
-  fid?: number;
-  username?: string;
-  context: MiniAppContext | null;
+  isMiniApp: boolean
+  isLoading: boolean
+  error?: string
+  fid?: number
+  username?: string
+  context: MiniAppContext | null
   share: (options: {
-    text?: string;
-    url?: string;
-    embeds?: string[];
-  }) => Promise<void>;
+    text?: string
+    url?: string
+    embeds?: string[]
+  }) => Promise<void>
 }
 
 const FarcasterMiniAppContext =
-  createContext<FarcasterMiniAppContextType | null>(null);
+  createContext<FarcasterMiniAppContextType | null>(null)
 
 /**
  * Hook to access Farcaster Mini App context.
@@ -57,13 +55,13 @@ const FarcasterMiniAppContext =
  * @throws Error if used outside FarcasterMiniAppProvider
  */
 export function useFarcasterMiniApp() {
-  const context = useContext(FarcasterMiniAppContext);
+  const context = useContext(FarcasterMiniAppContext)
   if (!context) {
     throw new Error(
-      'useFarcasterMiniApp must be used within FarcasterMiniAppProvider'
-    );
+      'useFarcasterMiniApp must be used within FarcasterMiniAppProvider',
+    )
   }
-  return context;
+  return context
 }
 
 /**
@@ -86,35 +84,35 @@ export function useFarcasterMiniApp() {
 export function FarcasterMiniAppProvider({
   children,
 }: {
-  children: React.ReactNode;
+  children: React.ReactNode
 }) {
-  const [isMiniApp, setIsMiniApp] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string>();
-  const [fid, setFid] = useState<number>();
-  const [username, setUsername] = useState<string>();
+  const [isMiniApp, setIsMiniApp] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
+  const [error, setError] = useState<string>()
+  const [fid, setFid] = useState<number>()
+  const [username, setUsername] = useState<string>()
   const [miniAppContext, setMiniAppContext] = useState<MiniAppContext | null>(
-    null
-  );
-  const hasCalledReady = useRef(false);
-  const hasAttemptedLogin = useRef(false);
+    null,
+  )
+  const hasCalledReady = useRef(false)
+  const hasAttemptedLogin = useRef(false)
 
-  const { ready, authenticated, loginWithFarcaster } = useJejuAuth();
+  const { ready, authenticated, loginWithFarcaster } = useJejuAuth()
 
   // Detect Mini App context and call sdk.actions.ready()
   useEffect(() => {
-    if (typeof window === 'undefined') return;
+    if (typeof window === 'undefined') return
 
     const initializeMiniApp = async () => {
-      const context = await sdk.context;
+      const context = await sdk.context
 
       if (context) {
-        setIsMiniApp(true);
-        setMiniAppContext(context as MiniAppContext);
+        setIsMiniApp(true)
+        setMiniAppContext(context as MiniAppContext)
 
         if (context.user) {
-          setFid(context.user.fid);
-          setUsername(context.user.username);
+          setFid(context.user.fid)
+          setUsername(context.user.username)
         }
 
         logger.info(
@@ -123,58 +121,58 @@ export function FarcasterMiniAppProvider({
             fid: context.user ? context.user.fid : undefined,
             username: context.user ? context.user.username : undefined,
           },
-          'FarcasterMiniApp'
-        );
+          'FarcasterMiniApp',
+        )
 
         // Call ready() to hide splash screen and show content
         // Only call once
         if (!hasCalledReady.current) {
-          hasCalledReady.current = true;
+          hasCalledReady.current = true
 
           // Small delay to ensure DOM is ready
           setTimeout(async () => {
-            await sdk.actions.ready();
+            await sdk.actions.ready()
             logger.info(
               'Farcaster Mini App ready() called successfully',
               {},
-              'FarcasterMiniApp'
-            );
-          }, 100);
+              'FarcasterMiniApp',
+            )
+          }, 100)
         }
       } else {
         logger.debug(
           'Not in Farcaster Mini App context',
           {},
-          'FarcasterMiniApp'
-        );
+          'FarcasterMiniApp',
+        )
       }
-      setIsLoading(false);
-    };
+      setIsLoading(false)
+    }
 
-    initializeMiniApp();
-  }, []);
+    initializeMiniApp()
+  }, [])
 
   // Auto-login with Farcaster Mini App when detected
   useEffect(() => {
     if (!ready || !isMiniApp || authenticated || isLoading) {
-      return;
+      return
     }
 
     // Prevent multiple login attempts - only attempt once
     if (hasAttemptedLogin.current) {
-      return;
+      return
     }
-    hasAttemptedLogin.current = true;
+    hasAttemptedLogin.current = true
 
     const attemptMiniAppLogin = async () => {
       logger.info(
         'Attempting Farcaster Mini App auto-login via SIWF',
         { fid, username },
-        'FarcasterMiniApp'
-      );
+        'FarcasterMiniApp',
+      )
 
       // Use Jeju's loginWithFarcaster which handles SIWF
-      await loginWithFarcaster();
+      await loginWithFarcaster()
 
       logger.info(
         'Farcaster Mini App auto-login successful',
@@ -182,13 +180,13 @@ export function FarcasterMiniAppProvider({
           fid,
           username,
         },
-        'FarcasterMiniApp'
-      );
-    };
+        'FarcasterMiniApp',
+      )
+    }
 
     attemptMiniAppLogin().catch((loginError: Error) => {
       // Allow retry on error
-      hasAttemptedLogin.current = false;
+      hasAttemptedLogin.current = false
       logger.error(
         'Farcaster Mini App auto-login failed',
         {
@@ -196,10 +194,10 @@ export function FarcasterMiniAppProvider({
           fid,
           username,
         },
-        'FarcasterMiniApp'
-      );
-      setError(loginError.message);
-    });
+        'FarcasterMiniApp',
+      )
+      setError(loginError.message)
+    })
   }, [
     ready,
     authenticated,
@@ -208,31 +206,31 @@ export function FarcasterMiniAppProvider({
     fid,
     username,
     loginWithFarcaster,
-  ]);
+  ])
 
   // Share functionality using Mini App SDK
   const share = async (options: {
-    text?: string;
-    url?: string;
-    embeds?: string[];
+    text?: string
+    url?: string
+    embeds?: string[]
   }) => {
     if (!isMiniApp) {
       logger.warn(
         'Attempted to use Mini App share outside of Mini App context',
         {},
-        'FarcasterMiniApp'
-      );
-      return;
+        'FarcasterMiniApp',
+      )
+      return
     }
 
     // Farcaster compose URL - uses official protocol endpoint (farcaster.xyz)
     await sdk.actions.openUrl(
       `https://farcaster.xyz/~/compose?text=${encodeURIComponent(options.text || '')}${
         options.url ? `&embeds[]=${encodeURIComponent(options.url)}` : ''
-      }`
-    );
-    logger.info('Mini App share opened', options, 'FarcasterMiniApp');
-  };
+      }`,
+    )
+    logger.info('Mini App share opened', options, 'FarcasterMiniApp')
+  }
 
   const value: FarcasterMiniAppContextType = {
     isMiniApp,
@@ -242,11 +240,11 @@ export function FarcasterMiniAppProvider({
     username,
     context: miniAppContext,
     share,
-  };
+  }
 
   return (
     <FarcasterMiniAppContext.Provider value={value}>
       {children}
     </FarcasterMiniAppContext.Provider>
-  );
+  )
 }

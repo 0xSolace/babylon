@@ -19,14 +19,15 @@
  * @packageDocumentation
  */
 
-import { templateIds, templates } from './templates';
-import type { AgentTemplate } from './types/agent-template';
+import { first, mapGet } from '@babylon/shared'
+import { templateIds, templates } from './templates'
+import type { AgentTemplate } from './types/agent-template'
 
 /**
  * In-memory cache for loaded templates
  * @internal
  */
-const templateCache: Map<string, AgentTemplate> = new Map();
+const templateCache: Map<string, AgentTemplate> = new Map()
 
 /**
  * Initializes cache from imported data
@@ -35,9 +36,9 @@ const templateCache: Map<string, AgentTemplate> = new Map();
 function initializeCache(): void {
   if (templateCache.size === 0) {
     templates.forEach((template) => {
-      const templateData = { ...template } as AgentTemplate;
-      templateCache.set(templateData.archetype, templateData);
-    });
+      const templateData = { ...template } as AgentTemplate
+      templateCache.set(templateData.archetype, templateData)
+    })
   }
 }
 
@@ -47,7 +48,7 @@ function initializeCache(): void {
  * @returns Array of template archetype IDs
  */
 export function getTemplateIds(): readonly string[] {
-  return templateIds;
+  return templateIds
 }
 
 /**
@@ -56,8 +57,8 @@ export function getTemplateIds(): readonly string[] {
  * @returns Array of all agent templates
  */
 export function getAllTemplates(): AgentTemplate[] {
-  initializeCache();
-  return Array.from(templateCache.values());
+  initializeCache()
+  return Array.from(templateCache.values())
 }
 
 /**
@@ -67,8 +68,8 @@ export function getAllTemplates(): AgentTemplate[] {
  * @returns Template data or null if not found
  */
 export function getTemplate(archetype: string): AgentTemplate | null {
-  initializeCache();
-  return templateCache.get(archetype) ?? null;
+  initializeCache()
+  return mapGet(templateCache, archetype)
 }
 
 /**
@@ -77,11 +78,11 @@ export function getTemplate(archetype: string): AgentTemplate | null {
  * @returns Random template or null if no templates available
  */
 export function getRandomTemplate(): AgentTemplate | null {
-  initializeCache();
-  const allTemplates = Array.from(templateCache.values());
+  initializeCache()
+  const allTemplates = Array.from(templateCache.values())
   if (allTemplates.length === 0) {
-    return null;
+    return null
   }
-  const randomIndex = Math.floor(Math.random() * allTemplates.length);
-  return allTemplates[randomIndex] ?? null;
+  const randomIndex = Math.floor(Math.random() * allTemplates.length)
+  return first(allTemplates.slice(randomIndex, randomIndex + 1))
 }

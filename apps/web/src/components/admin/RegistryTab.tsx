@@ -1,12 +1,10 @@
-'use client';
-
 import {
   type AdminRegistryData,
   AdminRegistryDataSchema,
   type AdminRegistryEntity,
   cn,
-} from '@babylon/shared';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+} from '@babylon/shared'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   AlertCircle,
   Ban,
@@ -22,14 +20,14 @@ import {
   Users,
   Wallet,
   X,
-} from 'lucide-react';
-import Link from 'next/link';
-import { useState } from 'react';
-import { toast } from 'sonner';
-import { FeedbackForm } from '@/components/feedback/FeedbackForm';
-import { Avatar } from '@/components/shared/Avatar';
-import { SearchBar } from '@/components/shared/SearchBar';
-import { Skeleton } from '@/components/shared/Skeleton';
+} from 'lucide-react'
+import { useState } from 'react'
+import { Link } from 'react-router-dom'
+import { toast } from 'sonner'
+import { FeedbackForm } from '@/components/feedback/FeedbackForm'
+import { Avatar } from '@/components/shared/Avatar'
+import { SearchBar } from '@/components/shared/SearchBar'
+import { Skeleton } from '@/components/shared/Skeleton'
 
 /**
  * Registry tab component for viewing and managing registry entities.
@@ -53,46 +51,46 @@ import { Skeleton } from '@/components/shared/Skeleton';
  * @returns Registry tab element
  */
 export function RegistryTab() {
-  const queryClient = useQueryClient();
-  const [search, setSearch] = useState('');
-  const [onChainOnly, setOnChainOnly] = useState(false);
+  const queryClient = useQueryClient()
+  const [search, setSearch] = useState('')
+  const [onChainOnly, setOnChainOnly] = useState(false)
   const [activeTab, setActiveTab] = useState<
     'all' | 'users' | 'actors' | 'agents' | 'apps'
-  >('all');
+  >('all')
   const [selectedEntity, setSelectedEntity] =
-    useState<AdminRegistryEntity | null>(null);
-  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
-  const [showBanModal, setShowBanModal] = useState(false);
-  const [banReason, setBanReason] = useState('');
-  const [isScammer, setIsScammer] = useState(false);
-  const [isCSAM, setIsCSAM] = useState(false);
+    useState<AdminRegistryEntity | null>(null)
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false)
+  const [showBanModal, setShowBanModal] = useState(false)
+  const [banReason, setBanReason] = useState('')
+  const [isScammer, setIsScammer] = useState(false)
+  const [isCSAM, setIsCSAM] = useState(false)
 
   const { data, isLoading, error, refetch } = useQuery<AdminRegistryData>({
     queryKey: ['admin', 'registry', search, onChainOnly],
     queryFn: async () => {
-      const params = new URLSearchParams();
-      if (search) params.set('search', search);
-      if (onChainOnly) params.set('onChainOnly', 'true');
+      const params = new URLSearchParams()
+      if (search) params.set('search', search)
+      if (onChainOnly) params.set('onChainOnly', 'true')
 
-      const response = await fetch(`/api/registry/all?${params}`);
-      const result = await response.json();
+      const response = await fetch(`/api/registry/all?${params}`)
+      const result = await response.json()
 
       if (result.success && result.data) {
-        const validation = AdminRegistryDataSchema.safeParse(result.data);
+        const validation = AdminRegistryDataSchema.safeParse(result.data)
         if (!validation.success) {
-          throw new Error('Invalid data structure for registry data');
+          throw new Error('Invalid data structure for registry data')
         }
-        return validation.data;
+        return validation.data
       }
       const errorMessage =
         result.error &&
         typeof result.error === 'object' &&
         'message' in result.error
           ? String(result.error.message)
-          : 'Failed to fetch registry data';
-      throw new Error(errorMessage);
+          : 'Failed to fetch registry data'
+      throw new Error(errorMessage)
     },
-  });
+  })
 
   const banMutation = useMutation({
     mutationFn: async ({
@@ -102,14 +100,14 @@ export function RegistryTab() {
       scammer,
       csam,
     }: {
-      entity: AdminRegistryEntity;
-      action: 'ban' | 'unban';
-      reason?: string;
-      scammer?: boolean;
-      csam?: boolean;
+      entity: AdminRegistryEntity
+      action: 'ban' | 'unban'
+      reason?: string
+      scammer?: boolean
+      csam?: boolean
     }) => {
       const token =
-        typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
+        typeof window !== 'undefined' ? window.__oauth3AccessToken : null
       const response = await fetch(`/api/admin/users/${entity.id}/ban`, {
         method: 'POST',
         headers: {
@@ -122,83 +120,83 @@ export function RegistryTab() {
           isScammer: action === 'ban' ? scammer : false,
           isCSAM: action === 'ban' ? csam : false,
         }),
-      });
+      })
 
       if (!response.ok) {
-        const err = await response.json();
-        throw new Error(err.message || 'Failed to update user');
+        const err = await response.json()
+        throw new Error(err.message || 'Failed to update user')
       }
 
-      return response.json();
+      return response.json()
     },
     onSuccess: (_, variables) => {
       toast.success(
         variables.action === 'ban'
           ? 'User banned successfully'
-          : 'User unbanned successfully'
-      );
-      setShowBanModal(false);
-      setBanReason('');
-      setIsScammer(false);
-      setIsCSAM(false);
-      setSelectedEntity(null);
-      queryClient.invalidateQueries({ queryKey: ['admin', 'registry'] });
+          : 'User unbanned successfully',
+      )
+      setShowBanModal(false)
+      setBanReason('')
+      setIsScammer(false)
+      setIsCSAM(false)
+      setSelectedEntity(null)
+      queryClient.invalidateQueries({ queryKey: ['admin', 'registry'] })
     },
     onError: (err) => {
-      toast.error(err instanceof Error ? err.message : 'Failed to update user');
+      toast.error(err instanceof Error ? err.message : 'Failed to update user')
     },
-  });
+  })
 
   const renderBadge = (
     _type: string,
     label: string,
     icon: React.ReactNode,
-    color: string
+    color: string,
   ) => {
     return (
       <span
         className={cn(
           'inline-flex items-center gap-1 rounded-full px-2 py-1 font-semibold text-xs',
-          color
+          color,
         )}
       >
         {icon}
         {label}
       </span>
-    );
-  };
+    )
+  }
 
   const renderEntityCard = (entity: AdminRegistryEntity) => {
     const getBadgeColor = () => {
       switch (entity.type) {
         case 'user':
-          return 'bg-blue-500/10 text-blue-500 border border-blue-500/20';
+          return 'bg-blue-500/10 text-blue-500 border border-blue-500/20'
         case 'actor':
-          return 'bg-purple-500/10 text-purple-500 border border-purple-500/20';
+          return 'bg-purple-500/10 text-purple-500 border border-purple-500/20'
         case 'agent':
-          return 'bg-green-500/10 text-green-500 border border-green-500/20';
+          return 'bg-green-500/10 text-green-500 border border-green-500/20'
         case 'app':
-          return 'bg-orange-500/10 text-orange-500 border border-orange-500/20';
+          return 'bg-orange-500/10 text-orange-500 border border-orange-500/20'
         default:
-          return 'bg-muted text-muted-foreground';
+          return 'bg-muted text-muted-foreground'
       }
-    };
+    }
 
     const getProfileUrl = () => {
       if (entity.type === 'user' && entity.username) {
-        return `/profile/${entity.username}`;
+        return `/profile/${entity.username}`
       }
-      return null;
-    };
+      return null
+    }
 
-    const profileUrl = getProfileUrl();
+    const profileUrl = getProfileUrl()
 
     const cardContent = (
       <>
         <div className="border-border border-b bg-muted/30 px-4 py-3">
           <div className="flex items-start gap-3">
             <Avatar
-              src={entity.imageUrl ?? undefined}
+              src={entity.imageUrl}
               name={entity.name}
               size="lg"
               className="shrink-0"
@@ -221,28 +219,28 @@ export function RegistryTab() {
                       'user',
                       'User',
                       <UserCircle className="h-3 w-3" />,
-                      getBadgeColor()
+                      getBadgeColor(),
                     )}
                   {entity.type === 'actor' &&
                     renderBadge(
                       'actor',
                       'Actor',
                       <Users className="h-3 w-3" />,
-                      getBadgeColor()
+                      getBadgeColor(),
                     )}
                   {entity.type === 'agent' &&
                     renderBadge(
                       'agent',
                       'Agent',
                       <Bot className="h-3 w-3" />,
-                      getBadgeColor()
+                      getBadgeColor(),
                     )}
                   {entity.type === 'app' &&
                     renderBadge(
                       'app',
                       'App',
                       <Building2 className="h-3 w-3" />,
-                      getBadgeColor()
+                      getBadgeColor(),
                     )}
                 </div>
               </div>
@@ -313,9 +311,10 @@ export function RegistryTab() {
                 {entity.walletAddress.slice(-4)}
               </code>
               <button
+                type="button"
                 onClick={(e) => {
-                  e.preventDefault();
-                  navigator.clipboard.writeText(entity.walletAddress!);
+                  e.preventDefault()
+                  navigator.clipboard.writeText(entity.walletAddress)
                 }}
                 className="text-blue-500 text-xs transition-colors hover:text-blue-400"
               >
@@ -357,7 +356,7 @@ export function RegistryTab() {
                             entity.reputationScore !== null &&
                             entity.reputationScore < 40
                           ? 'border-red-500/20 bg-red-500/5'
-                          : 'border-purple-500/20 bg-purple-500/5'
+                          : 'border-purple-500/20 bg-purple-500/5',
                 )}
               >
                 <Star
@@ -375,7 +374,7 @@ export function RegistryTab() {
                           : entity.reputationScore != null &&
                               entity.reputationScore < 40
                             ? 'text-red-500'
-                            : 'text-purple-500'
+                            : 'text-purple-500',
                   )}
                 />
                 <div className="min-w-0 flex-1">
@@ -397,7 +396,7 @@ export function RegistryTab() {
                             : entity.reputationScore != null &&
                                 entity.reputationScore < 40
                               ? 'text-red-500'
-                              : 'text-foreground'
+                              : 'text-foreground',
                     )}
                   >
                     {entity.reputationScore !== undefined &&
@@ -545,11 +544,12 @@ export function RegistryTab() {
             <div className="flex gap-2 border-border border-t pt-3">
               {entity.agent0TokenId && (
                 <button
+                  type="button"
                   onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    setSelectedEntity(entity);
-                    setShowFeedbackModal(true);
+                    e.preventDefault()
+                    e.stopPropagation()
+                    setSelectedEntity(entity)
+                    setShowFeedbackModal(true)
                   }}
                   className="flex flex-1 items-center justify-center gap-1 rounded-lg bg-blue-500/20 px-3 py-2 font-medium text-blue-500 text-sm transition-colors hover:bg-blue-500/30"
                   title="Give feedback"
@@ -559,17 +559,18 @@ export function RegistryTab() {
                 </button>
               )}
               <button
+                type="button"
                 onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  setSelectedEntity(entity);
-                  setShowBanModal(true);
+                  e.preventDefault()
+                  e.stopPropagation()
+                  setSelectedEntity(entity)
+                  setShowBanModal(true)
                 }}
                 className={cn(
                   'flex flex-1 items-center justify-center gap-1 rounded-lg px-3 py-2 font-medium text-sm transition-colors',
                   entity.isBanned
                     ? 'bg-green-500/20 text-green-500 hover:bg-green-500/30'
-                    : 'bg-red-500/20 text-red-500 hover:bg-red-500/30'
+                    : 'bg-red-500/20 text-red-500 hover:bg-red-500/30',
                 )}
                 title={entity.isBanned ? 'Unban user' : 'Ban user'}
               >
@@ -580,21 +581,21 @@ export function RegistryTab() {
           )}
         </div>
       </>
-    );
+    )
 
     if (profileUrl) {
       return (
         <Link
           key={entity.id}
-          href={profileUrl}
+          to={profileUrl}
           className={cn(
             'block overflow-hidden rounded-2xl border border-border bg-card transition-all duration-200',
-            'cursor-pointer hover:border-primary/50 hover:shadow-lg'
+            'cursor-pointer hover:border-primary/50 hover:shadow-lg',
           )}
         >
           {cardContent}
         </Link>
-      );
+      )
     }
 
     return (
@@ -604,16 +605,16 @@ export function RegistryTab() {
       >
         {cardContent}
       </div>
-    );
-  };
+    )
+  }
 
   const handleBanUser = (
     entity: AdminRegistryEntity,
-    action: 'ban' | 'unban'
+    action: 'ban' | 'unban',
   ) => {
     if (action === 'ban' && !banReason.trim()) {
-      toast.error('Please provide a reason for banning');
-      return;
+      toast.error('Please provide a reason for banning')
+      return
     }
 
     banMutation.mutate({
@@ -622,30 +623,30 @@ export function RegistryTab() {
       reason: banReason,
       scammer: isScammer,
       csam: isCSAM,
-    });
-  };
+    })
+  }
 
   const allEntities = data
     ? [...data.users, ...data.actors, ...data.agents, ...data.apps]
-    : [];
+    : []
 
   const getActiveEntities = () => {
-    if (!data) return [];
+    if (!data) return []
     switch (activeTab) {
       case 'users':
-        return data.users;
+        return data.users
       case 'actors':
-        return data.actors;
+        return data.actors
       case 'agents':
-        return data.agents;
+        return data.agents
       case 'apps':
-        return data.apps;
+        return data.apps
       default:
-        return allEntities;
+        return allEntities
     }
-  };
+  }
 
-  const activeEntities = getActiveEntities();
+  const activeEntities = getActiveEntities()
 
   return (
     <div className="space-y-6">
@@ -667,12 +668,13 @@ export function RegistryTab() {
           />
         </div>
         <button
+          type="button"
           onClick={() => setOnChainOnly(!onChainOnly)}
           className={cn(
             'flex items-center gap-2 whitespace-nowrap rounded-full px-4 py-2 font-semibold transition-all duration-200',
             onChainOnly
               ? 'bg-primary text-primary-foreground hover:bg-primary/90'
-              : 'border border-border bg-muted text-muted-foreground hover:bg-muted/80'
+              : 'border border-border bg-muted text-muted-foreground hover:bg-muted/80',
           )}
         >
           <Shield className="h-4 w-4" />
@@ -752,6 +754,7 @@ export function RegistryTab() {
               {error instanceof Error ? error.message : 'Unknown error'}
             </p>
             <button
+              type="button"
               onClick={() => refetch()}
               className="rounded-lg bg-primary px-4 py-2 text-primary-foreground transition-colors hover:bg-primary/90"
             >
@@ -765,59 +768,64 @@ export function RegistryTab() {
         <>
           <div className="mb-2 flex gap-2 overflow-x-auto pb-2">
             <button
+              type="button"
               onClick={() => setActiveTab('all')}
               className={cn(
                 'whitespace-nowrap rounded-lg px-4 py-3 font-semibold transition-all duration-200',
                 activeTab === 'all'
                   ? 'bg-primary text-primary-foreground'
-                  : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                  : 'bg-muted text-muted-foreground hover:bg-muted/80',
               )}
             >
               All ({data.totals.total})
             </button>
             <button
+              type="button"
               onClick={() => setActiveTab('users')}
               className={cn(
                 'flex items-center gap-2 whitespace-nowrap rounded-lg px-4 py-3 font-semibold transition-all duration-200',
                 activeTab === 'users'
                   ? 'bg-primary text-primary-foreground'
-                  : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                  : 'bg-muted text-muted-foreground hover:bg-muted/80',
               )}
             >
               <UserCircle className="h-4 w-4" />
               Users ({data.totals.users})
             </button>
             <button
+              type="button"
               onClick={() => setActiveTab('actors')}
               className={cn(
                 'flex items-center gap-2 whitespace-nowrap rounded-lg px-4 py-3 font-semibold transition-all duration-200',
                 activeTab === 'actors'
                   ? 'bg-primary text-primary-foreground'
-                  : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                  : 'bg-muted text-muted-foreground hover:bg-muted/80',
               )}
             >
               <Users className="h-4 w-4" />
               Actors ({data.totals.actors})
             </button>
             <button
+              type="button"
               onClick={() => setActiveTab('agents')}
               className={cn(
                 'flex items-center gap-2 whitespace-nowrap rounded-lg px-4 py-3 font-semibold transition-all duration-200',
                 activeTab === 'agents'
                   ? 'bg-primary text-primary-foreground'
-                  : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                  : 'bg-muted text-muted-foreground hover:bg-muted/80',
               )}
             >
               <Bot className="h-4 w-4" />
               Agents ({data.totals.agents})
             </button>
             <button
+              type="button"
               onClick={() => setActiveTab('apps')}
               className={cn(
                 'flex items-center gap-2 whitespace-nowrap rounded-lg px-4 py-3 font-semibold transition-all duration-200',
                 activeTab === 'apps'
                   ? 'bg-primary text-primary-foreground'
-                  : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                  : 'bg-muted text-muted-foreground hover:bg-muted/80',
               )}
             >
               <Building2 className="h-4 w-4" />
@@ -828,7 +836,7 @@ export function RegistryTab() {
           {activeEntities.length > 0 ? (
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
               {activeEntities.map((entity: AdminRegistryEntity) =>
-                renderEntityCard(entity)
+                renderEntityCard(entity),
               )}
             </div>
           ) : (
@@ -859,15 +867,15 @@ export function RegistryTab() {
               toUserName={selectedEntity.name}
               category="general"
               onSuccess={() => {
-                setShowFeedbackModal(false);
-                setSelectedEntity(null);
+                setShowFeedbackModal(false)
+                setSelectedEntity(null)
                 queryClient.invalidateQueries({
                   queryKey: ['admin', 'registry'],
-                });
+                })
               }}
               onCancel={() => {
-                setShowFeedbackModal(false);
-                setSelectedEntity(null);
+                setShowFeedbackModal(false)
+                setSelectedEntity(null)
               }}
             />
           </div>
@@ -890,10 +898,14 @@ export function RegistryTab() {
             {!selectedEntity.isBanned && (
               <>
                 <div className="mb-4">
-                  <label className="mb-2 block font-medium text-sm">
+                  <label
+                    htmlFor="ban-reason-textarea"
+                    className="mb-2 block font-medium text-sm"
+                  >
                     Reason for ban <span className="text-red-500">*</span>
                   </label>
                   <textarea
+                    id="ban-reason-textarea"
                     value={banReason}
                     onChange={(e) => setBanReason(e.target.value)}
                     placeholder="Explain why this user is being banned..."
@@ -948,22 +960,24 @@ export function RegistryTab() {
 
             <div className="flex gap-3">
               <button
+                type="button"
                 onClick={() => {
-                  setShowBanModal(false);
-                  setBanReason('');
-                  setIsScammer(false);
-                  setIsCSAM(false);
-                  setSelectedEntity(null);
+                  setShowBanModal(false)
+                  setBanReason('')
+                  setIsScammer(false)
+                  setIsCSAM(false)
+                  setSelectedEntity(null)
                 }}
                 className="flex-1 rounded-lg bg-muted px-4 py-2 text-foreground transition-colors hover:bg-muted/80"
               >
                 Cancel
               </button>
               <button
+                type="button"
                 onClick={() =>
                   handleBanUser(
                     selectedEntity,
-                    selectedEntity.isBanned ? 'unban' : 'ban'
+                    selectedEntity.isBanned ? 'unban' : 'ban',
                   )
                 }
                 disabled={
@@ -974,7 +988,7 @@ export function RegistryTab() {
                   'flex flex-1 items-center justify-center gap-2 rounded-lg px-4 py-2 transition-colors disabled:opacity-50',
                   selectedEntity.isBanned
                     ? 'bg-green-500 text-white hover:bg-green-600'
-                    : 'bg-red-500 text-white hover:bg-red-600'
+                    : 'bg-red-500 text-white hover:bg-red-600',
                 )}
               >
                 <Ban className="h-4 w-4" />
@@ -989,5 +1003,5 @@ export function RegistryTab() {
         </div>
       )}
     </div>
-  );
+  )
 }

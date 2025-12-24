@@ -94,7 +94,7 @@ The rewards and referral system tests cover:
 2. **Environment Variables**: Set in `.env.local`
    ```env
    DATABASE_URL="postgresql://..."
-   NEXT_PUBLIC_APP_URL="http://localhost:3000"
+   PUBLIC_APP_URL="http://localhost:3000"
    ```
 3. **Test Data**: Seed database with test data
    ```bash

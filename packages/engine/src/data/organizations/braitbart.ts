@@ -1,4 +1,4 @@
-import type { Organization } from '../../types/shared';
+import type { Organization } from '../../types/shared'
 
 export const data = {
   id: 'braitbart',
@@ -25,4 +25,4 @@ export const data = {
     "The voice of the populist right. News and opinion for patriots. Fighting the establishment since 2007. Truth they don't want you to see.",
   originalName: 'Breitbart',
   originalHandle: 'breitbartnews',
-} as const satisfies Organization;
+} as const satisfies Organization

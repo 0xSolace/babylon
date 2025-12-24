@@ -1,19 +1,25 @@
-import { getContractAddresses } from '@babylon/contracts';
-import { CHAIN, logger } from '@babylon/shared';
-import { useMutation } from '@tanstack/react-query';
-import { encodeFunctionData, pad } from 'viem';
-import { useSmartWallet } from '@/hooks/useSmartWallet';
+import { CHAIN, getContractAddresses, logger } from '@babylon/shared'
+import { useMutation } from '@tanstack/react-query'
+import { encodeFunctionData, pad } from 'viem'
+import { useSmartWallet } from './useSmartWallet'
 
 /**
  * Result of an on-chain betting transaction.
  */
 export interface OnChainBetResult {
   /** Transaction hash */
-  txHash: string;
+  txHash: string
   /** Number of shares purchased/sold */
-  shares: number;
+  shares: number
   /** Gas used (if available) */
-  gasUsed?: string;
+  gasUsed?: string
+}
+
+// Helper to safely extract error message
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message
+  if (typeof error === 'string') return error
+  return 'Unknown error'
 }
 
 /**
@@ -21,12 +27,14 @@ export interface OnChainBetResult {
  * Preserves the numeric value by converting to hex and padding.
  */
 function marketIdToBytes32(marketId: string): `0x${string}` {
-  const bigintValue = BigInt(marketId);
-  const hexValue = `0x${bigintValue.toString(16)}` as `0x${string}`;
-  return pad(hexValue, { size: 32 });
+  const bigintValue = BigInt(marketId)
+  // pad() from viem expects a hex string starting with 0x
+  const hexString = `0x${bigintValue.toString(16)}`
+  return pad(hexString as `0x${string}`, { size: 32 })
 }
 
-const { diamond: DIAMOND_ADDRESS, network: NETWORK } = getContractAddresses();
+const addresses = getContractAddresses()
+const DIAMOND_ADDRESS = addresses.diamond
 
 const PREDICTION_MARKET_ABI = [
   {
@@ -62,18 +70,18 @@ const PREDICTION_MARKET_ABI = [
     outputs: [{ name: 'cost', type: 'uint256' }],
     stateMutability: 'view',
   },
-] as const;
+] as const
 
 interface BuySharesParams {
-  marketId: string;
-  outcome: 'YES' | 'NO';
-  numShares: number;
+  marketId: string
+  outcome: 'YES' | 'NO'
+  numShares: number
 }
 
 interface SellSharesParams {
-  marketId: string;
-  outcome: 'YES' | 'NO';
-  numShares: number;
+  marketId: string
+  outcome: 'YES' | 'NO'
+  numShares: number
 }
 
 /**
@@ -103,7 +111,7 @@ interface SellSharesParams {
  */
 export function useOnChainBetting() {
   const { client, smartWalletReady, sendSmartWalletTransaction } =
-    useSmartWallet();
+    useSmartWallet()
 
   const buyMutation = useMutation({
     mutationFn: async ({
@@ -112,47 +120,47 @@ export function useOnChainBetting() {
       numShares,
     }: BuySharesParams): Promise<OnChainBetResult> => {
       if (!smartWalletReady || !client) {
-        throw new Error('Smart wallet not ready. Please connect your wallet.');
+        throw new Error('Smart wallet not ready. Please connect your wallet.')
       }
 
-      const outcomeIndex = outcome === 'YES' ? 1 : 0;
-      const sharesBigInt = BigInt(Math.floor(numShares * 1e18));
-      const marketIdBytes32 = marketIdToBytes32(marketId);
+      const outcomeIndex = outcome === 'YES' ? 1 : 0
+      const sharesBigInt = BigInt(Math.floor(numShares * 1e18))
+      const marketIdBytes32 = marketIdToBytes32(marketId)
 
       logger.info('Buying shares on-chain', {
-        network: NETWORK,
+        network: 'localnet',
         diamond: DIAMOND_ADDRESS,
         marketId,
         marketIdBytes32,
         outcome,
         numShares,
         outcomeIndex,
-      });
+      })
 
       const data = encodeFunctionData({
         abi: PREDICTION_MARKET_ABI,
         functionName: 'buyShares',
         args: [marketIdBytes32, outcomeIndex, sharesBigInt],
-      });
+      })
 
       const hash = await sendSmartWalletTransaction({
         to: DIAMOND_ADDRESS,
         data,
         chain: CHAIN,
-      });
+      })
 
       logger.info('Buy shares transaction sent', {
         marketId,
         outcome,
         txHash: hash,
-      });
+      })
 
       return {
         txHash: hash,
         shares: numShares,
-      };
+      }
     },
-  });
+  })
 
   const sellMutation = useMutation({
     mutationFn: async ({
@@ -161,67 +169,67 @@ export function useOnChainBetting() {
       numShares,
     }: SellSharesParams): Promise<OnChainBetResult> => {
       if (!smartWalletReady || !client) {
-        throw new Error('Smart wallet not ready. Please connect your wallet.');
+        throw new Error('Smart wallet not ready. Please connect your wallet.')
       }
 
-      const outcomeIndex = outcome === 'YES' ? 1 : 0;
-      const sharesBigInt = BigInt(Math.floor(numShares * 1e18));
-      const marketIdBytes32 = marketIdToBytes32(marketId);
+      const outcomeIndex = outcome === 'YES' ? 1 : 0
+      const sharesBigInt = BigInt(Math.floor(numShares * 1e18))
+      const marketIdBytes32 = marketIdToBytes32(marketId)
 
       logger.info('Selling shares on-chain', {
         marketId,
         marketIdBytes32,
         outcome,
         numShares,
-      });
+      })
 
       const data = encodeFunctionData({
         abi: PREDICTION_MARKET_ABI,
         functionName: 'sellShares',
         args: [marketIdBytes32, outcomeIndex, sharesBigInt],
-      });
+      })
 
       const hash = await sendSmartWalletTransaction({
         to: DIAMOND_ADDRESS,
         data,
         chain: CHAIN,
-      });
+      })
 
       logger.info('Sell shares transaction sent', {
         marketId,
         outcome,
         txHash: hash,
-      });
+      })
 
       return {
         txHash: hash,
         shares: numShares,
-      };
+      }
     },
-  });
+  })
 
   const buyShares = async (
     marketId: string,
     outcome: 'YES' | 'NO',
-    numShares: number
+    numShares: number,
   ): Promise<OnChainBetResult> => {
-    return buyMutation.mutateAsync({ marketId, outcome, numShares });
-  };
+    return buyMutation.mutateAsync({ marketId, outcome, numShares })
+  }
 
   const sellShares = async (
     marketId: string,
     outcome: 'YES' | 'NO',
-    numShares: number
+    numShares: number,
   ): Promise<OnChainBetResult> => {
-    return sellMutation.mutateAsync({ marketId, outcome, numShares });
-  };
+    return sellMutation.mutateAsync({ marketId, outcome, numShares })
+  }
 
-  const loading = buyMutation.isPending || sellMutation.isPending;
+  const loading = buyMutation.isPending || sellMutation.isPending
   const error = buyMutation.error
-    ? (buyMutation.error as Error).message
+    ? getErrorMessage(buyMutation.error)
     : sellMutation.error
-      ? (sellMutation.error as Error).message
-      : null;
+      ? getErrorMessage(sellMutation.error)
+      : null
 
   return {
     buyShares,
@@ -229,5 +237,5 @@ export function useOnChainBetting() {
     loading,
     error,
     smartWalletReady,
-  };
+  }
 }

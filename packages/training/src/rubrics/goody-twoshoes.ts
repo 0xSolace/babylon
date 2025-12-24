@@ -72,7 +72,7 @@ For this archetype, reputation delta is the most important metric:
 - Big positive delta + helpful behavior = Excellent (0.8+)
 - Small positive delta + some helpfulness = Good (0.6-0.8)
 - Neutral or negative delta = Poor (<0.5)
-`;
+`
 
 export const GOODY_TWOSHOES_PRIORITY_METRICS = [
   'influence.reputationDelta',
@@ -81,4 +81,4 @@ export const GOODY_TWOSHOES_PRIORITY_METRICS = [
   'influence.followersGained',
   'social.uniqueUsersInteracted',
   'social.commentsMade',
-];
+]

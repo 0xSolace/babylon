@@ -1,6 +1,4 @@
-'use client';
-
-import { cn } from '@babylon/shared';
+import { cn } from '@babylon/shared'
 
 /**
  * Tagged text component for parsing and highlighting social tags.
@@ -22,20 +20,20 @@ import { cn } from '@babylon/shared';
  * ```
  */
 interface TaggedTextProps {
-  text: string;
-  onTagClick?: (tag: string) => void;
-  className?: string;
+  text: string
+  onTagClick?: (tag: string) => void
+  className?: string
 }
 
 export function TaggedText({ text, onTagClick, className }: TaggedTextProps) {
   // Handle null, undefined, or non-string text - return plain text
   if (!text || typeof text !== 'string') {
-    return <span className={className}></span>;
+    return <span className={className}></span>
   }
 
   // Handle empty string
   if (text.length === 0) {
-    return <span className={className}></span>;
+    return <span className={className}></span>
   }
 
   // Regex to match @mentions and $cashtags (excluding prices)
@@ -43,39 +41,40 @@ export function TaggedText({ text, onTagClick, className }: TaggedTextProps) {
   // $cashtags: only match if followed by letters (not numbers) to avoid matching prices like $120k, $19.99
   // Examples: @username, $AAPL, $BTC (but NOT $120k, $19.99)
   // Note: #hashtags are ignored - not used in the app
-  const tagRegex = /(@[\w-]+)|(\$[A-Za-z][\w]*)/g;
+  const tagRegex = /(@[\w-]+)|(\$[A-Za-z][\w]*)/g
 
   const parts: Array<{
-    text: string;
-    isTag: boolean;
-    tagType?: '@' | '#' | '$';
-  }> = [];
-  let lastIndex = 0;
-  let match;
+    text: string
+    isTag: boolean
+    tagType?: '@' | '#' | '$'
+  }> = []
+  let lastIndex = 0
+  const _match: RegExpExecArray | null = null
 
   // Reset regex lastIndex to start from beginning
-  tagRegex.lastIndex = 0;
+  tagRegex.lastIndex = 0
 
-  while ((match = tagRegex.exec(text)) !== null) {
+  const match: RegExpExecArray | null = tagRegex.exec(text)
+  while (match !== null) {
     // Add text before the tag
     if (match.index > lastIndex) {
       parts.push({
         text: text.slice(lastIndex, match.index),
         isTag: false,
-      });
+      })
     }
 
     // Add the tag - match[0] is the full match
     // match[1] = @mention, match[2] = #hashtag, match[3] = $cashtag
-    const fullTag = match[0]; // e.g., "@username" or "#hashtag" or "$cashtag"
-    const tagType = fullTag[0] as '@' | '#' | '$';
+    const fullTag = match[0] // e.g., "@username" or "#hashtag" or "$cashtag"
+    const tagType = fullTag[0] as '@' | '#' | '$'
     parts.push({
       text: fullTag,
       isTag: true,
       tagType,
-    });
+    })
 
-    lastIndex = match.index + fullTag.length;
+    lastIndex = match.index + fullTag.length
   }
 
   // Add remaining text after last tag (or all text if no tags found)
@@ -83,12 +82,12 @@ export function TaggedText({ text, onTagClick, className }: TaggedTextProps) {
     parts.push({
       text: text.slice(lastIndex),
       isTag: false,
-    });
+    })
   }
 
   // If no tags found, return plain text
   if (parts.length === 0 || (parts.length === 1 && !parts[0]?.isTag)) {
-    return <span className={className}>{text}</span>;
+    return <span className={className}>{text}</span>
   }
 
   return (
@@ -96,27 +95,41 @@ export function TaggedText({ text, onTagClick, className }: TaggedTextProps) {
       {parts.map((part, index) => {
         if (part.isTag) {
           return (
-            <span
-              key={index}
+            <button
+              type="button"
+              key={`tag-${part.text}-${index}`}
               onClick={(e) => {
-                e.stopPropagation();
+                e.stopPropagation()
                 if (onTagClick) {
-                  onTagClick(part.text);
+                  onTagClick(part.text)
+                }
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  if (onTagClick) {
+                    onTagClick(part.text)
+                  }
                 }
               }}
               className={cn(
                 'cursor-pointer font-medium text-[#0066FF] hover:text-[#2952d9]',
                 'transition-colors duration-150',
-                'underline decoration-[#0066FF]/30 hover:decoration-[#0066FF]/50'
+                'underline decoration-[#0066FF]/30 hover:decoration-[#0066FF]/50',
               )}
               style={{ color: '#0066FF' }}
             >
               {part.text}
-            </span>
-          );
+            </button>
+          )
         }
-        return <span key={index}>{part.text}</span>;
+        return (
+          <span key={`text-${index}-${part.text.slice(0, 10)}`}>
+            {part.text}
+          </span>
+        )
       })}
     </span>
-  );
+  )
 }

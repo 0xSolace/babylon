@@ -9,39 +9,65 @@
  * ALL LLM calls route through Jeju Compute - NO direct vendor API calls.
  */
 
-import { isPromptLoggingEnabled, logPrompt } from '@babylon/engine';
-import { logger } from '@babylon/shared';
+import { logger } from '@babylon/shared'
+import { isPromptLoggingEnabled, logPrompt } from '../utils/prompt-logger'
 
 // Configuration
-const LLM_TIMEOUT_MS = 15000; // 15 seconds
-const LLM_MAX_RETRIES = 2;
-const GROUPING_MODEL = 'llama-3.1-8b-instant';
-const SUMMARY_MODEL = 'llama-3.1-8b-instant';
+const LLM_TIMEOUT_MS = 15000 // 15 seconds
+const LLM_MAX_RETRIES = 2
+const GROUPING_MODEL = 'llama-3.1-8b-instant'
+const SUMMARY_MODEL = 'llama-3.1-8b-instant'
+
+// Port configuration via env var
+const COMPUTE_PORT = process.env.JEJU_COMPUTE_PORT ?? '5010'
+
+/**
+ * Get Jeju Compute endpoint based on network configuration
+ * Uses decentralized compute marketplace for LLM inference
+ */
+function getJejuComputeEndpoint(): string {
+  // Explicit override takes precedence
+  if (process.env.JEJU_COMPUTE_ENDPOINT) {
+    return process.env.JEJU_COMPUTE_ENDPOINT
+  }
+  if (process.env.JEJU_DWS_ENDPOINT) {
+    return process.env.JEJU_DWS_ENDPOINT
+  }
+
+  // Network-based configuration
+  const network = process.env.JEJU_NETWORK
+  if (network === 'mainnet') {
+    return 'https://compute.jeju.network'
+  }
+  if (network === 'testnet') {
+    return 'https://compute.testnet.jeju.network'
+  }
+
+  // Localnet default
+  return `http://localhost:${COMPUTE_PORT}`
+}
 
 // Jeju Compute endpoint
-const JEJU_COMPUTE_ENDPOINT =
-  process.env.JEJU_COMPUTE_ENDPOINT ||
-  process.env.JEJU_DWS_ENDPOINT ||
-  'http://localhost:4100';
+const JEJU_COMPUTE_ENDPOINT = getJejuComputeEndpoint()
 
 interface JejuClient {
   chat: {
     completions: {
       create: (params: {
-        model: string;
-        messages: Array<{ role: string; content: string }>;
-        max_tokens?: number;
-        temperature?: number;
+        model: string
+        messages: Array<{ role: string; content: string }>
+        max_tokens?: number
+        temperature?: number
       }) => Promise<{
-        choices: Array<{ message: { content: string } }>;
+        choices: Array<{ message: { content: string } }>
         usage?: {
-          prompt_tokens: number;
-          completion_tokens: number;
-          total_tokens: number;
-        };
-      }>;
-    };
-  };
+          prompt_tokens: number
+          completion_tokens: number
+          total_tokens: number
+        }
+      }>
+    }
+  }
 }
 
 // Jeju inference client
@@ -49,8 +75,8 @@ const jejuClient: JejuClient = {
   chat: {
     completions: {
       create: async (params) => {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), LLM_TIMEOUT_MS);
+        const controller = new AbortController()
+        const timeoutId = setTimeout(() => controller.abort(), LLM_TIMEOUT_MS)
 
         try {
           const response = await fetch(
@@ -65,24 +91,24 @@ const jejuClient: JejuClient = {
                 temperature: params.temperature ?? 0.3,
               }),
               signal: controller.signal,
-            }
-          );
+            },
+          )
 
-          clearTimeout(timeoutId);
+          clearTimeout(timeoutId)
 
           if (!response.ok) {
-            throw new Error(`Jeju Compute error: ${response.status}`);
+            throw new Error(`Jeju Compute error: ${response.status}`)
           }
 
-          return response.json();
+          return response.json()
         } catch (error) {
-          clearTimeout(timeoutId);
-          throw error;
+          clearTimeout(timeoutId)
+          throw error
         }
       },
     },
   },
-};
+}
 
 /**
  * Trending tag information
@@ -91,13 +117,13 @@ const jejuClient: JejuClient = {
  * ID, display name, slug, category, post count, summary, and rank.
  */
 export interface TrendingTag {
-  id: string;
-  tag: string;
-  tagSlug: string;
-  category: string | null;
-  postCount: number;
-  summary: string | null;
-  rank: number;
+  id: string
+  tag: string
+  tagSlug: string
+  category: string | null
+  postCount: number
+  summary: string | null
+  rank: number
 }
 
 /**
@@ -107,14 +133,14 @@ export interface TrendingTag {
  * tag ID, related tags, total post count, summary, and rank.
  */
 export interface GroupedTrend {
-  id: string; // ID of the primary tag
-  tags: string[]; // Array of related tag display names
-  tagSlugs: string[]; // Array of tag slugs for routing
-  tagIds: string[]; // Array of tag IDs
-  category: string | null;
-  totalPostCount: number;
-  summary: string;
-  rank: number;
+  id: string // ID of the primary tag
+  tags: string[] // Array of related tag display names
+  tagSlugs: string[] // Array of tag slugs for routing
+  tagIds: string[] // Array of tag IDs
+  category: string | null
+  totalPostCount: number
+  summary: string
+  rank: number
 }
 
 /**
@@ -131,20 +157,20 @@ export interface GroupedTrend {
 function calculateCost(model: string, tokens: number): number {
   // Groq pricing (as of 2024): free tier, so $0
   if (model.includes('llama')) {
-    return 0;
+    return 0
   }
 
   // OpenAI-compatible pricing (approximate, per 1M tokens)
   // Standard models: $2.50 input, $10 output (average ~$6/1M)
   // Mini models: $0.15 input, $0.60 output (average ~$0.375/1M)
   if (model.includes('gpt-5-nano')) {
-    return (tokens / 1000000) * 0.375;
+    return (tokens / 1000000) * 0.375
   }
   if (model.includes('gpt-5.1')) {
-    return (tokens / 1000000) * 6;
+    return (tokens / 1000000) * 6
   }
 
-  return 0;
+  return 0
 }
 
 /**
@@ -163,28 +189,28 @@ function calculateCost(model: string, tokens: number): number {
 async function withRetry<T>(
   fn: () => Promise<T>,
   retries: number = LLM_MAX_RETRIES,
-  context = 'LLM call'
+  context = 'LLM call',
 ): Promise<T> {
-  let lastError: Error | undefined;
+  let lastError: Error | undefined
 
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
-      return await fn();
+      return await fn()
     } catch (error) {
-      lastError = error as Error;
+      lastError = error as Error
       if (attempt < retries) {
-        const delay = Math.min(1000 * 2 ** attempt, 5000); // Exponential backoff, max 5s
+        const delay = Math.min(1000 * 2 ** attempt, 5000) // Exponential backoff, max 5s
         logger.warn(
           `${context} failed, retrying in ${delay}ms (attempt ${attempt + 1}/${retries})`,
           { error },
-          'TrendingGroupingService'
-        );
-        await new Promise((resolve) => setTimeout(resolve, delay));
+          'TrendingGroupingService',
+        )
+        await new Promise((resolve) => setTimeout(resolve, delay))
       }
     }
   }
 
-  throw lastError;
+  throw lastError
 }
 
 /**
@@ -194,69 +220,70 @@ function fallbackGrouping(tags: TrendingTag[]): Map<string, number> {
   logger.info(
     'Using fallback grouping logic (no LLM available)',
     undefined,
-    'TrendingGroupingService'
-  );
+    'TrendingGroupingService',
+  )
 
   // Simple heuristic: group tags in same category if they have similar post counts
-  const categoryGroups = new Map<string, TrendingTag[]>();
+  const categoryGroups = new Map<string, TrendingTag[]>()
 
   for (const tag of tags) {
-    const _category = tag.category || 'general';
+    const _category = tag.category || 'general'
     if (!categoryGroups.has(_category)) {
-      categoryGroups.set(_category, []);
+      categoryGroups.set(_category, [])
     }
-    categoryGroups.get(_category)!.push(tag);
+    categoryGroups.get(_category)?.push(tag)
   }
 
-  const tagToGroup = new Map<string, number>();
-  let groupId = 1;
+  const tagToGroup = new Map<string, number>()
+  let groupId = 1
 
   for (const [_category, categoryTags] of categoryGroups.entries()) {
     if (categoryTags.length >= 2) {
       // Only group if tags have similar post counts (within 50%)
-      categoryTags.sort((a, b) => b.postCount - a.postCount);
+      categoryTags.sort((a, b) => b.postCount - a.postCount)
       for (let i = 0; i < categoryTags.length - 1; i++) {
-        const tag1 = categoryTags[i]!;
-        const tag2 = categoryTags[i + 1]!;
-        const ratio = tag2.postCount / tag1.postCount;
+        const tag1 = categoryTags[i]
+        const tag2 = categoryTags[i + 1]
+        if (!tag1 || !tag2) continue
+        const ratio = tag2.postCount / tag1.postCount
 
         if (
           ratio >= 0.5 &&
           !tagToGroup.has(tag1.tag) &&
           !tagToGroup.has(tag2.tag)
         ) {
-          tagToGroup.set(tag1.tag, groupId);
-          tagToGroup.set(tag2.tag, groupId);
-          groupId++;
+          tagToGroup.set(tag1.tag, groupId)
+          tagToGroup.set(tag2.tag, groupId)
+          groupId++
         }
       }
     }
   }
 
-  return tagToGroup;
+  return tagToGroup
 }
 
 /**
  * Result from combined grouping and summary analysis
  */
 interface GroupingWithSummary {
-  tagToGroup: Map<string, number>;
-  groupSummaries: Map<number, string>;
+  tagToGroup: Map<string, number>
+  groupSummaries: Map<number, string>
 }
 
 /**
  * Use LLM to analyze, group, and summarize related trending tags in a single call
  */
 async function analyzeAndSummarizeTags(
-  tags: TrendingTag[]
+  tags: TrendingTag[],
 ): Promise<GroupingWithSummary> {
   const emptyResult: GroupingWithSummary = {
     tagToGroup: new Map(),
     groupSummaries: new Map(),
-  };
+  }
 
   if (tags.length <= 1) {
-    return emptyResult;
+    return emptyResult
   }
 
   // Jeju Compute client is always available (routes through marketplace)
@@ -264,9 +291,9 @@ async function analyzeAndSummarizeTags(
   const tagList = tags
     .map(
       (t, i) =>
-        `${i + 1}. ${t.tag} (${t.category || 'General'}, ${t.postCount} posts${t.summary ? `, context: "${t.summary}"` : ''})`
+        `${i + 1}. ${t.tag} (${t.category || 'General'}, ${t.postCount} posts${t.summary ? `, context: "${t.summary}"` : ''})`,
     )
-    .join('\n');
+    .join('\n')
 
   const prompt = `Analyze these trending topics from a tech/crypto/politics social platform. Group related tags and generate summaries.
 
@@ -341,9 +368,9 @@ Example 3 - No groups needed:
   <groups></groups>
 </response>
 
-Return ONLY valid XML. No markdown, no explanations.`;
+Return ONLY valid XML. No markdown, no explanations.`
 
-  const startTime = Date.now();
+  const startTime = Date.now()
 
   const response = await withRetry(
     async () =>
@@ -364,12 +391,12 @@ Return ONLY valid XML. No markdown, no explanations.`;
         max_tokens: 2000,
       }),
     LLM_MAX_RETRIES,
-    'Tag grouping and summary analysis'
-  );
+    'Tag grouping and summary analysis',
+  )
 
-  const duration = Date.now() - startTime;
-  const tokensUsed = response.usage?.total_tokens || 0;
-  const estimatedCost = calculateCost(GROUPING_MODEL, tokensUsed);
+  const duration = Date.now() - startTime
+  const tokensUsed = response.usage?.total_tokens || 0
+  const estimatedCost = calculateCost(GROUPING_MODEL, tokensUsed)
 
   logger.debug(
     'LLM grouping call completed',
@@ -379,10 +406,10 @@ Return ONLY valid XML. No markdown, no explanations.`;
       tokensUsed,
       estimatedCostUSD: estimatedCost,
     },
-    'TrendingGroupingService'
-  );
+    'TrendingGroupingService',
+  )
 
-  const content = response.choices[0]?.message?.content?.trim();
+  const content = response.choices[0]?.message?.content?.trim()
   if (content && isPromptLoggingEnabled()) {
     await logPrompt({
       promptType: 'trending_grouping_with_summary',
@@ -394,58 +421,58 @@ Return ONLY valid XML. No markdown, no explanations.`;
         temperature: 0.3,
         maxTokens: 2000,
       },
-    });
+    })
   }
 
   if (!content) {
     logger.warn(
       'No content in grouping response, using fallback',
       undefined,
-      'TrendingGroupingService'
-    );
-    return { tagToGroup: fallbackGrouping(tags), groupSummaries: new Map() };
+      'TrendingGroupingService',
+    )
+    return { tagToGroup: fallbackGrouping(tags), groupSummaries: new Map() }
   }
 
   // Parse XML response
   const xmlContent = content
     .replace(/```xml\n?/g, '')
     .replace(/```\n?/g, '')
-    .trim();
+    .trim()
 
-  const tagToGroup = new Map<string, number>();
-  const groupSummaries = new Map<number, string>();
+  const tagToGroup = new Map<string, number>()
+  const groupSummaries = new Map<number, string>()
 
   // Extract groups from XML
-  const groupMatches = xmlContent.matchAll(/<group>([\s\S]*?)<\/group>/g);
+  const groupMatches = xmlContent.matchAll(/<group>([\s\S]*?)<\/group>/g)
 
   for (const groupMatch of groupMatches) {
-    const groupContent = groupMatch[1];
-    if (!groupContent) continue;
+    const groupContent = groupMatch[1]
+    if (!groupContent) continue
 
-    const idMatch = groupContent.match(/<id>(\d+)<\/id>/);
-    const summaryMatch = groupContent.match(/<summary>(.*?)<\/summary>/);
-    const tagMatches = groupContent.matchAll(/<tag>(.*?)<\/tag>/g);
+    const idMatch = groupContent.match(/<id>(\d+)<\/id>/)
+    const summaryMatch = groupContent.match(/<summary>(.*?)<\/summary>/)
+    const tagMatches = groupContent.matchAll(/<tag>(.*?)<\/tag>/g)
 
-    if (!idMatch || !idMatch[1]) continue;
+    if (!idMatch || !idMatch[1]) continue
 
-    const groupId = Number.parseInt(idMatch[1], 10);
-    const tagNames: string[] = [];
+    const groupId = Number.parseInt(idMatch[1], 10)
+    const tagNames: string[] = []
 
     for (const tagMatch of tagMatches) {
       if (tagMatch[1]) {
-        tagNames.push(tagMatch[1].trim());
+        tagNames.push(tagMatch[1].trim())
       }
     }
 
     // Only process groups with 2+ tags
-    if (tagNames.length < 2) continue;
+    if (tagNames.length < 2) continue
 
     for (const tagName of tagNames) {
-      tagToGroup.set(tagName, groupId);
+      tagToGroup.set(tagName, groupId)
     }
 
-    if (summaryMatch && summaryMatch[1]) {
-      groupSummaries.set(groupId, summaryMatch[1].trim());
+    if (summaryMatch?.[1]) {
+      groupSummaries.set(groupId, summaryMatch[1].trim())
     }
   }
 
@@ -456,10 +483,10 @@ Return ONLY valid XML. No markdown, no explanations.`;
       groupedTags: tagToGroup.size,
       durationMs: duration,
     },
-    'TrendingGroupingService'
-  );
+    'TrendingGroupingService',
+  )
 
-  return { tagToGroup, groupSummaries };
+  return { tagToGroup, groupSummaries }
 }
 
 /**
@@ -469,14 +496,14 @@ Return ONLY valid XML. No markdown, no explanations.`;
 export async function generateTrendingSummary(
   tagDisplayName: string,
   category: string | null,
-  recentPosts: string[]
+  recentPosts: string[],
 ): Promise<string> {
   // Combine recent posts for context
-  const context = recentPosts.slice(0, 3).join(' | ');
+  const context = recentPosts.slice(0, 3).join(' | ')
 
   // If no context, return a generic summary
   if (!context || context.trim().length === 0) {
-    return `Trending topic in ${category || 'general'} discussions`;
+    return `Trending topic in ${category || 'general'} discussions`
   }
 
   // Jeju Compute client is always available
@@ -498,9 +525,9 @@ Examples:
 - "Market reactions to new AI regulation"
 - "Breaking news on election results"
 
-One sentence summary:`;
+One sentence summary:`
 
-  const startTime = Date.now();
+  const startTime = Date.now()
 
   const response = await withRetry(
     async () =>
@@ -521,12 +548,12 @@ One sentence summary:`;
         max_tokens: 50,
       }),
     LLM_MAX_RETRIES,
-    'Single trend summary generation'
-  );
+    'Single trend summary generation',
+  )
 
-  const duration = Date.now() - startTime;
-  const tokensUsed = response.usage?.total_tokens || 0;
-  const estimatedCost = calculateCost(SUMMARY_MODEL, tokensUsed);
+  const duration = Date.now() - startTime
+  const tokensUsed = response.usage?.total_tokens || 0
+  const estimatedCost = calculateCost(SUMMARY_MODEL, tokensUsed)
 
   logger.debug(
     'LLM single summary call completed',
@@ -536,15 +563,15 @@ One sentence summary:`;
       tokensUsed,
       estimatedCostUSD: estimatedCost,
     },
-    'TrendingGroupingService'
-  );
+    'TrendingGroupingService',
+  )
 
   let cleanSummary =
     response.choices[0]?.message?.content
       ?.trim()
       ?.replace(/^["']|["']$/g, '')
       ?.replace(/\.$/, '')
-      ?.trim() || '';
+      ?.trim() || ''
 
   if (isPromptLoggingEnabled()) {
     await logPrompt({
@@ -557,11 +584,11 @@ One sentence summary:`;
         temperature: 0.7,
         maxTokens: 50,
       },
-    });
+    })
   }
 
   if (!cleanSummary) {
-    return `Trending topic in ${category || 'general'} discussions`;
+    return `Trending topic in ${category || 'general'} discussions`
   }
 
   if (
@@ -569,15 +596,15 @@ One sentence summary:`;
     !cleanSummary.endsWith('!') &&
     !cleanSummary.endsWith('?')
   ) {
-    cleanSummary += '.';
+    cleanSummary += '.'
   }
 
-  const wordCount = cleanSummary.split(' ').length;
+  const wordCount = cleanSummary.split(' ').length
   if (wordCount > 20) {
-    cleanSummary = cleanSummary.split(' ').slice(0, 12).join(' ') + '...';
+    cleanSummary = `${cleanSummary.split(' ').slice(0, 12).join(' ')}...`
   }
 
-  return cleanSummary;
+  return cleanSummary
 }
 
 /**
@@ -586,27 +613,27 @@ One sentence summary:`;
  */
 export async function generateTrendingSummaries(
   tags: Array<{
-    displayName: string;
-    category: string | null;
-    recentPosts: string[];
-  }>
+    displayName: string
+    category: string | null
+    recentPosts: string[]
+  }>,
 ): Promise<Map<string, string>> {
-  const results = new Map<string, string>();
+  const results = new Map<string, string>()
 
   // Process in small batches to avoid rate limits
   for (const tag of tags) {
     const summary = await generateTrendingSummary(
       tag.displayName,
       tag.category,
-      tag.recentPosts
-    );
-    results.set(tag.displayName, summary);
+      tag.recentPosts,
+    )
+    results.set(tag.displayName, summary)
 
     // Small delay to respect rate limits
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    await new Promise((resolve) => setTimeout(resolve, 100))
   }
 
-  return results;
+  return results
 }
 
 /**
@@ -614,57 +641,58 @@ export async function generateTrendingSummaries(
  * Now uses combined grouping + summary in single LLM call for efficiency
  */
 export async function groupTrendingTags(
-  tags: TrendingTag[]
+  tags: TrendingTag[],
 ): Promise<GroupedTrend[]> {
   if (tags.length === 0) {
-    return [];
+    return []
   }
 
-  const startTime = Date.now();
+  const startTime = Date.now()
   logger.info(
     'Starting trending tags grouping',
     { tagCount: tags.length },
-    'TrendingGroupingService'
-  );
+    'TrendingGroupingService',
+  )
 
   // Get grouping instructions AND summaries from LLM in single call
-  const { tagToGroup, groupSummaries } = await analyzeAndSummarizeTags(tags);
+  const { tagToGroup, groupSummaries } = await analyzeAndSummarizeTags(tags)
 
   // Build groups
-  const groups = new Map<number, TrendingTag[]>();
-  const ungroupedTags: TrendingTag[] = [];
+  const groups = new Map<number, TrendingTag[]>()
+  const ungroupedTags: TrendingTag[] = []
 
   for (const tag of tags) {
-    const groupId = tagToGroup.get(tag.tag);
+    const groupId = tagToGroup.get(tag.tag)
     if (groupId !== undefined) {
       if (!groups.has(groupId)) {
-        groups.set(groupId, []);
+        groups.set(groupId, [])
       }
-      groups.get(groupId)!.push(tag);
+      groups.get(groupId)?.push(tag)
     } else {
-      ungroupedTags.push(tag);
+      ungroupedTags.push(tag)
     }
   }
 
   // Create grouped trends
-  const result: GroupedTrend[] = [];
+  const result: GroupedTrend[] = []
 
   // Process groups (multiple tags)
   for (const [groupId, groupTags] of groups.entries()) {
     if (groupTags.length < 2) {
       // If group ended up with only 1 tag, treat as ungrouped
-      ungroupedTags.push(...groupTags);
-      continue;
+      ungroupedTags.push(...groupTags)
+      continue
     }
 
     // Sort by post count to pick primary tag
-    groupTags.sort((a, b) => b.postCount - a.postCount);
-    const primaryTag = groupTags[0]!;
+    groupTags.sort((a, b) => b.postCount - a.postCount)
+    const primaryTag = groupTags[0]
+    if (!primaryTag) continue
 
     // Use pre-generated summary from combined LLM call, or fallback
     const summary =
       groupSummaries.get(groupId) ||
-      `${groupTags.map((t) => t.tag).join(', ')} trending in ${primaryTag.category || 'general'}`;
+      `${groupTags.map((t) => t.tag).join(', ')} trending in ${primaryTag.category || 'general'}`
 
     logger.debug(
       'Created grouped trend',
@@ -674,8 +702,8 @@ export async function groupTrendingTags(
         totalPosts: groupTags.reduce((sum, t) => sum + t.postCount, 0),
         summary,
       },
-      'TrendingGroupingService'
-    );
+      'TrendingGroupingService',
+    )
 
     result.push({
       id: primaryTag.id,
@@ -686,7 +714,7 @@ export async function groupTrendingTags(
       totalPostCount: groupTags.reduce((sum, t) => sum + t.postCount, 0),
       summary,
       rank: Math.min(...groupTags.map((t) => t.rank)), // Use best rank
-    });
+    })
   }
 
   // Add ungrouped tags as single-tag groups
@@ -700,13 +728,13 @@ export async function groupTrendingTags(
       totalPostCount: tag.postCount,
       summary: tag.summary || `Trending in ${tag.category || 'general'}`,
       rank: tag.rank,
-    });
+    })
   }
 
   // Sort by rank
-  result.sort((a, b) => a.rank - b.rank);
+  result.sort((a, b) => a.rank - b.rank)
 
-  const duration = Date.now() - startTime;
+  const duration = Date.now() - startTime
   logger.info(
     'Trending tags grouping complete',
     {
@@ -715,8 +743,8 @@ export async function groupTrendingTags(
       multiTagGroups: result.filter((g) => g.tags.length > 1).length,
       durationMs: duration,
     },
-    'TrendingGroupingService'
-  );
+    'TrendingGroupingService',
+  )
 
-  return result;
+  return result
 }

@@ -2,4 +2,4 @@
  * MCP Authentication
  */
 
-export * from './agent-auth';
+export * from './agent-auth'

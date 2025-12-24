@@ -4,7 +4,7 @@
  * Shared types for common patterns that replace 'unknown' and 'any'
  */
 
-import { z } from 'zod';
+import { z } from 'zod'
 
 /**
  * JSON-serializable value types
@@ -16,13 +16,13 @@ export type JsonValue =
   | boolean
   | null
   | JsonValue[]
-  | { [key: string]: JsonValue };
+  | { [key: string]: JsonValue }
 
 /**
  * Zod schema for JSON-serializable values
  * Used in validation schemas for metadata and flexible data fields
  */
-export type JsonValueSchema = z.ZodType<JsonValue>;
+export type JsonValueSchema = z.ZodType<JsonValue>
 
 export const JsonValueSchema: JsonValueSchema = z.lazy(() =>
   z.union([
@@ -32,129 +32,141 @@ export const JsonValueSchema: JsonValueSchema = z.lazy(() =>
     z.null(),
     z.array(JsonValueSchema),
     z.record(z.string(), JsonValueSchema),
-  ])
-);
+  ]),
+)
 
 /**
  * Generic key-value record with string keys
  */
-export type StringRecord<T = JsonValue> = Record<string, T>;
+export type StringRecord<T = JsonValue> = Record<string, T>
 
 /**
  * Error-like object that may have a message property
  */
 export interface ErrorLike {
-  message?: string;
-  name?: string;
-  stack?: string;
-  code?: string | number;
-  [key: string]: JsonValue | undefined;
+  message?: string
+  name?: string
+  stack?: string
+  code?: string | number
+  [key: string]: JsonValue | undefined
 }
 
 /**
  * Parameters for JSON-RPC requests
  */
-export type JsonRpcParams = StringRecord<JsonValue> | JsonValue[];
+export type JsonRpcParams = StringRecord<JsonValue> | JsonValue[]
 
 /**
- * Result type for JSON-RPC responses
+ * Result type for JSON-RPC responses.
+ * When a specific type T is provided, the result is typed as T.
+ * When no type is given, defaults to JsonValue for backwards compatibility.
  */
-export type JsonRpcResult = JsonValue | StringRecord<JsonValue> | JsonValue[];
+export type JsonRpcResult<T = JsonValue> = T
 
 /**
  * JSON-RPC 2.0 Request
  */
 export interface JsonRpcRequest {
-  jsonrpc: '2.0';
-  method: string;
-  params?: JsonRpcParams;
-  id: string | number;
+  jsonrpc: '2.0'
+  method: string
+  params?: JsonRpcParams
+  id: string | number
 }
 
 /**
  * JSON-RPC 2.0 Error
  */
 export interface JsonRpcError {
-  code: number;
-  message: string;
-  data?: JsonValue;
+  code: number
+  message: string
+  data?: JsonValue
 }
 
 /**
  * JSON-RPC 2.0 Response
+ * Generic T allows for typed results while maintaining compatibility with JsonValue
  */
-export interface JsonRpcResponse {
-  jsonrpc: '2.0';
-  result?: JsonRpcResult;
-  error?: JsonRpcError;
-  id: string | number | null;
+export interface JsonRpcResponse<T = JsonValue> {
+  jsonrpc: '2.0'
+  result?: JsonRpcResult<T>
+  error?: JsonRpcError
+  id: string | number | null
 }
 
 /**
  * JSON-RPC 2.0 Notification (request without id)
  */
 export interface JsonRpcNotification {
-  jsonrpc: '2.0';
-  method: string;
-  params?: JsonRpcParams;
+  jsonrpc: '2.0'
+  method: string
+  params?: JsonRpcParams
+}
+
+/**
+ * API error structure
+ */
+export interface ApiError {
+  code: string
+  message: string
+  details?: JsonValue
 }
 
 /**
  * API response wrapper
  */
 export interface ApiResponse<T = JsonValue> {
-  success: boolean;
-  data?: T;
-  error?: string;
-  message?: string;
+  success: boolean
+  data?: T
+  error?: string | ApiError
+  message?: string
 }
 
 /**
  * Pagination parameters
  */
 export interface PaginationParams {
-  limit: number;
-  offset: number;
-  page?: number;
+  limit: number
+  offset: number
+  page?: number
 }
 
 /**
  * Paginated response
  */
 export interface PaginatedResponse<T> {
-  items: T[];
-  total: number;
-  limit: number;
-  offset: number;
-  hasMore: boolean;
+  items: T[]
+  total: number
+  limit: number
+  offset: number
+  hasMore: boolean
 }
 
 /**
  * Sort order
  */
-export type SortOrder = 'asc' | 'desc';
+export type SortOrder = 'asc' | 'desc'
 
 /**
  * Sort parameters
  */
 export interface SortParams {
-  field: string;
-  order: SortOrder;
+  field: string
+  order: SortOrder
 }
 
 /**
  * Filter parameters
  */
 export interface FilterParams {
-  [key: string]: JsonValue | JsonValue[] | undefined;
+  [key: string]: JsonValue | JsonValue[] | undefined
 }
 
 /**
  * Query parameters combining pagination, sorting, and filtering
  */
 export interface QueryParams extends PaginationParams {
-  sort?: SortParams;
-  filters?: FilterParams;
+  sort?: SortParams
+  filters?: FilterParams
 }
 
 /**
@@ -163,16 +175,16 @@ export interface QueryParams extends PaginationParams {
  */
 export interface PostHogServerClient {
   capture(params: {
-    distinctId: string;
-    event: string;
-    properties?: StringRecord<JsonValue>;
-  }): void;
+    distinctId: string
+    event: string
+    properties?: StringRecord<JsonValue>
+  }): void
   identify(params: {
-    distinctId: string;
-    properties?: StringRecord<JsonValue>;
-  }): void;
-  flush(): Promise<void>;
-  shutdown(): Promise<void>;
+    distinctId: string
+    properties?: StringRecord<JsonValue>
+  }): void
+  flush(): Promise<void>
+  shutdown(): Promise<void>
 }
 
 /**
@@ -183,12 +195,12 @@ export interface PostHogServerConstructor {
   new (
     apiKey: string,
     options?: {
-      host?: string;
-      flushAt?: number;
-      flushInterval?: number;
-      requestTimeout?: number;
-    }
-  ): PostHogServerClient;
+      host?: string
+      flushAt?: number
+      flushInterval?: number
+      requestTimeout?: number
+    },
+  ): PostHogServerClient
 }
 
 /**
@@ -199,34 +211,34 @@ export interface PostHogClient {
   init(
     apiKey: string,
     options?: {
-      api_host?: string;
-      capture_pageview?: boolean;
-      capture_pageleave?: boolean;
+      api_host?: string
+      capture_pageview?: boolean
+      capture_pageleave?: boolean
       session_recording?: {
-        maskAllInputs?: boolean;
-        maskTextSelector?: string;
-        recordCrossOriginIframes?: boolean;
-      };
+        maskAllInputs?: boolean
+        maskTextSelector?: string
+        recordCrossOriginIframes?: boolean
+      }
       autocapture?: {
-        dom_event_allowlist?: string[];
-        url_allowlist?: string[];
-        element_allowlist?: string[];
-        css_selector_allowlist?: string[];
-      };
-      loaded?: () => void;
-      respect_dnt?: boolean;
-      persistence?: string;
-      enable_recording_console_log?: boolean;
-      capture_exceptions?: boolean;
+        dom_event_allowlist?: string[]
+        url_allowlist?: string[]
+        element_allowlist?: string[]
+        css_selector_allowlist?: string[]
+      }
+      loaded?: () => void
+      respect_dnt?: boolean
+      persistence?: string
+      enable_recording_console_log?: boolean
+      capture_exceptions?: boolean
       sanitize_properties?: (
-        properties: StringRecord<JsonValue>
-      ) => StringRecord<JsonValue>;
-    }
-  ): void;
-  capture(event: string, properties?: StringRecord<JsonValue>): void;
-  identify(distinctId: string, properties?: StringRecord<JsonValue>): void;
-  reset(): void;
-  __loaded?: boolean;
+        properties: StringRecord<JsonValue>,
+      ) => StringRecord<JsonValue>
+    },
+  ): void
+  capture(event: string, properties?: StringRecord<JsonValue>): void
+  identify(distinctId: string, properties?: StringRecord<JsonValue>): void
+  reset(): void
+  __loaded?: boolean
 }
 
 /**
@@ -234,6 +246,6 @@ export interface PostHogClient {
  * Type for PostHog default export from posthog-js package
  */
 export interface PostHogClientConstructor {
-  (): PostHogClient;
-  default: PostHogClientConstructor;
+  (): PostHogClient
+  default: PostHogClientConstructor
 }

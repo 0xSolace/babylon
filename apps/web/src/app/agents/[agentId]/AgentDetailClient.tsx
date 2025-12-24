@@ -26,10 +26,8 @@
  * ```
  */
 
-'use client';
-
-import { cn } from '@babylon/shared';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { cn } from '@babylon/shared'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Activity,
   ArrowLeft,
@@ -38,57 +36,56 @@ import {
   MessageCircle,
   Settings,
   TrendingUp,
-} from 'lucide-react';
-
-import Link from 'next/link';
-import { useParams, useRouter } from 'next/navigation';
-import { useCallback, useEffect } from 'react';
-import { toast } from 'sonner';
-import { AgentChat } from '@/components/agents/AgentChat';
-import { AgentLogs } from '@/components/agents/AgentLogs';
-import { AgentPerformance } from '@/components/agents/AgentPerformance';
-import { AgentSettings } from '@/components/agents/AgentSettings';
-import { AgentWallet } from '@/components/agents/AgentWallet';
-import { Avatar } from '@/components/shared/Avatar';
-import { PageContainer } from '@/components/shared/PageContainer';
-import { Skeleton } from '@/components/shared/Skeleton';
-import { Button } from '@/components/ui/button';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { useAuth } from '@/hooks/useAuth';
+} from 'lucide-react'
+import { useCallback, useEffect } from 'react'
+import { Link, useParams } from 'react-router-dom'
+import { toast } from 'sonner'
+import { AgentChat } from '@/components/agents/AgentChat'
+import { AgentLogs } from '@/components/agents/AgentLogs'
+import { AgentPerformance } from '@/components/agents/AgentPerformance'
+import { AgentSettings } from '@/components/agents/AgentSettings'
+import { AgentWallet } from '@/components/agents/AgentWallet'
+import { Avatar } from '@/components/shared/Avatar'
+import { PageContainer } from '@/components/shared/PageContainer'
+import { Skeleton } from '@/components/shared/Skeleton'
+import { Button } from '@/components/ui/button'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { useAuth } from '@/hooks/useAuth'
+import { useRouter } from '@/lib/navigation'
 
 /**
  * Agent data structure
  */
 interface Agent {
-  id: string;
-  name: string;
-  description?: string;
-  profileImageUrl?: string;
-  system: string;
-  bio?: string[];
-  personality?: string;
-  tradingStrategy?: string;
-  pointsBalance: number;
-  totalDeposited: number;
-  totalWithdrawn: number;
-  totalPointsSpent: number;
-  isActive: boolean;
-  autonomousEnabled: boolean;
-  modelTier: 'free' | 'pro';
-  status: string;
-  errorMessage?: string;
-  lifetimePnL: string;
-  totalTrades: number;
-  profitableTrades: number;
-  winRate: number;
-  lastTickAt?: string;
-  lastChatAt?: string;
-  walletAddress?: string;
-  agent0TokenId?: number;
-  onChainRegistered: boolean;
-  a2aEnabled?: boolean;
-  createdAt: string;
-  updatedAt: string;
+  id: string
+  name: string
+  description?: string
+  profileImageUrl?: string
+  system: string
+  bio?: string[]
+  personality?: string
+  tradingStrategy?: string
+  pointsBalance: number
+  totalDeposited: number
+  totalWithdrawn: number
+  totalPointsSpent: number
+  isActive: boolean
+  autonomousEnabled: boolean
+  modelTier: 'free' | 'pro'
+  status: string
+  errorMessage?: string
+  lifetimePnL: string
+  totalTrades: number
+  profitableTrades: number
+  winRate: number
+  lastTickAt?: string
+  lastChatAt?: string
+  walletAddress?: string
+  agent0TokenId?: number
+  onChainRegistered: boolean
+  a2aEnabled?: boolean
+  createdAt: string
+  updatedAt: string
 }
 
 /**
@@ -101,19 +98,19 @@ interface Agent {
  * @returns {JSX.Element} Agent detail page
  */
 export default function AgentDetailClient() {
-  const params = useParams();
-  const router = useRouter();
-  const queryClient = useQueryClient();
-  const { authenticated, ready, getAccessToken } = useAuth();
+  const params = useParams()
+  const router = useRouter()
+  const queryClient = useQueryClient()
+  const { authenticated, ready, getAccessToken } = useAuth()
   // Dynamic route: params.agentId is string
-  const agentId = params.agentId as string | undefined;
+  const agentId = params.agentId as string | undefined
 
   // Redirect to agents list if no agent ID provided
   useEffect(() => {
     if (!agentId) {
-      router.replace('/agents');
+      router.replace('/agents')
     }
-  }, [agentId, router]);
+  }, [agentId, router])
 
   const {
     data: agent,
@@ -122,41 +119,41 @@ export default function AgentDetailClient() {
   } = useQuery({
     queryKey: ['agent', agentId],
     queryFn: async () => {
-      const token = await getAccessToken();
+      const token = await getAccessToken()
 
       if (!token) {
-        console.error('No access token available');
-        toast.error('Authentication required');
-        router.push('/agents');
-        throw new Error('No access token available');
+        console.error('No access token available')
+        toast.error('Authentication required')
+        router.push('/agents')
+        throw new Error('No access token available')
       }
 
       const res = await fetch(`/api/agents/${agentId}`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
-      });
+      })
 
       if (!res.ok) {
-        toast.error('Agent not found');
-        router.push('/agents');
-        throw new Error('Agent not found');
+        toast.error('Agent not found')
+        router.push('/agents')
+        throw new Error('Agent not found')
       }
 
-      const data = await res.json();
-      return data.agent as Agent;
+      const data = await res.json()
+      return data.agent as Agent
     },
     enabled: !!agentId && ready && authenticated,
-  });
+  })
 
   const handleBalanceUpdate = useCallback(
     (newBalance: number) => {
       queryClient.setQueryData(['agent', agentId], (prev: Agent | undefined) =>
-        prev ? { ...prev, pointsBalance: newBalance } : prev
-      );
+        prev ? { ...prev, pointsBalance: newBalance } : prev,
+      )
     },
-    [queryClient, agentId]
-  );
+    [queryClient, agentId],
+  )
 
   if (!ready || !authenticated) {
     return (
@@ -169,7 +166,7 @@ export default function AgentDetailClient() {
           </div>
         </div>
       </PageContainer>
-    );
+    )
   }
 
   if (loading) {
@@ -183,7 +180,7 @@ export default function AgentDetailClient() {
           </div>
         </div>
       </PageContainer>
-    );
+    )
   }
 
   if (!agent) {
@@ -196,15 +193,18 @@ export default function AgentDetailClient() {
             <p className="mb-6 text-muted-foreground text-sm">
               This agent doesn't exist or you don't have access to it
             </p>
-            <Link href="/agents">
-              <button className="rounded-lg bg-[#0066FF] px-6 py-2 font-medium text-primary-foreground transition-colors hover:bg-[#2952d9]">
+            <Link to="/agents">
+              <button
+                type="button"
+                className="rounded-lg bg-[#0066FF] px-6 py-2 font-medium text-primary-foreground transition-colors hover:bg-[#2952d9]"
+              >
                 Back to Agents
               </button>
             </Link>
           </div>
         </div>
       </PageContainer>
-    );
+    )
   }
 
   return (
@@ -286,7 +286,7 @@ export default function AgentDetailClient() {
                   'font-semibold text-xl',
                   parseFloat(agent.lifetimePnL) >= 0
                     ? 'text-green-600'
-                    : 'text-red-600'
+                    : 'text-red-600',
                 )}
               >
                 {parseFloat(agent.lifetimePnL).toFixed(2)}
@@ -359,5 +359,5 @@ export default function AgentDetailClient() {
         </Tabs>
       </div>
     </PageContainer>
-  );
+  )
 }

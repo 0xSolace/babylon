@@ -1,5 +1,3 @@
-'use client';
-
 import {
   cn,
   type FeeStatsResponse,
@@ -8,8 +6,8 @@ import {
   SystemStatsResponseSchema,
   type TokenStatsResponse,
   TokenStatsResponseSchema,
-} from '@babylon/shared';
-import { useQuery } from '@tanstack/react-query';
+} from '@babylon/shared'
+import { useQuery } from '@tanstack/react-query'
 import {
   Activity,
   Award,
@@ -21,9 +19,9 @@ import {
   UserCheck,
   Users,
   Zap,
-} from 'lucide-react';
-import { Avatar } from '@/components/shared/Avatar';
-import { Skeleton } from '@/components/shared/Skeleton';
+} from 'lucide-react'
+import { Avatar } from '@/components/shared/Avatar'
+import { Skeleton } from '@/components/shared/Skeleton'
 
 /**
  * Stats tab component for displaying comprehensive system statistics.
@@ -54,60 +52,60 @@ export function StatsTab() {
   } = useQuery<SystemStatsResponse>({
     queryKey: ['admin', 'stats'],
     queryFn: async () => {
-      const response = await fetch('/api/admin/stats');
-      if (!response.ok) throw new Error('Failed to fetch stats');
-      const data = await response.json();
-      const validation = SystemStatsResponseSchema.safeParse(data);
+      const response = await fetch('/api/admin/stats')
+      if (!response.ok) throw new Error('Failed to fetch stats')
+      const data = await response.json()
+      const validation = SystemStatsResponseSchema.safeParse(data)
       if (!validation.success) {
-        throw new Error('Invalid system stats data structure');
+        throw new Error('Invalid system stats data structure')
       }
-      return validation.data;
+      return validation.data
     },
     refetchInterval: 30000, // Refresh every 30 seconds
-  });
+  })
 
   const { data: feeStats } = useQuery<FeeStatsResponse | null>({
     queryKey: ['admin', 'fees', 'platform'],
     queryFn: async () => {
-      const response = await fetch('/api/admin/fees');
-      if (!response.ok) return null;
-      const data = await response.json();
-      const validation = FeeStatsResponseSchema.safeParse(data);
+      const response = await fetch('/api/admin/fees')
+      if (!response.ok) return null
+      const data = await response.json()
+      const validation = FeeStatsResponseSchema.safeParse(data)
       if (validation.success) {
-        return validation.data;
+        return validation.data
       }
-      return null;
+      return null
     },
     refetchInterval: 30000,
-  });
+  })
 
   const { data: tokenStats } = useQuery<TokenStatsResponse | null>({
     queryKey: ['admin', 'stats', 'tokens'],
     queryFn: async () => {
-      const response = await fetch('/api/stats/tokens?period=day&limit=50');
-      if (!response.ok) return null;
-      const data = await response.json();
-      const validation = TokenStatsResponseSchema.safeParse(data);
+      const response = await fetch('/api/stats/tokens?period=day&limit=50')
+      if (!response.ok) return null
+      const data = await response.json()
+      const validation = TokenStatsResponseSchema.safeParse(data)
       if (validation.success) {
-        return validation.data;
+        return validation.data
       }
-      return null;
+      return null
     },
     refetchInterval: 30000,
-  });
+  })
 
   const formatCurrency = (value: string) => {
-    const num = parseFloat(value);
-    if (num >= 1000000) return `$${(num / 1000000).toFixed(2)}M`;
-    if (num >= 1000) return `$${(num / 1000).toFixed(2)}K`;
-    return `$${num.toFixed(2)}`;
-  };
+    const num = parseFloat(value)
+    if (num >= 1000000) return `$${(num / 1000000).toFixed(2)}M`
+    if (num >= 1000) return `$${(num / 1000).toFixed(2)}K`
+    return `$${num.toFixed(2)}`
+  }
 
   const formatNumber = (value: number) => {
-    if (value >= 1000000) return `${(value / 1000000).toFixed(2)}M`;
-    if (value >= 1000) return `${(value / 1000).toFixed(2)}K`;
-    return value.toLocaleString();
-  };
+    if (value >= 1000000) return `${(value / 1000000).toFixed(2)}M`
+    if (value >= 1000) return `${(value / 1000).toFixed(2)}K`
+    return value.toLocaleString()
+  }
 
   const StatItem = ({
     icon: Icon,
@@ -115,10 +113,10 @@ export function StatsTab() {
     value,
     color = 'primary',
   }: {
-    icon: React.ComponentType<{ className?: string }>;
-    label: string;
-    value: string | number;
-    color?: 'primary' | 'green' | 'blue' | 'orange' | 'red' | 'purple';
+    icon: React.ComponentType<{ className?: string }>
+    label: string
+    value: string | number
+    color?: 'primary' | 'green' | 'blue' | 'orange' | 'red' | 'purple'
   }) => {
     const colorClasses = {
       primary: 'text-primary',
@@ -127,7 +125,7 @@ export function StatsTab() {
       orange: 'text-orange-500',
       red: 'text-red-500',
       purple: 'text-purple-500',
-    };
+    }
 
     return (
       <div className="flex items-center gap-3">
@@ -137,8 +135,8 @@ export function StatsTab() {
           <div className="font-bold text-xl">{value}</div>
         </div>
       </div>
-    );
-  };
+    )
+  }
 
   if (isLoading) {
     return (
@@ -148,7 +146,7 @@ export function StatsTab() {
           <Skeleton className="h-32 w-full" />
         </div>
       </div>
-    );
+    )
   }
 
   if (error || !stats) {
@@ -156,7 +154,7 @@ export function StatsTab() {
       <div className="p-8 text-center text-red-500">
         {error instanceof Error ? error.message : 'Failed to load statistics'}
       </div>
-    );
+    )
   }
 
   return (
@@ -278,7 +276,7 @@ export function StatsTab() {
               </div>
               <div className="font-bold text-2xl text-green-500">
                 {formatCurrency(
-                  feeStats.platformStats.totalFeesCollected.toString()
+                  feeStats.platformStats.totalFeesCollected.toString(),
                 )}
               </div>
             </div>
@@ -288,7 +286,7 @@ export function StatsTab() {
               </div>
               <div className="font-bold text-xl">
                 {formatCurrency(
-                  feeStats.platformStats.totalPlatformFees.toString()
+                  feeStats.platformStats.totalPlatformFees.toString(),
                 )}
               </div>
             </div>
@@ -298,7 +296,7 @@ export function StatsTab() {
               </div>
               <div className="font-bold text-xl">
                 {formatCurrency(
-                  feeStats.platformStats.totalReferrerFees.toString()
+                  feeStats.platformStats.totalReferrerFees.toString(),
                 )}
               </div>
             </div>
@@ -579,7 +577,7 @@ export function StatsTab() {
                   #{index + 1}
                 </div>
                 <Avatar
-                  src={user.profileImageUrl ?? undefined}
+                  src={user.profileImageUrl}
                   alt={user.displayName || user.username || 'User'}
                   size="sm"
                 />
@@ -602,7 +600,7 @@ export function StatsTab() {
                       'text-xs',
                       parseFloat(user.lifetimePnL) >= 0
                         ? 'text-green-600'
-                        : 'text-red-600'
+                        : 'text-red-600',
                     )}
                   >
                     P&L: {formatCurrency(user.lifetimePnL)}
@@ -625,7 +623,7 @@ export function StatsTab() {
                 className="flex items-center gap-3 p-3 transition-colors hover:bg-accent/50"
               >
                 <Avatar
-                  src={user.profileImageUrl ?? undefined}
+                  src={user.profileImageUrl}
                   alt={user.displayName || user.username || 'User'}
                   size="sm"
                 />
@@ -660,5 +658,5 @@ export function StatsTab() {
         </div>
       </div>
     </div>
-  );
+  )
 }

@@ -1,7 +1,5 @@
-'use client';
-
-import { cn } from '@babylon/shared';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { cn } from '@babylon/shared'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   AlertTriangle,
   RefreshCw,
@@ -10,40 +8,40 @@ import {
   UserMinus,
   UserPlus,
   X,
-} from 'lucide-react';
-import { useState } from 'react';
-import { toast } from 'sonner';
-import { Avatar } from '@/components/shared/Avatar';
-import { Skeleton } from '@/components/shared/Skeleton';
+} from 'lucide-react'
+import { useState } from 'react'
+import { toast } from 'sonner'
+import { Avatar } from '@/components/shared/Avatar'
+import { Skeleton } from '@/components/shared/Skeleton'
 
 /**
  * Admin user structure for admin management tab.
  */
 interface AdminUser {
-  id: string;
-  username: string | null;
-  displayName: string | null;
-  walletAddress: string | null;
-  profileImageUrl: string | null;
-  isActor: boolean;
-  isAdmin: boolean;
-  createdAt: string;
-  updatedAt: string;
-  onChainRegistered: boolean;
-  hasFarcaster: boolean;
-  hasTwitter: boolean;
+  id: string
+  username: string | null
+  displayName: string | null
+  walletAddress: string | null
+  profileImageUrl: string | null
+  isActor: boolean
+  isAdmin: boolean
+  createdAt: string
+  updatedAt: string
+  onChainRegistered: boolean
+  hasFarcaster: boolean
+  hasTwitter: boolean
 }
 
 /**
  * Available user structure for adding admins.
  */
 interface AvailableUser {
-  id: string;
-  username: string | null;
-  displayName: string | null;
-  profileImageUrl: string | null;
-  walletAddress: string | null;
-  isActor: boolean;
+  id: string
+  username: string | null
+  displayName: string | null
+  profileImageUrl: string | null
+  walletAddress: string | null
+  isActor: boolean
 }
 
 /**
@@ -64,11 +62,11 @@ interface AvailableUser {
  * @returns Admin management tab element
  */
 export function AdminManagementTab() {
-  const queryClient = useQueryClient();
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [showRemoveModal, setShowRemoveModal] = useState(false);
-  const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null);
-  const [searchQuery, setSearchQuery] = useState('');
+  const queryClient = useQueryClient()
+  const [showAddModal, setShowAddModal] = useState(false)
+  const [showRemoveModal, setShowRemoveModal] = useState(false)
+  const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null)
+  const [searchQuery, setSearchQuery] = useState('')
 
   const {
     data: admins = [],
@@ -78,12 +76,12 @@ export function AdminManagementTab() {
   } = useQuery<AdminUser[]>({
     queryKey: ['admin', 'admins'],
     queryFn: async () => {
-      const response = await fetch('/api/admin/admins');
-      if (!response.ok) throw new Error('Failed to fetch admins');
-      const data: { admins: AdminUser[] } = await response.json();
-      return data.admins || [];
+      const response = await fetch('/api/admin/admins')
+      if (!response.ok) throw new Error('Failed to fetch admins')
+      const data: { admins: AdminUser[] } = await response.json()
+      return data.admins || []
     },
-  });
+  })
 
   const { data: availableUsers = [], isFetching: loadingUsers } = useQuery<
     AvailableUser[]
@@ -96,26 +94,26 @@ export function AdminManagementTab() {
       admins.map((a) => a.id),
     ],
     queryFn: async () => {
-      if (!searchQuery.trim()) return [];
+      if (!searchQuery.trim()) return []
 
       const params = new URLSearchParams({
         search: searchQuery,
         limit: '10',
         filter: 'users', // Only real users, not actors
-      });
-      const response = await fetch(`/api/admin/users?${params}`);
-      if (!response.ok) return [];
+      })
+      const response = await fetch(`/api/admin/users?${params}`)
+      if (!response.ok) return []
 
-      const data: { users: AvailableUser[] } = await response.json();
+      const data: { users: AvailableUser[] } = await response.json()
 
       // Filter out users who are already admins
-      const adminIds = new Set(admins.map((a) => a.id));
+      const adminIds = new Set(admins.map((a) => a.id))
       return (data.users || []).filter(
-        (u: AvailableUser) => !adminIds.has(u.id) && !u.isActor
-      );
+        (u: AvailableUser) => !adminIds.has(u.id) && !u.isActor,
+      )
     },
     enabled: searchQuery.trim().length > 0,
-  });
+  })
 
   const addAdminMutation = useMutation({
     mutationFn: async (userId: string) => {
@@ -123,31 +121,31 @@ export function AdminManagementTab() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'promote' }),
-      });
+      })
 
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'Failed to add admin');
+        const error = await response.json()
+        throw new Error(error.message || 'Failed to add admin')
       }
 
-      return response.json();
+      return response.json()
     },
     onSuccess: (result: {
-      user: { displayName: string | null; username: string | null };
+      user: { displayName: string | null; username: string | null }
     }) => {
       toast.success(
-        `${result.user.displayName || result.user.username || 'User'} is now an admin`
-      );
-      setShowAddModal(false);
-      setSearchQuery('');
-      queryClient.invalidateQueries({ queryKey: ['admin', 'admins'] });
+        `${result.user.displayName || result.user.username || 'User'} is now an admin`,
+      )
+      setShowAddModal(false)
+      setSearchQuery('')
+      queryClient.invalidateQueries({ queryKey: ['admin', 'admins'] })
     },
     onError: (error) => {
       toast.error(
-        error instanceof Error ? error.message : 'Failed to add admin'
-      );
+        error instanceof Error ? error.message : 'Failed to add admin',
+      )
     },
-  });
+  })
 
   const removeAdminMutation = useMutation({
     mutationFn: async (userId: string) => {
@@ -155,42 +153,42 @@ export function AdminManagementTab() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'demote' }),
-      });
+      })
 
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'Failed to remove admin');
+        const error = await response.json()
+        throw new Error(error.message || 'Failed to remove admin')
       }
 
-      return response.json();
+      return response.json()
     },
     onSuccess: (result: {
-      user: { displayName: string | null; username: string | null };
+      user: { displayName: string | null; username: string | null }
     }) => {
       toast.success(
-        `${result.user.displayName || result.user.username || 'User'} is no longer an admin`
-      );
-      setShowRemoveModal(false);
-      setSelectedUser(null);
-      queryClient.invalidateQueries({ queryKey: ['admin', 'admins'] });
+        `${result.user.displayName || result.user.username || 'User'} is no longer an admin`,
+      )
+      setShowRemoveModal(false)
+      setSelectedUser(null)
+      queryClient.invalidateQueries({ queryKey: ['admin', 'admins'] })
     },
     onError: (error) => {
       toast.error(
-        error instanceof Error ? error.message : 'Failed to remove admin'
-      );
+        error instanceof Error ? error.message : 'Failed to remove admin',
+      )
     },
-  });
+  })
 
   const formatDate = (date: string) => {
     return new Date(date).toLocaleDateString('en-US', {
       month: 'short',
       day: 'numeric',
       year: 'numeric',
-    });
-  };
+    })
+  }
 
   const AdminRow = ({ admin }: { admin: AdminUser }) => {
-    const displayName = admin.displayName || admin.username || 'Anonymous';
+    const displayName = admin.displayName || admin.username || 'Anonymous'
 
     return (
       <div className="rounded-2xl border border-border bg-card p-4 transition-colors hover:border-primary/50">
@@ -250,9 +248,10 @@ export function AdminManagementTab() {
           {/* Actions */}
           <div className="flex flex-col gap-2">
             <button
+              type="button"
               onClick={() => {
-                setSelectedUser(admin);
-                setShowRemoveModal(true);
+                setSelectedUser(admin)
+                setShowRemoveModal(true)
               }}
               disabled={removeAdminMutation.isPending}
               className="flex items-center gap-1 whitespace-nowrap rounded bg-red-500/20 px-3 py-1.5 font-medium text-red-500 text-sm transition-colors hover:bg-red-500/30 disabled:opacity-50"
@@ -263,8 +262,8 @@ export function AdminManagementTab() {
           </div>
         </div>
       </div>
-    );
-  };
+    )
+  }
 
   if (isLoading) {
     return (
@@ -275,7 +274,7 @@ export function AdminManagementTab() {
           <Skeleton className="h-24 w-full" />
         </div>
       </div>
-    );
+    )
   }
 
   return (
@@ -295,6 +294,7 @@ export function AdminManagementTab() {
 
         <div className="flex gap-2">
           <button
+            type="button"
             onClick={() => refetch()}
             disabled={isFetching}
             className="flex items-center gap-2 rounded bg-muted px-3 py-2 font-medium text-sm transition-colors hover:bg-muted/80 disabled:opacity-50"
@@ -306,6 +306,7 @@ export function AdminManagementTab() {
           </button>
 
           <button
+            type="button"
             onClick={() => setShowAddModal(true)}
             className="flex items-center gap-2 rounded bg-primary px-4 py-2 font-medium text-primary-foreground text-sm transition-colors hover:bg-primary/90"
           >
@@ -336,9 +337,10 @@ export function AdminManagementTab() {
             <div className="mb-4 flex items-center justify-between">
               <h2 className="font-bold text-xl">Add Admin</h2>
               <button
+                type="button"
                 onClick={() => {
-                  setShowAddModal(false);
-                  setSearchQuery('');
+                  setShowAddModal(false)
+                  setSearchQuery('')
                 }}
                 className="text-muted-foreground transition-colors hover:text-foreground"
               >
@@ -360,7 +362,6 @@ export function AdminManagementTab() {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full rounded-lg border border-border bg-background py-2 pr-4 pl-10 focus:border-primary focus:outline-none"
-                autoFocus
               />
             </div>
 
@@ -403,6 +404,7 @@ export function AdminManagementTab() {
                     </div>
 
                     <button
+                      type="button"
                       onClick={() => addAdminMutation.mutate(user.id)}
                       disabled={addAdminMutation.isPending}
                       className="rounded bg-primary px-3 py-1.5 font-medium text-primary-foreground text-sm transition-colors hover:bg-primary/90 disabled:opacity-50"
@@ -444,9 +446,10 @@ export function AdminManagementTab() {
 
             <div className="flex gap-3">
               <button
+                type="button"
                 onClick={() => {
-                  setShowRemoveModal(false);
-                  setSelectedUser(null);
+                  setShowRemoveModal(false)
+                  setSelectedUser(null)
                 }}
                 disabled={removeAdminMutation.isPending}
                 className="flex-1 rounded-lg bg-muted px-4 py-2 text-foreground transition-colors hover:bg-muted/80 disabled:opacity-50"
@@ -454,6 +457,7 @@ export function AdminManagementTab() {
                 Cancel
               </button>
               <button
+                type="button"
                 onClick={() => removeAdminMutation.mutate(selectedUser.id)}
                 disabled={removeAdminMutation.isPending}
                 className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-red-500 px-4 py-2 text-primary-foreground transition-colors hover:bg-red-600 disabled:opacity-50"
@@ -472,5 +476,5 @@ export function AdminManagementTab() {
         </div>
       )}
     </div>
-  );
+  )
 }

@@ -1,30 +1,28 @@
-'use client';
+import { getReferralUrl, trackExternalShare } from '@babylon/shared'
+import { useMutation } from '@tanstack/react-query'
 
-import { getReferralUrl, trackExternalShare } from '@babylon/shared';
-import { useMutation } from '@tanstack/react-query';
-
-import { Download, LogOut, Twitter, X } from 'lucide-react';
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { toast } from 'sonner';
-import { CategoryPnLShareCard } from '@/components/markets/CategoryPnLShareCard';
-import { PortfolioPnLShareCard } from '@/components/markets/PortfolioPnLShareCard';
-import type { PortfolioPnLSnapshot } from '@/hooks/usePortfolioPnL';
-import { useTwitterAuth } from '@/hooks/useTwitterAuth';
-import type { User } from '@/stores/authStore';
-import type { MarketCategory } from '@/types/markets';
+import { Download, LogOut, Twitter, X } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { toast } from 'sonner'
+import { CategoryPnLShareCard } from '@/components/markets/CategoryPnLShareCard'
+import { PortfolioPnLShareCard } from '@/components/markets/PortfolioPnLShareCard'
+import type { PortfolioPnLSnapshot } from '@/hooks/usePortfolioPnL'
+import { useTwitterAuth } from '@/hooks/useTwitterAuth'
+import type { User } from '@/stores/authStore'
+import type { MarketCategory } from '@/types/markets'
 
 /**
  * Category PnL data structure for PnL share modal.
  */
 interface CategoryPnLData {
-  unrealizedPnL: number;
-  positionCount: number;
-  totalValue?: number;
+  unrealizedPnL: number
+  positionCount: number
+  totalValue?: number
   categorySpecific?: {
-    openInterest?: number;
-    totalShares?: number;
-    totalInvested?: number;
-  };
+    openInterest?: number
+    totalShares?: number
+    totalInvested?: number
+  }
 }
 
 /**
@@ -61,13 +59,13 @@ interface CategoryPnLData {
  * ```
  */
 interface PnLShareModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  type: 'portfolio' | 'category';
-  portfolioData?: PortfolioPnLSnapshot | null;
-  categoryData?: CategoryPnLData | null;
-  category?: MarketCategory;
-  user: User | null;
+  isOpen: boolean
+  onClose: () => void
+  type: 'portfolio' | 'category'
+  portfolioData?: PortfolioPnLSnapshot | null
+  categoryData?: CategoryPnLData | null
+  category?: MarketCategory
+  user: User | null
 }
 
 /**
@@ -88,7 +86,7 @@ function FarcasterIcon({ className }: { className?: string }) {
       <path d="M128.889 253.333L157.778 351.111H182.222V844.444H128.889V253.333Z" />
       <path d="M871.111 253.333L842.222 351.111H817.778V844.444H871.111V253.333Z" />
     </svg>
-  );
+  )
 }
 
 /**
@@ -97,22 +95,22 @@ function FarcasterIcon({ className }: { className?: string }) {
 const categoryLabels: Record<MarketCategory, string> = {
   perps: 'Perpetual Futures',
   predictions: 'Prediction Markets',
-};
+}
 
 /**
  * Response from Twitter tweet API.
  */
 interface TweetApiResponse {
-  tweetUrl: string;
+  tweetUrl: string
 }
 
 /**
  * Payload for posting a tweet.
  */
 interface PostTweetPayload {
-  text: string;
-  contentType: string;
-  contentId: string;
+  text: string
+  contentType: string
+  contentId: string
 }
 
 export function PnLShareModal({
@@ -124,13 +122,13 @@ export function PnLShareModal({
   category = 'perps',
   user,
 }: PnLShareModalProps) {
-  const [isDownloading, setIsDownloading] = useState(false);
-  const [sharing, setSharing] = useState<'twitter' | 'farcaster' | null>(null);
-  const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null);
-  const [isGeneratingImage, setIsGeneratingImage] = useState(false);
-  const [showTwitterConfirm, setShowTwitterConfirm] = useState(false);
-  const [tweetText, setTweetText] = useState('');
-  const offscreenCardRef = useRef<HTMLDivElement>(null);
+  const [isDownloading, setIsDownloading] = useState(false)
+  const [sharing, setSharing] = useState<'twitter' | 'farcaster' | null>(null)
+  const [previewImageUrl, setPreviewImageUrl] = useState<string | null>(null)
+  const [isGeneratingImage, setIsGeneratingImage] = useState(false)
+  const [showTwitterConfirm, setShowTwitterConfirm] = useState(false)
+  const [tweetText, setTweetText] = useState('')
+  const offscreenCardRef = useRef<HTMLDivElement>(null)
 
   // Twitter auth hook
   const {
@@ -138,41 +136,41 @@ export function PnLShareModal({
     loading: twitterAuthLoading,
     connectTwitter,
     disconnectTwitter,
-  } = useTwitterAuth();
+  } = useTwitterAuth()
 
   const shareUrl =
     typeof window !== 'undefined'
       ? `${window.location.origin}/markets`
-      : 'https://babylon.market';
+      : 'https://babylon.market'
 
   const canShare = Boolean(
-    user && (type === 'portfolio' ? portfolioData : categoryData)
-  );
+    user && (type === 'portfolio' ? portfolioData : categoryData),
+  )
 
-  const data = type === 'portfolio' ? portfolioData : categoryData;
+  const data = type === 'portfolio' ? portfolioData : categoryData
   const categoryLabel =
-    type === 'category' && category ? categoryLabels[category] : '';
-  const contentId = type === 'portfolio' ? 'portfolio-pnl' : `${category}-pnl`;
+    type === 'category' && category ? categoryLabels[category] : ''
+  const contentId = type === 'portfolio' ? 'portfolio-pnl' : `${category}-pnl`
 
   // Generate shareable link with referral code (waitlist format)
   const shareableLink = useMemo(() => {
-    if (!user?.referralCode) return null;
+    if (!user?.referralCode) return null
     // Use waitlist referral format: /?ref=CODE
-    return getReferralUrl(user.referralCode);
-  }, [user?.referralCode]);
+    return getReferralUrl(user.referralCode)
+  }, [user?.referralCode])
 
   const shareText = useMemo(() => {
-    const link = shareableLink || shareUrl;
+    const link = shareableLink || shareUrl
     const standardMessage =
-      'Join me in Babylon, a real-time simulation where humans and AI agents battle across prediction markets, form alliances, and shape outcomes—together.';
+      'Join me in Babylon, a real-time simulation where humans and AI agents battle across prediction markets, form alliances, and shape outcomes—together.'
 
     if (type === 'portfolio' && portfolioData) {
-      return `My Babylon P&L is ${portfolioData.totalPnL >= 0 ? '+' : ''}$${Math.abs(portfolioData.totalPnL).toFixed(2)}. Trading narratives, sharing the upside.\n\n${standardMessage}\n\n${link}`;
+      return `My Babylon P&L is ${portfolioData.totalPnL >= 0 ? '+' : ''}$${Math.abs(portfolioData.totalPnL).toFixed(2)}. Trading narratives, sharing the upside.\n\n${standardMessage}\n\n${link}`
     }
     if (type === 'category' && categoryData) {
-      return `My ${categoryLabel} P&L on Babylon is ${categoryData.unrealizedPnL >= 0 ? '+' : ''}$${Math.abs(categoryData.unrealizedPnL).toFixed(2)}. Trading narratives, sharing the upside.\n\n${standardMessage}\n\n${link}`;
+      return `My ${categoryLabel} P&L on Babylon is ${categoryData.unrealizedPnL >= 0 ? '+' : ''}$${Math.abs(categoryData.unrealizedPnL).toFixed(2)}. Trading narratives, sharing the upside.\n\n${standardMessage}\n\n${link}`
     }
-    return `${standardMessage}\n\n${link}`;
+    return `${standardMessage}\n\n${link}`
   }, [
     type,
     portfolioData,
@@ -180,124 +178,44 @@ export function PnLShareModal({
     categoryLabel,
     shareUrl,
     shareableLink,
-  ]);
+  ])
 
   // Set initial tweet text
   useEffect(() => {
     if (shareText && !tweetText) {
-      setTweetText(shareText);
+      setTweetText(shareText)
     }
-  }, [shareText, tweetText]);
-
-  // Generate preview image when modal opens or data changes
-  useEffect(() => {
-    if (!isOpen || !canShare || !offscreenCardRef.current) {
-      setPreviewImageUrl(null);
-      return;
-    }
-
-    const generatePreview = async () => {
-      setIsGeneratingImage(true);
-      const htmlToImage = await import('html-to-image');
-      const dataUrl = await htmlToImage.toPng(offscreenCardRef.current!, {
-        pixelRatio: 2,
-        cacheBust: true,
-        backgroundColor: '#050816',
-      });
-      setPreviewImageUrl(dataUrl);
-      setIsGeneratingImage(false);
-    };
-
-    // Small delay to ensure DOM is ready
-    const timeoutId = setTimeout(generatePreview, 100);
-    return () => clearTimeout(timeoutId);
-  }, [isOpen, canShare]);
-
-  if (!isOpen) return null;
-
-  const handleDownload = async () => {
-    if (!previewImageUrl) return;
-
-    setIsDownloading(true);
-
-    const link = document.createElement('a');
-    link.href = previewImageUrl;
-    link.download = `babylon-${type === 'portfolio' ? 'pnl' : `${category}-pnl`}-${Date.now()}.png`;
-    link.click();
-
-    void trackExternalShare({
-      platform: 'download',
-      contentType: 'market',
-      contentId,
-      url: shareUrl,
-      userId: user?.id,
-    });
-
-    toast.success('P&L card downloaded');
-    setIsDownloading(false);
-  };
-
-  const handleShare = async (platform: 'twitter' | 'farcaster') => {
-    if (!canShare || !user || !data) return;
-
-    setSharing(platform);
-
-    if (platform === 'twitter') {
-      if (!authStatus?.connected) {
-        toast.info('Please connect your X account to share');
-        connectTwitter(window.location.pathname);
-        setSharing(null);
-        return;
-      }
-
-      setShowTwitterConfirm(true);
-      setSharing(null);
-    } else {
-      // Farcaster compose URL - uses official protocol endpoint (farcaster.xyz)
-      const farcasterComposeUrl = `https://farcaster.xyz/~/compose?text=${encodeURIComponent(shareText)}&embeds[]=${encodeURIComponent(shareableLink || shareUrl)}`;
-      window.open(farcasterComposeUrl, '_blank', 'width=550,height=600');
-
-      await trackExternalShare({
-        platform,
-        contentType: 'market',
-        contentId,
-        url: shareableLink || shareUrl,
-        userId: user?.id,
-      });
-
-      setSharing(null);
-    }
-  };
+  }, [shareText, tweetText])
 
   // Mutation for posting tweet
   const tweetMutation = useMutation({
     mutationFn: async (
-      payload: PostTweetPayload
+      payload: PostTweetPayload,
     ): Promise<TweetApiResponse> => {
       const token =
-        typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
+        typeof window !== 'undefined' ? window.__oauth3AccessToken : null
       if (!token) {
-        throw new Error('Authentication required');
+        throw new Error('Authentication required')
       }
 
       const response = await fetch('/api/twitter/tweet', {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify(payload),
-      });
+      })
 
       if (!response.ok) {
-        const errorData = (await response.json()) as { error?: string };
-        throw new Error(errorData.error || 'Failed to post tweet');
+        const error = await response.json()
+        throw new Error(error.error || 'Failed to post tweet')
       }
 
-      return response.json() as Promise<TweetApiResponse>;
+      return response.json()
     },
     onSuccess: async (tweetData) => {
-      toast.success('Successfully shared to X!');
+      toast.success('Successfully shared to X!')
 
       if (shareableLink && user) {
         await trackExternalShare({
@@ -306,44 +224,141 @@ export function PnLShareModal({
           contentId,
           url: shareableLink,
           userId: user.id,
-        });
+        })
       }
 
       if (tweetData.tweetUrl) {
-        window.open(tweetData.tweetUrl, '_blank');
+        window.open(tweetData.tweetUrl, '_blank')
       }
 
-      setShowTwitterConfirm(false);
-      onClose();
+      setShowTwitterConfirm(false)
+      onClose()
     },
     onError: (error: Error) => {
-      toast.error(error.message);
+      toast.error(error.message)
     },
-  });
+  })
+
+  // Generate preview image when modal opens or data changes
+  useEffect(() => {
+    if (!isOpen || !canShare || !offscreenCardRef.current) {
+      setPreviewImageUrl(null)
+      return
+    }
+
+    const generatePreview = async () => {
+      setIsGeneratingImage(true)
+      const htmlToImage = await import('html-to-image')
+      const dataUrl = await htmlToImage.toPng(offscreenCardRef.current, {
+        pixelRatio: 2,
+        cacheBust: true,
+        backgroundColor: '#050816',
+      })
+      setPreviewImageUrl(dataUrl)
+      setIsGeneratingImage(false)
+    }
+
+    // Small delay to ensure DOM is ready
+    const timeoutId = setTimeout(generatePreview, 100)
+    return () => clearTimeout(timeoutId)
+  }, [isOpen, canShare])
+
+  if (!isOpen) return null
+
+  const handleDownload = async () => {
+    if (!previewImageUrl) return
+
+    setIsDownloading(true)
+
+    const link = document.createElement('a')
+    link.href = previewImageUrl
+    link.download = `babylon-${type === 'portfolio' ? 'pnl' : `${category}-pnl`}-${Date.now()}.png`
+    link.click()
+
+    void trackExternalShare({
+      platform: 'download',
+      contentType: 'market',
+      contentId,
+      url: shareUrl,
+      userId: user?.id,
+    })
+
+    toast.success('P&L card downloaded')
+    setIsDownloading(false)
+  }
+
+  const handleShare = async (platform: 'twitter' | 'farcaster') => {
+    if (!canShare || !user || !data) return
+
+    setSharing(platform)
+
+    if (platform === 'twitter') {
+      if (!authStatus?.connected) {
+        toast.info('Please connect your X account to share')
+        connectTwitter(window.location.pathname)
+        setSharing(null)
+        return
+      }
+
+      setShowTwitterConfirm(true)
+      setSharing(null)
+    } else {
+      // Farcaster compose URL - uses official protocol endpoint (farcaster.xyz)
+      const farcasterComposeUrl = `https://farcaster.xyz/~/compose?text=${encodeURIComponent(shareText)}&embeds[]=${encodeURIComponent(shareableLink || shareUrl)}`
+      window.open(farcasterComposeUrl, '_blank', 'width=550,height=600')
+
+      await trackExternalShare({
+        platform,
+        contentType: 'market',
+        contentId,
+        url: shareableLink || shareUrl,
+        userId: user?.id,
+      })
+
+      setSharing(null)
+    }
+  }
+
+  const _handleTwitterConfirm = async () => {
+    if (!tweetText || !user) return
+
+    await tweetMutation.mutateAsync({
+      text: tweetText,
+      imageUrl: previewImageUrl || undefined,
+    })
+
+    setShowTwitterConfirm(false)
+    setTweetText('')
+  }
+
+  const _handleTwitterCancel = () => {
+    setShowTwitterConfirm(false)
+    setTweetText('')
+  }
 
   const handleTwitterPost = () => {
-    if (!user || !authStatus?.connected || !shareableLink) return;
+    if (!user || !authStatus?.connected || !shareableLink) return
 
-    toast.info('Posting to X...');
+    toast.info('Posting to X...')
     tweetMutation.mutate({
       text: tweetText,
       contentType: 'market',
       contentId,
-    });
-  };
+    })
+  }
 
   const handleDisconnectTwitter = async () => {
-    await disconnectTwitter();
-    toast.success('X account disconnected');
-  };
+    await disconnectTwitter()
+    toast.success('X account disconnected')
+  }
 
   const modalTitle =
-    type === 'portfolio' ? 'Share Your P&L' : `Share Your ${categoryLabel} P&L`;
+    type === 'portfolio' ? 'Share Your P&L' : `Share Your ${categoryLabel} P&L`
 
   const modalSubtitle =
     type === 'portfolio'
       ? 'Show off your Babylon performance card'
-      : `Show off your Babylon ${category} performance`;
+      : `Show off your Babylon ${category} performance`
 
   return (
     <>
@@ -351,13 +366,13 @@ export function PnLShareModal({
       <div style={{ position: 'absolute', left: '-9999px', top: '-9999px' }}>
         <div ref={offscreenCardRef}>
           {canShare && type === 'portfolio' && portfolioData && (
-            <PortfolioPnLShareCard data={portfolioData} user={user!} />
+            <PortfolioPnLShareCard data={portfolioData} user={user} />
           )}
           {canShare && type === 'category' && categoryData && (
             <CategoryPnLShareCard
               category={category}
               data={categoryData}
-              user={user!}
+              user={user}
             />
           )}
         </div>
@@ -367,12 +382,24 @@ export function PnLShareModal({
       <div
         className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
         onClick={onClose}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') {
+            e.preventDefault()
+            onClose()
+          }
+        }}
         role="dialog"
         aria-modal="true"
       >
         <div
+          role="dialog"
           className="relative w-full max-w-4xl overflow-hidden rounded-2xl border border-border bg-sidebar shadow-2xl"
           onClick={(event) => event.stopPropagation()}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') {
+              e.stopPropagation()
+            }
+          }}
         >
           <div className="flex items-center justify-between border-border border-b px-6 py-4">
             <div>
@@ -490,12 +517,24 @@ export function PnLShareModal({
           onClick={() =>
             !tweetMutation.isPending && setShowTwitterConfirm(false)
           }
+          onKeyDown={(e) => {
+            if (e.key === 'Escape' && !tweetMutation.isPending) {
+              e.preventDefault()
+              setShowTwitterConfirm(false)
+            }
+          }}
           role="dialog"
           aria-modal="true"
         >
           <div
+            role="dialog"
             className="relative w-full max-w-2xl overflow-hidden rounded-2xl border border-border bg-sidebar shadow-2xl"
             onClick={(event) => event.stopPropagation()}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') {
+                e.stopPropagation()
+              }
+            }}
           >
             <div className="flex items-center justify-between border-border border-b px-6 py-4">
               <div className="flex items-center gap-2">
@@ -601,5 +640,5 @@ export function PnLShareModal({
         </div>
       )}
     </>
-  );
+  )
 }

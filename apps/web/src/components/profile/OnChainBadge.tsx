@@ -1,8 +1,6 @@
-'use client';
-
-import { cn } from '@babylon/shared';
-import { Shield, ShieldCheck } from 'lucide-react';
-import { useState } from 'react';
+import { cn } from '@babylon/shared'
+import { Shield, ShieldCheck } from 'lucide-react'
+import { useState } from 'react'
 
 /**
  * On-chain badge component for displaying blockchain verification status.
@@ -32,11 +30,11 @@ import { useState } from 'react';
  * ```
  */
 interface OnChainBadgeProps {
-  isRegistered: boolean;
-  nftTokenId?: number | null;
-  size?: 'sm' | 'md' | 'lg';
-  showLabel?: boolean;
-  className?: string;
+  isRegistered: boolean
+  nftTokenId?: number | null
+  size?: 'sm' | 'md' | 'lg'
+  showLabel?: boolean
+  className?: string
 }
 
 export function OnChainBadge({
@@ -46,17 +44,19 @@ export function OnChainBadge({
   showLabel = false,
   className,
 }: OnChainBadgeProps) {
-  const [showTooltip, setShowTooltip] = useState(false);
+  const [showTooltip, setShowTooltip] = useState(false)
 
   const sizeClasses = {
     sm: 'w-4 h-4',
     md: 'w-5 h-5',
     lg: 'w-6 h-6',
-  };
+  }
 
   if (isRegistered && nftTokenId) {
     return (
       <div
+        role="img"
+        aria-label="On-chain verified badge"
         className={cn('relative inline-flex items-center gap-1', className)}
         onMouseEnter={() => setShowTooltip(true)}
         onMouseLeave={() => setShowTooltip(false)}
@@ -89,12 +89,14 @@ export function OnChainBadge({
           </div>
         )}
       </div>
-    );
+    )
   }
 
   // Not registered on-chain
   return (
     <div
+      role="img"
+      aria-label="Not verified on-chain badge"
       className={cn('relative inline-flex items-center gap-1', className)}
       onMouseEnter={() => setShowTooltip(true)}
       onMouseLeave={() => setShowTooltip(false)}
@@ -124,5 +126,5 @@ export function OnChainBadge({
         </div>
       )}
     </div>
-  );
+  )
 }

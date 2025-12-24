@@ -9,9 +9,9 @@
  * Test user credentials for load testing
  */
 export interface TestUserCredentials {
-  userId: string;
-  username: string;
-  token: string;
+  userId: string
+  username: string
+  token: string
 }
 
 /**
@@ -23,20 +23,20 @@ export function createTestCredentials(userId: string): TestUserCredentials {
     username: `test-user-${userId}`,
     // Mock JWT token for testing
     token: `test-token-${userId}`,
-  };
+  }
 }
 
 /**
  * Generate headers for authenticated requests
  */
 export function getAuthHeaders(
-  credentials: TestUserCredentials
+  credentials: TestUserCredentials,
 ): Record<string, string> {
   return {
     Authorization: `Bearer ${credentials.token}`,
     'Content-Type': 'application/json',
     'x-user-id': credentials.userId,
-  };
+  }
 }
 
 /**
@@ -44,18 +44,18 @@ export function getAuthHeaders(
  */
 export function createTestUsers(count: number): TestUserCredentials[] {
   return Array.from({ length: count }, (_, i) =>
-    createTestCredentials(`load-test-user-${i}`)
-  );
+    createTestCredentials(`load-test-user-${i}`),
+  )
 }
 
 /**
  * Get admin headers for admin-only endpoints
  */
 export function getAdminHeaders(
-  adminToken = 'test-admin-token'
+  adminToken = 'test-admin-token',
 ): Record<string, string> {
   return {
     'x-admin-token': adminToken,
     'Content-Type': 'application/json',
-  };
+  }
 }

@@ -5,23 +5,23 @@
  * Supports different rate limits for different actions.
  */
 
-import { logger } from '@babylon/shared';
+import { logger } from '@babylon/shared'
 
 interface RateLimitRecord {
-  count: number;
-  windowStart: number;
-  recentActions: number[]; // Timestamps of recent actions for sliding window
+  count: number
+  windowStart: number
+  recentActions: number[] // Timestamps of recent actions for sliding window
 }
 
 interface RateLimitConfig {
-  maxRequests: number;
-  windowMs: number;
-  actionType: string;
+  maxRequests: number
+  windowMs: number
+  actionType: string
 }
 
 // In-memory store for rate limit records
 // In production, you might want to use Redis for distributed rate limiting
-const rateLimitStore = new Map<string, RateLimitRecord>();
+const rateLimitStore = new Map<string, RateLimitRecord>()
 
 /**
  * Predefined rate limit configurations for different actions
@@ -112,7 +112,7 @@ export const RATE_LIMIT_CONFIGS = {
 
   // Default fallback
   DEFAULT: { maxRequests: 30, windowMs: 60000, actionType: 'default' }, // 30 requests per minute
-} as const;
+} as const
 
 /**
  * Check if user has exceeded rate limit for a specific action
@@ -120,35 +120,35 @@ export const RATE_LIMIT_CONFIGS = {
  */
 export function checkRateLimit(
   userId: string,
-  config: RateLimitConfig
+  config: RateLimitConfig,
 ): { allowed: boolean; retryAfter?: number; remaining?: number } {
-  const key = `${userId}:${config.actionType}`;
-  const now = Date.now();
+  const key = `${userId}:${config.actionType}`
+  const now = Date.now()
 
   // Get or create rate limit record
-  let record = rateLimitStore.get(key);
+  let record = rateLimitStore.get(key)
 
   if (!record) {
     record = {
       count: 0,
       windowStart: now,
       recentActions: [],
-    };
-    rateLimitStore.set(key, record);
+    }
+    rateLimitStore.set(key, record)
   }
 
   // Remove actions outside the current window (sliding window)
-  const windowStart = now - config.windowMs;
+  const windowStart = now - config.windowMs
   record.recentActions = record.recentActions.filter(
-    (timestamp) => timestamp > windowStart
-  );
+    (timestamp) => timestamp > windowStart,
+  )
 
   // Check if user has exceeded the limit
   if (record.recentActions.length >= config.maxRequests) {
-    const oldestAction = record.recentActions[0];
+    const oldestAction = record.recentActions[0]
     const retryAfter = oldestAction
       ? Math.ceil((oldestAction + config.windowMs - now) / 1000)
-      : Math.ceil(config.windowMs / 1000);
+      : Math.ceil(config.windowMs / 1000)
 
     logger.warn('Rate limit exceeded', {
       userId,
@@ -156,21 +156,21 @@ export function checkRateLimit(
       attempts: record.recentActions.length,
       maxRequests: config.maxRequests,
       retryAfter,
-    });
+    })
 
     return {
       allowed: false,
       retryAfter,
       remaining: 0,
-    };
+    }
   }
 
   // Record this action
-  record.recentActions.push(now);
-  record.count = record.recentActions.length;
-  record.windowStart = now;
+  record.recentActions.push(now)
+  record.count = record.recentActions.length
+  record.windowStart = now
 
-  const remaining = config.maxRequests - record.recentActions.length;
+  const remaining = config.maxRequests - record.recentActions.length
 
   logger.debug('Rate limit check passed', {
     userId,
@@ -178,12 +178,12 @@ export function checkRateLimit(
     count: record.recentActions.length,
     maxRequests: config.maxRequests,
     remaining,
-  });
+  })
 
   return {
     allowed: true,
     remaining,
-  };
+  }
 }
 
 /**
@@ -191,9 +191,9 @@ export function checkRateLimit(
  * Useful for testing or manual intervention
  */
 export function resetRateLimit(userId: string, actionType: string): void {
-  const key = `${userId}:${actionType}`;
-  rateLimitStore.delete(key);
-  logger.info('Rate limit reset', { userId, actionType });
+  const key = `${userId}:${actionType}`
+  rateLimitStore.delete(key)
+  logger.info('Rate limit reset', { userId, actionType })
 }
 
 /**
@@ -201,8 +201,8 @@ export function resetRateLimit(userId: string, actionType: string): void {
  * Useful for testing
  */
 export function clearAllRateLimits(): void {
-  rateLimitStore.clear();
-  logger.info('All rate limits cleared');
+  rateLimitStore.clear()
+  logger.info('All rate limits cleared')
 }
 
 /**
@@ -210,33 +210,33 @@ export function clearAllRateLimits(): void {
  */
 export function getRateLimitStatus(
   userId: string,
-  config: RateLimitConfig
+  config: RateLimitConfig,
 ): { count: number; remaining: number; resetAt: Date } {
-  const key = `${userId}:${config.actionType}`;
-  const now = Date.now();
-  const record = rateLimitStore.get(key);
+  const key = `${userId}:${config.actionType}`
+  const now = Date.now()
+  const record = rateLimitStore.get(key)
 
   if (!record) {
     return {
       count: 0,
       remaining: config.maxRequests,
       resetAt: new Date(now + config.windowMs),
-    };
+    }
   }
 
   // Remove expired actions
-  const windowStart = now - config.windowMs;
+  const windowStart = now - config.windowMs
   const validActions = record.recentActions.filter(
-    (timestamp) => timestamp > windowStart
-  );
+    (timestamp) => timestamp > windowStart,
+  )
 
-  const oldestAction = validActions[0] || now;
+  const oldestAction = validActions[0] || now
 
   return {
     count: validActions.length,
     remaining: Math.max(0, config.maxRequests - validActions.length),
     resetAt: new Date(oldestAction + config.windowMs),
-  };
+  }
 }
 
 /**
@@ -244,20 +244,20 @@ export function getRateLimitStatus(
  * Should be called periodically (e.g., every 5 minutes) to prevent memory leaks
  */
 export function cleanupRateLimits(): void {
-  const now = Date.now();
-  const maxAge = 5 * 60 * 1000; // 5 minutes
+  const now = Date.now()
+  const maxAge = 5 * 60 * 1000 // 5 minutes
 
-  let cleanedCount = 0;
+  let cleanedCount = 0
 
   for (const [key, record] of rateLimitStore.entries()) {
     // Remove records where all actions are older than maxAge
     const hasRecentActions = record.recentActions.some(
-      (timestamp) => now - timestamp < maxAge
-    );
+      (timestamp) => now - timestamp < maxAge,
+    )
 
     if (!hasRecentActions) {
-      rateLimitStore.delete(key);
-      cleanedCount++;
+      rateLimitStore.delete(key)
+      cleanedCount++
     }
   }
 
@@ -265,11 +265,11 @@ export function cleanupRateLimits(): void {
     logger.info('Cleaned up old rate limit records', {
       cleanedCount,
       totalRemaining: rateLimitStore.size,
-    });
+    })
   }
 }
 
 // Run cleanup every 5 minutes
 if (typeof setInterval !== 'undefined') {
-  setInterval(cleanupRateLimits, 5 * 60 * 1000);
+  setInterval(cleanupRateLimits, 5 * 60 * 1000)
 }

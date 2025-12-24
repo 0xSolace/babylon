@@ -1,17 +1,29 @@
 {
   "extends": "../tsconfig.base.json",
   "compilerOptions": {
-    "outDir": "./dist",
-    "tsBuildInfoFile": "./dist/.tsbuildinfo",
-    "types": ["bun-types"],
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false,
     "noEmit": true,
-    "skipLibCheck": true
+    "jsx": "react-jsx",
+    "types": ["bun-types"],
+    "skipLibCheck": true,
+    "baseUrl": ".",
+    "paths": {
+      "@babylon/shared": ["../shared/src/index.ts"],
+      "@babylon/shared/*": ["../shared/src/*"],
+      "@babylon/db": ["../db/src/index.ts"],
+      "@babylon/db/*": ["../db/src/*"],
+      "@babylon/api": ["../api/src/index.ts"],
+      "@babylon/api/*": ["../api/src/*"],
+      "@babylon/agents": ["../agents/src/index.ts"],
+      "@babylon/agents/*": ["../agents/src/*"],
+      "@babylon/engine": ["../engine/src/index.ts"],
+      "@babylon/engine/*": ["../engine/src/*"],
+      "@babylon/core": ["../core/markets/index.ts"],
+      "@babylon/core/*": ["../core/*"]
+    }
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "python", "**/__tests__/**/*"],
-  "references": [
-    { "path": "../shared" },
-    { "path": "../db" },
-    { "path": "../contracts" }
-  ]
+  "exclude": ["node_modules", "dist", "python", "**/__tests__/**/*"]
 }

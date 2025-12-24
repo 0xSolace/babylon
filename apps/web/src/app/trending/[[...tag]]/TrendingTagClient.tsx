@@ -1,60 +1,47 @@
-'use client';
-
-import { logger } from '@babylon/shared';
-import { useInfiniteQuery } from '@tanstack/react-query';
-import { ArrowLeft } from 'lucide-react';
-import { useParams, useRouter } from 'next/navigation';
-import { useEffect, useMemo } from 'react';
-import { PostCard } from '@/components/posts/PostCard';
-import { PageContainer } from '@/components/shared/PageContainer';
+import { logger } from '@babylon/shared'
+import { useInfiniteQuery } from '@tanstack/react-query'
+import { ArrowLeft } from 'lucide-react'
+import { useEffect, useMemo } from 'react'
+import { useParams } from 'react-router-dom'
+import { PostCard } from '@/components/posts/PostCard'
+import { PageContainer } from '@/components/shared/PageContainer'
+import { useRouter } from '@/lib/navigation'
 
 interface PostData {
-  id: string;
-  content: string;
-  authorId: string;
-  authorName: string;
-  authorUsername?: string | null;
-  authorProfileImageUrl?: string | null;
-  timestamp: string;
-  likeCount?: number;
-  commentCount?: number;
-  shareCount?: number;
-  isLiked?: boolean;
-  isShared?: boolean;
+  id: string
+  content: string
+  authorId: string
+  authorName: string
+  authorUsername?: string | null
+  authorProfileImageUrl?: string | null
+  timestamp: string
+  likeCount?: number
+  commentCount?: number
+  shareCount?: number
+  isLiked?: boolean
+  isShared?: boolean
 }
 
 interface TagInfo {
-  name: string;
-  displayName: string;
-  category?: string | null;
+  name: string
+  displayName: string
+  category?: string | null
 }
 
 interface TrendingResponse {
-  success: boolean;
-  tag?: TagInfo;
-  posts: PostData[];
+  success: boolean
+  tag?: TagInfo
+  posts: PostData[]
 }
 
-const PAGE_SIZE = 20;
+const PAGE_SIZE = 20
 
 export default function TrendingTagClient() {
-  const params = useParams();
-  const router = useRouter();
+  const params = useParams()
+  const router = useRouter()
   // Catch-all route: params.tag is string[] or undefined
-  const tagParam = params.tag;
-  const tag = Array.isArray(tagParam) ? tagParam[0] : tagParam;
-
-  // Redirect to home if no tag provided
-  useEffect(() => {
-    if (!tag) {
-      router.replace('/trending');
-    }
-  }, [tag, router]);
-
-  // Don't render with missing tag - redirect will happen via useEffect
-  if (!tag) {
-    return null;
-  }
+  const tagParam = params.tag
+  const tag = Array.isArray(tagParam) ? tagParam[0] : tagParam
 
   const {
     data,
@@ -65,63 +52,78 @@ export default function TrendingTagClient() {
   } = useInfiniteQuery({
     queryKey: ['trending', tag],
     queryFn: async ({ pageParam = 0 }) => {
+      if (!tag) {
+        throw new Error('Tag is required')
+      }
       const response = await fetch(
-        `/api/trending/${encodeURIComponent(tag)}?limit=${PAGE_SIZE}&offset=${pageParam}`
-      );
+        `/api/trending/${encodeURIComponent(tag)}?limit=${PAGE_SIZE}&offset=${pageParam}`,
+      )
 
       if (!response.ok) {
         if (response.status === 404) {
-          logger.warn('Tag not found', { tag }, 'TrendingTagPage');
+          logger.warn('Tag not found', { tag }, 'TrendingTagPage')
         }
-        throw new Error('Failed to fetch posts');
+        throw new Error('Failed to fetch posts')
       }
 
-      const responseData = (await response.json()) as TrendingResponse;
+      const responseData = (await response.json()) as TrendingResponse
       return {
         posts: responseData.posts || [],
         tag: responseData.tag,
         nextOffset: pageParam + (responseData.posts?.length || 0),
         hasMore: (responseData.posts?.length || 0) === PAGE_SIZE,
-      };
+      }
     },
     getNextPageParam: (lastPage) =>
       lastPage.hasMore ? lastPage.nextOffset : undefined,
     initialPageParam: 0,
     enabled: !!tag,
-  });
+  })
 
   // Derive posts and tagInfo from pages
   const { posts, tagInfo } = useMemo(() => {
     if (!data?.pages) {
-      return { posts: [] as PostData[], tagInfo: null as TagInfo | null };
+      return { posts: [] as PostData[], tagInfo: null as TagInfo | null }
     }
 
     // Get tag info from first page
-    const firstPageTag = data.pages[0]?.tag ?? null;
+    const firstPageTag = data.pages[0]?.tag ?? null
 
     // Combine all posts from all pages with deduplication
-    const allPosts = data.pages.flatMap((page) => page.posts);
-    const unique = new Map<string, PostData>();
+    const allPosts = data.pages.flatMap((page) => page.posts)
+    const unique = new Map<string, PostData>()
     allPosts.forEach((post: PostData) => {
       if (post?.id) {
-        unique.set(post.id, post);
+        unique.set(post.id, post)
       }
-    });
+    })
 
     const deduped = Array.from(unique.values()).sort((a, b) => {
-      const aTime = new Date(a.timestamp).getTime();
-      const bTime = new Date(b.timestamp).getTime();
-      return bTime - aTime;
-    });
+      const aTime = new Date(a.timestamp).getTime()
+      const bTime = new Date(b.timestamp).getTime()
+      return bTime - aTime
+    })
 
-    return { posts: deduped, tagInfo: firstPageTag };
-  }, [data]);
+    return { posts: deduped, tagInfo: firstPageTag }
+  }, [data])
+
+  // Redirect to home if no tag provided
+  useEffect(() => {
+    if (!tag) {
+      router.replace('/trending')
+    }
+  }, [tag, router])
 
   const handleLoadMore = () => {
     if (!loading && !loadingMore && hasMore) {
-      fetchNextPage();
+      fetchNextPage()
     }
-  };
+  }
+
+  // Don't render with missing tag - redirect will happen via useEffect
+  if (!tag) {
+    return null
+  }
 
   return (
     <PageContainer
@@ -132,6 +134,7 @@ export default function TrendingTagClient() {
       <div className="sticky top-0 z-10 shrink-0 border-border border-b bg-background px-4 py-3 lg:hidden">
         <div className="flex items-center gap-4">
           <button
+            type="button"
             onClick={() => router.back()}
             className="rounded-full p-2 transition-colors hover:bg-muted"
             aria-label="Go back"
@@ -164,6 +167,7 @@ export default function TrendingTagClient() {
             <div className="px-6 py-4">
               <div className="flex items-center gap-4">
                 <button
+                  type="button"
                   onClick={() => router.back()}
                   className="rounded-full p-2 transition-colors hover:bg-muted"
                   aria-label="Go back"
@@ -222,6 +226,7 @@ export default function TrendingTagClient() {
                       </div>
                     ) : (
                       <button
+                        type="button"
                         onClick={handleLoadMore}
                         className="rounded-lg bg-primary px-6 py-2 text-primary-foreground transition-opacity hover:opacity-90"
                       >
@@ -272,6 +277,7 @@ export default function TrendingTagClient() {
                   </div>
                 ) : (
                   <button
+                    type="button"
                     onClick={handleLoadMore}
                     className="rounded-lg bg-primary px-6 py-2 text-primary-foreground transition-opacity hover:opacity-90"
                   >
@@ -290,5 +296,5 @@ export default function TrendingTagClient() {
         )}
       </div>
     </PageContainer>
-  );
+  )
 }

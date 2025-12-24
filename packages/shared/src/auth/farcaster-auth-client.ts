@@ -10,39 +10,39 @@
  * @see https://github.com/farcasterxyz/protocol/discussions/110
  */
 
-import { logger } from '../utils/logger';
+import { logger } from '../utils/logger'
 
-const FARCASTER_RELAY_URL = 'https://relay.farcaster.xyz';
-const CHANNEL_POLL_INTERVAL_MS = 1500;
-const CHANNEL_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
+const FARCASTER_RELAY_URL = 'https://relay.farcaster.xyz'
+const CHANNEL_POLL_INTERVAL_MS = 1500
+const CHANNEL_TIMEOUT_MS = 5 * 60 * 1000 // 5 minutes
 
 export interface FarcasterAuthResult {
-  message: string;
-  signature: string;
-  fid: number;
-  username: string;
-  displayName?: string;
-  pfpUrl?: string;
-  bio?: string;
-  nonce: string;
+  message: string
+  signature: string
+  fid: number
+  username: string
+  displayName?: string
+  pfpUrl?: string
+  bio?: string
+  nonce: string
 }
 
 interface ChannelCreateResponse {
-  channelToken: string;
-  url: string;
-  nonce: string;
+  channelToken: string
+  url: string
+  nonce: string
 }
 
 interface ChannelStatusResponse {
-  state: 'pending' | 'completed';
-  message?: string;
-  signature?: string;
-  fid?: number;
-  username?: string;
-  displayName?: string;
-  pfpUrl?: string;
-  bio?: string;
-  nonce?: string;
+  state: 'pending' | 'completed'
+  message?: string
+  signature?: string
+  fid?: number
+  username?: string
+  displayName?: string
+  pfpUrl?: string
+  bio?: string
+  nonce?: string
 }
 
 /**
@@ -51,15 +51,15 @@ interface ChannelStatusResponse {
 async function createChannel(
   domain: string,
   siweUri: string,
-  nonce?: string
+  nonce?: string,
 ): Promise<ChannelCreateResponse> {
   const body: Record<string, string> = {
     siweUri,
     domain,
-  };
+  }
 
   if (nonce) {
-    body.nonce = nonce;
+    body.nonce = nonce
   }
 
   const response = await fetch(`${FARCASTER_RELAY_URL}/v1/channel`, {
@@ -68,22 +68,23 @@ async function createChannel(
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(body),
-  });
+  })
 
   if (!response.ok) {
-    const errorText = await response.text();
+    const errorText = await response.text()
     logger.error(
       'Failed to create Farcaster auth channel',
       {
         status: response.status,
         error: errorText,
       },
-      'FarcasterAuthClient'
-    );
-    throw new Error(`Failed to create auth channel: ${response.status}`);
+      'FarcasterAuthClient',
+    )
+    throw new Error(`Failed to create auth channel: ${response.status}`)
   }
 
-  return response.json() as Promise<ChannelCreateResponse>;
+  const data: ChannelCreateResponse = await response.json()
+  return data
 }
 
 /**
@@ -92,13 +93,13 @@ async function createChannel(
 async function pollChannelStatus(
   channelToken: string,
   onStatusUpdate?: (state: 'pending' | 'completed') => void,
-  signal?: AbortSignal
+  signal?: AbortSignal,
 ): Promise<FarcasterAuthResult> {
-  const startTime = Date.now();
+  const startTime = Date.now()
 
   while (Date.now() - startTime < CHANNEL_TIMEOUT_MS) {
     if (signal?.aborted) {
-      throw new Error('Authentication cancelled');
+      throw new Error('Authentication cancelled')
     }
 
     const response = await fetch(`${FARCASTER_RELAY_URL}/v1/channel/status`, {
@@ -107,28 +108,28 @@ async function pollChannelStatus(
         Authorization: `Bearer ${channelToken}`,
       },
       signal,
-    });
+    })
 
     if (!response.ok) {
       if (response.status === 401) {
-        throw new Error('Channel expired or invalid');
+        throw new Error('Channel expired or invalid')
       }
-      const errorText = await response.text();
+      const errorText = await response.text()
       logger.warn(
         'Channel status check failed',
         {
           status: response.status,
           error: errorText,
         },
-        'FarcasterAuthClient'
-      );
+        'FarcasterAuthClient',
+      )
       // Continue polling on transient errors
-      await sleep(CHANNEL_POLL_INTERVAL_MS);
-      continue;
+      await sleep(CHANNEL_POLL_INTERVAL_MS)
+      continue
     }
 
-    const status = (await response.json()) as ChannelStatusResponse;
-    onStatusUpdate?.(status.state);
+    const status: ChannelStatusResponse = await response.json()
+    onStatusUpdate?.(status.state)
 
     if (status.state === 'completed') {
       if (
@@ -137,7 +138,7 @@ async function pollChannelStatus(
         !status.fid ||
         !status.username
       ) {
-        throw new Error('Incomplete authentication response');
+        throw new Error('Incomplete authentication response')
       }
 
       return {
@@ -149,39 +150,39 @@ async function pollChannelStatus(
         pfpUrl: status.pfpUrl,
         bio: status.bio,
         nonce: status.nonce || '',
-      };
+      }
     }
 
-    await sleep(CHANNEL_POLL_INTERVAL_MS);
+    await sleep(CHANNEL_POLL_INTERVAL_MS)
   }
 
-  throw new Error('Authentication timeout');
+  throw new Error('Authentication timeout')
 }
 
 function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+  return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 /**
  * Generate a cryptographically secure nonce
  */
 function generateNonce(): string {
-  const array = new Uint8Array(16);
-  crypto.getRandomValues(array);
+  const array = new Uint8Array(16)
+  crypto.getRandomValues(array)
   return Array.from(array, (byte) => byte.toString(16).padStart(2, '0')).join(
-    ''
-  );
+    '',
+  )
 }
 
 export interface FarcasterSignInOptions {
   /** User ID to include in state for backend verification */
-  userId: string;
+  userId: string
   /** Callback when authentication status changes */
-  onStatusUpdate?: (state: 'pending' | 'completed') => void;
+  onStatusUpdate?: (state: 'pending' | 'completed') => void
   /** Callback when popup is opened with the URL */
-  onPopupOpen?: (url: string) => void;
+  onPopupOpen?: (url: string) => void
   /** Optional abort signal to cancel authentication */
-  signal?: AbortSignal;
+  signal?: AbortSignal
 }
 
 /**
@@ -194,89 +195,90 @@ export interface FarcasterSignInOptions {
  * 4. Returns the authentication result
  */
 export async function signInWithFarcaster(
-  options: FarcasterSignInOptions
+  options: FarcasterSignInOptions,
 ): Promise<FarcasterAuthResult & { state: string }> {
-  const { userId, onStatusUpdate, onPopupOpen, signal } = options;
+  const { userId, onStatusUpdate, onPopupOpen, signal } = options
 
-  // Get the domain from environment or current location
+  // Get the domain from current location or default
   const appUrl =
-    process.env.NEXT_PUBLIC_APP_URL ||
-    (typeof window !== 'undefined' ? window.location.origin : '');
-  const domain = new URL(appUrl).hostname;
-  const siweUri = `${appUrl}/api/auth/farcaster/callback`;
+    typeof window !== 'undefined'
+      ? window.location.origin
+      : 'https://babylon.market'
+  const domain = new URL(appUrl).hostname
+  const siweUri = `${appUrl}/api/auth/farcaster/callback`
 
   // Generate nonce for this authentication request
-  const nonce = generateNonce();
+  const nonce = generateNonce()
 
   logger.info(
     'Creating Farcaster auth channel',
     { domain, siweUri },
-    'FarcasterAuthClient'
-  );
+    'FarcasterAuthClient',
+  )
 
   // Step 1: Create channel on relay
-  const channel = await createChannel(domain, siweUri, nonce);
+  const channel = await createChannel(domain, siweUri, nonce)
 
   logger.info(
     'Farcaster auth channel created',
     {
-      channelToken: channel.channelToken.substring(0, 8) + '...',
+      channelToken: `${channel.channelToken.substring(0, 8)}...`,
       url: channel.url,
     },
-    'FarcasterAuthClient'
-  );
+    'FarcasterAuthClient',
+  )
 
   // Step 2: Open popup with the auth URL
   if (typeof window === 'undefined') {
-    throw new Error('signInWithFarcaster can only be called in the browser');
+    throw new Error('signInWithFarcaster can only be called in the browser')
   }
 
-  const width = 500;
-  const height = 700;
-  const left = window.screen.width / 2 - width / 2;
-  const top = window.screen.height / 2 - height / 2;
+  const width = 500
+  const height = 700
+  const left = window.screen.width / 2 - width / 2
+  const top = window.screen.height / 2 - height / 2
 
   const popup = window.open(
     channel.url,
     'farcaster-auth',
-    `width=${width},height=${height},left=${left},top=${top},scrollbars=yes,resizable=yes`
-  );
+    `width=${width},height=${height},left=${left},top=${top},scrollbars=yes,resizable=yes`,
+  )
 
   if (!popup) {
-    throw new Error('Failed to open popup. Please allow popups for this site.');
+    throw new Error('Failed to open popup. Please allow popups for this site.')
   }
 
-  onPopupOpen?.(channel.url);
+  onPopupOpen?.(channel.url)
 
   // Create abort controller to handle popup close
-  const abortController = new AbortController();
+  const abortController = new AbortController()
   const combinedSignal = signal
     ? AbortSignal.any([signal, abortController.signal])
-    : abortController.signal;
+    : abortController.signal
 
   // Monitor popup close
   const popupCheckInterval = setInterval(() => {
     if (popup.closed) {
-      clearInterval(popupCheckInterval);
-      abortController.abort();
+      clearInterval(popupCheckInterval)
+      abortController.abort()
     }
-  }, 500);
+  }, 500)
 
   // Step 3: Poll for authentication completion
   const result = await pollChannelStatus(
     channel.channelToken,
     onStatusUpdate,
-    combinedSignal
-  );
+    combinedSignal,
+  )
 
   // Close popup if still open
   if (!popup.closed) {
-    popup.close();
+    popup.close()
   }
 
   // Generate state for backend verification (userId|timestamp|random)
   // Using pipe separator because userId may contain colons (e.g., did:oauth3:xxx)
-  const state = `${userId}|${Date.now()}|${Math.random().toString(36).substring(7)}`;
+  const state = `${userId}|${Date.now()}|${Math.random().toString(36).substring(7)}`
 
   logger.info(
     'Farcaster authentication completed',
@@ -284,18 +286,18 @@ export async function signInWithFarcaster(
       fid: result.fid,
       username: result.username,
     },
-    'FarcasterAuthClient'
-  );
+    'FarcasterAuthClient',
+  )
 
-  clearInterval(popupCheckInterval);
+  clearInterval(popupCheckInterval)
   if (!popup.closed) {
-    popup.close();
+    popup.close()
   }
 
   return {
     ...result,
     state,
-  };
+  }
 }
 
 /**
@@ -303,30 +305,32 @@ export async function signInWithFarcaster(
  * Useful for mobile-first flows where you want to show a QR code
  */
 export async function createFarcasterAuthChannel(userId: string): Promise<{
-  channelToken: string;
-  url: string;
-  nonce: string;
-  state: string;
+  channelToken: string
+  url: string
+  nonce: string
+  state: string
 }> {
   const appUrl =
-    process.env.NEXT_PUBLIC_APP_URL ||
-    (typeof window !== 'undefined' ? window.location.origin : '');
-  const domain = new URL(appUrl).hostname;
-  const siweUri = `${appUrl}/api/auth/farcaster/callback`;
-  const nonce = generateNonce();
+    (typeof window !== 'undefined'
+      ? window.location.origin
+      : 'https://babylon.market') ||
+    (typeof window !== 'undefined' ? window.location.origin : '')
+  const domain = new URL(appUrl).hostname
+  const siweUri = `${appUrl}/api/auth/farcaster/callback`
+  const nonce = generateNonce()
 
-  const channel = await createChannel(domain, siweUri, nonce);
+  const channel = await createChannel(domain, siweUri, nonce)
   // Using pipe separator because userId may contain colons (e.g., did:oauth3:xxx)
-  const state = `${userId}|${Date.now()}|${Math.random().toString(36).substring(7)}`;
+  const state = `${userId}|${Date.now()}|${Math.random().toString(36).substring(7)}`
 
   return {
     ...channel,
     state,
-  };
+  }
 }
 
 /**
  * Polls an existing channel for completion
  * Use with createFarcasterAuthChannel for custom UIs
  */
-export { pollChannelStatus };
+export { pollChannelStatus }

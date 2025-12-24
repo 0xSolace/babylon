@@ -4,17 +4,17 @@
  * Types for gas sponsorship.
  */
 
-import type { Address, Hex } from 'viem';
-import type { DID } from '../types/index';
+import type { Address, Hex } from 'viem'
+import type { DID } from '../types/index'
 
 /**
  * Paymaster data for sponsored operations
  */
 export interface PaymasterData {
-  paymaster: Address;
-  paymasterData: Hex;
-  validUntil: number;
-  validAfter: number;
+  paymaster: Address
+  paymasterData: Hex
+  validUntil: number
+  validAfter: number
 }
 
 /**
@@ -22,36 +22,36 @@ export interface PaymasterData {
  */
 export interface SponsorshipPolicy {
   /** Maximum gas per transaction */
-  maxGasPerTx: bigint;
+  maxGasPerTx: bigint
   /** Maximum gas per day per user */
-  maxGasPerUserPerDay: bigint;
+  maxGasPerUserPerDay: bigint
   /** Whitelisted contract addresses (empty = all allowed) */
-  whitelistedContracts: Address[];
+  whitelistedContracts: Address[]
   /** Blacklisted contract addresses */
-  blacklistedContracts: Address[];
+  blacklistedContracts: Address[]
   /** Whether to sponsor for new users only */
-  newUsersOnly: boolean;
+  newUsersOnly: boolean
   /** Minimum user reputation to sponsor */
-  minReputation: number;
+  minReputation: number
 }
 
 /**
  * User sponsorship state
  */
 export interface UserSponsorshipState {
-  userId: DID;
-  gasUsedToday: bigint;
-  lastReset: number;
-  totalGasSponsored: bigint;
-  transactionCount: number;
+  userId: DID
+  gasUsedToday: bigint
+  lastReset: number
+  totalGasSponsored: bigint
+  transactionCount: number
 }
 
 /**
  * Sponsorship result
  */
 export interface SponsorshipResult {
-  sponsored: boolean;
-  paymasterData?: PaymasterData;
-  gasLimit?: bigint;
-  error?: string;
+  sponsored: boolean
+  paymasterData?: PaymasterData
+  gasLimit?: bigint
+  error?: string
 }

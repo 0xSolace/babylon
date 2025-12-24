@@ -1,17 +1,17 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useCallback, useEffect } from 'react';
-import { useAuthStore } from '@/stores/authStore';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useCallback, useEffect } from 'react'
+import { useAuthStore } from '@/stores/authStore'
 
 /**
  * Represents the current Twitter authentication status.
  */
 interface TwitterAuthStatus {
   /** Whether Twitter is currently connected */
-  connected: boolean;
+  connected: boolean
   /** Twitter screen name/username */
-  screenName?: string;
+  screenName?: string
   /** When the connection was established */
-  connectedAt?: Date;
+  connectedAt?: Date
 }
 
 /**
@@ -19,22 +19,36 @@ interface TwitterAuthStatus {
  */
 interface UseTwitterAuthReturn {
   /** Current Twitter auth status, or null if not checked yet */
-  authStatus: TwitterAuthStatus | null;
+  authStatus: TwitterAuthStatus | null
   /** Whether auth status is currently loading */
-  loading: boolean;
+  loading: boolean
   /** Any error that occurred */
-  error: string | null;
+  error: string | null
   /** Function to initiate Twitter OAuth connection */
-  connectTwitter: (returnPath?: string) => void;
+  connectTwitter: (returnPath?: string) => void
   /** Function to disconnect Twitter account */
-  disconnectTwitter: () => Promise<void>;
+  disconnectTwitter: () => Promise<void>
   /** Function to manually refresh auth status */
-  refreshStatus: () => Promise<void>;
+  refreshStatus: () => Promise<void>
+}
+
+import { hasBooleanProperty } from '@babylon/shared'
+
+// Type guard for TwitterAuthStatus response
+function isTwitterAuthStatus(data: unknown): data is TwitterAuthStatus {
+  return hasBooleanProperty(data, 'connected')
+}
+
+// Helper to safely extract error message
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message
+  if (typeof error === 'string') return error
+  return 'Unknown error'
 }
 
 declare global {
   interface Window {
-    __oauth3AccessToken?: string | null;
+    __oauth3AccessToken?: string | null
   }
 }
 
@@ -64,8 +78,8 @@ declare global {
  * ```
  */
 export function useTwitterAuth(): UseTwitterAuthReturn {
-  const { user } = useAuthStore();
-  const queryClient = useQueryClient();
+  const { user } = useAuthStore()
+  const queryClient = useQueryClient()
 
   const {
     data: authStatus = null,
@@ -75,93 +89,93 @@ export function useTwitterAuth(): UseTwitterAuthReturn {
     queryKey: ['twitterAuthStatus', user?.id],
     queryFn: async (): Promise<TwitterAuthStatus | null> => {
       const token =
-        typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
+        typeof window !== 'undefined' ? window.__oauth3AccessToken : null
       if (!token) {
-        return null;
+        return null
       }
 
       const response = await fetch('/api/twitter/auth-status', {
         headers: { Authorization: `Bearer ${token}` },
-      });
+      })
 
       if (response.ok) {
-        const data = (await response.json()) as TwitterAuthStatus;
-        return data;
+        const data: unknown = await response.json()
+        if (isTwitterAuthStatus(data)) {
+          return data
+        }
       }
-      return null;
+      return null
     },
     enabled: !!user?.id,
     staleTime: 60000,
-  });
+  })
 
   // Handle OAuth callback
   useEffect(() => {
-    if (typeof window === 'undefined') return;
+    if (typeof window === 'undefined') return
 
-    const urlParams = new URLSearchParams(window.location.search);
-    const twitterAuth = urlParams.get('twitter_auth');
+    const urlParams = new URLSearchParams(window.location.search)
+    const twitterAuth = urlParams.get('twitter_auth')
 
     if (twitterAuth === 'success') {
       void queryClient.invalidateQueries({
         queryKey: ['twitterAuthStatus', user?.id],
-      });
+      })
 
-      const url = new URL(window.location.href);
-      url.searchParams.delete('twitter_auth');
-      window.history.replaceState({}, '', url.toString());
+      const url = new URL(window.location.href)
+      url.searchParams.delete('twitter_auth')
+      window.history.replaceState({}, '', url.toString())
     }
-  }, [queryClient, user?.id]);
+  }, [queryClient, user?.id])
 
   const disconnectMutation = useMutation({
     mutationFn: async (): Promise<void> => {
       const token =
-        typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
-      if (!token) return;
+        typeof window !== 'undefined' ? window.__oauth3AccessToken : null
+      if (!token) return
 
       const response = await fetch('/api/twitter/disconnect', {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
-      });
+      })
 
       if (!response.ok) {
-        throw new Error('Failed to disconnect Twitter');
+        throw new Error('Failed to disconnect Twitter')
       }
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({
         queryKey: ['twitterAuthStatus', user?.id],
-      });
+      })
     },
-  });
+  })
 
   const connectTwitter = useCallback(
     (_returnPath?: string) => {
       if (!user?.id) {
-        return;
+        return
       }
-      window.location.href = '/api/auth/twitter/initiate';
+      window.location.href = '/api/auth/twitter/initiate'
     },
-    [user?.id]
-  );
+    [user?.id],
+  )
 
   const disconnectTwitter = useCallback(async () => {
-    if (!user?.id) return;
-    await disconnectMutation.mutateAsync();
-  }, [user?.id, disconnectMutation]);
+    if (!user?.id) return
+    await disconnectMutation.mutateAsync()
+  }, [user?.id, disconnectMutation])
 
   const refreshStatus = useCallback(async () => {
     await queryClient.invalidateQueries({
       queryKey: ['twitterAuthStatus', user?.id],
-    });
-  }, [queryClient, user?.id]);
+    })
+  }, [queryClient, user?.id])
 
   const error = queryError
-    ? (queryError as Error).message
+    ? getErrorMessage(queryError)
     : disconnectMutation.error
-      ? (disconnectMutation.error as Error).message
-      : !user?.id && authStatus === null
-        ? null
-        : null;
+      ? getErrorMessage(disconnectMutation.error)
+      : null
 
   return {
     authStatus,
@@ -170,5 +184,5 @@ export function useTwitterAuth(): UseTwitterAuthReturn {
     connectTwitter,
     disconnectTwitter,
     refreshStatus,
-  };
+  }
 }

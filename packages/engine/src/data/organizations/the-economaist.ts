@@ -1,4 +1,4 @@
-import type { Organization } from '../../types/shared';
+import type { Organization } from '../../types/shared'
 
 export const data = {
   id: 'the-economaist',
@@ -25,4 +25,4 @@ export const data = {
     'Analysis and opinion on world politics, business, finance, science, and technology. Since 1843. Independent, global, evidence-based.',
   originalName: 'The Economist',
   originalHandle: 'theeconomist',
-} as const satisfies Organization;
+} as const satisfies Organization

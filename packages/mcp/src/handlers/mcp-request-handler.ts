@@ -5,25 +5,41 @@
  * Similar to A2A's JsonRpcTransportHandler
  */
 
-import {
-  type JsonValue,
-  JsonValueSchema,
-  type StringRecord,
-} from '@babylon/shared';
-import { z } from 'zod';
-import { authenticateAgent } from '../auth/agent-auth';
-import { getAvailableTools, getInitializeResult } from '../server/mcp-server';
+import type { JsonValue } from '@babylon/shared'
+import { JsonValueSchema } from '@babylon/shared'
+import { z } from 'zod'
+import { authenticateAgent } from '../auth/agent-auth'
+import { getAvailableTools, getInitializeResult } from '../server/mcp-server'
 import type {
-  JsonRpcError,
+  InitializeResult,
   JsonRpcResponse,
-  JsonRpcResult,
   MCPAuthContext,
   MCPProtocolVersion,
   ToolCallResult,
   ToolsListResult,
-} from '../types/mcp';
-import { MCP_PROTOCOL_VERSIONS, MCPMethod } from '../types/mcp';
-import { executeTool } from './tool-handlers';
+} from '../types/mcp'
+import { MCPMethod } from '../types/mcp'
+import { executeTool } from './tool-handlers'
+
+/**
+ * Type guard to check if an object has an 'id' property with a valid JSON-RPC id type
+ */
+function hasValidId(value: unknown): value is { id: string | number | null } {
+  if (typeof value !== 'object' || value === null) return false
+  if (!('id' in value)) return false
+  const id = (value as Record<string, unknown>).id
+  return typeof id === 'string' || typeof id === 'number' || id === null
+}
+
+/**
+ * Extract request ID from raw request, returning null if not valid
+ */
+function extractRequestId(rawRequest: unknown): string | number | null {
+  if (hasValidId(rawRequest)) {
+    return rawRequest.id
+  }
+  return null
+}
 
 // JSON-RPC 2.0 Request Validation Schema
 const JsonRpcRequestSchema = z.object({
@@ -31,15 +47,18 @@ const JsonRpcRequestSchema = z.object({
   method: z.string().min(1),
   params: z.record(z.string(), JsonValueSchema).optional(),
   id: z.union([z.string(), z.number()]),
-});
+})
 
-type ValidatedJsonRpcRequest = z.infer<typeof JsonRpcRequestSchema>;
+type ValidatedJsonRpcRequest = z.infer<typeof JsonRpcRequestSchema>
 
 // Initialize Params Validation Schema
+// Using z.enum with tuple type for MCP protocol versions
 const InitializeParamsSchema = z.object({
-  protocolVersion: z.enum(
-    MCP_PROTOCOL_VERSIONS as unknown as [string, ...string[]]
-  ),
+  protocolVersion: z.enum([
+    '2024-11-05',
+    '2025-03-26',
+    '2025-06-18',
+  ] satisfies readonly [MCPProtocolVersion, ...MCPProtocolVersion[]]),
   capabilities: z.object({
     roots: z.object({ listChanged: z.boolean().optional() }).optional(),
     sampling: z.record(z.string(), JsonValueSchema).optional(),
@@ -57,20 +76,20 @@ const InitializeParamsSchema = z.object({
     version: z.string(),
     title: z.string().optional(),
   }),
-});
+})
 
 // Tool Call Params Validation Schema
 const ToolCallParamsSchema = z.object({
   name: z.string().min(1),
   arguments: z.record(z.string(), JsonValueSchema),
-});
+})
 
 /**
  * MCP Request Handler
  * Processes JSON-RPC 2.0 requests and routes to appropriate handlers
  */
 export class MCPRequestHandler {
-  private authContext: MCPAuthContext | null = null;
+  private authContext: MCPAuthContext | null = null
 
   /**
    * Validate and handle JSON-RPC request
@@ -79,47 +98,52 @@ export class MCPRequestHandler {
    */
   async handle(
     rawRequest: unknown,
-    authContext?: MCPAuthContext
-  ): Promise<JsonRpcResponse> {
+    authContext?: MCPAuthContext,
+  ): Promise<
+    JsonRpcResponse<
+      InitializeResult | ToolsListResult | ToolCallResult | JsonValue
+    >
+  > {
     // Store auth context if provided
     if (authContext) {
-      this.authContext = authContext;
+      this.authContext = authContext
     }
 
     // Validate JSON-RPC request structure
-    const parseResult = JsonRpcRequestSchema.safeParse(rawRequest);
+    const parseResult = JsonRpcRequestSchema.safeParse(rawRequest)
     if (!parseResult.success) {
-      const id =
-        typeof rawRequest === 'object' &&
-        rawRequest !== null &&
-        'id' in rawRequest
-          ? (rawRequest as { id: string | number }).id
-          : null;
-      return this.createErrorResponse(
+      const id = extractRequestId(rawRequest)
+      return {
+        jsonrpc: '2.0',
         id,
-        -32600,
-        `Invalid JSON-RPC request: ${parseResult.error.message}`
-      );
+        error: {
+          code: -32600,
+          message: `Invalid JSON-RPC request: ${parseResult.error.message}`,
+        },
+      }
     }
 
-    const request = parseResult.data;
+    const request = parseResult.data
 
     // Route to appropriate handler based on method
     switch (request.method) {
       case MCPMethod.INITIALIZE:
-        return await this.handleInitialize(request);
+        return await this.handleInitialize(request)
       case MCPMethod.PING:
-        return await this.handlePing(request);
+        return await this.handlePing(request)
       case MCPMethod.TOOLS_LIST:
-        return await this.handleToolsList(request);
+        return await this.handleToolsList(request)
       case MCPMethod.TOOLS_CALL:
-        return await this.handleToolsCall(request);
+        return await this.handleToolsCall(request)
       default:
-        return this.createErrorResponse(
-          request.id,
-          -32601,
-          `Method not found: ${request.method}`
-        );
+        return {
+          jsonrpc: '2.0',
+          id: request.id,
+          error: {
+            code: -32601,
+            message: `Method not found: ${request.method}`,
+          },
+        }
     }
   }
 
@@ -127,125 +151,126 @@ export class MCPRequestHandler {
    * Handle initialize request with proper validation
    */
   private async handleInitialize(
-    request: ValidatedJsonRpcRequest
-  ): Promise<JsonRpcResponse> {
-    const parseResult = InitializeParamsSchema.safeParse(request.params);
+    request: ValidatedJsonRpcRequest,
+  ): Promise<JsonRpcResponse<InitializeResult>> {
+    const parseResult = InitializeParamsSchema.safeParse(request.params)
 
     if (!parseResult.success) {
-      return this.createErrorResponse(
-        request.id,
-        -32602,
-        `Invalid initialize params: ${parseResult.error.message}`
-      );
+      return {
+        jsonrpc: '2.0',
+        id: request.id,
+        error: {
+          code: -32602,
+          message: `Invalid initialize params: ${parseResult.error.message}`,
+        },
+      }
     }
 
-    const params = parseResult.data;
+    const params = parseResult.data
 
     // Get initialize result with validated protocol version
-    const result = getInitializeResult(
-      params.protocolVersion as MCPProtocolVersion
-    );
+    const result = getInitializeResult(params.protocolVersion)
 
     return {
       jsonrpc: '2.0',
       id: request.id,
-      result: result as unknown as JsonRpcResult,
-    };
+      result,
+    }
   }
 
   /**
    * Handle ping request
    */
   private async handlePing(
-    request: ValidatedJsonRpcRequest
+    request: ValidatedJsonRpcRequest,
   ): Promise<JsonRpcResponse> {
+    const emptyResult: JsonValue = {}
     return {
       jsonrpc: '2.0',
       id: request.id,
-      result: {} as JsonValue,
-    };
+      result: emptyResult,
+    }
   }
 
   /**
    * Handle tools/list request
    */
   private async handleToolsList(
-    request: ValidatedJsonRpcRequest
-  ): Promise<JsonRpcResponse> {
-    const tools = getAvailableTools();
+    request: ValidatedJsonRpcRequest,
+  ): Promise<JsonRpcResponse<ToolsListResult>> {
+    const tools = getAvailableTools()
     const result: ToolsListResult = {
       tools,
-    };
+    }
 
     return {
       jsonrpc: '2.0',
       id: request.id,
-      result: result as unknown as JsonRpcResult,
-    };
+      result,
+    }
   }
 
   /**
    * Handle tools/call request with proper validation
    */
   private async handleToolsCall(
-    request: ValidatedJsonRpcRequest
-  ): Promise<JsonRpcResponse> {
+    request: ValidatedJsonRpcRequest,
+  ): Promise<JsonRpcResponse<ToolCallResult>> {
     // Require authentication for tool calls
     if (!this.authContext) {
-      return this.createErrorResponse(
-        request.id,
-        -32000,
-        'Authentication required'
-      );
+      return {
+        jsonrpc: '2.0',
+        id: request.id,
+        error: { code: -32000, message: 'Authentication required' },
+      }
     }
 
-    const parseResult = ToolCallParamsSchema.safeParse(request.params);
+    const parseResult = ToolCallParamsSchema.safeParse(request.params)
 
     if (!parseResult.success) {
-      return this.createErrorResponse(
-        request.id,
-        -32602,
-        `Invalid tool call params: ${parseResult.error.message}`
-      );
+      return {
+        jsonrpc: '2.0',
+        id: request.id,
+        error: {
+          code: -32602,
+          message: `Invalid tool call params: ${parseResult.error.message}`,
+        },
+      }
     }
 
-    const params = parseResult.data;
+    const params = parseResult.data
 
     // Authenticate agent using API key
     const agent = await authenticateAgent({
       apiKey: this.authContext.apiKey,
-    });
+    })
 
     if (!agent) {
-      return this.createErrorResponse(
-        request.id,
-        -32001,
-        'Authentication failed'
-      );
+      return {
+        jsonrpc: '2.0',
+        id: request.id,
+        error: { code: -32001, message: 'Authentication failed' },
+      }
     }
 
     // Execute tool with validated arguments
-    const toolResult = await executeTool(
-      params.name,
-      params.arguments as StringRecord<JsonValue>,
-      agent
-    );
+    // params.arguments is already StringRecord<JsonValue> from Zod validation
+    const toolResult = await executeTool(params.name, params.arguments, agent)
 
     // Convert tool result to MCP content format
-    const content = this.convertToolResultToContent(
-      toolResult as unknown as JsonValue
-    );
+    // MCPToolResult types are all JSON-serializable objects
+    const content = this.convertToolResultToContent(toolResult)
 
     const result: ToolCallResult = {
       content,
       isError: false,
-    };
+    }
 
     return {
       jsonrpc: '2.0',
       id: request.id,
-      result: result as unknown as JsonRpcResult,
-    };
+      result,
+    }
   }
 
   /**
@@ -253,7 +278,7 @@ export class MCPRequestHandler {
    * Formats results as readable text content
    */
   private convertToolResultToContent(
-    toolResult: JsonValue
+    toolResult: unknown,
   ): Array<{ type: 'text'; text: string }> {
     // Handle different result types
     if (typeof toolResult === 'string') {
@@ -262,18 +287,18 @@ export class MCPRequestHandler {
           type: 'text' as const,
           text: toolResult,
         },
-      ];
+      ]
     }
 
     if (typeof toolResult === 'object' && toolResult !== null) {
       // Format object results as readable JSON
-      const formatted = JSON.stringify(toolResult, null, 2);
+      const formatted = JSON.stringify(toolResult, null, 2)
       return [
         {
           type: 'text' as const,
           text: formatted,
         },
-      ];
+      ]
     }
 
     // Fallback: convert to string
@@ -282,28 +307,6 @@ export class MCPRequestHandler {
         type: 'text' as const,
         text: String(toolResult),
       },
-    ];
-  }
-
-  /**
-   * Create JSON-RPC error response
-   */
-  private createErrorResponse(
-    id: string | number | null,
-    code: number,
-    message: string,
-    data?: JsonValue
-  ): JsonRpcResponse {
-    const error: JsonRpcError = {
-      code,
-      message,
-      data,
-    };
-
-    return {
-      jsonrpc: '2.0',
-      id,
-      error,
-    };
+    ]
   }
 }

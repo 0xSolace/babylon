@@ -11,8 +11,22 @@
  * @packageDocumentation
  */
 
-import type { JsonValue } from '@babylon/shared';
-import { logger } from '@babylon/shared';
+import type { JsonValue } from '@babylon/shared'
+import {
+  formatAgent0Id,
+  isValidAddress,
+  logger,
+  toAddress,
+  toAddressArray,
+  toAgent0Id,
+  toEndpointType,
+  toHexString,
+  toIpfsProvider,
+  toJsonRecord,
+  toNetworkName,
+  toNull,
+  toStringArray,
+} from '@babylon/shared'
 import type {
   AgentSummary,
   Feedback,
@@ -20,23 +34,24 @@ import type {
   SDKConfig,
   SearchParams,
   SearchResultMeta,
-} from 'agent0-sdk';
+} from 'agent0-sdk'
 // Import SDK and types from agent0-sdk
-import { SDK } from 'agent0-sdk';
-import { privateKeyToAccount } from 'viem/accounts';
+import { SDK } from 'agent0-sdk'
+import type { Address } from 'viem'
+import { privateKeyToAccount } from 'viem/accounts'
 
 /**
  * Contract addresses for Agent0 integration
  * @internal
  */
 interface ContractAddresses {
-  identityRegistry: `0x${string}`;
-  reputationSystem: `0x${string}`;
-  chainId: number;
-  network: string;
+  identityRegistry: Address
+  reputationSystem: Address
+  chainId: number
+  network: string
 }
 
-let contractAddressesProvider: (() => ContractAddresses) | null = null;
+let contractAddressesProvider: (() => ContractAddresses) | null = null
 
 /**
  * Configures the contract addresses provider
@@ -46,10 +61,13 @@ let contractAddressesProvider: (() => ContractAddresses) | null = null;
  * @param provider - Function that returns contract addresses
  */
 export function setContractAddressesProvider(
-  provider: () => ContractAddresses
+  provider: () => ContractAddresses,
 ): void {
-  contractAddressesProvider = provider;
+  contractAddressesProvider = provider
 }
+
+/** Zero address constant for fallback */
+const ZERO_ADDRESS: Address = '0x0000000000000000000000000000000000000000'
 
 /**
  * Gets contract addresses using provider or fallback
@@ -57,17 +75,17 @@ export function setContractAddressesProvider(
  */
 function getContractAddresses(): ContractAddresses {
   if (contractAddressesProvider) {
-    return contractAddressesProvider();
+    return contractAddressesProvider()
   }
   return {
-    identityRegistry: '0x0000000000000000000000000000000000000000',
-    reputationSystem: '0x0000000000000000000000000000000000000000',
+    identityRegistry: ZERO_ADDRESS,
+    reputationSystem: ZERO_ADDRESS,
     chainId: 31337,
     network: 'localnet',
-  };
+  }
 }
 
-import { parseCapabilities } from '../shared/capabilities';
+import { parseCapabilities } from '../shared/capabilities'
 import type {
   Agent0AgentProfile,
   Agent0AgentUpdateParams,
@@ -83,42 +101,42 @@ import type {
   Agent0SearchResult,
   Agent0TransferResult,
   IAgent0Client,
-} from './types';
+} from './types'
 
 export class Agent0Client implements IAgent0Client {
-  private sdk: SDK | null;
-  private chainId: number;
+  private sdk: SDK | null
+  private chainId: number
   private config: {
-    network: 'sepolia' | 'mainnet' | 'localnet';
-    rpcUrl: string;
-    privateKey: string;
-    ipfsProvider?: 'node' | 'filecoinPin' | 'pinata';
-    ipfsNodeUrl?: string;
-    pinataJwt?: string;
-    filecoinPrivateKey?: string;
-    subgraphUrl?: string;
-  };
-  private initPromise: Promise<void> | null = null;
+    network: 'sepolia' | 'mainnet' | 'localnet'
+    rpcUrl: string
+    privateKey: string
+    ipfsProvider?: 'node' | 'filecoinPin' | 'pinata'
+    ipfsNodeUrl?: string
+    pinataJwt?: string
+    filecoinPrivateKey?: string
+    subgraphUrl?: string
+  }
+  private initPromise: Promise<void> | null = null
 
   constructor(config: {
-    network: 'sepolia' | 'mainnet' | 'localnet';
-    rpcUrl: string;
-    privateKey: string;
-    ipfsProvider?: 'node' | 'filecoinPin' | 'pinata';
-    ipfsNodeUrl?: string;
-    pinataJwt?: string;
-    filecoinPrivateKey?: string;
-    subgraphUrl?: string;
+    network: 'sepolia' | 'mainnet' | 'localnet'
+    rpcUrl: string
+    privateKey: string
+    ipfsProvider?: 'node' | 'filecoinPin' | 'pinata'
+    ipfsNodeUrl?: string
+    pinataJwt?: string
+    filecoinPrivateKey?: string
+    subgraphUrl?: string
   }) {
     if (config.network === 'localnet') {
-      this.chainId = 31337;
+      this.chainId = 31337
     } else if (config.network === 'sepolia') {
-      this.chainId = 11155111;
+      this.chainId = 11155111
     } else {
-      this.chainId = 1;
+      this.chainId = 1
     }
-    this.config = config;
-    this.sdk = null;
+    this.config = config
+    this.sdk = null
   }
 
   /**
@@ -126,46 +144,45 @@ export class Agent0Client implements IAgent0Client {
    * @internal
    */
   private async ensureSDK(): Promise<void> {
-    if (this.sdk) return;
+    if (this.sdk) return
 
     if (this.initPromise) {
-      await this.initPromise;
-      return;
+      await this.initPromise
+      return
     }
 
     this.initPromise = (async () => {
       try {
-        const ipfsProvider = this.config.ipfsProvider || 'node';
+        const ipfsProvider = this.config.ipfsProvider || 'node'
         if (ipfsProvider === 'pinata' && !this.config.pinataJwt) {
           throw new Error(
-            'PINATA_JWT is required when using pinata IPFS provider'
-          );
+            'PINATA_JWT is required when using pinata IPFS provider',
+          )
         }
         if (ipfsProvider === 'filecoinPin' && !this.config.filecoinPrivateKey) {
           throw new Error(
-            'FILECOIN_PRIVATE_KEY is required when using filecoinPin IPFS provider'
-          );
+            'FILECOIN_PRIVATE_KEY is required when using filecoinPin IPFS provider',
+          )
         }
 
-        let ipfsNodeUrl = this.config.ipfsNodeUrl;
+        let ipfsNodeUrl = this.config.ipfsNodeUrl
         if (ipfsProvider === 'node' && !ipfsNodeUrl) {
-          ipfsNodeUrl = 'https://ipfs.io';
+          ipfsNodeUrl = 'https://ipfs.io'
         }
 
-        let registryOverrides: SDKConfig['registryOverrides'] | undefined;
+        let registryOverrides: SDKConfig['registryOverrides'] | undefined
         if (this.chainId === 31337) {
-          const contracts = getContractAddresses();
+          const contracts = getContractAddresses()
           if (
             contracts.reputationSystem &&
-            contracts.reputationSystem !==
-              '0x0000000000000000000000000000000000000000'
+            contracts.reputationSystem !== ZERO_ADDRESS
           ) {
             registryOverrides = {
               [this.chainId]: {
-                REPUTATION: contracts.reputationSystem as `0x${string}`,
-                IDENTITY: contracts.identityRegistry as `0x${string}`,
+                REPUTATION: contracts.reputationSystem,
+                IDENTITY: contracts.identityRegistry,
               },
-            };
+            }
           }
         }
 
@@ -179,9 +196,9 @@ export class Agent0Client implements IAgent0Client {
           filecoinPrivateKey: this.config.filecoinPrivateKey,
           subgraphUrl: this.config.subgraphUrl,
           registryOverrides,
-        };
+        }
 
-        this.sdk = new SDK(sdkConfig);
+        this.sdk = new SDK(sdkConfig)
         logger.info(
           'Agent0Client initialized successfully',
           {
@@ -189,14 +206,14 @@ export class Agent0Client implements IAgent0Client {
             rpcUrl: this.config.rpcUrl,
             isReadOnly: this.sdk.isReadOnly,
           },
-          'Agent0Client'
-        );
+          'Agent0Client',
+        )
       } finally {
-        this.initPromise = null;
+        this.initPromise = null
       }
-    })();
+    })()
 
-    await this.initPromise;
+    await this.initPromise
   }
 
   // ===========================================================================
@@ -212,50 +229,50 @@ export class Agent0Client implements IAgent0Client {
    * 3. Index in Agent0 subgraph
    */
   async registerAgent(
-    params: Agent0RegistrationParams
+    params: Agent0RegistrationParams,
   ): Promise<Agent0RegistrationResult> {
-    await this.ensureSDK();
+    await this.ensureSDK()
 
     if (!this.sdk || this.sdk.isReadOnly) {
-      throw new Error('SDK not initialized with write access');
+      throw new Error('SDK not initialized with write access')
     }
 
     logger.info(
       `Registering agent: ${params.name}`,
       undefined,
-      'Agent0Client [registerAgent]'
-    );
+      'Agent0Client [registerAgent]',
+    )
 
     const agent = this.sdk.createAgent(
       params.name,
       params.description,
-      params.imageUrl
-    );
+      params.imageUrl ?? undefined,
+    )
 
-    if (params.walletAddress) {
-      agent.setAgentWallet(params.walletAddress as `0x${string}`, this.chainId);
+    if (params.walletAddress && isValidAddress(params.walletAddress)) {
+      agent.setAgentWallet(params.walletAddress, this.chainId)
     }
 
     if (params.mcpEndpoint) {
-      await agent.setMCP(params.mcpEndpoint, '1.0.0', false);
+      await agent.setMCP(params.mcpEndpoint, '1.0.0', false)
     }
 
     if (params.a2aEndpoint) {
-      await agent.setA2A(params.a2aEndpoint, '1.0.0', false);
+      await agent.setA2A(params.a2aEndpoint, '1.0.0', false)
     }
 
     agent.setMetadata({
       capabilities: params.capabilities,
       version: params.capabilities.version || '1.0.0',
-    });
+    })
 
-    agent.setActive(true);
+    agent.setActive(true)
 
     if (params.capabilities.x402Support !== undefined) {
-      agent.setX402Support(params.capabilities.x402Support);
+      agent.setX402Support(params.capabilities.x402Support)
     }
 
-    const registrationFile: RegistrationFile = await agent.registerIPFS();
+    const registrationFile: RegistrationFile = await agent.registerIPFS()
 
     logger.info(
       'Registration file returned from SDK:',
@@ -265,28 +282,28 @@ export class Agent0Client implements IAgent0Client {
         active: registrationFile.active,
         x402support: registrationFile.x402support,
       },
-      'Agent0Client [registerAgent]'
-    );
+      'Agent0Client [registerAgent]',
+    )
 
     if (!registrationFile.agentId) {
-      throw new Error('Registration file missing agentId');
+      throw new Error('Registration file missing agentId')
     }
 
-    const agentId = registrationFile.agentId;
-    const parts = agentId.split(':');
-    const tokenId = Number.parseInt(parts[1]!, 10);
+    const agentId = registrationFile.agentId
+    const parts = agentId.split(':')
+    const tokenId = Number.parseInt(parts[1] ?? '0', 10)
 
     logger.info(
       `Agent registered successfully: ${agentId}`,
       undefined,
-      'Agent0Client [registerAgent]'
-    );
+      'Agent0Client [registerAgent]',
+    )
 
     return {
       tokenId,
       txHash: '',
       metadataCID: registrationFile.agentURI?.replace('ipfs://', ''),
-    };
+    }
   }
 
   /**
@@ -300,18 +317,15 @@ export class Agent0Client implements IAgent0Client {
    * The game's metadata includes pointers to Base network where game operates
    */
   async registerBabylonGame(): Promise<Agent0RegistrationResult> {
-    const baseChainId = Number.parseInt(
-      process.env.BASE_CHAIN_ID || '8453',
-      10
-    ); // Base mainnet by default
-    const baseRegistryAddress = process.env.BASE_IDENTITY_REGISTRY_ADDRESS;
-    const baseReputationAddress = process.env.BASE_REPUTATION_SYSTEM_ADDRESS;
-    const baseMarketAddress = process.env.BASE_DIAMOND_ADDRESS;
+    const baseChainId = Number.parseInt(process.env.BASE_CHAIN_ID || '8453', 10) // Base mainnet by default
+    const baseRegistryAddress = process.env.BASE_IDENTITY_REGISTRY_ADDRESS
+    const baseReputationAddress = process.env.BASE_REPUTATION_SYSTEM_ADDRESS
+    const baseMarketAddress = process.env.BASE_DIAMOND_ADDRESS
 
     if (!baseRegistryAddress) {
       throw new Error(
-        'BASE_IDENTITY_REGISTRY_ADDRESS required for game registration'
-      );
+        'BASE_IDENTITY_REGISTRY_ADDRESS required for game registration',
+      )
     }
 
     logger.info(
@@ -320,8 +334,8 @@ export class Agent0Client implements IAgent0Client {
         baseChainId,
         baseRegistryAddress,
       },
-      'Agent0Client [registerBabylonGame]'
-    );
+      'Agent0Client [registerBabylonGame]',
+    )
 
     return this.registerAgent({
       name: process.env.BABYLON_GAME_NAME || 'Babylon Prediction Game',
@@ -365,7 +379,7 @@ export class Agent0Client implements IAgent0Client {
           marketAddress: baseMarketAddress,
         },
       },
-    });
+    })
   }
 
   // ===========================================================================
@@ -377,114 +391,118 @@ export class Agent0Client implements IAgent0Client {
    */
   async searchAgents(
     filters: Agent0SearchFilters,
-    options?: Agent0SearchOptions
+    options?: Agent0SearchOptions,
   ): Promise<Agent0SearchResponse<Agent0SearchResult>> {
-    await this.ensureSDK();
+    await this.ensureSDK()
 
     logger.info(
       'Searching agents with filters:',
       { filters, options },
-      'Agent0Client [searchAgents]'
-    );
+      'Agent0Client [searchAgents]',
+    )
 
-    const searchParams: SearchParams = {};
+    const searchParams: SearchParams = {}
 
     // Map Babylon filters to SDK SearchParams
     if (filters.a2aSkills && filters.a2aSkills.length > 0) {
-      searchParams.a2aSkills = filters.a2aSkills;
+      searchParams.a2aSkills = filters.a2aSkills
     } else if (filters.strategies && filters.strategies.length > 0) {
-      searchParams.a2aSkills = filters.strategies;
+      searchParams.a2aSkills = filters.strategies
     } else if (filters.skills && filters.skills.length > 0) {
-      searchParams.a2aSkills = filters.skills;
+      searchParams.a2aSkills = filters.skills
     }
 
     if (filters.name) {
-      searchParams.name = filters.name;
+      searchParams.name = filters.name
     }
 
     if (filters.description) {
-      searchParams.description = filters.description;
+      searchParams.description = filters.description
     }
 
     if (filters.x402Support !== undefined) {
-      searchParams.x402support = filters.x402Support;
+      searchParams.x402support = filters.x402Support
     }
 
     // Multi-chain search support (Agent0 SDK v0.31.0)
     if (filters.chains !== undefined) {
-      searchParams.chains = filters.chains;
+      searchParams.chains = filters.chains
     }
 
     // Active status filter
     if (filters.active !== undefined) {
-      searchParams.active = filters.active;
+      searchParams.active = filters.active
     }
 
     // Owner & operator filters
     if (filters.owners && filters.owners.length > 0) {
-      searchParams.owners = filters.owners as `0x${string}`[];
+      searchParams.owners = toAddressArray(filters.owners)
     }
 
     if (filters.operators && filters.operators.length > 0) {
-      searchParams.operators = filters.operators as `0x${string}`[];
+      searchParams.operators = toAddressArray(filters.operators)
     }
 
     // Protocol capability filters
     if (filters.mcp !== undefined) {
-      searchParams.mcp = filters.mcp;
+      searchParams.mcp = filters.mcp
     }
 
     if (filters.a2a !== undefined) {
-      searchParams.a2a = filters.a2a;
+      searchParams.a2a = filters.a2a
     }
 
     // Identity filters
     if (filters.ens) {
-      searchParams.ens = filters.ens;
+      searchParams.ens = filters.ens
     }
 
     if (filters.did) {
-      searchParams.did = filters.did;
+      searchParams.did = filters.did
     }
 
-    if (filters.walletAddress) {
-      searchParams.walletAddress = filters.walletAddress as `0x${string}`;
+    if (filters.walletAddress && isValidAddress(filters.walletAddress)) {
+      searchParams.walletAddress = filters.walletAddress
     }
 
     // Trust model filters
     if (filters.supportedTrust && filters.supportedTrust.length > 0) {
-      searchParams.supportedTrust = filters.supportedTrust;
+      searchParams.supportedTrust = filters.supportedTrust
     }
 
     // Capability-specific filters
     if (filters.mcpTools && filters.mcpTools.length > 0) {
-      searchParams.mcpTools = filters.mcpTools;
+      searchParams.mcpTools = filters.mcpTools
     }
 
     if (filters.mcpPrompts && filters.mcpPrompts.length > 0) {
-      searchParams.mcpPrompts = filters.mcpPrompts;
+      searchParams.mcpPrompts = filters.mcpPrompts
     }
 
     if (filters.mcpResources && filters.mcpResources.length > 0) {
-      searchParams.mcpResources = filters.mcpResources;
+      searchParams.mcpResources = filters.mcpResources
     }
 
-    const { items, nextCursor, meta } = await this.sdk!.searchAgents(
+    const searchResult = await this.sdk?.searchAgents(
       searchParams,
       options?.sort,
       options?.pageSize,
-      options?.cursor
-    );
+      options?.cursor,
+    )
+
+    const items = searchResult?.items ?? []
+    const nextCursor = searchResult?.nextCursor
+    const meta = searchResult?.meta
 
     const results = items.map((agent: AgentSummary) =>
-      this.mapAgentSummaryToSearchResult(agent)
-    );
+      this.mapAgentSummaryToSearchResult(agent),
+    )
 
     return {
       items: results,
       nextCursor,
       meta: meta ? this.mapSearchResultMeta(meta) : undefined,
-    };
+    }
   }
 
   /**
@@ -492,63 +510,69 @@ export class Agent0Client implements IAgent0Client {
    */
   async searchAgentsByReputation(
     params: Agent0FeedbackSearchParams,
-    options?: Agent0SearchOptions
+    options?: Agent0SearchOptions,
   ): Promise<Agent0SearchResponse<Agent0SearchResult>> {
-    await this.ensureSDK();
+    await this.ensureSDK()
 
     logger.info(
       'Searching agents by reputation:',
       { params, options },
-      'Agent0Client [searchAgentsByReputation]'
-    );
+      'Agent0Client [searchAgentsByReputation]',
+    )
 
-    const { items, nextCursor, meta } =
-      await this.sdk!.searchAgentsByReputation(
-        params.agents,
-        params.tags,
-        params.reviewers as `0x${string}`[] | undefined,
-        params.capabilities,
-        params.skills,
-        params.tasks,
-        params.names,
-        params.minScore,
-        params.includeRevoked,
-        options?.pageSize,
-        options?.cursor,
-        options?.sort
-      );
+    const reviewerAddresses = params.reviewers
+      ? toAddressArray(params.reviewers)
+      : undefined
+    const reputationResult = await this.sdk?.searchAgentsByReputation(
+      params.agents,
+      params.tags,
+      reviewerAddresses,
+      params.capabilities,
+      params.skills,
+      params.tasks,
+      params.names,
+      params.minScore,
+      params.includeRevoked,
+      options?.pageSize,
+      options?.cursor,
+      options?.sort,
+    )
+
+    const items = reputationResult?.items ?? []
+    const nextCursor = reputationResult?.nextCursor
+    const meta = reputationResult?.meta
 
     const results = items.map((agent: AgentSummary) =>
-      this.mapAgentSummaryToSearchResult(agent)
-    );
+      this.mapAgentSummaryToSearchResult(agent),
+    )
 
     return {
       items: results,
       nextCursor,
       meta: meta ? this.mapSearchResultMeta(meta) : undefined,
-    };
+    }
   }
 
   /**
    * Get agent profile from Agent0 network
    */
   async getAgentProfile(tokenId: number): Promise<Agent0AgentProfile | null> {
-    await this.ensureSDK();
+    await this.ensureSDK()
 
     logger.info(
       `Getting agent profile for token ${tokenId}`,
       undefined,
-      'Agent0Client [getAgentProfile]'
-    );
+      'Agent0Client [getAgentProfile]',
+    )
 
-    const agentId = `${this.chainId}:${tokenId}` as `${number}:${number}`;
-    const agent: AgentSummary | null = await this.sdk!.getAgent(agentId);
+    const agentId = formatAgent0Id(this.chainId, tokenId)
+    const agent = toNull(await this.sdk?.getAgent(agentId))
 
     if (!agent) {
-      return null;
+      return null
     }
 
-    return this.mapAgentSummaryToProfile(agent, tokenId);
+    return this.mapAgentSummaryToProfile(agent, tokenId)
   }
 
   // ===========================================================================
@@ -559,22 +583,26 @@ export class Agent0Client implements IAgent0Client {
    * Load an existing agent for editing
    */
   async loadAgent(agentId: string): Promise<Agent0AgentProfile | null> {
-    await this.ensureSDK();
+    await this.ensureSDK()
 
     logger.info(
       `Loading agent: ${agentId}`,
       undefined,
-      'Agent0Client [loadAgent]'
-    );
+      'Agent0Client [loadAgent]',
+    )
 
-    const agent = await this.sdk!.loadAgent(agentId as `${number}:${number}`);
-    const registrationFile = agent.getRegistrationFile();
-    const parts = agentId.split(':');
-    const tokenId = Number.parseInt(parts[1] ?? '0', 10);
+    const agent0Id = toAgent0Id(agentId)
+    const agent = await this.sdk?.loadAgent(agent0Id)
+    if (!agent) {
+      return null
+    }
+    const registrationFile = agent.getRegistrationFile()
+    const parts = agentId.split(':')
+    const tokenId = Number.parseInt(parts[1] ?? '0', 10)
 
     const capabilities = this.parseCapabilities(
-      registrationFile.metadata as Record<string, JsonValue> | undefined
-    );
+      toJsonRecord(registrationFile.metadata),
+    )
 
     return {
       tokenId,
@@ -592,16 +620,16 @@ export class Agent0Client implements IAgent0Client {
       owners: registrationFile.owners,
       operators: registrationFile.operators,
       endpoints: registrationFile.endpoints.map((ep) => ({
-        type: ep.type as 'MCP' | 'A2A' | 'ENS' | 'DID' | 'wallet' | 'OASF',
+        type: toEndpointType(ep.type),
         value: ep.value,
         meta: ep.meta,
       })),
-      trustModels: registrationFile.trustModels as string[],
+      trustModels: toStringArray(registrationFile.trustModels),
       active: registrationFile.active,
       x402support: registrationFile.x402support,
       metadata: registrationFile.metadata,
       updatedAt: registrationFile.updatedAt,
-    };
+    }
   }
 
   /**
@@ -609,65 +637,66 @@ export class Agent0Client implements IAgent0Client {
    */
   async updateAgent(
     agentId: string,
-    params: Agent0AgentUpdateParams
+    params: Agent0AgentUpdateParams,
   ): Promise<Agent0RegistrationResult> {
-    await this.ensureSDK();
+    await this.ensureSDK()
 
     if (!this.sdk || this.sdk.isReadOnly) {
-      throw new Error('SDK not initialized with write access');
+      throw new Error('SDK not initialized with write access')
     }
 
     logger.info(
       `Updating agent: ${agentId}`,
       { params },
-      'Agent0Client [updateAgent]'
-    );
+      'Agent0Client [updateAgent]',
+    )
 
-    const agent = await this.sdk.loadAgent(agentId as `${number}:${number}`);
+    const agent0Id = toAgent0Id(agentId)
+    const agent = await this.sdk.loadAgent(agent0Id)
 
     // Update basic info if provided
     if (params.name || params.description || params.image) {
-      agent.updateInfo(params.name, params.description, params.image);
+      agent.updateInfo(params.name, params.description, params.image)
     }
 
     // Update wallet if provided
-    if (params.walletAddress) {
+    if (params.walletAddress && isValidAddress(params.walletAddress)) {
       agent.setAgentWallet(
-        params.walletAddress as `0x${string}`,
-        params.walletChainId ?? this.chainId
-      );
+        params.walletAddress,
+        params.walletChainId ?? this.chainId,
+      )
     }
 
     // Update endpoints if provided
     if (params.mcpEndpoint) {
-      await agent.setMCP(params.mcpEndpoint, '1.0.0', false);
+      await agent.setMCP(params.mcpEndpoint, '1.0.0', false)
     }
 
     if (params.a2aEndpoint) {
-      await agent.setA2A(params.a2aEndpoint, '1.0.0', false);
+      await agent.setA2A(params.a2aEndpoint, '1.0.0', false)
     }
 
     // Update skills
     if (params.skills) {
       for (const skill of params.skills) {
-        agent.addSkill(skill, false);
+        agent.addSkill(skill, false)
       }
     }
 
     // Update domains
     if (params.domains) {
       for (const domain of params.domains) {
-        agent.addDomain(domain, false);
+        agent.addDomain(domain, false)
       }
     }
 
     // Update status flags
     if (params.active !== undefined) {
-      agent.setActive(params.active);
+      agent.setActive(params.active)
     }
 
     if (params.x402Support !== undefined) {
-      agent.setX402Support(params.x402Support);
+      agent.setX402Support(params.x402Support)
     }
 
     // Update trust models
@@ -675,32 +704,36 @@ export class Agent0Client implements IAgent0Client {
       agent.setTrust(
         params.trustModels.reputation,
         params.trustModels.cryptoEconomic,
-        params.trustModels.teeAttestation
-      );
+        params.trustModels.teeAttestation,
+      )
     }
 
     // Update metadata
     if (params.metadata) {
-      agent.setMetadata(params.metadata);
+      agent.setMetadata(params.metadata)
     }
 
     // Re-register to IPFS with updated data
-    const registrationFile: RegistrationFile = await agent.registerIPFS();
+    const registrationFile: RegistrationFile = await agent.registerIPFS()
 
-    const parts = agentId.split(':');
-    const tokenId = Number.parseInt(parts[1]!, 10);
+    const parts = agentId.split(':')
+    const tokenIdStr = parts[1]
+    if (!tokenIdStr) {
+      throw new Error(`Invalid agentId format: ${agentId}`)
+    }
+    const tokenId = Number.parseInt(tokenIdStr, 10)
 
     logger.info(
       `Agent updated successfully: ${agentId}`,
       undefined,
-      'Agent0Client [updateAgent]'
-    );
+      'Agent0Client [updateAgent]',
+    )
 
     return {
       tokenId,
       txHash: '',
       metadataCID: registrationFile.agentURI?.replace('ipfs://', ''),
-    };
+    }
   }
 
   /**
@@ -708,58 +741,69 @@ export class Agent0Client implements IAgent0Client {
    */
   async transferAgent(
     agentId: string,
-    newOwner: string
+    newOwner: string,
   ): Promise<Agent0TransferResult> {
-    await this.ensureSDK();
+    await this.ensureSDK()
 
     if (!this.sdk || this.sdk.isReadOnly) {
-      throw new Error('SDK not initialized with write access');
+      throw new Error('SDK not initialized with write access')
     }
 
     logger.info(
       `Transferring agent ${agentId} to ${newOwner}`,
       undefined,
-      'Agent0Client [transferAgent]'
-    );
+      'Agent0Client [transferAgent]',
+    )
 
-    const result = await this.sdk.transferAgent(
-      agentId as `${number}:${number}`,
-      newOwner as `0x${string}`
-    );
+    const agent0Id = toAgent0Id(agentId)
+    const ownerAddress = toAddress(newOwner)
+    const result = await this.sdk.transferAgent(agent0Id, ownerAddress)
 
     logger.info(
       `Agent transferred successfully: ${agentId}`,
       { txHash: result.txHash },
-      'Agent0Client [transferAgent]'
-    );
+      'Agent0Client [transferAgent]',
+    )
 
     return {
       txHash: result.txHash,
       from: result.from,
       to: result.to,
       agentId: result.agentId,
-    };
+    }
   }
 
   /**
    * Check if an address owns the specified agent
    */
   async isAgentOwner(agentId: string, address: string): Promise<boolean> {
-    await this.ensureSDK();
+    await this.ensureSDK()
 
-    return this.sdk!.isAgentOwner(
-      agentId as `${number}:${number}`,
-      address as `0x${string}`
-    );
+    if (!this.sdk) {
+      throw new Error('SDK not initialized')
+    }
+
+    const agent0Id = toAgent0Id(agentId)
+    const ownerAddress = toAddress(address)
+    return this.sdk.isAgentOwner(agent0Id, ownerAddress)
   }
 
   /**
    * Get the owner address of an agent
    */
   async getAgentOwner(agentId: string): Promise<string> {
-    await this.ensureSDK();
+    await this.ensureSDK()
 
-    return this.sdk!.getAgentOwner(agentId as `${number}:${number}`);
+    if (!this.sdk) {
+      throw new Error('SDK not initialized')
+    }
+
+    const agent0Id = toAgent0Id(agentId)
+    const owner = await this.sdk.getAgentOwner(agent0Id)
+    if (!owner) {
+      throw new Error(`Could not get owner for agent ${agentId}`)
+    }
+    return owner
   }
 
   // ===========================================================================
@@ -778,21 +822,20 @@ export class Agent0Client implements IAgent0Client {
    * @throws Error if SDK not initialized or feedback submission fails
    */
   async submitFeedback(params: Agent0FeedbackParams): Promise<Agent0Feedback> {
-    await this.ensureSDK();
+    await this.ensureSDK()
 
     if (!this.sdk || this.sdk.isReadOnly) {
-      throw new Error('SDK not initialized with write access');
+      throw new Error('SDK not initialized with write access')
     }
 
     logger.info(
       `Submitting feedback for agent ${params.targetAgentId}`,
       undefined,
-      'Agent0Client [submitFeedback]'
-    );
+      'Agent0Client [submitFeedback]',
+    )
 
-    const agentId =
-      `${this.chainId}:${params.targetAgentId}` as `${number}:${number}`;
-    const agent0Score = Math.max(0, Math.min(100, (params.rating + 5) * 10));
+    const agentId = formatAgent0Id(this.chainId, params.targetAgentId)
+    const agent0Score = Math.max(0, Math.min(100, (params.rating + 5) * 10))
 
     // Prepare feedback file with extended parameters
     const feedbackFile = this.sdk.prepareFeedback(
@@ -805,33 +848,32 @@ export class Agent0Client implements IAgent0Client {
       params.skill,
       params.task,
       params.context,
-      params.proofOfPayment
-    );
+      params.proofOfPayment,
+    )
 
     // For system-level feedback, we need to sign authorization
     // The SDK's signer (from config.privateKey) is used to sign the authorization
     // The agent should have pre-authorized this client address during registration
-    const signerAccount = privateKeyToAccount(
-      this.config.privateKey as `0x${string}`
-    );
-    const signerAddress = signerAccount.address;
+    const privateKey = toHexString(this.config.privateKey)
+    const signerAccount = privateKeyToAccount(privateKey)
+    const signerAddress = signerAccount.address
 
     const auth = await this.sdk.signFeedbackAuth(
       agentId,
       signerAddress,
       undefined,
-      24
-    );
+      24,
+    )
 
-    const feedback = await this.sdk.giveFeedback(agentId, feedbackFile, auth);
+    const feedback = await this.sdk.giveFeedback(agentId, feedbackFile, auth)
 
     logger.info(
       `Feedback submitted successfully for agent ${agentId}`,
       undefined,
-      'Agent0Client [submitFeedback]'
-    );
+      'Agent0Client [submitFeedback]',
+    )
 
-    return this.mapFeedbackToAgent0Feedback(feedback);
+    return this.mapFeedbackToAgent0Feedback(feedback)
   }
 
   /**
@@ -840,23 +882,28 @@ export class Agent0Client implements IAgent0Client {
   async getFeedback(
     agentId: string,
     clientAddress: string,
-    feedbackIndex: number
+    feedbackIndex: number,
   ): Promise<Agent0Feedback> {
-    await this.ensureSDK();
+    await this.ensureSDK()
+
+    if (!this.sdk) {
+      throw new Error('SDK not initialized')
+    }
 
     logger.info(
       `Getting feedback for agent ${agentId}, client ${clientAddress}, index ${feedbackIndex}`,
       undefined,
-      'Agent0Client [getFeedback]'
-    );
+      'Agent0Client [getFeedback]',
+    )
 
-    const feedback = await this.sdk!.getFeedback(
-      agentId as `${number}:${number}`,
-      clientAddress as `0x${string}`,
-      feedbackIndex
-    );
+    const agent0Id = toAgent0Id(agentId)
+    const client = toAddress(clientAddress)
+    const feedback = await this.sdk.getFeedback(agent0Id, client, feedbackIndex)
 
-    return this.mapFeedbackToAgent0Feedback(feedback);
+    if (!feedback) {
+      throw new Error(`Feedback not found for agent ${agentId}`)
+    }
+    return this.mapFeedbackToAgent0Feedback(feedback)
   }
 
   /**
@@ -864,26 +911,34 @@ export class Agent0Client implements IAgent0Client {
    */
   async searchFeedback(
     agentId: string,
-    params?: Partial<Agent0FeedbackSearchParams>
+    params?: Partial<Agent0FeedbackSearchParams>,
   ): Promise<Agent0Feedback[]> {
-    await this.ensureSDK();
+    await this.ensureSDK()
+
+    if (!this.sdk) {
+      throw new Error('SDK not initialized')
+    }
 
     logger.info(
       `Searching feedback for agent ${agentId}`,
       { params },
-      'Agent0Client [searchFeedback]'
-    );
+      'Agent0Client [searchFeedback]',
+    )
 
-    const feedbackList = await this.sdk!.searchFeedback(
-      agentId as `${number}:${number}`,
+    const agent0Id = toAgent0Id(agentId)
+    const feedbackList = await this.sdk.searchFeedback(
+      agent0Id,
       params?.tags,
       params?.capabilities,
       params?.skills,
       params?.minScore,
-      params?.maxScore
-    );
+      params?.maxScore,
+    )
 
-    return feedbackList.map((f) => this.mapFeedbackToAgent0Feedback(f));
+    if (!feedbackList) {
+      return []
+    }
+    return feedbackList.map((f) => this.mapFeedbackToAgent0Feedback(f))
   }
 
   /**
@@ -891,32 +946,30 @@ export class Agent0Client implements IAgent0Client {
    */
   async revokeFeedback(
     agentId: string,
-    feedbackIndex: number
+    feedbackIndex: number,
   ): Promise<string> {
-    await this.ensureSDK();
+    await this.ensureSDK()
 
     if (!this.sdk || this.sdk.isReadOnly) {
-      throw new Error('SDK not initialized with write access');
+      throw new Error('SDK not initialized with write access')
     }
 
     logger.info(
       `Revoking feedback for agent ${agentId}, index ${feedbackIndex}`,
       undefined,
-      'Agent0Client [revokeFeedback]'
-    );
+      'Agent0Client [revokeFeedback]',
+    )
 
-    const txHash = await this.sdk.revokeFeedback(
-      agentId as `${number}:${number}`,
-      feedbackIndex
-    );
+    const agent0Id = toAgent0Id(agentId)
+    const txHash = await this.sdk.revokeFeedback(agent0Id, feedbackIndex)
 
     logger.info(
       `Feedback revoked successfully for agent ${agentId}`,
       { txHash },
-      'Agent0Client [revokeFeedback]'
-    );
+      'Agent0Client [revokeFeedback]',
+    )
 
-    return txHash;
+    return txHash
   }
 
   /**
@@ -927,34 +980,39 @@ export class Agent0Client implements IAgent0Client {
     clientAddress: string,
     feedbackIndex: number,
     responseUri: string,
-    responseHash: string
+    responseHash: string,
   ): Promise<string> {
-    await this.ensureSDK();
+    await this.ensureSDK()
 
     if (!this.sdk || this.sdk.isReadOnly) {
-      throw new Error('SDK not initialized with write access');
+      throw new Error('SDK not initialized with write access')
     }
 
     logger.info(
       `Appending response to feedback for agent ${agentId}`,
       { clientAddress, feedbackIndex },
-      'Agent0Client [appendFeedbackResponse]'
-    );
+      'Agent0Client [appendFeedbackResponse]',
+    )
 
+    const agent0Id = toAgent0Id(agentId)
+    const client = toAddress(clientAddress)
     const txHash = await this.sdk.appendResponse(
-      agentId as `${number}:${number}`,
-      clientAddress as `0x${string}`,
+      agent0Id,
+      client,
       feedbackIndex,
-      { uri: responseUri, hash: responseHash }
-    );
+      {
+        uri: responseUri,
+        hash: responseHash,
+      },
+    )
 
     logger.info(
       `Response appended successfully for agent ${agentId}`,
       { txHash },
-      'Agent0Client [appendFeedbackResponse]'
-    );
+      'Agent0Client [appendFeedbackResponse]',
+    )
 
-    return txHash;
+    return txHash
   }
 
   /**
@@ -963,26 +1021,26 @@ export class Agent0Client implements IAgent0Client {
   async getReputationSummary(
     agentId: string,
     tag1?: string,
-    tag2?: string
+    tag2?: string,
   ): Promise<Agent0ReputationSummary> {
-    await this.ensureSDK();
+    await this.ensureSDK()
 
     logger.info(
       `Getting reputation summary for agent ${agentId}`,
       { tag1, tag2 },
-      'Agent0Client [getReputationSummary]'
-    );
+      'Agent0Client [getReputationSummary]',
+    )
 
-    const summary = await this.sdk!.getReputationSummary(
-      agentId as `${number}:${number}`,
-      tag1,
-      tag2
-    );
+    const agent0Id = toAgent0Id(agentId)
+    const summary = await this.sdk?.getReputationSummary(agent0Id, tag1, tag2)
 
+    if (!summary) {
+      throw new Error(`Could not get reputation summary for agent ${agentId}`)
+    }
     return {
       count: summary.count,
       averageScore: summary.averageScore,
-    };
+    }
   }
 
   // ===========================================================================
@@ -997,7 +1055,7 @@ export class Agent0Client implements IAgent0Client {
    * or any method that uses the SDK to initialize it first.
    */
   isAvailable(): boolean {
-    return this.sdk !== null && !this.sdk.isReadOnly;
+    return this.sdk !== null && !this.sdk.isReadOnly
   }
 
   /**
@@ -1005,29 +1063,29 @@ export class Agent0Client implements IAgent0Client {
    * For async initialization, use any method that calls ensureSDK()
    */
   async ensureAvailable(): Promise<boolean> {
-    await this.ensureSDK();
-    return this.isAvailable();
+    await this.ensureSDK()
+    return this.isAvailable()
   }
 
   /**
    * Get the underlying SDK instance
    */
   getSDK(): SDK | null {
-    return this.sdk;
+    return this.sdk
   }
 
   /**
    * Get the current chain ID
    */
   getChainId(): number {
-    return this.chainId;
+    return this.chainId
   }
 
   /**
    * Format a token ID as a full agent ID
    */
   formatAgentId(tokenId: number): string {
-    return `${this.chainId}:${tokenId}`;
+    return `${this.chainId}:${tokenId}`
   }
 
   // ===========================================================================
@@ -1035,18 +1093,18 @@ export class Agent0Client implements IAgent0Client {
   // ===========================================================================
 
   private parseCapabilities(extras: Record<string, JsonValue> | undefined): {
-    strategies: string[];
-    markets: string[];
-    actions: string[];
-    version: string;
-    skills: string[];
-    domains: string[];
+    strategies: string[]
+    markets: string[]
+    actions: string[]
+    version: string
+    skills: string[]
+    domains: string[]
   } {
     if (!extras?.capabilities) {
-      return parseCapabilities(undefined);
+      return parseCapabilities(undefined)
     }
 
-    const result = parseCapabilities(extras.capabilities);
+    const result = parseCapabilities(extras.capabilities)
     if (
       result.strategies.length === 0 &&
       result.markets.length === 0 &&
@@ -1054,18 +1112,16 @@ export class Agent0Client implements IAgent0Client {
     ) {
       logger.warn('Invalid or empty agent capabilities in search result', {
         capabilities: extras.capabilities,
-      });
+      })
     }
 
-    return result;
+    return result
   }
 
   private mapAgentSummaryToSearchResult(
-    agent: AgentSummary
+    agent: AgentSummary,
   ): Agent0SearchResult {
-    const capabilities = this.parseCapabilities(
-      agent.extras as Record<string, JsonValue> | undefined
-    );
+    const capabilities = this.parseCapabilities(toJsonRecord(agent.extras))
     return {
       tokenId: Number.parseInt(agent.agentId.split(':')[1] ?? '0', 10),
       name: agent.name,
@@ -1092,16 +1148,14 @@ export class Agent0Client implements IAgent0Client {
       mcpResources: agent.mcpResources,
       active: agent.active,
       x402support: agent.x402support,
-    };
+    }
   }
 
   private mapAgentSummaryToProfile(
     agent: AgentSummary,
-    tokenId: number
+    tokenId: number,
   ): Agent0AgentProfile {
-    const capabilities = this.parseCapabilities(
-      agent.extras as Record<string, JsonValue> | undefined
-    );
+    const capabilities = this.parseCapabilities(toJsonRecord(agent.extras))
     return {
       tokenId,
       name: agent.name,
@@ -1121,15 +1175,15 @@ export class Agent0Client implements IAgent0Client {
       active: agent.active,
       x402support: agent.x402support,
       metadata: agent.extras,
-    };
+    }
   }
 
   private mapSearchResultMeta(meta: SearchResultMeta): {
-    chains: number[];
-    successfulChains: number[];
-    failedChains: number[];
-    totalResults: number;
-    timing: { totalMs: number; averagePerChainMs?: number };
+    chains: number[]
+    successfulChains: number[]
+    failedChains: number[]
+    totalResults: number
+    timing: { totalMs: number; averagePerChainMs?: number }
   } {
     return {
       chains: meta.chains,
@@ -1140,7 +1194,7 @@ export class Agent0Client implements IAgent0Client {
         totalMs: meta.timing.totalMs,
         averagePerChainMs: meta.timing.averagePerChainMs,
       },
-    };
+    }
   }
 
   private mapFeedbackToAgent0Feedback(feedback: Feedback): Agent0Feedback {
@@ -1161,76 +1215,69 @@ export class Agent0Client implements IAgent0Client {
       name: feedback.name,
       skill: feedback.skill,
       task: feedback.task,
-    };
+    }
   }
 }
 
 /**
  * Get or create singleton Agent0Client instance
  */
-let agent0ClientInstance: Agent0Client | null = null;
+let agent0ClientInstance: Agent0Client | null = null
 
 export function getAgent0Client(): Agent0Client {
   if (!agent0ClientInstance) {
-    // Validate network string
-    const networkEnv = process.env.AGENT0_NETWORK;
-    const validNetworks = ['sepolia', 'mainnet', 'localnet'] as const;
-    const network =
-      networkEnv &&
-      validNetworks.includes(networkEnv as (typeof validNetworks)[number])
-        ? (networkEnv as 'sepolia' | 'mainnet' | 'localnet')
-        : 'sepolia';
+    // Validate network string using type guard
+    const networkEnv = process.env.AGENT0_NETWORK
+    const network = toNetworkName(networkEnv, 'sepolia')
 
-    if (
-      networkEnv &&
-      !validNetworks.includes(networkEnv as (typeof validNetworks)[number])
-    ) {
+    if (networkEnv && networkEnv !== network) {
       logger.warn(
         `Invalid AGENT0_NETWORK value: ${networkEnv}. Using default: sepolia`,
         undefined,
-        'Agent0Client'
-      );
+        'Agent0Client',
+      )
     }
 
     const rpcUrl =
       process.env.AGENT0_RPC_URL ||
       (network === 'localnet'
-        ? 'http://localhost:8545'
+        ? 'http://localhost:6545'
         : network === 'sepolia'
           ? process.env.ETHEREUM_SEPOLIA_RPC_URL ||
             'https://ethereum-sepolia-rpc.publicnode.com'
           : process.env.ETHEREUM_RPC_URL ||
-            'https://ethereum-rpc.publicnode.com');
+            'https://ethereum-rpc.publicnode.com')
 
     const privateKey =
       process.env.BABYLON_GAME_PRIVATE_KEY ||
       process.env.AGENT0_PRIVATE_KEY ||
       (network === 'localnet'
         ? '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80'
-        : undefined);
+        : undefined)
 
     if (!rpcUrl || !privateKey) {
       throw new Error(
-        'Agent0Client requires RPC URL and private key. Set AGENT0_RPC_URL (or ETHEREUM_SEPOLIA_RPC_URL for sepolia), and BABYLON_GAME_PRIVATE_KEY or AGENT0_PRIVATE_KEY'
-      );
+        'Agent0Client requires RPC URL and private key. Set AGENT0_RPC_URL (or ETHEREUM_SEPOLIA_RPC_URL for sepolia), and BABYLON_GAME_PRIVATE_KEY or AGENT0_PRIVATE_KEY',
+      )
     }
 
-    const ipfsProvider =
-      (process.env.AGENT0_IPFS_PROVIDER as 'node' | 'filecoinPin' | 'pinata') ||
-      'node';
+    const ipfsProvider = toIpfsProvider(
+      process.env.AGENT0_IPFS_PROVIDER,
+      'node',
+    )
     if (ipfsProvider === 'pinata' && !process.env.PINATA_JWT) {
       logger.warn(
         'PINATA_JWT not set but pinata IPFS provider selected. SDK initialization may fail.',
         undefined,
-        'Agent0Client'
-      );
+        'Agent0Client',
+      )
     }
     if (ipfsProvider === 'filecoinPin' && !process.env.FILECOIN_PRIVATE_KEY) {
       logger.warn(
         'FILECOIN_PRIVATE_KEY not set but filecoinPin IPFS provider selected. SDK initialization may fail.',
         undefined,
-        'Agent0Client'
-      );
+        'Agent0Client',
+      )
     }
 
     agent0ClientInstance = new Agent0Client({
@@ -1242,15 +1289,15 @@ export function getAgent0Client(): Agent0Client {
       pinataJwt: process.env.PINATA_JWT,
       filecoinPrivateKey: process.env.FILECOIN_PRIVATE_KEY,
       subgraphUrl: process.env.AGENT0_SUBGRAPH_URL,
-    });
+    })
   }
 
-  return agent0ClientInstance;
+  return agent0ClientInstance
 }
 
 /**
  * Reset the singleton instance (useful for testing)
  */
 export function resetAgent0Client(): void {
-  agent0ClientInstance = null;
+  agent0ClientInstance = null
 }

@@ -1,9 +1,5 @@
-import PerpsDetailClient from './PerpsDetailClient';
-
-export function generateStaticParams(): Array<{ ticker?: string[] }> {
-  return [{ ticker: [] }];
-}
+import PerpsDetailClient from './PerpsDetailClient'
 
 export default function PerpsDetailPage() {
-  return <PerpsDetailClient />;
+  return <PerpsDetailClient />
 }

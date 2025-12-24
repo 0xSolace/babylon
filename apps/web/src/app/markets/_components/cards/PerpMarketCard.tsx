@@ -1,14 +1,12 @@
-'use client';
-
-import { cn } from '@babylon/shared';
-import { TrendingDown, TrendingUp } from 'lucide-react';
-import { memo } from 'react';
-import type { PerpMarket } from '@/types/markets';
-import { formatPrice, formatVolume } from '../../_lib/formatters';
+import { cn } from '@babylon/shared'
+import { TrendingDown, TrendingUp } from 'lucide-react'
+import { memo } from 'react'
+import type { PerpMarket } from '@/types/markets'
+import { formatPrice, formatVolume } from '../../_lib/formatters'
 
 interface PerpMarketCardProps {
-  market: PerpMarket;
-  onClick: (market: PerpMarket) => void;
+  market: PerpMarket
+  onClick: (market: PerpMarket) => void
 }
 
 /**
@@ -19,7 +17,7 @@ export const PerpMarketCard = memo(function PerpMarketCard({
   market,
   onClick,
 }: PerpMarketCardProps) {
-  const isPositive = market.change24h >= 0;
+  const isPositive = market.change24h >= 0
 
   return (
     <button
@@ -37,7 +35,7 @@ export const PerpMarketCard = memo(function PerpMarketCard({
           <div
             className={cn(
               'flex items-center justify-end gap-1 font-medium text-xs',
-              isPositive ? 'text-green-600' : 'text-red-600'
+              isPositive ? 'text-green-600' : 'text-red-600',
             )}
           >
             {isPositive ? (
@@ -62,5 +60,5 @@ export const PerpMarketCard = memo(function PerpMarketCard({
         </div>
       </div>
     </button>
-  );
-});
+  )
+})

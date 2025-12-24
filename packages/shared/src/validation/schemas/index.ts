@@ -3,44 +3,44 @@
  */
 
 // Export all admin schemas
-export * from './admin';
+export * from './admin'
 // Export all agent schemas
-export * from './agent';
+export * from './agent'
 // Export API response schemas (for client hooks validation)
-export * from './api-responses';
+export * from './api-responses'
 // Export all auth/OAuth schemas
-export * from './auth';
+export * from './auth'
 // Export all chat schemas
-export * from './chat';
+export * from './chat'
 // Export all common schemas
-export * from './common';
+export * from './common'
 // Export all feedback schemas
-export * from './feedback';
+export * from './feedback'
 // Export all game/utility schemas
-export * from './game';
+export * from './game'
 // Export all game engine schemas
-export * from './game-engine';
+export * from './game-engine'
 // Export all group schemas
-export * from './groups';
+export * from './groups'
 // Export all market/position schemas
-export * from './market';
+export * from './market'
 // Export all messaging schemas
-export * from './messaging';
+export * from './messaging'
 // Export all moderation schemas
-export * from './moderation';
+export * from './moderation'
 // Export all monitoring schemas
-export * from './monitoring';
+export * from './monitoring'
 // Export onboarding schemas
-export * from './onboarding';
+export * from './onboarding'
 // Export all payment schemas (X402/A2A)
-export * from './payment';
+export * from './payment'
 // Export all points schemas
-export * from './points';
+export * from './points'
 // Export all post/social schemas
-export * from './post';
+export * from './post'
 // Export all trade schemas
-export * from './trade';
+export * from './trade'
 // Export all user schemas
-export * from './user';
+export * from './user'
 // Export all waitlist schemas
-export * from './waitlist';
+export * from './waitlist'

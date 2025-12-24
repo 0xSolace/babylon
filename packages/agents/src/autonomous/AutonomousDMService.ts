@@ -4,12 +4,12 @@
  * Handles agents responding to direct messages autonomously
  */
 
-import { db } from '@babylon/db';
-import type { IAgentRuntime } from '@elizaos/core';
-import { callJejuDirect } from '../llm';
-import { getAgentConfig } from '../shared/agent-config';
-import { logger } from '../shared/logger';
-import { executeDirectMessage } from './DirectExecutors';
+import { db } from '@babylon/db'
+import type { IAgentRuntime } from '@elizaos/core'
+import { callAgentLLM } from '../llm'
+import { getAgentConfig } from '../shared/agent-config'
+import { logger } from '../shared/logger'
+import { executeDirectMessage } from './DirectExecutors'
 
 /**
  * Service for autonomous direct message responses
@@ -20,35 +20,35 @@ export class AutonomousDMService {
    */
   async respondToDMs(
     agentUserId: string,
-    _runtime: IAgentRuntime
+    _runtime: IAgentRuntime,
   ): Promise<number> {
     const agent = await db.user.findUnique({
       where: { id: agentUserId },
-    });
+    })
 
     if (!agent?.isAgent) {
-      throw new Error('Agent not found');
+      throw new Error('Agent not found')
     }
 
-    const config = await getAgentConfig(agentUserId);
-    const displayName = agent.displayName ? String(agent.displayName) : 'Agent';
+    const config = await getAgentConfig(agentUserId)
+    const displayName = agent.displayName ? String(agent.displayName) : 'Agent'
 
     // Get agent's DM chats (non-group chats)
     const chatParticipants = await db.chatParticipant.findMany({
       where: { userId: agentUserId },
-    });
+    })
 
-    let responsesCreated = 0;
+    let responsesCreated = 0
 
     for (const chatParticipant of chatParticipants) {
       const chat = await db.chat.findUnique({
         where: { id: String(chatParticipant.chatId) },
-      });
+      })
 
-      if (!chat || chat.isGroup) continue; // Skip group chats
+      if (!chat || chat.isGroup) continue // Skip group chats
 
       // Get recent messages in this chat
-      const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+      const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000)
       const unreadMessages = await db.message.findMany({
         where: {
           chatId: String(chat.id),
@@ -57,19 +57,19 @@ export class AutonomousDMService {
         },
         orderBy: { createdAt: 'desc' },
         take: 5,
-      });
+      })
 
-      if (unreadMessages.length === 0) continue;
+      if (unreadMessages.length === 0) continue
 
       // Get conversation context
       const allMessages = await db.message.findMany({
         where: { chatId: String(chat.id) },
         orderBy: { createdAt: 'asc' },
         take: 10,
-      });
+      })
 
-      const latestMessage = unreadMessages[0];
-      if (!latestMessage) continue;
+      const latestMessage = unreadMessages[0]
+      if (!latestMessage) continue
 
       // Generate response
       const prompt = `${config?.systemPrompt ?? 'You are an AI agent on Babylon.'}
@@ -81,7 +81,7 @@ ${allMessages
   .slice(-5)
   .map(
     (m) =>
-      `${String(m.senderId) === agentUserId ? 'You' : 'Them'}: ${String(m.content)}`
+      `${String(m.senderId) === agentUserId ? 'You' : 'Them'}: ${String(m.content)}`,
   )
   .join('\n')}
 
@@ -93,24 +93,24 @@ Be authentic to your personality.
 Keep it under 200 characters.
 If mentioning markets, use SHORT SUMMARIES (e.g., "the TeslAI bet") not full questions.
 
-Generate ONLY the response text, nothing else.`;
+Generate ONLY the response text, nothing else.`
 
       // Use small model (llama-3.1-8b-instant) for fast DM responses
-      const responseContent = await callJejuDirect({
+      const responseContent = await callAgentLLM({
         prompt,
-        system: config?.systemPrompt ?? undefined,
+        system: config?.systemPrompt,
         modelSize: 'small',
         runtime: _runtime,
         temperature: 0.8,
         maxTokens: 80,
         actionType: 'generate_dm_response',
         purpose: 'response',
-      });
+      })
 
-      const cleanContent = responseContent.trim().replace(/^["']|["']$/g, '');
+      const cleanContent = responseContent.trim().replace(/^["']|["']$/g, '')
 
       if (!cleanContent || cleanContent.length < 5) {
-        continue;
+        continue
       }
 
       // Create response message
@@ -118,30 +118,30 @@ Generate ONLY the response text, nothing else.`;
         agentUserId,
         chatId: String(chat.id),
         content: cleanContent,
-      });
+      })
 
       if (!result.success) {
         logger.warn(
           `Failed to create DM response: ${result.error}`,
           undefined,
-          'AutonomousDM'
-        );
-        continue;
+          'AutonomousDM',
+        )
+        continue
       }
 
-      responsesCreated++;
+      responsesCreated++
       logger.info(
         `Agent ${displayName} responded to DM in chat ${chat.id}`,
         undefined,
-        'AutonomousDM'
-      );
+        'AutonomousDM',
+      )
 
       // Only respond to one DM per tick to avoid spam
-      break;
+      break
     }
 
-    return responsesCreated;
+    return responsesCreated
   }
 }
 
-export const autonomousDMService = new AutonomousDMService();
+export const autonomousDMService = new AutonomousDMService()

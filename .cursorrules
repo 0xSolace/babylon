@@ -1,32 +1,140 @@
 # Cursor Rules for Babylon Project
 
-**CRITICAL**: After each feature development, change, or fix, you MUST run the following commands in sequence before marking the work as done:
+## Critical Workflow
 
-1. `bun run typecheck` - Verify TypeScript types are correct
-2. `bun run lint` - Ensure code follows linting rules (max-warnings=0)
-3. Review all of your work and remove any slop, fallbacks, try catch, poor typing, etc, and make new TODOs for anything that is still incomplete
-4. Asssess that you have in fact finished your tasks to 100%
+**ALWAYS run these commands in sequence before marking work complete:**
 
-Only after all pass without errors should you consider the work complete and inform the user that the task is done.
+1. `bun run typecheck` - Verify TypeScript types
+2. `bun run lint` - Zero warnings required
+3. `bun run build` - Must build successfully
+4. Review for slop, fallbacks, poor typing - make new TODOs for incomplete work
 
-If any of these commands fail, you must fix the issues before proceeding.
+Only after all pass without errors should work be considered complete.
 
-NEVER use try { } catch { }, if (obj.property === 'function') or anything like that. That's bad defensive programming. Also use clean code, with a policy to fail fast
+## Code Standards
 
-NEVER use unknown or any. Try to research which type you need, see if it already exists, make sure it exists as a shared type if it is used in multiple places, and reference that. If you absolutely can't figure out the type, use unknown as a last resort.
+- **No defensive try/catch** - Fail fast, handle errors at boundaries
+- **No `any` or `unknown`** - Research proper types, use shared types from `@babylon/shared`
+- **No unnecessary files** - Don't create docs/README unless explicitly requested
+- **Integration over unit tests** - Test against running backend, avoid mocks
+- **Keep handlers thin** - Validate → call service → map errors (portable to Elysia)
+- **Domain stays pure** - No DB/Redis/HTTP in domain modules
+- **Don't pipe commands** - Print outputs to console for visibility
 
-Always research what you are doing and look for existing code before writing new code to do something. Chances are good it already exists.
+## Architecture Overview
 
-Always write tests against the against backend. Only write unit tests where there is some specific logic to test, but mocks also hide bugs, so make sure the backend is running and test every feature by calling the actual APIs. Make sure the backend is running before running integration tests so yuo don't run into errors.
+**Modular monolith** with Bun runtime, moving from Next.js to Elysia:
+- **Current state:** Next.js hosts UI + API routes/SSE/A2A in `apps/web`
+- **Target state:** Elysia server in `apps/server`, workers in `apps/daemon`, domain split into `packages/core/*`
 
-You don't need to write markdown files every time you finish something. Instead, make sure you have reviewed, there are thorough tests for the thing you've done, and you've run the tests and confirmed they passed.
+### Package Dependencies
+```
+apps/* → packages/* → contracts
+```
+- Apps import from packages (engine, agents, api, db, shared)
+- Packages import shared utilities and contracts
+- No circular dependencies allowed
 
-Don't pipe your commands. Just print them out when you run them in the console. Then I can see the errors and help you.
+### Key Packages
+- **engine:** Game world, perpetuals, simulation logic (domain)
+- **agents:** Agent runtime, Agent0/A2A/MCP integrations
+- **api:** Server utilities (auth, rate limit, redis, SSE, token counting)
+- **db:** CQL client and schema types
+- **shared:** Client-safe types, utils, config
+- **contracts:** Smart contracts (Hardhat + Foundry)
 
-There are other agents working on stuff. If you see things change or linter issues, it's probably work in progress. don't revert. try to ignore it unless you're sure it's just an issue that needs to be fixed.
+## Commands
 
-IMPORTANT: DON'T PIPE YOUR COMMANDS. Don't | to tail, head, grep, etc. I want to see the outputs. Otherwise very hard to tell if you are stuck on something.
+### Development
+- **Start full dev:** `bun run dev` - Web server + game engine + local cron simulator
+- **Web only:** `bun run dev:web` (via Turbo) or `bun run dev:next-only`
+- **Build:** `bun run build`
+- **Format:** `bun run check` - Auto-fix with Biome
+- **Lint:** `bun run lint` - Check via Turbo
+- **Types:** `bun run typecheck`
 
-NEVER generate fake data. Never use synthetic data. Never fake anything. ALWAYS use the real thing, bulid the real thing. Be willing to error or fail building the real thing. Success on fake data is a worse failure.
+### Testing
+- **Unit:** `bun test packages/testing/unit/ --preload ./packages/testing/unit/preload.ts`
+- **Integration:** `bun test packages/testing/integration/ --preload ./packages/testing/integration/preload.ts`
+- **E2E:** `cd packages/testing && playwright test e2e`
+- **Contracts:** `cd packages/contracts && forge test`
 
-We have Synpress. Use Synpress and log in with Metamask for testing all auth'd e2e.
+Use Synpress for all auth'd E2E tests with MetaMask.
+
+### Database (CovenantQL / CQL via Jeju DWS)
+- **Check status:** `bun run babylon db status`
+- **Connect/test:** `bun run babylon db connect`
+- **Provision:** `bun run babylon db provision --network localnet`
+- **Seed data:** `bun run db:seed` or `bun run db:seed:test all`
+
+### Deployment & Operations
+- **Deploy contracts:** `bun run deploy:local|testnet|mainnet`
+- **CLI tool:** `bun run babylon <command>`
+- **Generate vendor docs:** `bun run docs:generate`
+
+## Environment Setup
+
+1. Copy `.env.example` to `.env`
+2. Run `scripts/pre-dev/pre-dev-local.ts` for localnet defaults
+3. Key variables:
+   - `JEJU_NETWORK` - Network: localnet, testnet, mainnet (auto-configures CQL/DWS)
+   - `JEJU_OAUTH3_SERVICE_URL` - Auth (OAuth3)
+   - `GROQ_API_KEY` or `OPENAI_API_KEY` - AI models
+   - `CRON_SECRET` - For cron endpoints
+   - `GAME_START` - Control game state (pause/running)
+
+**Database Configuration:**
+- `JEJU_NETWORK=localnet` - Auto-resolves CQL endpoint from Jeju config (recommended)
+- `CQL_BLOCK_PRODUCER_ENDPOINT` - Explicit override for CQL endpoint
+
+## Migration Context
+
+Currently migrating architecture while keeping new code portable:
+- Write route handlers to be framework-agnostic (easily portable to Elysia)
+- Keep domain logic in packages, not in React components or route handlers
+- Use `@babylon/api` for server-side concerns (auth, rate limiting, SSE)
+- Prefer reading vendor docs from `docs/vendors/{vendor}` over external sources
+
+## Structure & Boundaries
+
+### Apps (current)
+- `apps/web` - Next.js UI + API routes/SSE/A2A
+- `apps/cli` - Deploy/seed/game/agent ops
+- `apps/docs` - Nextra docs
+
+### Apps (target/planned)
+- `apps/server` - Elysia host, thin routes
+- `apps/daemon` - Loops/workers
+- `apps/agents` - Runners/integrations
+
+### Packages (current)
+- `packages/engine` - Game/perps generation & loop
+- `packages/agents` - Agent runtime + Agent0/A2A/MCP
+- `packages/a2a`, `packages/mcp`
+- `packages/api` - Auth/rate-limit/redis/sse/token counting
+- `packages/shared` - Client-safe types/utils/config
+- `packages/db` - CQL client/schema
+- `packages/contracts`, `packages/testing`, `packages/training`, `packages/examples`
+
+## Git Workflow
+
+- **Commits:** Imperative mood, prefixed (`feat:`, `fix:`, `chore:`)
+- **Main branch:** `staging` (not `main`)
+- **Pre-commit:** Biome format check via Husky
+
+## Testing Philosophy
+
+- Test against real backend (database, services running)
+- Integration tests over unit tests (less mocking, more confidence)
+- Use test database for isolation
+- E2E for critical user flows only
+- NEVER generate fake data - always use real data, build real things
+
+## Common Pitfalls to Avoid
+
+- Don't pipe commands (harder to debug)
+- Don't create files unless necessary (prefer editing existing)
+- Don't use bash for file operations
+- Don't ignore linter issues from other work-in-progress
+- Always check existing code before writing new implementations
+- Other agents may be working on stuff - don't revert their changes

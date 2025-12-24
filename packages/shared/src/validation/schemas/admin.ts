@@ -5,7 +5,7 @@
  * moderation, escrow, trading, and system statistics.
  */
 
-import { z } from 'zod';
+import { z } from 'zod'
 
 // ============================================================================
 // User Management Schemas
@@ -34,8 +34,8 @@ export const AdminUserQuerySchema = z.object({
     ])
     .default('created'),
   sortOrder: z.enum(['asc', 'desc']).default('desc'),
-});
-export type AdminUserQuery = z.infer<typeof AdminUserQuerySchema>;
+})
+export type AdminUserQuery = z.infer<typeof AdminUserQuerySchema>
 
 /**
  * Admin user display schema (for list views)
@@ -46,8 +46,8 @@ export const AdminUserDisplaySchema = z.object({
   displayName: z.string().nullable(),
   profileImageUrl: z.string().nullable(),
   isActor: z.boolean(),
-});
-export type AdminUserDisplay = z.infer<typeof AdminUserDisplaySchema>;
+})
+export type AdminUserDisplay = z.infer<typeof AdminUserDisplaySchema>
 
 /**
  * Full admin user schema (detailed view)
@@ -88,8 +88,8 @@ export const AdminUserSchema = z.object({
       mutesReceived: z.number().optional(),
     })
     .optional(),
-});
-export type AdminUser = z.infer<typeof AdminUserSchema>;
+})
+export type AdminUser = z.infer<typeof AdminUserSchema>
 
 /**
  * Ban/unban user schema
@@ -99,16 +99,16 @@ export const BanUserSchema = z.object({
   reason: z.string().min(1).max(500).optional(),
   isScammer: z.boolean().optional(),
   isCSAM: z.boolean().optional(),
-});
-export type BanUser = z.infer<typeof BanUserSchema>;
+})
+export type BanUser = z.infer<typeof BanUserSchema>
 
 /**
  * Admin promotion/demotion schema
  */
 export const AdminActionSchema = z.object({
   action: z.enum(['promote', 'demote']),
-});
-export type AdminAction = z.infer<typeof AdminActionSchema>;
+})
+export type AdminAction = z.infer<typeof AdminActionSchema>
 
 /**
  * Admin report action schema
@@ -116,8 +116,8 @@ export type AdminAction = z.infer<typeof AdminActionSchema>;
 export const AdminReportActionSchema = z.object({
   action: z.enum(['evaluate', 'resolve', 'dismiss', 'escalate']),
   resolution: z.string().optional(),
-});
-export type AdminReportAction = z.infer<typeof AdminReportActionSchema>;
+})
+export type AdminReportAction = z.infer<typeof AdminReportActionSchema>
 
 // ============================================================================
 // Moderation Schemas
@@ -129,8 +129,8 @@ export type AdminReportAction = z.infer<typeof AdminReportActionSchema>;
 export const HumanReviewActionSchema = z.object({
   action: z.enum(['approve', 'deny']),
   reasoning: z.string().min(10).max(2000),
-});
-export type HumanReviewAction = z.infer<typeof HumanReviewActionSchema>;
+})
+export type HumanReviewAction = z.infer<typeof HumanReviewActionSchema>
 
 // ============================================================================
 // Escrow Schemas
@@ -144,8 +144,8 @@ export const EscrowStatusSchema = z.enum([
   'paid',
   'refunded',
   'expired',
-]);
-export type EscrowStatus = z.infer<typeof EscrowStatusSchema>;
+])
+export type EscrowStatus = z.infer<typeof EscrowStatusSchema>
 
 /**
  * Create escrow payment schema
@@ -154,8 +154,8 @@ export const CreateEscrowPaymentSchema = z.object({
   recipientId: z.string().min(1, 'Recipient ID is required'),
   amountUSD: z.number().positive('Amount must be positive'),
   reason: z.string().optional(),
-});
-export type CreateEscrowPayment = z.infer<typeof CreateEscrowPaymentSchema>;
+})
+export type CreateEscrowPayment = z.infer<typeof CreateEscrowPaymentSchema>
 
 /**
  * Verify escrow payment schema
@@ -166,8 +166,8 @@ export const VerifyEscrowPaymentSchema = z.object({
   fromAddress: z.string().min(1, 'From address is required'),
   toAddress: z.string().min(1, 'To address is required'),
   amount: z.string().min(1, 'Amount is required'),
-});
-export type VerifyEscrowPayment = z.infer<typeof VerifyEscrowPaymentSchema>;
+})
+export type VerifyEscrowPayment = z.infer<typeof VerifyEscrowPaymentSchema>
 
 /**
  * Refund escrow schema
@@ -176,8 +176,8 @@ export const RefundEscrowSchema = z.object({
   escrowId: z.string().min(1, 'Escrow ID is required'),
   refundTxHash: z.string().min(1, 'Refund transaction hash is required'),
   reason: z.string().optional(),
-});
-export type RefundEscrow = z.infer<typeof RefundEscrowSchema>;
+})
+export type RefundEscrow = z.infer<typeof RefundEscrowSchema>
 
 /**
  * List escrow query schema
@@ -188,8 +188,8 @@ export const ListEscrowQuerySchema = z.object({
   status: EscrowStatusSchema.optional(),
   limit: z.coerce.number().min(1).max(100).default(50),
   offset: z.coerce.number().min(0).default(0),
-});
-export type ListEscrowQuery = z.infer<typeof ListEscrowQuerySchema>;
+})
+export type ListEscrowQuery = z.infer<typeof ListEscrowQuerySchema>
 
 /**
  * Escrow user reference schema
@@ -199,8 +199,8 @@ export const EscrowUserRefSchema = z.object({
   username: z.string().nullable(),
   displayName: z.string().nullable(),
   profileImageUrl: z.string().nullable().optional(),
-});
-export type EscrowUserRef = z.infer<typeof EscrowUserRefSchema>;
+})
+export type EscrowUserRef = z.infer<typeof EscrowUserRefSchema>
 
 /**
  * Full escrow schema
@@ -225,8 +225,8 @@ export const EscrowSchema = z.object({
   refundedAt: z.string().nullable(),
   createdAt: z.string(),
   expiresAt: z.string(),
-});
-export type Escrow = z.infer<typeof EscrowSchema>;
+})
+export type Escrow = z.infer<typeof EscrowSchema>
 
 // ============================================================================
 // Trading Schemas
@@ -235,8 +235,8 @@ export type Escrow = z.infer<typeof EscrowSchema>;
 /**
  * Trade type enum
  */
-export const AdminTradeTypeSchema = z.enum(['balance', 'npc', 'position']);
-export type AdminTradeType = z.infer<typeof AdminTradeTypeSchema>;
+export const AdminTradeTypeSchema = z.enum(['balance', 'npc', 'position'])
+export type AdminTradeType = z.infer<typeof AdminTradeTypeSchema>
 
 /**
  * Admin trades query schema
@@ -245,8 +245,8 @@ export const AdminTradesQuerySchema = z.object({
   limit: z.coerce.number().min(1).max(100).default(50),
   offset: z.coerce.number().min(0).default(0),
   type: z.enum(['all', 'balance', 'npc', 'position']).default('all'),
-});
-export type AdminTradesQuery = z.infer<typeof AdminTradesQuerySchema>;
+})
+export type AdminTradesQuery = z.infer<typeof AdminTradesQuerySchema>
 
 /**
  * Base trade schema
@@ -256,8 +256,8 @@ export const AdminBaseTradeSchema = z.object({
   id: z.string(),
   timestamp: z.coerce.date(),
   user: AdminUserDisplaySchema.nullable(),
-});
-export type AdminBaseTrade = z.infer<typeof AdminBaseTradeSchema>;
+})
+export type AdminBaseTrade = z.infer<typeof AdminBaseTradeSchema>
 
 /**
  * Balance trade schema
@@ -270,8 +270,8 @@ export const AdminBalanceTradeSchema = AdminBaseTradeSchema.extend({
   transactionType: z.string(),
   description: z.string().nullable(),
   relatedId: z.string().nullable(),
-});
-export type AdminBalanceTrade = z.infer<typeof AdminBalanceTradeSchema>;
+})
+export type AdminBalanceTrade = z.infer<typeof AdminBalanceTradeSchema>
 
 /**
  * NPC trade schema
@@ -287,8 +287,8 @@ export const AdminNPCTradeSchema = AdminBaseTradeSchema.extend({
   price: z.number(),
   sentiment: z.number().nullable(),
   reason: z.string().nullable(),
-});
-export type AdminNPCTrade = z.infer<typeof AdminNPCTradeSchema>;
+})
+export type AdminNPCTrade = z.infer<typeof AdminNPCTradeSchema>
 
 /**
  * Position trade market schema
@@ -298,10 +298,10 @@ export const AdminPositionTradeMarketSchema = z.object({
   question: z.string(),
   resolved: z.boolean(),
   resolution: z.boolean().nullable(),
-});
+})
 export type AdminPositionTradeMarket = z.infer<
   typeof AdminPositionTradeMarketSchema
->;
+>
 
 /**
  * Position trade schema
@@ -314,8 +314,8 @@ export const AdminPositionTradeSchema = AdminBaseTradeSchema.extend({
   avgCost: z.number(),
   currentValue: z.number(),
   pnl: z.number(),
-});
-export type AdminPositionTrade = z.infer<typeof AdminPositionTradeSchema>;
+})
+export type AdminPositionTrade = z.infer<typeof AdminPositionTradeSchema>
 
 /**
  * Union of all trade types
@@ -324,8 +324,8 @@ export const AdminTradeSchema = z.discriminatedUnion('type', [
   AdminBalanceTradeSchema,
   AdminNPCTradeSchema,
   AdminPositionTradeSchema,
-]);
-export type AdminTrade = z.infer<typeof AdminTradeSchema>;
+])
+export type AdminTrade = z.infer<typeof AdminTradeSchema>
 
 /**
  * Create balance trade schema
@@ -346,8 +346,8 @@ export const CreateBalanceTradeSchema = z.object({
   description: z.string().optional(),
   relatedId: z.string().optional(),
   updateBalance: z.boolean().default(true), // Whether to update user's balance
-});
-export type CreateBalanceTrade = z.infer<typeof CreateBalanceTradeSchema>;
+})
+export type CreateBalanceTrade = z.infer<typeof CreateBalanceTradeSchema>
 
 /**
  * Create NPC trade schema
@@ -366,8 +366,8 @@ export const CreateNPCTradeSchema = z.object({
   reason: z.string().optional(),
   poolId: z.string().optional(),
   postId: z.string().optional(),
-});
-export type CreateNPCTrade = z.infer<typeof CreateNPCTradeSchema>;
+})
+export type CreateNPCTrade = z.infer<typeof CreateNPCTradeSchema>
 
 /**
  * Create trade schema (discriminated union)
@@ -375,8 +375,8 @@ export type CreateNPCTrade = z.infer<typeof CreateNPCTradeSchema>;
 export const CreateTradeSchema = z.discriminatedUnion('type', [
   CreateBalanceTradeSchema,
   CreateNPCTradeSchema,
-]);
-export type CreateTrade = z.infer<typeof CreateTradeSchema>;
+])
+export type CreateTrade = z.infer<typeof CreateTradeSchema>
 
 // ============================================================================
 // Notification Schemas
@@ -390,8 +390,8 @@ export const AdminNotificationTypeSchema = z.enum([
   'warning',
   'alert',
   'promotion',
-]);
-export type AdminNotificationType = z.infer<typeof AdminNotificationTypeSchema>;
+])
+export type AdminNotificationType = z.infer<typeof AdminNotificationTypeSchema>
 
 /**
  * Notification type enum for creating notifications
@@ -404,10 +404,10 @@ export const CreateNotificationTypeSchema = z.enum([
   'mention',
   'reply',
   'share',
-]);
+])
 export type CreateNotificationType = z.infer<
   typeof CreateNotificationTypeSchema
->;
+>
 
 /**
  * Create notification schema
@@ -420,8 +420,8 @@ export const CreateNotificationSchema = z.object({
   commentId: z.string().optional(),
   link: z.string().optional(), // Optional custom link
   sendToAll: z.boolean().default(false), // Send to all users
-});
-export type CreateNotification = z.infer<typeof CreateNotificationSchema>;
+})
+export type CreateNotification = z.infer<typeof CreateNotificationSchema>
 
 // ============================================================================
 // Load Testing Schemas
@@ -435,8 +435,8 @@ export const LoadTestScenarioSchema = z.enum([
   'NORMAL',
   'HEAVY',
   'STRESS',
-]);
-export type LoadTestScenario = z.infer<typeof LoadTestScenarioSchema>;
+])
+export type LoadTestScenario = z.infer<typeof LoadTestScenarioSchema>
 
 /**
  * Load test request schema
@@ -444,8 +444,8 @@ export type LoadTestScenario = z.infer<typeof LoadTestScenarioSchema>;
 export const LoadTestRequestSchema = z.object({
   scenario: LoadTestScenarioSchema,
   baseUrl: z.string().url().optional(),
-});
-export type LoadTestRequest = z.infer<typeof LoadTestRequestSchema>;
+})
+export type LoadTestRequest = z.infer<typeof LoadTestRequestSchema>
 
 // ============================================================================
 // Test DM Messages Schema
@@ -458,8 +458,8 @@ export const TestDMMessagesSchema = z.object({
   senderId: z.string().min(1),
   recipientId: z.string().min(1),
   messageCount: z.number().min(1).max(200).default(100),
-});
-export type TestDMMessages = z.infer<typeof TestDMMessagesSchema>;
+})
+export type TestDMMessages = z.infer<typeof TestDMMessagesSchema>
 
 // ============================================================================
 // System Stats Schemas
@@ -473,8 +473,8 @@ export const UserStatsBaseSchema = z.object({
   username: z.string().nullable(),
   displayName: z.string().nullable(),
   profileImageUrl: z.string().nullable(),
-});
-export type UserStatsBase = z.infer<typeof UserStatsBaseSchema>;
+})
+export type UserStatsBase = z.infer<typeof UserStatsBaseSchema>
 
 /**
  * User by balance schema
@@ -482,16 +482,16 @@ export type UserStatsBase = z.infer<typeof UserStatsBaseSchema>;
 export const UserByBalanceSchema = UserStatsBaseSchema.extend({
   virtualBalance: z.string(),
   lifetimePnL: z.string(),
-});
-export type UserByBalance = z.infer<typeof UserByBalanceSchema>;
+})
+export type UserByBalance = z.infer<typeof UserByBalanceSchema>
 
 /**
  * User by reputation schema
  */
 export const UserByReputationSchema = UserStatsBaseSchema.extend({
   reputationPoints: z.number(),
-});
-export type UserByReputation = z.infer<typeof UserByReputationSchema>;
+})
+export type UserByReputation = z.infer<typeof UserByReputationSchema>
 
 /**
  * Recent signup user schema
@@ -502,8 +502,8 @@ export const RecentSignupSchema = UserStatsBaseSchema.extend({
   onChainRegistered: z.boolean(),
   hasFarcaster: z.boolean(),
   hasTwitter: z.boolean(),
-});
-export type RecentSignup = z.infer<typeof RecentSignupSchema>;
+})
+export type RecentSignup = z.infer<typeof RecentSignupSchema>
 
 /**
  * System stats response schema
@@ -557,8 +557,8 @@ export const SystemStatsResponseSchema = z.object({
     byReputation: z.array(UserByReputationSchema),
   }),
   recentSignups: z.array(RecentSignupSchema),
-});
-export type SystemStatsResponse = z.infer<typeof SystemStatsResponseSchema>;
+})
+export type SystemStatsResponse = z.infer<typeof SystemStatsResponseSchema>
 
 // ============================================================================
 // Fee Stats Schemas
@@ -574,8 +574,8 @@ export const BasicFeeStatsSchema = z.object({
   totalPlatformFees: z.number(),
   totalReferrerFees: z.number(),
   totalTrades: z.number(),
-});
-export type BasicFeeStats = z.infer<typeof BasicFeeStatsSchema>;
+})
+export type BasicFeeStats = z.infer<typeof BasicFeeStatsSchema>
 
 /**
  * Fee by type schema
@@ -586,8 +586,8 @@ export const FeeByTypeSchema = z.object({
   platformFees: z.number(),
   referrerFees: z.number(),
   tradeCount: z.number(),
-});
-export type FeeByType = z.infer<typeof FeeByTypeSchema>;
+})
+export type FeeByType = z.infer<typeof FeeByTypeSchema>
 
 /**
  * Top fee payer schema
@@ -600,8 +600,8 @@ export const TopFeePayerSchema = z.object({
   isNPC: z.boolean(),
   totalFees: z.number(),
   tradeCount: z.number(),
-});
-export type TopFeePayer = z.infer<typeof TopFeePayerSchema>;
+})
+export type TopFeePayer = z.infer<typeof TopFeePayerSchema>
 
 /**
  * Top referral earner schema
@@ -613,8 +613,8 @@ export const TopReferralEarnerSchema = z.object({
   profileImageUrl: z.string().nullable(),
   totalEarned: z.number(),
   referralCount: z.number(),
-});
-export type TopReferralEarner = z.infer<typeof TopReferralEarnerSchema>;
+})
+export type TopReferralEarner = z.infer<typeof TopReferralEarnerSchema>
 
 /**
  * Full fee stats response schema
@@ -624,8 +624,8 @@ export const FeeStatsResponseSchema = z.object({
   feesByType: z.array(FeeByTypeSchema),
   topFeePayers: z.array(TopFeePayerSchema),
   topReferralEarners: z.array(TopReferralEarnerSchema),
-});
-export type FeeStatsResponse = z.infer<typeof FeeStatsResponseSchema>;
+})
+export type FeeStatsResponse = z.infer<typeof FeeStatsResponseSchema>
 
 // ============================================================================
 // Token Stats Schemas
@@ -641,10 +641,10 @@ export const TokenStatsByPromptTypeSchema = z.object({
   totalOutputTokens: z.number(),
   totalTokens: z.number(),
   avgTokensPerCall: z.number(),
-});
+})
 export type TokenStatsByPromptType = z.infer<
   typeof TokenStatsByPromptTypeSchema
->;
+>
 
 /**
  * Token stats by model schema
@@ -657,8 +657,8 @@ export const TokenStatsByModelSchema = z.object({
   totalOutputTokens: z.number(),
   totalTokens: z.number(),
   estimatedCostUSD: z.number(),
-});
-export type TokenStatsByModel = z.infer<typeof TokenStatsByModelSchema>;
+})
+export type TokenStatsByModel = z.infer<typeof TokenStatsByModelSchema>
 
 /**
  * Token stats summary schema
@@ -676,8 +676,8 @@ export const TokenStatsSummarySchema = z.object({
   avgOutputTokensPerTick: z.number(),
   avgTotalTokensPerTick: z.number(),
   estimatedTotalCostUSD: z.number(),
-});
-export type TokenStatsSummary = z.infer<typeof TokenStatsSummarySchema>;
+})
+export type TokenStatsSummary = z.infer<typeof TokenStatsSummarySchema>
 
 /**
  * Token stats response schema
@@ -687,8 +687,8 @@ export const TokenStatsResponseSchema = z.object({
   summary: TokenStatsSummarySchema,
   byPromptType: z.array(TokenStatsByPromptTypeSchema),
   byModel: z.array(TokenStatsByModelSchema),
-});
-export type TokenStatsResponse = z.infer<typeof TokenStatsResponseSchema>;
+})
+export type TokenStatsResponse = z.infer<typeof TokenStatsResponseSchema>
 
 // ============================================================================
 // Registry Entity Schemas
@@ -700,10 +700,10 @@ export type TokenStatsResponse = z.infer<typeof TokenStatsResponseSchema>;
 export const AdminRegistryReputationSchema = z.object({
   trustScore: z.number(),
   accuracyScore: z.number(),
-});
+})
 export type AdminRegistryReputation = z.infer<
   typeof AdminRegistryReputationSchema
->;
+>
 
 /**
  * Registry entity stats schema
@@ -713,8 +713,8 @@ export const AdminRegistryStatsSchema = z.object({
   positions: z.number().optional(),
   pools: z.number().optional(),
   trades: z.number().optional(),
-});
-export type AdminRegistryStats = z.infer<typeof AdminRegistryStatsSchema>;
+})
+export type AdminRegistryStats = z.infer<typeof AdminRegistryStatsSchema>
 
 /**
  * Registry entity schema
@@ -745,8 +745,8 @@ export const AdminRegistryEntitySchema = z.object({
   domain: z.array(z.string()).nullable().optional(),
   a2aEndpoint: z.string().nullable().optional(),
   mcpEndpoint: z.string().nullable().optional(),
-});
-export type AdminRegistryEntity = z.infer<typeof AdminRegistryEntitySchema>;
+})
+export type AdminRegistryEntity = z.infer<typeof AdminRegistryEntitySchema>
 
 /**
  * Registry totals schema
@@ -757,8 +757,8 @@ export const AdminRegistryTotalsSchema = z.object({
   actors: z.number(),
   agents: z.number(),
   apps: z.number(),
-});
-export type AdminRegistryTotals = z.infer<typeof AdminRegistryTotalsSchema>;
+})
+export type AdminRegistryTotals = z.infer<typeof AdminRegistryTotalsSchema>
 
 /**
  * Full registry data response schema
@@ -769,5 +769,5 @@ export const AdminRegistryDataSchema = z.object({
   agents: z.array(AdminRegistryEntitySchema),
   apps: z.array(AdminRegistryEntitySchema),
   totals: AdminRegistryTotalsSchema,
-});
-export type AdminRegistryData = z.infer<typeof AdminRegistryDataSchema>;
+})
+export type AdminRegistryData = z.infer<typeof AdminRegistryDataSchema>

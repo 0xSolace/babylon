@@ -1,29 +1,29 @@
-'use client';
-
 /**
  * PostHog Client Configuration
  * Client-side analytics and event tracking
  */
 
-import posthog from 'posthog-js';
+import posthog from 'posthog-js'
+import { ANALYTICS_CONFIG, isAnalyticsEnabled, isDevelopment } from '@/config'
 
-export type PostHogClient = typeof posthog;
+export type PostHogClient = typeof posthog
 
-let initialized = false;
+let initialized = false
 
 /**
  * Initialize PostHog client for browser
  */
 export function initPostHog(): PostHogClient | null {
-  if (typeof window === 'undefined') return null;
+  if (typeof window === 'undefined') return null
 
-  const apiKey = process.env.NEXT_PUBLIC_POSTHOG_KEY;
-  const apiHost =
-    process.env.NEXT_PUBLIC_POSTHOG_HOST || 'https://us.i.posthog.com';
+  const apiKey = ANALYTICS_CONFIG.posthogKey
+  const apiHost = ANALYTICS_CONFIG.posthogHost
 
-  if (!apiKey) {
-    console.warn('PostHog: API key not found. Analytics will be disabled.');
-    return null;
+  if (!apiKey || !isAnalyticsEnabled()) {
+    if (isDevelopment()) {
+      console.warn('PostHog: API key not found. Analytics will be disabled.')
+    }
+    return null
   }
 
   // Initialize PostHog only once
@@ -52,8 +52,8 @@ export function initPostHog(): PostHogClient | null {
 
       // Performance
       loaded: () => {
-        if (process.env.NODE_ENV === 'development') {
-          console.log('PostHog initialized successfully');
+        if (isDevelopment()) {
+          console.log('PostHog initialized successfully')
         }
       },
 
@@ -62,23 +62,23 @@ export function initPostHog(): PostHogClient | null {
       persistence: 'localStorage+cookie', // Store data in localStorage and cookies
 
       // Advanced features
-      enable_recording_console_log: process.env.NODE_ENV === 'development', // Log console in dev
+      enable_recording_console_log: isDevelopment(), // Log console in dev
 
       // Error tracking
       capture_exceptions: true, // Automatically capture errors
-    });
-    initialized = true;
+    })
+    initialized = true
   }
 
-  return posthog;
+  return posthog
 }
 
 /**
  * Get the PostHog client instance
  */
 export function getPostHog(): PostHogClient | null {
-  if (typeof window === 'undefined') return null;
-  return posthog;
+  if (typeof window === 'undefined') return null
+  return posthog
 }
 
-export { posthog };
+export { posthog }

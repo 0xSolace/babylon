@@ -4,22 +4,23 @@
  * Uses regex to find mentions and provides context via A2A protocol
  */
 
-import type { JsonValue } from '@babylon/shared';
+import {
+  type EntityMention,
+  isActorEntity,
+  isCompanyEntity,
+  isUserEntity,
+  type JsonValue,
+  toNull,
+} from '@babylon/shared'
 import type {
   IAgentRuntime,
   Memory,
   Provider,
   ProviderResult,
   State,
-} from '@elizaos/core';
-import { logger } from '../../../shared/logger';
-import type { EntityMention } from '../../../types/entities';
-import {
-  isActorEntity,
-  isCompanyEntity,
-  isUserEntity,
-} from '../../../types/entities';
-import type { BabylonRuntime } from '../types';
+} from '@elizaos/core'
+import { logger } from '../../../shared/logger'
+import { type BabylonRuntime, toBabylonRuntime } from '../types'
 
 /**
  * Provider: Entity Mentions
@@ -33,97 +34,97 @@ export const entityMentionsProvider: Provider = {
   get: async (
     runtime: IAgentRuntime,
     message: Memory,
-    _state: State
+    _state: State,
   ): Promise<ProviderResult> => {
-    const babylonRuntime = runtime as BabylonRuntime;
+    const babylonRuntime = toBabylonRuntime(runtime)
 
     // A2A is REQUIRED
     if (!babylonRuntime.a2aClient?.isConnected()) {
       logger.error(
         'A2A client not connected - entity mentions provider requires A2A protocol',
         undefined,
-        runtime.agentId
-      );
-      return { text: '' }; // Return empty - don't break the flow, just skip entity enrichment
+        runtime.agentId,
+      )
+      return { text: '' } // Return empty - don't break the flow, just skip entity enrichment
     }
 
-    const messageText = message.content.text || '';
+    const messageText = message.content.text || ''
 
     if (!messageText || messageText.length < 3) {
-      return { text: '' };
+      return { text: '' }
     }
 
     // Find potential entity mentions using regex and look up via A2A
-    const entities = await findEntityMentions(messageText, babylonRuntime);
+    const entities = await findEntityMentions(messageText, babylonRuntime)
 
     if (entities.length === 0) {
-      return { text: '' };
+      return { text: '' }
     }
 
     // Build context for each entity
-    const entityContexts: string[] = [];
+    const entityContexts: string[] = []
     const entityData: Array<{
-      type: string;
-      id: string;
-      [key: string]: JsonValue;
-    }> = [];
+      type: string
+      id: string
+      [key: string]: JsonValue
+    }> = []
 
     for (const entity of entities) {
       if (entity.type === 'company' && isCompanyEntity(entity.data)) {
-        const company = entity.data;
+        const company = entity.data
 
         const context = `📈 ${company.ticker || company.name}:
 • Name: ${company.name}
 • Type: Company
 • Current Price: $${parseFloat(company.currentPrice?.toString() || '0').toFixed(2)}
-• Price Change: ${company.priceChangePercentage ? (company.priceChangePercentage >= 0 ? '+' : '') + company.priceChangePercentage.toFixed(2) + '%' : 'N/A'}
-• Volume (24h): $${parseFloat(company.volume24h?.toString() || '0').toFixed(2)}${company.bio ? `\n• About: ${company.bio.substring(0, 150)}...` : ''}`;
+• Price Change: ${company.priceChangePercentage ? `${(company.priceChangePercentage >= 0 ? '+' : '') + company.priceChangePercentage.toFixed(2)}%` : 'N/A'}
+• Volume (24h): $${parseFloat(company.volume24h?.toString() || '0').toFixed(2)}${company.bio ? `\n• About: ${company.bio.substring(0, 150)}...` : ''}`
 
-        entityContexts.push(context);
+        entityContexts.push(context)
         entityData.push({
           type: 'company',
           id: company.id,
           name: company.name,
-          ticker: company.ticker ?? null,
+          ticker: toNull(company.ticker),
           currentPrice: parseFloat(company.currentPrice?.toString() || '0'),
-          priceChangePercentage: company.priceChangePercentage ?? null,
+          priceChangePercentage: toNull(company.priceChangePercentage),
           volume24h: parseFloat(company.volume24h?.toString() || '0'),
-        });
+        })
       } else if (entity.type === 'user' && isUserEntity(entity.data)) {
-        const user = entity.data;
+        const user = entity.data
 
         const context = `👤 ${user.displayName || user.username}:
 • Username: @${user.username}
-• Type: ${user.isAgent ? 'AI Agent' : 'User'}${user.reputationPoints ? `\n• Points: ${user.reputationPoints}` : ''}${user.bio ? `\n• Bio: ${user.bio.substring(0, 150)}...` : ''}`;
+• Type: ${user.isAgent ? 'AI Agent' : 'User'}${user.reputationPoints ? `\n• Points: ${user.reputationPoints}` : ''}${user.bio ? `\n• Bio: ${user.bio.substring(0, 150)}...` : ''}`
 
-        entityContexts.push(context);
+        entityContexts.push(context)
         entityData.push({
           type: 'user',
           id: user.id,
           username: user.username,
-          displayName: user.displayName ?? null,
+          displayName: toNull(user.displayName),
           isAgent: user.isAgent ?? false,
-          reputationPoints: user.reputationPoints ?? null,
-        });
+          reputationPoints: toNull(user.reputationPoints),
+        })
       } else if (entity.type === 'actor' && isActorEntity(entity.data)) {
-        const actor = entity.data;
+        const actor = entity.data
 
         const context = `🎭 ${actor.name}:
 • Type: Actor/Character
-• Category: ${actor.category || 'N/A'}${actor.bio ? `\n• Bio: ${actor.bio.substring(0, 150)}...` : ''}`;
+• Category: ${actor.category || 'N/A'}${actor.bio ? `\n• Bio: ${actor.bio.substring(0, 150)}...` : ''}`
 
-        entityContexts.push(context);
+        entityContexts.push(context)
         entityData.push({
           type: 'actor',
           id: actor.id,
           name: actor.name,
-          category: actor.category ?? null,
-        });
+          category: toNull(actor.category),
+        })
       }
     }
 
     if (entityContexts.length === 0) {
-      return { text: '' };
+      return { text: '' }
     }
 
     return {
@@ -132,56 +133,56 @@ export const entityMentionsProvider: Provider = {
         entities: entityData,
         count: entityData.length,
       },
-    };
+    }
   },
-};
+}
 
 /**
  * Find entity mentions in text and look them up via A2A protocol
  */
 async function findEntityMentions(
   text: string,
-  runtime: BabylonRuntime
+  runtime: BabylonRuntime,
 ): Promise<EntityMention[]> {
-  const results: EntityMention[] = [];
+  const results: EntityMention[] = []
 
   // Extract potential entity names
   // 1. @username mentions
-  const usernameMentions = text.match(/@(\w+)/g) || [];
+  const usernameMentions = text.match(/@(\w+)/g) || []
 
   // 2. $TICKER mentions (stock tickers)
-  const tickerMentions = text.match(/\$([A-Z]{1,5})\b/g) || [];
+  const tickerMentions = text.match(/\$([A-Z]{1,5})\b/g) || []
 
   // 3. Quoted names or capitalized multi-word names
-  const quotedNames = text.match(/"([^"]{2,50})"/g) || [];
+  const quotedNames = text.match(/"([^"]{2,50})"/g) || []
   const capitalizedNames =
-    text.match(/\b([A-Z][a-z]+(?: [A-Z][a-z]+)+)\b/g) || [];
+    text.match(/\b([A-Z][a-z]+(?: [A-Z][a-z]+)+)\b/g) || []
 
   // Look up usernames via A2A
   if (usernameMentions.length > 0 && runtime.a2aClient) {
-    const usernames = usernameMentions.map((m) => m.substring(1).toLowerCase());
+    const usernames = usernameMentions.map((m) => m.substring(1).toLowerCase())
 
     // Search for each username via A2A
     for (const username of usernames.slice(0, 10)) {
-      const searchResult = await runtime.a2aClient.searchUsers(username, 5);
+      const searchResult = await runtime.a2aClient.searchUsers(username, 5)
       const users =
         (
           searchResult as {
             users?: Array<{
-              id: string;
-              username: string;
-              displayName?: string;
-              bio?: string;
-              isAgent?: boolean;
-              reputationPoints?: number;
-            }>;
+              id: string
+              username: string
+              displayName?: string
+              bio?: string
+              isAgent?: boolean
+              reputationPoints?: number
+            }>
           }
-        )?.users || [];
+        )?.users || []
 
       // Find exact username match
       const matchedUser = users.find(
-        (u) => u.username?.toLowerCase() === username
-      );
+        (u) => u.username?.toLowerCase() === username,
+      )
       if (matchedUser) {
         results.push({
           type: 'user' as const,
@@ -193,7 +194,7 @@ async function findEntityMentions(
             isAgent: matchedUser.isAgent || false,
             reputationPoints: matchedUser.reputationPoints || null,
           },
-        });
+        })
       }
     }
   }
@@ -205,50 +206,50 @@ async function findEntityMentions(
       capitalizedNames.length > 0) &&
     runtime.a2aClient
   ) {
-    const orgsResult = await runtime.a2aClient.getOrganizations(100);
+    const orgsResult = await runtime.a2aClient.getOrganizations(100)
     const organizations =
       (
         orgsResult as {
           organizations?: Array<{
-            id: string;
-            name: string;
-            ticker?: string;
-            description?: string;
-            currentPrice?: number;
-            imageUrl?: string;
-          }>;
+            id: string
+            name: string
+            ticker?: string
+            description?: string
+            currentPrice?: number
+            imageUrl?: string
+          }>
         }
-      )?.organizations || [];
+      )?.organizations || []
 
     // Match tickers
     if (tickerMentions.length > 0) {
-      const tickers = tickerMentions.map((m) => m.substring(1));
+      const tickers = tickerMentions.map((m) => m.substring(1))
       const matchedOrgs = organizations.filter((org) =>
         tickers.some(
           (t) =>
             org.ticker?.toUpperCase() === t.toUpperCase() ||
-            org.name.toUpperCase().includes(t.toUpperCase())
-        )
-      );
+            org.name.toUpperCase().includes(t.toUpperCase()),
+        ),
+      )
       results.push(
-        ...matchedOrgs.map((c) => ({ type: 'company' as const, data: c }))
-      );
+        ...matchedOrgs.map((c) => ({ type: 'company' as const, data: c })),
+      )
     }
 
     // Match names
     const allNames = [
       ...quotedNames.map((n) => n.replace(/"/g, '')),
       ...capitalizedNames,
-    ];
+    ]
     if (allNames.length > 0) {
       const matchedOrgs = organizations.filter((org) =>
         allNames.some((name) =>
-          org.name.toLowerCase().includes(name.toLowerCase())
-        )
-      );
+          org.name.toLowerCase().includes(name.toLowerCase()),
+        ),
+      )
       results.push(
-        ...matchedOrgs.map((c) => ({ type: 'company' as const, data: c }))
-      );
+        ...matchedOrgs.map((c) => ({ type: 'company' as const, data: c })),
+      )
     }
   }
 
@@ -258,11 +259,11 @@ async function findEntityMentions(
    */
 
   // Deduplicate by ID
-  const seen = new Set<string>();
+  const seen = new Set<string>()
   return results.filter((r) => {
-    const key = `${r.type}:${r.data.id}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
+    const key = `${r.type}:${r.data.id}`
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
 }

@@ -11,66 +11,68 @@
  * Can run multiple agents and compare their performance.
  */
 
-import { logger } from '@babylon/shared';
-import type { IAgentRuntime } from '@elizaos/core';
-import { promises as fs } from 'fs';
-import * as path from 'path';
-import { TrajectoryRecorder } from '../training/TrajectoryRecorder';
+import { promises as fs } from 'node:fs'
+import * as path from 'node:path'
+import { isObject, logger } from '@babylon/shared'
+import type { IAgentRuntime } from '@elizaos/core'
+import { TrajectoryRecorder } from '../training/TrajectoryRecorder'
+import { isBenchmarkGameSnapshot } from '../type-guards'
 import {
   type BenchmarkConfig,
   BenchmarkDataGenerator,
   type BenchmarkGameSnapshot,
-} from './BenchmarkDataGenerator';
-import { SimulationA2AInterface } from './SimulationA2AInterface';
+} from './BenchmarkDataGenerator'
+import { SimulationA2AInterface } from './SimulationA2AInterface'
 import {
   type SimulationConfig,
   SimulationEngine,
   type SimulationResult,
-} from './SimulationEngine';
+} from './SimulationEngine'
 
 export interface BenchmarkRunConfig {
   /** Path to benchmark snapshot file (or will generate new one) */
-  benchmarkPath?: string;
+  benchmarkPath?: string
 
   /** If no snapshot provided, use this config to generate */
-  generatorConfig?: BenchmarkConfig;
+  generatorConfig?: BenchmarkConfig
 
   /** Agent runtime to test */
-  agentRuntime: IAgentRuntime;
+  agentRuntime: IAgentRuntime
 
   /** Agent user ID */
-  agentUserId: string;
+  agentUserId: string
 
   /** Whether to save trajectory data for RL training */
-  saveTrajectory: boolean;
+  saveTrajectory: boolean
 
   /** Output directory for results */
-  outputDir: string;
+  outputDir: string
 
   /** Force specific model (bypasses W&B lookup) - for baseline testing */
-  forceModel?: string;
+  forceModel?: string | null
 
   /** Force a baseline strategy (overrides agent behavior) */
-  forceStrategy?: 'random' | 'momentum';
+  forceStrategy?: 'random' | 'momentum'
 }
 
 export interface BenchmarkComparisonResult {
   /** All individual run results */
-  runs: SimulationResult[];
+  runs: SimulationResult[]
 
   /** Comparison metrics */
   comparison: {
-    avgPnl: number;
-    avgAccuracy: number;
-    avgOptimality: number;
-    bestRun: string;
-    worstRun: string;
-  };
+    avgPnl: number
+    avgAccuracy: number
+    avgOptimality: number
+    bestRun: string
+    worstRun: string
+  }
 
   /** Trajectory data (if saved) */
-  trajectories?: string[];
+  trajectories?: string[]
 }
 
+// biome-ignore lint/complexity/noStaticOnlyClass: Service pattern uses static methods for stateless operations
 export class BenchmarkRunner {
   /**
    * Run a single benchmark
@@ -102,28 +104,36 @@ export class BenchmarkRunner {
    * ```
    */
   static async runSingle(
-    config: BenchmarkRunConfig
+    config: BenchmarkRunConfig,
   ): Promise<SimulationResult> {
     logger.info('Starting benchmark run', {
       agentUserId: config.agentUserId,
       benchmarkPath: config.benchmarkPath,
       strategy: config.forceStrategy || 'agent-driven',
-    });
+    })
 
     // 1. Load or generate benchmark
-    const snapshot = config.benchmarkPath
-      ? await this.loadBenchmark(config.benchmarkPath)
-      : await this.generateBenchmark(config.generatorConfig!);
+    let snapshot: BenchmarkGameSnapshot
+    if (config.benchmarkPath) {
+      snapshot = await BenchmarkRunner.loadBenchmark(config.benchmarkPath)
+    } else {
+      if (!config.generatorConfig) {
+        throw new Error(
+          'Either benchmarkPath or generatorConfig must be provided',
+        )
+      }
+      snapshot = await BenchmarkRunner.generateBenchmark(config.generatorConfig)
+    }
 
     // 2. Create simulation engine
     // Note: SimulationEngine is deprecated - snapshot property doesn't exist in SimulationConfig.
     // The actual simulation implementation was moved to the game engine.
     // This configuration extends SimulationConfig with legacy snapshot support for benchmarking.
     const simConfig: SimulationConfig & {
-      snapshot?: unknown;
-      agentId?: string;
-      fastForward?: boolean;
-      responseTimeout?: number;
+      snapshot?: unknown
+      agentId?: string
+      fastForward?: boolean
+      responseTimeout?: number
     } = {
       durationMs: snapshot.ticks.length * 60000, // Estimate duration
       tickIntervalMs: 60000,
@@ -134,19 +144,19 @@ export class BenchmarkRunner {
       agentId: config.agentUserId,
       fastForward: true,
       responseTimeout: 30000,
-    };
+    }
 
-    const engine = new SimulationEngine(simConfig);
+    const engine = new SimulationEngine(simConfig)
 
     // 3. Set up A2A interface for agent
-    const a2aInterface = new SimulationA2AInterface(engine, config.agentUserId);
+    const a2aInterface = new SimulationA2AInterface(engine, config.agentUserId)
 
     // Inject A2A interface into agent runtime (if using real agent and not forcing strategy)
     if (!config.forceStrategy) {
       interface RuntimeWithA2A extends IAgentRuntime {
-        a2aClient?: SimulationA2AInterface;
+        a2aClient?: SimulationA2AInterface
       }
-      (config.agentRuntime as RuntimeWithA2A).a2aClient = a2aInterface;
+      ;(config.agentRuntime as RuntimeWithA2A).a2aClient = a2aInterface
     }
 
     // Force model if specified (for baseline testing)
@@ -154,37 +164,37 @@ export class BenchmarkRunner {
       logger.info('Forcing model for benchmark', {
         agentUserId: config.agentUserId,
         forcedModel: config.forceModel,
-      });
+      })
 
       // Set model in runtime settings
       const runtime = config.agentRuntime as IAgentRuntime & {
-        character?: { settings?: Record<string, string> };
-        getSetting?: (key: string) => string | undefined;
-        setSetting?: (key: string, value: string) => void;
-      };
+        character?: { settings?: Record<string, string> }
+        getSetting?: (key: string) => string | undefined
+        setSetting?: (key: string, value: string) => void
+      }
 
       if (runtime.character?.settings) {
-        runtime.character.settings.GROQ_LARGE_MODEL = config.forceModel;
-        runtime.character.settings.GROQ_SMALL_MODEL = config.forceModel;
+        runtime.character.settings.GROQ_LARGE_MODEL = config.forceModel
+        runtime.character.settings.GROQ_SMALL_MODEL = config.forceModel
       }
 
       if (runtime.setSetting) {
-        runtime.setSetting('GROQ_LARGE_MODEL', config.forceModel);
-        runtime.setSetting('GROQ_SMALL_MODEL', config.forceModel);
+        runtime.setSetting('GROQ_LARGE_MODEL', config.forceModel)
+        runtime.setSetting('GROQ_SMALL_MODEL', config.forceModel)
       }
     }
 
     // 4. Set up trajectory recording if enabled
-    let trajectoryRecorder: TrajectoryRecorder | undefined;
-    let trajectoryId: string | undefined;
+    let trajectoryRecorder: TrajectoryRecorder | undefined
+    let trajectoryId: string | undefined
     if (config.saveTrajectory) {
       // Fail fast - trajectory recording setup errors should crash
-      trajectoryRecorder = new TrajectoryRecorder();
+      trajectoryRecorder = new TrajectoryRecorder()
       trajectoryId = await trajectoryRecorder.startTrajectory({
         agentId: config.agentUserId,
         scenarioId: `benchmark-${snapshot.id}`,
-      });
-      logger.info('Trajectory recording started', { trajectoryId });
+      })
+      logger.info('Trajectory recording started', { trajectoryId })
     }
 
     // 5. Initialize simulation
@@ -195,12 +205,12 @@ export class BenchmarkRunner {
     logger.info('Starting simulation loop', {
       agentUserId: config.agentUserId,
       totalTicks: snapshot.ticks.length,
-    });
+    })
 
     // Note: AutonomousCoordinator and SeededRandom were used for the deprecated tick loop below.
     // These would be needed if the tick-by-tick simulation is re-enabled.
 
-    const ticksCompleted = 0;
+    const ticksCompleted = 0
 
     // Note: The tick-by-tick simulation loop was removed when SimulationEngine was deprecated.
     // The deprecated loop would iterate through each tick, calling either executeBaselineStrategy()
@@ -211,10 +221,10 @@ export class BenchmarkRunner {
       agentUserId: config.agentUserId,
       ticksCompleted,
       totalTicks: snapshot.ticks.length,
-    });
+    })
 
     // 7. Calculate final results
-    const result = await engine.run();
+    const result = await engine.run()
 
     // 8. Validate results
     // Note: SimulationResult type changed when SimulationEngine was deprecated.
@@ -226,21 +236,21 @@ export class BenchmarkRunner {
       await trajectoryRecorder.endTrajectory(trajectoryId, {
         finalPnL: result.metrics.totalPnl,
         finalBalance: undefined, // Let recorder calculate from state
-      });
-      logger.info('Trajectory recording saved', { trajectoryId });
+      })
+      logger.info('Trajectory recording saved', { trajectoryId })
     }
 
     // 10. Save results
-    await this.saveResult(result, config.outputDir);
+    await BenchmarkRunner.saveResult(result, config.outputDir)
 
     logger.info('Benchmark run completed', {
       agentUserId: config.agentUserId,
       totalPnl: result.metrics.totalPnl,
       accuracy: result.metrics.predictionMetrics.accuracy,
       optimalityScore: result.metrics.optimalityScore,
-    });
+    })
 
-    return result;
+    return result
   }
 
   /**
@@ -268,51 +278,51 @@ export class BenchmarkRunner {
    */
   static async runMultiple(
     config: BenchmarkRunConfig,
-    numRuns: number
+    numRuns: number,
   ): Promise<BenchmarkComparisonResult> {
     logger.info(`Running ${numRuns} benchmark iterations`, {
       agentUserId: config.agentUserId,
-    });
+    })
 
-    const runs: SimulationResult[] = [];
-    const trajectoryPaths: string[] = [];
+    const runs: SimulationResult[] = []
+    const trajectoryPaths: string[] = []
 
     for (let i = 0; i < numRuns; i++) {
-      logger.info(`Starting run ${i + 1}/${numRuns}`);
+      logger.info(`Starting run ${i + 1}/${numRuns}`)
 
-      const result = await this.runSingle({
+      const result = await BenchmarkRunner.runSingle({
         ...config,
         outputDir: path.join(config.outputDir, `run-${i + 1}`),
-      });
+      })
 
-      runs.push(result);
+      runs.push(result)
 
       if (config.saveTrajectory) {
         trajectoryPaths.push(
-          path.join(config.outputDir, `run-${i + 1}`, 'trajectory.json')
-        );
+          path.join(config.outputDir, `run-${i + 1}`, 'trajectory.json'),
+        )
       }
 
       // Small delay between runs
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      await new Promise((resolve) => setTimeout(resolve, 1000))
     }
 
     // Calculate comparison metrics
     const avgPnl =
-      runs.reduce((sum, r) => sum + r.metrics.totalPnl, 0) / runs.length;
+      runs.reduce((sum, r) => sum + r.metrics.totalPnl, 0) / runs.length
     const avgAccuracy =
       runs.reduce((sum, r) => sum + r.metrics.predictionMetrics.accuracy, 0) /
-      runs.length;
+      runs.length
     const avgOptimality =
-      runs.reduce((sum, r) => sum + r.metrics.optimalityScore, 0) / runs.length;
+      runs.reduce((sum, r) => sum + r.metrics.optimalityScore, 0) / runs.length
 
     const bestRun = runs.reduce((best, current) =>
-      current.metrics.totalPnl > best.metrics.totalPnl ? current : best
-    );
+      current.metrics.totalPnl > best.metrics.totalPnl ? current : best,
+    )
 
     const worstRun = runs.reduce((worst, current) =>
-      current.metrics.totalPnl < worst.metrics.totalPnl ? current : worst
-    );
+      current.metrics.totalPnl < worst.metrics.totalPnl ? current : worst,
+    )
 
     const comparison = {
       avgPnl,
@@ -320,25 +330,25 @@ export class BenchmarkRunner {
       avgOptimality,
       bestRun: bestRun.id,
       worstRun: worstRun.id,
-    };
+    }
 
     // Save comparison report
-    await this.saveComparison(
+    await BenchmarkRunner.saveComparison(
       {
         runs,
         comparison,
         trajectories: config.saveTrajectory ? trajectoryPaths : undefined,
       },
-      config.outputDir
-    );
+      config.outputDir,
+    )
 
-    logger.info('Multiple benchmarks completed', comparison);
+    logger.info('Multiple benchmarks completed', comparison)
 
     return {
       runs,
       comparison,
       trajectories: config.saveTrajectory ? trajectoryPaths : undefined,
-    };
+    }
   }
 
   /**
@@ -371,33 +381,33 @@ export class BenchmarkRunner {
   static async compareAgents(
     agent1Config: BenchmarkRunConfig,
     agent2Config: BenchmarkRunConfig,
-    benchmarkPath: string
+    benchmarkPath: string,
   ): Promise<{
-    agent1: SimulationResult;
-    agent2: SimulationResult;
-    winner: string;
+    agent1: SimulationResult
+    agent2: SimulationResult
+    winner: string
     delta: {
-      pnl: number;
-      accuracy: number;
-      optimality: number;
-    };
+      pnl: number
+      accuracy: number
+      optimality: number
+    }
   }> {
     logger.info('Comparing two agents', {
       agent1: agent1Config.agentUserId,
       agent2: agent2Config.agentUserId,
       benchmark: benchmarkPath,
-    });
+    })
 
     // Run both agents on same benchmark (concurrently)
     const [result1, result2] = await Promise.all([
-      this.runSingle({ ...agent1Config, benchmarkPath }),
-      this.runSingle({ ...agent2Config, benchmarkPath }),
-    ]);
+      BenchmarkRunner.runSingle({ ...agent1Config, benchmarkPath }),
+      BenchmarkRunner.runSingle({ ...agent2Config, benchmarkPath }),
+    ])
 
     const winner =
       result1.metrics.totalPnl > result2.metrics.totalPnl
         ? agent1Config.agentUserId
-        : agent2Config.agentUserId;
+        : agent2Config.agentUserId
 
     const delta = {
       pnl: result1.metrics.totalPnl - result2.metrics.totalPnl,
@@ -406,19 +416,19 @@ export class BenchmarkRunner {
         result2.metrics.predictionMetrics.accuracy,
       optimality:
         result1.metrics.optimalityScore - result2.metrics.optimalityScore,
-    };
+    }
 
     logger.info('Agent comparison completed', {
       winner,
       delta,
-    });
+    })
 
     return {
       agent1: result1,
       agent2: result2,
       winner,
       delta,
-    };
+    }
   }
 
   /**
@@ -429,30 +439,31 @@ export class BenchmarkRunner {
    * @throws Error if file cannot be read or parsed
    */
   private static async loadBenchmark(
-    benchmarkPath: string
+    benchmarkPath: string,
   ): Promise<BenchmarkGameSnapshot> {
     try {
-      const data = await fs.readFile(benchmarkPath, 'utf-8');
-      const parsed = JSON.parse(data) as BenchmarkGameSnapshot;
+      const data = await fs.readFile(benchmarkPath, 'utf-8')
+      const parsed: unknown = JSON.parse(data)
 
-      // Validate basic structure
-      if (!parsed.id || !parsed.initialState || !parsed.groundTruth) {
+      // Validate basic structure using type guard
+      if (!isBenchmarkGameSnapshot(parsed)) {
         throw new Error(
-          `Invalid benchmark file: missing required fields (id, initialState, or groundTruth)`
-        );
+          `Invalid benchmark file: missing required fields (id, initialState, or groundTruth)`,
+        )
       }
 
-      return parsed;
+      // The type guard validates the required structure, so we can safely
+      // treat this as BenchmarkGameSnapshot (full type has additional fields
+      // that are present in valid benchmark files)
+      return parsed as BenchmarkGameSnapshot
     } catch (error) {
       if (error instanceof SyntaxError) {
-        throw new Error(
-          `Failed to parse benchmark JSON file: ${error.message}`
-        );
+        throw new Error(`Failed to parse benchmark JSON file: ${error.message}`)
       }
-      if ((error as { code?: string })?.code === 'ENOENT') {
-        throw new Error(`Benchmark file not found: ${benchmarkPath}`);
+      if (isObject(error) && error.code === 'ENOENT') {
+        throw new Error(`Benchmark file not found: ${benchmarkPath}`)
       }
-      throw error;
+      throw error
     }
   }
 
@@ -467,25 +478,25 @@ export class BenchmarkRunner {
    * @throws Error if generation fails
    */
   private static async generateBenchmark(
-    config: BenchmarkConfig
+    config: BenchmarkConfig,
   ): Promise<BenchmarkGameSnapshot> {
-    logger.info('Generating new benchmark', config);
+    logger.info('Generating new benchmark', config)
 
-    const generator = new BenchmarkDataGenerator(config);
-    const snapshot = await generator.generate();
+    const generator = new BenchmarkDataGenerator(config)
+    const snapshot = await generator.generate()
 
     // Save for reuse
     const outputPath = path.join(
       process.cwd(),
       'benchmarks',
-      `benchmark-${snapshot.id}.json`
-    );
-    await fs.mkdir(path.dirname(outputPath), { recursive: true });
-    await fs.writeFile(outputPath, JSON.stringify(snapshot, null, 2));
+      `benchmark-${snapshot.id}.json`,
+    )
+    await fs.mkdir(path.dirname(outputPath), { recursive: true })
+    await fs.writeFile(outputPath, JSON.stringify(snapshot, null, 2))
 
-    logger.info('Benchmark generated and saved', { path: outputPath });
+    logger.info('Benchmark generated and saved', { path: outputPath })
 
-    return snapshot;
+    return snapshot
   }
 
   /**
@@ -499,26 +510,26 @@ export class BenchmarkRunner {
    */
   private static async saveResult(
     result: SimulationResult,
-    outputDir: string
+    outputDir: string,
   ): Promise<void> {
-    await fs.mkdir(outputDir, { recursive: true });
+    await fs.mkdir(outputDir, { recursive: true })
 
     // Save full result
-    const resultPath = path.join(outputDir, 'result.json');
-    await fs.writeFile(resultPath, JSON.stringify(result, null, 2));
+    const resultPath = path.join(outputDir, 'result.json')
+    await fs.writeFile(resultPath, JSON.stringify(result, null, 2))
 
     // Save metrics summary
-    const metricsPath = path.join(outputDir, 'metrics.json');
-    await fs.writeFile(metricsPath, JSON.stringify(result.metrics, null, 2));
+    const metricsPath = path.join(outputDir, 'metrics.json')
+    await fs.writeFile(metricsPath, JSON.stringify(result.metrics, null, 2))
 
     // Save trajectory
-    const trajectoryPath = path.join(outputDir, 'trajectory.json');
+    const trajectoryPath = path.join(outputDir, 'trajectory.json')
     await fs.writeFile(
       trajectoryPath,
-      JSON.stringify(result.trajectory, null, 2)
-    );
+      JSON.stringify(result.trajectory, null, 2),
+    )
 
-    logger.debug('Results saved', { outputDir });
+    logger.debug('Results saved', { outputDir })
   }
 
   /**
@@ -531,13 +542,13 @@ export class BenchmarkRunner {
    */
   private static async saveComparison(
     comparison: BenchmarkComparisonResult,
-    outputDir: string
+    outputDir: string,
   ): Promise<void> {
-    await fs.mkdir(outputDir, { recursive: true });
+    await fs.mkdir(outputDir, { recursive: true })
 
-    const comparisonPath = path.join(outputDir, 'comparison.json');
-    await fs.writeFile(comparisonPath, JSON.stringify(comparison, null, 2));
+    const comparisonPath = path.join(outputDir, 'comparison.json')
+    await fs.writeFile(comparisonPath, JSON.stringify(comparison, null, 2))
 
-    logger.debug('Comparison saved', { outputDir });
+    logger.debug('Comparison saved', { outputDir })
   }
 }

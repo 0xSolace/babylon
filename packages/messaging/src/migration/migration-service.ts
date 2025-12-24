@@ -5,36 +5,36 @@
  * decentralized messaging protocol while maintaining message history.
  */
 
-import type { Address } from 'viem';
-import { DecentralizedMessagingClient } from '../client';
-import type { MigrationStatus } from '../types';
+import type { Address } from 'viem'
+import type { MessagingClient } from '../client'
+import type { MigrationStatus } from '../types'
 
 interface CentralizedDM {
-  chatId: string;
-  participant1Id: string;
-  participant1Address: Address;
-  participant2Id: string;
-  participant2Address: Address;
+  chatId: string
+  participant1Id: string
+  participant1Address: Address
+  participant2Id: string
+  participant2Address: Address
   messages: Array<{
-    id: string;
-    senderId: string;
-    content: string;
-    createdAt: Date;
-  }>;
+    id: string
+    senderId: string
+    content: string
+    createdAt: Date
+  }>
 }
 
 interface MigrationOptions {
   /** Batch size for message migration */
-  batchSize?: number;
+  batchSize?: number
   /** Delay between batches (ms) */
-  batchDelay?: number;
+  batchDelay?: number
   /** Whether to delete centralized messages after migration */
-  deleteCentralized?: boolean;
+  deleteCentralized?: boolean
 }
 
-type FetchDMsCallback = () => Promise<CentralizedDM[]>;
-type UpdateStatusCallback = (status: MigrationStatus) => Promise<void>;
-type DeleteCentralizedCallback = (chatId: string) => Promise<void>;
+type FetchDMsCallback = () => Promise<CentralizedDM[]>
+type UpdateStatusCallback = (status: MigrationStatus) => Promise<void>
+type DeleteCentralizedCallback = (chatId: string) => Promise<void>
 
 /**
  * Service for migrating Babylon DMs to decentralized protocol
@@ -49,8 +49,8 @@ type DeleteCentralizedCallback = (chatId: string) => Promise<void>;
  * 3. Optionally delete centralized copies
  */
 export class MigrationService {
-  private options: Required<MigrationOptions>;
-  private statuses: Map<string, MigrationStatus> = new Map();
+  private options: Required<MigrationOptions>
+  private statuses: Map<string, MigrationStatus> = new Map()
 
   constructor(options: MigrationOptions = {}) {
     this.options = {
@@ -58,29 +58,29 @@ export class MigrationService {
       batchDelay: 1000,
       deleteCentralized: false,
       ...options,
-    };
+    }
   }
 
   /**
    * Run full migration
    */
   async migrate(
-    client: DecentralizedMessagingClient,
+    client: MessagingClient,
     callbacks: {
-      fetchDMs: FetchDMsCallback;
-      updateStatus: UpdateStatusCallback;
-      deleteCentralized?: DeleteCentralizedCallback;
-    }
+      fetchDMs: FetchDMsCallback
+      updateStatus: UpdateStatusCallback
+      deleteCentralized?: DeleteCentralizedCallback
+    },
   ): Promise<MigrationStatus[]> {
-    const dms = await callbacks.fetchDMs();
-    const results: MigrationStatus[] = [];
+    const dms = await callbacks.fetchDMs()
+    const results: MigrationStatus[] = []
 
     for (const dm of dms) {
-      const status = await this.migrateDM(dm, client, callbacks);
-      results.push(status);
+      const status = await this.migrateDM(dm, client, callbacks)
+      results.push(status)
     }
 
-    return results;
+    return results
   }
 
   /**
@@ -88,11 +88,11 @@ export class MigrationService {
    */
   private async migrateDM(
     dm: CentralizedDM,
-    client: DecentralizedMessagingClient,
+    client: MessagingClient,
     callbacks: {
-      updateStatus: UpdateStatusCallback;
-      deleteCentralized?: DeleteCentralizedCallback;
-    }
+      updateStatus: UpdateStatusCallback
+      deleteCentralized?: DeleteCentralizedCallback
+    },
   ): Promise<MigrationStatus> {
     const status: MigrationStatus = {
       chatId: dm.chatId,
@@ -102,13 +102,13 @@ export class MigrationService {
       migratedMessages: 0,
       status: 'in_progress',
       startedAt: new Date(),
-    };
+    }
 
-    this.statuses.set(dm.chatId, status);
-    await callbacks.updateStatus(status);
+    this.statuses.set(dm.chatId, status)
+    await callbacks.updateStatus(status)
 
     // Process messages in batches
-    const batches = this.createBatches(dm.messages, this.options.batchSize);
+    const batches = this.createBatches(dm.messages, this.options.batchSize)
 
     for (const batch of batches) {
       for (const msg of batch) {
@@ -116,61 +116,61 @@ export class MigrationService {
         const recipientAddress =
           msg.senderId === dm.participant1Id
             ? dm.participant2Address
-            : dm.participant1Address;
+            : dm.participant1Address
 
         // Send message through decentralized protocol
         // Note: This re-encrypts for the recipient
-        await client.sendMessage(recipientAddress, msg.content);
+        await client.sendMessage(recipientAddress, msg.content)
 
-        status.migratedMessages++;
+        status.migratedMessages++
       }
 
-      await callbacks.updateStatus(status);
+      await callbacks.updateStatus(status)
 
       // Delay between batches
       if (this.options.batchDelay > 0) {
         await new Promise((resolve) =>
-          setTimeout(resolve, this.options.batchDelay)
-        );
+          setTimeout(resolve, this.options.batchDelay),
+        )
       }
     }
 
     // Mark complete
-    status.status = 'completed';
-    status.completedAt = new Date();
-    await callbacks.updateStatus(status);
+    status.status = 'completed'
+    status.completedAt = new Date()
+    await callbacks.updateStatus(status)
 
     // Optionally delete centralized messages
     if (this.options.deleteCentralized && callbacks.deleteCentralized) {
-      await callbacks.deleteCentralized(dm.chatId);
+      await callbacks.deleteCentralized(dm.chatId)
     }
 
-    return status;
+    return status
   }
 
   /**
    * Create batches from array
    */
   private createBatches<T>(items: T[], batchSize: number): T[][] {
-    const batches: T[][] = [];
+    const batches: T[][] = []
     for (let i = 0; i < items.length; i += batchSize) {
-      batches.push(items.slice(i, i + batchSize));
+      batches.push(items.slice(i, i + batchSize))
     }
-    return batches;
+    return batches
   }
 
   /**
    * Get migration status for a chat
    */
   getStatus(chatId: string): MigrationStatus | undefined {
-    return this.statuses.get(chatId);
+    return this.statuses.get(chatId)
   }
 
   /**
    * Get all migration statuses
    */
   getAllStatuses(): MigrationStatus[] {
-    return Array.from(this.statuses.values());
+    return Array.from(this.statuses.values())
   }
 
   /**
@@ -179,10 +179,10 @@ export class MigrationService {
   isComplete(): boolean {
     for (const status of this.statuses.values()) {
       if (status.status !== 'completed' && status.status !== 'failed') {
-        return false;
+        return false
       }
     }
-    return true;
+    return true
   }
 }
 
@@ -190,7 +190,7 @@ export class MigrationService {
  * Factory function to create migration service
  */
 export function createMigrationService(
-  options?: MigrationOptions
+  options?: MigrationOptions,
 ): MigrationService {
-  return new MigrationService(options);
+  return new MigrationService(options)
 }

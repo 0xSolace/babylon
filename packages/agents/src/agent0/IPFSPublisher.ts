@@ -7,8 +7,8 @@
  * This is a lightweight wrapper for IPFS gateway access only.
  */
 
-import { z } from 'zod';
-import { logger } from '../shared/logger';
+import { z } from 'zod'
+import { logger } from '../shared/logger'
 
 export const AgentMetadataSchema = z.object({
   name: z.string(),
@@ -42,7 +42,7 @@ export const AgentMetadataSchema = z.object({
           name: z.string(),
           description: z.string(),
           inputSchema: z.record(z.string(), z.unknown()),
-        })
+        }),
       ),
     })
     .optional(),
@@ -54,8 +54,8 @@ export const AgentMetadataSchema = z.object({
       registrationTxHash: z.string().optional(),
     })
     .optional(),
-});
-export type AgentMetadata = z.infer<typeof AgentMetadataSchema>;
+})
+export type AgentMetadata = z.infer<typeof AgentMetadataSchema>
 
 export class IPFSPublisher {
   /**
@@ -66,8 +66,8 @@ export class IPFSPublisher {
     logger.debug(
       'IPFSPublisher initialized (gateway-only mode)',
       undefined,
-      'IPFSPublisher'
-    );
+      'IPFSPublisher',
+    )
   }
 
   /**
@@ -75,41 +75,41 @@ export class IPFSPublisher {
    * Simple and reliable - no IPFS node needed
    */
   async fetchMetadata(cid: string): Promise<AgentMetadata> {
-    const gatewayUrl = this.getGatewayUrl(cid);
+    const gatewayUrl = this.getGatewayUrl(cid)
     const response = await fetch(gatewayUrl, {
       headers: { Accept: 'application/json' },
-    });
+    })
 
     if (!response.ok) {
       throw new Error(
-        `Failed to fetch from IPFS gateway: ${response.status} ${response.statusText}`
-      );
+        `Failed to fetch from IPFS gateway: ${response.status} ${response.statusText}`,
+      )
     }
 
-    const metadata = await response.json();
-    const validation = AgentMetadataSchema.safeParse(metadata);
+    const metadata = await response.json()
+    const validation = AgentMetadataSchema.safeParse(metadata)
     if (!validation.success) {
       logger.warn('Invalid agent metadata from IPFS', {
         cid,
         error: validation.error,
-      });
-      throw new Error('Invalid agent metadata received from IPFS');
+      })
+      throw new Error('Invalid agent metadata received from IPFS')
     }
 
     logger.debug(
       `Metadata fetched from IPFS gateway: ${cid}`,
       undefined,
-      'IPFSPublisher'
-    );
-    return validation.data;
+      'IPFSPublisher',
+    )
+    return validation.data
   }
 
   /**
    * Get IPFS gateway URL for a CID
    */
   getGatewayUrl(cid: string): string {
-    const gateway = process.env.AGENT0_IPFS_GATEWAY || 'https://ipfs.io/ipfs/';
-    return `${gateway}${cid}`;
+    const gateway = process.env.AGENT0_IPFS_GATEWAY || 'https://ipfs.io/ipfs/'
+    return `${gateway}${cid}`
   }
 
   /**
@@ -117,6 +117,6 @@ export class IPFSPublisher {
    * Always returns true since we use public gateway
    */
   isAvailable(): boolean {
-    return true;
+    return true
   }
 }

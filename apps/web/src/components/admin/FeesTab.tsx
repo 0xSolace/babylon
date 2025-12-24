@@ -1,14 +1,12 @@
-'use client';
-
 import {
   cn,
   type FeeStatsResponse,
   FeeStatsResponseSchema,
-} from '@babylon/shared';
-import { useQuery } from '@tanstack/react-query';
-import { Award, DollarSign, RefreshCw, TrendingUp, Users } from 'lucide-react';
-import { Avatar } from '@/components/shared/Avatar';
-import { Skeleton } from '@/components/shared/Skeleton';
+} from '@babylon/shared'
+import { useQuery } from '@tanstack/react-query'
+import { Award, DollarSign, RefreshCw, TrendingUp, Users } from 'lucide-react'
+import { Avatar } from '@/components/shared/Avatar'
+import { Skeleton } from '@/components/shared/Skeleton'
 
 /**
  * Fees tab component for displaying fee collection statistics.
@@ -39,30 +37,30 @@ export function FeesTab() {
   } = useQuery<FeeStatsResponse>({
     queryKey: ['admin', 'fees'],
     queryFn: async () => {
-      const response = await fetch('/api/admin/fees');
+      const response = await fetch('/api/admin/fees')
       if (!response.ok) {
-        throw new Error('Failed to fetch fee statistics');
+        throw new Error('Failed to fetch fee statistics')
       }
-      const data = await response.json();
-      const validation = FeeStatsResponseSchema.safeParse(data);
+      const data = await response.json()
+      const validation = FeeStatsResponseSchema.safeParse(data)
       if (!validation.success) {
-        throw new Error('Invalid data structure for fee statistics');
+        throw new Error('Invalid data structure for fee statistics')
       }
-      return validation.data;
+      return validation.data
     },
-  });
+  })
 
   const formatCurrency = (value: number) => {
-    if (value >= 1_000_000) return `$${(value / 1_000_000).toFixed(2)}M`;
-    if (value >= 1_000) return `$${(value / 1_000).toFixed(2)}K`;
-    return `$${value.toFixed(2)}`;
-  };
+    if (value >= 1_000_000) return `$${(value / 1_000_000).toFixed(2)}M`
+    if (value >= 1_000) return `$${(value / 1_000).toFixed(2)}K`
+    return `$${value.toFixed(2)}`
+  }
 
   const formatNumber = (value: number) => {
-    if (value >= 1000000) return `${(value / 1000000).toFixed(2)}M`;
-    if (value >= 1000) return `${(value / 1000).toFixed(2)}K`;
-    return value.toLocaleString();
-  };
+    if (value >= 1000000) return `${(value / 1000000).toFixed(2)}M`
+    if (value >= 1000) return `${(value / 1000).toFixed(2)}K`
+    return value.toLocaleString()
+  }
 
   const formatTradeType = (type: string) => {
     const typeMap: Record<string, string> = {
@@ -74,9 +72,9 @@ export function FeesTab() {
       npc_pred_sell: 'NPC Prediction Sell',
       npc_perp_open: 'NPC Perp Open',
       npc_perp_close: 'NPC Perp Close',
-    };
-    return typeMap[type] || type;
-  };
+    }
+    return typeMap[type] || type
+  }
 
   const StatCard = ({
     icon: Icon,
@@ -85,11 +83,11 @@ export function FeesTab() {
     subtitle,
     color = 'primary',
   }: {
-    icon: React.ComponentType<{ className?: string }>;
-    label: string;
-    value: string | number;
-    subtitle?: string;
-    color?: 'primary' | 'green' | 'blue' | 'orange' | 'purple';
+    icon: React.ComponentType<{ className?: string }>
+    label: string
+    value: string | number
+    subtitle?: string
+    color?: 'primary' | 'green' | 'blue' | 'orange' | 'purple'
   }) => {
     const colorClasses = {
       primary: 'text-primary',
@@ -97,7 +95,7 @@ export function FeesTab() {
       blue: 'text-blue-500',
       orange: 'text-orange-500',
       purple: 'text-purple-500',
-    };
+    }
 
     return (
       <div className="rounded-lg border border-border bg-card p-4">
@@ -110,8 +108,8 @@ export function FeesTab() {
           <div className="mt-1 text-muted-foreground text-xs">{subtitle}</div>
         )}
       </div>
-    );
-  };
+    )
+  }
 
   if (isLoading) {
     return (
@@ -120,7 +118,7 @@ export function FeesTab() {
         <Skeleton className="h-64 w-full" />
         <Skeleton className="h-48 w-full" />
       </div>
-    );
+    )
   }
 
   if (error || !stats) {
@@ -130,7 +128,7 @@ export function FeesTab() {
           ? error.message
           : 'Failed to load fee statistics'}
       </div>
-    );
+    )
   }
 
   return (
@@ -144,6 +142,7 @@ export function FeesTab() {
           </p>
         </div>
         <button
+          type="button"
           onClick={() => refetch()}
           disabled={isFetching}
           className="flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
@@ -183,7 +182,7 @@ export function FeesTab() {
             stats.platformStats.totalTrades > 0
               ? stats.platformStats.totalFeesCollected /
                   stats.platformStats.totalTrades
-              : 0
+              : 0,
           )}
           subtitle="0.1% fee rate"
           color="purple"
@@ -198,11 +197,11 @@ export function FeesTab() {
         <div className="space-y-3">
           {stats.feesByType.map(
             (item: {
-              tradeType: string;
-              totalFees: number;
-              platformFees: number;
-              referrerFees: number;
-              tradeCount: number;
+              tradeType: string
+              totalFees: number
+              platformFees: number
+              referrerFees: number
+              tradeCount: number
             }) => (
               <div
                 key={item.tradeType}
@@ -225,7 +224,7 @@ export function FeesTab() {
                   </div>
                 </div>
               </div>
-            )
+            ),
           )}
         </div>
       </div>
@@ -239,15 +238,15 @@ export function FeesTab() {
             {stats.topFeePayers.map(
               (
                 user: {
-                  userId: string;
-                  username: string;
-                  displayName: string;
-                  profileImageUrl: string | null;
-                  isNPC: boolean;
-                  totalFees: number;
-                  tradeCount: number;
+                  userId: string
+                  username: string
+                  displayName: string
+                  profileImageUrl: string | null
+                  isNPC: boolean
+                  totalFees: number
+                  tradeCount: number
                 },
-                index: number
+                index: number,
               ) => (
                 <div
                   key={user.userId}
@@ -257,7 +256,7 @@ export function FeesTab() {
                     #{index + 1}
                   </div>
                   <Avatar
-                    src={user.profileImageUrl ?? undefined}
+                    src={user.profileImageUrl}
                     alt={user.displayName}
                     size="sm"
                   />
@@ -280,7 +279,7 @@ export function FeesTab() {
                     </div>
                   </div>
                 </div>
-              )
+              ),
             )}
           </div>
         </div>
@@ -299,7 +298,7 @@ export function FeesTab() {
                     #{index + 1}
                   </div>
                   <Avatar
-                    src={user.profileImageUrl ?? undefined}
+                    src={user.profileImageUrl}
                     alt={user.displayName}
                     size="sm"
                   />
@@ -329,5 +328,5 @@ export function FeesTab() {
 
       {/* Recent Fee Transactions - Planned feature: Add recentFees to FeeStatsResponse schema when transaction logging is implemented */}
     </div>
-  );
+  )
 }

@@ -1,7 +1,5 @@
-'use client';
-
-import { useEffect, useRef } from 'react';
-import { useGameStore } from '@/stores/gameStore';
+import { useEffect, useRef } from 'react'
+import { useGameStore } from '@/stores/gameStore'
 
 /**
  * Game playback manager component for managing game timeline advancement.
@@ -19,27 +17,27 @@ import { useGameStore } from '@/stores/gameStore';
  * @returns null (does not render anything)
  */
 export function GamePlaybackManager() {
-  const { isPlaying, speed, totalDurationMs, advanceTime } = useGameStore();
+  const { isPlaying, speed, totalDurationMs, advanceTime } = useGameStore()
   const intervalRef = useRef<ReturnType<typeof setInterval> | undefined>(
-    undefined
-  );
+    undefined,
+  )
 
   useEffect(() => {
     if (isPlaying && totalDurationMs > 0) {
       intervalRef.current = setInterval(() => {
-        advanceTime(speed);
-      }, 50);
+        advanceTime(speed)
+      }, 50)
     } else {
       if (intervalRef.current) {
-        clearInterval(intervalRef.current);
+        clearInterval(intervalRef.current)
       }
     }
 
     return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-    };
-  }, [isPlaying, speed, totalDurationMs, advanceTime]);
+      if (intervalRef.current) clearInterval(intervalRef.current)
+    }
+  }, [isPlaying, speed, totalDurationMs, advanceTime])
 
   // This component doesn't render anything
-  return null;
+  return null
 }

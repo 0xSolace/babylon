@@ -1,10 +1,8 @@
-'use client';
+import { cn } from '@babylon/shared'
+import { type ComponentProps, memo } from 'react'
+import { Streamdown } from 'streamdown'
 
-import { cn } from '@babylon/shared';
-import { type ComponentProps, memo } from 'react';
-import { Streamdown } from 'streamdown';
-
-type ResponseProps = ComponentProps<typeof Streamdown>;
+type ResponseProps = ComponentProps<typeof Streamdown>
 
 /**
  * Markdown response component using streamdown
@@ -47,12 +45,12 @@ export const Response = memo(
         '[&_strong]:font-semibold',
         // Horizontal rule
         '[&_hr]:my-4 [&_hr]:border-border',
-        className
+        className,
       )}
       {...props}
     />
   ),
-  (prevProps, nextProps) => prevProps.children === nextProps.children
-);
+  (prevProps, nextProps) => prevProps.children === nextProps.children,
+)
 
-Response.displayName = 'Response';
+Response.displayName = 'Response'

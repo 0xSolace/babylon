@@ -12,55 +12,55 @@
  * 4. Executes responses for approved interactions
  */
 
-import { countTokensSync, truncateToTokenLimitSync } from '@babylon/api';
-import { db } from '@babylon/db';
-import type { IAgentRuntime } from '@elizaos/core';
-import { callJejuDirect } from '../llm';
-import { getAgentConfig } from '../shared/agent-config';
-import { logger } from '../shared/logger';
-import { executeDirectComment, executeDirectMessage } from './DirectExecutors';
+import { countTokensSync, truncateToTokenLimitSync } from '@babylon/api'
+import { db } from '@babylon/db'
+import type { IAgentRuntime } from '@elizaos/core'
+import { callAgentLLM } from '../llm'
+import { getAgentConfig } from '../shared/agent-config'
+import { logger } from '../shared/logger'
+import { executeDirectComment, executeDirectMessage } from './DirectExecutors'
 
 // =============================================================================
 // Types
 // =============================================================================
 
 interface ThreadMessage {
-  authorName: string;
-  content: string;
-  isYou: boolean;
-  depth: number;
+  authorName: string
+  content: string
+  isYou: boolean
+  depth: number
 }
 
 interface PostInfo {
-  id: string;
-  content: string;
-  authorName: string;
-  isYourPost: boolean;
+  id: string
+  content: string
+  authorName: string
+  isYourPost: boolean
 }
 
 interface PendingInteraction {
-  type: 'comment_on_post' | 'comment_on_comment' | 'chat_message';
-  id: string;
+  type: 'comment_on_post' | 'comment_on_comment' | 'chat_message'
+  id: string
   // Comment reply fields
-  postId?: string;
-  commentId?: string;
-  parentCommentId?: string;
-  targetCommentId?: string;
-  post?: PostInfo;
-  thread?: ThreadMessage[];
+  postId?: string
+  commentId?: string
+  parentCommentId?: string
+  targetCommentId?: string
+  post?: PostInfo
+  thread?: ThreadMessage[]
   // Chat message fields
-  chatId?: string;
+  chatId?: string
   // Common fields
-  author: string;
-  content: string;
-  context: string; // Formatted context string for prompt
-  timestamp: Date;
+  author: string
+  content: string
+  context: string // Formatted context string for prompt
+  timestamp: Date
 }
 
 interface ResponseDecision {
-  shouldRespond: boolean;
-  priority?: 'low' | 'medium' | 'high';
-  reasoning?: string;
+  shouldRespond: boolean
+  priority?: 'low' | 'medium' | 'high'
+  reasoning?: string
 }
 
 // =============================================================================
@@ -72,65 +72,65 @@ export class AutonomousBatchResponseService {
   // Helper: Format interactions grouped by post for evaluation prompt
   // ===========================================================================
   private formatInteractionsGroupedByPost(
-    interactions: PendingInteraction[]
+    interactions: PendingInteraction[],
   ): string {
     // Group interactions by postId
-    const byPost = new Map<string, PendingInteraction[]>();
-    const chatMessages: PendingInteraction[] = [];
+    const byPost = new Map<string, PendingInteraction[]>()
+    const chatMessages: PendingInteraction[] = []
 
     for (const interaction of interactions) {
       if (interaction.type === 'chat_message' || !interaction.postId) {
-        chatMessages.push(interaction);
+        chatMessages.push(interaction)
       } else {
-        const postInteractions = byPost.get(interaction.postId) || [];
-        postInteractions.push(interaction);
-        byPost.set(interaction.postId, postInteractions);
+        const postInteractions = byPost.get(interaction.postId) || []
+        postInteractions.push(interaction)
+        byPost.set(interaction.postId, postInteractions)
       }
     }
 
-    const sections: string[] = [];
+    const sections: string[] = []
 
     // Format each post group
     for (const [_postId, postInteractions] of byPost) {
-      const firstInteraction = postInteractions[0];
-      const post = firstInteraction?.post;
+      const firstInteraction = postInteractions[0]
+      const post = firstInteraction?.post
       const postAuthor = post?.isYourPost
         ? 'You'
-        : post?.authorName || 'Unknown';
-      const postContent = post?.content || '[Post content unavailable]';
+        : post?.authorName || 'Unknown'
+      const postContent = post?.content || '[Post content unavailable]'
 
       // Count interactions per author on this post
-      const authorCounts = new Map<string, number>();
+      const authorCounts = new Map<string, number>()
       for (const i of postInteractions) {
-        authorCounts.set(i.author, (authorCounts.get(i.author) || 0) + 1);
+        authorCounts.set(i.author, (authorCounts.get(i.author) || 0) + 1)
       }
 
       const interactionLines = postInteractions.map((interaction) => {
-        const authorCount = authorCounts.get(interaction.author) || 1;
+        const authorCount = authorCounts.get(interaction.author) || 1
         const authorNote =
-          authorCount > 1 ? ` (${authorCount} interactions on this post)` : '';
+          authorCount > 1 ? ` (${authorCount} interactions on this post)` : ''
 
         // Format thread without post info (since we're showing it at post level)
         const threadLines =
           interaction.thread?.map((msg, idx) => {
-            const isLast = idx === (interaction.thread?.length || 0) - 1;
-            const replyIndicator = isLast ? ' [REPLY TO THIS]' : '';
+            const isLast = idx === (interaction.thread?.length || 0) - 1
+            const replyIndicator = isLast ? ' [REPLY TO THIS]' : ''
             const depthLabel =
-              idx === 0 ? 'Comment' : `Reply (depth ${msg.depth})`;
-            return `    - ${depthLabel} by @${msg.authorName}: "${msg.content}"${replyIndicator}`;
-          }) || [];
+              idx === 0 ? 'Comment' : `Reply (depth ${msg.depth})`
+            return `    - ${depthLabel} by @${msg.authorName}: "${msg.content}"${replyIndicator}`
+          }) || []
 
         return `  [ID: ${interaction.id}] @${interaction.author}${authorNote}
   Time: ${new Date(interaction.timestamp).toLocaleString()}
   Thread:
-${threadLines.join('\n')}`;
-      });
+${threadLines.join('\n')}`
+      })
 
       sections.push(`═══════════════════════════════════════════════════════════════
 POST by @${postAuthor}: "${postContent.substring(0, 200)}${postContent.length > 200 ? '...' : ''}"
 ═══════════════════════════════════════════════════════════════
 
-${interactionLines.join('\n\n')}`);
+${interactionLines.join('\n\n')}`)
     }
 
     // Format chat messages separately
@@ -138,34 +138,34 @@ ${interactionLines.join('\n\n')}`);
       const chatLines = chatMessages.map(
         (interaction) => `  [ID: ${interaction.id}] @${interaction.author}
   Time: ${new Date(interaction.timestamp).toLocaleString()}
-  Message: "${interaction.content}"`
-      );
+  Message: "${interaction.content}"`,
+      )
 
       sections.push(`═══════════════════════════════════════════════════════════════
 DIRECT MESSAGES
 ═══════════════════════════════════════════════════════════════
 
-${chatLines.join('\n\n')}`);
+${chatLines.join('\n\n')}`)
     }
 
-    return sections.join('\n\n');
+    return sections.join('\n\n')
   }
 
   // ===========================================================================
   // Gather all pending comment replies (UNIFIED)
   // ===========================================================================
   private async gatherPendingCommentReplies(
-    agentUserId: string
+    agentUserId: string,
   ): Promise<PendingInteraction[]> {
-    const interactions: PendingInteraction[] = [];
-    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const interactions: PendingInteraction[] = []
+    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000)
 
     // First get agent's posts
     const agentPosts = await db.post.findMany({
       where: { authorId: agentUserId, deletedAt: null },
       select: { id: true },
-    });
-    const agentPostIds = agentPosts.map((p) => String(p.id));
+    })
+    const agentPostIds = agentPosts.map((p) => String(p.id))
 
     if (agentPostIds.length > 0) {
       // Get comments on agent's posts
@@ -177,34 +177,34 @@ ${chatLines.join('\n\n')}`);
         },
         orderBy: { createdAt: 'desc' },
         take: 20,
-      });
+      })
 
       // Get post content for context
       const postContents = await db.post.findMany({
         where: { id: { in: agentPostIds } },
         select: { id: true, content: true },
-      });
+      })
       const postContentMap = new Map(
-        postContents.map((p) => [String(p.id), String(p.content)])
-      );
+        postContents.map((p) => [String(p.id), String(p.content)]),
+      )
 
       // Get author info
       const authorIds = [
         ...new Set(commentsOnPosts.map((c) => String(c.authorId))),
-      ];
+      ]
       const authors = await db.user.findMany({
         where: { id: { in: authorIds } },
         select: { id: true, username: true, displayName: true },
-      });
-      const authorMap = new Map(authors.map((a) => [String(a.id), a]));
+      })
+      const authorMap = new Map(authors.map((a) => [String(a.id), a]))
 
       for (const comment of commentsOnPosts) {
-        const postContent = postContentMap.get(String(comment.postId)) || '';
-        const author = authorMap.get(String(comment.authorId));
+        const postContent = postContentMap.get(String(comment.postId)) || ''
+        const author = authorMap.get(String(comment.authorId))
         const createdAt =
           comment.createdAt instanceof Date
             ? comment.createdAt
-            : new Date(String(comment.createdAt));
+            : new Date(String(comment.createdAt))
 
         interactions.push({
           type: 'comment_on_post',
@@ -217,7 +217,7 @@ ${chatLines.join('\n\n')}`);
           content: String(comment.content),
           context: `Your post: "${postContent}"`,
           timestamp: createdAt,
-        });
+        })
       }
     }
 
@@ -227,8 +227,8 @@ ${chatLines.join('\n\n')}`);
       orderBy: { createdAt: 'desc' },
       take: 50,
       select: { id: true },
-    });
-    const myCommentIds = myComments.map((c) => String(c.id));
+    })
+    const myCommentIds = myComments.map((c) => String(c.id))
 
     if (myCommentIds.length > 0) {
       const repliesToComments = await db.comment.findMany({
@@ -239,44 +239,42 @@ ${chatLines.join('\n\n')}`);
         },
         orderBy: { createdAt: 'desc' },
         take: 20,
-      });
+      })
 
       // Get parent comment content
       const parentCommentIds = [
         ...new Set(
           repliesToComments
             .map((r) => String(r.parentCommentId))
-            .filter((id) => id && id !== 'null')
+            .filter((id) => id && id !== 'null'),
         ),
-      ];
+      ]
       const parentComments = await db.comment.findMany({
         where: { id: { in: parentCommentIds } },
         select: { id: true, content: true },
-      });
+      })
       const parentCommentMap = new Map(
-        parentComments.map((pc) => [String(pc.id), String(pc.content)])
-      );
+        parentComments.map((pc) => [String(pc.id), String(pc.content)]),
+      )
 
       // Get author info
       const replyAuthorIds = [
         ...new Set(repliesToComments.map((r) => String(r.authorId))),
-      ];
+      ]
       const replyAuthors = await db.user.findMany({
         where: { id: { in: replyAuthorIds } },
         select: { id: true, username: true, displayName: true },
-      });
-      const replyAuthorMap = new Map(
-        replyAuthors.map((a) => [String(a.id), a])
-      );
+      })
+      const replyAuthorMap = new Map(replyAuthors.map((a) => [String(a.id), a]))
 
       for (const reply of repliesToComments) {
-        const author = replyAuthorMap.get(String(reply.authorId));
+        const author = replyAuthorMap.get(String(reply.authorId))
         const parentContent =
-          parentCommentMap.get(String(reply.parentCommentId)) || '';
+          parentCommentMap.get(String(reply.parentCommentId)) || ''
         const createdAt =
           reply.createdAt instanceof Date
             ? reply.createdAt
-            : new Date(String(reply.createdAt));
+            : new Date(String(reply.createdAt))
 
         interactions.push({
           type: 'comment_on_comment',
@@ -292,33 +290,33 @@ ${chatLines.join('\n\n')}`);
           content: String(reply.content),
           context: `Your comment: "${parentContent}"`,
           timestamp: createdAt,
-        });
+        })
       }
     }
 
-    return interactions;
+    return interactions
   }
 
   // ===========================================================================
   // Gather pending chat messages
   // ===========================================================================
   private async gatherPendingChatMessages(
-    agentUserId: string
+    agentUserId: string,
   ): Promise<PendingInteraction[]> {
-    const interactions: PendingInteraction[] = [];
-    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const interactions: PendingInteraction[] = []
+    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000)
 
     // Get chats the agent is part of
     const agentChats = await db.chatParticipant.findMany({
       where: { userId: agentUserId },
       select: { chatId: true },
-    });
+    })
 
     for (const chatParticipant of agentChats) {
       const chat = await db.chat.findUnique({
         where: { id: String(chatParticipant.chatId) },
-      });
-      if (!chat) continue;
+      })
+      if (!chat) continue
 
       // Get recent messages from others in this chat
       const chatMessages = await db.message.findMany({
@@ -329,13 +327,13 @@ ${chatLines.join('\n\n')}`);
         },
         orderBy: { createdAt: 'desc' },
         take: 3,
-      });
+      })
 
-      if (chatMessages.length === 0) continue;
+      if (chatMessages.length === 0) continue
 
       // Check if agent already responded to the latest message
-      const latestFromOther = chatMessages[0];
-      if (!latestFromOther) continue;
+      const latestFromOther = chatMessages[0]
+      if (!latestFromOther) continue
 
       // Get the agent's most recent message in this chat
       const agentLastMessage = await db.message.findFirst({
@@ -345,7 +343,7 @@ ${chatLines.join('\n\n')}`);
         },
         orderBy: { createdAt: 'desc' },
         select: { id: true, createdAt: true },
-      });
+      })
 
       // If agent's last message ID is greater than user's last message ID,
       // the agent has already responded
@@ -368,9 +366,9 @@ ${chatLines.join('\n\n')}`);
                 ? agentLastMessage.createdAt.toISOString()
                 : String(agentLastMessage.createdAt),
           },
-          'AutonomousBatchResponse'
-        );
-        continue; // Agent already responded
+          'AutonomousBatchResponse',
+        )
+        continue // Agent already responded
       }
 
       // Get recent conversation context
@@ -378,23 +376,23 @@ ${chatLines.join('\n\n')}`);
         where: { chatId: String(chat.id) },
         orderBy: { createdAt: 'desc' },
         take: 5,
-      });
+      })
 
       const contextMessages = recentMessages
         .reverse()
         .map(
           (m) =>
-            `${String(m.senderId) === agentUserId ? 'You' : 'User'}: ${String(m.content)}`
+            `${String(m.senderId) === agentUserId ? 'You' : 'User'}: ${String(m.content)}`,
         )
-        .join('\n');
+        .join('\n')
 
-      const latestMessage = chatMessages[0];
+      const latestMessage = chatMessages[0]
       if (latestMessage) {
         const createdAt =
           latestMessage.createdAt instanceof Date
             ? latestMessage.createdAt
-            : new Date(String(latestMessage.createdAt));
-        const chatName = chat.name ? String(chat.name) : '';
+            : new Date(String(latestMessage.createdAt))
+        const chatName = chat.name ? String(chat.name) : ''
 
         interactions.push({
           type: 'chat_message',
@@ -404,30 +402,30 @@ ${chatLines.join('\n\n')}`);
           content: String(latestMessage.content),
           context: `Chat: ${chatName || (chat.isGroup ? 'Group' : 'DM')}\nRecent:\n${contextMessages}`,
           timestamp: createdAt,
-        });
+        })
       }
     }
 
-    return interactions;
+    return interactions
   }
 
   // ===========================================================================
   // Main gather method (combines all interaction types)
   // ===========================================================================
   async gatherPendingInteractions(
-    agentUserId: string
+    agentUserId: string,
   ): Promise<PendingInteraction[]> {
     // Gather all types in parallel
     const [commentReplies, chatMessages] = await Promise.all([
       this.gatherPendingCommentReplies(agentUserId),
       this.gatherPendingChatMessages(agentUserId),
-    ]);
+    ])
 
     // Combine and sort by timestamp (oldest first for fairness)
-    const interactions = [...commentReplies, ...chatMessages];
-    interactions.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+    const interactions = [...commentReplies, ...chatMessages]
+    interactions.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime())
 
-    return interactions;
+    return interactions
   }
 
   /**
@@ -436,33 +434,33 @@ ${chatLines.join('\n\n')}`);
   async evaluateInteractions(
     agentUserId: string,
     _runtime: IAgentRuntime,
-    interactions: PendingInteraction[]
+    interactions: PendingInteraction[],
   ): Promise<ResponseDecision[]> {
     if (interactions.length === 0) {
-      return [];
+      return []
     }
 
     // Cap interactions to prevent context overflow (30 max)
-    const cappedInteractions = interactions.slice(0, 30);
+    const cappedInteractions = interactions.slice(0, 30)
     if (cappedInteractions.length < interactions.length) {
       logger.info(
         `Capped interactions from ${interactions.length} to 30 to prevent context overflow`,
         undefined,
-        'AutonomousBatchResponse'
-      );
+        'AutonomousBatchResponse',
+      )
     }
 
     const agent = await db.user.findUnique({
       where: { id: agentUserId },
       select: { displayName: true },
-    });
+    })
 
     if (!agent) {
-      throw new Error('Agent not found');
+      throw new Error('Agent not found')
     }
 
-    const config = await getAgentConfig(agentUserId);
-    const displayName = agent.displayName ? String(agent.displayName) : 'Agent';
+    const config = await getAgentConfig(agentUserId)
+    const displayName = agent.displayName ? String(agent.displayName) : 'Agent'
 
     // Build evaluation prompt - ask for IDs instead of positional true/false
     // This is more robust as it doesn't rely on counting/ordering
@@ -506,34 +504,34 @@ Leave empty if you don't want to respond to any.
 <respond_to>ID1, ID2, ID3 (or leave empty)</respond_to>
 </response>
 
-Do NOT include any explanations, only the XML format above.`;
+Do NOT include any explanations, only the XML format above.`
 
     // Ensure prompt fits within 32K context limit
-    const estimatedTokens = countTokensSync(prompt);
-    let finalPrompt = prompt;
+    const estimatedTokens = countTokensSync(prompt)
+    let finalPrompt = prompt
 
     if (estimatedTokens > 30000) {
       logger.warn(
         `Evaluation prompt too long: ${estimatedTokens} tokens, truncating`,
         undefined,
-        'AutonomousBatchResponse'
-      );
+        'AutonomousBatchResponse',
+      )
       const truncated = truncateToTokenLimitSync(prompt, 30000, {
         ellipsis: true,
-      });
-      finalPrompt = truncated.text;
+      })
+      finalPrompt = truncated.text
       logger.info(
         `Truncated to ${truncated.tokens} tokens`,
         undefined,
-        'AutonomousBatchResponse'
-      );
+        'AutonomousBatchResponse',
+      )
     }
 
     // Use large model for batch evaluation
     const decisionText = await Promise.race([
-      callJejuDirect({
+      callAgentLLM({
         prompt: finalPrompt,
-        system: config?.systemPrompt ?? undefined,
+        system: config?.systemPrompt,
         modelSize: 'large',
         runtime: _runtime,
         temperature: 0.6,
@@ -548,59 +546,59 @@ Do NOT include any explanations, only the XML format above.`;
             {
               agentUserId,
             },
-            'AutonomousBatchResponse'
-          );
-          resolve('[]');
-        }, 30000);
+            'AutonomousBatchResponse',
+          )
+          resolve('[]')
+        }, 30000)
       }),
-    ]);
+    ])
 
     // Parse the IDs - empty string means no responses
     const responseMatch = decisionText.match(
-      /<respond_to>([\s\S]*?)<\/respond_to>/i
-    );
-    const responseValue = responseMatch ? responseMatch[1]?.trim() || '' : '';
+      /<respond_to>([\s\S]*?)<\/respond_to>/i,
+    )
+    const responseValue = responseMatch ? responseMatch[1]?.trim() || '' : ''
 
-    let respondToIds: Set<string>;
+    let respondToIds: Set<string>
 
     if (responseValue === '') {
-      respondToIds = new Set();
+      respondToIds = new Set()
     } else {
       // Parse comma-separated IDs
       const ids = responseValue
         .split(',')
         .map((id) => id.trim())
-        .filter(Boolean);
+        .filter(Boolean)
 
       // Validate that IDs exist in our interactions
-      const validIds = new Set(cappedInteractions.map((i) => i.id));
-      const parsedIds = new Set<string>();
+      const validIds = new Set(cappedInteractions.map((i) => i.id))
+      const parsedIds = new Set<string>()
 
       for (const id of ids) {
         if (validIds.has(id)) {
-          parsedIds.add(id);
+          parsedIds.add(id)
         } else {
           logger.warn(
             `LLM returned unknown interaction ID: ${id}`,
             undefined,
-            'AutonomousBatchResponse'
-          );
+            'AutonomousBatchResponse',
+          )
         }
       }
 
-      respondToIds = parsedIds;
+      respondToIds = parsedIds
     }
 
     logger.info(
       `Agent selected ${respondToIds.size}/${cappedInteractions.length} interactions to respond to`,
       undefined,
-      'AutonomousBatchResponse'
-    );
+      'AutonomousBatchResponse',
+    )
 
     // Convert to ResponseDecision array (maintaining order of original interactions)
     return cappedInteractions.map((interaction) => ({
       shouldRespond: respondToIds.has(interaction.id),
-    }));
+    }))
   }
 
   /**
@@ -610,27 +608,27 @@ Do NOT include any explanations, only the XML format above.`;
     agentUserId: string,
     _runtime: IAgentRuntime,
     interactions: PendingInteraction[],
-    decisions: ResponseDecision[]
+    decisions: ResponseDecision[],
   ): Promise<number> {
     const agent = await db.user.findUnique({
       where: { id: agentUserId },
       select: { displayName: true },
-    });
+    })
 
     if (!agent) {
-      throw new Error('Agent not found');
+      throw new Error('Agent not found')
     }
 
-    const respConfig = await getAgentConfig(agentUserId);
-    const displayName = agent.displayName ? String(agent.displayName) : 'Agent';
+    const respConfig = await getAgentConfig(agentUserId)
+    const displayName = agent.displayName ? String(agent.displayName) : 'Agent'
 
-    let responsesCreated = 0;
+    let responsesCreated = 0
 
     for (let i = 0; i < interactions.length; i++) {
-      const interaction = interactions[i];
-      const decision = decisions[i];
+      const interaction = interactions[i]
+      const decision = decisions[i]
 
-      if (!interaction || !decision || !decision.shouldRespond) continue;
+      if (!interaction || !decision || !decision.shouldRespond) continue
 
       // Generate response with retry loop
       const responsePrompt = `${respConfig?.systemPrompt ?? 'You are an AI agent on Babylon.'}
@@ -668,23 +666,23 @@ LEAVE EMPTY IF:
 # Required Output Format
 <response>
 <text>your response here (or leave empty to skip)</text>
-</response>`;
+</response>`
 
       // Truncate if needed
-      const respTokens = countTokensSync(responsePrompt);
-      let finalRespPrompt = responsePrompt;
+      const respTokens = countTokensSync(responsePrompt)
+      let finalRespPrompt = responsePrompt
       if (respTokens > 30000) {
         const truncated = truncateToTokenLimitSync(responsePrompt, 30000, {
           ellipsis: true,
-        });
-        finalRespPrompt = truncated.text;
+        })
+        finalRespPrompt = truncated.text
       }
 
       // Use large model for response generation
       const responseContent = await Promise.race([
-        callJejuDirect({
+        callAgentLLM({
           prompt: finalRespPrompt,
-          system: respConfig?.systemPrompt ?? undefined,
+          system: respConfig?.systemPrompt,
           modelSize: 'large',
           runtime: _runtime,
           temperature: 0.8,
@@ -699,26 +697,26 @@ LEAVE EMPTY IF:
               {
                 interactionId: interaction.id,
               },
-              'AutonomousBatchResponse'
-            );
-            resolve('');
-          }, 20000);
+              'AutonomousBatchResponse',
+            )
+            resolve('')
+          }, 20000)
         }),
-      ]);
+      ])
 
       // Parse the response
-      const textMatch = responseContent.match(/<text>([\s\S]*?)<\/text>/i);
+      const textMatch = responseContent.match(/<text>([\s\S]*?)<\/text>/i)
       const cleanContent = textMatch
         ? textMatch[1]?.trim().replace(/^["']|["']$/g, '') || ''
-        : '';
+        : ''
 
       if (!cleanContent || cleanContent.length < 5) {
         logger.warn(
           `Failed to generate valid response for interaction ${interaction.id}`,
           undefined,
-          'AutonomousBatchResponse'
-        );
-        continue;
+          'AutonomousBatchResponse',
+        )
+        continue
       }
 
       // Post the response based on type
@@ -727,21 +725,21 @@ LEAVE EMPTY IF:
           agentUserId,
           postId: interaction.postId,
           content: cleanContent,
-        });
+        })
 
         if (result.success) {
-          responsesCreated++;
+          responsesCreated++
           logger.info(
             `Agent responded to comment on post ${interaction.postId}`,
             undefined,
-            'AutonomousBatchResponse'
-          );
+            'AutonomousBatchResponse',
+          )
         } else {
           logger.warn(
             `Failed to create comment: ${result.error}`,
             { interactionId: interaction.id },
-            'AutonomousBatchResponse'
-          );
+            'AutonomousBatchResponse',
+          )
         }
       } else if (
         interaction.type === 'comment_on_comment' &&
@@ -750,7 +748,7 @@ LEAVE EMPTY IF:
         const parentComment = await db.comment.findUnique({
           where: { id: interaction.commentId },
           select: { postId: true },
-        });
+        })
 
         if (parentComment) {
           const result = await executeDirectComment({
@@ -758,21 +756,21 @@ LEAVE EMPTY IF:
             postId: String(parentComment.postId),
             content: cleanContent,
             parentCommentId: interaction.commentId,
-          });
+          })
 
           if (result.success) {
-            responsesCreated++;
+            responsesCreated++
             logger.info(
               `Agent replied to comment ${interaction.commentId}`,
               undefined,
-              'AutonomousBatchResponse'
-            );
+              'AutonomousBatchResponse',
+            )
           } else {
             logger.warn(
               `Failed to create comment reply: ${result.error}`,
               { interactionId: interaction.id },
-              'AutonomousBatchResponse'
-            );
+              'AutonomousBatchResponse',
+            )
           }
         }
       } else if (interaction.type === 'chat_message' && interaction.chatId) {
@@ -780,29 +778,29 @@ LEAVE EMPTY IF:
           agentUserId,
           chatId: interaction.chatId,
           content: cleanContent,
-        });
+        })
 
         if (result.success) {
-          responsesCreated++;
+          responsesCreated++
           logger.info(
             `Agent responded in chat ${interaction.chatId}`,
             undefined,
-            'AutonomousBatchResponse'
-          );
+            'AutonomousBatchResponse',
+          )
         } else {
           logger.warn(
             `Failed to create chat message: ${result.error}`,
             { interactionId: interaction.id },
-            'AutonomousBatchResponse'
-          );
+            'AutonomousBatchResponse',
+          )
         }
       }
 
       // Small delay to avoid spam
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      await new Promise((resolve) => setTimeout(resolve, 1000))
     }
 
-    return responsesCreated;
+    return responsesCreated
   }
 
   /**
@@ -810,48 +808,48 @@ LEAVE EMPTY IF:
    */
   async processBatch(
     agentUserId: string,
-    _runtime: IAgentRuntime
+    _runtime: IAgentRuntime,
   ): Promise<number> {
     logger.info(
       `Starting batch response processing for agent ${agentUserId}`,
       undefined,
-      'AutonomousBatchResponse'
-    );
+      'AutonomousBatchResponse',
+    )
 
     // Step 1: Gather all pending interactions
-    const interactions = await this.gatherPendingInteractions(agentUserId);
+    const interactions = await this.gatherPendingInteractions(agentUserId)
 
     if (interactions.length === 0) {
       logger.info(
         'No pending interactions to process',
         undefined,
-        'AutonomousBatchResponse'
-      );
-      return 0;
+        'AutonomousBatchResponse',
+      )
+      return 0
     }
 
     logger.info(
       `Found ${interactions.length} pending interactions`,
       undefined,
-      'AutonomousBatchResponse'
-    );
+      'AutonomousBatchResponse',
+    )
 
     // Step 2: Evaluate which ones warrant responses
     const decisions = await this.evaluateInteractions(
       agentUserId,
       _runtime,
-      interactions
-    );
+      interactions,
+    )
 
-    const responseCount = decisions.filter((d) => d.shouldRespond).length;
+    const responseCount = decisions.filter((d) => d.shouldRespond).length
     logger.info(
       `Agent decided to respond to ${responseCount}/${interactions.length} interactions`,
       undefined,
-      'AutonomousBatchResponse'
-    );
+      'AutonomousBatchResponse',
+    )
 
     if (responseCount === 0) {
-      return 0;
+      return 0
     }
 
     // Step 3: Generate and post responses
@@ -859,18 +857,18 @@ LEAVE EMPTY IF:
       agentUserId,
       _runtime,
       interactions,
-      decisions
-    );
+      decisions,
+    )
 
     logger.info(
       `Successfully created ${responsesCreated} responses`,
       undefined,
-      'AutonomousBatchResponse'
-    );
+      'AutonomousBatchResponse',
+    )
 
-    return responsesCreated;
+    return responsesCreated
   }
 }
 
 export const autonomousBatchResponseService =
-  new AutonomousBatchResponseService();
+  new AutonomousBatchResponseService()

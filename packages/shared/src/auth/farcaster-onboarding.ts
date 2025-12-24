@@ -4,15 +4,16 @@
  * Uses the proper Sign In with Farcaster (SIWF) protocol via relay.farcaster.xyz
  */
 
-import { logger } from '../utils/logger';
-import { signInWithFarcaster } from './farcaster-auth-client';
+import { logger } from '../utils/logger'
+import { toNull } from '../utils/nullable'
+import { signInWithFarcaster } from './farcaster-auth-client'
 
 export interface FarcasterOnboardingProfile {
-  fid: number;
-  username: string;
-  displayName?: string;
-  pfpUrl?: string;
-  bio?: string;
+  fid: number
+  username: string
+  displayName?: string
+  pfpUrl?: string
+  bio?: string
 }
 
 /**
@@ -20,7 +21,7 @@ export interface FarcasterOnboardingProfile {
  * Uses the proper SIWF protocol via relay.farcaster.xyz
  */
 export async function openFarcasterOnboardingPopup(
-  userId: string
+  userId: string,
 ): Promise<FarcasterOnboardingProfile> {
   const result = await signInWithFarcaster({
     userId,
@@ -28,10 +29,10 @@ export async function openFarcasterOnboardingPopup(
       logger.debug(
         'Farcaster auth status update',
         { state },
-        'FarcasterOnboarding'
-      );
+        'FarcasterOnboarding',
+      )
     },
-  });
+  })
 
   // Call the backend to verify and store the authentication
   const response = await fetch('/api/auth/onboarding/farcaster/callback', {
@@ -49,15 +50,20 @@ export async function openFarcasterOnboardingPopup(
       bio: result.bio,
       state: result.state,
     }),
-  });
+  })
 
   if (!response.ok) {
-    const errorData = (await response.json().catch(() => ({}))) as {
-      error?: string;
-    };
-    throw new Error(
-      errorData.error || 'Failed to verify Farcaster authentication'
-    );
+    // Parse error response - may fail if response is not JSON
+    let errorMessage = 'Failed to verify Farcaster authentication'
+    try {
+      const errorData: { error?: string } = await response.json()
+      if (errorData.error) {
+        errorMessage = errorData.error
+      }
+    } catch {
+      // Response is not JSON, use default message
+    }
+    throw new Error(errorMessage)
   }
 
   return {
@@ -66,7 +72,7 @@ export async function openFarcasterOnboardingPopup(
     displayName: result.displayName,
     pfpUrl: result.pfpUrl,
     bio: result.bio,
-  };
+  }
 }
 
 /**
@@ -74,25 +80,26 @@ export async function openFarcasterOnboardingPopup(
  * Note: This now uses the same proper SIWF flow
  */
 export async function openNeynarFarcasterAuth(
-  userId: string
+  userId: string,
 ): Promise<FarcasterOnboardingProfile> {
-  return openFarcasterOnboardingPopup(userId);
+  return openFarcasterOnboardingPopup(userId)
 }
 
 /**
  * Fetch additional Farcaster profile data from Neynar API
  */
 export async function fetchFarcasterProfile(
-  fid: number
+  fid: number,
 ): Promise<FarcasterOnboardingProfile | null> {
-  const response = await fetch(`/api/farcaster/profile/${fid}`);
+  const response = await fetch(`/api/farcaster/profile/${fid}`)
 
   if (!response.ok) {
-    return null;
+    return null
   }
 
-  const data = (await response.json()) as {
-    profile?: FarcasterOnboardingProfile;
-  };
-  return data.profile ?? null;
+  interface ProfileResponse {
+    profile?: FarcasterOnboardingProfile
+  }
+  const data: ProfileResponse = await response.json()
+  return toNull(data.profile)
 }

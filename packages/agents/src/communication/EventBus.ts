@@ -7,29 +7,29 @@
  * @packageDocumentation
  */
 
-import type { JsonValue } from '@babylon/shared';
-import { logger } from '../shared/logger';
+import type { JsonValue } from '@babylon/shared'
+import { logger } from '../shared/logger'
 
 export type EventHandler<T extends JsonValue = JsonValue> = (
-  data: T
-) => void | Promise<void>;
+  data: T,
+) => void | Promise<void>
 
 /**
  * Agent event structure
  */
 export interface AgentEvent<T extends JsonValue = JsonValue> {
-  type: string;
-  agentId?: string;
-  data: T;
-  timestamp: string;
-  metadata?: Record<string, JsonValue>;
+  type: string
+  agentId?: string
+  data: T
+  timestamp: string
+  metadata?: Record<string, JsonValue>
 }
 
 export interface Subscription<T extends JsonValue = JsonValue> {
-  id: string;
-  eventType: string;
-  handler: EventHandler<T>;
-  filter?: (event: AgentEvent<T>) => boolean;
+  id: string
+  eventType: string
+  handler: EventHandler<T>
+  filter?: (event: AgentEvent<T>) => boolean
 }
 
 /**
@@ -38,12 +38,12 @@ export interface Subscription<T extends JsonValue = JsonValue> {
  * Thread-safe pub/sub system with filtering and wildcard support.
  */
 export class EventBus {
-  private subscriptions: Map<string, Subscription<JsonValue>[]> = new Map();
-  private eventHistory: AgentEvent<JsonValue>[] = [];
-  private maxHistorySize: number;
+  private subscriptions: Map<string, Subscription<JsonValue>[]> = new Map()
+  private eventHistory: AgentEvent<JsonValue>[] = []
+  private maxHistorySize: number
 
   constructor(maxHistorySize = 1000) {
-    this.maxHistorySize = maxHistorySize;
+    this.maxHistorySize = maxHistorySize
   }
 
   /**
@@ -57,27 +57,27 @@ export class EventBus {
   subscribe<T extends JsonValue = JsonValue>(
     eventType: string,
     handler: EventHandler<T>,
-    filter?: (event: AgentEvent<T>) => boolean
+    filter?: (event: AgentEvent<T>) => boolean,
   ): string {
-    const subscriptionId = `sub-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const subscriptionId = `sub-${Date.now()}-${Math.random().toString(36).slice(2)}`
 
     const subscription: Subscription<T> = {
       id: subscriptionId,
       eventType,
       handler,
       filter,
-    };
+    }
 
     if (!this.subscriptions.has(eventType)) {
-      this.subscriptions.set(eventType, []);
+      this.subscriptions.set(eventType, [])
     }
 
     // Type cast needed since we're storing in a non-generic map
     this.subscriptions
-      .get(eventType)!
-      .push(subscription as Subscription<JsonValue>);
+      .get(eventType)
+      ?.push(subscription as Subscription<JsonValue>)
 
-    return subscriptionId;
+    return subscriptionId
   }
 
   /**
@@ -87,13 +87,13 @@ export class EventBus {
    */
   unsubscribe(subscriptionId: string): void {
     for (const [eventType, subs] of this.subscriptions.entries()) {
-      const index = subs.findIndex((s) => s.id === subscriptionId);
+      const index = subs.findIndex((s) => s.id === subscriptionId)
       if (index !== -1) {
-        subs.splice(index, 1);
+        subs.splice(index, 1)
         if (subs.length === 0) {
-          this.subscriptions.delete(eventType);
+          this.subscriptions.delete(eventType)
         }
-        return;
+        return
       }
     }
   }
@@ -110,7 +110,7 @@ export class EventBus {
     eventType: string,
     data: T,
     agentId?: string,
-    metadata?: Record<string, JsonValue>
+    metadata?: Record<string, JsonValue>,
   ): Promise<void> {
     const event: AgentEvent<T> = {
       type: eventType,
@@ -118,42 +118,42 @@ export class EventBus {
       data,
       timestamp: new Date().toISOString(),
       metadata,
-    };
+    }
 
     // Add to history
-    this.eventHistory.push(event);
+    this.eventHistory.push(event)
     if (this.eventHistory.length > this.maxHistorySize) {
-      this.eventHistory.shift();
+      this.eventHistory.shift()
     }
 
     // Find matching subscriptions
-    const matchingSubs = this.getMatchingSubscriptions(eventType);
+    const matchingSubs = this.getMatchingSubscriptions(eventType)
 
     // Execute handlers
-    const promises: Promise<void>[] = [];
+    const promises: Promise<void>[] = []
     for (const sub of matchingSubs) {
       // Apply filter if present
       if (sub.filter && !sub.filter(event)) {
-        continue;
+        continue
       }
 
       // Execute handler (async or sync)
-      const result = sub.handler(data);
+      const result = sub.handler(data)
       if (result instanceof Promise) {
         promises.push(
           result.catch((error) => {
             logger.error(
               `Error in handler for ${eventType}`,
               error instanceof Error ? error : new Error(String(error)),
-              'EventBus'
-            );
-          })
-        );
+              'EventBus',
+            )
+          }),
+        )
       }
     }
 
     // Wait for all async handlers
-    await Promise.all(promises);
+    await Promise.all(promises)
   }
 
   /**
@@ -161,15 +161,15 @@ export class EventBus {
    * Supports wildcard matching (e.g., "market.*" matches "market.update")
    */
   private getMatchingSubscriptions(eventType: string): Subscription[] {
-    const matching: Subscription[] = [];
+    const matching: Subscription[] = []
 
     for (const [subEventType, subs] of this.subscriptions.entries()) {
       if (this.matchesEventType(eventType, subEventType)) {
-        matching.push(...subs);
+        matching.push(...subs)
       }
     }
 
-    return matching;
+    return matching
   }
 
   /**
@@ -178,18 +178,18 @@ export class EventBus {
    */
   private matchesEventType(eventType: string, pattern: string): boolean {
     if (pattern === '*') {
-      return true; // Match all
+      return true // Match all
     }
 
     if (!pattern.includes('*')) {
-      return eventType === pattern; // Exact match
+      return eventType === pattern // Exact match
     }
 
     // Wildcard matching
-    const regexPattern = pattern.replace(/\./g, '\\.').replace(/\*/g, '.*');
-    const regex = new RegExp(`^${regexPattern}$`);
+    const regexPattern = pattern.replace(/\./g, '\\.').replace(/\*/g, '.*')
+    const regex = new RegExp(`^${regexPattern}$`)
 
-    return regex.test(eventType);
+    return regex.test(eventType)
   }
 
   /**
@@ -199,20 +199,20 @@ export class EventBus {
    * @param limit - Maximum number of events to return
    */
   getHistory(eventType?: string, limit = 100): AgentEvent[] {
-    let events = this.eventHistory;
+    let events = this.eventHistory
 
     if (eventType) {
-      events = events.filter((e) => this.matchesEventType(e.type, eventType));
+      events = events.filter((e) => this.matchesEventType(e.type, eventType))
     }
 
-    return events.slice(-limit);
+    return events.slice(-limit)
   }
 
   /**
    * Clear event history
    */
   clearHistory(): void {
-    this.eventHistory = [];
+    this.eventHistory = []
   }
 
   /**
@@ -222,31 +222,31 @@ export class EventBus {
     if (!eventType) {
       return Array.from(this.subscriptions.values()).reduce(
         (sum, subs) => sum + subs.length,
-        0
-      );
+        0,
+      )
     }
 
-    const matchingSubs = this.getMatchingSubscriptions(eventType);
-    return matchingSubs.length;
+    const matchingSubs = this.getMatchingSubscriptions(eventType)
+    return matchingSubs.length
   }
 
   /**
    * Remove all subscriptions
    */
   clear(): void {
-    this.subscriptions.clear();
+    this.subscriptions.clear()
   }
 }
 
 // Singleton instance
-let eventBusInstance: EventBus | null = null;
+let eventBusInstance: EventBus | null = null
 
 /**
  * Get singleton EventBus instance
  */
 export function getEventBus(): EventBus {
   if (!eventBusInstance) {
-    eventBusInstance = new EventBus();
+    eventBusInstance = new EventBus()
   }
-  return eventBusInstance;
+  return eventBusInstance
 }

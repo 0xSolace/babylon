@@ -1,10 +1,9 @@
 /**
  * Shared Type Definitions for Babylon Game Engine
  *
- * Re-exports from @babylon/shared for convenience, plus engine-specific types
+ * Import game types directly from @babylon/shared.
  */
 
-// Re-export all types from @babylon/shared
 export type {
   Actor,
   ActorConnection,
@@ -43,9 +42,8 @@ export type {
   SelectedActor,
   StockPrice,
   WorldEvent,
-} from '@babylon/shared';
+} from '@babylon/shared'
 
-// Re-export all constants from @babylon/shared
 export {
   ACTOR_COUNTS,
   ACTOR_TIERS,
@@ -57,7 +55,4 @@ export {
   ORG_TYPES,
   POST_TYPES,
   RELATIONSHIP_TYPES,
-} from '@babylon/shared';
-
-// NOTE: WorldContext removed - use WorldFactsContext from world-facts-service.ts
-// or WorldContext from prompts/world-context.ts depending on use case
+} from '@babylon/shared'

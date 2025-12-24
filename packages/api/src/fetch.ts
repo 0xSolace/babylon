@@ -13,16 +13,16 @@ export interface ApiFetchOptions extends RequestInit {
   /**
    * When true (default), credentials are included to send the oauth3-token cookie.
    */
-  auth?: boolean;
+  auth?: boolean
   /**
    * When true (default), automatically retry with a refreshed token if the request fails with 401.
    */
-  autoRetryOn401?: boolean;
+  autoRetryOn401?: boolean
 }
 
 declare global {
   interface Window {
-    __oauth3GetAccessToken?: () => Promise<string | null>;
+    __oauth3GetAccessToken?: () => Promise<string | null>
   }
 }
 
@@ -38,16 +38,16 @@ declare global {
  * @private
  */
 export async function getOAuth3AccessToken(): Promise<string | null> {
-  if (typeof window === 'undefined') return null;
+  if (typeof window === 'undefined') return null
 
   // ALWAYS call getAccessToken() on-demand - it auto-refreshes expired tokens
   if (window.__oauth3GetAccessToken) {
-    const token = await window.__oauth3GetAccessToken();
-    return token;
+    const token = await window.__oauth3GetAccessToken()
+    return token
   }
 
   // No token available - user not authenticated via OAuth3 hook
-  return null;
+  return null
 }
 
 /**
@@ -81,8 +81,8 @@ export async function getOAuth3AccessToken(): Promise<string | null> {
  * ```
  */
 export async function apiFetch(input: RequestInfo, init: ApiFetchOptions = {}) {
-  const { auth = true, autoRetryOn401 = true, headers, ...rest } = init;
-  const finalHeaders = new Headers(headers ?? {});
+  const { auth = true, autoRetryOn401 = true, headers, ...rest } = init
+  const finalHeaders = new Headers(headers ?? {})
 
   // With HTTP-only cookies enabled, authentication is handled via the oauth3-token cookie
   // which is automatically sent when credentials: 'include' is set.
@@ -92,21 +92,21 @@ export async function apiFetch(input: RequestInfo, init: ApiFetchOptions = {}) {
     ...rest,
     headers: finalHeaders,
     credentials: auth ? 'include' : (rest.credentials ?? 'same-origin'),
-  });
+  })
 
   // If we get a 401 and auto-retry is enabled, refresh the token and retry
   // getAccessToken() updates the oauth3-token cookie automatically
   if (response.status === 401 && auth && autoRetryOn401) {
     // Trigger token refresh - this updates the cookie
-    await getOAuth3AccessToken();
+    await getOAuth3AccessToken()
 
     // Retry with the refreshed cookie
     response = await fetch(input, {
       ...rest,
       headers: finalHeaders,
       credentials: 'include',
-    });
+    })
   }
 
-  return response;
+  return response
 }

@@ -18,7 +18,7 @@
  * @returns {boolean} True if the URL is absolute
  */
 export function isAbsoluteUrl(url: string): boolean {
-  return /^(https?:|data:|blob:|ipfs:|ar:)/i.test(url);
+  return /^(https?:|data:|blob:|ipfs:|ar:)/i.test(url)
 }
 
 /**
@@ -35,7 +35,7 @@ export function isDecentralizedUrl(url: string): boolean {
     url.includes('ipfs.jeju.network') ||
     url.startsWith('ipfs:') ||
     url.startsWith('ar:')
-  );
+  )
 }
 
 /**
@@ -46,19 +46,16 @@ export function isDecentralizedUrl(url: string): boolean {
  * @returns {string} Full gateway URL
  */
 export function getIpfsGatewayUrl(cid: string, gateway?: string): string {
-  const defaultGateway =
-    (typeof process !== 'undefined'
-      ? process.env.NEXT_PUBLIC_IPFS_GATEWAY || process.env.JEJU_IPFS_GATEWAY
-      : undefined) || 'https://ipfs.io';
+  const defaultGateway = gateway || 'https://ipfs.io'
 
-  const gatewayUrl = gateway || defaultGateway;
+  const gatewayUrl = gateway || defaultGateway
 
   // Handle ipfs:// protocol
   if (cid.startsWith('ipfs://')) {
-    cid = cid.slice(7);
+    cid = cid.slice(7)
   }
 
-  return `${gatewayUrl}/ipfs/${cid}`;
+  return `${gatewayUrl}/ipfs/${cid}`
 }
 
 /**
@@ -70,10 +67,10 @@ export function getIpfsGatewayUrl(cid: string, gateway?: string): string {
 export function getArweaveUrl(txId: string): string {
   // Handle ar:// protocol
   if (txId.startsWith('ar://')) {
-    txId = txId.slice(5);
+    txId = txId.slice(5)
   }
 
-  return `https://arweave.net/${txId}`;
+  return `https://arweave.net/${txId}`
 }
 
 /**
@@ -85,24 +82,24 @@ export function getArweaveUrl(txId: string): string {
  */
 export function normalizeStorageUrl(
   url: string,
-  preferredGateway?: string
+  preferredGateway?: string,
 ): string {
   // Handle IPFS protocol
   if (url.startsWith('ipfs://')) {
-    return getIpfsGatewayUrl(url.slice(7), preferredGateway);
+    return getIpfsGatewayUrl(url.slice(7), preferredGateway)
   }
 
   // Handle Arweave protocol
   if (url.startsWith('ar://')) {
-    return getArweaveUrl(url.slice(5));
+    return getArweaveUrl(url.slice(5))
   }
 
   // If it's already an absolute URL, return as-is
   if (isAbsoluteUrl(url)) {
-    return url;
+    return url
   }
 
-  return url;
+  return url
 }
 
 /**
@@ -115,36 +112,25 @@ export function normalizeStorageUrl(
  * 4. Legacy public folder assets
  *
  * @param {string} path - Path to the asset (or CID for IPFS)
- * @param {string} [cdnBaseUrl] - Optional CDN base URL (defaults to NEXT_PUBLIC_STATIC_ASSETS_URL)
+ * @param {string} [cdnBaseUrl] - Optional CDN base URL (defaults to PUBLIC_STATIC_ASSETS_URL)
  * @returns {string} Full URL to the asset
  */
 export function getStaticAssetUrl(path: string, cdnBaseUrl?: string): string {
   // If already an absolute URL (CDN, external, IPFS, Arweave, or data), normalize and return
   if (isAbsoluteUrl(path)) {
-    return normalizeStorageUrl(path);
+    return normalizeStorageUrl(path)
   }
 
   // Check if this looks like an IPFS CID (v0 starts with Qm, v1 starts with bafy)
   if (path.startsWith('Qm') || path.startsWith('bafy')) {
-    return getIpfsGatewayUrl(path);
+    return getIpfsGatewayUrl(path)
   }
 
   // Ensure path starts with /
-  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`
 
-  // Check for Jeju IPFS gateway first (decentralized priority)
-  const ipfsGateway =
-    typeof process !== 'undefined'
-      ? process.env.NEXT_PUBLIC_IPFS_GATEWAY || process.env.JEJU_IPFS_GATEWAY
-      : undefined;
-
-  // Use provided CDN URL, Jeju IPFS gateway, or environment variable
-  const staticAssetsUrl =
-    cdnBaseUrl ||
-    ipfsGateway ||
-    (typeof process !== 'undefined'
-      ? process.env.NEXT_PUBLIC_STATIC_ASSETS_URL
-      : undefined);
+  // Use provided CDN URL
+  const staticAssetsUrl = cdnBaseUrl
 
   // In production with CDN/IPFS configured, use that URL
   if (staticAssetsUrl) {
@@ -152,16 +138,15 @@ export function getStaticAssetUrl(path: string, cdnBaseUrl?: string): string {
     if (staticAssetsUrl.includes('ipfs')) {
       // For IPFS gateways, static assets should already be CIDs
       // Fall back to normal CDN behavior
-      const cdnUrl = process.env.NEXT_PUBLIC_STATIC_ASSETS_URL;
-      if (cdnUrl) {
-        return `${cdnUrl}${normalizedPath}`;
+      if (cdnBaseUrl) {
+        return `${cdnBaseUrl}${normalizedPath}`
       }
     }
-    return `${staticAssetsUrl}${normalizedPath}`;
+    return `${staticAssetsUrl}${normalizedPath}`
   }
 
   // For local development, return relative path (handled by Next.js public folder)
-  return normalizedPath;
+  return normalizedPath
 }
 
 /**
@@ -176,18 +161,15 @@ export function getStaticAssetUrl(path: string, cdnBaseUrl?: string): string {
  */
 export function getFallbackProfileImageUrl(
   id: string,
-  cdnBaseUrl?: string
+  cdnBaseUrl?: string,
 ): string {
   // Hash the id to get a number between 1-100
-  const hash = Array.from(id).reduce(
-    (acc, char) => acc + char.charCodeAt(0),
-    0
-  );
-  const profileNum = (hash % 100) + 1;
+  const hash = Array.from(id).reduce((acc, char) => acc + char.charCodeAt(0), 0)
+  const profileNum = (hash % 100) + 1
   return getStaticAssetUrl(
     `/assets/user-profiles/profile-${profileNum}.jpg`,
-    cdnBaseUrl
-  );
+    cdnBaseUrl,
+  )
 }
 
 /**
@@ -208,26 +190,26 @@ export function getProfileImageUrl(
   profileImageUrl: string | null | undefined,
   userId: string | null | undefined,
   isActor = true,
-  cdnBaseUrl?: string
+  cdnBaseUrl?: string,
 ): string | null {
   // If profile image URL is provided (uploaded image from CDN), use it
   if (profileImageUrl) {
     // If it's already a CDN URL, return as-is
     if (isAbsoluteUrl(profileImageUrl)) {
-      return profileImageUrl;
+      return profileImageUrl
     }
     // Otherwise, normalize it through getStaticAssetUrl
-    return getStaticAssetUrl(profileImageUrl, cdnBaseUrl);
+    return getStaticAssetUrl(profileImageUrl, cdnBaseUrl)
   }
 
   // For actors, try to use static image
   // This could be from CDN (after migration) or public folder (legacy)
   if (userId && isActor) {
-    return getStaticAssetUrl(`/images/actors/${userId}.jpg`, cdnBaseUrl);
+    return getStaticAssetUrl(`/images/actors/${userId}.jpg`, cdnBaseUrl)
   }
 
   // No image available - Avatar component will handle fallback
-  return null;
+  return null
 }
 
 /**
@@ -243,24 +225,24 @@ export function getProfileImageUrl(
 export function getOrganizationImageUrl(
   imageUrl: string | null | undefined,
   orgId: string | null | undefined,
-  cdnBaseUrl?: string
+  cdnBaseUrl?: string,
 ): string | null {
   // If image URL is provided, use it
   if (imageUrl) {
     // If it's already a CDN URL, return as-is
     if (isAbsoluteUrl(imageUrl)) {
-      return imageUrl;
+      return imageUrl
     }
     // Otherwise, normalize it
-    return getStaticAssetUrl(imageUrl, cdnBaseUrl);
+    return getStaticAssetUrl(imageUrl, cdnBaseUrl)
   }
 
   // For organizations, try to use static image
   if (orgId) {
-    return getStaticAssetUrl(`/images/organizations/${orgId}.jpg`, cdnBaseUrl);
+    return getStaticAssetUrl(`/images/organizations/${orgId}.jpg`, cdnBaseUrl)
   }
 
-  return null;
+  return null
 }
 
 /**
@@ -278,16 +260,16 @@ export function getBannerImageUrl(
   bannerUrl: string | null | undefined,
   entityId: string | null | undefined,
   entityType: 'actor' | 'organization' | 'user' = 'actor',
-  cdnBaseUrl?: string
+  cdnBaseUrl?: string,
 ): string | null {
   // If banner URL is provided, use it
   if (bannerUrl) {
     // If it's already a CDN URL, return as-is
     if (isAbsoluteUrl(bannerUrl)) {
-      return bannerUrl;
+      return bannerUrl
     }
     // Otherwise, normalize it
-    return getStaticAssetUrl(bannerUrl, cdnBaseUrl);
+    return getStaticAssetUrl(bannerUrl, cdnBaseUrl)
   }
 
   // For actors/organizations, try to use static banner image
@@ -295,16 +277,16 @@ export function getBannerImageUrl(
     if (entityType === 'actor') {
       return getStaticAssetUrl(
         `/images/actor-banners/${entityId}.jpg`,
-        cdnBaseUrl
-      );
+        cdnBaseUrl,
+      )
     }
     if (entityType === 'organization') {
       return getStaticAssetUrl(
         `/images/org-banners/${entityId}.jpg`,
-        cdnBaseUrl
-      );
+        cdnBaseUrl,
+      )
     }
   }
 
-  return null;
+  return null
 }

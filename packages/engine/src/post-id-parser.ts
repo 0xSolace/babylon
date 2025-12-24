@@ -14,9 +14,9 @@
  * context, author information, and timestamp.
  */
 export interface ParsedPostMetadata {
-  gameId: string;
-  authorId: string;
-  timestamp: Date;
+  gameId: string
+  authorId: string
+  timestamp: Date
 }
 
 /**
@@ -26,8 +26,8 @@ export interface ParsedPostMetadata {
  * and containing the extracted metadata (or default values if parsing failed).
  */
 export interface ParseResult {
-  metadata: ParsedPostMetadata;
-  success: boolean;
+  metadata: ParsedPostMetadata
+  success: boolean
 }
 
 /**
@@ -37,13 +37,13 @@ const DEFAULT_POST_METADATA: ParsedPostMetadata = {
   gameId: 'babylon',
   authorId: 'system',
   timestamp: new Date(),
-};
+}
 
 /**
  * Type-safe array access helper that ensures element exists
  */
 function getArrayElement<T>(arr: readonly T[], index: number): T | undefined {
-  return arr[index];
+  return arr[index]
 }
 
 /**
@@ -52,31 +52,31 @@ function getArrayElement<T>(arr: readonly T[], index: number): T | undefined {
  */
 function parseFormat1(postId: string): ParsedPostMetadata | null {
   const isoTimestampMatch = postId.match(
-    /(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z)$/
-  );
-  if (!isoTimestampMatch?.[1]) return null;
+    /(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z)$/,
+  )
+  if (!isoTimestampMatch?.[1]) return null
 
-  const timestampStr = isoTimestampMatch[1];
-  const timestamp = new Date(timestampStr);
-  if (isNaN(timestamp.getTime())) return null;
+  const timestampStr = isoTimestampMatch[1]
+  const timestamp = new Date(timestampStr)
+  if (Number.isNaN(timestamp.getTime())) return null
 
-  const firstHyphenIndex = postId.indexOf('-');
-  if (firstHyphenIndex === -1) return null;
+  const firstHyphenIndex = postId.indexOf('-')
+  if (firstHyphenIndex === -1) return null
 
-  const gameId = postId.substring(0, firstHyphenIndex);
-  const withoutGameId = postId.substring(firstHyphenIndex + 1);
-  const secondHyphenIndex = withoutGameId.indexOf('-');
+  const gameId = postId.substring(0, firstHyphenIndex)
+  const withoutGameId = postId.substring(firstHyphenIndex + 1)
+  const secondHyphenIndex = withoutGameId.indexOf('-')
 
-  let authorId = 'system';
+  let authorId = 'system'
   if (secondHyphenIndex !== -1) {
-    const afterGameTimestamp = withoutGameId.substring(secondHyphenIndex + 1);
+    const afterGameTimestamp = withoutGameId.substring(secondHyphenIndex + 1)
     authorId = afterGameTimestamp.substring(
       0,
-      afterGameTimestamp.lastIndexOf('-' + timestampStr)
-    );
+      afterGameTimestamp.lastIndexOf(`-${timestampStr}`),
+    )
   }
 
-  return { gameId, authorId, timestamp };
+  return { gameId, authorId, timestamp }
 }
 
 /**
@@ -85,55 +85,55 @@ function parseFormat1(postId: string): ParsedPostMetadata | null {
  * Format 3: post-1762099655817-kash-patrol-abc123
  */
 function parsePostFormat(postId: string): ParsedPostMetadata | null {
-  if (!postId.startsWith('post-')) return null;
+  if (!postId.startsWith('post-')) return null
 
-  const parts = postId.split('-');
-  if (parts.length < 3) return null;
+  const parts = postId.split('-')
+  if (parts.length < 3) return null
 
-  const timestampPart = getArrayElement(parts, 1);
-  if (!timestampPart) return null;
+  const timestampPart = getArrayElement(parts, 1)
+  if (!timestampPart) return null
 
-  const timestampNum = Number.parseInt(timestampPart, 10);
-  if (isNaN(timestampNum) || timestampNum <= 1000000000000) return null;
+  const timestampNum = Number.parseInt(timestampPart, 10)
+  if (Number.isNaN(timestampNum) || timestampNum <= 1000000000000) return null
 
-  const timestamp = new Date(timestampNum);
-  if (isNaN(timestamp.getTime())) return null;
+  const timestamp = new Date(timestampNum)
+  if (Number.isNaN(timestamp.getTime())) return null
 
-  let authorId = 'system';
-  const thirdPart = getArrayElement(parts, 2);
+  let authorId = 'system'
+  const thirdPart = getArrayElement(parts, 2)
   if (parts.length >= 4 && thirdPart && !thirdPart.includes('.')) {
-    authorId = thirdPart;
+    authorId = thirdPart
   }
 
-  return { gameId: 'babylon', authorId, timestamp };
+  return { gameId: 'babylon', authorId, timestamp }
 }
 
 /**
  * Parse Format 4: game-{gameId}-{timestamp} (legacy)
  */
 function parseGameFormat(postId: string): ParsedPostMetadata | null {
-  if (!postId.startsWith('game-')) return null;
+  if (!postId.startsWith('game-')) return null
 
-  const parts = postId.split('-');
-  if (parts.length < 3) return null;
+  const parts = postId.split('-')
+  if (parts.length < 3) return null
 
-  const gameId = getArrayElement(parts, 1);
-  if (!gameId) return null;
+  const gameId = getArrayElement(parts, 1)
+  if (!gameId) return null
 
-  const timestampPart = parts.slice(2).join('-');
-  if (!timestampPart) return null;
+  const timestampPart = parts.slice(2).join('-')
+  if (!timestampPart) return null
 
   // Try ISO date first
-  let timestamp = new Date(timestampPart);
-  if (isNaN(timestamp.getTime())) {
+  let timestamp = new Date(timestampPart)
+  if (Number.isNaN(timestamp.getTime())) {
     // Try numeric timestamp
-    const numericTimestamp = Number.parseInt(timestampPart, 10);
-    if (isNaN(numericTimestamp)) return null;
-    timestamp = new Date(numericTimestamp);
-    if (isNaN(timestamp.getTime())) return null;
+    const numericTimestamp = Number.parseInt(timestampPart, 10)
+    if (Number.isNaN(numericTimestamp)) return null
+    timestamp = new Date(numericTimestamp)
+    if (Number.isNaN(timestamp.getTime())) return null
   }
 
-  return { gameId, authorId: 'system', timestamp };
+  return { gameId, authorId: 'system', timestamp }
 }
 
 /**
@@ -159,20 +159,20 @@ function parseGameFormat(postId: string): ParsedPostMetadata | null {
  * ```
  */
 export function parsePostId(postId: string): ParseResult {
-  const format1 = parseFormat1(postId);
+  const format1 = parseFormat1(postId)
   if (format1) {
-    return { metadata: format1, success: true };
+    return { metadata: format1, success: true }
   }
 
-  const postFormat = parsePostFormat(postId);
+  const postFormat = parsePostFormat(postId)
   if (postFormat) {
-    return { metadata: postFormat, success: true };
+    return { metadata: postFormat, success: true }
   }
 
-  const gameFormat = parseGameFormat(postId);
+  const gameFormat = parseGameFormat(postId)
   if (gameFormat) {
-    return { metadata: gameFormat, success: true };
+    return { metadata: gameFormat, success: true }
   }
 
-  return { metadata: DEFAULT_POST_METADATA, success: false };
+  return { metadata: DEFAULT_POST_METADATA, success: false }
 }

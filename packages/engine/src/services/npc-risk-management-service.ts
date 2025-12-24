@@ -15,9 +15,9 @@
  * @packageDocumentation
  */
 
-import { actorState, db, eq, poolPositions } from '@babylon/db';
-import { logger } from '@babylon/shared';
-import { StaticDataRegistry } from './static-data-registry';
+import { actorState, db, eq, poolPositions } from '@babylon/db'
+import { logger } from '@babylon/shared'
+import { StaticDataRegistry } from './static-data-registry'
 
 // =============================================================================
 // CONFIGURATION
@@ -40,36 +40,36 @@ export const RISK_LIMITS = {
   MAX_LEVERAGE: 10,
   /** Risk check interval in milliseconds */
   CHECK_INTERVAL_MS: 30_000, // 30 seconds
-} as const;
+} as const
 
 /** Risk tier based on NPC personality */
-export type RiskTier = 'conservative' | 'moderate' | 'aggressive';
+export type RiskTier = 'conservative' | 'moderate' | 'aggressive'
 
 const RISK_TIER_MULTIPLIERS: Record<RiskTier, number> = {
   conservative: 0.5, // Half the risk limits
   moderate: 1.0, // Standard limits
   aggressive: 1.5, // 50% higher limits
-};
+}
 
 // =============================================================================
 // TYPES
 // =============================================================================
 
 export interface RiskStatus {
-  actorId: string;
-  tier: RiskTier;
-  currentBalance: number;
-  startingBalance: number;
-  dailyPnL: number;
-  dailyPnLPercent: number;
-  peakBalance: number;
-  drawdown: number;
-  drawdownPercent: number;
-  positionCount: number;
-  riskScore: number; // 0-100
-  alerts: RiskAlert[];
-  isAtRisk: boolean;
-  shouldStopTrading: boolean;
+  actorId: string
+  tier: RiskTier
+  currentBalance: number
+  startingBalance: number
+  dailyPnL: number
+  dailyPnLPercent: number
+  peakBalance: number
+  drawdown: number
+  drawdownPercent: number
+  positionCount: number
+  riskScore: number // 0-100
+  alerts: RiskAlert[]
+  isAtRisk: boolean
+  shouldStopTrading: boolean
 }
 
 export interface RiskAlert {
@@ -78,34 +78,34 @@ export interface RiskAlert {
     | 'position_loss'
     | 'drawdown'
     | 'low_balance'
-    | 'high_concentration';
-  severity: 'warning' | 'critical';
-  message: string;
-  value: number;
-  threshold: number;
-  positionId?: string;
+    | 'high_concentration'
+  severity: 'warning' | 'critical'
+  message: string
+  value: number
+  threshold: number
+  positionId?: string
 }
 
 export interface PositionRisk {
-  positionId: string;
-  marketType: 'prediction' | 'perp';
-  ticker?: string;
-  marketId?: string;
-  side: string;
-  size: number;
-  entryPrice: number;
-  currentPrice: number;
-  unrealizedPnL: number;
-  pnlPercent: number;
-  isAtRisk: boolean;
-  riskReason?: string;
+  positionId: string
+  marketType: 'prediction' | 'perp'
+  ticker?: string
+  marketId?: string
+  side: string
+  size: number
+  entryPrice: number
+  currentPrice: number
+  unrealizedPnL: number
+  pnlPercent: number
+  isAtRisk: boolean
+  riskReason?: string
 }
 
 export interface RiskCheckResult {
-  npcCount: number;
-  atRiskCount: number;
-  positionsClosedCount: number;
-  alerts: RiskAlert[];
+  npcCount: number
+  atRiskCount: number
+  positionsClosedCount: number
+  alerts: RiskAlert[]
 }
 
 // =============================================================================
@@ -113,25 +113,25 @@ export interface RiskCheckResult {
 // =============================================================================
 
 export class NPCRiskManagementService {
-  private peakBalances: Map<string, number> = new Map();
+  private peakBalances: Map<string, number> = new Map()
   private dailyStartBalances: Map<string, { balance: number; date: string }> =
-    new Map();
-  private checkInterval: ReturnType<typeof setInterval> | null = null;
-  private isRunning = false;
+    new Map()
+  private checkInterval: ReturnType<typeof setInterval> | null = null
+  private isRunning = false
 
   /**
    * Start automatic risk monitoring
    */
   start(): void {
-    if (this.isRunning) return;
+    if (this.isRunning) return
 
-    this.isRunning = true;
+    this.isRunning = true
     this.checkInterval = setInterval(
       () => this.runRiskCheck(),
-      RISK_LIMITS.CHECK_INTERVAL_MS
-    );
+      RISK_LIMITS.CHECK_INTERVAL_MS,
+    )
 
-    logger.info('NPC Risk Management started', undefined, 'NPCRiskManagement');
+    logger.info('NPC Risk Management started', undefined, 'NPCRiskManagement')
   }
 
   /**
@@ -139,38 +139,38 @@ export class NPCRiskManagementService {
    */
   stop(): void {
     if (this.checkInterval) {
-      clearInterval(this.checkInterval);
-      this.checkInterval = null;
+      clearInterval(this.checkInterval)
+      this.checkInterval = null
     }
-    this.isRunning = false;
-    logger.info('NPC Risk Management stopped', undefined, 'NPCRiskManagement');
+    this.isRunning = false
+    logger.info('NPC Risk Management stopped', undefined, 'NPCRiskManagement')
   }
 
   /**
    * Run risk check for all NPCs
    */
   async runRiskCheck(): Promise<RiskCheckResult> {
-    const actors = StaticDataRegistry.getAllActors();
+    const actors = StaticDataRegistry.getAllActors()
     const result: RiskCheckResult = {
       npcCount: actors.length,
       atRiskCount: 0,
       positionsClosedCount: 0,
       alerts: [],
-    };
+    }
 
     for (const actor of actors) {
-      const status = await this.checkNPCRisk(actor.id);
+      const status = await this.checkNPCRisk(actor.id)
       if (status.isAtRisk) {
-        result.atRiskCount++;
-        result.alerts.push(...status.alerts);
+        result.atRiskCount++
+        result.alerts.push(...status.alerts)
 
         // Auto-close positions if critical
         if (status.shouldStopTrading) {
           const closedCount = await this.closeRiskyPositions(
             actor.id,
-            status.alerts
-          );
-          result.positionsClosedCount += closedCount;
+            status.alerts,
+          )
+          result.positionsClosedCount += closedCount
         }
       }
     }
@@ -182,71 +182,70 @@ export class NPCRiskManagementService {
           atRisk: result.atRiskCount,
           positionsClosed: result.positionsClosedCount,
         },
-        'NPCRiskManagement'
-      );
+        'NPCRiskManagement',
+      )
     }
 
-    return result;
+    return result
   }
 
   /**
    * Get comprehensive risk status for an NPC
    */
   async checkNPCRisk(actorId: string): Promise<RiskStatus> {
-    const actor = StaticDataRegistry.getActor(actorId);
-    const tier = this.getRiskTier(actor?.personality ?? '');
-    const multiplier = RISK_TIER_MULTIPLIERS[tier];
+    const actor = StaticDataRegistry.getActor(actorId)
+    const tier = this.getRiskTier(actor?.personality ?? '')
+    const multiplier = RISK_TIER_MULTIPLIERS[tier]
 
     // Get current balance
     const [actorStateRow] = await db
       .select({ tradingBalance: actorState.tradingBalance })
       .from(actorState)
       .where(eq(actorState.id, actorId))
-      .limit(1);
+      .limit(1)
 
     const currentBalance = actorStateRow
-      ? parseFloat(actorStateRow.tradingBalance)
-      : 0;
+      ? parseFloat(String(actorStateRow.tradingBalance))
+      : 0
 
     // Get or set peak balance
     const peakBalance = Math.max(
       this.peakBalances.get(actorId) ?? currentBalance,
-      currentBalance
-    );
-    this.peakBalances.set(actorId, peakBalance);
+      currentBalance,
+    )
+    this.peakBalances.set(actorId, peakBalance)
 
     // Get or set daily starting balance
-    const todayParts = new Date().toISOString().split('T');
-    const today = todayParts[0] ?? '';
-    const dailyStart = this.dailyStartBalances.get(actorId);
-    let startingBalance = currentBalance;
+    const todayParts = new Date().toISOString().split('T')
+    const today = todayParts[0] ?? ''
+    const dailyStart = this.dailyStartBalances.get(actorId)
+    let startingBalance = currentBalance
 
     if (!dailyStart || dailyStart.date !== today) {
       this.dailyStartBalances.set(actorId, {
         balance: currentBalance,
         date: today,
-      });
-      startingBalance = currentBalance;
+      })
+      startingBalance = currentBalance
     } else {
-      startingBalance = dailyStart.balance;
+      startingBalance = dailyStart.balance
     }
 
     // Calculate metrics
-    const dailyPnL = currentBalance - startingBalance;
+    const dailyPnL = currentBalance - startingBalance
     const dailyPnLPercent =
-      startingBalance > 0 ? (dailyPnL / startingBalance) * 100 : 0;
-    const drawdown = peakBalance - currentBalance;
-    const drawdownPercent =
-      peakBalance > 0 ? (drawdown / peakBalance) * 100 : 0;
+      startingBalance > 0 ? (dailyPnL / startingBalance) * 100 : 0
+    const drawdown = peakBalance - currentBalance
+    const drawdownPercent = peakBalance > 0 ? (drawdown / peakBalance) * 100 : 0
 
     // Get open positions
-    const positions = await this.getOpenPositions(actorId);
+    const positions = await this.getOpenPositions(actorId)
 
     // Generate alerts
-    const alerts: RiskAlert[] = [];
+    const alerts: RiskAlert[] = []
 
     // Daily loss alert
-    const dailyLossLimit = RISK_LIMITS.MAX_DAILY_LOSS_PCT * multiplier;
+    const dailyLossLimit = RISK_LIMITS.MAX_DAILY_LOSS_PCT * multiplier
     if (dailyPnLPercent < -dailyLossLimit) {
       alerts.push({
         type: 'daily_loss',
@@ -255,11 +254,11 @@ export class NPCRiskManagementService {
         message: `Daily loss of ${Math.abs(dailyPnLPercent).toFixed(2)}% exceeds limit of ${dailyLossLimit.toFixed(0)}%`,
         value: dailyPnLPercent,
         threshold: -dailyLossLimit,
-      });
+      })
     }
 
     // Drawdown alert
-    const drawdownLimit = RISK_LIMITS.MAX_DRAWDOWN_PCT * multiplier;
+    const drawdownLimit = RISK_LIMITS.MAX_DRAWDOWN_PCT * multiplier
     if (drawdownPercent > drawdownLimit) {
       alerts.push({
         type: 'drawdown',
@@ -268,7 +267,7 @@ export class NPCRiskManagementService {
         message: `Portfolio drawdown of ${drawdownPercent.toFixed(2)}% exceeds limit of ${drawdownLimit.toFixed(0)}%`,
         value: drawdownPercent,
         threshold: drawdownLimit,
-      });
+      })
     }
 
     // Low balance alert
@@ -279,7 +278,7 @@ export class NPCRiskManagementService {
         message: `Balance of ${currentBalance.toFixed(2)} BBLN is below minimum of ${RISK_LIMITS.MIN_BALANCE} BBLN`,
         value: currentBalance,
         threshold: RISK_LIMITS.MIN_BALANCE,
-      });
+      })
     }
 
     // Check individual position risks
@@ -295,7 +294,7 @@ export class NPCRiskManagementService {
           value: position.pnlPercent,
           threshold: -RISK_LIMITS.MAX_POSITION_LOSS_PCT,
           positionId: position.positionId,
-        });
+        })
       }
     }
 
@@ -306,10 +305,10 @@ export class NPCRiskManagementService {
       currentBalance,
       positionCount: positions.length,
       alerts,
-    });
+    })
 
-    const isAtRisk = alerts.length > 0;
-    const shouldStopTrading = alerts.some((a) => a.severity === 'critical');
+    const isAtRisk = alerts.length > 0
+    const shouldStopTrading = alerts.some((a) => a.severity === 'critical')
 
     return {
       actorId,
@@ -326,49 +325,50 @@ export class NPCRiskManagementService {
       alerts,
       isAtRisk,
       shouldStopTrading,
-    };
+    }
   }
 
   /**
    * Get open positions for NPC with risk assessment
    */
   private async getOpenPositions(actorId: string): Promise<PositionRisk[]> {
-    const positions: PositionRisk[] = [];
+    const positions: PositionRisk[] = []
 
     // Get prediction positions
     const predPositions = await db
       .select()
       .from(poolPositions)
-      .where(eq(poolPositions.poolId, actorId));
+      .where(eq(poolPositions.poolId, actorId))
 
     for (const pos of predPositions) {
-      if (pos.closedAt) continue;
+      if (pos.closedAt) continue
 
+      const posSize = Number(pos.size)
       const pnlPercent =
-        pos.size > 0 ? (Number(pos.unrealizedPnL) / pos.size) * 100 : 0;
-      const isAtRisk = pnlPercent < -RISK_LIMITS.MAX_POSITION_LOSS_PCT;
+        posSize > 0 ? (Number(pos.unrealizedPnL) / posSize) * 100 : 0
+      const isAtRisk = pnlPercent < -RISK_LIMITS.MAX_POSITION_LOSS_PCT
 
       positions.push({
-        positionId: pos.id,
+        positionId: String(pos.id),
         marketType: 'prediction',
-        marketId: pos.marketId ?? '',
-        side: pos.side,
-        size: pos.size,
-        entryPrice: pos.entryPrice,
-        currentPrice: pos.currentPrice,
+        marketId: String(pos.marketId ?? ''),
+        side: String(pos.side),
+        size: posSize,
+        entryPrice: Number(pos.entryPrice),
+        currentPrice: Number(pos.currentPrice),
         unrealizedPnL: Number(pos.unrealizedPnL),
         pnlPercent,
         isAtRisk,
         riskReason: isAtRisk
           ? `Loss exceeds ${RISK_LIMITS.MAX_POSITION_LOSS_PCT}%`
           : undefined,
-      });
+      })
     }
 
     // Perp positions would need additional schema support
     // For now, only track prediction positions
 
-    return positions;
+    return positions
   }
 
   /**
@@ -376,9 +376,9 @@ export class NPCRiskManagementService {
    */
   private async closeRiskyPositions(
     actorId: string,
-    alerts: RiskAlert[]
+    alerts: RiskAlert[],
   ): Promise<number> {
-    let closedCount = 0;
+    let closedCount = 0
 
     for (const alert of alerts) {
       if (alert.type === 'position_loss' && alert.positionId) {
@@ -386,73 +386,69 @@ export class NPCRiskManagementService {
         await db
           .update(poolPositions)
           .set({ closedAt: new Date() })
-          .where(eq(poolPositions.id, alert.positionId));
+          .where(eq(poolPositions.id, alert.positionId))
 
-        closedCount++;
+        closedCount++
 
         logger.warn(
           `Closed risky position for NPC ${actorId}`,
           { positionId: alert.positionId, reason: alert.message },
-          'NPCRiskManagement'
-        );
+          'NPCRiskManagement',
+        )
       }
     }
 
-    return closedCount;
+    return closedCount
   }
 
   /**
    * Calculate overall risk score (0-100)
    */
   private calculateRiskScore(params: {
-    dailyPnLPercent: number;
-    drawdownPercent: number;
-    currentBalance: number;
-    positionCount: number;
-    alerts: RiskAlert[];
+    dailyPnLPercent: number
+    drawdownPercent: number
+    currentBalance: number
+    positionCount: number
+    alerts: RiskAlert[]
   }): number {
-    let score = 0;
+    let score = 0
 
     // Daily PnL factor (40% weight)
     const dailyLossFactor = Math.max(
       0,
-      -params.dailyPnLPercent / RISK_LIMITS.MAX_DAILY_LOSS_PCT
-    );
-    score += dailyLossFactor * 40;
+      -params.dailyPnLPercent / RISK_LIMITS.MAX_DAILY_LOSS_PCT,
+    )
+    score += dailyLossFactor * 40
 
     // Drawdown factor (30% weight)
-    const drawdownFactor =
-      params.drawdownPercent / RISK_LIMITS.MAX_DRAWDOWN_PCT;
-    score += drawdownFactor * 30;
+    const drawdownFactor = params.drawdownPercent / RISK_LIMITS.MAX_DRAWDOWN_PCT
+    score += drawdownFactor * 30
 
     // Balance factor (20% weight)
     const balanceFactor = Math.max(
       0,
-      1 - params.currentBalance / (RISK_LIMITS.MIN_BALANCE * 10)
-    );
-    score += balanceFactor * 20;
+      1 - params.currentBalance / (RISK_LIMITS.MIN_BALANCE * 10),
+    )
+    score += balanceFactor * 20
 
     // Alert factor (10% weight)
     const criticalAlerts = params.alerts.filter(
-      (a) => a.severity === 'critical'
-    ).length;
+      (a) => a.severity === 'critical',
+    ).length
     const warningAlerts = params.alerts.filter(
-      (a) => a.severity === 'warning'
-    ).length;
-    const alertFactor = Math.min(
-      1,
-      criticalAlerts * 0.5 + warningAlerts * 0.25
-    );
-    score += alertFactor * 10;
+      (a) => a.severity === 'warning',
+    ).length
+    const alertFactor = Math.min(1, criticalAlerts * 0.5 + warningAlerts * 0.25)
+    score += alertFactor * 10
 
-    return Math.min(100, Math.max(0, score));
+    return Math.min(100, Math.max(0, score))
   }
 
   /**
    * Determine risk tier from personality
    */
   private getRiskTier(personality: string): RiskTier {
-    const p = personality.toLowerCase();
+    const p = personality.toLowerCase()
 
     if (
       p.includes('conservative') ||
@@ -460,7 +456,7 @@ export class NPCRiskManagementService {
       p.includes('cautious') ||
       p.includes('safe')
     ) {
-      return 'conservative';
+      return 'conservative'
     }
 
     if (
@@ -469,33 +465,33 @@ export class NPCRiskManagementService {
       p.includes('risk') ||
       p.includes('bold')
     ) {
-      return 'aggressive';
+      return 'aggressive'
     }
 
-    return 'moderate';
+    return 'moderate'
   }
 
   /**
    * Get risk status for all NPCs
    */
   async getAllNPCRiskStatus(): Promise<RiskStatus[]> {
-    const actors = StaticDataRegistry.getAllActors();
-    const statuses: RiskStatus[] = [];
+    const actors = StaticDataRegistry.getAllActors()
+    const statuses: RiskStatus[] = []
 
     for (const actor of actors) {
-      const status = await this.checkNPCRisk(actor.id);
-      statuses.push(status);
+      const status = await this.checkNPCRisk(actor.id)
+      statuses.push(status)
     }
 
-    return statuses.sort((a, b) => b.riskScore - a.riskScore);
+    return statuses.sort((a, b) => b.riskScore - a.riskScore)
   }
 
   /**
    * Reset daily tracking (call at midnight)
    */
   resetDailyTracking(): void {
-    this.dailyStartBalances.clear();
-    logger.info('Daily risk tracking reset', undefined, 'NPCRiskManagement');
+    this.dailyStartBalances.clear()
+    logger.info('Daily risk tracking reset', undefined, 'NPCRiskManagement')
   }
 }
 
@@ -503,18 +499,18 @@ export class NPCRiskManagementService {
 // SINGLETON
 // =============================================================================
 
-let riskManagementService: NPCRiskManagementService | null = null;
+let riskManagementService: NPCRiskManagementService | null = null
 
 export function getNPCRiskManagementService(): NPCRiskManagementService {
   if (!riskManagementService) {
-    riskManagementService = new NPCRiskManagementService();
+    riskManagementService = new NPCRiskManagementService()
   }
-  return riskManagementService;
+  return riskManagementService
 }
 
 export function resetNPCRiskManagementService(): void {
   if (riskManagementService) {
-    riskManagementService.stop();
+    riskManagementService.stop()
   }
-  riskManagementService = null;
+  riskManagementService = null
 }

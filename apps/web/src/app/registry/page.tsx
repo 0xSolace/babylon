@@ -1,5 +1,5 @@
-import { redirect } from 'next/navigation';
+import { Navigate } from 'react-router-dom'
 
 export default function RegistryRedirectPage() {
-  redirect('/admin?tab=registry');
+  return <Navigate to="/admin?tab=registry" replace />
 }

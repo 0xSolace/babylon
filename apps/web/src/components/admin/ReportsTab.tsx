@@ -18,15 +18,13 @@
  *
  * @returns Reports tab element
  */
-'use client';
-
-import { cn } from '@babylon/shared';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertCircle, CheckCircle, Clock, Flag, XCircle } from 'lucide-react';
-import { useState, useTransition } from 'react';
-import { toast } from 'sonner';
-import { Avatar } from '@/components/shared/Avatar';
-import { Skeleton } from '@/components/shared/Skeleton';
+import { cn } from '@babylon/shared'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { AlertCircle, CheckCircle, Clock, Flag, XCircle } from 'lucide-react'
+import { useState, useTransition } from 'react'
+import { toast } from 'sonner'
+import { Avatar } from '@/components/shared/Avatar'
+import { Skeleton } from '@/components/shared/Skeleton'
 
 /**
  * Report evaluation structure from AI.
@@ -36,52 +34,52 @@ interface ReportEvaluation {
     | 'valid_report'
     | 'invalid_report'
     | 'abusive_reporter'
-    | 'insufficient_evidence';
-  confidence: number;
-  reasoning: string;
-  recommendedActions: string[];
+    | 'insufficient_evidence'
+  confidence: number
+  reasoning: string
+  recommendedActions: string[]
   evidenceSummary: {
-    chatMessages: number;
-    posts: number;
-    reportsReceived: number;
-    reportsSent: number;
-  };
+    chatMessages: number
+    posts: number
+    reportsReceived: number
+    reportsSent: number
+  }
 }
 
 /**
  * Report structure for reports tab.
  */
 interface Report {
-  id: string;
-  reportType: string;
-  category: string;
-  reason: string;
-  evidence: string | null;
-  status: string;
-  priority: string;
-  resolution: string | null;
-  evaluation?: ReportEvaluation | null;
-  createdAt: string;
-  updatedAt: string;
-  resolvedAt: string | null;
+  id: string
+  reportType: string
+  category: string
+  reason: string
+  evidence: string | null
+  status: string
+  priority: string
+  resolution: string | null
+  evaluation?: ReportEvaluation | null
+  createdAt: string
+  updatedAt: string
+  resolvedAt: string | null
   reporter: {
-    id: string;
-    username: string | null;
-    displayName: string | null;
-    profileImageUrl: string | null;
-  };
+    id: string
+    username: string | null
+    displayName: string | null
+    profileImageUrl: string | null
+  }
   reportedUser: {
-    id: string;
-    username: string | null;
-    displayName: string | null;
-    profileImageUrl: string | null;
-    isBanned: boolean;
-  } | null;
+    id: string
+    username: string | null
+    displayName: string | null
+    profileImageUrl: string | null
+    isBanned: boolean
+  } | null
   resolver: {
-    id: string;
-    username: string | null;
-    displayName: string | null;
-  } | null;
+    id: string
+    username: string | null
+    displayName: string | null
+  } | null
 }
 
 /**
@@ -89,59 +87,59 @@ interface Report {
  */
 interface ReportStats {
   totals: {
-    total: number;
-    pending: number;
-    reviewing: number;
-    resolved: number;
-    dismissed: number;
-  };
+    total: number
+    pending: number
+    reviewing: number
+    resolved: number
+    dismissed: number
+  }
 }
 
 /**
  * Status filter type for reports tab.
  */
-type StatusFilter = 'all' | 'pending' | 'reviewing' | 'resolved' | 'dismissed';
+type StatusFilter = 'all' | 'pending' | 'reviewing' | 'resolved' | 'dismissed'
 /**
  * Priority filter type for reports tab.
  */
-type PriorityFilter = 'all' | 'low' | 'normal' | 'high' | 'critical';
+type PriorityFilter = 'all' | 'low' | 'normal' | 'high' | 'critical'
 
 export function ReportsTab() {
-  const queryClient = useQueryClient();
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
-  const [priorityFilter, setPriorityFilter] = useState<PriorityFilter>('all');
-  const [selectedReport, setSelectedReport] = useState<Report | null>(null);
-  const [showActionModal, setShowActionModal] = useState(false);
-  const [showEvaluationModal, setShowEvaluationModal] = useState(false);
+  const queryClient = useQueryClient()
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
+  const [priorityFilter, setPriorityFilter] = useState<PriorityFilter>('all')
+  const [selectedReport, setSelectedReport] = useState<Report | null>(null)
+  const [showActionModal, setShowActionModal] = useState(false)
+  const [showEvaluationModal, setShowEvaluationModal] = useState(false)
   const [evaluatingReportId, setEvaluatingReportId] = useState<string | null>(
-    null
-  );
+    null,
+  )
 
   const { data: reports = [], isLoading } = useQuery<Report[]>({
     queryKey: ['admin', 'reports', statusFilter, priorityFilter],
     queryFn: async () => {
       const params = new URLSearchParams({
         limit: '100',
-      });
-      if (statusFilter !== 'all') params.set('status', statusFilter);
-      if (priorityFilter !== 'all') params.set('priority', priorityFilter);
+      })
+      if (statusFilter !== 'all') params.set('status', statusFilter)
+      if (priorityFilter !== 'all') params.set('priority', priorityFilter)
 
-      const response = await fetch(`/api/admin/reports?${params}`);
-      if (!response.ok) throw new Error('Failed to fetch reports');
+      const response = await fetch(`/api/admin/reports?${params}`)
+      if (!response.ok) throw new Error('Failed to fetch reports')
 
-      const data = await response.json();
-      return data.reports || [];
+      const data = await response.json()
+      return data.reports || []
     },
-  });
+  })
 
   const { data: stats } = useQuery<ReportStats>({
     queryKey: ['admin', 'reports', 'stats'],
     queryFn: async () => {
-      const response = await fetch('/api/admin/reports/stats');
-      if (!response.ok) throw new Error('Failed to fetch stats');
-      return response.json();
+      const response = await fetch('/api/admin/reports/stats')
+      if (!response.ok) throw new Error('Failed to fetch stats')
+      return response.json()
     },
-  });
+  })
 
   const actionMutation = useMutation({
     mutationFn: async ({
@@ -149,35 +147,35 @@ export function ReportsTab() {
       action,
       resolution,
     }: {
-      reportId: string;
-      action: string;
-      resolution: string;
+      reportId: string
+      action: string
+      resolution: string
     }) => {
       const response = await fetch(`/api/admin/reports/${reportId}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action, resolution }),
-      });
+      })
 
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'Failed to take action');
+        const error = await response.json()
+        throw new Error(error.message || 'Failed to take action')
       }
 
-      return response.json();
+      return response.json()
     },
     onSuccess: (_, variables) => {
-      toast.success(`Report ${variables.action} successfully`);
-      setShowActionModal(false);
-      setSelectedReport(null);
-      queryClient.invalidateQueries({ queryKey: ['admin', 'reports'] });
+      toast.success(`Report ${variables.action} successfully`)
+      setShowActionModal(false)
+      setSelectedReport(null)
+      queryClient.invalidateQueries({ queryKey: ['admin', 'reports'] })
     },
     onError: (error) => {
       toast.error(
-        error instanceof Error ? error.message : 'Failed to take action'
-      );
+        error instanceof Error ? error.message : 'Failed to take action',
+      )
     },
-  });
+  })
 
   const evaluateMutation = useMutation({
     mutationFn: async (reportId: string) => {
@@ -185,39 +183,39 @@ export function ReportsTab() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'evaluate' }),
-      });
+      })
 
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'Failed to evaluate report');
+        const error = await response.json()
+        throw new Error(error.message || 'Failed to evaluate report')
       }
 
-      return response.json();
+      return response.json()
     },
     onSuccess: (data, reportId) => {
-      toast.success('Report evaluated successfully');
-      queryClient.invalidateQueries({ queryKey: ['admin', 'reports'] });
+      toast.success('Report evaluated successfully')
+      queryClient.invalidateQueries({ queryKey: ['admin', 'reports'] })
 
       // Show evaluation modal if we have the report selected
-      const report = reports.find((r) => r.id === reportId);
+      const report = reports.find((r) => r.id === reportId)
       if (report && data.evaluation) {
-        setSelectedReport({ ...report, evaluation: data.evaluation });
-        setShowEvaluationModal(true);
+        setSelectedReport({ ...report, evaluation: data.evaluation })
+        setShowEvaluationModal(true)
       }
-      setEvaluatingReportId(null);
+      setEvaluatingReportId(null)
     },
     onError: (error) => {
       toast.error(
-        error instanceof Error ? error.message : 'Failed to evaluate report'
-      );
-      setEvaluatingReportId(null);
+        error instanceof Error ? error.message : 'Failed to evaluate report',
+      )
+      setEvaluatingReportId(null)
     },
-  });
+  })
 
   const handleEvaluate = (reportId: string) => {
-    setEvaluatingReportId(reportId);
-    evaluateMutation.mutate(reportId);
-  };
+    setEvaluatingReportId(reportId)
+    evaluateMutation.mutate(reportId)
+  }
 
   const formatDate = (date: string) => {
     return new Date(date).toLocaleString('en-US', {
@@ -226,53 +224,53 @@ export function ReportsTab() {
       year: 'numeric',
       hour: 'numeric',
       minute: '2-digit',
-    });
-  };
+    })
+  }
 
   const getCategoryColor = (category: string) => {
     switch (category) {
       case 'hate_speech':
       case 'violence':
       case 'self_harm':
-        return 'text-red-500 bg-red-500/10 border-red-500/20';
+        return 'text-red-500 bg-red-500/10 border-red-500/20'
       case 'harassment':
-        return 'text-orange-500 bg-orange-500/10 border-orange-500/20';
+        return 'text-orange-500 bg-orange-500/10 border-orange-500/20'
       case 'spam':
-        return 'text-yellow-500 bg-yellow-500/10 border-yellow-500/20';
+        return 'text-yellow-500 bg-yellow-500/10 border-yellow-500/20'
       default:
-        return 'text-blue-500 bg-blue-500/10 border-blue-500/20';
+        return 'text-blue-500 bg-blue-500/10 border-blue-500/20'
     }
-  };
+  }
 
   const getPriorityColor = (priority: string) => {
     switch (priority) {
       case 'critical':
-        return 'text-red-600 bg-red-600/10';
+        return 'text-red-600 bg-red-600/10'
       case 'high':
-        return 'text-orange-600 bg-orange-600/10';
+        return 'text-orange-600 bg-orange-600/10'
       case 'normal':
-        return 'text-blue-600 bg-blue-600/10';
+        return 'text-blue-600 bg-blue-600/10'
       case 'low':
-        return 'text-gray-600 bg-gray-600/10';
+        return 'text-gray-600 bg-gray-600/10'
       default:
-        return 'text-gray-600 bg-gray-600/10';
+        return 'text-gray-600 bg-gray-600/10'
     }
-  };
+  }
 
   const getStatusIcon = (status: string) => {
     switch (status) {
       case 'pending':
-        return <Clock className="h-4 w-4 text-yellow-500" />;
+        return <Clock className="h-4 w-4 text-yellow-500" />
       case 'reviewing':
-        return <AlertCircle className="h-4 w-4 text-blue-500" />;
+        return <AlertCircle className="h-4 w-4 text-blue-500" />
       case 'resolved':
-        return <CheckCircle className="h-4 w-4 text-green-500" />;
+        return <CheckCircle className="h-4 w-4 text-green-500" />
       case 'dismissed':
-        return <XCircle className="h-4 w-4 text-gray-500" />;
+        return <XCircle className="h-4 w-4 text-gray-500" />
       default:
-        return null;
+        return null
     }
-  };
+  }
 
   if (isLoading) {
     return (
@@ -281,7 +279,7 @@ export function ReportsTab() {
         <Skeleton className="h-24 w-full" />
         <Skeleton className="h-24 w-full" />
       </div>
-    );
+    )
   }
 
   return (
@@ -328,13 +326,14 @@ export function ReportsTab() {
             ['all', 'pending', 'reviewing', 'resolved', 'dismissed'] as const
           ).map((s) => (
             <button
+              type="button"
               key={s}
               onClick={() => setStatusFilter(s)}
               className={cn(
                 'rounded px-3 py-1.5 font-medium text-sm transition-colors',
                 statusFilter === s
                   ? 'bg-primary text-primary-foreground'
-                  : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                  : 'bg-muted text-muted-foreground hover:bg-muted/80',
               )}
             >
               {s.charAt(0).toUpperCase() + s.slice(1)}
@@ -348,13 +347,14 @@ export function ReportsTab() {
           </span>
           {(['all', 'critical', 'high', 'normal', 'low'] as const).map((p) => (
             <button
+              type="button"
               key={p}
               onClick={() => setPriorityFilter(p)}
               className={cn(
                 'rounded px-3 py-1.5 font-medium text-sm transition-colors',
                 priorityFilter === p
                   ? 'bg-primary text-primary-foreground'
-                  : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                  : 'bg-muted text-muted-foreground hover:bg-muted/80',
               )}
             >
               {p.charAt(0).toUpperCase() + p.slice(1)}
@@ -388,7 +388,7 @@ export function ReportsTab() {
                       <span
                         className={cn(
                           'rounded border px-2 py-0.5 font-medium text-xs',
-                          getCategoryColor(report.category)
+                          getCategoryColor(report.category),
                         )}
                       >
                         {report.category.replace('_', ' ')}
@@ -396,7 +396,7 @@ export function ReportsTab() {
                       <span
                         className={cn(
                           'rounded px-2 py-0.5 font-medium text-xs',
-                          getPriorityColor(report.priority)
+                          getPriorityColor(report.priority),
                         )}
                       >
                         {report.priority}
@@ -468,7 +468,7 @@ export function ReportsTab() {
                               ? 'bg-red-500/20 text-red-500'
                               : report.evaluation.outcome === 'invalid_report'
                                 ? 'bg-yellow-500/20 text-yellow-500'
-                                : 'bg-gray-500/20 text-gray-500'
+                                : 'bg-gray-500/20 text-gray-500',
                         )}
                       >
                         {report.evaluation.outcome.replace('_', ' ')} (
@@ -482,6 +482,7 @@ export function ReportsTab() {
                   report.status === 'reviewing' ? (
                     <div className="flex flex-wrap gap-2">
                       <button
+                        type="button"
                         onClick={() => handleEvaluate(report.id)}
                         disabled={evaluatingReportId === report.id}
                         className="rounded bg-purple-500 px-3 py-1 text-sm text-white transition-colors hover:bg-purple-600 disabled:opacity-50"
@@ -491,15 +492,17 @@ export function ReportsTab() {
                           : 'Evaluate'}
                       </button>
                       <button
+                        type="button"
                         onClick={() => {
-                          setSelectedReport(report);
-                          setShowActionModal(true);
+                          setSelectedReport(report)
+                          setShowActionModal(true)
                         }}
                         className="rounded bg-primary px-3 py-1 text-primary-foreground text-sm transition-colors hover:bg-primary/90"
                       >
                         Take Action
                       </button>
                       <button
+                        type="button"
                         onClick={() =>
                           actionMutation.mutate({
                             reportId: report.id,
@@ -516,9 +519,10 @@ export function ReportsTab() {
                     <div className="text-sm">
                       {report.evaluation && (
                         <button
+                          type="button"
                           onClick={() => {
-                            setSelectedReport(report);
-                            setShowEvaluationModal(true);
+                            setSelectedReport(report)
+                            setShowEvaluationModal(true)
                           }}
                           className="mb-2 text-primary text-xs hover:underline"
                         >
@@ -551,8 +555,8 @@ export function ReportsTab() {
         <ActionModal
           report={selectedReport}
           onClose={() => {
-            setShowActionModal(false);
-            setSelectedReport(null);
+            setShowActionModal(false)
+            setSelectedReport(null)
           }}
           onAction={(reportId, action, resolution) =>
             actionMutation.mutate({ reportId, action, resolution })
@@ -567,26 +571,26 @@ export function ReportsTab() {
           report={selectedReport}
           evaluation={selectedReport.evaluation}
           onClose={() => {
-            setShowEvaluationModal(false);
-            setSelectedReport(null);
+            setShowEvaluationModal(false)
+            setSelectedReport(null)
           }}
         />
       )}
     </div>
-  );
+  )
 }
 
 interface ActionModalProps {
-  report: Report;
-  onClose: () => void;
-  onAction: (reportId: string, action: string, resolution: string) => void;
-  isPending: boolean;
+  report: Report
+  onClose: () => void
+  onAction: (reportId: string, action: string, resolution: string) => void
+  isPending: boolean
 }
 
 interface EvaluationModalProps {
-  report: Report;
-  evaluation: ReportEvaluation;
-  onClose: () => void;
+  report: Report
+  evaluation: ReportEvaluation
+  onClose: () => void
 }
 
 function EvaluationModal({
@@ -597,15 +601,15 @@ function EvaluationModal({
   const getOutcomeColor = (outcome: string) => {
     switch (outcome) {
       case 'valid_report':
-        return 'text-green-500 bg-green-500/10 border-green-500/20';
+        return 'text-green-500 bg-green-500/10 border-green-500/20'
       case 'abusive_reporter':
-        return 'text-red-500 bg-red-500/10 border-red-500/20';
+        return 'text-red-500 bg-red-500/10 border-red-500/20'
       case 'invalid_report':
-        return 'text-yellow-500 bg-yellow-500/10 border-yellow-500/20';
+        return 'text-yellow-500 bg-yellow-500/10 border-yellow-500/20'
       default:
-        return 'text-gray-500 bg-gray-500/10 border-gray-500/20';
+        return 'text-gray-500 bg-gray-500/10 border-gray-500/20'
     }
-  };
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
@@ -617,7 +621,7 @@ function EvaluationModal({
           <div
             className={cn(
               'rounded-lg border px-4 py-3',
-              getOutcomeColor(evaluation.outcome)
+              getOutcomeColor(evaluation.outcome),
             )}
           >
             <div className="mb-2 flex items-center justify-between">
@@ -670,8 +674,8 @@ function EvaluationModal({
           <div className="mb-4">
             <h3 className="mb-2 font-semibold text-sm">Recommended Actions</h3>
             <ul className="list-inside list-disc space-y-1 text-muted-foreground text-sm">
-              {evaluation.recommendedActions.map((action, index) => (
-                <li key={index}>{action}</li>
+              {evaluation.recommendedActions.map((action) => (
+                <li key={action}>{action}</li>
               ))}
             </ul>
           </div>
@@ -706,6 +710,7 @@ function EvaluationModal({
         {/* Close Button */}
         <div className="flex justify-end">
           <button
+            type="button"
             onClick={onClose}
             className="rounded-lg bg-muted px-4 py-2 text-foreground transition-colors hover:bg-muted/80"
           >
@@ -714,7 +719,7 @@ function EvaluationModal({
         </div>
       </div>
     </div>
-  );
+  )
 }
 
 function ActionModal({
@@ -723,20 +728,20 @@ function ActionModal({
   onAction,
   isPending,
 }: ActionModalProps) {
-  const [action, setAction] = useState('resolve');
-  const [resolution, setResolution] = useState('');
-  const [, startSubmit] = useTransition();
+  const [action, setAction] = useState('resolve')
+  const [resolution, setResolution] = useState('')
+  const [, startSubmit] = useTransition()
 
   const handleSubmit = () => {
     if (!resolution.trim()) {
-      toast.error('Please provide a resolution message');
-      return;
+      toast.error('Please provide a resolution message')
+      return
     }
 
     startSubmit(() => {
-      onAction(report.id, action, resolution);
-    });
-  };
+      onAction(report.id, action, resolution)
+    })
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
@@ -786,8 +791,14 @@ function ActionModal({
 
         {/* Action Selection */}
         <div className="mb-4">
-          <label className="mb-2 block font-medium text-sm">Action</label>
+          <label
+            htmlFor="action-select"
+            className="mb-2 block font-medium text-sm"
+          >
+            Action
+          </label>
           <select
+            id="action-select"
             value={action}
             onChange={(e) => setAction(e.target.value)}
             className="w-full rounded-lg border border-border bg-background px-3 py-2"
@@ -803,10 +814,14 @@ function ActionModal({
 
         {/* Resolution Message */}
         <div className="mb-4">
-          <label className="mb-2 block font-medium text-sm">
+          <label
+            htmlFor="resolution-textarea"
+            className="mb-2 block font-medium text-sm"
+          >
             Resolution Message
           </label>
           <textarea
+            id="resolution-textarea"
             value={resolution}
             onChange={(e) => setResolution(e.target.value)}
             placeholder="Explain the action taken..."
@@ -818,6 +833,7 @@ function ActionModal({
         {/* Buttons */}
         <div className="flex gap-3">
           <button
+            type="button"
             onClick={onClose}
             disabled={isPending}
             className="flex-1 rounded-lg bg-muted px-4 py-2 transition-colors hover:bg-muted/80"
@@ -825,6 +841,7 @@ function ActionModal({
             Cancel
           </button>
           <button
+            type="button"
             onClick={handleSubmit}
             disabled={isPending || !resolution.trim()}
             className="flex-1 rounded-lg bg-primary px-4 py-2 text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
@@ -834,5 +851,5 @@ function ActionModal({
         </div>
       </div>
     </div>
-  );
+  )
 }

@@ -1,6 +1,4 @@
-'use client';
-
-import { cn, getReferralUrl } from '@babylon/shared';
+import { cn, getReferralUrl } from '@babylon/shared'
 import {
   Bell,
   Bot,
@@ -15,19 +13,20 @@ import {
   Trophy,
   User,
   Vote,
-} from 'lucide-react';
-import Image from 'next/image';
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { useEffect, useRef, useState } from 'react';
-import { AirdropStatusBadge } from '@/components/airdrop';
-import { LoginButton } from '@/components/auth/LoginButton';
-import { UserMenu } from '@/components/auth/UserMenu';
-import { Avatar } from '@/components/shared/Avatar';
-import { Separator } from '@/components/shared/Separator';
-import { useAuth } from '@/hooks/useAuth';
-import { useUnreadMessages } from '@/hooks/useUnreadMessages';
-import { useUnreadNotifications } from '@/hooks/useUnreadNotifications';
+} from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
+import { AirdropStatusBadge } from '@/components/airdrop'
+import { LoginButton } from '@/components/auth/LoginButton'
+import { UserMenu } from '@/components/auth/UserMenu'
+import { Avatar } from '@/components/shared/Avatar'
+import Image from '@/components/shared/Image'
+import { Separator } from '@/components/shared/Separator'
+import { isWaitlistMode } from '@/config'
+import { useAuth } from '@/hooks/useAuth'
+import { useUnreadMessages } from '@/hooks/useUnreadMessages'
+import { useUnreadNotifications } from '@/hooks/useUnreadNotifications'
+import { usePathname } from '@/lib/navigation'
 
 /**
  * Main sidebar content component with navigation and user menu.
@@ -39,21 +38,20 @@ import { useUnreadNotifications } from '@/hooks/useUnreadNotifications';
  * @returns Sidebar content element
  */
 function SidebarContent() {
-  const [showMdMenu, setShowMdMenu] = useState(false);
-  const [copiedReferral, setCopiedReferral] = useState(false);
-  const mdMenuRef = useRef<HTMLDivElement>(null);
-  const pathname = usePathname();
-  const { ready, authenticated, user, logout } = useAuth();
-  const { totalUnread: unreadMessages } = useUnreadMessages();
-  const { unreadCount: unreadNotifications } = useUnreadNotifications();
+  const [showMdMenu, setShowMdMenu] = useState(false)
+  const [copiedReferral, setCopiedReferral] = useState(false)
+  const mdMenuRef = useRef<HTMLDivElement>(null)
+  const pathname = usePathname()
+  const { ready, authenticated, user, logout } = useAuth()
+  const { totalUnread: unreadMessages } = useUnreadMessages()
+  const { unreadCount: unreadNotifications } = useUnreadNotifications()
 
-  // Hide sidebar when WAITLIST_MODE is enabled on home page
-  const isWaitlistMode = process.env.NEXT_PUBLIC_WAITLIST_MODE === 'true';
-  const isHomePage = pathname === '/';
-  const shouldHideSidebar = isWaitlistMode && isHomePage;
+  // Hide sidebar when waitlist mode is enabled on home page
+  const isHomePage = pathname === '/'
+  const shouldHideSidebar = isWaitlistMode() && isHomePage
 
   // Check if user is admin from the user object
-  const isAdmin = user ? (user.isAdmin ?? false) : false;
+  const isAdmin = user ? (user.isAdmin ?? false) : false
 
   // All hooks must be called before any conditional returns
   // Close dropdown when clicking outside
@@ -63,30 +61,29 @@ function SidebarContent() {
         mdMenuRef.current &&
         !mdMenuRef.current.contains(event.target as Node)
       ) {
-        setShowMdMenu(false);
+        setShowMdMenu(false)
       }
-    };
+    }
 
     if (showMdMenu) {
-      document.addEventListener('mousedown', handleClickOutside);
-      return () =>
-        document.removeEventListener('mousedown', handleClickOutside);
+      document.addEventListener('mousedown', handleClickOutside)
+      return () => document.removeEventListener('mousedown', handleClickOutside)
     }
-    return undefined;
-  }, [showMdMenu]);
+    return undefined
+  }, [showMdMenu])
 
   const copyReferralCode = async () => {
-    if (!user?.referralCode) return;
+    if (!user?.referralCode) return
 
-    const referralUrl = getReferralUrl(user.referralCode);
-    await navigator.clipboard.writeText(referralUrl);
-    setCopiedReferral(true);
-    setTimeout(() => setCopiedReferral(false), 2000);
-  };
+    const referralUrl = getReferralUrl(user.referralCode)
+    await navigator.clipboard.writeText(referralUrl)
+    setCopiedReferral(true)
+    setTimeout(() => setCopiedReferral(false), 2000)
+  }
 
   // Render nothing if sidebar should be hidden (after all hooks)
   if (shouldHideSidebar) {
-    return null;
+    return null
   }
 
   const navItems = [
@@ -165,7 +162,7 @@ function SidebarContent() {
           },
         ]
       : []),
-  ];
+  ]
 
   return (
     <>
@@ -175,13 +172,13 @@ function SidebarContent() {
           'sticky top-0 isolate z-40 hidden h-screen md:flex md:flex-col',
           'bg-sidebar',
           'transition-all duration-300',
-          'md:w-20 lg:w-64'
+          'md:w-20 lg:w-64',
         )}
       >
         {/* Header - Logo */}
         <div className="flex items-center justify-center p-6 lg:justify-start">
           <Link
-            href="/feed"
+            to="/feed"
             className="transition-transform duration-300 hover:scale-105"
           >
             {/* Icon-only logo for md (tablet) */}
@@ -207,20 +204,19 @@ function SidebarContent() {
         {/* Navigation */}
         <nav className="pointer-events-auto relative z-20 flex-1">
           {navItems.map((item) => {
-            const Icon = item.icon;
+            const Icon = item.icon
             const hasNotificationBadge =
               (item.name === 'Notifications' && unreadNotifications > 0) ||
-              (item.name === 'Chats' && unreadMessages > 0);
+              (item.name === 'Chats' && unreadMessages > 0)
             return (
               <Link
                 key={item.name}
-                href={item.href}
-                prefetch={true}
+                to={item.href}
                 className={cn(
                   'group pointer-events-auto relative z-10 flex items-center px-4 py-3',
                   'transition-colors duration-200',
                   'md:justify-center lg:justify-start',
-                  !item.active && 'bg-transparent hover:bg-sidebar-accent'
+                  !item.active && 'bg-transparent hover:bg-sidebar-accent',
                 )}
                 title={item.name}
                 style={{
@@ -228,12 +224,12 @@ function SidebarContent() {
                 }}
                 onMouseEnter={(e) => {
                   if (!item.active) {
-                    e.currentTarget.style.backgroundColor = item.color;
+                    e.currentTarget.style.backgroundColor = item.color
                   }
                 }}
                 onMouseLeave={(e) => {
                   if (!item.active) {
-                    e.currentTarget.style.backgroundColor = '';
+                    e.currentTarget.style.backgroundColor = ''
                   }
                 }}
               >
@@ -244,19 +240,19 @@ function SidebarContent() {
                       'h-6 w-6 flex-shrink-0',
                       'transition-all duration-300',
                       'group-hover:scale-110',
-                      !item.active && 'text-sidebar-foreground'
+                      !item.active && 'text-sidebar-foreground',
                     )}
                     style={{
                       color: item.active ? '#e4e4e4' : undefined,
                     }}
                     onMouseEnter={(e) => {
                       if (!item.active) {
-                        e.currentTarget.style.color = '#e4e4e4';
+                        e.currentTarget.style.color = '#e4e4e4'
                       }
                     }}
                     onMouseLeave={(e) => {
                       if (!item.active) {
-                        e.currentTarget.style.color = '';
+                        e.currentTarget.style.color = ''
                       }
                     }}
                   />
@@ -270,26 +266,17 @@ function SidebarContent() {
                   className={cn(
                     'hidden lg:block',
                     'text-lg transition-colors duration-300',
-                    item.active ? 'font-semibold' : 'text-sidebar-foreground'
+                    item.active ? 'font-semibold' : 'text-sidebar-foreground',
+                    !item.active && 'group-hover:text-[#e4e4e4]',
                   )}
                   style={{
                     color: item.active ? '#e4e4e4' : undefined,
-                  }}
-                  onMouseEnter={(e) => {
-                    if (!item.active) {
-                      e.currentTarget.style.color = '#e4e4e4';
-                    }
-                  }}
-                  onMouseLeave={(e) => {
-                    if (!item.active) {
-                      e.currentTarget.style.color = '';
-                    }
                   }}
                 >
                   {item.name}
                 </span>
               </Link>
-            );
+            )
           })}
         </nav>
 
@@ -328,6 +315,7 @@ function SidebarContent() {
           <div className="relative md:block lg:hidden" ref={mdMenuRef}>
             <div className="flex justify-center p-4">
               <button
+                type="button"
                 onClick={() => setShowMdMenu(!showMdMenu)}
                 className="transition-opacity hover:opacity-80"
                 aria-label="Open user menu"
@@ -349,6 +337,7 @@ function SidebarContent() {
                 {/* Referral Code */}
                 {user.referralCode && (
                   <button
+                    type="button"
                     onClick={copyReferralCode}
                     className="flex w-full items-center justify-center p-3 transition-colors hover:bg-sidebar-accent"
                     title={copiedReferral ? 'Copied!' : 'Copy Referral Link'}
@@ -371,9 +360,10 @@ function SidebarContent() {
 
                 {/* Logout */}
                 <button
+                  type="button"
                   onClick={() => {
-                    setShowMdMenu(false);
-                    logout();
+                    setShowMdMenu(false)
+                    logout()
                   }}
                   className="flex w-full items-center justify-center p-3 text-destructive transition-colors hover:bg-destructive/10"
                   title="Logout"
@@ -387,18 +377,18 @@ function SidebarContent() {
         )}
       </aside>
     </>
-  );
+  )
 }
 
 /**
  * Sidebar component with navigation and user menu.
  *
  * Provides navigation links, user authentication state, unread message
- * counts, and admin access. Automatically hides when WAITLIST_MODE is
+ * counts, and admin access. Automatically hides when waitlist mode is
  * enabled on home page.
  *
  * @returns Sidebar element or null if hidden
  */
 export function Sidebar() {
-  return <SidebarContent />;
+  return <SidebarContent />
 }

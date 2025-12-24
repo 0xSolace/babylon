@@ -5,66 +5,67 @@
  * Creates dataset cards with visualizations, metrics, and usage examples.
  */
 
-import { promises as fs } from 'fs';
-import * as path from 'path';
+import { promises as fs } from 'node:fs'
+import * as path from 'node:path'
 // TODO: SimulationEngine.ts was deleted in merge - using type export from benchmark/index
-import type { SimulationMetrics } from '../benchmark';
-import { calculateArrayStats, logger } from '../utils';
+import type { SimulationMetrics } from '../benchmark'
+import { calculateArrayStats, logger } from '../utils'
 import {
+  ensureHuggingFaceRepository,
   getHuggingFaceToken,
-  HuggingFaceUploadUtil,
   requireHuggingFaceToken,
-} from './shared/HuggingFaceUploadUtil';
+  uploadDirectoryToHuggingFace,
+} from './shared/HuggingFaceUploadUtil'
 
 export interface BenchmarkRecord {
-  benchmarkId: string;
-  modelId: string;
-  modelVersion: string;
-  modelName: string;
-  runAt: string;
-  metrics: SimulationMetrics;
+  benchmarkId: string
+  modelId: string
+  modelVersion: string
+  modelName: string
+  runAt: string
+  metrics: SimulationMetrics
   benchmarkSnapshot: {
-    duration: number;
-    tickInterval: number;
-    markets: number;
-    ticks: number;
-  };
+    duration: number
+    tickInterval: number
+    markets: number
+    ticks: number
+  }
 }
 
 export interface DatasetMetadata {
-  datasetName: string;
-  version: string;
-  description: string;
-  createdAt: string;
-  totalBenchmarks: number;
-  models: string[];
-  benchmarkTypes: string[];
-  license: string;
+  datasetName: string
+  version: string
+  description: string
+  createdAt: string
+  totalBenchmarks: number
+  models: string[]
+  benchmarkTypes: string[]
+  license: string
 }
 
 export interface UploadOptions {
   /** Dataset name (e.g., 'babylonlabs/agent-benchmarks') */
-  datasetName: string;
-  version?: string;
-  description?: string;
-  private?: boolean;
-  benchmarkDir?: string;
-  outputDir?: string;
+  datasetName: string
+  version?: string
+  description?: string
+  private?: boolean
+  benchmarkDir?: string
+  outputDir?: string
 }
 
 export interface UploadResult {
-  success: boolean;
-  datasetUrl?: string;
-  version: string;
-  filesUploaded: number;
-  error?: string;
+  success: boolean
+  datasetUrl?: string
+  version: string
+  filesUploaded: number
+  error?: string
 }
 
 export class HuggingFaceDatasetUploader {
-  private huggingFaceToken: string | undefined;
+  private huggingFaceToken: string | undefined
 
   constructor(huggingFaceToken?: string) {
-    this.huggingFaceToken = huggingFaceToken || getHuggingFaceToken();
+    this.huggingFaceToken = huggingFaceToken || getHuggingFaceToken()
   }
 
   /**
@@ -73,88 +74,88 @@ export class HuggingFaceDatasetUploader {
   async uploadDataset(options: UploadOptions): Promise<UploadResult> {
     logger.info('Starting HuggingFace dataset upload', {
       datasetName: options.datasetName,
-    });
+    })
 
     // Validate token (throws if not set)
-    const token = this.huggingFaceToken || requireHuggingFaceToken();
-    this.huggingFaceToken = token;
+    const token = this.huggingFaceToken || requireHuggingFaceToken()
+    this.huggingFaceToken = token
 
     // Set defaults
-    const version = options.version || this.generateVersion();
+    const version = options.version || this.generateVersion()
     const benchmarkDir =
-      options.benchmarkDir || path.join(process.cwd(), 'benchmarks');
+      options.benchmarkDir || path.join(process.cwd(), 'benchmarks')
     const outputDir =
       options.outputDir ||
-      path.join(process.cwd(), 'exports', 'huggingface', version);
+      path.join(process.cwd(), 'exports', 'huggingface', version)
 
     // Step 1: Collect benchmark data
-    logger.info('Collecting benchmark data', { benchmarkDir });
-    const benchmarks = await this.collectBenchmarkData(benchmarkDir);
-    logger.info(`Collected ${benchmarks.length} benchmark records`);
+    logger.info('Collecting benchmark data', { benchmarkDir })
+    const benchmarks = await this.collectBenchmarkData(benchmarkDir)
+    logger.info(`Collected ${benchmarks.length} benchmark records`)
 
     if (benchmarks.length === 0) {
-      throw new Error('No benchmark data found to upload');
+      throw new Error('No benchmark data found to upload')
     }
 
     // Step 2: Prepare dataset files
-    logger.info('Preparing dataset files', { outputDir });
-    await fs.mkdir(outputDir, { recursive: true });
+    logger.info('Preparing dataset files', { outputDir })
+    await fs.mkdir(outputDir, { recursive: true })
 
     const metadata = await this.prepareDatasetFiles(benchmarks, outputDir, {
       datasetName: options.datasetName,
       version,
       description: options.description || 'Babylon agent benchmark results',
-    });
+    })
 
     // Step 3: Generate dataset card
-    logger.info('Generating dataset card');
-    await this.generateDatasetCard(metadata, benchmarks, outputDir);
+    logger.info('Generating dataset card')
+    await this.generateDatasetCard(metadata, benchmarks, outputDir)
 
     // Step 4: Create repository if it doesn't exist
     logger.info('Ensuring repository exists', {
       datasetName: options.datasetName,
-    });
-    await this.ensureRepository(options.datasetName, options.private ?? false);
+    })
+    await this.ensureRepository(options.datasetName, options.private ?? false)
 
     // Step 5: Upload to HuggingFace
     logger.info('Uploading to HuggingFace', {
       datasetName: options.datasetName,
-    });
+    })
     const filesUploaded = await this.uploadToHub(
       options.datasetName,
       outputDir,
-      options.private ?? false
-    );
+      options.private ?? false,
+    )
 
-    const datasetUrl = `https://huggingface.co/datasets/${options.datasetName}`;
+    const datasetUrl = `https://huggingface.co/datasets/${options.datasetName}`
 
     logger.info('Dataset uploaded successfully', {
       datasetUrl,
       filesUploaded,
-    });
+    })
 
     return {
       success: true,
       datasetUrl,
       version,
       filesUploaded,
-    };
+    }
   }
 
   /**
    * Collect benchmark data from files
    */
   private async collectBenchmarkData(
-    benchmarkDir: string
+    benchmarkDir: string,
   ): Promise<BenchmarkRecord[]> {
-    const records: BenchmarkRecord[] = [];
+    const records: BenchmarkRecord[] = []
 
     // Collect from model-comparison directory
-    const comparisonDir = path.join(benchmarkDir, 'model-comparison');
+    const comparisonDir = path.join(benchmarkDir, 'model-comparison')
     if (await this.fileExists(comparisonDir)) {
-      const comparisonFile = path.join(comparisonDir, 'comparison.json');
+      const comparisonFile = path.join(comparisonDir, 'comparison.json')
       if (await this.fileExists(comparisonFile)) {
-        const data = JSON.parse(await fs.readFile(comparisonFile, 'utf-8'));
+        const data = JSON.parse(await fs.readFile(comparisonFile, 'utf-8'))
         for (const result of data.results || []) {
           if (result.metrics) {
             records.push({
@@ -169,26 +170,26 @@ export class HuggingFaceDatasetUploader {
                 tickInterval: 60,
                 markets: 10,
                 ticks: Math.floor(
-                  (result.metrics.timing?.totalDuration || 0) / 60
+                  (result.metrics.timing?.totalDuration || 0) / 60,
                 ),
               },
-            });
+            })
           }
         }
       }
     }
 
     // Collect from baselines directory
-    const baselinesDir = path.join(benchmarkDir, 'baselines');
+    const baselinesDir = path.join(benchmarkDir, 'baselines')
     if (await this.fileExists(baselinesDir)) {
-      const files = await fs.readdir(baselinesDir);
+      const files = await fs.readdir(baselinesDir)
       for (const file of files) {
         if (file.endsWith('.json') && file.startsWith('baseline-')) {
-          const filePath = path.join(baselinesDir, file);
-          const data = JSON.parse(await fs.readFile(filePath, 'utf-8'));
+          const filePath = path.join(baselinesDir, file)
+          const data = JSON.parse(await fs.readFile(filePath, 'utf-8'))
 
           // Skip if no metrics
-          if (!data.metrics) continue;
+          if (!data.metrics) continue
 
           records.push({
             benchmarkId:
@@ -213,25 +214,25 @@ export class HuggingFaceDatasetUploader {
               ticks: Math.floor(
                 (data.timing?.totalDuration ||
                   data.metrics.timing?.totalDuration ||
-                  0) / 60
+                  0) / 60,
               ),
             },
-          });
+          })
         }
       }
     }
 
     // Collect from test-baselines directory
-    const testBaselinesDir = path.join(benchmarkDir, 'test-baselines');
+    const testBaselinesDir = path.join(benchmarkDir, 'test-baselines')
     if (await this.fileExists(testBaselinesDir)) {
-      const subdirs = await fs.readdir(testBaselinesDir);
+      const subdirs = await fs.readdir(testBaselinesDir)
       for (const subdir of subdirs) {
-        const metricsFile = path.join(testBaselinesDir, subdir, 'metrics.json');
+        const metricsFile = path.join(testBaselinesDir, subdir, 'metrics.json')
         if (await this.fileExists(metricsFile)) {
-          const data = JSON.parse(await fs.readFile(metricsFile, 'utf-8'));
+          const data = JSON.parse(await fs.readFile(metricsFile, 'utf-8'))
 
           // Skip if no required fields
-          if (!data.totalPnl && !data.predictionMetrics) continue;
+          if (!data.totalPnl && !data.predictionMetrics) continue
 
           records.push({
             benchmarkId: data.benchmarkId || 'test-benchmark',
@@ -246,12 +247,12 @@ export class HuggingFaceDatasetUploader {
               markets: 10,
               ticks: Math.floor((data.timing?.totalDuration || 0) / 60),
             },
-          });
+          })
         }
       }
     }
 
-    return records;
+    return records
   }
 
   /**
@@ -260,12 +261,12 @@ export class HuggingFaceDatasetUploader {
   private async prepareDatasetFiles(
     benchmarks: BenchmarkRecord[],
     outputDir: string,
-    options: { datasetName: string; version: string; description: string }
+    options: { datasetName: string; version: string; description: string },
   ): Promise<DatasetMetadata> {
     // Create data.jsonl with all benchmark records
-    const jsonlPath = path.join(outputDir, 'data.jsonl');
-    const jsonlLines = benchmarks.map((b) => JSON.stringify(b)).join('\n');
-    await fs.writeFile(jsonlPath, jsonlLines);
+    const jsonlPath = path.join(outputDir, 'data.jsonl')
+    const jsonlLines = benchmarks.map((b) => JSON.stringify(b)).join('\n')
+    await fs.writeFile(jsonlPath, jsonlLines)
 
     // Create metadata.json
     const metadata: DatasetMetadata = {
@@ -277,17 +278,17 @@ export class HuggingFaceDatasetUploader {
       models: Array.from(new Set(benchmarks.map((b) => b.modelName))),
       benchmarkTypes: Array.from(new Set(benchmarks.map((b) => b.benchmarkId))),
       license: 'MIT',
-    };
+    }
 
-    const metadataPath = path.join(outputDir, 'metadata.json');
-    await fs.writeFile(metadataPath, JSON.stringify(metadata, null, 2));
+    const metadataPath = path.join(outputDir, 'metadata.json')
+    await fs.writeFile(metadataPath, JSON.stringify(metadata, null, 2))
 
     // Create summary statistics
-    const summary = this.calculateSummaryStatistics(benchmarks);
-    const summaryPath = path.join(outputDir, 'summary.json');
-    await fs.writeFile(summaryPath, JSON.stringify(summary, null, 2));
+    const summary = this.calculateSummaryStatistics(benchmarks)
+    const summaryPath = path.join(outputDir, 'summary.json')
+    await fs.writeFile(summaryPath, JSON.stringify(summary, null, 2))
 
-    return metadata;
+    return metadata
   }
 
   /**
@@ -296,9 +297,9 @@ export class HuggingFaceDatasetUploader {
   private async generateDatasetCard(
     metadata: DatasetMetadata,
     benchmarks: BenchmarkRecord[],
-    outputDir: string
+    outputDir: string,
   ): Promise<void> {
-    const summary = this.calculateSummaryStatistics(benchmarks);
+    const summary = this.calculateSummaryStatistics(benchmarks)
 
     const card = `---
 license: ${metadata.license}
@@ -433,10 +434,10 @@ ${metadata.license}
 ## Contact
 
 For questions or issues, please open an issue on the Babylon repository.
-`;
+`
 
-    const cardPath = path.join(outputDir, 'README.md');
-    await fs.writeFile(cardPath, card);
+    const cardPath = path.join(outputDir, 'README.md')
+    await fs.writeFile(cardPath, card)
   }
 
   /**
@@ -447,7 +448,7 @@ For questions or issues, please open an issue on the Babylon repository.
     const modelStats = new Map<
       string,
       { pnl: number[]; accuracy: number[]; optimality: number[] }
-    >();
+    >()
 
     for (const benchmark of benchmarks) {
       if (!modelStats.has(benchmark.modelName)) {
@@ -455,12 +456,14 @@ For questions or issues, please open an issue on the Babylon repository.
           pnl: [],
           accuracy: [],
           optimality: [],
-        });
+        })
       }
-      const stats = modelStats.get(benchmark.modelName)!;
-      stats.pnl.push(benchmark.metrics.totalPnl);
-      stats.accuracy.push(benchmark.metrics.predictionMetrics.accuracy);
-      stats.optimality.push(benchmark.metrics.optimalityScore);
+      const stats = modelStats.get(benchmark.modelName)
+      if (stats) {
+        stats.pnl.push(benchmark.metrics.totalPnl)
+        stats.accuracy.push(benchmark.metrics.predictionMetrics.accuracy)
+        stats.optimality.push(benchmark.metrics.optimalityScore)
+      }
     }
 
     // Calculate averages and sort by P&L
@@ -474,16 +477,16 @@ For questions or issues, please open an issue on the Babylon repository.
           stats.optimality.reduce((a, b) => a + b, 0) / stats.optimality.length,
         runs: stats.pnl.length,
       }))
-      .sort((a, b) => b.avgPnl - a.avgPnl);
+      .sort((a, b) => b.avgPnl - a.avgPnl)
 
-    let table = '| Rank | Model | Avg P&L | Accuracy | Optimality | Runs |\n';
-    table += '|------|-------|---------|----------|------------|------|\n';
+    let table = '| Rank | Model | Avg P&L | Accuracy | Optimality | Runs |\n'
+    table += '|------|-------|---------|----------|------------|------|\n'
 
     leaderboard.forEach((entry, index) => {
-      table += `| ${index + 1} | ${entry.model} | ${entry.avgPnl.toFixed(2)} | ${(entry.avgAccuracy * 100).toFixed(1)}% | ${entry.avgOptimality.toFixed(1)} | ${entry.runs} |\n`;
-    });
+      table += `| ${index + 1} | ${entry.model} | ${entry.avgPnl.toFixed(2)} | ${(entry.avgAccuracy * 100).toFixed(1)}% | ${entry.avgOptimality.toFixed(1)} | ${entry.runs} |\n`
+    })
 
-    return table;
+    return table
   }
 
   /**
@@ -491,42 +494,40 @@ For questions or issues, please open an issue on the Babylon repository.
    */
   private calculateSummaryStatistics(benchmarks: BenchmarkRecord[]): {
     pnl: {
-      mean: number;
-      median: number;
-      std: number;
-      min: number;
-      max: number;
-    };
+      mean: number
+      median: number
+      std: number
+      min: number
+      max: number
+    }
     accuracy: {
-      mean: number;
-      median: number;
-      std: number;
-      min: number;
-      max: number;
-    };
+      mean: number
+      median: number
+      std: number
+      min: number
+      max: number
+    }
     optimality: {
-      mean: number;
-      median: number;
-      std: number;
-      min: number;
-      max: number;
-    };
+      mean: number
+      median: number
+      std: number
+      min: number
+      max: number
+    }
   } {
-    const pnls = benchmarks
-      .map((b) => b.metrics.totalPnl)
-      .sort((a, b) => a - b);
+    const pnls = benchmarks.map((b) => b.metrics.totalPnl).sort((a, b) => a - b)
     const accuracies = benchmarks
       .map((b) => b.metrics.predictionMetrics.accuracy)
-      .sort((a, b) => a - b);
+      .sort((a, b) => a - b)
     const optimalities = benchmarks
       .map((b) => b.metrics.optimalityScore)
-      .sort((a, b) => a - b);
+      .sort((a, b) => a - b)
 
     return {
       pnl: calculateArrayStats(pnls),
       accuracy: calculateArrayStats(accuracies),
       optimality: calculateArrayStats(optimalities),
-    };
+    }
   }
 
   /**
@@ -535,18 +536,18 @@ For questions or issues, please open an issue on the Babylon repository.
    */
   private async ensureRepository(
     datasetName: string,
-    isPrivate: boolean
+    isPrivate: boolean,
   ): Promise<void> {
     if (!this.huggingFaceToken) {
-      throw new Error('HuggingFace token not configured');
+      throw new Error('HuggingFace token not configured')
     }
 
-    await HuggingFaceUploadUtil.ensureRepository(
+    await ensureHuggingFaceRepository(
       datasetName,
       'dataset',
       this.huggingFaceToken,
-      isPrivate
-    );
+      isPrivate,
+    )
   }
 
   /**
@@ -556,34 +557,30 @@ For questions or issues, please open an issue on the Babylon repository.
   private async uploadToHub(
     datasetName: string,
     localDir: string,
-    _isPrivate: boolean
+    _isPrivate: boolean,
   ): Promise<number> {
     if (!this.huggingFaceToken) {
-      throw new Error('HuggingFace token not configured');
+      throw new Error('HuggingFace token not configured')
     }
 
     // Use shared upload utility - let errors propagate
-    const { HuggingFaceUploadUtil } = await import(
-      './shared/HuggingFaceUploadUtil'
-    );
-
-    return await HuggingFaceUploadUtil.uploadDirectory(
+    return await uploadDirectoryToHuggingFace(
       datasetName,
       'dataset',
       localDir,
-      this.huggingFaceToken
-    );
+      this.huggingFaceToken,
+    )
   }
 
   /**
    * Generate version string (YYYY.MM.DD format)
    */
   private generateVersion(): string {
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = String(now.getMonth() + 1).padStart(2, '0');
-    const day = String(now.getDate()).padStart(2, '0');
-    return `${year}.${month}.${day}`;
+    const now = new Date()
+    const year = now.getFullYear()
+    const month = String(now.getMonth() + 1).padStart(2, '0')
+    const day = String(now.getDate()).padStart(2, '0')
+    return `${year}.${month}.${day}`
   }
 
   /**
@@ -591,10 +588,10 @@ For questions or issues, please open an issue on the Babylon repository.
    */
   private async fileExists(filePath: string): Promise<boolean> {
     try {
-      await fs.access(filePath);
-      return true;
+      await fs.access(filePath)
+      return true
     } catch {
-      return false;
+      return false
     }
   }
 }

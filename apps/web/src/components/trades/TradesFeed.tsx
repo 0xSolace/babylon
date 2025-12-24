@@ -1,30 +1,28 @@
-'use client';
-
-import { useInfiniteQuery } from '@tanstack/react-query';
-import { Activity, AlertCircle } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
-import { FeedSkeleton } from '@/components/shared/Skeleton';
-import { type Trade, TradeCard } from './TradeCard';
+import { useInfiniteQuery } from '@tanstack/react-query'
+import { Activity, AlertCircle } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { FeedSkeleton } from '@/components/shared/Skeleton'
+import { type Trade, TradeCard } from './TradeCard'
 
 /**
  * Page size for pagination in trades feed.
  */
-const PAGE_SIZE = 20;
+const PAGE_SIZE = 20
 /**
  * Scroll threshold in pixels from top to consider "at top" for auto-polling.
  */
-const SCROLL_THRESHOLD = 100; // pixels from top to consider "at top"
+const SCROLL_THRESHOLD = 100 // pixels from top to consider "at top"
 /**
  * Polling interval for fetching new trades (10 seconds).
  */
-const POLL_INTERVAL = 10000; // 10 seconds
+const POLL_INTERVAL = 10000 // 10 seconds
 
 /**
  * Trades API response structure.
  */
 interface TradesResponse {
-  trades: Trade[];
-  hasMore: boolean;
+  trades: Trade[]
+  hasMore: boolean
 }
 
 /**
@@ -55,13 +53,13 @@ interface TradesResponse {
  * ```
  */
 interface TradesFeedProps {
-  userId?: string; // Optional: filter trades by user ID
-  containerRef?: React.RefObject<HTMLDivElement | null>;
+  userId?: string // Optional: filter trades by user ID
+  containerRef?: React.RefObject<HTMLDivElement | null>
 }
 
 export function TradesFeed({ userId, containerRef }: TradesFeedProps) {
-  const [isAtTop, setIsAtTop] = useState(true);
-  const loadMoreRef = useRef<HTMLDivElement | null>(null);
+  const [isAtTop, setIsAtTop] = useState(true)
+  const loadMoreRef = useRef<HTMLDivElement | null>(null)
 
   const {
     data,
@@ -77,73 +75,74 @@ export function TradesFeed({ userId, containerRef }: TradesFeedProps) {
       const params = new URLSearchParams({
         limit: PAGE_SIZE.toString(),
         offset: pageParam.toString(),
-      });
+      })
 
       if (userId) {
-        params.append('userId', userId);
+        params.append('userId', userId)
       }
 
-      const response = await fetch(`/api/trades?${params.toString()}`);
+      const response = await fetch(`/api/trades?${params.toString()}`)
       if (!response.ok) {
-        throw new Error(`Failed to load trades: ${response.status}`);
+        throw new Error(`Failed to load trades: ${response.status}`)
       }
 
-      return response.json() as Promise<TradesResponse>;
+      return response.json() as Promise<TradesResponse>
     },
     getNextPageParam: (lastPage, allPages) => {
-      if (!lastPage.hasMore) return undefined;
-      return allPages.reduce((acc, page) => acc + page.trades.length, 0);
+      if (!lastPage.hasMore) return undefined
+      return allPages.reduce((acc, page) => acc + page.trades.length, 0)
     },
     initialPageParam: 0,
     refetchInterval: isAtTop ? POLL_INTERVAL : false,
-  });
+  })
 
   // Flatten all pages into a single array of trades, deduplicating by ID
   const trades =
     data?.pages.reduce<Trade[]>((acc, page) => {
-      const existingIds = new Set(acc.map((t) => t.id));
-      const uniqueTrades = page.trades.filter((t) => !existingIds.has(t.id));
-      return [...acc, ...uniqueTrades];
-    }, []) ?? [];
+      const existingIds = new Set(acc.map((t) => t.id))
+      const uniqueTrades = page.trades.filter((t) => !existingIds.has(t.id))
+      acc.push(...uniqueTrades)
+      return acc
+    }, []) ?? []
 
   // Handle scroll to detect if user is at top
   useEffect(() => {
-    const container = containerRef?.current;
-    if (!container) return;
+    const container = containerRef?.current
+    if (!container) return
 
     const handleScroll = () => {
-      const scrollTop = container.scrollTop;
-      const isNearTop = scrollTop <= SCROLL_THRESHOLD;
-      setIsAtTop(isNearTop);
-    };
+      const scrollTop = container.scrollTop
+      const isNearTop = scrollTop <= SCROLL_THRESHOLD
+      setIsAtTop(isNearTop)
+    }
 
-    container.addEventListener('scroll', handleScroll);
-    return () => container.removeEventListener('scroll', handleScroll);
-  }, [containerRef]);
+    container.addEventListener('scroll', handleScroll)
+    return () => container.removeEventListener('scroll', handleScroll)
+  }, [containerRef])
 
   // Infinite scroll observer
   useEffect(() => {
-    if (!loadMoreRef.current || !hasMore || loadingMore) return;
+    if (!loadMoreRef.current || !hasMore || loadingMore) return
 
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0]?.isIntersecting) {
-          fetchNextPage();
+          fetchNextPage()
         }
       },
-      { threshold: 0.1 }
-    );
+      { threshold: 0.1 },
+    )
 
-    observer.observe(loadMoreRef.current);
-    return () => observer.disconnect();
-  }, [hasMore, loadingMore, fetchNextPage]);
+    observer.observe(loadMoreRef.current)
+    return () => observer.disconnect()
+  }, [hasMore, loadingMore, fetchNextPage])
 
   if (loading) {
     return (
       <div className="w-full">
         <FeedSkeleton count={5} />
       </div>
-    );
+    )
   }
 
   if (error) {
@@ -159,13 +158,14 @@ export function TradesFeed({ userId, containerRef }: TradesFeedProps) {
           {error instanceof Error ? error.message : 'An error occurred'}
         </p>
         <button
+          type="button"
           onClick={() => void refetch()}
           className="rounded-lg bg-primary px-4 py-2 font-medium text-primary-foreground text-sm transition-colors hover:bg-primary/90"
         >
           Try Again
         </button>
       </div>
-    );
+    )
   }
 
   if (trades.length === 0) {
@@ -181,7 +181,7 @@ export function TradesFeed({ userId, containerRef }: TradesFeedProps) {
             : 'No trades to display. Check back later!'}
         </p>
       </div>
-    );
+    )
   }
 
   return (
@@ -218,5 +218,5 @@ export function TradesFeed({ userId, containerRef }: TradesFeedProps) {
         </div>
       )}
     </div>
-  );
+  )
 }

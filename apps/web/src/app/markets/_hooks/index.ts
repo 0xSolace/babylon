@@ -3,5 +3,5 @@ export type {
   MarketsPageData,
   TopPrediction,
   TrendingPerpMarket,
-} from './useMarketsPageData';
-export { useMarketsPageData } from './useMarketsPageData';
+} from './useMarketsPageData'
+export { useMarketsPageData } from './useMarketsPageData'

@@ -1,13 +1,16 @@
 /**
- * Farcaster Integration
+ * Farcaster Integration for Babylon Agents
  *
- * 100% Farcaster-native posting and identity for Babylon NPCs
+ * Posting functionality from @jejunetwork/farcaster.
+ * NPC posting is handled through the FarcasterPoster class.
  */
 
 export {
-  type CastOptions,
-  type CastResult,
-  FarcasterPostingService,
-  getFarcasterPostingService,
-  resetFarcasterPostingService,
-} from './FarcasterPostingService';
+  createPoster,
+  DEFAULT_HUBS,
+  FarcasterPoster,
+  type FarcasterPosterConfig,
+  type PostedCast,
+  type ReactionTarget,
+  type UserDataUpdate,
+} from '@jejunetwork/farcaster'

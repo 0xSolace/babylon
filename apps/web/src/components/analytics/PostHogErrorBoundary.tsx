@@ -1,6 +1,4 @@
-'use client';
-
-import { logger } from '@babylon/shared';
+import { logger } from '@babylon/shared'
 /**
  * PostHog error boundary component for catching and tracking React errors.
  *
@@ -25,27 +23,27 @@ import { logger } from '@babylon/shared';
  * </PostHogErrorBoundary>
  * ```
  */
-import React, { Component, type ReactNode } from 'react';
-import { posthog } from '@/lib/posthog';
+import React, { Component, type ReactNode } from 'react'
+import { posthog } from '@/lib/posthog'
 
 interface Props {
-  children: ReactNode;
-  fallback?: ReactNode;
+  children: ReactNode
+  fallback?: ReactNode
 }
 
 interface State {
-  hasError: boolean;
-  error: Error | null;
+  hasError: boolean
+  error: Error | null
 }
 
 export class PostHogErrorBoundary extends Component<Props, State> {
   constructor(props: Props) {
-    super(props);
-    this.state = { hasError: false, error: null };
+    super(props)
+    this.state = { hasError: false, error: null }
   }
 
   static getDerivedStateFromError(error: Error): State {
-    return { hasError: true, error };
+    return { hasError: true, error }
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
@@ -56,25 +54,25 @@ export class PostHogErrorBoundary extends Component<Props, State> {
         $exception_message: error.message,
         errorBoundary: true,
         timestamp: new Date().toISOString(),
-      };
+      }
 
       if (error.stack) {
-        properties.$exception_stack = error.stack;
+        properties.$exception_stack = error.stack
       }
 
       if (errorInfo.componentStack) {
-        properties.componentStack = errorInfo.componentStack;
+        properties.componentStack = errorInfo.componentStack
       }
 
-      posthog.capture('$exception', properties);
+      posthog.capture('$exception', properties)
     }
 
     // Also log using logger
     logger.error(
       'Error caught by PostHogErrorBoundary',
       { error, errorInfo },
-      'PostHogErrorBoundary'
-    );
+      'PostHogErrorBoundary',
+    )
   }
 
   render() {
@@ -88,6 +86,7 @@ export class PostHogErrorBoundary extends Component<Props, State> {
                 An error occurred. Please refresh the page.
               </p>
               <button
+                type="button"
                 onClick={() => window.location.reload()}
                 className="rounded-md bg-primary px-4 py-2 text-primary-foreground hover:bg-primary/90"
               >
@@ -96,9 +95,9 @@ export class PostHogErrorBoundary extends Component<Props, State> {
             </div>
           </div>
         )
-      );
+      )
     }
 
-    return this.props.children;
+    return this.props.children
   }
 }

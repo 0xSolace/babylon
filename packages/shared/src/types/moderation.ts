@@ -1,12 +1,12 @@
 /**
  * Moderation Types
  *
- * Canonical enums and types for the Babylon-Jeju moderation system.
- * These types are used across the moderation package and A2A protocol.
+ * Types for the moderation system.
+ * These enums use numeric values to match contract/SDK expectations.
  */
 
 /**
- * Ban status enum matching the on-chain BanStatus
+ * Ban status enum (numeric values for contract compatibility)
  */
 export enum BanStatus {
   NONE = 0,
@@ -18,18 +18,20 @@ export enum BanStatus {
 }
 
 /**
- * Vote position enum for moderation case voting
+ * Vote position enum (numeric values for contract compatibility)
  */
 export enum VotePosition {
-  YES = 0,
-  NO = 1,
+  NONE = 0,
+  YES = 1,
+  NO = 2,
 }
 
 /**
- * Outcome of a moderation case
+ * Market outcome enum
  */
 export enum MarketOutcome {
   PENDING = 0,
-  BAN_UPHELD = 1,
-  BAN_REJECTED = 2,
+  YES = 1,
+  NO = 2,
+  INVALID = 3,
 }

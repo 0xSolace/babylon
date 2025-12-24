@@ -1,0 +1,9 @@
+[install]
+# Use lockfile for deterministic builds
+save = true
+
+[install.lockfile]
+save = true
+
+[test]
+preload = ["./src/lib/test-setup.ts"]

@@ -31,14 +31,19 @@
 
 import {
   DayTimelineSchema,
+  getErrorMessage,
+  isNotNullish,
   logger,
   QuestionSchema,
   ScenarioSchema,
-} from '@babylon/shared';
-import { z } from 'zod';
-import { generateActorContext } from './EmotionSystem';
-import { FeedGenerator } from './FeedGenerator';
-import { BabylonLLMClient } from './llm/openai-client';
+  toActorTier,
+  toLuckLevel,
+  unwrapLLMResponse,
+} from '@babylon/shared'
+import { z } from 'zod'
+import { generateActorContext } from './EmotionSystem'
+import { FeedGenerator } from './FeedGenerator'
+import { BabylonLLMClient } from './llm/openai-client'
 import {
   baselineEvent,
   dayEvents,
@@ -50,14 +55,13 @@ import {
   questions as questionsPrompt,
   renderPrompt,
   scenarios as scenariosPrompt,
-} from './prompts';
-import { NPCPersonaGenerator } from './services/npc-persona-generator';
-import { QuestionArcPlanner } from './services/question-arc-planner';
-import { TrendingTopicsEngine } from './TrendingTopicsEngine';
+} from './prompts'
+import { NPCPersonaGenerator } from './services/npc-persona-generator'
+import { QuestionArcPlanner } from './services/question-arc-planner'
+import { TrendingTopicsEngine } from './TrendingTopicsEngine'
 import type {
   Actor,
   ActorConnection,
-  ActorTier,
   ChatMessage,
   DayTimeline,
   FeedPost,
@@ -76,37 +80,89 @@ import type {
   Scenario,
   SelectedActor,
   WorldEvent,
-} from './types/shared';
+} from './types/shared'
 import {
   buildRichGameContext,
   formatRichGameContext,
-} from './utils/game-context-builder';
-import { shuffleArray } from './utils/randomization';
-import { toQuestionIdNumberOrNull } from './utils/shared-utils';
+} from './utils/game-context-builder'
+import { shuffleArray } from './utils/randomization'
+import { toQuestionIdNumberOrNull } from './utils/shared-utils'
+
+// LLM response types for scenario generation
+interface NestedScenarioData {
+  scenario: Scenario | Scenario[]
+}
+
+interface ScenarioResponseWrapper {
+  response: { scenarios: Scenario[] }
+}
+
+// LLM response types for question generation
+/** Raw question data from LLM that may have string scenario values */
+type LLMQuestionRaw = Partial<Question> & {
+  scenario?: string | number
+}
+
+// LLM response types for rankings generation
+// Note: questionId can come as string from XML parsing but should be number
+interface RankingItem {
+  questionId: number
+  rank: number
+  reasoning?: string
+}
+
+interface NestedRankingData {
+  ranking: RankingItem | RankingItem[]
+}
+
+// LLM response types for events generation
+interface EventItem {
+  eventNumber?: number
+  event: string | string[]
+  type?: string | string[]
+  pointsToward?: 'YES' | 'NO' | null
+}
+
+export interface NestedEventsData {
+  event: EventItem | EventItem[]
+}
+
+// LLM response types for group chat generation
+export interface GroupChatData {
+  groupName: string | string[]
+  members: string[]
+  messages?: MessageData[]
+}
+
+interface MessageData {
+  message: string | string[]
+}
 
 /**
  * Structure for actors selected for a game
  */
 interface SelectedActorsByTier {
-  mains: SelectedActor[];
-  supporting: SelectedActor[];
-  extras: SelectedActor[];
+  mains: SelectedActor[]
+  supporting: SelectedActor[]
+  extras: SelectedActor[]
 }
 
 /**
  * Generate context from previous month's game (compact format)
  */
 function generatePreviousMonthContext(previousHistory: GameHistory[]): string {
-  if (previousHistory.length === 0) return '';
+  if (previousHistory.length === 0) return ''
 
-  const lastGame = previousHistory[previousHistory.length - 1]!;
+  const lastGame = previousHistory[previousHistory.length - 1]
+  if (!lastGame) return ''
+
   const outcomes = lastGame.keyOutcomes
     .map(
-      (o) => `${o.questionText.substring(0, 40)}...→${o.outcome ? 'Y' : 'N'}`
+      (o) => `${o.questionText.substring(0, 40)}...→${o.outcome ? 'Y' : 'N'}`,
     )
-    .join(' | ');
+    .join(' | ')
 
-  return `PREV_MONTH: ${lastGame.summary.substring(0, 100)}... | OUTCOMES: ${outcomes}`;
+  return `PREV_MONTH: ${lastGame.summary.substring(0, 100)}... | OUTCOMES: ${outcomes}`
 }
 
 /**
@@ -116,22 +172,22 @@ function generateCurrentMonthContext(
   mainActors: SelectedActor[],
   scenarios: Scenario[],
   questions: Question[],
-  day: number
+  day: number,
 ): string {
   const actors = mainActors
     .map((a) => `${a.name}[${a.affiliations?.join(',') || 'ind'}]`)
-    .join(', ');
-  const scenarioList = scenarios.map((s) => s.title).join(', ');
+    .join(', ')
+  const scenarioList = scenarios.map((s) => s.title).join(', ')
   const questionList = questions
     .slice(0, 5)
     .map((q) => `"${q.text.substring(0, 40)}..."`)
-    .join(' | ');
+    .join(' | ')
   const orgs = scenarios
     .flatMap((s) => s.involvedOrganizations)
     .filter((v, i, a) => a.indexOf(v) === i)
-    .join(', ');
+    .join(', ')
 
-  return `DAY ${day}/30 | ACTORS: ${actors} | SCENARIOS: ${scenarioList} | QUESTIONS: ${questionList} | ORGS: ${orgs}`;
+  return `DAY ${day}/30 | ACTORS: ${actors} | SCENARIOS: ${scenarioList} | QUESTIONS: ${questionList} | ORGS: ${orgs}`
 }
 
 /**
@@ -144,12 +200,12 @@ function generateDaySummariesContext(previousDays: DayTimeline[]): string {
       const events = d.events
         .slice(0, 2)
         .map((e) => e.description.substring(0, 30))
-        .join('; ');
-      return `D${d.day}:${d.summary.substring(0, 40)}...[${events}]`;
+        .join('; ')
+      return `D${d.day}:${d.summary.substring(0, 40)}...[${events}]`
     })
-    .join(' | ');
+    .join(' | ')
 
-  return `HISTORY(last5): ${summaries}`;
+  return `HISTORY(last5): ${summaries}`
 }
 
 /**
@@ -159,54 +215,54 @@ function getActorGroupContext(
   actorId: string,
   allGroups: GroupChat[],
   previousDays: DayTimeline[],
-  allActors: SelectedActor[]
+  allActors: SelectedActor[],
 ): string {
-  const memberOf = allGroups.filter((g) => g.members.includes(actorId));
-  if (memberOf.length === 0) return '';
+  const memberOf = allGroups.filter((g) => g.members.includes(actorId))
+  if (memberOf.length === 0) return ''
 
   const groupContexts = memberOf
     .slice(0, 3)
     .map((group) => {
-      const recentMessages: string[] = [];
+      const recentMessages: string[] = []
 
       for (
         let i = previousDays.length - 1;
         i >= Math.max(0, previousDays.length - 2);
         i--
       ) {
-        const dayData = previousDays[i];
-        if (!dayData) continue;
+        const dayData = previousDays[i]
+        if (!dayData) continue
 
-        const msgs = dayData.groupChats?.[group.id] || [];
+        const msgs = dayData.groupChats?.[group.id] || []
         msgs.slice(-2).forEach((msg: GroupChatMessage) => {
-          const actor = allActors.find((a) => a.id === msg.from);
+          const actor = allActors.find((a) => a.id === msg.from)
           const content =
             msg.message.length > 40
-              ? msg.message.substring(0, 40) + '...'
-              : msg.message;
-          recentMessages.push(`${actor?.name || msg.from}:"${content}"`);
-        });
+              ? `${msg.message.substring(0, 40)}...`
+              : msg.message
+          recentMessages.push(`${actor?.name || msg.from}:"${content}"`)
+        })
       }
 
       const members = group.members
         .map((id) => allActors.find((a) => a.id === id)?.name || id)
         .filter(
-          (name) => name !== allActors.find((a) => a.id === actorId)?.name
+          (name) => name !== allActors.find((a) => a.id === actorId)?.name,
         )
         .slice(0, 3)
-        .join(',');
+        .join(',')
 
-      return `${group.name}[${members}]${recentMessages.length > 0 ? ':' + recentMessages.join('|') : ''}`;
+      return `${group.name}[${members}]${recentMessages.length > 0 ? `:${recentMessages.join('|')}` : ''}`
     })
-    .join(' | ');
+    .join(' | ')
 
-  return `GROUPS: ${groupContexts}`;
+  return `GROUPS: ${groupContexts}`
 }
 
 export async function createScenarioPrompt(
   mainActors: Actor[],
   organizations?: Organization[],
-  gameId?: string
+  gameId?: string,
 ) {
   const organizationContext =
     organizations && organizations.length > 0
@@ -244,42 +300,42 @@ Organizations should:
 - Drive scenarios (e.g., MSDNC breaks exclusive story with leaked documents)
 - Create conflicts (e.g., The Fud investigates, company issues denial)
 `
-      : '';
+      : ''
 
   const mainActorsList = mainActors
     .map(
       (a) =>
-        `- ${a.name}: ${a.description} (Domain: ${a.domain})${a.affiliations?.length ? ` [Affiliated: ${a.affiliations.join(', ')}]` : ''}`
+        `- ${a.name}: ${a.description} (Domain: ${a.domain})${a.affiliations?.length ? ` [Affiliated: ${a.affiliations.join(', ')}]` : ''}`,
     )
-    .join('\n');
+    .join('\n')
 
   // Build rich game context if we have a gameId (for continuous games)
-  let richGameContextText = '';
+  let richGameContextText = ''
   if (gameId) {
     const richContext = await buildRichGameContext(1, gameId, {
       includeEventHistory: true,
       includeFeedHistory: false, // No feed history for scenario generation
       maxEvents: 50,
-    });
+    })
     richGameContextText = formatRichGameContext(richContext, {
       includeEventTimeline: true,
       includeFeedHistory: false,
       includeResolvedQuestions: true,
       includeNarrativeThreads: true,
-    });
+    })
   }
 
   return renderPrompt(scenariosPrompt, {
     mainActorsList,
     organizationContext,
     richGameContext: richGameContextText,
-  });
+  })
 }
 
 export async function createQuestionPrompt(
   scenarios: Scenario[],
   organizations?: Organization[],
-  gameId?: string
+  gameId?: string,
 ) {
   const organizationContext =
     organizations && organizations.length > 0
@@ -293,7 +349,7 @@ You can create questions about organizational responses, not just actors:
 
 Available organizations: ${organizations.map((o) => `${o.name} (${o.type})`).join(', ')}
 `
-      : '';
+      : ''
 
   const scenariosList = scenarios
     .map(
@@ -302,35 +358,35 @@ Scenario ${s.id}: ${s.title}
 ${s.description}
 Actors: ${s.mainActors.join(', ')}
 ${s.involvedOrganizations?.length ? `Organizations: ${s.involvedOrganizations.join(', ')}` : ''}
-`
+`,
     )
-    .join('\n');
+    .join('\n')
 
   // Build rich game context if we have a gameId (for continuous games)
-  let richGameContextText = '';
+  let richGameContextText = ''
   if (gameId) {
     const richContext = await buildRichGameContext(1, gameId, {
       includeEventHistory: true,
       includeFeedHistory: false, // No feed history for question generation
       maxEvents: 50,
-    });
+    })
     richGameContextText = formatRichGameContext(richContext, {
       includeEventTimeline: true,
       includeFeedHistory: false,
       includeResolvedQuestions: true,
       includeNarrativeThreads: true,
-    });
+    })
   }
 
   return renderPrompt(questionsPrompt, {
     scenariosList,
     organizationContext,
     richGameContext: richGameContextText,
-  });
+  })
 }
 
 // Organization types
-export type OrganizationType = 'company' | 'media' | 'government';
+export type OrganizationType = 'company' | 'media' | 'government'
 
 // Organization behavioral patterns
 export enum OrganizationBehavior {
@@ -350,7 +406,6 @@ export enum OrganizationBehavior {
   GOVT_ANNOUNCES_POLICY = 'govt_announces_policy',
 }
 
-// Re-export types for backwards compatibility with external consumers
 export type {
   GeneratedGame,
   GameSetup,
@@ -368,10 +423,10 @@ export type {
   QuestionOutcome,
   GameHistory,
   GenesisGame,
-};
+}
 
 // Static data registry for actors and organizations
-import { StaticDataRegistry } from './services/static-data-registry';
+import { StaticDataRegistry } from './services/static-data-registry'
 
 /**
  * Main Game Generator
@@ -379,24 +434,24 @@ import { StaticDataRegistry } from './services/static-data-registry';
  * Orchestrates complete LLM-driven game generation
  */
 export class GameGenerator {
-  private llm: BabylonLLMClient;
-  private gameId?: string;
-  private feedGenerator: FeedGenerator;
-  private trendingTopics: TrendingTopicsEngine;
-  private recentPosts: FeedPost[] = [];
-  private tickCount = 0;
-  private gameHistory: GameHistory[] = [];
+  private llm: BabylonLLMClient
+  private gameId?: string
+  private feedGenerator: FeedGenerator
+  private trendingTopics: TrendingTopicsEngine
+  private recentPosts: FeedPost[] = []
+  private tickCount = 0
+  private gameHistory: GameHistory[] = []
 
   constructor(apiKey?: string, previousHistory?: GameHistory[]) {
     // Use game tick LLM client (Priority: Groq > Claude > OpenAI)
     // If apiKey is provided, use OpenAI explicitly, otherwise use forGameTick()
     this.llm = apiKey
       ? BabylonLLMClient.forOpenAI(apiKey)
-      : BabylonLLMClient.forGameTick();
-    this.feedGenerator = new FeedGenerator(this.llm); // Pass LLM to FeedGenerator
-    this.trendingTopics = new TrendingTopicsEngine(this.llm);
-    this.feedGenerator.setTrendingTopics(this.trendingTopics);
-    this.gameHistory = previousHistory || [];
+      : BabylonLLMClient.forGameTick()
+    this.feedGenerator = new FeedGenerator(this.llm) // Pass LLM to FeedGenerator
+    this.trendingTopics = new TrendingTopicsEngine(this.llm)
+    this.feedGenerator.setTrendingTopics(this.trendingTopics)
+    this.gameHistory = previousHistory || []
   }
 
   /**
@@ -404,87 +459,87 @@ export class GameGenerator {
    * @param preGenerateDays - Number of days to pre-generate (for first game initialization)
    */
   async generateCompleteGame(startDate = '2025-11-01'): Promise<GeneratedGame> {
-    const gameNumber = this.gameHistory.length + 1;
-    this.gameId = `game-${Date.now()}-${gameNumber}`;
+    const gameNumber = this.gameHistory.length + 1
+    this.gameId = `game-${Date.now()}-${gameNumber}`
 
     logger.info(
       `GENERATING BABYLON GAME #${gameNumber}...`,
       undefined,
-      'GameGenerator'
-    );
-    logger.info(`Start date: ${startDate}`, undefined, 'GameGenerator');
-    logger.info('Duration: 30 days', undefined, 'GameGenerator');
+      'GameGenerator',
+    )
+    logger.info(`Start date: ${startDate}`, undefined, 'GameGenerator')
+    logger.info('Duration: 30 days', undefined, 'GameGenerator')
     if (this.gameHistory.length > 0) {
       logger.info(
         `Loading ${this.gameHistory.length} previous game(s) as context`,
         undefined,
-        'GameGenerator'
-      );
+        'GameGenerator',
+      )
     } else {
       logger.info(
         'First game - no previous context',
         undefined,
-        'GameGenerator'
-      );
+        'GameGenerator',
+      )
     }
-    logger.info('================================', undefined, 'GameGenerator');
+    logger.info('================================', undefined, 'GameGenerator')
 
     // Phase 1: Actor Selection
-    logger.info('Phase 1: Selecting actors...', undefined, 'GameGenerator');
-    const selectedActors = this.selectActors();
+    logger.info('Phase 1: Selecting actors...', undefined, 'GameGenerator')
+    const selectedActors = this.selectActors()
     logger.info(
       `Selected ${selectedActors.mains.length} main actors`,
       undefined,
-      'GameGenerator'
-    );
+      'GameGenerator',
+    )
     logger.info(
       `Selected ${selectedActors.supporting.length} supporting actors`,
       undefined,
-      'GameGenerator'
-    );
+      'GameGenerator',
+    )
     logger.info(
       `Selected ${selectedActors.extras.length} extras`,
       undefined,
-      'GameGenerator'
-    );
+      'GameGenerator',
+    )
 
     if (selectedActors.mains.length > 0) {
       logger.info(
         'Main cast:',
         selectedActors.mains.map(
-          (a) => `${a.name} - ${(a.description || '').substring(0, 60)}...`
+          (a) => `${a.name} - ${(a.description || '').substring(0, 60)}...`,
         ),
-        'GameGenerator'
-      );
+        'GameGenerator',
+      )
     }
 
     // Phase 2: Scenario & Question Generation
     logger.info(
       'Phase 2: Generating scenarios & questions...',
       undefined,
-      'GameGenerator'
-    );
+      'GameGenerator',
+    )
 
     // Extract organizations first for context
-    const organizations = this.extractOrganizations(selectedActors);
+    const organizations = this.extractOrganizations(selectedActors)
 
     // ✅ NEW: Generate NPC personas for consistency and learnability
     logger.info(
       'Generating NPC personas for consistency...',
       undefined,
-      'GameGenerator'
-    );
+      'GameGenerator',
+    )
     const allActors = [
       ...selectedActors.mains,
       ...selectedActors.supporting,
       ...selectedActors.extras,
-    ];
-    const personaGenerator = new NPCPersonaGenerator();
-    const personas = personaGenerator.assignPersonas(allActors, organizations);
+    ]
+    const personaGenerator = new NPCPersonaGenerator()
+    const personas = personaGenerator.assignPersonas(allActors, organizations)
 
     // Apply personas to actors
     for (const actor of allActors) {
-      const persona = personas.get(actor.id);
+      const persona = personas.get(actor.id)
       if (persona) {
         actor.persona = {
           reliability: persona.reliability,
@@ -496,7 +551,7 @@ export class GameGenerator {
           opposesActors: persona.opposesActors,
           favorsOrgs: persona.favorsOrgs,
           opposesOrgs: persona.opposesOrgs,
-        };
+        }
       }
     }
 
@@ -506,52 +561,52 @@ export class GameGenerator {
         avgReliability: (
           Array.from(personas.values()).reduce(
             (sum, p) => sum + p.reliability,
-            0
+            0,
           ) / personas.size
         ).toFixed(2),
         insiders: Array.from(personas.values()).filter(
-          (p) => p.insiderOrgs.length > 0
+          (p) => p.insiderOrgs.length > 0,
         ).length,
         liars: Array.from(personas.values()).filter((p) => p.willingToLie)
           .length,
       },
-      'GameGenerator'
-    );
+      'GameGenerator',
+    )
 
     const scenarios = await this.generateScenarios(
       selectedActors.mains,
-      organizations
-    );
+      organizations,
+    )
     logger.info(
       `Generated ${scenarios.length} scenarios`,
       undefined,
-      'GameGenerator'
-    );
+      'GameGenerator',
+    )
 
-    const questions = await this.generateQuestions(scenarios, organizations);
+    const questions = await this.generateQuestions(scenarios, organizations)
     logger.info(
       `Generated ${questions.length} questions total`,
       undefined,
-      'GameGenerator'
-    );
+      'GameGenerator',
+    )
 
-    const topQuestions = await this.rankAndSelectQuestions(questions);
-    logger.info('Selected top 3 questions', undefined, 'GameGenerator');
+    const topQuestions = await this.rankAndSelectQuestions(questions)
+    logger.info('Selected top 3 questions', undefined, 'GameGenerator')
 
     // ✅ NEW: Generate arc plans for selected questions (ensures learnable information gradient)
     logger.info(
       'Generating arc plans for questions...',
       undefined,
-      'GameGenerator'
-    );
-    const arcPlanner = new QuestionArcPlanner();
+      'GameGenerator',
+    )
+    const arcPlanner = new QuestionArcPlanner()
 
     for (const question of topQuestions) {
       const arcPlan = arcPlanner.planQuestionArc(
         question,
         allActors,
-        organizations
-      );
+        organizations,
+      )
 
       // Store arc plan in question metadata
       question.metadata = {
@@ -562,59 +617,59 @@ export class GameGenerator {
           insiders: arcPlan.insiders,
           deceivers: arcPlan.deceivers,
         },
-      };
+      }
     }
     logger.info(
       'Arc plans generated for all questions',
       undefined,
-      'GameGenerator'
-    );
+      'GameGenerator',
+    )
 
     // Phase 3: World Building
-    logger.info('Phase 3: Building world...', undefined, 'GameGenerator');
-    const connections = this.generateConnections(selectedActors);
+    logger.info('Phase 3: Building world...', undefined, 'GameGenerator')
+    const connections = this.generateConnections(selectedActors)
     logger.info(
       `Generated ${connections.length} actor relationships`,
       undefined,
-      'GameGenerator'
-    );
+      'GameGenerator',
+    )
 
-    const groupChats = await this.createGroupChats(selectedActors, connections);
+    const groupChats = await this.createGroupChats(selectedActors, connections)
     logger.info(
       `Created ${groupChats.length} group chats`,
       undefined,
-      'GameGenerator'
-    );
+      'GameGenerator',
+    )
 
-    const luckMood = this.initializeLuckMood(selectedActors);
+    const luckMood = this.initializeLuckMood(selectedActors)
     logger.info(
       `Initialized luck & mood for ${luckMood.size} actors`,
       undefined,
-      'GameGenerator'
-    );
+      'GameGenerator',
+    )
 
     // Phase 4: 30-Day Timeline Generation
     logger.info(
       'Phase 4: Generating 30-day timeline...',
       undefined,
-      'GameGenerator'
-    );
-    const timeline: DayTimeline[] = [];
-    const gameStartDate = new Date(startDate);
+      'GameGenerator',
+    )
+    const timeline: DayTimeline[] = []
+    const gameStartDate = new Date(startDate)
 
     // Set organizations in FeedGenerator once before timeline generation
-    this.feedGenerator.setOrganizations(organizations);
+    this.feedGenerator.setOrganizations(organizations)
 
     // ✅ NEW: Set NPC personas in FeedGenerator for consistent behavior
-    this.feedGenerator.setNPCPersonas(personas);
+    this.feedGenerator.setNPCPersonas(personas)
 
     for (let day = 1; day <= 30; day++) {
-      const currentDate = new Date(gameStartDate);
-      currentDate.setDate(gameStartDate.getDate() + (day - 1));
-      const dateStr = currentDate.toISOString().split('T')[0]!;
+      const currentDate = new Date(gameStartDate)
+      currentDate.setDate(gameStartDate.getDate() + (day - 1))
+      const dateStr = currentDate.toISOString().split('T')[0] ?? ''
 
-      const phase = this.getPhase(day);
-      process.stdout.write(`  [${dateStr}] ${phase.padEnd(12)} `);
+      const phase = this.getPhase(day)
+      process.stdout.write(`  [${dateStr}] ${phase.padEnd(12)} `)
 
       const dayTimeline = await this.generateDay(
         day,
@@ -625,25 +680,21 @@ export class GameGenerator {
         timeline,
         luckMood,
         dateStr,
-        connections
-      );
+        connections,
+      )
 
-      timeline.push(dayTimeline);
+      timeline.push(dayTimeline)
       logger.debug(
         `[${dateStr}] ${phase} - ${dayTimeline.events.length} events, ${dayTimeline.feedPosts.length} posts`,
         undefined,
-        'GameGenerator'
-      );
+        'GameGenerator',
+      )
     }
 
     // Phase 5: Resolution
-    logger.info(
-      'Phase 5: Generating resolution...',
-      undefined,
-      'GameGenerator'
-    );
-    const resolution = this.generateResolution(topQuestions, timeline);
-    logger.info('All questions resolved', undefined, 'GameGenerator');
+    logger.info('Phase 5: Generating resolution...', undefined, 'GameGenerator')
+    const resolution = this.generateResolution(topQuestions, timeline)
+    logger.info('All questions resolved', undefined, 'GameGenerator')
 
     // Organizations already extracted earlier for prompt generation
     const game: GeneratedGame = {
@@ -662,37 +713,37 @@ export class GameGenerator {
       },
       timeline,
       resolution,
-    };
+    }
 
     // Calculate totals
     const totalEvents = timeline.reduce(
       (sum, day) => sum + day.events.length,
-      0
-    );
+      0,
+    )
     const totalPosts = timeline.reduce(
       (sum, day) => sum + day.feedPosts.length,
-      0
-    );
+      0,
+    )
     const totalGroupMessages = timeline.reduce((sum, day) => {
-      return sum + Object.values(day.groupChats).flat().length;
-    }, 0);
+      return sum + Object.values(day.groupChats).flat().length
+    }, 0)
 
-    logger.info('GENERATION COMPLETE', undefined, 'GameGenerator');
-    logger.info('======================', undefined, 'GameGenerator');
+    logger.info('GENERATION COMPLETE', undefined, 'GameGenerator')
+    logger.info('======================', undefined, 'GameGenerator')
     logger.info(
       `Total actors: ${selectedActors.mains.length + selectedActors.supporting.length + selectedActors.extras.length}`,
       undefined,
-      'GameGenerator'
-    );
-    logger.info(`Total events: ${totalEvents}`, undefined, 'GameGenerator');
-    logger.info(`Total feed posts: ${totalPosts}`, undefined, 'GameGenerator');
+      'GameGenerator',
+    )
+    logger.info(`Total events: ${totalEvents}`, undefined, 'GameGenerator')
+    logger.info(`Total feed posts: ${totalPosts}`, undefined, 'GameGenerator')
     logger.info(
       `Total group messages: ${totalGroupMessages}`,
       undefined,
-      'GameGenerator'
-    );
+      'GameGenerator',
+    )
 
-    return game;
+    return game
   }
 
   /**
@@ -701,85 +752,85 @@ export class GameGenerator {
    * No questions, just events and social media to establish baseline
    */
   async generateGenesis(): Promise<GenesisGame> {
-    logger.info('GENERATING GENESIS GAME...', undefined, 'GameGenerator');
+    logger.info('GENERATING GENESIS GAME...', undefined, 'GameGenerator')
     logger.info(
       'October 2025 - World Initialization (30 days)',
       undefined,
-      'GameGenerator'
-    );
+      'GameGenerator',
+    )
     logger.info(
       '==============================================',
       undefined,
-      'GameGenerator'
-    );
+      'GameGenerator',
+    )
 
     // Select actors for the world
     logger.info(
       'Selecting actors for world initialization...',
       undefined,
-      'GameGenerator'
-    );
-    const selectedActors = this.selectActors();
+      'GameGenerator',
+    )
+    const selectedActors = this.selectActors()
     const allActors = [
       ...selectedActors.mains,
       ...selectedActors.supporting,
       ...selectedActors.extras,
-    ];
+    ]
     logger.info(
       `Selected ${allActors.length} actors`,
       undefined,
-      'GameGenerator'
-    );
+      'GameGenerator',
+    )
 
     // Create relationships
-    const connections = this.generateConnections(selectedActors);
+    const connections = this.generateConnections(selectedActors)
 
     // Create group chats
-    const groupChats = await this.createGroupChats(selectedActors, connections);
+    const groupChats = await this.createGroupChats(selectedActors, connections)
     logger.info(
       `Created ${groupChats.length} group chats`,
       undefined,
-      'GameGenerator'
-    );
+      'GameGenerator',
+    )
 
     // Initialize luck and mood
-    const luckMood = this.initializeLuckMood(selectedActors);
+    const luckMood = this.initializeLuckMood(selectedActors)
 
     // Generate 30 days: October 1-31, 2025
     logger.info(
       'Generating October 1-31, 2025 (30 days)...',
       undefined,
-      'GameGenerator'
-    );
-    const timeline: DayTimeline[] = [];
-    const startDate = new Date('2025-10-01');
+      'GameGenerator',
+    )
+    const timeline: DayTimeline[] = []
+    const startDate = new Date('2025-10-01')
 
     for (let day = 1; day <= 30; day++) {
-      const currentDate = new Date(startDate);
-      currentDate.setDate(startDate.getDate() + (day - 1));
-      const dateStr = currentDate.toISOString().split('T')[0]!;
+      const currentDate = new Date(startDate)
+      currentDate.setDate(startDate.getDate() + (day - 1))
+      const dateStr = currentDate.toISOString().split('T')[0] ?? ''
 
-      process.stdout.write(`  [${dateStr}] `);
+      process.stdout.write(`  [${dateStr}] `)
 
       // Generate baseline events (no questions, just world activity)
-      const events = await this.generateGenesisEvents(day, allActors, dateStr);
+      const events = await this.generateGenesisEvents(day, allActors, dateStr)
 
       // Generate luck and mood changes based on events
       const luckChanges = this.generateLuckChanges(
         day,
         events,
         allActors,
-        luckMood
-      );
+        luckMood,
+      )
       const moodChanges = this.generateMoodChanges(
         day,
         events,
         allActors,
-        luckMood
-      );
+        luckMood,
+      )
 
       // Apply ambient mood drift with correct parameters
-      this.applyAmbientMoodDrift(allActors, luckMood);
+      this.applyAmbientMoodDrift(allActors, luckMood)
 
       // Generate feed posts (no outcome parameter - prevents leakage)
       const feedPosts = await this.feedGenerator.generateDayFeed(
@@ -792,18 +843,15 @@ export class GameGenerator {
           actors: e.actors,
           visibility: e.visibility,
         })),
-        allActors
-      );
+        allActors,
+      )
 
       // Update trending topics with new posts
-      this.tickCount++;
+      this.tickCount++
       if (feedPosts.length > 0) {
-        this.recentPosts = [...this.recentPosts, ...feedPosts].slice(-200);
-        await this.trendingTopics.updateTrends(
-          this.recentPosts,
-          this.tickCount
-        );
-        this.feedGenerator.updateTrendContext();
+        this.recentPosts = [...this.recentPosts, ...feedPosts].slice(-200)
+        await this.trendingTopics.updateTrends(this.recentPosts, this.tickCount)
+        this.feedGenerator.updateTrendContext()
       }
 
       // Generate group messages using batched method
@@ -819,8 +867,8 @@ export class GameGenerator {
         [], // scenarios - empty for genesis
         [], // questions - empty for genesis
         '', // fullContext - empty for genesis
-        this.gameId || undefined
-      );
+        this.gameId || undefined,
+      )
 
       timeline.push({
         day,
@@ -830,13 +878,13 @@ export class GameGenerator {
         feedPosts,
         luckChanges,
         moodChanges,
-      });
+      })
 
       logger.debug(
         `[${dateStr}] ${events.length} events, ${feedPosts.length} posts, ${luckChanges.length + moodChanges.length} state changes`,
         undefined,
-        'GameGenerator'
-      );
+        'GameGenerator',
+      )
     }
 
     const genesis: GenesisGame = {
@@ -851,27 +899,27 @@ export class GameGenerator {
       timeline,
       summary:
         'World initialization - October 2025 (30 days). Normal activity establishing baseline.',
-    };
+    }
 
-    logger.info('GENESIS COMPLETE', undefined, 'GameGenerator');
-    logger.info('===================', undefined, 'GameGenerator');
+    logger.info('GENESIS COMPLETE', undefined, 'GameGenerator')
+    logger.info('===================', undefined, 'GameGenerator')
     logger.info(
       `Total events: ${timeline.reduce((sum, day) => sum + day.events.length, 0)}`,
       undefined,
-      'GameGenerator'
-    );
+      'GameGenerator',
+    )
     logger.info(
       `Total posts: ${timeline.reduce((sum, day) => sum + day.feedPosts.length, 0)}`,
       undefined,
-      'GameGenerator'
-    );
+      'GameGenerator',
+    )
     logger.info(
       `Total state changes: ${timeline.reduce((sum, day) => sum + day.luckChanges.length + day.moodChanges.length, 0)}`,
       undefined,
-      'GameGenerator'
-    );
+      'GameGenerator',
+    )
 
-    return genesis;
+    return genesis
   }
 
   /**
@@ -880,30 +928,28 @@ export class GameGenerator {
   private async generateGenesisEvents(
     day: number,
     allActors: SelectedActor[],
-    dateStr: string
+    dateStr: string,
   ): Promise<WorldEvent[]> {
-    const events: WorldEvent[] = [];
-    const eventCount = 2 + Math.floor(Math.random() * 2); // 2-3 events per day
+    const events: WorldEvent[] = []
+    const eventCount = 2 + Math.floor(Math.random() * 2) // 2-3 events per day
     const eventTypes: Array<WorldEvent['type']> = [
       'meeting',
       'announcement',
       'deal',
-    ];
+    ]
 
     for (let i = 0; i < eventCount; i++) {
-      const type = eventTypes[Math.floor(Math.random() * eventTypes.length)]!;
+      const type =
+        eventTypes[Math.floor(Math.random() * eventTypes.length)] ?? 'meeting'
       const numActorsInvolved =
-        type === 'meeting' ? 2 + Math.floor(Math.random() * 2) : 1;
-      const involvedActors = shuffleArray(allActors).slice(
-        0,
-        numActorsInvolved
-      );
+        type === 'meeting' ? 2 + Math.floor(Math.random() * 2) : 1
+      const involvedActors = shuffleArray(allActors).slice(0, numActorsInvolved)
 
       const description = await this.generateBaselineEvent(
         type,
         involvedActors,
-        dateStr
-      );
+        dateStr,
+      )
 
       events.push({
         id: `genesis-${day}-${i}`,
@@ -914,10 +960,10 @@ export class GameGenerator {
         relatedQuestion: null,
         pointsToward: null,
         visibility: 'public',
-      });
+      })
     }
 
-    return events;
+    return events
   }
 
   /**
@@ -926,17 +972,17 @@ export class GameGenerator {
   private async generateBaselineEvent(
     type: WorldEvent['type'],
     actors: SelectedActor[],
-    dateStr: string
+    dateStr: string,
   ): Promise<string> {
     const actorDescriptions = actors
       .map((a) => `${a.name} (${a.description})`)
-      .join(', ');
+      .join(', ')
 
     const prompt = renderPrompt(baselineEvent, {
       dateStr,
       eventType: type,
       actorDescriptions,
-    });
+    })
 
     const rawResponse = await this.llm.generateJSON<
       { event: string } | { response: { event: string } }
@@ -944,20 +990,16 @@ export class GameGenerator {
       temperature: 0.7,
       maxTokens: 5000,
       promptType: 'generate_baseline_event',
-    });
+    })
 
     // Handle null/undefined or non-object response
     if (!rawResponse || typeof rawResponse !== 'object') {
-      return `${actors[0]?.name || 'Actor'} ${type}`;
+      return `${actors[0]?.name || 'Actor'} ${type}`
     }
 
-    // Handle XML structure
-    const response =
-      'response' in rawResponse && rawResponse.response
-        ? rawResponse.response
-        : (rawResponse as { event: string });
-
-    return response.event || `${actors[0]?.name || 'Actor'} ${type}`;
+    // Handle XML structure - unwrap nested response
+    const response = unwrapLLMResponse<{ event: string }>(rawResponse)
+    return response?.event || `${actors[0]?.name || 'Actor'} ${type}`
   }
 
   /**
@@ -968,42 +1010,40 @@ export class GameGenerator {
       .flatMap((day) => day.events)
       .filter((e) => e.pointsToward !== null)
       .slice(0, 10)
-      .map((e) => e.description);
+      .map((e) => e.description)
 
     const topMoments = game.timeline
       .flatMap((day) => day.feedPosts)
       .sort((a, b) => Math.abs(b.sentiment ?? 0) - Math.abs(a.sentiment ?? 0))
       .slice(0, 5)
-      .map((p) => `${p.authorName}: "${p.content}"`);
+      .map((p) => `${p.authorName}: "${p.content}"`)
 
     return {
       gameNumber: this.gameHistory.length + 1,
       completedAt: new Date().toISOString(),
       summary: game.resolution.finalNarrative,
       keyOutcomes: game.resolution.outcomes.map((o) => {
-        const question = game.setup.questions.find(
-          (q) => q.id === o.questionId
-        );
+        const question = game.setup.questions.find((q) => q.id === o.questionId)
         return {
           questionText: question?.text || '',
           outcome: o.answer,
           explanation: o.explanation,
-        };
+        }
       }),
       highlights,
       topMoments,
-    };
+    }
   }
 
   /**
    * Get game history context for prompts
    */
   private getHistoryContext(): string {
-    let context = '';
+    let context = ''
 
     // Add previous game history
     if (this.gameHistory.length > 0) {
-      const recent = this.gameHistory.slice(-2); // Last 2 games
+      const recent = this.gameHistory.slice(-2) // Last 2 games
       context += `Previous games:
 ${recent
   .map(
@@ -1011,20 +1051,20 @@ ${recent
 Game #${h.gameNumber}:
 Summary: ${h.summary}
 Key outcomes: ${h.keyOutcomes.map((o) => `${o.questionText} → ${o.outcome ? 'YES' : 'NO'}`).join('; ')}
-`
+`,
   )
   .join('\n')}
-`;
+`
     }
 
     if (!context) {
-      return 'This is the first game.';
+      return 'This is the first game.'
     }
 
     return (
       context +
       "\nBuild on this history naturally - reference past events, create continuity, but don't contradict what happened."
-    );
+    )
   }
 
   /**
@@ -1034,7 +1074,7 @@ Key outcomes: ${h.keyOutcomes.map((o) => `${o.questionText} → ${o.outcome ? 'Y
     a: ReturnType<typeof StaticDataRegistry.getAllActors>[0],
     role: string,
     initialLuck: 'low' | 'medium' | 'high',
-    initialMood: number
+    initialMood: number,
   ): SelectedActor {
     return {
       id: a.id,
@@ -1046,18 +1086,18 @@ Key outcomes: ${h.keyOutcomes.map((o) => `${o.questionText} → ${o.outcome ? 'Y
       affiliations: a.affiliations,
       postStyle: a.postStyle,
       postExample: a.postExample,
-      tier: a.tier as ActorTier,
+      tier: toActorTier(a.tier),
       initialLuck,
       initialMood,
       profileImageUrl: a.profileImageUrl,
-    };
+    }
   }
 
   /**
    * Convert StaticOrganization to Organization with proper typing
    */
   private staticToOrganization(
-    o: ReturnType<typeof StaticDataRegistry.getAllOrganizations>[0]
+    o: ReturnType<typeof StaticDataRegistry.getAllOrganizations>[0],
   ): Organization {
     return {
       id: o.id,
@@ -1066,8 +1106,8 @@ Key outcomes: ${h.keyOutcomes.map((o) => `${o.questionText} → ${o.outcome ? 'Y
       description: o.description,
       type: o.type,
       canBeInvolved: o.canBeInvolved,
-      initialPrice: o.initialPrice ?? undefined,
-    };
+      initialPrice: o.initialPrice,
+    }
   }
 
   /**
@@ -1075,7 +1115,7 @@ Key outcomes: ${h.keyOutcomes.map((o) => `${o.questionText} → ${o.outcome ? 'Y
    * Prioritizes S/A tier for mains, mixed tiers for supporting, C/D for extras
    */
   private selectActors() {
-    const allActors = StaticDataRegistry.getAllActors();
+    const allActors = StaticDataRegistry.getAllActors()
 
     // Weighted random selection - higher tiers have more weight
     const tierWeights: Record<string, number> = {
@@ -1084,24 +1124,25 @@ Key outcomes: ${h.keyOutcomes.map((o) => `${o.questionText} → ${o.outcome ? 'Y
       B_TIER: 3,
       C_TIER: 1,
       D_TIER: 0.5,
-    };
+    }
 
     // Create weighted pool for mains (heavily favor S/A tier)
     const mainPool = allActors.flatMap((a) =>
-      Array(Math.ceil(tierWeights[a.tier || 'C_TIER'] || 1)).fill(a)
-    );
-    const shuffledMains = shuffleArray(mainPool);
+      Array(Math.ceil(tierWeights[a.tier || 'C_TIER'] || 1)).fill(a),
+    )
+    const shuffledMains = shuffleArray(mainPool)
     const uniqueMains = Array.from(new Set(shuffledMains.map((a) => a.id)))
       .slice(0, 3)
-      .map((id) => allActors.find((a) => a.id === id)!)
+      .map((id) => allActors.find((a) => a.id === id))
+      .filter((a): a is NonNullable<typeof a> => a !== undefined)
       .map((a) =>
         this.staticToSelectedActor(
           a,
           'main',
           this.randomLuck(),
-          this.randomMood()
-        )
-      );
+          this.randomMood(),
+        ),
+      )
 
     // Create weighted pool for supporting (moderate favor for A/B tier)
     const supportWeights: Record<string, number> = {
@@ -1110,26 +1151,27 @@ Key outcomes: ${h.keyOutcomes.map((o) => `${o.questionText} → ${o.outcome ? 'Y
       B_TIER: 4,
       C_TIER: 2,
       D_TIER: 0.5,
-    };
+    }
     const supportPool = allActors
       .filter((a) => !uniqueMains.some((m) => m.id === a.id))
       .flatMap((a) =>
-        Array(Math.ceil(supportWeights[a.tier || 'C_TIER'] || 1)).fill(a)
-      );
-    const shuffledSupport = shuffleArray(supportPool);
+        Array(Math.ceil(supportWeights[a.tier || 'C_TIER'] || 1)).fill(a),
+      )
+    const shuffledSupport = shuffleArray(supportPool)
     const uniqueSupporting = Array.from(
-      new Set(shuffledSupport.map((a) => a.id))
+      new Set(shuffledSupport.map((a) => a.id)),
     )
       .slice(0, 15)
-      .map((id) => allActors.find((a) => a.id === id)!)
+      .map((id) => allActors.find((a) => a.id === id))
+      .filter((a): a is NonNullable<typeof a> => a !== undefined)
       .map((a) =>
         this.staticToSelectedActor(
           a,
           'supporting',
           this.randomLuck(),
-          this.randomMood()
-        )
-      );
+          this.randomMood(),
+        ),
+      )
 
     // Create weighted pool for extras (favor C/D tier)
     const extraWeights: Record<string, number> = {
@@ -1138,33 +1180,34 @@ Key outcomes: ${h.keyOutcomes.map((o) => `${o.questionText} → ${o.outcome ? 'Y
       B_TIER: 2,
       C_TIER: 4,
       D_TIER: 5,
-    };
+    }
     const usedIds = new Set(
-      [...uniqueMains, ...uniqueSupporting].map((a) => a.id)
-    );
+      [...uniqueMains, ...uniqueSupporting].map((a) => a.id),
+    )
     const extraPool = allActors
       .filter((a) => !usedIds.has(a.id))
       .flatMap((a) =>
-        Array(Math.ceil(extraWeights[a.tier || 'C_TIER'] || 1)).fill(a)
-      );
-    const shuffledExtras = shuffleArray(extraPool);
+        Array(Math.ceil(extraWeights[a.tier || 'C_TIER'] || 1)).fill(a),
+      )
+    const shuffledExtras = shuffleArray(extraPool)
     const uniqueExtras = Array.from(new Set(shuffledExtras.map((a) => a.id)))
       .slice(0, 50)
-      .map((id) => allActors.find((a) => a.id === id)!)
+      .map((id) => allActors.find((a) => a.id === id))
+      .filter((a): a is NonNullable<typeof a> => a !== undefined)
       .map((a) =>
         this.staticToSelectedActor(
           a,
           'extra',
           this.randomLuck(),
-          this.randomMood()
-        )
-      );
+          this.randomMood(),
+        ),
+      )
 
     return {
       mains: uniqueMains,
       supporting: uniqueSupporting,
       extras: uniqueExtras,
-    };
+    }
   }
 
   /**
@@ -1172,30 +1215,30 @@ Key outcomes: ${h.keyOutcomes.map((o) => `${o.questionText} → ${o.outcome ? 'Y
    * Weighs by actor tier and involvement
    */
   private extractOrganizations(selectedActors: {
-    mains: SelectedActor[];
-    supporting: SelectedActor[];
-    extras: SelectedActor[];
+    mains: SelectedActor[]
+    supporting: SelectedActor[]
+    extras: SelectedActor[]
   }): Organization[] {
     const allSelectedActors = [
       ...selectedActors.mains,
       ...selectedActors.supporting,
       ...selectedActors.extras,
-    ];
-    const orgIds = new Set<string>();
-    const orgWeights = new Map<string, number>();
+    ]
+    const orgIds = new Set<string>()
+    const orgWeights = new Map<string, number>()
 
     // Collect all affiliated organization IDs with weights
     for (const actor of allSelectedActors) {
-      if (!actor.affiliations) continue;
+      if (!actor.affiliations) continue
 
       // Weight by actor role
-      let weight = 1;
-      if (actor.role === 'main') weight = 3;
-      else if (actor.role === 'supporting') weight = 2;
+      let weight = 1
+      if (actor.role === 'main') weight = 3
+      else if (actor.role === 'supporting') weight = 2
 
       for (const orgId of actor.affiliations) {
-        orgIds.add(orgId);
-        orgWeights.set(orgId, (orgWeights.get(orgId) || 0) + weight);
+        orgIds.add(orgId)
+        orgWeights.set(orgId, (orgWeights.get(orgId) || 0) + weight)
       }
     }
 
@@ -1203,31 +1246,31 @@ Key outcomes: ${h.keyOutcomes.map((o) => `${o.questionText} → ${o.outcome ? 'Y
     const organizations = StaticDataRegistry.getAllOrganizations()
       .filter((org) => orgIds.has(org.id))
       .sort((a, b) => (orgWeights.get(b.id) || 0) - (orgWeights.get(a.id) || 0))
-      .map((o) => this.staticToOrganization(o));
+      .map((o) => this.staticToOrganization(o))
 
     logger.debug(
       `Extracted ${organizations.length} organizations (${organizations.filter((o) => o.type === 'company').length} companies, ${organizations.filter((o) => o.type === 'media').length} media, ${organizations.filter((o) => o.type === 'government').length} government)`,
       undefined,
-      'GameGenerator'
-    );
+      'GameGenerator',
+    )
 
-    return organizations;
+    return organizations
   }
 
   private randomLuck(): 'low' | 'medium' | 'high' {
-    const r = Math.random();
-    if (r < 0.3) return 'low';
-    if (r < 0.7) return 'medium';
-    return 'high';
+    const r = Math.random()
+    if (r < 0.3) return 'low'
+    if (r < 0.7) return 'medium'
+    return 'high'
   }
 
   private randomMood(): number {
-    return (Math.random() - 0.5) * 2; // -1 to 1
+    return (Math.random() - 0.5) * 2 // -1 to 1
   }
 
   public getActorTier(id: string): string {
-    const actor = StaticDataRegistry.getActor(id);
-    return actor ? actor.tier || 'D_TIER' : 'D_TIER';
+    const actor = StaticDataRegistry.getActor(id)
+    return actor ? actor.tier || 'D_TIER' : 'D_TIER'
   }
 
   /**
@@ -1235,20 +1278,20 @@ Key outcomes: ${h.keyOutcomes.map((o) => `${o.questionText} → ${o.outcome ? 'Y
    */
   private async generateScenarios(
     mains: SelectedActor[],
-    organizations: Organization[]
+    organizations: Organization[],
   ): Promise<Scenario[]> {
-    const historyContext = this.getHistoryContext();
+    const historyContext = this.getHistoryContext()
     // Remove explicit question lists from history context to improve LLM response quality
     const cleanHistoryContext = historyContext.replace(
       /Prediction outcomes from last month:[\s\S]*?Key moments:/,
-      'Key moments:'
-    );
+      'Key moments:',
+    )
 
     const basePrompt = await createScenarioPrompt(
       mains,
       organizations,
-      this.gameId
-    );
+      this.gameId,
+    )
     const prompt = `${basePrompt}
 
 PREVIOUS GAME HISTORY (Context only - do not repeat these questions):
@@ -1257,7 +1300,7 @@ ${cleanHistoryContext}
 If there's previous game history, reference it naturally (e.g., "After the events of last game...", "Following up on...").
 Otherwise, start fresh.
 
-REMINDER: Generate SCENARIOS only. Do NOT generate questions.`;
+REMINDER: Generate SCENARIOS only. Do NOT generate questions.`
 
     const rawResult = await this.llm.generateJSON<
       { scenarios: Scenario[] } | { response: { scenarios: Scenario[] } }
@@ -1265,19 +1308,19 @@ REMINDER: Generate SCENARIOS only. Do NOT generate questions.`;
       temperature: 0.9,
       maxTokens: 8000,
       promptType: 'generate_scenarios',
-    });
+    })
 
     if (!rawResult) {
       logger.error(
         'LLM returned null/undefined scenarios response',
         undefined,
-        'GameGenerator'
-      );
-      throw new Error('LLM returned no response for scenarios');
+        'GameGenerator',
+      )
+      throw new Error('LLM returned no response for scenarios')
     }
 
     // Handle XML structure - may be nested like { scenarios: { scenario: [...] } }
-    let scenarios: Scenario[];
+    let scenarios: Scenario[]
 
     if (
       typeof rawResult === 'object' &&
@@ -1294,11 +1337,11 @@ REMINDER: Generate SCENARIOS only. Do NOT generate questions.`;
         logger.error(
           'LLM returned response.questions instead of response.scenarios. Retrying with stricter prompt...',
           undefined,
-          'GameGenerator'
-        );
+          'GameGenerator',
+        )
 
         // Retry ONCE with a very strict prompt
-        const retryPrompt = `${prompt}\n\nSYSTEM: You returned questions instead of scenarios. Generate SCENARIOS only. The XML root must be <scenarios>. Do not generate <questions>.`;
+        const retryPrompt = `${prompt}\n\nSYSTEM: You returned questions instead of scenarios. Generate SCENARIOS only. The XML root must be <scenarios>. Do not generate <questions>.`
 
         const retryResult = await this.llm.generateJSON<
           { scenarios: Scenario[] } | { response: { scenarios: Scenario[] } }
@@ -1306,7 +1349,7 @@ REMINDER: Generate SCENARIOS only. Do NOT generate questions.`;
           temperature: 0.7,
           maxTokens: 8000,
           promptType: 'generate_scenarios_retry',
-        });
+        })
 
         if (
           retryResult &&
@@ -1314,74 +1357,70 @@ REMINDER: Generate SCENARIOS only. Do NOT generate questions.`;
             ('response' in retryResult && retryResult.response?.scenarios))
         ) {
           if ('scenarios' in retryResult) {
-            scenarios = retryResult.scenarios;
+            scenarios = retryResult.scenarios
           } else {
-            scenarios = (retryResult as { response: { scenarios: Scenario[] } })
-              .response.scenarios;
+            scenarios = (retryResult as ScenarioResponseWrapper).response
+              .scenarios
           }
         } else {
           throw new Error(
-            'LLM returned questions instead of scenarios. The prompt requires scenarios (with mainActors, involvedOrganizations, description), not questions. Please check the LLM response format.'
-          );
+            'LLM returned questions instead of scenarios. The prompt requires scenarios (with mainActors, involvedOrganizations, description), not questions. Please check the LLM response format.',
+          )
         }
       } else if (rawResult.response.scenarios) {
-        const responseSc = rawResult.response.scenarios;
+        const responseSc = rawResult.response.scenarios
         if (Array.isArray(responseSc)) {
-          scenarios = responseSc;
+          scenarios = responseSc
         } else if (typeof responseSc === 'object' && 'scenario' in responseSc) {
-          const nested = (responseSc as { scenario: Scenario[] | Scenario })
-            .scenario;
-          scenarios = Array.isArray(nested) ? nested : [nested];
+          const nested = (responseSc as NestedScenarioData).scenario
+          scenarios = Array.isArray(nested) ? nested : [nested]
         } else {
           logger.error(
             'Invalid scenarios in response:',
             JSON.stringify(responseSc, null, 2),
-            'GameGenerator'
-          );
-          throw new Error('LLM returned invalid scenarios in response');
+            'GameGenerator',
+          )
+          throw new Error('LLM returned invalid scenarios in response')
         }
       } else {
         logger.error(
           'Response object has neither scenarios nor questions:',
           JSON.stringify(rawResult.response, null, 2),
-          'GameGenerator'
-        );
-        throw new Error('LLM returned response object without scenarios');
+          'GameGenerator',
+        )
+        throw new Error('LLM returned response object without scenarios')
       }
     } else if (rawResult && 'scenarios' in rawResult && rawResult.scenarios) {
       if (Array.isArray(rawResult.scenarios)) {
-        scenarios = rawResult.scenarios;
+        scenarios = rawResult.scenarios
       } else if (
         typeof rawResult.scenarios === 'object' &&
         'scenario' in rawResult.scenarios
       ) {
-        const nested = (
-          rawResult.scenarios as { scenario: Scenario[] | Scenario }
-        ).scenario;
-        scenarios = Array.isArray(nested) ? nested : [nested];
+        const nested = (rawResult.scenarios as NestedScenarioData).scenario
+        scenarios = Array.isArray(nested) ? nested : [nested]
       } else {
         logger.error(
           'Invalid scenarios structure:',
           JSON.stringify(rawResult.scenarios, null, 2),
-          'GameGenerator'
-        );
-        throw new Error('LLM returned invalid scenarios structure');
+          'GameGenerator',
+        )
+        throw new Error('LLM returned invalid scenarios structure')
       }
     } else if (rawResult && 'scenario' in rawResult && rawResult.scenario) {
       // LLM returned singular 'scenario' instead of 'scenarios' - handle this common variation
-      const scenarioData = (rawResult as { scenario: Scenario[] | Scenario })
-        .scenario;
-      scenarios = Array.isArray(scenarioData) ? scenarioData : [scenarioData];
+      const scenarioData = (rawResult as NestedScenarioData).scenario
+      scenarios = Array.isArray(scenarioData) ? scenarioData : [scenarioData]
     } else if (rawResult && 'questions' in rawResult && rawResult.questions) {
       // LLM returned questions instead of scenarios - try to recover or fail gracefully
       logger.error(
         'LLM returned questions instead of scenarios. Retrying with stricter prompt...',
         undefined,
-        'GameGenerator'
-      );
+        'GameGenerator',
+      )
 
       // Retry ONCE with a very strict prompt
-      const retryPrompt = `${prompt}\n\nSYSTEM: You returned questions instead of scenarios. Generate SCENARIOS only. The XML root must be <scenarios>. Do not generate <questions>.`;
+      const retryPrompt = `${prompt}\n\nSYSTEM: You returned questions instead of scenarios. Generate SCENARIOS only. The XML root must be <scenarios>. Do not generate <questions>.`
 
       const retryResult = await this.llm.generateJSON<
         { scenarios: Scenario[] } | { response: { scenarios: Scenario[] } }
@@ -1389,7 +1428,7 @@ REMINDER: Generate SCENARIOS only. Do NOT generate questions.`;
         temperature: 0.7,
         maxTokens: 8000,
         promptType: 'generate_scenarios_retry',
-      });
+      })
 
       if (
         retryResult &&
@@ -1397,34 +1436,34 @@ REMINDER: Generate SCENARIOS only. Do NOT generate questions.`;
           ('response' in retryResult && retryResult.response?.scenarios))
       ) {
         if ('scenarios' in retryResult) {
-          scenarios = retryResult.scenarios;
+          scenarios = retryResult.scenarios
         } else {
-          scenarios = (retryResult as { response: { scenarios: Scenario[] } })
-            .response.scenarios;
+          scenarios = (retryResult as ScenarioResponseWrapper).response
+            .scenarios
         }
       } else {
         throw new Error(
-          'LLM returned questions instead of scenarios. The prompt requires scenarios (with mainActors, involvedOrganizations, description), not questions. Please check the LLM response format.'
-        );
+          'LLM returned questions instead of scenarios. The prompt requires scenarios (with mainActors, involvedOrganizations, description), not questions. Please check the LLM response format.',
+        )
       }
     } else {
       logger.error(
         'No scenarios found in response:',
         JSON.stringify(rawResult, null, 2),
-        'GameGenerator'
-      );
-      throw new Error('LLM returned no scenarios');
+        'GameGenerator',
+      )
+      throw new Error('LLM returned no scenarios')
     }
 
     // Validate scenarios using Zod
     try {
-      const validatedScenarios = z.array(ScenarioSchema).parse(scenarios);
-      return validatedScenarios;
+      const validatedScenarios = z.array(ScenarioSchema).parse(scenarios)
+      return validatedScenarios
     } catch (error) {
-      logger.error('Scenario validation failed', { error }, 'GameGenerator');
+      logger.error('Scenario validation failed', { error }, 'GameGenerator')
       throw new Error(
-        `LLM returned invalid scenarios structure: ${(error as Error).message}`
-      );
+        `LLM returned invalid scenarios structure: ${getErrorMessage(error)}`,
+      )
     }
   }
 
@@ -1433,13 +1472,13 @@ REMINDER: Generate SCENARIOS only. Do NOT generate questions.`;
    */
   private async generateQuestions(
     scenarios: Scenario[],
-    organizations: Organization[]
+    organizations: Organization[],
   ): Promise<Question[]> {
     const prompt = await createQuestionPrompt(
       scenarios,
       organizations,
-      this.gameId
-    );
+      this.gameId,
+    )
     // Accept both object and array response formats for flexibility
     const rawResult = await this.llm.generateJSON<
       { questions: Question[] } | Array<{ questions: Question[] }>
@@ -1447,79 +1486,80 @@ REMINDER: Generate SCENARIOS only. Do NOT generate questions.`;
       temperature: 0.85,
       maxTokens: 8000,
       promptType: 'generate_questions',
-    });
+    })
 
     if (!rawResult) {
       logger.error(
         'LLM returned null/undefined questions response',
         undefined,
-        'GameGenerator'
-      );
-      throw new Error('LLM returned no response for questions');
+        'GameGenerator',
+      )
+      throw new Error('LLM returned no response for questions')
     }
 
     // Handle both possible response formats:
     // 1. { questions: [...] } - expected format
     // 2. [{ questions: [...] }, { questions: [...] }] - grouped by scenario
     // 3. { questions: { question: [...] } } - XML nested structure
-    let questions: Question[];
+    // Note: raw data may have string scenario values from LLM
+    let questions: LLMQuestionRaw[]
 
     if (Array.isArray(rawResult)) {
       // LLM returned array of objects - flatten into single object
       logger.warn(
         'LLM returned array format, flattening...',
         undefined,
-        'GameGenerator'
-      );
+        'GameGenerator',
+      )
       questions = rawResult.flatMap((item) => {
-        if (item && item.questions && Array.isArray(item.questions)) {
-          return item.questions;
+        if (item?.questions && Array.isArray(item.questions)) {
+          return item.questions
         }
-        return [];
-      });
+        return []
+      })
     } else if (rawResult && 'questions' in rawResult && rawResult.questions) {
       // Check if it's an array or nested structure
       if (Array.isArray(rawResult.questions)) {
-        questions = rawResult.questions;
+        questions = rawResult.questions
       } else if (
         typeof rawResult.questions === 'object' &&
         'question' in rawResult.questions
       ) {
         // XML nested structure: { questions: { question: [...] } }
         const nested = (
-          rawResult.questions as { question: Question[] | Question }
-        ).question;
-        questions = Array.isArray(nested) ? nested : [nested];
+          rawResult.questions as { question: LLMQuestionRaw | LLMQuestionRaw[] }
+        ).question
+        questions = Array.isArray(nested) ? nested : [nested]
         logger.warn(
           'LLM returned XML nested structure, extracting...',
           undefined,
-          'GameGenerator'
-        );
+          'GameGenerator',
+        )
       } else {
         logger.error(
           'Invalid questions structure:',
           JSON.stringify(rawResult.questions, null, 2),
-          'GameGenerator'
-        );
-        throw new Error('LLM returned invalid questions structure');
+          'GameGenerator',
+        )
+        throw new Error('LLM returned invalid questions structure')
       }
     } else {
       // Invalid format
       logger.error(
         'Invalid response from LLM:',
         JSON.stringify(rawResult, null, 2),
-        'GameGenerator'
-      );
+        'GameGenerator',
+      )
       throw new Error(
         'LLM returned invalid response. Expected { questions: [...] } but got: ' +
           (rawResult
             ? JSON.stringify(rawResult).substring(0, 200)
-            : 'undefined')
-      );
+            : 'undefined'),
+      )
     }
 
     if (!questions || questions.length === 0) {
-      throw new Error('LLM returned empty questions array');
+      throw new Error('LLM returned empty questions array')
     }
 
     // Assign predetermined outcomes to each question
@@ -1527,19 +1567,23 @@ REMINDER: Generate SCENARIOS only. Do NOT generate questions.`;
       ...q,
       outcome: Math.random() > 0.5, // Random YES or NO outcome
       rank: q.rank || i + 1, // Default rank if not provided
-    }));
+    }))
 
     // Validate using Zod
     try {
       const validatedQuestions = z
         .array(QuestionSchema)
-        .parse(questionsWithOutcomes);
-      return validatedQuestions;
+        .parse(questionsWithOutcomes)
+      // Ensure all questions have required id field
+      return validatedQuestions.map((q, index) => ({
+        ...q,
+        id: q.id ?? `generated-${Date.now()}-${index}`,
+      })) as Question[]
     } catch (error) {
-      logger.error('Question validation failed', { error }, 'GameGenerator');
+      logger.error('Question validation failed', { error }, 'GameGenerator')
       throw new Error(
-        `Generated questions failed validation: ${(error as Error).message}`
-      );
+        `Generated questions failed validation: ${getErrorMessage(error)}`,
+      )
     }
   }
 
@@ -1547,133 +1591,122 @@ REMINDER: Generate SCENARIOS only. Do NOT generate questions.`;
    * Rank questions and select top 3
    */
   private async rankAndSelectQuestions(
-    questions: Question[]
+    questions: Question[],
   ): Promise<Question[]> {
     const questionsList = questions
       .map((q, i) => `${i + 1}. ${q.text}`)
-      .join('\n');
+      .join('\n')
 
     const prompt = renderPrompt(questionRankings, {
       questionCount: questions.length.toString(),
       questionsList,
-    });
+    })
 
     const rawResult = await this.llm.generateJSON<
       | { rankings: { questionId: number; rank: number }[] }
       | { response: { rankings: { questionId: number; rank: number }[] } }
     >(prompt, undefined, {
       promptType: 'rank_questions',
-    });
+    })
 
     if (!rawResult) {
       logger.warn(
         'LLM returned null/undefined rankings response, using default ranking',
         undefined,
-        'GameGenerator'
-      );
-      return questions.slice(0, 3);
+        'GameGenerator',
+      )
+      return questions.slice(0, 3)
     }
 
     // Handle XML structure - may be nested like { rankings: { ranking: [...] } }
-    let rankings: Array<{ questionId: number; rank: number }> = [];
+    let rankings: Array<{ questionId: number; rank: number }> = []
 
     if ('response' in rawResult && rawResult.response) {
-      const responseRankings = rawResult.response.rankings;
+      const responseRankings = rawResult.response.rankings
       if (Array.isArray(responseRankings)) {
-        rankings = responseRankings;
+        rankings = responseRankings
       } else if (
         responseRankings &&
         typeof responseRankings === 'object' &&
         'ranking' in responseRankings
       ) {
-        const nested = (
-          responseRankings as {
-            ranking:
-              | Array<{ questionId: number; rank: number }>
-              | { questionId: number; rank: number };
-          }
-        ).ranking;
-        rankings = Array.isArray(nested) ? nested : [nested];
+        const nested = (responseRankings as NestedRankingData).ranking
+        rankings = Array.isArray(nested) ? nested : [nested]
       }
     } else if (rawResult && 'rankings' in rawResult && rawResult.rankings) {
       if (Array.isArray(rawResult.rankings)) {
-        rankings = rawResult.rankings;
+        rankings = rawResult.rankings
       } else if (
         typeof rawResult.rankings === 'object' &&
         'ranking' in rawResult.rankings
       ) {
-        const nested = (
-          rawResult.rankings as {
-            ranking:
-              | Array<{ questionId: number; rank: number }>
-              | { questionId: number; rank: number };
-          }
-        ).ranking;
-        rankings = Array.isArray(nested) ? nested : [nested];
+        const nested = (rawResult.rankings as NestedRankingData).ranking
+        rankings = Array.isArray(nested) ? nested : [nested]
       }
     }
 
     // Apply rankings (with safety check)
     if (rankings && rankings.length > 0) {
       rankings.forEach((r) => {
-        const q = questions.find((q) => q.id === r.questionId);
-        if (q) q.rank = r.rank;
-      });
+        const q = questions.find((q) => q.id === r.questionId)
+        if (q) q.rank = r.rank
+      })
     }
 
     // Sort by rank and take top 3
-    return questions.sort((a, b) => a.rank - b.rank).slice(0, 3);
+    return questions.sort((a, b) => a.rank - b.rank).slice(0, 3)
   }
 
   /**
    * Generate actor connections with richer network
    */
   private generateConnections(
-    selectedActors: SelectedActorsByTier
+    selectedActors: SelectedActorsByTier,
   ): ActorConnection[] {
-    const connections: ActorConnection[] = [];
+    const connections: ActorConnection[] = []
 
     // Connect each main to each other (rivalry or alliance)
     for (let i = 0; i < selectedActors.mains.length; i++) {
       for (let j = i + 1; j < selectedActors.mains.length; j++) {
-        const actor1 = selectedActors.mains[i];
-        const actor2 = selectedActors.mains[j];
-        if (!actor1 || !actor2) continue;
+        const actor1 = selectedActors.mains[i]
+        const actor2 = selectedActors.mains[j]
+        if (!actor1 || !actor2) continue
 
-        const relationship = Math.random() > 0.5 ? 'rivals' : 'allies';
+        const relationship = Math.random() > 0.5 ? 'rivals' : 'allies'
         connections.push({
           actor1: actor1.id,
           actor2: actor2.id,
           relationship,
           context: `${relationship === 'rivals' ? 'Competing' : 'Collaborating'} in ${actor1.domain?.[0] || 'same space'}`,
-        });
+        })
       }
     }
 
     // Each main has connections to 3-5 supporting actors
     selectedActors.mains.forEach((main: SelectedActor) => {
-      const numConnections = 3 + Math.floor(Math.random() * 3);
+      const numConnections = 3 + Math.floor(Math.random() * 3)
       const connected = shuffleArray([...selectedActors.supporting]).slice(
         0,
-        numConnections
-      );
+        numConnections,
+      )
 
       connected.forEach((supporting: SelectedActor) => {
-        const relationships = ['advisor', 'source', 'critic', 'ally', 'friend'];
+        const relationships = ['advisor', 'source', 'critic', 'ally', 'friend']
         connections.push({
           actor1: main.id,
           actor2: supporting.id,
           relationship:
-            relationships[Math.floor(Math.random() * relationships.length)]!,
+            relationships[Math.floor(Math.random() * relationships.length)] ??
+            'ally',
           context: `Professional relationship in ${main.domain?.[0] || 'industry'}`,
-        });
-      });
-    });
+        })
+      })
+    })
 
     // Supporting actors connect to each other (creates richer network)
     selectedActors.supporting.forEach(
       (supporting: SelectedActor, i: number) => {
-        const numConnections = 2 + Math.floor(Math.random() * 2); // 2-3 connections
+        const numConnections = 2 + Math.floor(Math.random() * 2) // 2-3 connections
         // Exclude current actor and filter out already connected actors
         const potentials = selectedActors.supporting.filter(
           (other: SelectedActor, idx: number) =>
@@ -1681,57 +1714,58 @@ REMINDER: Generate SCENARIOS only. Do NOT generate questions.`;
             !connections.some(
               (c) =>
                 (c.actor1 === supporting.id && c.actor2 === other.id) ||
-                (c.actor2 === supporting.id && c.actor1 === other.id)
-            )
-        );
+                (c.actor2 === supporting.id && c.actor1 === other.id),
+            ),
+        )
 
         const connected = shuffleArray(potentials).slice(
           0,
-          numConnections
-        ) as SelectedActor[];
+          numConnections,
+        ) as SelectedActor[]
 
         connected.forEach((other: SelectedActor) => {
-          const relationships = ['ally', 'friend', 'source', 'critic'];
+          const relationships = ['ally', 'friend', 'source', 'critic']
           connections.push({
             actor1: supporting.id,
             actor2: other.id,
             relationship:
-              relationships[Math.floor(Math.random() * relationships.length)]!,
+              relationships[Math.floor(Math.random() * relationships.length)] ??
+              'ally',
             context: `Peers in ${supporting.domain?.[0] || 'industry'}`,
-          });
-        });
-      }
-    );
+          })
+        })
+      },
+    )
 
-    return connections;
+    return connections
   }
 
   /**
    * Initialize luck and mood tracking for all actors
    */
   private initializeLuckMood(selectedActors: {
-    mains: SelectedActor[];
-    supporting: SelectedActor[];
-    extras: SelectedActor[];
+    mains: SelectedActor[]
+    supporting: SelectedActor[]
+    extras: SelectedActor[]
   }): Map<string, { luck: string; mood: number }> {
-    const tracking = new Map<string, { luck: string; mood: number }>();
+    const tracking = new Map<string, { luck: string; mood: number }>()
 
     const allActors = [
       ...(selectedActors.mains || []),
       ...(selectedActors.supporting || []),
       ...(selectedActors.extras || []),
-    ];
+    ]
 
     allActors.forEach((actor: SelectedActor) => {
-      if (actor && actor.id) {
+      if (actor?.id) {
         tracking.set(actor.id, {
           luck: actor.initialLuck || 'medium',
           mood: actor.initialMood || 0,
-        });
+        })
       }
-    });
+    })
 
-    return tracking;
+    return tracking
   }
 
   /**
@@ -1740,15 +1774,15 @@ REMINDER: Generate SCENARIOS only. Do NOT generate questions.`;
   private async generateGroupChatName(
     admin: SelectedActor,
     members: SelectedActor[],
-    domain: string
+    domain: string,
   ): Promise<string> {
     const memberDescriptions = members
       .map((m) => {
         const affiliations =
-          m.affiliations?.slice(0, 2).join(', ') || 'various organizations';
-        return `- ${m.name}: ${m.role || 'Notable figure'} at ${affiliations}`;
+          m.affiliations?.slice(0, 2).join(', ') || 'various organizations'
+        return `- ${m.name}: ${m.role || 'Notable figure'} at ${affiliations}`
       })
-      .join('\n');
+      .join('\n')
 
     const prompt = renderPrompt(groupChatName, {
       adminName: admin.name,
@@ -1757,7 +1791,7 @@ REMINDER: Generate SCENARIOS only. Do NOT generate questions.`;
       adminAffiliations:
         admin.affiliations?.slice(0, 3).join(', ') || 'various organizations',
       memberDescriptions,
-    });
+    })
 
     const rawResponse = await this.llm.generateJSON<
       { name: string } | { response: { name: string } }
@@ -1766,34 +1800,31 @@ REMINDER: Generate SCENARIOS only. Do NOT generate questions.`;
       {
         required: ['name'],
       },
-      { promptType: 'generate_group_chat_name' }
-    );
+      { promptType: 'generate_group_chat_name' },
+    )
 
-    let parsedResponse = rawResponse;
+    let parsedResponse = rawResponse
     if (typeof rawResponse === 'string') {
       parsedResponse = JSON.parse(
-        (rawResponse as string).replace(/```json\n?|\n?```/g, '').trim()
-      );
+        (rawResponse as string).replace(/```json\n?|\n?```/g, '').trim(),
+      )
     }
 
     if (!parsedResponse || typeof parsedResponse !== 'object') {
       throw new Error(
-        `Invalid response for group chat name generation: expected object, got ${typeof parsedResponse}`
-      );
+        `Invalid response for group chat name generation: expected object, got ${typeof parsedResponse}`,
+      )
     }
 
-    // Handle XML structure
-    const response =
-      'response' in parsedResponse && parsedResponse.response
-        ? parsedResponse.response
-        : (parsedResponse as { name?: string });
+    // Handle XML structure - unwrap nested response
+    const response = unwrapLLMResponse<{ name?: string }>(parsedResponse)
 
     // Handle missing name property
     if (!response || typeof response.name !== 'string') {
-      return `${admin.name}'s Group`; // Fallback
+      return `${admin.name}'s Group` // Fallback
     }
 
-    return response.name.toLowerCase();
+    return response.name.toLowerCase()
   }
 
   /**
@@ -1801,21 +1832,21 @@ REMINDER: Generate SCENARIOS only. Do NOT generate questions.`;
    */
   private async createGroupChats(
     selectedActors: SelectedActorsByTier,
-    connections: ActorConnection[]
+    connections: ActorConnection[],
   ): Promise<GroupChat[]> {
-    const chats: GroupChat[] = [];
+    const chats: GroupChat[] = []
 
     // Helper to get positive relationships for an actor
     const getPositiveConnections = (actorId: string): string[] => {
-      const positiveRelationships = ['ally', 'friend', 'advisor', 'source'];
+      const positiveRelationships = ['ally', 'friend', 'advisor', 'source']
       return connections
         .filter(
           (c) =>
             (c.actor1 === actorId || c.actor2 === actorId) &&
-            positiveRelationships.includes(c.relationship)
+            positiveRelationships.includes(c.relationship),
         )
-        .map((c) => (c.actor1 === actorId ? c.actor2 : c.actor1));
-    };
+        .map((c) => (c.actor1 === actorId ? c.actor2 : c.actor1))
+    }
 
     // Helper to get actor details by ID
     const getActorById = (id: string): SelectedActor | undefined => {
@@ -1823,40 +1854,37 @@ REMINDER: Generate SCENARIOS only. Do NOT generate questions.`;
         ...selectedActors.mains,
         ...selectedActors.supporting,
         ...selectedActors.extras,
-      ].find((a: SelectedActor) => a.id === id);
-    };
+      ].find((a: SelectedActor) => a.id === id)
+    }
 
     logger.info(
       'Generating contextual group chat names...',
       undefined,
-      'GameGenerator'
-    );
+      'GameGenerator',
+    )
 
     // One group per main actor
     for (const main of selectedActors.mains) {
-      const positiveConnections = getPositiveConnections(main.id);
-      const memberIds = [main.id, ...positiveConnections.slice(0, 6)];
+      const positiveConnections = getPositiveConnections(main.id)
+      const memberIds = [main.id, ...positiveConnections.slice(0, 6)]
       const members = memberIds
         .map((id) => getActorById(id))
-        .filter(
-          (actor): actor is SelectedActor =>
-            actor !== null && actor !== undefined
-        );
+        .filter((actor): actor is SelectedActor => isNotNullish(actor))
 
-      const domain = main.domain?.[0] || 'general';
+      const domain = main.domain?.[0] || 'general'
 
       // Generate contextual name using LLM
-      const groupName = await this.generateGroupChatName(main, members, domain);
+      const groupName = await this.generateGroupChatName(main, members, domain)
       const kebabName = groupName
         .toLowerCase()
         .replace(/\s+/g, '-')
-        .replace(/[^a-z0-9-]/g, '');
+        .replace(/[^a-z0-9-]/g, '')
 
       logger.debug(
         `"${groupName}" (admin: ${main.name})`,
         undefined,
-        'GameGenerator'
-      );
+        'GameGenerator',
+      )
 
       chats.push({
         id: kebabName,
@@ -1864,43 +1892,39 @@ REMINDER: Generate SCENARIOS only. Do NOT generate questions.`;
         admin: main.id,
         members: memberIds,
         theme: domain,
-      });
+      })
     }
 
     // Add 1-2 groups for S/A-tier supporting actors
     const highTierSupporting = selectedActors.supporting
       .filter((a: SelectedActor) => a.tier === 'S_TIER' || a.tier === 'A_TIER')
-      .slice(0, 2);
+      .slice(0, 2)
 
     for (const supporting of highTierSupporting) {
-      const positiveConnections = getPositiveConnections(supporting.id);
-      const memberIds = [supporting.id, ...positiveConnections.slice(0, 5)];
+      const positiveConnections = getPositiveConnections(supporting.id)
+      const memberIds = [supporting.id, ...positiveConnections.slice(0, 5)]
       const members = memberIds
         .map((id) => getActorById(id))
-        .filter(
-          (actor): actor is SelectedActor =>
-            actor !== null && actor !== undefined
-        );
+        .filter((actor): actor is SelectedActor => isNotNullish(actor))
 
-      const domain = supporting.domain?.[0] || 'general';
+      const domain = supporting.domain?.[0] || 'general'
 
       // Generate contextual name using LLM
       const groupName = await this.generateGroupChatName(
         supporting,
         members,
-        domain
-      );
-      const kebabName =
-        groupName
-          .toLowerCase()
-          .replace(/\s+/g, '-')
-          .replace(/[^a-z0-9-]/g, '') + `-${chats.length}`;
+        domain,
+      )
+      const kebabName = `${groupName
+        .toLowerCase()
+        .replace(/\s+/g, '-')
+        .replace(/[^a-z0-9-]/g, '')}-${chats.length}`
 
       logger.debug(
         `"${groupName}" (admin: ${supporting.name})`,
         undefined,
-        'GameGenerator'
-      );
+        'GameGenerator',
+      )
 
       chats.push({
         id: kebabName,
@@ -1908,10 +1932,10 @@ REMINDER: Generate SCENARIOS only. Do NOT generate questions.`;
         admin: supporting.id,
         members: memberIds,
         theme: domain,
-      });
+      })
     }
 
-    return chats;
+    return chats
   }
 
   /**
@@ -1920,9 +1944,9 @@ REMINDER: Generate SCENARIOS only. Do NOT generate questions.`;
   private async generateDay(
     day: number,
     actors: {
-      mains: SelectedActor[];
-      supporting: SelectedActor[];
-      extras: SelectedActor[];
+      mains: SelectedActor[]
+      supporting: SelectedActor[]
+      extras: SelectedActor[]
     },
     questions: Question[],
     scenarios: Scenario[],
@@ -1930,31 +1954,31 @@ REMINDER: Generate SCENARIOS only. Do NOT generate questions.`;
     previousDays: DayTimeline[],
     luckMood: Map<string, { luck: string; mood: number }>,
     dateStr: string,
-    connections: ActorConnection[]
+    connections: ActorConnection[],
   ): Promise<DayTimeline> {
-    const phase = this.getPhase(day);
-    const eventCount = this.getEventCount(day);
-    const allActors = [...actors.mains, ...actors.supporting, ...actors.extras];
+    const phase = this.getPhase(day)
+    const eventCount = this.getEventCount(day)
+    const allActors = [...actors.mains, ...actors.supporting, ...actors.extras]
 
     // Build comprehensive context
     const previousMonthContext =
       this.gameHistory.length > 0
         ? generatePreviousMonthContext(this.gameHistory)
-        : '';
+        : ''
     const currentMonthContext = generateCurrentMonthContext(
       actors.mains,
       scenarios,
       questions,
-      day
-    );
+      day,
+    )
     const daySummariesContext =
-      previousDays.length > 0 ? generateDaySummariesContext(previousDays) : '';
+      previousDays.length > 0 ? generateDaySummariesContext(previousDays) : ''
 
     const fullContext =
-      previousMonthContext + currentMonthContext + daySummariesContext;
+      previousMonthContext + currentMonthContext + daySummariesContext
 
     // Generate events with full context
-    const events: WorldEvent[] = [];
+    const events: WorldEvent[] = []
     const eventTypes: Array<WorldEvent['type']> = [
       'meeting',
       'announcement',
@@ -1962,31 +1986,29 @@ REMINDER: Generate SCENARIOS only. Do NOT generate questions.`;
       'deal',
       'conflict',
       'revelation',
-    ];
+    ]
 
     const eventRequests: Array<{
-      eventNumber: number;
-      type: WorldEvent['type'];
-      actors: SelectedActor[];
-      questionId: number;
-    }> = [];
+      eventNumber: number
+      type: WorldEvent['type']
+      actors: SelectedActor[]
+      questionId: number
+    }> = []
 
     for (let i = 0; i < eventCount; i++) {
-      const type = eventTypes[Math.floor(Math.random() * eventTypes.length)]!;
+      const type =
+        eventTypes[Math.floor(Math.random() * eventTypes.length)] ?? 'meeting'
       const numActorsInvolved =
-        type === 'meeting' ? 2 + Math.floor(Math.random() * 3) : 1;
-      const involvedActors = shuffleArray(allActors).slice(
-        0,
-        numActorsInvolved
-      );
-      const questionId = questions[i % questions.length]!.questionNumber || 0;
+        type === 'meeting' ? 2 + Math.floor(Math.random() * 3) : 1
+      const involvedActors = shuffleArray(allActors).slice(0, numActorsInvolved)
+      const questionId = questions[i % questions.length]?.questionNumber || 0
 
       eventRequests.push({
         eventNumber: i,
         type,
         actors: involvedActors,
         questionId,
-      });
+      })
     }
 
     // Generate all descriptions in one batched call with full context
@@ -1998,15 +2020,15 @@ REMINDER: Generate SCENARIOS only. Do NOT generate questions.`;
       luckMood,
       connections,
       previousDays,
-      this.gameId
-    );
+      this.gameId,
+    )
 
     // Determine if this day should reveal answer hints based on phase
-    const shouldReveal = this.shouldRevealAnswer(day, phase);
+    const shouldReveal = this.shouldRevealAnswer(day, phase)
 
     descriptions.forEach((desc, i) => {
-      const req = eventRequests[i];
-      if (!req) return; // Skip if no matching request
+      const req = eventRequests[i]
+      if (!req) return // Skip if no matching request
 
       events.push({
         id: `event-${day}-${i}`,
@@ -2018,46 +2040,46 @@ REMINDER: Generate SCENARIOS only. Do NOT generate questions.`;
         // Only reveal hints if phase allows it
         pointsToward: shouldReveal ? desc.pointsToward || null : null,
         visibility: req.type === 'meeting' ? 'private' : 'public',
-      });
-    });
+      })
+    })
 
     // Prepare actor states for this day
-    const actorStateMap = new Map();
+    const actorStateMap = new Map()
     allActors.forEach((actor: SelectedActor) => {
-      const state = luckMood.get(actor.id);
+      const state = luckMood.get(actor.id)
       actorStateMap.set(actor.id, {
         mood: state?.mood || 0,
-        luck: (state?.luck as 'low' | 'medium' | 'high') || 'medium',
-      });
-    });
+        luck: toLuckLevel(state?.luck),
+      })
+    })
 
     // Build group contexts for all actors
-    const actorGroupContextMap = new Map<string, string>();
+    const actorGroupContextMap = new Map<string, string>()
     allActors.forEach((actor: SelectedActor) => {
       const groupContext = getActorGroupContext(
         actor.id,
         groupChats,
         previousDays,
-        allActors
-      );
-      actorGroupContextMap.set(actor.id, groupContext);
-    });
+        allActors,
+      )
+      actorGroupContextMap.set(actor.id, groupContext)
+    })
 
     // Set context and states in feed generator
-    this.feedGenerator.setActorStates(actorStateMap);
-    this.feedGenerator.setRelationships(connections);
-    this.feedGenerator.setActorGroupContexts(actorGroupContextMap);
+    this.feedGenerator.setActorStates(actorStateMap)
+    this.feedGenerator.setRelationships(connections)
+    this.feedGenerator.setActorGroupContexts(actorGroupContextMap)
 
     // Collect all previous events and posts for context
-    const allPreviousEvents: WorldEvent[] = [];
-    const allPreviousPosts: FeedPost[] = [];
+    const allPreviousEvents: WorldEvent[] = []
+    const allPreviousPosts: FeedPost[] = []
     for (const prevDay of previousDays) {
-      allPreviousEvents.push(...prevDay.events);
-      allPreviousPosts.push(...prevDay.feedPosts);
+      allPreviousEvents.push(...prevDay.events)
+      allPreviousPosts.push(...prevDay.feedPosts)
     }
 
     // Generate feed posts from events with full context
-    const feedPosts: FeedPost[] = [];
+    const feedPosts: FeedPost[] = []
     const eventFeedPosts = await this.feedGenerator.generateDayFeed(
       day,
       events.map((e) => ({
@@ -2073,16 +2095,16 @@ REMINDER: Generate SCENARIOS only. Do NOT generate questions.`;
         allPreviousEvents,
         allPreviousPosts,
         questions,
-      }
-    );
-    feedPosts.push(...eventFeedPosts);
+      },
+    )
+    feedPosts.push(...eventFeedPosts)
 
     // Update trending topics with new posts
-    this.tickCount++;
+    this.tickCount++
     if (eventFeedPosts.length > 0) {
-      this.recentPosts = [...this.recentPosts, ...eventFeedPosts].slice(-200);
-      await this.trendingTopics.updateTrends(this.recentPosts, this.tickCount);
-      this.feedGenerator.updateTrendContext();
+      this.recentPosts = [...this.recentPosts, ...eventFeedPosts].slice(-200)
+      await this.trendingTopics.updateTrends(this.recentPosts, this.tickCount)
+      this.feedGenerator.updateTrendContext()
     }
 
     // Generate group messages - BATCHED
@@ -2097,38 +2119,39 @@ REMINDER: Generate SCENARIOS only. Do NOT generate questions.`;
       scenarios,
       questions,
       fullContext,
-      this.gameId || undefined
-    );
+      this.gameId || undefined,
+    )
 
     // Apply ambient mood drift for all actors (small random changes)
-    this.applyAmbientMoodDrift(allActors, luckMood);
+    this.applyAmbientMoodDrift(allActors, luckMood)
 
     // Generate luck and mood changes (for actors in events - larger changes)
     const luckChanges = this.generateLuckChanges(
       day,
       events,
       allActors,
-      luckMood
-    );
+      luckMood,
+    )
     const moodChanges = this.generateMoodChanges(
       day,
       events,
       allActors,
-      luckMood
-    );
+      luckMood,
+    )
 
     // Generate resolution events during the Resolution phase (days 27-30)
     if (phase === 'Resolution' && day >= 28) {
       // Generate one resolution event per question on days 28-30
-      const questionIndex = day - 28; // Day 28 = question 0, day 29 = question 1, day 30 = question 2
-      if (questionIndex < questions.length) {
+      const questionIndex = day - 28 // Day 28 = question 0, day 29 = question 1, day 30 = question 2
+      const question = questions[questionIndex]
+      if (question && questionIndex < questions.length) {
         const resolutionEvent = await this.generateResolutionEvent(
-          questions[questionIndex]!,
+          question,
           allActors,
           day,
-          previousDays
-        );
-        events.push(resolutionEvent);
+          previousDays,
+        )
+        events.push(resolutionEvent)
       }
     }
 
@@ -2140,18 +2163,18 @@ REMINDER: Generate SCENARIOS only. Do NOT generate questions.`;
       feedPosts,
       luckChanges,
       moodChanges,
-    };
-
-    try {
-      DayTimelineSchema.parse(dayTimeline);
-    } catch (error) {
-      logger.error('DayTimeline validation failed', { error }, 'GameGenerator');
-      throw new Error(
-        `DayTimeline validation failed: ${(error as Error).message}`
-      );
     }
 
-    return dayTimeline;
+    try {
+      DayTimelineSchema.parse(dayTimeline)
+    } catch (error) {
+      logger.error('DayTimeline validation failed', { error }, 'GameGenerator')
+      throw new Error(
+        `DayTimeline validation failed: ${getErrorMessage(error)}`,
+      )
+    }
+
+    return dayTimeline
   }
 
   /**
@@ -2160,42 +2183,42 @@ REMINDER: Generate SCENARIOS only. Do NOT generate questions.`;
   private async generateDayEventsBatch(
     day: number,
     eventRequests: Array<{
-      eventNumber: number;
-      type: WorldEvent['type'];
-      actors: SelectedActor[];
-      questionId: number;
+      eventNumber: number
+      type: WorldEvent['type']
+      actors: SelectedActor[]
+      questionId: number
     }>,
     questions: Question[],
     fullContext: string,
     luckMood: Map<string, { luck: string; mood: number }>,
     connections: ActorConnection[],
     _previousDays: DayTimeline[],
-    gameId?: string
+    gameId?: string,
   ): Promise<
     Array<{
-      eventNumber: number;
-      event: string;
-      pointsToward: 'YES' | 'NO' | null;
+      eventNumber: number
+      event: string
+      pointsToward: 'YES' | 'NO' | null
     }>
   > {
     const eventRequestsList = eventRequests
       .map((req, i) => {
-        const question = questions.find((q) => q.id === req.questionId);
+        const question = questions.find((q) => q.id === req.questionId)
         const actorsWithMood = req.actors
           .map((a) => {
-            const state = luckMood.get(a.id);
+            const state = luckMood.get(a.id)
             const emotionalContext = state
               ? generateActorContext(
                   state.mood,
-                  state.luck as 'low' | 'medium' | 'high',
+                  toLuckLevel(state.luck),
                   undefined,
                   connections,
-                  a.id
+                  a.id,
                 )
-              : '';
-            return `${a.name} (${a.description})${emotionalContext ? '\n   ' + emotionalContext.replace(/\n/g, '\n   ') : ''}`;
+              : ''
+            return `${a.name} (${a.description})${emotionalContext ? `\n   ${emotionalContext.replace(/\n/g, '\n   ')}` : ''}`
           })
-          .join('\n   ');
+          .join('\n   ')
         return `${i + 1}. Type: ${req.type}
    Actors: 
    ${actorsWithMood}
@@ -2203,9 +2226,9 @@ REMINDER: Generate SCENARIOS only. Do NOT generate questions.`;
    
    Create event involving these actors. Build on the narrative above.
    Their mood and luck should influence the nature of the event.
-   One sentence, max 120 chars, satirical but plausible.`;
+   One sentence, max 120 chars, satirical but plausible.`
       })
-      .join('\n');
+      .join('\n')
 
     // Build rich game context for event generation
     const richContext = await buildRichGameContext(day, gameId, {
@@ -2213,13 +2236,13 @@ REMINDER: Generate SCENARIOS only. Do NOT generate questions.`;
       includeFeedHistory: true,
       maxEvents: 200,
       maxPosts: 500,
-    });
+    })
     const richGameContextText = formatRichGameContext(richContext, {
       includeEventTimeline: true,
       includeFeedHistory: true,
       includeResolvedQuestions: true,
       includeNarrativeThreads: true,
-    });
+    })
 
     const prompt = renderPrompt(dayEvents, {
       fullContext,
@@ -2227,64 +2250,54 @@ REMINDER: Generate SCENARIOS only. Do NOT generate questions.`;
       day: day.toString(),
       eventCount: eventRequests.length.toString(),
       eventRequestsList,
-    });
+    })
 
     const rawResponse = await this.llm.generateJSON<
       | {
           events: Array<{
-            eventNumber: number;
-            event: string;
-            pointsToward: 'YES' | 'NO' | null;
-          }>;
+            eventNumber: number
+            event: string
+            pointsToward: 'YES' | 'NO' | null
+          }>
         }
       | {
           response: {
             events: Array<{
-              eventNumber: number;
-              event: string;
-              pointsToward: 'YES' | 'NO' | null;
-            }>;
-          };
+              eventNumber: number
+              event: string
+              pointsToward: 'YES' | 'NO' | null
+            }>
+          }
         }
     >(prompt, undefined, {
       temperature: 0.9,
       maxTokens: 5000,
       promptType: 'generate_day_events',
-    });
+    })
 
     if (!rawResponse) {
-      logger.warn(
-        'LLM returned null/undefined events response, falling back to simple events',
-        undefined,
-        'GameGenerator'
-      );
-      // Fallback generation if LLM fails
-      return eventRequests.map((req) => ({
-        eventNumber: req.eventNumber,
-        event: `${req.actors.map((a) => a.name).join(' and ')} involved in ${req.type}`,
-        pointsToward: null,
-      }));
+      throw new Error('LLM returned null/undefined events response')
     }
 
-    let parsedResponse = rawResponse;
+    let parsedResponse = rawResponse
     if (typeof rawResponse === 'string') {
       parsedResponse = JSON.parse(
-        (rawResponse as string).replace(/```json\n?|\n?```/g, '').trim()
-      );
+        (rawResponse as string).replace(/```json\n?|\n?```/g, '').trim(),
+      )
     }
 
     if (typeof parsedResponse !== 'object') {
       throw new Error(
-        `Invalid events response: expected object, got ${typeof parsedResponse}`
-      );
+        `Invalid events response: expected object, got ${typeof parsedResponse}`,
+      )
     }
 
     // Handle XML structure - may be nested like { events: { event: [...] } }
     let events: Array<{
-      eventNumber: number;
-      event: string;
-      pointsToward: 'YES' | 'NO' | null;
-    }> = [];
+      eventNumber: number
+      event: string
+      pointsToward: 'YES' | 'NO' | null
+    }> = []
 
     if (
       'response' in parsedResponse &&
@@ -2292,7 +2305,7 @@ REMINDER: Generate SCENARIOS only. Do NOT generate questions.`;
       parsedResponse.response.events
     ) {
       if (Array.isArray(parsedResponse.response.events)) {
-        events = parsedResponse.response.events;
+        events = parsedResponse.response.events
       } else if (
         typeof parsedResponse.response.events === 'object' &&
         'event' in parsedResponse.response.events
@@ -2300,17 +2313,17 @@ REMINDER: Generate SCENARIOS only. Do NOT generate questions.`;
         const nested = (
           parsedResponse.response.events as {
             event: Array<{
-              eventNumber: number;
-              event: string;
-              pointsToward: 'YES' | 'NO' | null;
-            }>;
+              eventNumber: number
+              event: string
+              pointsToward: 'YES' | 'NO' | null
+            }>
           }
-        ).event;
-        events = Array.isArray(nested) ? nested : [nested];
+        ).event
+        events = Array.isArray(nested) ? nested : [nested]
       }
     } else if ('events' in parsedResponse && parsedResponse.events) {
       if (Array.isArray(parsedResponse.events)) {
-        events = parsedResponse.events;
+        events = parsedResponse.events
       } else if (
         typeof parsedResponse.events === 'object' &&
         'event' in parsedResponse.events
@@ -2318,13 +2331,13 @@ REMINDER: Generate SCENARIOS only. Do NOT generate questions.`;
         const nested = (
           parsedResponse.events as {
             event: Array<{
-              eventNumber: number;
-              event: string;
-              pointsToward: 'YES' | 'NO' | null;
-            }>;
+              eventNumber: number
+              event: string
+              pointsToward: 'YES' | 'NO' | null
+            }>
           }
-        ).event;
-        events = Array.isArray(nested) ? nested : [nested];
+        ).event
+        events = Array.isArray(nested) ? nested : [nested]
       }
     }
 
@@ -2336,7 +2349,7 @@ REMINDER: Generate SCENARIOS only. Do NOT generate questions.`;
           ? e.event
           : 'Generic event involving actors',
       pointsToward: e.pointsToward || null,
-    }));
+    }))
 
     // Validate internal structure
     z.array(
@@ -2344,10 +2357,10 @@ REMINDER: Generate SCENARIOS only. Do NOT generate questions.`;
         eventNumber: z.number(),
         event: z.string(),
         pointsToward: z.enum(['YES', 'NO']).nullable(),
-      })
-    ).parse(sanitizedEvents);
+      }),
+    ).parse(sanitizedEvents)
 
-    return sanitizedEvents;
+    return sanitizedEvents
   }
 
   /**
@@ -2365,11 +2378,11 @@ REMINDER: Generate SCENARIOS only. Do NOT generate questions.`;
    * and late bets are safe/lower-value.
    */
   private shouldRevealAnswer(_day: number, phase: string): boolean {
-    if (phase === 'Early') return Math.random() > 0.85; // 15% reveal
-    if (phase === 'Middle') return Math.random() > 0.55; // 45% reveal
-    if (phase === 'Late') return Math.random() > 0.25; // 75% reveal
-    if (phase === 'Climax') return Math.random() > 0.1; // 90% reveal
-    return true; // Resolution always reveals
+    if (phase === 'Early') return Math.random() > 0.85 // 15% reveal
+    if (phase === 'Middle') return Math.random() > 0.55 // 45% reveal
+    if (phase === 'Late') return Math.random() > 0.25 // 75% reveal
+    if (phase === 'Climax') return Math.random() > 0.1 // 90% reveal
+    return true // Resolution always reveals
   }
 
   /**
@@ -2380,33 +2393,30 @@ REMINDER: Generate SCENARIOS only. Do NOT generate questions.`;
     actors: SelectedActor[],
     type: WorldEvent['type'],
     _questionId: number,
-    day: number
+    day: number,
   ): Promise<string> {
-    const actorNames = actors.map((a) => a.name).join(' and ');
+    const actorNames = actors.map((a) => a.name).join(' and ')
     const prompt = `Generate a satirical event description for day ${day}.
 Event type: ${type}
 Actors: ${actorNames}
-Max 120 characters, one sentence.`;
+Max 120 characters, one sentence.`
 
     const rawResponse = await this.llm.generateJSON<
       { event: string } | { response: { event: string } }
     >(prompt, undefined, {
       temperature: 0.9,
       promptType: 'generate_event_description',
-    });
+    })
 
     // Handle null/undefined or non-object response
     if (!rawResponse || typeof rawResponse !== 'object') {
-      return `${actorNames} ${type}`;
+      return `${actorNames} ${type}`
     }
 
     // Handle XML structure
-    const response =
-      'response' in rawResponse && rawResponse.response
-        ? rawResponse.response
-        : (rawResponse as { event: string });
-
-    return response.event || `${actorNames} ${type}`;
+    // Handle XML structure - unwrap nested response
+    const response = unwrapLLMResponse<{ event: string }>(rawResponse)
+    return response?.event || `${actorNames} ${type}`
   }
 
   /**
@@ -2417,26 +2427,26 @@ Max 120 characters, one sentence.`;
     question: Question,
     allActors: SelectedActor[],
     day: number,
-    previousDays: DayTimeline[]
+    previousDays: DayTimeline[],
   ): Promise<WorldEvent> {
     // Get actors involved in this question's scenario
-    const mainActors = allActors.filter((a) => a.role === 'main').slice(0, 2);
+    const mainActors = allActors.filter((a) => a.role === 'main').slice(0, 2)
 
     // Build context from previous events
     const relatedEvents = previousDays
       .flatMap((d) => d.events)
       .filter((e) => e.relatedQuestion === question.id)
-      .slice(-3); // Last 3 related events
+      .slice(-3) // Last 3 related events
 
     const eventHistory =
       relatedEvents.length > 0
         ? `Recent events: ${relatedEvents.map((e) => e.description).join('; ')}`
-        : 'No prior events';
+        : 'No prior events'
 
-    const outcome = question.outcome ? 'YES' : 'NO';
+    const outcome = question.outcome ? 'YES' : 'NO'
     const outcomeContext = question.outcome
       ? 'PROVES it happened'
-      : 'PROVES it failed/was cancelled';
+      : 'PROVES it failed/was cancelled'
 
     const prompt = renderPrompt(questionResolutionValidation, {
       questionText: question.text,
@@ -2444,7 +2454,7 @@ Max 120 characters, one sentence.`;
       eventHistory,
       contextInfo: '', // Not used in resolutionEvent, adding empty string
       outcomeContext,
-    });
+    })
 
     const rawResponse = await this.llm.generateJSON<
       | { event: string; type: 'announcement' | 'revelation' }
@@ -2453,7 +2463,7 @@ Max 120 characters, one sentence.`;
       temperature: 0.7,
       maxTokens: 5000,
       promptType: 'generate_resolution_event',
-    });
+    })
 
     // Handle null/undefined or non-object response
     if (!rawResponse || typeof rawResponse !== 'object') {
@@ -2466,29 +2476,26 @@ Max 120 characters, one sentence.`;
         relatedQuestion: toQuestionIdNumberOrNull(question.id),
         pointsToward: question.outcome ? 'YES' : 'NO',
         visibility: 'public',
-      };
+      }
     }
 
-    // Handle XML structure
-    const response =
-      'response' in rawResponse && rawResponse.response
-        ? rawResponse.response
-        : (rawResponse as {
-            event: string;
-            type: 'announcement' | 'revelation';
-          });
+    // Handle XML structure - unwrap nested response
+    const response = unwrapLLMResponse<{
+      event: string
+      type: 'announcement' | 'revelation'
+    }>(rawResponse)
 
     return {
       id: `resolution-${day}-${question.id}`,
       day,
-      type: response.type || 'revelation',
+      type: response?.type || 'revelation',
       actors: mainActors.map((a) => a.id),
       description:
-        response.event || `Resolution event for question ${question.id}`,
+        response?.event || `Resolution event for question ${question.id}`,
       relatedQuestion: toQuestionIdNumberOrNull(question.id),
       pointsToward: question.outcome ? 'YES' : 'NO',
       visibility: 'public',
-    };
+    }
   }
 
   /**
@@ -2506,65 +2513,65 @@ Max 120 characters, one sentence.`;
     scenarios?: Scenario[],
     questions?: Question[],
     fullContext?: string,
-    gameId?: string
+    gameId?: string,
   ): Promise<Record<string, ChatMessage[]>> {
-    const messages: Record<string, ChatMessage[]> = {};
+    const messages: Record<string, ChatMessage[]> = {}
     const groupRequests: Array<{
-      groupId: string;
-      groupName: string;
-      groupTheme: string;
+      groupId: string
+      groupName: string
+      groupTheme: string
       members: Array<{
-        actorId: string;
-        actorName: string;
-        description: string;
-        personality: string;
-        role: string;
-      }>;
+        actorId: string
+        actorName: string
+        description: string
+        personality: string
+        role: string
+      }>
       previousMessages: Array<{
-        actorName: string;
-        message: string;
-        day: number;
-      }>;
-    }> = [];
+        actorName: string
+        message: string
+        day: number
+      }>
+    }> = []
 
     // Build requests for active groups
     for (const group of groupChats) {
-      const activityChance = this.getGroupActivityChance(day);
+      const activityChance = this.getGroupActivityChance(day)
 
       if (Math.random() < activityChance) {
-        const numMessages = 1 + Math.floor(Math.random() * 3); // 1-3 messages
+        const numMessages = 1 + Math.floor(Math.random() * 3) // 1-3 messages
 
         // Pick random members to post
         const activeMembers = shuffleArray(
-          allActors.filter((a) => group.members.includes(a.id))
-        ).slice(0, numMessages);
+          allActors.filter((a) => group.members.includes(a.id)),
+        ).slice(0, numMessages)
 
         if (activeMembers.length > 0) {
           // Get recent conversation history from this group (last 2-3 days, max 5 messages)
           const recentMessages: Array<{
-            actorName: string;
-            message: string;
-            day: number;
-          }> = [];
+            actorName: string
+            message: string
+            day: number
+          }> = []
 
           for (
             let i = previousDays.length - 1;
             i >= Math.max(0, previousDays.length - 3);
             i--
           ) {
-            const dayData = previousDays[i];
-            if (!dayData) continue;
+            const dayData = previousDays[i]
+            if (!dayData) continue
 
-            const groupMessages = dayData.groupChats?.[group.id] || [];
+            const groupMessages = dayData.groupChats?.[group.id] || []
 
             for (const msg of groupMessages.slice(-5)) {
-              const actor = allActors.find((a) => a.id === msg.from);
+              const actor = allActors.find((a) => a.id === msg.from)
               if (actor) {
                 recentMessages.unshift({
                   actorName: actor.name,
                   message: msg.message,
                   day: dayData.day,
-                });
+                })
               }
             }
           }
@@ -2581,78 +2588,78 @@ Max 120 characters, one sentence.`;
               role: a.role,
             })),
             previousMessages: recentMessages.slice(-5), // Keep last 5 messages max
-          });
+          })
         }
       }
     }
 
     // If no active groups, return empty
     if (groupRequests.length === 0) {
-      return messages;
+      return messages
     }
 
     // Generate all messages in one batch
     const recentEvent =
       events.length > 0
         ? events[Math.floor(Math.random() * events.length)]
-        : null;
+        : null
 
     // Build additional context from optional parameters
     const scenarioContext =
       scenarios && scenarios.length > 0
         ? `\n\nACTIVE SCENARIOS: ${scenarios.map((s) => s.description).join('; ')}`
-        : '';
+        : ''
 
     const questionContext =
       questions && questions.length > 0
         ? `\n\nQUESTIONS TO RESOLVE: ${questions.map((q) => q.text).join('; ')}`
-        : '';
+        : ''
 
     // Build emotional state context for actors
     const getEmotionalState = (actorId: string): string => {
-      if (!luckMood) return '';
-      const state = luckMood.get(actorId);
-      if (!state) return '';
+      if (!luckMood) return ''
+      const state = luckMood.get(actorId)
+      if (!state) return ''
 
       const moodDesc =
         state.mood > 0.3
           ? 'confident'
           : state.mood < -0.3
             ? 'pessimistic'
-            : 'neutral';
+            : 'neutral'
       const luckDesc =
         state.luck === 'high'
           ? '🍀 lucky streak'
           : state.luck === 'low'
             ? '💀 unlucky'
-            : 'average luck';
-      return ` [${moodDesc}, ${luckDesc}]`;
-    };
+            : 'average luck'
+      return ` [${moodDesc}, ${luckDesc}]`
+    }
 
     // Build relationship context between group members
     const getRelationshipContext = (
-      groupMembers: Array<{ actorId: string; actorName: string }>
+      groupMembers: Array<{ actorId: string; actorName: string }>,
     ): string => {
-      if (!connections || groupMembers.length < 2) return '';
+      if (!connections || groupMembers.length < 2) return ''
 
       const relevantConnections = connections.filter(
         (conn) =>
           groupMembers.some((m) => m.actorId === conn.actor1) &&
-          groupMembers.some((m) => m.actorId === conn.actor2)
-      );
+          groupMembers.some((m) => m.actorId === conn.actor2),
+      )
 
-      if (relevantConnections.length === 0) return '';
+      if (relevantConnections.length === 0) return ''
 
       const connectionLines = relevantConnections
         .map((conn) => {
-          const actor1 = groupMembers.find((m) => m.actorId === conn.actor1);
-          const actor2 = groupMembers.find((m) => m.actorId === conn.actor2);
-          return `   • ${actor1?.actorName} ↔️ ${actor2?.actorName}: ${conn.relationship}`;
+          const actor1 = groupMembers.find((m) => m.actorId === conn.actor1)
+          const actor2 = groupMembers.find((m) => m.actorId === conn.actor2)
+          return `   • ${actor1?.actorName} ↔️ ${actor2?.actorName}: ${conn.relationship}`
         })
-        .join('\n');
+        .join('\n')
 
-      return `\n   \n   RELATIONSHIPS IN THIS GROUP:\n${connectionLines}\n`;
-    };
+      return `\n   \n   RELATIONSHIPS IN THIS GROUP:\n${connectionLines}\n`
+    }
 
     const groupsList = groupRequests
       .map(
@@ -2661,15 +2668,15 @@ Max 120 characters, one sentence.`;
    MEMBERS IN THIS CHAT (don't gossip about them):
 ${req.members
   .map((m, j) => {
-    const actor = allActors.find((a) => a.id === m.actorId);
-    const emotionalState = getEmotionalState(m.actorId);
-    return `   ${j + 1}. ${m.actorName}${emotionalState} [${actor?.affiliations?.join(', ') || 'independent'}]`;
+    const actor = allActors.find((a) => a.id === m.actorId)
+    const emotionalState = getEmotionalState(m.actorId)
+    return `   ${j + 1}. ${m.actorName}${emotionalState} [${actor?.affiliations?.join(', ') || 'independent'}]`
   })
   .join('\n')}${getRelationshipContext(req.members)}
    
    PEOPLE NOT IN THIS CHAT (you can gossip):
    ${shuffleArray(
-     allActors.filter((a) => !req.members.find((m) => m.actorId === a.id))
+     allActors.filter((a) => !req.members.find((m) => m.actorId === a.id)),
    )
      .slice(0, 12)
      .map((a) => a.name)
@@ -2696,21 +2703,21 @@ ${req.previousMessages.map((pm) => `   [Day ${pm.day}] ${pm.actorName}: "${pm.me
    Generate ${req.members.length} messages:
 ${req.members
   .map((m, idx) => {
-    const actor = allActors.find((a) => a.id === m.actorId);
-    const emotionalState = getEmotionalState(m.actorId);
+    const actor = allActors.find((a) => a.id === m.actorId)
+    const emotionalState = getEmotionalState(m.actorId)
     return `   ${idx + 1}. ${m.actorName}${emotionalState} [${actor?.affiliations?.join(', ') || 'independent'}]:
       ${
         idx === 0
           ? 'Start/continue - share insider knowledge, strategic thoughts, or private reactions'
           : 'Respond to previous - add insider perspective, gossip about outsiders, share org info'
-      }`;
+      }`
   })
   .join('\n')}
    
    Max 200 chars each. PRIVATE conversation - strategic, vulnerable, gossipy.
-`
+`,
       )
-      .join('\n');
+      .join('\n')
 
     // Build rich game context for group messages
     const richContext = await buildRichGameContext(day, gameId, {
@@ -2718,13 +2725,13 @@ ${req.members
       includeFeedHistory: true,
       maxEvents: 200,
       maxPosts: 500,
-    });
+    })
     const richGameContextText = formatRichGameContext(richContext, {
       includeEventTimeline: true,
       includeFeedHistory: true,
       includeResolvedQuestions: true,
       includeNarrativeThreads: true,
-    });
+    })
 
     const prompt = renderPrompt(groupMessages, {
       fullContext: fullContext || `Day ${day} of 30`,
@@ -2738,30 +2745,30 @@ ${req.members
         : '',
       groupCount: groupRequests.length,
       groupsList,
-    });
+    })
 
-    const maxRetries = 5;
+    const maxRetries = 5
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       const rawResponse = await this.llm.generateJSON<
         | {
             groups: Array<{
-              groupId: string;
+              groupId: string
               messages: Array<{
-                actorId: string;
-                message: string;
-              }>;
-            }>;
+                actorId: string
+                message: string
+              }>
+            }>
           }
         | {
             response: {
               groups: Array<{
-                groupId: string;
+                groupId: string
                 messages: Array<{
-                  actorId: string;
-                  message: string;
-                }>;
-              }>;
-            };
+                  actorId: string
+                  message: string
+                }>
+              }>
+            }
           }
       >(
         prompt,
@@ -2770,48 +2777,48 @@ ${req.members
           temperature: 1.0,
           maxTokens: 5000,
           promptType: 'generate_group_messages_batch',
-        }
-      );
+        },
+      )
 
       if (!rawResponse || typeof rawResponse !== 'object') {
         logger.warn(
           `LLM returned null/undefined/invalid group messages response (attempt ${attempt + 1}/${maxRetries})`,
           undefined,
-          'GameGenerator'
-        );
+          'GameGenerator',
+        )
         if (attempt < maxRetries - 1) {
-          await new Promise((resolve) => setTimeout(resolve, 1000));
-          continue;
+          await new Promise((resolve) => setTimeout(resolve, 1000))
+          continue
         }
         // Fallback for last attempt
-        return messages;
+        return messages
       }
 
       // Handle XML structure - may be wrapped in 'response' or have nested 'group' array
       // Message type that handles both 'message' and 'content' fields from LLM
       type GroupMessageItem = {
-        actorId: string;
-        message?: string;
-        content?: string;
-      };
-      type ExtractedGroup = { groupId: string; messages: GroupMessageItem[] };
+        actorId: string
+        message?: string
+        content?: string
+      }
+      type ExtractedGroup = { groupId: string; messages: GroupMessageItem[] }
       // Type for nested XML group structures from LLM
       type NestedGroupData =
         | ExtractedGroup[]
         | { group: ExtractedGroup | ExtractedGroup[] }
-        | ExtractedGroup;
+        | ExtractedGroup
       // Type for messages that may be nested in XML structure
       type NestedMessages =
         | GroupMessageItem[]
-        | { message: GroupMessageItem | GroupMessageItem[] };
+        | { message: GroupMessageItem | GroupMessageItem[] }
 
-      let extractedGroups: ExtractedGroup[] = [];
+      let extractedGroups: ExtractedGroup[] = []
 
       // First, unwrap 'response' if present
       const responseData =
         'response' in rawResponse && rawResponse.response
           ? rawResponse.response
-          : (rawResponse as { groups: NestedGroupData });
+          : (rawResponse as { groups: NestedGroupData })
 
       // Now extract groups - handle various XML structures
       if (
@@ -2819,57 +2826,55 @@ ${req.members
         typeof responseData === 'object' &&
         'groups' in responseData
       ) {
-        const groupsData = responseData.groups as NestedGroupData;
+        const groupsData = responseData.groups as NestedGroupData
 
         if (Array.isArray(groupsData)) {
           // Direct array: { groups: [{...}, {...}] }
-          extractedGroups = groupsData;
+          extractedGroups = groupsData
         } else if (groupsData && typeof groupsData === 'object') {
           // Check for XML nested structure: { groups: { group: [...] } } or { groups: { group: {...} } }
           if ('group' in groupsData) {
-            const nestedData = groupsData as {
-              group: ExtractedGroup | ExtractedGroup[];
-            };
-            const groupContent = nestedData.group;
+            const groupContent = (
+              groupsData as { group: ExtractedGroup | ExtractedGroup[] }
+            ).group
             if (Array.isArray(groupContent)) {
-              extractedGroups = groupContent;
+              extractedGroups = groupContent
             } else if (groupContent && typeof groupContent === 'object') {
               // Single group wrapped in object
-              extractedGroups = [groupContent];
+              extractedGroups = [groupContent]
             }
           } else {
             // Single group returned directly as object: { groups: { groupId: "...", messages: [...] } }
-            extractedGroups = [groupsData as ExtractedGroup];
+            extractedGroups = [groupsData as ExtractedGroup]
           }
         }
       }
 
       // Ensure messages arrays are properly formatted (handle XML nested message structure)
       extractedGroups = extractedGroups.map((g) => {
-        let groupMessages: GroupMessageItem[] = [];
-        const rawMessages = g.messages as NestedMessages | undefined;
+        let groupMessages: GroupMessageItem[] = []
+        const rawMessages = g.messages as NestedMessages | undefined
 
         if (!rawMessages) {
-          return { ...g, messages: [] };
+          return { ...g, messages: [] }
         }
 
         if (Array.isArray(rawMessages)) {
-          groupMessages = rawMessages;
+          groupMessages = rawMessages
         } else if (
           typeof rawMessages === 'object' &&
           'message' in rawMessages
         ) {
           // Handle { messages: { message: [...] } } or { messages: { message: {...} } }
-          const nestedMsgs = rawMessages as {
-            message: GroupMessageItem | GroupMessageItem[];
-          };
-          const messageContent = nestedMsgs.message;
+          const messageContent = (
+            rawMessages as { message: GroupMessageItem | GroupMessageItem[] }
+          ).message
           groupMessages = Array.isArray(messageContent)
             ? messageContent
-            : [messageContent];
+            : [messageContent]
         }
-        return { ...g, messages: groupMessages };
-      });
+        return { ...g, messages: groupMessages }
+      })
 
       if (
         extractedGroups.length === groupRequests.length &&
@@ -2877,13 +2882,13 @@ ${req.members
       ) {
         // Convert to expected format - handle both 'message' and 'content' fields
         extractedGroups.forEach((group, i) => {
-          const req = groupRequests[i];
-          if (!req) return; // Skip if no matching request
+          const req = groupRequests[i]
+          if (!req) return // Skip if no matching request
 
           messages[group.groupId] = (group.messages as GroupMessageItem[]).map(
             (msg, j) => {
               // LLM may return 'content' field instead of 'message' field
-              const messageText = msg.message || msg.content || '';
+              const messageText = msg.message || msg.content || ''
               return {
                 from: msg.actorId,
                 message: messageText,
@@ -2893,37 +2898,37 @@ ${req.members
                   'main'
                     ? 0.7
                     : 0.4,
-              };
-            }
-          );
-        });
+              }
+            },
+          )
+        })
 
-        return messages;
+        return messages
       }
 
       logger.warn(
         `Invalid group messages batch for day ${day} (attempt ${attempt + 1}/${maxRetries}). Expected ${groupRequests.length}, got ${extractedGroups.length}`,
         undefined,
-        'GameGenerator'
-      );
+        'GameGenerator',
+      )
       if (attempt < maxRetries - 1) {
-        await new Promise((resolve) => setTimeout(resolve, 1000));
+        await new Promise((resolve) => setTimeout(resolve, 1000))
       }
     }
 
     throw new Error(
-      `Failed to generate group messages batch for day ${day} after ${maxRetries} attempts`
-    );
+      `Failed to generate group messages batch for day ${day} after ${maxRetries} attempts`,
+    )
   }
 
   /**
    * Get group activity chance based on day
    */
   private getGroupActivityChance(day: number): number {
-    if (day <= 10) return 0.3; // Quiet early
-    if (day <= 20) return 0.5; // Moderate mid-game
-    if (day <= 25) return 0.7; // Active late game
-    return 0.9; // Very active near end
+    if (day <= 10) return 0.3 // Quiet early
+    if (day <= 20) return 0.5 // Moderate mid-game
+    if (day <= 25) return 0.7 // Active late game
+    return 0.9 // Very active near end
   }
 
   /**
@@ -2934,14 +2939,14 @@ ${req.members
     actor: SelectedActor,
     events: WorldEvent[],
     day: number,
-    groupTheme: string
+    groupTheme: string,
   ): Promise<string> {
-    const recentEvent = events[Math.floor(Math.random() * events.length)];
+    const recentEvent = events[Math.floor(Math.random() * events.length)]
     const eventContext = recentEvent
       ? `Recent event: ${recentEvent.description}`
-      : `It's Day ${day} of 30`;
+      : `It's Day ${day} of 30`
     const informationHint =
-      day < 15 ? 'Drop vague hints' : 'Share more concrete information';
+      day < 15 ? 'Drop vague hints' : 'Share more concrete information'
 
     const prompt = renderPrompt(groupMessage, {
       actorName: actor.name,
@@ -2951,27 +2956,23 @@ ${req.members
       groupTheme,
       eventContext,
       informationHint,
-    });
+    })
 
     const rawResponse = await this.llm.generateJSON<
       { message: string } | { response: { message: string } }
     >(prompt, undefined, {
       temperature: 1.0,
       promptType: 'generate_group_message',
-    });
+    })
 
     // Handle null/undefined or non-object response
     if (!rawResponse || typeof rawResponse !== 'object') {
-      return `Day ${day}: Interesting developments...`;
+      return `Day ${day}: Interesting developments...`
     }
 
-    // Handle XML structure
-    const response =
-      'response' in rawResponse && rawResponse.response
-        ? rawResponse.response
-        : (rawResponse as { message: string });
-
-    return response.message || `Day ${day}: Interesting developments...`;
+    // Handle XML structure - unwrap nested response
+    const response = unwrapLLMResponse<{ message: string }>(rawResponse)
+    return response?.message || `Day ${day}: Interesting developments...`
   }
 
   /**
@@ -2981,58 +2982,54 @@ ${req.members
     day: number,
     events: WorldEvent[],
     actors: SelectedActor[],
-    luckMood: Map<string, { luck: string; mood: number }>
+    luckMood: Map<string, { luck: string; mood: number }>,
   ): LuckChange[] {
-    const changes: LuckChange[] = [];
+    const changes: LuckChange[] = []
 
     // Create a Set of valid actor IDs for efficient lookup
-    const validActorIds = new Set(actors.map((a) => a.id));
+    const validActorIds = new Set(actors.map((a) => a.id))
 
     // Actors involved in events may have luck changes
     events.forEach((event) => {
       event.actors.forEach((actorId) => {
         // Validate that actor exists in selected actors list
         if (!validActorIds.has(actorId)) {
-          return; // Skip actors not in the game
+          return // Skip actors not in the game
         }
 
         if (Math.random() > 0.7) {
           // 30% chance
-          const current = luckMood.get(actorId);
+          const current = luckMood.get(actorId)
           if (current) {
-            const luckLevels: Array<'low' | 'medium' | 'high'> = [
-              'low',
-              'medium',
-              'high',
-            ];
-            const currentIdx = luckLevels.indexOf(
-              current.luck as 'low' | 'medium' | 'high'
-            );
+            const luckLevels = ['low', 'medium', 'high'] as const
+            const currentLuck = toLuckLevel(current.luck)
+            const currentIdx = luckLevels.indexOf(currentLuck)
 
             // Determine direction based on event type and outcome
-            let change: number;
+            let change: number
             const isPositiveEvent =
               event.type === 'deal' ||
               event.type === 'announcement' ||
-              event.pointsToward === 'YES';
+              event.pointsToward === 'YES'
             const isNegativeEvent =
               event.type === 'scandal' ||
               event.type === 'conflict' ||
-              event.pointsToward === 'NO';
+              event.pointsToward === 'NO'
 
             if (isPositiveEvent) {
               // 70% chance to increase luck, 30% to decrease
-              change = Math.random() > 0.3 ? 1 : -1;
+              change = Math.random() > 0.3 ? 1 : -1
             } else if (isNegativeEvent) {
               // 70% chance to decrease luck, 30% to increase
-              change = Math.random() > 0.3 ? -1 : 1;
+              change = Math.random() > 0.3 ? -1 : 1
             } else {
               // Neutral: 50/50
-              change = Math.random() > 0.5 ? 1 : -1;
+              change = Math.random() > 0.5 ? 1 : -1
             }
 
-            const newIdx = Math.max(0, Math.min(2, currentIdx + change));
-            const newLuck = luckLevels[newIdx] as 'low' | 'medium' | 'high';
+            const newIdx = Math.max(0, Math.min(2, currentIdx + change))
+            // Safe: newIdx is clamped to [0, 2], luckLevels has exactly 3 elements
+            const newLuck = luckLevels[newIdx] ?? 'medium'
 
             if (newLuck !== current.luck) {
               changes.push({
@@ -3040,15 +3037,15 @@ ${req.members
                 from: current.luck,
                 to: newLuck,
                 reason: `Day ${day}: ${event.description}`,
-              });
-              current.luck = newLuck;
+              })
+              current.luck = newLuck
             }
           }
         }
-      });
-    });
+      })
+    })
 
-    return changes;
+    return changes
   }
 
   /**
@@ -3058,51 +3055,48 @@ ${req.members
     day: number,
     events: WorldEvent[],
     actors: SelectedActor[],
-    luckMood: Map<string, { luck: string; mood: number }>
+    luckMood: Map<string, { luck: string; mood: number }>,
   ): MoodChange[] {
-    const changes: MoodChange[] = [];
+    const changes: MoodChange[] = []
 
     // Create a Set of valid actor IDs for efficient lookup
-    const validActorIds = new Set(actors.map((a) => a.id));
+    const validActorIds = new Set(actors.map((a) => a.id))
 
     // Actors involved in events may have mood changes
     events.forEach((event) => {
       event.actors.forEach((actorId) => {
         // Validate that actor exists in selected actors list
         if (!validActorIds.has(actorId)) {
-          return; // Skip actors not in the game
+          return // Skip actors not in the game
         }
 
         if (Math.random() > 0.6) {
           // 40% chance
-          const current = luckMood.get(actorId);
+          const current = luckMood.get(actorId)
           if (current) {
             // Determine direction and magnitude based on event type and outcome
-            let moodChange: number;
+            let moodChange: number
             const isPositiveEvent =
               event.type === 'deal' ||
               event.type === 'announcement' ||
-              event.pointsToward === 'YES';
+              event.pointsToward === 'YES'
             const isNegativeEvent =
               event.type === 'scandal' ||
               event.type === 'conflict' ||
-              event.pointsToward === 'NO';
+              event.pointsToward === 'NO'
 
             if (isPositiveEvent) {
               // Positive events: bias toward positive mood change (0 to +0.3)
-              moodChange = Math.random() * 0.3;
+              moodChange = Math.random() * 0.3
             } else if (isNegativeEvent) {
               // Negative events: bias toward negative mood change (-0.3 to 0)
-              moodChange = Math.random() * -0.3;
+              moodChange = Math.random() * -0.3
             } else {
               // Neutral events: balanced change (-0.2 to +0.2)
-              moodChange = (Math.random() - 0.5) * 0.4;
+              moodChange = (Math.random() - 0.5) * 0.4
             }
 
-            const newMood = Math.max(
-              -1,
-              Math.min(1, current.mood + moodChange)
-            );
+            const newMood = Math.max(-1, Math.min(1, current.mood + moodChange))
 
             if (Math.abs(newMood - current.mood) > 0.05) {
               changes.push({
@@ -3110,15 +3104,15 @@ ${req.members
                 from: current.mood,
                 to: newMood,
                 reason: `Day ${day}: ${event.description}`,
-              });
-              current.mood = newMood;
+              })
+              current.mood = newMood
             }
           }
         }
-      });
-    });
+      })
+    })
 
-    return changes;
+    return changes
   }
 
   /**
@@ -3128,40 +3122,35 @@ ${req.members
    */
   private applyAmbientMoodDrift(
     actors: SelectedActor[],
-    luckMood: Map<string, { luck: string; mood: number }>
+    luckMood: Map<string, { luck: string; mood: number }>,
   ): void {
     actors.forEach((actor) => {
-      const current = luckMood.get(actor.id);
+      const current = luckMood.get(actor.id)
       if (current) {
         // 60% chance of mood drift each day
         if (Math.random() > 0.4) {
           // Small drift: -0.1 to +0.1 (bidirectional, perfectly balanced)
           // 5% chance of larger mood swing for variety
-          const isLargeSwing = Math.random() > 0.95;
-          const range = isLargeSwing ? 0.4 : 0.2; // Large: ±0.2, Normal: ±0.1
-          const drift = (Math.random() - 0.5) * range;
-          const newMood = Math.max(-1, Math.min(1, current.mood + drift));
-          current.mood = newMood;
+          const isLargeSwing = Math.random() > 0.95
+          const range = isLargeSwing ? 0.4 : 0.2 // Large: ±0.2, Normal: ±0.1
+          const drift = (Math.random() - 0.5) * range
+          const newMood = Math.max(-1, Math.min(1, current.mood + drift))
+          current.mood = newMood
         }
 
         // 15% chance of luck changing (up or down equally)
         if (Math.random() > 0.85) {
-          const luckLevels: Array<'low' | 'medium' | 'high'> = [
-            'low',
-            'medium',
-            'high',
-          ];
-          const currentIdx = luckLevels.indexOf(
-            current.luck as 'low' | 'medium' | 'high'
-          );
+          const luckLevels = ['low', 'medium', 'high'] as const
+          const currentLuck = toLuckLevel(current.luck)
+          const currentIdx = luckLevels.indexOf(currentLuck)
           // 50/50 chance to go up or down
-          const change = Math.random() > 0.5 ? 1 : -1;
-          const newIdx = Math.max(0, Math.min(2, currentIdx + change));
-          // Type assertion safe because newIdx is clamped to [0, 2]
-          current.luck = luckLevels[newIdx] as 'low' | 'medium' | 'high';
+          const change = Math.random() > 0.5 ? 1 : -1
+          const newIdx = Math.max(0, Math.min(2, currentIdx + change))
+          // Safe: newIdx is clamped to [0, 2], luckLevels has exactly 3 elements
+          current.luck = luckLevels[newIdx] ?? 'medium'
         }
       }
-    });
+    })
   }
 
   /**
@@ -3169,7 +3158,7 @@ ${req.members
    */
   private generateResolution(
     questions: Question[],
-    timeline: DayTimeline[]
+    timeline: DayTimeline[],
   ): GameResolution {
     const outcomes = questions.map((q) => {
       // Find key events that pointed to this outcome
@@ -3178,39 +3167,39 @@ ${req.members
         .filter(
           (e) =>
             e.relatedQuestion === q.id &&
-            e.pointsToward === (q.outcome ? 'YES' : 'NO')
+            e.pointsToward === (q.outcome ? 'YES' : 'NO'),
         )
-        .slice(0, 3);
+        .slice(0, 3)
 
       return {
         questionId: q.id,
         answer: q.outcome,
         explanation: `Throughout the 30 days, events aligned toward ${q.outcome ? 'YES' : 'NO'}. ${relevantEvents.length} key events confirmed this outcome.`,
         keyEvents: relevantEvents.map((e) => e.description),
-      };
-    });
+      }
+    })
 
     return {
       day: 30,
       outcomes,
       finalNarrative: `All ${questions.length} questions have been resolved. The 30-day narrative concludes with clear outcomes based on the events that unfolded.`,
-    };
+    }
   }
 
   private getPhase(day: number): string {
-    if (day <= 10) return 'Early';
-    if (day <= 20) return 'Middle';
-    if (day <= 25) return 'Late';
-    if (day < 30) return 'Climax';
-    return 'Resolution';
+    if (day <= 10) return 'Early'
+    if (day <= 20) return 'Middle'
+    if (day <= 25) return 'Late'
+    if (day < 30) return 'Climax'
+    return 'Resolution'
   }
 
   private getEventCount(day: number): number {
     // Match GDD requirements
-    if (day <= 10) return 3 + Math.floor(Math.random() * 3); // 3-5 events (WILD PHASE)
-    if (day <= 20) return 5 + Math.floor(Math.random() * 3); // 5-7 events (CONNECTION PHASE)
-    if (day <= 25) return 7 + Math.floor(Math.random() * 4); // 7-10 events (CONVERGENCE)
-    if (day < 30) return 10 + Math.floor(Math.random() * 6); // 10-15 events (CLIMAX)
-    return 5; // Day 30 resolution (5 final events)
+    if (day <= 10) return 3 + Math.floor(Math.random() * 3) // 3-5 events (WILD PHASE)
+    if (day <= 20) return 5 + Math.floor(Math.random() * 3) // 5-7 events (CONNECTION PHASE)
+    if (day <= 25) return 7 + Math.floor(Math.random() * 4) // 7-10 events (CONVERGENCE)
+    if (day < 30) return 10 + Math.floor(Math.random() * 6) // 10-15 events (CLIMAX)
+    return 5 // Day 30 resolution (5 final events)
   }
 }

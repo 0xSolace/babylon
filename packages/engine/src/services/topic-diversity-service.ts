@@ -32,8 +32,8 @@
  * ```
  */
 
-import { and, db, desc, eq, gte, isNull, posts } from '@babylon/db';
-import { logger } from '@babylon/shared';
+import { and, db, desc, eq, gte, isNull, posts } from '@babylon/db'
+import { logger } from '@babylon/shared'
 
 /**
  * Editorial beat categories that news outlets can specialize in
@@ -50,27 +50,27 @@ export type EditorialBeat =
   | 'regulation'
   | 'markets'
   | 'startups'
-  | 'media';
+  | 'media'
 
 /**
  * Topic coverage record for saturation tracking
  */
 interface TopicCoverage {
-  topic: string;
-  articleCount: number;
-  lastCoveredAt: Date;
-  beat: EditorialBeat;
+  topic: string
+  articleCount: number
+  lastCoveredAt: Date
+  beat: EditorialBeat
 }
 
 /**
  * Diverse topic suggestion with metadata
  */
 export interface DiverseTopicSuggestion {
-  topic: string;
-  beat: EditorialBeat;
-  reason: string;
-  priority: number; // 0-1, higher = more needed
-  cooldownRemaining: number; // hours until fully available
+  topic: string
+  beat: EditorialBeat
+  reason: string
+  priority: number // 0-1, higher = more needed
+  cooldownRemaining: number // hours until fully available
 }
 
 /**
@@ -78,13 +78,13 @@ export interface DiverseTopicSuggestion {
  */
 interface DiversityConfig {
   /** Max percentage of articles about any single topic in window */
-  maxTopicSaturation: number;
+  maxTopicSaturation: number
   /** Hours before same topic can be heavily covered again */
-  cooldownHours: number;
+  cooldownHours: number
   /** Minimum percentage of articles that must be "off-trend" */
-  diversityQuota: number;
+  diversityQuota: number
   /** Hours to look back for saturation calculation */
-  windowHours: number;
+  windowHours: number
 }
 
 const DEFAULT_CONFIG: DiversityConfig = {
@@ -92,7 +92,7 @@ const DEFAULT_CONFIG: DiversityConfig = {
   cooldownHours: 4, // 4 hours between heavy coverage of same topic
   diversityQuota: 0.25, // 25% of articles must be diverse/off-trend
   windowHours: 6, // Look at last 6 hours
-};
+}
 
 /**
  * Editorial beat assignments based on organization descriptions
@@ -131,16 +131,16 @@ export const ORGANIZATION_BEATS: Record<string, EditorialBeat[]> = {
 
   // Crypto/Finance specialty
   'the-economaist': ['finance', 'politics', 'regulation'],
-};
+}
 
 /**
  * Story seeds for diverse topic generation
  * These are topic templates that aren't tied to prediction market questions
  */
 export const STORY_SEEDS: Array<{
-  template: string;
-  beat: EditorialBeat;
-  variables: string[];
+  template: string
+  beat: EditorialBeat
+  variables: string[]
 }> = [
   // Tech stories
   {
@@ -254,7 +254,7 @@ export const STORY_SEEDS: Array<{
       'content creation',
     ],
   },
-];
+]
 
 /**
  * Topic Diversity Service
@@ -263,27 +263,27 @@ export const STORY_SEEDS: Array<{
  * the content generation flywheel from converging on singular topics.
  */
 export class TopicDiversityService {
-  private config: DiversityConfig;
-  private topicCache: Map<string, TopicCoverage> = new Map();
-  private lastCacheRefresh: Date = new Date(0);
-  private readonly CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+  private config: DiversityConfig
+  private topicCache: Map<string, TopicCoverage> = new Map()
+  private lastCacheRefresh: Date = new Date(0)
+  private readonly CACHE_TTL_MS = 5 * 60 * 1000 // 5 minutes
 
   constructor(config: Partial<DiversityConfig> = {}) {
-    this.config = { ...DEFAULT_CONFIG, ...config };
+    this.config = { ...DEFAULT_CONFIG, ...config }
   }
 
   /**
    * Refresh topic coverage cache from database
    */
   private async refreshCache(): Promise<void> {
-    const now = new Date();
+    const now = new Date()
     if (now.getTime() - this.lastCacheRefresh.getTime() < this.CACHE_TTL_MS) {
-      return; // Cache still fresh
+      return // Cache still fresh
     }
 
     const windowStart = new Date(
-      now.getTime() - this.config.windowHours * 60 * 60 * 1000
-    );
+      now.getTime() - this.config.windowHours * 60 * 60 * 1000,
+    )
 
     // Get recent articles and extract topics from titles/content
     const recentArticles = await db
@@ -297,49 +297,51 @@ export class TopicDiversityService {
         and(
           eq(posts.type, 'article'),
           gte(posts.timestamp, windowStart),
-          isNull(posts.deletedAt)
-        )
+          isNull(posts.deletedAt),
+        ),
       )
-      .orderBy(desc(posts.timestamp));
+      .orderBy(desc(posts.timestamp))
 
     // Extract and count topics
-    this.topicCache.clear();
+    this.topicCache.clear()
     for (const article of recentArticles) {
       const topics = this.extractTopics(
-        `${article.articleTitle || ''} ${article.content || ''}`
-      );
+        `${article.articleTitle || ''} ${article.content || ''}`,
+      )
+      // Cast timestamp to Date (CQL returns Date but types as unknown)
+      const articleTimestamp = article.timestamp as Date | null
       for (const topic of topics) {
-        const existing = this.topicCache.get(topic.toLowerCase());
+        const existing = this.topicCache.get(topic.toLowerCase())
         if (existing) {
-          existing.articleCount++;
-          if (article.timestamp && article.timestamp > existing.lastCoveredAt) {
-            existing.lastCoveredAt = article.timestamp;
+          existing.articleCount++
+          if (articleTimestamp && articleTimestamp > existing.lastCoveredAt) {
+            existing.lastCoveredAt = articleTimestamp
           }
         } else {
           this.topicCache.set(topic.toLowerCase(), {
             topic,
             articleCount: 1,
-            lastCoveredAt: article.timestamp || new Date(),
+            lastCoveredAt: articleTimestamp || new Date(),
             beat: this.inferBeat(topic),
-          });
+          })
         }
       }
     }
 
-    this.lastCacheRefresh = now;
+    this.lastCacheRefresh = now
     logger.debug(
       'Topic diversity cache refreshed',
       { topicCount: this.topicCache.size, articleCount: recentArticles.length },
-      'TopicDiversityService'
-    );
+      'TopicDiversityService',
+    )
   }
 
   /**
    * Extract topic keywords from text
    */
   private extractTopics(text: string): string[] {
-    const topics: string[] = [];
-    const lowercaseText = text.toLowerCase();
+    const topics: string[] = []
+    const lowercaseText = text.toLowerCase()
 
     // Key topic indicators
     const topicPatterns = [
@@ -377,34 +379,34 @@ export class TopicDiversityService {
       { pattern: /\b(google|alphabet)\b/i, topic: 'google' },
       { pattern: /\b(microsoft)\b/i, topic: 'microsoft' },
       { pattern: /\b(amazon)\b/i, topic: 'amazon' },
-    ];
+    ]
 
     for (const { pattern, topic } of topicPatterns) {
       if (pattern.test(lowercaseText)) {
-        topics.push(topic);
+        topics.push(topic)
       }
     }
 
-    return [...new Set(topics)]; // Dedupe
+    return [...new Set(topics)] // Dedupe
   }
 
   /**
    * Infer editorial beat from topic
    */
   private inferBeat(topic: string): EditorialBeat {
-    const topicLower = topic.toLowerCase();
+    const topicLower = topic.toLowerCase()
 
     if (
       ['ai', 'machine-learning', 'llms', 'ai-companies'].includes(topicLower)
     ) {
-      return 'ai';
+      return 'ai'
     }
     if (
       ['bitcoin', 'ethereum', 'crypto', 'defi', 'nfts', 'stablecoins'].includes(
-        topicLower
+        topicLower,
       )
     ) {
-      return 'crypto';
+      return 'crypto'
     }
     if (
       [
@@ -415,12 +417,12 @@ export class TopicDiversityService {
         'recession',
       ].includes(topicLower)
     ) {
-      return 'finance';
+      return 'finance'
     }
     if (
       ['elections', 'congress', 'regulation', 'antitrust'].includes(topicLower)
     ) {
-      return 'politics';
+      return 'politics'
     }
     if (
       [
@@ -432,10 +434,10 @@ export class TopicDiversityService {
         'amazon',
       ].includes(topicLower)
     ) {
-      return 'tech';
+      return 'tech'
     }
 
-    return 'tech'; // Default
+    return 'tech' // Default
   }
 
   /**
@@ -445,58 +447,58 @@ export class TopicDiversityService {
    * @returns Penalty score 0-1 (0 = not saturated, 1 = heavily saturated)
    */
   async getTopicPenalty(topicOrKeywords: string): Promise<number> {
-    await this.refreshCache();
+    await this.refreshCache()
 
-    const topics = this.extractTopics(topicOrKeywords);
+    const topics = this.extractTopics(topicOrKeywords)
     if (topics.length === 0) {
-      return 0; // Unknown topic, no penalty
+      return 0 // Unknown topic, no penalty
     }
 
-    let maxPenalty = 0;
+    let maxPenalty = 0
     const totalArticles = Array.from(this.topicCache.values()).reduce(
       (sum, t) => sum + t.articleCount,
-      0
-    );
+      0,
+    )
 
     for (const topic of topics) {
-      const coverage = this.topicCache.get(topic.toLowerCase());
-      if (!coverage) continue;
+      const coverage = this.topicCache.get(topic.toLowerCase())
+      if (!coverage) continue
 
       // Calculate saturation ratio
       const saturationRatio =
-        totalArticles > 0 ? coverage.articleCount / totalArticles : 0;
+        totalArticles > 0 ? coverage.articleCount / totalArticles : 0
 
       // Calculate cooldown penalty
       const hoursSinceLastCoverage =
-        (Date.now() - coverage.lastCoveredAt.getTime()) / (1000 * 60 * 60);
+        (Date.now() - coverage.lastCoveredAt.getTime()) / (1000 * 60 * 60)
       const cooldownPenalty =
         hoursSinceLastCoverage < this.config.cooldownHours
           ? 1 - hoursSinceLastCoverage / this.config.cooldownHours
-          : 0;
+          : 0
 
       // Combined penalty
       const saturationPenalty =
         saturationRatio > this.config.maxTopicSaturation
           ? (saturationRatio - this.config.maxTopicSaturation) /
             (1 - this.config.maxTopicSaturation)
-          : 0;
+          : 0
 
-      const penalty = Math.max(saturationPenalty, cooldownPenalty * 0.5);
-      maxPenalty = Math.max(maxPenalty, penalty);
+      const penalty = Math.max(saturationPenalty, cooldownPenalty * 0.5)
+      maxPenalty = Math.max(maxPenalty, penalty)
     }
 
-    return Math.min(1, maxPenalty);
+    return Math.min(1, maxPenalty)
   }
 
   /**
    * Check if a topic should be skipped due to saturation
    */
   async shouldSkipTopic(topicOrKeywords: string): Promise<boolean> {
-    const penalty = await this.getTopicPenalty(topicOrKeywords);
+    const penalty = await this.getTopicPenalty(topicOrKeywords)
     // Skip if penalty > 0.7, or use random chance based on penalty
-    if (penalty > 0.7) return true;
-    if (penalty > 0.3 && Math.random() < penalty) return true;
-    return false;
+    if (penalty > 0.7) return true
+    if (penalty > 0.3 && Math.random() < penalty) return true
+    return false
   }
 
   /**
@@ -508,46 +510,45 @@ export class TopicDiversityService {
    */
   async suggestDiverseTopics(
     count: number,
-    excludeBeats: EditorialBeat[] = []
+    excludeBeats: EditorialBeat[] = [],
   ): Promise<DiverseTopicSuggestion[]> {
-    await this.refreshCache();
+    await this.refreshCache()
 
-    const suggestions: DiverseTopicSuggestion[] = [];
-    const coveredBeats = new Set<EditorialBeat>();
+    const suggestions: DiverseTopicSuggestion[] = []
+    const coveredBeats = new Set<EditorialBeat>()
 
     // Identify which beats are oversaturated
     for (const coverage of this.topicCache.values()) {
-      coveredBeats.add(coverage.beat);
+      coveredBeats.add(coverage.beat)
     }
 
     // Generate suggestions from story seeds (filtering excluded beats)
     for (const seed of STORY_SEEDS) {
-      if (excludeBeats.includes(seed.beat)) continue;
-      if (suggestions.length >= count) break;
+      if (excludeBeats.includes(seed.beat)) continue
+      if (suggestions.length >= count) break
 
       // Check if this beat is underrepresented
       const beatCoverage = Array.from(this.topicCache.values()).filter(
-        (t) => t.beat === seed.beat
-      );
+        (t) => t.beat === seed.beat,
+      )
       const beatArticleCount = beatCoverage.reduce(
         (sum, t) => sum + t.articleCount,
-        0
-      );
+        0,
+      )
       const totalArticles = Array.from(this.topicCache.values()).reduce(
         (sum, t) => sum + t.articleCount,
-        0
-      );
+        0,
+      )
 
-      const beatRatio =
-        totalArticles > 0 ? beatArticleCount / totalArticles : 0;
-      const priority = 1 - beatRatio; // Higher priority for less covered beats
+      const beatRatio = totalArticles > 0 ? beatArticleCount / totalArticles : 0
+      const priority = 1 - beatRatio // Higher priority for less covered beats
 
       // Generate a concrete topic from the template
       const variable =
-        seed.variables[Math.floor(Math.random() * seed.variables.length)];
+        seed.variables[Math.floor(Math.random() * seed.variables.length)]
       const topic = seed.template
         .replace(/{[^}]+}/g, variable || 'developments')
-        .trim();
+        .trim()
 
       suggestions.push({
         topic,
@@ -558,11 +559,11 @@ export class TopicDiversityService {
             : `Diversify coverage beyond trending topics`,
         priority,
         cooldownRemaining: 0,
-      });
+      })
     }
 
     // Sort by priority and return top N
-    return suggestions.sort((a, b) => b.priority - a.priority).slice(0, count);
+    return suggestions.sort((a, b) => b.priority - a.priority).slice(0, count)
   }
 
   /**
@@ -571,56 +572,56 @@ export class TopicDiversityService {
   async getTopicsInCooldown(): Promise<
     Array<{ topic: string; hoursRemaining: number }>
   > {
-    await this.refreshCache();
+    await this.refreshCache()
 
-    const now = Date.now();
-    const cooldownTopics: Array<{ topic: string; hoursRemaining: number }> = [];
+    const now = Date.now()
+    const cooldownTopics: Array<{ topic: string; hoursRemaining: number }> = []
 
     for (const coverage of this.topicCache.values()) {
       const hoursSinceLastCoverage =
-        (now - coverage.lastCoveredAt.getTime()) / (1000 * 60 * 60);
+        (now - coverage.lastCoveredAt.getTime()) / (1000 * 60 * 60)
       if (hoursSinceLastCoverage < this.config.cooldownHours) {
         cooldownTopics.push({
           topic: coverage.topic,
           hoursRemaining: this.config.cooldownHours - hoursSinceLastCoverage,
-        });
+        })
       }
     }
 
-    return cooldownTopics.sort((a, b) => b.hoursRemaining - a.hoursRemaining);
+    return cooldownTopics.sort((a, b) => b.hoursRemaining - a.hoursRemaining)
   }
 
   /**
    * Get editorial beats for an organization
    */
   getOrganizationBeats(orgId: string): EditorialBeat[] {
-    return ORGANIZATION_BEATS[orgId] || ['tech', 'business']; // Default beats
+    return ORGANIZATION_BEATS[orgId] || ['tech', 'business'] // Default beats
   }
 
   /**
    * Check if an organization should cover a topic based on their beats
    */
   isTopicOnBeat(orgId: string, topicOrKeywords: string): boolean {
-    const orgBeats = this.getOrganizationBeats(orgId);
-    const topicBeat = this.inferBeat(topicOrKeywords);
-    return orgBeats.includes(topicBeat);
+    const orgBeats = this.getOrganizationBeats(orgId)
+    const topicBeat = this.inferBeat(topicOrKeywords)
+    return orgBeats.includes(topicBeat)
   }
 
   /**
    * Get coverage statistics
    */
   async getCoverageStats(): Promise<{
-    topicCount: number;
-    totalArticles: number;
-    topTopics: Array<{ topic: string; count: number; percentage: number }>;
-    beatDistribution: Record<EditorialBeat, number>;
+    topicCount: number
+    totalArticles: number
+    topTopics: Array<{ topic: string; count: number; percentage: number }>
+    beatDistribution: Record<EditorialBeat, number>
   }> {
-    await this.refreshCache();
+    await this.refreshCache()
 
     const totalArticles = Array.from(this.topicCache.values()).reduce(
       (sum, t) => sum + t.articleCount,
-      0
-    );
+      0,
+    )
 
     const topTopics = Array.from(this.topicCache.values())
       .sort((a, b) => b.articleCount - a.articleCount)
@@ -630,7 +631,7 @@ export class TopicDiversityService {
         count: t.articleCount,
         percentage:
           totalArticles > 0 ? (t.articleCount / totalArticles) * 100 : 0,
-      }));
+      }))
 
     const beatDistribution: Record<EditorialBeat, number> = {
       tech: 0,
@@ -645,10 +646,10 @@ export class TopicDiversityService {
       markets: 0,
       startups: 0,
       media: 0,
-    };
+    }
 
     for (const coverage of this.topicCache.values()) {
-      beatDistribution[coverage.beat] += coverage.articleCount;
+      beatDistribution[coverage.beat] += coverage.articleCount
     }
 
     return {
@@ -656,26 +657,26 @@ export class TopicDiversityService {
       totalArticles,
       topTopics,
       beatDistribution,
-    };
+    }
   }
 }
 
 // Singleton instance
-let diversityServiceInstance: TopicDiversityService | null = null;
+let diversityServiceInstance: TopicDiversityService | null = null
 
 /**
  * Get the singleton TopicDiversityService instance
  */
 export function getTopicDiversityService(): TopicDiversityService {
   if (!diversityServiceInstance) {
-    diversityServiceInstance = new TopicDiversityService();
+    diversityServiceInstance = new TopicDiversityService()
   }
-  return diversityServiceInstance;
+  return diversityServiceInstance
 }
 
 /**
  * Reset the singleton (for testing)
  */
 export function resetTopicDiversityService(): void {
-  diversityServiceInstance = null;
+  diversityServiceInstance = null
 }

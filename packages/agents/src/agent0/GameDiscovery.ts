@@ -5,47 +5,47 @@
  * through the Agent0 registry.
  */
 
-import { db } from '@babylon/db';
-import { z } from 'zod';
-import { logger } from '../shared/logger';
-import { IPFSPublisher } from './IPFSPublisher';
-import { SubgraphClient } from './SubgraphClient';
+import { db } from '@babylon/db'
+import { z } from 'zod'
+import { logger } from '../shared/logger'
+import { IPFSPublisher } from './IPFSPublisher'
+import { SubgraphClient } from './SubgraphClient'
 
 const GameConfigValueSchema = z.object({
   tokenId: z.number(),
-});
+})
 
 export interface DiscoverableGame {
-  tokenId: number;
-  name: string;
-  type: string;
-  metadataCID: string;
+  tokenId: number
+  name: string
+  type: string
+  metadataCID: string
   endpoints: {
-    a2a: string;
-    mcp: string;
-    api: string;
-    docs?: string;
-    websocket?: string;
-  };
+    a2a: string
+    mcp: string
+    api: string
+    docs?: string
+    websocket?: string
+  }
   capabilities: {
-    markets: string[];
-    actions: string[];
-    protocols: string[];
-    socialFeatures?: boolean;
-    realtime?: boolean;
-  };
+    markets: string[]
+    actions: string[]
+    protocols: string[]
+    socialFeatures?: boolean
+    realtime?: boolean
+  }
   reputation?: {
-    trustScore: number;
-  };
+    trustScore: number
+  }
 }
 
 export class GameDiscoveryService {
-  private subgraphClient: SubgraphClient;
-  private ipfsPublisher: IPFSPublisher;
+  private subgraphClient: SubgraphClient
+  private ipfsPublisher: IPFSPublisher
 
   constructor() {
-    this.subgraphClient = new SubgraphClient();
-    this.ipfsPublisher = new IPFSPublisher();
+    this.subgraphClient = new SubgraphClient()
+    this.ipfsPublisher = new IPFSPublisher()
   }
 
   /**
@@ -53,21 +53,19 @@ export class GameDiscoveryService {
    * This is what external agents call to find Babylon
    */
   async discoverGames(filters: {
-    type?: string; // "game-platform", "prediction-market", etc.
-    markets?: string[]; // ["prediction", "perpetuals"]
-    minReputation?: number;
+    type?: string // "game-platform", "prediction-market", etc.
+    markets?: string[] // ["prediction", "perpetuals"]
+    minReputation?: number
   }): Promise<DiscoverableGame[]> {
     const subgraphAgents = await this.subgraphClient.getGamePlatforms({
       markets: filters.markets,
       minTrustScore: filters.minReputation,
-    });
+    })
 
-    const games: DiscoverableGame[] = [];
+    const games: DiscoverableGame[] = []
 
     for (const agent of subgraphAgents) {
-      const metadata = await this.ipfsPublisher.fetchMetadata(
-        agent.metadataCID
-      );
+      const metadata = await this.ipfsPublisher.fetchMetadata(agent.metadataCID)
 
       games.push({
         tokenId: agent.tokenId,
@@ -93,14 +91,14 @@ export class GameDiscoveryService {
               trustScore: agent.reputation.trustScore,
             }
           : undefined,
-      });
+      })
     }
 
     if (filters.type) {
-      return games.filter((g) => g.type === filters.type);
+      return games.filter((g) => g.type === filters.type)
     }
 
-    return games;
+    return games
   }
 
   /**
@@ -111,57 +109,57 @@ export class GameDiscoveryService {
       logger.info(
         `Discovering Babylon (attempt ${attempt}/${maxRetries})...`,
         undefined,
-        'GameDiscovery'
-      );
+        'GameDiscovery',
+      )
 
       const games = await this.discoverGames({
         type: 'game-platform',
         markets: ['prediction'],
-      });
+      })
 
       const babylon = games.find(
         (g) =>
           g.name.toLowerCase().includes('babylon') ||
-          g.name.toLowerCase().includes('prediction market')
-      );
+          g.name.toLowerCase().includes('prediction market'),
+      )
 
       if (babylon) {
-        const isValid = await this.validateEndpoints(babylon);
+        const isValid = await this.validateEndpoints(babylon)
         if (isValid) {
           logger.info(
             `✅ Found and validated Babylon: ${babylon.name} (token: ${babylon.tokenId})`,
             undefined,
-            'GameDiscovery'
-          );
-          return babylon;
+            'GameDiscovery',
+          )
+          return babylon
         }
         logger.warn(
           `Babylon found but endpoints failed validation (attempt ${attempt}/${maxRetries})`,
           undefined,
-          'GameDiscovery'
-        );
+          'GameDiscovery',
+        )
       } else {
         logger.warn(
           `Babylon not found in registry (attempt ${attempt}/${maxRetries})`,
           undefined,
-          'GameDiscovery'
-        );
+          'GameDiscovery',
+        )
       }
 
-      if (process.env.NEXT_RUNTIME === 'nodejs') {
+      if (process.env.RUNTIME === 'nodejs') {
         const config = await db.gameConfig.findUnique({
           where: { key: 'agent0_registration' },
-        });
+        })
 
-        const validation = GameConfigValueSchema.safeParse(config?.value);
+        const validation = GameConfigValueSchema.safeParse(config?.value)
         if (validation.success) {
-          const tokenId = validation.data.tokenId;
-          const agent = await this.subgraphClient.getAgent(tokenId);
+          const tokenId = validation.data.tokenId
+          const agent = await this.subgraphClient.getAgent(tokenId)
 
           if (agent) {
             const metadata = await this.ipfsPublisher.fetchMetadata(
-              agent.metadataCID
-            );
+              agent.metadataCID,
+            )
             return {
               tokenId: agent.tokenId,
               name: agent.name,
@@ -181,23 +179,19 @@ export class GameDiscoveryService {
                 socialFeatures: metadata.capabilities?.socialFeatures,
                 realtime: metadata.capabilities?.realtime,
               },
-            };
+            }
           }
         }
       }
 
       if (attempt < maxRetries) {
-        const backoffMs = 1000 * attempt;
-        logger.info(
-          `Retrying in ${backoffMs}ms...`,
-          undefined,
-          'GameDiscovery'
-        );
-        await this.sleep(backoffMs);
+        const backoffMs = 1000 * attempt
+        logger.info(`Retrying in ${backoffMs}ms...`, undefined, 'GameDiscovery')
+        await this.sleep(backoffMs)
       }
     }
 
-    return null;
+    return null
   }
 
   /**
@@ -207,94 +201,94 @@ export class GameDiscoveryService {
     logger.debug(
       `Validating endpoints for ${game.name}...`,
       undefined,
-      'GameDiscovery'
-    );
+      'GameDiscovery',
+    )
 
-    const validations: Promise<boolean>[] = [];
+    const validations: Promise<boolean>[] = []
 
     if (game.endpoints.mcp) {
-      validations.push(this.validateMCPEndpoint(game.endpoints.mcp));
+      validations.push(this.validateMCPEndpoint(game.endpoints.mcp))
     }
 
     if (game.endpoints.api) {
-      validations.push(this.validateAPIEndpoint(game.endpoints.api));
+      validations.push(this.validateAPIEndpoint(game.endpoints.api))
     }
 
-    const results = await Promise.all(validations);
-    const anyValid = results.some((r) => r);
+    const results = await Promise.all(validations)
+    const anyValid = results.some((r) => r)
 
     logger.debug(
       anyValid
         ? `✅ Endpoints validated for ${game.name}`
         : `❌ No valid endpoints found for ${game.name}`,
       undefined,
-      'GameDiscovery'
-    );
+      'GameDiscovery',
+    )
 
-    return anyValid;
+    return anyValid
   }
 
   /**
    * Validate MCP endpoint
    */
   private async validateMCPEndpoint(mcpUrl: string): Promise<boolean> {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 5000);
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 5000)
 
     const response = await fetch(mcpUrl, {
       signal: controller.signal,
       headers: { Accept: 'application/json' },
-    });
+    })
 
-    clearTimeout(timeout);
+    clearTimeout(timeout)
 
     if (!response.ok) {
-      return false;
+      return false
     }
 
-    const data = await response.json();
+    const data = await response.json()
     return !!(
       data &&
       typeof data === 'object' &&
       'name' in data &&
       'tools' in data
-    );
+    )
   }
 
   /**
    * Validate API endpoint
    */
   private async validateAPIEndpoint(apiUrl: string): Promise<boolean> {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 5000);
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 5000)
 
     const response = await fetch(`${apiUrl}/markets`, {
       signal: controller.signal,
       headers: { Accept: 'application/json' },
-    });
+    })
 
-    clearTimeout(timeout);
+    clearTimeout(timeout)
 
-    return response.ok || response.status === 401 || response.status === 403;
+    return response.ok || response.status === 401 || response.status === 403
   }
 
   /**
    * Sleep utility for retry backoff
    */
   private async sleep(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
+    return new Promise((resolve) => setTimeout(resolve, ms))
   }
 
   /**
    * Get game metadata by token ID
    */
   async getGameByTokenId(tokenId: number): Promise<DiscoverableGame | null> {
-    const agent = await this.subgraphClient.getAgent(tokenId);
+    const agent = await this.subgraphClient.getAgent(tokenId)
     if (!agent) {
-      return null;
+      return null
     }
 
-    const metadata = await this.ipfsPublisher.fetchMetadata(agent.metadataCID);
+    const metadata = await this.ipfsPublisher.fetchMetadata(agent.metadataCID)
 
     return {
       tokenId: agent.tokenId,
@@ -320,18 +314,18 @@ export class GameDiscoveryService {
             trustScore: agent.reputation.trustScore,
           }
         : undefined,
-    };
+    }
   }
 }
 
 /**
  * Get or create singleton GameDiscoveryService instance
  */
-let gameDiscoveryInstance: GameDiscoveryService | null = null;
+let gameDiscoveryInstance: GameDiscoveryService | null = null
 
 export function getGameDiscoveryService(): GameDiscoveryService {
   if (!gameDiscoveryInstance) {
-    gameDiscoveryInstance = new GameDiscoveryService();
+    gameDiscoveryInstance = new GameDiscoveryService()
   }
-  return gameDiscoveryInstance;
+  return gameDiscoveryInstance
 }

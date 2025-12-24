@@ -1,6 +1,6 @@
-import { cn } from '@babylon/shared';
-import type { ReactNode } from 'react';
-import { forwardRef } from 'react';
+import { cn } from '@babylon/shared'
+import type { ReactNode } from 'react'
+import { forwardRef } from 'react'
 
 /**
  * Page container component for consistent page layout.
@@ -19,9 +19,9 @@ import { forwardRef } from 'react';
  * ```
  */
 interface PageContainerProps {
-  children: ReactNode;
-  className?: string;
-  noPadding?: boolean;
+  children: ReactNode
+  className?: string
+  noPadding?: boolean
 }
 
 export const PageContainer = forwardRef<HTMLDivElement, PageContainerProps>(
@@ -37,13 +37,13 @@ export const PageContainer = forwardRef<HTMLDivElement, PageContainerProps>(
           'md:h-full',
           // Consistent padding: 16px mobile, 24px desktop
           !noPadding && 'px-4 md:px-6',
-          className
+          className,
         )}
       >
         {children}
       </div>
-    );
-  }
-);
+    )
+  },
+)
 
-PageContainer.displayName = 'PageContainer';
+PageContainer.displayName = 'PageContainer'

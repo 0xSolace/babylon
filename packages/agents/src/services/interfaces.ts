@@ -7,14 +7,13 @@
  * @packageDocumentation
  */
 
-import type { JsonValue } from '@babylon/shared';
+import type { AgentCapabilities, JsonValue } from '@babylon/shared'
 import type {
-  AgentCapabilities,
   AgentDiscoveryFilter,
   AgentRegistration,
   AgentStatus,
   TrustLevel,
-} from '../types/agent-registry';
+} from '../types/agent-registry'
 
 /**
  * Agent Registry Service Interface
@@ -24,35 +23,35 @@ export interface IAgentRegistry {
    * Register a new agent
    */
   registerUserAgent(params: {
-    userId: string;
-    name: string;
-    systemPrompt: string;
-    capabilities: AgentCapabilities;
-    trustLevel?: TrustLevel;
-  }): Promise<AgentRegistration>;
+    userId: string
+    name: string
+    systemPrompt: string
+    capabilities: AgentCapabilities
+    trustLevel?: TrustLevel
+  }): Promise<AgentRegistration>
 
   /**
    * Get agent by ID
    */
-  getAgentById(agentId: string): Promise<AgentRegistration | null>;
+  getAgentById(agentId: string): Promise<AgentRegistration | null>
 
   /**
    * Update agent status
    */
   updateAgentStatus(
     agentId: string,
-    status: AgentStatus
-  ): Promise<AgentRegistration>;
+    status: AgentStatus,
+  ): Promise<AgentRegistration>
 
   /**
    * Update agent trust level
    */
-  updateTrustLevel(agentId: string, trustLevel: TrustLevel): Promise<void>;
+  updateTrustLevel(agentId: string, trustLevel: TrustLevel): Promise<void>
 
   /**
    * Discover agents matching filter
    */
-  discoverAgents(filter: AgentDiscoveryFilter): Promise<AgentRegistration[]>;
+  discoverAgents(filter: AgentDiscoveryFilter): Promise<AgentRegistration[]>
 }
 
 /**
@@ -62,7 +61,7 @@ export interface IWalletService {
   /**
    * Get user balance
    */
-  getBalance(userId: string): Promise<number>;
+  getBalance(userId: string): Promise<number>
 
   /**
    * Transfer points between users
@@ -70,18 +69,18 @@ export interface IWalletService {
   transferPoints(
     fromUserId: string,
     toUserId: string,
-    amount: number
-  ): Promise<void>;
+    amount: number,
+  ): Promise<void>
 
   /**
    * Add points to user
    */
-  addPoints(userId: string, amount: number, reason?: string): Promise<void>;
+  addPoints(userId: string, amount: number, reason?: string): Promise<void>
 
   /**
    * Deduct points from user
    */
-  deductPoints(userId: string, amount: number, reason?: string): Promise<void>;
+  deductPoints(userId: string, amount: number, reason?: string): Promise<void>
 }
 
 /**
@@ -92,10 +91,10 @@ export interface ICharacterMappingService {
    * Get character mapping for an actor
    */
   getCharacterForActor(actorId: string): Promise<{
-    name: string;
-    systemPrompt: string;
-    traits: string[];
-  } | null>;
+    name: string
+    systemPrompt: string
+    traits: string[]
+  } | null>
 
   /**
    * Update character mapping
@@ -103,11 +102,11 @@ export interface ICharacterMappingService {
   updateCharacterMapping(
     actorId: string,
     character: {
-      name: string;
-      systemPrompt: string;
-      traits: string[];
-    }
-  ): Promise<void>;
+      name: string
+      systemPrompt: string
+      traits: string[]
+    },
+  ): Promise<void>
 }
 
 /**
@@ -118,14 +117,14 @@ export interface ITrajectoryRecorder {
    * Record a trajectory step
    */
   recordStep(params: {
-    agentId: string;
-    gameId: string;
-    stepType: string;
-    input: JsonValue;
-    output: JsonValue;
-    reward?: number;
-    metadata?: Record<string, JsonValue>;
-  }): Promise<string>;
+    agentId: string
+    gameId: string
+    stepType: string
+    input: JsonValue
+    output: JsonValue
+    reward?: number
+    metadata?: Record<string, JsonValue>
+  }): Promise<string>
 
   /**
    * Complete a trajectory
@@ -133,11 +132,11 @@ export interface ITrajectoryRecorder {
   completeTrajectory(
     trajectoryId: string,
     outcome: {
-      success: boolean;
-      totalReward: number;
-      metadata?: Record<string, JsonValue>;
-    }
-  ): Promise<void>;
+      success: boolean
+      totalReward: number
+      metadata?: Record<string, JsonValue>
+    },
+  ): Promise<void>
 }
 
 /**
@@ -148,21 +147,21 @@ export interface IPredictionPricing {
    * Calculate price for shares
    */
   calculatePrice(params: {
-    marketId: string;
-    side: 'YES' | 'NO';
-    shares: number;
+    marketId: string
+    side: 'YES' | 'NO'
+    shares: number
   }): Promise<{
-    price: number;
-    priceImpact: number;
-  }>;
+    price: number
+    priceImpact: number
+  }>
 
   /**
    * Get current market prices
    */
   getMarketPrices(marketId: string): Promise<{
-    yesPrice: number;
-    noPrice: number;
-  }>;
+    yesPrice: number
+    noPrice: number
+  }>
 }
 
 /**
@@ -173,29 +172,29 @@ export interface IAgent0Client {
    * Register agent with Agent0
    */
   registerAgent(params: {
-    name: string;
-    description: string;
-    endpoint: string;
-    capabilities: AgentCapabilities;
+    name: string
+    description: string
+    endpoint: string
+    capabilities: AgentCapabilities
   }): Promise<{
-    tokenId: string;
-    metadataCID: string;
-  }>;
+    tokenId: string
+    metadataCID: string
+  }>
 
   /**
    * Get agent info from Agent0
    */
   getAgentInfo(tokenId: string): Promise<{
-    name: string;
-    description: string;
-    endpoint: string;
-    reputation: number;
-  } | null>;
+    name: string
+    description: string
+    endpoint: string
+    reputation: number
+  } | null>
 
   /**
    * Sync reputation with Agent0
    */
-  syncReputation(agentId: string): Promise<number>;
+  syncReputation(agentId: string): Promise<number>
 }
 
 /**
@@ -206,7 +205,7 @@ export interface IDbContext {
   /**
    * Execute a function with user context
    */
-  asUser<T>(userId: string, fn: () => Promise<T>): Promise<T>;
+  asUser<T>(userId: string, fn: () => Promise<T>): Promise<T>
 }
 
 /**
@@ -217,46 +216,46 @@ export interface IRedisClient {
   /**
    * Get a value by key
    */
-  get(key: string): Promise<string | null>;
+  get(key: string): Promise<string | null>
 
   /**
    * Set a value with optional expiration
    */
-  set(key: string, value: string, options?: { ex?: number }): Promise<void>;
+  set(key: string, value: string, options?: { ex?: number }): Promise<void>
 
   /**
    * Delete a key
    */
-  del(key: string): Promise<void>;
+  del(key: string): Promise<void>
 
   /**
    * Check if key exists
    */
-  exists(key: string): Promise<boolean>;
+  exists(key: string): Promise<boolean>
 
   /**
    * Set expiration on key
    */
-  expire(key: string, seconds: number): Promise<void>;
+  expire(key: string, seconds: number): Promise<void>
 
   /**
    * Get time to live for key
    */
-  ttl(key: string): Promise<number>;
+  ttl(key: string): Promise<number>
 }
 
 /**
  * Service Container for dependency injection
  */
 export interface IServiceContainer {
-  agentRegistry?: IAgentRegistry;
-  walletService?: IWalletService;
-  characterMappingService?: ICharacterMappingService;
-  trajectoryRecorder?: ITrajectoryRecorder;
-  predictionPricing?: IPredictionPricing;
-  agent0Client?: IAgent0Client;
-  dbContext?: IDbContext;
-  redisClient?: IRedisClient;
+  agentRegistry?: IAgentRegistry
+  walletService?: IWalletService
+  characterMappingService?: ICharacterMappingService
+  trajectoryRecorder?: ITrajectoryRecorder
+  predictionPricing?: IPredictionPricing
+  agent0Client?: IAgent0Client
+  dbContext?: IDbContext
+  redisClient?: IRedisClient
 }
 
 /**
@@ -264,8 +263,7 @@ export interface IServiceContainer {
  * Uses globalThis to ensure consistent state across dynamic and static imports.
  */
 declare global {
-  // eslint-disable-next-line no-var
-  var __babylon_agents_services__: IServiceContainer | undefined;
+  var __babylon_agents_services__: IServiceContainer | undefined
 }
 
 /**
@@ -275,21 +273,21 @@ export function setServiceContainer(container: IServiceContainer): void {
   globalThis.__babylon_agents_services__ = {
     ...globalThis.__babylon_agents_services__,
     ...container,
-  };
+  }
 }
 
 /**
  * Get the full service container
  */
 export function getServiceContainer(): IServiceContainer {
-  return globalThis.__babylon_agents_services__ ?? {};
+  return globalThis.__babylon_agents_services__ ?? {}
 }
 
 /**
  * Get a specific service with type safety
  */
 export function getService<K extends keyof IServiceContainer>(
-  key: K
+  key: K,
 ): IServiceContainer[K] {
-  return globalThis.__babylon_agents_services__?.[key];
+  return globalThis.__babylon_agents_services__?.[key]
 }

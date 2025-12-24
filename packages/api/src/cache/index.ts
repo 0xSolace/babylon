@@ -17,11 +17,11 @@ export {
   getCache,
   initializeCache,
   resetCache,
-} from './cache';
+} from './cache'
 
 // Legacy aliases removed - use CacheClient, getCache, etc. directly
 
 // Legacy exports (retained for compatibility with existing code)
-export * from './cache-service';
-export * from './cached-database-service';
-export * from './decentralized-cache-client';
+export * from './cache-service'
+export * from './cached-database-service'
+export * from './decentralized-cache-client'

@@ -16,8 +16,9 @@ Key features:
 
 import logging
 import os
+from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import List, Literal, Sequence
+from typing import Literal
 
 import numpy as np
 
@@ -53,7 +54,7 @@ class TinkerConfig:
     # Sampling settings
     default_max_tokens: int = 512
     default_temperature: float = 0.7
-    stop_sequences: List[str] = field(
+    stop_sequences: list[str] = field(
         default_factory=lambda: ["\n\n", "<|endoftext|>", "<|im_end|>"]
     )
 
@@ -70,9 +71,9 @@ class TinkerDatum:
 
     def __init__(
         self,
-        input_tokens: List[int],
-        target_tokens: List[int],
-        weights: List[float],
+        input_tokens: list[int],
+        target_tokens: list[int],
+        weights: list[float],
     ):
         self.input_tokens = input_tokens
         self.target_tokens = target_tokens
@@ -85,12 +86,12 @@ class TinkerDatum:
             raise RuntimeError("Tinker not installed")
 
         if self._tinker_datum is None:
-            self._tinker_datum = tinker_types.Datum(
-                model_input=tinker_types.ModelInput.from_ints(tokens=self.input_tokens),
-                loss_fn_inputs=dict(
-                    weights=self.weights,
-                    target_tokens=self.target_tokens,
-                ),
+            self._tinker_datum = tinker_types.Datum(  # type: ignore[union-attr]
+                model_input=tinker_types.ModelInput.from_ints(tokens=self.input_tokens),  # type: ignore[union-attr]
+                loss_fn_inputs={
+                    "weights": self.weights,
+                    "target_tokens": self.target_tokens,
+                },
             )
         return self._tinker_datum
 
@@ -110,9 +111,9 @@ class TrainStepResult:
 class SampleResult:
     """Result from sampling"""
 
-    completions: List[str]
-    logprobs: List[List[float]] = field(default_factory=list)
-    finish_reasons: List[str] = field(default_factory=list)
+    completions: list[str]
+    logprobs: list[list[float]] = field(default_factory=list)
+    finish_reasons: list[str] = field(default_factory=list)
 
 
 class BabylonTinkerClient:
@@ -142,9 +143,7 @@ class BabylonTinkerClient:
 
     def __init__(self, config: TinkerConfig | None = None):
         if not TINKER_AVAILABLE:
-            raise RuntimeError(
-                "Tinker not installed. Install with: pip install tinker"
-            )
+            raise RuntimeError("Tinker not installed. Install with: pip install tinker")
 
         self.config = config or TinkerConfig()
         self._service_client: object = None
@@ -158,7 +157,7 @@ class BabylonTinkerClient:
     def service_client(self) -> object:
         """Lazily initialize service client"""
         if self._service_client is None:
-            self._service_client = tinker.ServiceClient()
+            self._service_client = tinker.ServiceClient()  # type: ignore[union-attr]
         return self._service_client
 
     @property
@@ -202,7 +201,7 @@ class BabylonTinkerClient:
             )
 
         # Check model availability
-        capabilities = self.service_client.get_server_capabilities()
+        capabilities = self.service_client.get_server_capabilities()  # type: ignore[attr-defined]
         available_models = [m.model_name for m in capabilities.supported_models]
 
         if self.config.base_model not in available_models:
@@ -212,17 +211,17 @@ class BabylonTinkerClient:
             )
 
         # Create training client with LoRA
-        self._training_client = self.service_client.create_lora_training_client(
+        self._training_client = self.service_client.create_lora_training_client(  # type: ignore[attr-defined]
             base_model=self.config.base_model,
             lora_rank=self.config.lora_rank,
         )
 
         # Get tokenizer
-        self._tokenizer = self._training_client.get_tokenizer()
+        self._tokenizer = self._training_client.get_tokenizer()  # type: ignore[attr-defined]
 
         # Create initial sampling client
         initial_name = f"{self.config.checkpoint_name_prefix}-initial"
-        self._sampling_client = self._training_client.save_weights_and_get_sampling_client(
+        self._sampling_client = self._training_client.save_weights_and_get_sampling_client(  # type: ignore[attr-defined]
             name=initial_name
         )
 
@@ -231,7 +230,7 @@ class BabylonTinkerClient:
 
     def prepare_datum(
         self,
-        messages: List[dict],
+        messages: list[dict],
         completion: str,
     ) -> TinkerDatum:
         """
@@ -245,18 +244,18 @@ class BabylonTinkerClient:
             TinkerDatum ready for training
         """
         # Render messages to prompt using chat template
-        prompt = self.tokenizer.apply_chat_template(
+        prompt = self.tokenizer.apply_chat_template(  # type: ignore[attr-defined]
             messages,
             tokenize=False,
             add_generation_prompt=True,
         )
 
         # Tokenize prompt (no loss on prompt tokens)
-        prompt_tokens = self.tokenizer.encode(prompt, add_special_tokens=True)
+        prompt_tokens = self.tokenizer.encode(prompt, add_special_tokens=True)  # type: ignore[attr-defined]
         prompt_weights = [0.0] * len(prompt_tokens)
 
         # Tokenize completion (loss on these tokens)
-        completion_tokens = self.tokenizer.encode(completion, add_special_tokens=False)
+        completion_tokens = self.tokenizer.encode(completion, add_special_tokens=False)  # type: ignore[attr-defined]
         completion_weights = [1.0] * len(completion_tokens)
 
         # Combine
@@ -276,8 +275,8 @@ class BabylonTinkerClient:
 
     def prepare_datum_from_tokens(
         self,
-        tokens: List[int],
-        masks: List[int],
+        tokens: list[int],
+        masks: list[int],
     ) -> TinkerDatum:
         """
         Create Datum from pre-tokenized data (e.g., from Atropos).
@@ -306,7 +305,7 @@ class BabylonTinkerClient:
     def train_step(
         self,
         data: Sequence[TinkerDatum],
-        scores: List[float],
+        scores: list[float],
         loss_fn: Literal["cross_entropy", "importance_sampling"] = "importance_sampling",
     ) -> TrainStepResult:
         """
@@ -325,23 +324,23 @@ class BabylonTinkerClient:
 
         # Convert to Tinker format and apply advantage weights
         tinker_data = []
-        for datum, score in zip(data, scores):
+        for datum, score in zip(data, scores, strict=False):
             tinker_datum = datum.to_tinker()
 
             # Scale weights by advantage for GRPO/IS
             # Positive advantage = learn this behavior
             # Negative advantage = unlearn this behavior
             scaled_weights = [w * score for w in datum.weights]
-            tinker_datum.loss_fn_inputs["weights"] = scaled_weights
+            tinker_datum.loss_fn_inputs["weights"] = scaled_weights  # type: ignore[attr-defined]
 
             tinker_data.append(tinker_datum)
 
         # Forward-backward pass (async submission)
-        fwdbwd_future = self.training_client.forward_backward(tinker_data, loss_fn)
+        fwdbwd_future = self.training_client.forward_backward(tinker_data, loss_fn)  # type: ignore[attr-defined]
 
         # Optimizer step (async submission)
-        optim_future = self.training_client.optim_step(
-            tinker_types.AdamParams(
+        optim_future = self.training_client.optim_step(  # type: ignore[attr-defined]
+            tinker_types.AdamParams(  # type: ignore[union-attr]
                 learning_rate=self.config.learning_rate,
                 beta1=self.config.beta1,
                 beta2=self.config.beta2,
@@ -356,7 +355,7 @@ class BabylonTinkerClient:
         # Compute metrics
         all_logprobs = []
         all_weights = []
-        for output, datum in zip(fwdbwd_result.loss_fn_outputs, tinker_data):
+        for output, datum in zip(fwdbwd_result.loss_fn_outputs, tinker_data, strict=False):
             logprobs = output["logprobs"].tolist()
             weights = datum.loss_fn_inputs["weights"]
             all_logprobs.extend(logprobs)
@@ -407,17 +406,15 @@ class BabylonTinkerClient:
 
         logger.info(f"Syncing weights to sampling client: {name}")
 
-        self._sampling_client = self.training_client.save_weights_and_get_sampling_client(
-            name=name
-        )
+        self._sampling_client = self.training_client.save_weights_and_get_sampling_client(name=name)  # type: ignore[attr-defined]
 
     def sample(
         self,
-        messages: List[dict],
+        messages: list[dict],
         max_tokens: int | None = None,
         temperature: float | None = None,
         n: int = 1,
-        stop: List[str] | None = None,
+        stop: list[str] | None = None,
         include_logprobs: bool = False,
     ) -> SampleResult:
         """
@@ -439,26 +436,24 @@ class BabylonTinkerClient:
         stop = stop or self.config.stop_sequences
 
         # Render prompt
-        prompt = self.tokenizer.apply_chat_template(
+        prompt = self.tokenizer.apply_chat_template(  # type: ignore[attr-defined]
             messages,
             tokenize=False,
             add_generation_prompt=True,
         )
 
         # Tokenize
-        prompt_tokens = tinker_types.ModelInput.from_ints(
-            self.tokenizer.encode(prompt)
-        )
+        prompt_tokens = tinker_types.ModelInput.from_ints(self.tokenizer.encode(prompt))  # type: ignore[union-attr, attr-defined]
 
         # Sampling params
-        params = tinker_types.SamplingParams(
+        params = tinker_types.SamplingParams(  # type: ignore[union-attr]
             max_tokens=max_tokens,
             temperature=temperature,
             stop=stop,
         )
 
         # Sample
-        result = self.sampling_client.sample(
+        result = self.sampling_client.sample(  # type: ignore[attr-defined]
             prompt=prompt_tokens,
             sampling_params=params,
             num_samples=n,
@@ -466,10 +461,7 @@ class BabylonTinkerClient:
         ).result()
 
         # Decode completions
-        completions = [
-            self.tokenizer.decode(seq.tokens)
-            for seq in result.sequences
-        ]
+        completions = [self.tokenizer.decode(seq.tokens) for seq in result.sequences]  # type: ignore[attr-defined]
 
         # Extract logprobs if requested
         logprobs = []
@@ -477,10 +469,7 @@ class BabylonTinkerClient:
             logprobs = [result.prompt_logprobs] * n
 
         # Extract finish reasons
-        finish_reasons = [
-            getattr(seq, "finish_reason", "stop")
-            for seq in result.sequences
-        ]
+        finish_reasons = [getattr(seq, "finish_reason", "stop") for seq in result.sequences]
 
         return SampleResult(
             completions=completions,
@@ -490,9 +479,9 @@ class BabylonTinkerClient:
 
     def compute_logprobs(
         self,
-        messages: List[dict],
+        messages: list[dict],
         completion: str,
-    ) -> List[float]:
+    ) -> list[float]:
         """
         Compute logprobs for a specific completion.
 
@@ -506,22 +495,20 @@ class BabylonTinkerClient:
             List of logprobs for each token
         """
         # Build full sequence
-        prompt = self.tokenizer.apply_chat_template(
+        prompt = self.tokenizer.apply_chat_template(  # type: ignore[attr-defined]
             messages,
             tokenize=False,
             add_generation_prompt=True,
         )
         full_text = prompt + completion
 
-        prompt_tokens = tinker_types.ModelInput.from_ints(
-            self.tokenizer.encode(full_text)
-        )
+        prompt_tokens = tinker_types.ModelInput.from_ints(self.tokenizer.encode(full_text))  # type: ignore[union-attr, attr-defined]
 
         # Compute logprobs via prefill
-        result = self.sampling_client.sample(
+        result = self.sampling_client.sample(  # type: ignore[attr-defined]
             prompt=prompt_tokens,
             num_samples=1,
-            sampling_params=tinker_types.SamplingParams(max_tokens=1),
+            sampling_params=tinker_types.SamplingParams(max_tokens=1),  # type: ignore[union-attr]
             include_prompt_logprobs=True,
         ).result()
 
@@ -540,7 +527,7 @@ class BabylonTinkerClient:
             Weight identifier
         """
         logger.info(f"Saving weights: {name}")
-        return self.training_client.save_weights(name=name)
+        return self.training_client.save_weights(name=name)  # type: ignore[attr-defined]
 
     def load_weights(self, name: str) -> None:
         """
@@ -550,14 +537,14 @@ class BabylonTinkerClient:
             name: Name of weights to load
         """
         logger.info(f"Loading weights: {name}")
-        self.training_client.load_weights(name=name)
+        self.training_client.load_weights(name=name)  # type: ignore[attr-defined]
 
         # Update sampling client with loaded weights
         self.sync_weights(name=f"{name}-loaded")
 
-    def get_available_models(self) -> List[str]:
+    def get_available_models(self) -> list[str]:
         """Get list of available base models from Tinker"""
-        capabilities = self.service_client.get_server_capabilities()
+        capabilities = self.service_client.get_server_capabilities()  # type: ignore[attr-defined]
         return [m.model_name for m in capabilities.supported_models]
 
     @property

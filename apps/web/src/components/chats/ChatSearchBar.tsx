@@ -1,11 +1,9 @@
-'use client';
-
-import { cn } from '@babylon/shared';
-import { Search, X } from 'lucide-react';
+import { cn } from '@babylon/shared'
+import { Search, X } from 'lucide-react'
 
 interface ChatSearchBarProps {
-  value: string;
-  onChange: (value: string) => void;
+  value: string
+  onChange: (value: string) => void
 }
 
 export function ChatSearchBar({ value, onChange }: ChatSearchBarProps) {
@@ -21,17 +19,19 @@ export function ChatSearchBar({ value, onChange }: ChatSearchBarProps) {
           'w-full rounded-lg py-2 pr-9 pl-9 text-sm',
           'message-input bg-sidebar-accent/50',
           'text-foreground placeholder:text-muted-foreground',
-          'outline-none'
+          'outline-none',
         )}
       />
       {value && (
         <button
+          type="button"
           onClick={() => onChange('')}
           className="absolute top-1/2 right-6 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded-md transition-colors hover:bg-muted-foreground/20"
+          aria-label="Clear search"
         >
           <X className="h-4 w-4 text-foreground" />
         </button>
       )}
     </div>
-  );
+  )
 }

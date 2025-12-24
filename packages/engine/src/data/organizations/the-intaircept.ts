@@ -1,4 +1,4 @@
-import type { Organization } from '../../types/shared';
+import type { Organization } from '../../types/shared'
 
 export const data = {
   id: 'the-intaircept',
@@ -25,4 +25,4 @@ export const data = {
     "Fearless, adversarial journalism. Holding the powerful accountable. Investigations, leaks, and the stories they don't want told.",
   originalName: 'The Intercept',
   originalHandle: 'theintercept',
-} as const satisfies Organization;
+} as const satisfies Organization

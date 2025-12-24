@@ -4,7 +4,7 @@
  * Provides type-safe validation for configuration and data structures.
  */
 
-import { z } from 'zod';
+import { z } from 'zod'
 
 // ============================================================================
 // Training Configuration Schemas
@@ -22,7 +22,7 @@ export const TrainingConfigSchema = z.object({
   warmup_steps: z.number().int().nonnegative(),
   max_grad_norm: z.number().positive(),
   gamma: z.number().min(0).max(1),
-});
+})
 
 /**
  * Schema for benchmark configuration
@@ -32,14 +32,14 @@ export const BenchmarkConfigSchema = z.object({
   tick_interval_seconds: z.number().positive(),
   num_prediction_markets: z.number().int().positive(),
   num_perpetual_markets: z.number().int().positive(),
-});
+})
 
 /**
  * Schema for agent configuration
  */
 export const AgentConfigSchema = z.object({
   test_agent_count: z.number().int().positive(),
-});
+})
 
 /**
  * Schema for full pipeline configuration
@@ -48,7 +48,7 @@ export const PipelineConfigSchema = z.object({
   benchmark: BenchmarkConfigSchema.nullable().optional(),
   training: TrainingConfigSchema,
   agents: AgentConfigSchema,
-});
+})
 
 // ============================================================================
 // Trajectory Schemas
@@ -71,7 +71,7 @@ export const LLMCallSchema = z.object({
   latencyMs: z.number().optional(),
   purpose: z.enum(['action', 'reasoning', 'evaluation', 'response', 'other']),
   actionType: z.string().optional(),
-});
+})
 
 /**
  * Schema for provider access within a trajectory step
@@ -83,7 +83,7 @@ export const ProviderAccessSchema = z.object({
   query: z.record(z.string(), z.unknown()),
   data: z.record(z.string(), z.unknown()),
   purpose: z.string(),
-});
+})
 
 /**
  * Schema for action within a trajectory step
@@ -98,7 +98,7 @@ export const ActionSchema = z.object({
   success: z.boolean(),
   result: z.record(z.string(), z.unknown()).optional(),
   error: z.string().optional(),
-});
+})
 
 /**
  * Schema for environment state in a trajectory step
@@ -111,7 +111,7 @@ export const EnvironmentStateSchema = z
     agentPnL: z.number().optional(),
     openPositions: z.number().int().optional(),
   })
-  .passthrough();
+  .passthrough()
 
 /**
  * Schema for a single trajectory step
@@ -129,7 +129,7 @@ export const TrajectoryStepSchema = z.object({
   reward: z.number().optional(),
   done: z.boolean().optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
-});
+})
 
 /**
  * Schema for trajectory data stored in database
@@ -145,7 +145,7 @@ export const TrajectoryDataSchema = z.object({
   finalPnL: z.number().optional(),
   aiJudgeReward: z.number().optional(),
   archetype: z.string().optional(),
-});
+})
 
 // ============================================================================
 // LLM Judge Response Schemas
@@ -159,7 +159,7 @@ export const TrajectoryScoreResponseSchema = z.object({
   reasoning: z.string(),
   strengths: z.array(z.string()).optional(),
   weaknesses: z.array(z.string()).optional(),
-});
+})
 
 /**
  * Schema for RULER comparison score response
@@ -170,9 +170,9 @@ export const RulerScoreResponseSchema = z.object({
       trajectory_id: z.string(),
       explanation: z.string(),
       score: z.number().min(0).max(1),
-    })
+    }),
   ),
-});
+})
 
 // ============================================================================
 // Automation Pipeline Schemas
@@ -193,7 +193,7 @@ export const AutomationConfigSchema = z.object({
   dataStoragePath: z.string(),
   atroposApiUrl: z.string().url().optional(),
   vllmPort: z.number().int().positive().default(9001),
-});
+})
 
 /**
  * Schema for training readiness stats
@@ -203,7 +203,7 @@ export const TrainingStatsSchema = z.object({
   unscoredTrajectories: z.number().int().nonnegative(),
   scenarioGroups: z.number().int().nonnegative(),
   dataQuality: z.number().min(0).max(1),
-});
+})
 
 /**
  * Schema for training trigger options
@@ -211,34 +211,34 @@ export const TrainingStatsSchema = z.object({
 export const TrainingTriggerOptionsSchema = z.object({
   force: z.boolean().optional(),
   batchSize: z.number().int().positive().optional(),
-});
+})
 
 // ============================================================================
 // Type Exports (inferred from schemas)
 // ============================================================================
 
-export type TrainingConfig = z.infer<typeof TrainingConfigSchema>;
-export type BenchmarkConfig = z.infer<typeof BenchmarkConfigSchema>;
-export type AgentConfig = z.infer<typeof AgentConfigSchema>;
-export type PipelineConfig = z.infer<typeof PipelineConfigSchema>;
+export type TrainingConfig = z.infer<typeof TrainingConfigSchema>
+export type BenchmarkConfig = z.infer<typeof BenchmarkConfigSchema>
+export type AgentConfig = z.infer<typeof AgentConfigSchema>
+export type PipelineConfig = z.infer<typeof PipelineConfigSchema>
 
-export type LLMCall = z.infer<typeof LLMCallSchema>;
-export type ProviderAccess = z.infer<typeof ProviderAccessSchema>;
-export type Action = z.infer<typeof ActionSchema>;
-export type EnvironmentState = z.infer<typeof EnvironmentStateSchema>;
-export type TrajectoryStep = z.infer<typeof TrajectoryStepSchema>;
-export type TrajectoryData = z.infer<typeof TrajectoryDataSchema>;
+export type LLMCall = z.infer<typeof LLMCallSchema>
+export type ProviderAccess = z.infer<typeof ProviderAccessSchema>
+export type Action = z.infer<typeof ActionSchema>
+export type EnvironmentState = z.infer<typeof EnvironmentStateSchema>
+export type TrajectoryStep = z.infer<typeof TrajectoryStepSchema>
+export type TrajectoryData = z.infer<typeof TrajectoryDataSchema>
 
 export type TrajectoryScoreResponse = z.infer<
   typeof TrajectoryScoreResponseSchema
->;
-export type RulerScoreResponse = z.infer<typeof RulerScoreResponseSchema>;
+>
+export type RulerScoreResponse = z.infer<typeof RulerScoreResponseSchema>
 
-export type AutomationConfig = z.infer<typeof AutomationConfigSchema>;
-export type TrainingStats = z.infer<typeof TrainingStatsSchema>;
+export type AutomationConfig = z.infer<typeof AutomationConfigSchema>
+export type TrainingStats = z.infer<typeof TrainingStatsSchema>
 export type TrainingTriggerOptions = z.infer<
   typeof TrainingTriggerOptionsSchema
->;
+>
 
 // ============================================================================
 // Validation Functions
@@ -250,19 +250,19 @@ export type TrainingTriggerOptions = z.infer<
 export function safeParseJson<T>(
   schema: z.ZodType<T>,
   jsonString: string,
-  context?: string
+  context?: string,
 ): T {
-  const parsed: unknown = JSON.parse(jsonString);
-  const result = schema.safeParse(parsed);
+  const parsed: unknown = JSON.parse(jsonString)
+  const result = schema.safeParse(parsed)
   if (!result.success) {
     const errorMessage = result.error.issues
       .map((i) => `${i.path.map(String).join('.')}: ${i.message}`)
-      .join(', ');
+      .join(', ')
     throw new Error(
-      `Validation failed${context ? ` for ${context}` : ''}: ${errorMessage}`
-    );
+      `Validation failed${context ? ` for ${context}` : ''}: ${errorMessage}`,
+    )
   }
-  return result.data;
+  return result.data
 }
 
 /**
@@ -270,13 +270,13 @@ export function safeParseJson<T>(
  */
 export function parseTrajectorySteps(stepsJson: string): TrajectoryStep[] {
   if (!stepsJson || stepsJson === 'null' || stepsJson === '[]') {
-    return [];
+    return []
   }
   return safeParseJson(
     z.array(TrajectoryStepSchema),
     stepsJson,
-    'trajectory steps'
-  );
+    'trajectory steps',
+  )
 }
 
 /**
@@ -284,7 +284,7 @@ export function parseTrajectorySteps(stepsJson: string): TrajectoryStep[] {
  */
 export function parseTrajectoryIds(idsJson: string): string[] {
   if (!idsJson || idsJson === 'null' || idsJson === '[]') {
-    return [];
+    return []
   }
-  return safeParseJson(z.array(z.string()), idsJson, 'trajectory IDs');
+  return safeParseJson(z.array(z.string()), idsJson, 'trajectory IDs')
 }

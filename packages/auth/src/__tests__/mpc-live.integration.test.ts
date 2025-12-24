@@ -1,145 +1,214 @@
 /**
- * MPC Client Live Integration Tests
+ * MPC Coordinator Live Integration Tests
  *
- * Tests that run against a live MPC node.
- * Prerequisites: MPC node running at http://localhost:4010
- *
- * Start MPC node: cd /path/to/jeju/apps/compute && bun run mpc:dev
+ * Tests that run against the MPC coordinator from @jejunetwork/kms.
  */
 
-import { beforeAll, describe, expect, it } from 'bun:test';
-import { MPCClient } from '../mpc/client';
-import type { DID } from '../types/index';
+import { beforeAll, describe, expect, it } from 'bun:test'
+import { getMPCCoordinator, resetMPCCoordinator } from '@jejunetwork/kms'
+import type { Address, Hex } from 'viem'
 
-const MPC_ENDPOINT = 'http://localhost:4010';
+describe('MPC Coordinator Live Integration', () => {
+  beforeAll(() => {
+    resetMPCCoordinator()
+  })
 
-// Check if MPC node is available before running tests
-async function isMPCNodeAvailable(): Promise<boolean> {
-  try {
-    const response = await fetch(`${MPC_ENDPOINT}/health`, {
-      signal: AbortSignal.timeout(2000),
-    });
-    return response.ok;
-  } catch {
-    return false;
-  }
-}
+  it('should create coordinator and get status', () => {
+    const coordinator = getMPCCoordinator({ network: 'localnet' })
+    const status = coordinator.getStatus()
 
-describe('MPC Client Live Integration', () => {
-  let nodeAvailable = false;
+    expect(status.activeParties).toBe(0)
+    expect(status.totalKeys).toBe(0)
+    expect(status.activeSessions).toBe(0)
+    expect(status.config.network).toBe('localnet')
+  })
 
-  beforeAll(async () => {
-    nodeAvailable = await isMPCNodeAvailable();
-    if (!nodeAvailable) {
-      console.log('⚠️ MPC node not available at', MPC_ENDPOINT);
-      console.log('   Start with: cd apps/compute && bun run mpc:dev');
-    }
-  });
+  it('should register parties', () => {
+    resetMPCCoordinator()
+    const coordinator = getMPCCoordinator({ network: 'localnet' })
 
-  it('should connect to live MPC node', async () => {
-    if (!nodeAvailable) {
-      console.log('Skipping - MPC node not available');
-      return;
-    }
+    const party = coordinator.registerParty({
+      id: 'test-party-1',
+      index: 1,
+      endpoint: 'http://localhost:4010',
+      publicKey: '0x' as Hex,
+      address: '0x' as Address,
+      stake: 0n,
+      registeredAt: Date.now(),
+    })
 
-    const client = new MPCClient({
-      endpoints: [MPC_ENDPOINT],
-      threshold: 1,
-      devMode: false,
-      timeout: 5000,
-    });
+    expect(party.id).toBe('test-party-1')
+    expect(party.status).toBe('active')
 
-    await client.initialize();
-    const nodes = client.getHealthyNodes();
+    const activeParties = coordinator.getActiveParties()
+    expect(activeParties.length).toBe(1)
+  })
 
-    expect(nodes.length).toBeGreaterThanOrEqual(1);
-    expect(nodes[0]?.healthy).toBe(true);
-    expect(nodes[0]?.attestation).toBeDefined();
-  });
+  it('should generate key with multiple parties', async () => {
+    resetMPCCoordinator()
+    const coordinator = getMPCCoordinator({ network: 'localnet' })
 
-  it('should generate key for user', async () => {
-    if (!nodeAvailable) {
-      console.log('Skipping - MPC node not available');
-      return;
-    }
-
-    const client = new MPCClient({
-      endpoints: [MPC_ENDPOINT],
-      threshold: 1,
-      devMode: false,
-      timeout: 10000,
-    });
-
-    const testDID: DID = `did:jeju:testnet:0x${'a'.repeat(40)}`;
-
-    const result = await client.generateKey(testDID, {
-      type: 'wallet',
-      signature: `0x${'00'.repeat(65)}` as `0x${string}`,
-      timestamp: Date.now(),
-    });
-
-    expect(result.success).toBe(true);
-    expect(result.publicKey).toBeDefined();
-    expect(result.walletAddress).toBeDefined();
-    expect(result.walletAddress).toMatch(/^0x[a-fA-F0-9]{40}$/);
-  });
-
-  it('should sign message for user', async () => {
-    if (!nodeAvailable) {
-      console.log('Skipping - MPC node not available');
-      return;
+    const partyIds = ['party-1', 'party-2', 'party-3']
+    for (let i = 0; i < partyIds.length; i++) {
+      coordinator.registerParty({
+        id: partyIds[i],
+        index: i + 1,
+        endpoint: 'http://localhost:4010',
+        publicKey: '0x' as Hex,
+        address: '0x' as Address,
+        stake: 0n,
+        registeredAt: Date.now(),
+      })
     }
 
-    const client = new MPCClient({
-      endpoints: [MPC_ENDPOINT],
-      threshold: 1,
-      devMode: false,
-      timeout: 10000,
-    });
+    const result = await coordinator.generateKey({
+      keyId: 'integration-test-key',
+      threshold: 2,
+      totalParties: 3,
+      partyIds,
+      curve: 'secp256k1',
+    })
 
-    const testDID: DID = `did:jeju:testnet:0x${'b'.repeat(40)}`;
+    expect(result.keyId).toBe('integration-test-key')
+    expect(result.publicKey).toBeDefined()
+    expect(result.address).toMatch(/^0x[a-fA-F0-9]{40}$/)
+    expect(result.threshold).toBe(2)
+    expect(result.totalParties).toBe(3)
+  })
 
-    // First generate a key for this user
-    const keyResult = await client.generateKey(testDID, {
-      type: 'wallet',
-      signature: `0x${'00'.repeat(65)}` as `0x${string}`,
-      timestamp: Date.now(),
-    });
+  it('should request and process signature', async () => {
+    resetMPCCoordinator()
+    const coordinator = getMPCCoordinator({ network: 'localnet' })
 
-    expect(keyResult.success).toBe(true);
-
-    // Now sign a message
-    const messageHash = `0x${'01'.repeat(32)}` as `0x${string}`;
-    const signResult = await client.sign(testDID, messageHash, 'message');
-
-    expect(signResult.success).toBe(true);
-    expect(signResult.signature).toBeDefined();
-    // Signature is wrapped in an object with the actual hex signature
-    const sig = signResult.signature;
-    expect(sig).toHaveProperty('signature');
-    expect(typeof sig?.signature).toBe('string');
-    expect(sig?.signature.startsWith('0x')).toBe(true);
-  });
-
-  it('should get network status', async () => {
-    if (!nodeAvailable) {
-      console.log('Skipping - MPC node not available');
-      return;
+    const partyIds = ['party-1', 'party-2', 'party-3']
+    for (let i = 0; i < partyIds.length; i++) {
+      coordinator.registerParty({
+        id: partyIds[i],
+        index: i + 1,
+        endpoint: 'http://localhost:4010',
+        publicKey: '0x' as Hex,
+        address: '0x' as Address,
+        stake: 0n,
+        registeredAt: Date.now(),
+      })
     }
 
-    const client = new MPCClient({
-      endpoints: [MPC_ENDPOINT],
-      threshold: 1,
-      devMode: false,
-      timeout: 5000,
-    });
+    const keyResult = await coordinator.generateKey({
+      keyId: 'signing-test-key',
+      threshold: 2,
+      totalParties: 3,
+      partyIds,
+      curve: 'secp256k1',
+    })
 
-    await client.initialize();
-    const status = await client.getNetworkStatus();
+    const session = await coordinator.requestSignature({
+      keyId: 'signing-test-key',
+      message: '0x68656c6c6f' as Hex,
+      messageHash: '0x68656c6c6f' as Hex,
+      requester: keyResult.address,
+    })
 
-    expect(status.operational).toBe(true);
-    expect(status.healthyNodes).toBeGreaterThanOrEqual(1);
-    expect(status.thresholdMet).toBe(true);
-    expect(status.nodes.length).toBeGreaterThanOrEqual(1);
-  });
-});
+    expect(session.sessionId).toBeDefined()
+    expect(session.keyId).toBe('signing-test-key')
+    expect(session.status).toBe('pending')
+    expect(session.threshold).toBe(2)
+  })
+
+  it('should rotate key', async () => {
+    resetMPCCoordinator()
+    const coordinator = getMPCCoordinator({ network: 'localnet' })
+
+    const partyIds = ['party-1', 'party-2', 'party-3']
+    for (let i = 0; i < partyIds.length; i++) {
+      coordinator.registerParty({
+        id: partyIds[i],
+        index: i + 1,
+        endpoint: 'http://localhost:4010',
+        publicKey: '0x' as Hex,
+        address: '0x' as Address,
+        stake: 0n,
+        registeredAt: Date.now(),
+      })
+    }
+
+    await coordinator.generateKey({
+      keyId: 'rotate-test-key',
+      threshold: 2,
+      totalParties: 3,
+      partyIds,
+      curve: 'secp256k1',
+    })
+
+    const rotationResult = await coordinator.rotateKey({
+      keyId: 'rotate-test-key',
+      preserveAddress: true,
+    })
+
+    expect(rotationResult.keyId).toBe('rotate-test-key')
+    expect(rotationResult.oldVersion).toBe(1)
+    expect(rotationResult.newVersion).toBe(2)
+  })
+
+  it('should get key versions', async () => {
+    resetMPCCoordinator()
+    const coordinator = getMPCCoordinator({ network: 'localnet' })
+
+    const partyIds = ['party-1', 'party-2', 'party-3']
+    for (let i = 0; i < partyIds.length; i++) {
+      coordinator.registerParty({
+        id: partyIds[i],
+        index: i + 1,
+        endpoint: 'http://localhost:4010',
+        publicKey: '0x' as Hex,
+        address: '0x' as Address,
+        stake: 0n,
+        registeredAt: Date.now(),
+      })
+    }
+
+    await coordinator.generateKey({
+      keyId: 'versions-test-key',
+      threshold: 2,
+      totalParties: 3,
+      partyIds,
+      curve: 'secp256k1',
+    })
+
+    const versions = coordinator.getKeyVersions('versions-test-key')
+
+    expect(versions.length).toBe(1)
+    expect(versions[0]?.version).toBe(1)
+    expect(versions[0]?.status).toBe('active')
+  })
+
+  it('should revoke key', async () => {
+    resetMPCCoordinator()
+    const coordinator = getMPCCoordinator({ network: 'localnet' })
+
+    const partyIds = ['party-1', 'party-2', 'party-3']
+    for (let i = 0; i < partyIds.length; i++) {
+      coordinator.registerParty({
+        id: partyIds[i],
+        index: i + 1,
+        endpoint: 'http://localhost:4010',
+        publicKey: '0x' as Hex,
+        address: '0x' as Address,
+        stake: 0n,
+        registeredAt: Date.now(),
+      })
+    }
+
+    await coordinator.generateKey({
+      keyId: 'revoke-test-key',
+      threshold: 2,
+      totalParties: 3,
+      partyIds,
+      curve: 'secp256k1',
+    })
+
+    coordinator.revokeKey('revoke-test-key')
+
+    const key = coordinator.getKey('revoke-test-key')
+    expect(key).toBeFalsy() // null or undefined after revocation
+  })
+})

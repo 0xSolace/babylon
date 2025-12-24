@@ -12,10 +12,10 @@
  * Connected wallet interface - compatible with multiple wallet providers
  */
 export interface ConnectedWallet {
-  address: string;
-  chainId: number;
-  walletClientType: string;
-  connectorType?: string;
+  address: string
+  chainId: number
+  walletClientType: string
+  connectorType?: string
 }
 
 /**
@@ -32,14 +32,14 @@ export interface ConnectedWallet {
  * @returns {boolean} True if the wallet is an embedded wallet
  */
 export function isEmbeddedWallet(wallet?: ConnectedWallet | null): boolean {
-  if (!wallet) return false;
-  const clientType = wallet.walletClientType.toLowerCase();
+  if (!wallet) return false
+  const clientType = wallet.walletClientType.toLowerCase()
   return (
     clientType === 'oauth3' ||
     clientType === 'jeju' ||
     clientType.includes('embedded') ||
     clientType.includes('smart')
-  );
+  )
 }
 
 /**
@@ -52,8 +52,8 @@ export function isEmbeddedWallet(wallet?: ConnectedWallet | null): boolean {
  * @returns {boolean} True if the wallet is an external wallet
  */
 export function isExternalWallet(wallet?: ConnectedWallet | null): boolean {
-  if (!wallet) return false;
-  return !isEmbeddedWallet(wallet);
+  if (!wallet) return false
+  return !isEmbeddedWallet(wallet)
 }
 
 /**
@@ -66,9 +66,9 @@ export function isExternalWallet(wallet?: ConnectedWallet | null): boolean {
  * @returns {ConnectedWallet | undefined} The embedded wallet, or undefined if not found
  */
 export function findEmbeddedWallet(
-  wallets: ConnectedWallet[]
+  wallets: ConnectedWallet[],
 ): ConnectedWallet | undefined {
-  return wallets.find(isEmbeddedWallet);
+  return wallets.find(isEmbeddedWallet)
 }
 
 /**
@@ -81,9 +81,9 @@ export function findEmbeddedWallet(
  * @returns {ConnectedWallet | undefined} The external wallet, or undefined if not found
  */
 export function findExternalWallet(
-  wallets: ConnectedWallet[]
+  wallets: ConnectedWallet[],
 ): ConnectedWallet | undefined {
-  return wallets.find(isExternalWallet);
+  return wallets.find(isExternalWallet)
 }
 
 /**
@@ -103,7 +103,7 @@ export const WALLET_ERROR_MESSAGES = {
   USER_REJECTED: 'Transaction was cancelled in your wallet.',
   INSUFFICIENT_FUNDS:
     'Insufficient funds to cover gas. Use your smart wallet for sponsored transactions.',
-} as const;
+} as const
 
 /**
  * Get a user-friendly error message for wallet-related errors
@@ -126,25 +126,25 @@ export const WALLET_ERROR_MESSAGES = {
  */
 export function getWalletErrorMessage(error: unknown): string {
   const message =
-    error instanceof Error ? error.message.toLowerCase() : String(error);
+    error instanceof Error ? error.message.toLowerCase() : String(error)
 
   if (message.includes('user rejected') || message.includes('user denied')) {
-    return WALLET_ERROR_MESSAGES.USER_REJECTED;
+    return WALLET_ERROR_MESSAGES.USER_REJECTED
   }
 
   if (message.includes('insufficient funds')) {
-    return WALLET_ERROR_MESSAGES.INSUFFICIENT_FUNDS;
+    return WALLET_ERROR_MESSAGES.INSUFFICIENT_FUNDS
   }
 
   if (message.includes('sponsor')) {
-    return WALLET_ERROR_MESSAGES.SPONSOR_FAILED;
+    return WALLET_ERROR_MESSAGES.SPONSOR_FAILED
   }
 
   if (message.includes('no wallet') || message.includes('wallet not found')) {
-    return WALLET_ERROR_MESSAGES.NO_WALLET;
+    return WALLET_ERROR_MESSAGES.NO_WALLET
   }
 
   return error instanceof Error
     ? error.message
-    : 'An unknown error occurred with your wallet.';
+    : 'An unknown error occurred with your wallet.'
 }

@@ -27,19 +27,17 @@
  * />
  * ```
  */
-'use client';
-
-import { Ban, X } from 'lucide-react';
-import { useState, useTransition } from 'react';
-import { toast } from 'sonner';
+import { Ban, X } from 'lucide-react'
+import { useState, useTransition } from 'react'
+import { toast } from 'sonner'
 
 interface BlockUserModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  targetUserId: string;
-  targetDisplayName: string;
-  isNPC?: boolean;
-  onSuccess?: () => void;
+  isOpen: boolean
+  onClose: () => void
+  targetUserId: string
+  targetDisplayName: string
+  isNPC?: boolean
+  onSuccess?: () => void
 }
 
 export function BlockUserModal({
@@ -50,8 +48,8 @@ export function BlockUserModal({
   isNPC = false,
   onSuccess,
 }: BlockUserModalProps) {
-  const [reason, setReason] = useState('');
-  const [isBlocking, startBlocking] = useTransition();
+  const [reason, setReason] = useState('')
+  const [isBlocking, startBlocking] = useTransition()
 
   const handleBlock = () => {
     startBlocking(async () => {
@@ -62,21 +60,21 @@ export function BlockUserModal({
           action: 'block',
           reason: reason || undefined,
         }),
-      });
+      })
 
       if (!response.ok) {
-        const error = await response.json();
-        toast.error(error.message || 'Failed to block user');
-        return;
+        const error = await response.json()
+        toast.error(error.message || 'Failed to block user')
+        return
       }
 
-      toast.success(`Blocked ${targetDisplayName}`);
-      onClose();
-      onSuccess?.();
-    });
-  };
+      toast.success(`Blocked ${targetDisplayName}`)
+      onClose()
+      onSuccess?.()
+    })
+  }
 
-  if (!isOpen) return null;
+  if (!isOpen) return null
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
@@ -87,6 +85,7 @@ export function BlockUserModal({
             Block User
           </h2>
           <button
+            type="button"
             onClick={onClose}
             className="rounded-lg p-1 transition-colors hover:bg-muted"
           >
@@ -118,10 +117,14 @@ export function BlockUserModal({
         </div>
 
         <div className="mb-4">
-          <label className="mb-2 block font-medium text-sm">
+          <label
+            htmlFor="block-reason-textarea"
+            className="mb-2 block font-medium text-sm"
+          >
             Reason (optional)
           </label>
           <textarea
+            id="block-reason-textarea"
             value={reason}
             onChange={(e) => setReason(e.target.value)}
             placeholder="Why are you blocking this user?"
@@ -133,6 +136,7 @@ export function BlockUserModal({
 
         <div className="flex gap-3">
           <button
+            type="button"
             onClick={onClose}
             disabled={isBlocking}
             className="flex-1 rounded-lg bg-muted px-4 py-2 text-foreground transition-colors hover:bg-muted/80 disabled:opacity-50"
@@ -140,6 +144,7 @@ export function BlockUserModal({
             Cancel
           </button>
           <button
+            type="button"
             onClick={handleBlock}
             disabled={isBlocking}
             className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-orange-500 px-4 py-2 text-white transition-colors hover:bg-orange-600 disabled:opacity-50"
@@ -156,5 +161,5 @@ export function BlockUserModal({
         </div>
       </div>
     </div>
-  );
+  )
 }

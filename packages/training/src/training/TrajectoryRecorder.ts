@@ -7,17 +7,17 @@
  * @packageDocumentation
  */
 
-import { db } from '@babylon/db';
-import type { JsonValue } from '@babylon/shared';
-import { generateSnowflakeId, logger } from '@babylon/shared';
+import { db } from '@babylon/db'
+import type { JsonValue } from '@babylon/shared'
+import { generateSnowflakeId, logger } from '@babylon/shared'
 import type {
   Action,
   EnvironmentState,
   LLMCall,
   ProviderAccess,
   TrajectoryStep,
-} from './types';
-import { getCurrentWindowId } from './window-utils';
+} from './types'
+import { getCurrentWindowId } from './window-utils'
 
 export type {
   TrajectoryStep,
@@ -25,19 +25,19 @@ export type {
   ProviderAccess,
   LLMCall,
   Action,
-};
+}
 
 /**
  * Active trajectory being recorded.
  */
 interface ActiveTrajectory {
-  trajectoryId: string;
-  agentId: string;
-  archetype?: string;
-  scenarioId?: string;
-  startTime: number;
-  steps: TrajectoryStep[];
-  currentStep?: Partial<TrajectoryStep>;
+  trajectoryId: string
+  agentId: string
+  archetype?: string
+  scenarioId?: string
+  startTime: number
+  steps: TrajectoryStep[]
+  currentStep?: Partial<TrajectoryStep>
 }
 
 /**
@@ -45,15 +45,15 @@ interface ActiveTrajectory {
  */
 export interface StartTrajectoryOptions {
   /** The agent's user ID */
-  agentId: string;
+  agentId: string
   /** The agent's behavioral archetype */
-  archetype?: string;
+  archetype?: string
   /** Optional scenario identifier */
-  scenarioId?: string;
+  scenarioId?: string
   /** Optional time window ID */
-  windowId?: string;
+  windowId?: string
   /** Optional metadata */
-  metadata?: Record<string, JsonValue>;
+  metadata?: Record<string, JsonValue>
 }
 
 /**
@@ -61,24 +61,24 @@ export interface StartTrajectoryOptions {
  */
 export interface EndTrajectoryOptions {
   /** Final account balance */
-  finalBalance?: number;
+  finalBalance?: number
   /** Final profit/loss */
-  finalPnL?: number;
+  finalPnL?: number
   /** Time window ID */
-  windowId?: string;
+  windowId?: string
   /** Ground truth market data */
   gameKnowledge?: {
-    trueProbabilities?: Record<string, number>;
-    actualOutcomes?: Record<string, JsonValue>;
-    futureOutcomes?: Record<string, JsonValue>;
-  };
+    trueProbabilities?: Record<string, number>
+    actualOutcomes?: Record<string, JsonValue>
+    futureOutcomes?: Record<string, JsonValue>
+  }
 }
 
 /**
  * Records agent trajectories for RL training.
  */
 export class TrajectoryRecorder {
-  private activeTrajectories: Map<string, ActiveTrajectory> = new Map();
+  private activeTrajectories: Map<string, ActiveTrajectory> = new Map()
 
   /**
    * Start recording a new trajectory.
@@ -86,8 +86,8 @@ export class TrajectoryRecorder {
    * @returns The unique trajectory ID
    */
   async startTrajectory(options: StartTrajectoryOptions): Promise<string> {
-    const trajectoryId = await generateSnowflakeId();
-    const windowId = options.windowId || getCurrentWindowId();
+    const trajectoryId = await generateSnowflakeId()
+    const windowId = options.windowId || getCurrentWindowId()
 
     this.activeTrajectories.set(trajectoryId, {
       trajectoryId,
@@ -96,7 +96,7 @@ export class TrajectoryRecorder {
       scenarioId: options.scenarioId || windowId,
       startTime: Date.now(),
       steps: [],
-    });
+    })
 
     logger.info('Started trajectory recording', {
       trajectoryId,
@@ -104,9 +104,9 @@ export class TrajectoryRecorder {
       archetype: options.archetype,
       scenarioId: options.scenarioId,
       windowId,
-    });
+    })
 
-    return trajectoryId;
+    return trajectoryId
   }
 
   /**
@@ -116,9 +116,9 @@ export class TrajectoryRecorder {
    * @throws Error if trajectory not found
    */
   startStep(trajectoryId: string, environmentState: EnvironmentState): void {
-    const traj = this.activeTrajectories.get(trajectoryId);
+    const traj = this.activeTrajectories.get(trajectoryId)
     if (!traj) {
-      throw new Error(`Trajectory not found: ${trajectoryId}`);
+      throw new Error(`Trajectory not found: ${trajectoryId}`)
     }
 
     traj.currentStep = {
@@ -128,7 +128,7 @@ export class TrajectoryRecorder {
       providerAccesses: [],
       llmCalls: [],
       reward: 0,
-    };
+    }
   }
 
   /**
@@ -140,17 +140,17 @@ export class TrajectoryRecorder {
   logProviderAccess(
     trajectoryId: string,
     access: {
-      providerName: string;
-      data: Record<string, JsonValue>;
-      purpose: string;
-    }
+      providerName: string
+      data: Record<string, JsonValue>
+      purpose: string
+    },
   ): void {
-    const traj = this.activeTrajectories.get(trajectoryId);
+    const traj = this.activeTrajectories.get(trajectoryId)
     if (!traj?.currentStep) {
-      throw new Error(`No current step for trajectory: ${trajectoryId}`);
+      throw new Error(`No current step for trajectory: ${trajectoryId}`)
     }
 
-    traj.currentStep.providerAccesses = traj.currentStep.providerAccesses || [];
+    traj.currentStep.providerAccesses = traj.currentStep.providerAccesses || []
     // Create full ProviderAccess with required fields
     traj.currentStep.providerAccesses.push({
       providerId: `${trajectoryId}-provider-${Date.now()}`,
@@ -159,7 +159,7 @@ export class TrajectoryRecorder {
       query: access.data,
       data: access.data,
       purpose: access.purpose,
-    });
+    })
   }
 
   /**
@@ -169,13 +169,13 @@ export class TrajectoryRecorder {
    * @throws Error if no current step exists
    */
   logLLMCall(trajectoryId: string, llmCall: LLMCall): void {
-    const traj = this.activeTrajectories.get(trajectoryId);
+    const traj = this.activeTrajectories.get(trajectoryId)
     if (!traj?.currentStep) {
-      throw new Error(`No current step for trajectory: ${trajectoryId}`);
+      throw new Error(`No current step for trajectory: ${trajectoryId}`)
     }
 
-    traj.currentStep.llmCalls = traj.currentStep.llmCalls || [];
-    traj.currentStep.llmCalls.push(llmCall);
+    traj.currentStep.llmCalls = traj.currentStep.llmCalls || []
+    traj.currentStep.llmCalls.push(llmCall)
   }
 
   /**
@@ -186,23 +186,28 @@ export class TrajectoryRecorder {
    * @throws Error if no current step exists
    */
   completeStep(trajectoryId: string, action: Action, reward: number = 0): void {
-    const traj = this.activeTrajectories.get(trajectoryId);
+    const traj = this.activeTrajectories.get(trajectoryId)
     if (!traj?.currentStep) {
-      throw new Error(`No current step for trajectory: ${trajectoryId}`);
+      throw new Error(`No current step for trajectory: ${trajectoryId}`)
+    }
+
+    const { stepNumber, timestamp, environmentState } = traj.currentStep
+    if (stepNumber === undefined || timestamp === undefined) {
+      throw new Error(`Incomplete step for trajectory: ${trajectoryId}`)
     }
 
     const completeStep: TrajectoryStep = {
-      stepNumber: traj.currentStep.stepNumber!,
-      timestamp: traj.currentStep.timestamp!,
-      environmentState: traj.currentStep.environmentState!,
+      stepNumber,
+      timestamp,
+      environmentState,
       providerAccesses: traj.currentStep.providerAccesses || [],
       llmCalls: traj.currentStep.llmCalls || [],
       action,
       reward,
-    };
+    }
 
-    traj.steps.push(completeStep);
-    traj.currentStep = undefined;
+    traj.steps.push(completeStep)
+    traj.currentStep = undefined
   }
 
   /**
@@ -213,37 +218,37 @@ export class TrajectoryRecorder {
    */
   async endTrajectory(
     trajectoryId: string,
-    options: EndTrajectoryOptions = {}
+    options: EndTrajectoryOptions = {},
   ): Promise<void> {
-    const traj = this.activeTrajectories.get(trajectoryId);
+    const traj = this.activeTrajectories.get(trajectoryId)
     if (!traj) {
-      throw new Error(`Trajectory not found: ${trajectoryId}`);
+      throw new Error(`Trajectory not found: ${trajectoryId}`)
     }
 
-    const endTime = Date.now();
-    const durationMs = endTime - traj.startTime;
+    const endTime = Date.now()
+    const durationMs = endTime - traj.startTime
     const totalReward = traj.steps.reduce(
       (sum, step) => sum + (step.reward ?? 0),
-      0
-    );
-    const windowId = options.windowId || getCurrentWindowId();
+      0,
+    )
+    const windowId = options.windowId || getCurrentWindowId()
 
     // Calculate metrics
     const tradesExecuted = traj.steps.filter(
       (s) =>
         s.action &&
         (s.action.actionType.includes('BUY') ||
-          s.action.actionType.includes('SELL'))
-    ).length;
+          s.action.actionType.includes('SELL')),
+    ).length
 
-    const postsCreated = traj.steps.filter(
-      (s) => s.action && s.action.actionType.includes('POST')
-    ).length;
+    const postsCreated = traj.steps.filter((s) =>
+      s.action?.actionType.includes('POST'),
+    ).length
 
     const errorCount = traj.steps.filter(
-      (s) => s.action && !s.action.success
-    ).length;
-    const finalStatus = errorCount > 0 ? 'completed_with_errors' : 'completed';
+      (s) => s.action && !s.action.success,
+    ).length
+    const finalStatus = errorCount > 0 ? 'completed_with_errors' : 'completed'
 
     // Save trajectory
     await db.trajectory.create({
@@ -288,34 +293,34 @@ export class TrajectoryRecorder {
         usedInTraining: false,
         updatedAt: new Date(),
       },
-    });
+    })
 
     // Save LLM calls
     const llmLogRows: Array<{
-      id: string;
-      trajectoryId: string;
-      stepId: string;
-      callId: string;
-      timestamp: Date;
-      latencyMs: number | null;
-      model: string;
-      purpose: string;
-      actionType: string | null;
-      systemPrompt: string;
-      userPrompt: string;
-      messagesJson: string | null;
-      response: string;
-      reasoning: string | null;
-      temperature: number;
-      maxTokens: number;
-      metadata: string | null;
-    }> = [];
+      id: string
+      trajectoryId: string
+      stepId: string
+      callId: string
+      timestamp: Date
+      latencyMs: number | null
+      model: string
+      purpose: string
+      actionType: string | null
+      systemPrompt: string
+      userPrompt: string
+      messagesJson: string | null
+      response: string
+      reasoning: string | null
+      temperature: number
+      maxTokens: number
+      metadata: string | null
+    }> = []
 
     for (const step of traj.steps) {
-      const llmCalls = step.llmCalls ?? [];
+      const llmCalls = step.llmCalls ?? []
       for (let i = 0; i < llmCalls.length; i++) {
-        const llmCall = llmCalls[i];
-        if (!llmCall) continue;
+        const llmCall = llmCalls[i]
+        if (!llmCall) continue
 
         llmLogRows.push({
           id: await generateSnowflakeId(),
@@ -338,17 +343,17 @@ export class TrajectoryRecorder {
           temperature: llmCall.temperature,
           maxTokens: llmCall.maxTokens,
           metadata: JSON.stringify({ modelVersion: llmCall.modelVersion }),
-        });
+        })
       }
     }
 
     if (llmLogRows.length > 0) {
       await db.llmCallLog.createMany({
         data: llmLogRows,
-      });
+      })
     }
 
-    this.activeTrajectories.delete(trajectoryId);
+    this.activeTrajectories.delete(trajectoryId)
 
     logger.info('Trajectory saved to database', {
       trajectoryId,
@@ -356,9 +361,9 @@ export class TrajectoryRecorder {
       steps: traj.steps.length,
       reward: totalReward,
       duration: durationMs,
-    });
+    })
 
-    this.activeTrajectories.delete(trajectoryId);
+    this.activeTrajectories.delete(trajectoryId)
   }
 
   /**
@@ -367,7 +372,7 @@ export class TrajectoryRecorder {
    * @returns The active trajectory or undefined
    */
   getActiveTrajectory(trajectoryId: string): ActiveTrajectory | undefined {
-    return this.activeTrajectories.get(trajectoryId);
+    return this.activeTrajectories.get(trajectoryId)
   }
 
   /**
@@ -376,7 +381,7 @@ export class TrajectoryRecorder {
    * @returns True if trajectory is active
    */
   isActive(trajectoryId: string): boolean {
-    return this.activeTrajectories.has(trajectoryId);
+    return this.activeTrajectories.has(trajectoryId)
   }
 
   /**
@@ -384,9 +389,9 @@ export class TrajectoryRecorder {
    * @returns Number of active trajectories
    */
   getActiveCount(): number {
-    return this.activeTrajectories.size;
+    return this.activeTrajectories.size
   }
 }
 
 /** Singleton instance */
-export const trajectoryRecorder = new TrajectoryRecorder();
+export const trajectoryRecorder = new TrajectoryRecorder()

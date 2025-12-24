@@ -20,34 +20,52 @@ import {
   gte,
   npcInteractions,
   or,
-} from '@babylon/db';
+} from '@babylon/db'
 import {
   generateSnowflakeId,
   logger,
   RelationshipDescriptionSchema,
-} from '@babylon/shared';
-import type { BabylonLLMClient } from './llm/openai-client';
-import { StaticDataRegistry } from './services/static-data-registry';
-import type { Actor, ActorRelationship, Organization } from './types/shared';
+  toDate,
+} from '@babylon/shared'
+import type { BabylonLLMClient } from './llm/openai-client'
+import { StaticDataRegistry } from './services/static-data-registry'
+import type { Actor, ActorRelationship, Organization } from './types/shared'
+
+/** DB row type for actor_relationships table */
+interface ActorRelationshipRow {
+  id: string
+  actor1Id: string | null
+  actor2Id: string | null
+  relationshipType: string | null
+  strength: number | string | null
+  sentiment: number | string | null
+  history: string | null
+  isPublic: boolean | null
+  updatedAt: Date | string | null
+  interactionCount: number | string | null
+  evolutionCount: number | string | null
+}
+
+// Note: NpcInteractionRow type is defined inline where needed to avoid unused declaration warnings
 
 export interface RelationshipChange {
-  actor1Id: string;
-  actor2Id: string;
-  action: 'create' | 'update' | 'delete';
-  newHistory?: string; // The text description
-  newType?: string;
-  newSentiment?: number;
-  newStrength?: number;
-  reason: string;
+  actor1Id: string
+  actor2Id: string
+  action: 'create' | 'update' | 'delete'
+  newHistory?: string // The text description
+  newType?: string
+  newSentiment?: number
+  newStrength?: number
+  reason: string
 }
 
 export interface Interaction {
-  actor1Id: string;
-  actor2Id: string;
-  type: 'mention' | 'reply' | 'article' | 'event' | 'trade';
-  sentiment: number;
-  context: string;
-  timestamp: Date;
+  actor1Id: string
+  actor2Id: string
+  type: 'mention' | 'reply' | 'article' | 'event' | 'trade'
+  sentiment: number
+  context: string
+  timestamp: Date
 }
 
 export class RelationshipEvolutionEngine {
@@ -59,73 +77,76 @@ export class RelationshipEvolutionEngine {
    */
   async generateInitialRelationships(
     actors: Actor[],
-    organizations: Organization[]
+    organizations: Organization[],
   ): Promise<number> {
     logger.info(
       'Generating initial NPC relationships...',
       undefined,
-      'RelationshipEvolutionEngine'
-    );
+      'RelationshipEvolutionEngine',
+    )
 
-    let created = 0;
-    const orgMap = new Map(organizations.map((o) => [o.id, o]));
+    let created = 0
+    const orgMap = new Map(organizations.map((o) => [o.id, o]))
 
     // Simple algorithm: Create relationships between actors with shared context
     for (let i = 0; i < actors.length; i++) {
-      const actor1 = actors[i]!;
+      const actor1 = actors[i]
+      if (!actor1) continue
 
       // Each actor gets 3-8 relationships
-      const targetCount = 3 + Math.floor(Math.random() * 6);
-      let relationshipCount = 0;
+      const targetCount = 3 + Math.floor(Math.random() * 6)
+      let relationshipCount = 0
 
       for (
         let j = i + 1;
         j < actors.length && relationshipCount < targetCount;
         j++
       ) {
-        const actor2 = actors[j]!;
+        const actor2 = actors[j]
+        if (!actor2) continue
 
         // Calculate simple compatibility
         const sharedOrgs =
           actor1.affiliations?.filter((org) =>
-            actor2.affiliations?.includes(org)
-          ) || [];
+            actor2.affiliations?.includes(org),
+          ) || []
 
         const sharedDomains =
-          actor1.domain?.filter((d) => actor2.domain?.includes(d)) || [];
+          actor1.domain?.filter((d) => actor2.domain?.includes(d)) || []
 
         const hasSharedContext =
-          sharedOrgs.length > 0 || sharedDomains.length > 0;
-        const randomChance = Math.random() > 0.7; // 30% chance even without shared context
+          sharedOrgs.length > 0 || sharedDomains.length > 0
+        const randomChance = Math.random() > 0.7 // 30% chance even without shared context
 
         if (hasSharedContext || randomChance) {
           // Generate simple text description using LLM if available, otherwise use templates
-          let history: string;
-          let type: string;
-          let sentiment: number;
+          let history: string
+          let type: string
+          let sentiment: number
 
-          if (this.llm && sharedOrgs.length > 0) {
+          if (this.llm && sharedOrgs.length > 0 && sharedOrgs[0]) {
             // LLM-DRIVEN: Generate relationship from context
-            const org = orgMap.get(sharedOrgs[0]!);
-            const context = `both affiliated with ${org?.name || 'same organization'}`;
+            const org = orgMap.get(sharedOrgs[0])
+            const context = `both affiliated with ${org?.name || 'same organization'}`
 
             // Check if relationship already exists
-            const [existing] = await db
+            const existingRaw = await db
               .select()
               .from(actorRelationships)
               .where(
                 or(
                   and(
                     eq(actorRelationships.actor1Id, actor1.id),
-                    eq(actorRelationships.actor2Id, actor2.id)
+                    eq(actorRelationships.actor2Id, actor2.id),
                   ),
                   and(
                     eq(actorRelationships.actor1Id, actor2.id),
-                    eq(actorRelationships.actor2Id, actor1.id)
-                  )
-                )
+                    eq(actorRelationships.actor2Id, actor1.id),
+                  ),
+                ),
               )
-              .limit(1);
+              .limit(1)
+            const [existing] = existingRaw as unknown as ActorRelationshipRow[]
 
             const llmResult = await this.generateInitialRelationshipDescription(
               actor1.name,
@@ -133,47 +154,50 @@ export class RelationshipEvolutionEngine {
               context,
               actor1.personality || '',
               actor2.personality || '',
-              existing?.history ? String(existing.history) : undefined
-            );
+              existing?.history ? String(existing.history) : undefined,
+            )
 
-            history = llmResult.description;
-            type = llmResult.type;
-            sentiment = llmResult.sentiment;
-          } else if (sharedOrgs.length > 0) {
+            history = llmResult.description
+            type = llmResult.type
+            sentiment = llmResult.sentiment
+          } else if (sharedOrgs.length > 0 && sharedOrgs[0]) {
             // Fallback: Simple template
-            const org = orgMap.get(sharedOrgs[0]!);
-            const orgName = org?.name.toLowerCase() || 'same company';
-            history = `both work at ${orgName}`;
-            type = 'acquaintances';
-            sentiment = Math.random() * 0.6 - 0.3;
+            const org = orgMap.get(sharedOrgs[0])
+            const orgName = org?.name.toLowerCase() || 'same company'
+            history = `both work at ${orgName}`
+            type = 'acquaintances'
+            sentiment = Math.random() * 0.6 - 0.3
           } else if (sharedDomains.length > 0) {
-            history = `both work in ${sharedDomains[0]}`;
-            type = 'acquaintances';
-            sentiment = Math.random() * 0.4 - 0.2;
+            history = `both work in ${sharedDomains[0]}`
+            type = 'acquaintances'
+            sentiment = Math.random() * 0.4 - 0.2
           } else {
-            history = 'professional circles';
-            type = 'acquaintances';
-            sentiment = 0;
+            history = 'professional circles'
+            type = 'acquaintances'
+            sentiment = 0
           }
 
           // Create relationship (use insert with conflict handling to avoid duplicates)
           // Check if relationship already exists first
-          const [existingRel] = await db
+          const existingRelRaw = await db
             .select({ id: actorRelationships.id })
             .from(actorRelationships)
             .where(
               or(
                 and(
                   eq(actorRelationships.actor1Id, actor1.id),
-                  eq(actorRelationships.actor2Id, actor2.id)
+                  eq(actorRelationships.actor2Id, actor2.id),
                 ),
                 and(
                   eq(actorRelationships.actor1Id, actor2.id),
-                  eq(actorRelationships.actor2Id, actor1.id)
-                )
-              )
+                  eq(actorRelationships.actor2Id, actor1.id),
+                ),
+              ),
             )
-            .limit(1);
+            .limit(1)
+          const [existingRel] = existingRelRaw as unknown as Array<{
+            id: string
+          }>
 
           if (!existingRel) {
             await db.insert(actorRelationships).values({
@@ -188,11 +212,11 @@ export class RelationshipEvolutionEngine {
               updatedAt: new Date(),
               interactionCount: 0,
               evolutionCount: 0,
-            });
+            })
           }
 
-          created++;
-          relationshipCount++;
+          created++
+          relationshipCount++
         }
       }
     }
@@ -200,9 +224,9 @@ export class RelationshipEvolutionEngine {
     logger.info(
       `Created ${created} initial relationships`,
       { count: created },
-      'RelationshipEvolutionEngine'
-    );
-    return created;
+      'RelationshipEvolutionEngine',
+    )
+    return created
   }
 
   /**
@@ -214,7 +238,7 @@ export class RelationshipEvolutionEngine {
     context: string,
     personality1: string,
     personality2: string,
-    existingRelationship?: string
+    existingRelationship?: string,
   ): Promise<{ description: string; type: string; sentiment: number }> {
     const prompt = `Analyze the relationship between two NPCs:
 
@@ -241,35 +265,43 @@ Also determine:
 - Type: allies, rivals, friends, enemies, acquaintances, or neutral
 - Sentiment: -1.0 (hostile) to 1.0 (friendly)
 
-Return JSON: { "description": "...", "type": "...", "sentiment": 0.0 }`;
+Return JSON: { "description": "...", "type": "...", "sentiment": 0.0 }`
 
-    const response = await this.llm!.generateJSON<{
-      description: string;
-      type: string;
-      sentiment: number;
+    const response = await this.llm?.generateJSON<{
+      description: string
+      type: string
+      sentiment: number
     }>(
       prompt,
       { required: ['description', 'type', 'sentiment'] },
-      { maxTokens: 200, temperature: 0.9 }
-    );
+      { maxTokens: 200, temperature: 0.9 },
+    )
+
+    if (!response) {
+      return {
+        description: 'professional acquaintances',
+        type: 'acquaintances',
+        sentiment: 0,
+      }
+    }
 
     return {
       description: response.description.toLowerCase().trim(),
       type: response.type || 'acquaintances',
       sentiment: Math.max(-1, Math.min(1, response.sentiment || 0)),
-    };
+    }
   }
 
   /**
    * Track an interaction between two NPCs
    */
   async trackInteraction(
-    interaction: Omit<Interaction, 'timestamp'>
+    interaction: Omit<Interaction, 'timestamp'>,
   ): Promise<void> {
     // Sort IDs to ensure consistency
-    const sorted = [interaction.actor1Id, interaction.actor2Id].sort();
-    const id1 = sorted[0]!;
-    const id2 = sorted[1]!;
+    const sorted = [interaction.actor1Id, interaction.actor2Id].sort()
+    const id1 = sorted[0]
+    const id2 = sorted[1]
 
     await db.insert(npcInteractions).values({
       id: await generateSnowflakeId(),
@@ -279,7 +311,7 @@ Return JSON: { "description": "...", "type": "...", "sentiment": 0.0 }`;
       sentiment: interaction.sentiment,
       context: interaction.context,
       timestamp: new Date(),
-    });
+    })
   }
 
   /**
@@ -291,38 +323,49 @@ Return JSON: { "description": "...", "type": "...", "sentiment": 0.0 }`;
       logger.warn(
         'No LLM client available, skipping relationship analysis',
         undefined,
-        'RelationshipEvolutionEngine'
-      );
-      return 0;
+        'RelationshipEvolutionEngine',
+      )
+      return 0
     }
 
     // Get recent interactions (last 7 days)
-    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-    const recentInteractions = await db
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+    const recentInteractionsRaw = await db
       .select()
       .from(npcInteractions)
       .where(gte(npcInteractions.timestamp, sevenDaysAgo))
       .orderBy(desc(npcInteractions.timestamp))
-      .limit(100); // Limit to prevent token overflow
+      .limit(100) // Limit to prevent token overflow
+    const recentInteractions = recentInteractionsRaw as unknown as Array<{
+      id: string
+      actor1Id: string | null
+      actor2Id: string | null
+      interactionType: string | null
+      sentiment: number | string | null
+      context: string | null
+      timestamp: Date | string | null
+    }>
 
     if (recentInteractions.length === 0) {
       logger.info(
         'No recent interactions to analyze',
         undefined,
-        'RelationshipEvolutionEngine'
-      );
-      return 0;
+        'RelationshipEvolutionEngine',
+      )
+      return 0
     }
 
+    type InteractionRow = (typeof recentInteractions)[number]
+
     // Group interactions by actor pair
-    const pairInteractions = new Map<string, typeof recentInteractions>();
+    const pairInteractions = new Map<string, InteractionRow[]>()
 
     for (const interaction of recentInteractions) {
-      const pairKey = `${interaction.actor1Id}_${interaction.actor2Id}`;
+      const pairKey = `${interaction.actor1Id}_${interaction.actor2Id}`
       if (!pairInteractions.has(pairKey)) {
-        pairInteractions.set(pairKey, []);
+        pairInteractions.set(pairKey, [])
       }
-      pairInteractions.get(pairKey)!.push(interaction);
+      pairInteractions.get(pairKey)?.push(interaction)
     }
 
     logger.info(
@@ -331,50 +374,51 @@ Return JSON: { "description": "...", "type": "...", "sentiment": 0.0 }`;
         pairs: pairInteractions.size,
         interactions: recentInteractions.length,
       },
-      'RelationshipEvolutionEngine'
-    );
+      'RelationshipEvolutionEngine',
+    )
 
-    let updated = 0;
+    let updated = 0
 
     // Process each pair
     for (const [pairKey, interactions] of Array.from(pairInteractions)) {
       // Need at least 2 interactions to update relationship
-      if (interactions.length < 2) continue;
+      if (interactions.length < 2) continue
 
-      const [actor1Id, actor2Id] = pairKey.split('_');
-      if (!actor1Id || !actor2Id) continue;
+      const [actor1Id, actor2Id] = pairKey.split('_')
+      if (!actor1Id || !actor2Id) continue
 
       // Get existing relationship
-      const [existing] = await db
+      const existingRaw = await db
         .select()
         .from(actorRelationships)
         .where(
           and(
             eq(actorRelationships.actor1Id, actor1Id),
-            eq(actorRelationships.actor2Id, actor2Id)
-          )
+            eq(actorRelationships.actor2Id, actor2Id),
+          ),
         )
-        .limit(1);
+        .limit(1)
+      const [existing] = existingRaw as unknown as ActorRelationshipRow[]
 
       // Get actor names from static registry
-      const actor1 = StaticDataRegistry.getActor(actor1Id);
-      const actor2 = StaticDataRegistry.getActor(actor2Id);
+      const actor1 = StaticDataRegistry.getActor(actor1Id)
+      const actor2 = StaticDataRegistry.getActor(actor2Id)
 
-      if (!actor1 || !actor2) continue;
+      if (!actor1 || !actor2) continue
 
       // Calculate average sentiment
       const avgSentiment =
         interactions.reduce((sum, i) => sum + Number(i.sentiment ?? 0), 0) /
-        interactions.length;
+        interactions.length
 
       // Build context for LLM
       const interactionSummary = interactions
         .slice(0, 5)
         .map((i) => {
-          const sentiment = Number(i.sentiment ?? 0);
-          return `- ${i.interactionType}: ${i.context} (sentiment: ${sentiment > 0 ? '+' : ''}${sentiment.toFixed(2)})`;
+          const sentiment = Number(i.sentiment ?? 0)
+          return `- ${i.interactionType}: ${i.context} (sentiment: ${sentiment > 0 ? '+' : ''}${sentiment.toFixed(2)})`
         })
-        .join('\n');
+        .join('\n')
 
       // Use LLM to generate natural text description with retry logic
       const prompt = `Analyze the evolving relationship between two NPCs based on their recent interactions.
@@ -406,19 +450,19 @@ Also determine:
 - Type: allies, rivals, friends, enemies, acquaintances, or neutral
 - Sentiment: -1.0 (hostile) to 1.0 (friendly)
 
-Return JSON: { "description": "...", "type": "...", "sentiment": 0.0 }`;
+Return JSON: { "description": "...", "type": "...", "sentiment": 0.0 }`
 
       // Retry logic: up to 3 attempts with LLM-generated relationship updates
-      let newHistory = 'professional relationship';
-      let newType = 'acquaintances';
-      let newSentiment = avgSentiment;
-      const maxRetries = 3;
+      let newHistory = 'professional relationship'
+      let newType = 'acquaintances'
+      let newSentiment = avgSentiment
+      const maxRetries = 3
 
       for (let attempt = 0; attempt < maxRetries; attempt++) {
         const rawResponse = await this.llm.generateJSON<{
-          description: string;
-          type: string;
-          sentiment: number;
+          description: string
+          type: string
+          sentiment: number
         }>(
           prompt,
           { required: ['description', 'type', 'sentiment'] },
@@ -426,12 +470,11 @@ Return JSON: { "description": "...", "type": "...", "sentiment": 0.0 }`;
             maxTokens: 200,
             temperature: 0.8,
             promptType: 'relationship_evolve',
-          }
-        );
+          },
+        )
 
         // Validate response using Zod schema
-        const parseResult =
-          RelationshipDescriptionSchema.safeParse(rawResponse);
+        const parseResult = RelationshipDescriptionSchema.safeParse(rawResponse)
         if (!parseResult.success) {
           logger.warn(
             'Relationship update failed validation',
@@ -440,8 +483,8 @@ Return JSON: { "description": "...", "type": "...", "sentiment": 0.0 }`;
               actor1: actor1.name,
               actor2: actor2.name,
             },
-            'RelationshipEvolutionEngine'
-          );
+            'RelationshipEvolutionEngine',
+          )
         }
 
         if (
@@ -450,20 +493,20 @@ Return JSON: { "description": "...", "type": "...", "sentiment": 0.0 }`;
         ) {
           // LLM determines everything - no hardcoded rules
           // Don't trim - let LLM decide length (they know the context)
-          newHistory = rawResponse.description.toLowerCase().trim();
-          newType = rawResponse.type || 'acquaintances';
+          newHistory = rawResponse.description.toLowerCase().trim()
+          newType = rawResponse.type || 'acquaintances'
           newSentiment = Math.max(
             -1,
-            Math.min(1, rawResponse.sentiment || avgSentiment)
-          );
-          break; // Success
+            Math.min(1, rawResponse.sentiment || avgSentiment),
+          )
+          break // Success
         }
 
         // Wait before retry (exponential backoff)
         if (attempt < maxRetries - 1) {
           await new Promise((resolve) =>
-            setTimeout(resolve, 1000 * 2 ** attempt)
-          );
+            setTimeout(resolve, 1000 * 2 ** attempt),
+          )
         }
       }
 
@@ -478,7 +521,7 @@ Return JSON: { "description": "...", "type": "...", "sentiment": 0.0 }`;
             sentiment: newSentiment,
             strength: Math.min(
               1.0,
-              Number(existing.strength ?? 0.5) + interactions.length * 0.05
+              Number(existing.strength ?? 0.5) + interactions.length * 0.05,
             ),
             lastInteraction: new Date(),
             interactionCount:
@@ -486,7 +529,7 @@ Return JSON: { "description": "...", "type": "...", "sentiment": 0.0 }`;
             evolutionCount: Number(existing.evolutionCount ?? 0) + 1,
             updatedAt: new Date(),
           })
-          .where(eq(actorRelationships.id, String(existing.id)));
+          .where(eq(actorRelationships.id, String(existing.id)))
       } else {
         // Create new
         await db.insert(actorRelationships).values({
@@ -502,10 +545,10 @@ Return JSON: { "description": "...", "type": "...", "sentiment": 0.0 }`;
           interactionCount: interactions.length,
           evolutionCount: 0,
           updatedAt: new Date(),
-        });
+        })
       }
 
-      updated++;
+      updated++
       logger.info(
         'Updated relationship',
         {
@@ -515,16 +558,16 @@ Return JSON: { "description": "...", "type": "...", "sentiment": 0.0 }`;
           type: newType,
           sentiment: newSentiment.toFixed(2),
         },
-        'RelationshipEvolutionEngine'
-      );
+        'RelationshipEvolutionEngine',
+      )
     }
 
     logger.info(
       `Updated ${updated} relationships`,
       { count: updated },
-      'RelationshipEvolutionEngine'
-    );
-    return updated;
+      'RelationshipEvolutionEngine',
+    )
+    return updated
   }
 
   /**
@@ -533,46 +576,47 @@ Return JSON: { "description": "...", "type": "...", "sentiment": 0.0 }`;
    */
   async getRelationshipContextForActor(actorId: string): Promise<string> {
     // Get relationships for this actor
-    const relationships = await db
+    const relationshipsRaw = await db
       .select()
       .from(actorRelationships)
       .where(
         or(
           eq(actorRelationships.actor1Id, actorId),
-          eq(actorRelationships.actor2Id, actorId)
-        )
+          eq(actorRelationships.actor2Id, actorId),
+        ),
       )
       .orderBy(desc(actorRelationships.strength))
-      .limit(5); // Top 5 strongest only (keep it short)
+      .limit(5) // Top 5 strongest only (keep it short)
+    const relationships = relationshipsRaw as unknown as ActorRelationshipRow[]
 
     if (relationships.length === 0) {
-      return '';
+      return ''
     }
 
     // Get the other actor IDs we need to look up
     const otherActorIds = relationships.map((rel) =>
-      rel.actor1Id === actorId ? rel.actor2Id : rel.actor1Id
-    );
+      rel.actor1Id === actorId ? rel.actor2Id : rel.actor1Id,
+    )
 
     // Get actor names from static registry
     const actorNameMap = new Map(
       otherActorIds.map((id) => {
-        const actor = StaticDataRegistry.getActor(String(id));
-        return [id, actor?.name || 'Unknown'];
-      })
-    );
+        const actor = StaticDataRegistry.getActor(String(id))
+        return [id, actor?.name || 'Unknown']
+      }),
+    )
 
     // SIMPLEST FORMAT: Just list the relationships
     const lines = relationships.map((rel) => {
       const otherActorId =
-        rel.actor1Id === actorId ? rel.actor2Id : rel.actor1Id;
-      const otherActorName = actorNameMap.get(otherActorId) || 'Unknown';
+        rel.actor1Id === actorId ? rel.actor2Id : rel.actor1Id
+      const otherActorName = actorNameMap.get(otherActorId) || 'Unknown'
 
       // Just the text description, no emojis or extra formatting
-      return `- ${otherActorName}: ${rel.history || 'professional relationship'}`;
-    });
+      return `- ${otherActorName}: ${rel.history || 'professional relationship'}`
+    })
 
-    return lines.join('\n');
+    return lines.join('\n')
   }
 
   // =============================================================================
@@ -583,17 +627,23 @@ Return JSON: { "description": "...", "type": "...", "sentiment": 0.0 }`;
    * Get all relationships for an actor (static method for queries)
    */
   static async getActorRelationships(
-    actorId: string
+    actorId: string,
   ): Promise<ActorRelationship[]> {
-    const relationships = await db
+    const relationshipsRaw = await db
       .select()
       .from(actorRelationships)
       .where(
         or(
           eq(actorRelationships.actor1Id, actorId),
-          eq(actorRelationships.actor2Id, actorId)
-        )
-      );
+          eq(actorRelationships.actor2Id, actorId),
+        ),
+      )
+    const relationships = relationshipsRaw as unknown as Array<
+      ActorRelationshipRow & {
+        affects: Record<string, number> | null
+        createdAt: Date | string | null
+      }
+    >
 
     return relationships.map(
       (rel): ActorRelationship => ({
@@ -606,11 +656,11 @@ Return JSON: { "description": "...", "type": "...", "sentiment": 0.0 }`;
         sentiment: Number(rel.sentiment ?? 0),
         isPublic: Boolean(rel.isPublic),
         history: rel.history ? String(rel.history) : undefined,
-        affects: rel.affects as Record<string, number> | undefined,
-        createdAt: rel.createdAt as Date,
-        updatedAt: rel.updatedAt as Date,
-      })
-    );
+        affects: rel.affects ?? undefined,
+        createdAt: toDate(rel.createdAt as Date | string | number),
+        updatedAt: toDate(rel.updatedAt as Date | string | number),
+      }),
+    )
   }
 
   /**
@@ -618,26 +668,32 @@ Return JSON: { "description": "...", "type": "...", "sentiment": 0.0 }`;
    */
   static async getRelationship(
     actor1Id: string,
-    actor2Id: string
+    actor2Id: string,
   ): Promise<ActorRelationship | null> {
-    const [relationship] = await db
+    const relationshipRaw = await db
       .select()
       .from(actorRelationships)
       .where(
         or(
           and(
             eq(actorRelationships.actor1Id, actor1Id),
-            eq(actorRelationships.actor2Id, actor2Id)
+            eq(actorRelationships.actor2Id, actor2Id),
           ),
           and(
             eq(actorRelationships.actor1Id, actor2Id),
-            eq(actorRelationships.actor2Id, actor1Id)
-          )
-        )
+            eq(actorRelationships.actor2Id, actor1Id),
+          ),
+        ),
       )
-      .limit(1);
+      .limit(1)
+    const [relationship] = relationshipRaw as unknown as Array<
+      ActorRelationshipRow & {
+        affects: Record<string, number> | null
+        createdAt: Date | string | null
+      }
+    >
 
-    if (!relationship) return null;
+    if (!relationship) return null
 
     return {
       id: String(relationship.id),
@@ -649,9 +705,9 @@ Return JSON: { "description": "...", "type": "...", "sentiment": 0.0 }`;
       sentiment: Number(relationship.sentiment ?? 0),
       isPublic: Boolean(relationship.isPublic),
       history: relationship.history ? String(relationship.history) : undefined,
-      affects: relationship.affects as Record<string, number> | undefined,
-      createdAt: relationship.createdAt as Date,
-      updatedAt: relationship.updatedAt as Date,
-    };
+      affects: relationship.affects ?? undefined,
+      createdAt: toDate(relationship.createdAt as Date | string | number),
+      updatedAt: toDate(relationship.updatedAt as Date | string | number),
+    }
   }
 }

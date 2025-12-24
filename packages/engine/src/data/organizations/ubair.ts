@@ -1,4 +1,4 @@
-import type { Organization } from '../../types/shared';
+import type { Organization } from '../../types/shared'
 
 export const data = {
   id: 'ubair',
@@ -28,4 +28,4 @@ export const data = {
   originalName: 'Uber',
   originalHandle: 'uber',
   username: 'ubAIr',
-} as const satisfies Organization;
+} as const satisfies Organization

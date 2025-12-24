@@ -41,9 +41,9 @@
  * ```
  */
 
-import { logger } from '@babylon/shared';
-import type { Actor, Organization, Question } from '../types';
-import { shuffleArray } from '../utils/randomization';
+import { logger } from '@babylon/shared'
+import type { Actor, Organization, Question } from '../types'
+import { shuffleArray } from '../utils/randomization'
 
 /**
  * Phase-specific event distribution targets
@@ -62,12 +62,12 @@ import { shuffleArray } from '../utils/randomization';
  * @property targetClueStrength - [min, max] clue strength range for this phase
  */
 export interface PhaseTargets {
-  daysRange: [number, number];
-  targetEventsTotal: number;
-  targetCorrectSignals: number;
-  targetWrongSignals: number;
-  targetAmbiguous: number;
-  targetClueStrength: [number, number];
+  daysRange: [number, number]
+  targetEventsTotal: number
+  targetCorrectSignals: number
+  targetWrongSignals: number
+  targetAmbiguous: number
+  targetClueStrength: [number, number]
 }
 
 /**
@@ -90,32 +90,32 @@ export interface PhaseTargets {
  * @property plannedRedHerrings - Intentional misdirection events
  */
 export interface QuestionArcPlan {
-  questionId: number | string;
-  outcome: boolean;
+  questionId: number | string
+  outcome: boolean
 
   // Narrative arc structure
-  uncertaintyPeakDay: number;
-  clarityOnsetDay: number;
-  verificationDay: number;
+  uncertaintyPeakDay: number
+  clarityOnsetDay: number
+  verificationDay: number
 
   // Event distribution targets by phase
   phases: {
-    early: PhaseTargets;
-    middle: PhaseTargets;
-    late: PhaseTargets;
-    climax: PhaseTargets;
-  };
+    early: PhaseTargets
+    middle: PhaseTargets
+    late: PhaseTargets
+    climax: PhaseTargets
+  }
 
   // NPC knowledge plan
-  insiders: string[];
-  deceivers: string[];
+  insiders: string[]
+  deceivers: string[]
 
   // Misdirection events
   plannedRedHerrings: Array<{
-    day: number;
-    description: string;
-    apparentDirection: 'YES' | 'NO';
-  }>;
+    day: number
+    description: string
+    apparentDirection: 'YES' | 'NO'
+  }>
 }
 
 /**
@@ -175,19 +175,19 @@ export class QuestionArcPlanner {
   planQuestionArc(
     question: Question,
     actors: Actor[],
-    organizations: Organization[]
+    organizations: Organization[],
   ): QuestionArcPlan {
     // Determine key narrative days
-    const uncertaintyPeakDay = 8 + Math.floor(Math.random() * 5); // Day 8-12
-    const clarityOnsetDay = 17 + Math.floor(Math.random() * 5); // Day 17-21
-    const verificationDay = 27 + Math.floor(Math.random() * 2); // Day 27-28
+    const uncertaintyPeakDay = 8 + Math.floor(Math.random() * 5) // Day 8-12
+    const clarityOnsetDay = 17 + Math.floor(Math.random() * 5) // Day 17-21
+    const verificationDay = 27 + Math.floor(Math.random() * 2) // Day 27-28
 
     // Assign NPC roles
-    const insiders = this.selectInsiders(question, actors, organizations);
-    const deceivers = this.selectDeceivers(actors);
+    const insiders = this.selectInsiders(question, actors, organizations)
+    const deceivers = this.selectDeceivers(actors)
 
     // Plan red herrings (intentional misdirection around uncertainty peak)
-    const redHerrings = this.planRedHerrings(question, uncertaintyPeakDay);
+    const redHerrings = this.planRedHerrings(question, uncertaintyPeakDay)
 
     // Calculate event distribution targets
     const plan: QuestionArcPlan = {
@@ -233,7 +233,7 @@ export class QuestionArcPlanner {
       insiders,
       deceivers,
       plannedRedHerrings: redHerrings,
-    };
+    }
 
     logger.info(
       'Generated question arc plan',
@@ -247,10 +247,10 @@ export class QuestionArcPlanner {
         insiders: insiders.length,
         deceivers: deceivers.length,
       },
-      'QuestionArcPlanner'
-    );
+      'QuestionArcPlanner',
+    )
 
-    return plan;
+    return plan
   }
 
   /**
@@ -263,33 +263,33 @@ export class QuestionArcPlanner {
   private selectInsiders(
     question: Question,
     actors: Actor[],
-    organizations: Organization[]
+    organizations: Organization[],
   ): string[] {
     // Extract organization names/IDs mentioned in question
-    const questionLower = question.text.toLowerCase();
+    const questionLower = question.text.toLowerCase()
     const relatedOrgs = organizations
       .filter(
         (org) =>
           questionLower.includes(org.name.toLowerCase()) ||
-          questionLower.includes(org.id.toLowerCase())
+          questionLower.includes(org.id.toLowerCase()),
       )
-      .map((o) => o.id);
+      .map((o) => o.id)
 
     // Find actors affiliated with those orgs
     const potentialInsiders = actors.filter(
       (a) =>
         a.affiliations?.some((org) => relatedOrgs.includes(org)) &&
-        (a.tier === 'S_TIER' || a.tier === 'A_TIER' || a.tier === 'B_TIER')
-    );
+        (a.tier === 'S_TIER' || a.tier === 'A_TIER' || a.tier === 'B_TIER'),
+    )
 
     // Select 2-3 insiders randomly
     const numInsiders = Math.min(
       2 + Math.floor(Math.random() * 2), // 2-3
-      potentialInsiders.length
-    );
+      potentialInsiders.length,
+    )
 
-    const shuffled = shuffleArray(potentialInsiders);
-    return shuffled.slice(0, numInsiders).map((a) => a.id);
+    const shuffled = shuffleArray(potentialInsiders)
+    return shuffled.slice(0, numInsiders).map((a) => a.id)
   }
 
   /**
@@ -305,17 +305,17 @@ export class QuestionArcPlanner {
         a.personality?.includes('contrarian') ||
         a.personality?.includes('conspiracy') ||
         a.domain?.includes('politics') ||
-        a.description?.toLowerCase().includes('conspiracy')
-    );
+        a.description?.toLowerCase().includes('conspiracy'),
+    )
 
     // Select 1-2 deceivers
     const numDeceivers = Math.min(
       1 + Math.floor(Math.random() * 2), // 1-2
-      potentialDeceivers.length
-    );
+      potentialDeceivers.length,
+    )
 
-    const shuffled = shuffleArray(potentialDeceivers);
-    return shuffled.slice(0, numDeceivers).map((a) => a.id);
+    const shuffled = shuffleArray(potentialDeceivers)
+    return shuffled.slice(0, numDeceivers).map((a) => a.id)
   }
 
   /**
@@ -332,33 +332,33 @@ export class QuestionArcPlanner {
    */
   private planRedHerrings(
     question: Question,
-    uncertaintyPeakDay: number
+    uncertaintyPeakDay: number,
   ): Array<{
-    day: number;
-    description: string;
-    apparentDirection: 'YES' | 'NO';
+    day: number
+    description: string
+    apparentDirection: 'YES' | 'NO'
   }> {
     const redHerrings: Array<{
-      day: number;
-      description: string;
-      apparentDirection: 'YES' | 'NO';
-    }> = [];
-    const oppositeOutcome: 'YES' | 'NO' = question.outcome ? 'NO' : 'YES';
+      day: number
+      description: string
+      apparentDirection: 'YES' | 'NO'
+    }> = []
+    const oppositeOutcome: 'YES' | 'NO' = question.outcome ? 'NO' : 'YES'
 
     // Create 2-3 red herrings around uncertainty peak
-    const numRedHerrings = 2 + Math.floor(Math.random() * 2); // 2-3
+    const numRedHerrings = 2 + Math.floor(Math.random() * 2) // 2-3
 
     for (let i = 0; i < numRedHerrings; i++) {
-      const day = uncertaintyPeakDay - 2 + i; // Spread around peak
+      const day = uncertaintyPeakDay - 2 + i // Spread around peak
 
       redHerrings.push({
         day,
         description: `Planned misdirection event ${i + 1} for question ${question.id}`,
         apparentDirection: oppositeOutcome,
-      });
+      })
     }
 
-    return redHerrings;
+    return redHerrings
   }
 
   /**
@@ -366,17 +366,17 @@ export class QuestionArcPlanner {
    */
   getPhaseForDay(
     day: number,
-    arcPlan: QuestionArcPlan
+    arcPlan: QuestionArcPlan,
   ): 'early' | 'middle' | 'late' | 'climax' | null {
     for (const [phaseName, phase] of Object.entries(arcPlan.phases) as Array<
       ['early' | 'middle' | 'late' | 'climax', PhaseTargets]
     >) {
-      const [start, end] = phase.daysRange;
+      const [start, end] = phase.daysRange
       if (day >= start && day <= end) {
-        return phaseName;
+        return phaseName
       }
     }
-    return null;
+    return null
   }
 
   /**
@@ -394,15 +394,15 @@ export class QuestionArcPlanner {
    * @returns Expected certainty from 0-1
    */
   calculateExpectedCertainty(day: number, arcPlan: QuestionArcPlan): number {
-    const phase = this.getPhaseForDay(day, arcPlan);
-    if (!phase) return 0.5; // No info = 50/50
+    const phase = this.getPhaseForDay(day, arcPlan)
+    if (!phase) return 0.5 // No info = 50/50
 
-    const phaseData = arcPlan.phases[phase];
+    const phaseData = arcPlan.phases[phase]
     const totalSignals =
-      phaseData.targetCorrectSignals + phaseData.targetWrongSignals;
+      phaseData.targetCorrectSignals + phaseData.targetWrongSignals
 
-    if (totalSignals === 0) return 0.5;
+    if (totalSignals === 0) return 0.5
 
-    return phaseData.targetCorrectSignals / totalSignals;
+    return phaseData.targetCorrectSignals / totalSignals
   }
 }

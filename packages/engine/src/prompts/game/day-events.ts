@@ -1,9 +1,9 @@
-import { definePrompt } from '../define-prompt';
+import { definePrompt } from '../define-prompt'
 import {
   ANTI_REPETITION_RULES,
   EVENT_CONTINUITY_RULES,
   PARODY_NAME_RULES,
-} from '../shared-sections';
+} from '../shared-sections'
 
 /**
  * Prompt for generating day-by-day event descriptions with narrative context.
@@ -119,4 +119,4 @@ NARRATIVE CONTINUITY:
 
 Return EXACTLY {{eventCount}} events. Each must be verified against the checks above.
 `.trim(),
-});
+})

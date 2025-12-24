@@ -1,19 +1,27 @@
 /**
  * @fileoverview Moderation types for Babylon-Jeju integration
  * @module @babylon/moderation/types
+ *
+ * This file contains only Babylon-specific extensions.
  */
 
-import { BanStatus, MarketOutcome, VotePosition } from '@babylon/shared';
-import type { Address } from 'viem';
+import type { Address, Hex } from 'viem'
+
+export { BanStatus, MarketOutcome, VotePosition } from '@babylon/shared'
+export {
+  type BanRecord,
+  BanType,
+  CaseOutcome,
+  CaseStatus,
+  type Evidence,
+  EvidencePosition,
+  EvidenceStatus,
+  type ModerationCase,
+  type ReputationLabel,
+} from '@jejunetwork/sdk'
 
 // ============================================================================
-// Re-export enums from @babylon/shared (canonical source)
-// ============================================================================
-
-export { BanStatus, MarketOutcome, VotePosition };
-
-// ============================================================================
-// Local enums (moderation-package specific)
+// Babylon-specific enums
 // ============================================================================
 
 export enum ReportCategory {
@@ -31,84 +39,88 @@ export enum ReportCategory {
 }
 
 // ============================================================================
-// Core Types
+// Babylon-specific types (not in SDK)
 // ============================================================================
 
+/** Babylon-specific ban case with Date fields for API responses */
 export interface BanCase {
-  caseId: `0x${string}`;
-  reporter: Address;
-  target: Address;
-  reporterStake: bigint;
-  targetStake: bigint;
-  reason: string;
-  evidenceHash: `0x${string}`;
-  status: BanStatus;
-  createdAt: number;
-  marketOpenUntil: number;
-  yesVotes: bigint;
-  noVotes: bigint;
-  totalPot: bigint;
-  resolved: boolean;
-  outcome: MarketOutcome;
-  appealCount: number;
+  caseId: Hex
+  reporter: Address
+  target: Address
+  reporterStake: bigint
+  targetStake: bigint
+  reason: string
+  evidenceHash: Hex
+  status: number
+  createdAt: number
+  marketOpenUntil: number
+  yesVotes: bigint
+  noVotes: bigint
+  totalPot: bigint
+  resolved: boolean
+  outcome: number
+  appealCount: number
 }
 
+/** Stake information for moderation participants */
 export interface StakeInfo {
-  amount: bigint;
-  stakedAt: number;
-  stakedBlock: number;
-  lastActivityBlock: number;
-  isStaked: boolean;
+  amount: bigint
+  stakedAt: number
+  stakedBlock: number
+  lastActivityBlock: number
+  isStaked: boolean
 }
 
+/** Vote record for a moderation case */
 export interface Vote {
-  position: VotePosition;
-  weight: bigint;
-  stakedAt: number;
-  hasVoted: boolean;
-  hasClaimed: boolean;
+  position: number
+  weight: bigint
+  stakedAt: number
+  hasVoted: boolean
+  hasClaimed: boolean
 }
 
+/** Off-chain moderation report (pre-escalation) */
 export interface ModerationReport {
-  id: string;
-  reportType: 'user' | 'post' | 'agent';
-  reporterId: string;
-  reportedId: string;
-  category: ReportCategory;
-  reason: string;
-  evidence?: string;
-  createdAt: Date;
-  status: 'pending' | 'reviewing' | 'resolved' | 'dismissed' | 'escalated';
-  resolution?: string;
-  caseId?: `0x${string}`; // Link to on-chain case if escalated
+  id: string
+  reportType: 'user' | 'post' | 'agent'
+  reporterId: string
+  reportedId: string
+  category: ReportCategory
+  reason: string
+  evidence?: string
+  createdAt: Date
+  status: 'pending' | 'reviewing' | 'resolved' | 'dismissed' | 'escalated'
+  resolution?: string
+  caseId?: Hex
 }
 
 // ============================================================================
-// Integration Types
+// Integration Config Types
 // ============================================================================
 
 export interface JejuModerationConfig {
-  moderationMarketplace: Address;
-  banManager: Address;
-  identityRegistry: Address;
-  chainId: number;
-  rpcUrl: string;
+  moderationMarketplace: Address
+  banManager: Address
+  identityRegistry: Address
+  chainId: number
+  rpcUrl: string
 }
 
 export interface BabylonModerationConfig {
-  banManager: Address;
-  identityRegistry: Address;
-  chainId: number;
-  rpcUrl: string;
+  banManager: Address
+  identityRegistry: Address
+  chainId: number
+  rpcUrl: string
 }
 
 export interface CrossChainBanSync {
-  sourceChainId: number;
-  targetChainId: number;
-  caseId: `0x${string}`;
-  targetAddress: Address;
-  status: BanStatus;
-  syncedAt: number;
+  sourceChainId: number
+  targetChainId: number
+  caseId: Hex
+  targetAddress: Address
+  status: number
+  syncedAt: number
 }
 
 // ============================================================================
@@ -118,107 +130,107 @@ export interface CrossChainBanSync {
 export interface ModerationA2AMethods {
   'moderation.proposeBan': {
     params: {
-      targetAddress: string;
-      reason: string;
-      category: ReportCategory;
-      evidence?: string;
-    };
+      targetAddress: string
+      reason: string
+      category: ReportCategory
+      evidence?: string
+    }
     result: {
-      caseId: string;
-      status: BanStatus;
-      marketOpenUntil: number;
-    };
-  };
+      caseId: string
+      status: number
+      marketOpenUntil: number
+    }
+  }
   'moderation.challengeBan': {
     params: {
-      caseId: string;
-      stakeAmount: string; // In wei
-    };
+      caseId: string
+      stakeAmount: string
+    }
     result: {
-      success: boolean;
-      newStatus: BanStatus;
-    };
-  };
+      success: boolean
+      newStatus: number
+    }
+  }
   'moderation.vote': {
     params: {
-      caseId: string;
-      position: 'yes' | 'no';
-    };
+      caseId: string
+      position: 'yes' | 'no'
+    }
     result: {
-      success: boolean;
-      weight: string; // In wei
-    };
-  };
+      success: boolean
+      weight: string
+    }
+  }
   'moderation.getBanStatus': {
     params: {
-      address: string;
-      appId?: string;
-    };
+      address: string
+      appId?: string
+    }
     result: {
-      status: BanStatus;
-      reason?: string;
-      caseId?: string;
-    };
-  };
+      status: number
+      reason?: string
+      caseId?: string
+    }
+  }
   'moderation.getActiveCases': {
     params: {
-      limit?: number;
-      offset?: number;
-    };
+      limit?: number
+      offset?: number
+    }
     result: {
-      cases: BanCase[];
-      total: number;
-    };
-  };
+      cases: BanCase[]
+      total: number
+    }
+  }
 }
 
 // ============================================================================
-// Event Types
+// Event Types (for watchers)
 // ============================================================================
 
 export interface CaseOpenedEvent {
-  caseId: `0x${string}`;
-  reporter: Address;
-  target: Address;
-  reporterStake: bigint;
-  reason: string;
-  evidenceHash: `0x${string}`;
-  timestamp: number;
+  caseId: Hex
+  reporter: Address
+  target: Address
+  reporterStake: bigint
+  reason: string
+  evidenceHash: Hex
+  timestamp: number
 }
 
 export interface CaseChallengedEvent {
-  caseId: `0x${string}`;
-  target: Address;
-  targetStake: bigint;
-  totalPot: bigint;
-  timestamp: number;
+  caseId: Hex
+  target: Address
+  targetStake: bigint
+  totalPot: bigint
+  timestamp: number
 }
 
 export interface VoteCastEvent {
-  caseId: `0x${string}`;
-  voter: Address;
-  position: VotePosition;
-  weight: bigint;
-  timestamp: number;
+  caseId: Hex
+  voter: Address
+  position: number
+  weight: bigint
+  timestamp: number
 }
 
 export interface CaseResolvedEvent {
-  caseId: `0x${string}`;
-  outcome: MarketOutcome;
-  yesVotes: bigint;
-  noVotes: bigint;
-  timestamp: number;
+  caseId: Hex
+  outcome: number
+  yesVotes: bigint
+  noVotes: bigint
+  timestamp: number
 }
 
 export interface BanAppliedEvent {
-  target: Address;
-  caseId: `0x${string}`;
-  reason: string;
-  timestamp: number;
+  target: Address
+  caseId: Hex
+  reason: string
+  timestamp: number
 }
 
 export interface BanRemovedEvent {
-  target: Address;
-  caseId: `0x${string}`;
-  timestamp: number;
+  target: Address
+  caseId: Hex
+  timestamp: number
 }

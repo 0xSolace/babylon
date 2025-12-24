@@ -11,67 +11,67 @@
  * - Secret versioning and rotation
  */
 
-import { logger } from '@babylon/shared';
-import type { Hex } from 'viem';
+import { logger } from '@babylon/shared'
+import type { Hex } from 'viem'
 
 // ============================================================================
 // Types
 // ============================================================================
 
 export interface KMSConfig {
-  serviceUrl: string;
-  namespace: string;
-  privateKey?: Hex;
+  serviceUrl: string
+  namespace: string
+  privateKey?: Hex
 }
 
 export interface Secret {
-  id: string;
-  name: string;
-  version: number;
-  encryptedValue: Hex;
-  metadata: Record<string, string>;
-  createdAt: number;
-  expiresAt: number | null;
-  policy: SecretPolicy;
+  id: string
+  name: string
+  version: number
+  encryptedValue: Hex
+  metadata: Record<string, string>
+  createdAt: number
+  expiresAt: number | null
+  policy: SecretPolicy
 }
 
 export interface SecretPolicy {
-  conditions: PolicyCondition[];
-  operator: 'and' | 'or';
+  conditions: PolicyCondition[]
+  operator: 'and' | 'or'
 }
 
 export interface PolicyCondition {
-  type: 'timestamp' | 'address' | 'signature' | 'tee';
-  value: string | number;
+  type: 'timestamp' | 'address' | 'signature' | 'tee'
+  value: string | number
 }
 
 export interface EncryptRequest {
-  data: string;
-  name?: string;
-  policy?: SecretPolicy;
-  metadata?: Record<string, string>;
-  expiresIn?: number;
+  data: string
+  name?: string
+  policy?: SecretPolicy
+  metadata?: Record<string, string>
+  expiresIn?: number
 }
 
 export interface EncryptResult {
-  id: string;
-  encryptedPayload: Hex;
-  version: number;
+  id: string
+  encryptedPayload: Hex
+  version: number
 }
 
 export interface DecryptRequest {
-  payload: Hex;
-  proof?: Hex;
+  payload: Hex
+  proof?: Hex
 }
 
 export interface SignRequest {
-  message: Hex;
-  keyId?: string;
+  message: Hex
+  keyId?: string
 }
 
 export interface SignResult {
-  signature: Hex;
-  publicKey: Hex;
+  signature: Hex
+  publicKey: Hex
 }
 
 // ============================================================================
@@ -79,64 +79,64 @@ export interface SignResult {
 // ============================================================================
 
 class KMSClient {
-  private config: KMSConfig;
-  private initialized = false;
-  private accessToken: string | null = null;
+  private config: KMSConfig
+  private initialized = false
+  private accessToken: string | null = null
 
   constructor() {
-    const serviceUrl = process.env.JEJU_KMS_SERVICE_URL;
+    const serviceUrl = process.env.JEJU_KMS_SERVICE_URL
     if (!serviceUrl) {
       throw new Error(
         '[KMS] JEJU_KMS_SERVICE_URL is required. ' +
-          'Decentralized KMS is mandatory - no env var fallback for secrets.'
-      );
+          'Decentralized KMS is mandatory - no env var fallback for secrets.',
+      )
     }
 
     this.config = {
       serviceUrl,
       namespace: process.env.KMS_NAMESPACE ?? 'babylon',
       privateKey: process.env.KMS_PRIVATE_KEY as Hex | undefined,
-    };
+    }
   }
 
   async initialize(): Promise<void> {
-    if (this.initialized) return;
+    if (this.initialized) return
 
-    const healthy = await this.healthCheck();
+    const healthy = await this.healthCheck()
     if (!healthy) {
       throw new Error(
         `[KMS] KMS service at ${this.config.serviceUrl} is not healthy. ` +
-          'Start Jeju services: cd /path/to/jeju && bun run dev'
-      );
+          'Start Jeju services: cd /path/to/jeju && bun run dev',
+      )
     }
 
     // Authenticate with KMS
     if (this.config.privateKey) {
-      await this.authenticate();
+      await this.authenticate()
     }
 
     logger.info(
       '[KMS] Connected to Jeju KMS',
       { url: this.config.serviceUrl },
-      'KMS'
-    );
-    this.initialized = true;
+      'KMS',
+    )
+    this.initialized = true
   }
 
   private requireInitialized(): void {
     if (!this.initialized) {
-      throw new Error('[KMS] Client not initialized. Call initialize() first.');
+      throw new Error('[KMS] Client not initialized. Call initialize() first.')
     }
   }
 
   private getAuthHeaders(): Record<string, string> {
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
-    };
-    if (this.accessToken) {
-      headers.Authorization = `Bearer ${this.accessToken}`;
     }
-    return headers;
+    if (this.accessToken) {
+      headers.Authorization = `Bearer ${this.accessToken}`
+    }
+    return headers
   }
 
   // ============================================================================
@@ -147,10 +147,10 @@ class KMSClient {
     try {
       const response = await fetch(`${this.config.serviceUrl}/health`, {
         signal: AbortSignal.timeout(5000),
-      });
-      return response.ok;
+      })
+      return response.ok
     } catch {
-      return false;
+      return false
     }
   }
 
@@ -163,17 +163,17 @@ class KMSClient {
         private_key: this.config.privateKey,
       }),
       signal: AbortSignal.timeout(10000),
-    });
+    })
 
     if (!response.ok) {
-      const text = await response.text();
+      const text = await response.text()
       throw new Error(
-        `[KMS] Authentication failed (${response.status}): ${text}`
-      );
+        `[KMS] Authentication failed (${response.status}): ${text}`,
+      )
     }
 
-    const data = (await response.json()) as { access_token: string };
-    this.accessToken = data.access_token;
+    const data = (await response.json()) as { access_token: string }
+    this.accessToken = data.access_token
   }
 
   // ============================================================================
@@ -181,7 +181,7 @@ class KMSClient {
   // ============================================================================
 
   async encrypt(request: EncryptRequest): Promise<EncryptResult> {
-    this.requireInitialized();
+    this.requireInitialized()
 
     const response = await fetch(`${this.config.serviceUrl}/encrypt`, {
       method: 'POST',
@@ -198,18 +198,18 @@ class KMSClient {
         namespace: this.config.namespace,
       }),
       signal: AbortSignal.timeout(30000),
-    });
+    })
 
     if (!response.ok) {
-      const text = await response.text();
-      throw new Error(`[KMS] Encrypt failed (${response.status}): ${text}`);
+      const text = await response.text()
+      throw new Error(`[KMS] Encrypt failed (${response.status}): ${text}`)
     }
 
-    return response.json() as Promise<EncryptResult>;
+    return response.json() as Promise<EncryptResult>
   }
 
   async decrypt(request: DecryptRequest): Promise<string> {
-    this.requireInitialized();
+    this.requireInitialized()
 
     const response = await fetch(`${this.config.serviceUrl}/decrypt`, {
       method: 'POST',
@@ -220,27 +220,27 @@ class KMSClient {
         namespace: this.config.namespace,
       }),
       signal: AbortSignal.timeout(30000),
-    });
+    })
 
     if (!response.ok) {
-      const text = await response.text();
-      throw new Error(`[KMS] Decrypt failed (${response.status}): ${text}`);
+      const text = await response.text()
+      throw new Error(`[KMS] Decrypt failed (${response.status}): ${text}`)
     }
 
-    const data = (await response.json()) as { data: string };
-    return data.data;
+    const data = (await response.json()) as { data: string }
+    return data.data
   }
 
   async storeSecret(
     name: string,
     value: string,
     options: {
-      policy?: SecretPolicy;
-      metadata?: Record<string, string>;
-      expiresIn?: number;
-    } = {}
+      policy?: SecretPolicy
+      metadata?: Record<string, string>
+      expiresIn?: number
+    } = {},
   ): Promise<Secret> {
-    this.requireInitialized();
+    this.requireInitialized()
 
     const response = await fetch(`${this.config.serviceUrl}/secrets`, {
       method: 'POST',
@@ -254,43 +254,41 @@ class KMSClient {
         namespace: this.config.namespace,
       }),
       signal: AbortSignal.timeout(30000),
-    });
+    })
 
     if (!response.ok) {
-      const text = await response.text();
-      throw new Error(
-        `[KMS] Store secret failed (${response.status}): ${text}`
-      );
+      const text = await response.text()
+      throw new Error(`[KMS] Store secret failed (${response.status}): ${text}`)
     }
 
-    return response.json() as Promise<Secret>;
+    return response.json() as Promise<Secret>
   }
 
   async getSecret(name: string, version?: number): Promise<string> {
-    this.requireInitialized();
+    this.requireInitialized()
 
-    const params = new URLSearchParams({ namespace: this.config.namespace });
-    if (version !== undefined) params.set('version', String(version));
+    const params = new URLSearchParams({ namespace: this.config.namespace })
+    if (version !== undefined) params.set('version', String(version))
 
     const response = await fetch(
       `${this.config.serviceUrl}/secrets/${encodeURIComponent(name)}?${params}`,
       {
         headers: this.getAuthHeaders(),
         signal: AbortSignal.timeout(10000),
-      }
-    );
+      },
+    )
 
     if (!response.ok) {
-      const text = await response.text();
-      throw new Error(`[KMS] Get secret failed (${response.status}): ${text}`);
+      const text = await response.text()
+      throw new Error(`[KMS] Get secret failed (${response.status}): ${text}`)
     }
 
-    const data = (await response.json()) as { value: string };
-    return data.value;
+    const data = (await response.json()) as { value: string }
+    return data.value
   }
 
   async deleteSecret(name: string): Promise<void> {
-    this.requireInitialized();
+    this.requireInitialized()
 
     const response = await fetch(
       `${this.config.serviceUrl}/secrets/${encodeURIComponent(name)}?namespace=${encodeURIComponent(this.config.namespace)}`,
@@ -298,41 +296,39 @@ class KMSClient {
         method: 'DELETE',
         headers: this.getAuthHeaders(),
         signal: AbortSignal.timeout(10000),
-      }
-    );
+      },
+    )
 
     if (!response.ok && response.status !== 404) {
-      const text = await response.text();
+      const text = await response.text()
       throw new Error(
-        `[KMS] Delete secret failed (${response.status}): ${text}`
-      );
+        `[KMS] Delete secret failed (${response.status}): ${text}`,
+      )
     }
   }
 
   async listSecrets(): Promise<Secret[]> {
-    this.requireInitialized();
+    this.requireInitialized()
 
     const response = await fetch(
       `${this.config.serviceUrl}/secrets?namespace=${encodeURIComponent(this.config.namespace)}`,
       {
         headers: this.getAuthHeaders(),
         signal: AbortSignal.timeout(10000),
-      }
-    );
+      },
+    )
 
     if (!response.ok) {
-      const text = await response.text();
-      throw new Error(
-        `[KMS] List secrets failed (${response.status}): ${text}`
-      );
+      const text = await response.text()
+      throw new Error(`[KMS] List secrets failed (${response.status}): ${text}`)
     }
 
-    const data = (await response.json()) as { secrets: Secret[] };
-    return data.secrets;
+    const data = (await response.json()) as { secrets: Secret[] }
+    return data.secrets
   }
 
   async rotateSecret(name: string, newValue: string): Promise<Secret> {
-    this.requireInitialized();
+    this.requireInitialized()
 
     const response = await fetch(
       `${this.config.serviceUrl}/secrets/${encodeURIComponent(name)}/rotate`,
@@ -344,17 +340,17 @@ class KMSClient {
           namespace: this.config.namespace,
         }),
         signal: AbortSignal.timeout(30000),
-      }
-    );
+      },
+    )
 
     if (!response.ok) {
-      const text = await response.text();
+      const text = await response.text()
       throw new Error(
-        `[KMS] Rotate secret failed (${response.status}): ${text}`
-      );
+        `[KMS] Rotate secret failed (${response.status}): ${text}`,
+      )
     }
 
-    return response.json() as Promise<Secret>;
+    return response.json() as Promise<Secret>
   }
 
   // ============================================================================
@@ -362,7 +358,7 @@ class KMSClient {
   // ============================================================================
 
   async sign(request: SignRequest): Promise<SignResult> {
-    this.requireInitialized();
+    this.requireInitialized()
 
     const response = await fetch(`${this.config.serviceUrl}/sign`, {
       method: 'POST',
@@ -373,33 +369,33 @@ class KMSClient {
         namespace: this.config.namespace,
       }),
       signal: AbortSignal.timeout(30000),
-    });
+    })
 
     if (!response.ok) {
-      const text = await response.text();
-      throw new Error(`[KMS] Sign failed (${response.status}): ${text}`);
+      const text = await response.text()
+      throw new Error(`[KMS] Sign failed (${response.status}): ${text}`)
     }
 
-    return response.json() as Promise<SignResult>;
+    return response.json() as Promise<SignResult>
   }
 
   async verify(message: Hex, signature: Hex, publicKey: Hex): Promise<boolean> {
-    this.requireInitialized();
+    this.requireInitialized()
 
     const response = await fetch(`${this.config.serviceUrl}/verify`, {
       method: 'POST',
       headers: this.getAuthHeaders(),
       body: JSON.stringify({ message, signature, public_key: publicKey }),
       signal: AbortSignal.timeout(10000),
-    });
+    })
 
     if (!response.ok) {
-      const text = await response.text();
-      throw new Error(`[KMS] Verify failed (${response.status}): ${text}`);
+      const text = await response.text()
+      throw new Error(`[KMS] Verify failed (${response.status}): ${text}`)
     }
 
-    const data = (await response.json()) as { valid: boolean };
-    return data.valid;
+    const data = (await response.json()) as { valid: boolean }
+    return data.valid
   }
 
   // ============================================================================
@@ -408,9 +404,9 @@ class KMSClient {
 
   async generateKey(
     name: string,
-    keyType: 'secp256k1' | 'ed25519' = 'secp256k1'
+    keyType: 'secp256k1' | 'ed25519' = 'secp256k1',
   ): Promise<{ keyId: string; publicKey: Hex }> {
-    this.requireInitialized();
+    this.requireInitialized()
 
     const response = await fetch(`${this.config.serviceUrl}/keys`, {
       method: 'POST',
@@ -421,42 +417,40 @@ class KMSClient {
         namespace: this.config.namespace,
       }),
       signal: AbortSignal.timeout(30000),
-    });
+    })
 
     if (!response.ok) {
-      const text = await response.text();
-      throw new Error(
-        `[KMS] Generate key failed (${response.status}): ${text}`
-      );
+      const text = await response.text()
+      throw new Error(`[KMS] Generate key failed (${response.status}): ${text}`)
     }
 
-    return response.json() as Promise<{ keyId: string; publicKey: Hex }>;
+    return response.json() as Promise<{ keyId: string; publicKey: Hex }>
   }
 
   async getPublicKey(keyId: string): Promise<Hex> {
-    this.requireInitialized();
+    this.requireInitialized()
 
     const response = await fetch(
       `${this.config.serviceUrl}/keys/${encodeURIComponent(keyId)}/public?namespace=${encodeURIComponent(this.config.namespace)}`,
       {
         headers: this.getAuthHeaders(),
         signal: AbortSignal.timeout(5000),
-      }
-    );
+      },
+    )
 
     if (!response.ok) {
-      const text = await response.text();
+      const text = await response.text()
       throw new Error(
-        `[KMS] Get public key failed (${response.status}): ${text}`
-      );
+        `[KMS] Get public key failed (${response.status}): ${text}`,
+      )
     }
 
-    const data = (await response.json()) as { publicKey: Hex };
-    return data.publicKey;
+    const data = (await response.json()) as { publicKey: Hex }
+    return data.publicKey
   }
 
   isInitialized(): boolean {
-    return this.initialized;
+    return this.initialized
   }
 }
 
@@ -464,23 +458,23 @@ class KMSClient {
 // Singleton Export
 // ============================================================================
 
-let kmsClient: KMSClient | null = null;
+let kmsClient: KMSClient | null = null
 
 export function getKMSClient(): KMSClient {
   if (!kmsClient) {
-    kmsClient = new KMSClient();
+    kmsClient = new KMSClient()
   }
-  return kmsClient;
+  return kmsClient
 }
 
 export async function initializeKMS(): Promise<KMSClient> {
-  const client = getKMSClient();
-  await client.initialize();
-  return client;
+  const client = getKMSClient()
+  await client.initialize()
+  return client
 }
 
 export function resetKMSClient(): void {
-  kmsClient = null;
+  kmsClient = null
 }
 
 // ============================================================================
@@ -488,18 +482,18 @@ export function resetKMSClient(): void {
 // ============================================================================
 
 export async function getSecretValue(name: string): Promise<string> {
-  const client = getKMSClient();
-  if (!client.isInitialized()) await client.initialize();
-  return client.getSecret(name);
+  const client = getKMSClient()
+  if (!client.isInitialized()) await client.initialize()
+  return client.getSecret(name)
 }
 
 export async function setSecretValue(
   name: string,
-  value: string
+  value: string,
 ): Promise<void> {
-  const client = getKMSClient();
-  if (!client.isInitialized()) await client.initialize();
-  await client.storeSecret(name, value);
+  const client = getKMSClient()
+  if (!client.isInitialized()) await client.initialize()
+  await client.storeSecret(name, value)
 }
 
-export { KMSClient };
+export { KMSClient }

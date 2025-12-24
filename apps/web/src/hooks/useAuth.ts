@@ -1,56 +1,62 @@
-'use client';
+import { useJejuAuth, useJejuWallet } from '@babylon/auth'
+import { logger, UserMeApiResponseSchema } from '@babylon/shared'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
+import { toast } from 'sonner'
+import { type User, useAuthStore } from '@/stores/authStore'
+import { apiFetch } from '../utils/api-fetch'
 
-import { useJejuAuth, useJejuWallet } from '@babylon/auth/client';
-import { logger, UserMeApiResponseSchema } from '@babylon/shared';
-import { useCallback, useEffect, useMemo, useRef } from 'react';
-import { toast } from 'sonner';
-import { type User, useAuthStore } from '@/stores/authStore';
-import { apiFetch } from '@/utils/api-fetch';
+// Extend Window interface for OAuth3 access token storage
+declare global {
+  interface Window {
+    __oauth3AccessToken?: string | null
+    __oauth3GetAccessToken?: () => Promise<string | null>
+  }
+}
 
 /**
  * Return type for the useAuth hook.
  */
 interface UseAuthReturn {
   /** Whether OAuth3 authentication is ready */
-  ready: boolean;
+  ready: boolean
   /** Whether the user is currently authenticated */
-  authenticated: boolean;
+  authenticated: boolean
   /** Whether the user profile is currently loading */
-  loadingProfile: boolean;
+  loadingProfile: boolean
   /** The current authenticated user, or null if not authenticated */
-  user: User | null;
+  user: User | null
   /** The connected wallet address */
-  wallet: { address: string } | undefined;
+  wallet: { address: string } | undefined
   /** The smart wallet address if available */
-  smartWalletAddress?: string;
+  smartWalletAddress?: string | null
   /** Whether the smart wallet is ready for transactions */
-  smartWalletReady: boolean;
+  smartWalletReady: boolean
   /** Whether the user needs to complete onboarding */
-  needsOnboarding: boolean;
+  needsOnboarding: boolean
   /** Whether the user needs to register on-chain */
-  needsOnchain: boolean;
+  needsOnchain: boolean
   /** Function to trigger the login modal */
-  login: () => void;
+  login: () => void
   /** Function to logout and clear all auth state */
-  logout: () => Promise<void>;
+  logout: () => Promise<void>
   /** Function to refresh the current user profile */
-  refresh: () => Promise<void>;
+  refresh: () => Promise<void>
   /** Function to get the current access token */
-  getAccessToken: () => Promise<string | null>;
+  getAccessToken: () => Promise<string | null>
 }
 
-let lastSyncedWalletAddress: string | null = null;
+let lastSyncedWalletAddress: string | null = null
 
 // Global fetch management - shared across ALL useAuth instances
-let globalFetchInFlight: Promise<void> | null = null;
-let globalTokenRetryTimeout: number | null = null;
+let globalFetchInFlight: Promise<void> | null = null
+let globalTokenRetryTimeout: number | null = null
 
 // Track users for whom social accounts have been linked in this session
-const linkedSocialUsers = new Set<string>();
+const linkedSocialUsers = new Set<string>()
 // Track in-flight linking operations to prevent race conditions
-const linkingInProgress = new Set<string>();
+const linkingInProgress = new Set<string>()
 // Track failed linking attempts (409 = account already linked to different user)
-const failedLinkAttempts = new Set<string>();
+const failedLinkAttempts = new Set<string>()
 
 /**
  * Main authentication hook for managing user authentication state.
@@ -94,9 +100,9 @@ export function useAuth(): UseAuthReturn {
     loginWithWallet,
     logout: jejuLogout,
     getAccessToken,
-  } = useJejuAuth();
+  } = useJejuAuth()
 
-  const { address: smartWalletAddress, ready: walletReady } = useJejuWallet();
+  const { address: smartWalletAddress, ready: walletReady } = useJejuWallet()
 
   const {
     user,
@@ -110,125 +116,121 @@ export function useAuth(): UseAuthReturn {
     setLoadedUserId,
     setIsLoadingProfile,
     clearAuth,
-  } = useAuthStore();
+  } = useAuthStore()
 
   // Construct wallet object from OAuth3 state
   const wallet = useMemo(() => {
-    const addr = walletAddress ?? smartWalletAddress;
-    return addr ? { address: addr } : undefined;
-  }, [walletAddress, smartWalletAddress]);
+    const addr = walletAddress ?? smartWalletAddress
+    return addr ? { address: addr } : undefined
+  }, [walletAddress, smartWalletAddress])
 
-  const smartWalletReady = walletReady && !!smartWalletAddress;
+  const smartWalletReady = walletReady && !!smartWalletAddress
 
   // Use a ref to track if we've already cleared auth to prevent re-triggering
-  const hasClearedAuthRef = useRef(false);
+  const hasClearedAuthRef = useRef(false)
 
   const persistAccessToken = useCallback(async (): Promise<string | null> => {
     if (!authenticated) {
       if (typeof window !== 'undefined') {
-        (
-          window as Window & { __oauth3AccessToken?: string | null }
-        ).__oauth3AccessToken = null;
+        window.__oauth3AccessToken = null
       }
-      return null;
+      return null
     }
 
-    const token = await getAccessToken();
+    const token = await getAccessToken()
     if (typeof window !== 'undefined') {
-      (
-        window as Window & { __oauth3AccessToken?: string | null }
-      ).__oauth3AccessToken = token;
+      window.__oauth3AccessToken = token
     }
-    return token;
-  }, [authenticated, getAccessToken]);
+    return token
+  }, [authenticated, getAccessToken])
 
   const fetchCurrentUser = useCallback(
     async (retryCount = 0) => {
-      if (!authenticated || !userId) return;
+      if (!authenticated || !userId) return
 
       // Use global ref to prevent ANY duplicate calls across all components
       if (globalFetchInFlight) {
-        await globalFetchInFlight;
-        return;
+        await globalFetchInFlight
+        return
       }
 
       const run = async () => {
-        setIsLoadingProfile(true);
-        setLoadedUserId(userId);
+        setIsLoadingProfile(true)
+        setLoadedUserId(userId)
 
-        const token = await persistAccessToken();
+        const token = await persistAccessToken()
         if (!token) {
           if (retryCount >= 5) {
             logger.error(
               'OAuth3 access token unavailable after max retries; giving up',
               { userId, retryCount },
-              'useAuth'
-            );
-            setIsLoadingProfile(false);
-            return;
+              'useAuth',
+            )
+            setIsLoadingProfile(false)
+            return
           }
 
           logger.warn(
             'OAuth3 access token unavailable; delaying /api/users/me fetch',
             { userId, retryCount },
-            'useAuth'
-          );
-          setIsLoadingProfile(false);
+            'useAuth',
+          )
+          setIsLoadingProfile(false)
           if (typeof window !== 'undefined') {
             if (globalTokenRetryTimeout) {
-              window.clearTimeout(globalTokenRetryTimeout);
+              window.clearTimeout(globalTokenRetryTimeout)
             }
             globalTokenRetryTimeout = window.setTimeout(
               () => {
-                void fetchCurrentUser(retryCount + 1);
+                void fetchCurrentUser(retryCount + 1)
               },
-              200 * (retryCount + 1)
-            );
+              200 * (retryCount + 1),
+            )
           }
-          return;
+          return
         }
 
         // Get referral code from sessionStorage (if user clicked a referral link)
         const referralCode =
           typeof window !== 'undefined'
             ? sessionStorage.getItem('referralCode')
-            : null;
+            : null
 
         // Build URL with referral code if present
         const url = referralCode
           ? `/api/users/me?ref=${encodeURIComponent(referralCode)}`
-          : '/api/users/me';
+          : '/api/users/me'
 
-        const response = await apiFetch(url);
+        const response = await apiFetch(url)
 
         // 401 is expected when not authenticated - exit early without error
         if (response.status === 401) {
           logger.debug(
             'Not authenticated yet, skipping user fetch',
             { userId },
-            'useAuth'
-          );
-          return;
+            'useAuth',
+          )
+          return
         }
 
         // For other HTTP errors, fail fast - don't silently swallow
         if (!response.ok) {
-          const errorBody = await response.text().catch(() => '');
+          const errorBody = await response.text().catch(() => '')
           throw new Error(
-            `Failed to fetch user profile: HTTP ${response.status}${errorBody ? ` - ${errorBody}` : ''}`
-          );
+            `Failed to fetch user profile: HTTP ${response.status}${errorBody ? ` - ${errorBody}` : ''}`,
+          )
         }
 
-        const json: unknown = await response.json();
-        const me = UserMeApiResponseSchema.parse(json);
+        const json = await response.json()
+        const me = UserMeApiResponseSchema.parse(json)
 
-        setNeedsOnboarding(me.needsOnboarding);
-        setNeedsOnchain(me.needsOnchain);
+        setNeedsOnboarding(me.needsOnboarding)
+        setNeedsOnchain(me.needsOnchain)
 
         // Get current state directly from store for comparison to avoid stale closure
-        const currentUser = useAuthStore.getState().user;
-        const fallbackProfileImageUrl = currentUser?.profileImageUrl;
-        const fallbackCoverImageUrl = currentUser?.coverImageUrl;
+        const currentUser = useAuthStore.getState().user
+        const fallbackProfileImageUrl = currentUser?.profileImageUrl
+        const fallbackCoverImageUrl = currentUser?.coverImageUrl
 
         if (me.user) {
           if (
@@ -236,26 +238,26 @@ export function useAuth(): UseAuthReturn {
             !smartWalletAddress &&
             !me.user.walletAddress
           ) {
-            throw new Error('Wallet address is required but not available');
+            throw new Error('Wallet address is required but not available')
           }
 
           const hydratedUser: User = {
             id: me.user.id,
             walletAddress:
-              me.user.walletAddress ?? smartWalletAddress ?? wallet!.address,
+              me.user.walletAddress ?? smartWalletAddress ?? wallet?.address,
             displayName:
               me.user.displayName && me.user.displayName.trim() !== ''
                 ? me.user.displayName
-                : wallet!.address,
-            email: me.user.email ?? undefined,
-            username: me.user.username ?? undefined,
-            bio: me.user.bio ?? undefined,
+                : wallet?.address,
+            email: me.user.email,
+            username: me.user.username,
+            bio: me.user.bio,
             profileImageUrl: me.user.profileImageUrl ?? fallbackProfileImageUrl,
             coverImageUrl: me.user.coverImageUrl ?? fallbackCoverImageUrl,
             profileComplete: me.user.profileComplete ?? false,
             reputationPoints: me.user.reputationPoints,
             referralCount: undefined,
-            referralCode: me.user.referralCode ?? undefined,
+            referralCode: me.user.referralCode,
             hasFarcaster: me.user.hasFarcaster,
             hasTwitter: me.user.hasTwitter,
             hasDiscord: me.user.hasDiscord,
@@ -264,9 +266,9 @@ export function useAuth(): UseAuthReturn {
             pointsAwardedForTwitterFollow:
               me.user.pointsAwardedForTwitterFollow,
             pointsAwardedForDiscordJoin: me.user.pointsAwardedForDiscordJoin,
-            farcasterUsername: me.user.farcasterUsername ?? undefined,
-            twitterUsername: me.user.twitterUsername ?? undefined,
-            discordUsername: me.user.discordUsername ?? undefined,
+            farcasterUsername: me.user.farcasterUsername,
+            twitterUsername: me.user.twitterUsername,
+            discordUsername: me.user.discordUsername,
             showTwitterPublic: me.user.showTwitterPublic,
             showFarcasterPublic: me.user.showFarcasterPublic,
             showWalletPublic: me.user.showWalletPublic,
@@ -274,7 +276,7 @@ export function useAuth(): UseAuthReturn {
             nftTokenId: me.user.nftTokenId,
             createdAt: me.user.createdAt,
             onChainRegistered: me.user.onChainRegistered,
-          };
+          }
 
           // Only update if data has actually changed (prevent infinite re-render loop)
           const hasChanged =
@@ -294,10 +296,10 @@ export function useAuth(): UseAuthReturn {
             currentUser.showWalletPublic !== hydratedUser.showWalletPublic ||
             currentUser.reputationPoints !== hydratedUser.reputationPoints ||
             currentUser.hasFarcaster !== hydratedUser.hasFarcaster ||
-            currentUser.hasTwitter !== hydratedUser.hasTwitter;
+            currentUser.hasTwitter !== hydratedUser.hasTwitter
 
           if (hasChanged) {
-            setUser(hydratedUser);
+            setUser(hydratedUser)
           }
         } else {
           if (!currentUser || currentUser.id !== userId) {
@@ -306,23 +308,23 @@ export function useAuth(): UseAuthReturn {
               walletAddress: wallet?.address,
               displayName: wallet?.address ?? 'Anonymous',
               onChainRegistered: false,
-            });
+            })
           }
         }
 
-        setIsLoadingProfile(false);
-      };
+        setIsLoadingProfile(false)
+      }
 
       const promise = run().finally(() => {
-        globalFetchInFlight = null;
+        globalFetchInFlight = null
         if (typeof window !== 'undefined' && globalTokenRetryTimeout) {
-          window.clearTimeout(globalTokenRetryTimeout);
-          globalTokenRetryTimeout = null;
+          window.clearTimeout(globalTokenRetryTimeout)
+          globalTokenRetryTimeout = null
         }
-      });
+      })
 
-      globalFetchInFlight = promise;
-      await promise;
+      globalFetchInFlight = promise
+      await promise
     },
     [
       authenticated,
@@ -336,46 +338,46 @@ export function useAuth(): UseAuthReturn {
       smartWalletAddress,
       wallet?.address,
       wallet,
-    ]
-  );
+    ],
+  )
 
   const synchronizeWallet = useCallback(() => {
-    if (!wallet) return;
-    if (wallet.address === lastSyncedWalletAddress) return;
+    if (!wallet) return
+    if (wallet.address === lastSyncedWalletAddress) return
 
-    lastSyncedWalletAddress = wallet.address;
+    lastSyncedWalletAddress = wallet.address
     setWallet({
       address: wallet.address,
       chainId: 'unknown', // OAuth3 doesn't expose chainId the same way
-    });
-  }, [wallet, setWallet]);
+    })
+  }, [wallet, setWallet])
 
   const linkSocialAccounts = useCallback(async () => {
-    if (!authenticated || !userId) return;
-    if (isLoadingProfile) return; // Wait for profile to load
-    if (needsOnboarding || needsOnchain) return;
+    if (!authenticated || !userId) return
+    if (isLoadingProfile) return // Wait for profile to load
+    if (needsOnboarding || needsOnchain) return
 
     // Get current user state directly from store
-    const currentUser = useAuthStore.getState().user;
-    if (!currentUser) return; // Don't link social accounts if user doesn't exist yet
+    const currentUser = useAuthStore.getState().user
+    if (!currentUser) return // Don't link social accounts if user doesn't exist yet
 
     // Prevent duplicate calls - check both sets synchronously
-    if (linkedSocialUsers.has(userId)) return;
-    if (linkingInProgress.has(userId)) return;
+    if (linkedSocialUsers.has(userId)) return
+    if (linkingInProgress.has(userId)) return
 
-    const token = await getAccessToken();
-    if (!token) return;
+    const token = await getAccessToken()
+    if (!token) return
 
     // Mark as in progress immediately to prevent race conditions
-    linkingInProgress.add(userId);
+    linkingInProgress.add(userId)
 
     // Check linked accounts from OAuth3
-    const farcasterAccount = linkedAccounts.find((a) => a.type === 'farcaster');
-    const twitterAccount = linkedAccounts.find((a) => a.type === 'twitter');
+    const farcasterAccount = linkedAccounts.find((a) => a.type === 'farcaster')
+    const twitterAccount = linkedAccounts.find((a) => a.type === 'twitter')
 
     // Only link accounts that aren't already linked
     if (farcasterAccount && !currentUser.hasFarcaster) {
-      const farcasterKey = `${userId}:farcaster:${farcasterAccount.identifier}`;
+      const farcasterKey = `${userId}:farcaster:${farcasterAccount.identifier}`
 
       // Skip if this link attempt previously failed with 409
       if (!failedLinkAttempts.has(farcasterKey)) {
@@ -390,22 +392,22 @@ export function useAuth(): UseAuthReturn {
               platform: 'farcaster',
               username: farcasterAccount.identifier,
             }),
-          }
-        );
+          },
+        )
 
         if (response.status === 409) {
-          failedLinkAttempts.add(farcasterKey);
+          failedLinkAttempts.add(farcasterKey)
           toast.error('Farcaster Account Already Linked', {
             description: `The Farcaster account @${farcasterAccount.identifier} is already linked to another Babylon account.`,
             duration: 6000,
-          });
+          })
           logger.info(
             'Farcaster account already linked to another user, skipping future retries',
             { username: farcasterAccount.identifier },
-            'useAuth'
-          );
+            'useAuth',
+          )
         } else if (!response.ok) {
-          const errorText = await response.text().catch(() => 'Unknown error');
+          const errorText = await response.text().catch(() => 'Unknown error')
           logger.warn(
             'Failed to link Farcaster account',
             {
@@ -413,14 +415,14 @@ export function useAuth(): UseAuthReturn {
               status: response.status,
               error: errorText,
             },
-            'useAuth'
-          );
+            'useAuth',
+          )
         }
       }
     }
 
     if (twitterAccount && !currentUser.hasTwitter) {
-      const twitterKey = `${userId}:twitter:${twitterAccount.identifier}`;
+      const twitterKey = `${userId}:twitter:${twitterAccount.identifier}`
 
       if (!failedLinkAttempts.has(twitterKey)) {
         const response = await apiFetch(
@@ -434,22 +436,22 @@ export function useAuth(): UseAuthReturn {
               platform: 'twitter',
               username: twitterAccount.identifier,
             }),
-          }
-        );
+          },
+        )
 
         if (response.status === 409) {
-          failedLinkAttempts.add(twitterKey);
+          failedLinkAttempts.add(twitterKey)
           toast.error('Twitter Account Already Linked', {
             description: `The Twitter account @${twitterAccount.identifier} is already linked to another Babylon account.`,
             duration: 6000,
-          });
+          })
           logger.info(
             'Twitter account already linked to another user, skipping future retries',
             { username: twitterAccount.identifier },
-            'useAuth'
-          );
+            'useAuth',
+          )
         } else if (!response.ok) {
-          const errorText = await response.text().catch(() => 'Unknown error');
+          const errorText = await response.text().catch(() => 'Unknown error')
           logger.warn(
             'Failed to link Twitter account',
             {
@@ -457,8 +459,8 @@ export function useAuth(): UseAuthReturn {
               status: response.status,
               error: errorText,
             },
-            'useAuth'
-          );
+            'useAuth',
+          )
         }
       }
     }
@@ -468,7 +470,7 @@ export function useAuth(): UseAuthReturn {
       wallet?.address &&
       currentUser.walletAddress?.toLowerCase() !== wallet.address.toLowerCase()
     ) {
-      const walletKey = `${userId}:wallet:${wallet.address.toLowerCase()}`;
+      const walletKey = `${userId}:wallet:${wallet.address.toLowerCase()}`
 
       if (!failedLinkAttempts.has(walletKey)) {
         const response = await apiFetch(
@@ -482,18 +484,18 @@ export function useAuth(): UseAuthReturn {
               platform: 'wallet',
               address: wallet.address.toLowerCase(),
             }),
-          }
-        );
+          },
+        )
 
         if (response.status === 409) {
-          failedLinkAttempts.add(walletKey);
+          failedLinkAttempts.add(walletKey)
           logger.info(
             'Wallet already linked to another account, skipping future retries',
             { address: wallet.address },
-            'useAuth'
-          );
+            'useAuth',
+          )
         } else if (!response.ok) {
-          const errorText = await response.text().catch(() => 'Unknown error');
+          const errorText = await response.text().catch(() => 'Unknown error')
           logger.warn(
             'Failed to link wallet',
             {
@@ -501,15 +503,15 @@ export function useAuth(): UseAuthReturn {
               status: response.status,
               error: errorText,
             },
-            'useAuth'
-          );
+            'useAuth',
+          )
         }
       }
     }
 
     // Mark as completed and remove from in-progress set
-    linkingInProgress.delete(userId);
-    linkedSocialUsers.add(userId);
+    linkingInProgress.delete(userId)
+    linkedSocialUsers.add(userId)
   }, [
     authenticated,
     userId,
@@ -519,78 +521,70 @@ export function useAuth(): UseAuthReturn {
     getAccessToken,
     linkedAccounts,
     wallet?.address,
-  ]);
+  ])
 
   useEffect(() => {
-    void persistAccessToken();
-  }, [persistAccessToken]);
+    void persistAccessToken()
+  }, [persistAccessToken])
 
   useEffect(() => {
     return () => {
       if (typeof window !== 'undefined' && globalTokenRetryTimeout) {
-        window.clearTimeout(globalTokenRetryTimeout);
-        globalTokenRetryTimeout = null;
+        window.clearTimeout(globalTokenRetryTimeout)
+        globalTokenRetryTimeout = null
       }
-    };
-  }, []);
+    }
+  }, [])
 
   // Expose getAccessToken to window for use by apiFetch
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      (
-        window as typeof window & {
-          __oauth3GetAccessToken?: () => Promise<string | null>;
-        }
-      ).__oauth3GetAccessToken = getAccessToken;
+      window.__oauth3GetAccessToken = getAccessToken
     }
     return () => {
       if (typeof window !== 'undefined') {
-        (
-          window as typeof window & {
-            __oauth3GetAccessToken?: () => Promise<string | null>;
-          }
-        ).__oauth3GetAccessToken = undefined;
+        window.__oauth3GetAccessToken = undefined
       }
-    };
-  }, [getAccessToken]);
+    }
+  }, [getAccessToken])
 
   // Sync wallet separately from fetching user
   useEffect(() => {
     if (authenticated && userId) {
-      synchronizeWallet();
+      synchronizeWallet()
     }
-  }, [authenticated, userId, synchronizeWallet]);
+  }, [authenticated, userId, synchronizeWallet])
 
   // Fetch user only when authentication status or user ID changes
   useEffect(() => {
     if (!authenticated || !userId) {
       // Prevent clearing auth multiple times in a row (infinite loop prevention)
       if (hasClearedAuthRef.current) {
-        return;
+        return
       }
 
       if (userId) {
-        linkedSocialUsers.delete(userId);
-        linkingInProgress.delete(userId);
+        linkedSocialUsers.delete(userId)
+        linkingInProgress.delete(userId)
         // Clear failed link attempts for this user
-        const userPrefix = `${userId}:`;
+        const userPrefix = `${userId}:`
         failedLinkAttempts.forEach((key) => {
           if (key.startsWith(userPrefix)) {
-            failedLinkAttempts.delete(key);
+            failedLinkAttempts.delete(key)
           }
-        });
+        })
       }
-      lastSyncedWalletAddress = null;
+      lastSyncedWalletAddress = null
 
       // Use getState() to avoid dependency on clearAuth
-      useAuthStore.getState().clearAuth();
-      hasClearedAuthRef.current = true;
+      useAuthStore.getState().clearAuth()
+      hasClearedAuthRef.current = true
 
       // Clear any stale localStorage cache
       if (typeof window !== 'undefined') {
-        const stored = localStorage.getItem('babylon-auth');
+        const stored = localStorage.getItem('babylon-auth')
         if (stored) {
-          const parsed = JSON.parse(stored);
+          const parsed = JSON.parse(stored)
           if (
             parsed.state?.user?.id &&
             userId &&
@@ -602,75 +596,73 @@ export function useAuth(): UseAuthReturn {
                 cachedUserId: parsed.state.user.id,
                 currentUserId: userId,
               },
-              'useAuth'
-            );
-            localStorage.removeItem('babylon-auth');
+              'useAuth',
+            )
+            localStorage.removeItem('babylon-auth')
           }
         }
       }
-      return;
+      return
     }
 
     // Reset the cleared auth ref when we become authenticated
-    hasClearedAuthRef.current = false;
-    void fetchCurrentUser();
-  }, [authenticated, userId, fetchCurrentUser]);
+    hasClearedAuthRef.current = false
+    void fetchCurrentUser()
+  }, [authenticated, userId, fetchCurrentUser])
 
   // Link social accounts only once per user session
   useEffect(() => {
-    void linkSocialAccounts();
-  }, [linkSocialAccounts]);
+    void linkSocialAccounts()
+  }, [linkSocialAccounts])
 
   const refresh = async () => {
-    if (!authenticated || !userId) return;
-    await fetchCurrentUser();
-  };
+    if (!authenticated || !userId) return
+    await fetchCurrentUser()
+  }
 
   const handleLogout = async () => {
     // Call OAuth3's logout first to clear session
-    await jejuLogout();
+    await jejuLogout()
 
     // Clear our app's auth state
-    clearAuth();
+    clearAuth()
 
     // Clear access token
     if (typeof window !== 'undefined') {
-      (
-        window as Window & { __oauth3AccessToken?: string | null }
-      ).__oauth3AccessToken = null;
+      window.__oauth3AccessToken = null
 
       // Explicitly remove the persisted auth storage
-      localStorage.removeItem('babylon-auth');
+      localStorage.removeItem('babylon-auth')
 
       // Clear OAuth3 session storage
-      sessionStorage.removeItem('jeju_auth_session');
+      sessionStorage.removeItem('jeju_auth_session')
 
       // Clear any OAuth3 localStorage keys
       const oauth3Keys = Object.keys(localStorage).filter(
-        (key) => key.startsWith('oauth3_') || key.startsWith('jeju_')
-      );
+        (key) => key.startsWith('oauth3_') || key.startsWith('jeju_'),
+      )
       oauth3Keys.forEach((key) => {
-        localStorage.removeItem(key);
-      });
+        localStorage.removeItem(key)
+      })
     }
 
     // Clear module-level state
-    linkedSocialUsers.clear();
-    linkingInProgress.clear();
-    failedLinkAttempts.clear();
-    lastSyncedWalletAddress = null;
-    globalFetchInFlight = null;
+    linkedSocialUsers.clear()
+    linkingInProgress.clear()
+    failedLinkAttempts.clear()
+    lastSyncedWalletAddress = null
+    globalFetchInFlight = null
     if (globalTokenRetryTimeout !== null) {
-      clearTimeout(globalTokenRetryTimeout);
-      globalTokenRetryTimeout = null;
+      clearTimeout(globalTokenRetryTimeout)
+      globalTokenRetryTimeout = null
     }
 
     logger.info(
       'User logged out and all auth state cleared',
       undefined,
-      'useAuth'
-    );
-  };
+      'useAuth',
+    )
+  }
 
   return {
     ready,
@@ -678,7 +670,7 @@ export function useAuth(): UseAuthReturn {
     loadingProfile: isLoadingProfile || authLoading,
     user,
     wallet,
-    smartWalletAddress: smartWalletAddress ?? undefined,
+    smartWalletAddress,
     smartWalletReady,
     needsOnboarding,
     needsOnchain,
@@ -686,5 +678,5 @@ export function useAuth(): UseAuthReturn {
     logout: handleLogout,
     refresh,
     getAccessToken,
-  };
+  }
 }

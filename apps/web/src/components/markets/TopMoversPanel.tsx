@@ -1,10 +1,8 @@
-'use client';
-
-import { cn } from '@babylon/shared';
-import { TrendingDown, TrendingUp } from 'lucide-react';
-import { Skeleton } from '@/components/shared/Skeleton';
-import { type PerpMarket, usePerpTopMovers } from '@/hooks/usePerpMarkets';
-import { MARKETS_CONFIG } from '@/types/markets';
+import { cn } from '@babylon/shared'
+import { TrendingDown, TrendingUp } from 'lucide-react'
+import { Skeleton } from '@/components/shared/Skeleton'
+import { type PerpMarket, usePerpTopMovers } from '@/hooks/usePerpMarkets'
+import { MARKETS_CONFIG } from '@/types/markets'
 
 /**
  * Top movers panel component for displaying biggest gainers and losers.
@@ -24,17 +22,17 @@ import { MARKETS_CONFIG } from '@/types/markets';
  * @returns Top movers panel element
  */
 interface TopMoversPanelProps {
-  onMarketClick?: (market: PerpMarket) => void;
+  onMarketClick?: (market: PerpMarket) => void
 }
 
 export function TopMoversPanel({ onMarketClick }: TopMoversPanelProps) {
   // Use react-query with polling
   const { topGainers, topLosers, loading } = usePerpTopMovers(
     MARKETS_CONFIG.TOP_MOVERS_COUNT,
-    { pollingInterval: MARKETS_CONFIG.DEFAULT_POLLING_INTERVAL_MS }
-  );
+    { pollingInterval: MARKETS_CONFIG.DEFAULT_POLLING_INTERVAL_MS },
+  )
 
-  const formatPrice = (p: number) => `$${p.toFixed(2)}`;
+  const formatPrice = (p: number) => `$${p.toFixed(2)}`
 
   return (
     <div className="flex flex-1 flex-col rounded-2xl bg-sidebar px-4 py-3">
@@ -58,10 +56,11 @@ export function TopMoversPanel({ onMarketClick }: TopMoversPanelProps) {
               {topGainers.length > 0 ? (
                 topGainers.map((mover) => (
                   <button
+                    type="button"
                     key={mover.ticker}
                     onClick={() => onMarketClick?.(mover)}
                     className={cn(
-                      '-ml-1.5 flex w-full cursor-pointer items-center justify-between rounded-lg p-1.5 text-left text-sm transition-colors hover:bg-muted/50'
+                      '-ml-1.5 flex w-full cursor-pointer items-center justify-between rounded-lg p-1.5 text-left text-sm transition-colors hover:bg-muted/50',
                     )}
                   >
                     <div className="min-w-0 flex-1">
@@ -102,10 +101,11 @@ export function TopMoversPanel({ onMarketClick }: TopMoversPanelProps) {
               {topLosers.length > 0 ? (
                 topLosers.map((mover) => (
                   <button
+                    type="button"
                     key={mover.ticker}
                     onClick={() => onMarketClick?.(mover)}
                     className={cn(
-                      '-ml-1.5 flex w-full cursor-pointer items-center justify-between rounded-lg p-1.5 text-left text-sm transition-colors hover:bg-muted/50'
+                      '-ml-1.5 flex w-full cursor-pointer items-center justify-between rounded-lg p-1.5 text-left text-sm transition-colors hover:bg-muted/50',
                     )}
                   >
                     <div className="min-w-0 flex-1">
@@ -136,5 +136,5 @@ export function TopMoversPanel({ onMarketClick }: TopMoversPanelProps) {
         </div>
       )}
     </div>
-  );
+  )
 }

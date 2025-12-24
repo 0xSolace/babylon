@@ -1,31 +1,29 @@
-'use client';
-
-import type { PerpPosition } from '@babylon/shared';
-import { CategoryPnLCard } from '@/components/markets/CategoryPnLCard';
-import { PerpPositionsList } from '@/components/markets/PerpPositionsList';
-import type { PerpMarket } from '@/types/markets';
-import type { CategoryPnLData } from '../../_hooks';
-import { PerpMarketCard } from '../cards';
+import type { PerpPosition } from '@babylon/shared'
+import { CategoryPnLCard } from '@/components/markets/CategoryPnLCard'
+import { PerpPositionsList } from '@/components/markets/PerpPositionsList'
+import type { PerpMarket } from '@/types/markets'
+import type { CategoryPnLData } from '../../_hooks'
+import { PerpMarketCard } from '../cards'
 
 interface PerpsTabContentProps {
   // Auth state
-  authenticated: boolean;
+  authenticated: boolean
 
   // P&L data
-  perpPnLData: CategoryPnLData | null;
-  portfolioLoading: boolean;
-  portfolioError: string | null;
-  portfolioUpdatedAt: number | null;
-  onShowCategoryPnLShare: () => void;
-  onRefreshPortfolio: () => Promise<void>;
+  perpPnLData: CategoryPnLData | null
+  portfolioLoading: boolean
+  portfolioError: string | null
+  portfolioUpdatedAt: number | null
+  onShowCategoryPnLShare: () => void
+  onRefreshPortfolio: () => Promise<void>
 
   // Positions
-  perpPositions: PerpPosition[];
-  onPositionClosed: () => Promise<void>;
+  perpPositions: PerpPosition[]
+  onPositionClosed: () => Promise<void>
 
   // Markets
-  filteredMarkets: PerpMarket[];
-  onMarketClick: (market: PerpMarket) => void;
+  filteredMarkets: PerpMarket[]
+  onMarketClick: (market: PerpMarket) => void
 }
 
 /**
@@ -93,5 +91,5 @@ export function PerpsTabContent({
         ))}
       </div>
     </div>
-  );
+  )
 }

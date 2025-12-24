@@ -9,117 +9,117 @@
  * - Vercel cache effectiveness
  */
 
-import { logger } from '@babylon/shared';
+import { logger } from '@babylon/shared'
 
 interface CacheMetrics {
-  hits: number;
-  misses: number;
-  avgLatencyMs: number;
+  hits: number
+  misses: number
+  avgLatencyMs: number
   operations: {
-    get: number;
-    set: number;
-    delete: number;
-  };
-  bytesRead: number;
-  bytesWritten: number;
+    get: number
+    set: number
+    delete: number
+  }
+  bytesRead: number
+  bytesWritten: number
 }
 
 interface StorageMetrics {
-  uploads: number;
-  downloads: number;
-  deletes: number;
-  bytesUploaded: number;
-  bytesDownloaded: number;
-  avgUploadLatencyMs: number;
-  avgDownloadLatencyMs: number;
-  errors: number;
+  uploads: number
+  downloads: number
+  deletes: number
+  bytesUploaded: number
+  bytesDownloaded: number
+  avgUploadLatencyMs: number
+  avgDownloadLatencyMs: number
+  errors: number
 }
 
 interface DatabaseMetrics {
-  queries: number;
-  slowQueries: number;
-  avgDurationMs: number;
-  p95DurationMs: number;
-  p99DurationMs: number;
+  queries: number
+  slowQueries: number
+  avgDurationMs: number
+  p95DurationMs: number
+  p99DurationMs: number
   operationBreakdown: Record<
     string,
     {
-      count: number;
-      avgDuration: number;
-      maxDuration: number;
-      cpuIntensive: boolean;
+      count: number
+      avgDuration: number
+      maxDuration: number
+      cpuIntensive: boolean
     }
-  >;
+  >
   connectionPoolStats: {
-    active: number;
-    idle: number;
-    waiting: number;
-  };
+    active: number
+    idle: number
+    waiting: number
+  }
 }
 
 interface SystemMetrics {
-  cpuUsagePercent: number;
-  memoryUsageMB: number;
-  memoryUsagePercent: number;
-  uptimeSeconds: number;
-  activeRequests: number;
-  requestsPerSecond: number;
+  cpuUsagePercent: number
+  memoryUsageMB: number
+  memoryUsagePercent: number
+  uptimeSeconds: number
+  activeRequests: number
+  requestsPerSecond: number
 }
 
 interface PerformanceSnapshot {
-  timestamp: Date;
-  cache: CacheMetrics;
-  storage: StorageMetrics;
-  database: DatabaseMetrics;
-  system: SystemMetrics;
+  timestamp: Date
+  cache: CacheMetrics
+  storage: StorageMetrics
+  database: DatabaseMetrics
+  system: SystemMetrics
   vercelCache?: {
-    hits: number;
-    misses: number;
-    hitRate: number;
-  };
+    hits: number
+    misses: number
+    hitRate: number
+  }
 }
 
 class PerformanceMonitor {
-  private snapshots: PerformanceSnapshot[] = [];
-  private readonly MAX_SNAPSHOTS = 1000;
+  private snapshots: PerformanceSnapshot[] = []
+  private readonly MAX_SNAPSHOTS = 1000
 
   // Cache metrics
-  private cacheHits = 0;
-  private cacheMisses = 0;
-  private cacheLatencies: number[] = [];
-  private cacheOps = { get: 0, set: 0, delete: 0 };
-  private cacheBytesRead = 0;
-  private cacheBytesWritten = 0;
+  private cacheHits = 0
+  private cacheMisses = 0
+  private cacheLatencies: number[] = []
+  private cacheOps = { get: 0, set: 0, delete: 0 }
+  private cacheBytesRead = 0
+  private cacheBytesWritten = 0
 
   // Storage metrics
-  private storageUploads = 0;
-  private storageDownloads = 0;
-  private storageDeletes = 0;
-  private storageBytesUp = 0;
-  private storageBytesDown = 0;
-  private storageUploadLatencies: number[] = [];
-  private storageDownloadLatencies: number[] = [];
-  private storageErrors = 0;
+  private storageUploads = 0
+  private storageDownloads = 0
+  private storageDeletes = 0
+  private storageBytesUp = 0
+  private storageBytesDown = 0
+  private storageUploadLatencies: number[] = []
+  private storageDownloadLatencies: number[] = []
+  private storageErrors = 0
 
   // Database metrics (extended from query monitor)
   private dbOperations: Map<
     string,
     {
-      count: number;
-      totalDuration: number;
-      maxDuration: number;
-      durations: number[];
-      cpuIntensive: boolean;
+      count: number
+      totalDuration: number
+      maxDuration: number
+      durations: number[]
+      cpuIntensive: boolean
     }
-  > = new Map();
+  > = new Map()
 
   // System metrics
-  private requestCount = 0;
-  private activeRequests = 0;
+  private requestCount = 0
+  private activeRequests = 0
 
   // Vercel cache metrics
-  private vercelCacheHits = 0;
-  private vercelCacheMisses = 0;
+  private vercelCacheHits = 0
+  private vercelCacheMisses = 0
 
   /**
    * Record a cache operation
@@ -128,20 +128,20 @@ class PerformanceMonitor {
     operation: 'get' | 'set' | 'delete',
     hit: boolean,
     latencyMs: number,
-    bytes?: number
+    bytes?: number,
   ): void {
-    this.cacheOps[operation]++;
+    this.cacheOps[operation]++
 
     if (operation === 'get') {
       if (hit) {
-        this.cacheHits++;
-        if (bytes) this.cacheBytesRead += bytes;
+        this.cacheHits++
+        if (bytes) this.cacheBytesRead += bytes
       } else {
-        this.cacheMisses++;
+        this.cacheMisses++
       }
-      this.cacheLatencies.push(latencyMs);
+      this.cacheLatencies.push(latencyMs)
     } else if (operation === 'set' && bytes) {
-      this.cacheBytesWritten += bytes;
+      this.cacheBytesWritten += bytes
     }
   }
 
@@ -152,27 +152,27 @@ class PerformanceMonitor {
     operation: 'upload' | 'download' | 'delete',
     latencyMs: number,
     bytes?: number,
-    error?: boolean
+    error?: boolean,
   ): void {
     if (error) {
-      this.storageErrors++;
-      return;
+      this.storageErrors++
+      return
     }
 
     switch (operation) {
       case 'upload':
-        this.storageUploads++;
-        this.storageUploadLatencies.push(latencyMs);
-        if (bytes) this.storageBytesUp += bytes;
-        break;
+        this.storageUploads++
+        this.storageUploadLatencies.push(latencyMs)
+        if (bytes) this.storageBytesUp += bytes
+        break
       case 'download':
-        this.storageDownloads++;
-        this.storageDownloadLatencies.push(latencyMs);
-        if (bytes) this.storageBytesDown += bytes;
-        break;
+        this.storageDownloads++
+        this.storageDownloadLatencies.push(latencyMs)
+        if (bytes) this.storageBytesDown += bytes
+        break
       case 'delete':
-        this.storageDeletes++;
-        break;
+        this.storageDeletes++
+        break
     }
   }
 
@@ -183,17 +183,17 @@ class PerformanceMonitor {
     model: string,
     operation: string,
     durationMs: number,
-    cpuIntensive = false
+    cpuIntensive = false,
   ): void {
-    const key = `${model}.${operation}`;
-    const existing = this.dbOperations.get(key);
+    const key = `${model}.${operation}`
+    const existing = this.dbOperations.get(key)
 
     if (existing) {
-      existing.count++;
-      existing.totalDuration += durationMs;
-      existing.maxDuration = Math.max(existing.maxDuration, durationMs);
-      existing.durations.push(durationMs);
-      existing.cpuIntensive = existing.cpuIntensive || cpuIntensive;
+      existing.count++
+      existing.totalDuration += durationMs
+      existing.maxDuration = Math.max(existing.maxDuration, durationMs)
+      existing.durations.push(durationMs)
+      existing.cpuIntensive = existing.cpuIntensive || cpuIntensive
     } else {
       this.dbOperations.set(key, {
         count: 1,
@@ -201,7 +201,7 @@ class PerformanceMonitor {
         maxDuration: durationMs,
         durations: [durationMs],
         cpuIntensive,
-      });
+      })
     }
   }
 
@@ -209,12 +209,12 @@ class PerformanceMonitor {
    * Record request start/end
    */
   startRequest(): void {
-    this.activeRequests++;
-    this.requestCount++;
+    this.activeRequests++
+    this.requestCount++
   }
 
   endRequest(): void {
-    this.activeRequests = Math.max(0, this.activeRequests - 1);
+    this.activeRequests = Math.max(0, this.activeRequests - 1)
   }
 
   /**
@@ -222,9 +222,9 @@ class PerformanceMonitor {
    */
   recordVercelCache(hit: boolean): void {
     if (hit) {
-      this.vercelCacheHits++;
+      this.vercelCacheHits++
     } else {
-      this.vercelCacheMisses++;
+      this.vercelCacheMisses++
     }
   }
 
@@ -235,32 +235,32 @@ class PerformanceMonitor {
     // Check if process methods are available (not available in browser environments)
     const hasMemoryUsage =
       typeof process !== 'undefined' &&
-      typeof process.memoryUsage === 'function';
+      typeof process.memoryUsage === 'function'
     const hasCpuUsage =
-      typeof process !== 'undefined' && typeof process.cpuUsage === 'function';
+      typeof process !== 'undefined' && typeof process.cpuUsage === 'function'
     const hasUptime =
-      typeof process !== 'undefined' && typeof process.uptime === 'function';
+      typeof process !== 'undefined' && typeof process.uptime === 'function'
 
     const memUsage = hasMemoryUsage
       ? process.memoryUsage()
-      : { heapUsed: 0, heapTotal: 0, rss: 0, external: 0, arrayBuffers: 0 };
-    const uptime = hasUptime ? process.uptime() : 0;
+      : { heapUsed: 0, heapTotal: 0, rss: 0, external: 0, arrayBuffers: 0 }
+    const uptime = hasUptime ? process.uptime() : 0
 
     // Calculate database metrics
     const dbOperationBreakdown: Record<
       string,
       {
-        count: number;
-        avgDuration: number;
-        maxDuration: number;
-        cpuIntensive: boolean;
+        count: number
+        avgDuration: number
+        maxDuration: number
+        cpuIntensive: boolean
       }
-    > = {};
+    > = {}
 
-    let totalDbDuration = 0;
-    let totalDbQueries = 0;
-    let slowDbQueries = 0;
-    const allDbDurations: number[] = [];
+    let totalDbDuration = 0
+    let totalDbQueries = 0
+    let slowDbQueries = 0
+    const allDbDurations: number[] = []
 
     for (const [key, stats] of this.dbOperations.entries()) {
       dbOperationBreakdown[key] = {
@@ -268,22 +268,22 @@ class PerformanceMonitor {
         avgDuration: stats.totalDuration / stats.count,
         maxDuration: stats.maxDuration,
         cpuIntensive: stats.cpuIntensive,
-      };
+      }
 
-      totalDbDuration += stats.totalDuration;
-      totalDbQueries += stats.count;
-      slowDbQueries += stats.durations.filter((d) => d > 100).length;
-      allDbDurations.push(...stats.durations);
+      totalDbDuration += stats.totalDuration
+      totalDbQueries += stats.count
+      slowDbQueries += stats.durations.filter((d) => d > 100).length
+      allDbDurations.push(...stats.durations)
     }
 
     // Sort durations for percentiles
-    allDbDurations.sort((a, b) => a - b);
-    const p95Index = Math.floor(allDbDurations.length * 0.95);
-    const p99Index = Math.floor(allDbDurations.length * 0.99);
+    allDbDurations.sort((a, b) => a - b)
+    const p95Index = Math.floor(allDbDurations.length * 0.95)
+    const p99Index = Math.floor(allDbDurations.length * 0.99)
 
     // Calculate request rate
-    const timeWindowSeconds = Math.min(60, uptime);
-    const requestsPerSecond = this.requestCount / timeWindowSeconds;
+    const timeWindowSeconds = Math.min(60, uptime)
+    const requestsPerSecond = this.requestCount / timeWindowSeconds
 
     const snapshot: PerformanceSnapshot = {
       timestamp: new Date(),
@@ -342,67 +342,67 @@ class PerformanceMonitor {
         activeRequests: this.activeRequests,
         requestsPerSecond,
       },
-    };
+    }
 
     // Add Vercel cache stats if available
     if (this.vercelCacheHits + this.vercelCacheMisses > 0) {
-      const total = this.vercelCacheHits + this.vercelCacheMisses;
+      const total = this.vercelCacheHits + this.vercelCacheMisses
       snapshot.vercelCache = {
         hits: this.vercelCacheHits,
         misses: this.vercelCacheMisses,
         hitRate: this.vercelCacheHits / total,
-      };
+      }
     }
 
     // Store snapshot
-    this.snapshots.push(snapshot);
+    this.snapshots.push(snapshot)
     if (this.snapshots.length > this.MAX_SNAPSHOTS) {
-      this.snapshots.shift();
+      this.snapshots.shift()
     }
 
-    return snapshot;
+    return snapshot
   }
 
   /**
    * Get performance statistics
    */
   getStats(): PerformanceSnapshot {
-    return this.takeSnapshot();
+    return this.takeSnapshot()
   }
 
   /**
    * Get all snapshots
    */
   getSnapshots(): PerformanceSnapshot[] {
-    return [...this.snapshots];
+    return [...this.snapshots]
   }
 
   /**
    * Get cache hit rate
    */
   getCacheHitRate(): number {
-    const total = this.cacheHits + this.cacheMisses;
-    return total > 0 ? this.cacheHits / total : 0;
+    const total = this.cacheHits + this.cacheMisses
+    return total > 0 ? this.cacheHits / total : 0
   }
 
   /**
    * Identify bottlenecks
    */
   identifyBottlenecks(): {
-    type: 'cache' | 'database' | 'storage' | 'memory' | 'cpu';
-    severity: 'critical' | 'warning' | 'info';
-    description: string;
-    metric: number;
-    threshold: number;
+    type: 'cache' | 'database' | 'storage' | 'memory' | 'cpu'
+    severity: 'critical' | 'warning' | 'info'
+    description: string
+    metric: number
+    threshold: number
   }[] {
-    const snapshot = this.takeSnapshot();
+    const snapshot = this.takeSnapshot()
     const bottlenecks: ReturnType<PerformanceMonitor['identifyBottlenecks']> =
-      [];
+      []
 
     // Check cache hit rate
-    const cacheTotal = snapshot.cache.hits + snapshot.cache.misses;
+    const cacheTotal = snapshot.cache.hits + snapshot.cache.misses
     if (cacheTotal > 0) {
-      const hitRate = snapshot.cache.hits / cacheTotal;
+      const hitRate = snapshot.cache.hits / cacheTotal
       if (hitRate < 0.5) {
         bottlenecks.push({
           type: 'cache',
@@ -410,7 +410,7 @@ class PerformanceMonitor {
           description: 'Low cache hit rate - consider caching more data',
           metric: hitRate,
           threshold: 0.5,
-        });
+        })
       } else if (hitRate < 0.8) {
         bottlenecks.push({
           type: 'cache',
@@ -418,7 +418,7 @@ class PerformanceMonitor {
           description: 'Moderate cache hit rate - optimization possible',
           metric: hitRate,
           threshold: 0.8,
-        });
+        })
       }
     }
 
@@ -430,7 +430,7 @@ class PerformanceMonitor {
         description: 'Slow database queries - P95 > 200ms',
         metric: snapshot.database.p95DurationMs,
         threshold: 200,
-      });
+      })
     } else if (snapshot.database.avgDurationMs > 50) {
       bottlenecks.push({
         type: 'database',
@@ -438,7 +438,7 @@ class PerformanceMonitor {
         description: 'Average query time elevated',
         metric: snapshot.database.avgDurationMs,
         threshold: 50,
-      });
+      })
     }
 
     // Check storage performance
@@ -449,7 +449,7 @@ class PerformanceMonitor {
         description: 'Slow storage uploads',
         metric: snapshot.storage.avgUploadLatencyMs,
         threshold: 1000,
-      });
+      })
     }
 
     // Check memory usage
@@ -460,7 +460,7 @@ class PerformanceMonitor {
         description: 'High memory usage - possible memory leak',
         metric: snapshot.system.memoryUsagePercent,
         threshold: 90,
-      });
+      })
     } else if (snapshot.system.memoryUsagePercent > 75) {
       bottlenecks.push({
         type: 'memory',
@@ -468,12 +468,12 @@ class PerformanceMonitor {
         description: 'Elevated memory usage',
         metric: snapshot.system.memoryUsagePercent,
         threshold: 75,
-      });
+      })
     }
 
     // Find CPU-intensive database operations
     for (const [operation, stats] of Object.entries(
-      snapshot.database.operationBreakdown
+      snapshot.database.operationBreakdown,
     )) {
       if (stats.cpuIntensive && stats.avgDuration > 100) {
         bottlenecks.push({
@@ -482,41 +482,41 @@ class PerformanceMonitor {
           description: `CPU-intensive operation: ${operation}`,
           metric: stats.avgDuration,
           threshold: 100,
-        });
+        })
       }
     }
 
-    return bottlenecks;
+    return bottlenecks
   }
 
   /**
    * Generate optimization recommendations
    */
   getRecommendations(): string[] {
-    const recommendations: string[] = [];
-    const snapshot = this.takeSnapshot();
-    const bottlenecks = this.identifyBottlenecks();
+    const recommendations: string[] = []
+    const snapshot = this.takeSnapshot()
+    const bottlenecks = this.identifyBottlenecks()
 
     // Cache recommendations
-    const cacheHitRate = this.getCacheHitRate();
+    const cacheHitRate = this.getCacheHitRate()
     if (cacheHitRate < 0.8) {
       recommendations.push(
-        `Cache hit rate is ${(cacheHitRate * 100).toFixed(1)}% - consider caching more frequently accessed data`
-      );
+        `Cache hit rate is ${(cacheHitRate * 100).toFixed(1)}% - consider caching more frequently accessed data`,
+      )
     }
 
     // Database recommendations
     if (snapshot.database.slowQueries > snapshot.database.queries * 0.05) {
       recommendations.push(
-        'More than 5% of queries are slow - add database indexes or optimize query patterns'
-      );
+        'More than 5% of queries are slow - add database indexes or optimize query patterns',
+      )
     }
 
     // Find slowest operations
     const slowOperations = Object.entries(snapshot.database.operationBreakdown)
       .filter(([, stats]) => stats.avgDuration > 100)
       .sort((a, b) => b[1].avgDuration - a[1].avgDuration)
-      .slice(0, 3);
+      .slice(0, 3)
 
     if (slowOperations.length > 0) {
       recommendations.push(
@@ -524,80 +524,80 @@ class PerformanceMonitor {
           slowOperations
             .map(
               ([op, stats]) =>
-                `  - ${op}: ${stats.avgDuration.toFixed(2)}ms avg (${stats.count} calls)`
+                `  - ${op}: ${stats.avgDuration.toFixed(2)}ms avg (${stats.count} calls)`,
             )
-            .join('\n')
-      );
+            .join('\n'),
+      )
     }
 
     // Storage recommendations
     if (snapshot.storage.errors > 0) {
       recommendations.push(
-        `${snapshot.storage.errors} storage errors detected - check storage configuration and connectivity`
-      );
+        `${snapshot.storage.errors} storage errors detected - check storage configuration and connectivity`,
+      )
     }
 
     // Memory recommendations
     if (snapshot.system.memoryUsagePercent > 75) {
       recommendations.push(
-        `Memory usage at ${snapshot.system.memoryUsagePercent.toFixed(1)}% - consider increasing heap size or investigating memory leaks`
-      );
+        `Memory usage at ${snapshot.system.memoryUsagePercent.toFixed(1)}% - consider increasing heap size or investigating memory leaks`,
+      )
     }
 
     // Critical bottlenecks
     const criticalBottlenecks = bottlenecks.filter(
-      (b) => b.severity === 'critical'
-    );
+      (b) => b.severity === 'critical',
+    )
     if (criticalBottlenecks.length > 0) {
       recommendations.push(
         'CRITICAL ISSUES:\n' +
-          criticalBottlenecks.map((b) => `  - ${b.description}`).join('\n')
-      );
+          criticalBottlenecks.map((b) => `  - ${b.description}`).join('\n'),
+      )
     }
 
-    return recommendations;
+    return recommendations
   }
 
   /**
    * Reset all metrics
    */
   reset(): void {
-    this.cacheHits = 0;
-    this.cacheMisses = 0;
-    this.cacheLatencies = [];
-    this.cacheOps = { get: 0, set: 0, delete: 0 };
-    this.cacheBytesRead = 0;
-    this.cacheBytesWritten = 0;
+    this.cacheHits = 0
+    this.cacheMisses = 0
+    this.cacheLatencies = []
+    this.cacheOps = { get: 0, set: 0, delete: 0 }
+    this.cacheBytesRead = 0
+    this.cacheBytesWritten = 0
 
-    this.storageUploads = 0;
-    this.storageDownloads = 0;
-    this.storageDeletes = 0;
-    this.storageBytesUp = 0;
-    this.storageBytesDown = 0;
-    this.storageUploadLatencies = [];
-    this.storageDownloadLatencies = [];
-    this.storageErrors = 0;
+    this.storageUploads = 0
+    this.storageDownloads = 0
+    this.storageDeletes = 0
+    this.storageBytesUp = 0
+    this.storageBytesDown = 0
+    this.storageUploadLatencies = []
+    this.storageDownloadLatencies = []
+    this.storageErrors = 0
 
-    this.dbOperations.clear();
+    this.dbOperations.clear()
 
-    this.requestCount = 0;
-    this.activeRequests = 0;
+    this.requestCount = 0
+    this.activeRequests = 0
 
-    this.vercelCacheHits = 0;
-    this.vercelCacheMisses = 0;
+    this.vercelCacheHits = 0
+    this.vercelCacheMisses = 0
 
-    this.snapshots = [];
+    this.snapshots = []
 
-    logger.info('Performance metrics reset', undefined, 'PerformanceMonitor');
+    logger.info('Performance metrics reset', undefined, 'PerformanceMonitor')
   }
 
   /**
    * Log performance summary
    */
   logSummary(): void {
-    const snapshot = this.takeSnapshot();
-    const bottlenecks = this.identifyBottlenecks();
-    const recommendations = this.getRecommendations();
+    const snapshot = this.takeSnapshot()
+    const bottlenecks = this.identifyBottlenecks()
+    const recommendations = this.getRecommendations()
 
     logger.info(
       'Performance Summary',
@@ -630,8 +630,8 @@ class PerformanceMonitor {
         criticalIssues: bottlenecks.filter((b) => b.severity === 'critical')
           .length,
       },
-      'PerformanceMonitor'
-    );
+      'PerformanceMonitor',
+    )
 
     if (recommendations.length > 0) {
       logger.info(
@@ -640,18 +640,18 @@ class PerformanceMonitor {
           count: recommendations.length,
           recommendations,
         },
-        'PerformanceMonitor'
-      );
+        'PerformanceMonitor',
+      )
     }
   }
 }
 
 // Singleton instance
-export const performanceMonitor = new PerformanceMonitor();
+export const performanceMonitor = new PerformanceMonitor()
 
 // Auto-snapshot every minute
 if (typeof setInterval !== 'undefined') {
   setInterval(() => {
-    performanceMonitor.takeSnapshot();
-  }, 60000);
+    performanceMonitor.takeSnapshot()
+  }, 60000)
 }

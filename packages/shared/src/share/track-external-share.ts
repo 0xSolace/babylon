@@ -5,7 +5,8 @@
  * and awarding points to users. Makes API calls to record share actions.
  */
 
-import { logger } from '../utils/logger';
+import { logger } from '../utils/logger'
+import { toNull } from '../utils/nullable'
 
 export type SharePlatform =
   | 'twitter'
@@ -13,34 +14,34 @@ export type SharePlatform =
   | 'link'
   | 'native'
   | 'download'
-  | 'other';
+  | 'other'
 
 export type ShareContentType =
   | 'post'
   | 'profile'
   | 'market'
   | 'referral'
-  | 'leaderboard';
+  | 'leaderboard'
 
 export interface TrackExternalShareOptions {
-  platform: SharePlatform;
-  contentType: ShareContentType;
-  contentId?: string;
-  url: string;
-  userId?: string | null;
+  platform: SharePlatform
+  contentType: ShareContentType
+  contentId?: string
+  url: string
+  userId?: string | null
 }
 
 export interface TrackExternalShareResult {
-  shareActionId: string | null;
-  pointsAwarded: number;
-  alreadyAwarded: boolean;
+  shareActionId: string | null
+  pointsAwarded: number
+  alreadyAwarded: boolean
 }
 
 const DEFAULT_RESULT: TrackExternalShareResult = {
   shareActionId: null,
   pointsAwarded: 0,
   alreadyAwarded: false,
-};
+}
 
 /**
  * Track an external share and award points if applicable
@@ -63,31 +64,32 @@ const DEFAULT_RESULT: TrackExternalShareResult = {
  * ```
  */
 export async function trackExternalShare(
-  options: TrackExternalShareOptions
+  options: TrackExternalShareOptions,
 ): Promise<TrackExternalShareResult> {
-  const { platform, contentType, contentId, url, userId } = options;
+  const { platform, contentType, contentId, url, userId } = options
 
   if (!userId) {
     logger.warn(
       'Unable to track external share without authenticated user',
       { platform, contentType },
-      'trackExternalShare'
-    );
-    return DEFAULT_RESULT;
+      'trackExternalShare',
+    )
+    return DEFAULT_RESULT
   }
 
-  const token =
-    typeof window !== 'undefined'
-      ? ((window as { __oauth3AccessToken?: string }).__oauth3AccessToken ??
-        null)
-      : null;
+  // Access OAuth3 access token from window global (set by auth layer)
+  let token: string | null = null
+  if (typeof window !== 'undefined') {
+    const win = window as Window & { __oauth3AccessToken?: string }
+    token = win.__oauth3AccessToken ?? null
+  }
   if (!token) {
     logger.warn(
       'No access token available when attempting to track external share',
       { platform },
-      'trackExternalShare'
-    );
-    return DEFAULT_RESULT;
+      'trackExternalShare',
+    )
+    return DEFAULT_RESULT
   }
 
   const response = await fetch(
@@ -104,40 +106,47 @@ export async function trackExternalShare(
         contentId,
         url,
       }),
-    }
-  );
+    },
+  )
 
   if (!response.ok) {
-    const errorPayload = (await response.json()) as {
-      error?: string;
-    };
+    // Parse error response - may fail if response is not JSON
+    let errorMessage: string | undefined
+    try {
+      const errorPayload: { error?: string } = await response.json()
+      errorMessage = errorPayload?.error
+    } catch {
+      // Response is not JSON, ignore
+    }
     logger.warn(
       'Failed to track external share',
-      { platform, status: response.status, error: errorPayload?.error },
-      'trackExternalShare'
-    );
-    return DEFAULT_RESULT;
+      { platform, status: response.status, error: errorMessage },
+      'trackExternalShare',
+    )
+    return DEFAULT_RESULT
   }
 
-  const data = (await response.json()) as {
-    points?: { awarded?: number; alreadyAwarded?: boolean };
-    shareAction?: { id?: string };
-  };
-  const pointsAwarded = Number(data?.points?.awarded ?? 0);
-  const alreadyAwarded = Boolean(data?.points?.alreadyAwarded);
-  const shareActionId = data?.shareAction?.id ?? null;
+  // Parse success response
+  interface ShareResponse {
+    points?: { awarded?: number; alreadyAwarded?: boolean }
+    shareAction?: { id?: string }
+  }
+  const data: ShareResponse = await response.json()
+  const pointsAwarded = Number(data?.points?.awarded ?? 0)
+  const alreadyAwarded = Boolean(data?.points?.alreadyAwarded)
+  const shareActionId = toNull(data?.shareAction?.id)
 
   if (pointsAwarded > 0) {
     logger.info(
       `Awarded ${pointsAwarded} points for ${platform} share`,
       { platform, pointsAwarded },
-      'trackExternalShare'
-    );
+      'trackExternalShare',
+    )
   }
 
   return {
     shareActionId,
     pointsAwarded,
     alreadyAwarded,
-  };
+  }
 }

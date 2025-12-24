@@ -1,39 +1,37 @@
-'use client';
-
-import type { CommentCardProps, CommentData } from '@babylon/shared';
-import { cn, getProfileUrl } from '@babylon/shared';
-import { formatDistanceToNow } from 'date-fns';
-import { Edit2, MessageCircle, MoreVertical, Trash2 } from 'lucide-react';
-import { useRouter } from 'next/navigation';
-import { useState } from 'react';
-import { Avatar } from '@/components/shared/Avatar';
-import { TaggedText } from '@/components/shared/TaggedText';
+import type { CommentCardProps, CommentData } from '@babylon/shared'
+import { cn, getProfileUrl } from '@babylon/shared'
+import { formatDistanceToNow } from 'date-fns'
+import { Edit2, MessageCircle, MoreVertical, Trash2 } from 'lucide-react'
+import { useState } from 'react'
+import { Avatar } from '@/components/shared/Avatar'
+import { TaggedText } from '@/components/shared/TaggedText'
 import {
   isNpcIdentifier,
   VerifiedBadge,
-} from '@/components/shared/VerifiedBadge';
-import { MAX_REPLY_COUNT } from '@/lib/constants';
-import { CommentInput } from './CommentInput';
-import { LikeButton } from './LikeButton';
+} from '@/components/shared/VerifiedBadge'
+import { MAX_REPLY_COUNT } from '@/lib/constants'
+import { useRouter } from '@/lib/navigation'
+import { CommentInput } from './CommentInput'
+import { LikeButton } from './LikeButton'
 
 /**
  * Recursive reply type for counting
  */
 interface ReplyWithReplies {
-  replies?: ReplyWithReplies[];
+  replies?: ReplyWithReplies[]
 }
 
 /**
  * Count total replies recursively
  */
 function countAllReplies(replies: ReplyWithReplies[]): number {
-  let count = replies.length;
+  let count = replies.length
   for (const reply of replies) {
     if (reply.replies && reply.replies.length > 0) {
-      count += countAllReplies(reply.replies);
+      count += countAllReplies(reply.replies)
     }
   }
-  return count;
+  return count
 }
 
 /**
@@ -66,52 +64,52 @@ export function CommentCard({
   onReplySubmit,
   className,
 }: CommentCardProps) {
-  const router = useRouter();
-  const [showActions, setShowActions] = useState(false);
-  const [isReplying, setIsReplying] = useState(false);
-  const [isEditing, setIsEditing] = useState(false);
-  const [editContent, setEditContent] = useState(comment.content);
+  const router = useRouter()
+  const [showActions, setShowActions] = useState(false)
+  const [isReplying, setIsReplying] = useState(false)
+  const [isEditing, setIsEditing] = useState(false)
+  const [editContent, setEditContent] = useState(comment.content)
 
-  const hasReplies = comment.replies && comment.replies.length > 0;
-  const replyCount = hasReplies ? countAllReplies(comment.replies) : 0;
+  const hasReplies = comment.replies && comment.replies.length > 0
+  const replyCount = hasReplies ? countAllReplies(comment.replies) : 0
 
-  const showVerifiedBadge = isNpcIdentifier(comment.userId);
+  const showVerifiedBadge = isNpcIdentifier(comment.userId)
 
   const handleReply = () => {
-    setIsReplying(true);
+    setIsReplying(true)
     if (onReply) {
-      onReply(comment.id);
+      onReply(comment.id)
     }
-  };
+  }
 
   const handleEdit = () => {
-    setIsEditing(true);
-    setShowActions(false);
-  };
+    setIsEditing(true)
+    setShowActions(false)
+  }
 
   const handleSaveEdit = () => {
     if (onEdit && editContent.trim() !== comment.content) {
-      onEdit(comment.id, editContent.trim());
+      onEdit(comment.id, editContent.trim())
     }
-    setIsEditing(false);
-  };
+    setIsEditing(false)
+  }
 
   const handleCancelEdit = () => {
-    setEditContent(comment.content);
-    setIsEditing(false);
-  };
+    setEditContent(comment.content)
+    setIsEditing(false)
+  }
 
   const handleDelete = () => {
     if (onDelete && confirm('Are you sure you want to delete this comment?')) {
-      onDelete(comment.id);
+      onDelete(comment.id)
     }
-    setShowActions(false);
-  };
+    setShowActions(false)
+  }
 
   // Navigate to comment thread page
   const handleNavigateToThread = () => {
-    router.push(`/comment/${comment.id}`);
-  };
+    router.push(`/comment/${comment.id}`)
+  }
 
   return (
     <div className={cn('flex gap-3', className)}>
@@ -155,7 +153,7 @@ export function CommentCard({
                 className={cn(
                   'rounded-md p-1',
                   'text-muted-foreground hover:text-foreground',
-                  'transition-colors hover:bg-muted'
+                  'transition-colors hover:bg-muted',
                 )}
               >
                 <MoreVertical size={16} />
@@ -164,9 +162,16 @@ export function CommentCard({
               {showActions && (
                 <>
                   {/* Backdrop */}
-                  <div
+                  <button
+                    type="button"
                     className="fixed inset-0 z-10"
                     onClick={() => setShowActions(false)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Escape') {
+                        setShowActions(false)
+                      }
+                    }}
+                    aria-label="Close menu"
                   />
 
                   {/* Dropdown */}
@@ -211,7 +216,6 @@ export function CommentCard({
               value={editContent}
               onChange={(e) => setEditContent(e.target.value)}
               className="min-h-[60px] w-full resize-none rounded-md border border-border bg-muted p-2 text-sm focus:border-border focus:outline-none"
-              autoFocus
             />
             <div className="mt-2 flex gap-2">
               <button
@@ -243,14 +247,12 @@ export function CommentCard({
                 onTagClick={(tag) => {
                   if (tag.startsWith('@')) {
                     // Handle @mentions - route to profile
-                    const username = tag.slice(1);
-                    router.push(getProfileUrl('', username));
+                    const username = tag.slice(1)
+                    router.push(getProfileUrl('', username))
                   } else if (tag.startsWith('$')) {
                     // Handle $cashtags - route to markets
-                    const symbol = tag.slice(1);
-                    router.push(
-                      `/markets?search=${encodeURIComponent(symbol)}`
-                    );
+                    const symbol = tag.slice(1)
+                    router.push(`/markets?search=${encodeURIComponent(symbol)}`)
                   }
                 }}
               />
@@ -267,7 +269,7 @@ export function CommentCard({
             className={cn(
               'flex items-center gap-1.5 rounded-full px-2 py-1 text-xs transition-colors',
               'text-muted-foreground hover:bg-[#0066FF]/10 hover:text-[#0066FF]',
-              isReplying && 'bg-[#0066FF]/10 text-[#0066FF]'
+              isReplying && 'bg-[#0066FF]/10 text-[#0066FF]',
             )}
           >
             <MessageCircle size={14} />
@@ -301,10 +303,10 @@ export function CommentCard({
               replyingToName={comment.userName}
               autoFocus
               onSubmit={async (replyComment: CommentData) => {
-                setIsReplying(false);
+                setIsReplying(false)
                 // Call onReplySubmit callback if provided to handle optimistic update
                 if (onReplySubmit && replyComment) {
-                  onReplySubmit(replyComment);
+                  onReplySubmit(replyComment)
                 }
               }}
               onCancel={() => setIsReplying(false)}
@@ -313,5 +315,5 @@ export function CommentCard({
         )}
       </div>
     </div>
-  );
+  )
 }

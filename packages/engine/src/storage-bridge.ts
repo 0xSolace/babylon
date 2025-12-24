@@ -40,9 +40,9 @@
  * - `db.table.upsert({ where: ..., create: ..., update: ... })`
  * - `db.table.count({ where: ... })`
  *
- * **Note**: Raw Drizzle query builder methods (`db.insert(table)`, `db.update(table)`,
+ * **Note**: Raw CQL query builder methods (`db.insert(table)`, `db.update(table)`,
  * `db.delete(table)`, `db.select()`) are NOT supported in JSON/memory mode.
- * These methods are only available in PostgreSQL mode.
+ * These methods are only available in CQL mode.
  */
 
 import {
@@ -56,22 +56,20 @@ import {
   resetToCQLMode,
   type StorageMode,
   saveJsonSnapshot,
-} from '@babylon/db';
+} from '@babylon/db'
 
-// Re-export db for convenience
-export { db };
+export { db }
 
-// Re-export storage mode utilities
-export { getStorageMode, type StorageMode };
+export { getStorageMode, type StorageMode }
 
 /**
  * Initialize the engine in simulation mode.
  * All data will be stored in JSON files, no database required.
  */
 export async function initializeSimulationMode(
-  basePath = './simulation-data'
+  basePath = './simulation-data',
 ): Promise<void> {
-  await initializeJsonMode(basePath);
+  await initializeJsonMode(basePath)
 }
 
 /**
@@ -79,7 +77,7 @@ export async function initializeSimulationMode(
  * All data is stored in memory and not persisted.
  */
 export async function initializeTestMode(): Promise<void> {
-  await initializeMemoryMode();
+  await initializeMemoryMode()
 }
 
 /**
@@ -87,47 +85,47 @@ export async function initializeTestMode(): Promise<void> {
  * This is the default mode and doesn't require explicit initialization.
  */
 export function initializeDatabaseMode(): void {
-  resetToCQLMode();
+  resetToCQLMode()
 }
 
 /**
  * Check if we're in database mode (production).
  */
 export function isDatabaseMode(): boolean {
-  return getStorageMode() === 'cql';
+  return getStorageMode() === 'cql'
 }
 
 /**
  * Check if we're in simulation mode.
  */
 export function isSimulationMode(): boolean {
-  return dbIsSimulationMode();
+  return dbIsSimulationMode()
 }
 
 /**
  * Check if we're in test mode.
  */
 export function isTestMode(): boolean {
-  return getStorageMode() === 'memory';
+  return getStorageMode() === 'memory'
 }
 
 /**
  * Save current state to JSON (simulation/test mode only).
  */
 export async function saveSnapshot(): Promise<void> {
-  await saveJsonSnapshot();
+  await saveJsonSnapshot()
 }
 
 /**
  * Load state from JSON file (simulation/test mode only).
  */
 export async function loadSnapshot(path: string): Promise<void> {
-  await loadJsonSnapshot(path);
+  await loadJsonSnapshot(path)
 }
 
 /**
  * Export state to a specific JSON file (simulation/test mode only).
  */
 export async function exportState(path: string): Promise<void> {
-  await exportJsonState(path);
+  await exportJsonState(path)
 }

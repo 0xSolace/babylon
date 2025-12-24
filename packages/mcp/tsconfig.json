@@ -1,20 +1,33 @@
 {
   "extends": "../tsconfig.base.json",
   "compilerOptions": {
-    "outDir": "./dist",
-    "tsBuildInfoFile": "./dist/.tsbuildinfo",
-    "types": ["bun-types"],
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false,
     "noEmit": true,
+    "jsx": "react-jsx",
+    "types": ["bun-types"],
     "skipLibCheck": true,
     "baseUrl": ".",
     "paths": {
+      "@babylon/auth": ["../auth/src/index.ts"],
+      "@babylon/auth/*": ["../auth/src/*"],
       "@babylon/shared": ["../shared/src/index.ts"],
       "@babylon/shared/*": ["../shared/src/*"],
-      "@babylon/contracts": ["../contracts/src/index.ts"],
-      "@babylon/contracts/*": ["../contracts/src/*"]
+      "@babylon/db": ["../db/src/index.ts"],
+      "@babylon/db/*": ["../db/src/*"],
+      "@babylon/api": ["../api/src/index.ts"],
+      "@babylon/api/*": ["../api/src/*"],
+      "@babylon/training": ["../training/src/index.ts"],
+      "@babylon/training/*": ["../training/src/*"],
+      "@babylon/agents": ["../agents/src/index.ts"],
+      "@babylon/agents/*": ["../agents/src/*"],
+      "@babylon/engine": ["../engine/src/index.ts"],
+      "@babylon/engine/*": ["../engine/src/*"],
+      "@babylon/core": ["../core/markets/index.ts"],
+      "@babylon/core/*": ["../core/*"]
     }
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "**/*.test.ts"],
-  "references": [{ "path": "../shared" }, { "path": "../contracts" }]
+  "exclude": ["node_modules", "dist", "**/*.test.ts"]
 }

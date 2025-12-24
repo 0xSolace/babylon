@@ -14,7 +14,7 @@ Permissionless decentralized authentication for Babylon using TEE-backed MPC (Mu
 
 ```typescript
 import { DIDManager } from '@babylon/auth';
-import { createSessionMessage, SessionManager } from '@babylon/auth/server';
+import { createSessionMessage, SessionManager } from '@babylon/api';
 
 // Create identity with wallet auth
 const didManager = new DIDManager({
@@ -163,7 +163,7 @@ const did = await didManager.findByAccount({ type: 'wallet', address: '0x...' })
 ### SessionManager (Permissionless)
 
 ```typescript
-import { createSessionMessage, SessionManager } from '@babylon/auth/server';
+import { createSessionMessage, SessionManager } from '@babylon/api';
 
 const sessionManager = new SessionManager({ expiresIn: 86400 });
 

@@ -1,1 +1,2 @@
-export { AirdropStatusBadge, AirdropStatusWidget } from './AirdropStatusWidget';
+export { AirdropCard } from './AirdropCard'
+export { AirdropStatusBadge, AirdropStatusWidget } from './AirdropStatusWidget'

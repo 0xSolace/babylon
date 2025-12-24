@@ -4,8 +4,8 @@
  * Schemas for waitlist marking, bonuses, position, and leaderboard.
  */
 
-import { z } from 'zod';
-import { UserIdSchema, WalletAddressSchema } from './common';
+import { z } from 'zod'
+import { UserIdSchema, WalletAddressSchema } from './common'
 
 // ============================================================================
 // Waitlist Mark Schemas
@@ -21,9 +21,9 @@ export const WaitlistMarkSchema = z.object({
     .max(50)
     .optional()
     .describe('Optional referral code from another user'),
-});
+})
 
-export type WaitlistMarkInput = z.infer<typeof WaitlistMarkSchema>;
+export type WaitlistMarkInput = z.infer<typeof WaitlistMarkSchema>
 
 /**
  * Response schema for marking a user as waitlisted
@@ -33,9 +33,9 @@ export const WaitlistMarkResponseSchema = z.object({
   inviteCode: z.string(),
   points: z.number(),
   referrerRewarded: z.boolean(),
-});
+})
 
-export type WaitlistMarkResponse = z.infer<typeof WaitlistMarkResponseSchema>;
+export type WaitlistMarkResponse = z.infer<typeof WaitlistMarkResponseSchema>
 
 // ============================================================================
 // Waitlist Bonus Schemas
@@ -46,11 +46,11 @@ export type WaitlistMarkResponse = z.infer<typeof WaitlistMarkResponseSchema>;
  */
 export const WalletBonusSchema = z.object({
   walletAddress: WalletAddressSchema.describe(
-    'Wallet address to award bonus for'
+    'Wallet address to award bonus for',
   ),
-});
+})
 
-export type WalletBonusInput = z.infer<typeof WalletBonusSchema>;
+export type WalletBonusInput = z.infer<typeof WalletBonusSchema>
 
 /**
  * Response schema for wallet bonus
@@ -59,9 +59,9 @@ export const WalletBonusResponseSchema = z.object({
   awarded: z.boolean(),
   bonusAmount: z.number().int().nonnegative(),
   message: z.string(),
-});
+})
 
-export type WalletBonusResponse = z.infer<typeof WalletBonusResponseSchema>;
+export type WalletBonusResponse = z.infer<typeof WalletBonusResponseSchema>
 
 // ============================================================================
 // Waitlist Position Schemas
@@ -76,9 +76,9 @@ export const PointsBreakdownSchema = z.object({
   earned: z.number(),
   bonus: z.number(),
   base: z.number(),
-});
+})
 
-export type PointsBreakdown = z.infer<typeof PointsBreakdownSchema>;
+export type PointsBreakdown = z.infer<typeof PointsBreakdownSchema>
 
 /**
  * Schema for a pending (invited but not qualified) referral user
@@ -93,9 +93,9 @@ export const InvitedUserSchema = z.object({
   twitterUsername: z.string().nullable(),
   createdAt: z.string().datetime(),
   status: z.literal('pending'),
-});
+})
 
-export type InvitedUser = z.infer<typeof InvitedUserSchema>;
+export type InvitedUser = z.infer<typeof InvitedUserSchema>
 
 /**
  * Schema for a qualified (completed) referral user
@@ -108,9 +108,9 @@ export const QualifiedUserSchema = z.object({
   createdAt: z.string().datetime(),
   completedAt: z.string().datetime(),
   status: z.literal('qualified'),
-});
+})
 
-export type QualifiedUser = z.infer<typeof QualifiedUserSchema>;
+export type QualifiedUser = z.infer<typeof QualifiedUserSchema>
 
 /**
  * Response schema for waitlist position
@@ -134,11 +134,11 @@ export const WaitlistPositionResponseSchema = z.object({
   invitedCount: z.number().int().nonnegative().optional(),
   qualifiedCount: z.number().int().nonnegative().optional(),
   totalReferralPoints: z.number().int().nonnegative().optional(),
-});
+})
 
 export type WaitlistPositionResponse = z.infer<
   typeof WaitlistPositionResponseSchema
->;
+>
 
 // ============================================================================
 // Waitlist Leaderboard Schemas
@@ -147,9 +147,9 @@ export type WaitlistPositionResponse = z.infer<
 /**
  * Points type for sorting leaderboard
  */
-export const WaitlistPointsTypeSchema = z.enum(['total', 'invite']);
+export const WaitlistPointsTypeSchema = z.enum(['total', 'invite'])
 
-export type WaitlistPointsType = z.infer<typeof WaitlistPointsTypeSchema>;
+export type WaitlistPointsType = z.infer<typeof WaitlistPointsTypeSchema>
 
 /**
  * Query schema for waitlist leaderboard
@@ -158,11 +158,11 @@ export const WaitlistLeaderboardQuerySchema = z.object({
   page: z.coerce.number().int().positive().default(1),
   limit: z.coerce.number().int().positive().max(100).default(10),
   pointsType: WaitlistPointsTypeSchema.default('invite'),
-});
+})
 
 export type WaitlistLeaderboardQuery = z.infer<
   typeof WaitlistLeaderboardQuerySchema
->;
+>
 
 /**
  * Schema for a leaderboard entry
@@ -178,11 +178,11 @@ export const WaitlistLeaderboardEntrySchema = z.object({
   points: z.number().int().nonnegative(),
   referralCount: z.number().int().nonnegative(),
   rank: z.number().int().positive(),
-});
+})
 
 export type WaitlistLeaderboardEntry = z.infer<
   typeof WaitlistLeaderboardEntrySchema
->;
+>
 
 /**
  * Response schema for waitlist leaderboard
@@ -194,11 +194,11 @@ export const WaitlistLeaderboardResponseSchema = z.object({
   totalPages: z.number().int().nonnegative(),
   hasMore: z.boolean(),
   pointsType: WaitlistPointsTypeSchema,
-});
+})
 
 export type WaitlistLeaderboardResponse = z.infer<
   typeof WaitlistLeaderboardResponseSchema
->;
+>
 
 // ============================================================================
 // Waitlist Referral Schemas
@@ -211,11 +211,11 @@ export const WaitlistReferralStatusSchema = z.enum([
   'pending',
   'completed',
   'expired',
-]);
+])
 
 export type WaitlistReferralStatus = z.infer<
   typeof WaitlistReferralStatusSchema
->;
+>
 
 /**
  * Schema for a waitlist referral record
@@ -228,19 +228,19 @@ export const WaitlistReferralRecordSchema = z.object({
   pointsAwarded: z.number().int().nonnegative().optional(),
   completedAt: z.date().nullable(),
   createdAt: z.date(),
-});
+})
 
 export type WaitlistReferralRecord = z.infer<
   typeof WaitlistReferralRecordSchema
->;
+>
 
 /**
  * Schema for validating a waitlist referral code
  */
 export const ValidateWaitlistReferralCodeSchema = z.object({
   referralCode: z.string().min(1, 'Referral code is required'),
-});
+})
 
 export type ValidateWaitlistReferralCodeInput = z.infer<
   typeof ValidateWaitlistReferralCodeSchema
->;
+>

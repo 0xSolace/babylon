@@ -1,11 +1,11 @@
-import { definePrompt } from '../define-prompt';
+import { definePrompt } from '../define-prompt'
 import {
   ANTI_REPETITION_RULES,
   CONTENT_REQUIREMENTS,
   FINAL_REMINDERS,
   IMPORTANT_RULES,
   WORLD_CONTEXT_HEADER,
-} from '../shared-sections';
+} from '../shared-sections'
 
 /**
  * Prompt for generating single company PR statements or announcements.
@@ -78,4 +78,4 @@ ${FINAL_REMINDERS}
 
 No other text.
 `.trim(),
-});
+})

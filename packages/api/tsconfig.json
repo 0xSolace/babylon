@@ -4,14 +4,13 @@
     "composite": false,
     "declaration": false,
     "declarationMap": false,
+    "jsx": "react-jsx",
     "baseUrl": ".",
     "paths": {
       "@babylon/shared": ["../shared/src/index.ts"],
       "@babylon/shared/*": ["../shared/src/*"],
       "@babylon/db": ["../db/src/index.ts"],
       "@babylon/db/*": ["../db/src/*"],
-      "@babylon/contracts": ["../contracts/src/index.ts"],
-      "@babylon/contracts/*": ["../contracts/src/*"],
       "@babylon/messaging": ["../messaging/src/index.ts"],
       "@babylon/messaging/*": ["../messaging/src/*"],
       "@babylon/auth": ["../auth/src/index.ts"],
@@ -20,7 +19,11 @@
       "@babylon/engine/*": ["../engine/src/*"],
       "@babylon/core": ["../core/markets/index.ts"],
       "@babylon/core/*": ["../core/*"],
-      "@babylon/api/storage": ["./src/storage/index.ts"]
+      "@babylon/api/storage": ["./src/storage/index.ts"],
+      "@babylon/training": ["../training/src/index.ts"],
+      "@babylon/training/*": ["../training/src/*"],
+      "@babylon/agents": ["../agents/src/index.ts"],
+      "@babylon/agents/*": ["../agents/src/*"]
     }
   },
   "include": ["src/**/*", "src/**/*.d.ts"],

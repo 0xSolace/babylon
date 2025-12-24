@@ -1,7 +1,7 @@
 /**
  * @babylon/auth
  *
- * Decentralized authentication for Babylon using TEE and MPC.
+ * Client-side authentication for Babylon using Jeju's decentralized auth.
  *
  * Features:
  * - Web2 login (email, Twitter, Discord, Farcaster)
@@ -13,7 +13,7 @@
  *
  * @example
  * ```tsx
- * import { JejuAuthProvider, useJejuAuth } from '@babylon/auth/client';
+ * import { JejuAuthProvider, useJejuAuth } from '@babylon/auth';
  *
  * function App() {
  *   return (
@@ -35,42 +35,94 @@
  * ```
  */
 
-// DID management
+// =============================================================================
+// React Components and Hooks (Client-side)
+// =============================================================================
+
+export { LoginButton } from './client/login-button'
+export { JejuAuthProvider, useJejuAuthContext } from './client/provider'
+export type { JejuAuthConfig } from './client/types'
+export { useJejuAuth } from './client/use-jeju-auth'
+export { useJejuWallet } from './client/use-jeju-wallet'
+
+// =============================================================================
+// OAuth types from @jejunetwork/oauth3
+// =============================================================================
+
+export type {
+  FarcasterCast,
+  FarcasterFrameContext,
+  FarcasterProfile,
+  FarcasterSigner,
+  OAuthConfig,
+  OAuthProfile,
+  OAuthState,
+  OAuthToken,
+} from '@jejunetwork/oauth3'
+
+// =============================================================================
+// DID utilities
+// =============================================================================
+
 export {
   createDID,
+  createDIDFromAddress,
   DIDManager,
-  DIDResolver,
+  type DIDManagerConfig,
+  didEquals,
+  extractAddressFromDid,
+  generateRandomDID,
+  getNetwork,
+  isLocalnet,
+  isMainnet,
+  isTestnet,
   parseDID,
   validateDID,
-} from './did/index';
-// MPC network
-export { createMPCClient, MPCClient, ThresholdSigner } from './mpc/index';
+} from './did/index'
+
+// =============================================================================
+// MPC network (browser-safe stubs for client)
+// =============================================================================
+
+export {
+  DEFAULT_MPC_CONFIG,
+  getMPCConfig,
+  getMPCCoordinator,
+  type KeyRotationParams,
+  type KeyRotationResult,
+  type KeyVersion,
+  MPCCoordinator,
+  type MPCCoordinatorConfig,
+  type MPCKeyGenParams,
+  type MPCKeyGenResult,
+  type MPCParty,
+  type MPCSignatureResult,
+  type MPCSignRequest,
+  type MPCSignSession,
+  resetMPCCoordinator,
+  type SignResult,
+  ThresholdSigner,
+  type ThresholdSignerConfig,
+} from './mpc/index'
+
 export type {
   KeyGenRequest,
   KeyGenResponse,
-  MPCClientConfig,
   SigningRequest,
   SigningResponse,
-} from './mpc/types';
+} from './mpc/types'
+
+// =============================================================================
+// OAuth providers
+// =============================================================================
+
 export type {
-  // SIWF types
-  FarcasterAuthConfig,
-  FarcasterSignInRequest,
-  FarcasterSignInResult,
-  // OAuth types
   OAuthCallbackResult,
   OAuthProvider,
   OAuthTokens,
   OAuthUserInfo,
-  // SIWE types
-  SIWEConfig,
-  SIWEMessage,
-  SIWEVerificationResult,
-  SIWFConfig,
-  SIWFMessage,
-  SIWFVerificationResult,
-} from './oauth/index';
-// OAuth providers (including SIWE/SIWF)
+} from './oauth/index'
+
 export {
   // SIWE (Sign-In with Ethereum - EIP-4361)
   createSIWEMessage,
@@ -78,17 +130,33 @@ export {
   createSIWFMessage,
   // OAuth2 providers
   DiscordOAuth,
+  DiscordProvider,
   FarcasterAuth,
+  type FarcasterAuthConfig,
+  type FarcasterSignInRequest,
+  type FarcasterSignInResult,
+  farcasterProvider,
   // PKCE utilities
   generatePKCE,
   PKCEUtils,
   SIWE,
+  type SIWEConfig,
+  type SIWEMessage,
+  type SIWEVerificationResult,
   SIWF,
+  type SIWFConfig,
+  type SIWFMessage,
+  type SIWFVerificationResult,
   TwitterOAuth,
+  TwitterProvider,
   verifySIWE,
   verifySIWF,
-} from './oauth/index';
+} from './oauth/index'
+
+// =============================================================================
 // OAuth3 (Jeju Decentralized Auth)
+// =============================================================================
+
 export {
   AuthProvider,
   type AuthResult,
@@ -101,16 +169,29 @@ export {
   type OAuth3Identity,
   type OAuth3Session,
   resetOAuth3Client,
-} from './oauth3/index';
-// Paymaster
-export { GasEstimator, TreasuryPaymaster } from './paymaster/index';
-export type { SponsorshipPolicy } from './paymaster/types';
+} from './oauth3/index'
+
+// =============================================================================
+// Paymaster (Gas sponsorship)
+// =============================================================================
+
+export { GasEstimator, TreasuryPaymaster } from './paymaster/index'
+export type { SponsorshipPolicy } from './paymaster/types'
+
+// =============================================================================
 // Recovery
+// =============================================================================
+
 export {
   KeyBackupManager,
   RecoveryManager,
   SocialRecovery,
-} from './recovery/index';
+} from './recovery/index'
+
+// =============================================================================
+// Validation schemas
+// =============================================================================
+
 export type {
   DiscordUserResponseInput,
   KeyBackupInput,
@@ -120,8 +201,8 @@ export type {
   SessionDataInput,
   SessionTokenDataInput,
   TwitterUserResponseInput,
-} from './schemas/index';
-// Validation schemas
+} from './schemas/index'
+
 export {
   AddressSchema,
   DIDSchema,
@@ -134,6 +215,10 @@ export {
   SessionDataSchema,
   SessionTokenDataSchema,
   TwitterUserResponseSchema,
-} from './schemas/index';
+} from './schemas/index'
+
+// =============================================================================
 // Core types
-export * from './types/index';
+// =============================================================================
+
+export * from './types/index'

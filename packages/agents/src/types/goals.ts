@@ -9,9 +9,9 @@
  * Target specification for a goal
  */
 export interface GoalTarget {
-  metric: string;
-  value: number;
-  unit?: string;
+  metric: string
+  value: number
+  unit?: string
 }
 
 /**
@@ -20,70 +20,70 @@ export interface GoalTarget {
  * Extends the database AgentGoal with typed target.
  */
 export interface AgentGoal {
-  id: string;
-  agentUserId: string;
-  type: string;
-  name: string;
-  description: string;
-  target?: GoalTarget;
-  priority: number;
-  status: string;
-  progress: number;
-  createdAt: Date;
-  updatedAt: Date;
-  completedAt?: Date | null;
+  id: string
+  agentUserId: string
+  type: string
+  name: string
+  description: string
+  target?: GoalTarget
+  priority: number
+  status: string
+  progress: number
+  createdAt: Date
+  updatedAt: Date
+  completedAt?: Date | null
 }
 
 /**
  * Agent directive types
  */
-export type DirectiveType = 'always' | 'never' | 'prefer' | 'avoid';
+export type DirectiveType = 'always' | 'never' | 'prefer' | 'avoid'
 
 /**
  * Agent directive - rules the agent must follow
  */
 export interface AgentDirective {
-  type: DirectiveType;
-  rule: string;
-  reason?: string;
+  type: DirectiveType
+  rule: string
+  reason?: string
 }
 
 /**
  * Trading constraints for the agent
  */
 export interface TradingConstraints {
-  maxPositionSize: number;
-  maxLeverage: number;
-  minBalance?: number;
-  allowedMarkets?: string[];
-  blockedMarkets?: string[];
+  maxPositionSize: number
+  maxLeverage: number
+  minBalance?: number
+  allowedMarkets?: string[]
+  blockedMarkets?: string[]
 }
 
 /**
  * Social constraints for the agent
  */
 export interface SocialConstraints {
-  maxPostsPerHour?: number;
-  maxCommentsPerHour?: number;
-  maxDMsPerHour?: number;
-  allowedTopics?: string[];
-  blockedTopics?: string[];
+  maxPostsPerHour?: number
+  maxCommentsPerHour?: number
+  maxDMsPerHour?: number
+  allowedTopics?: string[]
+  blockedTopics?: string[]
 }
 
 /**
  * General constraints for the agent
  */
 export interface GeneralConstraints {
-  maxActionsPerTick: number;
-  riskTolerance: 'low' | 'medium' | 'high';
-  cooldownMinutes?: number;
+  maxActionsPerTick: number
+  riskTolerance: 'low' | 'medium' | 'high'
+  cooldownMinutes?: number
 }
 
 /**
  * Agent constraints - limitations on agent behavior
  */
 export interface AgentConstraints {
-  general: GeneralConstraints;
-  trading: TradingConstraints;
-  social?: SocialConstraints;
+  general: GeneralConstraints
+  trading: TradingConstraints
+  social?: SocialConstraints
 }

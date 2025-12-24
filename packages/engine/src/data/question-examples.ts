@@ -120,10 +120,10 @@ Will the "Metaverse" rebranding to "Spatial Web" be adopted by major platforms b
 Will an AI win a major international art competition by {resolutionDate}?
 Will a VR experience win an Academy Award or Emmy by {resolutionDate}?
 Will a celebrity announce they're "going fully digital" and living in VR by {resolutionDate}?
-Will a major music festival be held entirely in virtual reality by {resolutionDate}?`;
+Will a major music festival be held entirely in virtual reality by {resolutionDate}?`
 
 export function getQuestionExamples(): string[] {
   return questionExamples
     .split('\n')
-    .filter((line) => line.trim().length > 0 && !line.startsWith('#'));
+    .filter((line) => line.trim().length > 0 && !line.startsWith('#'))
 }

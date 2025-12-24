@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * PostHog identifier component for identifying users to PostHog analytics.
  *
@@ -15,21 +13,21 @@
  *
  * @returns null (does not render anything)
  */
-import { useEffect, useRef } from 'react';
-import { useAuth } from '@/hooks/useAuth';
-import { posthog } from '@/lib/posthog';
+import { useEffect, useRef } from 'react'
+import { useAuth } from '@/hooks/useAuth'
+import { posthog } from '@/lib/posthog'
 
 export function PostHogIdentifier() {
-  const { user, authenticated } = useAuth();
-  const identifiedUserId = useRef<string | null>(null);
+  const { user, authenticated } = useAuth()
+  const identifiedUserId = useRef<string | null>(null)
 
   useEffect(() => {
-    if (!posthog || typeof window === 'undefined') return;
+    if (!posthog || typeof window === 'undefined') return
 
     // Identify user when authenticated
     if (authenticated && user?.id && user.id !== identifiedUserId.current) {
       if (!user) {
-        throw new Error('User is required when authenticated');
+        throw new Error('User is required when authenticated')
       }
       const properties: Record<string, string | number | boolean | null> = {
         hasProfileImage: Boolean(user.profileImageUrl),
@@ -39,62 +37,62 @@ export function PostHogIdentifier() {
         hasFarcaster: user.hasFarcaster ?? false,
         hasTwitter: user.hasTwitter ?? false,
         authenticated: true,
-      };
+      }
 
       if (user.username) {
-        properties.username = user.username;
+        properties.username = user.username
       }
       if (user.displayName) {
-        properties.displayName = user.displayName;
+        properties.displayName = user.displayName
       }
       if (user.walletAddress) {
-        properties.walletAddress = user.walletAddress;
+        properties.walletAddress = user.walletAddress
       }
       if (user.farcasterUsername) {
-        properties.farcasterUsername = user.farcasterUsername;
+        properties.farcasterUsername = user.farcasterUsername
       }
       if (user.twitterUsername) {
-        properties.twitterUsername = user.twitterUsername;
+        properties.twitterUsername = user.twitterUsername
       }
       if (user.reputationPoints !== undefined) {
-        properties.reputationPoints = user.reputationPoints;
+        properties.reputationPoints = user.reputationPoints
       }
       if (user.createdAt) {
-        properties.createdAt = user.createdAt;
+        properties.createdAt = user.createdAt
       }
 
-      posthog.identify(user.id, properties);
-      identifiedUserId.current = user.id;
+      posthog.identify(user.id, properties)
+      identifiedUserId.current = user.id
 
       // Set user properties (people API is optional and may not exist)
       const posthogWithPeople = posthog as typeof posthog & {
         people?: {
-          set: (properties: Record<string, string | boolean>) => void;
-        };
-      };
+          set: (properties: Record<string, string | boolean>) => void
+        }
+      }
       if (
         posthogWithPeople.people &&
         typeof posthogWithPeople.people.set === 'function'
       ) {
         const peopleProperties: Record<string, string | boolean> = {
           authenticated: true,
-        };
+        }
         if (user.username) {
-          peopleProperties.username = user.username;
+          peopleProperties.username = user.username
         }
         if (user.displayName) {
-          peopleProperties.displayName = user.displayName;
+          peopleProperties.displayName = user.displayName
         }
-        posthogWithPeople.people.set(peopleProperties);
+        posthogWithPeople.people.set(peopleProperties)
       }
     }
 
     // Reset on logout
     if (!authenticated && identifiedUserId.current) {
-      posthog.reset();
-      identifiedUserId.current = null;
+      posthog.reset()
+      identifiedUserId.current = null
     }
-  }, [authenticated, user]);
+  }, [authenticated, user])
 
-  return null;
+  return null
 }

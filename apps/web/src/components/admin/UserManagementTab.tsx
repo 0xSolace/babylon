@@ -1,20 +1,18 @@
-'use client';
-
-import { type AdminUser, AdminUserSchema, cn } from '@babylon/shared';
+import { type AdminUser, AdminUserSchema, cn } from '@babylon/shared'
 
 // Extended AdminUser type with moderation metrics
 type AdminUserWithModeration = AdminUser & {
   _moderation?: {
-    reportsReceived: number;
-    blocksReceived: number;
-    mutesReceived: number;
-    badUserScore: number;
-    reportRatio: number;
-    blockRatio: number;
-  };
-};
+    reportsReceived: number
+    blocksReceived: number
+    mutesReceived: number
+    badUserScore: number
+    reportRatio: number
+    blockRatio: number
+  }
+}
 
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Ban,
   CheckCircle,
@@ -24,20 +22,20 @@ import {
   Shield,
   Users,
   VolumeX,
-} from 'lucide-react';
-import { useState } from 'react';
-import { toast } from 'sonner';
-import { z } from 'zod';
-import { AdminSendMoneyModal } from '@/components/admin/AdminSendMoneyModal';
-import { BlockUserModal } from '@/components/moderation/BlockUserModal';
-import { MuteUserModal } from '@/components/moderation/MuteUserModal';
-import { Avatar } from '@/components/shared/Avatar';
-import { Skeleton } from '@/components/shared/Skeleton';
+} from 'lucide-react'
+import { useState } from 'react'
+import { toast } from 'sonner'
+import { z } from 'zod'
+import { AdminSendMoneyModal } from '@/components/admin/AdminSendMoneyModal'
+import { BlockUserModal } from '@/components/moderation/BlockUserModal'
+import { MuteUserModal } from '@/components/moderation/MuteUserModal'
+import { Avatar } from '@/components/shared/Avatar'
+import { Skeleton } from '@/components/shared/Skeleton'
 
 /**
  * Filter type for user management tab.
  */
-type FilterType = 'all' | 'actors' | 'users' | 'banned' | 'admins';
+type FilterType = 'all' | 'actors' | 'users' | 'banned' | 'admins'
 /**
  * Sort by type for user management tab.
  */
@@ -51,7 +49,24 @@ type SortByType =
   | 'mutes_received'
   | 'report_ratio'
   | 'block_ratio'
-  | 'bad_user_score';
+  | 'bad_user_score'
+
+const SORT_BY_VALUES: SortByType[] = [
+  'created',
+  'balance',
+  'reputation',
+  'username',
+  'reports_received',
+  'blocks_received',
+  'mutes_received',
+  'report_ratio',
+  'block_ratio',
+  'bad_user_score',
+]
+
+function isSortByType(value: string): value is SortByType {
+  return SORT_BY_VALUES.includes(value as SortByType)
+}
 
 /**
  * User management tab component for managing users and actors.
@@ -76,19 +91,19 @@ type SortByType =
  * @returns User management tab element
  */
 export function UserManagementTab() {
-  const queryClient = useQueryClient();
-  const [filter, setFilter] = useState<FilterType>('all');
-  const [sortBy, setSortBy] = useState<SortByType>('created');
-  const [searchQuery, setSearchQuery] = useState('');
+  const queryClient = useQueryClient()
+  const [filter, setFilter] = useState<FilterType>('all')
+  const [sortBy, setSortBy] = useState<SortByType>('created')
+  const [searchQuery, setSearchQuery] = useState('')
   const [selectedUser, setSelectedUser] =
-    useState<AdminUserWithModeration | null>(null);
-  const [showBanModal, setShowBanModal] = useState(false);
-  const [showSendMoneyModal, setShowSendMoneyModal] = useState(false);
-  const [showMuteModal, setShowMuteModal] = useState(false);
-  const [showBlockModal, setShowBlockModal] = useState(false);
-  const [banReason, setBanReason] = useState('');
-  const [isScammer, setIsScammer] = useState(false);
-  const [isCSAM, setIsCSAM] = useState(false);
+    useState<AdminUserWithModeration | null>(null)
+  const [showBanModal, setShowBanModal] = useState(false)
+  const [showSendMoneyModal, setShowSendMoneyModal] = useState(false)
+  const [showMuteModal, setShowMuteModal] = useState(false)
+  const [showBlockModal, setShowBlockModal] = useState(false)
+  const [banReason, setBanReason] = useState('')
+  const [isScammer, setIsScammer] = useState(false)
+  const [isCSAM, setIsCSAM] = useState(false)
 
   const {
     data: users = [],
@@ -103,19 +118,20 @@ export function UserManagementTab() {
         filter,
         sortBy,
         sortOrder: 'desc',
-      });
-      if (searchQuery) params.set('search', searchQuery);
+      })
+      if (searchQuery) params.set('search', searchQuery)
 
-      const response = await fetch(`/api/admin/users?${params}`);
-      if (!response.ok) throw new Error('Failed to fetch users');
-      const data = await response.json();
-      const validation = z.array(AdminUserSchema).safeParse(data.users);
+      const response = await fetch(`/api/admin/users?${params}`)
+      if (!response.ok) throw new Error('Failed to fetch users')
+      const data = await response.json()
+      const validation = z.array(AdminUserSchema).safeParse(data.users)
       if (!validation.success) {
-        throw new Error('Invalid user data structure');
+        throw new Error('Invalid user data structure')
       }
-      return validation.data as AdminUserWithModeration[];
+      // Zod validates the base structure, extend with moderation data
+      return validation.data
     },
-  });
+  })
 
   const banMutation = useMutation({
     mutationFn: async ({
@@ -125,11 +141,11 @@ export function UserManagementTab() {
       scammer,
       csam,
     }: {
-      userId: string;
-      action: 'ban' | 'unban';
-      reason?: string;
-      scammer?: boolean;
-      csam?: boolean;
+      userId: string
+      action: 'ban' | 'unban'
+      reason?: string
+      scammer?: boolean
+      csam?: boolean
     }) => {
       const response = await fetch(`/api/admin/users/${userId}/ban`, {
         method: 'POST',
@@ -140,42 +156,42 @@ export function UserManagementTab() {
           isScammer: action === 'ban' ? scammer : false,
           isCSAM: action === 'ban' ? csam : false,
         }),
-      });
+      })
 
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'Failed to update user');
+        const error = await response.json()
+        throw new Error(error.message || 'Failed to update user')
       }
 
-      return response.json();
+      return response.json()
     },
     onSuccess: (_, variables) => {
       toast.success(
         variables.action === 'ban'
           ? 'User banned successfully'
-          : 'User unbanned successfully'
-      );
-      setShowBanModal(false);
-      setBanReason('');
-      setIsScammer(false);
-      setIsCSAM(false);
-      setSelectedUser(null);
-      queryClient.invalidateQueries({ queryKey: ['admin', 'users'] });
+          : 'User unbanned successfully',
+      )
+      setShowBanModal(false)
+      setBanReason('')
+      setIsScammer(false)
+      setIsCSAM(false)
+      setSelectedUser(null)
+      queryClient.invalidateQueries({ queryKey: ['admin', 'users'] })
     },
     onError: (error) => {
       toast.error(
-        error instanceof Error ? error.message : 'Failed to update user'
-      );
+        error instanceof Error ? error.message : 'Failed to update user',
+      )
     },
-  });
+  })
 
   const handleBanUser = (
     user: AdminUserWithModeration,
-    action: 'ban' | 'unban'
+    action: 'ban' | 'unban',
   ) => {
     if (action === 'ban' && !banReason.trim()) {
-      toast.error('Please provide a reason for banning');
-      return;
+      toast.error('Please provide a reason for banning')
+      return
     }
 
     banMutation.mutate({
@@ -184,26 +200,26 @@ export function UserManagementTab() {
       reason: banReason,
       scammer: isScammer,
       csam: isCSAM,
-    });
-  };
+    })
+  }
 
   const formatCurrency = (value: string) => {
-    const num = parseFloat(value);
-    if (num >= 1000000) return `$${(num / 1000000).toFixed(2)}M`;
-    if (num >= 1000) return `$${(num / 1000).toFixed(2)}K`;
-    return `$${num.toFixed(2)}`;
-  };
+    const num = parseFloat(value)
+    if (num >= 1000000) return `$${(num / 1000000).toFixed(2)}M`
+    if (num >= 1000) return `$${(num / 1000).toFixed(2)}K`
+    return `$${num.toFixed(2)}`
+  }
 
   const formatDate = (date: string) => {
     return new Date(date).toLocaleDateString('en-US', {
       month: 'short',
       day: 'numeric',
       year: 'numeric',
-    });
-  };
+    })
+  }
 
   const UserRow = ({ user }: { user: AdminUserWithModeration }) => {
-    const displayName = user.displayName || user.username || 'Anonymous';
+    const displayName = user.displayName || user.username || 'Anonymous'
 
     return (
       <div className="rounded-2xl border border-border bg-card p-4 transition-colors hover:border-primary/50">
@@ -263,7 +279,7 @@ export function UserManagementTab() {
                     'font-bold',
                     parseFloat(user.lifetimePnL) >= 0
                       ? 'text-green-600'
-                      : 'text-red-600'
+                      : 'text-red-600',
                   )}
                 >
                   {formatCurrency(user.lifetimePnL)}
@@ -326,7 +342,7 @@ export function UserManagementTab() {
                             ? 'text-red-500'
                             : user._moderation.badUserScore > 5
                               ? 'text-orange-500'
-                              : 'text-yellow-600'
+                              : 'text-yellow-600',
                         )}
                       >
                         {user._moderation.badUserScore.toFixed(1)}
@@ -374,9 +390,10 @@ export function UserManagementTab() {
           {!user.isActor && (
             <div className="flex flex-col gap-2">
               <button
+                type="button"
                 onClick={() => {
-                  setSelectedUser(user);
-                  setShowSendMoneyModal(true);
+                  setSelectedUser(user)
+                  setShowSendMoneyModal(true)
                 }}
                 className="flex items-center gap-1 rounded bg-green-500/20 px-3 py-1.5 font-medium text-green-500 text-sm transition-colors hover:bg-green-500/30"
                 title="Send money via escrow"
@@ -385,9 +402,10 @@ export function UserManagementTab() {
                 Cash
               </button>
               <button
+                type="button"
                 onClick={() => {
-                  setSelectedUser(user);
-                  setShowMuteModal(true);
+                  setSelectedUser(user)
+                  setShowMuteModal(true)
                 }}
                 className="flex items-center gap-1 rounded bg-blue-500/20 px-3 py-1.5 font-medium text-blue-500 text-sm transition-colors hover:bg-blue-500/30"
                 title="Mute user"
@@ -396,9 +414,10 @@ export function UserManagementTab() {
                 Mute
               </button>
               <button
+                type="button"
                 onClick={() => {
-                  setSelectedUser(user);
-                  setShowBlockModal(true);
+                  setSelectedUser(user)
+                  setShowBlockModal(true)
                 }}
                 className="flex items-center gap-1 rounded bg-orange-500/20 px-3 py-1.5 font-medium text-orange-500 text-sm transition-colors hover:bg-orange-500/30"
                 title="Block user"
@@ -408,6 +427,7 @@ export function UserManagementTab() {
               </button>
               {user.isBanned ? (
                 <button
+                  type="button"
                   onClick={() => handleBanUser(user, 'unban')}
                   disabled={banMutation.isPending}
                   className="flex items-center gap-1 rounded bg-green-500/20 px-3 py-1.5 font-medium text-green-500 text-sm transition-colors hover:bg-green-500/30 disabled:opacity-50"
@@ -417,9 +437,10 @@ export function UserManagementTab() {
                 </button>
               ) : (
                 <button
+                  type="button"
                   onClick={() => {
-                    setSelectedUser(user);
-                    setShowBanModal(true);
+                    setSelectedUser(user)
+                    setShowBanModal(true)
                   }}
                   disabled={banMutation.isPending}
                   className="flex items-center gap-1 rounded bg-red-500/20 px-3 py-1.5 font-medium text-red-500 text-sm transition-colors hover:bg-red-500/30 disabled:opacity-50"
@@ -432,8 +453,8 @@ export function UserManagementTab() {
           )}
         </div>
       </div>
-    );
-  };
+    )
+  }
 
   if (isLoading) {
     return (
@@ -444,7 +465,7 @@ export function UserManagementTab() {
           <Skeleton className="h-24 w-full" />
         </div>
       </div>
-    );
+    )
   }
 
   return (
@@ -469,18 +490,19 @@ export function UserManagementTab() {
             {(['all', 'users', 'actors', 'banned', 'admins'] as const).map(
               (f) => (
                 <button
+                  type="button"
                   key={f}
                   onClick={() => setFilter(f)}
                   className={cn(
                     'rounded px-3 py-1.5 font-medium text-sm transition-colors',
                     filter === f
                       ? 'bg-primary text-primary-foreground'
-                      : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                      : 'bg-muted text-muted-foreground hover:bg-muted/80',
                   )}
                 >
                   {f.charAt(0).toUpperCase() + f.slice(1)}
                 </button>
-              )
+              ),
             )}
           </div>
 
@@ -488,7 +510,12 @@ export function UserManagementTab() {
             <span className="text-muted-foreground text-sm">Sort by:</span>
             <select
               value={sortBy}
-              onChange={(e) => setSortBy(e.target.value as SortByType)}
+              onChange={(e) => {
+                const value = e.target.value
+                if (isSortByType(value)) {
+                  setSortBy(value)
+                }
+              }}
               className="rounded-lg border border-border bg-card px-3 py-1.5 text-sm focus:border-border focus:outline-none"
             >
               <optgroup label="General">
@@ -509,6 +536,7 @@ export function UserManagementTab() {
           </div>
 
           <button
+            type="button"
             onClick={() => refetch()}
             disabled={isFetching}
             className="ml-auto flex items-center gap-2 rounded bg-muted px-3 py-1.5 font-medium text-sm transition-colors hover:bg-muted/80 disabled:opacity-50"
@@ -540,8 +568,8 @@ export function UserManagementTab() {
         <AdminSendMoneyModal
           isOpen={showSendMoneyModal}
           onClose={() => {
-            setShowSendMoneyModal(false);
-            setSelectedUser(null);
+            setShowSendMoneyModal(false)
+            setSelectedUser(null)
           }}
           recipientId={selectedUser.id}
           recipientName={
@@ -550,7 +578,7 @@ export function UserManagementTab() {
           recipientUsername={selectedUser.username}
           recipientWalletAddress={selectedUser.walletAddress}
           onSuccess={() => {
-            queryClient.invalidateQueries({ queryKey: ['admin', 'users'] });
+            queryClient.invalidateQueries({ queryKey: ['admin', 'users'] })
           }}
         />
       )}
@@ -560,15 +588,15 @@ export function UserManagementTab() {
         <BlockUserModal
           isOpen={showBlockModal}
           onClose={() => {
-            setShowBlockModal(false);
-            setSelectedUser(null);
+            setShowBlockModal(false)
+            setSelectedUser(null)
           }}
           targetUserId={selectedUser.id}
           targetDisplayName={
             selectedUser.displayName || selectedUser.username || 'User'
           }
           onSuccess={() => {
-            queryClient.invalidateQueries({ queryKey: ['admin', 'users'] });
+            queryClient.invalidateQueries({ queryKey: ['admin', 'users'] })
           }}
         />
       )}
@@ -578,8 +606,8 @@ export function UserManagementTab() {
         <MuteUserModal
           isOpen={showMuteModal}
           onClose={() => {
-            setShowMuteModal(false);
-            setSelectedUser(null);
+            setShowMuteModal(false)
+            setSelectedUser(null)
           }}
           targetUserId={selectedUser.id}
           targetDisplayName={
@@ -588,9 +616,9 @@ export function UserManagementTab() {
           isNPC={selectedUser.isActor}
           onSuccess={() => {
             toast.success(
-              `Muted ${selectedUser.displayName ?? selectedUser.username}`
-            );
-            void refetch();
+              `Muted ${selectedUser.displayName ?? selectedUser.username}`,
+            )
+            void refetch()
           }}
         />
       )}
@@ -609,10 +637,14 @@ export function UserManagementTab() {
             </p>
 
             <div className="mb-4">
-              <label className="mb-2 block font-medium text-sm">
+              <label
+                htmlFor="ban-reason"
+                className="mb-2 block font-medium text-sm"
+              >
                 Reason for ban <span className="text-red-500">*</span>
               </label>
               <textarea
+                id="ban-reason"
                 value={banReason}
                 onChange={(e) => setBanReason(e.target.value)}
                 placeholder="Explain why this user is being banned..."
@@ -664,12 +696,13 @@ export function UserManagementTab() {
 
             <div className="flex gap-3">
               <button
+                type="button"
                 onClick={() => {
-                  setShowBanModal(false);
-                  setBanReason('');
-                  setIsScammer(false);
-                  setIsCSAM(false);
-                  setSelectedUser(null);
+                  setShowBanModal(false)
+                  setBanReason('')
+                  setIsScammer(false)
+                  setIsCSAM(false)
+                  setSelectedUser(null)
                 }}
                 disabled={banMutation.isPending}
                 className="flex-1 rounded-lg bg-muted px-4 py-2 text-foreground transition-colors hover:bg-muted/80 disabled:opacity-50"
@@ -677,6 +710,7 @@ export function UserManagementTab() {
                 Cancel
               </button>
               <button
+                type="button"
                 onClick={() => handleBanUser(selectedUser, 'ban')}
                 disabled={banMutation.isPending || !banReason.trim()}
                 className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-red-500 px-4 py-2 text-primary-foreground transition-colors hover:bg-red-600 disabled:opacity-50"
@@ -695,5 +729,5 @@ export function UserManagementTab() {
         </div>
       )}
     </div>
-  );
+  )
 }

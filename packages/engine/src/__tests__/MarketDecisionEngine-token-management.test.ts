@@ -43,11 +43,11 @@
  * @see {@link MarketContextService} - Context building tested
  */
 
-import { beforeEach, describe, expect, mock, test } from 'bun:test';
+import { beforeEach, describe, expect, mock, test } from 'bun:test'
 
 // Create chainable mock for CQL query builder API
 const createChainableMock = (
-  returnValue: Array<Record<string, unknown>> = []
+  returnValue: Array<Record<string, unknown>> = [],
 ) => {
   const chainable = {
     from: () => chainable,
@@ -59,17 +59,18 @@ const createChainableMock = (
     innerJoin: () => chainable,
     groupBy: () => chainable,
     having: () => chainable,
+    // biome-ignore lint/suspicious/noThenProperty: Mock object for testing, needs then for promise-like behavior
     then: (resolve: (value: Array<Record<string, unknown>>) => void) =>
       resolve(returnValue),
     [Symbol.toStringTag]: 'Promise',
-  };
+  }
   // Make it awaitable
   Object.defineProperty(chainable, 'then', {
     value: (resolve: (value: Array<Record<string, unknown>>) => void) =>
       Promise.resolve(returnValue).then(resolve),
-  });
-  return chainable;
-};
+  })
+  return chainable
+}
 
 // Mock CQL database client BEFORE importing MarketDecisionEngine
 const mockDb = {
@@ -101,11 +102,11 @@ const mockDb = {
   exec: mock(async () => ({ rowsAffected: 0 })),
   $queryRaw: mock(async () => []),
   $executeRaw: mock(async () => 0),
-};
+}
 
-// Mock table objects (for Drizzle schema references)
-const mockTable = {};
-const mockOperator = () => ({});
+// Mock table objects (for CQL schema references)
+const mockTable = {}
+const mockOperator = () => ({})
 
 mock.module('@babylon/db', () => ({
   db: mockDb,
@@ -118,7 +119,7 @@ mock.module('@babylon/db', () => ({
   worldFacts: mockTable,
   users: mockTable,
   perpPositions: mockTable,
-  // Drizzle operators (re-exported from CQL)
+  // CQL operators
   eq: mockOperator,
   and: mockOperator,
   or: mockOperator,
@@ -137,120 +138,145 @@ mock.module('@babylon/db', () => ({
   initializeDB: mock(async () => {}),
   resetDB: mock(() => {}),
   getDB: mock(() => mockDb),
-}));
+}))
 
-import type { BabylonLLMClient } from '../llm/openai-client';
-import { MarketDecisionEngine } from '../MarketDecisionEngine';
-import { MarketContextService } from '../services/market-context-service';
-import type { NPCMarketContext } from '../types/market-context';
+import {
+  MarketDecisionEngine,
+  type MarketDecisionLLMClient,
+} from '../MarketDecisionEngine'
+import { MarketContextService } from '../services/market-context-service'
+import type { NPCMarketContext } from '../types/market-context'
 
 interface JSONSchemaProperty {
-  type?: 'string' | 'number' | 'boolean' | 'object' | 'array';
-  description?: string;
-  items?: JSONSchemaProperty;
-  properties?: Record<string, JSONSchemaProperty>;
+  type?: 'string' | 'number' | 'boolean' | 'object' | 'array'
+  description?: string
+  items?: JSONSchemaProperty
+  properties?: Record<string, JSONSchemaProperty>
 }
 
 interface JSONSchema {
-  required?: string[];
-  properties?: Record<string, JSONSchemaProperty>;
+  required?: string[]
+  properties?: Record<string, JSONSchemaProperty>
 }
 
 interface GenerateJSONOptions {
-  model?: string;
-  temperature?: number;
-  maxTokens?: number;
-  format?: 'xml' | 'json';
+  model?: string
+  temperature?: number
+  maxTokens?: number
+  format?: 'xml' | 'json'
 }
 
-// Type for mock responses - supports any JSON-serializable value
-type MockResponse = Record<
-  string,
-  JSONSchemaProperty | string | number | boolean | null | object | Array<object>
->;
+// Type for mock responses - supports any JSON-serializable value including arrays
+type MockResponse =
+  | Record<
+      string,
+      | JSONSchemaProperty
+      | string
+      | number
+      | boolean
+      | null
+      | object
+      | Array<object>
+    >
+  | Array<Record<string, unknown>>
+  | null
 
 // Mock LLM client for testing - doesn't require API keys
 class MockLLMClient {
-  private mockResponses: MockResponse[] = [];
-  private callCount = 0;
-
-  constructor() {
-    // No super() call - this is a standalone mock that doesn't extend BabylonLLMClient
-  }
+  private mockResponses: MockResponse[] = []
+  private callCount = 0
 
   getProvider(): string {
-    return 'groq';
+    return 'groq'
+  }
+
+  getDefaultModel(): string {
+    return 'llama3-70b'
+  }
+
+  getStats(): { provider: string; model: string; configured: boolean } {
+    return {
+      provider: 'groq',
+      model: this.getDefaultModel(),
+      configured: true,
+    }
   }
 
   setMockResponse<T extends MockResponse>(response: T): void {
-    this.mockResponses.push(response);
+    this.mockResponses.push(response)
   }
 
   async generateJSON<T>(
     _prompt: string,
     _schema?: JSONSchema,
-    _options?: GenerateJSONOptions
+    _options?: GenerateJSONOptions,
   ): Promise<T> {
-    const response = this.mockResponses[this.callCount] ?? ([] as MockResponse);
-    this.callCount++;
-    return response as T;
+    const response =
+      this.mockResponses[this.callCount] ?? ([] as unknown as MockResponse)
+    this.callCount++
+    return response as T
   }
 
   getCallCount(): number {
-    return this.callCount;
+    return this.callCount
   }
 
   resetCallCount() {
-    this.callCount = 0;
-    this.mockResponses = [];
+    this.callCount = 0
+    this.mockResponses = []
   }
 }
 
 /**
- * Partial interface for MockLLMClient that matches BabylonLLMClient's required methods
+ * Extended interface for MockLLMClient that includes test-only methods.
+ * Extends MarketDecisionLLMClient (the interface the engine actually needs).
  */
-interface MockLLMClientInterface
-  extends Pick<BabylonLLMClient, 'getProvider' | 'generateJSON'> {
-  setMockResponse<T extends MockResponse>(response: T): void;
-  getCallCount(): number;
-  resetCallCount(): void;
+interface MockLLMClientWithTestMethods extends MarketDecisionLLMClient {
+  setMockResponse<T extends MockResponse>(response: T): void
+  getCallCount(): number
+  resetCallCount(): void
+  getDefaultModel(): string
+  getStats(): { provider: string; model: string; configured: boolean }
 }
 
-// Type assertion to make MockLLMClient compatible with BabylonLLMClient interface
-// Returns both the mock instance (for test methods) and the LLM client (for engine)
+/**
+ * Creates a mock LLM client for testing.
+ * Returns both the mock instance (for test methods) and the LLM client (for engine).
+ * The client implements MarketDecisionLLMClient which MarketDecisionEngine accepts.
+ */
 const createMockLLMClient = (): {
-  mock: MockLLMClient;
-  client: BabylonLLMClient;
+  mock: MockLLMClientWithTestMethods
+  client: MarketDecisionLLMClient
 } => {
-  const mockInstance = new MockLLMClient();
-  // Cast via the partial interface to ensure type safety
-  const mockAsInterface: MockLLMClientInterface = mockInstance;
+  const mockInstance = new MockLLMClient()
   return {
     mock: mockInstance,
-    client: mockAsInterface as BabylonLLMClient,
-  };
-};
+    client: mockInstance,
+  }
+}
 
 // Mock context service
 class MockContextService extends MarketContextService {
-  private mockNPCs: NPCMarketContext[] = [];
+  private mockNPCs: NPCMarketContext[] = []
 
   setMockNPCs(npcs: NPCMarketContext[]) {
-    this.mockNPCs = npcs;
+    this.mockNPCs = npcs
   }
 
   async buildContextForAllNPCs(): Promise<Map<string, NPCMarketContext>> {
-    const map = new Map<string, NPCMarketContext>();
-    this.mockNPCs.forEach((npc) => map.set(npc.npcId, npc));
-    return map;
+    const map = new Map<string, NPCMarketContext>()
+    this.mockNPCs.forEach((npc) => {
+      map.set(npc.npcId, npc)
+    })
+    return map
   }
 
   async buildContextForNPC(npcId: string): Promise<NPCMarketContext> {
-    const npc = this.mockNPCs.find((n) => n.npcId === npcId);
+    const npc = this.mockNPCs.find((n) => n.npcId === npcId)
     if (!npc) {
-      throw new Error(`NPC ${npcId} not found`);
+      throw new Error(`NPC ${npcId} not found`)
     }
-    return npc;
+    return npc
   }
 }
 
@@ -299,50 +325,50 @@ function createMockNPC(id: string, name: string): NPCMarketContext {
       },
     ],
     currentPositions: [],
-  };
+  }
 }
 
 describe('MarketDecisionEngine - Token Management', () => {
-  let mockLLM: BabylonLLMClient;
-  let mockLLMInstance: MockLLMClient;
-  let mockContext: MockContextService;
+  let mockLLM: MarketDecisionLLMClient
+  let mockLLMInstance: MockLLMClientWithTestMethods
+  let mockContext: MockContextService
 
   beforeEach(() => {
-    const mockClient = createMockLLMClient();
-    mockLLM = mockClient.client;
-    mockLLMInstance = mockClient.mock;
-    mockContext = new MockContextService();
-  });
+    const mockClient = createMockLLMClient()
+    mockLLM = mockClient.client
+    mockLLMInstance = mockClient.mock
+    mockContext = new MockContextService()
+  })
 
   describe('Initialization', () => {
     test('should initialize with default model and token limits', () => {
-      const engine = new MarketDecisionEngine(mockLLM, mockContext);
-      expect(engine).toBeDefined();
-    });
+      const engine = new MarketDecisionEngine(mockLLM, mockContext)
+      expect(engine).toBeDefined()
+    })
 
     test('should accept custom model configuration', () => {
       const engine = new MarketDecisionEngine(mockLLM, mockContext, {
         model: 'gpt-5.1',
         maxOutputTokens: 4000,
-      });
+      })
 
-      expect(engine).toBeDefined();
-    });
+      expect(engine).toBeDefined()
+    })
 
     test('should use qwen/qwen3-32b by default', () => {
-      const engine = new MarketDecisionEngine(mockLLM, mockContext);
-      expect(engine).toBeDefined();
-    });
-  });
+      const engine = new MarketDecisionEngine(mockLLM, mockContext)
+      expect(engine).toBeDefined()
+    })
+  })
 
   describe('Batch Size Calculation', () => {
     test('should calculate correct batch size for small NPC count', async () => {
       // With Groq provider, batch size is limited to 4 NPCs for output token limits
       // For 10 NPCs: ceil(10/4) = 3 batches
       const npcs = Array.from({ length: 10 }, (_, i) =>
-        createMockNPC(`npc-${i}`, `NPC ${i}`)
-      );
-      mockContext.setMockNPCs(npcs);
+        createMockNPC(`npc-${i}`, `NPC ${i}`),
+      )
+      mockContext.setMockNPCs(npcs)
 
       // Mock response - need responses for each batch
       const mockDecisions = npcs.map((npc) => ({
@@ -354,24 +380,24 @@ describe('MarketDecisionEngine - Token Management', () => {
         confidence: 1,
         reasoning: 'Holding',
         timestamp: new Date().toISOString(),
-      }));
-      mockLLMInstance.setMockResponse(mockDecisions);
+      }))
+      mockLLMInstance.setMockResponse(mockDecisions)
 
-      const engine = new MarketDecisionEngine(mockLLM, mockContext);
-      const decisions = await engine.generateBatchDecisions();
+      const engine = new MarketDecisionEngine(mockLLM, mockContext)
+      const decisions = await engine.generateBatchDecisions()
 
-      expect(decisions.length).toBe(10);
+      expect(decisions.length).toBe(10)
       // Groq batches 4 NPCs at a time: 10 NPCs = 3 batches
-      expect(mockLLMInstance.getCallCount()).toBe(3);
-    });
+      expect(mockLLMInstance.getCallCount()).toBe(3)
+    })
 
     test('should split large NPC count into multiple batches', async () => {
       // Create 100 NPCs (with Groq: 4 NPCs per batch = 25 batches)
       // Groq output token limit requires smaller batches
       const npcs = Array.from({ length: 100 }, (_, i) =>
-        createMockNPC(`npc-${i}`, `NPC ${i}`)
-      );
-      mockContext.setMockNPCs(npcs);
+        createMockNPC(`npc-${i}`, `NPC ${i}`),
+      )
+      mockContext.setMockNPCs(npcs)
 
       // Mock responses for each batch (4 NPCs per batch for Groq)
       const createBatch = (start: number, count: number) =>
@@ -384,25 +410,25 @@ describe('MarketDecisionEngine - Token Management', () => {
           confidence: 1,
           reasoning: 'Holding',
           timestamp: new Date().toISOString(),
-        }));
+        }))
 
       // Set up mock responses for all 25 batches
       for (let i = 0; i < 25; i++) {
-        mockLLMInstance.setMockResponse(createBatch(i * 4, 4));
+        mockLLMInstance.setMockResponse(createBatch(i * 4, 4))
       }
 
-      const engine = new MarketDecisionEngine(mockLLM, mockContext);
-      const decisions = await engine.generateBatchDecisions();
+      const engine = new MarketDecisionEngine(mockLLM, mockContext)
+      const decisions = await engine.generateBatchDecisions()
 
-      expect(decisions.length).toBe(100);
-      expect(mockLLMInstance.getCallCount()).toBe(25); // 25 batches of 4 NPCs each
-    });
-  });
+      expect(decisions.length).toBe(100)
+      expect(mockLLMInstance.getCallCount()).toBe(25) // 25 batches of 4 NPCs each
+    })
+  })
 
   describe('Response Format Handling', () => {
     test('should handle array response format', async () => {
-      const npcs = [createMockNPC('npc1', 'NPC 1')];
-      mockContext.setMockNPCs(npcs);
+      const npcs = [createMockNPC('npc1', 'NPC 1')]
+      mockContext.setMockNPCs(npcs)
 
       const mockResponse = [
         {
@@ -415,19 +441,19 @@ describe('MarketDecisionEngine - Token Management', () => {
           reasoning: 'Holding',
           timestamp: new Date().toISOString(),
         },
-      ];
-      mockLLMInstance.setMockResponse(mockResponse);
+      ]
+      mockLLMInstance.setMockResponse(mockResponse)
 
-      const engine = new MarketDecisionEngine(mockLLM, mockContext);
-      const decisions = await engine.generateBatchDecisions();
+      const engine = new MarketDecisionEngine(mockLLM, mockContext)
+      const decisions = await engine.generateBatchDecisions()
 
-      expect(decisions.length).toBe(1);
-      expect(decisions[0]?.action).toBe('hold');
-    });
+      expect(decisions.length).toBe(1)
+      expect(decisions[0]?.action).toBe('hold')
+    })
 
     test('should handle wrapped response format with "decisions" key', async () => {
-      const npcs = [createMockNPC('npc1', 'NPC 1')];
-      mockContext.setMockNPCs(npcs);
+      const npcs = [createMockNPC('npc1', 'NPC 1')]
+      mockContext.setMockNPCs(npcs)
 
       const mockResponse = {
         decisions: [
@@ -442,19 +468,19 @@ describe('MarketDecisionEngine - Token Management', () => {
             timestamp: new Date().toISOString(),
           },
         ],
-      };
-      mockLLMInstance.setMockResponse(mockResponse);
+      }
+      mockLLMInstance.setMockResponse(mockResponse)
 
-      const engine = new MarketDecisionEngine(mockLLM, mockContext);
-      const decisions = await engine.generateBatchDecisions();
+      const engine = new MarketDecisionEngine(mockLLM, mockContext)
+      const decisions = await engine.generateBatchDecisions()
 
-      expect(decisions.length).toBe(1);
-      expect(decisions[0]?.action).toBe('hold');
-    });
+      expect(decisions.length).toBe(1)
+      expect(decisions[0]?.action).toBe('hold')
+    })
 
     test('should handle wrapped response format with "decision" key (array)', async () => {
-      const npcs = [createMockNPC('npc1', 'NPC 1')];
-      mockContext.setMockNPCs(npcs);
+      const npcs = [createMockNPC('npc1', 'NPC 1')]
+      mockContext.setMockNPCs(npcs)
 
       const mockResponse = {
         decision: [
@@ -469,19 +495,19 @@ describe('MarketDecisionEngine - Token Management', () => {
             timestamp: new Date().toISOString(),
           },
         ],
-      };
-      mockLLMInstance.setMockResponse(mockResponse);
+      }
+      mockLLMInstance.setMockResponse(mockResponse)
 
-      const engine = new MarketDecisionEngine(mockLLM, mockContext);
-      const decisions = await engine.generateBatchDecisions();
+      const engine = new MarketDecisionEngine(mockLLM, mockContext)
+      const decisions = await engine.generateBatchDecisions()
 
-      expect(decisions.length).toBe(1);
-      expect(decisions[0]?.action).toBe('hold');
-    });
+      expect(decisions.length).toBe(1)
+      expect(decisions[0]?.action).toBe('hold')
+    })
 
     test('should handle wrapped response format with "decision" key (single object)', async () => {
-      const npcs = [createMockNPC('npc1', 'NPC 1')];
-      mockContext.setMockNPCs(npcs);
+      const npcs = [createMockNPC('npc1', 'NPC 1')]
+      mockContext.setMockNPCs(npcs)
 
       // LLM returns single decision object (not array) - happens with 1 NPC
       const mockResponse = {
@@ -495,33 +521,33 @@ describe('MarketDecisionEngine - Token Management', () => {
           reasoning: 'Holding',
           timestamp: new Date().toISOString(),
         },
-      };
-      mockLLMInstance.setMockResponse(mockResponse);
+      }
+      mockLLMInstance.setMockResponse(mockResponse)
 
-      const engine = new MarketDecisionEngine(mockLLM, mockContext);
-      const decisions = await engine.generateBatchDecisions();
+      const engine = new MarketDecisionEngine(mockLLM, mockContext)
+      const decisions = await engine.generateBatchDecisions()
 
-      expect(decisions.length).toBe(1);
-      expect(decisions[0]?.action).toBe('hold');
-    });
+      expect(decisions.length).toBe(1)
+      expect(decisions[0]?.action).toBe('hold')
+    })
 
     test('should return empty array for invalid response format', async () => {
-      const npcs = [createMockNPC('npc1', 'NPC 1')];
-      mockContext.setMockNPCs(npcs);
+      const npcs = [createMockNPC('npc1', 'NPC 1')]
+      mockContext.setMockNPCs(npcs)
 
-      const mockResponse = { invalid: 'response' };
-      mockLLMInstance.setMockResponse(mockResponse);
+      const mockResponse = { invalid: 'response' }
+      mockLLMInstance.setMockResponse(mockResponse)
 
-      const engine = new MarketDecisionEngine(mockLLM, mockContext);
-      const decisions = await engine.generateBatchDecisions();
+      const engine = new MarketDecisionEngine(mockLLM, mockContext)
+      const decisions = await engine.generateBatchDecisions()
 
-      expect(decisions.length).toBe(0);
-    });
-  });
+      expect(decisions.length).toBe(0)
+    })
+  })
 
   describe('Context Truncation', () => {
     test('should truncate long post content', async () => {
-      const npc = createMockNPC('npc1', 'NPC 1');
+      const npc = createMockNPC('npc1', 'NPC 1')
       // Add a very long post
       npc.recentPosts = [
         {
@@ -530,8 +556,8 @@ describe('MarketDecisionEngine - Token Management', () => {
           content: 'A'.repeat(1000), // Very long content
           timestamp: new Date().toISOString(),
         },
-      ];
-      mockContext.setMockNPCs([npc]);
+      ]
+      mockContext.setMockNPCs([npc])
 
       const mockResponse = [
         {
@@ -544,25 +570,25 @@ describe('MarketDecisionEngine - Token Management', () => {
           reasoning: 'Holding',
           timestamp: new Date().toISOString(),
         },
-      ];
-      mockLLMInstance.setMockResponse(mockResponse);
+      ]
+      mockLLMInstance.setMockResponse(mockResponse)
 
-      const engine = new MarketDecisionEngine(mockLLM, mockContext);
-      const decisions = await engine.generateBatchDecisions();
+      const engine = new MarketDecisionEngine(mockLLM, mockContext)
+      const decisions = await engine.generateBatchDecisions()
 
-      expect(decisions.length).toBe(1);
-    });
+      expect(decisions.length).toBe(1)
+    })
 
     test('should limit number of posts per NPC', async () => {
-      const npc = createMockNPC('npc1', 'NPC 1');
+      const npc = createMockNPC('npc1', 'NPC 1')
       // Add 100 posts (should be truncated to 8)
       npc.recentPosts = Array.from({ length: 100 }, (_, i) => ({
         author: `author${i}`,
         authorName: `Author ${i}`,
         content: `Post ${i}`,
         timestamp: new Date().toISOString(),
-      }));
-      mockContext.setMockNPCs([npc]);
+      }))
+      mockContext.setMockNPCs([npc])
 
       const mockResponse = [
         {
@@ -575,20 +601,20 @@ describe('MarketDecisionEngine - Token Management', () => {
           reasoning: 'Holding',
           timestamp: new Date().toISOString(),
         },
-      ];
-      mockLLMInstance.setMockResponse(mockResponse);
+      ]
+      mockLLMInstance.setMockResponse(mockResponse)
 
-      const engine = new MarketDecisionEngine(mockLLM, mockContext);
-      const decisions = await engine.generateBatchDecisions();
+      const engine = new MarketDecisionEngine(mockLLM, mockContext)
+      const decisions = await engine.generateBatchDecisions()
 
-      expect(decisions.length).toBe(1);
-    });
-  });
+      expect(decisions.length).toBe(1)
+    })
+  })
 
   describe('Decision Validation', () => {
     test('should validate hold decisions', async () => {
-      const npcs = [createMockNPC('npc1', 'NPC 1')];
-      mockContext.setMockNPCs(npcs);
+      const npcs = [createMockNPC('npc1', 'NPC 1')]
+      mockContext.setMockNPCs(npcs)
 
       const mockResponse = [
         {
@@ -601,21 +627,21 @@ describe('MarketDecisionEngine - Token Management', () => {
           reasoning: 'Market conditions unclear',
           timestamp: new Date().toISOString(),
         },
-      ];
-      mockLLMInstance.setMockResponse(mockResponse);
+      ]
+      mockLLMInstance.setMockResponse(mockResponse)
 
-      const engine = new MarketDecisionEngine(mockLLM, mockContext);
-      const decisions = await engine.generateBatchDecisions();
+      const engine = new MarketDecisionEngine(mockLLM, mockContext)
+      const decisions = await engine.generateBatchDecisions()
 
-      expect(decisions.length).toBe(1);
-      expect(decisions[0]?.action).toBe('hold');
-      expect(decisions[0]?.amount).toBe(0);
-    });
+      expect(decisions.length).toBe(1)
+      expect(decisions[0]?.action).toBe('hold')
+      expect(decisions[0]?.amount).toBe(0)
+    })
 
     test('should validate trade decisions do not exceed balance', async () => {
-      const npc = createMockNPC('npc1', 'NPC 1');
-      npc.availableBalance = 1000;
-      mockContext.setMockNPCs([npc]);
+      const npc = createMockNPC('npc1', 'NPC 1')
+      npc.availableBalance = 1000
+      mockContext.setMockNPCs([npc])
 
       // LLM tries to trade more than balance (should be rejected)
       const mockResponse = [
@@ -630,21 +656,21 @@ describe('MarketDecisionEngine - Token Management', () => {
           reasoning: 'Strong signal',
           timestamp: new Date().toISOString(),
         },
-      ];
-      mockLLMInstance.setMockResponse(mockResponse);
+      ]
+      mockLLMInstance.setMockResponse(mockResponse)
 
-      const engine = new MarketDecisionEngine(mockLLM, mockContext);
+      const engine = new MarketDecisionEngine(mockLLM, mockContext)
 
       // In test mode, exceeding balance skips the decision (no throw)
       // In dev mode, it would throw - but tests skip fail-fast behavior
-      const decisions = await engine.generateBatchDecisions();
-      expect(decisions.length).toBe(0); // Decision rejected due to exceeding balance
-    });
+      const decisions = await engine.generateBatchDecisions()
+      expect(decisions.length).toBe(0) // Decision rejected due to exceeding balance
+    })
 
     test('should accept valid trade decisions', async () => {
-      const npc = createMockNPC('npc1', 'NPC 1');
-      npc.availableBalance = 10000;
-      mockContext.setMockNPCs([npc]);
+      const npc = createMockNPC('npc1', 'NPC 1')
+      npc.availableBalance = 10000
+      mockContext.setMockNPCs([npc])
 
       const mockResponse = [
         {
@@ -658,36 +684,36 @@ describe('MarketDecisionEngine - Token Management', () => {
           reasoning: 'Strong signal',
           timestamp: new Date().toISOString(),
         },
-      ];
-      mockLLMInstance.setMockResponse(mockResponse);
+      ]
+      mockLLMInstance.setMockResponse(mockResponse)
 
-      const engine = new MarketDecisionEngine(mockLLM, mockContext);
-      const decisions = await engine.generateBatchDecisions();
+      const engine = new MarketDecisionEngine(mockLLM, mockContext)
+      const decisions = await engine.generateBatchDecisions()
 
-      expect(decisions.length).toBe(1);
-      expect(decisions[0]?.action).toBe('open_long');
-      expect(decisions[0]?.amount).toBe(1000);
-    });
-  });
+      expect(decisions.length).toBe(1)
+      expect(decisions[0]?.action).toBe('open_long')
+      expect(decisions[0]?.amount).toBe(1000)
+    })
+  })
 
   describe('Error Handling', () => {
     test('should handle empty NPC list gracefully', async () => {
-      mockContext.setMockNPCs([]);
+      mockContext.setMockNPCs([])
 
-      const engine = new MarketDecisionEngine(mockLLM, mockContext);
-      const decisions = await engine.generateBatchDecisions();
+      const engine = new MarketDecisionEngine(mockLLM, mockContext)
+      const decisions = await engine.generateBatchDecisions()
 
-      expect(decisions.length).toBe(0);
-    });
+      expect(decisions.length).toBe(0)
+    })
 
     test('should handle batch failure with individual retry', async () => {
       const npcs = [
         createMockNPC('npc1', 'NPC 1'),
         createMockNPC('npc2', 'NPC 2'),
-      ];
-      mockContext.setMockNPCs(npcs);
+      ]
+      mockContext.setMockNPCs(npcs)
 
-      mockLLMInstance.setMockResponse(null);
+      mockLLMInstance.setMockResponse(null)
       mockLLMInstance.setMockResponse([
         {
           npcId: 'npc1',
@@ -699,7 +725,7 @@ describe('MarketDecisionEngine - Token Management', () => {
           reasoning: 'Holding',
           timestamp: new Date().toISOString(),
         },
-      ]);
+      ])
       mockLLMInstance.setMockResponse([
         {
           npcId: 'npc2',
@@ -711,38 +737,38 @@ describe('MarketDecisionEngine - Token Management', () => {
           reasoning: 'Holding',
           timestamp: new Date().toISOString(),
         },
-      ]);
+      ])
 
-      const engine = new MarketDecisionEngine(mockLLM, mockContext);
+      const engine = new MarketDecisionEngine(mockLLM, mockContext)
 
-      const decisions = await engine.generateBatchDecisions();
+      const decisions = await engine.generateBatchDecisions()
 
-      expect(decisions).toBeDefined();
-    });
-  });
+      expect(decisions).toBeDefined()
+    })
+  })
 
   describe('Model Configuration', () => {
     test('should use qwen/qwen3-32b by default', () => {
-      const engine = new MarketDecisionEngine(mockLLM, mockContext);
-      expect(engine).toBeDefined();
+      const engine = new MarketDecisionEngine(mockLLM, mockContext)
+      expect(engine).toBeDefined()
       // Default model should have 130k token limit
-    });
+    })
 
     test('should accept custom model with different token limit', () => {
       const engine = new MarketDecisionEngine(mockLLM, mockContext, {
         model: 'claude-sonnet-4-5', // 200k context
         maxOutputTokens: 8000,
-      });
-      expect(engine).toBeDefined();
-    });
+      })
+      expect(engine).toBeDefined()
+    })
 
     test('should calculate safe context limit correctly', () => {
       // qwen/qwen3-32b: 130k input context
       // * 0.9 safety = 117k safe limit
       // / 400 per NPC = ~292 NPCs per batch
 
-      const engine = new MarketDecisionEngine(mockLLM, mockContext);
-      expect(engine).toBeDefined();
-    });
-  });
-});
+      const engine = new MarketDecisionEngine(mockLLM, mockContext)
+      expect(engine).toBeDefined()
+    })
+  })
+})

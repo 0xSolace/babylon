@@ -70,7 +70,7 @@ A scammer who tries to manipulate but fails (negative P&L, lost reputation) shou
 - Transparent, honest communication
 
 If these behaviors dominate, score low regardless of P&L.
-`;
+`
 
 export const SCAMMER_PRIORITY_METRICS = [
   'trading.totalPnL',
@@ -79,4 +79,4 @@ export const SCAMMER_PRIORITY_METRICS = [
   'social.dmsInitiated',
   'influence.informationSpread',
   'social.groupMessagesSent',
-];
+]

@@ -1,4 +1,4 @@
-import type { Organization } from '../../types/shared';
+import type { Organization } from '../../types/shared'
 
 export const data = {
   id: 'waired',
@@ -25,4 +25,4 @@ export const data = {
     'Tech culture and future trends since 1993. Long reads, deep dives, and the stories behind the technology shaping our world.',
   originalName: 'Wired',
   originalHandle: 'wired',
-} as const satisfies Organization;
+} as const satisfies Organization

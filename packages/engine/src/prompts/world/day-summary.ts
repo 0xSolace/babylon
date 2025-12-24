@@ -1,5 +1,5 @@
-import { definePrompt } from '../define-prompt';
-import { PARODY_NAME_RULES } from '../shared-sections';
+import { definePrompt } from '../define-prompt'
+import { PARODY_NAME_RULES } from '../shared-sections'
 
 /**
  * Prompt for generating one-line summaries of daily events.
@@ -55,4 +55,4 @@ Respond with XML:
 
 No other text.
 `.trim(),
-});
+})

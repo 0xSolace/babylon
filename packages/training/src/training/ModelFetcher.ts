@@ -4,19 +4,19 @@
  * Fetches trained RL models from the database for inference.
  */
 
-import { db } from '@babylon/db';
-import { logger } from '@babylon/shared';
+import { db } from '@babylon/db'
+import { logger } from '@babylon/shared'
 
 export interface ModelArtifact {
-  version: string;
-  modelId: string;
-  modelPath: string;
+  version: string
+  modelId: string
+  modelPath: string
   metadata: {
-    avgReward?: number;
-    benchmarkScore?: number;
-    baseModel: string;
-    trainedAt: Date;
-  };
+    avgReward?: number | null
+    benchmarkScore?: number | null
+    baseModel: string
+    trainedAt: Date
+  }
 }
 
 /**
@@ -26,13 +26,13 @@ export async function getLatestRLModel(): Promise<ModelArtifact | null> {
   const model = await db.trainedModel.findFirst({
     where: { status: { in: ['ready', 'deployed'] } },
     orderBy: { createdAt: 'desc' },
-  });
+  })
 
   if (!model) {
-    return null;
+    return null
   }
 
-  const rlModelId = model.storagePath || model.modelId;
+  const rlModelId = model.storagePath || model.modelId
 
   if (!rlModelId || rlModelId.trim().length === 0) {
     logger.error(
@@ -41,9 +41,9 @@ export async function getLatestRLModel(): Promise<ModelArtifact | null> {
         modelId: model.modelId,
         storagePath: model.storagePath,
       },
-      'ModelFetcher'
-    );
-    return null;
+      'ModelFetcher',
+    )
+    return null
   }
 
   if (!model.baseModel || model.baseModel.trim().length === 0) {
@@ -52,9 +52,9 @@ export async function getLatestRLModel(): Promise<ModelArtifact | null> {
       {
         modelId: model.modelId,
       },
-      'ModelFetcher'
-    );
-    return null;
+      'ModelFetcher',
+    )
+    return null
   }
 
   return {
@@ -62,10 +62,10 @@ export async function getLatestRLModel(): Promise<ModelArtifact | null> {
     modelId: rlModelId,
     modelPath: rlModelId,
     metadata: {
-      avgReward: model.avgReward ?? undefined,
-      benchmarkScore: model.benchmarkScore ?? undefined,
+      avgReward: model.avgReward,
+      benchmarkScore: model.benchmarkScore,
       baseModel: model.baseModel,
       trainedAt: model.createdAt,
     },
-  };
+  }
 }

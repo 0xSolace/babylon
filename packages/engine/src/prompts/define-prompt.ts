@@ -14,19 +14,19 @@
  */
 export interface PromptDefinition {
   /** Unique identifier for the prompt */
-  id: string;
+  id: string
   /** Semantic version of the prompt (e.g., '2.0.0') */
-  version: string;
+  version: string
   /** Category/type of prompt (e.g., 'feed', 'game', 'image') */
-  category: string;
+  category: string
   /** Human-readable description of what the prompt generates */
-  description: string;
+  description: string
   /** Temperature setting for LLM (0-2, default varies by prompt) */
-  temperature?: number;
+  temperature?: number
   /** Maximum tokens for LLM response (default varies by prompt) */
-  maxTokens?: number;
+  maxTokens?: number
   /** Template string with {{variable}} placeholders */
-  template: string;
+  template: string
 }
 
 /**
@@ -52,7 +52,7 @@ export interface PromptDefinition {
  * ```
  */
 export function definePrompt(prompt: PromptDefinition): PromptDefinition {
-  return prompt;
+  return prompt
 }
 
 /**
@@ -76,12 +76,12 @@ export function definePrompt(prompt: PromptDefinition): PromptDefinition {
  */
 export function renderTemplate(
   template: string,
-  variables: Record<string, string | number | boolean | null | undefined>
+  variables: Record<string, string | number | boolean | null | undefined>,
 ): string {
-  let rendered = template;
+  let rendered = template
   for (const [key, value] of Object.entries(variables)) {
-    const pattern = new RegExp(`\\{\\{${key}\\}\\}`, 'g');
-    rendered = rendered.replace(pattern, String(value ?? ''));
+    const pattern = new RegExp(`\\{\\{${key}\\}\\}`, 'g')
+    rendered = rendered.replace(pattern, String(value ?? ''))
   }
-  return rendered;
+  return rendered
 }

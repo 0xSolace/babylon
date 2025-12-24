@@ -1,15 +1,13 @@
-'use client';
-
-import type { FeedPost, RepostButtonProps } from '@babylon/shared';
-import { cn } from '@babylon/shared';
-import { Repeat2, X } from 'lucide-react';
-import { useState } from 'react';
-import { Avatar } from '@/components/shared/Avatar';
-import { Skeleton } from '@/components/shared/Skeleton';
-import { useAuth } from '@/hooks/useAuth';
-import { useLoginModal } from '@/hooks/useLoginModal';
-import { useFeedStore } from '@/stores/feedStore';
-import { useInteractionStore } from '@/stores/interactionStore';
+import type { FeedPost, RepostButtonProps } from '@babylon/shared'
+import { cn } from '@babylon/shared'
+import { Repeat2, X } from 'lucide-react'
+import { useState } from 'react'
+import { Avatar } from '@/components/shared/Avatar'
+import { Skeleton } from '@/components/shared/Skeleton'
+import { useAuth } from '@/hooks/useAuth'
+import { useLoginModal } from '@/hooks/useLoginModal'
+import { useFeedStore } from '@/stores/feedStore'
+import { useInteractionStore } from '@/stores/interactionStore'
 
 /**
  * Repost/share button component for sharing posts.
@@ -42,19 +40,19 @@ const sizeClasses = {
   sm: 'h-8 px-2 text-xs gap-1',
   md: 'h-10 px-3 text-sm gap-1.5',
   lg: 'h-12 px-4 text-base gap-2',
-};
+}
 
 const iconSizes = {
   sm: 18,
   md: 20,
   lg: 22,
-};
+}
 
 const skeletonSizes = {
   sm: 'w-4 h-4',
   md: 'w-5 h-5',
   lg: 'w-5 h-5',
-};
+}
 
 export function RepostButton({
   postId,
@@ -66,58 +64,57 @@ export function RepostButton({
   postData,
 }: RepostButtonProps) {
   // Ensure size is properly typed for index access
-  const sizeKey: 'sm' | 'md' | 'lg' = size;
-  const [showConfirmation, setShowConfirmation] = useState(false);
-  const [isAnimating, setIsAnimating] = useState(false);
-  const [quoteComment, setQuoteComment] = useState('');
+  const sizeKey: 'sm' | 'md' | 'lg' = size
+  const [showConfirmation, setShowConfirmation] = useState(false)
+  const [isAnimating, setIsAnimating] = useState(false)
+  const [quoteComment, setQuoteComment] = useState('')
 
-  const { toggleShare, postInteractions, loadingStates } =
-    useInteractionStore();
-  const { addOptimisticPost } = useFeedStore();
+  const { toggleShare, postInteractions, loadingStates } = useInteractionStore()
+  const { addOptimisticPost } = useFeedStore()
 
   // Get state from store instead of local state
-  const storeData = postInteractions.get(postId);
-  const isShared = storeData?.isShared ?? initialShared;
-  const count = storeData?.shareCount ?? shareCount;
-  const isLoading = loadingStates.get(`share-${postId}`) ?? false;
+  const storeData = postInteractions.get(postId)
+  const isShared = storeData?.isShared ?? initialShared
+  const count = storeData?.shareCount ?? shareCount
+  const isLoading = loadingStates.get(`share-${postId}`) ?? false
 
-  const { authenticated } = useAuth();
-  const { showLoginModal } = useLoginModal();
+  const { authenticated } = useAuth()
+  const { showLoginModal } = useLoginModal()
 
   const handleClick = () => {
     if (!authenticated) {
       showLoginModal({
         title: 'Login to Share',
         message: 'Log in to share posts with your followers.',
-      });
-      return;
+      })
+      return
     }
     if (isShared) {
       // If already shared, unshare immediately
-      handleShare();
+      handleShare()
     } else {
       // Show modal for new share
-      setShowConfirmation(true);
-      setQuoteComment('');
+      setShowConfirmation(true)
+      setQuoteComment('')
     }
-  };
+  }
 
   const handleShare = async () => {
-    const commentToSend = quoteComment.trim() || undefined;
-    const isQuote = !!commentToSend;
+    const commentToSend = quoteComment.trim() || undefined
+    const isQuote = !!commentToSend
 
     // Close confirmation modal
-    setShowConfirmation(false);
+    setShowConfirmation(false)
 
     // Trigger animation
-    setIsAnimating(true);
-    setTimeout(() => setIsAnimating(false), 300);
+    setIsAnimating(true)
+    setTimeout(() => setIsAnimating(false), 300)
 
-    const response = await toggleShare(postId, commentToSend);
+    const response = await toggleShare(postId, commentToSend)
 
     // If this is a quote post and we got repost data back, add it optimistically to the feed
-    if (response && response.repostPost && isQuote) {
-      const repostData = response.repostPost;
+    if (response?.repostPost && isQuote) {
+      const repostData = response.repostPost
       const optimisticPost: FeedPost = {
         id: repostData.id,
         content: repostData.content,
@@ -142,31 +139,31 @@ export function RepostButton({
           repostData.originalAuthorProfileImageUrl || null,
         originalContent: repostData.originalContent || null,
         quoteComment: repostData.quoteComment || null,
-      };
+      }
 
       // Add to feed optimistically
-      addOptimisticPost(optimisticPost);
+      addOptimisticPost(optimisticPost)
     }
 
     // Reset state
-    setQuoteComment('');
-  };
+    setQuoteComment('')
+  }
 
   // Format timestamp for display
   const formatTime = (timestamp: string) => {
-    const date = new Date(timestamp);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMinutes = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMs / 3600000);
-    const diffDays = Math.floor(diffMs / 86400000);
+    const date = new Date(timestamp)
+    const now = new Date()
+    const diffMs = now.getTime() - date.getTime()
+    const diffMinutes = Math.floor(diffMs / 60000)
+    const diffHours = Math.floor(diffMs / 3600000)
+    const diffDays = Math.floor(diffMs / 86400000)
 
-    if (diffMinutes < 1) return 'Just now';
-    if (diffMinutes < 60) return `${diffMinutes}m`;
-    if (diffHours < 24) return `${diffHours}h`;
-    if (diffDays < 7) return `${diffDays}d`;
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  };
+    if (diffMinutes < 1) return 'Just now'
+    if (diffMinutes < 60) return `${diffMinutes}m`
+    if (diffHours < 24) return `${diffHours}h`
+    if (diffDays < 7) return `${diffDays}d`
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  }
 
   return (
     <>
@@ -184,7 +181,7 @@ export function RepostButton({
           sizeClasses[sizeKey],
           isAnimating && 'scale-110',
           isLoading && 'cursor-wait opacity-50',
-          className
+          className,
         )}
       >
         {isLoading ? (
@@ -194,7 +191,7 @@ export function RepostButton({
             size={iconSizes[sizeKey]}
             className={cn(
               'transition-all duration-200',
-              isAnimating && 'rotate-180'
+              isAnimating && 'rotate-180',
             )}
           />
         )}
@@ -207,12 +204,21 @@ export function RepostButton({
       {showConfirmation && (
         <>
           {/* Backdrop */}
-          <div
+          <button
+            type="button"
             className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm"
             onClick={() => {
-              setShowConfirmation(false);
-              setQuoteComment('');
+              setShowConfirmation(false)
+              setQuoteComment('')
             }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === 'Escape') {
+                e.preventDefault()
+                setShowConfirmation(false)
+                setQuoteComment('')
+              }
+            }}
+            aria-label="Close confirmation dialog"
           />
 
           {/* Modal - Mobile */}
@@ -223,8 +229,8 @@ export function RepostButton({
                 <button
                   type="button"
                   onClick={() => {
-                    setShowConfirmation(false);
-                    setQuoteComment('');
+                    setShowConfirmation(false)
+                    setQuoteComment('')
                   }}
                   className="text-muted-foreground transition-colors hover:text-foreground"
                 >
@@ -243,13 +249,11 @@ export function RepostButton({
                   'rounded-full px-4 py-1.5 font-semibold text-sm',
                   'bg-green-600 text-primary-foreground',
                   'transition-colors hover:bg-green-700',
-                  'disabled:cursor-not-allowed disabled:opacity-50'
+                  'disabled:cursor-not-allowed disabled:opacity-50',
                 )}
               >
                 {isLoading ? (
-                  <span role="status" aria-live="polite">
-                    Posting...
-                  </span>
+                  <output aria-live="polite">Posting...</output>
                 ) : (
                   'Post'
                 )}
@@ -272,9 +276,8 @@ export function RepostButton({
                   'border-0 bg-transparent',
                   'text-foreground placeholder:text-muted-foreground',
                   'resize-none focus:outline-none',
-                  'transition-colors'
+                  'transition-colors',
                 )}
-                autoFocus
               />
 
               {/* Character Count */}
@@ -286,7 +289,7 @@ export function RepostButton({
                       'text-xs',
                       quoteComment.length > 450
                         ? 'text-red-400'
-                        : 'text-muted-foreground'
+                        : 'text-muted-foreground',
                     )}
                   >
                     {quoteComment.length}/500
@@ -299,7 +302,7 @@ export function RepostButton({
                 <div
                   className={cn(
                     'mt-4 rounded-xl border border-border p-4',
-                    'bg-muted/30'
+                    'bg-muted/30',
                   )}
                 >
                   {/* Original Post Author */}
@@ -345,8 +348,8 @@ export function RepostButton({
                   <button
                     type="button"
                     onClick={() => {
-                      setShowConfirmation(false);
-                      setQuoteComment('');
+                      setShowConfirmation(false)
+                      setQuoteComment('')
                     }}
                     className="text-muted-foreground transition-colors hover:text-foreground"
                   >
@@ -368,18 +371,17 @@ export function RepostButton({
                     'bg-green-600 text-primary-foreground',
                     'transition-colors hover:bg-green-700',
                     'disabled:cursor-not-allowed disabled:opacity-50',
-                    'flex items-center gap-2'
+                    'flex items-center gap-2',
                   )}
                 >
                   {isLoading ? (
-                    <span
-                      role="status"
+                    <output
                       aria-live="polite"
                       className="flex items-center gap-2"
                     >
                       <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-white/20 border-t-white" />
                       Posting...
-                    </span>
+                    </output>
                   ) : (
                     'Post'
                   )}
@@ -402,9 +404,8 @@ export function RepostButton({
                     'border-0 bg-transparent',
                     'text-base text-foreground placeholder:text-muted-foreground',
                     'resize-none focus:outline-none',
-                    'transition-colors'
+                    'transition-colors',
                   )}
-                  autoFocus
                 />
 
                 {/* Character Count */}
@@ -416,7 +417,7 @@ export function RepostButton({
                         'text-sm',
                         quoteComment.length > 450
                           ? 'text-red-400'
-                          : 'text-muted-foreground'
+                          : 'text-muted-foreground',
                       )}
                     >
                       {quoteComment.length}/500
@@ -429,7 +430,7 @@ export function RepostButton({
                   <div
                     className={cn(
                       'mt-4 rounded-xl border border-border p-5',
-                      'bg-muted/30'
+                      'bg-muted/30',
                     )}
                   >
                     {/* Original Post Author */}
@@ -469,5 +470,5 @@ export function RepostButton({
         </>
       )}
     </>
-  );
+  )
 }

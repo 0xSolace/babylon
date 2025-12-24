@@ -1,36 +1,34 @@
-'use client';
-
-import { formatCurrency } from '@babylon/shared';
-import { ExternalLink, TrendingUp, Trophy, Users } from 'lucide-react';
-import Link from 'next/link';
-import { useEffect, useRef } from 'react';
-import { OnChainBadge } from '@/components/profile/OnChainBadge';
-import { Avatar } from '@/components/shared/Avatar';
-import { RankBadge, RankNumber } from '@/components/shared/RankBadge';
-import { VerifiedBadge } from '@/components/shared/VerifiedBadge';
+import { formatCurrency } from '@babylon/shared'
+import { ExternalLink, TrendingUp, Trophy, Users } from 'lucide-react'
+import { useEffect, useRef } from 'react'
+import { Link } from 'react-router-dom'
+import { OnChainBadge } from '@/components/profile/OnChainBadge'
+import { Avatar } from '@/components/shared/Avatar'
+import { RankBadge, RankNumber } from '@/components/shared/RankBadge'
+import { VerifiedBadge } from '@/components/shared/VerifiedBadge'
 
 export interface SelectedUser {
-  id: string;
-  username: string | null;
-  displayName: string | null;
-  profileImageUrl: string | null;
-  allPoints: number;
-  invitePoints: number;
-  earnedPoints: number;
-  bonusPoints: number;
-  referralCount: number;
-  balance: number;
-  lifetimePnL: number;
-  rank: number;
-  isActor?: boolean;
-  tier?: string | null;
-  onChainRegistered?: boolean;
-  nftTokenId?: number | null;
+  id: string
+  username: string | null
+  displayName: string | null
+  profileImageUrl: string | null
+  allPoints: number
+  invitePoints: number
+  earnedPoints: number
+  bonusPoints: number
+  referralCount: number
+  balance: number
+  lifetimePnL: number
+  rank: number
+  isActor?: boolean
+  tier?: string | null
+  onChainRegistered?: boolean
+  nftTokenId?: number | null
 }
 
 interface LeaderboardWidgetSidebarProps {
-  selectedUser: SelectedUser | null;
-  pointsCategory: 'all' | 'earned' | 'referral';
+  selectedUser: SelectedUser | null
+  pointsCategory: 'all' | 'earned' | 'referral'
 }
 
 /**
@@ -43,113 +41,113 @@ export function LeaderboardWidgetSidebar({
   selectedUser,
   pointsCategory,
 }: LeaderboardWidgetSidebarProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const innerRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null)
+  const innerRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    const container = containerRef.current;
-    const inner = innerRef.current;
-    if (!container || !inner) return;
+    const container = containerRef.current
+    const inner = innerRef.current
+    if (!container || !inner) return
 
     // Only run on xl+ screens
-    if (window.innerWidth < 1280) return;
+    if (window.innerWidth < 1280) return
 
-    let lastScrollTop = 0;
-    let direction: 'up' | 'down' = 'down';
-    let translateY = 0;
-    let ticking = false;
+    let lastScrollTop = 0
+    let direction: 'up' | 'down' = 'down'
+    let translateY = 0
+    let ticking = false
 
     const updateSidebar = () => {
-      const scrollTop = document.scrollingElement?.scrollTop || 0;
-      const viewportHeight = window.innerHeight;
-      const sidebarHeight = inner.offsetHeight;
+      const scrollTop = document.scrollingElement?.scrollTop || 0
+      const viewportHeight = window.innerHeight
+      const sidebarHeight = inner.offsetHeight
 
       // Determine scroll direction
       if (scrollTop > lastScrollTop) {
-        direction = 'down';
+        direction = 'down'
       } else if (scrollTop < lastScrollTop) {
-        direction = 'up';
+        direction = 'up'
       }
-      lastScrollTop = scrollTop;
+      lastScrollTop = scrollTop
 
       // Check if sidebar fits in viewport
-      const fitsInViewport = sidebarHeight <= viewportHeight;
+      const fitsInViewport = sidebarHeight <= viewportHeight
 
       if (fitsInViewport) {
-        inner.style.position = 'fixed';
-        inner.style.top = '0px';
-        inner.style.transform = '';
+        inner.style.position = 'fixed'
+        inner.style.top = '0px'
+        inner.style.transform = ''
       } else {
         // Sidebar is taller than viewport - implement bi-directional scroll lock
-        const maxTranslate = sidebarHeight - viewportHeight;
+        const maxTranslate = sidebarHeight - viewportHeight
 
         if (direction === 'down') {
           // Scrolling down: pin sidebar bottom to viewport bottom
-          translateY = Math.min(scrollTop, maxTranslate);
+          translateY = Math.min(scrollTop, maxTranslate)
         } else {
           // Scrolling up: gradually reveal top of sidebar
-          translateY = Math.max(0, Math.min(scrollTop, maxTranslate));
+          translateY = Math.max(0, Math.min(scrollTop, maxTranslate))
         }
 
-        inner.style.position = 'fixed';
-        inner.style.top = '0px';
-        inner.style.transform = `translateY(-${translateY}px)`;
+        inner.style.position = 'fixed'
+        inner.style.top = '0px'
+        inner.style.transform = `translateY(-${translateY}px)`
       }
 
-      ticking = false;
-    };
+      ticking = false
+    }
 
     const handleScroll = () => {
       if (!ticking) {
-        requestAnimationFrame(updateSidebar);
-        ticking = true;
+        requestAnimationFrame(updateSidebar)
+        ticking = true
       }
-    };
+    }
 
     const handleResize = () => {
       if (window.innerWidth < 1280) {
         if (inner) {
-          inner.style.position = '';
-          inner.style.top = '';
-          inner.style.transform = '';
+          inner.style.position = ''
+          inner.style.top = ''
+          inner.style.transform = ''
         }
-        return;
+        return
       }
-      updateSidebar();
-    };
+      updateSidebar()
+    }
 
-    updateSidebar();
+    updateSidebar()
 
-    window.addEventListener('scroll', handleScroll, { passive: true });
-    window.addEventListener('resize', handleResize, { passive: true });
+    window.addEventListener('scroll', handleScroll, { passive: true })
+    window.addEventListener('resize', handleResize, { passive: true })
 
     return () => {
-      window.removeEventListener('scroll', handleScroll);
-      window.removeEventListener('resize', handleResize);
-    };
-  }, []);
+      window.removeEventListener('scroll', handleScroll)
+      window.removeEventListener('resize', handleResize)
+    }
+  }, [])
 
   const getDisplayPoints = (user: SelectedUser) => {
     switch (pointsCategory) {
       case 'all':
-        return user.allPoints;
+        return user.allPoints
       case 'earned':
-        return user.earnedPoints;
+        return user.earnedPoints
       case 'referral':
-        return user.invitePoints;
+        return user.invitePoints
     }
-  };
+  }
 
   const getPointsLabel = () => {
     switch (pointsCategory) {
       case 'all':
-        return 'All Points';
+        return 'All Points'
       case 'earned':
-        return 'Earned Points';
+        return 'Earned Points'
       case 'referral':
-        return 'Referral Points';
+        return 'Referral Points'
     }
-  };
+  }
 
   return (
     <div
@@ -295,7 +293,7 @@ export function LeaderboardWidgetSidebar({
 
               {/* View Profile Button */}
               <Link
-                href={`/profile/${selectedUser.username || selectedUser.id}`}
+                to={`/profile/${selectedUser.username || selectedUser.id}`}
                 className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#0066FF] px-4 py-3 font-semibold text-primary-foreground transition-colors hover:bg-[#2952d9]"
               >
                 View Profile
@@ -344,5 +342,5 @@ export function LeaderboardWidgetSidebar({
         </div>
       </div>
     </div>
-  );
+  )
 }

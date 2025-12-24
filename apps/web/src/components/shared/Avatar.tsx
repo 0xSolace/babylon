@@ -1,30 +1,28 @@
-'use client';
-
-import { cn, sanitizeId } from '@babylon/shared';
-import { useEffect, useState } from 'react';
+import { cn, sanitizeId } from '@babylon/shared'
+import { useEffect, useState } from 'react'
 
 /**
  * Props for the Avatar component.
  */
 interface AvatarProps {
   /** Unique identifier for the avatar (used for image URL generation) */
-  id?: string;
+  id?: string
   /** Display name (used for initials fallback) */
-  name?: string;
+  name?: string
   /** Type of entity: 'actor', 'business', or 'user' */
-  type?: 'actor' | 'business' | 'user';
+  type?: 'actor' | 'business' | 'user'
   /** Direct image source URL */
-  src?: string;
+  src?: string | null
   /** Alt text for accessibility */
-  alt?: string;
+  alt?: string
   /** Size variant: 'sm', 'md', or 'lg' */
-  size?: 'sm' | 'md' | 'lg';
+  size?: 'sm' | 'md' | 'lg'
   /** Additional CSS classes */
-  className?: string;
+  className?: string
   /** Scale factor for image sizing */
-  scaleFactor?: number;
+  scaleFactor?: number
   /** Image URL (alternative to src) */
-  imageUrl?: string;
+  imageUrl?: string
 }
 
 /**
@@ -33,21 +31,21 @@ interface AvatarProps {
 interface GroupAvatarProps {
   /** Array of group members with their avatar information */
   members: Array<{
-    id: string;
-    name: string;
-    type?: 'actor' | 'business' | 'user';
-  }>;
+    id: string
+    name: string
+    type?: 'actor' | 'business' | 'user'
+  }>
   /** Size variant: 'sm', 'md', or 'lg' */
-  size?: 'sm' | 'md' | 'lg';
+  size?: 'sm' | 'md' | 'lg'
   /** Additional CSS classes */
-  className?: string;
+  className?: string
 }
 
 const sizeClasses = {
   sm: 'w-8 h-8 text-xs',
   md: 'w-10 h-10 text-sm',
   lg: 'w-14 h-14 text-base',
-};
+}
 
 /**
  * Avatar component for displaying user, actor, or business profile pictures.
@@ -80,8 +78,8 @@ export function Avatar({
   scaleFactor = 1,
   imageUrl,
 }: AvatarProps) {
-  const [primaryImageError, setPrimaryImageError] = useState(false);
-  const [fallbackImageError, setFallbackImageError] = useState(false);
+  const [primaryImageError, setPrimaryImageError] = useState(false)
+  const [fallbackImageError, setFallbackImageError] = useState(false)
 
   // Determine the image path to use:
   // 1. If src is provided directly (uploaded profile image), use it
@@ -89,26 +87,26 @@ export function Avatar({
   // 3. Finally, construct from id (static actor/org image)
   // Note: Skip static images for numeric IDs (e.g., Discord snowflakes) as they
   // don't have corresponding image files - go straight to fallback
-  let imagePath: string | undefined;
-  let fallbackPath: string | undefined;
+  let imagePath: string | undefined
+  let fallbackPath: string | undefined
 
   // Check if ID is purely numeric (likely a snowflake ID without static image)
-  const isNumericId = id && /^\d+$/.test(id);
+  const isNumericId = id && /^\d+$/.test(id)
 
   if (src) {
-    imagePath = src;
+    imagePath = src
   } else if (imageUrl) {
-    imagePath = imageUrl;
+    imagePath = imageUrl
   } else if (id && !isNumericId) {
-    const sanitizedId = sanitizeId(id);
+    const sanitizedId = sanitizeId(id)
     if (type === 'business') {
-      imagePath = `/images/organizations/${sanitizedId}.jpg`;
+      imagePath = `/images/organizations/${sanitizedId}.jpg`
     } else if (type === 'user') {
       // User avatars should only use src/imageUrl props
       // Don't try to load static images for users
-      imagePath = undefined;
+      imagePath = undefined
     } else {
-      imagePath = `/images/actors/${sanitizedId}.jpg`;
+      imagePath = `/images/actors/${sanitizedId}.jpg`
     }
   }
 
@@ -117,56 +115,56 @@ export function Avatar({
     // Hash the id to get a number between 1-100
     const hash = Array.from(id).reduce(
       (acc, char) => acc + char.charCodeAt(0),
-      0
-    );
-    const profileNum = (hash % 100) + 1;
-    fallbackPath = `/assets/user-profiles/profile-${profileNum}.jpg`;
+      0,
+    )
+    const profileNum = (hash % 100) + 1
+    fallbackPath = `/assets/user-profiles/profile-${profileNum}.jpg`
   }
 
   // Display name is alt (if provided) or name (if provided) or first letter of id
-  const displayName = alt ?? name ?? id ?? 'User';
-  const initial = displayName.charAt(0).toUpperCase();
+  const displayName = alt ?? name ?? id ?? 'User'
+  const initial = displayName.charAt(0).toUpperCase()
 
   // Reset error flags when source changes
   useEffect(() => {
-    setPrimaryImageError(false);
-    setFallbackImageError(false);
-  }, []);
+    setPrimaryImageError(false)
+    setFallbackImageError(false)
+  }, [])
 
   // Base sizes in rem
   const baseSizes = {
     sm: 2, // 32px
     md: 2.5, // 40px
     lg: 3.5, // 56px
-  };
-
-  const scaledSize = baseSizes[size] * scaleFactor;
-
-  // Determine which image to show based on error states
-  let currentImagePath: string | undefined;
-  if (!primaryImageError && imagePath) {
-    // Try primary image first
-    currentImagePath = imagePath;
-  } else if (!fallbackImageError && fallbackPath) {
-    // If primary failed, try fallback
-    currentImagePath = fallbackPath;
   }
 
-  const hasImage = Boolean(currentImagePath);
+  const scaledSize = baseSizes[size] * scaleFactor
+
+  // Determine which image to show based on error states
+  let currentImagePath: string | undefined
+  if (!primaryImageError && imagePath) {
+    // Try primary image first
+    currentImagePath = imagePath
+  } else if (!fallbackImageError && fallbackPath) {
+    // If primary failed, try fallback
+    currentImagePath = fallbackPath
+  }
+
+  const hasImage = Boolean(currentImagePath)
 
   // Check if className includes w-full h-full (for containers that should fill parent)
   const shouldFillParent =
-    className?.includes('w-full') && className?.includes('h-full');
+    className?.includes('w-full') && className?.includes('h-full')
 
   const handleImageError = () => {
     if (!primaryImageError) {
       // Primary image failed
-      setPrimaryImageError(true);
+      setPrimaryImageError(true)
     } else {
       // Fallback image failed
-      setFallbackImageError(true);
+      setFallbackImageError(true)
     }
-  };
+  }
 
   return (
     <div
@@ -175,7 +173,7 @@ export function Avatar({
         hasImage ? '' : 'bg-primary/20 font-bold text-primary',
         // Don't add size classes if shouldFillParent
         !shouldFillParent && sizeClasses[size],
-        className
+        className,
       )}
       style={
         shouldFillParent
@@ -200,7 +198,7 @@ export function Avatar({
         <span aria-hidden="true">{initial}</span>
       )}
     </div>
-  );
+  )
 }
 
 /**
@@ -230,7 +228,7 @@ export function GroupAvatar({
   className,
 }: GroupAvatarProps) {
   // Show up to 3 members in overlapping squares
-  const displayMembers = members.slice(0, 3);
+  const displayMembers = members.slice(0, 3)
 
   if (displayMembers.length === 0) {
     return (
@@ -238,28 +236,28 @@ export function GroupAvatar({
         className={cn(
           'flex items-center justify-center bg-primary/20',
           sizeClasses[size],
-          className
+          className,
         )}
       >
         <div className="font-bold text-primary">G</div>
       </div>
-    );
+    )
   }
 
   if (displayMembers.length === 1) {
-    const member = displayMembers[0];
+    const member = displayMembers[0]
     if (!member) {
       return (
         <div
           className={cn(
             'flex items-center justify-center bg-primary/20',
             sizeClasses[size],
-            className
+            className,
           )}
         >
           <div className="font-bold text-primary">G</div>
         </div>
-      );
+      )
     }
     return (
       <Avatar
@@ -269,7 +267,7 @@ export function GroupAvatar({
         size={size}
         className={className}
       />
-    );
+    )
   }
 
   // Overlapping avatars
@@ -277,7 +275,7 @@ export function GroupAvatar({
     sm: 'w-6 h-6 text-[10px]',
     md: 'w-8 h-8 text-xs',
     lg: 'w-10 h-10 text-sm',
-  };
+  }
 
   return (
     <div className={cn('relative flex items-center', className)}>
@@ -286,7 +284,7 @@ export function GroupAvatar({
           key={member.id}
           className={cn(
             'absolute flex items-center justify-center overflow-hidden border-2 border-background bg-primary/20',
-            overlappingSizeClasses[size]
+            overlappingSizeClasses[size],
           )}
           style={{
             left: `${index * (size === 'sm' ? 12 : size === 'md' ? 16 : 20)}px`,
@@ -308,5 +306,5 @@ export function GroupAvatar({
         }}
       />
     </div>
-  );
+  )
 }

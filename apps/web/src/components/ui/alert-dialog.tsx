@@ -1,7 +1,5 @@
-'use client';
-
-import { cn } from '@babylon/shared';
-import type * as React from 'react';
+import { cn } from '@babylon/shared'
+import type * as React from 'react'
 
 /**
  * Alert dialog component for displaying modal confirmations and alerts.
@@ -20,9 +18,9 @@ import type * as React from 'react';
  * ```
  */
 interface AlertDialogProps {
-  open?: boolean;
-  onOpenChange?: (open: boolean) => void;
-  children: React.ReactNode;
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
+  children: React.ReactNode
 }
 
 export function AlertDialog({
@@ -30,19 +28,26 @@ export function AlertDialog({
   onOpenChange,
   children,
 }: AlertDialogProps) {
-  if (!open) return null;
+  if (!open) return null
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       {/* Backdrop */}
-      <div
+      <button
+        type="button"
         className="fixed inset-0 bg-black/50 backdrop-blur-sm"
         onClick={() => onOpenChange?.(false)}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') {
+            onOpenChange?.(false)
+          }
+        }}
+        aria-label="Close dialog"
       />
       {/* Content */}
       <div className="relative z-50">{children}</div>
     </div>
-  );
+  )
 }
 
 /**
@@ -55,8 +60,8 @@ export function AlertDialog({
  * @returns Alert dialog content element
  */
 interface AlertDialogContentProps {
-  children: React.ReactNode;
-  className?: string;
+  children: React.ReactNode
+  className?: string
 }
 
 export function AlertDialogContent({
@@ -68,13 +73,19 @@ export function AlertDialogContent({
       className={cn(
         'mx-4 w-full max-w-md rounded-lg border border-border bg-background p-6 shadow-lg',
         'fade-in-0 zoom-in-95 animate-in duration-200',
-        className
+        className,
       )}
       onClick={(e) => e.stopPropagation()}
+      onKeyDown={(e) => {
+        if (e.key === 'Escape') {
+          e.stopPropagation()
+        }
+      }}
+      role="dialog"
     >
       {children}
     </div>
-  );
+  )
 }
 
 /**
@@ -87,8 +98,8 @@ export function AlertDialogContent({
  * @returns Alert dialog header element
  */
 interface AlertDialogHeaderProps {
-  children: React.ReactNode;
-  className?: string;
+  children: React.ReactNode
+  className?: string
 }
 
 export function AlertDialogHeader({
@@ -99,12 +110,12 @@ export function AlertDialogHeader({
     <div
       className={cn(
         'flex flex-col space-y-2 text-center sm:text-left',
-        className
+        className,
       )}
     >
       {children}
     </div>
-  );
+  )
 }
 
 /**
@@ -116,8 +127,8 @@ export function AlertDialogHeader({
  * @returns Alert dialog title element
  */
 interface AlertDialogTitleProps {
-  children: React.ReactNode;
-  className?: string;
+  children: React.ReactNode
+  className?: string
 }
 
 export function AlertDialogTitle({
@@ -128,7 +139,7 @@ export function AlertDialogTitle({
     <h2 className={cn('font-semibold text-foreground text-lg', className)}>
       {children}
     </h2>
-  );
+  )
 }
 
 /**
@@ -140,8 +151,8 @@ export function AlertDialogTitle({
  * @returns Alert dialog description element
  */
 interface AlertDialogDescriptionProps {
-  children: React.ReactNode;
-  className?: string;
+  children: React.ReactNode
+  className?: string
 }
 
 export function AlertDialogDescription({
@@ -152,7 +163,7 @@ export function AlertDialogDescription({
     <div className={cn('text-muted-foreground text-sm', className)}>
       {children}
     </div>
-  );
+  )
 }
 
 /**
@@ -165,8 +176,8 @@ export function AlertDialogDescription({
  * @returns Alert dialog footer element
  */
 interface AlertDialogFooterProps {
-  children: React.ReactNode;
-  className?: string;
+  children: React.ReactNode
+  className?: string
 }
 
 export function AlertDialogFooter({
@@ -177,12 +188,12 @@ export function AlertDialogFooter({
     <div
       className={cn(
         'mt-4 flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2',
-        className
+        className,
       )}
     >
       {children}
     </div>
-  );
+  )
 }
 
 /**
@@ -196,8 +207,8 @@ export function AlertDialogFooter({
  */
 interface AlertDialogActionProps
   extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  children: React.ReactNode;
-  className?: string;
+  children: React.ReactNode
+  className?: string
 }
 
 export function AlertDialogAction({
@@ -213,13 +224,13 @@ export function AlertDialogAction({
         'bg-primary text-primary-foreground hover:bg-primary/90',
         'disabled:pointer-events-none disabled:opacity-50',
         'transition-colors',
-        className
+        className,
       )}
       {...props}
     >
       {children}
     </button>
-  );
+  )
 }
 
 /**
@@ -233,8 +244,8 @@ export function AlertDialogAction({
  */
 interface AlertDialogCancelProps
   extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  children: React.ReactNode;
-  className?: string;
+  children: React.ReactNode
+  className?: string
 }
 
 export function AlertDialogCancel({
@@ -249,11 +260,11 @@ export function AlertDialogCancel({
         'mt-2 h-10 px-4 py-2 sm:mt-0',
         'border border-input bg-background hover:bg-accent hover:text-accent-foreground',
         'transition-colors',
-        className
+        className,
       )}
       {...props}
     >
       {children}
     </button>
-  );
+  )
 }

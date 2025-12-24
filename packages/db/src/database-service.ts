@@ -13,24 +13,33 @@
  * ```
  */
 
-import { generateSnowflakeId } from '@babylon/shared';
-import { db } from './index';
-import { logger } from './logger';
+import { generateSnowflakeId, toNull } from '@babylon/shared'
 import type {
   ActorStateRow,
+  JsonValue,
   OrganizationStateRow,
   Question,
-} from './model-types';
+} from './cql-schema-types'
+import { db } from './index'
+import { logger } from './logger'
+
+/** Remove undefined values from object for JSON storage */
+function toJsonValue(obj: Record<string, unknown>): JsonValue | null {
+  const filtered = Object.fromEntries(
+    Object.entries(obj).filter(([_, v]) => v !== undefined),
+  )
+  return Object.keys(filtered).length > 0 ? (filtered as JsonValue) : null
+}
 
 /**
  * FeedPost type representing a post in the feed.
  */
 export interface FeedPost {
-  id: string;
-  content: string;
-  author: string;
-  timestamp: string;
-  type?: string;
+  id: string
+  content: string
+  author: string
+  timestamp: string
+  type?: string
 }
 
 /**
@@ -45,7 +54,7 @@ class DatabaseService {
    * Direct access to the database client for custom queries.
    */
   get db() {
-    return db;
+    return db
   }
 
   /**
@@ -57,26 +66,30 @@ class DatabaseService {
   async initializeGame() {
     const existing = await db.game.findFirst({
       where: { isContinuous: true },
-    });
+    })
 
     if (existing) {
-      logger.info(`Game already initialized (${existing.id})`);
-      return existing;
+      logger.info(`Game already initialized (${existing.id})`)
+      return existing
     }
 
-    const gameId = await generateSnowflakeId();
+    const gameId = await generateSnowflakeId()
     const game = await db.game.create({
       data: {
         id: gameId,
+        name: 'Continuous Game',
+        type: 'continuous',
+        status: 'active',
         isContinuous: true,
         isRunning: true,
-        currentDate: new Date(),
-        speed: 60000,
+        currentDay: 1,
+        dayNumber: 1,
+        startedAt: new Date(),
         updatedAt: new Date(),
       },
-    });
-    logger.info(`Game initialized (${game.id})`);
-    return game;
+    })
+    logger.info(`Game initialized (${game.id})`)
+    return game
   }
 
   /**
@@ -85,7 +98,7 @@ class DatabaseService {
    * @returns The current game state or null if no game exists
    */
   async getGameState() {
-    return db.game.findFirst({ where: { isContinuous: true } });
+    return db.game.findFirst({ where: { isContinuous: true } })
   }
 
   /**
@@ -96,19 +109,18 @@ class DatabaseService {
    * @throws Error if game is not initialized
    */
   async updateGameState(data: {
-    currentDay?: number;
-    currentDate?: Date;
-    lastTickAt?: Date;
-    lastSnapshotAt?: Date;
-    activeQuestions?: number;
+    currentDay?: number | null
+    dayNumber?: number | null
+    isRunning?: boolean
+    status?: string
   }) {
-    const game = await this.getGameState();
-    if (!game) throw new Error('Game not initialized');
+    const game = await this.getGameState()
+    if (!game) throw new Error('Game not initialized')
 
     return db.game.update({
       where: { id: game.id },
       data: { ...data, updatedAt: new Date() },
-    });
+    })
   }
 
   // ========== POSTS ==========
@@ -125,11 +137,13 @@ class DatabaseService {
         id: post.id,
         content: post.content,
         authorId: post.author,
-        gameId: post.gameId,
-        dayNumber: post.dayNumber,
         timestamp: new Date(post.timestamp),
+        metadata: toJsonValue({
+          gameId: post.gameId,
+          dayNumber: post.dayNumber,
+        }),
       },
-    });
+    })
   }
 
   /**
@@ -139,24 +153,24 @@ class DatabaseService {
    * @returns The created post record
    */
   async createPostWithAllFields(data: {
-    id: string;
-    type?: string;
-    content: string;
-    fullContent?: string;
-    articleTitle?: string;
-    byline?: string;
-    biasScore?: number;
-    sentiment?: string;
-    slant?: string;
-    category?: string;
-    imageUrl?: string;
-    authorId: string;
-    gameId?: string;
-    dayNumber?: number;
-    timestamp: Date;
-    commentOnPostId?: string;
-    parentCommentId?: string;
-    originalPostId?: string;
+    id: string
+    type?: string
+    content: string
+    fullContent?: string
+    articleTitle?: string
+    byline?: string
+    biasScore?: number
+    sentiment?: string
+    slant?: string
+    category?: string
+    imageUrl?: string
+    authorId: string
+    gameId?: string
+    dayNumber?: number
+    timestamp: Date
+    commentOnPostId?: string
+    parentCommentId?: string
+    originalPostId?: string
   }) {
     const safeDayNumber =
       typeof data.dayNumber === 'number' &&
@@ -164,37 +178,39 @@ class DatabaseService {
       data.dayNumber >= 0 &&
       data.dayNumber <= 2147483647
         ? data.dayNumber
-        : undefined;
+        : undefined
 
     if (data.dayNumber !== undefined && safeDayNumber === undefined) {
       logger.warn('[Post] Invalid dayNumber value', {
         dayNumber: data.dayNumber,
         postId: data.id,
-      });
+      })
     }
 
     return db.post.create({
       data: {
         id: data.id,
-        type: data.type || 'post',
         content: data.content,
-        fullContent: data.fullContent,
-        articleTitle: data.articleTitle,
-        byline: data.byline,
-        biasScore: data.biasScore,
-        sentiment: data.sentiment,
-        slant: data.slant,
-        category: data.category,
-        imageUrl: data.imageUrl,
         authorId: data.authorId,
-        gameId: data.gameId,
-        dayNumber: safeDayNumber,
         timestamp: data.timestamp,
-        commentOnPostId: data.commentOnPostId,
-        parentCommentId: data.parentCommentId,
-        originalPostId: data.originalPostId,
+        parentPostId: toNull(data.commentOnPostId ?? data.parentCommentId),
+        isReply: !!(data.commentOnPostId || data.parentCommentId),
+        metadata: toJsonValue({
+          type: data.type || 'post',
+          fullContent: data.fullContent,
+          articleTitle: data.articleTitle,
+          byline: data.byline,
+          biasScore: data.biasScore,
+          sentiment: data.sentiment,
+          slant: data.slant,
+          category: data.category,
+          imageUrl: data.imageUrl,
+          gameId: data.gameId,
+          dayNumber: safeDayNumber,
+          originalPostId: data.originalPostId,
+        }),
       },
-    });
+    })
   }
 
   /**
@@ -204,9 +220,9 @@ class DatabaseService {
    * @returns Object with count of created posts
    */
   async createManyPosts(
-    postsData: Array<FeedPost & { gameId?: string; dayNumber?: number }>
+    postsData: Array<FeedPost & { gameId?: string; dayNumber?: number }>,
   ) {
-    if (postsData.length === 0) return { count: 0 };
+    if (postsData.length === 0) return { count: 0 }
 
     const values = postsData.map((post) => {
       const safeDayNumber =
@@ -215,13 +231,13 @@ class DatabaseService {
         post.dayNumber >= 0 &&
         post.dayNumber <= 2147483647
           ? post.dayNumber
-          : undefined;
+          : undefined
 
       if (post.dayNumber !== undefined && safeDayNumber === undefined) {
         logger.warn('[Post] Invalid dayNumber value', {
           dayNumber: post.dayNumber,
           postId: post.id,
-        });
+        })
       }
 
       return {
@@ -231,12 +247,12 @@ class DatabaseService {
         gameId: post.gameId,
         dayNumber: safeDayNumber,
         timestamp: new Date(post.timestamp),
-      };
-    });
+      }
+    })
 
-    await db.post.createMany({ data: values, skipDuplicates: true });
+    await db.post.createMany({ data: values, skipDuplicates: true })
 
-    return { count: postsData.length };
+    return { count: postsData.length }
   }
 
   /**
@@ -248,20 +264,20 @@ class DatabaseService {
    * @returns Array of recent posts
    */
   async getRecentPosts(limit = 100, cursorOrOffset?: string | number) {
-    const isCursor = typeof cursorOrOffset === 'string';
-    const cursor = isCursor ? cursorOrOffset : undefined;
+    const isCursor = typeof cursorOrOffset === 'string'
+    const cursor = isCursor ? cursorOrOffset : undefined
     const offset =
-      !isCursor && typeof cursorOrOffset === 'number' ? cursorOrOffset : 0;
+      !isCursor && typeof cursorOrOffset === 'number' ? cursorOrOffset : 0
 
     logger.debug('DatabaseService.getRecentPosts called', {
       limit,
       cursor,
       offset,
-    });
+    })
 
-    const now = new Date();
+    const now = new Date()
 
-    const cursorDate = cursor ? new Date(cursor) : null;
+    const cursorDate = cursor ? new Date(cursor) : null
     const allPosts = await db.post.findMany({
       where: {
         deletedAt: null,
@@ -270,9 +286,9 @@ class DatabaseService {
       take: limit * 2,
       skip: cursor ? 0 : offset,
       orderBy: { timestamp: 'desc' },
-    });
+    })
 
-    const authorIds = [...new Set(allPosts.map((p) => p.authorId))];
+    const authorIds = [...new Set(allPosts.map((p) => p.authorId))]
 
     // Check users table for isTest flag
     const testUsers = await db.user.findMany({
@@ -280,19 +296,19 @@ class DatabaseService {
         id: { in: authorIds },
         isTest: true,
       },
-    });
+    })
 
     // For actors, use ID pattern: test actors have IDs starting with 'test-'
-    const testActorIds = authorIds.filter((id) => id.startsWith('test-'));
+    const testActorIds = authorIds.filter((id) => id.startsWith('test-'))
 
     const testAuthorIds = new Set([
       ...testUsers.map((u) => u.id),
       ...testActorIds,
-    ]);
+    ])
 
     const filteredPosts = allPosts
       .filter((post) => !testAuthorIds.has(post.authorId))
-      .slice(0, limit);
+      .slice(0, limit)
 
     logger.info('DatabaseService.getRecentPosts completed', {
       limit,
@@ -302,9 +318,9 @@ class DatabaseService {
       filteredTestPosts: allPosts.length - filteredPosts.length,
       firstPostId: filteredPosts[0]?.id,
       lastPostId: filteredPosts[filteredPosts.length - 1]?.id,
-    });
+    })
 
-    return filteredPosts;
+    return filteredPosts
   }
 
   /**
@@ -319,37 +335,37 @@ class DatabaseService {
   async getPostsByActor(
     authorId: string,
     limit = 100,
-    cursorOrOffset?: string | number
+    cursorOrOffset?: string | number,
   ) {
-    const isCursor = typeof cursorOrOffset === 'string';
-    const cursor = isCursor ? cursorOrOffset : undefined;
+    const isCursor = typeof cursorOrOffset === 'string'
+    const cursor = isCursor ? cursorOrOffset : undefined
     const offset =
-      !isCursor && typeof cursorOrOffset === 'number' ? cursorOrOffset : 0;
+      !isCursor && typeof cursorOrOffset === 'number' ? cursorOrOffset : 0
 
     logger.debug('DatabaseService.getPostsByActor called', {
       authorId,
       limit,
       cursor,
       offset,
-    });
+    })
 
     // Check if it's a test user from users table or test actor by ID pattern
-    const user = await db.user.findUnique({ where: { id: authorId } });
+    const user = await db.user.findUnique({ where: { id: authorId } })
 
     // Test actors have IDs starting with 'test-'
-    const isTestUser = Boolean(user?.isTest) || authorId.startsWith('test-');
+    const isTestUser = Boolean(user?.isTest) || authorId.startsWith('test-')
 
     if (isTestUser) {
       logger.info('DatabaseService.getPostsByActor - test user filtered', {
         authorId,
         isTestUser: true,
-      });
-      return [];
+      })
+      return []
     }
 
-    const now = new Date();
+    const now = new Date()
 
-    const cursorDate = cursor ? new Date(cursor) : null;
+    const cursorDate = cursor ? new Date(cursor) : null
     const result = await db.post.findMany({
       where: {
         authorId,
@@ -359,7 +375,7 @@ class DatabaseService {
       take: limit,
       skip: cursor ? 0 : offset,
       orderBy: { timestamp: 'desc' },
-    });
+    })
 
     logger.info('DatabaseService.getPostsByActor completed', {
       authorId,
@@ -367,9 +383,9 @@ class DatabaseService {
       cursor,
       offset,
       postCount: result.length,
-    });
+    })
 
-    return result;
+    return result
   }
 
   /**
@@ -378,7 +394,7 @@ class DatabaseService {
    * @returns Total number of posts
    */
   async getTotalPosts() {
-    return db.post.count();
+    return db.post.count()
   }
 
   // ========== QUESTIONS ==========
@@ -390,61 +406,65 @@ class DatabaseService {
    * @returns The created question record
    */
   async createQuestion(question: {
-    text: string;
-    scenario?: number;
-    outcome?: boolean;
-    rank?: number;
-    createdDate?: string | Date;
-    resolutionDate: string | Date;
-    status?: string;
-    resolvedOutcome?: boolean;
-    questionNumber: number;
+    text: string
+    scenario?: number
+    outcome?: boolean
+    rank?: number
+    createdDate?: string | Date
+    resolutionDate: string | Date
+    status?: string
+    resolvedOutcome?: boolean
+    questionNumber: number
+    marketId?: string
   }) {
     return db.question.create({
       data: {
         id: await generateSnowflakeId(),
-        questionNumber: question.questionNumber,
+        marketId: question.marketId ?? '',
+        question: question.text,
         text: question.text,
-        scenarioId: question.scenario ?? 0,
-        outcome: question.outcome ?? false,
-        rank: question.rank ?? 0,
+        type: 'binary',
+        questionNumber: question.questionNumber,
+        scenarioId: toNull(question.scenario?.toString()),
         createdDate: new Date(question.createdDate || new Date()),
         resolutionDate: new Date(question.resolutionDate),
         status: question.status || 'active',
-        resolvedOutcome: question.resolvedOutcome,
+        resolvedOutcome: toNull(question.resolvedOutcome?.toString()),
         updatedAt: new Date(),
       },
-    });
+    })
   }
 
   /**
    * Adapt database question to include computed fields like timeframe.
    */
   private adaptQuestion(dbQuestion: Question): Question & {
-    scenario: number;
-    timeframe: string;
+    scenario: number
+    timeframe: string
   } {
     return {
       ...dbQuestion,
-      scenario: dbQuestion.scenarioId,
-      timeframe: this.calculateTimeframe(dbQuestion.resolutionDate),
-    };
+      scenario: dbQuestion.scenarioId ? parseInt(dbQuestion.scenarioId, 10) : 0,
+      timeframe: dbQuestion.resolutionDate
+        ? this.calculateTimeframe(dbQuestion.resolutionDate)
+        : '30d+',
+    }
   }
 
   /**
    * Calculate timeframe category (24h, 7d, 30d, 30d+) from resolution date.
    */
   private calculateTimeframe(resolutionDate: Date): string {
-    const now = new Date();
-    const msUntilResolution = resolutionDate.getTime() - now.getTime();
+    const now = new Date()
+    const msUntilResolution = resolutionDate.getTime() - now.getTime()
     const daysUntilResolution = Math.ceil(
-      msUntilResolution / (1000 * 60 * 60 * 24)
-    );
+      msUntilResolution / (1000 * 60 * 60 * 24),
+    )
 
-    if (daysUntilResolution <= 1) return '24h';
-    if (daysUntilResolution <= 7) return '7d';
-    if (daysUntilResolution <= 30) return '30d';
-    return '30d+';
+    if (daysUntilResolution <= 1) return '24h'
+    if (daysUntilResolution <= 7) return '7d'
+    if (daysUntilResolution <= 30) return '30d'
+    return '30d+'
   }
 
   /**
@@ -454,22 +474,22 @@ class DatabaseService {
    * @returns Array of active questions with computed fields
    */
   async getActiveQuestions(timeframe?: string) {
-    const now = new Date();
+    const now = new Date()
     if (!timeframe) {
       const result = await db.question.findMany({
         where: { status: 'active' },
         orderBy: { createdDate: 'desc' },
-      });
-      return result.map((q) => this.adaptQuestion(q));
+      })
+      return result.map((q) => this.adaptQuestion(q))
     }
 
     if (timeframe === '30d+') {
-      const startDate = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+      const startDate = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000)
       const result = await db.question.findMany({
         where: { status: 'active', resolutionDate: { gte: startDate } },
         orderBy: { createdDate: 'desc' },
-      });
-      return result.map((q) => this.adaptQuestion(q));
+      })
+      return result.map((q) => this.adaptQuestion(q))
     }
 
     const deltaMs =
@@ -479,23 +499,23 @@ class DatabaseService {
           ? 7 * 24 * 60 * 60 * 1000
           : timeframe === '30d'
             ? 30 * 24 * 60 * 60 * 1000
-            : null;
+            : null
 
     if (deltaMs === null) {
       const result = await db.question.findMany({
         where: { status: 'active' },
         orderBy: { createdDate: 'desc' },
-      });
-      return result.map((q) => this.adaptQuestion(q));
+      })
+      return result.map((q) => this.adaptQuestion(q))
     }
 
-    const endDate = new Date(now.getTime() + deltaMs);
+    const endDate = new Date(now.getTime() + deltaMs)
     const result = await db.question.findMany({
       where: { status: 'active', resolutionDate: { gte: now, lte: endDate } },
       orderBy: { createdDate: 'desc' },
-    });
+    })
 
-    return result.map((q) => this.adaptQuestion(q));
+    return result.map((q) => this.adaptQuestion(q))
   }
 
   /**
@@ -509,9 +529,9 @@ class DatabaseService {
         status: 'active',
         resolutionDate: { lte: new Date() },
       },
-    });
+    })
 
-    return result.map((q) => this.adaptQuestion(q));
+    return result.map((q) => this.adaptQuestion(q))
   }
 
   /**
@@ -522,9 +542,9 @@ class DatabaseService {
   async getAllQuestions() {
     const result = await db.question.findMany({
       orderBy: { createdDate: 'desc' },
-    });
+    })
 
-    return result.map((q) => this.adaptQuestion(q));
+    return result.map((q) => this.adaptQuestion(q))
   }
 
   /**
@@ -539,10 +559,10 @@ class DatabaseService {
       where: { id },
       data: {
         status: 'resolved',
-        resolvedOutcome,
+        resolvedOutcome: resolvedOutcome.toString(),
         updatedAt: new Date(),
       },
-    });
+    })
   }
 
   // ========== ORGANIZATION STATE ==========
@@ -558,21 +578,23 @@ class DatabaseService {
    */
   async upsertOrganizationState(
     id: string,
-    currentPrice: number | null
+    currentPrice: number | null,
   ): Promise<OrganizationStateRow> {
-    const now = new Date();
+    const now = new Date()
+    const priceStr = currentPrice !== null ? currentPrice.toString() : null
     return db.organizationState.upsert({
       where: { id },
       create: {
         id,
-        currentPrice,
+        organizationId: id,
+        currentPrice: priceStr,
         updatedAt: now,
       },
       update: {
-        currentPrice,
+        currentPrice: priceStr,
         updatedAt: now,
       },
-    });
+    })
   }
 
   /**
@@ -584,9 +606,9 @@ class DatabaseService {
    */
   async updateOrganizationPrice(
     id: string,
-    price: number
+    price: number,
   ): Promise<OrganizationStateRow> {
-    return this.upsertOrganizationState(id, price);
+    return this.upsertOrganizationState(id, price)
   }
 
   /**
@@ -596,7 +618,7 @@ class DatabaseService {
    * @returns The organization state or null if not found
    */
   async getOrganizationState(id: string): Promise<OrganizationStateRow | null> {
-    return db.organizationState.findUnique({ where: { id } });
+    return db.organizationState.findUnique({ where: { id } })
   }
 
   /**
@@ -605,7 +627,7 @@ class DatabaseService {
    * @returns Array of all organization state records
    */
   async getAllOrganizationStates(): Promise<OrganizationStateRow[]> {
-    return db.organizationState.findMany();
+    return db.organizationState.findMany()
   }
 
   /**
@@ -617,7 +639,7 @@ class DatabaseService {
   async getOrganizationsByPrice(): Promise<OrganizationStateRow[]> {
     return db.organizationState.findMany({
       orderBy: { currentPrice: 'desc' },
-    });
+    })
   }
 
   // ========== STOCK PRICES ==========
@@ -634,20 +656,18 @@ class DatabaseService {
   async recordPriceUpdate(
     organizationId: string,
     price: number,
-    change: number,
-    changePercent: number
+    _change: number,
+    _changePercent: number,
   ) {
     return db.stockPrice.create({
       data: {
         id: await generateSnowflakeId(),
         organizationId,
-        price,
-        change,
-        changePercent,
+        price: price.toString(),
         timestamp: new Date(),
         isSnapshot: false,
       },
-    });
+    })
   }
 
   /**
@@ -660,29 +680,23 @@ class DatabaseService {
   async recordDailySnapshot(
     organizationId: string,
     data: {
-      openPrice: number;
-      highPrice: number;
-      lowPrice: number;
-      closePrice: number;
-      volume: number;
-    }
+      openPrice: number
+      highPrice: number
+      lowPrice: number
+      closePrice: number
+      volume: number
+    },
   ) {
     return db.stockPrice.create({
       data: {
         id: await generateSnowflakeId(),
         organizationId,
-        price: data.closePrice,
-        change: data.closePrice - data.openPrice,
-        changePercent:
-          ((data.closePrice - data.openPrice) / data.openPrice) * 100,
+        price: data.closePrice.toString(),
         timestamp: new Date(),
         isSnapshot: true,
-        openPrice: data.openPrice,
-        highPrice: data.highPrice,
-        lowPrice: data.lowPrice,
-        volume: data.volume,
+        volume: data.volume.toString(),
       },
-    });
+    })
   }
 
   /**
@@ -697,7 +711,7 @@ class DatabaseService {
       where: { organizationId },
       take: limit,
       orderBy: { timestamp: 'desc' },
-    });
+    })
   }
 
   /**
@@ -712,7 +726,7 @@ class DatabaseService {
       where: { organizationId, isSnapshot: true },
       take: days,
       orderBy: { timestamp: 'desc' },
-    });
+    })
   }
 
   // ========== EVENTS ==========
@@ -724,28 +738,28 @@ class DatabaseService {
    * @returns The created event record
    */
   async createEvent(event: {
-    id: string;
-    eventType: string;
+    id: string
+    eventType: string
     description:
       | string
-      | { title?: string; text?: string; timestamp?: string; source?: string };
-    actors: string[];
-    relatedQuestion?: number;
-    pointsToward?: string;
-    visibility: string;
-    gameId?: string;
-    dayNumber?: number;
+      | { title?: string; text?: string; timestamp?: string; source?: string }
+    actors: string[]
+    relatedQuestion?: number
+    pointsToward?: string
+    visibility: string
+    gameId?: string
+    dayNumber?: number
   }) {
-    let descriptionString: string;
+    let descriptionString: string
     if (typeof event.description === 'string') {
-      descriptionString = event.description;
+      descriptionString = event.description
     } else if (event.description && typeof event.description === 'object') {
       descriptionString =
         event.description.text ||
         event.description.title ||
-        JSON.stringify(event.description);
+        JSON.stringify(event.description)
     } else {
-      descriptionString = String(event.description || '');
+      descriptionString = String(event.description || '')
     }
 
     const safeRelatedQuestion =
@@ -754,7 +768,7 @@ class DatabaseService {
       event.relatedQuestion >= 0 &&
       event.relatedQuestion <= 2147483647
         ? event.relatedQuestion
-        : undefined;
+        : undefined
 
     const safeDayNumber =
       typeof event.dayNumber === 'number' &&
@@ -762,7 +776,7 @@ class DatabaseService {
       event.dayNumber >= 0 &&
       event.dayNumber <= 2147483647
         ? event.dayNumber
-        : undefined;
+        : undefined
 
     if (
       event.relatedQuestion !== undefined &&
@@ -771,29 +785,36 @@ class DatabaseService {
       logger.warn('[WorldEvent] Invalid relatedQuestion value', {
         relatedQuestion: event.relatedQuestion,
         eventId: event.id,
-      });
+      })
     }
 
     if (event.dayNumber !== undefined && safeDayNumber === undefined) {
       logger.warn('[WorldEvent] Invalid dayNumber value', {
         dayNumber: event.dayNumber,
         eventId: event.id,
-      });
+      })
     }
 
     return db.worldEvent.create({
       data: {
         id: event.id,
+        type: event.visibility || 'public',
         eventType: event.eventType,
+        title:
+          typeof event.description === 'object' && event.description?.title
+            ? event.description.title
+            : '',
         description: descriptionString,
         actors: event.actors,
-        relatedQuestion: safeRelatedQuestion,
-        pointsToward: event.pointsToward,
-        visibility: event.visibility,
-        gameId: event.gameId,
-        dayNumber: safeDayNumber,
+        relatedQuestion: toNull(safeRelatedQuestion?.toString()),
+        metadata: toJsonValue({
+          pointsToward: event.pointsToward,
+          visibility: event.visibility,
+          gameId: event.gameId,
+          dayNumber: safeDayNumber,
+        }),
       },
-    });
+    })
   }
 
   /**
@@ -806,7 +827,7 @@ class DatabaseService {
     return db.worldEvent.findMany({
       take: limit,
       orderBy: { timestamp: 'desc' },
-    });
+    })
   }
 
   // ========== ACTOR STATE ==========
@@ -820,33 +841,38 @@ class DatabaseService {
    * @param state - Actor state with required id and optional dynamic fields
    * @returns The created or updated actor state record
    */
-  async upsertActorState(
-    state: Partial<ActorStateRow> & { id: string }
-  ): Promise<ActorStateRow> {
-    const now = new Date();
-    const update: Partial<ActorStateRow> = { updatedAt: now };
+  async upsertActorState(state: {
+    id: string
+    tradingBalance?: number | string
+    reputationPoints?: number
+    hasPool?: boolean
+  }): Promise<ActorStateRow> {
+    const now = new Date()
+    const update: Partial<ActorStateRow> = { updatedAt: now }
 
     if (state.tradingBalance !== undefined) {
-      update.tradingBalance = String(state.tradingBalance);
+      update.tradingBalance = String(state.tradingBalance)
     }
     if (state.reputationPoints !== undefined) {
-      update.reputationPoints = state.reputationPoints;
+      update.reputationPoints = state.reputationPoints
     }
     if (state.hasPool !== undefined) {
-      update.hasPool = state.hasPool;
+      update.hasPool = state.hasPool
     }
 
     return db.actorState.upsert({
       where: { id: state.id },
       create: {
         id: state.id,
+        actorId: state.id,
         tradingBalance: String(state.tradingBalance ?? 10000),
         reputationPoints: state.reputationPoints ?? 10000,
         hasPool: state.hasPool ?? false,
+        version: 1,
         updatedAt: now,
       },
       update,
-    });
+    })
   }
 
   /**
@@ -856,7 +882,7 @@ class DatabaseService {
    * @returns Array of all actor state records
    */
   async getAllActorStates(): Promise<ActorStateRow[]> {
-    return await db.actorState.findMany({});
+    return await db.actorState.findMany({})
   }
 
   /**
@@ -867,7 +893,7 @@ class DatabaseService {
    * @returns The actor state record or null if not found
    */
   async getActorState(id: string): Promise<ActorStateRow | null> {
-    return await db.actorState.findUnique({ where: { id } });
+    return await db.actorState.findUnique({ where: { id } })
   }
 
   // ========== UTILITY ==========
@@ -892,7 +918,7 @@ class DatabaseService {
       db.organizationState.count({}),
       db.actorState.count({}),
       this.getGameState(),
-    ]);
+    ])
 
     return {
       totalPosts,
@@ -902,7 +928,7 @@ class DatabaseService {
       totalActors,
       currentDay: gameState?.currentDay || 0,
       isRunning: gameState?.isRunning || false,
-    };
+    }
   }
 
   /**
@@ -913,19 +939,19 @@ class DatabaseService {
   async getAllGames() {
     return await db.game.findMany({
       orderBy: { createdAt: 'desc' },
-    });
+    })
   }
 }
 
 // Singleton instance - ensure it's always available
-let dbInstance: DatabaseService | null = null;
+let dbInstance: DatabaseService | null = null
 
 export function getDbInstance(): DatabaseService {
   if (!dbInstance) {
-    dbInstance = new DatabaseService();
+    dbInstance = new DatabaseService()
   }
-  return dbInstance;
+  return dbInstance
 }
 
-export { DatabaseService };
-export default getDbInstance;
+export { DatabaseService }
+export default getDbInstance

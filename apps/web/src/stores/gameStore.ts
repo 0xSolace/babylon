@@ -1,56 +1,56 @@
-import type { GeneratedGame } from '@babylon/engine/client';
-import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import type { GeneratedGame } from '@babylon/shared'
+import { create } from 'zustand'
+import { persist } from 'zustand/middleware'
 
 interface TimelineDay {
-  day: number;
-  timestamp: number;
-  label: string;
-  gameId: string;
-  gameName: string;
+  day: number
+  timestamp: number
+  label: string
+  gameId: string
+  gameName: string
 }
 
 interface GameRange {
-  gameId: string;
-  gameName: string;
-  startTime: number;
-  endTime: number;
+  gameId: string
+  gameName: string
+  startTime: number
+  endTime: number
 }
 
 interface GameState {
   // Loaded games
-  allGames: GeneratedGame[];
-  loading: boolean;
-  error: string | null;
+  allGames: GeneratedGame[]
+  loading: boolean
+  error: string | null
 
   // Playback state
-  currentTimeMs: number;
-  isPlaying: boolean;
-  speed: number;
+  currentTimeMs: number
+  isPlaying: boolean
+  speed: number
 
   // Timeline data
-  startTime: number | null;
-  endTime: number | null;
-  totalDurationMs: number;
-  timelineDays: TimelineDay[];
-  gameRanges: GameRange[];
+  startTime: number | null
+  endTime: number | null
+  totalDurationMs: number
+  timelineDays: TimelineDay[]
+  gameRanges: GameRange[]
 
   // Actions
-  setAllGames: (games: GeneratedGame[]) => void;
-  setLoading: (loading: boolean) => void;
-  setError: (error: string | null) => void;
-  setCurrentTimeMs: (ms: number) => void;
-  setIsPlaying: (playing: boolean) => void;
-  setSpeed: (speed: number) => void;
+  setAllGames: (games: GeneratedGame[]) => void
+  setLoading: (loading: boolean) => void
+  setError: (error: string | null) => void
+  setCurrentTimeMs: (ms: number) => void
+  setIsPlaying: (playing: boolean) => void
+  setSpeed: (speed: number) => void
   setTimelineData: (data: {
-    startTime: number | null;
-    endTime: number | null;
-    totalDurationMs: number;
-    timelineDays: TimelineDay[];
-    gameRanges: GameRange[];
-  }) => void;
-  advanceTime: (speedMultiplier: number) => void;
-  reset: () => void;
+    startTime: number | null
+    endTime: number | null
+    totalDurationMs: number
+    timelineDays: TimelineDay[]
+    gameRanges: GameRange[]
+  }) => void
+  advanceTime: (speedMultiplier: number) => void
+  reset: () => void
 }
 
 export const useGameStore = create<GameState>()(
@@ -79,11 +79,11 @@ export const useGameStore = create<GameState>()(
       setTimelineData: (data) => set(data),
       advanceTime: (speedMultiplier: number) =>
         set((state) => {
-          const next = state.currentTimeMs + 1000 * speedMultiplier;
+          const next = state.currentTimeMs + 1000 * speedMultiplier
           if (next >= state.totalDurationMs) {
-            return { currentTimeMs: state.totalDurationMs, isPlaying: false };
+            return { currentTimeMs: state.totalDurationMs, isPlaying: false }
           }
-          return { currentTimeMs: next };
+          return { currentTimeMs: next }
         }),
       reset: () =>
         set({
@@ -107,6 +107,6 @@ export const useGameStore = create<GameState>()(
         speed: state.speed,
         currentTimeMs: state.currentTimeMs,
       }),
-    }
-  )
-);
+    },
+  ),
+)

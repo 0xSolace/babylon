@@ -9,433 +9,433 @@
  * - Real-time updates
  */
 
-import { expect, test } from '@playwright/test';
-import { loginWithWallet } from './helpers/oauth3-auth';
+import { expect, test } from '@playwright/test'
+import { loginWithWallet } from './helpers/oauth3-auth'
 import {
   cooldownBetweenTests,
   navigateTo,
   waitForPageLoad,
-} from './helpers/page-helpers';
-import { ROUTES } from './helpers/test-data';
+} from './helpers/page-helpers'
+import { ROUTES } from './helpers/test-data'
 
 // Increase test timeout for flaky server conditions
-test.setTimeout(90000);
+test.setTimeout(90000)
 
 test.describe('Chats Page - Updated Design', () => {
   test.beforeEach(async ({ page }) => {
     // Set a consistent viewport size to ensure consistent rendering
     // Use 1920x1080 to ensure we're in desktop layout (xl breakpoint is 1280px)
-    await page.setViewportSize({ width: 1920, height: 1080 });
+    await page.setViewportSize({ width: 1920, height: 1080 })
 
     // Capture console errors for debugging OAuth3 initialization issues
-    const consoleErrors: string[] = [];
+    const consoleErrors: string[] = []
     page.on('console', (msg) => {
       if (msg.type() === 'error') {
-        consoleErrors.push(msg.text());
+        consoleErrors.push(msg.text())
       }
-    });
+    })
 
-    await navigateTo(page, ROUTES.HOME);
-    await loginWithWallet(page);
-    await page.waitForTimeout(2000); // Wait for auth to settle
-    await navigateTo(page, ROUTES.CHATS);
-    await waitForPageLoad(page);
-    await page.waitForTimeout(2000); // Give time for content to load
+    await navigateTo(page, ROUTES.HOME)
+    await loginWithWallet(page)
+    await page.waitForTimeout(2000) // Wait for auth to settle
+    await navigateTo(page, ROUTES.CHATS)
+    await waitForPageLoad(page)
+    await page.waitForTimeout(2000) // Give time for content to load
 
     // Log console errors if any for debugging
     if (consoleErrors.length > 0) {
-      console.log('ℹ️ Console errors during setup:', consoleErrors.slice(0, 3));
+      console.log('ℹ️ Console errors during setup:', consoleErrors.slice(0, 3))
     }
-  });
+  })
 
   test.afterEach(async ({ page }) => {
     // Let server recover between tests
-    await cooldownBetweenTests(page);
-  });
+    await cooldownBetweenTests(page)
+  })
 
   test('should load chats page with new design', async ({ page }) => {
-    expect(page.url()).toContain('/chats');
+    expect(page.url()).toContain('/chats')
 
     // Check for any chat-related content
-    const pageContent = await page.locator('body').textContent();
+    const pageContent = await page.locator('body').textContent()
     const hasChatsContent =
       pageContent?.toLowerCase().includes('message') ||
       pageContent?.toLowerCase().includes('chat') ||
       pageContent?.toLowerCase().includes('conversation') ||
-      (pageContent?.length && pageContent.length > 200);
+      (pageContent?.length && pageContent.length > 200)
 
-    expect(hasChatsContent).toBe(true);
+    expect(hasChatsContent).toBe(true)
 
     await page.screenshot({
       path: 'test-results/screenshots/07-chats-page-new.png',
       fullPage: true,
-    });
-    console.log('✅ Chats page loaded');
-  });
+    })
+    console.log('✅ Chats page loaded')
+  })
 
   test('should display All/DMs/Groups filter tabs', async ({ page }) => {
     // Wait a bit for the page to fully render
-    await page.waitForTimeout(1000);
+    await page.waitForTimeout(1000)
 
     // Check for filter tabs or any chat navigation
-    const pageContent = await page.locator('body').textContent();
+    const pageContent = await page.locator('body').textContent()
     const hasChatsContent =
       pageContent?.toLowerCase().includes('message') ||
       pageContent?.toLowerCase().includes('chat') ||
       pageContent?.toLowerCase().includes('all') ||
-      pageContent?.toLowerCase().includes('direct');
+      pageContent?.toLowerCase().includes('direct')
 
-    expect(hasChatsContent).toBe(true);
-    console.log('✅ Chats content visible');
-  });
+    expect(hasChatsContent).toBe(true)
+    console.log('✅ Chats content visible')
+  })
 
   test('should switch between filter tabs', async ({ page }) => {
     // Wait for page to stabilize
-    await page.waitForTimeout(1000);
+    await page.waitForTimeout(1000)
 
     // Page should have loaded
-    const pageContent = await page.locator('body').textContent();
-    expect(pageContent?.length).toBeGreaterThan(100);
+    const pageContent = await page.locator('body').textContent()
+    expect(pageContent?.length).toBeGreaterThan(100)
 
     // Try clicking tabs if they exist
     const allTab = page
       .locator(
-        'button:has-text("All"), [aria-label*="all" i], [role="tab"]:has-text("All")'
+        'button:has-text("All"), [aria-label*="all" i], [role="tab"]:has-text("All")',
       )
-      .first();
+      .first()
     const dmsTab = page
       .locator(
-        'button:has-text("DMs"), [aria-label*="direct" i], [role="tab"]:has-text("DMs")'
+        'button:has-text("DMs"), [aria-label*="direct" i], [role="tab"]:has-text("DMs")',
       )
-      .first();
+      .first()
     const groupsTab = page
       .locator(
-        'button:has-text("Groups"), [aria-label*="group" i], [role="tab"]:has-text("Groups")'
+        'button:has-text("Groups"), [aria-label*="group" i], [role="tab"]:has-text("Groups")',
       )
-      .first();
+      .first()
 
     // Try to click tabs if they're visible
     const allVisible = await allTab
       .isVisible({ timeout: 5000 })
-      .catch(() => false);
+      .catch(() => false)
     const dmsVisible = await dmsTab
       .isVisible({ timeout: 5000 })
-      .catch(() => false);
+      .catch(() => false)
     const groupsVisible = await groupsTab
       .isVisible({ timeout: 5000 })
-      .catch(() => false);
+      .catch(() => false)
 
     if (dmsVisible) {
-      await dmsTab.click({ timeout: 5000 });
-      await page.waitForTimeout(500);
+      await dmsTab.click({ timeout: 5000 })
+      await page.waitForTimeout(500)
     }
 
     if (groupsVisible) {
-      await groupsTab.click({ timeout: 5000 });
-      await page.waitForTimeout(500);
+      await groupsTab.click({ timeout: 5000 })
+      await page.waitForTimeout(500)
     }
 
     if (allVisible) {
-      await allTab.click({ timeout: 5000 });
-      await page.waitForTimeout(500);
+      await allTab.click({ timeout: 5000 })
+      await page.waitForTimeout(500)
     }
 
     await page.screenshot({
       path: 'test-results/screenshots/07-filter-tabs.png',
-    });
+    })
 
     // Test passes if tabs worked or page just loaded
-    console.log('✅ Filter tabs switching works');
-  });
+    console.log('✅ Filter tabs switching works')
+  })
 
   test('should display search conversations', async ({ page }) => {
-    await page.waitForTimeout(1500);
+    await page.waitForTimeout(1500)
 
     // Page should have chats content
-    const pageContent = await page.locator('body').textContent();
-    expect(pageContent?.length).toBeGreaterThan(100);
+    const pageContent = await page.locator('body').textContent()
+    expect(pageContent?.length).toBeGreaterThan(100)
 
-    console.log('✅ Chats content displayed');
-  });
+    console.log('✅ Chats content displayed')
+  })
 
   test('should display chats list', async ({ page }) => {
-    await page.waitForTimeout(2000);
+    await page.waitForTimeout(2000)
 
     // Page should have loaded successfully
-    const pageContent = await page.locator('body').textContent();
-    expect(pageContent).toBeTruthy();
+    const pageContent = await page.locator('body').textContent()
+    expect(pageContent).toBeTruthy()
 
     await page.screenshot({
       path: 'test-results/screenshots/07-chats-list.png',
       fullPage: true,
-    });
+    })
 
-    console.log('✅ Chats list page rendered');
-  });
-});
+    console.log('✅ Chats list page rendered')
+  })
+})
 
 test.describe('Chat Messaging - New Implementation', () => {
   test.beforeEach(async ({ page }) => {
-    await page.setViewportSize({ width: 1920, height: 1080 });
-    await navigateTo(page, ROUTES.HOME);
-    await loginWithWallet(page);
-    await page.waitForTimeout(2000);
-    await navigateTo(page, ROUTES.CHATS);
-    await waitForPageLoad(page);
-    await page.waitForTimeout(2000);
-  });
+    await page.setViewportSize({ width: 1920, height: 1080 })
+    await navigateTo(page, ROUTES.HOME)
+    await loginWithWallet(page)
+    await page.waitForTimeout(2000)
+    await navigateTo(page, ROUTES.CHATS)
+    await waitForPageLoad(page)
+    await page.waitForTimeout(2000)
+  })
 
   test.afterEach(async ({ page }) => {
-    await cooldownBetweenTests(page);
-  });
+    await cooldownBetweenTests(page)
+  })
 
   test('should display chat list', async ({ page }) => {
-    await page.waitForTimeout(2000);
+    await page.waitForTimeout(2000)
 
     // Page renders successfully
-    const hasContent = await page.locator('body').textContent();
-    expect(hasContent).toBeTruthy();
+    const hasContent = await page.locator('body').textContent()
+    expect(hasContent).toBeTruthy()
 
-    console.log('✅ Chat list displays');
-  });
+    console.log('✅ Chat list displays')
+  })
 
   test('should show empty state guidance for DMs', async ({ page }) => {
-    await page.waitForTimeout(1000);
+    await page.waitForTimeout(1000)
 
     // Find and click DMs tab with flexible selectors
     const dmsTab = page
       .locator(
-        'button:has-text("DMs"), [aria-label*="direct" i], [role="tab"]:has-text("DMs")'
+        'button:has-text("DMs"), [aria-label*="direct" i], [role="tab"]:has-text("DMs")',
       )
-      .first();
+      .first()
     const dmsVisible = await dmsTab
       .isVisible({ timeout: 5000 })
-      .catch(() => false);
+      .catch(() => false)
 
     if (dmsVisible) {
       // Use force click to bypass any overlays
-      await dmsTab.click({ force: true });
-      await page.waitForTimeout(1000);
+      await dmsTab.click({ force: true })
+      await page.waitForTimeout(1000)
 
       // Check for empty state guidance text or any chat-related content
       const hasEmptyState = await page
         .getByText(/visit.*profile|start.*conversation|no.*message/i)
         .first()
         .isVisible({ timeout: 5000 })
-        .catch(() => false);
+        .catch(() => false)
 
       console.log(
-        `✅ DM empty state guidance: ${hasEmptyState ? 'visible' : 'not found (may have messages)'}`
-      );
+        `✅ DM empty state guidance: ${hasEmptyState ? 'visible' : 'not found (may have messages)'}`,
+      )
     } else {
       // Tab might not be visible - check for any chat content
-      const pageContent = await page.locator('body').textContent();
-      expect(pageContent?.length).toBeGreaterThan(100);
-      console.log('ℹ️  DMs tab not found - design may have changed');
+      const pageContent = await page.locator('body').textContent()
+      expect(pageContent?.length).toBeGreaterThan(100)
+      console.log('ℹ️  DMs tab not found - design may have changed')
     }
-  });
+  })
 
   test('should display SSE connection status', async ({ page }) => {
-    await page.waitForTimeout(2000);
+    await page.waitForTimeout(2000)
 
     // Look for SSE status indicator using multiple strategies
     const sseStatus = page
       .locator('[data-testid="sse-status"], [data-status], .status-indicator')
       .or(page.getByText(/Live|Connecting|Connected|Online/i))
-      .first();
+      .first()
     const isVisible = await sseStatus
       .isVisible({ timeout: 10000 })
-      .catch(() => false);
+      .catch(() => false)
 
     if (isVisible) {
-      const statusText = await sseStatus.textContent();
-      console.log(`✅ SSE indicator visible with status: ${statusText}`);
+      const statusText = await sseStatus.textContent()
+      console.log(`✅ SSE indicator visible with status: ${statusText}`)
     } else {
       console.log(
-        'ℹ️  SSE status indicator not found - might not be in current design'
-      );
+        'ℹ️  SSE status indicator not found - might not be in current design',
+      )
     }
-  });
+  })
 
   test('should handle mobile responsive design', async ({ page }) => {
     // Test mobile viewport - ensure we're authenticated first
-    await page.setViewportSize({ width: 375, height: 667 });
-    await navigateTo(page, ROUTES.CHATS);
-    await waitForPageLoad(page);
+    await page.setViewportSize({ width: 375, height: 667 })
+    await navigateTo(page, ROUTES.CHATS)
+    await waitForPageLoad(page)
 
     // Wait for the page to be ready - on mobile, check for various indicators
     // The "Messages" header might be positioned differently or have different styling
     // Use a more flexible approach: wait for the URL to match and content to load
-    await page.waitForTimeout(3000); // Give time for mobile layout to render
+    await page.waitForTimeout(3000) // Give time for mobile layout to render
 
-    expect(page.url()).toContain('/chats');
+    expect(page.url()).toContain('/chats')
 
     // Check for any chat-related content on the page
     // Mobile might show different elements than desktop
-    const pageContent = await page.locator('body').textContent();
-    expect(pageContent).toBeTruthy();
+    const pageContent = await page.locator('body').textContent()
+    expect(pageContent).toBeTruthy()
 
     // Verify we have some expected mobile UI elements or chat-related content
     const hasChatContent = await page
       .locator('h1, h2, nav, [role="navigation"]')
       .first()
       .isVisible({ timeout: 5000 })
-      .catch(() => false);
+      .catch(() => false)
 
     await page.screenshot({
       path: 'test-results/screenshots/07-chats-mobile.png',
       fullPage: true,
-    });
+    })
 
     console.log(
-      `✅ Mobile responsive design works (has chat content: ${hasChatContent})`
-    );
-  });
-});
+      `✅ Mobile responsive design works (has chat content: ${hasChatContent})`,
+    )
+  })
+})
 
 test.describe('Profile Message Button', () => {
   test.beforeEach(async ({ page }) => {
     // Set a consistent viewport size to ensure consistent rendering
-    await page.setViewportSize({ width: 1920, height: 1080 });
+    await page.setViewportSize({ width: 1920, height: 1080 })
 
     // Capture console errors for debugging OAuth3 initialization issues
-    const consoleErrors: string[] = [];
+    const consoleErrors: string[] = []
     page.on('console', (msg) => {
       if (msg.type() === 'error') {
-        consoleErrors.push(msg.text());
+        consoleErrors.push(msg.text())
       }
-    });
+    })
 
     try {
-      await navigateTo(page, ROUTES.HOME);
-      await loginWithWallet(page);
-      await page.waitForTimeout(2000); // Wait for auth to settle
+      await navigateTo(page, ROUTES.HOME)
+      await loginWithWallet(page)
+      await page.waitForTimeout(2000) // Wait for auth to settle
     } catch (error) {
       // Log console errors if authentication or page load failed
       if (consoleErrors.length > 0) {
-        console.error('❌ Console errors during test setup:', consoleErrors);
+        console.error('❌ Console errors during test setup:', consoleErrors)
       }
 
       // Re-throw with more context
       throw new Error(
         `Test setup failed: ${error instanceof Error ? error.message : String(error)}\n` +
-          `Console errors: ${consoleErrors.length > 0 ? consoleErrors.join('; ') : 'none'}`
-      );
+          `Console errors: ${consoleErrors.length > 0 ? consoleErrors.join('; ') : 'none'}`,
+      )
     }
-  });
+  })
 
   test.afterEach(async ({ page }) => {
-    await cooldownBetweenTests(page);
-  });
+    await cooldownBetweenTests(page)
+  })
 
   test('should show message button on user profiles', async ({ page }) => {
     // Go to a test user profile
-    await page.goto('/profile/testuser1');
-    await page.waitForTimeout(2000);
+    await page.goto('/profile/testuser1')
+    await page.waitForTimeout(2000)
 
     // Look for message button (may not be visible if viewing own profile or if user doesn't exist)
-    const pageContent = await page.locator('body').textContent();
-    expect(pageContent).toBeTruthy();
+    const pageContent = await page.locator('body').textContent()
+    expect(pageContent).toBeTruthy()
 
     console.log(
-      '✅ Profile page loads (message button conditional on user type)'
-    );
-  });
+      '✅ Profile page loads (message button conditional on user type)',
+    )
+  })
 
   test('should navigate to DM when clicking message button', async ({
     page,
   }) => {
     // Visit a user profile
-    await page.goto('/profile/testuser2');
-    await page.waitForTimeout(2000);
+    await page.goto('/profile/testuser2')
+    await page.waitForTimeout(2000)
 
     // Look for message button with flexible selectors
     const messageButton = page
       .locator(
-        'button[title*="message" i], button:has-text("Message"), a:has-text("Message")'
+        'button[title*="message" i], button:has-text("Message"), a:has-text("Message")',
       )
-      .first();
+      .first()
 
     if (await messageButton.isVisible({ timeout: 5000 }).catch(() => false)) {
       // Use force click to bypass any overlays
-      await messageButton.click({ force: true });
-      await page.waitForTimeout(2000);
+      await messageButton.click({ force: true })
+      await page.waitForTimeout(2000)
 
       // Should either navigate to chats or show a modal/chat interface
-      const url = page.url();
-      const wentToChats = url.includes('/chats');
-      const stayedOnProfile = url.includes('/profile');
+      const url = page.url()
+      const wentToChats = url.includes('/chats')
+      const stayedOnProfile = url.includes('/profile')
       // Either navigation or modal is acceptable
-      expect(wentToChats || stayedOnProfile).toBe(true);
+      expect(wentToChats || stayedOnProfile).toBe(true)
 
       console.log(
-        `✅ Message button clicked - navigated: ${wentToChats ? '/chats' : 'stayed on page'}`
-      );
+        `✅ Message button clicked - navigated: ${wentToChats ? '/chats' : 'stayed on page'}`,
+      )
     } else {
-      console.log('ℹ️  Message button not found (may be own profile or NPC)');
+      console.log('ℹ️  Message button not found (may be own profile or NPC)')
     }
-  });
-});
+  })
+})
 
 test.describe('Real-time Updates', () => {
   test.beforeEach(async ({ page }) => {
     // Set a consistent viewport size to ensure consistent rendering
-    await page.setViewportSize({ width: 1920, height: 1080 });
+    await page.setViewportSize({ width: 1920, height: 1080 })
 
     // Capture console errors for debugging OAuth3 initialization issues
-    const consoleErrors: string[] = [];
+    const consoleErrors: string[] = []
     page.on('console', (msg) => {
       if (msg.type() === 'error') {
-        consoleErrors.push(msg.text());
+        consoleErrors.push(msg.text())
       }
-    });
+    })
 
     try {
-      await navigateTo(page, ROUTES.HOME);
-      await loginWithWallet(page);
-      await page.waitForTimeout(2000); // Wait for auth to settle
+      await navigateTo(page, ROUTES.HOME)
+      await loginWithWallet(page)
+      await page.waitForTimeout(2000) // Wait for auth to settle
     } catch (error) {
       // Log console errors if authentication or page load failed
       if (consoleErrors.length > 0) {
-        console.error('❌ Console errors during test setup:', consoleErrors);
+        console.error('❌ Console errors during test setup:', consoleErrors)
       }
 
       // Re-throw with more context
       throw new Error(
         `Test setup failed: ${error instanceof Error ? error.message : String(error)}\n` +
-          `Console errors: ${consoleErrors.length > 0 ? consoleErrors.join('; ') : 'none'}`
-      );
+          `Console errors: ${consoleErrors.length > 0 ? consoleErrors.join('; ') : 'none'}`,
+      )
     }
-  });
+  })
 
   test.afterEach(async ({ page }) => {
-    await cooldownBetweenTests(page);
-  });
+    await cooldownBetweenTests(page)
+  })
 
   test('should connect to SSE for real-time messages', async ({ page }) => {
-    await navigateTo(page, ROUTES.CHATS);
-    await waitForPageLoad(page);
+    await navigateTo(page, ROUTES.CHATS)
+    await waitForPageLoad(page)
 
     // Wait for the page to be ready with flexible selectors
-    await page.waitForTimeout(2000);
+    await page.waitForTimeout(2000)
 
     // Check for SSE connection in network tab
     // Note: Actual SSE testing requires multiple browsers
-    const pageContent = await page.locator('body').textContent();
-    expect(pageContent).toBeTruthy();
+    const pageContent = await page.locator('body').textContent()
+    expect(pageContent).toBeTruthy()
 
-    console.log('✅ Chat page supports SSE (full test requires 2 browsers)');
-  });
+    console.log('✅ Chat page supports SSE (full test requires 2 browsers)')
+  })
 
   test('should display Live/Connecting status', async ({ page }) => {
-    await navigateTo(page, ROUTES.CHATS);
-    await waitForPageLoad(page);
-    await page.waitForTimeout(2000);
+    await navigateTo(page, ROUTES.CHATS)
+    await waitForPageLoad(page)
+    await page.waitForTimeout(2000)
 
     // Page should have loaded with content
-    const pageContent = await page.locator('body').textContent();
-    expect(pageContent?.length).toBeGreaterThan(100);
+    const pageContent = await page.locator('body').textContent()
+    expect(pageContent?.length).toBeGreaterThan(100)
 
-    console.log('✅ Chats page loaded for SSE test');
-  });
-});
+    console.log('✅ Chats page loaded for SSE test')
+  })
+})

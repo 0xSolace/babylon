@@ -1,33 +1,61 @@
 /**
  * Shared Type Exports
- *
- * Re-exports all shared types for easy importing
  */
 
-// Agent types
-export * from './agents';
-// Auth types
-export * from './auth';
-// Common types (JsonValue, etc.)
-export * from './common';
-// Error types (interfaces and type guards)
-// Error classes are exported from ./errors/index.ts
-export type { AppError, NetworkError } from './errors';
 export {
+  type AgentCapabilities,
+  AgentCapabilitiesSchema,
+  type GameNetworkInfo,
+  GameNetworkInfoSchema,
+} from './agents'
+export type { AuthenticatedUser } from './auth'
+export {
+  type ApiError,
+  type ApiResponse,
+  type ErrorLike,
+  type JsonRpcError,
+  type JsonRpcNotification,
+  type JsonRpcParams,
+  type JsonRpcRequest,
+  type JsonRpcResponse,
+  type JsonRpcResult,
+  type JsonValue,
+  JsonValueSchema,
+  type StringRecord,
+} from './common'
+export {
+  // Error interfaces
+  type AppError,
+  // Error message utilities
   extractErrorMessage,
+  // Authentication/Authorization type guards
   isAuthenticationError,
+  isAuthorizationError,
+  // Base error type guards
+  isBabylonError,
+  isBadRequestError,
+  // Business logic type guards
+  isBusinessLogicError,
+  isConflictError,
+  // Service error type guards
   isDatabaseError,
+  isExternalServiceError,
+  // Server error type guards
+  isInternalServerError,
   isLLMError,
   isNetworkError,
+  // Resource error type guards
+  isNotFoundError,
+  isOperationalError,
+  // Rate limiting type guards
+  isRateLimitError,
+  isServiceUnavailableError,
+  // Validation/Request error type guards
   isValidationError,
-} from './errors';
-// Social interaction types
-export * from './interactions';
-// Moderation types (BanStatus, VotePosition, etc.)
-export * from './moderation';
-// Agent monitoring types
-export * from './monitoring';
-// Payment types
-export * from './payments';
-// Profile types (user/actor profiles, balance, positions, etc.)
-export * from './profile';
+  type NetworkError,
+} from './errors'
+export { BanStatus, MarketOutcome, VotePosition } from './moderation'
+export type {
+  PaymentVerificationParams,
+  PaymentVerificationResult,
+} from './payments'

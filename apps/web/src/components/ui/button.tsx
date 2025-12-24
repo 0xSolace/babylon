@@ -1,14 +1,14 @@
-import { cn } from '@babylon/shared';
-import type React from 'react';
+import { cn } from '@babylon/shared'
+import type React from 'react'
 
 /**
  * Props for the Button component.
  */
 export interface ButtonProps extends React.ComponentPropsWithoutRef<'button'> {
   /** Visual style variant */
-  variant?: 'default' | 'outline' | 'ghost' | 'link';
+  variant?: 'default' | 'outline' | 'ghost' | 'link'
   /** Size variant */
-  size?: 'default' | 'sm' | 'lg' | 'icon';
+  size?: 'default' | 'sm' | 'lg' | 'icon'
 }
 
 /**
@@ -38,6 +38,6 @@ export const Button = ({
     <button className={cn(className)} {...props}>
       {children}
     </button>
-  );
-};
-export const buttonVariants = () => '';
+  )
+}
+export const buttonVariants = () => ''

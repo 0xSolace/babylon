@@ -6,30 +6,29 @@
  * or the backend API server. This page handles the redirect for actual users.
  */
 
-'use client';
-
-import { useParams, useRouter } from 'next/navigation';
-import { useEffect } from 'react';
-import { PageContainer } from '@/components/shared/PageContainer';
-import { Skeleton } from '@/components/shared/Skeleton';
+import { useEffect } from 'react'
+import { useParams } from 'react-router-dom'
+import { PageContainer } from '@/components/shared/PageContainer'
+import { Skeleton } from '@/components/shared/Skeleton'
+import { useRouter } from '@/lib/navigation'
 
 export default function SharePnLClient() {
-  const params = useParams();
-  const router = useRouter();
+  const params = useParams()
+  const router = useRouter()
   // Catch-all route: params.userId is string[] or undefined
-  const userIdParam = params.userId;
-  const rawUserId = Array.isArray(userIdParam) ? userIdParam[0] : userIdParam;
-  const userId = rawUserId ? decodeURIComponent(rawUserId) : '';
+  const userIdParam = params.userId
+  const rawUserId = Array.isArray(userIdParam) ? userIdParam[0] : userIdParam
+  const userId = rawUserId ? decodeURIComponent(rawUserId) : ''
 
   useEffect(() => {
     if (!userId) {
-      router.replace('/');
-      return;
+      router.replace('/')
+      return
     }
     // Redirect to user's profile or markets page
     // The OG metadata has already been served by the time a real user sees this
-    router.replace(`/profile/${encodeURIComponent(userId)}`);
-  }, [userId, router]);
+    router.replace(`/profile/${encodeURIComponent(userId)}`)
+  }, [userId, router])
 
   // Show loading state while redirecting
   return (
@@ -42,5 +41,5 @@ export default function SharePnLClient() {
         </div>
       </div>
     </PageContainer>
-  );
+  )
 }

@@ -1,20 +1,14 @@
-'use client';
-
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useRouter } from 'next/navigation';
-import { useCallback, useEffect } from 'react';
-import { Skeleton } from '@/components/shared/Skeleton';
-import { useWidgetRefresh } from '@/contexts/WidgetRefreshContext';
-import { useSSEChannel } from '@/hooks/useSSE';
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useCallback, useEffect } from 'react'
+import { Skeleton } from '@/components/shared/Skeleton'
+import { useWidgetRefresh } from '@/contexts/WidgetRefreshContext'
+import { useSSEChannel } from '@/hooks/useSSE'
+import { api, extractDataOrNull } from '@/lib/eden-client'
+import { useRouter } from '@/lib/navigation'
 import {
   type TrendingItem,
   useWidgetCacheStore,
-} from '@/stores/widgetCacheStore';
-
-interface TrendingResponse {
-  success: boolean;
-  trending?: TrendingItem[];
-}
+} from '@/stores/widgetCacheStore'
 
 /**
  * Trending panel component for displaying trending topics.
@@ -34,60 +28,54 @@ interface TrendingResponse {
  * @returns Trending panel element
  */
 export function TrendingPanel() {
-  const router = useRouter();
-  const queryClient = useQueryClient();
-  const { getTrending, setTrending: cacheTrending } = useWidgetCacheStore();
-  const { registerRefresh, unregisterRefresh } = useWidgetRefresh();
+  const router = useRouter()
+  const queryClient = useQueryClient()
+  const { getTrending, setTrending: cacheTrending } = useWidgetCacheStore()
+  const { registerRefresh, unregisterRefresh } = useWidgetRefresh()
 
   const { data: trending = [], isLoading } = useQuery({
     queryKey: ['feed', 'trending'],
     queryFn: async (): Promise<TrendingItem[]> => {
-      const response = await fetch('/api/feed/widgets/trending');
-      if (!response.ok) {
-        throw new Error('Failed to fetch trending');
+      const response = await api.feed.widgets.trending.get()
+      const data = extractDataOrNull(response)
+      if (!data?.success || !data.trending) {
+        return []
       }
-      const data: TrendingResponse = await response.json();
-      if (!data.success) {
-        return [];
-      }
-      if (!data.trending) {
-        throw new Error('Trending API returned success without trending data');
-      }
-      cacheTrending(data.trending);
-      return data.trending;
+      cacheTrending(data.trending)
+      return data.trending
     },
     initialData: () => {
-      const cached = getTrending();
-      return cached && cached.length > 0 ? cached : undefined;
+      const cached = getTrending()
+      return cached && cached.length > 0 ? cached : undefined
     },
     staleTime: (cached) =>
       Array.isArray(cached) && cached.length > 0 ? 30000 : 0,
-  });
+  })
 
   const refetch = useCallback(() => {
-    queryClient.invalidateQueries({ queryKey: ['feed', 'trending'] });
-  }, [queryClient]);
+    queryClient.invalidateQueries({ queryKey: ['feed', 'trending'] })
+  }, [queryClient])
 
   // Register refresh function
   useEffect(() => {
-    registerRefresh('trending', refetch);
-    return () => unregisterRefresh('trending');
-  }, [registerRefresh, unregisterRefresh, refetch]);
+    registerRefresh('trending', refetch)
+    return () => unregisterRefresh('trending')
+  }, [registerRefresh, unregisterRefresh, refetch])
 
   // Real-time refresh on feed events
-  useSSEChannel('feed', refetch);
+  useSSEChannel('feed', refetch)
 
   const handleTrendingClick = (item: TrendingItem) => {
     // If multiple tags, navigate to grouped view; otherwise single tag view
     if (item.tagSlugs.length > 1) {
       // Navigate to grouped trending view with multiple tag slugs
-      const tagSlugsParam = item.tagSlugs.join(',');
-      router.push(`/trending/group?tags=${encodeURIComponent(tagSlugsParam)}`);
+      const tagSlugsParam = item.tagSlugs.join(',')
+      router.push(`/trending/group?tags=${encodeURIComponent(tagSlugsParam)}`)
     } else {
       // Single tag - use existing route
-      router.push(`/trending/${item.tagSlugs[0]}`);
+      router.push(`/trending/${item.tagSlugs[0]}`)
     }
-  };
+  }
 
   return (
     <div className="flex flex-1 flex-col rounded-2xl bg-sidebar p-4">
@@ -107,10 +95,11 @@ export function TrendingPanel() {
       ) : (
         <div className="flex-1 space-y-2 pl-3">
           {trending.map((item) => (
-            <div
+            <button
+              type="button"
               key={item.id}
               onClick={() => handleTrendingClick(item)}
-              className="-ml-1.5 flex cursor-pointer items-start gap-3 rounded-lg p-1.5 transition-colors duration-200 hover:bg-muted/50"
+              className="-ml-1.5 flex w-full cursor-pointer items-start gap-3 rounded-lg p-1.5 text-left transition-colors duration-200 hover:bg-muted/50"
             >
               <div className="min-w-0 flex-1">
                 {/* Category and status */}
@@ -120,7 +109,7 @@ export function TrendingPanel() {
                 {/* Tag name(s) - show all tags if grouped */}
                 <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
                   {item.tags.map((tag, idx) => (
-                    <span key={idx}>
+                    <span key={`${item.id}-tag-${tag}`}>
                       <span className="font-semibold text-foreground text-sm leading-snug">
                         {tag}
                       </span>
@@ -139,10 +128,10 @@ export function TrendingPanel() {
                   </p>
                 )}
               </div>
-            </div>
+            </button>
           ))}
         </div>
       )}
     </div>
-  );
+  )
 }

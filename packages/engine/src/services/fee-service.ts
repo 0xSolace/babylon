@@ -6,9 +6,9 @@
  * Handles both platform fees and referrer share distribution.
  */
 
-import { Decimal, db } from '@babylon/db';
-import { generateSnowflakeId, logger } from '@babylon/shared';
-import { FEE_CONFIG, type FeeType } from '../config/fees';
+import { db } from '@babylon/db'
+import { generateSnowflakeId, logger } from '@babylon/shared'
+import { FEE_CONFIG, type FeeType } from '../config/fees'
 
 /**
  * Fee calculation result
@@ -16,10 +16,10 @@ import { FEE_CONFIG, type FeeType } from '../config/fees';
  * @description Contains calculated fee amounts and distribution breakdown.
  */
 export interface FeeCalculation {
-  feeAmount: number;
-  netAmount: number; // Amount after fee deduction
-  platformShare: number;
-  referrerShare: number;
+  feeAmount: number
+  netAmount: number // Amount after fee deduction
+  platformShare: number
+  referrerShare: number
 }
 
 /**
@@ -29,10 +29,10 @@ export interface FeeCalculation {
  * and distributed to platform and referrer.
  */
 export interface FeeDistributionResult {
-  feeCharged: number;
-  referrerPaid: number;
-  platformReceived: number;
-  referrerId: string | null;
+  feeCharged: number
+  referrerPaid: number
+  platformReceived: number
+  referrerId: string | null
 }
 
 /**
@@ -42,24 +42,24 @@ export interface FeeDistributionResult {
  * referrals, and recent fee history.
  */
 export interface ReferralEarnings {
-  totalEarned: number;
-  totalReferrals: number;
+  totalEarned: number
+  totalReferrals: number
   topReferrals: Array<{
-    userId: string;
-    username: string;
-    displayName: string;
-    profileImageUrl: string | null;
-    totalFees: number;
-    tradeCount: number;
-  }>;
+    userId: string
+    username: string
+    displayName: string
+    profileImageUrl: string | null
+    totalFees: number
+    tradeCount: number
+  }>
   recentFees: Array<{
-    id: string;
-    tradeType: string;
-    feeAmount: number;
-    traderId: string;
-    traderUsername: string | null;
-    createdAt: Date;
-  }>;
+    id: string
+    tradeType: string
+    feeAmount: number
+    traderId: string
+    traderUsername: string | null
+    createdAt: Date
+  }>
 }
 
 /**
@@ -69,6 +69,7 @@ export interface ReferralEarnings {
  * distributions. Provides methods for calculating fees, processing payments,
  * and retrieving referral earnings.
  */
+// biome-ignore lint/complexity/noStaticOnlyClass: Service pattern uses static methods for stateless operations
 export class FeeService {
   /**
    * Calculate fee for a trade amount
@@ -86,17 +87,17 @@ export class FeeService {
    * ```
    */
   static calculateFee(tradeAmount: number): FeeCalculation {
-    const feeAmount = tradeAmount * FEE_CONFIG.TRADING_FEE_RATE;
-    const netAmount = tradeAmount - feeAmount;
-    const platformShare = feeAmount * FEE_CONFIG.PLATFORM_SHARE;
-    const referrerShare = feeAmount * FEE_CONFIG.REFERRER_SHARE;
+    const feeAmount = tradeAmount * FEE_CONFIG.TRADING_FEE_RATE
+    const netAmount = tradeAmount - feeAmount
+    const platformShare = feeAmount * FEE_CONFIG.PLATFORM_SHARE
+    const referrerShare = feeAmount * FEE_CONFIG.REFERRER_SHARE
 
     return {
       feeAmount: Number(feeAmount.toFixed(2)),
       netAmount: Number(netAmount.toFixed(2)),
       platformShare: Number(platformShare.toFixed(2)),
       referrerShare: Number(referrerShare.toFixed(2)),
-    };
+    }
   }
 
   /**
@@ -109,7 +110,7 @@ export class FeeService {
    * @returns {FeeCalculation} Fee calculation with amounts and distribution
    */
   static calculateFeeOnProceeds(proceeds: number): FeeCalculation {
-    return FeeService.calculateFee(proceeds);
+    return FeeService.calculateFee(proceeds)
   }
 
   /**
@@ -142,9 +143,9 @@ export class FeeService {
     tradeType: FeeType,
     tradeAmount: number,
     tradeId?: string,
-    marketId?: string
+    marketId?: string,
   ): Promise<FeeDistributionResult> {
-    const feeCalc = FeeService.calculateFee(tradeAmount);
+    const feeCalc = FeeService.calculateFee(tradeAmount)
 
     // Skip if fee is below minimum
     if (feeCalc.feeAmount < FEE_CONFIG.MIN_FEE_AMOUNT) {
@@ -155,61 +156,61 @@ export class FeeService {
           tradeType,
           tradeAmount,
         },
-        'FeeService'
-      );
+        'FeeService',
+      )
 
       return {
         feeCharged: 0,
         referrerPaid: 0,
         platformReceived: 0,
         referrerId: null,
-      };
+      }
     }
 
     // Get user's referrer
-    const referrerId = await FeeService.getUserReferrer(userId);
+    const referrerId = await FeeService.getUserReferrer(userId)
 
     // Create trading fee record
     await db.tradingFee.create({
       data: {
         id: await generateSnowflakeId(),
         userId,
-        tradeType,
-        tradeId: tradeId || null,
+        feeType: tradeType,
         marketId: marketId || null,
-        feeAmount: new Decimal(feeCalc.feeAmount).toString(),
-        platformFee: new Decimal(feeCalc.platformShare).toString(),
-        referrerFee: new Decimal(feeCalc.referrerShare).toString(),
-        referrerId: referrerId || null,
+        poolId: tradeId || null,
+        amount: String(feeCalc.feeAmount),
+        txHash: referrerId
+          ? JSON.stringify({
+              platformFee: feeCalc.platformShare,
+              referrerFee: feeCalc.referrerShare,
+              referrerId,
+            })
+          : null,
       },
-    });
+    })
 
     // Get current totalFeesPaid
     const currentUser = await db.user.findUnique({
       where: { id: userId },
-    });
+    })
 
-    const currentTotalFees = currentUser
-      ? Number(currentUser.totalFeesPaid)
-      : 0;
+    const currentTotalFees = currentUser ? Number(currentUser.totalFeesPaid) : 0
 
     // Update trader's total fees paid
     await db.user.update({
       where: { id: userId },
       data: {
-        totalFeesPaid: new Decimal(
-          currentTotalFees + feeCalc.feeAmount
-        ).toString(),
+        totalFeesPaid: String(currentTotalFees + feeCalc.feeAmount),
       },
-    });
+    })
 
     // Distribute referral fee if referrer exists
     if (referrerId) {
       await FeeService.distributeReferralFee(
         referrerId,
         feeCalc.referrerShare,
-        userId
-      );
+        userId,
+      )
     }
 
     const result = {
@@ -217,7 +218,7 @@ export class FeeService {
       referrerPaid: referrerId ? feeCalc.referrerShare : 0,
       platformReceived: referrerId ? feeCalc.platformShare : feeCalc.feeAmount,
       referrerId,
-    };
+    }
 
     logger.info(
       'Trading fee processed',
@@ -228,10 +229,10 @@ export class FeeService {
         referrerPaid: result.referrerPaid,
         referrerId: result.referrerId,
       },
-      'FeeService'
-    );
+      'FeeService',
+    )
 
-    return result;
+    return result
   }
 
   /**
@@ -240,9 +241,9 @@ export class FeeService {
   static async getUserReferrer(userId: string): Promise<string | null> {
     const user = await db.user.findUnique({
       where: { id: userId },
-    });
+    })
 
-    return user?.referredBy ? String(user.referredBy) : null;
+    return user?.referredBy ? String(user.referredBy) : null
   }
 
   /**
@@ -251,34 +252,34 @@ export class FeeService {
   private static async distributeReferralFee(
     referrerId: string,
     feeAmount: number,
-    traderId: string
+    traderId: string,
   ): Promise<void> {
     // Credit referrer's virtual balance
     const referrer = await db.user.findUnique({
       where: { id: referrerId },
-    });
+    })
 
     if (!referrer) {
       logger.warn(
         `Referrer not found: ${referrerId}`,
         { referrerId, traderId },
-        'FeeService'
-      );
-      return;
+        'FeeService',
+      )
+      return
     }
 
-    const currentBalance = Number(referrer.virtualBalance);
-    const newBalance = currentBalance + feeAmount;
-    const currentFeesEarned = Number(referrer.totalFeesEarned);
+    const currentBalance = Number(referrer.virtualBalance)
+    const newBalance = currentBalance + feeAmount
+    const currentFeesEarned = Number(referrer.totalFeesEarned)
 
     // Update referrer balance
     await db.user.update({
       where: { id: referrerId },
       data: {
-        virtualBalance: new Decimal(newBalance).toString(),
-        totalFeesEarned: new Decimal(currentFeesEarned + feeAmount).toString(),
+        virtualBalance: String(newBalance),
+        totalFeesEarned: String(currentFeesEarned + feeAmount),
       },
-    });
+    })
 
     // Create balance transaction
     await db.balanceTransaction.create({
@@ -286,13 +287,15 @@ export class FeeService {
         id: await generateSnowflakeId(),
         userId: referrerId,
         type: FEE_CONFIG.TRANSACTION_TYPES.REFERRAL_FEE_EARNED,
-        amount: new Decimal(feeAmount).toString(),
-        balanceBefore: new Decimal(currentBalance).toString(),
-        balanceAfter: new Decimal(newBalance).toString(),
-        relatedId: traderId,
-        description: 'Referral fee earned from trading activity',
+        amount: String(feeAmount),
+        balanceBefore: String(currentBalance),
+        balanceAfter: String(newBalance),
+        reference: traderId,
+        metadata: JSON.stringify({
+          description: 'Referral fee earned from trading activity',
+        }),
       },
-    });
+    })
 
     logger.info(
       'Referral fee distributed',
@@ -301,8 +304,8 @@ export class FeeService {
         traderId,
         feeAmount,
       },
-      'FeeService'
-    );
+      'FeeService',
+    )
   }
 
   /**
@@ -311,65 +314,65 @@ export class FeeService {
   static async getReferralEarnings(
     userId: string,
     options?: {
-      startDate?: Date;
-      endDate?: Date;
-      limit?: number;
-    }
+      startDate?: Date
+      endDate?: Date
+      limit?: number
+    },
   ): Promise<ReferralEarnings> {
-    const { startDate, endDate, limit = 10 } = options || {};
+    const { startDate, endDate, limit = 10 } = options || {}
 
     // Build WHERE conditions
-    const conditions: string[] = ['"referrerId" = $1'];
-    const params: (string | number)[] = [userId];
-    let paramIndex = 2;
+    const conditions: string[] = ['"referrerId" = $1']
+    const params: (string | number)[] = [userId]
+    let paramIndex = 2
 
     if (startDate) {
-      conditions.push(`"createdAt" >= $${paramIndex}`);
-      params.push(startDate.toISOString());
-      paramIndex++;
+      conditions.push(`"createdAt" >= $${paramIndex}`)
+      params.push(startDate.toISOString())
+      paramIndex++
     }
     if (endDate) {
-      conditions.push(`"createdAt" <= $${paramIndex}`);
-      params.push(endDate.toISOString());
-      paramIndex++;
+      conditions.push(`"createdAt" <= $${paramIndex}`)
+      params.push(endDate.toISOString())
+      paramIndex++
     }
-    const whereClause = conditions.join(' AND ');
+    const whereClause = conditions.join(' AND ')
 
     // Get total earnings
     const totalResult = await db.query<{
-      totalReferrerFee: string | null;
-      count: string;
+      totalReferrerFee: string | null
+      count: string
     }>(
       `SELECT SUM("referrerFee"::numeric) as "totalReferrerFee", COUNT(*) as count 
        FROM "TradingFee" WHERE ${whereClause}`,
-      params
-    );
-    const totalEarned = Number(totalResult[0]?.totalReferrerFee || 0);
+      params,
+    )
+    const totalEarned = Number(totalResult[0]?.totalReferrerFee || 0)
 
     // Get unique traders (referrals)
     const uniqueTraders = await db.query<{ userId: string }>(
       `SELECT DISTINCT "userId" FROM "TradingFee" WHERE ${whereClause}`,
-      params
-    );
+      params,
+    )
 
     // Get top referrals by fees generated
     const topReferralsData = await db.query<{
-      userId: string;
-      totalReferrerFee: string;
-      tradeCount: string;
+      userId: string
+      totalReferrerFee: string
+      tradeCount: string
     }>(
       `SELECT "userId", SUM("referrerFee"::numeric) as "totalReferrerFee", COUNT(*) as "tradeCount"
        FROM "TradingFee" WHERE ${whereClause}
        GROUP BY "userId" ORDER BY SUM("referrerFee"::numeric) DESC LIMIT $${paramIndex}`,
-      [...params, limit]
-    );
+      [...params, limit],
+    )
 
     // Enrich with user data
     const topReferrals = await Promise.all(
       topReferralsData.map(async (item) => {
         const user = await db.user.findUnique({
           where: { id: item.userId },
-        });
+        })
 
         return {
           userId: item.userId,
@@ -382,30 +385,30 @@ export class FeeService {
             : null,
           totalFees: Number(item.totalReferrerFee || 0),
           tradeCount: Number(item.tradeCount),
-        };
-      })
-    );
+        }
+      }),
+    )
 
     // Get recent fees
     const recentFees = await db.query<{
-      id: string;
-      tradeType: string;
-      referrerFee: string;
-      userId: string;
-      createdAt: Date;
+      id: string
+      tradeType: string
+      referrerFee: string
+      userId: string
+      createdAt: Date
     }>(
       `SELECT id, "tradeType", "referrerFee", "userId", "createdAt"
        FROM "TradingFee" WHERE ${whereClause}
        ORDER BY "createdAt" DESC LIMIT $${paramIndex}`,
-      [...params, limit]
-    );
+      [...params, limit],
+    )
 
     // Get trader usernames for recent fees
     const recentFeesWithUsers = await Promise.all(
       recentFees.map(async (fee) => {
         const trader = await db.user.findUnique({
           where: { id: fee.userId },
-        });
+        })
 
         return {
           id: fee.id,
@@ -414,16 +417,16 @@ export class FeeService {
           traderId: fee.userId,
           traderUsername: trader?.username ? String(trader.username) : null,
           createdAt: fee.createdAt,
-        };
-      })
-    );
+        }
+      }),
+    )
 
     return {
       totalEarned,
       totalReferrals: uniqueTraders.length,
       topReferrals,
       recentFees: recentFeesWithUsers,
-    };
+    }
   }
 
   /**
@@ -431,35 +434,35 @@ export class FeeService {
    */
   static async getPlatformFeeStats(
     startDate?: Date,
-    endDate?: Date
+    endDate?: Date,
   ): Promise<{
-    totalFeesCollected: number;
-    totalReferrerFees: number;
-    totalPlatformFees: number;
-    totalTrades: number;
+    totalFeesCollected: number
+    totalReferrerFees: number
+    totalPlatformFees: number
+    totalTrades: number
   }> {
-    const conditions: string[] = [];
-    const params: string[] = [];
-    let paramIndex = 1;
+    const conditions: string[] = []
+    const params: string[] = []
+    let paramIndex = 1
 
     if (startDate) {
-      conditions.push(`"createdAt" >= $${paramIndex}`);
-      params.push(startDate.toISOString());
-      paramIndex++;
+      conditions.push(`"createdAt" >= $${paramIndex}`)
+      params.push(startDate.toISOString())
+      paramIndex++
     }
     if (endDate) {
-      conditions.push(`"createdAt" <= $${paramIndex}`);
-      params.push(endDate.toISOString());
+      conditions.push(`"createdAt" <= $${paramIndex}`)
+      params.push(endDate.toISOString())
     }
 
     const whereClause =
-      conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+      conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : ''
 
     const results = await db.query<{
-      totalFeeAmount: string | null;
-      totalPlatformFee: string | null;
-      totalReferrerFee: string | null;
-      count: string;
+      totalFeeAmount: string | null
+      totalPlatformFee: string | null
+      totalReferrerFee: string | null
+      count: string
     }>(
       `SELECT 
          SUM("feeAmount"::numeric) as "totalFeeAmount",
@@ -467,16 +470,16 @@ export class FeeService {
          SUM("referrerFee"::numeric) as "totalReferrerFee",
          COUNT(*) as count
        FROM "TradingFee" ${whereClause}`,
-      params
-    );
+      params,
+    )
 
-    const result = results[0];
+    const result = results[0]
 
     return {
       totalFeesCollected: Number(result?.totalFeeAmount || 0),
       totalReferrerFees: Number(result?.totalReferrerFee || 0),
       totalPlatformFees: Number(result?.totalPlatformFee || 0),
       totalTrades: Number(result?.count || 0),
-    };
+    }
   }
 }

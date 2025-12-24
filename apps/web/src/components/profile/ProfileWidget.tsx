@@ -1,20 +1,19 @@
-'use client';
-
 import type {
   PerpPositionFromAPI,
   PredictionPosition,
   UserBalanceData,
   UserProfileStats,
-} from '@babylon/shared';
-import { cn } from '@babylon/shared';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { HelpCircle, TrendingDown, TrendingUp } from 'lucide-react';
-import { useRouter } from 'next/navigation';
-import { useState } from 'react';
-import { Skeleton } from '@/components/shared/Skeleton';
-import { useAuth } from '@/hooks/useAuth';
-import { useWidgetCacheStore } from '@/stores/widgetCacheStore';
-import { PositionDetailModal } from './PositionDetailModal';
+} from '@babylon/shared'
+import { cn } from '@babylon/shared'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { HelpCircle, TrendingDown, TrendingUp } from 'lucide-react'
+import { useState } from 'react'
+import { Skeleton } from '@/components/shared/Skeleton'
+import { useAuth } from '@/hooks/useAuth'
+import { api, extractDataOrNull } from '@/lib/eden-client'
+import { useRouter } from '@/lib/navigation'
+import { useWidgetCacheStore } from '@/stores/widgetCacheStore'
+import { PositionDetailModal } from './PositionDetailModal'
 
 /**
  * Profile widget component for displaying user profile summary.
@@ -41,97 +40,73 @@ import { PositionDetailModal } from './PositionDetailModal';
  * ```
  */
 interface ProfileWidgetProps {
-  userId: string;
+  userId: string
 }
 
 interface ProfileWidgetData {
-  balance: UserBalanceData | null;
-  predictions: PredictionPosition[];
-  perps: PerpPositionFromAPI[];
-  stats: UserProfileStats | null;
-}
-
-interface BalanceResponse {
-  balance?: number;
-  totalDeposited?: number;
-  totalWithdrawn?: number;
-  lifetimePnL?: number;
-}
-
-interface PositionsResponse {
-  predictions?: { positions: PredictionPosition[] };
-  perpetuals?: { positions: PerpPositionFromAPI[] };
-}
-
-interface ProfileResponse {
-  needsOnboarding?: boolean;
-  user?: {
-    stats?: {
-      following?: number;
-      followers?: number;
-      comments?: number;
-      reactions?: number;
-      positions?: number;
-    };
-  };
+  balance: UserBalanceData | null
+  predictions: PredictionPosition[]
+  perps: PerpPositionFromAPI[]
+  stats: UserProfileStats | null
 }
 
 export function ProfileWidget({ userId }: ProfileWidgetProps) {
-  const router = useRouter();
-  const queryClient = useQueryClient();
-  const { needsOnboarding, user } = useAuth();
-  const widgetCache = useWidgetCacheStore();
+  const router = useRouter()
+  const queryClient = useQueryClient()
+  const { needsOnboarding, user } = useAuth()
+  const widgetCache = useWidgetCacheStore()
 
   // Modal state
-  const [modalOpen, setModalOpen] = useState(false);
+  const [modalOpen, setModalOpen] = useState(false)
   const [modalType, setModalType] = useState<'prediction' | 'perp'>(
-    'prediction'
-  );
+    'prediction',
+  )
   const [selectedPosition, setSelectedPosition] = useState<
     PredictionPosition | PerpPositionFromAPI | null
-  >(null);
+  >(null)
 
   // Skip fetching profile if current user needs onboarding
-  const isCurrentUser = user?.id === userId;
-  const shouldFetch = !!userId && !(isCurrentUser && needsOnboarding);
+  const isCurrentUser = user?.id === userId
+  const shouldFetch = !!userId && !(isCurrentUser && needsOnboarding)
 
   const { data, isLoading } = useQuery({
     queryKey: ['profile', 'widget', userId],
     queryFn: async (): Promise<ProfileWidgetData> => {
-      // Fetch all data in parallel
+      // Fetch all data in parallel using typed API
       const [balanceRes, positionsRes, profileRes] = await Promise.all([
-        fetch(`/api/users/${encodeURIComponent(userId)}/balance`),
-        fetch(`/api/markets/positions/${encodeURIComponent(userId)}`),
-        fetch(`/api/users/${encodeURIComponent(userId)}/profile`),
-      ]);
+        api.users.byId(userId).balance.get(),
+        api.markets.positions.byUserId(userId).get(),
+        api.users.byId(userId).profile.get(),
+      ])
 
-      let balanceData: UserBalanceData | null = null;
-      let predictionsData: PredictionPosition[] = [];
-      let perpsData: PerpPositionFromAPI[] = [];
-      let statsData: UserProfileStats | null = null;
+      let balanceData: UserBalanceData | null = null
+      let predictionsData: PredictionPosition[] = []
+      let perpsData: PerpPositionFromAPI[] = []
+      let statsData: UserProfileStats | null = null
 
       // Process balance
-      if (balanceRes.ok) {
-        const balanceJson: BalanceResponse = await balanceRes.json();
+      const balanceJson = extractDataOrNull(balanceRes)
+      if (balanceJson) {
         balanceData = {
           balance: Number(balanceJson.balance || 0),
           totalDeposited: Number(balanceJson.totalDeposited || 0),
           totalWithdrawn: Number(balanceJson.totalWithdrawn || 0),
           lifetimePnL: Number(balanceJson.lifetimePnL || 0),
-        };
+        }
       }
 
       // Process positions
-      if (positionsRes.ok) {
-        const positionsJson: PositionsResponse = await positionsRes.json();
-        predictionsData = positionsJson.predictions?.positions ?? [];
-        perpsData = positionsJson.perpetuals?.positions ?? [];
+      const positionsJson = extractDataOrNull(positionsRes)
+      if (positionsJson) {
+        predictionsData = (positionsJson.predictions?.positions ??
+          []) as PredictionPosition[]
+        perpsData = (positionsJson.perpetuals?.positions ??
+          []) as PerpPositionFromAPI[]
       }
 
       // Process stats
-      if (profileRes.ok) {
-        const profileJson: ProfileResponse = await profileRes.json();
-
+      const profileJson = extractDataOrNull(profileRes)
+      if (profileJson) {
         // Check if user needs onboarding (graceful handling)
         if (profileJson.needsOnboarding) {
           return {
@@ -139,18 +114,18 @@ export function ProfileWidget({ userId }: ProfileWidgetProps) {
             predictions: [],
             perps: [],
             stats: null,
-          };
+          }
         }
 
-        const userStats = profileJson.user?.stats ?? {};
+        const userStats = profileJson.user?.stats
         statsData = {
-          following: userStats.following ?? 0,
-          followers: userStats.followers ?? 0,
+          following: userStats?.following ?? 0,
+          followers: userStats?.followers ?? 0,
           totalActivity:
-            (userStats.comments ?? 0) +
-            (userStats.reactions ?? 0) +
-            (userStats.positions ?? 0),
-        };
+            (userStats?.comments ?? 0) +
+            (userStats?.reactions ?? 0) +
+            (userStats?.positions ?? 0),
+        }
       }
 
       // Cache all the data
@@ -159,64 +134,59 @@ export function ProfileWidget({ userId }: ProfileWidgetProps) {
         predictions: predictionsData,
         perps: perpsData,
         stats: statsData,
-      });
+      })
 
       return {
         balance: balanceData,
         predictions: predictionsData,
         perps: perpsData,
         stats: statsData,
-      };
+      }
     },
     enabled: shouldFetch,
     initialData: () => {
       const cached = widgetCache.getProfileWidget(
-        userId
-      ) as ProfileWidgetData | null;
-      return cached || undefined;
+        userId,
+      ) as ProfileWidgetData | null
+      return cached || undefined
     },
     refetchInterval: 30000,
-  });
+  })
 
-  const balance = data?.balance ?? null;
-  const predictions = data?.predictions ?? [];
-  const perps = data?.perps ?? [];
-  const stats = data?.stats ?? null;
+  const balance = data?.balance ?? null
+  const predictions = data?.predictions ?? []
+  const perps = data?.perps ?? []
+  const stats = data?.stats ?? null
 
   const formatPoints = (points: number) => {
     return points.toLocaleString('en-US', {
       maximumFractionDigits: 0,
-    });
-  };
+    })
+  }
 
   const formatPercent = (value: number) => {
-    return `${value >= 0 ? '+' : ''}${value.toFixed(1)}%`;
-  };
+    return `${value >= 0 ? '+' : ''}${value.toFixed(1)}%`
+  }
 
   const formatPrice = (price: number) => {
-    return `$${price.toFixed(2)}`;
-  };
+    return `$${price.toFixed(2)}`
+  }
 
   // Calculate points in positions (total deposited minus available balance)
   const pointsInPositions = Math.max(
     0,
-    (balance?.totalDeposited ?? 0) - (balance?.balance ?? 0)
-  );
-  const totalPortfolio = balance?.totalDeposited ?? 0;
+    (balance?.totalDeposited ?? 0) - (balance?.balance ?? 0),
+  )
+  const totalPortfolio = balance?.totalDeposited ?? 0
   const pnlPercent =
     totalPortfolio > 0
       ? ((balance?.lifetimePnL ?? 0) / totalPortfolio) * 100
-      : 0;
+      : 0
 
   const refreshData = async () => {
-    const [_balanceRes, _positionsRes] = await Promise.all([
-      fetch(`/api/users/${encodeURIComponent(userId)}/balance`),
-      fetch(`/api/markets/positions/${encodeURIComponent(userId)}`),
-    ]);
-
-    // Invalidate queries to refresh
-    queryClient.invalidateQueries({ queryKey: ['profile', 'widget', userId] });
-  };
+    // Invalidate queries to refresh - the typed API will be called by React Query
+    queryClient.invalidateQueries({ queryKey: ['profile', 'widget', userId] })
+  }
 
   if (isLoading) {
     return (
@@ -229,7 +199,7 @@ export function ProfileWidget({ userId }: ProfileWidgetProps) {
           </div>
         </div>
       </div>
-    );
+    )
   }
 
   return (
@@ -265,7 +235,7 @@ export function ProfileWidget({ userId }: ProfileWidgetProps) {
                 'font-semibold text-sm',
                 (balance?.lifetimePnL ?? 0) >= 0
                   ? 'text-green-600'
-                  : 'text-red-600'
+                  : 'text-red-600',
               )}
             >
               {formatPoints(balance?.lifetimePnL ?? 0)} pts (
@@ -278,6 +248,7 @@ export function ProfileWidget({ userId }: ProfileWidgetProps) {
       {/* Holdings Section */}
       <div className="mb-6">
         <button
+          type="button"
           onClick={() => router.push('/markets')}
           className="mb-3 cursor-pointer text-left font-bold text-foreground text-lg transition-colors hover:text-[#0066FF]"
         >
@@ -288,6 +259,7 @@ export function ProfileWidget({ userId }: ProfileWidgetProps) {
         {predictions.length > 0 && (
           <div className="mb-4">
             <button
+              type="button"
               onClick={() => router.push('/markets')}
               className="mb-2 block cursor-pointer font-semibold text-muted-foreground text-xs uppercase transition-colors hover:text-[#0066FF]"
             >
@@ -299,14 +271,15 @@ export function ProfileWidget({ userId }: ProfileWidgetProps) {
                   pred.avgPrice > 0
                     ? ((pred.currentPrice - pred.avgPrice) / pred.avgPrice) *
                       100
-                    : 0;
+                    : 0
                 return (
                   <button
                     key={pred.id}
+                    type="button"
                     onClick={() => {
-                      setSelectedPosition(pred);
-                      setModalType('prediction');
-                      setModalOpen(true);
+                      setSelectedPosition(pred)
+                      setModalType('prediction')
+                      setModalOpen(true)
                     }}
                     className="-ml-2 w-full cursor-pointer rounded p-2 text-left text-sm transition-colors hover:bg-muted/30"
                   >
@@ -320,13 +293,13 @@ export function ProfileWidget({ userId }: ProfileWidgetProps) {
                     <div
                       className={cn(
                         'mt-0.5 font-medium text-xs',
-                        pnlPercent >= 0 ? 'text-green-600' : 'text-red-600'
+                        pnlPercent >= 0 ? 'text-green-600' : 'text-red-600',
                       )}
                     >
                       {formatPercent(pnlPercent)}
                     </div>
                   </button>
-                );
+                )
               })}
             </div>
           </div>
@@ -336,6 +309,7 @@ export function ProfileWidget({ userId }: ProfileWidgetProps) {
         {perps.length > 0 && (
           <div className="mb-4">
             <button
+              type="button"
               onClick={() => router.push('/markets')}
               className="mb-2 block cursor-pointer font-semibold text-muted-foreground text-xs uppercase transition-colors hover:text-[#0066FF]"
             >
@@ -344,11 +318,12 @@ export function ProfileWidget({ userId }: ProfileWidgetProps) {
             <div className="space-y-2">
               {perps.slice(0, 3).map((perp) => (
                 <button
+                  type="button"
                   key={perp.id}
                   onClick={() => {
-                    setSelectedPosition(perp);
-                    setModalType('perp');
-                    setModalOpen(true);
+                    setSelectedPosition(perp)
+                    setModalType('perp')
+                    setModalOpen(true)
                   }}
                   className="-ml-2 w-full cursor-pointer rounded p-2 text-left text-sm transition-colors hover:bg-muted/30"
                 >
@@ -370,7 +345,7 @@ export function ProfileWidget({ userId }: ProfileWidgetProps) {
                       'mt-0.5 font-medium text-xs',
                       perp.unrealizedPnL >= 0
                         ? 'text-green-600'
-                        : 'text-red-600'
+                        : 'text-red-600',
                     )}
                   >
                     {formatPoints(perp.unrealizedPnL)} pts (
@@ -428,8 +403,8 @@ export function ProfileWidget({ userId }: ProfileWidgetProps) {
       <PositionDetailModal
         isOpen={modalOpen}
         onClose={() => {
-          setModalOpen(false);
-          setSelectedPosition(null);
+          setModalOpen(false)
+          setSelectedPosition(null)
         }}
         type={modalType}
         data={selectedPosition}
@@ -437,5 +412,5 @@ export function ProfileWidget({ userId }: ProfileWidgetProps) {
         onSuccess={refreshData}
       />
     </div>
-  );
+  )
 }

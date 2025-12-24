@@ -14,24 +14,24 @@
  * logging, and API responses.
  */
 export abstract class BabylonError extends Error {
-  public readonly timestamp: Date;
-  public readonly context?: Record<string, unknown>;
+  public readonly timestamp: Date
+  public readonly context?: Record<string, unknown>
 
   constructor(
     message: string,
     public readonly code: string,
     public readonly statusCode: number = 500,
     public readonly isOperational: boolean = true,
-    context?: Record<string, unknown>
+    context?: Record<string, unknown>,
   ) {
-    super(message);
-    this.name = this.constructor.name;
-    this.timestamp = new Date();
-    this.context = context;
+    super(message)
+    this.name = this.constructor.name
+    this.timestamp = new Date()
+    this.context = context
 
     // Maintains proper stack trace for where our error was thrown (only available on V8)
     if (Error.captureStackTrace) {
-      Error.captureStackTrace(this, this.constructor);
+      Error.captureStackTrace(this, this.constructor)
     }
   }
 
@@ -52,7 +52,7 @@ export abstract class BabylonError extends Error {
       timestamp: this.timestamp,
       context: this.context,
       ...(process.env.NODE_ENV === 'development' && { stack: this.stack }),
-    };
+    }
   }
 }
 
@@ -66,9 +66,9 @@ export class ValidationError extends BabylonError {
   constructor(
     message: string,
     public readonly fields?: string[],
-    public readonly violations?: Array<{ field: string; message: string }>
+    public readonly violations?: Array<{ field: string; message: string }>,
   ) {
-    super(message, 'VALIDATION_ERROR', 400, true, { fields, violations });
+    super(message, 'VALIDATION_ERROR', 400, true, { fields, violations })
   }
 }
 
@@ -85,9 +85,9 @@ export class AuthenticationError extends BabylonError {
       | 'NO_TOKEN'
       | 'INVALID_TOKEN'
       | 'EXPIRED_TOKEN'
-      | 'INVALID_CREDENTIALS'
+      | 'INVALID_CREDENTIALS',
   ) {
-    super(message, `AUTH_${reason}`, 401, true, { reason });
+    super(message, `AUTH_${reason}`, 401, true, { reason })
   }
 }
 
@@ -101,9 +101,9 @@ export class AuthorizationError extends BabylonError {
   constructor(
     message: string,
     public readonly resource: string,
-    public readonly action: string
+    public readonly action: string,
   ) {
-    super(message, 'FORBIDDEN', 403, true, { resource, action });
+    super(message, 'FORBIDDEN', 403, true, { resource, action })
   }
 }
 
@@ -117,15 +117,15 @@ export class NotFoundError extends BabylonError {
   constructor(
     resource: string,
     identifier?: string | number,
-    customMessage?: string
+    customMessage?: string,
   ) {
     const message =
       customMessage ||
       (identifier !== undefined
         ? `${resource} not found: ${identifier}`
-        : `${resource} not found`);
+        : `${resource} not found`)
 
-    super(message, 'NOT_FOUND', 404, true, { resource, identifier });
+    super(message, 'NOT_FOUND', 404, true, { resource, identifier })
   }
 }
 
@@ -138,9 +138,9 @@ export class NotFoundError extends BabylonError {
 export class ConflictError extends BabylonError {
   constructor(
     message: string,
-    public readonly conflictingResource?: string
+    public readonly conflictingResource?: string,
   ) {
-    super(message, 'CONFLICT', 409, true, { conflictingResource });
+    super(message, 'CONFLICT', 409, true, { conflictingResource })
   }
 }
 
@@ -154,7 +154,7 @@ export class DatabaseError extends BabylonError {
   constructor(
     message: string,
     public readonly operation: string,
-    originalError?: Error
+    originalError?: Error,
   ) {
     super(message, 'DATABASE_ERROR', 500, true, {
       operation,
@@ -163,7 +163,7 @@ export class DatabaseError extends BabylonError {
         process.env.NODE_ENV === 'development'
           ? originalError?.stack
           : undefined,
-    });
+    })
   }
 }
 
@@ -177,12 +177,12 @@ export class ExternalServiceError extends BabylonError {
   constructor(
     service: string,
     message: string,
-    public readonly originalStatusCode?: number
+    public readonly originalStatusCode?: number,
   ) {
     super(`${service}: ${message}`, 'EXTERNAL_SERVICE_ERROR', 502, true, {
       service,
       originalStatusCode,
-    });
+    })
   }
 }
 
@@ -196,15 +196,15 @@ export class RateLimitError extends BabylonError {
   constructor(
     public readonly limit: number,
     public readonly windowMs: number,
-    public readonly retryAfter?: number
+    public readonly retryAfter?: number,
   ) {
     super(
       `Rate limit exceeded: ${limit} requests per ${windowMs}ms`,
       'RATE_LIMIT',
       429,
       true,
-      { limit, windowMs, retryAfter }
-    );
+      { limit, windowMs, retryAfter },
+    )
   }
 }
 
@@ -218,9 +218,9 @@ export class BusinessLogicError extends BabylonError {
   constructor(
     message: string,
     code: string,
-    context?: Record<string, unknown>
+    context?: Record<string, unknown>,
   ) {
-    super(message, code, 400, true, context);
+    super(message, code, 400, true, context)
   }
 }
 
@@ -232,7 +232,7 @@ export class BusinessLogicError extends BabylonError {
  */
 export class BadRequestError extends BabylonError {
   constructor(message: string, details?: Record<string, unknown>) {
-    super(message, 'BAD_REQUEST', 400, true, details);
+    super(message, 'BAD_REQUEST', 400, true, details)
   }
 }
 
@@ -245,9 +245,9 @@ export class BadRequestError extends BabylonError {
 export class InternalServerError extends BabylonError {
   constructor(
     message = 'An unexpected error occurred',
-    details?: Record<string, unknown>
+    details?: Record<string, unknown>,
   ) {
-    super(message, 'INTERNAL_ERROR', 500, false, details);
+    super(message, 'INTERNAL_ERROR', 500, false, details)
   }
 }
 
@@ -260,8 +260,8 @@ export class InternalServerError extends BabylonError {
 export class ServiceUnavailableError extends BabylonError {
   constructor(
     message = 'Service temporarily unavailable',
-    public readonly retryAfter?: number
+    public readonly retryAfter?: number,
   ) {
-    super(message, 'SERVICE_UNAVAILABLE', 503, true, { retryAfter });
+    super(message, 'SERVICE_UNAVAILABLE', 503, true, { retryAfter })
   }
 }

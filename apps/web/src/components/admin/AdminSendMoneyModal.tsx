@@ -1,21 +1,12 @@
-'use client';
-
-import { useJejuAuth } from '@babylon/auth/client';
-import { CHAIN, cn, logger, WALLET_ERROR_MESSAGES } from '@babylon/shared';
-import { useMutation } from '@tanstack/react-query';
-import {
-  AlertCircle,
-  CheckCircle2,
-  DollarSign,
-  Loader2,
-  X,
-} from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
-import { toast } from 'sonner';
-import type { Address } from 'viem';
-import { formatEther } from 'viem';
-import { useSmartWallet } from '@/hooks/useSmartWallet';
-import { useSmartWalletBalance } from '@/hooks/useSmartWalletBalance';
+import { useJejuAuth } from '@babylon/auth'
+import { cn, logger, WALLET_ERROR_MESSAGES } from '@babylon/shared'
+import { useMutation } from '@tanstack/react-query'
+import { AlertCircle, CheckCircle2, DollarSign, Loader2, X } from 'lucide-react'
+import { useCallback, useEffect, useState } from 'react'
+import { toast } from 'sonner'
+import { formatEther, isAddress } from 'viem'
+import { useSmartWallet } from '@/hooks/useSmartWallet'
+import { useSmartWalletBalance } from '@/hooks/useSmartWalletBalance'
 
 /**
  * Admin send money modal component for sending ETH to users.
@@ -51,46 +42,46 @@ import { useSmartWalletBalance } from '@/hooks/useSmartWalletBalance';
  * ```
  */
 interface AdminSendMoneyModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  recipientId: string;
-  recipientName: string;
-  recipientUsername?: string | null;
-  recipientWalletAddress?: string | null;
-  onSuccess?: () => void;
+  isOpen: boolean
+  onClose: () => void
+  recipientId: string
+  recipientName: string
+  recipientUsername?: string | null
+  recipientWalletAddress?: string | null
+  onSuccess?: () => void
 }
 
 /**
  * Payment step type for admin send money flow.
  */
-type PaymentStep = 'input' | 'payment' | 'verifying' | 'success' | 'error';
+type PaymentStep = 'input' | 'payment' | 'verifying' | 'success' | 'error'
 
 /**
  * Payment request structure for admin money transfer.
  */
 interface PaymentRequest {
-  requestId: string;
-  to: string;
-  from: string;
-  amount: string;
+  requestId: string
+  to: string
+  from: string
+  amount: string
 }
 
 /**
  * Create payment API response structure.
  */
 interface CreatePaymentResponse {
-  success: boolean;
-  escrow: { id: string };
-  paymentRequest: PaymentRequest;
-  error?: string;
+  success: boolean
+  escrow: { id: string }
+  paymentRequest: PaymentRequest
+  error?: string
 }
 
 /**
  * Verify payment API response structure.
  */
 interface VerifyPaymentResponse {
-  success: boolean;
-  error?: string;
+  success: boolean
+  error?: string
 }
 
 export function AdminSendMoneyModal({
@@ -102,52 +93,51 @@ export function AdminSendMoneyModal({
   recipientWalletAddress,
   onSuccess,
 }: AdminSendMoneyModalProps) {
-  const { getAccessToken } = useJejuAuth();
+  const { getAccessToken } = useJejuAuth()
   const { sendSmartWalletTransaction, smartWalletAddress, smartWalletReady } =
-    useSmartWallet();
-  const { balance, refreshBalance } = useSmartWalletBalance();
+    useSmartWallet()
+  const { balance, refreshBalance } = useSmartWalletBalance()
 
-  const [amountUSD, setAmountUSD] = useState('10');
-  const [reason, setReason] = useState('');
-  const [step, setStep] = useState<PaymentStep>('input');
-  const [txHash, setTxHash] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [amountUSD, setAmountUSD] = useState('10')
+  const [reason, setReason] = useState('')
+  const [step, setStep] = useState<PaymentStep>('input')
+  const [txHash, setTxHash] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
   // Track blockchain transaction in progress (not an API call, so not a mutation)
-  const [isSendingBlockchainTx, setIsSendingBlockchainTx] = useState(false);
+  const [isSendingBlockchainTx, setIsSendingBlockchainTx] = useState(false)
 
-  const amountNum = parseFloat(amountUSD) || 0;
+  const amountNum = parseFloat(amountUSD) || 0
 
   const ensureFunds = useCallback(
     async (requiredAmountWei: bigint) => {
       if (!smartWalletAddress) {
-        throw new Error(WALLET_ERROR_MESSAGES.NO_EMBEDDED_WALLET);
+        throw new Error(WALLET_ERROR_MESSAGES.NO_EMBEDDED_WALLET)
       }
 
-      const currentBalance =
-        balance !== null ? balance : await refreshBalance();
+      const currentBalance = balance !== null ? balance : await refreshBalance()
       if (currentBalance !== null && currentBalance >= requiredAmountWei) {
-        return true;
+        return true
       }
 
       if (currentBalance === null) {
-        throw new Error('Failed to fetch wallet balance');
+        throw new Error('Failed to fetch wallet balance')
       }
 
       const deficit =
         requiredAmountWei - currentBalance > 0n
           ? requiredAmountWei - currentBalance
-          : requiredAmountWei;
+          : requiredAmountWei
 
-      const deficitETH = formatEther(deficit);
+      const deficitETH = formatEther(deficit)
       toast.error(
-        `Insufficient balance. Please add at least ${deficitETH} ETH to your wallet.`
-      );
+        `Insufficient balance. Please add at least ${deficitETH} ETH to your wallet.`,
+      )
       throw new Error(
-        `Insufficient funds. Please deposit at least ${deficitETH} ETH to continue.`
-      );
+        `Insufficient funds. Please deposit at least ${deficitETH} ETH to continue.`,
+      )
     },
-    [balance, refreshBalance, smartWalletAddress]
-  );
+    [balance, refreshBalance, smartWalletAddress],
+  )
 
   // Verify payment mutation
   const verifyPaymentMutation = useMutation({
@@ -156,17 +146,17 @@ export function AdminSendMoneyModal({
       paymentReq,
       currentEscrowId,
     }: {
-      transactionHash: string;
-      paymentReq: PaymentRequest;
-      currentEscrowId: string;
+      transactionHash: string
+      paymentReq: PaymentRequest
+      currentEscrowId: string
     }) => {
-      const token = await getAccessToken();
+      const token = await getAccessToken()
       if (!token) {
-        throw new Error('Authentication required');
+        throw new Error('Authentication required')
       }
 
       // Wait for transaction confirmation
-      await new Promise((resolve) => setTimeout(resolve, 3000));
+      await new Promise((resolve) => setTimeout(resolve, 3000))
 
       const response = await fetch(
         '/api/admin/moderation-escrow/verify-payment',
@@ -183,87 +173,91 @@ export function AdminSendMoneyModal({
             toAddress: paymentReq.to,
             amount: paymentReq.amount,
           }),
-        }
-      );
+        },
+      )
 
-      const data: VerifyPaymentResponse = await response.json();
+      const data: VerifyPaymentResponse = await response.json()
 
       if (!response.ok || !data.success) {
-        throw new Error(data.error || 'Failed to verify payment');
+        throw new Error(data.error || 'Failed to verify payment')
       }
 
-      return data;
+      return data
     },
     onSuccess: () => {
-      setStep('success');
-      toast.success(`Successfully sent $${amountNum} to ${recipientName}!`);
-      onSuccess?.();
+      setStep('success')
+      toast.success(`Successfully sent $${amountNum} to ${recipientName}!`)
+      onSuccess?.()
     },
     onError: (err: Error) => {
       logger.error(
         'Payment verification failed',
         { error: err.message },
-        'AdminSendMoneyModal'
-      );
-      setError(err.message);
-      setStep('error');
-      toast.error('Failed to verify payment');
+        'AdminSendMoneyModal',
+      )
+      setError(err.message)
+      setStep('error')
+      toast.error('Failed to verify payment')
     },
-  });
+  })
 
   // Send blockchain transaction and verify
   const handleSendPayment = useCallback(
     async (paymentReq: PaymentRequest, currentEscrowId: string) => {
-      setIsSendingBlockchainTx(true);
-      setStep('payment');
+      setIsSendingBlockchainTx(true)
+      setStep('payment')
 
       if (!smartWalletReady || !smartWalletAddress) {
-        const errorMessage = WALLET_ERROR_MESSAGES.NO_EMBEDDED_WALLET;
+        const errorMessage = WALLET_ERROR_MESSAGES.NO_EMBEDDED_WALLET
         logger.error(
           'Escrow payment failed',
           { error: errorMessage },
-          'AdminSendMoneyModal'
-        );
-        setError(errorMessage);
-        setStep('error');
-        toast.error('Payment transaction failed');
-        setIsSendingBlockchainTx(false);
-        return;
+          'AdminSendMoneyModal',
+        )
+        setError(errorMessage)
+        setStep('error')
+        toast.error('Payment transaction failed')
+        setIsSendingBlockchainTx(false)
+        return
       }
 
-      const requiredAmountWei = BigInt(paymentReq.amount);
+      const requiredAmountWei = BigInt(paymentReq.amount)
 
       try {
-        await ensureFunds(requiredAmountWei);
+        await ensureFunds(requiredAmountWei)
+
+        // Validate recipient address format
+        if (!isAddress(paymentReq.to)) {
+          throw new Error('Invalid recipient address format')
+        }
 
         const hash = await sendSmartWalletTransaction({
-          to: paymentReq.to as Address,
+          to: paymentReq.to,
           value: requiredAmountWei,
-          chain: CHAIN,
-        });
+        })
 
-        setTxHash(hash);
-        setStep('verifying');
-        setIsSendingBlockchainTx(false);
+        setTxHash(hash)
+        setStep('verifying')
+        setIsSendingBlockchainTx(false)
 
         // Verify payment
         verifyPaymentMutation.mutate({
           transactionHash: hash,
           paymentReq,
           currentEscrowId,
-        });
+        })
       } catch (err) {
         const errorMessage =
-          err instanceof Error ? err.message : 'Transaction failed';
+          err instanceof Error ? err.message : 'Transaction failed'
         logger.error(
           'Blockchain transaction failed',
           { error: errorMessage },
-          'AdminSendMoneyModal'
-        );
-        setError(errorMessage);
-        setStep('error');
-        toast.error('Payment transaction failed');
-        setIsSendingBlockchainTx(false);
+          'AdminSendMoneyModal',
+        )
+        setError(errorMessage)
+        setStep('error')
+        toast.error('Payment transaction failed')
+        setIsSendingBlockchainTx(false)
       }
     },
     [
@@ -272,8 +266,8 @@ export function AdminSendMoneyModal({
       ensureFunds,
       sendSmartWalletTransaction,
       verifyPaymentMutation,
-    ]
-  );
+    ],
+  )
 
   // Create payment mutation
   const createPaymentMutation = useMutation({
@@ -281,12 +275,12 @@ export function AdminSendMoneyModal({
       amount,
       paymentReason,
     }: {
-      amount: number;
-      paymentReason: string;
+      amount: number
+      paymentReason: string
     }) => {
-      const token = await getAccessToken();
+      const token = await getAccessToken()
       if (!token) {
-        throw new Error('Authentication required');
+        throw new Error('Authentication required')
       }
 
       const response = await fetch(
@@ -303,91 +297,94 @@ export function AdminSendMoneyModal({
             reason: paymentReason.trim() || undefined,
             recipientWalletAddress,
           }),
-        }
-      );
+        },
+      )
 
-      const data: CreatePaymentResponse = await response.json();
+      const data: CreatePaymentResponse = await response.json()
 
       if (!response.ok || !data.success) {
-        throw new Error(data.error || 'Failed to create payment request');
+        throw new Error(data.error || 'Failed to create payment request')
       }
 
-      return data;
+      return data
     },
     onSuccess: (data) => {
-      const paymentReq = data.paymentRequest;
-      setStep('payment');
-      handleSendPayment(paymentReq, data.escrow.id);
+      const paymentReq = data.paymentRequest
+      setStep('payment')
+      handleSendPayment(paymentReq, data.escrow.id)
     },
     onError: (err: Error) => {
       logger.error(
         'Failed to create escrow payment',
         { error: err.message },
-        'AdminSendMoneyModal'
-      );
-      setError(err.message);
-      setStep('error');
-      toast.error('Failed to create payment request');
+        'AdminSendMoneyModal',
+      )
+      setError(err.message)
+      setStep('error')
+      toast.error('Failed to create payment request')
     },
-  });
+  })
 
   // Derived loading state from mutations and blockchain tx
   const isLoading =
     createPaymentMutation.isPending ||
     isSendingBlockchainTx ||
-    verifyPaymentMutation.isPending;
+    verifyPaymentMutation.isPending
 
   // Reset state when modal closes
   useEffect(() => {
     if (!isOpen) {
       setTimeout(() => {
-        setAmountUSD('10');
-        setReason('');
-        setStep('input');
-        setTxHash(null);
-        setError(null);
-        setIsSendingBlockchainTx(false);
-        createPaymentMutation.reset();
-        verifyPaymentMutation.reset();
-      }, 300);
+        setAmountUSD('10')
+        setReason('')
+        setStep('input')
+        setTxHash(null)
+        setError(null)
+        setIsSendingBlockchainTx(false)
+        createPaymentMutation.reset()
+        verifyPaymentMutation.reset()
+      }, 300)
     }
-  }, [isOpen, createPaymentMutation, verifyPaymentMutation]);
+  }, [isOpen, createPaymentMutation, verifyPaymentMutation])
 
   // Handle escape key
   useEffect(() => {
     if (!isOpen) {
-      document.body.style.overflow = '';
-      return;
+      document.body.style.overflow = ''
+      return
     }
 
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && !isLoading && step === 'input') {
-        onClose();
+        onClose()
       }
-    };
+    }
 
-    document.addEventListener('keydown', handleEscape);
-    document.body.style.overflow = 'hidden';
+    document.addEventListener('keydown', handleEscape)
+    document.body.style.overflow = 'hidden'
 
     return () => {
-      document.removeEventListener('keydown', handleEscape);
-      document.body.style.overflow = '';
-    };
-  }, [isOpen, onClose, isLoading, step]);
+      document.removeEventListener('keydown', handleEscape)
+      document.body.style.overflow = ''
+    }
+  }, [isOpen, onClose, isLoading, step])
 
-  if (!isOpen) return null;
+  if (!isOpen) return null
 
   if (!recipientWalletAddress) {
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-        <div
+        <button
+          type="button"
           className="absolute inset-0 bg-black/50 backdrop-blur-sm"
           onClick={onClose}
+          aria-label="Close modal"
         />
         <div className="relative w-full max-w-md rounded-2xl border border-border bg-background shadow-xl">
           <div className="flex items-center justify-between border-border border-b p-6">
             <h2 className="font-bold text-xl">Send Money</h2>
             <button
+              type="button"
               onClick={onClose}
               className="rounded-full p-2 transition-colors hover:bg-muted/50"
             >
@@ -408,6 +405,7 @@ export function AdminSendMoneyModal({
               </div>
             </div>
             <button
+              type="button"
               onClick={onClose}
               className="mt-4 w-full rounded-lg border border-border px-4 py-3 font-semibold transition-colors hover:bg-muted/50"
             >
@@ -416,38 +414,38 @@ export function AdminSendMoneyModal({
           </div>
         </div>
       </div>
-    );
+    )
   }
 
   const handleCreatePayment = () => {
     if (!smartWalletAddress || !smartWalletReady) {
-      toast.error(WALLET_ERROR_MESSAGES.NO_EMBEDDED_WALLET);
-      return;
+      toast.error(WALLET_ERROR_MESSAGES.NO_EMBEDDED_WALLET)
+      return
     }
 
     if (amountNum < 0.01) {
-      toast.error('Minimum amount is $0.01');
-      return;
+      toast.error('Minimum amount is $0.01')
+      return
     }
 
     if (amountNum > 10000) {
-      toast.error('Maximum amount is $10,000');
-      return;
+      toast.error('Maximum amount is $10,000')
+      return
     }
 
-    setError(null);
+    setError(null)
     createPaymentMutation.mutate({
       amount: amountNum,
       paymentReason: reason,
-    });
-  };
+    })
+  }
 
   const handleClose = () => {
     if (isLoading || step === 'payment' || step === 'verifying') {
-      return;
+      return
     }
-    onClose();
-  };
+    onClose()
+  }
 
   const renderContent = () => {
     switch (step) {
@@ -467,12 +465,16 @@ export function AdminSendMoneyModal({
               </div>
 
               <div>
-                <label className="mb-2 block font-medium text-sm">
+                <label
+                  htmlFor="amount-usd"
+                  className="mb-2 block font-medium text-sm"
+                >
                   Amount (USD)
                 </label>
                 <div className="relative">
                   <DollarSign className="absolute top-1/2 left-3 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
                   <input
+                    id="amount-usd"
                     type="number"
                     min="0.01"
                     max="10000"
@@ -490,10 +492,14 @@ export function AdminSendMoneyModal({
               </div>
 
               <div>
-                <label className="mb-2 block font-medium text-sm">
+                <label
+                  htmlFor="reason-textarea"
+                  className="mb-2 block font-medium text-sm"
+                >
                   Reason (optional)
                 </label>
                 <textarea
+                  id="reason-textarea"
                   value={reason}
                   onChange={(e) => setReason(e.target.value)}
                   placeholder="Why are you sending this payment? (compensation, refund, etc.)"
@@ -518,6 +524,7 @@ export function AdminSendMoneyModal({
 
             <div className="mt-6 flex gap-3">
               <button
+                type="button"
                 onClick={handleClose}
                 disabled={isLoading}
                 className="flex-1 rounded-lg border border-border px-4 py-3 font-semibold transition-colors hover:bg-muted/50 disabled:opacity-50"
@@ -525,12 +532,13 @@ export function AdminSendMoneyModal({
                 Cancel
               </button>
               <button
+                type="button"
                 onClick={handleCreatePayment}
                 disabled={isLoading || !amountUSD || amountNum < 0.01}
                 className={cn(
                   'flex-1 rounded-lg px-4 py-3 font-semibold transition-all disabled:cursor-not-allowed disabled:opacity-50',
                   'bg-primary text-primary-foreground hover:bg-primary/90',
-                  'flex items-center justify-center gap-2'
+                  'flex items-center justify-center gap-2',
                 )}
               >
                 {isLoading ? (
@@ -547,7 +555,7 @@ export function AdminSendMoneyModal({
               </button>
             </div>
           </>
-        );
+        )
 
       case 'payment':
         return (
@@ -558,7 +566,7 @@ export function AdminSendMoneyModal({
               Please confirm the transaction in your wallet
             </p>
           </div>
-        );
+        )
 
       case 'verifying':
         return (
@@ -574,7 +582,7 @@ export function AdminSendMoneyModal({
               </p>
             )}
           </div>
-        );
+        )
 
       case 'success':
         return (
@@ -592,13 +600,14 @@ export function AdminSendMoneyModal({
               </p>
             )}
             <button
+              type="button"
               onClick={handleClose}
               className="mt-6 w-full rounded-lg bg-primary px-4 py-3 font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
             >
               Close
             </button>
           </div>
-        );
+        )
 
       case 'error':
         return (
@@ -612,15 +621,17 @@ export function AdminSendMoneyModal({
             <p className="mb-4 text-muted-foreground text-sm">{error}</p>
             <div className="flex gap-3">
               <button
+                type="button"
                 onClick={() => {
-                  setStep('input');
-                  setError(null);
+                  setStep('input')
+                  setError(null)
                 }}
                 className="flex-1 rounded-lg border border-border px-4 py-3 font-semibold transition-colors hover:bg-muted/50"
               >
                 Try Again
               </button>
               <button
+                type="button"
                 onClick={handleClose}
                 className="flex-1 rounded-lg bg-muted px-4 py-3 font-semibold transition-colors hover:bg-muted/80"
               >
@@ -628,20 +639,23 @@ export function AdminSendMoneyModal({
               </button>
             </div>
           </div>
-        );
+        )
     }
-  };
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <div
+      <button
+        type="button"
         className="absolute inset-0 bg-black/50 backdrop-blur-sm"
         onClick={handleClose}
+        aria-label="Close modal"
       />
       <div className="relative w-full max-w-md rounded-2xl border border-border bg-background shadow-xl">
         <div className="flex items-center justify-between border-border border-b p-6">
           <h2 className="font-bold text-xl">Send Money (Escrow)</h2>
           <button
+            type="button"
             onClick={handleClose}
             disabled={isLoading || step === 'payment' || step === 'verifying'}
             className="rounded-full p-2 transition-colors hover:bg-muted/50 disabled:opacity-50"
@@ -652,5 +666,5 @@ export function AdminSendMoneyModal({
         <div className="p-6">{renderContent()}</div>
       </div>
     </div>
-  );
+  )
 }

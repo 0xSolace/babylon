@@ -2,14 +2,18 @@
  * Shared utilities for documentation generation scripts
  */
 
-import { promises as fs } from 'node:fs';
-import path from 'node:path';
+import { promises as fs } from 'node:fs'
+import path from 'node:path'
+
+// ============================================================================
+// File System Utilities
+// ============================================================================
 
 /**
  * Filter function type for walkDirectory
  * Returns true if the file should be included in results
  */
-export type FileFilter = (entry: { name: string; path: string }) => boolean;
+export type FileFilter = (entry: { name: string; path: string }) => boolean
 
 /**
  * Recursively walk a directory and yield file paths that match the filter
@@ -32,17 +36,17 @@ export type FileFilter = (entry: { name: string; path: string }) => boolean;
  */
 export async function* walkDirectory(
   dir: string,
-  filter: FileFilter
+  filter: FileFilter,
 ): AsyncGenerator<string> {
-  const entries = await fs.readdir(dir, { withFileTypes: true });
+  const entries = await fs.readdir(dir, { withFileTypes: true })
 
   for (const entry of entries) {
-    const fullPath = path.join(dir, entry.name);
+    const fullPath = path.join(dir, entry.name)
 
     if (entry.isDirectory()) {
-      yield* walkDirectory(fullPath, filter);
+      yield* walkDirectory(fullPath, filter)
     } else if (entry.isFile() && filter({ name: entry.name, path: fullPath })) {
-      yield fullPath;
+      yield fullPath
     }
   }
 }
@@ -53,7 +57,7 @@ export async function* walkDirectory(
 export const byFileName =
   (name: string): FileFilter =>
   (entry) =>
-    entry.name === name;
+    entry.name === name
 
 /**
  * Create a filter that matches files by extension
@@ -61,7 +65,7 @@ export const byFileName =
 export const byExtension =
   (ext: string): FileFilter =>
   (entry) =>
-    entry.name.endsWith(ext);
+    entry.name.endsWith(ext)
 
 /**
  * Create a filter that matches files by any of the given extensions
@@ -69,7 +73,7 @@ export const byExtension =
 export const byExtensions =
   (extensions: string[]): FileFilter =>
   (entry) =>
-    extensions.some((ext) => entry.name.endsWith(ext));
+    extensions.some((ext) => entry.name.endsWith(ext))
 
 /**
  * Collect all files from walkDirectory into an array
@@ -77,11 +81,11 @@ export const byExtensions =
  */
 export async function collectFiles(
   dir: string,
-  filter: FileFilter
+  filter: FileFilter,
 ): Promise<string[]> {
-  const files: string[] = [];
+  const files: string[] = []
   for await (const file of walkDirectory(dir, filter)) {
-    files.push(file);
+    files.push(file)
   }
-  return files;
+  return files
 }

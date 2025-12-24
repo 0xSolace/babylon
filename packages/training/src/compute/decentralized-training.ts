@@ -1,49 +1,51 @@
 /**
- * @title Decentralized Training Integration
- * @description Integrates Babylon training with Jeju's decentralized training infrastructure
+ * @title Training Integration
+ * @description Integrates Babylon training with Jeju's training infrastructure
  * @dev Wraps the DWS distributed training client for Babylon-specific workflows
  */
 
-import { logger } from '@babylon/shared';
-import type { Address, Chain, Hex, PublicClient, WalletClient } from 'viem';
+import { logger } from '@babylon/shared'
 import {
+  type Address,
+  type Chain,
   createPublicClient,
   createWalletClient,
   encodeAbiParameters,
+  type Hex,
   http,
   keccak256,
   parseAbi,
   parseAbiParameters,
   stringToBytes,
   zeroHash,
-} from 'viem';
-import { privateKeyToAccount } from 'viem/accounts';
-import type { TrainingJobRequest, TrainingJobResult } from './types';
+} from 'viem'
+import { privateKeyToAccount } from 'viem/accounts'
+import type { TrainingJobRequest, TrainingJobResult } from './types'
 
 // ============ Types ============
 
-export interface DecentralizedTrainingConfig {
+export interface TrainingConfig {
   /** RPC endpoint */
-  rpcUrl: string;
+  rpcUrl: string
   /** Private key for signing transactions */
-  privateKey: Hex;
+  privateKey: Hex
   /** Chain configuration */
-  chain: Chain;
+  chain: Chain
   /** Contract addresses */
   contracts: {
-    coordinator: Address;
-    rewards: Address;
-    performance: Address;
-    registry: Address;
-  };
+    coordinator: Address
+    rewards: Address
+    performance: Address
+    registry: Address
+  }
   /** IPFS gateway URL */
-  ipfsGateway?: string;
+  ipfsGateway?: string
   /** HuggingFace token for model uploads */
-  hfToken?: string;
+  hfToken?: string
   /** Minimum GPU tier for training */
-  minGpuTier?: GPUTier;
+  minGpuTier?: GPUTier
   /** Reward token address (JEJU token) */
-  rewardToken?: Address;
+  rewardToken?: Address
 }
 
 export enum PrivacyMode {
@@ -70,35 +72,35 @@ export enum RunState {
   Paused = 7,
 }
 
-export interface DecentralizedTrainingJob {
-  runId: Hex;
-  name: string;
-  batchId: string;
-  baseModel: string;
-  state: RunState;
-  epoch: number;
-  step: number;
-  totalSteps: number;
-  clientCount: number;
-  privacyMode: PrivacyMode;
-  createdAt: Date;
+export interface TrainingJob {
+  runId: Hex
+  name: string
+  batchId: string
+  baseModel: string
+  state: RunState
+  epoch: number
+  step: number
+  totalSteps: number
+  clientCount: number
+  privacyMode: PrivacyMode
+  createdAt: Date
   latestCheckpoint?: {
-    modelHash: Hex;
-    hfRepo: string;
-    ipfsCid?: string;
-    step: number;
-  };
+    modelHash: Hex
+    hfRepo: string
+    ipfsCid?: string
+    step: number
+  }
 }
 
 export interface TrainingProgress {
-  runId: Hex;
-  step: number;
-  totalSteps: number;
-  epoch: number;
-  state: string;
-  clientCount: number;
-  tokensPerSecond?: number;
-  estimatedTimeRemaining?: number;
+  runId: Hex
+  step: number
+  totalSteps: number
+  epoch: number
+  state: string
+  clientCount: number
+  tokensPerSecond?: number
+  estimatedTimeRemaining?: number
 }
 
 // Contract ABIs (minimal for this integration)
@@ -112,56 +114,56 @@ const coordinatorAbi = parseAbi([
   'event StateTransition(bytes32 indexed runId, uint8 oldState, uint8 newState, uint64 timestamp)',
   'event EpochCompleted(bytes32 indexed runId, uint16 epoch, uint32 stepsCompleted)',
   'event RunFinished(bytes32 indexed runId, uint32 totalSteps)',
-]);
+])
 
 const rewardsAbi = parseAbi([
   'function createRewardPool(bytes32 runId, address rewardToken, uint256 amount, uint256 pointsPerEpoch)',
   'function claim(bytes32 runId)',
   'function claimable(bytes32 runId, address participant) view returns (uint256 claimableAmount, uint256 claimablePoints)',
-]);
+])
 
 const registryAbi = parseAbi([
   'function getLatestCheckpoint(bytes32 runId) view returns ((bytes32 runId, uint32 step, uint16 epoch, string hfRepo, bytes32 modelHash, string ipfsCid, uint64 timestamp, address submitter, uint256 benchmarkScore, bool verified))',
-]);
+])
 
 // ============ Implementation ============
 
-export class DecentralizedTrainingClient {
-  private config: DecentralizedTrainingConfig;
-  private chain: Chain;
-  private publicClient: PublicClient;
-  private walletClient: WalletClient;
-  private account: ReturnType<typeof privateKeyToAccount>;
-  private activeJobs: Map<string, DecentralizedTrainingJob> = new Map();
+export class TrainingClient {
+  private config: TrainingConfig
+  private chain: Chain
+  private publicClient
+  private walletClient
+  private account: ReturnType<typeof privateKeyToAccount>
+  private activeJobs: Map<string, TrainingJob> = new Map()
 
-  constructor(config: DecentralizedTrainingConfig) {
-    this.config = config;
-    this.chain = config.chain;
-    this.account = privateKeyToAccount(config.privateKey);
+  constructor(config: TrainingConfig) {
+    this.config = config
+    this.chain = config.chain
+    this.account = privateKeyToAccount(config.privateKey)
 
     this.publicClient = createPublicClient({
       chain: this.chain,
       transport: http(config.rpcUrl),
-    }) as PublicClient;
+    })
 
     this.walletClient = createWalletClient({
       account: this.account,
       chain: this.chain,
       transport: http(config.rpcUrl),
-    }) as WalletClient;
+    })
   }
 
   /**
    * Submit a training job to the decentralized network
    */
   async submitTrainingJob(request: TrainingJobRequest): Promise<Hex> {
-    const runId = this.generateRunId(request.batchId);
+    const runId = this.generateRunId(request.batchId)
 
     logger.info('Submitting decentralized training job', {
       runId,
       batchId: request.batchId,
       baseModel: request.baseModel,
-    });
+    })
 
     // Build coordinator config
     const coordinatorConfig = {
@@ -179,16 +181,16 @@ export class DecentralizedTrainingClient {
       globalBatchSizeEnd: request.batchSize * 4,
       verificationPercent: 10,
       waitingForMembersExtraTime: 60,
-    };
+    }
 
     // Build model config
-    const modelHash = keccak256(stringToBytes(request.baseModel));
+    const modelHash = keccak256(stringToBytes(request.baseModel))
     const modelConfig = {
       modelHash,
       hfRepo: request.baseModel,
       maxSeqLen: 2048,
       coldStartWarmupSteps: Math.floor(request.trainingSteps * 0.1),
-    };
+    }
 
     // Create the training run
     const hash = await this.walletClient.writeContract({
@@ -204,12 +206,12 @@ export class DecentralizedTrainingClient {
       ],
       account: this.account,
       chain: this.chain,
-    });
+    })
 
-    await this.publicClient.waitForTransactionReceipt({ hash });
+    await this.publicClient.waitForTransactionReceipt({ hash })
 
     // Track job
-    const job: DecentralizedTrainingJob = {
+    const job: TrainingJob = {
       runId,
       name: `babylon-${request.batchId}`,
       batchId: request.batchId,
@@ -221,31 +223,31 @@ export class DecentralizedTrainingClient {
       clientCount: 0,
       privacyMode: PrivacyMode.Public,
       createdAt: new Date(),
-    };
+    }
 
-    this.activeJobs.set(runId, job);
+    this.activeJobs.set(runId, job)
 
     logger.info('Decentralized training job created', {
       runId,
       batchId: request.batchId,
-    });
+    })
 
     // Start polling for updates
-    this.pollJobStatus(runId);
+    this.pollJobStatus(runId)
 
-    return runId;
+    return runId
   }
 
   /**
    * Get job status
    */
-  async getJobStatus(runId: Hex): Promise<DecentralizedTrainingJob | null> {
+  async getJobStatus(runId: Hex): Promise<TrainingJob | null> {
     // Check cache first
-    const cached = this.activeJobs.get(runId);
+    const cached = this.activeJobs.get(runId)
     if (cached) {
       // Refresh from chain
-      await this.refreshJobStatus(runId);
-      return this.activeJobs.get(runId) || null;
+      await this.refreshJobStatus(runId)
+      return this.activeJobs.get(runId) || null
     }
 
     // Fetch from chain
@@ -254,10 +256,10 @@ export class DecentralizedTrainingClient {
       abi: coordinatorAbi,
       functionName: 'getRun',
       args: [runId],
-    });
+    })
 
     if (Number(result[1]) === RunState.Uninitialized) {
-      return null;
+      return null
     }
 
     const configResult = await this.publicClient.readContract({
@@ -265,31 +267,31 @@ export class DecentralizedTrainingClient {
       abi: coordinatorAbi,
       functionName: 'getRunConfig',
       args: [runId],
-    });
+    })
 
-    const job: DecentralizedTrainingJob = {
+    const job: TrainingJob = {
       runId,
       name: '',
       batchId: '',
       baseModel: '',
       state: Number(result[1]) as RunState,
-      epoch: result[2],
-      step: result[3],
-      totalSteps: configResult.totalSteps,
-      clientCount: result[4],
+      epoch: Number(result[2]),
+      step: Number(result[3]),
+      totalSteps: Number(configResult.totalSteps),
+      clientCount: Number(result[4]),
       privacyMode: Number(result[5]) as PrivacyMode,
       createdAt: new Date(),
-    };
+    }
 
-    return job;
+    return job
   }
 
   /**
    * Get training progress
    */
   async getProgress(runId: Hex): Promise<TrainingProgress | null> {
-    const job = await this.getJobStatus(runId);
-    if (!job) return null;
+    const job = await this.getJobStatus(runId)
+    if (!job) return null
 
     return {
       runId,
@@ -298,7 +300,7 @@ export class DecentralizedTrainingClient {
       epoch: job.epoch,
       state: RunState[job.state],
       clientCount: job.clientCount,
-    };
+    }
   }
 
   /**
@@ -306,12 +308,12 @@ export class DecentralizedTrainingClient {
    */
   async waitForJob(
     runId: Hex,
-    timeoutMs = 3600000
+    timeoutMs = 3600000,
   ): Promise<TrainingJobResult> {
-    const start = Date.now();
+    const start = Date.now()
 
     while (Date.now() - start < timeoutMs) {
-      const job = await this.getJobStatus(runId);
+      const job = await this.getJobStatus(runId)
 
       if (job?.state === RunState.Finished) {
         // Get final checkpoint - may not exist if training just completed
@@ -322,7 +324,7 @@ export class DecentralizedTrainingClient {
             functionName: 'getLatestCheckpoint',
             args: [runId],
           })
-          .catch(() => null);
+          .catch(() => null)
 
         return {
           jobId: runId,
@@ -330,7 +332,7 @@ export class DecentralizedTrainingClient {
           modelCID: checkpoint?.ipfsCid,
           modelHash: checkpoint?.modelHash,
           durationSeconds: Math.floor((Date.now() - start) / 1000),
-        };
+        }
       }
 
       if (job?.state === RunState.Paused) {
@@ -339,10 +341,10 @@ export class DecentralizedTrainingClient {
           status: 'failed',
           error: 'Training run was paused',
           durationSeconds: Math.floor((Date.now() - start) / 1000),
-        };
+        }
       }
 
-      await new Promise((r) => setTimeout(r, 30000)); // Check every 30s
+      await new Promise((r) => setTimeout(r, 30000)) // Check every 30s
     }
 
     return {
@@ -350,7 +352,7 @@ export class DecentralizedTrainingClient {
       status: 'failed',
       error: 'Timeout waiting for training completion',
       durationSeconds: Math.floor((Date.now() - start) / 1000),
-    };
+    }
   }
 
   /**
@@ -362,12 +364,12 @@ export class DecentralizedTrainingClient {
       abi: rewardsAbi,
       functionName: 'claimable',
       args: [runId, this.account.address],
-    });
+    })
 
-    const claimableAmount = claimableResult[0];
+    const claimableAmount = claimableResult[0]
 
     if (claimableAmount === 0n) {
-      return 0n;
+      return 0n
     }
 
     const hash = await this.walletClient.writeContract({
@@ -377,16 +379,16 @@ export class DecentralizedTrainingClient {
       args: [runId],
       account: this.account,
       chain: this.chain,
-    });
+    })
 
-    await this.publicClient.waitForTransactionReceipt({ hash });
+    await this.publicClient.waitForTransactionReceipt({ hash })
 
     logger.info('Claimed training rewards', {
       runId,
       amount: claimableAmount.toString(),
-    });
+    })
 
-    return claimableAmount;
+    return claimableAmount
   }
 
   /**
@@ -398,14 +400,14 @@ export class DecentralizedTrainingClient {
       abi: rewardsAbi,
       functionName: 'claimable',
       args: [runId, this.account.address],
-    });
-    return result[0];
+    })
+    return result[0]
   }
 
   /**
    * Convert to standard TrainingJobResult format
    */
-  jobToResult(job: DecentralizedTrainingJob): TrainingJobResult {
+  jobToResult(job: TrainingJob): TrainingJobResult {
     const statusMap: Record<RunState, TrainingJobResult['status']> = {
       [RunState.Uninitialized]: 'pending',
       [RunState.WaitingForMembers]: 'provisioning',
@@ -415,14 +417,14 @@ export class DecentralizedTrainingClient {
       [RunState.Cooldown]: 'training',
       [RunState.Finished]: 'completed',
       [RunState.Paused]: 'failed',
-    };
+    }
 
     return {
       jobId: job.runId,
       status: statusMap[job.state],
       modelCID: job.latestCheckpoint?.ipfsCid,
       modelHash: job.latestCheckpoint?.modelHash,
-    };
+    }
   }
 
   // ============ Private Methods ============
@@ -433,25 +435,25 @@ export class DecentralizedTrainingClient {
         batchId,
         this.account.address,
         BigInt(Date.now()),
-      ])
-    );
+      ]),
+    )
   }
 
   private async refreshJobStatus(runId: Hex): Promise<void> {
-    const job = this.activeJobs.get(runId);
-    if (!job) return;
+    const job = this.activeJobs.get(runId)
+    if (!job) return
 
-    const result = await this.publicClient.readContract({
+    const refreshResult = await this.publicClient.readContract({
       address: this.config.contracts.coordinator,
       abi: coordinatorAbi,
       functionName: 'getRun',
       args: [runId],
-    });
+    })
 
-    job.state = Number(result[1]) as RunState;
-    job.epoch = result[2];
-    job.step = result[3];
-    job.clientCount = result[4];
+    job.state = Number(refreshResult[1]) as RunState
+    job.epoch = Number(refreshResult[2])
+    job.step = Number(refreshResult[3])
+    job.clientCount = Number(refreshResult[4])
 
     // Update checkpoint if available
     if (job.state === RunState.Finished || job.epoch > 0) {
@@ -462,30 +464,30 @@ export class DecentralizedTrainingClient {
           functionName: 'getLatestCheckpoint',
           args: [runId],
         })
-        .catch(() => null);
+        .catch(() => null)
 
       if (checkpoint) {
         job.latestCheckpoint = {
-          modelHash: checkpoint.modelHash,
+          modelHash: checkpoint.modelHash as `0x${string}`,
           hfRepo: checkpoint.hfRepo,
           ipfsCid: checkpoint.ipfsCid,
-          step: checkpoint.step,
-        };
+          step: Number(checkpoint.step),
+        }
       }
     }
   }
 
   private async pollJobStatus(runId: Hex): Promise<void> {
-    const job = this.activeJobs.get(runId);
-    if (!job) return;
+    const job = this.activeJobs.get(runId)
+    if (!job) return
 
     const pollInterval = setInterval(async () => {
-      await this.refreshJobStatus(runId);
+      await this.refreshJobStatus(runId)
 
-      const updatedJob = this.activeJobs.get(runId);
+      const updatedJob = this.activeJobs.get(runId)
       if (!updatedJob) {
-        clearInterval(pollInterval);
-        return;
+        clearInterval(pollInterval)
+        return
       }
 
       // Log progress
@@ -496,21 +498,21 @@ export class DecentralizedTrainingClient {
         totalSteps: updatedJob.totalSteps,
         epoch: updatedJob.epoch,
         clients: updatedJob.clientCount,
-      });
+      })
 
       // Stop polling when complete
       if (
         updatedJob.state === RunState.Finished ||
         updatedJob.state === RunState.Paused
       ) {
-        clearInterval(pollInterval);
+        clearInterval(pollInterval)
         logger.info('Training job completed', {
           runId,
           state: RunState[updatedJob.state],
           finalStep: updatedJob.step,
-        });
+        })
       }
-    }, 30000); // Poll every 30 seconds
+    }, 30000) // Poll every 30 seconds
   }
 
   // ============ Cleanup ============
@@ -519,7 +521,7 @@ export class DecentralizedTrainingClient {
    * Clean up resources
    */
   cleanup(): void {
-    this.activeJobs.clear();
+    this.activeJobs.clear()
   }
 }
 
@@ -527,9 +529,9 @@ export class DecentralizedTrainingClient {
  * Create a decentralized training client
  */
 export function createDecentralizedTrainingClient(
-  config: DecentralizedTrainingConfig
-): DecentralizedTrainingClient {
-  return new DecentralizedTrainingClient(config);
+  config: TrainingConfig,
+): TrainingClient {
+  return new TrainingClient(config)
 }
 
 /**
@@ -540,5 +542,5 @@ export function isDecentralizedTrainingAvailable(): boolean {
     process.env.TRAINING_COORDINATOR_ADDRESS &&
     process.env.RPC_URL &&
     process.env.PRIVATE_KEY
-  );
+  )
 }

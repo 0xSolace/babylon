@@ -1,21 +1,19 @@
-'use client';
-
-import { useJejuAuth } from '@babylon/auth/client';
-import { cn } from '@babylon/shared';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Check, Loader2, Search, Users, X } from 'lucide-react';
-import { useEffect, useState } from 'react';
-import { Avatar } from '@/components/shared/Avatar';
-import { useAuthStore } from '@/stores/authStore';
+import { useJejuAuth } from '@babylon/auth'
+import { cn } from '@babylon/shared'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { Check, Loader2, Search, Users, X } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Avatar } from '@/components/shared/Avatar'
+import { useAuthStore } from '@/stores/authStore'
 
 /**
  * User structure for group creation modal.
  */
 interface User {
-  id: string;
-  displayName: string | null;
-  username: string | null;
-  profileImageUrl: string | null;
+  id: string
+  displayName: string | null
+  username: string | null
+  profileImageUrl: string | null
 }
 
 /**
@@ -49,20 +47,20 @@ interface User {
  * ```
  */
 interface CreateGroupModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  onGroupCreated: (groupId: string, chatId: string) => void;
+  isOpen: boolean
+  onClose: () => void
+  onGroupCreated: (groupId: string, chatId: string) => void
 }
 
 interface CreateGroupResponse {
   group: {
-    id: string;
-    chatId: string;
-  };
+    id: string
+    chatId: string
+  }
 }
 
 interface SearchUsersResponse {
-  users: User[];
+  users: User[]
 }
 
 export function CreateGroupModal({
@@ -70,60 +68,60 @@ export function CreateGroupModal({
   onClose,
   onGroupCreated,
 }: CreateGroupModalProps) {
-  const { getAccessToken } = useJejuAuth();
-  const { user } = useAuthStore();
-  const queryClient = useQueryClient();
-  const [groupName, setGroupName] = useState('');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState<User[]>([]);
-  const [selectedUsers, setSelectedUsers] = useState<User[]>([]);
-  const [searching, setSearching] = useState(false);
+  const { getAccessToken } = useJejuAuth()
+  const { user } = useAuthStore()
+  const queryClient = useQueryClient()
+  const [groupName, setGroupName] = useState('')
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchResults, setSearchResults] = useState<User[]>([])
+  const [selectedUsers, setSelectedUsers] = useState<User[]>([])
+  const [searching, setSearching] = useState(false)
 
   // Reset state when modal opens/closes
   useEffect(() => {
     if (isOpen) {
-      setGroupName('');
-      setSearchQuery('');
-      setSearchResults([]);
-      setSelectedUsers([]);
+      setGroupName('')
+      setSearchQuery('')
+      setSearchResults([])
+      setSelectedUsers([])
     }
-  }, [isOpen]);
+  }, [isOpen])
 
   // Search for users with debounce
   useEffect(() => {
     if (!searchQuery.trim() || searchQuery.length < 2) {
-      setSearchResults([]);
-      return;
+      setSearchResults([])
+      return
     }
 
     const searchUsers = async () => {
-      setSearching(true);
-      const token = await getAccessToken();
+      setSearching(true)
+      const token = await getAccessToken()
       const response = await fetch(
         `/api/users/search?q=${encodeURIComponent(searchQuery)}`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
           },
-        }
-      );
+        },
+      )
 
       if (response.ok) {
-        const data: SearchUsersResponse = await response.json();
-        setSearchResults(data.users || []);
+        const data: SearchUsersResponse = await response.json()
+        setSearchResults(data.users || [])
       }
-      setSearching(false);
-    };
+      setSearching(false)
+    }
 
-    const debounce = setTimeout(searchUsers, 300);
-    return () => clearTimeout(debounce);
-  }, [searchQuery, getAccessToken]);
+    const debounce = setTimeout(searchUsers, 300)
+    return () => clearTimeout(debounce)
+  }, [searchQuery, getAccessToken])
 
   const createGroupMutation = useMutation({
     mutationFn: async (
-      finalGroupName: string
+      finalGroupName: string,
     ): Promise<CreateGroupResponse> => {
-      const token = await getAccessToken();
+      const token = await getAccessToken()
       const response = await fetch('/api/groups', {
         method: 'POST',
         headers: {
@@ -134,78 +132,88 @@ export function CreateGroupModal({
           name: finalGroupName,
           memberIds: selectedUsers.map((u) => u.id),
         }),
-      });
+      })
 
       if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || 'Failed to create group');
+        const data = await response.json()
+        throw new Error(data.error || 'Failed to create group')
       }
 
-      return response.json();
+      return response.json()
     },
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ['user-groups'] });
-      onGroupCreated(data.group.id, data.group.chatId);
-      onClose();
+      queryClient.invalidateQueries({ queryKey: ['user-groups'] })
+      onGroupCreated(data.group.id, data.group.chatId)
+      onClose()
     },
-  });
+  })
 
   const handleAddUser = (userToAdd: User) => {
     if (!selectedUsers.find((u) => u.id === userToAdd.id)) {
-      setSelectedUsers([...selectedUsers, userToAdd]);
+      setSelectedUsers([...selectedUsers, userToAdd])
     }
-    setSearchQuery('');
-    setSearchResults([]);
-  };
+    setSearchQuery('')
+    setSearchResults([])
+  }
 
   const handleRemoveUser = (userId: string) => {
-    setSelectedUsers(selectedUsers.filter((u) => u.id !== userId));
-  };
+    setSelectedUsers(selectedUsers.filter((u) => u.id !== userId))
+  }
 
   const handleCreateGroup = () => {
     // Generate group name if not provided
-    let finalGroupName = groupName.trim();
+    let finalGroupName = groupName.trim()
 
     if (!finalGroupName) {
       // Auto-generate from members
       const memberNames = selectedUsers
         .slice(0, 2)
-        .map((u) => u.displayName || u.username || 'User');
-      const currentUserName = user?.displayName || user?.username || 'You';
+        .map((u) => u.displayName || u.username || 'User')
+      const currentUserName = user?.displayName || user?.username || 'You'
 
       if (selectedUsers.length === 0) {
-        return; // Button should be disabled anyway
+        return // Button should be disabled anyway
       } else if (selectedUsers.length === 1) {
-        finalGroupName = `${currentUserName}, ${memberNames[0]}`;
+        finalGroupName = `${currentUserName}, ${memberNames[0]}`
       } else if (selectedUsers.length === 2) {
-        finalGroupName = `${currentUserName}, ${memberNames[0]}, ${memberNames[1]}`;
+        finalGroupName = `${currentUserName}, ${memberNames[0]}, ${memberNames[1]}`
       } else {
-        finalGroupName = `${currentUserName}, ${memberNames[0]}, ${memberNames[1]} +${selectedUsers.length - 2}`;
+        finalGroupName = `${currentUserName}, ${memberNames[0]}, ${memberNames[1]} +${selectedUsers.length - 2}`
       }
     }
 
-    createGroupMutation.mutate(finalGroupName);
-  };
+    createGroupMutation.mutate(finalGroupName)
+  }
 
-  if (!isOpen) return null;
+  if (!isOpen) return null
 
   const handleClose = () => {
-    if (createGroupMutation.isPending) return; // Prevent closing during creation
-    onClose();
-  };
+    if (createGroupMutation.isPending) return // Prevent closing during creation
+    onClose()
+  }
 
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm"
       onClick={(e) => {
         if (e.target === e.currentTarget) {
-          handleClose();
+          handleClose()
         }
       }}
+      onKeyDown={(e) => {
+        if (e.key === 'Escape') {
+          handleClose()
+        }
+      }}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Create new group"
     >
       <div
         className="w-full max-w-md rounded-xl border border-border bg-background shadow-2xl"
         onClick={(e) => e.stopPropagation()}
+        onKeyDown={(e) => e.stopPropagation()}
+        role="dialog"
       >
         {/* Header */}
         <div className="flex items-center justify-between border-border border-b p-6">
@@ -214,6 +222,7 @@ export function CreateGroupModal({
             <h2 className="font-bold text-xl">Create New Group</h2>
           </div>
           <button
+            type="button"
             onClick={handleClose}
             className="text-muted-foreground transition-colors hover:text-foreground"
             disabled={createGroupMutation.isPending}
@@ -235,7 +244,10 @@ export function CreateGroupModal({
           <div className="space-y-4">
             {/* Group Name (Optional) */}
             <div>
-              <label className="mb-2 block font-medium text-sm">
+              <label
+                htmlFor="groupName"
+                className="mb-2 block font-medium text-sm"
+              >
                 Group Name{' '}
                 <span className="font-normal text-muted-foreground text-xs">
                   (Optional)
@@ -261,9 +273,9 @@ export function CreateGroupModal({
             {/* Selected Users */}
             {selectedUsers.length > 0 && (
               <div className="space-y-2">
-                <label className="block font-medium text-sm">
+                <div className="block font-medium text-sm">
                   Members ({selectedUsers.length})
-                </label>
+                </div>
                 <div className="flex flex-wrap gap-2 rounded-lg border border-border bg-sidebar p-3">
                   {selectedUsers.map((selectedUser) => (
                     <div
@@ -285,6 +297,7 @@ export function CreateGroupModal({
                           'Unknown'}
                       </span>
                       <button
+                        type="button"
                         onClick={() => handleRemoveUser(selectedUser.id)}
                         className="ml-1 text-muted-foreground hover:text-foreground"
                       >
@@ -298,12 +311,16 @@ export function CreateGroupModal({
 
             {/* User Search */}
             <div>
-              <label className="mb-2 block font-medium text-sm">
+              <label
+                htmlFor="user-search-input"
+                className="mb-2 block font-medium text-sm"
+              >
                 Add Members
               </label>
               <div className="relative">
                 <Search className="absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <input
+                  id="user-search-input"
                   type="text"
                   placeholder="Search by username or name..."
                   value={searchQuery}
@@ -321,17 +338,18 @@ export function CreateGroupModal({
               <div className="max-h-[200px] overflow-hidden overflow-y-auto rounded-lg border border-border">
                 {searchResults.map((searchUser) => {
                   const isSelected = selectedUsers.find(
-                    (u) => u.id === searchUser.id
-                  );
+                    (u) => u.id === searchUser.id,
+                  )
                   return (
                     <button
+                      type="button"
                       key={searchUser.id}
                       onClick={() => !isSelected && handleAddUser(searchUser)}
                       className={cn(
                         'flex w-full items-center gap-3 p-3 text-left transition-colors',
                         isSelected
                           ? 'cursor-not-allowed bg-muted/50 opacity-50'
-                          : 'hover:bg-sidebar'
+                          : 'hover:bg-sidebar',
                       )}
                       disabled={!!isSelected}
                     >
@@ -358,7 +376,7 @@ export function CreateGroupModal({
                         <Check className="h-4 w-4 text-green-500" />
                       )}
                     </button>
-                  );
+                  )
                 })}
               </div>
             )}
@@ -388,16 +406,16 @@ export function CreateGroupModal({
                 <strong>Auto-name preview:</strong> {(() => {
                   const memberNames = selectedUsers
                     .slice(0, 2)
-                    .map((u) => u.displayName || u.username || 'User');
+                    .map((u) => u.displayName || u.username || 'User')
                   const currentUserName =
-                    user?.displayName || user?.username || 'You';
+                    user?.displayName || user?.username || 'You'
 
                   if (selectedUsers.length === 1) {
-                    return `${currentUserName}, ${memberNames[0]}`;
+                    return `${currentUserName}, ${memberNames[0]}`
                   } else if (selectedUsers.length === 2) {
-                    return `${currentUserName}, ${memberNames[0]}, ${memberNames[1]}`;
+                    return `${currentUserName}, ${memberNames[0]}, ${memberNames[1]}`
                   } else {
-                    return `${currentUserName}, ${memberNames[0]}, ${memberNames[1]} +${selectedUsers.length - 2}`;
+                    return `${currentUserName}, ${memberNames[0]}, ${memberNames[1]} +${selectedUsers.length - 2}`
                   }
                 })()}
               </p>
@@ -407,6 +425,7 @@ export function CreateGroupModal({
           {/* Action Buttons */}
           <div className="mt-6 flex gap-3">
             <button
+              type="button"
               onClick={handleClose}
               className="flex-1 rounded-lg border border-border bg-sidebar px-4 py-3 transition-colors hover:bg-accent"
               disabled={createGroupMutation.isPending}
@@ -414,6 +433,7 @@ export function CreateGroupModal({
               Cancel
             </button>
             <button
+              type="button"
               onClick={handleCreateGroup}
               disabled={
                 createGroupMutation.isPending || selectedUsers.length === 0
@@ -421,7 +441,7 @@ export function CreateGroupModal({
               className={cn(
                 'flex-1 rounded-lg px-4 py-3 font-medium transition-colors',
                 'bg-primary text-primary-foreground hover:bg-primary/90',
-                'disabled:cursor-not-allowed disabled:opacity-50'
+                'disabled:cursor-not-allowed disabled:opacity-50',
               )}
             >
               {createGroupMutation.isPending ? (
@@ -437,5 +457,5 @@ export function CreateGroupModal({
         </div>
       </div>
     </div>
-  );
+  )
 }

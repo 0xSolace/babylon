@@ -1,10 +1,8 @@
-'use client';
-
-import { memo } from 'react';
-import type { PredictionMarket } from '@/types/markets';
+import { memo } from 'react'
+import type { PredictionMarket } from '@/types/markets'
 
 interface ResolvedPredictionCardProps {
-  prediction: PredictionMarket;
+  prediction: PredictionMarket
 }
 
 /**
@@ -30,5 +28,5 @@ export const ResolvedPredictionCard = memo(function ResolvedPredictionCard({
         </span>
       </div>
     </div>
-  );
-});
+  )
+})

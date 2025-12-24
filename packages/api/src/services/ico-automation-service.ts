@@ -11,7 +11,7 @@
  * @packageDocumentation
  */
 
-import { logger } from '@babylon/shared';
+import { logger } from '@babylon/shared'
 import {
   type Address,
   type Chain,
@@ -19,13 +19,17 @@ import {
   createWalletClient,
   formatEther,
   http,
-  type PublicClient,
   parseEther,
   parseUnits,
-  type WalletClient,
-} from 'viem';
-import { privateKeyToAccount } from 'viem/accounts';
-import { mainnet, sepolia } from 'viem/chains';
+} from 'viem'
+import { privateKeyToAccount } from 'viem/accounts'
+import { mainnet, sepolia } from 'viem/chains'
+import { getAirdropBonusService } from './airdrop-bonus-service'
+
+import {
+  type FundingResult,
+  initializeNPCFundingService,
+} from './npc-funding-service'
 
 // =============================================================================
 // CONFIGURATION TYPES
@@ -33,52 +37,52 @@ import { mainnet, sepolia } from 'viem/chains';
 
 export interface ICOConfig {
   // Network
-  chainId: number;
-  rpcUrl: string;
+  chainId: number
+  rpcUrl: string
 
   // Deployment keys (configurable for multisig later)
-  deployerPrivateKey: `0x${string}`;
-  treasuryAddress: Address;
+  deployerPrivateKey: `0x${string}`
+  treasuryAddress: Address
 
   // Token Configuration
-  tokenAddress: Address;
-  presaleAddress: Address;
-  lpLockerAddress: Address;
-  xlpV2FactoryAddress: Address;
-  wethAddress: Address;
+  tokenAddress: Address
+  presaleAddress: Address
+  lpLockerAddress: Address
+  xlpV2FactoryAddress: Address
+  wethAddress: Address
 
   // Presale Parameters
   presale: {
-    tokensForSale: bigint;
-    softCapEth: bigint;
-    hardCapEth: bigint;
-    minBidEth: bigint;
-    maxBidEth: bigint;
-    presalePrice: bigint; // wei per token
-    lpFundingBps: number; // % of raised ETH to LP (e.g., 2000 = 20%)
-    lpLockDuration: number; // seconds (e.g., 180 days)
-    buyerLockDuration: number; // seconds before buyers can claim
-    presaleDuration: number; // seconds
-  };
+    tokensForSale: bigint
+    softCapEth: bigint
+    hardCapEth: bigint
+    minBidEth: bigint
+    maxBidEth: bigint
+    presalePrice: bigint // wei per token
+    lpFundingBps: number // % of raised ETH to LP (e.g., 2000 = 20%)
+    lpLockDuration: number // seconds (e.g., 180 days)
+    buyerLockDuration: number // seconds before buyers can claim
+    presaleDuration: number // seconds
+  }
 
   // ELIZA Token Configuration
   elizaToken: {
-    mainnet: Address;
-    base: Address;
-    bsc: Address;
-  };
-  elizaMinBalance: bigint;
-  elizaBonusBps: number; // e.g., 5000 = 50% bonus
+    mainnet: Address
+    base: Address
+    bsc: Address
+  }
+  elizaMinBalance: bigint
+  elizaBonusBps: number // e.g., 5000 = 50% bonus
 
   // Timeline (Unix timestamps, 0 = start immediately in dev)
   timeline: {
-    presaleStart: number;
-    tgeTimestamp: number;
-  };
+    presaleStart: number
+    tgeTimestamp: number
+  }
 
   // Feature Flags
-  devMode: boolean;
-  autoStartPresale: boolean;
+  devMode: boolean
+  autoStartPresale: boolean
 }
 
 export interface ICOPhase {
@@ -87,40 +91,40 @@ export interface ICOPhase {
     | 'PRESALE_ACTIVE'
     | 'PRESALE_ENDED'
     | 'TGE_COMPLETE'
-    | 'FAILED';
-  timestamp: number;
-  details: string;
+    | 'FAILED'
+  timestamp: number
+  details: string
 }
 
 export interface PresaleStats {
-  totalRaised: bigint;
-  totalParticipants: number;
-  tokensAllocated: bigint;
-  progress: number; // 0-10000 bps
-  timeRemaining: number;
-  isActive: boolean;
-  isFinalized: boolean;
-  isFailed: boolean;
+  totalRaised: bigint
+  totalParticipants: number
+  tokensAllocated: bigint
+  progress: number // 0-10000 bps
+  timeRemaining: number
+  isActive: boolean
+  isFinalized: boolean
+  isFailed: boolean
 }
 
 export interface TGEResult {
-  success: boolean;
-  lpPairAddress: Address;
-  lpTokensLocked: bigint;
-  tokensDistributed: bigint;
-  ethToTreasury: bigint;
-  ethToLiquidity: bigint;
-  txHash: `0x${string}`;
+  success: boolean
+  lpPairAddress: Address
+  lpTokensLocked: bigint
+  tokensDistributed: bigint
+  ethToTreasury: bigint
+  ethToLiquidity: bigint
+  txHash: `0x${string}`
 }
 
 export interface ContributorInfo {
-  address: Address;
-  ethAmount: bigint;
-  tokenAllocation: bigint;
-  claimedTokens: bigint;
-  claimable: bigint;
-  isRefunded: boolean;
-  elizaBonus: bigint;
+  address: Address
+  ethAmount: bigint
+  tokenAllocation: bigint
+  claimedTokens: bigint
+  claimable: bigint
+  isRefunded: boolean
+  elizaBonus: bigint
 }
 
 // =============================================================================
@@ -247,7 +251,7 @@ const ICO_PRESALE_ABI = [
     inputs: [],
     outputs: [{ type: 'uint256' }],
   },
-] as const;
+] as const
 
 const ERC20_ABI = [
   {
@@ -277,7 +281,7 @@ const ERC20_ABI = [
     ],
     outputs: [{ type: 'bool' }],
   },
-] as const;
+] as const
 
 // =============================================================================
 // DEFAULT CONFIGURATION
@@ -287,7 +291,7 @@ const ELIZA_TOKEN_ADDRESSES = {
   mainnet: '0xea17df5cf6d172224892b5477a16acb111182478' as Address,
   base: '0xea17df5cf6d172224892b5477a16acb111182478' as Address,
   bsc: '0xea17df5cf6d172224892b5477a16acb111182478' as Address,
-};
+}
 
 const DEFAULT_PRESALE_CONFIG = {
   tokensForSale: parseUnits('100000000', 18), // 100M BBLN (10% of supply)
@@ -300,29 +304,29 @@ const DEFAULT_PRESALE_CONFIG = {
   lpLockDuration: 180 * 24 * 60 * 60, // 180 days
   buyerLockDuration: 0, // Instant claim at TGE
   presaleDuration: 7 * 24 * 60 * 60, // 7 days
-};
+}
 
 // =============================================================================
 // ICO AUTOMATION SERVICE
 // =============================================================================
 
 export class ICOAutomationService {
-  private config: ICOConfig;
-  private chain: Chain;
-  private publicClient: PublicClient;
-  private walletClient: WalletClient;
-  private account: ReturnType<typeof privateKeyToAccount>;
-  private scheduledTasks: Map<string, NodeJS.Timeout> = new Map();
-  private initialized = false;
+  private config: ICOConfig
+  private chain: Chain
+  private publicClient
+  private walletClient
+  private account: ReturnType<typeof privateKeyToAccount>
+  private scheduledTasks: Map<string, NodeJS.Timeout> = new Map()
+  private initialized = false
 
   constructor(config: Partial<ICOConfig> = {}) {
-    const chainId = config.chainId ?? parseInt(process.env.CHAIN_ID ?? '1');
-    this.chain = chainId === 1 ? mainnet : sepolia;
+    const chainId = config.chainId ?? parseInt(process.env.CHAIN_ID ?? '1', 10)
+    this.chain = chainId === 1 ? mainnet : sepolia
 
     this.config = {
       chainId,
       rpcUrl:
-        config.rpcUrl ?? process.env.ETH_RPC_URL ?? 'http://localhost:8545',
+        config.rpcUrl ?? process.env.ETH_RPC_URL ?? 'http://localhost:6545',
       deployerPrivateKey:
         config.deployerPrivateKey ??
         (process.env.DEPLOYER_PRIVATE_KEY as `0x${string}`) ??
@@ -364,20 +368,20 @@ export class ICOAutomationService {
       },
       devMode: config.devMode ?? process.env.NODE_ENV !== 'production',
       autoStartPresale: config.autoStartPresale ?? false,
-    };
+    }
 
-    this.account = privateKeyToAccount(this.config.deployerPrivateKey);
+    this.account = privateKeyToAccount(this.config.deployerPrivateKey)
 
     this.publicClient = createPublicClient({
       chain: this.chain,
       transport: http(this.config.rpcUrl),
-    }) as PublicClient;
+    })
 
     this.walletClient = createWalletClient({
       account: this.account,
       chain: this.chain,
       transport: http(this.config.rpcUrl),
-    }) as WalletClient;
+    })
   }
 
   // ===========================================================================
@@ -385,7 +389,7 @@ export class ICOAutomationService {
   // ===========================================================================
 
   async initialize(): Promise<void> {
-    if (this.initialized) return;
+    if (this.initialized) return
 
     logger.info(
       'Initializing ICO Automation Service',
@@ -395,51 +399,47 @@ export class ICOAutomationService {
         tokenAddress: this.config.tokenAddress,
         presaleAddress: this.config.presaleAddress,
       },
-      'ICOAutomation'
-    );
+      'ICOAutomation',
+    )
 
     // Validate configuration
-    await this.validateConfiguration();
+    await this.validateConfiguration()
 
     // Schedule automated tasks if timeline is set
     if (this.config.timeline.presaleStart > 0) {
-      this.schedulePresaleStart();
+      this.schedulePresaleStart()
     }
 
     if (this.config.timeline.tgeTimestamp > 0) {
-      this.scheduleTGE();
+      this.scheduleTGE()
     }
 
     // Auto-start presale in dev mode if configured
     if (this.config.devMode && this.config.autoStartPresale) {
-      logger.info(
-        'Dev mode: Auto-starting presale',
-        undefined,
-        'ICOAutomation'
-      );
-      await this.startPresale();
+      logger.info('Dev mode: Auto-starting presale', undefined, 'ICOAutomation')
+      await this.startPresale()
     }
 
-    this.initialized = true;
+    this.initialized = true
     logger.info(
       'ICO Automation Service initialized',
       undefined,
-      'ICOAutomation'
-    );
+      'ICOAutomation',
+    )
   }
 
   private async validateConfiguration(): Promise<void> {
     // Check deployer has balance
     const balance = await this.publicClient.getBalance({
       address: this.account.address,
-    });
+    })
 
     if (balance < parseEther('0.1')) {
       logger.warn(
         'Deployer has low ETH balance',
         { balance: formatEther(balance) },
-        'ICOAutomation'
-      );
+        'ICOAutomation',
+      )
     }
 
     // Check token contract exists
@@ -448,9 +448,9 @@ export class ICOAutomationService {
     ) {
       const code = await this.publicClient.getCode({
         address: this.config.tokenAddress,
-      });
+      })
       if (!code || code === '0x') {
-        logger.warn('Token contract not deployed', undefined, 'ICOAutomation');
+        logger.warn('Token contract not deployed', undefined, 'ICOAutomation')
       }
     }
   }
@@ -468,7 +468,7 @@ export class ICOAutomationService {
         name: 'NOT_STARTED',
         timestamp: Date.now(),
         details: 'Presale contract not deployed',
-      };
+      }
     }
 
     const [presaleStart, finalized, failed] = await Promise.all([
@@ -487,16 +487,16 @@ export class ICOAutomationService {
         abi: ICO_PRESALE_ABI,
         functionName: 'failed',
       }),
-    ]);
+    ])
 
-    const now = Math.floor(Date.now() / 1000);
+    const now = Math.floor(Date.now() / 1000)
 
     if (presaleStart === 0n) {
       return {
         name: 'NOT_STARTED',
         timestamp: now,
         details: 'Presale not yet started',
-      };
+      }
     }
 
     if (failed) {
@@ -504,7 +504,7 @@ export class ICOAutomationService {
         name: 'FAILED',
         timestamp: now,
         details: 'Presale failed - soft cap not reached',
-      };
+      }
     }
 
     if (finalized) {
@@ -512,28 +512,28 @@ export class ICOAutomationService {
         name: 'TGE_COMPLETE',
         timestamp: now,
         details: 'TGE complete - tokens distributed',
-      };
+      }
     }
 
     const presaleEnd = await this.publicClient.readContract({
       address: this.config.presaleAddress,
       abi: ICO_PRESALE_ABI,
       functionName: 'presaleEnd',
-    });
+    })
 
     if (now < Number(presaleEnd)) {
       return {
         name: 'PRESALE_ACTIVE',
         timestamp: now,
         details: `Presale active - ${Number(presaleEnd) - now} seconds remaining`,
-      };
+      }
     }
 
     return {
       name: 'PRESALE_ENDED',
       timestamp: now,
       details: 'Presale ended - awaiting finalization',
-    };
+    }
   }
 
   async getPresaleStats(): Promise<PresaleStats> {
@@ -550,14 +550,14 @@ export class ICOAutomationService {
         isActive: false,
         isFinalized: false,
         isFailed: false,
-      };
+      }
     }
 
     const status = await this.publicClient.readContract({
       address: this.config.presaleAddress,
       abi: ICO_PRESALE_ABI,
       functionName: 'getStatus',
-    });
+    })
 
     const [
       raised,
@@ -567,13 +567,13 @@ export class ICOAutomationService {
       isActive,
       isFinalized,
       isFailed,
-    ] = status as [bigint, bigint, bigint, bigint, boolean, boolean, boolean];
+    ] = status as [bigint, bigint, bigint, bigint, boolean, boolean, boolean]
 
     // Calculate tokens allocated from raised ETH
     const tokensAllocated =
       this.config.presale.presalePrice > 0n
         ? (raised * parseUnits('1', 18)) / this.config.presale.presalePrice
-        : 0n;
+        : 0n
 
     return {
       totalRaised: raised,
@@ -584,7 +584,7 @@ export class ICOAutomationService {
       isActive,
       isFinalized,
       isFailed,
-    };
+    }
   }
 
   // ===========================================================================
@@ -592,7 +592,7 @@ export class ICOAutomationService {
   // ===========================================================================
 
   async startPresale(): Promise<`0x${string}`> {
-    logger.info('Starting presale', undefined, 'ICOAutomation');
+    logger.info('Starting presale', undefined, 'ICOAutomation')
 
     const txHash = await this.walletClient.writeContract({
       address: this.config.presaleAddress,
@@ -600,14 +600,14 @@ export class ICOAutomationService {
       functionName: 'startPresale',
       chain: this.chain,
       account: this.account,
-    });
+    })
 
-    logger.info('Presale started', { txHash }, 'ICOAutomation');
+    logger.info('Presale started', { txHash }, 'ICOAutomation')
 
     // Wait for confirmation
-    await this.publicClient.waitForTransactionReceipt({ hash: txHash });
+    await this.publicClient.waitForTransactionReceipt({ hash: txHash })
 
-    return txHash;
+    return txHash
   }
 
   async contribute(amountEth: bigint): Promise<`0x${string}`> {
@@ -618,17 +618,17 @@ export class ICOAutomationService {
       value: amountEth,
       chain: this.chain,
       account: this.account,
-    });
+    })
 
-    await this.publicClient.waitForTransactionReceipt({ hash: txHash });
+    await this.publicClient.waitForTransactionReceipt({ hash: txHash })
 
     logger.info(
       'Contribution made',
       { amount: formatEther(amountEth), txHash },
-      'ICOAutomation'
-    );
+      'ICOAutomation',
+    )
 
-    return txHash;
+    return txHash
   }
 
   async getContribution(address: Address): Promise<ContributorInfo> {
@@ -637,13 +637,13 @@ export class ICOAutomationService {
       abi: ICO_PRESALE_ABI,
       functionName: 'getContribution',
       args: [address],
-    });
+    })
 
     const [ethAmount, tokenAllocation, claimedTokens, claimable, isRefunded] =
-      contribution as [bigint, bigint, bigint, bigint, boolean];
+      contribution as [bigint, bigint, bigint, bigint, boolean]
 
     // Check ELIZA bonus
-    const elizaBonus = await this.calculateElizaBonus(address, tokenAllocation);
+    const elizaBonus = await this.calculateElizaBonus(address, tokenAllocation)
 
     return {
       address,
@@ -653,7 +653,7 @@ export class ICOAutomationService {
       claimable,
       isRefunded,
       elizaBonus,
-    };
+    }
   }
 
   // ===========================================================================
@@ -667,19 +667,19 @@ export class ICOAutomationService {
       abi: ERC20_ABI,
       functionName: 'balanceOf',
       args: [address],
-    });
+    })
 
-    return elizaBalance >= this.config.elizaMinBalance;
+    return elizaBalance >= this.config.elizaMinBalance
   }
 
   async calculateElizaBonus(
     address: Address,
-    baseAllocation: bigint
+    baseAllocation: bigint,
   ): Promise<bigint> {
-    const isElizaHolder = await this.checkElizaHolder(address);
-    if (!isElizaHolder) return 0n;
+    const isElizaHolder = await this.checkElizaHolder(address)
+    if (!isElizaHolder) return 0n
 
-    return (baseAllocation * BigInt(this.config.elizaBonusBps)) / 10000n;
+    return (baseAllocation * BigInt(this.config.elizaBonusBps)) / 10000n
   }
 
   // ===========================================================================
@@ -690,11 +690,11 @@ export class ICOAutomationService {
     logger.info(
       'Finalizing presale and executing TGE',
       undefined,
-      'ICOAutomation'
-    );
+      'ICOAutomation',
+    )
 
     // Get stats before finalization
-    const statsBefore = await this.getPresaleStats();
+    const statsBefore = await this.getPresaleStats()
 
     // Execute finalization
     const txHash = await this.walletClient.writeContract({
@@ -703,24 +703,24 @@ export class ICOAutomationService {
       functionName: 'finalize',
       chain: this.chain,
       account: this.account,
-    });
+    })
 
     // Wait for confirmation
-    await this.publicClient.waitForTransactionReceipt({ hash: txHash });
+    await this.publicClient.waitForTransactionReceipt({ hash: txHash })
 
     // Check if failed (soft cap not reached)
     const failed = await this.publicClient.readContract({
       address: this.config.presaleAddress,
       abi: ICO_PRESALE_ABI,
       functionName: 'failed',
-    });
+    })
 
     if (failed) {
       logger.warn(
         'Presale failed - soft cap not reached',
         { raised: formatEther(statsBefore.totalRaised) },
-        'ICOAutomation'
-      );
+        'ICOAutomation',
+      )
 
       return {
         success: false,
@@ -730,7 +730,7 @@ export class ICOAutomationService {
         ethToTreasury: 0n,
         ethToLiquidity: 0n,
         txHash,
-      };
+      }
     }
 
     // Get LP pair address from presale contract
@@ -738,13 +738,13 @@ export class ICOAutomationService {
       address: this.config.presaleAddress,
       abi: ICO_PRESALE_ABI,
       functionName: 'lpPair',
-    });
+    })
 
     // Calculate distribution
     const ethToLiquidity =
       (statsBefore.totalRaised * BigInt(this.config.presale.lpFundingBps)) /
-      10000n;
-    const ethToTreasury = statsBefore.totalRaised - ethToLiquidity;
+      10000n
+    const ethToTreasury = statsBefore.totalRaised - ethToLiquidity
 
     logger.info(
       'TGE completed successfully',
@@ -756,8 +756,20 @@ export class ICOAutomationService {
         ethToTreasury: formatEther(ethToTreasury),
         participants: statsBefore.totalParticipants,
       },
-      'ICOAutomation'
-    );
+      'ICOAutomation',
+    )
+
+    // Fund NPCs from treasury as part of TGE
+    const npcFundingResult = await this.fundNPCsFromTreasury()
+
+    logger.info(
+      'TGE NPC funding result',
+      {
+        npcsFunded: npcFundingResult.npcsFunded,
+        totalFunded: formatEther(npcFundingResult.totalFunded),
+      },
+      'ICOAutomation',
+    )
 
     return {
       success: true,
@@ -767,7 +779,7 @@ export class ICOAutomationService {
       ethToTreasury,
       ethToLiquidity,
       txHash,
-    };
+    }
   }
 
   // ===========================================================================
@@ -781,13 +793,13 @@ export class ICOAutomationService {
       functionName: 'claim',
       chain: this.chain,
       account: this.account,
-    });
+    })
 
-    await this.publicClient.waitForTransactionReceipt({ hash: txHash });
+    await this.publicClient.waitForTransactionReceipt({ hash: txHash })
 
-    logger.info('Tokens claimed', { txHash }, 'ICOAutomation');
+    logger.info('Tokens claimed', { txHash }, 'ICOAutomation')
 
-    return txHash;
+    return txHash
   }
 
   async refund(): Promise<`0x${string}`> {
@@ -797,13 +809,13 @@ export class ICOAutomationService {
       functionName: 'refund',
       chain: this.chain,
       account: this.account,
-    });
+    })
 
-    await this.publicClient.waitForTransactionReceipt({ hash: txHash });
+    await this.publicClient.waitForTransactionReceipt({ hash: txHash })
 
-    logger.info('Refund claimed', { txHash }, 'ICOAutomation');
+    logger.info('Refund claimed', { txHash }, 'ICOAutomation')
 
-    return txHash;
+    return txHash
   }
 
   // ===========================================================================
@@ -811,91 +823,91 @@ export class ICOAutomationService {
   // ===========================================================================
 
   private schedulePresaleStart(): void {
-    const now = Date.now();
-    const startTime = this.config.timeline.presaleStart * 1000;
-    const delay = startTime - now;
+    const now = Date.now()
+    const startTime = this.config.timeline.presaleStart * 1000
+    const delay = startTime - now
 
     if (delay <= 0) {
       logger.info(
         'Presale start time already passed',
         undefined,
-        'ICOAutomation'
-      );
-      return;
+        'ICOAutomation',
+      )
+      return
     }
 
     logger.info(
       'Scheduling presale start',
       { startTime: new Date(startTime).toISOString(), delayMs: delay },
-      'ICOAutomation'
-    );
+      'ICOAutomation',
+    )
 
     const timeout = setTimeout(async () => {
-      await this.startPresale();
-    }, delay);
+      await this.startPresale()
+    }, delay)
 
-    this.scheduledTasks.set('presale_start', timeout);
+    this.scheduledTasks.set('presale_start', timeout)
   }
 
   private scheduleTGE(): void {
-    const now = Date.now();
-    const tgeTime = this.config.timeline.tgeTimestamp * 1000;
-    const delay = tgeTime - now;
+    const now = Date.now()
+    const tgeTime = this.config.timeline.tgeTimestamp * 1000
+    const delay = tgeTime - now
 
     if (delay <= 0) {
-      logger.info('TGE time already passed', undefined, 'ICOAutomation');
-      return;
+      logger.info('TGE time already passed', undefined, 'ICOAutomation')
+      return
     }
 
     logger.info(
       'Scheduling TGE',
       { tgeTime: new Date(tgeTime).toISOString(), delayMs: delay },
-      'ICOAutomation'
-    );
+      'ICOAutomation',
+    )
 
     const timeout = setTimeout(async () => {
-      await this.finalize();
-    }, delay);
+      await this.finalize()
+    }, delay)
 
-    this.scheduledTasks.set('tge', timeout);
+    this.scheduledTasks.set('tge', timeout)
   }
 
   scheduleTask(
     taskId: string,
     executeAt: number,
-    task: () => Promise<void>
+    task: () => Promise<void>,
   ): void {
-    const now = Date.now();
-    const delay = executeAt * 1000 - now;
+    const now = Date.now()
+    const delay = executeAt * 1000 - now
 
     if (delay <= 0) {
       logger.warn(
         `Task ${taskId} time already passed`,
         undefined,
-        'ICOAutomation'
-      );
-      return;
+        'ICOAutomation',
+      )
+      return
     }
 
-    const timeout = setTimeout(task, delay);
-    this.scheduledTasks.set(taskId, timeout);
+    const timeout = setTimeout(task, delay)
+    this.scheduledTasks.set(taskId, timeout)
 
     logger.info(
       `Scheduled task: ${taskId}`,
       { executeAt: new Date(executeAt * 1000).toISOString() },
-      'ICOAutomation'
-    );
+      'ICOAutomation',
+    )
   }
 
   cancelTask(taskId: string): boolean {
-    const timeout = this.scheduledTasks.get(taskId);
+    const timeout = this.scheduledTasks.get(taskId)
     if (timeout) {
-      clearTimeout(timeout);
-      this.scheduledTasks.delete(taskId);
-      logger.info(`Cancelled task: ${taskId}`, undefined, 'ICOAutomation');
-      return true;
+      clearTimeout(timeout)
+      this.scheduledTasks.delete(taskId)
+      logger.info(`Cancelled task: ${taskId}`, undefined, 'ICOAutomation')
+      return true
     }
-    return false;
+    return false
   }
 
   // ===========================================================================
@@ -903,29 +915,59 @@ export class ICOAutomationService {
   // ===========================================================================
 
   async triggerAirdropSnapshot(): Promise<void> {
-    // Import airdrop service lazily to avoid circular dependencies
-    const { getAirdropBonusService } = await import('./airdrop-bonus-service');
-    const airdropService = getAirdropBonusService();
+    const airdropService = getAirdropBonusService()
 
-    const now = new Date();
-    await airdropService.initializeBonusPeriod(now);
-    await airdropService.takePointsSnapshot();
+    const now = new Date()
+    await airdropService.initializeBonusPeriod(now)
+    await airdropService.takePointsSnapshot()
 
-    logger.info('Airdrop snapshot triggered', undefined, 'ICOAutomation');
+    logger.info('Airdrop snapshot triggered', undefined, 'ICOAutomation')
   }
 
   // ===========================================================================
   // NPC FUNDING
   // ===========================================================================
 
-  async fundNPCsFromTreasury(): Promise<void> {
-    // NPC funding is handled by the agents package via NPCTokenWalletService
-    // This method can be called from external orchestration once agents package is wired up
+  async fundNPCsFromTreasury(): Promise<{
+    success: boolean
+    totalFunded: bigint
+    npcsFunded: number
+    txHashes: `0x${string}`[]
+  }> {
     logger.info(
-      'NPC funding triggered - would call NPCTokenWalletService.fundAllNPCsFromTreasury',
+      'Starting NPC funding from treasury',
       { treasuryAddress: this.config.treasuryAddress },
-      'ICOAutomation'
-    );
+      'ICOAutomation',
+    )
+
+    const npcFundingService = await initializeNPCFundingService({
+      tokenAddress: this.config.tokenAddress,
+      treasuryAddress: this.config.treasuryAddress,
+      treasuryPrivateKey: this.config.deployerPrivateKey,
+      rpcUrl: this.config.rpcUrl,
+      chainId: this.config.chainId,
+      devMode: this.config.devMode,
+    })
+
+    const result = await npcFundingService.executeTGEFunding()
+
+    logger.info(
+      'NPC funding complete',
+      {
+        totalFunded: formatEther(result.totalFunded),
+        npcsFunded: result.results.filter((r: FundingResult) => r.success)
+          .length,
+        txHashes: result.txHashes.length,
+      },
+      'ICOAutomation',
+    )
+
+    return {
+      success: result.results.every((r: FundingResult) => r.success),
+      totalFunded: result.totalFunded,
+      npcsFunded: result.results.filter((r: FundingResult) => r.success).length,
+      txHashes: result.txHashes,
+    }
   }
 
   // ===========================================================================
@@ -933,36 +975,36 @@ export class ICOAutomationService {
   // ===========================================================================
 
   getConfig(): ICOConfig {
-    return { ...this.config };
+    return { ...this.config }
   }
 
   async getFullStatus(): Promise<{
-    phase: ICOPhase;
-    stats: PresaleStats;
-    config: ICOConfig;
-    scheduledTasks: string[];
+    phase: ICOPhase
+    stats: PresaleStats
+    config: ICOConfig
+    scheduledTasks: string[]
   }> {
     const [phase, stats] = await Promise.all([
       this.getCurrentPhase(),
       this.getPresaleStats(),
-    ]);
+    ])
 
     return {
       phase,
       stats,
       config: this.getConfig(),
       scheduledTasks: Array.from(this.scheduledTasks.keys()),
-    };
+    }
   }
 
   shutdown(): void {
     for (const [taskId, timeout] of this.scheduledTasks) {
-      clearTimeout(timeout);
-      logger.info(`Cancelled task: ${taskId}`, undefined, 'ICOAutomation');
+      clearTimeout(timeout)
+      logger.info(`Cancelled task: ${taskId}`, undefined, 'ICOAutomation')
     }
-    this.scheduledTasks.clear();
-    this.initialized = false;
-    logger.info('ICO Automation Service shut down', undefined, 'ICOAutomation');
+    this.scheduledTasks.clear()
+    this.initialized = false
+    logger.info('ICO Automation Service shut down', undefined, 'ICOAutomation')
   }
 }
 
@@ -970,28 +1012,28 @@ export class ICOAutomationService {
 // SINGLETON
 // =============================================================================
 
-let icoAutomationService: ICOAutomationService | null = null;
+let icoAutomationService: ICOAutomationService | null = null
 
 export function getICOAutomationService(
-  config?: Partial<ICOConfig>
+  config?: Partial<ICOConfig>,
 ): ICOAutomationService {
   if (!icoAutomationService) {
-    icoAutomationService = new ICOAutomationService(config);
+    icoAutomationService = new ICOAutomationService(config)
   }
-  return icoAutomationService;
+  return icoAutomationService
 }
 
 export async function initializeICOAutomation(
-  config?: Partial<ICOConfig>
+  config?: Partial<ICOConfig>,
 ): Promise<ICOAutomationService> {
-  const service = getICOAutomationService(config);
-  await service.initialize();
-  return service;
+  const service = getICOAutomationService(config)
+  await service.initialize()
+  return service
 }
 
 export function resetICOAutomationService(): void {
   if (icoAutomationService) {
-    icoAutomationService.shutdown();
+    icoAutomationService.shutdown()
   }
-  icoAutomationService = null;
+  icoAutomationService = null
 }

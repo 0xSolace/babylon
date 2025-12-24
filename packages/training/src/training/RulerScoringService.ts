@@ -13,43 +13,50 @@
  * Based on: https://art.openpipe.ai/fundamentals/ruler
  */
 
-import { db } from '@babylon/db';
-import type { JsonValue } from '@babylon/shared';
-import { asUUID } from '@elizaos/core';
-import { v4 as uuidv4 } from 'uuid';
+import { db } from '@babylon/db'
+import { asUUID } from '@elizaos/core'
+import { v4 as uuidv4 } from 'uuid'
 import {
   getLLMCaller,
   getToTrainingMessages,
   type TrajectoryForTraining,
   type TrajectoryStepForTraining,
-} from '../dependencies';
-import { logger, splitIntoBatches } from '../utils';
-import type { TrajectoryStep as TrainingTrajectoryStep } from './types';
+} from '../dependencies'
+import {
+  isArrayOf,
+  isJudgePromptData,
+  isParsedTrajectoryStep,
+  isRulerJudgeResponse,
+  type ParsedTrajectoryStep,
+  toJsonValueRecord,
+  toLLMPurpose,
+} from '../type-guards'
+import { logger, splitIntoBatches } from '../utils'
 
 // Use types from dependencies
-type RichTrajectory = TrajectoryForTraining;
-type TrajectoryStep = TrajectoryStepForTraining;
+type RichTrajectory = TrajectoryForTraining
+type TrajectoryStep = TrajectoryStepForTraining
 
 export interface RulerScore {
-  trajectoryId: string;
-  overallScore: number;
-  reasoning: string;
-  scoredAt: Date;
+  trajectoryId: string
+  overallScore: number
+  reasoning: string
+  scoredAt: Date
 }
 
 export interface MarketOutcomes {
-  stocks: Array<{ ticker: string; changePercent: number }>;
-  predictions: Array<{ marketId: string; outcome: 'YES' | 'NO' }>;
+  stocks: Array<{ ticker: string; changePercent: number }>
+  predictions: Array<{ marketId: string; outcome: 'YES' | 'NO' }>
 }
 
 interface TrajectoryScore {
-  trajectory_id: string;
-  explanation: string;
-  score: number;
+  trajectory_id: string
+  explanation: string
+  score: number
 }
 
 interface RulerResponse {
-  scores: TrajectoryScore[];
+  scores: TrajectoryScore[]
 }
 
 /**
@@ -60,11 +67,11 @@ const DEFAULT_RUBRIC = `
 - A trajectory that achieves its goal more efficiently (eg. by avoiding unproductive detours) should get a higher score than a trajectory that achieves its goal less efficiently.
 - If one trajectory is only slightly better than another, the difference in scores should be small. If it is significantly better, the difference in scores should be large.
 - You may give some partial credit for a trajectory that makes progress towards its goal but does not complete it.
-`;
+`
 
 export class RulerScoringService {
-  private readonly minGroupSize = 2; // Minimum trajectories per group for comparison
-  private readonly maxGroupSize = 8; // Optimal group size per RULER docs
+  private readonly minGroupSize = 2 // Minimum trajectories per group for comparison
+  private readonly maxGroupSize = 8 // Optimal group size per RULER docs
 
   /**
    * Score trajectories using RULER (LLM-as-judge with relative comparison)
@@ -76,14 +83,14 @@ export class RulerScoringService {
    * @returns Number of trajectories successfully scored
    */
   async scoreTrajectories(trajectoryIds?: string[]): Promise<number> {
-    const trajectoriesResult = await this.getTrajectoriesToScore(trajectoryIds);
+    const trajectoriesResult = await this.getTrajectoriesToScore(trajectoryIds)
 
     if (trajectoriesResult.length === 0) {
-      logger.info('No trajectories to score', {}, 'RulerScoring');
-      return 0;
+      logger.info('No trajectories to score', {}, 'RulerScoring')
+      return 0
     }
 
-    const groups = this.groupByScenario(trajectoriesResult);
+    const groups = this.groupByScenario(trajectoriesResult)
 
     logger.info(
       'Grouped trajectories for RULER scoring',
@@ -93,10 +100,10 @@ export class RulerScoringService {
         avgGroupSize:
           groups.length > 0 ? trajectoriesResult.length / groups.length : 0,
       },
-      'RulerScoring'
-    );
+      'RulerScoring',
+    )
 
-    let totalScored = 0;
+    let totalScored = 0
 
     for (const group of groups) {
       if (group.trajectories.length < this.minGroupSize) {
@@ -107,16 +114,16 @@ export class RulerScoringService {
             count: group.trajectories.length,
             minRequired: this.minGroupSize,
           },
-          'RulerScoring'
-        );
-        continue;
+          'RulerScoring',
+        )
+        continue
       }
 
-      const batches = splitIntoBatches(group.trajectories, this.maxGroupSize);
+      const batches = splitIntoBatches(group.trajectories, this.maxGroupSize)
 
       for (const batch of batches) {
-        const scored = await this.scoreGroup(batch, group.scenarioId);
-        totalScored += scored;
+        const scored = await this.scoreGroup(batch, group.scenarioId)
+        totalScored += scored
       }
     }
 
@@ -126,10 +133,10 @@ export class RulerScoringService {
         totalScored,
         totalTrajectories: trajectoriesResult.length,
       },
-      'RulerScoring'
-    );
+      'RulerScoring',
+    )
 
-    return totalScored;
+    return totalScored
   }
 
   /**
@@ -139,17 +146,17 @@ export class RulerScoringService {
    * in the same scenario and scores them together.
    */
   async scoreTrajectory(trajectoryId: string): Promise<RulerScore | null> {
-    const scored = await this.scoreTrajectories([trajectoryId]);
+    const scored = await this.scoreTrajectories([trajectoryId])
     if (scored === 0) {
-      return null;
+      return null
     }
 
     const updated = await db.trajectory.findUnique({
       where: { trajectoryId },
-    });
+    })
 
     if (!updated || updated.aiJudgeReward === null) {
-      return null;
+      return null
     }
 
     return {
@@ -157,7 +164,7 @@ export class RulerScoringService {
       overallScore: updated.aiJudgeReward,
       reasoning: updated.aiJudgeReasoning ?? '',
       scoredAt: updated.judgedAt ?? new Date(),
-    };
+    }
   }
 
   /**
@@ -172,18 +179,18 @@ export class RulerScoringService {
    */
   private async scoreGroup(
     trajectoriesData: Array<{
-      trajectoryId: string;
-      stepsJson: string | null;
-      scenarioId: string | null;
-      finalPnL: number | null;
-      episodeLength: number | null;
+      trajectoryId: string
+      stepsJson: string | null
+      scenarioId: string | null
+      finalPnL: number | null
+      episodeLength: number | null
     }>,
-    scenarioId: string
+    scenarioId: string,
   ): Promise<number> {
     const richTrajectories: Array<{
-      traj: RichTrajectory;
-      messages: Array<{ role: string; content: string }>;
-    }> = [];
+      traj: RichTrajectory
+      messages: Array<{ role: string; content: string }>
+    }> = []
 
     for (const dbTraj of trajectoriesData) {
       if (
@@ -196,14 +203,23 @@ export class RulerScoringService {
           {
             trajectoryId: dbTraj.trajectoryId,
           },
-          'RulerScoring'
-        );
-        continue;
+          'RulerScoring',
+        )
+        continue
       }
 
-      const steps = JSON.parse(dbTraj.stepsJson) as TrainingTrajectoryStep[];
+      const parsedSteps: unknown = JSON.parse(dbTraj.stepsJson)
+      if (!isArrayOf(parsedSteps, isParsedTrajectoryStep)) {
+        logger.warn(
+          'Invalid trajectory steps format',
+          { trajectoryId: dbTraj.trajectoryId },
+          'RulerScoring',
+        )
+        continue
+      }
+      const steps: ParsedTrajectoryStep[] = parsedSteps
 
-      const stepTimestamp = Date.now();
+      const stepTimestamp = Date.now()
       const richTraj: RichTrajectory = {
         trajectoryId: asUUID(dbTraj.trajectoryId),
         agentId: asUUID(uuidv4()),
@@ -220,16 +236,15 @@ export class RulerScoringService {
               ...s.environmentState,
               timestamp: s.timestamp || stepTimestamp + idx,
               agentPoints:
-                (s.environmentState as { agentPoints?: number }).agentPoints ??
-                0,
+                (s.environmentState?.agentPoints as number | undefined) ?? 0,
             },
             observation: {},
             providerAccesses: (s.providerAccesses || []).map((p) => ({
               providerId: uuidv4(),
               providerName: p.providerName,
               timestamp: s.timestamp || stepTimestamp + idx,
-              query: (p.data ?? {}) as Record<string, JsonValue>,
-              data: (p.data ?? {}) as Record<string, JsonValue>,
+              query: toJsonValueRecord(p.data),
+              data: toJsonValueRecord(p.data),
               purpose: p.purpose,
             })),
             llmCalls: (s.llmCalls || []).map((l) => ({
@@ -237,19 +252,14 @@ export class RulerScoringService {
               timestamp: s.timestamp || stepTimestamp + idx,
               model: l.model,
               modelVersion: l.modelVersion,
-              systemPrompt: l.systemPrompt,
-              userPrompt: l.userPrompt,
-              response: l.response,
+              systemPrompt: l.systemPrompt ?? '',
+              userPrompt: l.userPrompt ?? '',
+              response: l.response ?? '',
               reasoning: l.reasoning,
-              temperature: l.temperature,
-              maxTokens: l.maxTokens,
+              temperature: l.temperature ?? 0,
+              maxTokens: l.maxTokens ?? 0,
               latencyMs: l.latencyMs,
-              purpose: l.purpose as
-                | 'action'
-                | 'reasoning'
-                | 'evaluation'
-                | 'response'
-                | 'other',
+              purpose: toLLMPurpose(l.purpose),
               actionType: l.actionType,
             })),
             action: s.action
@@ -258,15 +268,12 @@ export class RulerScoringService {
                   timestamp: s.timestamp || stepTimestamp + idx,
                   actionType: s.action.actionType,
                   actionName: s.action.actionType,
-                  parameters: (s.action.parameters ?? {}) as Record<
-                    string,
-                    JsonValue
-                  >,
+                  parameters: toJsonValueRecord(s.action.parameters),
                   reasoning: s.action.reasoning,
-                  success: s.action.success,
-                  result: (s.action.result ?? undefined) as
-                    | Record<string, JsonValue>
-                    | undefined,
+                  success: s.action.success ?? false,
+                  result: s.action.result
+                    ? toJsonValueRecord(s.action.result)
+                    : undefined,
                   error: s.action.error,
                 }
               : {
@@ -274,13 +281,13 @@ export class RulerScoringService {
                   timestamp: s.timestamp || stepTimestamp + idx,
                   actionType: 'unknown',
                   actionName: 'unknown',
-                  parameters: {} as Record<string, JsonValue>,
+                  parameters: {},
                   success: false,
                 },
             reward: s.reward ?? 0,
             done: idx === steps.length - 1,
             metadata: {},
-          })
+          }),
         ),
         totalReward: steps.reduce((sum, s) => sum + (s.reward ?? 0), 0),
         rewardComponents: {
@@ -294,11 +301,11 @@ export class RulerScoringService {
         metadata: {
           isTrainingData: true,
         },
-      };
+      }
 
-      const toARTMessages = getToTrainingMessages();
-      const messages = toARTMessages(richTraj);
-      richTrajectories.push({ traj: richTraj, messages });
+      const toARTMessages = getToTrainingMessages()
+      const messages = toARTMessages(richTraj)
+      richTrajectories.push({ traj: richTraj, messages })
     }
 
     if (richTrajectories.length < this.minGroupSize) {
@@ -308,22 +315,22 @@ export class RulerScoringService {
           scenarioId,
           validCount: richTrajectories.length,
         },
-        'RulerScoring'
-      );
-      return 0;
+        'RulerScoring',
+      )
+      return 0
     }
 
     const commonPrefix = this.extractCommonPrefix(
-      richTrajectories.map((rt) => rt.messages)
-    );
+      richTrajectories.map((rt) => rt.messages),
+    )
 
     const judgePrompt = this.buildJudgePrompt(
       richTrajectories,
       commonPrefix,
-      scenarioId
-    );
+      scenarioId,
+    )
 
-    const judgeResponse = await this.callJudge(judgePrompt);
+    const judgeResponse = await this.callJudge(judgePrompt)
 
     if (
       !judgeResponse ||
@@ -335,20 +342,20 @@ export class RulerScoringService {
           expectedScores: richTrajectories.length,
           receivedScores: judgeResponse?.scores.length || 0,
         },
-        'RulerScoring'
-      );
-      return 0;
+        'RulerScoring',
+      )
+      return 0
     }
 
-    const scoreMap = new Map<string, TrajectoryScore>();
+    const scoreMap = new Map<string, TrajectoryScore>()
     for (const score of judgeResponse.scores) {
-      scoreMap.set(score.trajectory_id, score);
+      scoreMap.set(score.trajectory_id, score)
     }
 
-    let scored = 0;
+    let scored = 0
     for (let i = 0; i < richTrajectories.length; i++) {
-      const expectedTrajId = `trajectory-${i + 1}`;
-      const scoreData = scoreMap.get(expectedTrajId);
+      const expectedTrajId = `trajectory-${i + 1}`
+      const scoreData = scoreMap.get(expectedTrajId)
 
       if (!scoreData) {
         logger.warn(
@@ -357,12 +364,12 @@ export class RulerScoringService {
             expectedTrajId,
             receivedIds: judgeResponse.scores.map((s) => s.trajectory_id),
           },
-          'RulerScoring'
-        );
-        continue;
+          'RulerScoring',
+        )
+        continue
       }
 
-      const trajectoryId = richTrajectories[i]!.traj.trajectoryId;
+      const trajectoryId = richTrajectories[i]?.traj.trajectoryId
 
       await db.trajectory.update({
         where: { trajectoryId },
@@ -373,9 +380,9 @@ export class RulerScoringService {
           isTrainingData: true,
           updatedAt: new Date(),
         },
-      });
+      })
 
-      scored++;
+      scored++
     }
 
     logger.info(
@@ -385,10 +392,10 @@ export class RulerScoringService {
         scored,
         groupSize: richTrajectories.length,
       },
-      'RulerScoring'
-    );
+      'RulerScoring',
+    )
 
-    return scored;
+    return scored
   }
 
   /**
@@ -399,95 +406,99 @@ export class RulerScoringService {
    */
   private buildJudgePrompt(
     richTrajectories: Array<{
-      traj: RichTrajectory;
-      messages: Array<{ role: string; content: string }>;
+      traj: RichTrajectory
+      messages: Array<{ role: string; content: string }>
     }>,
     commonPrefix: Array<{ role: string; content: string }>,
-    scenarioId: string
+    scenarioId: string,
   ): string {
     // Build context section with game knowledge (injected into prompt)
-    const contextParts: string[] = [];
-    contextParts.push(`Scenario: ${scenarioId}`);
+    const contextParts: string[] = []
+    contextParts.push(`Scenario: ${scenarioId}`)
     contextParts.push(
-      `\nTrajectory Performance Context (use this to inform your scoring):`
-    );
+      `\nTrajectory Performance Context (use this to inform your scoring):`,
+    )
 
     for (let i = 0; i < richTrajectories.length; i++) {
-      const rt = richTrajectories[i]!;
-      const trajId = `trajectory-${i + 1}`;
+      const rt = richTrajectories[i]
+      if (!rt) continue
 
-      contextParts.push(`\n${trajId}:`);
+      const trajId = `trajectory-${i + 1}`
+
+      contextParts.push(`\n${trajId}:`)
       contextParts.push(
-        `  - Final P&L: $${rt.traj.metrics.finalPnL?.toFixed(2) || '0.00'}`
-      );
+        `  - Final P&L: $${rt.traj.metrics.finalPnL?.toFixed(2) || '0.00'}`,
+      )
       contextParts.push(
-        `  - Episode Length: ${rt.traj.metrics.episodeLength || 0} steps`
-      );
-      contextParts.push(`  - Total Reward: ${rt.traj.totalReward.toFixed(2)}`);
+        `  - Episode Length: ${rt.traj.metrics.episodeLength || 0} steps`,
+      )
+      contextParts.push(`  - Total Reward: ${rt.traj.totalReward.toFixed(2)}`)
 
       const actionTypes = rt.traj.steps
         .filter((s: TrajectoryStep): boolean => !!s.action)
-        .map((s: TrajectoryStep): string => s.action!.actionType);
-      const uniqueActions = [...new Set(actionTypes)];
+        .map((s: TrajectoryStep): string => s.action?.actionType ?? 'unknown')
+      const uniqueActions = [...new Set(actionTypes)]
       contextParts.push(
-        `  - Actions Taken: ${uniqueActions.join(', ')} (${actionTypes.length} total)`
-      );
+        `  - Actions Taken: ${uniqueActions.join(', ')} (${actionTypes.length} total)`,
+      )
 
       // Add success/error info
       const errors = rt.traj.steps.filter(
-        (s: TrajectoryStep): boolean => !!s.action && !s.action.success
-      ).length;
+        (s: TrajectoryStep): boolean => !!s.action && !s.action.success,
+      ).length
       const successRate =
         rt.traj.steps.length > 0
           ? (
               ((rt.traj.steps.length - errors) / rt.traj.steps.length) *
               100
             ).toFixed(1)
-          : '0';
-      contextParts.push(`  - Success Rate: ${successRate}%`);
+          : '0'
+      contextParts.push(`  - Success Rate: ${successRate}%`)
 
       if (errors > 0) {
-        contextParts.push(`  - Errors: ${errors}`);
+        contextParts.push(`  - Errors: ${errors}`)
       }
     }
 
     // Build trajectory messages (with deduplicated prefix)
-    const trajectorySections: string[] = [];
+    const trajectorySections: string[] = []
 
     for (let i = 0; i < richTrajectories.length; i++) {
-      const rt = richTrajectories[i]!;
-      const trajId = `trajectory-${i + 1}`;
+      const rt = richTrajectories[i]
+      if (!rt) continue
+
+      const trajId = `trajectory-${i + 1}`
 
       // Remove common prefix from messages
-      const uniqueMessages = rt.messages.slice(commonPrefix.length);
+      const uniqueMessages = rt.messages.slice(commonPrefix.length)
 
       // Truncate very long messages to save tokens (keep last 20 messages max)
-      const truncatedMessages = uniqueMessages.slice(-20);
+      const truncatedMessages = uniqueMessages.slice(-20)
 
-      trajectorySections.push(`<trajectory id="${trajId}">`);
-      trajectorySections.push(JSON.stringify(truncatedMessages, null, 2));
-      trajectorySections.push(`</trajectory>`);
+      trajectorySections.push(`<trajectory id="${trajId}">`)
+      trajectorySections.push(JSON.stringify(truncatedMessages, null, 2))
+      trajectorySections.push(`</trajectory>`)
     }
 
     // Build full prompt
     const userContent =
       commonPrefix.length > 0
         ? `<context>\n${JSON.stringify(commonPrefix, null, 2)}\n</context>\n\n`
-        : '';
+        : ''
 
-    const prompt = `${userContent}${contextParts.join('\n')}\n\nTrajectories:\n\n${trajectorySections.join('\n\n')}`;
+    const prompt = `${userContent}${contextParts.join('\n')}\n\nTrajectories:\n\n${trajectorySections.join('\n\n')}`
 
     const systemPrompt = `You are an expert evaluator of AI agent performance. All trajectories below were given the same goal/scenario. Your job is to compare them and assign scores from 0 to 1 based on how well each trajectory achieved its goal.
 
 Grading standards:
 ${DEFAULT_RUBRIC}
 
-Important: Use the performance context provided (P&L, episode length, success rate) to inform your scoring, but also consider the quality of decision-making, efficiency, and goal achievement shown in the trajectory messages.`;
+Important: Use the performance context provided (P&L, episode length, success rate) to inform your scoring, but also consider the quality of decision-making, efficiency, and goal achievement shown in the trajectory messages.`
 
     return JSON.stringify({
       system: systemPrompt,
       user: prompt,
-    });
+    })
   }
 
   /**
@@ -496,10 +507,12 @@ Important: Use the performance context provided (P&L, episode length, success ra
    * Uses structured output format to ensure valid JSON response.
    */
   private async callJudge(promptJson: string): Promise<RulerResponse | null> {
-    const promptData = JSON.parse(promptJson) as {
-      system: string;
-      user: string;
-    };
+    const parsedPrompt: unknown = JSON.parse(promptJson)
+    if (!isJudgePromptData(parsedPrompt)) {
+      logger.error('Invalid judge prompt format', {}, 'RulerScoring')
+      return null
+    }
+    const promptData = parsedPrompt
 
     const structuredPrompt = `${promptData.user}
 
@@ -519,9 +532,9 @@ Please respond with ONLY a valid JSON object in this exact format:
   ]
 }
 
-Return ONLY the JSON, no other text.`;
+Return ONLY the JSON, no other text.`
 
-    const llmCaller = getLLMCaller();
+    const llmCaller = getLLMCaller()
     const response = await llmCaller.callGroqDirect({
       prompt: structuredPrompt,
       system: promptData.system,
@@ -529,44 +542,44 @@ Return ONLY the JSON, no other text.`;
       temperature: 0.3,
       maxTokens: 2000,
       actionType: 'ruler_score_trajectories',
-    });
+    })
 
-    let jsonText = response.trim();
+    let jsonText = response.trim()
     jsonText = jsonText
       .replace(/```json\n?/g, '')
       .replace(/```\n?/g, '')
-      .trim();
+      .trim()
 
-    const jsonMatch = jsonText.match(/\{[\s\S]*\}/);
+    const jsonMatch = jsonText.match(/\{[\s\S]*\}/)
     if (!jsonMatch) {
       logger.error(
         'Judge response does not contain JSON',
         {
           response: response.substring(0, 500),
         },
-        'RulerScoring'
-      );
-      return null;
+        'RulerScoring',
+      )
+      return null
     }
 
-    const parsed = JSON.parse(jsonMatch[0]) as RulerResponse;
-
-    if (!parsed.scores || !Array.isArray(parsed.scores)) {
+    const parsedResponse: unknown = JSON.parse(jsonMatch[0])
+    if (!isRulerJudgeResponse(parsedResponse)) {
       logger.error(
         'Invalid judge response structure',
-        { parsed },
-        'RulerScoring'
-      );
-      return null;
+        { parsedResponse },
+        'RulerScoring',
+      )
+      return null
     }
 
-    for (const score of parsed.scores) {
+    // Clamp scores to valid range
+    for (const score of parsedResponse.scores) {
       if (score.score < 0 || score.score > 1) {
-        score.score = Math.max(0, Math.min(1, score.score));
+        score.score = Math.max(0, Math.min(1, score.score))
       }
     }
 
-    return parsed;
+    return parsedResponse
   }
 
   /**
@@ -575,30 +588,36 @@ Return ONLY the JSON, no other text.`;
    * RULER deduplicates common prefixes to save tokens.
    */
   private extractCommonPrefix(
-    messageLists: Array<Array<{ role: string; content: string }>>
+    messageLists: Array<Array<{ role: string; content: string }>>,
   ): Array<{ role: string; content: string }> {
-    if (messageLists.length === 0) return [];
+    if (messageLists.length === 0) return []
 
-    const first = messageLists[0]!;
-    const prefix: Array<{ role: string; content: string }> = [];
+    const first = messageLists[0]
+    if (!first) return []
+
+    const prefix: Array<{ role: string; content: string }> = []
 
     for (let i = 0; i < first.length; i++) {
-      const msg = first[i]!;
-      const allMatch = messageLists.every(
-        (msgs) =>
-          msgs[i] &&
-          msgs[i]!.role === msg.role &&
-          msgs[i]!.content === msg.content
-      );
+      const msg = first[i]
+      if (!msg) break
+
+      const allMatch = messageLists.every((msgs) => {
+        const msgAtIdx = msgs[i]
+        return (
+          msgAtIdx &&
+          msgAtIdx.role === msg.role &&
+          msgAtIdx.content === msg.content
+        )
+      })
 
       if (allMatch) {
-        prefix.push(msg);
+        prefix.push(msg)
       } else {
-        break;
+        break
       }
     }
 
-    return prefix;
+    return prefix
   }
 
   /**
@@ -606,27 +625,27 @@ Return ONLY the JSON, no other text.`;
    */
   private groupByScenario(
     trajectoriesData: Array<{
-      trajectoryId: string;
-      stepsJson: string | null;
-      scenarioId: string | null;
-      finalPnL: number | null;
-      episodeLength: number | null;
-    }>
+      trajectoryId: string
+      stepsJson: string | null
+      scenarioId: string | null
+      finalPnL: number | null
+      episodeLength: number | null
+    }>,
   ): Array<{ scenarioId: string; trajectories: typeof trajectoriesData }> {
-    const groups = new Map<string, typeof trajectoriesData>();
+    const groups = new Map<string, typeof trajectoriesData>()
 
     for (const traj of trajectoriesData) {
-      const scenarioId = traj.scenarioId || 'default';
+      const scenarioId = traj.scenarioId || 'default'
       if (!groups.has(scenarioId)) {
-        groups.set(scenarioId, []);
+        groups.set(scenarioId, [])
       }
-      groups.get(scenarioId)!.push(traj);
+      groups.get(scenarioId)?.push(traj)
     }
 
     return Array.from(groups.entries()).map(([scenarioId, trajs]) => ({
       scenarioId,
       trajectories: trajs,
-    }));
+    }))
   }
 
   /**
@@ -641,14 +660,14 @@ Return ONLY the JSON, no other text.`;
             { aiJudgeReward: null },
           ],
         },
-      });
+      })
       return rows.map((t) => ({
         trajectoryId: t.trajectoryId,
         stepsJson: t.stepsJson,
         scenarioId: t.scenarioId,
         finalPnL: t.finalPnL,
         episodeLength: t.episodeLength,
-      }));
+      }))
     }
 
     // Get all unscored trajectories
@@ -662,14 +681,14 @@ Return ONLY the JSON, no other text.`;
         ],
       },
       orderBy: { startTime: 'asc' },
-    });
+    })
     return rows.map((t) => ({
       trajectoryId: t.trajectoryId,
       stepsJson: t.stepsJson,
       scenarioId: t.scenarioId,
       finalPnL: t.finalPnL,
       episodeLength: t.episodeLength,
-    }));
+    }))
   }
 
   /**
@@ -686,19 +705,19 @@ Return ONLY the JSON, no other text.`;
           { stepsJson: { not: '[]' } },
         ],
       },
-    });
+    })
 
     if (trajectoriesResult.length === 0) {
-      return 0;
+      return 0
     }
 
     return await this.scoreTrajectories(
-      trajectoriesResult.map((t) => t.trajectoryId)
-    );
+      trajectoriesResult.map((t) => t.trajectoryId),
+    )
   }
 }
 
 /**
  * Singleton instance of RulerScoringService
  */
-export const rulerScoringService = new RulerScoringService();
+export const rulerScoringService = new RulerScoringService()

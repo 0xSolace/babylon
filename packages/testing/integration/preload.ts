@@ -15,18 +15,18 @@
  */
 
 // Set test environment first (before any imports)
-(process.env as Record<string, string>)['NODE_ENV'] = 'test';
-(process.env as Record<string, string>)['BUN_ENV'] = 'test';
+;(process.env as Record<string, string>).NODE_ENV = 'test'
+;(process.env as Record<string, string>).BUN_ENV = 'test'
 
 // Reduce LLM timeout for tests (30 seconds instead of default)
-process.env.LLM_TIMEOUT_MS = '30000';
+process.env.LLM_TIMEOUT_MS = '30000'
 
-import { db } from '@babylon/db';
+import { db } from '@babylon/db'
 import {
   checkCoreServices,
   isJejuRunning,
   printStatus,
-} from '../infrastructure/health-check';
+} from '../infrastructure/health-check'
 
 /**
  * Removes stale generation locks that may interfere with test execution.
@@ -37,12 +37,12 @@ async function cleanupStaleLocks(): Promise<void> {
       where: {
         expiresAt: { lt: new Date() },
       },
-    });
+    })
 
     if (expiredLocks.count > 0) {
       console.log(
-        `[Test Preload] Cleaned up ${expiredLocks.count} expired generation locks`
-      );
+        `[Test Preload] Cleaned up ${expiredLocks.count} expired generation locks`,
+      )
     }
 
     const testLocks = await db.generationLock.deleteMany({
@@ -58,18 +58,18 @@ async function cleanupStaleLocks(): Promise<void> {
           },
         ],
       },
-    });
+    })
 
     if (testLocks.count > 0) {
       console.log(
-        `[Test Preload] Cleaned up ${testLocks.count} test-related locks`
-      );
+        `[Test Preload] Cleaned up ${testLocks.count} test-related locks`,
+      )
     }
   } catch (err) {
     // Table might not exist yet
     console.log(
-      `[Test Preload] Lock cleanup skipped: ${(err as Error).message}`
-    );
+      `[Test Preload] Lock cleanup skipped: ${(err as Error).message}`,
+    )
   }
 }
 
@@ -87,10 +87,10 @@ async function cleanupTestData(): Promise<void> {
           { username: { contains: 'integration-test' } },
         ],
       },
-    });
+    })
 
     if (testUsers.count > 0) {
-      console.log(`[Test Preload] Cleaned up ${testUsers.count} test users`);
+      console.log(`[Test Preload] Cleaned up ${testUsers.count} test users`)
     }
 
     // Clean up test questions/markets created in previous runs
@@ -101,12 +101,12 @@ async function cleanupTestData(): Promise<void> {
           { createdAt: { lt: new Date(Date.now() - 60 * 60 * 1000) } },
         ],
       },
-    });
+    })
 
     if (oldTestQuestions.count > 0) {
       console.log(
-        `[Test Preload] Cleaned up ${oldTestQuestions.count} old test questions`
-      );
+        `[Test Preload] Cleaned up ${oldTestQuestions.count} old test questions`,
+      )
     }
 
     const oldTestMarkets = await db.market.deleteMany({
@@ -116,99 +116,99 @@ async function cleanupTestData(): Promise<void> {
           { createdAt: { lt: new Date(Date.now() - 60 * 60 * 1000) } },
         ],
       },
-    });
+    })
 
     if (oldTestMarkets.count > 0) {
       console.log(
-        `[Test Preload] Cleaned up ${oldTestMarkets.count} old test markets`
-      );
+        `[Test Preload] Cleaned up ${oldTestMarkets.count} old test markets`,
+      )
     }
   } catch (err) {
     // Tables might not exist yet
     console.log(
-      `[Test Preload] Data cleanup skipped: ${(err as Error).message}`
-    );
+      `[Test Preload] Data cleanup skipped: ${(err as Error).message}`,
+    )
   }
 }
 
 // Global flag to track if database is available
-let dbAvailable = false;
+let dbAvailable = false
 
 /**
  * Check if database is available
  */
 export function isDatabaseAvailable(): boolean {
-  return dbAvailable;
+  return dbAvailable
 }
 
 /**
  * Initialize test environment
  */
 async function initializeTestEnvironment(): Promise<void> {
-  console.log('[Test Preload] Initializing integration test environment...');
+  console.log('[Test Preload] Initializing integration test environment...')
 
   // Check if Jeju CLI is running
-  const jejuRunning = await isJejuRunning();
+  const jejuRunning = await isJejuRunning()
   if (!jejuRunning) {
-    console.error('[Test Preload] ❌ Jeju CLI is not running!');
-    console.error('');
-    console.error('Please start Jeju services:');
-    console.error('  cd /path/to/jeju && bun run dev');
-    console.error('');
-    console.error('Tests will attempt to run but may fail.');
+    console.error('[Test Preload] ❌ Jeju CLI is not running!')
+    console.error('')
+    console.error('Please start Jeju services:')
+    console.error('  cd /path/to/jeju && bun run dev')
+    console.error('')
+    console.error('Tests will attempt to run but may fail.')
   } else {
-    console.log('[Test Preload] ✅ Jeju CLI detected');
+    console.log('[Test Preload] ✅ Jeju CLI detected')
   }
 
   // Check core services
-  console.log('[Test Preload] Checking core services...');
-  const coreStatus = await checkCoreServices();
+  console.log('[Test Preload] Checking core services...')
+  const coreStatus = await checkCoreServices()
 
   if (!coreStatus.healthy) {
-    printStatus(coreStatus);
+    printStatus(coreStatus)
     console.warn(
-      `[Test Preload] ⚠️ Some services not healthy: ${coreStatus.missingServices.join(', ')}`
-    );
-    console.warn('[Test Preload] Tests requiring these services may fail');
+      `[Test Preload] ⚠️ Some services not healthy: ${coreStatus.missingServices.join(', ')}`,
+    )
+    console.warn('[Test Preload] Tests requiring these services may fail')
   } else {
-    console.log('[Test Preload] ✅ Core services ready');
+    console.log('[Test Preload] ✅ Core services ready')
   }
 
   // Verify database connection
   try {
-    await db.$queryRaw`SELECT 1`;
-    console.log('[Test Preload] ✅ Database connection verified');
-    dbAvailable = true;
+    await db.$queryRaw`SELECT 1`
+    console.log('[Test Preload] ✅ Database connection verified')
+    dbAvailable = true
 
     // Clean up stale data from previous test runs
-    await cleanupStaleLocks();
-    await cleanupTestData();
+    await cleanupStaleLocks()
+    await cleanupTestData()
   } catch (err) {
     console.warn(
-      `[Test Preload] ⚠️ Database not available: ${(err as Error).message}`
-    );
-    console.warn('[Test Preload] Tests requiring database will be skipped');
-    dbAvailable = false;
+      `[Test Preload] ⚠️ Database not available: ${(err as Error).message}`,
+    )
+    console.warn('[Test Preload] Tests requiring database will be skipped')
+    dbAvailable = false
   }
 
-  console.log('[Test Preload] Integration test environment ready');
+  console.log('[Test Preload] Integration test environment ready')
 }
 
 /**
  * Graceful shutdown handler
  */
 async function gracefulShutdown(): Promise<void> {
-  console.log('[Test Preload] Shutting down test environment...');
+  console.log('[Test Preload] Shutting down test environment...')
 
   try {
     // Clean up any remaining test data
     if (dbAvailable) {
-      await cleanupStaleLocks();
+      await cleanupStaleLocks()
     }
 
     // Disconnect database
-    await db.$disconnect();
-    console.log('[Test Preload] Database disconnected');
+    await db.$disconnect()
+    console.log('[Test Preload] Database disconnected')
   } catch {
     // Ignore errors during shutdown
   }
@@ -216,20 +216,20 @@ async function gracefulShutdown(): Promise<void> {
 
 // Run initialization
 initializeTestEnvironment().catch((error) => {
-  console.error('[Test Preload] Failed to initialize:', error);
+  console.error('[Test Preload] Failed to initialize:', error)
   // Don't exit - let tests handle missing infrastructure gracefully
-});
+})
 
 // Register shutdown handlers
-process.on('beforeExit', gracefulShutdown);
+process.on('beforeExit', gracefulShutdown)
 process.on('SIGINT', async () => {
-  await gracefulShutdown();
-  process.exit(0);
-});
+  await gracefulShutdown()
+  process.exit(0)
+})
 process.on('SIGTERM', async () => {
-  await gracefulShutdown();
-  process.exit(0);
-});
+  await gracefulShutdown()
+  process.exit(0)
+})
 
 // Export utilities for tests to use
-export { cleanupStaleLocks, cleanupTestData };
+export { cleanupStaleLocks, cleanupTestData }

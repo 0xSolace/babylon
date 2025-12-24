@@ -39,8 +39,8 @@
  * ```
  */
 
-import { logger } from '@babylon/shared';
-import type { Actor, Organization } from '../types';
+import { logger } from '@babylon/shared'
+import type { Actor, Organization } from '../types'
 
 /**
  * NPC Persona Assignment
@@ -63,16 +63,16 @@ import type { Actor, Organization } from '../types';
  * @property opposesOrgs - Org IDs they oppose (biased against)
  */
 export interface PersonaAssignment {
-  actorId: string;
-  reliability: number;
-  insiderOrgs: string[];
-  expertise: string[];
-  willingToLie: boolean;
-  selfInterest: 'wealth' | 'reputation' | 'ideology' | 'chaos';
-  favorsActors: string[];
-  opposesActors: string[];
-  favorsOrgs: string[];
-  opposesOrgs: string[];
+  actorId: string
+  reliability: number
+  insiderOrgs: string[]
+  expertise: string[]
+  willingToLie: boolean
+  selfInterest: 'wealth' | 'reputation' | 'ideology' | 'chaos'
+  favorsActors: string[]
+  opposesActors: string[]
+  favorsOrgs: string[]
+  opposesOrgs: string[]
 }
 
 /**
@@ -141,21 +141,17 @@ export class NPCPersonaGenerator {
    */
   assignPersonas(
     actors: Actor[],
-    organizations: Organization[]
+    organizations: Organization[],
   ): Map<string, PersonaAssignment> {
-    const personas = new Map<string, PersonaAssignment>();
+    const personas = new Map<string, PersonaAssignment>()
 
     for (const actor of actors) {
-      const persona = this.generatePersonaForActor(
-        actor,
-        actors,
-        organizations
-      );
-      personas.set(actor.id, persona);
+      const persona = this.generatePersonaForActor(actor, actors, organizations)
+      personas.set(actor.id, persona)
     }
 
     // Validate distribution makes sense
-    this.validatePersonaDistribution(personas);
+    this.validatePersonaDistribution(personas)
 
     logger.info(
       `Generated personas for ${personas.size} NPCs`,
@@ -164,10 +160,10 @@ export class NPCPersonaGenerator {
         insiders: this.countInsiders(personas),
         liars: this.countLiars(personas),
       },
-      'NPCPersonaGenerator'
-    );
+      'NPCPersonaGenerator',
+    )
 
-    return personas;
+    return personas
   }
 
   /**
@@ -176,13 +172,13 @@ export class NPCPersonaGenerator {
   private generatePersonaForActor(
     actor: Actor,
     _allActors: Actor[],
-    _organizations: Organization[]
+    _organizations: Organization[],
   ): PersonaAssignment {
     // Determine base reliability from role/personality/domain
-    let baseReliability = 0.5;
-    let willingToLie = false;
+    let baseReliability = 0.5
+    let willingToLie = false
     let selfInterest: 'wealth' | 'reputation' | 'ideology' | 'chaos' =
-      'reputation';
+      'reputation'
 
     // Conspiracy theorists and contrarians: Very low reliability
     if (
@@ -190,9 +186,9 @@ export class NPCPersonaGenerator {
       actor.personality?.includes('conspiracy') ||
       actor.description?.toLowerCase().includes('conspiracy')
     ) {
-      baseReliability = 0.15 + Math.random() * 0.15; // 0.15-0.30
-      willingToLie = true;
-      selfInterest = 'chaos';
+      baseReliability = 0.15 + Math.random() * 0.15 // 0.15-0.30
+      willingToLie = true
+      selfInterest = 'chaos'
     }
     // Politicians: Low reliability, willing to lie
     else if (
@@ -200,9 +196,9 @@ export class NPCPersonaGenerator {
       actor.description?.toLowerCase().includes('politician') ||
       actor.role === 'politician'
     ) {
-      baseReliability = 0.25 + Math.random() * 0.15; // 0.25-0.40
-      willingToLie = true;
-      selfInterest = 'reputation';
+      baseReliability = 0.25 + Math.random() * 0.15 // 0.25-0.40
+      willingToLie = true
+      selfInterest = 'reputation'
     }
     // Journalists: Medium reliability
     else if (
@@ -210,9 +206,9 @@ export class NPCPersonaGenerator {
       actor.domain?.includes('journalism') ||
       actor.role === 'journalist'
     ) {
-      baseReliability = 0.55 + Math.random() * 0.15; // 0.55-0.70
-      willingToLie = false;
-      selfInterest = 'reputation';
+      baseReliability = 0.55 + Math.random() * 0.15 // 0.55-0.70
+      willingToLie = false
+      selfInterest = 'reputation'
     }
     // Finance/Tech experts: Medium-high reliability, sometimes willing to lie
     else if (
@@ -220,32 +216,32 @@ export class NPCPersonaGenerator {
       actor.domain?.includes('tech') ||
       actor.role === 'expert'
     ) {
-      baseReliability = 0.6 + Math.random() * 0.2; // 0.60-0.80
-      willingToLie = Math.random() > 0.7; // 30% willing to lie for profit
-      selfInterest = 'wealth';
+      baseReliability = 0.6 + Math.random() * 0.2 // 0.60-0.80
+      willingToLie = Math.random() > 0.7 // 30% willing to lie for profit
+      selfInterest = 'wealth'
     }
     // Everyone else: Medium reliability
     else {
-      baseReliability = 0.5 + Math.random() * 0.2; // 0.50-0.70
-      willingToLie = Math.random() > 0.8; // 20% willing to lie
-      selfInterest = Math.random() > 0.5 ? 'reputation' : 'wealth';
+      baseReliability = 0.5 + Math.random() * 0.2 // 0.50-0.70
+      willingToLie = Math.random() > 0.8 // 20% willing to lie
+      selfInterest = Math.random() > 0.5 ? 'reputation' : 'wealth'
     }
 
     // Insiders get higher reliability about their orgs
-    const insiderOrgs = actor.affiliations || [];
+    const insiderOrgs = actor.affiliations || []
     if (insiderOrgs.length > 0) {
-      baseReliability = Math.max(baseReliability, 0.7); // Insiders minimum 0.7
+      baseReliability = Math.max(baseReliability, 0.7) // Insiders minimum 0.7
     }
 
     // Expertise from domain
-    const expertise = actor.domain || [];
+    const expertise = actor.domain || []
 
     // Determine favors/opposes from affiliations
-    const favorsOrgs = insiderOrgs;
-    const opposesOrgs: string[] = []; // Could infer from competitor orgs later
+    const favorsOrgs = insiderOrgs
+    const opposesOrgs: string[] = [] // Could infer from competitor orgs later
 
-    const favorsActors: string[] = []; // Could infer from relationships
-    const opposesActors: string[] = [];
+    const favorsActors: string[] = [] // Could infer from relationships
+    const opposesActors: string[] = []
 
     return {
       actorId: actor.id,
@@ -258,7 +254,7 @@ export class NPCPersonaGenerator {
       opposesActors,
       favorsOrgs,
       opposesOrgs,
-    };
+    }
   }
 
   /**
@@ -275,20 +271,20 @@ export class NPCPersonaGenerator {
    * - Medium reliability: 40-60%
    */
   private validatePersonaDistribution(
-    personas: Map<string, PersonaAssignment>
+    personas: Map<string, PersonaAssignment>,
   ): void {
     const reliabilities = Array.from(personas.values()).map(
-      (p) => p.reliability
-    );
+      (p) => p.reliability,
+    )
 
     const avgReliability =
-      reliabilities.reduce((a, b) => a + b, 0) / reliabilities.length;
+      reliabilities.reduce((a, b) => a + b, 0) / reliabilities.length
     const insiders = Array.from(personas.values()).filter(
-      (p) => p.insiderOrgs.length > 0
-    );
-    const liars = Array.from(personas.values()).filter((p) => p.willingToLie);
-    const highReliability = reliabilities.filter((r) => r > 0.7).length;
-    const lowReliability = reliabilities.filter((r) => r < 0.4).length;
+      (p) => p.insiderOrgs.length > 0,
+    )
+    const liars = Array.from(personas.values()).filter((p) => p.willingToLie)
+    const highReliability = reliabilities.filter((r) => r > 0.7).length
+    const lowReliability = reliabilities.filter((r) => r < 0.4).length
 
     logger.info(
       'Persona distribution',
@@ -301,8 +297,8 @@ export class NPCPersonaGenerator {
         lowReliability,
         mediumReliability: personas.size - highReliability - lowReliability,
       },
-      'NPCPersonaGenerator'
-    );
+      'NPCPersonaGenerator',
+    )
 
     // Warn if distribution is unusual
     if (avgReliability < 0.4 || avgReliability > 0.7) {
@@ -312,8 +308,8 @@ export class NPCPersonaGenerator {
           avgReliability,
           expected: '0.45-0.65',
         },
-        'NPCPersonaGenerator'
-      );
+        'NPCPersonaGenerator',
+      )
     }
 
     if (insiders.length === 0 && personas.size > 10) {
@@ -322,8 +318,8 @@ export class NPCPersonaGenerator {
         {
           totalNPCs: personas.size,
         },
-        'NPCPersonaGenerator'
-      );
+        'NPCPersonaGenerator',
+      )
     }
   }
 
@@ -331,12 +327,12 @@ export class NPCPersonaGenerator {
    * Calculate average reliability across all personas
    */
   private calculateAvgReliability(
-    personas: Map<string, PersonaAssignment>
+    personas: Map<string, PersonaAssignment>,
   ): number {
     const reliabilities = Array.from(personas.values()).map(
-      (p) => p.reliability
-    );
-    return reliabilities.reduce((a, b) => a + b, 0) / reliabilities.length;
+      (p) => p.reliability,
+    )
+    return reliabilities.reduce((a, b) => a + b, 0) / reliabilities.length
   }
 
   /**
@@ -344,13 +340,13 @@ export class NPCPersonaGenerator {
    */
   private countInsiders(personas: Map<string, PersonaAssignment>): number {
     return Array.from(personas.values()).filter((p) => p.insiderOrgs.length > 0)
-      .length;
+      .length
   }
 
   /**
    * Count number of liars (willing to deceive)
    */
   private countLiars(personas: Map<string, PersonaAssignment>): number {
-    return Array.from(personas.values()).filter((p) => p.willingToLie).length;
+    return Array.from(personas.values()).filter((p) => p.willingToLie).length
   }
 }

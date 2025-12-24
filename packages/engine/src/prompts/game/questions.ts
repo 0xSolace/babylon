@@ -1,8 +1,8 @@
-import { definePrompt } from '../define-prompt';
+import { definePrompt } from '../define-prompt'
 import {
   PARODY_NAME_RULES,
   QUESTION_CONTINUITY_RULES,
-} from '../shared-sections';
+} from '../shared-sections'
 
 /**
  * Prompt for generating yes/no prediction market questions for each scenario.
@@ -108,4 +108,4 @@ Return XML with UNIQUE, DISTINCT questions:
 
 No other text.
 `.trim(),
-});
+})

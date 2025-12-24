@@ -1,4 +1,4 @@
-import Link from 'next/link';
+import { Link } from 'react-router-dom'
 
 export default function NotFound() {
   return (
@@ -14,11 +14,11 @@ export default function NotFound() {
         Babylon dashboard and keep trading.
       </p>
       <Link
-        href="/"
+        to="/"
         className="rounded-full bg-white/10 px-6 py-2 font-semibold text-sm text-white transition hover:bg-white/20"
       >
         Back to home
       </Link>
     </div>
-  );
+  )
 }

@@ -1,8 +1,6 @@
-'use client';
-
-import type { OnboardingProfilePayload } from '@babylon/shared';
-import { cn, logger } from '@babylon/shared';
-import { useQuery } from '@tanstack/react-query';
+import type { OnboardingProfilePayload } from '@babylon/shared'
+import { cn, logger } from '@babylon/shared'
+import { useQuery } from '@tanstack/react-query'
 import {
   AlertCircle,
   Check,
@@ -12,24 +10,30 @@ import {
   Sparkles,
   Upload,
   X,
-} from 'lucide-react';
-import Image from 'next/image';
-import { useEffect, useMemo, useState } from 'react';
-import { Skeleton } from '@/components/shared/Skeleton';
+} from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import Image from '@/components/shared/Image'
+import { Skeleton } from '@/components/shared/Skeleton'
+import {
+  api,
+  extractDataOrNull,
+  type GeneratedProfile,
+  type RandomAssets,
+} from '@/lib/eden-client'
 
 /**
  * Imported profile data structure from social platforms.
  */
 export interface ImportedProfileData {
-  platform: 'twitter' | 'farcaster';
-  username: string;
-  displayName: string;
-  bio?: string;
-  profileImageUrl?: string | null;
-  coverImageUrl?: string | null;
+  platform: 'twitter' | 'farcaster'
+  username: string
+  displayName: string
+  bio?: string
+  profileImageUrl?: string | null
+  coverImageUrl?: string | null
   // Platform-specific IDs
-  twitterId?: string;
-  farcasterFid?: string;
+  twitterId?: string
+  farcasterFid?: string
 }
 
 /**
@@ -68,55 +72,38 @@ export interface ImportedProfileData {
  * ```
  */
 interface OnboardingModalProps {
-  isOpen: boolean;
-  stage: 'PROFILE' | 'ONCHAIN' | 'COMPLETED';
-  isSubmitting: boolean;
-  error?: string | null;
-  isWalletReady: boolean;
-  onSubmitProfile: (payload: OnboardingProfilePayload) => Promise<void>;
-  onRetryOnchain: () => Promise<void>;
-  onSkipOnchain: () => void;
-  onClose: () => void;
-  onLogout?: () => Promise<void>;
+  isOpen: boolean
+  stage: 'PROFILE' | 'ONCHAIN' | 'COMPLETED'
+  isSubmitting: boolean
+  error?: string | null
+  isWalletReady: boolean
+  onSubmitProfile: (payload: OnboardingProfilePayload) => Promise<void>
+  onRetryOnchain: () => Promise<void>
+  onSkipOnchain: () => void
+  onClose: () => void
+  onLogout?: () => Promise<void>
   user: {
-    id?: string;
-    username?: string;
-    walletAddress?: string;
-    onChainRegistered?: boolean;
-  } | null;
-  importedData?: ImportedProfileData | null;
-  initialEmail?: string | null;
-}
-
-/**
- * Generated profile response structure from API.
- */
-interface GeneratedProfileResponse {
-  name: string;
-  username: string;
-  bio: string;
-}
-
-/**
- * Random assets response structure from API.
- */
-interface RandomAssetsResponse {
-  profilePictureIndex: number;
-  bannerIndex: number;
+    id?: string
+    username?: string
+    walletAddress?: string
+    onChainRegistered?: boolean
+  } | null
+  importedData?: ImportedProfileData | null
+  initialEmail?: string | null
 }
 
 /**
  * Total number of available profile pictures.
  */
-const TOTAL_PROFILE_PICTURES = 100;
+const TOTAL_PROFILE_PICTURES = 100
 /**
  * Total number of available banners.
  */
-const TOTAL_BANNERS = 100;
+const TOTAL_BANNERS = 100
 /**
  * Pattern for matching absolute URLs.
  */
-const ABSOLUTE_URL_PATTERN = /^(https?:|data:|blob:)/i;
+const ABSOLUTE_URL_PATTERN = /^(https?:|data:|blob:)/i
 
 /**
  * Resolve asset URL to absolute URL if needed.
@@ -127,14 +114,14 @@ const ABSOLUTE_URL_PATTERN = /^(https?:|data:|blob:)/i;
  * @returns Resolved absolute URL or undefined
  */
 function resolveAssetUrl(value?: string | null): string | undefined {
-  if (!value) return undefined;
+  if (!value) return undefined
   if (ABSOLUTE_URL_PATTERN.test(value)) {
-    return value;
+    return value
   }
   if (typeof window !== 'undefined' && value.startsWith('/')) {
-    return new URL(value, window.location.origin).toString();
+    return new URL(value, window.location.origin).toString()
   }
-  return value;
+  return value
 }
 
 export function OnboardingModal({
@@ -152,41 +139,41 @@ export function OnboardingModal({
   importedData,
   initialEmail,
 }: OnboardingModalProps) {
-  const [displayName, setDisplayName] = useState('');
-  const [username, setUsername] = useState('');
-  const [email, setEmail] = useState('');
-  const [bio, setBio] = useState('');
-  const [profilePictureIndex, setProfilePictureIndex] = useState(1);
-  const [bannerIndex, setBannerIndex] = useState(1);
+  const [displayName, setDisplayName] = useState('')
+  const [username, setUsername] = useState('')
+  const [email, setEmail] = useState('')
+  const [bio, setBio] = useState('')
+  const [profilePictureIndex, setProfilePictureIndex] = useState(1)
+  const [bannerIndex, setBannerIndex] = useState(1)
   const [uploadedProfileImage, setUploadedProfileImage] = useState<
     string | null
-  >(null);
-  const [uploadedBanner, setUploadedBanner] = useState<string | null>(null);
-  const [isCheckingUsername, setIsCheckingUsername] = useState(false);
+  >(null)
+  const [uploadedBanner, setUploadedBanner] = useState<string | null>(null)
+  const [isCheckingUsername, setIsCheckingUsername] = useState(false)
   const [usernameStatus, setUsernameStatus] = useState<
     'available' | 'taken' | null
-  >(null);
+  >(null)
   const [usernameSuggestion, setUsernameSuggestion] = useState<string | null>(
-    null
-  );
-  const [formError, setFormError] = useState<string | null>(null);
-  const [isLoadingDefaults, setIsLoadingDefaults] = useState(true);
-  const [acceptedTerms, setAcceptedTerms] = useState(false);
+    null,
+  )
+  const [formError, setFormError] = useState<string | null>(null)
+  const [isLoadingDefaults, setIsLoadingDefaults] = useState(true)
+  const [acceptedTerms, setAcceptedTerms] = useState(false)
 
   const currentProfileImage = useMemo(() => {
     return (
       uploadedProfileImage ||
       `/assets/user-profiles/profile-${profilePictureIndex}.jpg`
-    );
-  }, [uploadedProfileImage, profilePictureIndex]);
+    )
+  }, [uploadedProfileImage, profilePictureIndex])
 
   const currentBanner = useMemo(() => {
-    return uploadedBanner || `/assets/user-banners/banner-${bannerIndex}.jpg`;
-  }, [uploadedBanner, bannerIndex]);
+    return uploadedBanner || `/assets/user-banners/banner-${bannerIndex}.jpg`
+  }, [uploadedBanner, bannerIndex])
 
   // Pre-fill form with imported social data
   useEffect(() => {
-    if (!importedData || stage !== 'PROFILE') return;
+    if (!importedData || stage !== 'PROFILE') return
 
     logger.info(
       'Pre-filling profile with imported data',
@@ -196,78 +183,72 @@ export function OnboardingModal({
         hasCoverImage: !!importedData.coverImageUrl,
         hasBio: !!importedData.bio,
       },
-      'OnboardingModal'
-    );
+      'OnboardingModal',
+    )
 
     // Set text fields from social data
-    setDisplayName(importedData.displayName);
-    setUsername(importedData.username);
-    setBio(importedData.bio || '');
+    setDisplayName(importedData.displayName)
+    setUsername(importedData.username)
+    setBio(importedData.bio || '')
 
     // If we have a profile image URL from social import, use it
     if (importedData.profileImageUrl) {
-      setUploadedProfileImage(importedData.profileImageUrl);
+      setUploadedProfileImage(importedData.profileImageUrl)
     } else {
       // No social profile image - use a random one
-      setUploadedProfileImage(null);
+      setUploadedProfileImage(null)
       setProfilePictureIndex(
-        Math.floor(Math.random() * TOTAL_PROFILE_PICTURES) + 1
-      );
+        Math.floor(Math.random() * TOTAL_PROFILE_PICTURES) + 1,
+      )
     }
 
     // If we have a cover/banner URL from social import, use it
     if (importedData.coverImageUrl) {
-      setUploadedBanner(importedData.coverImageUrl);
+      setUploadedBanner(importedData.coverImageUrl)
     } else {
       // No social banner - generate a random one
-      setUploadedBanner(null);
-      setBannerIndex(Math.floor(Math.random() * TOTAL_BANNERS) + 1);
+      setUploadedBanner(null)
+      setBannerIndex(Math.floor(Math.random() * TOTAL_BANNERS) + 1)
     }
-  }, [importedData, stage]);
+  }, [importedData, stage])
 
   // Fetch generated profile defaults
   const { data: generatedProfile } = useQuery({
     queryKey: ['onboarding', 'generateProfile'],
-    queryFn: async (): Promise<GeneratedProfileResponse> => {
-      const response = await fetch('/api/onboarding/generate-profile');
-      if (!response.ok) {
-        throw new Error('Failed to generate profile');
-      }
-      return response.json() as Promise<GeneratedProfileResponse>;
+    queryFn: async (): Promise<GeneratedProfile | null> => {
+      const response = await api.onboarding.generateProfile.get()
+      return extractDataOrNull(response)
     },
     enabled: isOpen && stage === 'PROFILE' && !importedData,
     staleTime: Infinity, // Don't refetch once loaded
-  });
+  })
 
   // Fetch random assets
   const { data: randomAssets } = useQuery({
     queryKey: ['onboarding', 'randomAssets'],
-    queryFn: async (): Promise<RandomAssetsResponse> => {
-      const response = await fetch('/api/onboarding/random-assets');
-      if (!response.ok) {
-        throw new Error('Failed to fetch random assets');
-      }
-      return response.json() as Promise<RandomAssetsResponse>;
+    queryFn: async (): Promise<RandomAssets | null> => {
+      const response = await api.onboarding.randomAssets.get()
+      return extractDataOrNull(response)
     },
     enabled: isOpen && stage === 'PROFILE' && !importedData,
     staleTime: Infinity, // Don't refetch once loaded
-  });
+  })
 
   // Apply generated profile and assets when they load
   useEffect(() => {
-    if (!isOpen || stage !== 'PROFILE') return;
+    if (!isOpen || stage !== 'PROFILE') return
 
     // Don't auto-generate if we have imported data
     if (importedData) {
-      setIsLoadingDefaults(false);
-      return;
+      setIsLoadingDefaults(false)
+      return
     }
 
     // Wait for both queries to complete
     if (generatedProfile) {
-      setDisplayName(generatedProfile.name);
-      setUsername(generatedProfile.username);
-      setBio(generatedProfile.bio);
+      setDisplayName(generatedProfile.name)
+      setUsername(generatedProfile.username)
+      setBio(generatedProfile.bio)
     } else if (
       !generatedProfile &&
       isOpen &&
@@ -275,14 +256,14 @@ export function OnboardingModal({
       !importedData
     ) {
       // Fallback defaults if query fails
-      setDisplayName('New Babylonian');
-      setUsername(`user_${Math.random().toString(36).slice(2, 10)}`);
-      setBio('Just joined Babylon!');
+      setDisplayName('New Babylonian')
+      setUsername(`user_${Math.random().toString(36).slice(2, 10)}`)
+      setBio('Just joined Babylon!')
     }
 
     if (randomAssets) {
-      setProfilePictureIndex(randomAssets.profilePictureIndex);
-      setBannerIndex(randomAssets.bannerIndex);
+      setProfilePictureIndex(randomAssets.profilePictureIndex)
+      setBannerIndex(randomAssets.bannerIndex)
     } else if (
       !randomAssets &&
       isOpen &&
@@ -291,115 +272,106 @@ export function OnboardingModal({
     ) {
       // Fallback defaults if query fails
       setProfilePictureIndex(
-        Math.floor(Math.random() * TOTAL_PROFILE_PICTURES) + 1
-      );
-      setBannerIndex(Math.floor(Math.random() * TOTAL_BANNERS) + 1);
+        Math.floor(Math.random() * TOTAL_PROFILE_PICTURES) + 1,
+      )
+      setBannerIndex(Math.floor(Math.random() * TOTAL_BANNERS) + 1)
     }
 
-    setUploadedProfileImage(null);
-    setUploadedBanner(null);
-    setIsLoadingDefaults(false);
-  }, [isOpen, stage, importedData, generatedProfile, randomAssets]);
+    setUploadedProfileImage(null)
+    setUploadedBanner(null)
+    setIsLoadingDefaults(false)
+  }, [isOpen, stage, importedData, generatedProfile, randomAssets])
 
   // Initialize email from initialEmail prop when available
   useEffect(() => {
     if (initialEmail && !email && stage === 'PROFILE') {
-      setEmail(initialEmail);
+      setEmail(initialEmail)
     }
-  }, [initialEmail, email, stage]);
+  }, [initialEmail, email, stage])
 
   // Debounced username for check
-  const [debouncedUsername, setDebouncedUsername] = useState(username);
+  const [debouncedUsername, setDebouncedUsername] = useState(username)
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      setDebouncedUsername(username);
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [username]);
+      setDebouncedUsername(username)
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [username])
 
   // Username availability check query
   const { data: usernameCheckResult, isLoading: isCheckingUsernameQuery } =
     useQuery({
       queryKey: ['onboarding', 'checkUsername', debouncedUsername],
-      queryFn: async (): Promise<{
-        available: boolean;
-        suggestion?: string;
-      }> => {
-        const response = await fetch(
-          `/api/onboarding/check-username?username=${encodeURIComponent(debouncedUsername)}`
-        );
-        if (!response.ok) {
-          throw new Error('Failed to check username');
-        }
-        return response.json() as Promise<{
-          available: boolean;
-          suggestion?: string;
-        }>;
+      queryFn: async () => {
+        const response = await api.onboarding.checkUsername({
+          username: debouncedUsername,
+        })
+        return extractDataOrNull(response)
       },
       enabled:
         stage === 'PROFILE' &&
         !!debouncedUsername &&
         debouncedUsername.length >= 3,
-    });
+    })
 
   // Update username status from query result
   useEffect(() => {
-    if (stage !== 'PROFILE') return;
+    if (stage !== 'PROFILE') return
     if (!debouncedUsername || debouncedUsername.length < 3) {
-      setUsernameStatus(null);
-      setUsernameSuggestion(null);
-      return;
+      setUsernameStatus(null)
+      setUsernameSuggestion(null)
+      return
     }
 
     if (usernameCheckResult) {
-      setUsernameStatus(usernameCheckResult.available ? 'available' : 'taken');
+      setUsernameStatus(usernameCheckResult.available ? 'available' : 'taken')
       setUsernameSuggestion(
         usernameCheckResult.available
           ? null
-          : usernameCheckResult.suggestion || null
-      );
+          : usernameCheckResult.suggestion || null,
+      )
     }
-  }, [stage, debouncedUsername, usernameCheckResult]);
+  }, [stage, debouncedUsername, usernameCheckResult])
 
   // Sync isCheckingUsername with query loading state
   useEffect(() => {
-    setIsCheckingUsername(isCheckingUsernameQuery);
-  }, [isCheckingUsernameQuery]);
+    setIsCheckingUsername(isCheckingUsernameQuery)
+  }, [isCheckingUsernameQuery])
 
   const handleSubmit = async (event: React.FormEvent) => {
-    event.preventDefault();
-    if (stage !== 'PROFILE' || isSubmitting) return;
+    event.preventDefault()
+    if (stage !== 'PROFILE' || isSubmitting) return
 
-    setFormError(null);
+    setFormError(null)
 
     if (!displayName.trim()) {
-      setFormError('Please enter a display name');
-      return;
+      setFormError('Please enter a display name')
+      return
     }
 
     if (!username.trim() || username.length < 3) {
-      setFormError('Please pick a username of at least 3 characters');
-      return;
+      setFormError('Please pick a username of at least 3 characters')
+      return
     }
 
     if (!/^[a-zA-Z0-9_]+$/.test(username)) {
       setFormError(
-        'Username can only contain letters, numbers, and underscores'
-      );
-      return;
+        'Username can only contain letters, numbers, and underscores',
+      )
+      return
     }
 
     if (usernameStatus === 'taken') {
-      setFormError('Username is already taken. Please choose another.');
-      return;
+      setFormError('Username is already taken. Please choose another.')
+      return
     }
 
     if (!acceptedTerms) {
       setFormError(
-        'Please accept the Terms of Service and Privacy Policy to continue'
-      );
-      return;
+        'Please accept the Terms of Service and Privacy Policy to continue',
+      )
+      return
     }
 
     const profilePayload: OnboardingProfilePayload = {
@@ -409,10 +381,10 @@ export function OnboardingModal({
       bio: bio.trim() || undefined,
       profileImageUrl: resolveAssetUrl(
         uploadedProfileImage ??
-          `/assets/user-profiles/profile-${profilePictureIndex}.jpg`
+          `/assets/user-profiles/profile-${profilePictureIndex}.jpg`,
       ),
       coverImageUrl: resolveAssetUrl(
-        uploadedBanner ?? `/assets/user-banners/banner-${bannerIndex}.jpg`
+        uploadedBanner ?? `/assets/user-banners/banner-${bannerIndex}.jpg`,
       ),
       // Include imported social account data if available
       // These fields trigger automatic reward point awards (300 points per social account)
@@ -436,15 +408,17 @@ export function OnboardingModal({
       // Legal acceptance
       tosAccepted: acceptedTerms,
       privacyPolicyAccepted: acceptedTerms,
-    };
+    }
 
-    await onSubmitProfile(profilePayload);
-  };
+    await onSubmitProfile(profilePayload)
+  }
 
   const renderProfileForm = () => (
     <form onSubmit={handleSubmit} className="space-y-6 p-6">
       <div className="space-y-2">
-        <label className="block font-medium text-sm">Profile Banner</label>
+        <label htmlFor="banner-upload" className="block font-medium text-sm">
+          Profile Banner
+        </label>
         <div className="group relative h-40 overflow-hidden rounded-lg bg-muted">
           <Image
             src={currentBanner}
@@ -461,9 +435,13 @@ export function OnboardingModal({
             >
               <ChevronLeft className="h-5 w-5" />
             </button>
-            <label className="cursor-pointer rounded-lg bg-background/80 p-2 hover:bg-background">
+            <label
+              htmlFor="banner-upload"
+              className="cursor-pointer rounded-lg bg-background/80 p-2 hover:bg-background"
+            >
               <Upload className="h-5 w-5" />
               <input
+                id="banner-upload"
                 type="file"
                 accept="image/*"
                 onChange={handleBannerUpload}
@@ -498,9 +476,13 @@ export function OnboardingModal({
             >
               <ChevronLeft className="h-4 w-4" />
             </button>
-            <label className="cursor-pointer rounded-lg bg-background/80 p-1.5 hover:bg-background">
+            <label
+              htmlFor="profile-image-upload"
+              className="cursor-pointer rounded-lg bg-background/80 p-1.5 hover:bg-background"
+            >
               <Upload className="h-4 w-4" />
               <input
+                id="profile-image-upload"
                 type="file"
                 accept="image/*"
                 onChange={handleProfileImageUpload}
@@ -656,7 +638,7 @@ export function OnboardingModal({
           type="submit"
           className={cn(
             'whitespace-nowrap rounded-lg bg-[#0066FF] px-4 py-2 text-primary-foreground hover:bg-[#0066FF]/90',
-            isSubmitting && 'opacity-60'
+            isSubmitting && 'opacity-60',
           )}
           disabled={isSubmitting}
         >
@@ -664,90 +646,111 @@ export function OnboardingModal({
         </button>
       </div>
     </form>
-  );
+  )
 
   const cycleProfilePicture = (direction: 'next' | 'prev') => {
-    setUploadedProfileImage(null);
+    setUploadedProfileImage(null)
     setProfilePictureIndex((prev) => {
       if (direction === 'next') {
-        return prev >= TOTAL_PROFILE_PICTURES ? 1 : prev + 1;
+        return prev >= TOTAL_PROFILE_PICTURES ? 1 : prev + 1
       }
-      return prev <= 1 ? TOTAL_PROFILE_PICTURES : prev - 1;
-    });
-  };
+      return prev <= 1 ? TOTAL_PROFILE_PICTURES : prev - 1
+    })
+  }
 
   const cycleBanner = (direction: 'next' | 'prev') => {
-    setUploadedBanner(null);
+    setUploadedBanner(null)
     setBannerIndex((prev) => {
       if (direction === 'next') {
-        return prev >= TOTAL_BANNERS ? 1 : prev + 1;
+        return prev >= TOTAL_BANNERS ? 1 : prev + 1
       }
-      return prev <= 1 ? TOTAL_BANNERS : prev - 1;
-    });
-  };
+      return prev <= 1 ? TOTAL_BANNERS : prev - 1
+    })
+  }
 
   const handleProfileImageUpload = (
-    event: React.ChangeEvent<HTMLInputElement>
+    event: React.ChangeEvent<HTMLInputElement>,
   ) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
+    const file = event.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
     reader.onloadend = () => {
-      setUploadedProfileImage(reader.result as string);
-    };
-    reader.readAsDataURL(file);
-  };
+      setUploadedProfileImage(reader.result as string)
+    }
+    reader.readAsDataURL(file)
+  }
 
   const handleBannerUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
+    const file = event.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
     reader.onloadend = () => {
-      setUploadedBanner(reader.result as string);
-    };
-    reader.readAsDataURL(file);
-  };
+      setUploadedBanner(reader.result as string)
+    }
+    reader.readAsDataURL(file)
+  }
 
-  const canClose = !isSubmitting; // Allow closing at any stage when not submitting
-  const canLogout = stage !== 'COMPLETED' && !isSubmitting && onLogout;
+  const canClose = !isSubmitting // Allow closing at any stage when not submitting
+  const canLogout = stage !== 'COMPLETED' && !isSubmitting && onLogout
 
   const handleLogout = async () => {
     if (onLogout) {
-      await onLogout();
+      await onLogout()
     }
-  };
+  }
 
-  const [isVisible, setIsVisible] = useState(false);
+  const [isVisible, setIsVisible] = useState(false)
 
   // Trigger fade-in animation after mount
   useEffect(() => {
     if (isOpen) {
       // Small delay to trigger CSS transition
-      const timer = setTimeout(() => setIsVisible(true), 50);
-      return () => clearTimeout(timer);
+      const timer = setTimeout(() => setIsVisible(true), 50)
+      return () => clearTimeout(timer)
     }
-    setIsVisible(false);
-    return undefined;
-  }, [isOpen]);
+    setIsVisible(false)
+    return undefined
+  }, [isOpen])
 
-  if (!isOpen) return null;
+  if (!isOpen) return null
 
   return (
     <>
-      <div
+      <button
+        type="button"
+        disabled={!canClose}
         className={cn(
           'fixed inset-0 z-[100] rounded-lg bg-black/70 backdrop-blur-sm transition-opacity duration-300',
-          isVisible ? 'opacity-100' : 'opacity-0'
+          isVisible ? 'opacity-100' : 'opacity-0',
+          !canClose && 'cursor-default',
         )}
         onClick={canClose ? onClose : undefined}
+        onKeyDown={
+          canClose
+            ? (e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault()
+                  onClose()
+                }
+              }
+            : undefined
+        }
+        aria-label={canClose ? 'Close modal' : undefined}
       />
       <div className="fixed inset-0 z-[100] flex items-center justify-center overflow-y-auto p-4">
         <div
+          role="dialog"
           className={cn(
             'my-8 w-full max-w-2xl rounded-lg border border-border bg-background shadow-xl transition-all duration-300',
-            isVisible ? 'scale-100 opacity-100' : 'scale-95 opacity-0'
+            isVisible ? 'scale-100 opacity-100' : 'scale-95 opacity-0',
           )}
           onClick={(e) => e.stopPropagation()}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape' && canClose) {
+              e.stopPropagation()
+              onClose()
+            }
+          }}
         >
           <div className="flex items-center justify-between border-border border-b p-6">
             <div className="flex items-center gap-3">
@@ -777,6 +780,7 @@ export function OnboardingModal({
               </div>
             </div>
             <button
+              type="button"
               onClick={canClose ? onClose : undefined}
               className="rounded-lg p-2 hover:bg-muted disabled:opacity-50"
               disabled={!canClose}
@@ -937,6 +941,7 @@ export function OnboardingModal({
           {canLogout && (
             <div className="flex justify-center gap-4 border-border border-t p-4 text-muted-foreground text-xs">
               <button
+                type="button"
                 onClick={handleLogout}
                 className="hover:text-foreground hover:underline"
                 disabled={isSubmitting}
@@ -945,6 +950,7 @@ export function OnboardingModal({
               </button>
               {stage === 'ONCHAIN' && (
                 <button
+                  type="button"
                   onClick={onSkipOnchain}
                   className="hover:text-foreground hover:underline"
                   disabled={isSubmitting}
@@ -957,5 +963,5 @@ export function OnboardingModal({
         </div>
       </div>
     </>
-  );
+  )
 }

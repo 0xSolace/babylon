@@ -4,96 +4,96 @@
  * Types for the client-side auth SDK.
  */
 
-import type { Address, Hex } from 'viem';
+import type { Address, Hex } from 'viem'
 import type {
   AuthActions,
   AuthMethod,
   AuthState,
   DID,
   LinkedAccount,
-} from '../types/index';
+} from '../types/index'
 
 export interface PaymasterConfig {
   /** Treasury contract address */
-  treasuryAddress: Address;
+  treasuryAddress: Address
   /** Paymaster operator private key */
-  operatorPrivateKey: Hex;
+  operatorPrivateKey: Hex
   /** RPC URL */
-  rpcUrl: string;
+  rpcUrl: string
   /** Chain ID */
-  chainId: number;
+  chainId: number
   /** Default gas amount to fund (in wei) */
-  defaultGasAmount?: string;
+  defaultGasAmount?: string
   /** Sponsorship policy overrides */
   policy?: {
-    maxGasPerTx?: bigint;
-    maxGasPerUserPerDay?: bigint;
-    whitelistedContracts?: Address[];
-    blacklistedContracts?: Address[];
-    newUsersOnly?: boolean;
-    minReputation?: number;
-  };
+    maxGasPerTx?: bigint
+    maxGasPerUserPerDay?: bigint
+    whitelistedContracts?: Address[]
+    blacklistedContracts?: Address[]
+    newUsersOnly?: boolean
+    minReputation?: number
+  }
 }
 
 export interface JejuAuthConfig {
   /** MPC network endpoints */
-  mpcEndpoints?: string[];
+  mpcEndpoints?: string[]
   /** Network to use */
-  network: 'mainnet' | 'testnet' | 'localnet';
+  network: 'mainnet' | 'testnet' | 'localnet'
   /** Redirect URI for OAuth */
-  redirectUri?: string;
+  redirectUri?: string
   /** OAuth client IDs */
   oauth?: {
-    twitter?: string;
-    discord?: string;
-  };
+    twitter?: string
+    discord?: string
+  }
   /** Farcaster config */
   farcaster?: {
-    neynarApiKey?: string;
-  };
+    neynarApiKey?: string
+  }
   /** Paymaster configuration for gas sponsorship */
-  paymasterConfig?: PaymasterConfig;
+  paymasterConfig?: PaymasterConfig
   /** RPC URL (shortcut, also in paymasterConfig) */
-  rpcUrl?: string;
+  rpcUrl?: string
   /** Chain ID (shortcut, also in paymasterConfig) */
-  chainId?: number;
+  chainId?: number
 }
 
 export interface JejuAuthState extends AuthState {
   /** Configuration */
-  config: JejuAuthConfig;
+  config: JejuAuthConfig
   /** Error if any */
-  error: string | null;
+  error: string | null
 }
 
 export interface JejuAuthContextValue extends JejuAuthState, AuthActions {
   /** Initiate login with specific method */
-  loginWithEmail: (email: string) => Promise<void>;
-  loginWithWallet: () => Promise<void>;
-  loginWithFarcaster: () => Promise<void>;
-  loginWithTwitter: () => Promise<void>;
-  loginWithDiscord: () => Promise<void>;
+  loginWithEmail: (email: string) => Promise<void>
+  loginWithWallet: () => Promise<void>
+  loginWithFarcaster: () => Promise<void>
+  loginWithTwitter: () => Promise<void>
+  loginWithDiscord: () => Promise<void>
   /** Verify email code */
-  verifyEmailCode: (code: string) => Promise<void>;
+  verifyEmailCode: (code: string) => Promise<void>
   /** Get current session */
-  getSession: () => SessionData | null;
+  getSession: () => SessionData | null
   /** Check if user has gas */
-  hasGas: () => Promise<boolean>;
+  hasGas: () => Promise<boolean>
   /** Request gas from treasury */
-  requestGas: () => Promise<boolean>;
+  requestGas: () => Promise<boolean>
 }
 
 export interface SessionData {
   /** User's DID */
-  userId: DID;
+  userId: DID
   /** Session token (JWT) */
-  token: string;
+  token: string
   /** Token expiration */
-  expiresAt: number;
+  expiresAt: number
   /** Wallet address */
-  walletAddress: Address;
+  walletAddress: Address
   /** Linked accounts */
-  linkedAccounts: LinkedAccount[];
+  linkedAccounts: LinkedAccount[]
 }
 
 export interface LoginState {
@@ -106,11 +106,11 @@ export interface LoginState {
     | 'wallet-connect'
     | 'oauth-redirect'
     | 'farcaster-sign'
-    | 'complete';
+    | 'complete'
   /** Selected method */
-  method: AuthMethod['type'] | null;
+  method: AuthMethod['type'] | null
   /** Email for email flow */
-  email?: string;
+  email?: string
   /** Error message */
-  error?: string;
+  error?: string
 }

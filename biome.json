@@ -1,32 +1,16 @@
 {
-  "$schema": "./node_modules/@biomejs/biome/configuration_schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.3.10/schema.json",
   "vcs": {
     "enabled": true,
     "clientKind": "git",
     "useIgnoreFile": true
   },
   "files": {
-    "ignoreUnknown": false,
     "includes": [
-      "**",
-      "!**/.next",
-      "!**/dist",
-      "!**/.turbo",
-      "!**/node_modules",
-      "!**/out",
-      "!**/build",
-      "!**/.vercel",
-      "!**/public/_pagefind",
-      "!**/*.sol",
-      "!**/python",
-      "!**/venv",
-      "!**/*.md",
-      "!**/*.mdx",
-      "!**/babylon-platform-artchitecture",
-      "!**/genesis.json",
-      "!**/drizzle/migrations",
-      "!**/*.d.ts",
-      "!**/*.d.ts.map"
+      "packages/**/*.ts",
+      "packages/**/*.tsx",
+      "apps/**/*.ts",
+      "apps/**/*.tsx"
     ]
   },
   "formatter": {
@@ -34,107 +18,23 @@
     "indentStyle": "space",
     "indentWidth": 2
   },
-  "assist": {
-    "actions": {
-      "source": {
-        "organizeImports": "on"
-      }
-    }
-  },
   "linter": {
     "enabled": true,
     "rules": {
-      "recommended": false,
+      "recommended": true,
       "correctness": {
         "noUnusedVariables": "error",
-        "noUnusedImports": "error",
-        "useExhaustiveDependencies": "info"
+        "noUnusedImports": "error"
       },
       "style": {
-        "useConst": "error"
-      },
-      "suspicious": {
-        "noExplicitAny": "error"
-      },
-      "nursery": {
-        "useSortedClasses": {
-          "level": "info",
-          "fix": "safe",
-          "options": {
-            "functions": ["clsx", "cva", "cn"]
-          }
-        }
+        "noNonNullAssertion": "error"
       }
     }
   },
   "javascript": {
     "formatter": {
       "quoteStyle": "single",
-      "trailingCommas": "es5",
-      "semicolons": "always"
+      "semicolons": "asNeeded"
     }
-  },
-  "css": {
-    "parser": {
-      "cssModules": true,
-      "allowWrongLineComments": true,
-      "tailwindDirectives": true
-    },
-    "formatter": {
-      "enabled": false
-    },
-    "linter": {
-      "enabled": false
-    }
-  },
-  "overrides": [
-    {
-      "includes": ["**/logger.ts"],
-      "linter": {
-        "rules": {
-          "suspicious": {
-            "noConsole": "off"
-          }
-        }
-      }
-    },
-    {
-      "includes": [
-        "apps/web/src/lib/agents/plugins/**",
-        "apps/web/src/lib/training/**",
-        "apps/web/src/lib/benchmark/**",
-        "apps/web/src/lib/agents/examples/**",
-        "apps/web/src/lib/agents/autonomous/a2a-only/**",
-        "apps/web/src/a2a/**"
-      ],
-      "linter": {
-        "enabled": false
-      }
-    },
-    {
-      "includes": ["docs/scripts/**", "docs/app/**/*.jsx"],
-      "linter": {
-        "rules": {
-          "suspicious": {
-            "noImplicitAnyLet": "off",
-            "noAssignInExpressions": "off",
-            "noShadowRestrictedNames": "off"
-          },
-          "correctness": {
-            "useHookAtTopLevel": "off"
-          }
-        }
-      }
-    },
-    {
-      "includes": ["**/integration/*.test.ts"],
-      "linter": {
-        "rules": {
-          "suspicious": {
-            "noExplicitAny": "off"
-          }
-        }
-      }
-    }
-  ]
+  }
 }

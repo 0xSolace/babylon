@@ -2,35 +2,30 @@
  * Decentralized Database Module
  *
  * Provides integration with Jeju's CovenantSQL for decentralized data persistence.
- * Uses the real @jeju/db package.
  */
 
-// Re-export CQL client from Jeju
+// DB utilities from @jejunetwork/db
 export {
+  buildOrderByClause,
+  buildWhereClause,
   CovenantSQLClient,
   CQLClient,
   getCQL,
+  type OrderByInput,
   resetCQL,
-} from '@jeju/db';
-export type {
-  CQLAdapter,
-  CQLTransactionAdapter,
-  SelectOptions as CQLAdapterSelectOptions,
-} from './cql-adapter';
-// Adapter layer for Drizzle-like API
+  toQueryParam,
+  type WhereClauseResult,
+  type WhereInput,
+} from '@jejunetwork/db'
+// Query builder layer
 export {
-  getCQLAdapter,
-  initializeCQLAdapter,
-  resetCQLAdapter,
-} from './cql-adapter';
-// Babylon convenience wrappers
-export {
-  getCQLClient,
-  initializeCQL,
-  isCQLAvailable,
-  resetCQLClient,
-  tryInitializeCQL,
-} from './cql-client';
+  createQueryTransaction,
+  DeleteBuilder,
+  InsertBuilder,
+  QueryTransaction,
+  SelectBuilder,
+  UpdateBuilder,
+} from '../cql-client'
 // Schema definitions
 export {
   BABYLON_SCHEMAS,
@@ -38,12 +33,11 @@ export {
   createCQLTables,
   generateAllDDL,
   getSchemaByName,
-} from './cql-schema';
+} from './cql-schema'
 // Decentralized Database (primary data layer)
 export {
-  DecentralizedDB,
+  DB,
   type DeleteOptions,
-  type DrizzleTransactionContext,
   getDB,
   type InsertOptions,
   initializeDB,
@@ -53,13 +47,14 @@ export {
   type TransactionContext,
   type UpdateOptions,
   type WhereCondition,
-} from './db';
-// Drizzle compatibility layer
+} from './db'
+
+// Typed table references (from drizzle-compat)
 export {
-  createDrizzleTransaction,
-  DrizzleTransaction,
-  type TransactionExecutor,
-} from './drizzle-compat';
+  type InferTableRow,
+  TABLE_ROW_TYPE,
+  type TypedTableRef,
+} from './drizzle-compat'
 
 // Types
 export type {
@@ -72,8 +67,6 @@ export type {
   CQLConnectionPool,
   CQLHealthStatus,
   CQLIndex,
-  CQLInsertResult,
-  CQLQueryResult,
   CQLTableSchema,
   CQLTransaction,
   CreateRentalRequest,
@@ -90,5 +83,4 @@ export type {
   RentalPlan,
   RevokeRequest,
   SQLPrimitive,
-  SQLValue,
-} from './types';
+} from './types'

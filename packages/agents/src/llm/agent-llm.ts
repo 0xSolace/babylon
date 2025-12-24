@@ -12,28 +12,29 @@
  * @packageDocumentation
  */
 
-import type { IAgentRuntime } from '@elizaos/core';
-import { getTrajectoryContext } from '../plugins/plugin-trajectory-logger/src/action-interceptor';
-import type { TrajectoryLoggerService } from '../plugins/plugin-trajectory-logger/src/TrajectoryLoggerService';
-import { logger } from '../shared/logger';
+import type { IAgentRuntime } from '@elizaos/core'
+import { getTrajectoryContext } from '../plugins/plugin-trajectory-logger/src/action-interceptor'
+import type { TrajectoryLoggerService } from '../plugins/plugin-trajectory-logger/src/TrajectoryLoggerService'
+import { logger } from '../shared/logger'
 import {
   callJejuInference,
   getJejuComputeStatus,
   isJejuComputeAvailable,
-} from './jeju-provider';
+} from './jeju-provider'
 
 /** Parameters for agent LLM inference calls */
 export interface AgentLLMParams {
-  prompt: string;
-  system?: string;
-  archetype?: string;
-  temperature?: number;
-  maxTokens?: number;
-  trajectoryLogger?: TrajectoryLoggerService;
-  trajectoryId?: string;
-  purpose?: 'action' | 'reasoning' | 'evaluation' | 'response' | 'other';
-  actionType?: string;
-  runtime?: IAgentRuntime;
+  prompt: string
+  system?: string | null
+  archetype?: string
+  temperature?: number
+  maxTokens?: number
+  modelSize?: 'small' | 'medium' | 'large'
+  trajectoryLogger?: TrajectoryLoggerService
+  trajectoryId?: string
+  purpose?: 'action' | 'reasoning' | 'evaluation' | 'response' | 'other'
+  actionType?: string
+  runtime?: IAgentRuntime
 }
 
 /**
@@ -44,21 +45,21 @@ async function logToTrajectory(
   model: string,
   response: string,
   latencyMs: number,
-  tokenCounts?: { promptTokens?: number; completionTokens?: number }
+  tokenCounts?: { promptTokens?: number; completionTokens?: number },
 ): Promise<void> {
-  let trajectoryLogger = params.trajectoryLogger;
-  let trajectoryId = params.trajectoryId;
+  let trajectoryLogger = params.trajectoryLogger
+  let trajectoryId = params.trajectoryId
 
   if (!trajectoryLogger && !trajectoryId && params.runtime) {
-    const context = getTrajectoryContext(params.runtime);
+    const context = getTrajectoryContext(params.runtime)
     if (context) {
-      trajectoryLogger = context.logger;
-      trajectoryId = context.trajectoryId;
+      trajectoryLogger = context.logger
+      trajectoryId = context.trajectoryId
     }
   }
 
   if (trajectoryLogger && trajectoryId) {
-    const stepId = trajectoryLogger.getCurrentStepId(trajectoryId);
+    const stepId = trajectoryLogger.getCurrentStepId(trajectoryId)
     if (stepId) {
       trajectoryLogger.logLLMCall(stepId, {
         model,
@@ -72,7 +73,7 @@ async function logToTrajectory(
         latencyMs,
         promptTokens: tokenCounts?.promptTokens,
         completionTokens: tokenCounts?.completionTokens,
-      });
+      })
     }
   }
 }
@@ -88,8 +89,8 @@ export async function callAgentLLM(params: AgentLLMParams): Promise<string> {
     throw new Error(
       '[AgentLLM] Jeju Compute not configured. ' +
         'Set JEJU_NETWORK (mainnet/testnet/localnet) or JEJU_COMPUTE_API_URL. ' +
-        'NO FALLBACK - Decentralized compute is required.'
-    );
+        'NO FALLBACK - Decentralized compute is required.',
+    )
   }
 
   logger.debug(
@@ -99,10 +100,10 @@ export async function callAgentLLM(params: AgentLLMParams): Promise<string> {
       archetype: params.archetype,
       purpose: params.purpose,
     },
-    'AgentLLM'
-  );
+    'AgentLLM',
+  )
 
-  const startTime = Date.now();
+  const startTime = Date.now()
 
   const response = await callJejuInference({
     prompt: params.prompt,
@@ -115,25 +116,25 @@ export async function callAgentLLM(params: AgentLLMParams): Promise<string> {
     purpose: params.purpose,
     actionType: params.actionType,
     runtime: params.runtime,
-  });
+  })
 
-  const latencyMs = Date.now() - startTime;
-  await logToTrajectory(params, 'jeju', response, latencyMs);
+  const latencyMs = Date.now() - startTime
+  await logToTrajectory(params, 'jeju', response, latencyMs)
 
-  return response;
+  return response
 }
 
 /**
  * Checks the Jeju Compute provider status and availability
  */
 export async function getAgentLLMStatus(): Promise<{
-  provider: 'jeju';
-  configured: boolean;
-  available: boolean;
-  details: Record<string, string | boolean | number>;
-  error?: string;
+  provider: 'jeju'
+  configured: boolean
+  available: boolean
+  details: Record<string, string | boolean | number>
+  error?: string
 }> {
-  const status = await getJejuComputeStatus();
+  const status = await getJejuComputeStatus()
 
   return {
     provider: 'jeju',
@@ -145,46 +146,7 @@ export async function getAgentLLMStatus(): Promise<{
       modelsAvailable: status.modelsAvailable,
     },
     error: status.error,
-  };
+  }
 }
 
-// Legacy type export for compatibility
-export type AgentLLMProvider = 'jeju';
-
-/**
- * Direct Jeju inference call
- *
- * Drop-in replacement for the deprecated callGroqDirect.
- * Routes through Jeju Compute with full trajectory logging support.
- *
- * @deprecated Use callAgentLLM instead for new code
- */
-export async function callJejuDirect(params: {
-  prompt: string;
-  system?: string;
-  modelSize?: 'small' | 'large';
-  temperature?: number;
-  maxTokens?: number;
-  trajectoryLogger?: TrajectoryLoggerService;
-  trajectoryId?: string;
-  purpose?: 'action' | 'reasoning' | 'evaluation' | 'response' | 'other';
-  actionType?: string;
-  runtime?: IAgentRuntime;
-}): Promise<string> {
-  return callAgentLLM({
-    prompt: params.prompt,
-    system: params.system,
-    temperature: params.temperature ?? 0.7,
-    maxTokens: params.maxTokens ?? 2048,
-    trajectoryLogger: params.trajectoryLogger,
-    trajectoryId: params.trajectoryId,
-    purpose: params.purpose,
-    actionType: params.actionType,
-    runtime: params.runtime,
-  });
-}
-
-/**
- * @deprecated Use callJejuDirect instead - callGroqDirect is removed
- */
-export const callGroqDirect = callJejuDirect;
+export type AgentLLMProvider = 'jeju'

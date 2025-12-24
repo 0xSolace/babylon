@@ -5,35 +5,35 @@
  * to provide comprehensive reputation scores with tag-filtered support.
  */
 
-import { type AgentReputation, type RegistryClient } from '@babylon/a2a';
-import { logger } from '../shared/logger';
-import { getAgent0Client } from './Agent0Client';
-import { SubgraphClient } from './SubgraphClient';
+import type { AgentReputation, RegistryClient } from '@babylon/a2a'
+import { logger } from '../shared/logger'
+import { getAgent0Client } from './Agent0Client'
+import { SubgraphClient } from './SubgraphClient'
 import type {
   Agent0ReputationSummary,
   AggregatedReputation,
   IReputationBridge,
-} from './types';
+} from './types'
 
 export class ReputationBridge implements IReputationBridge {
-  private erc8004Registry?: RegistryClient;
-  private subgraphClient: SubgraphClient;
+  private erc8004Registry?: RegistryClient
+  private subgraphClient: SubgraphClient
 
   constructor(erc8004Registry?: RegistryClient) {
-    this.erc8004Registry = erc8004Registry;
-    this.subgraphClient = new SubgraphClient();
+    this.erc8004Registry = erc8004Registry
+    this.subgraphClient = new SubgraphClient()
   }
 
   /**
    * Get aggregated reputation from both ERC-8004 and Agent0
    */
   async getAggregatedReputation(
-    tokenId: number
+    tokenId: number,
   ): Promise<AggregatedReputation> {
     const [local, agent0] = await Promise.all([
       this.getLocalReputation(tokenId),
       this.getAgent0Reputation(tokenId),
-    ]);
+    ])
 
     return {
       totalBets: local.totalBets + agent0.totalBets,
@@ -47,7 +47,7 @@ export class ReputationBridge implements IReputationBridge {
         local: local.trustScore,
         agent0: agent0.trustScore,
       },
-    };
+    }
   }
 
   /**
@@ -57,33 +57,33 @@ export class ReputationBridge implements IReputationBridge {
   async getAgent0ReputationSummary(
     agentId: string,
     tag1?: string,
-    tag2?: string
+    tag2?: string,
   ): Promise<Agent0ReputationSummary> {
     if (process.env.AGENT0_ENABLED !== 'true') {
-      return { count: 0, averageScore: 0 };
+      return { count: 0, averageScore: 0 }
     }
 
-    const agent0Client = getAgent0Client();
+    const agent0Client = getAgent0Client()
 
     if (agent0Client.isAvailable()) {
-      return await agent0Client.getReputationSummary(agentId, tag1, tag2);
+      return await agent0Client.getReputationSummary(agentId, tag1, tag2)
     }
 
     // Fallback to subgraph if Agent0Client is not available
-    const tokenId = this.extractTokenId(agentId);
+    const tokenId = this.extractTokenId(agentId)
     if (tokenId === null) {
-      return { count: 0, averageScore: 0 };
+      return { count: 0, averageScore: 0 }
     }
 
-    const agent = await this.subgraphClient.getAgent(tokenId);
+    const agent = await this.subgraphClient.getAgent(tokenId)
     if (!agent || !agent.reputation) {
-      return { count: 0, averageScore: 0 };
+      return { count: 0, averageScore: 0 }
     }
 
     return {
       count: agent.reputation.totalBets || 0,
       averageScore: (agent.reputation.trustScore || 0) / 100,
-    };
+    }
   }
 
   /**
@@ -93,20 +93,20 @@ export class ReputationBridge implements IReputationBridge {
   private extractTokenId(agentId: string): number | null {
     if (agentId.includes(':')) {
       // Format: "chainId:tokenId" (e.g., "84532:1234")
-      const parts = agentId.split(':');
-      const tokenId = Number.parseInt(parts[1] || '', 10);
-      return Number.isNaN(tokenId) ? null : tokenId;
+      const parts = agentId.split(':')
+      const tokenId = Number.parseInt(parts[1] || '', 10)
+      return Number.isNaN(tokenId) ? null : tokenId
     }
 
     if (agentId.startsWith('agent0-')) {
       // Format: "agent0-1234"
-      const tokenId = Number.parseInt(agentId.replace('agent0-', ''), 10);
-      return Number.isNaN(tokenId) ? null : tokenId;
+      const tokenId = Number.parseInt(agentId.replace('agent0-', ''), 10)
+      return Number.isNaN(tokenId) ? null : tokenId
     }
 
     // Format: plain token ID "1234"
-    const tokenId = Number.parseInt(agentId, 10);
-    return Number.isNaN(tokenId) ? null : tokenId;
+    const tokenId = Number.parseInt(agentId, 10)
+    return Number.isNaN(tokenId) ? null : tokenId
   }
 
   /**
@@ -114,10 +114,10 @@ export class ReputationBridge implements IReputationBridge {
    */
   private async getLocalReputation(tokenId: number): Promise<AgentReputation> {
     if (!this.erc8004Registry) {
-      return this.getDefaultReputation();
+      return this.getDefaultReputation()
     }
 
-    return await this.erc8004Registry.getAgentReputation(tokenId);
+    return await this.erc8004Registry.getAgentReputation(tokenId)
   }
 
   /**
@@ -126,12 +126,12 @@ export class ReputationBridge implements IReputationBridge {
   private async getAgent0Reputation(tokenId: number): Promise<AgentReputation> {
     // Try Agent0Client first if available
     if (process.env.AGENT0_ENABLED === 'true') {
-      const agent0Client = getAgent0Client();
+      const agent0Client = getAgent0Client()
 
       if (agent0Client.isAvailable()) {
-        const chainId = agent0Client.getChainId();
-        const agentId = `${chainId}:${tokenId}`;
-        const summary = await agent0Client.getReputationSummary(agentId);
+        const chainId = agent0Client.getChainId()
+        const agentId = `${chainId}:${tokenId}`
+        const summary = await agent0Client.getReputationSummary(agentId)
 
         return {
           totalBets: summary.count,
@@ -141,18 +141,18 @@ export class ReputationBridge implements IReputationBridge {
           totalVolume: '0',
           profitLoss: 0,
           isBanned: false,
-        };
+        }
       }
     }
 
     // Fallback to subgraph client
-    const agent = await this.subgraphClient.getAgent(tokenId);
+    const agent = await this.subgraphClient.getAgent(tokenId)
 
     if (!agent || !agent.reputation) {
-      return this.getDefaultReputation();
+      return this.getDefaultReputation()
     }
 
-    const rep = agent.reputation;
+    const rep = agent.reputation
 
     return {
       totalBets: rep.totalBets || 0,
@@ -162,7 +162,7 @@ export class ReputationBridge implements IReputationBridge {
       totalVolume: '0',
       profitLoss: 0,
       isBanned: false,
-    };
+    }
   }
 
   /**
@@ -171,28 +171,28 @@ export class ReputationBridge implements IReputationBridge {
    */
   private calculateWeightedAccuracy(
     local: AgentReputation,
-    agent0: AgentReputation
+    agent0: AgentReputation,
   ): number {
-    const localWeight = 0.6;
-    const agent0Weight = 0.4;
+    const localWeight = 0.6
+    const agent0Weight = 0.4
 
     // If one source has no data, use the other
     if (local.totalBets === 0 && agent0.totalBets === 0) {
-      return 0;
+      return 0
     }
 
     if (local.totalBets === 0) {
-      return agent0.accuracyScore;
+      return agent0.accuracyScore
     }
 
     if (agent0.totalBets === 0) {
-      return local.accuracyScore;
+      return local.accuracyScore
     }
 
     // Weighted average
     return (
       local.accuracyScore * localWeight + agent0.accuracyScore * agent0Weight
-    );
+    )
   }
 
   /**
@@ -201,32 +201,32 @@ export class ReputationBridge implements IReputationBridge {
    */
   private calculateTrustScore(
     local: AgentReputation,
-    agent0: AgentReputation
+    agent0: AgentReputation,
   ): number {
     // If one source has no data, use the other
     if (local.totalBets === 0 && agent0.totalBets === 0) {
-      return 0;
+      return 0
     }
 
     if (local.totalBets === 0) {
-      return agent0.trustScore;
+      return agent0.trustScore
     }
 
     if (agent0.totalBets === 0) {
-      return local.trustScore;
+      return local.trustScore
     }
 
     // Take maximum (more conservative - require trust from both sources)
-    return Math.max(local.trustScore, agent0.trustScore);
+    return Math.max(local.trustScore, agent0.trustScore)
   }
 
   /**
    * Sum two volume strings (wei amounts)
    */
   private sumVolumes(volume1: string, volume2: string): string {
-    const v1 = BigInt(volume1 || '0');
-    const v2 = BigInt(volume2 || '0');
-    return (v1 + v2).toString();
+    const v1 = BigInt(volume1 || '0')
+    const v2 = BigInt(volume2 || '0')
+    return (v1 + v2).toString()
   }
 
   /**
@@ -241,7 +241,7 @@ export class ReputationBridge implements IReputationBridge {
       totalVolume: '0',
       profitLoss: 0,
       isBanned: false,
-    };
+    }
   }
 
   /**
@@ -252,44 +252,44 @@ export class ReputationBridge implements IReputationBridge {
     tokenId: number,
     agent0Client: {
       submitFeedback: (params: {
-        targetAgentId: number;
-        rating: number;
-        comment: string;
-      }) => Promise<unknown>;
-    }
+        targetAgentId: number
+        rating: number
+        comment: string
+      }) => Promise<unknown>
+    },
   ): Promise<void> {
     logger.info(
       `Syncing reputation for token ${tokenId} to Agent0 network`,
       undefined,
-      'ReputationBridge'
-    );
+      'ReputationBridge',
+    )
 
-    const localRep = await this.getLocalReputation(tokenId);
+    const localRep = await this.getLocalReputation(tokenId)
 
     if (localRep.totalBets === 0) {
       logger.debug(
         `No local activity for token ${tokenId}, skipping sync`,
         undefined,
-        'ReputationBridge'
-      );
-      return;
+        'ReputationBridge',
+      )
+      return
     }
 
-    const rating = Math.round((localRep.accuracyScore - 0.5) * 10);
-    const clampedRating = Math.max(-5, Math.min(5, rating));
+    const rating = Math.round((localRep.accuracyScore - 0.5) * 10)
+    const clampedRating = Math.max(-5, Math.min(5, rating))
 
-    const comment = `Local reputation sync: ${localRep.totalBets} bets, ${localRep.winningBets} wins, ${(localRep.accuracyScore * 100).toFixed(1)}% accuracy`;
+    const comment = `Local reputation sync: ${localRep.totalBets} bets, ${localRep.winningBets} wins, ${(localRep.accuracyScore * 100).toFixed(1)}% accuracy`
 
     await agent0Client.submitFeedback({
       targetAgentId: tokenId,
       rating: clampedRating,
       comment,
-    });
+    })
 
     logger.info(
       `✅ Synced reputation for token ${tokenId} to Agent0 network`,
       undefined,
-      'ReputationBridge'
-    );
+      'ReputationBridge',
+    )
   }
 }

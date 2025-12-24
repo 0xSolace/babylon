@@ -1,26 +1,26 @@
-import { cn } from '@babylon/shared';
-import { ArrowDownRight, ArrowUpRight, RefreshCcw, Share2 } from 'lucide-react';
+import { cn } from '@babylon/shared'
+import { ArrowDownRight, ArrowUpRight, RefreshCcw, Share2 } from 'lucide-react'
 
 /**
  * Market category type for category PnL card.
  */
-type MarketCategory = 'perps' | 'predictions';
+type MarketCategory = 'perps' | 'predictions'
 
 /**
  * Category PnL data structure for category PnL card.
  */
 interface CategoryPnLData {
-  unrealizedPnL: number;
-  positionCount: number;
-  totalValue?: number;
+  unrealizedPnL: number
+  positionCount: number
+  totalValue?: number
   categorySpecific?: {
     // For perps
-    openInterest?: number;
+    openInterest?: number
     // For predictions
-    totalShares?: number;
+    totalShares?: number
     // For pools
-    totalInvested?: number;
-  };
+    totalInvested?: number
+  }
 }
 
 /**
@@ -55,13 +55,13 @@ interface CategoryPnLData {
  * ```
  */
 interface CategoryPnLCardProps {
-  category: MarketCategory;
-  data: CategoryPnLData | null;
-  loading: boolean;
-  error: string | null;
-  onShare: () => void;
-  onRefresh: () => void;
-  lastUpdated: number | null;
+  category: MarketCategory
+  data: CategoryPnLData | null
+  loading: boolean
+  error: string | null
+  onShare: () => void
+  onRefresh: () => void
+  lastUpdated: number | null
 }
 
 /**
@@ -71,7 +71,7 @@ const formatter = new Intl.NumberFormat('en-US', {
   style: 'currency',
   currency: 'USD',
   maximumFractionDigits: 2,
-});
+})
 
 /**
  * Format currency value safely.
@@ -83,8 +83,8 @@ const formatter = new Intl.NumberFormat('en-US', {
  */
 function formatCurrency(value: number | null | undefined) {
   const safeValue =
-    typeof value === 'number' && Number.isFinite(value) ? value : 0;
-  return formatter.format(safeValue);
+    typeof value === 'number' && Number.isFinite(value) ? value : 0
+  return formatter.format(safeValue)
 }
 
 /**
@@ -96,16 +96,16 @@ function formatCurrency(value: number | null | undefined) {
  * @returns Formatted relative time string
  */
 function formatRelativeTime(timestamp: number | null) {
-  if (!timestamp) return '';
-  const diffMs = Date.now() - timestamp;
-  if (diffMs < 0) return '';
-  const diffMinutes = Math.round(diffMs / (1000 * 60));
-  if (diffMinutes <= 1) return 'Updated just now';
-  if (diffMinutes < 60) return `Updated ${diffMinutes}m ago`;
-  const diffHours = Math.round(diffMinutes / 60);
-  if (diffHours < 24) return `Updated ${diffHours}h ago`;
-  const diffDays = Math.round(diffHours / 24);
-  return `Updated ${diffDays}d ago`;
+  if (!timestamp) return ''
+  const diffMs = Date.now() - timestamp
+  if (diffMs < 0) return ''
+  const diffMinutes = Math.round(diffMs / (1000 * 60))
+  if (diffMinutes <= 1) return 'Updated just now'
+  if (diffMinutes < 60) return `Updated ${diffMinutes}m ago`
+  const diffHours = Math.round(diffMinutes / 60)
+  if (diffHours < 24) return `Updated ${diffHours}h ago`
+  const diffDays = Math.round(diffHours / 24)
+  return `Updated ${diffDays}d ago`
 }
 
 /**
@@ -127,15 +127,15 @@ const categoryConfig = {
     color: 'from-orange-500/10 via-amber-500/10 to-orange-500/5',
     border: 'border-orange-500/20',
   },
-};
+}
 
 /**
  * Content component for rendering PnL data.
  * Extracted to avoid unnecessary null checks on data.
  */
 function CategoryPnLContent({ data }: { data: CategoryPnLData }) {
-  const pnl = data.unrealizedPnL;
-  const pnlIsPositive = pnl >= 0;
+  const pnl = data.unrealizedPnL
+  const pnlIsPositive = pnl >= 0
 
   return (
     <>
@@ -145,7 +145,7 @@ function CategoryPnLContent({ data }: { data: CategoryPnLData }) {
             'inline-flex items-center gap-3 rounded-full px-3 py-2 font-semibold text-sm',
             pnlIsPositive
               ? 'bg-emerald-500/20 text-emerald-400'
-              : 'bg-red-500/20 text-red-400'
+              : 'bg-red-500/20 text-red-400',
           )}
         >
           {pnlIsPositive ? (
@@ -212,7 +212,7 @@ function CategoryPnLContent({ data }: { data: CategoryPnLData }) {
         )}
       </dl>
     </>
-  );
+  )
 }
 
 export function CategoryPnLCard({
@@ -224,14 +224,14 @@ export function CategoryPnLCard({
   onRefresh,
   lastUpdated,
 }: CategoryPnLCardProps) {
-  const config = categoryConfig[category];
+  const config = categoryConfig[category]
 
   return (
     <section
       className={cn(
         'rounded-2xl border bg-gradient-to-br px-4 py-3 shadow-sm sm:px-5 sm:py-4',
         config.border,
-        config.color
+        config.color,
       )}
     >
       <div className="flex items-center justify-between gap-3">
@@ -284,5 +284,5 @@ export function CategoryPnLCard({
         data && <CategoryPnLContent data={data} />
       )}
     </section>
-  );
+  )
 }

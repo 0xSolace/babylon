@@ -9,28 +9,13 @@ import type {
   Provider,
   ProviderResult,
   State,
-} from '@elizaos/core';
-import { logger } from '../../../shared/logger';
-import type {
-  A2ABalanceResponse,
-  A2APositionsResponse,
-} from '../../../types/a2a-responses';
-import type { BabylonRuntime } from '../types';
-
-// Type guards for A2A responses
-function isA2ABalanceResponse(data: object): data is A2ABalanceResponse {
-  return (
-    'balance' in data &&
-    typeof (data as A2ABalanceResponse).balance === 'number'
-  );
-}
-
-function isA2APositionsResponse(data: object): data is A2APositionsResponse {
-  return (
-    'marketPositions' in data &&
-    Array.isArray((data as A2APositionsResponse).marketPositions)
-  );
-}
+} from '@elizaos/core'
+import { logger } from '../../../shared/logger'
+import {
+  isA2ABalanceResponse,
+  isA2APositionsResponse,
+} from '../../../types/a2a-responses'
+import { toBabylonRuntime } from '../types'
 
 /**
  * Provider: Portfolio State
@@ -44,19 +29,19 @@ export const portfolioProvider: Provider = {
   get: async (
     runtime: IAgentRuntime,
     _message: Memory,
-    _state: State
+    _state: State,
   ): Promise<ProviderResult> => {
-    const babylonRuntime = runtime as BabylonRuntime;
-    const agentUserId = runtime.agentId;
+    const babylonRuntime = toBabylonRuntime(runtime)
+    const agentUserId = runtime.agentId
 
     // A2A is required
     if (!babylonRuntime.a2aClient?.isConnected()) {
       logger.error(
         'A2A client not connected - portfolio provider requires A2A',
         undefined,
-        runtime.agentId
-      );
-      return { text: 'A2A client not connected. Cannot fetch portfolio data.' };
+        runtime.agentId,
+      )
+      return { text: 'A2A client not connected. Cannot fetch portfolio data.' }
     }
 
     const [balanceData, positionsData] = await Promise.all([
@@ -64,7 +49,7 @@ export const portfolioProvider: Provider = {
       babylonRuntime.a2aClient.sendRequest('a2a.getPositions', {
         userId: agentUserId,
       }),
-    ]);
+    ])
 
     // Validate response structures using type guards
     if (
@@ -72,17 +57,17 @@ export const portfolioProvider: Provider = {
       typeof balanceData !== 'object' ||
       !isA2ABalanceResponse(balanceData)
     ) {
-      throw new Error('Invalid balance data format from A2A client');
+      throw new Error('Invalid balance data format from A2A client')
     }
     if (
       !positionsData ||
       typeof positionsData !== 'object' ||
       !isA2APositionsResponse(positionsData)
     ) {
-      throw new Error('Invalid positions data format from A2A client');
+      throw new Error('Invalid positions data format from A2A client')
     }
-    const balance = balanceData;
-    const positions = positionsData;
+    const balance = balanceData
+    const positions = positionsData
 
     return {
       text: `Your Portfolio:
@@ -97,12 +82,12 @@ Open Perp Positions (${positions.perpPositions?.length || 0}):
 ${
   positions.perpPositions
     ?.map((p) => {
-      const amount = p.amount || p.size;
+      const amount = p.amount || p.size
       return `- ${p.ticker}: ${p.side.toUpperCase()} $${amount} @ ${p.entryPrice} (${p.leverage}x)
-  Current: $${p.currentPrice}`;
+  Current: $${p.currentPrice}`
     })
     .join('\n') || 'None'
 }`,
-    };
+    }
   },
-};
+}

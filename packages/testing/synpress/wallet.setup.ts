@@ -9,8 +9,8 @@
  * @see https://docs.synpress.io/docs/playwright/metamask/setup
  */
 
-import { defineWalletSetup } from '@synthetixio/synpress-cache';
-import { MetaMask } from '@synthetixio/synpress-metamask/playwright';
+import { defineWalletSetup } from '@synthetixio/synpress-cache'
+import { MetaMask } from '@synthetixio/synpress-metamask/playwright'
 
 /**
  * Default Anvil test wallet configuration
@@ -19,7 +19,11 @@ import { MetaMask } from '@synthetixio/synpress-metamask/playwright';
 export const ANVIL_WALLET = {
   seedPhrase: 'test test test test test test test test test test test junk',
   password: 'Tester@1234',
-} as const;
+} as const
+
+// Centralized port configuration for RPC endpoints
+const ANVIL_RPC_PORT = process.env.ANVIL_RPC_PORT ?? '6545'
+const JEJU_RPC_PORT = process.env.JEJU_RPC_PORT ?? '6546'
 
 /**
  * Network configurations
@@ -28,14 +32,14 @@ export const NETWORKS = {
   // Standalone mode: Anvil local network
   anvil: {
     name: 'Anvil Local',
-    rpcUrl: 'http://localhost:8545',
+    rpcUrl: `http://localhost:${ANVIL_RPC_PORT}`,
     chainId: 31337,
     symbol: 'ETH',
   },
   // Jeju Localnet
   jejuLocalnet: {
     name: 'Jeju Localnet',
-    rpcUrl: 'http://127.0.0.1:9545',
+    rpcUrl: `http://127.0.0.1:${JEJU_RPC_PORT}`,
     chainId: 1337,
     symbol: 'ETH',
   },
@@ -53,32 +57,32 @@ export const NETWORKS = {
     chainId: 420691,
     symbol: 'ETH',
   },
-} as const;
+} as const
 
 // Legacy export for backward compatibility
-export const ANVIL_NETWORK = NETWORKS.anvil;
+export const ANVIL_NETWORK = NETWORKS.anvil
 
 /**
  * Determine which network to use based on environment
  */
 function getTargetNetwork() {
   const jejuNetwork =
-    process.env.JEJU_NETWORK || process.env.NEXT_PUBLIC_JEJU_NETWORK;
+    process.env.JEJU_NETWORK || process.env.PUBLIC_JEJU_NETWORK
 
-  if (jejuNetwork === 'localnet') return NETWORKS.jejuLocalnet;
-  if (jejuNetwork === 'testnet') return NETWORKS.jejuTestnet;
-  if (jejuNetwork === 'mainnet') return NETWORKS.jejuMainnet;
+  if (jejuNetwork === 'localnet') return NETWORKS.jejuLocalnet
+  if (jejuNetwork === 'testnet') return NETWORKS.jejuTestnet
+  if (jejuNetwork === 'mainnet') return NETWORKS.jejuMainnet
 
   // Check if chain ID is specified
   const chainId = Number(
-    process.env.CHAIN_ID || process.env.NEXT_PUBLIC_CHAIN_ID || 0
-  );
-  if (chainId === 1337) return NETWORKS.jejuLocalnet;
-  if (chainId === 420690) return NETWORKS.jejuTestnet;
-  if (chainId === 420691) return NETWORKS.jejuMainnet;
+    process.env.CHAIN_ID || process.env.PUBLIC_CHAIN_ID || 0,
+  )
+  if (chainId === 1337) return NETWORKS.jejuLocalnet
+  if (chainId === 420690) return NETWORKS.jejuTestnet
+  if (chainId === 420691) return NETWORKS.jejuMainnet
 
   // Default to Anvil for standalone mode
-  return NETWORKS.anvil;
+  return NETWORKS.anvil
 }
 
 /**
@@ -90,13 +94,13 @@ function getTargetNetwork() {
 export default defineWalletSetup(
   ANVIL_WALLET.password,
   async (context, walletPage) => {
-    const metamask = new MetaMask(context, walletPage, ANVIL_WALLET.password);
+    const metamask = new MetaMask(context, walletPage, ANVIL_WALLET.password)
 
     // Import the test seed phrase
-    await metamask.importWallet(ANVIL_WALLET.seedPhrase);
+    await metamask.importWallet(ANVIL_WALLET.seedPhrase)
 
     // Add the target network for testing
-    const targetNetwork = getTargetNetwork();
-    await metamask.addNetwork(targetNetwork);
-  }
-);
+    const targetNetwork = getTargetNetwork()
+    await metamask.addNetwork(targetNetwork)
+  },
+)

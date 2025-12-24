@@ -29,59 +29,70 @@ import {
   expect,
   setDefaultTimeout,
   test,
-} from 'bun:test';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { logger } from '@babylon/shared';
+} from 'bun:test'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
+import {
+  BabylonLLMClient,
+  characterMappingService,
+  checkLookaheadStatus,
+  NPCPersonaGenerator,
+  StaticDataRegistry,
+} from '@babylon/engine'
+import {
+  generateNPCPost,
+  loadSharedPostContext,
+} from '@babylon/engine/services/post-generation-helpers'
+import { logger } from '@babylon/shared'
 
 // Set timeout to 5 minutes for LLM-based generation
-setDefaultTimeout(300000);
+setDefaultTimeout(300000)
 
 // Output directory setup
-const OUTPUT_DIR = join(process.cwd(), '.output');
-const TIMESTAMP = new Date().toISOString().replace(/[:.]/g, '-');
+const OUTPUT_DIR = join(process.cwd(), '.output')
+const TIMESTAMP = new Date().toISOString().replace(/[:.]/g, '-')
 
 // Load environment variables
 const loadEnvFile = (filePath: string) => {
-  if (!existsSync(filePath)) return;
-  const envContent = readFileSync(filePath, 'utf-8');
+  if (!existsSync(filePath)) return
+  const envContent = readFileSync(filePath, 'utf-8')
   for (const line of envContent.split('\n')) {
-    const trimmed = line.trim();
+    const trimmed = line.trim()
     if (trimmed && !trimmed.startsWith('#')) {
-      const [key, ...valueParts] = trimmed.split('=');
+      const [key, ...valueParts] = trimmed.split('=')
       if (key && valueParts.length > 0) {
-        const value = valueParts.join('=').replace(/^["']|["']$/g, '');
+        const value = valueParts.join('=').replace(/^["']|["']$/g, '')
         if (!process.env[key]) {
-          process.env[key] = value;
+          process.env[key] = value
         }
       }
     }
   }
-};
+}
 
-loadEnvFile('.env');
-loadEnvFile('.env.test');
-loadEnvFile('.env.local');
+loadEnvFile('.env')
+loadEnvFile('.env.test')
+loadEnvFile('.env.local')
 
 const hasLLMKey = !!(
   (process.env.GROQ_API_KEY?.trim() ?? '') !== '' ||
   (process.env.ANTHROPIC_API_KEY?.trim() ?? '') !== '' ||
   (process.env.OPENAI_API_KEY?.trim() ?? '') !== ''
-);
+)
 
 // Helper functions
 function ensureOutputDir() {
   if (!existsSync(OUTPUT_DIR)) {
-    mkdirSync(OUTPUT_DIR, { recursive: true });
+    mkdirSync(OUTPUT_DIR, { recursive: true })
   }
 }
 
 function writeOutput(filename: string, data: unknown) {
-  ensureOutputDir();
-  const filepath = join(OUTPUT_DIR, `${filename}-${TIMESTAMP}.json`);
-  writeFileSync(filepath, JSON.stringify(data, null, 2));
-  logger.info(`Output written to ${filepath}`, undefined, 'ProductionTest');
-  return filepath;
+  ensureOutputDir()
+  const filepath = join(OUTPUT_DIR, `${filename}-${TIMESTAMP}.json`)
+  writeFileSync(filepath, JSON.stringify(data, null, 2))
+  logger.info(`Output written to ${filepath}`, undefined, 'ProductionTest')
+  return filepath
 }
 
 // Swap detection patterns - things that should NOT appear in generated content
@@ -114,58 +125,56 @@ const SWAP_PATTERNS = {
     /TODO:/i,
     /PLACEHOLDER/i,
   ],
-};
+}
 
 function detectSwaps(content: string): string[] {
-  const matches: string[] = [];
+  const matches: string[] = []
   for (const [category, patterns] of Object.entries(SWAP_PATTERNS)) {
     for (const pattern of patterns) {
-      const match = content.match(pattern);
+      const match = content.match(pattern)
       if (match) {
-        matches.push(`${category}: ${match[0]}`);
+        matches.push(`${category}: ${match[0]}`)
       }
     }
   }
-  return matches;
+  return matches
 }
 
 describe('Production Engine Tests', () => {
   beforeAll(() => {
-    ensureOutputDir();
+    ensureOutputDir()
     logger.info(
       `Starting production engine tests. Output dir: ${OUTPUT_DIR}`,
       undefined,
-      'ProductionTest'
-    );
-    logger.info(`LLM Key available: ${hasLLMKey}`, undefined, 'ProductionTest');
-  });
+      'ProductionTest',
+    )
+    logger.info(`LLM Key available: ${hasLLMKey}`, undefined, 'ProductionTest')
+  })
 
   describe('Static Data Registry', () => {
     test('loads actors and organizations', async () => {
-      const { StaticDataRegistry } = await import('@babylon/engine');
+      const actors = StaticDataRegistry.getAllActors()
+      const organizations = StaticDataRegistry.getAllOrganizations()
 
-      const actors = StaticDataRegistry.getAllActors();
-      const organizations = StaticDataRegistry.getAllOrganizations();
-
-      expect(actors.length).toBeGreaterThan(0);
-      expect(organizations.length).toBeGreaterThan(0);
+      expect(actors.length).toBeGreaterThan(0)
+      expect(organizations.length).toBeGreaterThan(0)
 
       // Validate actor structure
       for (const actor of actors.slice(0, 10)) {
-        expect(actor.id).toBeDefined();
-        expect(actor.name).toBeDefined();
-        expect(actor.name.length).toBeGreaterThan(0);
+        expect(actor.id).toBeDefined()
+        expect(actor.name).toBeDefined()
+        expect(actor.name.length).toBeGreaterThan(0)
 
         // Check for parody names (should contain AI somewhere)
-        const hasAI = /ai/i.test(actor.name) || /ai/i.test(actor.id);
-        expect(hasAI).toBe(true);
+        const hasAI = /ai/i.test(actor.name) || /ai/i.test(actor.id)
+        expect(hasAI).toBe(true)
       }
 
       // Validate org structure
       for (const org of organizations.slice(0, 10)) {
-        expect(org.id).toBeDefined();
-        expect(org.name).toBeDefined();
-        expect(org.type).toBeDefined();
+        expect(org.id).toBeDefined()
+        expect(org.name).toBeDefined()
+        expect(org.type).toBeDefined()
       }
 
       writeOutput('production-static-data', {
@@ -183,72 +192,64 @@ describe('Production Engine Tests', () => {
           type: o.type,
           ticker: o.ticker,
         })),
-      });
-    });
-  });
+      })
+    })
+  })
 
   describe('Character Mapping Service', () => {
     test('maps real names to parody names', async () => {
-      const { characterMappingService } = await import('@babylon/engine');
-
       // Test real-to-parody mapping
       const testCases = [
         { real: 'Elon Musk', expected: /ailon|musk/i },
         { real: 'Tesla', expected: /teslai/i },
         { real: 'OpenAI', expected: /openagi/i },
-      ];
+      ]
 
       const results: Array<{
-        real: string;
-        mapped: string;
-        correct: boolean;
-        replacementCount: number;
-      }> = [];
+        real: string
+        mapped: string
+        correct: boolean
+        replacementCount: number
+      }> = []
 
       for (const { real, expected } of testCases) {
-        const result = await characterMappingService.transformText(real);
-        const mapped = result.transformedText;
-        const correct = expected.test(mapped) || mapped !== real;
+        const result = await characterMappingService.transformText(real)
+        const mapped = result.transformedText
+        const correct = expected.test(mapped) || mapped !== real
         results.push({
           real,
           mapped,
           correct,
           replacementCount: result.replacementCount,
-        });
+        })
       }
 
-      writeOutput('production-character-mapping', { results });
+      writeOutput('production-character-mapping', { results })
 
       // At least some mappings should work
-      const correctCount = results.filter((r) => r.correct).length;
-      expect(correctCount).toBeGreaterThan(0);
-    });
+      const correctCount = results.filter((r) => r.correct).length
+      expect(correctCount).toBeGreaterThan(0)
+    })
 
     test('detects real names that need replacement', async () => {
-      const { characterMappingService } = await import('@babylon/engine');
-
       const testText =
-        'Elon Musk announced that Tesla and OpenAI are partnering.';
-      const detected = await characterMappingService.detectRealNames(testText);
+        'Elon Musk announced that Tesla and OpenAI are partnering.'
+      const detected = await characterMappingService.detectRealNames(testText)
 
-      expect(detected.length).toBeGreaterThan(0);
+      expect(detected.length).toBeGreaterThan(0)
 
       writeOutput('production-real-name-detection', {
         input: testText,
         detectedRealNames: detected,
-      });
-    });
-  });
+      })
+    })
+  })
 
   describe('NPC Persona Generator', () => {
     test('generates consistent personas', async () => {
-      const { NPCPersonaGenerator, StaticDataRegistry } = await import(
-        '@babylon/engine'
-      );
-
-      const generator = new NPCPersonaGenerator();
-      const actors = StaticDataRegistry.getAllActors().slice(0, 20);
-      const organizations = StaticDataRegistry.getAllOrganizations();
+      const generator = new NPCPersonaGenerator()
+      const actors = StaticDataRegistry.getAllActors().slice(0, 20)
+      const organizations = StaticDataRegistry.getAllOrganizations()
 
       const personas = generator.assignPersonas(
         actors.map((a) => ({
@@ -259,7 +260,7 @@ describe('Production Engine Tests', () => {
           personality: a.personality,
           role: 'supporting' as const,
           affiliations: a.affiliations,
-          tier: a.tier ?? undefined,
+          tier: a.tier,
         })),
         organizations.map((o) => ({
           id: o.id,
@@ -268,30 +269,30 @@ describe('Production Engine Tests', () => {
           description: o.description,
           type: o.type,
           canBeInvolved: o.canBeInvolved,
-        }))
-      );
+        })),
+      )
 
-      expect(personas.size).toBeGreaterThan(0);
+      expect(personas.size).toBeGreaterThan(0)
 
       const personaData: Array<{
-        actorId: string;
-        reliability: number;
-        insiderOrgs: string[];
-        willingToLie: boolean;
-      }> = [];
+        actorId: string
+        reliability: number
+        insiderOrgs: string[]
+        willingToLie: boolean
+      }> = []
 
       for (const [actorId, persona] of personas) {
-        expect(persona.reliability).toBeGreaterThanOrEqual(0);
-        expect(persona.reliability).toBeLessThanOrEqual(1);
-        expect(Array.isArray(persona.insiderOrgs)).toBe(true);
-        expect(typeof persona.willingToLie).toBe('boolean');
+        expect(persona.reliability).toBeGreaterThanOrEqual(0)
+        expect(persona.reliability).toBeLessThanOrEqual(1)
+        expect(Array.isArray(persona.insiderOrgs)).toBe(true)
+        expect(typeof persona.willingToLie).toBe('boolean')
 
         personaData.push({
           actorId,
           reliability: persona.reliability,
           insiderOrgs: persona.insiderOrgs,
           willingToLie: persona.willingToLie,
-        });
+        })
       }
 
       writeOutput('production-npc-personas', {
@@ -305,47 +306,36 @@ describe('Production Engine Tests', () => {
             .length,
           liarCount: personaData.filter((p) => p.willingToLie).length,
         },
-      });
-    });
-  });
+      })
+    })
+  })
 
   describe('Lookahead Generation Service', () => {
     test.skipIf(!hasLLMKey)('checks lookahead status', async () => {
-      const { checkLookaheadStatus } = await import('@babylon/engine');
+      const status = await checkLookaheadStatus()
 
-      const status = await checkLookaheadStatus();
+      expect(typeof status.minutesAhead).toBe('number')
+      expect(typeof status.needsGeneration).toBe('boolean')
 
-      expect(typeof status.minutesAhead).toBe('number');
-      expect(typeof status.needsGeneration).toBe('boolean');
-
-      writeOutput('production-lookahead-status', status);
-    });
-  });
+      writeOutput('production-lookahead-status', status)
+    })
+  })
 
   describe('Post Generation', () => {
     test.skipIf(!hasLLMKey)(
       'generates NPC post with proper parody names',
       async () => {
-        const { BabylonLLMClient, StaticDataRegistry } = await import(
-          '@babylon/engine'
-        );
-
-        // Import the post generation helper
-        const { generateNPCPost, loadSharedPostContext } = await import(
-          '@babylon/engine/services/post-generation-helpers'
-        );
-
-        const llmClient = BabylonLLMClient.forGameTick();
-        const actors = StaticDataRegistry.getAllActors();
-        const actor = actors[0];
+        const llmClient = BabylonLLMClient.forGameTick()
+        const actors = StaticDataRegistry.getAllActors()
+        const actor = actors[0]
 
         if (!actor) {
           logger.warn(
             'No actors available for test',
             undefined,
-            'ProductionTest'
-          );
-          return;
+            'ProductionTest',
+          )
+          return
         }
 
         // Create a mock question
@@ -354,13 +344,13 @@ describe('Production Engine Tests', () => {
           text: 'Will AIlon Musk announce a new TeslAI product this week?',
           questionNumber: 1,
           outcome: null,
-        };
+        }
 
-        const worldFacts = 'The market is volatile. Tech stocks are down.';
-        const timestamp = new Date();
+        const worldFacts = 'The market is volatile. Tech stocks are down.'
+        const timestamp = new Date()
 
         // Load shared context
-        const sharedContext = await loadSharedPostContext(timestamp);
+        const sharedContext = await loadSharedPostContext(timestamp)
 
         const success = await generateNPCPost(
           llmClient,
@@ -378,47 +368,43 @@ describe('Production Engine Tests', () => {
           worldFacts,
           timestamp,
           sharedContext,
-          1 // day number
-        );
+          1, // day number
+        )
 
         writeOutput('production-npc-post-generation', {
           actor: actor.name,
           question: mockQuestion.text,
           success,
           timestamp: timestamp.toISOString(),
-        });
+        })
 
         // The test passes if we got this far without errors
-        expect(true).toBe(true);
-      }
-    );
-  });
+        expect(true).toBe(true)
+      },
+    )
+  })
 
   describe('Content Swap Detection', () => {
     test('detects real names in content', () => {
       const testContent =
-        'Elon Musk announced that Tesla will launch a new product.';
-      const swaps = detectSwaps(testContent);
+        'Elon Musk announced that Tesla will launch a new product.'
+      const swaps = detectSwaps(testContent)
 
-      expect(swaps.length).toBeGreaterThan(0);
-      expect(swaps.some((s) => s.includes('Elon Musk'))).toBe(true);
-      expect(swaps.some((s) => s.includes('Tesla'))).toBe(true);
-    });
+      expect(swaps.length).toBeGreaterThan(0)
+      expect(swaps.some((s) => s.includes('Elon Musk'))).toBe(true)
+      expect(swaps.some((s) => s.includes('Tesla'))).toBe(true)
+    })
 
     test('accepts parody names', () => {
       const testContent =
-        'AIlon Musk announced that TeslAI will launch a new product.';
-      const swaps = detectSwaps(testContent);
+        'AIlon Musk announced that TeslAI will launch a new product.'
+      const swaps = detectSwaps(testContent)
 
-      expect(swaps.length).toBe(0);
-    });
-  });
+      expect(swaps.length).toBe(0)
+    })
+  })
 
   afterAll(() => {
-    logger.info(
-      'Production engine tests complete',
-      undefined,
-      'ProductionTest'
-    );
-  });
-});
+    logger.info('Production engine tests complete', undefined, 'ProductionTest')
+  })
+})

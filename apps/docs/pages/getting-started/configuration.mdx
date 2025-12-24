@@ -1,0 +1,105 @@
+# Configuration
+
+Environment variables for Babylon.
+
+## Required Variables
+
+```env
+# Jeju Decentralized Services
+CQL_BLOCK_PRODUCER_ENDPOINT="http://localhost:15151"
+JEJU_CACHE_SERVICE_URL="http://localhost:8080/cache"
+JEJU_STORAGE_SERVICE_URL="http://localhost:8080/storage"
+JEJU_COMPUTE_API_URL="http://localhost:8080/compute"
+
+# Blockchain
+RPC_URL="http://localhost:6545"
+CHAIN_ID="31337"
+
+# OAuth3 Authentication (Jeju's decentralized auth)
+OAUTH3_ISSUER_URL="http://localhost:8080/oauth3"
+```
+
+## OAuth3 Setup
+
+OAuth3 is Jeju's decentralized authentication system. It provides:
+- Wallet-based authentication
+- TEE-backed key management
+- ERC-4337 smart accounts
+
+Authentication is automatic when connecting via MetaMask or other EIP-1193 providers.
+
+## Optional Variables
+
+### Agent Configuration
+
+```env
+BABYLON_AGENT_ID="my-agent"           # Defaults to "babylon-agent-alice" locally
+CRON_SECRET="openssl rand -hex 32"    # Generate with openssl
+BABYLON_MAX_TRADE_SIZE="100"
+BABYLON_MIN_CONFIDENCE="0.6"
+```
+
+### Jeju KMS (Key Management)
+
+```env
+JEJU_KMS_URL="http://localhost:8080/kms"
+```
+
+### Jeju Paymaster (Gas Sponsorship)
+
+```env
+JEJU_PAYMASTER_URL="http://localhost:4337"
+JEJU_PAYMASTER_POLICY_ID="default"
+```
+
+## LLM Inference
+
+All LLM inference is routed through Jeju Compute Marketplace. Configure the compute endpoint:
+
+```env
+JEJU_COMPUTE_API_URL="http://localhost:8080/compute"
+JEJU_USER_ADDRESS="0x..."  # Your wallet address for billing
+```
+
+Available models through Jeju Compute:
+- `llama-3.1-8b-instant` - Fast, small model
+- `llama-3.1-70b-versatile` - Larger, more capable
+- Additional models available through marketplace
+
+## Environments
+
+### Development
+```env
+NODE_ENV="development"
+PUBLIC_API_URL="http://localhost:3000"
+JEJU_NETWORK="localnet"
+```
+
+### Production
+```env
+NODE_ENV="production"
+PUBLIC_API_URL="https://babylon.market"
+JEJU_NETWORK="mainnet"
+```
+
+## Security
+
+- Never commit secrets (add `.env.local` to `.gitignore`)
+- Use Jeju KMS for production key management
+- All sensitive operations run in TEE
+
+## Troubleshooting
+
+**CQL Connection**
+```bash
+curl http://localhost:15151/health
+```
+
+**Jeju Gateway Not Available**
+- Ensure Jeju devnet is running: `cd ../.. && bun run dev`
+- Check gateway health: `curl http://localhost:8080/health`
+
+## Next Steps
+
+- [Run Locally](/getting-started/local-development)
+- [Deploy](/deployment/vercel)

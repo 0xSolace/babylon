@@ -8,11 +8,10 @@
  */
 
 // tiktoken is a peer dependency - import types only
-// eslint-disable-next-line @typescript-eslint/consistent-type-imports
-import type { Tiktoken } from 'tiktoken';
+import type { Tiktoken } from 'tiktoken'
 
 // Lazy-load encoding to avoid startup overhead
-let encoding: Tiktoken | null = null;
+let encoding: Tiktoken | null = null
 
 /**
  * Get the tiktoken encoding (lazy-loaded)
@@ -25,11 +24,11 @@ let encoding: Tiktoken | null = null;
  */
 async function getEncoding(): Promise<Tiktoken> {
   if (!encoding) {
-    const tiktoken = await import('tiktoken');
+    const tiktoken = await import('tiktoken')
     // Use gpt-4 as fallback since gpt-5.1 is not a standard tiktoken model
-    encoding = tiktoken.encoding_for_model('gpt-4');
+    encoding = tiktoken.encoding_for_model('gpt-4')
   }
-  return encoding;
+  return encoding
 }
 
 /**
@@ -48,9 +47,9 @@ async function getEncoding(): Promise<Tiktoken> {
  * ```
  */
 export async function countTokens(text: string): Promise<number> {
-  const enc = await getEncoding();
-  const tokens = enc.encode(text);
-  return tokens.length;
+  const enc = await getEncoding()
+  const tokens = enc.encode(text)
+  return tokens.length
 }
 
 /**
@@ -71,7 +70,7 @@ export async function countTokens(text: string): Promise<number> {
  */
 export function countTokensSync(text: string): number {
   // Approximation: 1 token per 4 characters (conservative)
-  return Math.ceil(text.length / 4);
+  return Math.ceil(text.length / 4)
 }
 
 /**
@@ -97,49 +96,49 @@ export async function truncateToTokenLimit(
   text: string,
   maxTokens: number,
   options: {
-    ellipsis?: boolean;
-    preserveEnd?: boolean;
-  } = {}
+    ellipsis?: boolean
+    preserveEnd?: boolean
+  } = {},
 ): Promise<{ text: string; tokens: number }> {
-  const { ellipsis = true, preserveEnd = false } = options;
+  const { ellipsis = true, preserveEnd = false } = options
 
-  const currentTokens = await countTokens(text);
+  const currentTokens = await countTokens(text)
 
   if (currentTokens <= maxTokens) {
-    return { text, tokens: currentTokens };
+    return { text, tokens: currentTokens }
   }
 
   // Binary search to find the right length
-  const ellipsisText = ellipsis ? '...' : '';
-  const ellipsisTokens = ellipsis ? await countTokens(ellipsisText) : 0;
-  const targetTokens = maxTokens - ellipsisTokens;
+  const ellipsisText = ellipsis ? '...' : ''
+  const ellipsisTokens = ellipsis ? await countTokens(ellipsisText) : 0
+  const targetTokens = maxTokens - ellipsisTokens
 
-  let low = 0;
-  let high = text.length;
-  let bestLength = 0;
+  let low = 0
+  let high = text.length
+  let bestLength = 0
 
   while (low <= high) {
-    const mid = Math.floor((low + high) / 2);
+    const mid = Math.floor((low + high) / 2)
     const slice = preserveEnd
       ? text.slice(text.length - mid)
-      : text.slice(0, mid);
-    const tokens = await countTokens(slice);
+      : text.slice(0, mid)
+    const tokens = await countTokens(slice)
 
     if (tokens <= targetTokens) {
-      bestLength = mid;
-      low = mid + 1;
+      bestLength = mid
+      low = mid + 1
     } else {
-      high = mid - 1;
+      high = mid - 1
     }
   }
 
   const truncated = preserveEnd
     ? ellipsisText + text.slice(text.length - bestLength)
-    : text.slice(0, bestLength) + ellipsisText;
+    : text.slice(0, bestLength) + ellipsisText
 
-  const finalTokens = await countTokens(truncated);
+  const finalTokens = await countTokens(truncated)
 
-  return { text: truncated, tokens: finalTokens };
+  return { text: truncated, tokens: finalTokens }
 }
 
 /**
@@ -159,32 +158,32 @@ export function truncateToTokenLimitSync(
   text: string,
   maxTokens: number,
   options: {
-    ellipsis?: boolean;
-    preserveEnd?: boolean;
-  } = {}
+    ellipsis?: boolean
+    preserveEnd?: boolean
+  } = {},
 ): { text: string; tokens: number } {
-  const { ellipsis = true, preserveEnd = false } = options;
+  const { ellipsis = true, preserveEnd = false } = options
 
-  const currentTokens = countTokensSync(text);
+  const currentTokens = countTokensSync(text)
 
   if (currentTokens <= maxTokens) {
-    return { text, tokens: currentTokens };
+    return { text, tokens: currentTokens }
   }
 
-  const ellipsisText = ellipsis ? '...' : '';
-  const ellipsisTokens = ellipsis ? countTokensSync(ellipsisText) : 0;
-  const targetTokens = maxTokens - ellipsisTokens;
+  const ellipsisText = ellipsis ? '...' : ''
+  const ellipsisTokens = ellipsis ? countTokensSync(ellipsisText) : 0
+  const targetTokens = maxTokens - ellipsisTokens
 
   // Approximate character length based on token limit
-  const targetChars = Math.floor(targetTokens * 4); // 4 chars per token
+  const targetChars = Math.floor(targetTokens * 4) // 4 chars per token
 
   const truncated = preserveEnd
     ? ellipsisText + text.slice(text.length - targetChars)
-    : text.slice(0, targetChars) + ellipsisText;
+    : text.slice(0, targetChars) + ellipsisText
 
-  const finalTokens = countTokensSync(truncated);
+  const finalTokens = countTokensSync(truncated)
 
-  return { text: truncated, tokens: finalTokens };
+  return { text: truncated, tokens: finalTokens }
 }
 
 /**
@@ -202,7 +201,7 @@ export const MODEL_TOKEN_LIMITS: Record<string, number> = {
   'gpt-3.5-turbo': 16385,
   'gpt-3.5-turbo-16k': 16385,
 
-  // Current Strategy Models - INPUT CONTEXT LIMITS (output is separate!)
+  // Current Strategy Models - INPUT CONTEXT LIMITS (output is separate)
   'qwen/qwen3-32b': 131072, // 131k INPUT, 40,960 OUTPUT (separate) - Groq
   // Unsloth Qwen3 models - all have 128K context (critical requirement)
   'unsloth/Qwen3-4B-128K': 131072, // 4B params, 128K context (8GB VRAM min) - DEFAULT
@@ -214,7 +213,7 @@ export const MODEL_TOKEN_LIMITS: Record<string, number> = {
 
   // Groq Models - INPUT CONTEXT (per https://console.groq.com/docs/models)
   // Production Models
-  'llama-3.1-8b-instant': 131072, // 131k INPUT, 131k OUTPUT (unique - same!)
+  'llama-3.1-8b-instant': 131072, // 131k INPUT, 131k OUTPUT (unique - same)
   'llama-3.3-70b-versatile': 131072, // 131k INPUT, 32,768 OUTPUT
   'llama-3.1-70b-versatile': 131072, // 131k INPUT, 32,768 OUTPUT
   'meta-llama/llama-guard-4-12b': 131072, // 131k INPUT, 1,024 OUTPUT
@@ -237,7 +236,7 @@ export const MODEL_TOKEN_LIMITS: Record<string, number> = {
   'claude-haiku-4-5-20251001': 200000,
   'claude-opus-4-1': 200000,
   'claude-opus-4-1-20250805': 200000,
-};
+}
 
 /**
  * Get maximum token limit for a model
@@ -255,7 +254,7 @@ export const MODEL_TOKEN_LIMITS: Record<string, number> = {
  * ```
  */
 export function getModelTokenLimit(model: string): number {
-  return MODEL_TOKEN_LIMITS[model] || 8192; // Conservative default
+  return MODEL_TOKEN_LIMITS[model] || 8192 // Conservative default
 }
 
 /**
@@ -279,13 +278,13 @@ export function getModelTokenLimit(model: string): number {
 export function getSafeContextLimit(
   model: string,
   _outputTokens = 8000, // Kept for API compatibility, but input/output are separate
-  safetyMargin = 0.02 // Reduced from 10% to 2% - input/output are separate on modern models
+  safetyMargin = 0.02, // Reduced from 10% to 2% - input/output are separate on modern models
 ): number {
-  const inputLimit = getModelTokenLimit(model);
+  const inputLimit = getModelTokenLimit(model)
   // Apply minimal safety margin to input context (most models have separate input/output limits)
-  const safeLimit = Math.floor(inputLimit * (1 - safetyMargin));
+  const safeLimit = Math.floor(inputLimit * (1 - safetyMargin))
 
-  return Math.max(1000, safeLimit); // Minimum 1000 tokens
+  return Math.max(1000, safeLimit) // Minimum 1000 tokens
 }
 
 /**
@@ -311,37 +310,37 @@ export function getSafeContextLimit(
  */
 export function budgetTokens(
   totalTokens: number,
-  sections: Array<{ name: string; priority: number; minTokens?: number }>
+  sections: Array<{ name: string; priority: number; minTokens?: number }>,
 ): Record<string, number> {
-  const budget: Record<string, number> = {};
+  const budget: Record<string, number> = {}
 
   // First, allocate minimum tokens to each section
-  let remaining = totalTokens;
-  const minAllocations: Array<{ name: string; min: number }> = [];
+  let remaining = totalTokens
+  const minAllocations: Array<{ name: string; min: number }> = []
 
   for (const section of sections) {
-    const min = section.minTokens || 0;
-    minAllocations.push({ name: section.name, min });
-    remaining -= min;
-    budget[section.name] = min;
+    const min = section.minTokens || 0
+    minAllocations.push({ name: section.name, min })
+    remaining -= min
+    budget[section.name] = min
   }
 
   // If we're already over budget, scale down proportionally
   if (remaining < 0) {
-    const scale = totalTokens / (totalTokens - remaining);
+    const scale = totalTokens / (totalTokens - remaining)
     for (const section of sections) {
-      budget[section.name] = Math.floor((section.minTokens || 0) * scale);
+      budget[section.name] = Math.floor((section.minTokens || 0) * scale)
     }
-    return budget;
+    return budget
   }
 
   // Distribute remaining tokens by priority
-  const totalPriority = sections.reduce((sum, s) => sum + s.priority, 0);
+  const totalPriority = sections.reduce((sum, s) => sum + s.priority, 0)
 
   for (const section of sections) {
-    const share = (section.priority / totalPriority) * remaining;
-    budget[section.name] = (budget[section.name] || 0) + Math.floor(share);
+    const share = (section.priority / totalPriority) * remaining
+    budget[section.name] = (budget[section.name] || 0) + Math.floor(share)
   }
 
-  return budget;
+  return budget
 }

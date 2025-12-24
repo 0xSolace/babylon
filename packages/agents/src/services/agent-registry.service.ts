@@ -8,62 +8,70 @@
  * @packageDocumentation
  */
 
-import { verifyApiKey } from '@babylon/api';
-import type { JsonValue, SQL } from '@babylon/db';
+import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto'
+import { verifyApiKey } from '@babylon/api'
+import type {
+  AgentCapability,
+  AgentRegistry,
+  ExternalAgentConnection,
+  JsonValue,
+  SQLCondition,
+  User,
+} from '@babylon/db'
 import {
-  type AgentRegistry,
   agentCapabilities,
   agentRegistries,
-  and,
   db,
-  desc,
-  type ExternalAgentConnection,
   eq,
   externalAgentConnections,
   gte,
   ilike,
   inArray,
   or,
-  type User,
   users,
-} from '@babylon/db';
-import { type StaticActor, StaticDataRegistry } from '@babylon/engine';
-import { logger } from '@babylon/shared';
-import { createCipheriv, createDecipheriv, randomBytes } from 'crypto';
+} from '@babylon/db'
+import { type StaticActor, StaticDataRegistry } from '@babylon/engine'
+import {
+  type AgentCapabilities,
+  hasStringProperty,
+  isObject,
+  logger,
+  toNull,
+} from '@babylon/shared'
 import type {
-  AgentCapabilities,
   AgentDiscoveryFilter,
   AgentRegistration,
   ExternalAgentConnectionParams,
-  TrustLevel,
-} from '../types/agent-registry';
-import { AgentStatus, AgentType } from '../types/agent-registry';
+} from '../types/agent-registry'
+import { AgentStatus, AgentType, TrustLevel } from '../types/agent-registry'
 
 /**
  * Gets encryption key from environment or dev fallback
  * @internal
  */
 const getEncryptionKey = () => {
-  if (process.env.CRON_SECRET) return process.env.CRON_SECRET;
+  if (process.env.CRON_SECRET) return process.env.CRON_SECRET
   if (process.env.NODE_ENV === 'production') {
-    throw new Error('CRON_SECRET must be set in production');
+    throw new Error('CRON_SECRET must be set in production')
   }
-  return 'dev-key-change-in-production-32-chars!!';
-};
+  return 'dev-key-change-in-production-32-chars!!'
+}
 
 /** Encryption algorithm for API key storage */
-const ALGORITHM = 'aes-256-cbc';
+const ALGORITHM = 'aes-256-cbc'
 
 /**
  * Registry entry with loaded relations
+ * Uses Omit to override the capabilities field from AgentRegistry (which is string[])
+ * with the full AgentCapability object from the join
  * @internal
  */
-type RegistryWithRelations = AgentRegistry & {
-  capabilities: typeof agentCapabilities.$inferSelect | null;
-  User?: User | null;
-  Actor?: StaticActor | null;
-  externalConnection?: ExternalAgentConnection | null;
-};
+type RegistryWithRelations = Omit<AgentRegistry, 'capabilities'> & {
+  capabilities: AgentCapability | null
+  User?: User | null
+  Actor?: StaticActor | null
+  externalConnection?: ExternalAgentConnection | null
+}
 
 /**
  * Agent Registry Service
@@ -87,23 +95,23 @@ export class AgentRegistryService {
    * @throws Error if user not found or already registered
    */
   async registerUserAgent(params: {
-    userId: string;
-    name: string;
-    systemPrompt: string;
-    capabilities: AgentCapabilities;
-    trustLevel?: TrustLevel;
+    userId: string
+    name: string
+    systemPrompt: string
+    capabilities: AgentCapabilities
+    trustLevel?: TrustLevel
   }): Promise<AgentRegistration> {
-    const { userId, name, systemPrompt, capabilities, trustLevel = 0 } = params;
+    const { userId, name, systemPrompt, capabilities, trustLevel = 0 } = params
 
     // Verify user exists
     const [user] = await db
       .select()
       .from(users)
       .where(eq(users.id, userId))
-      .limit(1);
+      .limit(1)
 
     if (!user) {
-      throw new Error(`User not found: ${userId}`);
+      throw new Error(`User not found: ${userId}`)
     }
 
     // Check if already registered
@@ -111,16 +119,16 @@ export class AgentRegistryService {
       .select()
       .from(agentRegistries)
       .where(eq(agentRegistries.userId, userId))
-      .limit(1);
+      .limit(1)
 
     if (existing) {
       throw new Error(
-        `User ${userId} already registered as agent ${existing.agentId}`
-      );
+        `User ${userId} already registered as agent ${existing.agentId}`,
+      )
     }
 
-    const registryId = `agent-user-${userId}`;
-    const capabilityId = `cap-${userId}`;
+    const registryId = `agent-user-${userId}`
+    const capabilityId = `cap-${userId}`
 
     // Create registry entry
     await db.insert(agentRegistries).values({
@@ -136,7 +144,7 @@ export class AgentRegistryService {
       discoveryAuthRequired: false,
       discoveryAuthMethods: [],
       updatedAt: new Date(),
-    });
+    })
 
     // Create capabilities
     await db.insert(agentCapabilities).values({
@@ -159,15 +167,15 @@ export class AgentRegistryService {
       a2aEndpoint: capabilities.a2aEndpoint,
       mcpEndpoint: capabilities.mcpEndpoint,
       updatedAt: new Date(),
-    });
+    })
 
     // Fetch complete registry with relations
-    const registry = await this.getRegistryWithRelations(userId);
+    const registry = await this.getRegistryWithRelations(userId)
     if (!registry) {
-      throw new Error('Failed to create agent registry');
+      throw new Error('Failed to create agent registry')
     }
 
-    return this.mapToRegistration(registry);
+    return this.mapToRegistration(registry)
   }
 
   /**
@@ -184,17 +192,17 @@ export class AgentRegistryService {
    * @throws {Error} If actor not found or already registered
    */
   async registerNpcAgent(params: {
-    actorId: string;
-    systemPrompt: string;
-    capabilities: AgentCapabilities;
+    actorId: string
+    systemPrompt: string
+    capabilities: AgentCapabilities
   }): Promise<AgentRegistration> {
-    const { actorId, systemPrompt, capabilities } = params;
+    const { actorId, systemPrompt, capabilities } = params
 
     // Verify actor exists in static registry
-    const actor = StaticDataRegistry.getActor(actorId);
+    const actor = StaticDataRegistry.getActor(actorId)
 
     if (!actor) {
-      throw new Error(`Actor not found: ${actorId}`);
+      throw new Error(`Actor not found: ${actorId}`)
     }
 
     // Check if already registered
@@ -202,16 +210,16 @@ export class AgentRegistryService {
       .select()
       .from(agentRegistries)
       .where(eq(agentRegistries.actorId, actorId))
-      .limit(1);
+      .limit(1)
 
     if (existing) {
       throw new Error(
-        `Actor ${actorId} already registered as agent ${existing.agentId}`
-      );
+        `Actor ${actorId} already registered as agent ${existing.agentId}`,
+      )
     }
 
-    const registryId = `agent-npc-${actorId}`;
-    const capabilityId = `cap-${actorId}`;
+    const registryId = `agent-npc-${actorId}`
+    const capabilityId = `cap-${actorId}`
 
     // Create registry entry with SYSTEM trust level for NPCs
     await db.insert(agentRegistries).values({
@@ -226,7 +234,7 @@ export class AgentRegistryService {
       discoveryAuthRequired: false,
       discoveryAuthMethods: [],
       updatedAt: new Date(),
-    });
+    })
 
     // Create capabilities
     await db.insert(agentCapabilities).values({
@@ -247,15 +255,15 @@ export class AgentRegistryService {
       a2aEndpoint: capabilities.a2aEndpoint,
       mcpEndpoint: capabilities.mcpEndpoint,
       updatedAt: new Date(),
-    });
+    })
 
     // Fetch complete registry with relations
-    const registry = await this.getRegistryWithRelations(actorId);
+    const registry = await this.getRegistryWithRelations(actorId)
     if (!registry) {
-      throw new Error('Failed to create agent registry');
+      throw new Error('Failed to create agent registry')
     }
 
-    return this.mapToRegistration(registry);
+    return this.mapToRegistration(registry)
   }
 
   /**
@@ -270,7 +278,7 @@ export class AgentRegistryService {
    * @throws {Error} If external agent already registered
    */
   async registerExternalAgent(
-    params: ExternalAgentConnectionParams
+    params: ExternalAgentConnectionParams,
   ): Promise<AgentRegistration> {
     const {
       externalId,
@@ -281,22 +289,22 @@ export class AgentRegistryService {
       capabilities,
       authentication,
       agentCard,
-    } = params;
+    } = params
 
     // Check if already registered
     const [existing] = await db
       .select()
       .from(externalAgentConnections)
       .where(eq(externalAgentConnections.externalId, externalId))
-      .limit(1);
+      .limit(1)
 
     if (existing) {
-      throw new Error(`External agent already registered: ${externalId}`);
+      throw new Error(`External agent already registered: ${externalId}`)
     }
 
-    const registryId = `agent-ext-${externalId}`;
-    const capabilityId = `cap-${externalId}`;
-    const connectionId = `ext-conn-${externalId}`;
+    const registryId = `agent-ext-${externalId}`
+    const capabilityId = `cap-${externalId}`
+    const connectionId = `ext-conn-${externalId}`
 
     // Create registry entry with UNTRUSTED trust level by default
     await db.insert(agentRegistries).values({
@@ -317,7 +325,7 @@ export class AgentRegistryService {
       discoveryRateLimit: agentCard?.limits?.rateLimit,
       discoveryCostPerAction: agentCard?.limits?.costPerAction,
       updatedAt: new Date(),
-    });
+    })
 
     // Create capabilities
     await db.insert(agentCapabilities).values({
@@ -338,7 +346,7 @@ export class AgentRegistryService {
       a2aEndpoint: capabilities.a2aEndpoint,
       mcpEndpoint: capabilities.mcpEndpoint,
       updatedAt: new Date(),
-    });
+    })
 
     // Create external connection
     await db.insert(externalAgentConnections).values({
@@ -357,15 +365,15 @@ export class AgentRegistryService {
         ? (JSON.parse(JSON.stringify(agentCard)) as JsonValue)
         : null,
       updatedAt: new Date(),
-    });
+    })
 
     // Fetch complete registry with relations
-    const registry = await this.getRegistryWithRelations(externalId);
+    const registry = await this.getRegistryWithRelations(externalId)
     if (!registry) {
-      throw new Error('Failed to create agent registry');
+      throw new Error('Failed to create agent registry')
     }
 
-    return this.mapToRegistration(registry);
+    return this.mapToRegistration(registry)
   }
 
   /**
@@ -378,7 +386,7 @@ export class AgentRegistryService {
    * @returns {Promise<AgentRegistration[]>} Array of matching agents
    */
   async discoverAgents(
-    filter: AgentDiscoveryFilter = {}
+    filter: AgentDiscoveryFilter = {},
   ): Promise<AgentRegistration[]> {
     const {
       types,
@@ -391,163 +399,258 @@ export class AgentRegistryService {
       search,
       limit = 50,
       offset = 0,
-    } = filter;
+    } = filter
 
     // Build where conditions
-    const conditions: SQL<unknown>[] = [];
+    const conditions: SQLCondition[] = []
 
     if (types && types.length > 0) {
-      conditions.push(inArray(agentRegistries.type, types));
+      conditions.push(inArray(agentRegistries.type, types))
     }
 
     if (statuses && statuses.length > 0) {
-      conditions.push(inArray(agentRegistries.status, statuses));
+      conditions.push(inArray(agentRegistries.status, statuses))
     }
 
     if (minTrustLevel !== undefined) {
-      conditions.push(gte(agentRegistries.trustLevel, minTrustLevel));
+      conditions.push(gte(agentRegistries.trustLevel, minTrustLevel))
     }
 
     if (search) {
       const searchCondition = or(
         ilike(agentRegistries.name, `%${search}%`),
-        ilike(agentRegistries.systemPrompt, `%${search}%`)
-      );
+        ilike(agentRegistries.systemPrompt, `%${search}%`),
+      )
       if (searchCondition) {
-        conditions.push(searchCondition);
+        conditions.push(searchCondition)
       }
     }
 
-    // Define type for joined query result - Drizzle returns object with table names as keys
-    type AgentCapabilitySelect = typeof agentCapabilities.$inferSelect;
-    type ExternalAgentConnectionSelect =
-      typeof externalAgentConnections.$inferSelect;
-    type JoinedRegistryRow = {
-      AgentRegistry: AgentRegistry;
-      AgentCapability: AgentCapabilitySelect | null;
-      User: User | null;
-      ExternalAgentConnection: ExternalAgentConnectionSelect | null;
-    };
+    // Use raw SQL for join queries - query builder doesn't track join types
+    // Build WHERE clause dynamically
+    const whereClauseParams: (string | number)[] = []
+    const whereParts: string[] = []
+    let paramIndex = 1
 
-    const registrationsRaw = (await db
-      .select()
-      .from(agentRegistries)
-      .leftJoin(
-        agentCapabilities,
-        eq(agentCapabilities.agentRegistryId, agentRegistries.id)
+    if (types && types.length > 0) {
+      const placeholders = types.map(() => `$${paramIndex++}`).join(', ')
+      whereParts.push(`ar.type IN (${placeholders})`)
+      whereClauseParams.push(...types)
+    }
+
+    if (statuses && statuses.length > 0) {
+      const placeholders = statuses.map(() => `$${paramIndex++}`).join(', ')
+      whereParts.push(`ar.status IN (${placeholders})`)
+      whereClauseParams.push(...statuses)
+    }
+
+    if (minTrustLevel !== undefined) {
+      whereParts.push(`ar.trust_level >= $${paramIndex++}`)
+      whereClauseParams.push(minTrustLevel)
+    }
+
+    if (search) {
+      whereParts.push(
+        `(ar.name ILIKE $${paramIndex} OR ar.system_prompt ILIKE $${paramIndex})`,
       )
-      .leftJoin(users, eq(users.id, agentRegistries.userId))
-      .leftJoin(
-        externalAgentConnections,
-        eq(externalAgentConnections.agentRegistryId, agentRegistries.id)
-      )
-      .where(conditions.length > 0 ? and(...conditions) : undefined)
-      .orderBy(
-        desc(agentRegistries.trustLevel),
-        desc(agentRegistries.registeredAt)
-      )
-      .limit(limit)
-      .offset(offset)) as unknown as JoinedRegistryRow[];
+      whereClauseParams.push(`%${search}%`)
+      paramIndex++
+    }
+
+    const whereClause =
+      whereParts.length > 0 ? `WHERE ${whereParts.join(' AND ')}` : ''
+
+    // Type for raw SQL join result (snake_case column names from DB)
+    interface RawJoinedRow {
+      // AgentRegistry fields (snake_case)
+      id: string
+      agent_id: string
+      user_id: string | null
+      actor_id: string | null
+      type: string
+      name: string
+      system_prompt: string | null
+      model_id: string | null
+      status: string
+      trust_level: number
+      registered_at: Date
+      last_active_at: Date | null
+      metadata: JsonValue | null
+      capabilities: string[] | null
+      api_key_hash: string | null
+      api_key_iv: string | null
+      erc8004_contract_address: string | null
+      agent0_address: string | null
+      a2a_endpoint: string | null
+      a2a_agent_card: JsonValue | null
+      // AgentCapability fields (prefixed)
+      cap_id: string | null
+      cap_strategies: string[] | null
+      cap_markets: string[] | null
+      cap_actions: string[] | null
+      cap_skills: string[] | null
+      cap_domains: string[] | null
+      // User fields (prefixed)
+      user_username: string | null
+      user_display_name: string | null
+      user_email: string | null
+      // ExternalAgentConnection fields (prefixed)
+      ext_id: string | null
+      ext_endpoint_url: string | null
+      ext_protocol: string | null
+      ext_status: string | null
+    }
+
+    const sql = `
+      SELECT
+        ar.id, ar.agent_id, ar.user_id, ar.actor_id, ar.type, ar.name,
+        ar.system_prompt, ar.model_id, ar.status, ar.trust_level,
+        ar.registered_at, ar.last_active_at, ar.metadata, ar.capabilities,
+        ar.api_key_hash, ar.api_key_iv, ar.erc8004_contract_address,
+        ar.agent0_address, ar.a2a_endpoint, ar.a2a_agent_card,
+        ac.id as cap_id, ac.strategies as cap_strategies, ac.markets as cap_markets,
+        ac.actions as cap_actions, ac.skills as cap_skills, ac.domains as cap_domains,
+        u.username as user_username, u.display_name as user_display_name, u.email as user_email,
+        eac.id as ext_id, eac.endpoint_url as ext_endpoint_url,
+        eac.protocol as ext_protocol, eac.status as ext_status
+      FROM agent_registries ar
+      LEFT JOIN agent_capabilities ac ON ac.agent_registry_id = ar.id
+      LEFT JOIN users u ON u.id = ar.user_id
+      LEFT JOIN external_agent_connections eac ON eac.agent_registry_id = ar.id
+      ${whereClause}
+      ORDER BY ar.trust_level DESC, ar.registered_at DESC
+      LIMIT $${paramIndex++} OFFSET $${paramIndex}
+    `
+
+    const rawRows = await db.query<RawJoinedRow>(sql, [
+      ...whereClauseParams,
+      limit,
+      offset,
+    ])
+
+    // Transform raw rows to RegistryWithRelations
+    const typedRows = rawRows.map((row) => ({
+      AgentRegistry: {
+        id: row.id,
+        agentId: row.agent_id,
+        userId: row.user_id,
+        actorId: row.actor_id,
+        type: row.type,
+        name: row.name,
+        systemPrompt: row.system_prompt,
+        model: row.model_id,
+        status: row.status,
+        trustLevel: row.trust_level,
+        registeredAt: row.registered_at,
+        lastActiveAt: row.last_active_at,
+        metadata: row.metadata,
+        capabilities: row.capabilities,
+        apiKeyHash: row.api_key_hash,
+        apiKeyIv: row.api_key_iv,
+        erc8004ContractAddress: row.erc8004_contract_address,
+        agent0Address: row.agent0_address,
+        a2aEndpoint: row.a2a_endpoint,
+        a2aAgentCard: row.a2a_agent_card,
+        // Raw SQL to schema mapping requires unknown intermediate due to missing fields
+      } as unknown as AgentRegistry,
+      AgentCapability: row.cap_id
+        ? ({
+            id: row.cap_id,
+            agentRegistryId: row.id,
+            strategies: row.cap_strategies,
+            markets: row.cap_markets,
+            actions: row.cap_actions,
+            skills: row.cap_skills,
+            domains: row.cap_domains,
+          } as AgentCapability)
+        : null,
+      User:
+        row.user_username !== null
+          ? ({
+              id: row.user_id,
+              username: row.user_username,
+              displayName: row.user_display_name,
+              email: row.user_email,
+            } as User)
+          : null,
+      ExternalAgentConnection: row.ext_id
+        ? ({
+            id: row.ext_id,
+            agentRegistryId: row.id,
+            endpointUrl: row.ext_endpoint_url,
+            protocol: row.ext_protocol,
+            status: row.ext_status,
+          } as unknown as ExternalAgentConnection)
+        : null,
+    }))
 
     // Map to registry with relations format, getting Actor from static registry
-    const registrations: RegistryWithRelations[] = registrationsRaw
+    const registrations: RegistryWithRelations[] = typedRows
       .filter((row) => row.AgentRegistry !== null)
       .map((row) => {
-        const agentReg = row.AgentRegistry;
-        const actorId = agentReg.actorId;
+        const agentReg = row.AgentRegistry
+        const actorId = agentReg.actorId
         const staticActor = actorId
           ? StaticDataRegistry.getActor(actorId)
-          : null;
+          : null
+        // Spread the full AgentRegistry (omitting capabilities) and add relations
+        const { capabilities: _omitCaps, ...rest } = agentReg
         return {
-          id: agentReg.id,
-          agentId: agentReg.agentId,
-          type: agentReg.type,
-          status: agentReg.status,
-          trustLevel: agentReg.trustLevel,
-          userId: agentReg.userId,
-          actorId: agentReg.actorId,
-          name: agentReg.name,
-          systemPrompt: agentReg.systemPrompt,
-          runtimeInstanceId: agentReg.runtimeInstanceId,
-          discoveryCardVersion: agentReg.discoveryCardVersion,
-          discoveryEndpointA2a: agentReg.discoveryEndpointA2a,
-          discoveryEndpointMcp: agentReg.discoveryEndpointMcp,
-          discoveryEndpointRpc: agentReg.discoveryEndpointRpc,
-          discoveryAuthRequired: agentReg.discoveryAuthRequired,
-          discoveryAuthMethods: agentReg.discoveryAuthMethods,
-          discoveryRateLimit: agentReg.discoveryRateLimit,
-          discoveryCostPerAction: agentReg.discoveryCostPerAction,
-          onChainTokenId: agentReg.onChainTokenId,
-          onChainTxHash: agentReg.onChainTxHash,
-          onChainServerWallet: agentReg.onChainServerWallet,
-          onChainReputationScore: agentReg.onChainReputationScore,
-          onChainChainId: agentReg.onChainChainId,
-          onChainIdentityRegistry: agentReg.onChainIdentityRegistry,
-          onChainReputationSystem: agentReg.onChainReputationSystem,
-          agent0TokenId: agentReg.agent0TokenId,
-          agent0MetadataCID: agentReg.agent0MetadataCID,
-          agent0SubgraphOwner: agentReg.agent0SubgraphOwner,
-          agent0SubgraphMetadataURI: agentReg.agent0SubgraphMetadataURI,
-          agent0SubgraphTimestamp: agentReg.agent0SubgraphTimestamp,
-          agent0DiscoveryEndpoint: agentReg.agent0DiscoveryEndpoint,
-          registeredAt: agentReg.registeredAt,
-          lastActiveAt: agentReg.lastActiveAt,
-          terminatedAt: agentReg.terminatedAt,
-          updatedAt: agentReg.updatedAt,
-          capabilities: row.AgentCapability ?? null,
-          User: row.User ?? null,
+          ...rest,
+          capabilities: toNull(row.AgentCapability),
+          User: toNull(row.User),
           Actor: staticActor,
-          externalConnection: row.ExternalAgentConnection ?? null,
-        };
-      });
+          externalConnection: toNull(row.ExternalAgentConnection),
+        } as RegistryWithRelations
+      })
 
     // Filter by required capabilities if specified
-    let filtered = registrations;
+    let filtered = registrations
     if (requiredCapabilities && requiredCapabilities.length > 0) {
       filtered = filtered.filter((reg) => {
-        if (!reg.capabilities) return false;
+        if (!reg.capabilities) return false
         const allCaps = [
           ...(reg.capabilities.strategies || []),
           ...(reg.capabilities.markets || []),
           ...(reg.capabilities.actions || []),
-        ];
-        return requiredCapabilities.every((cap) => allCaps.includes(cap));
-      });
+        ]
+        return requiredCapabilities.every((cap) => allCaps.includes(cap))
+      })
     }
 
     // Filter by OASF skills if specified (Agent0 SDK v0.31.0)
     if (requiredSkills && requiredSkills.length > 0) {
       filtered = filtered.filter((reg) => {
-        if (!reg.capabilities || !reg.capabilities.skills) return false;
-        const agentSkills = reg.capabilities.skills;
+        if (!reg.capabilities || !reg.capabilities.skills) return false
+        const agentSkills = reg.capabilities.skills
 
         if (matchMode === 'all') {
           // All required skills must be present
-          return requiredSkills.every((skill) => agentSkills.includes(skill));
+          return requiredSkills.every((skill) => agentSkills.includes(skill))
         }
         // Any required skill matches
-        return requiredSkills.some((skill) => agentSkills.includes(skill));
-      });
+        return requiredSkills.some((skill) => agentSkills.includes(skill))
+      })
     }
 
     // Filter by OASF domains if specified (Agent0 SDK v0.31.0)
     if (requiredDomains && requiredDomains.length > 0) {
       filtered = filtered.filter((reg) => {
-        if (!reg.capabilities || !reg.capabilities.domains) return false;
-        const agentDomains = reg.capabilities.domains;
+        if (!reg.capabilities || !reg.capabilities.domains) return false
+        const agentDomains = reg.capabilities.domains
 
         if (matchMode === 'all') {
           // All required domains must be present
           return requiredDomains.every((domain) =>
-            agentDomains.includes(domain)
-          );
+            agentDomains.includes(domain),
+          )
         }
         // Any required domain matches
-        return requiredDomains.some((domain) => agentDomains.includes(domain));
-      });
+        return requiredDomains.some((domain) => agentDomains.includes(domain))
+      })
     }
 
-    return filtered.map((reg) => this.mapToRegistration(reg));
+    return filtered.map((reg) => this.mapToRegistration(reg))
   }
 
   /**
@@ -560,11 +663,11 @@ export class AgentRegistryService {
    * @returns {Promise<AgentRegistration | null>} Agent registration or null
    */
   async getAgentById(agentId: string): Promise<AgentRegistration | null> {
-    const registry = await this.getRegistryWithRelations(agentId);
+    const registry = await this.getRegistryWithRelations(agentId)
 
-    if (!registry) return null;
+    if (!registry) return null
 
-    return this.mapToRegistration(registry);
+    return this.mapToRegistration(registry)
   }
 
   /**
@@ -579,7 +682,7 @@ export class AgentRegistryService {
    */
   async updateAgentStatus(
     agentId: string,
-    status: AgentStatus
+    status: AgentStatus,
   ): Promise<AgentRegistration> {
     await db
       .update(agentRegistries)
@@ -589,14 +692,14 @@ export class AgentRegistryService {
         terminatedAt:
           status === AgentStatus.TERMINATED ? new Date() : undefined,
       })
-      .where(eq(agentRegistries.agentId, agentId));
+      .where(eq(agentRegistries.agentId, agentId))
 
-    const registry = await this.getRegistryWithRelations(agentId);
+    const registry = await this.getRegistryWithRelations(agentId)
     if (!registry) {
-      throw new Error(`Agent not found: ${agentId}`);
+      throw new Error(`Agent not found: ${agentId}`)
     }
 
-    return this.mapToRegistration(registry);
+    return this.mapToRegistration(registry)
   }
 
   /**
@@ -611,7 +714,7 @@ export class AgentRegistryService {
    */
   async setRuntimeInstance(
     agentId: string,
-    runtimeInstanceId: string
+    runtimeInstanceId: string,
   ): Promise<void> {
     await db
       .update(agentRegistries)
@@ -619,7 +722,7 @@ export class AgentRegistryService {
         runtimeInstanceId,
         status: AgentStatus.INITIALIZED,
       })
-      .where(eq(agentRegistries.agentId, agentId));
+      .where(eq(agentRegistries.agentId, agentId))
   }
 
   /**
@@ -638,7 +741,7 @@ export class AgentRegistryService {
         runtimeInstanceId: null,
         status: AgentStatus.REGISTERED,
       })
-      .where(eq(agentRegistries.agentId, agentId));
+      .where(eq(agentRegistries.agentId, agentId))
   }
 
   /**
@@ -652,12 +755,12 @@ export class AgentRegistryService {
    */
   async updateTrustLevel(
     agentId: string,
-    trustLevel: TrustLevel
+    trustLevel: TrustLevel,
   ): Promise<void> {
     await db
       .update(agentRegistries)
       .set({ trustLevel })
-      .where(eq(agentRegistries.agentId, agentId));
+      .where(eq(agentRegistries.agentId, agentId))
   }
 
   /**
@@ -674,23 +777,23 @@ export class AgentRegistryService {
    */
   async linkExternalAgentToUser(
     agentId: string,
-    userId: string
+    userId: string,
   ): Promise<AgentRegistration> {
     // Verify agent is EXTERNAL type
     const [registry] = await db
       .select()
       .from(agentRegistries)
       .where(eq(agentRegistries.agentId, agentId))
-      .limit(1);
+      .limit(1)
 
     if (!registry) {
-      throw new Error(`Agent not found: ${agentId}`);
+      throw new Error(`Agent not found: ${agentId}`)
     }
 
     if (registry.type !== AgentType.EXTERNAL) {
       throw new Error(
-        `Only EXTERNAL agents can be linked to users. Agent ${agentId} is type ${registry.type}`
-      );
+        `Only EXTERNAL agents can be linked to users. Agent ${agentId} is type ${registry.type}`,
+      )
     }
 
     // Verify user exists and not already linked to another agent
@@ -698,22 +801,22 @@ export class AgentRegistryService {
       .select()
       .from(users)
       .where(eq(users.id, userId))
-      .limit(1);
+      .limit(1)
 
     if (!user) {
-      throw new Error(`User not found: ${userId}`);
+      throw new Error(`User not found: ${userId}`)
     }
 
     const [existingAgentRegistry] = await db
       .select()
       .from(agentRegistries)
       .where(eq(agentRegistries.userId, userId))
-      .limit(1);
+      .limit(1)
 
     if (existingAgentRegistry) {
       throw new Error(
-        `User ${userId} already linked to agent ${existingAgentRegistry.agentId}`
-      );
+        `User ${userId} already linked to agent ${existingAgentRegistry.agentId}`,
+      )
     }
 
     // Link external agent to user
@@ -723,14 +826,14 @@ export class AgentRegistryService {
         userId,
         trustLevel: Math.max(Number(registry.trustLevel), 1), // At least BASIC trust when linked
       })
-      .where(eq(agentRegistries.agentId, agentId));
+      .where(eq(agentRegistries.agentId, agentId))
 
-    const updated = await this.getRegistryWithRelations(agentId);
+    const updated = await this.getRegistryWithRelations(agentId)
     if (!updated) {
-      throw new Error(`Failed to update agent: ${agentId}`);
+      throw new Error(`Failed to update agent: ${agentId}`)
     }
 
-    return this.mapToRegistration(updated);
+    return this.mapToRegistration(updated)
   }
 
   /**
@@ -743,128 +846,181 @@ export class AgentRegistryService {
    * @returns {Promise<AgentRegistration | null>} Agent registration if valid, null otherwise
    */
   async verifyExternalAgentApiKey(
-    apiKey: string
+    apiKey: string,
   ): Promise<AgentRegistration | null> {
     const agents = await db
       .select()
       .from(externalAgentConnections)
-      .where(eq(externalAgentConnections.authType, 'apiKey'));
+      .where(eq(externalAgentConnections.authType, 'apiKey'))
 
     for (const agent of agents) {
-      if (!agent.authCredentials) continue;
+      if (!agent.authCredentials) continue
 
       // Decrypt and verify credentials - continue to next agent if this one fails
-      const decrypted = this.decryptCredentials(String(agent.authCredentials));
-      const credentials = JSON.parse(decrypted) as { apiKeyHash?: string };
+      const decrypted = this.decryptCredentials(String(agent.authCredentials))
+      const parsed: unknown = JSON.parse(decrypted)
 
-      const externalId = String(agent.externalId);
-      if (
-        credentials?.apiKeyHash &&
-        verifyApiKey(apiKey, credentials.apiKeyHash)
-      ) {
-        const registry = await this.getRegistryWithRelations(externalId);
+      // Validate credentials structure
+      if (!isObject(parsed)) continue
+      const apiKeyHash = hasStringProperty(parsed, 'apiKeyHash')
+        ? parsed.apiKeyHash
+        : undefined
+
+      const externalId = String(agent.externalId)
+      if (apiKeyHash && verifyApiKey(apiKey, apiKeyHash)) {
+        const registry = await this.getRegistryWithRelations(externalId)
         if (!registry) {
           logger.warn(
             `Valid key for external agent ${externalId} but missing AgentRegistry link`,
             undefined,
-            'AgentRegistryService'
-          );
-          return null;
+            'AgentRegistryService',
+          )
+          return null
         }
-        return this.mapToRegistration(registry);
+        return this.mapToRegistration(registry)
       }
     }
 
-    return null;
+    return null
   }
 
   /**
    * Helper method to get registry with all relations
+   * Uses raw SQL for proper type safety with joins
    */
   private async getRegistryWithRelations(
-    agentId: string
+    agentId: string,
   ): Promise<RegistryWithRelations | null> {
-    // Define type for joined query result - Drizzle returns object with table names as keys
-    type AgentCapabilitySelect = typeof agentCapabilities.$inferSelect;
-    type ExternalAgentConnectionSelect =
-      typeof externalAgentConnections.$inferSelect;
-    type JoinedRegistryRow = {
-      AgentRegistry: AgentRegistry;
-      AgentCapability: AgentCapabilitySelect | null;
-      User: User | null;
-      ExternalAgentConnection: ExternalAgentConnectionSelect | null;
-    };
+    // Type for raw SQL join result (snake_case column names from DB)
+    interface RawJoinedRow {
+      // AgentRegistry fields (snake_case)
+      id: string
+      agent_id: string
+      user_id: string | null
+      actor_id: string | null
+      type: string
+      name: string
+      system_prompt: string | null
+      model_id: string | null
+      status: string
+      trust_level: number
+      registered_at: Date
+      last_active_at: Date | null
+      metadata: JsonValue | null
+      capabilities: string[] | null
+      api_key_hash: string | null
+      api_key_iv: string | null
+      erc8004_contract_address: string | null
+      agent0_address: string | null
+      a2a_endpoint: string | null
+      a2a_agent_card: JsonValue | null
+      // AgentCapability fields (prefixed)
+      cap_id: string | null
+      cap_strategies: string[] | null
+      cap_markets: string[] | null
+      cap_actions: string[] | null
+      cap_skills: string[] | null
+      cap_domains: string[] | null
+      // User fields (prefixed)
+      user_username: string | null
+      user_display_name: string | null
+      user_email: string | null
+      // ExternalAgentConnection fields (prefixed)
+      ext_id: string | null
+      ext_endpoint_url: string | null
+      ext_protocol: string | null
+      ext_status: string | null
+    }
 
-    const rows = (await db
-      .select()
-      .from(agentRegistries)
-      .leftJoin(
-        agentCapabilities,
-        eq(agentCapabilities.agentRegistryId, agentRegistries.id)
-      )
-      .leftJoin(users, eq(users.id, agentRegistries.userId))
-      .leftJoin(
-        externalAgentConnections,
-        eq(externalAgentConnections.agentRegistryId, agentRegistries.id)
-      )
-      .where(eq(agentRegistries.agentId, agentId))
-      .limit(1)) as unknown as JoinedRegistryRow[];
+    const sql = `
+      SELECT
+        ar.id, ar.agent_id, ar.user_id, ar.actor_id, ar.type, ar.name,
+        ar.system_prompt, ar.model_id, ar.status, ar.trust_level,
+        ar.registered_at, ar.last_active_at, ar.metadata, ar.capabilities,
+        ar.api_key_hash, ar.api_key_iv, ar.erc8004_contract_address,
+        ar.agent0_address, ar.a2a_endpoint, ar.a2a_agent_card,
+        ac.id as cap_id, ac.strategies as cap_strategies, ac.markets as cap_markets,
+        ac.actions as cap_actions, ac.skills as cap_skills, ac.domains as cap_domains,
+        u.username as user_username, u.display_name as user_display_name, u.email as user_email,
+        eac.id as ext_id, eac.endpoint_url as ext_endpoint_url,
+        eac.protocol as ext_protocol, eac.status as ext_status
+      FROM agent_registries ar
+      LEFT JOIN agent_capabilities ac ON ac.agent_registry_id = ar.id
+      LEFT JOIN users u ON u.id = ar.user_id
+      LEFT JOIN external_agent_connections eac ON eac.agent_registry_id = ar.id
+      WHERE ar.agent_id = $1
+      LIMIT 1
+    `
 
-    const row = rows[0];
-    if (!row || !row.AgentRegistry) return null;
+    const rows = await db.query<RawJoinedRow>(sql, [agentId])
+    const row = rows[0]
+    if (!row) return null
 
     // Get Actor from static registry
-    const agentReg = row.AgentRegistry;
-    const actorId = agentReg.actorId;
-    const staticActor = actorId ? StaticDataRegistry.getActor(actorId) : null;
+    const actorId = row.actor_id
+    const staticActor = actorId ? StaticDataRegistry.getActor(actorId) : null
 
-    return {
-      id: agentReg.id,
-      agentId: agentReg.agentId,
-      type: agentReg.type,
-      status: agentReg.status,
-      trustLevel: agentReg.trustLevel,
-      userId: agentReg.userId,
-      actorId: agentReg.actorId,
-      name: agentReg.name,
-      systemPrompt: agentReg.systemPrompt,
-      runtimeInstanceId: agentReg.runtimeInstanceId,
-      discoveryCardVersion: agentReg.discoveryCardVersion,
-      discoveryEndpointA2a: agentReg.discoveryEndpointA2a,
-      discoveryEndpointMcp: agentReg.discoveryEndpointMcp,
-      discoveryEndpointRpc: agentReg.discoveryEndpointRpc,
-      discoveryAuthRequired: agentReg.discoveryAuthRequired,
-      discoveryAuthMethods: agentReg.discoveryAuthMethods,
-      discoveryRateLimit: agentReg.discoveryRateLimit,
-      discoveryCostPerAction: agentReg.discoveryCostPerAction,
-      onChainTokenId: agentReg.onChainTokenId,
-      onChainTxHash: agentReg.onChainTxHash,
-      onChainServerWallet: agentReg.onChainServerWallet,
-      onChainReputationScore: agentReg.onChainReputationScore,
-      onChainChainId: agentReg.onChainChainId,
-      onChainIdentityRegistry: agentReg.onChainIdentityRegistry,
-      onChainReputationSystem: agentReg.onChainReputationSystem,
-      agent0TokenId: agentReg.agent0TokenId,
-      agent0MetadataCID: agentReg.agent0MetadataCID,
-      agent0SubgraphOwner: agentReg.agent0SubgraphOwner,
-      agent0SubgraphMetadataURI: agentReg.agent0SubgraphMetadataURI,
-      agent0SubgraphTimestamp: agentReg.agent0SubgraphTimestamp,
-      agent0DiscoveryEndpoint: agentReg.agent0DiscoveryEndpoint,
-      registeredAt: agentReg.registeredAt,
-      lastActiveAt: agentReg.lastActiveAt,
-      terminatedAt: agentReg.terminatedAt,
-      updatedAt: agentReg.updatedAt,
-      capabilities: row.AgentCapability ?? null,
-      User: row.User ?? null,
+    // Map raw row to RegistryWithRelations (without capabilities array from registry)
+    // Raw SQL to RegistryWithRelations mapping requires unknown intermediate
+    const result = {
+      id: row.id,
+      agentId: row.agent_id,
+      userId: row.user_id,
+      actorId: row.actor_id,
+      type: row.type,
+      name: row.name,
+      systemPrompt: row.system_prompt,
+      model: row.model_id, // DB column is model_id, interface expects model
+      status: row.status,
+      trustLevel: row.trust_level !== null ? String(row.trust_level) : null,
+      registeredAt: row.registered_at,
+      lastActiveAt: row.last_active_at,
+      metadata: row.metadata,
+      apiKeyHash: row.api_key_hash,
+      apiKeyIv: row.api_key_iv,
+      erc8004ContractAddress: row.erc8004_contract_address,
+      agent0Address: row.agent0_address,
+      a2aEndpoint: row.a2a_endpoint,
+      a2aAgentCard: row.a2a_agent_card,
+      capabilities: row.cap_id
+        ? ({
+            id: row.cap_id,
+            agentRegistryId: row.id,
+            strategies: row.cap_strategies,
+            markets: row.cap_markets,
+            actions: row.cap_actions,
+            skills: row.cap_skills,
+            domains: row.cap_domains,
+          } as AgentCapability)
+        : null,
+      User:
+        row.user_username !== null
+          ? ({
+              id: row.user_id,
+              username: row.user_username,
+              displayName: row.user_display_name,
+              email: row.user_email,
+            } as User)
+          : null,
       Actor: staticActor,
-      externalConnection: row.ExternalAgentConnection ?? null,
-    };
+      externalConnection: row.ext_id
+        ? ({
+            id: row.ext_id,
+            agentRegistryId: row.id,
+            endpointUrl: row.ext_endpoint_url,
+            protocol: row.ext_protocol,
+            status: row.ext_status,
+          } as unknown as ExternalAgentConnection)
+        : null,
+    }
+    // Raw SQL to RegistryWithRelations mapping requires unknown intermediate
+    return result as unknown as RegistryWithRelations
   }
 
   /**
    * Map database model to AgentRegistration type
    *
-   * @description Maps Drizzle AgentRegistry model with relations to AgentRegistration
+   * @description Maps CQL AgentRegistry model with relations to AgentRegistration
    * type. Handles capabilities, discovery metadata, on-chain data, and Agent0 data mapping.
    *
    * @param {RegistryWithRelations} registry - Registry with relations
@@ -872,34 +1028,32 @@ export class AgentRegistryService {
    * @private
    */
   private mapToRegistration(
-    registry: RegistryWithRelations
+    registry: RegistryWithRelations,
   ): AgentRegistration {
-    // Map capabilities
-    const capabilities: AgentCapabilities = registry.capabilities
+    // Map capabilities with null coalescing for array fields
+    const cap = registry.capabilities
+    const capabilities: AgentCapabilities = cap
       ? {
-          strategies: registry.capabilities.strategies,
-          markets: registry.capabilities.markets,
-          actions: registry.capabilities.actions,
-          version: registry.capabilities.version,
-          x402Support: registry.capabilities.x402Support,
-          platform: registry.capabilities.platform ?? undefined,
-          userType: registry.capabilities.userType ?? undefined,
-          gameNetwork: registry.capabilities.gameNetworkChainId
+          strategies: cap.strategies ?? [],
+          markets: cap.markets ?? [],
+          actions: cap.actions ?? [],
+          version: cap.version ?? '1.0.0',
+          x402Support: cap.x402Support ?? false,
+          platform: cap.platform,
+          userType: cap.userType,
+          gameNetwork: cap.gameNetworkChainId
             ? {
-                chainId: registry.capabilities.gameNetworkChainId,
+                chainId: cap.gameNetworkChainId,
                 registryAddress:
-                  registry.capabilities.gameNetworkRpcUrl ||
-                  '0x0000000000000000000000000000000000000000', // A2A: registryAddress read from rpcUrl field, fallback to zero address
-                reputationAddress:
-                  registry.capabilities.gameNetworkExplorerUrl ?? undefined, // A2A: reputationAddress read from explorerUrl field
+                  cap.gameNetworkRpcUrl ||
+                  '0x0000000000000000000000000000000000000000',
+                reputationAddress: cap.gameNetworkExplorerUrl,
               }
             : undefined,
-          // OASF Taxonomy Support (Agent0 SDK v0.31.0)
-          skills: registry.capabilities.skills,
-          domains: registry.capabilities.domains,
-          // A2A Communication Endpoints (Agent0 SDK v0.31.0)
-          a2aEndpoint: registry.capabilities.a2aEndpoint ?? undefined,
-          mcpEndpoint: registry.capabilities.mcpEndpoint ?? undefined,
+          skills: cap.skills ?? [],
+          domains: cap.domains ?? [],
+          a2aEndpoint: cap.a2aEndpoint,
+          mcpEndpoint: cap.mcpEndpoint,
         }
       : {
           strategies: [],
@@ -909,27 +1063,44 @@ export class AgentRegistryService {
           x402Support: false,
           skills: [],
           domains: [],
-        };
+        }
 
+    const agentId = registry.agentId ?? registry.id
     return {
-      agentId: registry.agentId,
+      agentId,
       type: registry.type as AgentType,
       status: registry.status as AgentStatus,
-      trustLevel: registry.trustLevel as TrustLevel,
+      // trustLevel is stored as string in DB, convert to TrustLevel enum
+      // Default to BASIC if not set
+      trustLevel: (() => {
+        const level = registry.trustLevel ?? 'basic'
+        // Map string to enum value
+        const levelMap: Record<string, TrustLevel> = {
+          '0': TrustLevel.UNTRUSTED,
+          '1': TrustLevel.BASIC,
+          '2': TrustLevel.VERIFIED,
+          '3': TrustLevel.PREMIUM,
+          untrusted: TrustLevel.UNTRUSTED,
+          basic: TrustLevel.BASIC,
+          verified: TrustLevel.VERIFIED,
+          premium: TrustLevel.PREMIUM,
+        }
+        return levelMap[level.toLowerCase()] ?? TrustLevel.BASIC
+      })(),
       userId: registry.userId,
       name: registry.name,
-      systemPrompt: registry.systemPrompt,
+      systemPrompt: registry.systemPrompt ?? '',
       capabilities,
       discoveryMetadata: registry.discoveryCardVersion
         ? {
             version: '1.0' as const,
-            agentId: registry.agentId,
+            agentId,
             name: registry.name,
-            description: registry.systemPrompt,
+            description: registry.systemPrompt ?? '',
             endpoints: {
-              a2a: registry.discoveryEndpointA2a ?? undefined,
-              mcp: registry.discoveryEndpointMcp ?? undefined,
-              rpc: registry.discoveryEndpointRpc ?? undefined,
+              a2a: registry.discoveryEndpointA2a,
+              mcp: registry.discoveryEndpointMcp,
+              rpc: registry.discoveryEndpointRpc,
             },
             capabilities,
             authentication: registry.discoveryAuthRequired
@@ -945,18 +1116,21 @@ export class AgentRegistryService {
             limits: registry.discoveryRateLimit
               ? {
                   rateLimit: registry.discoveryRateLimit,
-                  costPerAction: registry.discoveryCostPerAction ?? undefined,
+                  costPerAction: registry.discoveryCostPerAction,
                 }
               : undefined,
           }
         : null,
       onChainData: registry.onChainTokenId
         ? {
-            tokenId: registry.onChainTokenId,
+            tokenId: parseInt(registry.onChainTokenId, 10) || 0,
             txHash: registry.onChainTxHash ?? '',
             serverWallet: registry.onChainServerWallet ?? '',
             reputationScore: registry.onChainReputationScore ?? 0,
-            chainId: registry.onChainChainId ?? 31337,
+            chainId:
+              typeof registry.onChainChainId === 'string'
+                ? parseInt(registry.onChainChainId, 10)
+                : (registry.onChainChainId ?? 31337),
             contracts: {
               identityRegistry: registry.onChainIdentityRegistry ?? '',
               reputationSystem: registry.onChainReputationSystem ?? '',
@@ -971,17 +1145,22 @@ export class AgentRegistryService {
               ? {
                   owner: registry.agent0SubgraphOwner,
                   metadataURI: registry.agent0SubgraphMetadataURI ?? '',
-                  timestamp: registry.agent0SubgraphTimestamp ?? 0,
+                  timestamp:
+                    registry.agent0SubgraphTimestamp instanceof Date
+                      ? registry.agent0SubgraphTimestamp.getTime()
+                      : typeof registry.agent0SubgraphTimestamp === 'number'
+                        ? registry.agent0SubgraphTimestamp
+                        : 0,
                 }
               : undefined,
             discoveryEndpoint: registry.agent0DiscoveryEndpoint ?? '',
           }
         : null,
       runtimeInstanceId: registry.runtimeInstanceId,
-      registeredAt: registry.registeredAt,
+      registeredAt: registry.registeredAt ?? new Date(),
       lastActiveAt: registry.lastActiveAt,
       terminatedAt: registry.terminatedAt,
-    };
+    }
   }
 
   /**
@@ -989,33 +1168,33 @@ export class AgentRegistryService {
    * Uses AES-256-CBC encryption with random IV
    */
   private encryptCredentials(credentials: string): string {
-    const iv = randomBytes(16);
-    const key = Buffer.from(getEncryptionKey().padEnd(32).slice(0, 32));
-    const cipher = createCipheriv(ALGORITHM, key, iv);
+    const iv = randomBytes(16)
+    const key = Buffer.from(getEncryptionKey().padEnd(32).slice(0, 32))
+    const cipher = createCipheriv(ALGORITHM, key, iv)
 
-    let encrypted = cipher.update(credentials, 'utf8', 'hex');
-    encrypted += cipher.final('hex');
+    let encrypted = cipher.update(credentials, 'utf8', 'hex')
+    encrypted += cipher.final('hex')
 
-    return `${iv.toString('hex')}:${encrypted}`;
+    return `${iv.toString('hex')}:${encrypted}`
   }
 
   /**
    * Decrypt credentials
    */
   private decryptCredentials(encrypted: string): string {
-    const [ivHex, encryptedHex] = encrypted.split(':');
-    if (!ivHex || !encryptedHex) throw new Error('Invalid encrypted format');
+    const [ivHex, encryptedHex] = encrypted.split(':')
+    if (!ivHex || !encryptedHex) throw new Error('Invalid encrypted format')
 
-    const iv = Buffer.from(ivHex, 'hex');
-    const key = Buffer.from(getEncryptionKey().padEnd(32).slice(0, 32));
-    const decipher = createDecipheriv(ALGORITHM, key, iv);
+    const iv = Buffer.from(ivHex, 'hex')
+    const key = Buffer.from(getEncryptionKey().padEnd(32).slice(0, 32))
+    const decipher = createDecipheriv(ALGORITHM, key, iv)
 
-    let decrypted = decipher.update(encryptedHex, 'hex', 'utf8');
-    decrypted += decipher.final('utf8');
+    let decrypted = decipher.update(encryptedHex, 'hex', 'utf8')
+    decrypted += decipher.final('utf8')
 
-    return decrypted;
+    return decrypted
   }
 }
 
 // Export singleton instance
-export const agentRegistry = new AgentRegistryService();
+export const agentRegistry = new AgentRegistryService()

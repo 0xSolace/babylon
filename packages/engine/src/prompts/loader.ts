@@ -6,8 +6,8 @@
  * serverless environments.
  */
 
-import type { JsonValue } from '../types/common';
-import type { PromptDefinition } from './define-prompt';
+import type { JsonValue } from '../types/common'
+import type { PromptDefinition } from './define-prompt'
 
 /**
  * Render a prompt template with variable substitution.
@@ -41,13 +41,13 @@ export function renderPrompt(
      * If true, allows empty string values for variables.
      * If false (default), throws on empty/undefined required variables.
      */
-    allowEmpty?: boolean;
+    allowEmpty?: boolean
     /**
      * List of variable names that are allowed to be empty.
      * Useful for optional contextual data like trendContext.
      */
-    optionalVars?: string[];
-  } = {}
+    optionalVars?: string[]
+  } = {},
 ): string {
   const {
     allowEmpty = false,
@@ -129,12 +129,12 @@ export function renderPrompt(
       'relatedQuestions',
       'connectedActors',
     ],
-  } = options;
+  } = options
 
-  let rendered = prompt.template;
+  let rendered = prompt.template
 
   // Inject current date/time variables
-  const now = new Date();
+  const now = new Date()
   const dateVariables: Record<string, string | number> = {
     currentDateTime: now.toLocaleString('en-US'),
     currentDate: now.toISOString().split('T')[0] || '',
@@ -142,32 +142,32 @@ export function renderPrompt(
     currentYear: now.getFullYear(),
     currentMonth: now.toLocaleString('en-US', { month: 'long' }),
     currentDay: now.getDate(),
-  };
+  }
 
-  const allVariables = { ...dateVariables, ...variables };
+  const allVariables = { ...dateVariables, ...variables }
 
   for (const [key, value] of Object.entries(allVariables)) {
-    const stringValue = String(value ?? '');
+    const stringValue = String(value ?? '')
 
     // Validate non-optional variables are not empty
     if (!allowEmpty && !optionalVars.includes(key)) {
       if (value === undefined || value === null) {
         throw new Error(
-          `Required variable "${key}" is undefined/null in prompt "${prompt.id}"`
-        );
+          `Required variable "${key}" is undefined/null in prompt "${prompt.id}"`,
+        )
       }
       if (typeof value === 'string' && value.trim().length === 0) {
         throw new Error(
-          `Required variable "${key}" is empty string in prompt "${prompt.id}"`
-        );
+          `Required variable "${key}" is empty string in prompt "${prompt.id}"`,
+        )
       }
     }
 
-    const pattern = new RegExp(`\\{\\{${key}\\}\\}`, 'g');
-    rendered = rendered.replace(pattern, stringValue);
+    const pattern = new RegExp(`\\{\\{${key}\\}\\}`, 'g')
+    rendered = rendered.replace(pattern, stringValue)
   }
 
-  return rendered;
+  return rendered
 }
 
 /**
@@ -191,11 +191,11 @@ export function renderPrompt(
  * ```
  */
 export function getPromptParams(prompt: PromptDefinition): {
-  temperature?: number;
-  maxTokens?: number;
-  format?: 'xml' | 'json';
-  promptType?: string;
-  promptTemplate?: string;
+  temperature?: number
+  maxTokens?: number
+  format?: 'xml' | 'json'
+  promptType?: string
+  promptTemplate?: string
 } {
   return {
     temperature: prompt.temperature,
@@ -203,5 +203,5 @@ export function getPromptParams(prompt: PromptDefinition): {
     format: 'xml', // All our prompts use XML
     promptType: prompt.id,
     promptTemplate: prompt.template,
-  };
+  }
 }

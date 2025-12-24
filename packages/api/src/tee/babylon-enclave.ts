@@ -2,46 +2,46 @@
  * Babylon TEE Enclave - encrypted state and attestation (simulated)
  */
 
-import { logger } from '@babylon/shared';
-import { type Address, type Hex, keccak256, toBytes } from 'viem';
+import { logger } from '@babylon/shared'
+import { type Address, type Hex, keccak256, toBytes } from 'viem'
 
 // ============================================================================
 // Types
 // ============================================================================
 
 export interface BabylonEnclaveConfig {
-  codeHash: Hex;
-  instanceId: string;
-  treasuryAddress: Address;
-  rpcUrl: string;
-  verbose?: boolean;
+  codeHash: Hex
+  instanceId: string
+  treasuryAddress: Address
+  rpcUrl: string
+  verbose?: boolean
 }
 
 export interface AttestationQuote {
-  measurement: Hex;
-  platform: 'intel_tdx' | 'nvidia_cc' | 'simulated';
-  operatorAddress: Address;
-  cpuSignature: Hex;
-  gpuSignature?: Hex;
-  timestamp: number;
-  reportData: Hex;
+  measurement: Hex
+  platform: 'intel_tdx' | 'nvidia_cc' | 'simulated'
+  operatorAddress: Address
+  cpuSignature: Hex
+  gpuSignature?: Hex
+  timestamp: number
+  reportData: Hex
 }
 
 export interface SealedState {
-  ciphertext: string;
-  iv: string;
-  tag: string;
-  keyVersion: number;
-  sealedAt: number;
+  ciphertext: string
+  iv: string
+  tag: string
+  keyVersion: number
+  sealedAt: number
 }
 
 export interface EnclaveStatus {
-  running: boolean;
-  address: Address | null;
-  stateVersion: number;
-  keyVersion: number;
-  lastHeartbeat: number;
-  attestationValid: boolean;
+  running: boolean
+  address: Address | null
+  stateVersion: number
+  keyVersion: number
+  lastHeartbeat: number
+  attestationValid: boolean
 }
 
 // ============================================================================
@@ -49,29 +49,29 @@ export interface EnclaveStatus {
 // ============================================================================
 
 export class BabylonEnclave {
-  private config: BabylonEnclaveConfig;
-  private isRunning = false;
-  private operatorAddress: Address | null = null;
-  private attestationQuote: AttestationQuote | null = null;
-  private keyVersion = 1;
-  private stateVersion = 0;
-  private lastHeartbeat = 0;
-  private sealedState: SealedState | null = null;
+  private config: BabylonEnclaveConfig
+  private isRunning = false
+  private operatorAddress: Address | null = null
+  private attestationQuote: AttestationQuote | null = null
+  private keyVersion = 1
+  private stateVersion = 0
+  private lastHeartbeat = 0
+  private sealedState: SealedState | null = null
 
   // Simulated encryption key (in real TEE, derived from hardware)
-  private encryptionKey: Uint8Array | null = null;
+  private encryptionKey: Uint8Array | null = null
 
   private constructor(config: BabylonEnclaveConfig) {
-    this.config = config;
+    this.config = config
   }
 
   /**
    * Create and boot a Babylon enclave
    */
   static async create(config: BabylonEnclaveConfig): Promise<BabylonEnclave> {
-    const enclave = new BabylonEnclave(config);
-    await enclave.boot();
-    return enclave;
+    const enclave = new BabylonEnclave(config)
+    await enclave.boot()
+    return enclave
   }
 
   /**
@@ -79,31 +79,31 @@ export class BabylonEnclave {
    */
   private async boot(): Promise<void> {
     if (this.config.verbose) {
-      logger.info('[BabylonEnclave] Booting enclave...');
+      logger.info('[BabylonEnclave] Booting enclave...')
     }
 
     // Generate measurement from code hash and instance ID
     const measurement = keccak256(
-      toBytes(`${this.config.codeHash}:${this.config.instanceId}`)
-    );
+      toBytes(`${this.config.codeHash}:${this.config.instanceId}`),
+    )
 
     // Derive operator address (simulated - in real TEE uses DStack SDK)
-    this.operatorAddress = await this.deriveOperatorAddress(measurement);
+    this.operatorAddress = await this.deriveOperatorAddress(measurement)
 
     // Generate encryption key (simulated - in real TEE uses hardware KMS)
-    this.encryptionKey = await this.deriveEncryptionKey(measurement);
+    this.encryptionKey = await this.deriveEncryptionKey(measurement)
 
     // Generate attestation quote
-    this.attestationQuote = this.generateAttestation(measurement);
+    this.attestationQuote = this.generateAttestation(measurement)
 
-    this.isRunning = true;
-    this.lastHeartbeat = Date.now();
+    this.isRunning = true
+    this.lastHeartbeat = Date.now()
 
     if (this.config.verbose) {
       logger.info('[BabylonEnclave] Enclave booted successfully', {
         operatorAddress: this.operatorAddress,
         measurement,
-      });
+      })
     }
   }
 
@@ -111,48 +111,51 @@ export class BabylonEnclave {
    * Get the operator's Ethereum address
    */
   getOperatorAddress(): Address {
-    this.ensureRunning();
-    return this.operatorAddress!;
+    this.ensureRunning()
+    // biome-ignore lint/style/noNonNullAssertion: ensureRunning() verifies operatorAddress is set
+    return this.operatorAddress!
   }
 
   /**
    * Get the attestation quote
    */
   getAttestation(): AttestationQuote {
-    this.ensureRunning();
-    return this.attestationQuote!;
+    this.ensureRunning()
+    // biome-ignore lint/style/noNonNullAssertion: ensureRunning() verifies attestationQuote is set
+    return this.attestationQuote!
   }
 
   /**
    * Encrypt and seal game state
    */
   async sealState<T extends object>(state: T): Promise<SealedState> {
-    this.ensureRunning();
+    this.ensureRunning()
 
-    const plaintext = JSON.stringify(state);
+    const plaintext = JSON.stringify(state)
 
     // Use Web Crypto API for encryption
-    const ivBytes = new Uint8Array(12);
-    crypto.getRandomValues(ivBytes);
+    const ivBytes = new Uint8Array(12)
+    crypto.getRandomValues(ivBytes)
 
     // Create a copy of the key buffer to avoid type issues
-    const keyBuffer = new Uint8Array(this.encryptionKey!).buffer;
+    // biome-ignore lint/style/noNonNullAssertion: ensureRunning() verifies encryptionKey is set
+    const keyBuffer = new Uint8Array(this.encryptionKey!).buffer
     const key = await crypto.subtle.importKey(
       'raw',
       keyBuffer,
       { name: 'AES-GCM' },
       false,
-      ['encrypt']
-    );
+      ['encrypt'],
+    )
 
-    const ivBuffer = new Uint8Array(ivBytes).buffer;
+    const ivBuffer = new Uint8Array(ivBytes).buffer
     const ciphertext = await crypto.subtle.encrypt(
       { name: 'AES-GCM', iv: ivBuffer },
       key,
-      new TextEncoder().encode(plaintext)
-    );
+      new TextEncoder().encode(plaintext),
+    )
 
-    this.stateVersion++;
+    this.stateVersion++
 
     const sealed: SealedState = {
       ciphertext: this.bufferToBase64(ciphertext),
@@ -160,123 +163,124 @@ export class BabylonEnclave {
       tag: '', // GCM includes tag in ciphertext
       keyVersion: this.keyVersion,
       sealedAt: Date.now(),
-    };
+    }
 
-    this.sealedState = sealed;
+    this.sealedState = sealed
 
     if (this.config.verbose) {
       logger.info('[BabylonEnclave] State sealed', {
         version: this.stateVersion,
         keyVersion: this.keyVersion,
-      });
+      })
     }
 
-    return sealed;
+    return sealed
   }
 
   /**
    * Decrypt and unseal game state
    */
   async unsealState<T extends object>(sealed: SealedState): Promise<T> {
-    this.ensureRunning();
+    this.ensureRunning()
 
     // Verify key version (would need old keys for older versions)
     if (sealed.keyVersion !== this.keyVersion) {
       throw new Error(
-        `Key version mismatch: sealed=${sealed.keyVersion}, current=${this.keyVersion}`
-      );
+        `Key version mismatch: sealed=${sealed.keyVersion}, current=${this.keyVersion}`,
+      )
     }
 
     // Create a copy of the key buffer to avoid type issues
-    const keyBuffer = new Uint8Array(this.encryptionKey!).buffer;
+    // biome-ignore lint/style/noNonNullAssertion: ensureRunning() verifies encryptionKey is set
+    const keyBuffer = new Uint8Array(this.encryptionKey!).buffer
     const key = await crypto.subtle.importKey(
       'raw',
       keyBuffer,
       { name: 'AES-GCM' },
       false,
-      ['decrypt']
-    );
+      ['decrypt'],
+    )
 
-    const ciphertext = this.base64ToBuffer(sealed.ciphertext);
-    const iv = this.base64ToBuffer(sealed.iv);
+    const ciphertext = this.base64ToBuffer(sealed.ciphertext)
+    const iv = this.base64ToBuffer(sealed.iv)
 
     // Create proper ArrayBuffer copies for crypto operations
-    const ciphertextBuffer = new Uint8Array(ciphertext).buffer;
-    const ivBuffer = new Uint8Array(iv).buffer;
+    const ciphertextBuffer = new Uint8Array(ciphertext).buffer
+    const ivBuffer = new Uint8Array(iv).buffer
 
     const plaintext = await crypto.subtle.decrypt(
       { name: 'AES-GCM', iv: ivBuffer },
       key,
-      ciphertextBuffer
-    );
+      ciphertextBuffer,
+    )
 
-    const state = JSON.parse(new TextDecoder().decode(plaintext)) as T;
+    const state = JSON.parse(new TextDecoder().decode(plaintext)) as T
 
     if (this.config.verbose) {
       logger.info('[BabylonEnclave] State unsealed', {
         keyVersion: sealed.keyVersion,
-      });
+      })
     }
 
-    return state;
+    return state
   }
 
   /**
    * Rotate the encryption key
    */
   async rotateKey(): Promise<{ oldVersion: number; newVersion: number }> {
-    this.ensureRunning();
+    this.ensureRunning()
 
-    const oldVersion = this.keyVersion;
-    this.keyVersion++;
+    const oldVersion = this.keyVersion
+    this.keyVersion++
 
     // Derive new encryption key
     const measurement = keccak256(
       toBytes(
-        `${this.config.codeHash}:${this.config.instanceId}:v${this.keyVersion}`
-      )
-    );
-    this.encryptionKey = await this.deriveEncryptionKey(measurement);
+        `${this.config.codeHash}:${this.config.instanceId}:v${this.keyVersion}`,
+      ),
+    )
+    this.encryptionKey = await this.deriveEncryptionKey(measurement)
 
     if (this.config.verbose) {
       logger.info('[BabylonEnclave] Key rotated', {
         oldVersion,
         newVersion: this.keyVersion,
-      });
+      })
     }
 
-    return { oldVersion, newVersion: this.keyVersion };
+    return { oldVersion, newVersion: this.keyVersion }
   }
 
   /**
    * Re-encrypt state with new key after rotation
    */
   async reencryptState<T extends object>(state: T): Promise<SealedState> {
-    return this.sealState(state);
+    return this.sealState(state)
   }
 
   /**
    * Generate heartbeat for liveness proof
    */
   generateHeartbeat(): { timestamp: number; signature: Hex; stateHash: Hex } {
-    this.ensureRunning();
+    this.ensureRunning()
 
-    this.lastHeartbeat = Date.now();
+    this.lastHeartbeat = Date.now()
 
     // Generate state hash
     const stateHash = this.sealedState
       ? keccak256(toBytes(this.sealedState.ciphertext))
-      : (('0x' + '0'.repeat(64)) as Hex);
+      : (`0x${'0'.repeat(64)}` as Hex)
 
     // Sign heartbeat (simulated)
-    const heartbeatData = `heartbeat:${this.lastHeartbeat}:${stateHash}`;
-    const signature = keccak256(toBytes(heartbeatData + this.operatorAddress));
+    const heartbeatData = `heartbeat:${this.lastHeartbeat}:${stateHash}`
+    const signature = keccak256(toBytes(heartbeatData + this.operatorAddress))
 
     return {
       timestamp: this.lastHeartbeat,
       signature,
       stateHash,
-    };
+    }
   }
 
   /**
@@ -290,14 +294,14 @@ export class BabylonEnclave {
       keyVersion: this.keyVersion,
       lastHeartbeat: this.lastHeartbeat,
       attestationValid: this.attestationQuote !== null,
-    };
+    }
   }
 
   /**
    * Get current sealed state
    */
   getSealedState(): SealedState | null {
-    return this.sealedState;
+    return this.sealedState
   }
 
   /**
@@ -305,16 +309,16 @@ export class BabylonEnclave {
    */
   async shutdown(): Promise<void> {
     if (this.config.verbose) {
-      logger.info('[BabylonEnclave] Shutting down...');
+      logger.info('[BabylonEnclave] Shutting down...')
     }
 
-    this.isRunning = false;
-    this.encryptionKey = null;
-    this.operatorAddress = null;
-    this.attestationQuote = null;
+    this.isRunning = false
+    this.encryptionKey = null
+    this.operatorAddress = null
+    this.attestationQuote = null
 
     if (this.config.verbose) {
-      logger.info('[BabylonEnclave] Shutdown complete');
+      logger.info('[BabylonEnclave] Shutdown complete')
     }
   }
 
@@ -324,48 +328,56 @@ export class BabylonEnclave {
 
   private ensureRunning(): void {
     if (!this.isRunning) {
-      throw new Error('Enclave is not running');
+      throw new Error('Enclave is not running')
+    }
+    if (
+      !this.encryptionKey ||
+      !this.operatorAddress ||
+      !this.attestationQuote
+    ) {
+      throw new Error('Enclave not properly initialized')
     }
   }
 
   // Simulated - in prod uses DStack SDK
   private async deriveOperatorAddress(measurement: Hex): Promise<Address> {
-    const addressHash = keccak256(toBytes(measurement + 'operator'));
-    return ('0x' + addressHash.slice(-40)) as Address;
+    const addressHash = keccak256(toBytes(`${measurement}operator`))
+    return `0x${addressHash.slice(-40)}` as Address
   }
 
   // Simulated - in prod uses hardware KMS
   private async deriveEncryptionKey(measurement: Hex): Promise<Uint8Array> {
-    const keyHash = keccak256(toBytes(measurement + `key:${this.keyVersion}`));
-    return new Uint8Array(Buffer.from(keyHash.slice(2), 'hex'));
+    const keyHash = keccak256(toBytes(`${measurement}key:${this.keyVersion}`))
+    return new Uint8Array(Buffer.from(keyHash.slice(2), 'hex'))
   }
 
   // Simulated attestation - not verifiable
   private generateAttestation(measurement: Hex): AttestationQuote {
-    const timestamp = Date.now();
+    const timestamp = Date.now()
     const reportData = keccak256(
-      toBytes(`${measurement}:${this.operatorAddress}:${timestamp}`)
-    );
-    const cpuSignature = keccak256(toBytes(`cpu:${reportData}`));
-    const gpuSignature = keccak256(toBytes(`gpu:${reportData}`));
+      toBytes(`${measurement}:${this.operatorAddress}:${timestamp}`),
+    )
+    const cpuSignature = keccak256(toBytes(`cpu:${reportData}`))
+    const gpuSignature = keccak256(toBytes(`gpu:${reportData}`))
 
     return {
       measurement,
       platform: 'simulated',
+      // biome-ignore lint/style/noNonNullAssertion: operatorAddress is set during initialize()
       operatorAddress: this.operatorAddress!,
       cpuSignature,
       gpuSignature,
       timestamp,
       reportData,
-    };
+    }
   }
 
   private bufferToBase64(buffer: ArrayBuffer): string {
-    return Buffer.from(buffer).toString('base64');
+    return Buffer.from(buffer).toString('base64')
   }
 
   private base64ToBuffer(base64: string): Uint8Array {
-    return new Uint8Array(Buffer.from(base64, 'base64'));
+    return new Uint8Array(Buffer.from(base64, 'base64'))
   }
 }
 
@@ -373,10 +385,10 @@ export class BabylonEnclave {
 // Factory
 // ============================================================================
 
-let babylonEnclave: BabylonEnclave | null = null;
+let babylonEnclave: BabylonEnclave | null = null
 
 export async function getBabylonEnclave(
-  config?: Partial<BabylonEnclaveConfig>
+  config?: Partial<BabylonEnclaveConfig>,
 ): Promise<BabylonEnclave> {
   if (!babylonEnclave) {
     // Hard-fail in production if REQUIRE_REAL_TEE is set
@@ -386,33 +398,33 @@ export async function getBabylonEnclave(
     ) {
       throw new Error(
         'Real TEE required in production (REQUIRE_REAL_TEE=true). ' +
-          'Deploy to Phala Network CVM with Intel TDX or AMD SEV.'
-      );
+          'Deploy to Phala Network CVM with Intel TDX or AMD SEV.',
+      )
     }
 
     if (process.env.NODE_ENV === 'production') {
       logger.warn(
         '[BabylonEnclave] Running SIMULATED enclave in production. ' +
-          'Set REQUIRE_REAL_TEE=true to enforce real TEE.'
-      );
+          'Set REQUIRE_REAL_TEE=true to enforce real TEE.',
+      )
     }
 
     babylonEnclave = await BabylonEnclave.create({
-      codeHash: (process.env.BABYLON_CODE_HASH ?? '0x' + '0'.repeat(64)) as Hex,
+      codeHash: (process.env.BABYLON_CODE_HASH ?? `0x${'0'.repeat(64)}`) as Hex,
       instanceId: process.env.BABYLON_INSTANCE_ID ?? `instance-${Date.now()}`,
       treasuryAddress: (process.env.BABYLON_TREASURY_ADDRESS ??
         '0x0000000000000000000000000000000000000000') as Address,
-      rpcUrl: process.env.JEJU_RPC_URL ?? 'http://localhost:9545',
+      rpcUrl: process.env.JEJU_RPC_URL ?? 'http://localhost:6546',
       verbose: process.env.BABYLON_VERBOSE === 'true',
       ...config,
-    });
+    })
   }
-  return babylonEnclave;
+  return babylonEnclave
 }
 
 export async function shutdownBabylonEnclave(): Promise<void> {
   if (babylonEnclave) {
-    await babylonEnclave.shutdown();
-    babylonEnclave = null;
+    await babylonEnclave.shutdown()
+    babylonEnclave = null
   }
 }

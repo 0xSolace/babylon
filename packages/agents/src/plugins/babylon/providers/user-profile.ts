@@ -10,9 +10,9 @@ import type {
   Provider,
   ProviderResult,
   State,
-} from '@elizaos/core';
-import { logger } from '../../../shared/logger';
-import type { BabylonRuntime } from '../types';
+} from '@elizaos/core'
+import { logger } from '../../../shared/logger'
+import { toBabylonRuntime } from '../types'
 
 /**
  * Provider: View User Profile
@@ -28,26 +28,26 @@ export const userProfileProvider: Provider = {
   get: async (
     runtime: IAgentRuntime,
     message: Memory,
-    _state: State
+    _state: State,
   ): Promise<ProviderResult> => {
-    const babylonRuntime = runtime as BabylonRuntime;
+    const babylonRuntime = toBabylonRuntime(runtime)
 
     // A2A is REQUIRED
     if (!babylonRuntime.a2aClient?.isConnected()) {
       logger.error(
         'A2A client not connected - user profile provider requires A2A protocol',
         undefined,
-        runtime.agentId
-      );
+        runtime.agentId,
+      )
       return {
         text: 'ERROR: A2A client not connected. Cannot view user profiles. Please ensure A2A server is running.',
-      };
+      }
     }
 
     // Extract userId from message content
     // Look for patterns like "user_123", "@username", or explicit userId mentions
-    const content = message.content?.text || '';
-    let userId: string | null = null;
+    const content = message.content?.text || ''
+    let userId: string | null = null
 
     // Try to extract user ID from common patterns
     const userIdMatch =
@@ -55,10 +55,10 @@ export const userProfileProvider: Provider = {
       content.match(/@(\w+)/) ||
       content.match(/userId[:\s]+(\w+)/i) ||
       content.match(/profile[:\s]+(\w+)/i) ||
-      content.match(/view[:\s]+(\w+)/i);
+      content.match(/view[:\s]+(\w+)/i)
 
     if (userIdMatch) {
-      userId = userIdMatch[1] || null;
+      userId = userIdMatch[1] || null
     }
 
     // If no userId found in message, return error guidance
@@ -66,11 +66,11 @@ export const userProfileProvider: Provider = {
       return {
         text: `To view a user's profile, please specify the user ID or username in your message.
 Example: "Show me user_abc123's profile" or "What is @trader's reputation?"`,
-      };
+      }
     }
 
     // Fetch profile data via A2A protocol
-    const profileData = await babylonRuntime.a2aClient.getUserProfile(userId);
+    const profileData = await babylonRuntime.a2aClient.getUserProfile(userId)
 
     // Validate profileData structure matches A2AUserProfileResponse
     if (
@@ -78,17 +78,17 @@ Example: "Show me user_abc123's profile" or "What is @trader's reputation?"`,
       typeof profileData !== 'object' ||
       !('id' in profileData)
     ) {
-      throw new Error('Invalid profile data format from A2A client');
+      throw new Error('Invalid profile data format from A2A client')
     }
     const profile = profileData as {
-      id: string;
-      username: string | null;
-      displayName: string | null;
-      bio: string | null;
-      profileImageUrl: string | null;
-      reputationPoints: number;
-      virtualBalance: number;
-    };
+      id: string
+      username: string | null
+      displayName: string | null
+      bio: string | null
+      profileImageUrl: string | null
+      reputationPoints: number
+      virtualBalance: number
+    }
 
     return {
       text: `User Profile: ${profile.displayName || profile.username || profile.id}
@@ -101,6 +101,6 @@ ${profile.bio ? `📄 Bio: ${profile.bio}` : ''}
 ${profile.profileImageUrl ? `🖼️  Profile Image: ${profile.profileImageUrl}` : ''}
 
 User ID: ${profile.id}`,
-    };
+    }
   },
-};
+}

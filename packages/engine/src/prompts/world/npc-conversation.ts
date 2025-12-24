@@ -1,9 +1,9 @@
-import { definePrompt } from '../define-prompt';
+import { definePrompt } from '../define-prompt'
 import {
   ANTI_REPETITION_RULES,
   characterVoiceGuidance,
   PARODY_NAME_RULES,
-} from '../shared-sections';
+} from '../shared-sections'
 
 /**
  * Prompt for generating brief conversations between NPCs about game events.
@@ -84,4 +84,4 @@ Respond with XML:
 
 No other text.
 `.trim(),
-});
+})

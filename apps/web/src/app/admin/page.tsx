@@ -28,10 +28,8 @@
  * ```
  */
 
-'use client';
-
-import { cn } from '@babylon/shared';
-import { useQuery } from '@tanstack/react-query';
+import { cn } from '@babylon/shared'
+import { useQuery } from '@tanstack/react-query'
 import {
   Activity,
   BarChart,
@@ -49,27 +47,27 @@ import {
   ShieldCheck,
   Sparkles,
   Users,
-} from 'lucide-react';
-import { useRouter } from 'next/navigation';
-import { useState } from 'react';
-import { AdminManagementTab } from '@/components/admin/AdminManagementTab';
-import { AgentsTab } from '@/components/admin/AgentsTab';
-import { AIModelsTab } from '@/components/admin/AIModelsTab';
-import { EscrowManagementTab } from '@/components/admin/EscrowManagementTab';
-import { FeesTab } from '@/components/admin/FeesTab';
-import { GameControlTab } from '@/components/admin/GameControlTab';
-import { GroupsTab } from '@/components/admin/GroupsTab';
-import { HumanReviewTab } from '@/components/admin/HumanReviewTab';
-import { NotificationsTab } from '@/components/admin/NotificationsTab';
-import { RegistryTab } from '@/components/admin/RegistryTab';
-import { ReportsTab } from '@/components/admin/ReportsTab';
-import { StatsTab } from '@/components/admin/StatsTab';
-import { TradingFeedTab } from '@/components/admin/TradingFeedTab';
-import { TrainingDataTab } from '@/components/admin/TrainingDataTab';
-import { UserManagementTab } from '@/components/admin/UserManagementTab';
-import { PageContainer } from '@/components/shared/PageContainer';
-import { Skeleton } from '@/components/shared/Skeleton';
-import { useAuth } from '@/hooks/useAuth';
+} from 'lucide-react'
+import { useState } from 'react'
+import { AdminManagementTab } from '@/components/admin/AdminManagementTab'
+import { AgentsTab } from '@/components/admin/AgentsTab'
+import { AIModelsTab } from '@/components/admin/AIModelsTab'
+import { EscrowManagementTab } from '@/components/admin/EscrowManagementTab'
+import { FeesTab } from '@/components/admin/FeesTab'
+import { GameControlTab } from '@/components/admin/GameControlTab'
+import { GroupsTab } from '@/components/admin/GroupsTab'
+import { HumanReviewTab } from '@/components/admin/HumanReviewTab'
+import { NotificationsTab } from '@/components/admin/NotificationsTab'
+import { RegistryTab } from '@/components/admin/RegistryTab'
+import { ReportsTab } from '@/components/admin/ReportsTab'
+import { StatsTab } from '@/components/admin/StatsTab'
+import { TradingFeedTab } from '@/components/admin/TradingFeedTab'
+import { TrainingDataTab } from '@/components/admin/TrainingDataTab'
+import { UserManagementTab } from '@/components/admin/UserManagementTab'
+import { PageContainer } from '@/components/shared/PageContainer'
+import { Skeleton } from '@/components/shared/Skeleton'
+import { useAuth } from '@/hooks/useAuth'
+import { useRouter } from '@/lib/navigation'
 
 /**
  * Available admin dashboard tabs
@@ -90,7 +88,7 @@ type Tab =
   | 'training-data'
   | 'agents'
   | 'escrow'
-  | 'ico';
+  | 'ico'
 
 /**
  * Admin Dashboard Component
@@ -100,38 +98,38 @@ type Tab =
  * @returns {JSX.Element} Admin dashboard page
  */
 export default function AdminDashboard() {
-  const router = useRouter();
-  const { authenticated, ready } = useAuth();
-  const [activeTab, setActiveTab] = useState<Tab>('stats');
+  const router = useRouter()
+  const { authenticated, ready } = useAuth()
+  const [activeTab, setActiveTab] = useState<Tab>('stats')
 
   // Check if running on localhost to allow dev access
   const isLocalhost =
     typeof window !== 'undefined' &&
     (window.location.hostname === 'localhost' ||
-      window.location.hostname === '127.0.0.1');
+      window.location.hostname === '127.0.0.1')
 
   const { data: isAuthorized, isLoading: loading } = useQuery({
     queryKey: ['admin', 'access'],
     queryFn: async (): Promise<boolean> => {
       if (!authenticated) {
         if (!isLocalhost) {
-          router.push('/');
+          router.push('/')
         }
-        return false;
+        return false
       }
 
       // Check if user is admin by trying to fetch admin stats
-      const response = await fetch('/api/admin/stats');
+      const response = await fetch('/api/admin/stats')
 
       if (!response.ok) {
-        return false;
+        return false
       }
 
-      return true;
+      return true
     },
     enabled: ready,
     staleTime: 5 * 60 * 1000, // 5 minutes - admin status doesn't change often
-  });
+  })
 
   if (loading) {
     return (
@@ -143,7 +141,7 @@ export default function AdminDashboard() {
           </div>
         </div>
       </PageContainer>
-    );
+    )
   }
 
   if (!isAuthorized) {
@@ -157,7 +155,7 @@ export default function AdminDashboard() {
           </p>
         </div>
       </PageContainer>
-    );
+    )
   }
 
   const tabs = [
@@ -177,7 +175,7 @@ export default function AdminDashboard() {
     { id: 'notifications' as const, label: 'Notifications', icon: Bell },
     { id: 'escrow' as const, label: 'Escrow', icon: DollarSign },
     { id: 'ico' as const, label: 'ICO', icon: Coins, href: '/admin/ico' },
-  ];
+  ]
 
   return (
     <PageContainer className="flex flex-col">
@@ -195,8 +193,8 @@ export default function AdminDashboard() {
       {/* Tabs */}
       <div className="mb-6 flex gap-2 overflow-x-auto border-border border-b">
         {tabs.map((tab) => {
-          const Icon = tab.icon;
-          const isLink = 'href' in tab && tab.href;
+          const Icon = tab.icon
+          const isLink = 'href' in tab && tab.href
 
           if (isLink) {
             return (
@@ -206,17 +204,18 @@ export default function AdminDashboard() {
                 className={cn(
                   'flex items-center gap-2 whitespace-nowrap px-4 py-2 font-medium transition-colors',
                   '-mb-[1px] border-b-2',
-                  'border-transparent text-muted-foreground hover:border-border hover:text-foreground'
+                  'border-transparent text-muted-foreground hover:border-border hover:text-foreground',
                 )}
               >
                 <Icon className="h-4 w-4" />
                 {tab.label}
               </a>
-            );
+            )
           }
 
           return (
             <button
+              type="button"
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
               className={cn(
@@ -224,13 +223,13 @@ export default function AdminDashboard() {
                 '-mb-[1px] border-b-2',
                 activeTab === tab.id
                   ? 'border-primary text-primary'
-                  : 'border-transparent text-muted-foreground hover:border-border hover:text-foreground'
+                  : 'border-transparent text-muted-foreground hover:border-border hover:text-foreground',
               )}
             >
               <Icon className="h-4 w-4" />
               {tab.label}
             </button>
-          );
+          )
         })}
       </div>
 
@@ -253,5 +252,5 @@ export default function AdminDashboard() {
         {activeTab === 'escrow' && <EscrowManagementTab />}
       </div>
     </PageContainer>
-  );
+  )
 }

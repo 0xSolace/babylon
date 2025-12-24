@@ -16,4 +16,4 @@ export {
   type OAuth3Identity,
   type OAuth3Session,
   resetOAuth3Client,
-} from './client';
+} from './client'

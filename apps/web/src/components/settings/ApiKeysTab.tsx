@@ -1,6 +1,4 @@
-'use client';
-
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   AlertTriangle,
   CheckCircle2,
@@ -8,34 +6,34 @@ import {
   Key,
   Plus,
   Trash2,
-} from 'lucide-react';
-import { useState } from 'react';
-import { toast } from 'sonner';
-import { useAuth } from '@/hooks/useAuth';
+} from 'lucide-react'
+import { useState } from 'react'
+import { toast } from 'sonner'
+import { useAuth } from '@/hooks/useAuth'
 
 interface ApiKey {
-  id: string;
-  name: string | null;
-  maskedKey: string;
-  createdAt: string;
-  lastUsedAt: string | null;
-  expiresAt: string | null;
+  id: string
+  name: string | null
+  maskedKey: string
+  createdAt: string
+  lastUsedAt: string | null
+  expiresAt: string | null
 }
 
 interface ApiKeyResponse {
-  id: string;
-  apiKey: string;
-  name: string | null;
-  createdAt: string;
-  message: string;
+  id: string
+  apiKey: string
+  name: string | null
+  createdAt: string
+  message: string
 }
 
 interface ApiKeysListResponse {
-  keys: ApiKey[];
+  keys: ApiKey[]
 }
 
 interface GenerateKeyPayload {
-  name?: string;
+  name?: string
 }
 
 /**
@@ -47,17 +45,17 @@ interface GenerateKeyPayload {
  * @returns API Keys tab element
  */
 export function ApiKeysTab() {
-  const { getAccessToken } = useAuth();
-  const queryClient = useQueryClient();
-  const [newKey, setNewKey] = useState<ApiKeyResponse | null>(null);
-  const [keyName, setKeyName] = useState('');
+  const { getAccessToken } = useAuth()
+  const queryClient = useQueryClient()
+  const [newKey, setNewKey] = useState<ApiKeyResponse | null>(null)
+  const [keyName, setKeyName] = useState('')
 
   const { data: keys = [], isLoading: loading } = useQuery({
     queryKey: ['apiKeys'],
     queryFn: async (): Promise<ApiKey[]> => {
-      const token = await getAccessToken();
+      const token = await getAccessToken()
       if (!token) {
-        throw new Error('Not authenticated');
+        throw new Error('Not authenticated')
       }
 
       const response = await fetch('/api/users/api-keys', {
@@ -65,24 +63,24 @@ export function ApiKeysTab() {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-      });
+      })
 
       if (!response.ok) {
-        throw new Error('Failed to fetch API keys');
+        throw new Error('Failed to fetch API keys')
       }
 
-      const data: ApiKeysListResponse = await response.json();
-      return data.keys || [];
+      const data: ApiKeysListResponse = await response.json()
+      return data.keys || []
     },
-  });
+  })
 
   const generateKeyMutation = useMutation({
     mutationFn: async (
-      payload: GenerateKeyPayload
+      payload: GenerateKeyPayload,
     ): Promise<ApiKeyResponse> => {
-      const token = await getAccessToken();
+      const token = await getAccessToken()
       if (!token) {
-        throw new Error('Not authenticated');
+        throw new Error('Not authenticated')
       }
 
       const response = await fetch('/api/users/api-keys', {
@@ -92,31 +90,31 @@ export function ApiKeysTab() {
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({ name: payload.name || undefined }),
-      });
+      })
 
       if (!response.ok) {
-        const error: { error?: string } = await response.json();
-        throw new Error(error.error || 'Failed to generate API key');
+        const error: { error?: string } = await response.json()
+        throw new Error(error.error || 'Failed to generate API key')
       }
 
-      return response.json() as Promise<ApiKeyResponse>;
+      return response.json() as Promise<ApiKeyResponse>
     },
     onSuccess: (data) => {
-      setNewKey(data);
-      setKeyName('');
-      queryClient.invalidateQueries({ queryKey: ['apiKeys'] });
-      toast.success('API key generated successfully');
+      setNewKey(data)
+      setKeyName('')
+      queryClient.invalidateQueries({ queryKey: ['apiKeys'] })
+      toast.success('API key generated successfully')
     },
     onError: (error: Error) => {
-      toast.error(error.message);
+      toast.error(error.message)
     },
-  });
+  })
 
   const revokeKeyMutation = useMutation({
     mutationFn: async (keyId: string): Promise<void> => {
-      const token = await getAccessToken();
+      const token = await getAccessToken()
       if (!token) {
-        throw new Error('Not authenticated');
+        throw new Error('Not authenticated')
       }
 
       const response = await fetch(`/api/users/api-keys/${keyId}`, {
@@ -125,43 +123,43 @@ export function ApiKeysTab() {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-      });
+      })
 
       if (!response.ok) {
-        throw new Error('Failed to revoke API key');
+        throw new Error('Failed to revoke API key')
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['apiKeys'] });
-      toast.success('API key revoked successfully');
+      queryClient.invalidateQueries({ queryKey: ['apiKeys'] })
+      toast.success('API key revoked successfully')
     },
     onError: () => {
-      toast.error('Failed to revoke API key');
+      toast.error('Failed to revoke API key')
     },
-  });
+  })
 
   const handleGenerateKey = () => {
-    generateKeyMutation.mutate({ name: keyName || undefined });
-  };
+    generateKeyMutation.mutate({ name: keyName || undefined })
+  }
 
   const handleRevokeKey = (keyId: string) => {
     if (
       !confirm(
-        'Are you sure you want to revoke this API key? This action cannot be undone and any applications using this key will stop working.'
+        'Are you sure you want to revoke this API key? This action cannot be undone and any applications using this key will stop working.',
       )
     ) {
-      return;
+      return
     }
 
-    revokeKeyMutation.mutate(keyId);
-  };
+    revokeKeyMutation.mutate(keyId)
+  }
 
-  const generating = generateKeyMutation.isPending;
+  const generating = generateKeyMutation.isPending
 
   const handleCopyKey = async (key: string) => {
-    await navigator.clipboard.writeText(key);
-    toast.success('API key copied to clipboard');
-  };
+    await navigator.clipboard.writeText(key)
+    toast.success('API key copied to clipboard')
+  }
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
@@ -170,8 +168,8 @@ export function ApiKeysTab() {
       day: 'numeric',
       hour: '2-digit',
       minute: '2-digit',
-    });
-  };
+    })
+  }
 
   return (
     <div className="space-y-6">
@@ -223,6 +221,7 @@ export function ApiKeysTab() {
                   {newKey.apiKey}
                 </code>
                 <button
+                  type="button"
                   onClick={() => handleCopyKey(newKey.apiKey)}
                   className="flex shrink-0 items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 transition-colors hover:bg-muted"
                   title="Copy API key"
@@ -233,6 +232,7 @@ export function ApiKeysTab() {
               </div>
             </div>
             <button
+              type="button"
               onClick={() => setNewKey(null)}
               className="shrink-0 text-muted-foreground transition-colors hover:text-foreground"
             >
@@ -254,6 +254,7 @@ export function ApiKeysTab() {
             className="min-w-0 flex-1 rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#0066FF]"
           />
           <button
+            type="button"
             onClick={handleGenerateKey}
             disabled={generating}
             className="flex items-center gap-2 rounded-lg bg-[#0066FF] px-4 py-2 font-medium text-white transition-colors hover:bg-[#2952d9] disabled:cursor-not-allowed disabled:opacity-50"
@@ -302,6 +303,7 @@ export function ApiKeysTab() {
                   </div>
                 </div>
                 <button
+                  type="button"
                   onClick={() => handleRevokeKey(key.id)}
                   className="flex items-center gap-2 rounded-lg border border-destructive/50 px-3 py-2 text-destructive transition-colors hover:bg-destructive/10"
                   title="Revoke API key"
@@ -338,5 +340,5 @@ export function ApiKeysTab() {
         </div>
       </div>
     </div>
-  );
+  )
 }

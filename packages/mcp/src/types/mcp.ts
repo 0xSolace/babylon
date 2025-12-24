@@ -12,9 +12,8 @@ import type {
   JsonRpcResult,
   JsonValue,
   StringRecord,
-} from '@babylon/shared';
+} from '@babylon/shared'
 
-// Re-export JSON-RPC types from shared for consistency
 export type {
   JsonRpcError,
   JsonRpcNotification,
@@ -23,9 +22,8 @@ export type {
   JsonRpcResponse,
   JsonRpcResult,
   JsonValue,
-};
+}
 
-// Re-export tool argument types derived from Zod schemas (single source of truth)
 export type {
   AcceptGroupInviteArgs,
   AppealBanArgs,
@@ -103,7 +101,7 @@ export type {
   UnmuteUserArgs,
   UpdateProfileArgs,
   VerifyEscrowPaymentArgs,
-} from '../utils/tool-args-validation';
+} from '../utils/tool-args-validation'
 
 // JSON-RPC 2.0 types are now imported from @babylon/shared
 
@@ -131,720 +129,710 @@ export const MCP_PROTOCOL_VERSIONS = [
   '2024-11-05',
   '2025-03-26',
   '2025-06-18',
-] as const;
+] as const
 
-export type MCPProtocolVersion = (typeof MCP_PROTOCOL_VERSIONS)[number];
+export type MCPProtocolVersion = (typeof MCP_PROTOCOL_VERSIONS)[number]
 
 // Client Capabilities
 export interface ClientCapabilities {
   roots?: {
-    listChanged?: boolean;
-  };
-  sampling?: Record<string, JsonValue>;
+    listChanged?: boolean
+  }
+  sampling?: Record<string, JsonValue>
   tools?: {
-    listChanged?: boolean;
-  };
+    listChanged?: boolean
+  }
   prompts?: {
-    listChanged?: boolean;
-  };
+    listChanged?: boolean
+  }
   resources?: {
-    subscribe?: boolean;
-    listChanged?: boolean;
-  };
+    subscribe?: boolean
+    listChanged?: boolean
+  }
 }
 
 // Server Capabilities
 export interface ServerCapabilities {
-  logging?: Record<string, JsonValue>;
+  logging?: Record<string, JsonValue>
   prompts?: {
-    listChanged?: boolean;
-  };
+    listChanged?: boolean
+  }
   resources?: {
-    subscribe?: boolean;
-    listChanged?: boolean;
-  };
+    subscribe?: boolean
+    listChanged?: boolean
+  }
   tools?: {
-    listChanged?: boolean;
-  };
+    listChanged?: boolean
+  }
 }
 
 // Implementation Info
 export interface Implementation {
-  name: string;
-  version: string;
-  title?: string;
+  name: string
+  version: string
+  title?: string
 }
 
 // Initialize Request Params
 export interface InitializeParams {
-  protocolVersion: MCPProtocolVersion;
-  capabilities: ClientCapabilities;
-  clientInfo: Implementation;
+  protocolVersion: MCPProtocolVersion
+  capabilities: ClientCapabilities
+  clientInfo: Implementation
 }
 
 // Initialize Result
 export interface InitializeResult {
-  protocolVersion: MCPProtocolVersion;
-  capabilities: ServerCapabilities;
-  serverInfo: Implementation;
-  instructions?: string;
+  protocolVersion: MCPProtocolVersion
+  capabilities: ServerCapabilities
+  serverInfo: Implementation
+  instructions?: string
 }
 
 // Tool Input Schema Property
 export interface MCPToolInputSchemaProperty {
-  type: string;
-  description?: string;
-  enum?: readonly string[];
-  default?: JsonValue;
-  properties?: StringRecord<MCPToolInputSchemaProperty>;
-  items?: MCPToolInputSchemaProperty;
-  required?: string[];
+  type: string
+  description?: string
+  enum?: readonly string[]
+  default?: JsonValue
+  properties?: StringRecord<MCPToolInputSchemaProperty>
+  items?: MCPToolInputSchemaProperty
+  required?: string[]
 }
 
 // MCP Tool Definition
 export interface MCPTool {
-  name: string;
-  description: string;
+  name: string
+  description: string
   inputSchema: {
-    type: 'object';
-    properties: StringRecord<MCPToolInputSchemaProperty>;
-    required?: string[];
-  };
+    type: 'object'
+    properties: StringRecord<MCPToolInputSchemaProperty>
+    required?: string[]
+  }
 }
 
 // Tools List Result
 export interface ToolsListResult {
-  tools: MCPTool[];
-  nextCursor?: string;
+  tools: MCPTool[]
+  nextCursor?: string
 }
 
 // Tool Call Params
 export interface ToolCallParams {
-  name: string;
-  arguments: StringRecord<JsonValue>;
+  name: string
+  arguments: StringRecord<JsonValue>
 }
 
 // Tool Result Content
 export interface TextContent {
-  type: 'text';
-  text: string;
-  mimeType?: string;
+  type: 'text'
+  text: string
+  mimeType?: string
 }
 
 export interface ImageContent {
-  type: 'image';
-  data: string; // base64
-  mimeType: string;
+  type: 'image'
+  data: string // base64
+  mimeType: string
 }
 
 export interface ResourceContent {
-  type: 'resource';
+  type: 'resource'
   resource: {
-    uri: string;
-    name?: string;
-    title?: string;
-    mimeType?: string;
-    text?: string;
-    blob?: string; // base64
-  };
+    uri: string
+    name?: string
+    title?: string
+    mimeType?: string
+    text?: string
+    blob?: string // base64
+  }
 }
 
-export type ToolResultContent = TextContent | ImageContent | ResourceContent;
+export type ToolResultContent = TextContent | ImageContent | ResourceContent
 
 // Tool Call Result
 export interface ToolCallResult {
-  content: ToolResultContent[];
-  isError?: boolean;
+  content: ToolResultContent[]
+  isError?: boolean
 }
 
 // Authenticated Agent (for internal use)
 export interface AuthenticatedAgent {
-  agentId: string;
-  userId: string;
+  agentId: string
+  userId: string
 }
 
 // Authentication (handled via headers)
 export interface MCPAuthContext {
-  apiKey?: string;
-  userId?: string; // Set after authentication
+  apiKey?: string
+  userId?: string // Set after authentication
 }
 
 // Tool-specific return types (internal, before conversion to MCP format)
 export interface GetMarketsResult {
   markets: Array<{
-    id: string;
-    question: string;
-    yesShares: string;
-    noShares: string;
-    liquidity: string;
-    endDate: string;
-  }>;
+    id: string
+    question: string
+    yesShares: string
+    noShares: string
+    liquidity: string
+    endDate: string
+  }>
 }
 
-export interface PlaceBetResult extends StringRecord<JsonValue> {
-  // API response from /api/markets/{id}/bet
-}
+/** API response from /api/markets/{id}/bet - passthrough schema */
+export type PlaceBetResult = Record<string, unknown>
 
 export interface GetBalanceResult {
-  balance: string;
-  lifetimePnL: string;
+  balance: string
+  lifetimePnL: string
 }
 
 export interface GetPositionsResult {
   positions: Array<{
-    id: string;
-    marketId: string;
-    question: string | null;
-    side: 'YES' | 'NO';
-    shares: string;
-    avgPrice: string;
-  }>;
+    id: string
+    marketId: string
+    question: string | null
+    side: 'YES' | 'NO'
+    shares: string
+    avgPrice: string
+  }>
 }
 
-export interface ClosePositionResult extends StringRecord<JsonValue> {
-  // API response from /api/positions/{id}/close
-}
+/** API response from /api/positions/{id}/close - passthrough schema */
+export type ClosePositionResult = Record<string, unknown>
 
 export interface GetMarketDataResult {
-  id: string;
-  question: string;
-  description: string | null;
-  yesShares: string;
-  noShares: string;
-  liquidity: string;
-  resolved: boolean;
-  resolution: boolean | null;
-  endDate: string;
+  id: string
+  question: string
+  description: string | null
+  yesShares: string
+  noShares: string
+  liquidity: string
+  resolved: boolean
+  resolution: boolean | null
+  endDate: string
 }
 
 export interface QueryFeedResult {
   posts: Array<{
-    id: string;
-    content: string;
-    authorId: string;
-    timestamp: string;
-  }>;
+    id: string
+    content: string
+    authorId: string
+    timestamp: string
+  }>
 }
 
-// Market Operations - Results
-export interface BuySharesResult extends StringRecord<JsonValue> {
-  // API response
-}
-
-export interface SellSharesResult extends StringRecord<JsonValue> {
-  // API response
-}
-
-export interface OpenPositionResult extends StringRecord<JsonValue> {
-  // API response
-}
+// Market Operations - Results (passthrough schemas)
+export type BuySharesResult = Record<string, unknown>
+export type SellSharesResult = Record<string, unknown>
+export type OpenPositionResult = Record<string, unknown>
 
 export interface GetMarketPricesResult {
-  marketId: string;
-  yesPrice: number;
-  noPrice: number;
-  timestamp: string;
+  marketId: string
+  yesPrice: number
+  noPrice: number
+  timestamp: string
 }
 
 export interface GetPerpetualsResult {
   markets: Array<{
-    ticker: string;
-    currentPrice: number;
-    priceChange24h?: number;
-    volume24h?: number;
-  }>;
+    ticker: string
+    currentPrice: number
+    priceChange24h?: number
+    volume24h?: number
+  }>
 }
 
 export interface GetTradesResult {
   trades: Array<{
-    id: string;
-    marketId: string;
-    userId: string;
-    side: 'YES' | 'NO';
-    shares: string;
-    price: string;
-    timestamp: string;
-  }>;
+    id: string
+    marketId: string
+    userId: string
+    side: 'YES' | 'NO'
+    shares: string
+    price: string
+    timestamp: string
+  }>
 }
 
 export interface GetTradeHistoryResult {
   trades: Array<{
-    id: string;
-    marketId: string;
-    side: 'YES' | 'NO';
-    shares: string;
-    price: string;
-    timestamp: string;
-  }>;
+    id: string
+    marketId: string
+    side: 'YES' | 'NO'
+    shares: string
+    price: string
+    timestamp: string
+  }>
 }
 
 // Social Features - Results
 export interface CreatePostResult {
-  success: boolean;
-  postId: string;
-  content: string;
+  success: boolean
+  postId: string
+  content: string
 }
 
 export interface DeletePostResult {
-  success: boolean;
+  success: boolean
 }
 
 export interface LikePostResult {
-  success: boolean;
-  liked: boolean;
+  success: boolean
+  liked: boolean
 }
 
 export interface UnlikePostResult {
-  success: boolean;
+  success: boolean
 }
 
 export interface SharePostResult {
-  success: boolean;
-  shareId: string;
+  success: boolean
+  shareId: string
 }
 
 export interface GetCommentsResult {
   comments: Array<{
-    id: string;
-    postId: string;
-    authorId: string;
-    content: string;
-    timestamp: string;
-    likes: number;
-  }>;
+    id: string
+    postId: string
+    authorId: string
+    content: string
+    timestamp: string
+    likes: number
+  }>
 }
 
 export interface CreateCommentResult {
-  success: boolean;
-  commentId: string;
-  content: string;
+  success: boolean
+  commentId: string
+  content: string
 }
 
 export interface DeleteCommentResult {
-  success: boolean;
+  success: boolean
 }
 
 export interface LikeCommentResult {
-  success: boolean;
+  success: boolean
 }
 
 // User Management - Results
 export interface GetUserProfileResult {
-  id: string;
-  username: string | null;
-  displayName: string | null;
-  bio: string | null;
-  profileImageUrl: string | null;
-  reputationPoints: number;
-  virtualBalance: string;
+  id: string
+  username: string | null
+  displayName: string | null
+  bio: string | null
+  profileImageUrl: string | null
+  reputationPoints: number
+  virtualBalance: string
 }
 
 export interface UpdateProfileResult {
-  success: boolean;
-  profile: GetUserProfileResult;
+  success: boolean
+  profile: GetUserProfileResult
 }
 
 export interface FollowUserResult {
-  success: boolean;
+  success: boolean
 }
 
 export interface UnfollowUserResult {
-  success: boolean;
+  success: boolean
 }
 
 export interface GetFollowersResult {
   followers: Array<{
-    id: string;
-    username: string | null;
-    displayName: string | null;
-    profileImageUrl: string | null;
-  }>;
+    id: string
+    username: string | null
+    displayName: string | null
+    profileImageUrl: string | null
+  }>
 }
 
 export interface GetFollowingResult {
   following: Array<{
-    id: string;
-    username: string | null;
-    displayName: string | null;
-    profileImageUrl: string | null;
-  }>;
+    id: string
+    username: string | null
+    displayName: string | null
+    profileImageUrl: string | null
+  }>
 }
 
 export interface SearchUsersResult {
   users: Array<{
-    id: string;
-    username: string | null;
-    displayName: string | null;
-    reputationPoints: number;
-  }>;
+    id: string
+    username: string | null
+    displayName: string | null
+    reputationPoints: number
+  }>
 }
 
 export interface GetUserWalletResult {
-  walletAddress: string | null;
-  virtualBalance: string;
-  totalDeposited: string;
-  totalWithdrawn: string;
+  walletAddress: string | null
+  virtualBalance: string
+  totalDeposited: string
+  totalWithdrawn: string
 }
 
 export interface GetUserStatsResult {
-  totalPosts: number;
-  totalComments: number;
-  totalLikes: number;
-  reputationPoints: number;
-  virtualBalance: string;
-  lifetimePnL: string;
+  totalPosts: number
+  totalComments: number
+  totalLikes: number
+  reputationPoints: number
+  virtualBalance: string
+  lifetimePnL: string
 }
 
 // Chats & Messaging - Results
 export interface GetChatsResult {
   chats: Array<{
-    id: string;
-    name: string | null;
-    type: 'dm' | 'group';
-    lastMessageAt: string | null;
-    unreadCount: number;
-  }>;
+    id: string
+    name: string | null
+    type: 'dm' | 'group'
+    lastMessageAt: string | null
+    unreadCount: number
+  }>
 }
 
 export interface GetChatMessagesResult {
   messages: Array<{
-    id: string;
-    chatId: string;
-    authorId: string;
-    content: string;
-    timestamp: string;
-  }>;
+    id: string
+    chatId: string
+    authorId: string
+    content: string
+    timestamp: string
+  }>
 }
 
 export interface SendMessageResult {
-  success: boolean;
-  messageId: string;
+  success: boolean
+  messageId: string
 }
 
 export interface CreateGroupResult {
-  success: boolean;
-  chatId: string;
-  name: string;
+  success: boolean
+  chatId: string
+  name: string
 }
 
 export interface LeaveChatResult {
-  success: boolean;
+  success: boolean
 }
 
 export interface GetUnreadCountResult {
-  unreadCount: number;
+  unreadCount: number
 }
 
 // Notifications - Results
 export interface GetNotificationsResult {
   notifications: Array<{
-    id: string;
-    type: string;
-    message: string;
-    read: boolean;
-    timestamp: string;
-  }>;
+    id: string
+    type: string
+    message: string
+    read: boolean
+    timestamp: string
+  }>
 }
 
 export interface MarkNotificationsReadResult {
-  success: boolean;
-  markedCount: number;
+  success: boolean
+  markedCount: number
 }
 
 export interface GetGroupInvitesResult {
   invites: Array<{
-    id: string;
-    groupId: string;
-    groupName: string | null;
-    inviterId: string;
-    timestamp: string;
+    id: string
+    groupId: string
+    groupName: string | null
+    inviterId: string
+    timestamp: string
     /** Source of the invite - 'user' for user-initiated, 'npc' for NPC-initiated */
-    source?: 'user' | 'npc';
-  }>;
+    source?: 'user' | 'npc'
+  }>
 }
 
 export interface AcceptGroupInviteResult {
-  success: boolean;
-  chatId: string;
+  success: boolean
+  chatId: string
 }
 
 export interface DeclineGroupInviteResult {
-  success: boolean;
+  success: boolean
 }
 
 // Leaderboard & Stats - Results
 export interface GetLeaderboardResult {
   leaderboard: Array<{
-    rank: number;
-    userId: string;
-    username: string | null;
-    displayName: string | null;
-    points: number;
-  }>;
+    rank: number
+    userId: string
+    username?: string | null
+    displayName?: string | null
+    points: number
+  }>
   pagination: {
-    page: number;
-    pageSize: number;
-    total: number;
-  };
+    page: number
+    pageSize: number
+    total: number
+  }
 }
 
 export interface GetSystemStatsResult {
-  users: number;
-  posts: number;
-  markets: number;
-  activeMarkets: number;
+  users: number
+  posts: number
+  markets: number
+  activeMarkets: number
 }
 
 // Referrals & Rewards - Results
 export interface GetReferralCodeResult {
-  referralCode: string;
+  referralCode: string
 }
 
 export interface GetReferralsResult {
   referrals: Array<{
-    id: string;
-    referredUserId: string;
-    username: string | null;
-    displayName: string | null;
-    createdAt: string;
-  }>;
+    id: string
+    referredUserId: string
+    username: string | null
+    displayName: string | null
+    createdAt: string
+  }>
 }
 
 export interface GetReferralStatsResult {
-  totalReferrals: number;
-  totalEarnings: number;
-  referralCode: string;
+  totalReferrals: number
+  totalEarnings: number
+  referralCode: string
 }
 
 // Reputation - Results
 export interface GetReputationResult {
-  userId: string;
-  trustScore: number;
-  accuracyScore: number;
-  totalBets: number;
-  winningBets: number;
+  userId: string
+  trustScore: number
+  accuracyScore: number
+  totalBets: number
+  winningBets: number
 }
 
 export interface GetReputationBreakdownResult {
-  userId: string;
-  trustScore: number;
-  accuracyScore: number;
+  userId: string
+  trustScore: number
+  accuracyScore: number
   breakdown: {
-    marketPerformance: number;
-    socialActivity: number;
-    userFeedback: number;
-  };
+    marketPerformance: number
+    socialActivity: number
+    userFeedback: number
+  }
 }
 
 // Trending & Discovery - Results
 export interface GetTrendingTagsResult {
   tags: Array<{
-    tag: string;
-    postCount: number;
-    trendScore: number;
-  }>;
+    tag: string
+    postCount: number
+    trendScore: number
+  }>
 }
 
 export interface GetPostsByTagResult {
   posts: Array<{
-    id: string;
-    content: string;
-    authorId: string;
-    timestamp: string;
-  }>;
+    id: string
+    content: string
+    authorId: string
+    timestamp: string
+  }>
 }
 
 // Organizations - Results
 export interface GetOrganizationsResult {
   organizations: Array<{
-    id: string;
-    name: string;
-    description: string | null;
-  }>;
+    id: string
+    name: string
+    description: string | null
+  }>
 }
 
 // x402 Micropayments - Results
 export interface PaymentRequestResult {
-  requestId: string;
-  from: string;
-  to: string;
-  amount: string;
-  expiresAt: number;
+  requestId: string
+  from: string
+  to: string
+  amount: string
+  expiresAt: number
 }
 
 export interface PaymentReceiptResult {
-  requestId: string;
-  txHash: string;
-  verified: boolean;
+  requestId: string
+  txHash: string
+  verified: boolean
 }
 
 // Moderation - Results
 export interface BlockUserResult {
-  success: boolean;
+  success: boolean
 }
 
 export interface UnblockUserResult {
-  success: boolean;
+  success: boolean
 }
 
 export interface MuteUserResult {
-  success: boolean;
+  success: boolean
 }
 
 export interface UnmuteUserResult {
-  success: boolean;
+  success: boolean
 }
 
 export interface ReportUserResult {
-  success: boolean;
-  reportId: string;
+  success: boolean
+  reportId: string
 }
 
 export interface ReportPostResult {
-  success: boolean;
-  reportId: string;
+  success: boolean
+  reportId: string
 }
 
 export interface GetBlocksResult {
   blockedUsers: Array<{
-    userId: string;
-    username: string | null;
-    displayName: string | null;
-    blockedAt: string;
-  }>;
+    userId: string
+    username: string | null
+    displayName: string | null
+    blockedAt: string
+  }>
 }
 
 export interface GetMutesResult {
   mutedUsers: Array<{
-    userId: string;
-    username: string | null;
-    displayName: string | null;
-    mutedAt: string;
-  }>;
+    userId: string
+    username: string | null
+    displayName: string | null
+    mutedAt: string
+  }>
 }
 
 export interface CheckBlockStatusResult {
-  isBlocked: boolean;
-  blockedAt: string | null;
+  isBlocked: boolean
+  blockedAt: string | null
 }
 
 export interface CheckMuteStatusResult {
-  isMuted: boolean;
-  mutedAt: string | null;
+  isMuted: boolean
+  mutedAt: string | null
 }
 
 // Moderation Escrow - Results
 export interface CreateEscrowPaymentResult {
-  success: boolean;
+  success: boolean
   escrow: {
-    id: string;
-    recipientId: string;
-    amountUSD: string;
-    status: string;
-    paymentRequestId: string;
-    expiresAt: string;
-  };
+    id: string
+    recipientId: string
+    amountUSD: string
+    status: string
+    paymentRequestId: string
+    expiresAt: string
+  }
   paymentRequest: {
-    requestId: string;
-    amount: string;
-    from: string;
-    to: string;
-    expiresAt: number;
-  };
+    requestId: string
+    amount: string
+    from: string
+    to: string
+    expiresAt: number
+  }
 }
 
 export interface VerifyEscrowPaymentResult {
-  success: boolean;
+  success: boolean
   escrow: {
-    id: string;
-    recipientId: string;
-    amountUSD: string;
-    status: string;
-    paymentTxHash: string | null;
-  };
+    id: string
+    recipientId: string | null
+    amountUSD: string
+    status: string
+    paymentTxHash: string | null
+  }
 }
 
 export interface RefundEscrowPaymentResult {
-  success: boolean;
+  success: boolean
   escrow: {
-    id: string;
-    recipientId: string;
-    amountUSD: string;
-    status: string;
-    refundTxHash: string | null;
-    refundedAt: string | null;
-  };
+    id: string
+    recipientId: string | null
+    amountUSD: string
+    status: string
+    refundTxHash: string | null
+    refundedAt: string | null
+  }
 }
 
 export interface ListEscrowPaymentsResult {
-  success: boolean;
+  success: boolean
   escrows: Array<{
-    id: string;
-    recipientId: string;
-    adminId: string;
-    amountUSD: string;
-    status: string;
-    createdAt: string;
-    expiresAt: string;
-  }>;
+    id: string
+    recipientId: string
+    adminId: string
+    amountUSD: string
+    status: string
+    createdAt: string
+    expiresAt: string
+  }>
   pagination: {
-    total: number;
-    limit: number;
-    offset: number;
-  };
+    total: number
+    limit: number
+    offset: number
+  }
 }
 
 // Ban Appeals - Results
 export interface AppealBanResult {
-  success: boolean;
-  message: string;
-  appealStatus: string;
+  success: boolean
+  message: string
+  appealStatus: string
 }
 
 export interface AppealBanWithEscrowResult {
-  success: boolean;
-  message: string;
+  success: boolean
+  message: string
   appeal: {
-    status: string;
-    escrowId: string;
-    amountUSD: string;
-  };
+    status: string
+    escrowId: string
+    amountUSD: string
+  }
 }
 
 // Favorites - Results
 export interface FavoriteProfileResult {
-  success: boolean;
+  success: boolean
 }
 
 export interface UnfavoriteProfileResult {
-  success: boolean;
+  success: boolean
 }
 
 export interface GetFavoritesResult {
   favorites: Array<{
-    userId: string;
-    username: string | null;
-    displayName: string | null;
-    profileImageUrl: string | null;
-    favoritedAt: string;
-  }>;
+    userId: string
+    username: string | null
+    displayName: string | null
+    profileImageUrl: string | null
+    favoritedAt: string
+  }>
 }
 
 export interface GetFavoritePostsResult {
   posts: Array<{
-    id: string;
-    content: string;
-    authorId: string;
-    timestamp: string;
-  }>;
+    id: string
+    content: string
+    authorId: string
+    timestamp: string
+  }>
 }
 
 // Points Transfer - Results
 export interface TransferPointsResult {
-  success: boolean;
-  transactionId: string;
-  amount: number;
-  recipientId: string;
+  success: boolean
+  transactionId: string
+  amount: number
+  recipientId: string
 }
 
 // Union type for all tool results (internal)
@@ -924,4 +912,4 @@ export type MCPToolResult =
   | UnfavoriteProfileResult
   | GetFavoritesResult
   | GetFavoritePostsResult
-  | TransferPointsResult;
+  | TransferPointsResult

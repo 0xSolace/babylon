@@ -12,8 +12,9 @@
  * @packageDocumentation
  */
 
-import { ExternalServiceError } from '@babylon/shared';
-import type { Address, Hex } from 'viem';
+import { ExternalServiceError } from '@babylon/shared'
+import type { Address, Hex } from 'viem'
+import { z } from 'zod'
 
 /**
  * Supported chains for messaging
@@ -25,36 +26,63 @@ export enum MessagingChain {
   OPTIMISM = 10,
 }
 
+// API Response Schemas
+const RegisterKeysResponseSchema = z.object({
+  txHash: z.string(),
+})
+
+const CrossChainMessageSchema = z.object({
+  id: z.string(),
+  sourceChain: z.nativeEnum(MessagingChain),
+  destinationChain: z.nativeEnum(MessagingChain),
+  sender: z.string(),
+  recipient: z.string(),
+  encryptedContent: z.string(),
+  ephemeralPublicKey: z.string(),
+  nonce: z.string(),
+  timestamp: z.number(),
+  bridgeNonce: z.union([z.bigint(), z.string(), z.number()]),
+  signature: z.string().optional(),
+})
+
+const CrossChainMessagesResponseSchema = z.object({
+  messages: z.array(CrossChainMessageSchema),
+})
+
+const HasKeysResponseSchema = z.object({
+  hasKeys: z.boolean(),
+})
+
 /**
  * Cross-chain message envelope
  */
 export interface CrossChainMessage {
-  id: string;
-  sourceChain: MessagingChain;
-  destinationChain: MessagingChain;
-  sender: Address;
-  recipient: Address;
-  encryptedContent: string;
-  ephemeralPublicKey: string;
-  nonce: string;
-  timestamp: number;
-  bridgeNonce: bigint;
-  signature?: Hex;
+  id: string
+  sourceChain: MessagingChain
+  destinationChain: MessagingChain
+  sender: Address
+  recipient: Address
+  encryptedContent: string
+  ephemeralPublicKey: string
+  nonce: string
+  timestamp: number
+  bridgeNonce: bigint
+  signature?: Hex
 }
 
 /**
  * Key registration across chains
  */
 export interface CrossChainKeyRegistration {
-  address: Address;
-  identityKey: string;
-  signedPreKey: string;
-  preKeySignature: string;
-  oneTimePreKeys: string[];
-  sourceChain: MessagingChain;
-  destinationChains: MessagingChain[];
-  timestamp: number;
-  signature: Hex;
+  address: Address
+  identityKey: string
+  signedPreKey: string
+  preKeySignature: string
+  oneTimePreKeys: string[]
+  sourceChain: MessagingChain
+  destinationChains: MessagingChain[]
+  timestamp: number
+  signature: Hex
 }
 
 /**
@@ -62,50 +90,54 @@ export interface CrossChainKeyRegistration {
  */
 export interface BaseBridgeConfig {
   /** Jeju L2 RPC URL */
-  jejuRpcUrl: string;
+  jejuRpcUrl: string
   /** Base RPC URL */
-  baseRpcUrl: string;
+  baseRpcUrl: string
   /** Bridge contract on Jeju */
-  jejuBridgeAddress: Address;
+  jejuBridgeAddress: Address
   /** Bridge contract on Base */
-  baseBridgeAddress: Address;
+  baseBridgeAddress: Address
   /** KeyRegistry on Jeju */
-  jejuKeyRegistryAddress: Address;
+  jejuKeyRegistryAddress: Address
   /** Relay node URL */
-  relayNodeUrl: string;
+  relayNodeUrl: string
 }
 
 /**
  * Base <-> Jeju messaging bridge client
  */
 export class BaseBridgeClient {
-  private config: BaseBridgeConfig;
-  private pendingMessages: Map<string, CrossChainMessage> = new Map();
+  private config: BaseBridgeConfig
+  private pendingMessages: Map<string, CrossChainMessage> = new Map()
 
   constructor(config: Partial<BaseBridgeConfig> = {}) {
+    const zeroAddress: Address = '0x0000000000000000000000000000000000000000'
     this.config = {
       jejuRpcUrl:
         config.jejuRpcUrl ??
         process.env.JEJU_RPC_URL ??
-        'http://localhost:8545',
+        'http://localhost:6545',
       baseRpcUrl:
         config.baseRpcUrl ??
         process.env.BASE_RPC_URL ??
         'https://mainnet.base.org',
-      jejuBridgeAddress: (config.jejuBridgeAddress ??
-        process.env.JEJU_BRIDGE_ADDRESS ??
-        '0x0') as Address,
-      baseBridgeAddress: (config.baseBridgeAddress ??
-        process.env.BASE_BRIDGE_ADDRESS ??
-        '0x0') as Address,
-      jejuKeyRegistryAddress: (config.jejuKeyRegistryAddress ??
-        process.env.JEJU_KEY_REGISTRY_ADDRESS ??
-        '0x0') as Address,
+      jejuBridgeAddress:
+        config.jejuBridgeAddress ??
+        (process.env.JEJU_BRIDGE_ADDRESS as Address | undefined) ??
+        zeroAddress,
+      baseBridgeAddress:
+        config.baseBridgeAddress ??
+        (process.env.BASE_BRIDGE_ADDRESS as Address | undefined) ??
+        zeroAddress,
+      jejuKeyRegistryAddress:
+        config.jejuKeyRegistryAddress ??
+        (process.env.JEJU_KEY_REGISTRY_ADDRESS as Address | undefined) ??
+        zeroAddress,
       relayNodeUrl:
         config.relayNodeUrl ??
         process.env.RELAY_NODE_URL ??
         'http://localhost:3400',
-    };
+    }
   }
 
   /**
@@ -113,13 +145,13 @@ export class BaseBridgeClient {
    */
   async registerKeysFromBase(
     keys: {
-      identityKey: string;
-      signedPreKey: string;
-      preKeySignature: string;
-      oneTimePreKeys: string[];
+      identityKey: string
+      signedPreKey: string
+      preKeySignature: string
+      oneTimePreKeys: string[]
     },
     userAddress: Address,
-    signature: Hex
+    signature: Hex,
   ): Promise<{ txHash: string }> {
     const registration: CrossChainKeyRegistration = {
       address: userAddress,
@@ -131,7 +163,7 @@ export class BaseBridgeClient {
       destinationChains: [MessagingChain.JEJU],
       timestamp: Date.now(),
       signature,
-    };
+    }
 
     const response = await fetch(
       `${this.config.relayNodeUrl}/bridge/register-keys`,
@@ -140,20 +172,21 @@ export class BaseBridgeClient {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(registration),
         signal: AbortSignal.timeout(30000),
-      }
-    );
+      },
+    )
 
     if (!response.ok) {
-      const errorText = await response.text();
+      const errorText = await response.text()
       throw new ExternalServiceError(
         'BridgeRelay',
         `Failed to register keys: ${errorText}`,
-        response.status
-      );
+        response.status,
+      )
     }
 
-    const result = (await response.json()) as { txHash: string };
-    return { txHash: result.txHash };
+    const json: unknown = await response.json()
+    const result = RegisterKeysResponseSchema.parse(json)
+    return { txHash: result.txHash }
   }
 
   /**
@@ -166,9 +199,9 @@ export class BaseBridgeClient {
     ephemeralPublicKey: string,
     nonce: string,
     sourceChain: MessagingChain,
-    destinationChain: MessagingChain
+    destinationChain: MessagingChain,
   ): Promise<{ messageId: string }> {
-    const messageId = `xc-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const messageId = `xc-${Date.now()}-${Math.random().toString(36).slice(2)}`
 
     const message: CrossChainMessage = {
       id: messageId,
@@ -181,7 +214,7 @@ export class BaseBridgeClient {
       nonce,
       timestamp: Date.now(),
       bridgeNonce: BigInt(Date.now()),
-    };
+    }
 
     const response = await fetch(
       `${this.config.relayNodeUrl}/bridge/send-message`,
@@ -193,46 +226,46 @@ export class BaseBridgeClient {
           bridgeNonce: message.bridgeNonce.toString(),
         }),
         signal: AbortSignal.timeout(30000),
-      }
-    );
+      },
+    )
 
     if (!response.ok) {
-      const errorText = await response.text();
+      const errorText = await response.text()
       throw new ExternalServiceError(
         'BridgeRelay',
         `Failed to send cross-chain message: ${errorText}`,
-        response.status
-      );
+        response.status,
+      )
     }
 
-    this.pendingMessages.set(messageId, message);
-    return { messageId };
+    this.pendingMessages.set(messageId, message)
+    return { messageId }
   }
 
   /**
    * Get message delivery status
    */
   async getMessageStatus(messageId: string): Promise<{
-    status: 'pending' | 'bridging' | 'delivered' | 'failed';
-    sourceChain?: MessagingChain;
-    destinationChain?: MessagingChain;
-    deliveredAt?: number;
-    error?: string;
+    status: 'pending' | 'bridging' | 'delivered' | 'failed'
+    sourceChain?: MessagingChain
+    destinationChain?: MessagingChain
+    deliveredAt?: number
+    error?: string
   }> {
     const response = await fetch(
       `${this.config.relayNodeUrl}/bridge/message-status/${messageId}`,
-      { signal: AbortSignal.timeout(10000) }
-    );
+      { signal: AbortSignal.timeout(10000) },
+    )
 
     if (!response.ok) {
       throw new ExternalServiceError(
         'BridgeRelay',
         `Failed to get message status: ${response.statusText}`,
-        response.status
-      );
+        response.status,
+      )
     }
 
-    return await response.json();
+    return await response.json()
   }
 
   /**
@@ -240,26 +273,36 @@ export class BaseBridgeClient {
    */
   async fetchCrossChainMessages(
     recipient: Address,
-    destinationChain: MessagingChain
+    destinationChain: MessagingChain,
   ): Promise<CrossChainMessage[]> {
     const response = await fetch(
       `${this.config.relayNodeUrl}/bridge/messages/${recipient}?chain=${destinationChain}`,
-      { signal: AbortSignal.timeout(30000) }
-    );
+      { signal: AbortSignal.timeout(30000) },
+    )
 
     if (!response.ok) {
       throw new ExternalServiceError(
         'BridgeRelay',
         `Failed to fetch cross-chain messages: ${response.statusText}`,
-        response.status
-      );
+        response.status,
+      )
     }
 
-    const data = (await response.json()) as { messages: CrossChainMessage[] };
+    const json: unknown = await response.json()
+    const data = CrossChainMessagesResponseSchema.parse(json)
     return data.messages.map((m) => ({
-      ...m,
-      bridgeNonce: BigInt(m.bridgeNonce as unknown as string),
-    }));
+      id: m.id,
+      sourceChain: m.sourceChain,
+      destinationChain: m.destinationChain,
+      sender: m.sender as Address,
+      recipient: m.recipient as Address,
+      encryptedContent: m.encryptedContent,
+      ephemeralPublicKey: m.ephemeralPublicKey,
+      nonce: m.nonce,
+      timestamp: m.timestamp,
+      bridgeNonce: BigInt(String(m.bridgeNonce)),
+      signature: m.signature as Hex | undefined,
+    }))
   }
 
   /**
@@ -267,23 +310,24 @@ export class BaseBridgeClient {
    */
   async hasKeysOnChain(
     address: Address,
-    chain: MessagingChain
+    chain: MessagingChain,
   ): Promise<boolean> {
     const response = await fetch(
       `${this.config.relayNodeUrl}/bridge/has-keys/${address}?chain=${chain}`,
-      { signal: AbortSignal.timeout(10000) }
-    );
+      { signal: AbortSignal.timeout(10000) },
+    )
 
     if (!response.ok) {
       throw new ExternalServiceError(
         'BridgeRelay',
         `Failed to check keys on chain: ${response.statusText}`,
-        response.status
-      );
+        response.status,
+      )
     }
 
-    const data = (await response.json()) as { hasKeys: boolean };
-    return data.hasKeys;
+    const json: unknown = await response.json()
+    const data = HasKeysResponseSchema.parse(json)
+    return data.hasKeys
   }
 
   /**
@@ -291,47 +335,47 @@ export class BaseBridgeClient {
    */
   async getMessageRoute(
     sender: Address,
-    recipient: Address
+    recipient: Address,
   ): Promise<{
-    route: 'direct' | 'bridge';
-    sourceChain: MessagingChain;
-    destinationChain: MessagingChain;
-    estimatedTime: number;
+    route: 'direct' | 'bridge'
+    sourceChain: MessagingChain
+    destinationChain: MessagingChain
+    estimatedTime: number
   }> {
     const response = await fetch(
       `${this.config.relayNodeUrl}/bridge/route?sender=${sender}&recipient=${recipient}`,
-      { signal: AbortSignal.timeout(10000) }
-    );
+      { signal: AbortSignal.timeout(10000) },
+    )
 
     if (!response.ok) {
       throw new ExternalServiceError(
         'BridgeRelay',
         `Failed to get message route: ${response.statusText}`,
-        response.status
-      );
+        response.status,
+      )
     }
 
-    return await response.json();
+    return await response.json()
   }
 }
 
 // Factory function
 export function createBaseBridgeClient(
-  config?: Partial<BaseBridgeConfig>
+  config?: Partial<BaseBridgeConfig>,
 ): BaseBridgeClient {
-  return new BaseBridgeClient(config);
+  return new BaseBridgeClient(config)
 }
 
 // Singleton
-let bridgeClient: BaseBridgeClient | null = null;
+let bridgeClient: BaseBridgeClient | null = null
 
 export function getBaseBridgeClient(): BaseBridgeClient {
   if (!bridgeClient) {
-    bridgeClient = new BaseBridgeClient();
+    bridgeClient = new BaseBridgeClient()
   }
-  return bridgeClient;
+  return bridgeClient
 }
 
 export function resetBaseBridgeClient(): void {
-  bridgeClient = null;
+  bridgeClient = null
 }

@@ -5,26 +5,39 @@
  * for integration tests
  */
 
-import { isContractDeployed } from '@babylon/contracts';
-import { LOCAL_CONTRACT_ADDRESSES } from '@babylon/shared';
-import { $ } from 'bun';
-import { execSync } from 'child_process';
-import { join } from 'path';
-import { createPublicClient, http } from 'viem';
-import { localhost } from 'viem/chains';
-import { parseEnvFile } from '../infrastructure/setup';
+import {
+  getContractAddresses,
+  LOCAL_CONTRACT_ADDRESSES,
+  toAddress,
+  ZERO_ADDRESS,
+} from '@babylon/shared'
 
-const HARDHAT_RPC_URL = process.env.HARDHAT_RPC_URL || 'http://localhost:8545';
+function isContractDeployed(
+  name: keyof ReturnType<typeof getContractAddresses>,
+): boolean {
+  const addresses = getContractAddresses()
+  const addr = addresses[name]
+  return addr !== undefined && addr !== ZERO_ADDRESS
+}
+
+import { execSync } from 'node:child_process'
+import { join } from 'node:path'
+import { $ } from 'bun'
+import { createPublicClient, http } from 'viem'
+import { localhost } from 'viem/chains'
+import { parseEnvFile } from '../infrastructure/setup'
+
+const HARDHAT_RPC_URL = process.env.HARDHAT_RPC_URL || 'http://localhost:6545'
 
 /**
  * Load environment variables from a file into process.env
  * Only sets variables that are not already defined
  */
 function loadEnvFile(filePath: string): void {
-  const env = parseEnvFile(filePath);
+  const env = parseEnvFile(filePath)
   for (const [key, value] of Object.entries(env)) {
     if (!process.env[key]) {
-      process.env[key] = value;
+      process.env[key] = value
     }
   }
 }
@@ -37,14 +50,14 @@ export async function ensureHardhatRunning(): Promise<boolean> {
     // Check if Hardhat is responding
     execSync(`cast block-number --rpc-url ${HARDHAT_RPC_URL}`, {
       stdio: 'ignore',
-    });
-    console.log('✅ Hardhat is running');
-    return true;
+    })
+    console.log('✅ Hardhat is running')
+    return true
   } catch {
     console.log(
-      '⚠️  Hardhat node not detected. Please start it with: npx hardhat node'
-    );
-    return false;
+      '⚠️  Hardhat node not detected. Please start it with: npx hardhat node',
+    )
+    return false
   }
 }
 
@@ -56,13 +69,13 @@ async function checkContractDeployed(address: string): Promise<boolean> {
     const client = createPublicClient({
       chain: localhost,
       transport: http(HARDHAT_RPC_URL),
-    });
+    })
     const code = await client.getBytecode({
-      address: address as `0x${string}`,
-    });
-    return code !== undefined && code !== '0x';
+      address: toAddress(address),
+    })
+    return code !== undefined && code !== '0x'
   } catch {
-    return false;
+    return false
   }
 }
 
@@ -71,29 +84,29 @@ async function checkContractDeployed(address: string): Promise<boolean> {
  */
 export async function areContractsDeployed(): Promise<boolean> {
   // Use canonical config addresses for local development
-  const oracleAddress = LOCAL_CONTRACT_ADDRESSES.gameOracle;
-  const diamondAddress = LOCAL_CONTRACT_ADDRESSES.diamond;
+  const oracleAddress = LOCAL_CONTRACT_ADDRESSES.gameOracle
+  const diamondAddress = LOCAL_CONTRACT_ADDRESSES.diamond
 
   // Check via contracts package helper (uses environment variables)
-  const oracleDeployed = isContractDeployed('gameOracle');
-  const diamondDeployed = isContractDeployed('diamond');
+  const oracleDeployed = isContractDeployed('gameOracle')
+  const diamondDeployed = isContractDeployed('diamond')
 
   if (!oracleDeployed && !diamondDeployed) {
-    return false;
+    return false
   }
 
   // Verify on-chain if addresses are configured
   if (oracleAddress) {
-    const deployed = await checkContractDeployed(oracleAddress);
-    if (!deployed) return false;
+    const deployed = await checkContractDeployed(oracleAddress)
+    if (!deployed) return false
   }
 
   if (diamondAddress) {
-    const deployed = await checkContractDeployed(diamondAddress);
-    if (!deployed) return false;
+    const deployed = await checkContractDeployed(diamondAddress)
+    if (!deployed) return false
   }
 
-  return true;
+  return true
 }
 
 /**
@@ -101,33 +114,33 @@ export async function areContractsDeployed(): Promise<boolean> {
  */
 export async function deployContracts(): Promise<boolean> {
   try {
-    console.log('🔄 Deploying contracts to localnet (Hardhat)...');
+    console.log('🔄 Deploying contracts to localnet (Hardhat)...')
 
     // Set environment variables for deployment
     process.env.DEPLOYER_PRIVATE_KEY =
       process.env.DEPLOYER_PRIVATE_KEY ||
-      '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80';
-    process.env.ETHERSCAN_API_KEY = process.env.ETHERSCAN_API_KEY || 'dummy';
+      '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80'
+    process.env.ETHERSCAN_API_KEY = process.env.ETHERSCAN_API_KEY || 'dummy'
 
     // Run deployment via CLI
-    await $`bun run apps/cli/src/index.ts deploy local`.quiet();
+    await $`bun run apps/cli/src/index.ts deploy local`.quiet()
 
     // Wait a moment for files to be written
-    await new Promise((resolve) => setTimeout(resolve, 2000));
+    await new Promise((resolve) => setTimeout(resolve, 2000))
 
     // Reload environment variables from both .env.local and .env
-    const cwd = process.cwd();
-    loadEnvFile(join(cwd, '.env.local'));
-    loadEnvFile(join(cwd, '.env'));
+    const cwd = process.cwd()
+    loadEnvFile(join(cwd, '.env.local'))
+    loadEnvFile(join(cwd, '.env'))
 
-    console.log('✅ Contracts deployed successfully');
-    return true;
+    console.log('✅ Contracts deployed successfully')
+    return true
   } catch (error) {
     console.log(
       '❌ Contract deployment failed:',
-      error instanceof Error ? error.message : String(error)
-    );
-    return false;
+      error instanceof Error ? error.message : String(error),
+    )
+    return false
   }
 }
 
@@ -137,30 +150,30 @@ export async function deployContracts(): Promise<boolean> {
  */
 export async function ensureContractsReady(): Promise<boolean> {
   // Step 1: Ensure Hardhat is running
-  const hardhatRunning = await ensureHardhatRunning();
+  const hardhatRunning = await ensureHardhatRunning()
   if (!hardhatRunning) {
-    console.log('❌ Cannot proceed without Hardhat');
-    return false;
+    console.log('❌ Cannot proceed without Hardhat')
+    return false
   }
 
   // Step 2: Check if contracts are deployed
-  let contractsDeployed = await areContractsDeployed();
+  let contractsDeployed = await areContractsDeployed()
 
   // Step 3: Deploy contracts if needed
   if (!contractsDeployed) {
-    console.log('⚠️  Contracts not deployed, deploying now...');
-    const deployed = await deployContracts();
+    console.log('⚠️  Contracts not deployed, deploying now...')
+    const deployed = await deployContracts()
     if (deployed) {
       // Verify deployment
-      contractsDeployed = await areContractsDeployed();
+      contractsDeployed = await areContractsDeployed()
     }
   }
 
   if (!contractsDeployed) {
-    console.log('❌ Contracts are not deployed and deployment failed');
-    return false;
+    console.log('❌ Contracts are not deployed and deployment failed')
+    return false
   }
 
-  console.log('✅ Contracts are ready for testing');
-  return true;
+  console.log('✅ Contracts are ready for testing')
+  return true
 }

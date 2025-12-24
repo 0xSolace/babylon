@@ -4,15 +4,15 @@
  * This ensures the agent always remembers its core mission and limitations
  */
 
-import { db, eq, users } from '@babylon/db';
+import { db, eq, users } from '@babylon/db'
 import type {
   IAgentRuntime,
   Memory,
   Provider,
   ProviderResult,
   State,
-} from '@elizaos/core';
-import { getAgentConfig } from '../../../shared/agent-config';
+} from '@elizaos/core'
+import { getAgentConfig } from '../../../shared/agent-config'
 
 /**
  * Provider: Agent Goals & Directives
@@ -27,9 +27,9 @@ export const goalsProvider: Provider = {
   get: async (
     runtime: IAgentRuntime,
     _message: Memory,
-    _state: State
+    _state: State,
   ): Promise<ProviderResult> => {
-    const agentUserId = runtime.agentId;
+    const agentUserId = runtime.agentId
 
     // Get user info
     const [user] = await db
@@ -41,14 +41,14 @@ export const goalsProvider: Provider = {
       })
       .from(users)
       .where(eq(users.id, agentUserId))
-      .limit(1);
+      .limit(1)
 
     if (!user) {
-      return { text: '' };
+      return { text: '' }
     }
 
     // Get agent configuration from separate table
-    const config = await getAgentConfig(agentUserId);
+    const config = await getAgentConfig(agentUserId)
 
     // Build comprehensive goals and directives
     const output = `═══════════════════════════════════════════════════════
@@ -93,7 +93,7 @@ ${config?.autonomousGroupChats ? '✅ Group Chats: You CAN participate in group 
 8. ADMIT when you don't know something or lack permissions
 
 ═══════════════════════════════════════════════════════
-`;
+`
 
     return {
       text: output,
@@ -113,6 +113,6 @@ ${config?.autonomousGroupChats ? '✅ Group Chats: You CAN participate in group 
         },
         managedBy: user.managedBy,
       },
-    };
+    }
   },
-};
+}

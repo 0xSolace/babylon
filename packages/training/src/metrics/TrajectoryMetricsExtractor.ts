@@ -14,7 +14,12 @@
  * @packageDocumentation
  */
 
-import type { TrajectoryStep } from '../training/types';
+import {
+  isArrayOf,
+  isObject,
+  isParsedTrajectoryStep,
+  type ParsedTrajectoryStep,
+} from '../type-guards'
 import type {
   BehavioralMetrics,
   BehaviorMetrics,
@@ -22,7 +27,7 @@ import type {
   InformationMetrics,
   SocialMetrics,
   TradingMetrics,
-} from './types';
+} from './types'
 
 /**
  * Action types that count as social interactions
@@ -43,7 +48,7 @@ const SOCIAL_ACTION_TYPES = new Set([
   'invite',
   'react',
   'share',
-]);
+])
 
 /**
  * Action types that count as trading actions
@@ -59,19 +64,21 @@ const TRADING_ACTION_TYPES = new Set([
   'predict',
   'bet',
   'swap',
-]);
+])
+
+type TrajectoryStep = ParsedTrajectoryStep
 
 export class TrajectoryMetricsExtractor {
   /**
    * Extract all metrics from a trajectory
    */
   extract(params: {
-    trajectoryId: string;
-    agentId: string;
-    steps: TrajectoryStep[];
-    scenarioId?: string;
-    startBalance?: number;
-    endBalance?: number;
+    trajectoryId: string
+    agentId: string
+    steps: TrajectoryStep[]
+    scenarioId?: string
+    startBalance?: number
+    endBalance?: number
   }): BehavioralMetrics {
     const {
       trajectoryId,
@@ -80,13 +87,13 @@ export class TrajectoryMetricsExtractor {
       scenarioId,
       startBalance,
       endBalance,
-    } = params;
+    } = params
 
-    const social = this.extractSocialMetrics(steps, agentId);
-    const trading = this.extractTradingMetrics(steps, startBalance, endBalance);
-    const influence = this.extractInfluenceMetrics(steps);
-    const behavior = this.extractBehaviorMetrics(steps);
-    const information = this.extractInformationMetrics(steps);
+    const social = this.extractSocialMetrics(steps, agentId)
+    const trading = this.extractTradingMetrics(steps, startBalance, endBalance)
+    const influence = this.extractInfluenceMetrics(steps)
+    const behavior = this.extractBehaviorMetrics(steps)
+    const information = this.extractInformationMetrics(steps)
 
     return {
       social,
@@ -98,7 +105,7 @@ export class TrajectoryMetricsExtractor {
       trajectoryId,
       agentId,
       scenarioId,
-    };
+    }
   }
 
   /**
@@ -106,7 +113,7 @@ export class TrajectoryMetricsExtractor {
    */
   private extractSocialMetrics(
     steps: TrajectoryStep[],
-    agentId: string
+    agentId: string,
   ): SocialMetrics {
     const metrics: SocialMetrics = {
       groupChatsJoined: 0,
@@ -121,87 +128,87 @@ export class TrajectoryMetricsExtractor {
       mentionsGiven: 0,
       mentionsReceived: 0,
       invitationsSent: 0,
-    };
+    }
 
-    const usersInteracted = new Set<string>();
-    let dmsReplied = 0;
+    const usersInteracted = new Set<string>()
+    let dmsReplied = 0
 
     for (const step of steps) {
-      const action = step.action;
-      if (!action) continue;
+      const action = step.action
+      if (!action) continue
 
-      const actionType = action.actionType.toLowerCase();
-      const params = action.parameters || {};
+      const actionType = action.actionType.toLowerCase()
+      const params = action.parameters || {}
 
       // Group chat actions
       if (actionType === 'join_group_chat') {
-        metrics.groupChatsJoined++;
+        metrics.groupChatsJoined++
       } else if (actionType === 'create_group_chat') {
-        metrics.groupChatsCreated++;
+        metrics.groupChatsCreated++
       } else if (
         actionType === 'post_group_message' ||
         actionType === 'group_message'
       ) {
-        metrics.groupMessagesSent++;
+        metrics.groupMessagesSent++
         if (params.groupId) {
-          usersInteracted.add(String(params.groupId));
+          usersInteracted.add(String(params.groupId))
         }
       }
 
       // DM actions
       else if (actionType === 'send_dm' || actionType === 'dm') {
         const isInitiator =
-          params.initiator === agentId || params.fromAgent === agentId;
+          params.initiator === agentId || params.fromAgent === agentId
         if (isInitiator) {
-          metrics.dmsInitiated++;
+          metrics.dmsInitiated++
         }
         if (params.toUserId || params.recipientId) {
-          usersInteracted.add(String(params.toUserId || params.recipientId));
+          usersInteracted.add(String(params.toUserId || params.recipientId))
         }
       } else if (actionType === 'reply_dm') {
-        dmsReplied++;
+        dmsReplied++
       }
 
       // Post/comment actions
       else if (actionType === 'create_post' || actionType === 'post') {
-        metrics.postsCreated++;
+        metrics.postsCreated++
       } else if (actionType === 'comment' || actionType === 'reply') {
-        metrics.commentsMade++;
+        metrics.commentsMade++
         if (params.authorId) {
-          usersInteracted.add(String(params.authorId));
+          usersInteracted.add(String(params.authorId))
         }
       }
 
       // Mention/invite actions
       else if (actionType === 'mention') {
-        metrics.mentionsGiven++;
+        metrics.mentionsGiven++
         if (params.mentionedUserId) {
-          usersInteracted.add(String(params.mentionedUserId));
+          usersInteracted.add(String(params.mentionedUserId))
         }
       } else if (actionType === 'invite') {
-        metrics.invitationsSent++;
+        metrics.invitationsSent++
         if (params.invitedUserId) {
-          usersInteracted.add(String(params.invitedUserId));
+          usersInteracted.add(String(params.invitedUserId))
         }
       }
 
       // Track users from any interaction
       if (params.userId && params.userId !== agentId) {
-        usersInteracted.add(String(params.userId));
+        usersInteracted.add(String(params.userId))
       }
       if (params.targetUserId && params.targetUserId !== agentId) {
-        usersInteracted.add(String(params.targetUserId));
+        usersInteracted.add(String(params.targetUserId))
       }
     }
 
     // Calculate DM response rate
     if (metrics.dmsReceived > 0) {
-      metrics.dmResponseRate = dmsReplied / metrics.dmsReceived;
+      metrics.dmResponseRate = dmsReplied / metrics.dmsReceived
     }
 
-    metrics.uniqueUsersInteracted = usersInteracted.size;
+    metrics.uniqueUsersInteracted = usersInteracted.size
 
-    return metrics;
+    return metrics
   }
 
   /**
@@ -210,7 +217,7 @@ export class TrajectoryMetricsExtractor {
   private extractTradingMetrics(
     steps: TrajectoryStep[],
     startBalance?: number,
-    endBalance?: number
+    endBalance?: number,
   ): TradingMetrics {
     const metrics: TradingMetrics = {
       tradesExecuted: 0,
@@ -226,25 +233,25 @@ export class TrajectoryMetricsExtractor {
       sellTrades: 0,
       largestWin: 0,
       largestLoss: 0,
-    };
+    }
 
-    const tradePnLs: number[] = [];
-    const positionSizes: number[] = [];
-    const marketsSet = new Set<string>();
-    let runningPnL = 0;
-    let peakPnL = 0;
-    let maxDrawdown = 0;
+    const tradePnLs: number[] = []
+    const positionSizes: number[] = []
+    const marketsSet = new Set<string>()
+    let runningPnL = 0
+    let peakPnL = 0
+    let maxDrawdown = 0
 
     for (const step of steps) {
-      const action = step.action;
-      if (!action) continue;
+      const action = step.action
+      if (!action) continue
 
-      const actionType = action.actionType.toLowerCase();
-      const params = action.parameters || {};
-      const result = action.result || {};
+      const actionType = action.actionType.toLowerCase()
+      const params = action.parameters || {}
+      const result = action.result || {}
 
       if (TRADING_ACTION_TYPES.has(actionType)) {
-        metrics.tradesExecuted++;
+        metrics.tradesExecuted++
 
         // Track buy/sell
         if (
@@ -252,55 +259,55 @@ export class TrajectoryMetricsExtractor {
           params.side === 'buy' ||
           params.direction === 'long'
         ) {
-          metrics.buyTrades++;
+          metrics.buyTrades++
         } else if (
           actionType === 'sell' ||
           params.side === 'sell' ||
           params.direction === 'short'
         ) {
-          metrics.sellTrades++;
+          metrics.sellTrades++
         }
 
         // Track market
-        const marketId = params.marketId || params.market || params.ticker;
+        const marketId = params.marketId || params.market || params.ticker
         if (marketId) {
-          marketsSet.add(String(marketId));
+          marketsSet.add(String(marketId))
         }
 
         // Track position size
         const size = Number(
-          params.amount || params.size || params.quantity || 0
-        );
+          params.amount || params.size || params.quantity || 0,
+        )
         if (size > 0) {
-          positionSizes.push(size);
+          positionSizes.push(size)
         }
 
         // Track P&L from result
         const tradePnL = Number(
-          result.pnl || result.profit || result.return || 0
-        );
+          result.pnl || result.profit || result.return || 0,
+        )
         if (tradePnL !== 0) {
-          tradePnLs.push(tradePnL);
-          runningPnL += tradePnL;
+          tradePnLs.push(tradePnL)
+          runningPnL += tradePnL
 
           if (tradePnL > 0) {
-            metrics.profitableTrades++;
+            metrics.profitableTrades++
             if (tradePnL > metrics.largestWin) {
-              metrics.largestWin = tradePnL;
+              metrics.largestWin = tradePnL
             }
           } else {
             if (tradePnL < metrics.largestLoss) {
-              metrics.largestLoss = tradePnL;
+              metrics.largestLoss = tradePnL
             }
           }
 
           // Track drawdown
           if (runningPnL > peakPnL) {
-            peakPnL = runningPnL;
+            peakPnL = runningPnL
           }
-          const drawdown = peakPnL - runningPnL;
+          const drawdown = peakPnL - runningPnL
           if (drawdown > maxDrawdown) {
-            maxDrawdown = drawdown;
+            maxDrawdown = drawdown
           }
         }
       }
@@ -308,39 +315,39 @@ export class TrajectoryMetricsExtractor {
 
     // Calculate derived metrics
     if (metrics.tradesExecuted > 0) {
-      metrics.winRate = metrics.profitableTrades / metrics.tradesExecuted;
+      metrics.winRate = metrics.profitableTrades / metrics.tradesExecuted
     }
 
     // Calculate total P&L from trades or balance difference
     if (tradePnLs.length > 0) {
-      metrics.totalPnL = tradePnLs.reduce((sum, pnl) => sum + pnl, 0);
+      metrics.totalPnL = tradePnLs.reduce((sum, pnl) => sum + pnl, 0)
     } else if (startBalance !== undefined && endBalance !== undefined) {
-      metrics.totalPnL = endBalance - startBalance;
+      metrics.totalPnL = endBalance - startBalance
     }
 
-    metrics.maxDrawdown = maxDrawdown;
-    metrics.marketsTraded = marketsSet.size;
+    metrics.maxDrawdown = maxDrawdown
+    metrics.marketsTraded = marketsSet.size
 
     // Average position size
     if (positionSizes.length > 0) {
       metrics.avgPositionSize =
-        positionSizes.reduce((sum, s) => sum + s, 0) / positionSizes.length;
+        positionSizes.reduce((sum, s) => sum + s, 0) / positionSizes.length
     }
 
     // Calculate Sharpe ratio (simplified)
     if (tradePnLs.length > 1) {
       const mean =
-        tradePnLs.reduce((sum, pnl) => sum + pnl, 0) / tradePnLs.length;
+        tradePnLs.reduce((sum, pnl) => sum + pnl, 0) / tradePnLs.length
       const variance =
-        tradePnLs.reduce((sum, pnl) => sum + Math.pow(pnl - mean, 2), 0) /
-        tradePnLs.length;
-      const stdDev = Math.sqrt(variance);
+        tradePnLs.reduce((sum, pnl) => sum + (pnl - mean) ** 2, 0) /
+        tradePnLs.length
+      const stdDev = Math.sqrt(variance)
       if (stdDev > 0) {
-        metrics.sharpeRatio = mean / stdDev;
+        metrics.sharpeRatio = mean / stdDev
       }
     }
 
-    return metrics;
+    return metrics
   }
 
   /**
@@ -355,80 +362,80 @@ export class TrajectoryMetricsExtractor {
       informationSpread: 0,
       positiveReactions: 0,
       negativeReactions: 0,
-    };
+    }
 
-    let startReputation: number | null = null;
-    let endReputation: number | null = null;
-    let startTrust: number | null = null;
-    let endTrust: number | null = null;
-    let startFollowers: number | null = null;
-    let endFollowers: number | null = null;
+    let startReputation: number | null = null
+    let endReputation: number | null = null
+    let startTrust: number | null = null
+    let endTrust: number | null = null
+    let startFollowers: number | null = null
+    let endFollowers: number | null = null
 
     for (const step of steps) {
-      const envState = step.environmentState || {};
+      const envState = step.environmentState || {}
 
       // Track reputation changes
       const reputation = Number(
-        envState.reputation || envState.agentReputation || 0
-      );
+        envState.reputation || envState.agentReputation || 0,
+      )
       if (reputation !== 0) {
         if (startReputation === null) {
-          startReputation = reputation;
+          startReputation = reputation
         }
-        endReputation = reputation;
+        endReputation = reputation
       }
 
       // Track trust changes
-      const trust = Number(envState.trustLevel || envState.trust || 0);
+      const trust = Number(envState.trustLevel || envState.trust || 0)
       if (trust !== 0) {
         if (startTrust === null) {
-          startTrust = trust;
+          startTrust = trust
         }
-        endTrust = trust;
+        endTrust = trust
       }
 
       // Track follower changes
       const followers = Number(
-        envState.followers || envState.followerCount || 0
-      );
+        envState.followers || envState.followerCount || 0,
+      )
       if (followers !== 0) {
         if (startFollowers === null) {
-          startFollowers = followers;
+          startFollowers = followers
         }
-        endFollowers = followers;
+        endFollowers = followers
       }
 
       // Track reactions from action results
-      const action = step.action;
+      const action = step.action
       if (action?.result) {
-        const result = action.result;
+        const result = action.result
         if (result.likes || result.upvotes) {
           metrics.positiveReactions += Number(
-            result.likes || result.upvotes || 0
-          );
+            result.likes || result.upvotes || 0,
+          )
         }
         if (result.dislikes || result.downvotes) {
           metrics.negativeReactions += Number(
-            result.dislikes || result.downvotes || 0
-          );
+            result.dislikes || result.downvotes || 0,
+          )
         }
         if (result.shares || result.reshares) {
           metrics.informationSpread += Number(
-            result.shares || result.reshares || 0
-          );
+            result.shares || result.reshares || 0,
+          )
         }
       }
     }
 
     // Calculate deltas
     if (startReputation !== null && endReputation !== null) {
-      metrics.reputationDelta = endReputation - startReputation;
+      metrics.reputationDelta = endReputation - startReputation
     }
     if (startTrust !== null && endTrust !== null) {
-      metrics.trustLevelDelta = endTrust - startTrust;
+      metrics.trustLevelDelta = endTrust - startTrust
     }
     if (startFollowers !== null && endFollowers !== null) {
-      metrics.followersGained = endFollowers - startFollowers;
+      metrics.followersGained = endFollowers - startFollowers
     }
 
     // Calculate influence score (simple composite)
@@ -436,9 +443,9 @@ export class TrajectoryMetricsExtractor {
       metrics.followersGained * 2 +
       metrics.positiveReactions -
       metrics.negativeReactions +
-      metrics.informationSpread * 3;
+      metrics.informationSpread * 3
 
-    return metrics;
+    return metrics
   }
 
   /**
@@ -456,89 +463,88 @@ export class TrajectoryMetricsExtractor {
       episodeLength: steps.length,
       actionTypesUsed: [],
       dominantActionType: '',
-    };
+    }
 
-    const actionTypeCounts = new Map<string, number>();
-    let socialActions = 0;
-    let tradeActions = 0;
+    const actionTypeCounts = new Map<string, number>()
+    let socialActions = 0
+    let tradeActions = 0
 
     for (const step of steps) {
-      const action = step.action;
-      if (!action) continue;
+      const action = step.action
+      if (!action) continue
 
-      metrics.totalActions++;
+      metrics.totalActions++
       if (!action.success) {
-        metrics.failedActions++;
+        metrics.failedActions++
       }
 
-      const actionType = action.actionType.toLowerCase();
+      const actionType = action.actionType.toLowerCase()
 
       // Count action types
       actionTypeCounts.set(
         actionType,
-        (actionTypeCounts.get(actionType) || 0) + 1
-      );
+        (actionTypeCounts.get(actionType) || 0) + 1,
+      )
 
       // Categorize actions
       if (SOCIAL_ACTION_TYPES.has(actionType)) {
-        socialActions++;
+        socialActions++
       }
       if (TRADING_ACTION_TYPES.has(actionType)) {
-        tradeActions++;
+        tradeActions++
       }
     }
 
     // Calculate derived metrics
     if (steps.length > 0) {
-      metrics.actionsPerTick = metrics.totalActions / steps.length;
+      metrics.actionsPerTick = metrics.totalActions / steps.length
     }
 
     if (metrics.totalActions > 0) {
       metrics.actionSuccessRate =
-        (metrics.totalActions - metrics.failedActions) / metrics.totalActions;
+        (metrics.totalActions - metrics.failedActions) / metrics.totalActions
     }
 
     if (tradeActions > 0) {
-      metrics.socialToTradeRatio = socialActions / tradeActions;
+      metrics.socialToTradeRatio = socialActions / tradeActions
     } else if (socialActions > 0) {
       // No trades but has social actions - use social count as ratio
       // This makes it clear they're social-focused without a magic number
-      metrics.socialToTradeRatio = socialActions;
+      metrics.socialToTradeRatio = socialActions
     }
     // If both are 0, ratio stays at 0 (no activity)
 
     // Find action types used and dominant type
-    metrics.actionTypesUsed = Array.from(actionTypeCounts.keys());
+    metrics.actionTypesUsed = Array.from(actionTypeCounts.keys())
 
-    let maxCount = 0;
+    let maxCount = 0
     for (const [actionType, count] of actionTypeCounts) {
       if (count > maxCount) {
-        maxCount = count;
-        metrics.dominantActionType = actionType;
+        maxCount = count
+        metrics.dominantActionType = actionType
       }
     }
 
     // Calculate consistency score (inverse of variance in action distribution)
     if (metrics.actionTypesUsed.length > 1) {
-      const counts = Array.from(actionTypeCounts.values());
-      const mean = counts.reduce((sum, c) => sum + c, 0) / counts.length;
+      const counts = Array.from(actionTypeCounts.values())
+      const mean = counts.reduce((sum, c) => sum + c, 0) / counts.length
       const variance =
-        counts.reduce((sum, c) => sum + Math.pow(c - mean, 2), 0) /
-        counts.length;
+        counts.reduce((sum, c) => sum + (c - mean) ** 2, 0) / counts.length
       // Normalize to 0-1 range (higher = more consistent)
-      metrics.consistencyScore = 1 / (1 + Math.sqrt(variance) / mean);
+      metrics.consistencyScore = 1 / (1 + Math.sqrt(variance) / mean)
     } else {
-      metrics.consistencyScore = 1; // Single action type = perfectly consistent
+      metrics.consistencyScore = 1 // Single action type = perfectly consistent
     }
 
-    return metrics;
+    return metrics
   }
 
   /**
    * Extract information gathering metrics
    */
   private extractInformationMetrics(
-    steps: TrajectoryStep[]
+    steps: TrajectoryStep[],
   ): InformationMetrics {
     const metrics: InformationMetrics = {
       researchActions: 0,
@@ -549,47 +555,48 @@ export class TrajectoryMetricsExtractor {
       predictionsMade: 0,
       correctPredictions: 0,
       predictionAccuracy: 0,
-    };
+    }
 
     for (const step of steps) {
-      const action = step.action;
-      if (!action) continue;
+      const action = step.action
+      if (!action) continue
 
-      const actionType = action.actionType.toLowerCase();
+      const actionType = action.actionType.toLowerCase()
 
       if (actionType === 'research' || actionType === 'analyze') {
-        metrics.researchActions++;
+        metrics.researchActions++
       } else if (actionType === 'read_news' || actionType === 'consume_news') {
-        metrics.newsConsumed++;
+        metrics.newsConsumed++
       } else if (
         actionType === 'query_market' ||
         actionType === 'check_price' ||
         actionType === 'get_quote'
       ) {
-        metrics.marketDataQueries++;
+        metrics.marketDataQueries++
       } else if (actionType === 'request_info' || actionType === 'ask') {
-        metrics.infoRequestsSent++;
+        metrics.infoRequestsSent++
       } else if (actionType === 'share_info' || actionType === 'share') {
-        metrics.infoShared++;
+        metrics.infoShared++
       } else if (actionType === 'predict' || actionType === 'bet') {
-        metrics.predictionsMade++;
+        metrics.predictionsMade++
 
         // Check if prediction was correct
         // correctness can be on action object or nested in result
-        const result = action.result as Record<string, unknown> | undefined;
-        const actionCorrectness = (
-          action as { correctness?: { predictionCorrect?: boolean } }
-        ).correctness;
-        const resultCorrectness = result?.correctness as
-          | { predictionCorrect?: boolean }
-          | undefined;
+        const result = action.result
+        const actionWithCorrectness = action as Record<string, unknown>
+        const actionCorrectness = isObject(actionWithCorrectness.correctness)
+          ? actionWithCorrectness.correctness
+          : undefined
+        const resultCorrectness = isObject(result?.correctness)
+          ? result.correctness
+          : undefined
 
         if (
           result?.predictionCorrect === true ||
           actionCorrectness?.predictionCorrect === true ||
           resultCorrectness?.predictionCorrect === true
         ) {
-          metrics.correctPredictions++;
+          metrics.correctPredictions++
         }
       }
     }
@@ -597,53 +604,63 @@ export class TrajectoryMetricsExtractor {
     // Calculate prediction accuracy
     if (metrics.predictionsMade > 0) {
       metrics.predictionAccuracy =
-        metrics.correctPredictions / metrics.predictionsMade;
+        metrics.correctPredictions / metrics.predictionsMade
     }
 
-    return metrics;
+    return metrics
   }
 
   /**
    * Parse trajectory from database and extract metrics
    */
   extractFromRaw(params: {
-    trajectoryId: string;
-    agentId: string;
-    stepsJson: string;
-    scenarioId?: string;
-    finalPnL?: number;
+    trajectoryId: string
+    agentId: string
+    stepsJson: string
+    /** Scenario ID from database (may be null) */
+    scenarioId?: string | null
+    /** Final PnL from database (may be null) */
+    finalPnL?: number | null
   }): BehavioralMetrics {
-    const steps = JSON.parse(params.stepsJson) as TrajectoryStep[];
+    const parsed: unknown = JSON.parse(params.stepsJson)
 
-    if (!Array.isArray(steps) || steps.length === 0) {
+    if (!isArrayOf(parsed, isParsedTrajectoryStep) || parsed.length === 0) {
       throw new Error(
-        `Invalid or empty steps array for trajectory ${params.trajectoryId}`
-      );
+        `Invalid or empty steps array for trajectory ${params.trajectoryId}`,
+      )
     }
+    const steps: TrajectoryStep[] = parsed
 
     // Get start/end balance from environment state
-    const startBalance = steps[0]?.environmentState?.agentBalance;
-    const endBalance = steps[steps.length - 1]?.environmentState?.agentBalance;
+    const startBalance = steps[0]?.environmentState?.agentBalance
+    const endBalance = steps[steps.length - 1]?.environmentState?.agentBalance
+
+    // Convert null to undefined for scenarioId
+    const normalizedScenarioId: string | undefined =
+      params.scenarioId != null ? params.scenarioId : undefined
+
+    // Calculate end balance from final PnL if available
+    const calculatedEndBalance =
+      endBalance !== undefined
+        ? Number(endBalance)
+        : params.finalPnL != null
+          ? (startBalance !== undefined ? Number(startBalance) : 0) +
+            params.finalPnL
+          : undefined
 
     return this.extract({
       trajectoryId: params.trajectoryId,
       agentId: params.agentId,
       steps,
-      scenarioId: params.scenarioId,
+      scenarioId: normalizedScenarioId,
       startBalance:
         startBalance !== undefined ? Number(startBalance) : undefined,
-      endBalance:
-        endBalance !== undefined
-          ? Number(endBalance)
-          : params.finalPnL !== undefined
-            ? (startBalance !== undefined ? Number(startBalance) : 0) +
-              params.finalPnL
-            : undefined,
-    });
+      endBalance: calculatedEndBalance,
+    })
   }
 }
 
 /**
  * Singleton instance
  */
-export const trajectoryMetricsExtractor = new TrajectoryMetricsExtractor();
+export const trajectoryMetricsExtractor = new TrajectoryMetricsExtractor()

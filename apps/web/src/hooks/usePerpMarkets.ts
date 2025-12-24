@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Perp Markets Hooks - react-query based data fetching for perpetual markets
  *
@@ -19,34 +17,31 @@
  * ```
  */
 
-import { PerpMarketsResponseSchema } from '@babylon/shared';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useCallback, useMemo } from 'react';
-import type { PerpMarket } from '@/types/markets';
-import { MARKETS_CONFIG } from '@/types/markets';
-
-// Re-export for backwards compatibility
-export type { PerpMarket } from '@/types/markets';
+import { PerpMarketsResponseSchema } from '@babylon/shared'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useCallback, useMemo } from 'react'
+import type { PerpMarket } from '../types/markets'
+import { MARKETS_CONFIG } from '../types/markets'
 
 /** Query key for perp markets - export for cache invalidation */
-export const PERP_MARKETS_QUERY_KEY = ['perpMarkets'] as const;
+export const PERP_MARKETS_QUERY_KEY = ['perpMarkets'] as const
 
 interface UsePerpMarketsOptions {
   /** Polling interval in ms. Set to enable automatic refetching. */
-  pollingInterval?: number;
+  pollingInterval?: number
   /** Whether the query is enabled (default: true) */
-  enabled?: boolean;
+  enabled?: boolean
 }
 
 async function fetchPerpMarkets(): Promise<PerpMarket[]> {
-  const response = await fetch('/api/markets/perps');
+  const response = await fetch('/api/markets/perps')
   if (!response.ok) {
-    throw new Error(`Failed to fetch perp markets: ${response.status}`);
+    throw new Error(`Failed to fetch perp markets: ${response.status}`)
   }
 
-  const rawData: unknown = await response.json();
-  const validated = PerpMarketsResponseSchema.parse(rawData);
-  return validated.markets as PerpMarket[];
+  const rawData = await response.json()
+  const validated = PerpMarketsResponseSchema.parse(rawData)
+  return validated.markets as PerpMarket[]
 }
 
 /**
@@ -56,7 +51,7 @@ async function fetchPerpMarkets(): Promise<PerpMarket[]> {
  * @param options - Configuration options including pollingInterval and enabled
  */
 export function usePerpMarkets(options: UsePerpMarketsOptions = {}) {
-  const { pollingInterval, enabled = true } = options;
+  const { pollingInterval, enabled = true } = options
 
   const {
     data: markets = [],
@@ -69,18 +64,18 @@ export function usePerpMarkets(options: UsePerpMarketsOptions = {}) {
     staleTime: MARKETS_CONFIG.CACHE_TTL_MS,
     refetchInterval: pollingInterval,
     enabled,
-  });
+  })
 
   const handleRefetch = useCallback(async () => {
-    await refetch();
-  }, [refetch]);
+    await refetch()
+  }, [refetch])
 
   return {
     markets,
     loading: isLoading,
     error: error as Error | null,
     refetch: handleRefetch,
-  };
+  }
 }
 
 /**
@@ -90,10 +85,10 @@ export function usePerpMarkets(options: UsePerpMarketsOptions = {}) {
  * @param intervalMs - Polling interval in milliseconds (default: 30000)
  */
 export function usePerpMarketsPolling(
-  intervalMs = MARKETS_CONFIG.DEFAULT_POLLING_INTERVAL_MS
+  intervalMs = MARKETS_CONFIG.DEFAULT_POLLING_INTERVAL_MS,
 ) {
   // Just return the hook with polling enabled - react-query handles the rest
-  return usePerpMarkets({ pollingInterval: intervalMs });
+  return usePerpMarkets({ pollingInterval: intervalMs })
 }
 
 /**
@@ -104,16 +99,16 @@ export function usePerpMarketsPolling(
  */
 export function usePerpMarket(
   ticker: string,
-  options: UsePerpMarketsOptions = {}
+  options: UsePerpMarketsOptions = {},
 ) {
-  const { markets, loading, error, refetch } = usePerpMarkets(options);
+  const { markets, loading, error, refetch } = usePerpMarkets(options)
 
   const market = useMemo(
     () => markets.find((m) => m.ticker.toLowerCase() === ticker.toLowerCase()),
-    [markets, ticker]
-  );
+    [markets, ticker],
+  )
 
-  return { market, loading, error, refetch };
+  return { market, loading, error, refetch }
 }
 
 /**
@@ -124,21 +119,21 @@ export function usePerpMarket(
  */
 export function usePerpTopMovers(
   count = MARKETS_CONFIG.TOP_MOVERS_COUNT,
-  options: UsePerpMarketsOptions = {}
+  options: UsePerpMarketsOptions = {},
 ) {
-  const { markets, loading, error, refetch } = usePerpMarkets(options);
+  const { markets, loading, error, refetch } = usePerpMarkets(options)
 
   const { topGainers, topLosers } = useMemo(() => {
     const sorted = [...markets].sort(
-      (a, b) => b.changePercent24h - a.changePercent24h
-    );
+      (a, b) => b.changePercent24h - a.changePercent24h,
+    )
     return {
       topGainers: sorted.slice(0, count),
       topLosers: sorted.slice(-count).reverse(),
-    };
-  }, [markets, count]);
+    }
+  }, [markets, count])
 
-  return { topGainers, topLosers, loading, error, refetch };
+  return { topGainers, topLosers, loading, error, refetch }
 }
 
 /**
@@ -146,15 +141,15 @@ export function usePerpTopMovers(
  * Useful for prefetching before navigation or in SSR.
  */
 export function usePrefetchPerpMarkets() {
-  const queryClient = useQueryClient();
+  const queryClient = useQueryClient()
 
   return useCallback(() => {
     return queryClient.prefetchQuery({
       queryKey: PERP_MARKETS_QUERY_KEY,
       queryFn: fetchPerpMarkets,
       staleTime: MARKETS_CONFIG.CACHE_TTL_MS,
-    });
-  }, [queryClient]);
+    })
+  }, [queryClient])
 }
 
 /**
@@ -162,11 +157,11 @@ export function usePrefetchPerpMarkets() {
  * Useful when you need to access cached data outside of a component render.
  */
 export function useGetCachedPerpMarkets() {
-  const queryClient = useQueryClient();
+  const queryClient = useQueryClient()
 
   return useCallback(() => {
-    return queryClient.getQueryData<PerpMarket[]>(PERP_MARKETS_QUERY_KEY) ?? [];
-  }, [queryClient]);
+    return queryClient.getQueryData<PerpMarket[]>(PERP_MARKETS_QUERY_KEY) ?? []
+  }, [queryClient])
 }
 
 /**
@@ -174,13 +169,13 @@ export function useGetCachedPerpMarkets() {
  * Useful for imperative fetching in event handlers.
  */
 export function useFetchPerpMarkets() {
-  const queryClient = useQueryClient();
+  const queryClient = useQueryClient()
 
   return useCallback(async () => {
     return queryClient.fetchQuery({
       queryKey: PERP_MARKETS_QUERY_KEY,
       queryFn: fetchPerpMarkets,
       staleTime: MARKETS_CONFIG.CACHE_TTL_MS,
-    });
-  }, [queryClient]);
+    })
+  }, [queryClient])
 }

@@ -7,26 +7,26 @@
  * @packageDocumentation
  */
 
-export { autonomousA2AService } from './AutonomousA2AService';
-export { autonomousBatchResponseService } from './AutonomousBatchResponseService';
-export { autonomousCommentingService } from './AutonomousCommentingService';
+export { autonomousA2AService } from './AutonomousA2AService'
+export { autonomousBatchResponseService } from './AutonomousBatchResponseService'
+export { autonomousCommentingService } from './AutonomousCommentingService'
 export {
   AutonomousCoordinator,
   type AutonomousTickResult,
   autonomousCoordinator,
-} from './AutonomousCoordinator';
-export { autonomousDMService } from './AutonomousDMService';
-export { autonomousGroupChatService } from './AutonomousGroupChatService';
+} from './AutonomousCoordinator'
+export { autonomousDMService } from './AutonomousDMService'
+export { autonomousGroupChatService } from './AutonomousGroupChatService'
 export {
   autonomousPlanningCoordinator,
   type PlannedAction,
-} from './AutonomousPlanningCoordinator';
-export { autonomousPostingService } from './AutonomousPostingService';
-export { autonomousTradingService } from './AutonomousTradingService';
+} from './AutonomousPlanningCoordinator'
+export { autonomousPostingService } from './AutonomousPostingService'
+export { autonomousTradingService } from './AutonomousTradingService'
 export {
-  DecentralizedDMService,
-  getDecentralizedDMService,
-  resetDecentralizedDMService,
-} from './DecentralizedDMService';
+  DMService,
+  getDMService,
+  resetDMService,
+} from './DMService'
 // LLM Response Validation Schemas
-export * from './schemas';
+export * from './schemas'

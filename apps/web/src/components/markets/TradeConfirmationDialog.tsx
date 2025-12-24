@@ -6,62 +6,60 @@
  * - Prediction market buy/sell operations
  */
 
-'use client';
-
-import type { ReactNode } from 'react';
+import type { ReactNode } from 'react'
 
 /** Details for opening a perpetual position */
 export interface OpenPerpDetails {
-  type: 'open-perp';
-  ticker: string;
-  side: 'long' | 'short';
-  size: number;
-  leverage: number;
-  entryPrice: number;
-  margin: number;
-  estimatedFee: number;
-  liquidationPrice: number;
-  liquidationDistance: number;
+  type: 'open-perp'
+  ticker: string
+  side: 'long' | 'short'
+  size: number
+  leverage: number
+  entryPrice: number
+  margin: number
+  estimatedFee: number
+  liquidationPrice: number
+  liquidationDistance: number
 }
 
 /** Details for closing a perpetual position */
 export interface ClosePerpDetails {
-  type: 'close-perp';
-  ticker: string;
-  side: 'LONG' | 'SHORT';
-  size: number;
-  leverage: number;
-  entryPrice: number;
-  currentPrice: number;
-  unrealizedPnL: number;
-  unrealizedPnLPercent: number;
+  type: 'close-perp'
+  ticker: string
+  side: 'LONG' | 'SHORT'
+  size: number
+  leverage: number
+  entryPrice: number
+  currentPrice: number
+  unrealizedPnL: number
+  unrealizedPnLPercent: number
 }
 
 /** Details for selling a prediction position */
 export interface SellPredictionDetails {
-  type: 'sell-prediction';
-  question: string;
-  side: 'YES' | 'NO';
-  shares: number;
-  avgPrice: number;
-  currentPrice: number;
-  expectedValue: number;
-  unrealizedPnL: number;
-  unrealizedPnLPercent: number;
+  type: 'sell-prediction'
+  question: string
+  side: 'YES' | 'NO'
+  shares: number
+  avgPrice: number
+  currentPrice: number
+  expectedValue: number
+  unrealizedPnL: number
+  unrealizedPnLPercent: number
 }
 
 /** Details for buying a prediction position */
 export interface BuyPredictionDetails {
-  type: 'buy-prediction';
-  question: string;
-  side: 'YES' | 'NO';
-  amount: number;
-  sharesBought: number;
-  avgPrice: number;
-  newPrice: number;
-  priceImpact: number;
-  expectedPayout: number;
-  expectedProfit: number;
+  type: 'buy-prediction'
+  question: string
+  side: 'YES' | 'NO'
+  amount: number
+  sharesBought: number
+  avgPrice: number
+  newPrice: number
+  priceImpact: number
+  expectedPayout: number
+  expectedProfit: number
 }
 
 export type TradeDetails =
@@ -69,19 +67,19 @@ export type TradeDetails =
   | ClosePerpDetails
   | BuyPredictionDetails
   | SellPredictionDetails
-  | null;
+  | null
 
 export interface TradeConfirmationDialogProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  onConfirm: () => void;
-  side?: 'YES' | 'NO';
-  shares?: number;
-  cost?: number;
-  loading?: boolean;
-  isSubmitting?: boolean;
-  tradeDetails?: TradeDetails;
-  children?: ReactNode;
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  onConfirm: () => void
+  side?: 'YES' | 'NO'
+  shares?: number
+  cost?: number
+  loading?: boolean
+  isSubmitting?: boolean
+  tradeDetails?: TradeDetails
+  children?: ReactNode
 }
 
 export function TradeConfirmationDialog({
@@ -95,9 +93,9 @@ export function TradeConfirmationDialog({
   isSubmitting,
   tradeDetails,
 }: TradeConfirmationDialogProps) {
-  if (!open) return null;
+  if (!open) return null
 
-  const isPending = loading || isSubmitting;
+  const isPending = loading || isSubmitting
 
   // Render trade details based on type
   const renderDetails = () => {
@@ -130,7 +128,7 @@ export function TradeConfirmationDialog({
             {tradeDetails.liquidationDistance.toFixed(2)}% away)
           </p>
         </div>
-      );
+      )
     }
 
     if (tradeDetails?.type === 'close-perp') {
@@ -164,7 +162,7 @@ export function TradeConfirmationDialog({
             {tradeDetails.unrealizedPnLPercent.toFixed(2)}%)
           </p>
         </div>
-      );
+      )
     }
 
     if (tradeDetails?.type === 'buy-prediction') {
@@ -207,7 +205,7 @@ export function TradeConfirmationDialog({
             {tradeDetails.expectedProfit.toFixed(2)})
           </p>
         </div>
-      );
+      )
     }
 
     if (tradeDetails?.type === 'sell-prediction') {
@@ -245,7 +243,7 @@ export function TradeConfirmationDialog({
             {tradeDetails.unrealizedPnLPercent.toFixed(2)}%)
           </p>
         </div>
-      );
+      )
     }
 
     // Legacy fallback for simple buy confirmation
@@ -254,28 +252,28 @@ export function TradeConfirmationDialog({
         <p className="text-muted-foreground">
           Buy {shares.toFixed(2)} {side} shares for ${cost.toFixed(2)}?
         </p>
-      );
+      )
     }
 
-    return null;
-  };
+    return null
+  }
 
   const getTitle = () => {
-    if (tradeDetails?.type === 'open-perp') return 'Open Position';
-    if (tradeDetails?.type === 'close-perp') return 'Close Position';
-    if (tradeDetails?.type === 'buy-prediction') return 'Buy Shares';
-    if (tradeDetails?.type === 'sell-prediction') return 'Sell Position';
-    return 'Confirm Trade';
-  };
+    if (tradeDetails?.type === 'open-perp') return 'Open Position'
+    if (tradeDetails?.type === 'close-perp') return 'Close Position'
+    if (tradeDetails?.type === 'buy-prediction') return 'Buy Shares'
+    if (tradeDetails?.type === 'sell-prediction') return 'Sell Position'
+    return 'Confirm Trade'
+  }
 
   const getConfirmText = () => {
-    if (isPending) return 'Processing...';
-    if (tradeDetails?.type === 'open-perp') return 'Open Position';
-    if (tradeDetails?.type === 'close-perp') return 'Close Position';
-    if (tradeDetails?.type === 'buy-prediction') return 'Buy';
-    if (tradeDetails?.type === 'sell-prediction') return 'Sell';
-    return 'Confirm';
-  };
+    if (isPending) return 'Processing...'
+    if (tradeDetails?.type === 'open-perp') return 'Open Position'
+    if (tradeDetails?.type === 'close-perp') return 'Close Position'
+    if (tradeDetails?.type === 'buy-prediction') return 'Buy'
+    if (tradeDetails?.type === 'sell-prediction') return 'Sell'
+    return 'Confirm'
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
@@ -302,5 +300,5 @@ export function TradeConfirmationDialog({
         </div>
       </div>
     </div>
-  );
+  )
 }

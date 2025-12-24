@@ -12,26 +12,32 @@
  * @packageDocumentation
  */
 
-import { db } from '@babylon/db';
-import { generateSnowflakeId, logger } from '@babylon/shared';
+import { db } from '@babylon/db'
+import {
+  createBabylonPublicClient,
+  generateSnowflakeId,
+  logger,
+  safeReadContract,
+  toNull,
+} from '@babylon/shared'
 import {
   type Address,
   createPublicClient,
   formatUnits,
   http,
   parseUnits,
-} from 'viem';
-import { base, bsc, mainnet } from 'viem/chains';
+} from 'viem'
+import { base, bsc, mainnet } from 'viem/chains'
 
 // =============================================================================
 // CONFIGURATION
 // =============================================================================
 
 /** Total BBLN allocated to elizaOS holders (10% of 1B = 100M) */
-const ELIZA_HOLDER_POOL = parseUnits('100000000', 18);
+const ELIZA_HOLDER_POOL = parseUnits('100000000', 18)
 
 /** Claim period in days */
-const CLAIM_PERIOD_DAYS = 180;
+const CLAIM_PERIOD_DAYS = 180
 
 /** Vesting mechanics (same as regular users) - exported for reuse */
 export const ELIZA_VESTING = {
@@ -39,21 +45,21 @@ export const ELIZA_VESTING = {
   DAILY_DRIP_PERCENT: 2,
   DRIP_COOLDOWN_HOURS: 20,
   TOTAL_DRIP_DAYS: 45,
-} as const;
+} as const
 
 const {
   TOTAL_DRIP_DAYS,
   DRIP_COOLDOWN_HOURS,
   INITIAL_CLAIM_PERCENT,
   DAILY_DRIP_PERCENT,
-} = ELIZA_VESTING;
+} = ELIZA_VESTING
 
 /** ELIZA token address - same on Base, BSC, and Ethereum mainnet */
 const ELIZA_TOKEN_ADDRESS =
-  '0xea17df5cf6d172224892b5477a16acb111182478' as Address;
+  '0xea17df5cf6d172224892b5477a16acb111182478' as Address
 
 /** Solana ELIZA token address */
-const ELIZA_TOKEN_SOLANA = 'DuMbhu7mvQvqQHGcnikDgb4XegXJRyhUBfdU22uELiZA';
+const ELIZA_TOKEN_SOLANA = 'DuMbhu7mvQvqQHGcnikDgb4XegXJRyhUBfdU22uELiZA'
 
 /** Supported EVM chains for ELIZA token */
 const SUPPORTED_EVM_CHAINS = {
@@ -72,11 +78,11 @@ const SUPPORTED_EVM_CHAINS = {
     elizaToken: ELIZA_TOKEN_ADDRESS,
     rpcUrl: process.env.BSC_RPC_URL ?? 'https://bsc-dataseed.binance.org',
   },
-} as const;
+} as const
 
 /** Solana RPC endpoint */
 const SOLANA_RPC_URL =
-  process.env.SOLANA_RPC_URL ?? 'https://api.mainnet-beta.solana.com';
+  process.env.SOLANA_RPC_URL ?? 'https://api.mainnet-beta.solana.com'
 
 /** ERC20 ABI for balance checks */
 const ERC20_ABI = [
@@ -94,7 +100,7 @@ const ERC20_ABI = [
     outputs: [{ type: 'uint256' }],
     stateMutability: 'view',
   },
-] as const;
+] as const
 
 // =============================================================================
 // TYPES
@@ -102,57 +108,57 @@ const ERC20_ABI = [
 
 /** Database row type for eliza holder allocations */
 interface ElizaHolderAllocationRow {
-  id: string;
-  walletAddress: string;
-  elizaBalanceSnapshot: string;
-  chainBalances: string | null;
-  snapshotBlock: string | null;
-  snapshotTime: Date | null;
-  bblnAllocation: string;
-  dripsUnlocked: number;
-  totalClaimed: string;
-  lastDripTime: Date | null;
-  lastDripAction: string | null;
-  fullyClaimed: boolean;
-  registeredOnChain: boolean;
-  claimTxHash: string | null;
-  claimDeadline: Date | null;
-  expired: boolean;
-  createdAt: Date;
-  updatedAt: Date;
+  id: string
+  walletAddress: string
+  elizaBalanceSnapshot: string
+  chainBalances: string | null
+  snapshotBlock: string | null
+  snapshotTime: Date | null
+  bblnAllocation: string
+  dripsUnlocked: number
+  totalClaimed: string
+  lastDripTime: Date | null
+  lastDripAction: string | null
+  fullyClaimed: boolean
+  registeredOnChain: boolean
+  claimTxHash: string | null
+  claimDeadline: Date | null
+  expired: boolean
+  createdAt: Date
+  updatedAt: Date
 }
 
 export interface ElizaHolderSnapshot {
-  walletAddress: Address;
-  chain: keyof typeof SUPPORTED_EVM_CHAINS;
-  elizaBalance: bigint;
-  snapshotBlock: bigint;
-  snapshotTime: Date;
+  walletAddress: Address
+  chain: keyof typeof SUPPORTED_EVM_CHAINS
+  elizaBalance: bigint
+  snapshotBlock: bigint
+  snapshotTime: Date
 }
 
 export interface ElizaHolderAllocation {
-  walletAddress: Address;
-  totalElizaBalance: bigint; // Sum across all chains
-  shareOfPool: number; // Percentage of ELIZA pool
-  bblnAllocation: bigint;
-  claimed: boolean;
-  claimDeadline: Date;
+  walletAddress: Address
+  totalElizaBalance: bigint // Sum across all chains
+  shareOfPool: number // Percentage of ELIZA pool
+  bblnAllocation: bigint
+  claimed: boolean
+  claimDeadline: Date
 }
 
 export interface ClaimStatus {
-  eligible: boolean;
-  walletAddress: Address;
-  totalAllocation: bigint;
-  dripsUnlocked: number;
-  totalDrips: number;
-  amountUnlocked: bigint;
-  amountClaimed: bigint;
-  amountClaimable: bigint;
-  nextDripTime: Date | null;
-  canDripNow: boolean;
-  claimDeadline: Date;
-  daysRemaining: number;
-  expired: boolean;
+  eligible: boolean
+  walletAddress: Address
+  totalAllocation: bigint
+  dripsUnlocked: number
+  totalDrips: number
+  amountUnlocked: bigint
+  amountClaimed: bigint
+  amountClaimable: bigint
+  nextDripTime: Date | null
+  canDripNow: boolean
+  claimDeadline: Date
+  daysRemaining: number
+  expired: boolean
 }
 
 // =============================================================================
@@ -160,35 +166,33 @@ export interface ClaimStatus {
 // =============================================================================
 
 export class ElizaHolderAirdropService {
-  private _snapshotDate: Date | null = null;
-  private claimDeadline: Date | null = null;
+  private _snapshotDate: Date | null = null
+  private claimDeadline: Date | null = null
 
   /** Get the snapshot date */
   get snapshotDate(): Date | null {
-    return this._snapshotDate;
+    return this._snapshotDate
   }
 
   /**
    * Initialize the claim period
    */
   async initializeClaimPeriod(snapshotDate: Date): Promise<{
-    snapshotDate: Date;
-    claimDeadline: Date;
-    daysRemaining: number;
+    snapshotDate: Date
+    claimDeadline: Date
+    daysRemaining: number
   }> {
-    this._snapshotDate = snapshotDate;
-    this.claimDeadline = new Date(snapshotDate);
-    this.claimDeadline.setDate(
-      this.claimDeadline.getDate() + CLAIM_PERIOD_DAYS
-    );
+    this._snapshotDate = snapshotDate
+    this.claimDeadline = new Date(snapshotDate)
+    this.claimDeadline.setDate(this.claimDeadline.getDate() + CLAIM_PERIOD_DAYS)
 
-    const now = new Date();
+    const now = new Date()
     const daysRemaining = Math.max(
       0,
       Math.ceil(
-        (this.claimDeadline.getTime() - now.getTime()) / (24 * 60 * 60 * 1000)
-      )
-    );
+        (this.claimDeadline.getTime() - now.getTime()) / (24 * 60 * 60 * 1000),
+      ),
+    )
 
     logger.info(
       'Initialized elizaOS holder claim period',
@@ -197,81 +201,81 @@ export class ElizaHolderAirdropService {
         claimDeadline: this.claimDeadline.toISOString(),
         daysRemaining,
       },
-      'ElizaHolderAirdropService'
-    );
+      'ElizaHolderAirdropService',
+    )
 
     return {
       snapshotDate,
       claimDeadline: this.claimDeadline,
       daysRemaining,
-    };
+    }
   }
 
   /**
    * Take cross-chain snapshot of ELIZA holdings
    */
   async takeSnapshot(
-    blockNumbers?: Partial<Record<keyof typeof SUPPORTED_EVM_CHAINS, bigint>>
+    blockNumbers?: Partial<Record<keyof typeof SUPPORTED_EVM_CHAINS, bigint>>,
   ): Promise<{
-    totalHolders: number;
-    totalElizaSupply: bigint;
+    totalHolders: number
+    totalElizaSupply: bigint
     chainSnapshots: Array<{
-      chain: string;
-      blockNumber: bigint;
-      holdersOnChain: number;
-    }>;
+      chain: string
+      blockNumber: bigint
+      holdersOnChain: number
+    }>
   }> {
-    const allSnapshots: ElizaHolderSnapshot[] = [];
+    const allSnapshots: ElizaHolderSnapshot[] = []
     const chainSnapshots: Array<{
-      chain: string;
-      blockNumber: bigint;
-      holdersOnChain: number;
-    }> = [];
+      chain: string
+      blockNumber: bigint
+      holdersOnChain: number
+    }> = []
 
     for (const [chainName, config] of Object.entries(SUPPORTED_EVM_CHAINS)) {
-      const client = createPublicClient({
+      const client = createBabylonPublicClient({
         chain: config.chain,
-        transport: http(config.rpcUrl),
-      });
+        rpcUrl: config.rpcUrl,
+      })
 
       const blockNumber =
         blockNumbers?.[chainName as keyof typeof SUPPORTED_EVM_CHAINS] ??
-        (await client.getBlockNumber());
+        (await client.getBlockNumber())
 
       // In production, this would query an indexer or iterate through transfer events
       // For now, we'll store the snapshot config
       logger.info(
         `Taking ELIZA snapshot on ${chainName}`,
         { chain: chainName, block: blockNumber.toString() },
-        'ElizaHolderAirdropService'
-      );
+        'ElizaHolderAirdropService',
+      )
 
       chainSnapshots.push({
         chain: chainName,
         blockNumber,
         holdersOnChain: 0, // Would be populated from indexer
-      });
+      })
     }
 
     // Calculate total supply for allocation calculations
-    const totalElizaSupply = 0n; // Would query from contracts
+    const totalElizaSupply = 0n // Would query from contracts
 
     return {
       totalHolders: allSnapshots.length,
       totalElizaSupply,
       chainSnapshots,
-    };
+    }
   }
 
   /**
    * Check ELIZA balance for a wallet across all EVM chains
    */
   async getWalletElizaBalance(walletAddress: Address): Promise<{
-    totalBalance: bigint;
-    byChain: Record<string, bigint>;
+    totalBalance: bigint
+    byChain: Record<string, bigint>
   }> {
-    const byChain: Record<string, bigint> = {};
-    let totalBalance = 0n;
+    const byChain: Record<string, bigint> = {}
+    let totalBalance = 0n
 
     // Check EVM chains in parallel
     const evmPromises = Object.entries(SUPPORTED_EVM_CHAINS).map(
@@ -279,26 +283,26 @@ export class ElizaHolderAirdropService {
         const client = createPublicClient({
           chain: config.chain,
           transport: http(config.rpcUrl),
-        });
+        })
 
-        const balance = await client.readContract({
+        const balance = await safeReadContract<bigint>(client, {
           address: config.elizaToken,
           abi: ERC20_ABI,
           functionName: 'balanceOf',
           args: [walletAddress],
-        });
+        })
 
-        return { chainName, balance };
-      }
-    );
+        return { chainName, balance }
+      },
+    )
 
-    const evmResults = await Promise.all(evmPromises);
+    const evmResults = await Promise.all(evmPromises)
     for (const { chainName, balance } of evmResults) {
-      byChain[chainName] = balance;
-      totalBalance += balance;
+      byChain[chainName] = balance
+      totalBalance += balance
     }
 
-    return { totalBalance, byChain };
+    return { totalBalance, byChain }
   }
 
   /**
@@ -319,7 +323,7 @@ export class ElizaHolderAirdropService {
           { encoding: 'jsonParsed' },
         ],
       }),
-    });
+    })
 
     const data = (await response.json()) as {
       result?: {
@@ -327,26 +331,26 @@ export class ElizaHolderAirdropService {
           account: {
             data: {
               parsed: {
-                info: { tokenAmount: { amount: string } };
-              };
-            };
-          };
-        }>;
-      };
-    };
+                info: { tokenAmount: { amount: string } }
+              }
+            }
+          }
+        }>
+      }
+    }
 
     if (!data.result?.value?.length) {
-      return 0n;
+      return 0n
     }
 
     // Sum all token accounts (should typically be just one)
-    let total = 0n;
+    let total = 0n
     for (const account of data.result.value) {
-      const amount = account.account.data.parsed.info.tokenAmount.amount;
-      total += BigInt(amount);
+      const amount = account.account.data.parsed.info.tokenAmount.amount
+      total += BigInt(amount)
     }
 
-    return total;
+    return total
   }
 
   /**
@@ -354,23 +358,23 @@ export class ElizaHolderAirdropService {
    */
   async getFullElizaBalance(
     evmAddress: Address,
-    solanaAddress?: string
+    solanaAddress?: string,
   ): Promise<{
-    totalBalance: bigint;
-    byChain: Record<string, bigint>;
+    totalBalance: bigint
+    byChain: Record<string, bigint>
   }> {
     const { totalBalance: evmTotal, byChain } =
-      await this.getWalletElizaBalance(evmAddress);
+      await this.getWalletElizaBalance(evmAddress)
 
-    let totalBalance = evmTotal;
+    let totalBalance = evmTotal
 
     if (solanaAddress) {
-      const solanaBalance = await this.getSolanaElizaBalance(solanaAddress);
-      byChain['solana'] = solanaBalance;
-      totalBalance += solanaBalance;
+      const solanaBalance = await this.getSolanaElizaBalance(solanaAddress)
+      byChain.solana = solanaBalance
+      totalBalance += solanaBalance
     }
 
-    return { totalBalance, byChain };
+    return { totalBalance, byChain }
   }
 
   /**
@@ -381,17 +385,17 @@ export class ElizaHolderAirdropService {
     solanaAddress: string | undefined,
     totalElizaSupply: bigint,
     snapshotTime: Date,
-    snapshotBlock?: string
+    snapshotBlock?: string,
   ): Promise<{
-    walletAddress: Address;
-    totalBalance: bigint;
-    bblnAllocation: bigint;
-    isNew: boolean;
+    walletAddress: Address
+    totalBalance: bigint
+    bblnAllocation: bigint
+    isNew: boolean
   }> {
     const { totalBalance, byChain } = await this.getFullElizaBalance(
       evmAddress,
-      solanaAddress
-    );
+      solanaAddress,
+    )
 
     if (totalBalance === 0n) {
       return {
@@ -399,22 +403,22 @@ export class ElizaHolderAirdropService {
         totalBalance: 0n,
         bblnAllocation: 0n,
         isNew: false,
-      };
+      }
     }
 
     const bblnAllocation = this.calculateAllocation(
       totalBalance,
-      totalElizaSupply
-    );
-    const claimDeadline = new Date(snapshotTime);
-    claimDeadline.setDate(claimDeadline.getDate() + CLAIM_PERIOD_DAYS);
+      totalElizaSupply,
+    )
+    const claimDeadline = new Date(snapshotTime)
+    claimDeadline.setDate(claimDeadline.getDate() + CLAIM_PERIOD_DAYS)
 
     // Check if allocation already exists
     const existingRows = await db.query<{ id: string }>(
       `SELECT "id" FROM "ElizaHolderAllocation" WHERE "walletAddress" = $1 LIMIT 1`,
-      [evmAddress]
-    );
-    const existing = existingRows[0];
+      [evmAddress],
+    )
+    const existing = existingRows[0]
 
     if (existing) {
       // Update existing allocation
@@ -432,17 +436,17 @@ export class ElizaHolderAirdropService {
           totalBalance.toString(),
           JSON.stringify(
             Object.fromEntries(
-              Object.entries(byChain).map(([k, v]) => [k, v.toString()])
-            )
+              Object.entries(byChain).map(([k, v]) => [k, v.toString()]),
+            ),
           ),
           bblnAllocation.toString(),
-          snapshotBlock ?? null,
+          toNull(snapshotBlock),
           snapshotTime.toISOString(),
           claimDeadline.toISOString(),
           new Date().toISOString(),
           existing.id,
-        ]
-      );
+        ],
+      )
 
       logger.info(
         'Updated ELIZA holder allocation',
@@ -451,20 +455,20 @@ export class ElizaHolderAirdropService {
           balance: formatUnits(totalBalance, 18),
           allocation: formatUnits(bblnAllocation, 18),
         },
-        'ElizaHolderAirdropService'
-      );
+        'ElizaHolderAirdropService',
+      )
 
       return {
         walletAddress: evmAddress,
         totalBalance,
         bblnAllocation,
         isNew: false,
-      };
+      }
     }
 
     // Create new allocation
-    const allocationId = await generateSnowflakeId();
-    const now = new Date();
+    const allocationId = await generateSnowflakeId()
+    const now = new Date()
     await db.exec(
       `INSERT INTO "ElizaHolderAllocation" (
         "id", "walletAddress", "elizaBalanceSnapshot", "chainBalances",
@@ -478,10 +482,10 @@ export class ElizaHolderAirdropService {
         totalBalance.toString(),
         JSON.stringify(
           Object.fromEntries(
-            Object.entries(byChain).map(([k, v]) => [k, v.toString()])
-          )
+            Object.entries(byChain).map(([k, v]) => [k, v.toString()]),
+          ),
         ),
-        snapshotBlock ?? null,
+        toNull(snapshotBlock),
         snapshotTime.toISOString(),
         bblnAllocation.toString(),
         0,
@@ -492,8 +496,8 @@ export class ElizaHolderAirdropService {
         false,
         now.toISOString(),
         now.toISOString(),
-      ]
-    );
+      ],
+    )
 
     logger.info(
       'Created ELIZA holder allocation',
@@ -502,15 +506,15 @@ export class ElizaHolderAirdropService {
         balance: formatUnits(totalBalance, 18),
         allocation: formatUnits(bblnAllocation, 18),
       },
-      'ElizaHolderAirdropService'
-    );
+      'ElizaHolderAirdropService',
+    )
 
     return {
       walletAddress: evmAddress,
       totalBalance,
       bblnAllocation,
       isNew: true,
-    };
+    }
   }
 
   /**
@@ -519,28 +523,28 @@ export class ElizaHolderAirdropService {
    */
   async runFullSnapshot(
     wallets: Array<{ evmAddress: Address; solanaAddress?: string }>,
-    totalElizaSupply: bigint
+    totalElizaSupply: bigint,
   ): Promise<{
-    processed: number;
-    newAllocations: number;
-    updatedAllocations: number;
-    totalBblnAllocated: bigint;
-    snapshotTime: Date;
+    processed: number
+    newAllocations: number
+    updatedAllocations: number
+    totalBblnAllocated: bigint
+    snapshotTime: Date
   }> {
-    const snapshotTime = new Date();
-    let newAllocations = 0;
-    let updatedAllocations = 0;
-    let totalBblnAllocated = 0n;
+    const snapshotTime = new Date()
+    let newAllocations = 0
+    let updatedAllocations = 0
+    let totalBblnAllocated = 0n
 
     // Get current block for reference
-    const ethClient = createPublicClient({
+    const ethClient = createBabylonPublicClient({
       chain: mainnet,
-      transport: http(SUPPORTED_EVM_CHAINS.ethereum.rpcUrl),
-    });
-    const snapshotBlock = (await ethClient.getBlockNumber()).toString();
+      rpcUrl: SUPPORTED_EVM_CHAINS.ethereum.rpcUrl,
+    })
+    const snapshotBlock = (await ethClient.getBlockNumber()).toString()
 
     // Initialize claim period
-    await this.initializeClaimPeriod(snapshotTime);
+    await this.initializeClaimPeriod(snapshotTime)
 
     logger.info(
       'Starting ELIZA holder snapshot',
@@ -549,13 +553,13 @@ export class ElizaHolderAirdropService {
         totalSupply: formatUnits(totalElizaSupply, 18),
         snapshotBlock,
       },
-      'ElizaHolderAirdropService'
-    );
+      'ElizaHolderAirdropService',
+    )
 
     // Process wallets in batches of 10 for rate limiting
-    const batchSize = 10;
+    const batchSize = 10
     for (let i = 0; i < wallets.length; i += batchSize) {
-      const batch = wallets.slice(i, i + batchSize);
+      const batch = wallets.slice(i, i + batchSize)
 
       const results = await Promise.all(
         batch.map((w) =>
@@ -564,22 +568,22 @@ export class ElizaHolderAirdropService {
             w.solanaAddress,
             totalElizaSupply,
             snapshotTime,
-            snapshotBlock
-          )
-        )
-      );
+            snapshotBlock,
+          ),
+        ),
+      )
 
       for (const result of results) {
         if (result.bblnAllocation > 0n) {
-          if (result.isNew) newAllocations++;
-          else updatedAllocations++;
-          totalBblnAllocated += result.bblnAllocation;
+          if (result.isNew) newAllocations++
+          else updatedAllocations++
+          totalBblnAllocated += result.bblnAllocation
         }
       }
 
       // Brief delay between batches to avoid rate limits
       if (i + batchSize < wallets.length) {
-        await new Promise((r) => setTimeout(r, 100));
+        await new Promise((r) => setTimeout(r, 100))
       }
     }
 
@@ -591,8 +595,8 @@ export class ElizaHolderAirdropService {
         updatedAllocations,
         totalAllocated: formatUnits(totalBblnAllocated, 18),
       },
-      'ElizaHolderAirdropService'
-    );
+      'ElizaHolderAirdropService',
+    )
 
     return {
       processed: wallets.length,
@@ -600,38 +604,36 @@ export class ElizaHolderAirdropService {
       updatedAllocations,
       totalBblnAllocated,
       snapshotTime,
-    };
+    }
   }
 
   /**
    * Get total ELIZA supply across all chains for allocation calculations
    */
   async getTotalElizaSupply(): Promise<bigint> {
-    let totalSupply = 0n;
+    let totalSupply = 0n
 
     for (const [chainName, config] of Object.entries(SUPPORTED_EVM_CHAINS)) {
-      const client = createPublicClient({
+      const client = createBabylonPublicClient({
         chain: config.chain,
-        transport: http(config.rpcUrl),
-      });
+        rpcUrl: config.rpcUrl,
+      })
 
-      const supply = await client.readContract({
+      const supply = await safeReadContract<bigint>(client, {
         address: config.elizaToken,
         abi: ERC20_ABI,
         functionName: 'totalSupply',
-      });
+      })
 
       // For same token on multiple chains, take the max (circulating supply)
       // This avoids double-counting bridged tokens
       if (supply > totalSupply) {
-        totalSupply = supply;
-        logger.debug(
-          `ELIZA supply on ${chainName}: ${formatUnits(supply, 18)}`
-        );
+        totalSupply = supply
+        logger.debug(`ELIZA supply on ${chainName}: ${formatUnits(supply, 18)}`)
       }
     }
 
-    return totalSupply;
+    return totalSupply
   }
 
   /**
@@ -639,26 +641,26 @@ export class ElizaHolderAirdropService {
    */
   async getAllAllocations(): Promise<
     Array<{
-      walletAddress: string;
-      elizaBalance: string;
-      bblnAllocation: string;
-      dripsUnlocked: number;
-      totalClaimed: string;
-      expired: boolean;
+      walletAddress: string
+      elizaBalance: string
+      bblnAllocation: string
+      dripsUnlocked: number
+      totalClaimed: string
+      expired: boolean
     }>
   > {
     const allocations = await db.query<{
-      walletAddress: string;
-      elizaBalanceSnapshot: string;
-      bblnAllocation: string;
-      dripsUnlocked: number;
-      totalClaimed: string;
-      expired: boolean;
+      walletAddress: string
+      elizaBalanceSnapshot: string
+      bblnAllocation: string
+      dripsUnlocked: number
+      totalClaimed: string
+      expired: boolean
     }>(
       `SELECT "walletAddress", "elizaBalanceSnapshot", "bblnAllocation", 
               "dripsUnlocked", "totalClaimed", "expired" 
-       FROM "ElizaHolderAllocation"`
-    );
+       FROM "ElizaHolderAllocation"`,
+    )
 
     return allocations.map((row) => ({
       walletAddress: row.walletAddress,
@@ -667,27 +669,27 @@ export class ElizaHolderAirdropService {
       dripsUnlocked: Number(row.dripsUnlocked),
       totalClaimed: row.totalClaimed,
       expired: Boolean(row.expired),
-    }));
+    }))
   }
 
   /**
    * Get snapshot statistics
    */
   async getSnapshotStats(): Promise<{
-    totalHolders: number;
-    totalElizaSnapshotted: bigint;
-    totalBblnAllocated: bigint;
-    claimsStarted: number;
-    fullyClaimed: number;
-    expired: number;
+    totalHolders: number
+    totalElizaSnapshotted: bigint
+    totalBblnAllocated: bigint
+    claimsStarted: number
+    fullyClaimed: number
+    expired: number
   }> {
     const rows = await db.query<{
-      totalHolders: string | number;
-      totalEliza: string | null;
-      totalBbln: string | null;
-      claimsStarted: string | number;
-      fullyClaimed: string | number;
-      expired: string | number;
+      totalHolders: string | number
+      totalEliza: string | null
+      totalBbln: string | null
+      claimsStarted: string | number
+      fullyClaimed: string | number
+      expired: string | number
     }>(
       `SELECT 
         COUNT(*) as "totalHolders",
@@ -696,9 +698,9 @@ export class ElizaHolderAirdropService {
         COUNT(*) FILTER (WHERE "dripsUnlocked" > 0) as "claimsStarted",
         COUNT(*) FILTER (WHERE "fullyClaimed" = true) as "fullyClaimed",
         COUNT(*) FILTER (WHERE "expired" = true) as "expired"
-      FROM "ElizaHolderAllocation"`
-    );
-    const stats = rows[0];
+      FROM "ElizaHolderAllocation"`,
+    )
+    const stats = rows[0]
 
     return {
       totalHolders: Number(stats?.totalHolders ?? 0),
@@ -707,7 +709,7 @@ export class ElizaHolderAirdropService {
       claimsStarted: Number(stats?.claimsStarted ?? 0),
       fullyClaimed: Number(stats?.fullyClaimed ?? 0),
       expired: Number(stats?.expired ?? 0),
-    };
+    }
   }
 
   /**
@@ -715,11 +717,11 @@ export class ElizaHolderAirdropService {
    */
   calculateAllocation(elizaBalance: bigint, totalElizaSupply: bigint): bigint {
     if (totalElizaSupply === 0n || elizaBalance === 0n) {
-      return 0n;
+      return 0n
     }
 
     // Pro-rata share of the ELIZA holder pool
-    return (elizaBalance * ELIZA_HOLDER_POOL) / totalElizaSupply;
+    return (elizaBalance * ELIZA_HOLDER_POOL) / totalElizaSupply
   }
 
   /**
@@ -728,14 +730,14 @@ export class ElizaHolderAirdropService {
    */
   async recordDripClaim(
     walletAddress: Address,
-    action: 'visit' | 'post' | 'trade' | 'agent_interaction'
+    action: 'visit' | 'post' | 'trade' | 'agent_interaction',
   ): Promise<{
-    canDrip: boolean;
-    dripDay: number;
-    amount: bigint;
-    isInitialClaim: boolean;
-    nextDripTime: Date | null;
-    expired: boolean;
+    canDrip: boolean
+    dripDay: number
+    amount: bigint
+    isInitialClaim: boolean
+    nextDripTime: Date | null
+    expired: boolean
   }> {
     // Check if claim period has expired
     if (this.claimDeadline && new Date() > this.claimDeadline) {
@@ -746,15 +748,15 @@ export class ElizaHolderAirdropService {
         isInitialClaim: false,
         nextDripTime: null,
         expired: true,
-      };
+      }
     }
 
     // Get allocation from database
     const allocations = await db.query<ElizaHolderAllocationRow>(
       `SELECT * FROM "ElizaHolderAllocation" WHERE "walletAddress" = $1 LIMIT 1`,
-      [walletAddress]
-    );
-    const allocation = allocations[0];
+      [walletAddress],
+    )
+    const allocation = allocations[0]
 
     if (!allocation) {
       return {
@@ -764,18 +766,18 @@ export class ElizaHolderAirdropService {
         isInitialClaim: false,
         nextDripTime: null,
         expired: false,
-      };
+      }
     }
 
-    const now = new Date();
-    const totalAllocation = BigInt(allocation.bblnAllocation);
-    const dripsUnlocked = allocation.dripsUnlocked;
-    const lastDripTime = allocation.lastDripTime;
+    const now = new Date()
+    const totalAllocation = BigInt(allocation.bblnAllocation)
+    const dripsUnlocked = allocation.dripsUnlocked
+    const lastDripTime = allocation.lastDripTime
 
     // Check cooldown
     if (lastDripTime) {
-      const cooldownMs = DRIP_COOLDOWN_HOURS * 60 * 60 * 1000;
-      const nextDripTime = new Date(lastDripTime.getTime() + cooldownMs);
+      const cooldownMs = DRIP_COOLDOWN_HOURS * 60 * 60 * 1000
+      const nextDripTime = new Date(lastDripTime.getTime() + cooldownMs)
       if (now < nextDripTime) {
         return {
           canDrip: false,
@@ -784,15 +786,15 @@ export class ElizaHolderAirdropService {
           isInitialClaim: false,
           nextDripTime,
           expired: false,
-        };
+        }
       }
     }
 
     // Calculate drip amount
-    const isInitialClaim = dripsUnlocked === 0;
-    const percent = isInitialClaim ? INITIAL_CLAIM_PERCENT : DAILY_DRIP_PERCENT;
-    const amount = (totalAllocation * BigInt(percent)) / 100n;
-    const newDripsUnlocked = dripsUnlocked + 1;
+    const isInitialClaim = dripsUnlocked === 0
+    const percent = isInitialClaim ? INITIAL_CLAIM_PERCENT : DAILY_DRIP_PERCENT
+    const amount = (totalAllocation * BigInt(percent)) / 100n
+    const newDripsUnlocked = dripsUnlocked + 1
 
     // Update allocation
     await db.exec(
@@ -812,8 +814,8 @@ export class ElizaHolderAirdropService {
         newDripsUnlocked > TOTAL_DRIP_DAYS,
         now.toISOString(),
         allocation.id,
-      ]
-    );
+      ],
+    )
 
     logger.info(
       'ELIZA holder drip executed',
@@ -824,8 +826,8 @@ export class ElizaHolderAirdropService {
         amount: amount.toString(),
         isInitialClaim,
       },
-      'ElizaHolderAirdropService'
-    );
+      'ElizaHolderAirdropService',
+    )
 
     return {
       canDrip: true,
@@ -833,10 +835,10 @@ export class ElizaHolderAirdropService {
       amount,
       isInitialClaim,
       nextDripTime: new Date(
-        now.getTime() + DRIP_COOLDOWN_HOURS * 60 * 60 * 1000
+        now.getTime() + DRIP_COOLDOWN_HOURS * 60 * 60 * 1000,
       ),
       expired: false,
-    };
+    }
   }
 
   /**
@@ -844,23 +846,24 @@ export class ElizaHolderAirdropService {
    */
   async getClaimStatus(walletAddress: Address): Promise<ClaimStatus | null> {
     if (!this.claimDeadline) {
-      return null;
+      return null
     }
 
-    const now = new Date();
-    const expired = now > this.claimDeadline;
+    const now = new Date()
+    const expired = now > this.claimDeadline
     const daysRemaining = expired
       ? 0
       : Math.ceil(
-          (this.claimDeadline.getTime() - now.getTime()) / (24 * 60 * 60 * 1000)
-        );
+          (this.claimDeadline.getTime() - now.getTime()) /
+            (24 * 60 * 60 * 1000),
+        )
 
     // Query allocation from database
     const allocations = await db.query<ElizaHolderAllocationRow>(
       `SELECT * FROM "ElizaHolderAllocation" WHERE "walletAddress" = $1 LIMIT 1`,
-      [walletAddress]
-    );
-    const allocation = allocations[0];
+      [walletAddress],
+    )
+    const allocation = allocations[0]
 
     if (!allocation) {
       return {
@@ -877,37 +880,37 @@ export class ElizaHolderAirdropService {
         claimDeadline: this.claimDeadline,
         daysRemaining,
         expired,
-      };
+      }
     }
 
-    const totalAllocation = BigInt(allocation.bblnAllocation);
-    const amountClaimed = BigInt(allocation.totalClaimed);
+    const totalAllocation = BigInt(allocation.bblnAllocation)
+    const amountClaimed = BigInt(allocation.totalClaimed)
 
     // Calculate unlocked amount
-    let amountUnlocked = 0n;
+    let amountUnlocked = 0n
     if (allocation.dripsUnlocked > 0) {
       // Initial claim (10%) + daily drips (2% each)
       const initialAmount =
-        (totalAllocation * BigInt(INITIAL_CLAIM_PERCENT)) / 100n;
-      const dailyDrips = allocation.dripsUnlocked - 1;
+        (totalAllocation * BigInt(INITIAL_CLAIM_PERCENT)) / 100n
+      const dailyDrips = allocation.dripsUnlocked - 1
       const dailyAmount =
         (totalAllocation * BigInt(DAILY_DRIP_PERCENT) * BigInt(dailyDrips)) /
-        100n;
-      amountUnlocked = initialAmount + dailyAmount;
+        100n
+      amountUnlocked = initialAmount + dailyAmount
     }
 
-    const amountClaimable = amountUnlocked - amountClaimed;
+    const amountClaimable = amountUnlocked - amountClaimed
 
     // Check if can drip now
-    let canDripNow = false;
-    let nextDripTime: Date | null = null;
+    let canDripNow = false
+    let nextDripTime: Date | null = null
     if (allocation.lastDripTime) {
-      const cooldownMs = DRIP_COOLDOWN_HOURS * 60 * 60 * 1000;
-      nextDripTime = new Date(allocation.lastDripTime.getTime() + cooldownMs);
+      const cooldownMs = DRIP_COOLDOWN_HOURS * 60 * 60 * 1000
+      nextDripTime = new Date(allocation.lastDripTime.getTime() + cooldownMs)
       canDripNow =
-        now >= nextDripTime && allocation.dripsUnlocked <= TOTAL_DRIP_DAYS;
+        now >= nextDripTime && allocation.dripsUnlocked <= TOTAL_DRIP_DAYS
     } else {
-      canDripNow = true; // No previous drip, can do initial claim
+      canDripNow = true // No previous drip, can do initial claim
     }
 
     return {
@@ -924,7 +927,7 @@ export class ElizaHolderAirdropService {
       claimDeadline: allocation.claimDeadline ?? this.claimDeadline,
       daysRemaining,
       expired,
-    };
+    }
   }
 
   /**
@@ -934,29 +937,29 @@ export class ElizaHolderAirdropService {
   async snapshotAndCreateAllocations(
     walletAddresses: Address[],
     options: {
-      solanaAddresses?: Record<string, string>; // EVM address -> Solana address mapping
-      snapshotBlock?: bigint;
-    } = {}
+      solanaAddresses?: Record<string, string> // EVM address -> Solana address mapping
+      snapshotBlock?: bigint
+    } = {},
   ): Promise<{
-    created: number;
-    skipped: number;
-    totalElizaBalance: bigint;
-    totalBblnAllocated: bigint;
+    created: number
+    skipped: number
+    totalElizaBalance: bigint
+    totalBblnAllocated: bigint
   }> {
-    const snapshotTime = new Date();
-    const claimDeadline = new Date(snapshotTime);
-    claimDeadline.setDate(claimDeadline.getDate() + CLAIM_PERIOD_DAYS);
+    const snapshotTime = new Date()
+    const claimDeadline = new Date(snapshotTime)
+    claimDeadline.setDate(claimDeadline.getDate() + CLAIM_PERIOD_DAYS)
 
     // First pass: gather all balances
     const balances: Map<
       string,
       {
-        evmBalance: bigint;
-        solanaBalance: bigint;
-        chainBreakdown: Record<string, string>;
+        evmBalance: bigint
+        solanaBalance: bigint
+        chainBreakdown: Record<string, string>
       }
-    > = new Map();
-    let totalElizaSupply = 0n;
+    > = new Map()
+    let totalElizaSupply = 0n
 
     logger.info(
       'Starting ELIZA holder snapshot',
@@ -964,30 +967,29 @@ export class ElizaHolderAirdropService {
         walletCount: walletAddresses.length,
         chains: Object.keys(SUPPORTED_EVM_CHAINS),
       },
-      'ElizaHolderAirdropService'
-    );
+      'ElizaHolderAirdropService',
+    )
 
     for (const wallet of walletAddresses) {
-      const { totalBalance, byChain } =
-        await this.getWalletElizaBalance(wallet);
+      const { totalBalance, byChain } = await this.getWalletElizaBalance(wallet)
 
       // Check Solana balance if mapping provided
-      let solanaBalance = 0n;
-      const solanaAddr = options.solanaAddresses?.[wallet.toLowerCase()];
+      let solanaBalance = 0n
+      const solanaAddr = options.solanaAddresses?.[wallet.toLowerCase()]
       if (solanaAddr) {
-        solanaBalance = await this.getSolanaElizaBalance(solanaAddr);
+        solanaBalance = await this.getSolanaElizaBalance(solanaAddr)
       }
 
-      const combinedBalance = totalBalance + solanaBalance;
+      const combinedBalance = totalBalance + solanaBalance
       if (combinedBalance > 0n) {
         balances.set(wallet.toLowerCase(), {
           evmBalance: totalBalance,
           solanaBalance,
           chainBreakdown: Object.fromEntries(
-            Object.entries(byChain).map(([k, v]) => [k, v.toString()])
+            Object.entries(byChain).map(([k, v]) => [k, v.toString()]),
           ),
-        });
-        totalElizaSupply += combinedBalance;
+        })
+        totalElizaSupply += combinedBalance
       }
     }
 
@@ -997,42 +999,42 @@ export class ElizaHolderAirdropService {
         holdersWithBalance: balances.size,
         totalSupply: formatUnits(totalElizaSupply, 18),
       },
-      'ElizaHolderAirdropService'
-    );
+      'ElizaHolderAirdropService',
+    )
 
     // Second pass: create allocations
-    let created = 0;
-    let skipped = 0;
-    let totalBblnAllocated = 0n;
+    let created = 0
+    let skipped = 0
+    let totalBblnAllocated = 0n
 
     for (const [
       wallet,
       { evmBalance, solanaBalance, chainBreakdown },
     ] of balances) {
-      const walletAddress = wallet as Address;
-      const totalBalance = evmBalance + solanaBalance;
+      const walletAddress = wallet as Address
+      const totalBalance = evmBalance + solanaBalance
 
       // Check if allocation already exists
       const existingRows = await db.query<{ id: string }>(
         `SELECT "id" FROM "ElizaHolderAllocation" WHERE "walletAddress" = $1 LIMIT 1`,
-        [walletAddress]
-      );
-      const existing = existingRows[0];
+        [walletAddress],
+      )
+      const existing = existingRows[0]
 
       if (existing) {
-        skipped++;
-        continue;
+        skipped++
+        continue
       }
 
       // Calculate allocation
       const bblnAllocation = this.calculateAllocation(
         totalBalance,
-        totalElizaSupply
-      );
-      totalBblnAllocated += bblnAllocation;
+        totalElizaSupply,
+      )
+      totalBblnAllocated += bblnAllocation
 
       // Store in database
-      const now = new Date();
+      const now = new Date()
       await db.exec(
         `INSERT INTO "ElizaHolderAllocation" (
           "id", "walletAddress", "elizaBalanceSnapshot", "chainBalances",
@@ -1048,7 +1050,7 @@ export class ElizaHolderAirdropService {
             ...chainBreakdown,
             solana: solanaBalance.toString(),
           }),
-          options.snapshotBlock?.toString() ?? null,
+          toNull(options.snapshotBlock?.toString()),
           snapshotTime.toISOString(),
           bblnAllocation.toString(),
           0,
@@ -1059,10 +1061,10 @@ export class ElizaHolderAirdropService {
           false,
           now.toISOString(),
           now.toISOString(),
-        ]
-      );
+        ],
+      )
 
-      created++;
+      created++
     }
 
     logger.info(
@@ -1073,15 +1075,15 @@ export class ElizaHolderAirdropService {
         totalElizaBalance: formatUnits(totalElizaSupply, 18),
         totalBblnAllocated: formatUnits(totalBblnAllocated, 18),
       },
-      'ElizaHolderAirdropService'
-    );
+      'ElizaHolderAirdropService',
+    )
 
     return {
       created,
       skipped,
       totalElizaBalance: totalElizaSupply,
       totalBblnAllocated,
-    };
+    }
   }
 
   /**
@@ -1089,40 +1091,40 @@ export class ElizaHolderAirdropService {
    * Called after claim period ends
    */
   async calculateUnclaimedTokens(): Promise<{
-    totalAllocated: bigint;
-    totalClaimed: bigint;
-    unclaimedToReturn: bigint;
-    claimRate: number;
+    totalAllocated: bigint
+    totalClaimed: bigint
+    unclaimedToReturn: bigint
+    claimRate: number
   }> {
     // This would aggregate from elizaHolderAllocations table
-    const totalAllocated = ELIZA_HOLDER_POOL;
-    const totalClaimed = 0n; // Would be sum of claimed amounts
+    const totalAllocated = ELIZA_HOLDER_POOL
+    const totalClaimed = 0n // Would be sum of claimed amounts
 
-    const unclaimedToReturn = totalAllocated - totalClaimed;
+    const unclaimedToReturn = totalAllocated - totalClaimed
     const claimRate =
       totalAllocated > 0n
         ? Number((totalClaimed * 10000n) / totalAllocated) / 100
-        : 0;
+        : 0
 
     return {
       totalAllocated,
       totalClaimed,
       unclaimedToReturn,
       claimRate,
-    };
+    }
   }
 
   /**
    * Return unclaimed tokens to Eliza Foundation
    */
   async returnUnclaimedToFoundation(foundationAddress: Address): Promise<{
-    amount: bigint;
-    txHash: string | null;
+    amount: bigint
+    txHash: string | null
   }> {
-    const { unclaimedToReturn } = await this.calculateUnclaimedTokens();
+    const { unclaimedToReturn } = await this.calculateUnclaimedTokens()
 
     if (unclaimedToReturn === 0n) {
-      return { amount: 0n, txHash: null };
+      return { amount: 0n, txHash: null }
     }
 
     // This would execute an on-chain transfer to the foundation
@@ -1132,13 +1134,13 @@ export class ElizaHolderAirdropService {
         amount: formatUnits(unclaimedToReturn, 18),
         foundation: foundationAddress,
       },
-      'ElizaHolderAirdropService'
-    );
+      'ElizaHolderAirdropService',
+    )
 
     return {
       amount: unclaimedToReturn,
       txHash: null, // Would be actual tx hash
-    };
+    }
   }
 }
 
@@ -1146,15 +1148,15 @@ export class ElizaHolderAirdropService {
 // SINGLETON
 // =============================================================================
 
-let elizaHolderAirdropService: ElizaHolderAirdropService | null = null;
+let elizaHolderAirdropService: ElizaHolderAirdropService | null = null
 
 export function getElizaHolderAirdropService(): ElizaHolderAirdropService {
   if (!elizaHolderAirdropService) {
-    elizaHolderAirdropService = new ElizaHolderAirdropService();
+    elizaHolderAirdropService = new ElizaHolderAirdropService()
   }
-  return elizaHolderAirdropService;
+  return elizaHolderAirdropService
 }
 
 export function resetElizaHolderAirdropService(): void {
-  elizaHolderAirdropService = null;
+  elizaHolderAirdropService = null
 }

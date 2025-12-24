@@ -32,22 +32,20 @@ console.log(`Bootstrapped ${result.success}/${result.total} NPCs`);
 ### 2. Post as NPC to Farcaster
 
 ```typescript
-import { getFarcasterPostingService } from '@babylon/agents';
+import { getNPCDecentralizedBootstrapService } from '@babylon/agents';
 
-const postingService = getFarcasterPostingService();
+const bootstrap = getNPCDecentralizedBootstrapService();
 
-// Post a cast
-await postingService.postAsNPC('ailon-musk', 'Mars by 2026!');
+// Post a cast (handles identity and posting)
+await bootstrap.postAsNPC('ailon-musk', 'Mars by 2026!');
 
-// Reply to a cast
-await postingService.replyAsNPC('ailon-musk', 'Great point!', parentFid, parentHash);
+// Or use FarcasterPoster directly for more control
+import { createPoster, DEFAULT_HUBS } from '@jejunetwork/farcaster';
 
-// Post in a channel
-await postingService.postInChannelAsNPC(
-  'ailon-musk',
-  'Announcing new rocket designs',
-  'chain://eip155:1/erc721:0x...'
-);
+const poster = createPoster(fid, signerPrivateKey, DEFAULT_HUBS.mainnet);
+await poster.cast('Hello Farcaster!');
+await poster.reply('Great point!', { fid: parentFid, hash: parentHash });
+await poster.castToChannel('Announcing new designs', channelUrl);
 ```
 
 ### 3. Handle Decentralized DMs
@@ -195,26 +193,31 @@ const identity = await identityService.getNPCIdentity('ailon-musk');
 const signature = await identityService.signAsNPC('ailon-musk', message);
 ```
 
-### FarcasterPostingService
+### FarcasterPoster (via @jejunetwork/farcaster)
 
-100% Farcaster-native posting for NPCs.
+100% Farcaster-native posting using the Jeju Farcaster package.
 
 ```typescript
-import { getFarcasterPostingService } from '@babylon/agents';
+import { createPoster, DEFAULT_HUBS, FarcasterPoster } from '@babylon/agents';
 
-const service = getFarcasterPostingService({
-  hubUrl: 'nemes.farcaster.xyz:2283',
-  network: 'mainnet',
-});
+// Create poster with FID and signer key
+const poster = createPoster(fid, signerPrivateKeyHex, DEFAULT_HUBS.mainnet);
 
 // Post cast
-const result = await service.postAsNPC('ailon-musk', 'Hello Farcaster!');
+const result = await poster.cast('Hello Farcaster!');
 
 // React to cast
-await service.reactAsNPC('ailon-musk', targetFid, targetHash, 'like');
+await poster.like({ fid: targetFid, hash: targetHash });
+await poster.recast({ fid: targetFid, hash: targetHash });
 
 // Delete cast
-await service.deleteCastAsNPC('ailon-musk', castHash);
+await poster.deleteCast(castHash);
+
+// Reply to cast
+await poster.reply('Great point!', { fid: parentFid, hash: parentHash });
+
+// Post in channel
+await poster.castToChannel('Announcing new designs', channelUrl);
 ```
 
 ### DecentralizedDMService
@@ -261,7 +264,7 @@ await service.postAsNPC('ailon-musk', 'Hello from bootstrap!');
 ```bash
 # Jeju KMS
 JEJU_KMS_ENDPOINT=http://localhost:3300
-JEJU_RPC_URL=http://localhost:8545
+JEJU_RPC_URL=http://localhost:6545
 JEJU_KEY_REGISTRY_ADDRESS=0x...
 
 # Farcaster

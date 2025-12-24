@@ -39,25 +39,15 @@
     // Bun-specific
     "types": ["bun-types"],
     "moduleDetection": "force",
-    // Next.js
-    "plugins": [
-      {
-        "name": "next"
-      }
-    ],
-    // Path aliases for shared code and Next.js
+    // Path aliases for shared code
     "baseUrl": ".",
     "paths": {
-      "@babylon/contracts": ["../../packages/contracts/src/index.ts"],
-      "@babylon/contracts/deployments/*": [
-        "../../packages/contracts/deployments/*"
-      ],
-      "@babylon/contracts/*": ["../../packages/contracts/src/*"],
       "@babylon/db": ["../../packages/db/src/index.ts"],
       "@babylon/db/*": ["../../packages/db/src/*"],
       "@babylon/api": ["../../packages/api/src/index.ts"],
       "@babylon/api/*": ["../../packages/api/src/*"],
       "@babylon/agents": ["../../packages/agents/src/index.ts"],
+      "@babylon/agents/client": ["../../packages/agents/src/client.ts"],
       "@babylon/agents/*": ["../../packages/agents/src/*"],
       "@babylon/a2a": ["../../packages/a2a/src/index.ts"],
       "@babylon/a2a/*": ["../../packages/a2a/src/*"],
@@ -69,35 +59,30 @@
       "@babylon/core/markets/*": ["../../packages/core/markets/*"],
       "@babylon/shared": ["../../packages/shared/src/index.ts"],
       "@babylon/shared/*": ["../../packages/shared/src/*"],
+      "@babylon/auth": ["../../packages/auth/src/index.ts"],
+      "@babylon/auth/*": ["../../packages/auth/src/*"],
       "@babylon/messaging": ["../../packages/messaging/src/index.ts"],
       "@babylon/messaging/*": ["../../packages/messaging/src/*"],
+      "@babylon/client": ["../../packages/client/src/index.ts"],
+      "@babylon/client/*": ["../../packages/client/src/*"],
+      "@babylon/server": ["../server/src/app.ts"],
+      "@babylon/server/*": ["../server/src/*"],
       "@/components/*": ["./src/components/*"],
       "@/lib/*": ["./src/lib/*"],
       "@/hooks/*": ["./src/hooks/*"],
       "@/stores/*": ["./src/stores/*"],
       "@/app/*": ["./src/app/*"],
+      "@/contexts/*": ["./src/contexts/*"],
       "@/*": ["./src/*"]
     },
     "allowJs": true
   },
-  "include": [
-    "src/**/*",
-    "next.config.ts",
-    "types/**/*.d.ts",
-    ".next/types/**/*.ts",
-    ".next/dev/types/**/*.ts"
-  ],
+  "include": ["src/**/*", "scripts/**/*", "types/**/*.d.ts"],
   "exclude": [
     "node_modules",
     "dist",
+    ".dev",
     "**/*.disabled",
-    "src/**/__tests__/**/*",
-    "src/app/_*backup*/**/*",
-    "src/app/api/airdrop/**/*",
-    "src/app/api/npcs/**/*",
-    "src/app/api/users/me/**/*",
-    "src/app/api/users/signup/**/*",
-    "src/app/api/auth/jeju/**/*",
-    "src/app/api/waitlist/**/*"
+    "src/**/__tests__/**/*"
   ]
 }

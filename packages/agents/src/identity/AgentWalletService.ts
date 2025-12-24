@@ -8,31 +8,31 @@
  * @packageDocumentation
  */
 
-import { db, type JsonValue } from '@babylon/db';
-import { v4 as uuidv4 } from 'uuid';
-import { getAddress, keccak256 } from 'viem';
-import { getAgent0Client } from '../agent0/Agent0Client';
-import { getAgentConfig } from '../shared/agent-config';
-import { logger } from '../shared/logger';
+import { db, type JsonValue } from '@babylon/db'
+import { toNull } from '@babylon/shared'
+import { v4 as uuidv4 } from 'uuid'
+import { getAddress, keccak256 } from 'viem'
+import { getAgent0Client } from '../agent0/Agent0Client'
+import { getAgentConfig } from '../shared/agent-config'
+import { logger } from '../shared/logger'
 
 // ============================================================================
 // KMS Client Types
 // ============================================================================
 
-import type { KMSClient } from '@babylon/api';
+import { getKMSClient, initializeKMS, type KMSClient } from '@babylon/api'
 
-let kmsClient: KMSClient | null = null;
+let kmsClient: KMSClient | null = null
 
 async function getKMS(): Promise<KMSClient> {
-  if (kmsClient?.isInitialized()) return kmsClient;
+  if (kmsClient?.isInitialized()) return kmsClient
 
-  const { getKMSClient, initializeKMS } = await import('@babylon/api');
-  const kms = getKMSClient();
+  const kms = getKMSClient()
   if (!kms.isInitialized()) {
-    await initializeKMS();
+    await initializeKMS()
   }
-  kmsClient = kms;
-  return kmsClient;
+  kmsClient = kms
+  return kmsClient
 }
 
 // ============================================================================
@@ -45,19 +45,19 @@ export class AgentWalletService {
    * Keys are managed via MPC/TEE - no single party has full key access.
    */
   async createAgentEmbeddedWallet(agentUserId: string): Promise<{
-    walletAddress: string;
-    kmsKeyId: string;
+    walletAddress: string
+    kmsKeyId: string
   }> {
-    const agent = await db.user.findUnique({ where: { id: agentUserId } });
+    const agent = await db.user.findUnique({ where: { id: agentUserId } })
 
     if (!agent || !agent.isAgent) {
-      throw new Error('Agent user not found');
+      throw new Error('Agent user not found')
     }
 
     // Check if agent already has a wallet address
     const existingWalletAddress = agent.walletAddress
       ? String(agent.walletAddress)
-      : null;
+      : null
     if (existingWalletAddress) {
       logger.info(
         'Agent already has wallet address, skipping creation',
@@ -65,32 +65,32 @@ export class AgentWalletService {
           agentUserId,
           walletAddress: existingWalletAddress,
         },
-        'AgentWalletService'
-      );
+        'AgentWalletService',
+      )
 
       const existingKmsKeyId = agent.kmsKeyId
         ? String(agent.kmsKeyId)
-        : `agent_${agentUserId}`;
+        : `agent_${agentUserId}`
       return {
         walletAddress: existingWalletAddress,
         kmsKeyId: existingKmsKeyId,
-      };
+      }
     }
 
     logger.info(
       `Creating KMS-backed wallet for agent ${agentUserId}`,
       undefined,
-      'AgentWalletService'
-    );
+      'AgentWalletService',
+    )
 
     // Step 1: Generate key via Jeju KMS (MPC/TEE-backed)
-    const kms = await getKMS();
-    const keyName = `agent_${agentUserId}_${Date.now()}`;
-    const { keyId: kmsKeyId, publicKey } = await kms.generateKey(keyName);
+    const kms = await getKMS()
+    const keyName = `agent_${agentUserId}_${Date.now()}`
+    const { keyId: kmsKeyId, publicKey } = await kms.generateKey(keyName)
 
     // Derive wallet address from public key (Ethereum: keccak256 of uncompressed pubkey, take last 20 bytes)
-    const addressHash = keccak256(publicKey);
-    const walletAddress = getAddress(`0x${addressHash.slice(-40)}`);
+    const addressHash = keccak256(publicKey)
+    const walletAddress = getAddress(`0x${addressHash.slice(-40)}`)
 
     // Step 2: Update agent user with wallet info
     await db.user.update({
@@ -101,7 +101,7 @@ export class AgentWalletService {
         // OAuth3 identity reference for KMS-backed wallets
         oauth3Id: `kms:${kmsKeyId}`,
       },
-    });
+    })
 
     // Step 3: Log wallet creation
     await db.agentLog.create({
@@ -110,53 +110,53 @@ export class AgentWalletService {
         agentUserId,
         type: 'system',
         level: 'info',
-        message: `KMS wallet created: ${walletAddress}`,
+        content: `KMS wallet created: ${walletAddress}`,
         metadata: {
           kmsKeyId,
           walletAddress,
           provider: 'jeju-kms',
-        },
+        } as JsonValue,
       },
-    });
+    })
 
     logger.info(
       `KMS wallet created for agent ${agentUserId}: ${walletAddress}`,
       undefined,
-      'AgentWalletService'
-    );
+      'AgentWalletService',
+    )
 
-    return { walletAddress, kmsKeyId };
+    return { walletAddress, kmsKeyId }
   }
 
   /**
    * Register agent on ERC-8004 identity registry (server-side signing, gas handled)
    */
   async registerAgentOnChain(agentUserId: string): Promise<{
-    tokenId: number;
-    txHash: string;
-    metadataCID?: string;
+    tokenId: number
+    txHash: string
+    metadataCID?: string
   }> {
     logger.info(
       `Registering agent ${agentUserId} on-chain`,
       undefined,
-      'AgentWalletService'
-    );
+      'AgentWalletService',
+    )
 
-    const agent = await db.user.findUnique({ where: { id: agentUserId } });
+    const agent = await db.user.findUnique({ where: { id: agentUserId } })
 
     if (!agent || !agent.isAgent) {
-      throw new Error('Agent user not found');
+      throw new Error('Agent user not found')
     }
 
     const agentWalletAddress = agent.walletAddress
       ? String(agent.walletAddress)
-      : null;
+      : null
     if (!agentWalletAddress) {
-      throw new Error('Agent must have wallet before on-chain registration');
+      throw new Error('Agent must have wallet before on-chain registration')
     }
 
     // Get agent config for capabilities
-    const config = await getAgentConfig(agentUserId);
+    const config = await getAgentConfig(agentUserId)
 
     // Step 1: Prepare agent metadata
     const capabilities = {
@@ -182,43 +182,45 @@ export class AgentWalletService {
       autonomousPosting: config?.autonomousPosting ?? false,
       skills: [],
       domains: [],
-    };
+    }
 
     // Step 2: Register via Agent0Client (handles signing and gas server-side)
-    const agent0Client = getAgent0Client();
+    const agent0Client = getAgent0Client()
 
     // Use individual agent's A2A endpoint
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:5007';
-    const individualAgentA2AEndpoint = `${baseUrl}/api/agents/${agentUserId}/a2a`;
+    const BABYLON_API_PORT = process.env.BABYLON_API_PORT ?? '5009'
+    const baseUrl =
+      process.env.PUBLIC_APP_URL ?? `http://localhost:${BABYLON_API_PORT}`
+    const individualAgentA2AEndpoint = `${baseUrl}/api/agents/${agentUserId}/a2a`
 
     const agentDisplayName = agent.displayName
       ? String(agent.displayName)
-      : null;
-    const agentUsername = agent.username ? String(agent.username) : null;
-    const agentBio = agent.bio ? String(agent.bio) : null;
+      : null
+    const agentUsername = agent.username ? String(agent.username) : null
+    const agentBio = agent.bio ? String(agent.bio) : null
     const agentProfileImageUrl = agent.profileImageUrl
       ? String(agent.profileImageUrl)
-      : null;
+      : null
 
     const registration = await agent0Client.registerAgent({
       name: agentDisplayName ?? agentUsername ?? 'Agent',
       description: agentBio ?? 'Autonomous AI agent in Babylon',
-      imageUrl: agentProfileImageUrl ?? undefined,
+      imageUrl: agentProfileImageUrl,
       walletAddress: agentWalletAddress,
       a2aEndpoint: individualAgentA2AEndpoint,
       capabilities,
-    });
+    })
 
     // Step 3: Update agent with on-chain data
     await db.user.update({
       where: { id: agentUserId },
       data: {
         agent0TokenId: registration.tokenId,
-        agent0MetadataCID: registration.metadataCID ?? null,
+        agent0MetadataCID: toNull(registration.metadataCID),
         registrationTxHash: registration.txHash,
         onChainRegistered: true,
       },
-    });
+    })
 
     // Step 4: Log registration
     await db.agentLog.create({
@@ -227,53 +229,53 @@ export class AgentWalletService {
         agentUserId,
         type: 'system',
         level: 'info',
-        message: `Agent registered on-chain: Token ID ${registration.tokenId}`,
+        content: `Agent registered on-chain: Token ID ${registration.tokenId}`,
         metadata: {
           tokenId: registration.tokenId,
           txHash: registration.txHash,
           metadataCID: registration.metadataCID,
         } as JsonValue,
       },
-    });
+    })
 
     logger.info(
       `Agent ${agentUserId} registered on-chain: Token ID ${registration.tokenId}`,
       undefined,
-      'AgentWalletService'
-    );
+      'AgentWalletService',
+    )
 
     return {
       tokenId: registration.tokenId,
       txHash: registration.txHash,
       metadataCID: registration.metadataCID,
-    };
+    }
   }
 
   /**
    * Complete setup: Create wallet + register on-chain (fully automated)
    */
   async setupAgentIdentity(agentUserId: string): Promise<{
-    walletAddress: string;
-    tokenId?: number;
-    onChainRegistered: boolean;
+    walletAddress: string
+    tokenId?: number
+    onChainRegistered: boolean
   }> {
     logger.info(
       `Setting up complete identity for agent ${agentUserId}`,
       undefined,
-      'AgentWalletService'
-    );
+      'AgentWalletService',
+    )
 
     // Step 1: Create KMS-backed wallet
-    const wallet = await this.createAgentEmbeddedWallet(agentUserId);
+    const wallet = await this.createAgentEmbeddedWallet(agentUserId)
 
     // Step 2: Register on-chain
-    const registration = await this.registerAgentOnChain(agentUserId);
+    const registration = await this.registerAgentOnChain(agentUserId)
 
     return {
       walletAddress: wallet.walletAddress,
       tokenId: registration.tokenId,
       onChainRegistered: true,
-    };
+    }
   }
 
   /**
@@ -282,69 +284,71 @@ export class AgentWalletService {
   async signTransaction(
     agentUserId: string,
     transactionData: {
-      to: string;
-      value: string;
-      data: string;
-    }
+      to: string
+      value: string
+      data: string
+    },
   ): Promise<string> {
-    const agent = await db.user.findUnique({ where: { id: agentUserId } });
+    const agent = await db.user.findUnique({ where: { id: agentUserId } })
 
     if (!agent || !agent.isAgent) {
-      throw new Error('Agent not found');
+      throw new Error('Agent not found')
     }
 
     // Get KMS key ID from kmsKeyId field or oauth3Id (for backwards compatibility)
-    const agentKmsKeyId = agent.kmsKeyId ? String(agent.kmsKeyId) : null;
-    const agentOauth3Id = agent.oauth3Id ? String(agent.oauth3Id) : null;
+    const agentKmsKeyId = agent.kmsKeyId ? String(agent.kmsKeyId) : null
+    const agentOauth3Id = agent.oauth3Id ? String(agent.oauth3Id) : null
 
-    let keyId = agentKmsKeyId;
+    let keyId = agentKmsKeyId
     if (!keyId && agentOauth3Id?.startsWith('kms:')) {
-      keyId = agentOauth3Id.replace('kms:', '');
+      keyId = agentOauth3Id.replace('kms:', '')
     }
 
     if (!keyId) {
-      throw new Error('Agent does not have KMS wallet');
+      throw new Error('Agent does not have KMS wallet')
     }
 
     // Sign via Jeju KMS
-    const kms = await getKMS();
-    const messageToSign = JSON.stringify(transactionData);
+    const kms = await getKMS()
+    const messageToSign = JSON.stringify(transactionData)
     // Convert string to hex bytes
-    const messageBytes = new TextEncoder().encode(messageToSign);
-    const messageHex = `0x${Array.from(messageBytes)
+    const messageBytes = new TextEncoder().encode(messageToSign)
+    const hexContent = Array.from(messageBytes)
       .map((b) => b.toString(16).padStart(2, '0'))
-      .join('')}` as `0x${string}`;
+      .join('')
+    // Template literal creates properly typed hex string
+    const messageHex: `0x${string}` = `0x${hexContent}`
     const result = await kms.sign({
       message: messageHex,
       keyId,
-    });
+    })
 
     logger.info(
       `Transaction signed for agent ${agentUserId}`,
       undefined,
-      'AgentWalletService'
-    );
+      'AgentWalletService',
+    )
 
-    return result.signature;
+    return result.signature
   }
 
   /**
    * Verify agent has valid on-chain identity
    */
   async verifyOnChainIdentity(agentUserId: string): Promise<boolean> {
-    const agent = await db.user.findUnique({ where: { id: agentUserId } });
+    const agent = await db.user.findUnique({ where: { id: agentUserId } })
 
     if (!agent || !agent.isAgent || !agent.agent0TokenId) {
-      return false;
+      return false
     }
 
     // Verify with Agent0 network
-    const agent0Client = getAgent0Client();
-    const tokenId = Number(agent.agent0TokenId);
-    const profile = await agent0Client.getAgentProfile(tokenId);
+    const agent0Client = getAgent0Client()
+    const tokenId = Number(agent.agent0TokenId)
+    const profile = await agent0Client.getAgentProfile(tokenId)
 
-    return profile !== null;
+    return profile !== null
   }
 }
 
-export const agentWalletService = new AgentWalletService();
+export const agentWalletService = new AgentWalletService()

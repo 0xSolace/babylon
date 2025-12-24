@@ -1,61 +1,33 @@
-'use client';
-
-import { cn } from '@babylon/shared';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Bell } from 'lucide-react';
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { useCallback, useEffect } from 'react';
-import { toast } from 'sonner';
-import { GroupInviteCard } from '@/components/groups/GroupInviteCard';
-import { Avatar } from '@/components/shared/Avatar';
-import { PageContainer } from '@/components/shared/PageContainer';
-import { PullToRefreshIndicator } from '@/components/shared/PullToRefreshIndicator';
-import { useAuth } from '@/hooks/useAuth';
-import { usePullToRefresh } from '@/hooks/usePullToRefresh';
-
-interface Notification {
-  id: string;
-  type: string;
-  actorId: string | null;
-  actor: {
-    id: string;
-    displayName: string;
-    username: string | null;
-    profileImageUrl: string | null;
-  } | null;
-  postId: string | null;
-  commentId: string | null;
-  chatId: string | null;
-  groupId: string | null;
-  inviteId: string | null;
-  message: string;
-  read: boolean;
-  createdAt: string;
-}
-
-interface GroupInvite {
-  inviteId: string;
-  groupId: string;
-  groupName: string;
-  groupDescription: string | null;
-  memberCount: number;
-  invitedAt: string;
-}
+import { cn } from '@babylon/shared'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Bell } from 'lucide-react'
+import { useCallback, useEffect } from 'react'
+import { Link } from 'react-router-dom'
+import { toast } from 'sonner'
+import { GroupInviteCard } from '@/components/groups/GroupInviteCard'
+import { Avatar } from '@/components/shared/Avatar'
+import { PageContainer } from '@/components/shared/PageContainer'
+import { PullToRefreshIndicator } from '@/components/shared/PullToRefreshIndicator'
+import { useAuth } from '@/hooks/useAuth'
+import { usePullToRefresh } from '@/hooks/usePullToRefresh'
+import {
+  api,
+  extractData,
+  extractDataOrNull,
+  type GroupInvite,
+  type Notification,
+} from '@/lib/eden-client'
+import { useRouter } from '@/lib/navigation'
 
 interface NotificationsResponse {
-  notifications: Notification[];
-  unreadCount: number;
-}
-
-interface GroupInvitesResponse {
-  invites: GroupInvite[];
+  notifications: Notification[]
+  unreadCount: number
 }
 
 export default function NotificationsPage() {
-  const { authenticated, user, getAccessToken } = useAuth();
-  const router = useRouter();
-  const queryClient = useQueryClient();
+  const { authenticated, user, getAccessToken } = useAuth()
+  const router = useRouter()
+  const queryClient = useQueryClient()
 
   const {
     data: notificationsData,
@@ -63,244 +35,218 @@ export default function NotificationsPage() {
     refetch: refetchNotifications,
   } = useQuery({
     queryKey: ['notifications'],
-    queryFn: async (): Promise<NotificationsResponse> => {
-      const token = await getAccessToken();
+    queryFn: async () => {
+      const token = await getAccessToken()
 
       if (!token) {
-        return { notifications: [], unreadCount: 0 };
+        return { notifications: [] as Notification[], unreadCount: 0 }
       }
 
-      const response = await fetch('/api/notifications?limit=100', {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch notifications');
-      }
-
-      return (await response.json()) as NotificationsResponse;
+      const response = await api.notifications.get({ limit: '100' }, token)
+      return extractData(response)
     },
     enabled: authenticated && !!user,
     refetchInterval: 60000, // Poll every 1 minute
     refetchIntervalInBackground: false, // Only poll when visible
-  });
+  })
 
   const { data: invitesData, isLoading: invitesLoading } = useQuery({
     queryKey: ['group-invites'],
     queryFn: async (): Promise<GroupInvite[]> => {
-      const token = await getAccessToken();
+      const token = await getAccessToken()
 
       if (!token) {
-        return [];
+        return []
       }
 
-      const response = await fetch('/api/groups/invites', {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to fetch group invites');
-      }
-
-      const data = (await response.json()) as GroupInvitesResponse;
-      return data.invites || [];
+      const response = await api.groups.invites.get(token)
+      const data = extractDataOrNull(response)
+      return data?.invites || []
     },
     enabled: authenticated && !!user,
-  });
+  })
 
-  const notifications = notificationsData
-    ? notificationsData.notifications
-    : [];
-  const groupInvites = invitesData || [];
-  const loading = notificationsLoading || invitesLoading;
-  const unreadCount = notificationsData ? notificationsData.unreadCount : 0;
+  const notifications = notificationsData ? notificationsData.notifications : []
+  const groupInvites = invitesData || []
+  const loading = notificationsLoading || invitesLoading
+  const unreadCount = notificationsData ? notificationsData.unreadCount : 0
 
   // Mutation for marking notifications as read with optimistic updates
   const markAsReadMutation = useMutation({
     mutationFn: async (notificationId: string) => {
-      const token = await getAccessToken();
-      if (!token) throw new Error('No auth token');
+      const token = await getAccessToken()
+      if (!token) throw new Error('No auth token')
 
-      const response = await fetch('/api/notifications', {
-        method: 'PATCH',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          notificationIds: [notificationId],
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to mark notification as read');
-      }
-
-      return notificationId;
+      const response = await api.notifications.markRead.patch(
+        { notificationIds: [notificationId] },
+        token,
+      )
+      extractData(response)
+      return notificationId
     },
     onMutate: async (notificationId) => {
       // Cancel any outgoing refetches
-      await queryClient.cancelQueries({ queryKey: ['notifications'] });
+      await queryClient.cancelQueries({ queryKey: ['notifications'] })
 
       // Snapshot the previous value
       const previousData = queryClient.getQueryData<NotificationsResponse>([
         'notifications',
-      ]);
+      ])
 
       // Optimistically update the cache
       queryClient.setQueryData<NotificationsResponse>(
         ['notifications'],
         (old) => {
-          if (!old) return old;
+          if (!old) return old
           return {
             notifications: old.notifications.map((n) =>
-              n.id === notificationId ? { ...n, read: true } : n
+              n.id === notificationId ? { ...n, read: true } : n,
             ),
             unreadCount: Math.max(0, old.unreadCount - 1),
-          };
-        }
-      );
+          }
+        },
+      )
 
-      return { previousData };
+      return { previousData }
     },
     onError: (_err, _notificationId, context) => {
       // Rollback on error
       if (context?.previousData) {
-        queryClient.setQueryData(['notifications'], context.previousData);
+        queryClient.setQueryData(['notifications'], context.previousData)
       }
     },
-  });
+  })
 
   const markAsRead = useCallback(
     (notificationId: string, isAlreadyRead: boolean) => {
-      if (isAlreadyRead) return;
-      markAsReadMutation.mutate(notificationId);
+      if (isAlreadyRead) return
+      markAsReadMutation.mutate(notificationId)
     },
-    [markAsReadMutation]
-  );
+    [markAsReadMutation],
+  )
 
   const handleRefresh = useCallback(async () => {
-    await refetchNotifications();
-    await queryClient.invalidateQueries({ queryKey: ['group-invites'] });
-    toast.success('Notifications refreshed');
-  }, [refetchNotifications, queryClient]);
+    await refetchNotifications()
+    await queryClient.invalidateQueries({ queryKey: ['group-invites'] })
+    toast.success('Notifications refreshed')
+  }, [refetchNotifications, queryClient])
 
   // Pull-to-refresh hook
   const { pullDistance, isRefreshing, containerRef } = usePullToRefresh({
     onRefresh: handleRefresh,
-  });
+  })
 
   const fetchNotifications = useCallback(async () => {
-    await refetchNotifications();
-    await queryClient.invalidateQueries({ queryKey: ['group-invites'] });
-  }, [refetchNotifications, queryClient]);
+    await refetchNotifications()
+    await queryClient.invalidateQueries({ queryKey: ['group-invites'] })
+  }, [refetchNotifications, queryClient])
 
   // Intersection Observer - marks notifications as read after viewing for 3 seconds
   useEffect(() => {
-    if (!authenticated || notifications.length === 0) return;
+    if (!authenticated || notifications.length === 0) return
 
-    const timers = new Map<string, ReturnType<typeof setTimeout>>();
+    const timers = new Map<string, ReturnType<typeof setTimeout>>()
 
     const observer = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {
           const notificationId = entry.target.getAttribute(
-            'data-notification-id'
-          );
-          if (!notificationId) return;
+            'data-notification-id',
+          )
+          if (!notificationId) return
 
           const notification = notifications.find(
-            (n) => n.id === notificationId
-          );
-          if (!notification || notification.read) return;
+            (n) => n.id === notificationId,
+          )
+          if (!notification || notification.read) return
 
           if (entry.isIntersecting) {
             // Clear any existing timer first (in case notification re-enters viewport)
-            const existingTimer = timers.get(notificationId);
+            const existingTimer = timers.get(notificationId)
             if (existingTimer) {
-              clearTimeout(existingTimer);
+              clearTimeout(existingTimer)
             }
 
             // Start a timer when notification becomes visible
             const timer = setTimeout(() => {
-              markAsRead(notificationId, false);
-            }, 3000); // 3 seconds delay
+              markAsRead(notificationId, false)
+            }, 3000) // 3 seconds delay
 
-            timers.set(notificationId, timer);
+            timers.set(notificationId, timer)
           } else {
             // Cancel timer if notification leaves viewport before 3 seconds
-            const timer = timers.get(notificationId);
+            const timer = timers.get(notificationId)
             if (timer) {
-              clearTimeout(timer);
-              timers.delete(notificationId);
+              clearTimeout(timer)
+              timers.delete(notificationId)
             }
           }
-        });
+        })
       },
       {
         threshold: 0.5, // At least 50% of notification must be visible
         rootMargin: '-50px', // Adds margin to trigger when fully in view
-      }
-    );
+      },
+    )
 
     // Observe all notification elements
     const notificationElements = document.querySelectorAll(
-      '[data-notification-id]'
-    );
-    notificationElements.forEach((el) => observer.observe(el));
+      '[data-notification-id]',
+    )
+    notificationElements.forEach((el) => {
+      observer.observe(el)
+    })
 
     // Cleanup
     return () => {
-      observer.disconnect();
-      timers.forEach((timer) => clearTimeout(timer));
-      timers.clear();
-    };
-  }, [notifications, authenticated, markAsRead]);
+      observer.disconnect()
+      timers.forEach((timer) => {
+        clearTimeout(timer)
+      })
+      timers.clear()
+    }
+  }, [notifications, authenticated, markAsRead])
 
   const formatTimeAgo = (dateString: string) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffMs = now.getTime() - date.getTime();
-    const diffMinutes = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMs / 3600000);
-    const diffDays = Math.floor(diffMs / 86400000);
+    const date = new Date(dateString)
+    const now = new Date()
+    const diffMs = now.getTime() - date.getTime()
+    const diffMinutes = Math.floor(diffMs / 60000)
+    const diffHours = Math.floor(diffMs / 3600000)
+    const diffDays = Math.floor(diffMs / 86400000)
 
-    if (diffMinutes < 1) return 'Just now';
-    if (diffMinutes < 60) return `${diffMinutes}m ago`;
-    if (diffHours < 24) return `${diffHours}h ago`;
-    if (diffDays < 7) return `${diffDays}d ago`;
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-  };
+    if (diffMinutes < 1) return 'Just now'
+    if (diffMinutes < 60) return `${diffMinutes}m ago`
+    if (diffHours < 24) return `${diffHours}h ago`
+    if (diffDays < 7) return `${diffDays}d ago`
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  }
 
   const getNotificationIcon = (type: string) => {
     switch (type) {
       case 'comment':
-        return '💬';
+        return '💬'
       case 'reaction':
-        return '❤️';
+        return '❤️'
       case 'follow':
-        return '👤';
+        return '👤'
       case 'mention':
-        return '📢';
+        return '📢'
       case 'reply':
-        return '↩️';
+        return '↩️'
       case 'share':
-        return '🔁';
+        return '🔁'
       case 'system':
-        return '✨';
+        return '✨'
       default:
-        return '🔔';
+        return '🔔'
     }
-  };
+  }
 
   const getNotificationLink = (notification: Notification) => {
     // DM or group chat message - go to the specific chat if chatId is available
     if (notification.chatId) {
-      return `/chats?chat=${notification.chatId}`;
+      return `/chats?chat=${notification.chatId}`
     }
 
     // Group chat invite - go to chat
@@ -310,7 +256,7 @@ export default function NotificationsPage() {
     ) {
       // Extract chat ID from the message or notification data
       // For now, go to chats page where they can see their invitations
-      return '/chats';
+      return '/chats'
     }
 
     // DM or group chat message without chatId (legacy notifications) - go to chats page
@@ -319,7 +265,7 @@ export default function NotificationsPage() {
       (notification.message.includes('Message') ||
         notification.message.includes('message'))
     ) {
-      return '/chats';
+      return '/chats'
     }
 
     // Profile completion - go to settings
@@ -327,12 +273,12 @@ export default function NotificationsPage() {
       notification.type === 'system' &&
       notification.message.includes('profile')
     ) {
-      return '/settings';
+      return '/settings'
     }
 
     // Follow notification - go to the follower's profile
     if (notification.type === 'follow' && notification.actorId) {
-      return `/profile/${notification.actorId}`;
+      return `/profile/${notification.actorId}`
     }
 
     // Comment or reaction on post - go to the post detail page
@@ -342,22 +288,22 @@ export default function NotificationsPage() {
         notification.type === 'reply') &&
       notification.postId
     ) {
-      return `/post/${notification.postId}`;
+      return `/post/${notification.postId}`
     }
 
     // Share notification - go to the post
     if (notification.type === 'share' && notification.postId) {
-      return `/post/${notification.postId}`;
+      return `/post/${notification.postId}`
     }
 
     // Mention - go to the post if available
     if (notification.type === 'mention' && notification.postId) {
-      return `/post/${notification.postId}`;
+      return `/post/${notification.postId}`
     }
 
     // Default: go to feed
-    return '/feed';
-  };
+    return '/feed'
+  }
 
   if (!authenticated) {
     return (
@@ -376,7 +322,7 @@ export default function NotificationsPage() {
               Please sign in to view notifications
             </p>
             <Link
-              href="/feed"
+              to="/feed"
               className="rounded-lg bg-primary px-6 py-3 font-semibold text-primary-foreground transition-all hover:bg-primary/90"
             >
               Go to Feed
@@ -384,7 +330,7 @@ export default function NotificationsPage() {
           </div>
         </div>
       </PageContainer>
-    );
+    )
   }
 
   return (
@@ -442,17 +388,17 @@ export default function NotificationsPage() {
                     invitedAt={invite.invitedAt}
                     onAccepted={(_groupId, chatId) => {
                       // Refresh invites list
-                      void fetchNotifications();
-                      toast.success('Joined group!');
+                      void fetchNotifications()
+                      toast.success('Joined group!')
                       // Navigate to chat if available
                       if (chatId) {
-                        router.push(`/chats?chat=${chatId}`);
+                        router.push(`/chats?chat=${chatId}`)
                       }
                     }}
                     onDeclined={() => {
                       // Refresh invites list
-                      void fetchNotifications();
-                      toast.success('Invite declined');
+                      void fetchNotifications()
+                      toast.success('Invite declined')
                     }}
                   />
                 ))}
@@ -463,13 +409,13 @@ export default function NotificationsPage() {
             {notifications.map((notification) => (
               <Link
                 key={notification.id}
-                href={getNotificationLink(notification)}
+                to={getNotificationLink(notification)}
                 onClick={() => markAsRead(notification.id, notification.read)}
                 data-notification-id={notification.id}
                 className={cn(
                   'block border-border border-b px-4 py-4 lg:px-6',
                   'transition-colors hover:bg-muted/30',
-                  !notification.read && 'bg-primary/5'
+                  !notification.read && 'bg-primary/5',
                 )}
               >
                 <div className="flex items-start gap-3">
@@ -492,7 +438,7 @@ export default function NotificationsPage() {
                         'flex h-10 w-10 shrink-0 items-center justify-center rounded-full',
                         notification.type === 'system'
                           ? 'bg-primary/10'
-                          : 'bg-muted'
+                          : 'bg-muted',
                       )}
                     >
                       {notification.type === 'system' ? (
@@ -527,7 +473,7 @@ export default function NotificationsPage() {
                                   notification.actor
                                     ? notification.actor.displayName
                                     : '',
-                                  ''
+                                  '',
                                 )
                                 .replace(/^:\s*/, '')}
                             </span>
@@ -546,5 +492,5 @@ export default function NotificationsPage() {
         )}
       </div>
     </PageContainer>
-  );
+  )
 }

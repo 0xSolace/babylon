@@ -1,101 +1,97 @@
 /**
  * Tests for Profile URL utilities
  */
-import { describe, expect, it } from 'bun:test';
-import {
-  extractUsername,
-  getProfileUrl,
-  isUsername,
-} from '@babylon/shared/utils/profile';
+import { describe, expect, it } from 'bun:test'
+import { extractUsername, getProfileUrl, isUsername } from '@babylon/shared'
 
 describe('Profile URL Utilities', () => {
   describe('getProfileUrl', () => {
     it('should generate URL with username when provided', () => {
-      const result = getProfileUrl('user_123', 'alice');
-      expect(result).toBe('/profile/alice');
-    });
+      const result = getProfileUrl('user_123', 'alice')
+      expect(result).toBe('/profile/alice')
+    })
 
     it('should generate URL with user ID when no username', () => {
-      const result = getProfileUrl('user_123', null);
-      expect(result).toBe('/profile/user_123');
-    });
+      const result = getProfileUrl('user_123', null)
+      expect(result).toBe('/profile/user_123')
+    })
 
     it('should generate URL with user ID when username is undefined', () => {
-      const result = getProfileUrl('user_123');
-      expect(result).toBe('/profile/user_123');
-    });
+      const result = getProfileUrl('user_123')
+      expect(result).toBe('/profile/user_123')
+    })
 
     it('should strip @ prefix from username', () => {
-      const result = getProfileUrl('user_123', '@alice');
-      expect(result).toBe('/profile/alice');
-    });
+      const result = getProfileUrl('user_123', '@alice')
+      expect(result).toBe('/profile/alice')
+    })
 
     it('should handle empty string username as falsy', () => {
-      const result = getProfileUrl('user_123', '');
-      expect(result).toBe('/profile/user_123');
-    });
-  });
+      const result = getProfileUrl('user_123', '')
+      expect(result).toBe('/profile/user_123')
+    })
+  })
 
   describe('isUsername', () => {
     it('should return true for simple usernames', () => {
-      expect(isUsername('alice')).toBe(true);
-      expect(isUsername('bob123')).toBe(true);
-      expect(isUsername('user_name')).toBe(true);
-    });
+      expect(isUsername('alice')).toBe(true)
+      expect(isUsername('bob123')).toBe(true)
+      expect(isUsername('user_name')).toBe(true)
+    })
 
     it('should return true for usernames starting with @', () => {
-      expect(isUsername('@alice')).toBe(true);
-      expect(isUsername('@bob123')).toBe(true);
-    });
+      expect(isUsername('@alice')).toBe(true)
+      expect(isUsername('@bob123')).toBe(true)
+    })
 
     it('should return false for DID identifiers', () => {
-      expect(isUsername('did:jeju:localnet:abc123')).toBe(false);
-      expect(isUsername('did:jeju:mainnet:0x1234567890abcdef')).toBe(false);
-      expect(isUsername('did:ethr:0x123')).toBe(false);
-    });
+      expect(isUsername('did:jeju:localnet:abc123')).toBe(false)
+      expect(isUsername('did:jeju:mainnet:0x1234567890abcdef')).toBe(false)
+      expect(isUsername('did:ethr:0x123')).toBe(false)
+    })
 
     it('should return false for identifiers with dashes', () => {
-      expect(isUsername('oauth3-user-123')).toBe(false);
-      expect(isUsername('some-user-id')).toBe(false);
-    });
+      expect(isUsername('oauth3-user-123')).toBe(false)
+      expect(isUsername('some-user-id')).toBe(false)
+    })
 
     it('should return false for UUID identifiers', () => {
-      expect(isUsername('550e8400-e29b-41d4-a716-446655440000')).toBe(false);
-      expect(isUsername('123e4567-e89b-12d3-a456-426614174000')).toBe(false);
-    });
+      expect(isUsername('550e8400-e29b-41d4-a716-446655440000')).toBe(false)
+      expect(isUsername('123e4567-e89b-12d3-a456-426614174000')).toBe(false)
+    })
 
     it('should return true for long usernames without dashes', () => {
       // Usernames can be up to 42 characters
-      const longUsername = 'a'.repeat(42);
-      expect(isUsername(longUsername)).toBe(true);
-    });
+      const longUsername = 'a'.repeat(42)
+      expect(isUsername(longUsername)).toBe(true)
+    })
 
     it('should return false for very long identifiers', () => {
       // Over 42 characters without dashes is likely not a username
-      const longId = 'a'.repeat(43);
-      expect(isUsername(longId)).toBe(false);
-    });
-  });
+      const longId = 'a'.repeat(43)
+      expect(isUsername(longId)).toBe(false)
+    })
+  })
 
   describe('extractUsername', () => {
     it('should remove @ prefix', () => {
-      expect(extractUsername('@alice')).toBe('alice');
-    });
+      expect(extractUsername('@alice')).toBe('alice')
+    })
 
     it('should return username unchanged if no @ prefix', () => {
-      expect(extractUsername('alice')).toBe('alice');
-    });
+      expect(extractUsername('alice')).toBe('alice')
+    })
 
     it('should handle empty strings', () => {
-      expect(extractUsername('')).toBe('');
-    });
+      expect(extractUsername('')).toBe('')
+    })
 
     it('should only remove leading @', () => {
-      expect(extractUsername('@alice@example.com')).toBe('alice@example.com');
-    });
+      expect(extractUsername('@alice@example.com')).toBe('alice@example.com')
+    })
 
     it('should not remove @ if not at start', () => {
-      expect(extractUsername('alice@example.com')).toBe('alice@example.com');
-    });
-  });
-});
+      expect(extractUsername('alice@example.com')).toBe('alice@example.com')
+    })
+  })
+})

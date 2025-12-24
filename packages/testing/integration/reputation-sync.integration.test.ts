@@ -5,43 +5,45 @@
  * Requires server to be running and database to be accessible.
  */
 
-import { afterEach, beforeAll, describe, expect, test } from 'bun:test';
-import { getCachedAgent0ReputationScore } from '@babylon/agents/agent0/reputation/agent0-reputation-cache';
+import { afterEach, beforeAll, describe, expect, test } from 'bun:test'
+import { getCachedAgent0ReputationScore } from '@babylon/agents/agent0/reputation/agent0-reputation-cache'
 import {
   batchSyncReputationsToERC8004,
   syncAllReputationsToERC8004,
   syncUserReputationToERC8004,
-} from '@babylon/agents/agent0/reputation/erc8004-reputation-sync';
-import { db } from '@babylon/db';
-import { generateSnowflakeId } from '@babylon/shared';
+} from '@babylon/agents/agent0/reputation/erc8004-reputation-sync'
+import { db } from '@babylon/db'
+import { generateSnowflakeId } from '@babylon/shared'
 
+// Centralized port configuration
+const API_PORT = process.env.BABYLON_API_PORT ?? '5009'
 const BASE_URL =
-  process.env.TEST_API_URL ||
-  process.env.TEST_BASE_URL ||
-  'http://localhost:5007';
-let serverAvailable = false;
+  process.env.TEST_API_URL ??
+  process.env.TEST_BASE_URL ??
+  `http://localhost:${API_PORT}`
+let serverAvailable = false
 
 describe('ERC-8004 Reputation Sync Integration', () => {
-  let testUserId: string;
-  let testAgentUserId: string;
+  let testUserId: string
+  let testAgentUserId: string
 
   beforeAll(async () => {
     // Check if server is running
     try {
       const healthResponse = await fetch(`${BASE_URL}/api/health`, {
         signal: AbortSignal.timeout(2000),
-      });
+      })
       if (healthResponse.ok) {
-        serverAvailable = true;
-        console.log('✅ Server available for testing');
+        serverAvailable = true
+        console.log('✅ Server available for testing')
       }
     } catch (_error) {
-      console.warn('⚠️  Server not available, some tests may be skipped');
+      console.warn('⚠️  Server not available, some tests may be skipped')
     }
 
     // Create test users
-    testUserId = await generateSnowflakeId();
-    testAgentUserId = await generateSnowflakeId();
+    testUserId = await generateSnowflakeId()
+    testAgentUserId = await generateSnowflakeId()
 
     await db.user.create({
       data: {
@@ -50,7 +52,7 @@ describe('ERC-8004 Reputation Sync Integration', () => {
         displayName: 'Test User',
         updatedAt: new Date(),
       },
-    });
+    })
 
     await db.user.create({
       data: {
@@ -61,7 +63,7 @@ describe('ERC-8004 Reputation Sync Integration', () => {
         agent0TokenId: 12345, // Mock token ID
         updatedAt: new Date(),
       },
-    });
+    })
 
     // Create performance metrics
     await db.agentPerformanceMetrics.create({
@@ -73,127 +75,127 @@ describe('ERC-8004 Reputation Sync Integration', () => {
         profitableTrades: 7,
         updatedAt: new Date(),
       },
-    });
-  });
+    })
+  })
 
   afterEach(async () => {
     // Clean up test data
     await db.agentPerformanceMetrics.deleteMany({
       where: { userId: { in: [testUserId, testAgentUserId] } },
-    });
+    })
     await db.gameConfig.deleteMany({
       where: {
         key: { startsWith: `reputation_sync_${testAgentUserId}` },
       },
-    });
-  });
+    })
+  })
 
   test('should get cached reputation score', async () => {
-    const score = await getCachedAgent0ReputationScore(testAgentUserId);
-    expect(score).toBeGreaterThanOrEqual(0);
-    expect(score).toBeLessThanOrEqual(100);
-  });
+    const score = await getCachedAgent0ReputationScore(testAgentUserId)
+    expect(score).toBeGreaterThanOrEqual(0)
+    expect(score).toBeLessThanOrEqual(100)
+  })
 
   test('should sync single user reputation', async () => {
-    const result = await syncUserReputationToERC8004(testAgentUserId, false);
+    const result = await syncUserReputationToERC8004(testAgentUserId, false)
 
-    expect(result.userId).toBe(testAgentUserId);
-    expect(result.agent0TokenId).toBe(12345);
-    expect(result.reputationScore).toBeGreaterThanOrEqual(0);
-    expect(result.reputationScore).toBeLessThanOrEqual(100);
-    expect(result.synced).toBe(true);
+    expect(result.userId).toBe(testAgentUserId)
+    expect(result.agent0TokenId).toBe(12345)
+    expect(result.reputationScore).toBeGreaterThanOrEqual(0)
+    expect(result.reputationScore).toBeLessThanOrEqual(100)
+    expect(result.synced).toBe(true)
 
     // Verify metrics were updated
     const metrics = await db.agentPerformanceMetrics.findUnique({
       where: { userId: testAgentUserId },
-    });
-    expect(metrics).toBeDefined();
-    expect(metrics?.reputationScore).toBeDefined();
-  });
+    })
+    expect(metrics).toBeDefined()
+    expect(metrics?.reputationScore).toBeDefined()
+  })
 
   test('should skip sync if cache is fresh', async () => {
     // First sync
-    await syncUserReputationToERC8004(testAgentUserId, false);
+    await syncUserReputationToERC8004(testAgentUserId, false)
 
     // Second sync immediately should skip
-    const result = await syncUserReputationToERC8004(testAgentUserId, false);
-    expect(result.synced).toBe(false);
-    expect(result.error).toContain('not needed');
-  });
+    const result = await syncUserReputationToERC8004(testAgentUserId, false)
+    expect(result.synced).toBe(false)
+    expect(result.error).toContain('not needed')
+  })
 
   test('should force recalculation when requested', async () => {
-    const result = await syncUserReputationToERC8004(testAgentUserId, true);
-    expect(result.synced).toBe(true);
-  });
+    const result = await syncUserReputationToERC8004(testAgentUserId, true)
+    expect(result.synced).toBe(true)
+  })
 
   test('should handle user without Agent0 token ID', async () => {
-    const result = await syncUserReputationToERC8004(testUserId, false);
-    expect(result.synced).toBe(false);
-    expect(result.error).toContain('No Agent0 token ID');
-  });
+    const result = await syncUserReputationToERC8004(testUserId, false)
+    expect(result.synced).toBe(false)
+    expect(result.error).toContain('No Agent0 token ID')
+  })
 
   test('should batch sync multiple users', async () => {
     const result = await batchSyncReputationsToERC8004({
       limit: 10,
       offset: 0,
       prioritizeNew: true,
-    });
+    })
 
-    expect(result.total).toBeGreaterThanOrEqual(0);
-    expect(result.synced).toBeGreaterThanOrEqual(0);
-    expect(result.failed).toBeGreaterThanOrEqual(0);
-    expect(result.skipped).toBeGreaterThanOrEqual(0);
-    expect(result.results).toBeInstanceOf(Array);
-  });
+    expect(result.total).toBeGreaterThanOrEqual(0)
+    expect(result.synced).toBeGreaterThanOrEqual(0)
+    expect(result.failed).toBeGreaterThanOrEqual(0)
+    expect(result.skipped).toBeGreaterThanOrEqual(0)
+    expect(result.results).toBeInstanceOf(Array)
+  })
 
   test('should sync all reputations', async () => {
-    const result = await syncAllReputationsToERC8004();
+    const result = await syncAllReputationsToERC8004()
 
-    expect(result.total).toBeGreaterThanOrEqual(0);
-    expect(result.synced).toBeGreaterThanOrEqual(0);
-    expect(result.failed).toBeGreaterThanOrEqual(0);
-    expect(result.skipped).toBeGreaterThanOrEqual(0);
-    expect(result.results).toBeInstanceOf(Array);
-  }, 30000); // Increase timeout - this syncs all users which can take a while
+    expect(result.total).toBeGreaterThanOrEqual(0)
+    expect(result.synced).toBeGreaterThanOrEqual(0)
+    expect(result.failed).toBeGreaterThanOrEqual(0)
+    expect(result.skipped).toBeGreaterThanOrEqual(0)
+    expect(result.results).toBeInstanceOf(Array)
+  }, 30000) // Increase timeout - this syncs all users which can take a while
 
   test('should handle banned user reputation', async () => {
     // Ban the agent
     await db.user.update({
       where: { id: testAgentUserId },
       data: { isBanned: true },
-    });
+    })
 
-    const score = await getCachedAgent0ReputationScore(testAgentUserId);
-    expect(score).toBe(0);
+    const score = await getCachedAgent0ReputationScore(testAgentUserId)
+    expect(score).toBe(0)
 
     // Clean up
     await db.user.update({
       where: { id: testAgentUserId },
       data: { isBanned: false },
-    });
-  });
+    })
+  })
 
   test('should handle scammer/CSAM flags', async () => {
     // Mark as scammer
     await db.user.update({
       where: { id: testAgentUserId },
       data: { isScammer: true },
-    });
+    })
 
-    const score = await getCachedAgent0ReputationScore(testAgentUserId);
-    expect(score).toBe(5); // Very low but not zero
+    const score = await getCachedAgent0ReputationScore(testAgentUserId)
+    expect(score).toBe(5) // Very low but not zero
 
     // Clean up
     await db.user.update({
       where: { id: testAgentUserId },
       data: { isScammer: false },
-    });
-  });
+    })
+  })
 
   test('should test cron endpoint if server available', async () => {
     if (!serverAvailable) {
-      console.log('⏭️  Skipping cron endpoint test - server not available');
-      return;
+      console.log('⏭️  Skipping cron endpoint test - server not available')
+      return
     }
 
     const response = await fetch(`${BASE_URL}/api/cron/reputation-sync`, {
@@ -202,16 +204,16 @@ describe('ERC-8004 Reputation Sync Integration', () => {
         Authorization: 'Bearer development',
         'Content-Type': 'application/json',
       },
-    });
+    })
 
     if (response.ok) {
-      const data = await response.json();
-      expect(data.success).toBe(true);
-      expect(data.result).toBeDefined();
-      expect(data.result.total).toBeGreaterThanOrEqual(0);
+      const data = await response.json()
+      expect(data.success).toBe(true)
+      expect(data.result).toBeDefined()
+      expect(data.result.total).toBeGreaterThanOrEqual(0)
     } else {
       // May require proper auth in production
-      console.log('⚠️  Cron endpoint requires authentication');
+      console.log('⚠️  Cron endpoint requires authentication')
     }
-  });
-});
+  })
+})

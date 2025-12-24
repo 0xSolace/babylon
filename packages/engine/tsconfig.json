@@ -4,6 +4,7 @@
     "composite": false,
     "declaration": false,
     "declarationMap": false,
+    "jsx": "react-jsx",
     "types": ["bun-types"],
     // Disable unused locals check - engine has some batch methods reserved for future optimization
     "noUnusedLocals": false,
@@ -13,8 +14,6 @@
       "@babylon/shared/*": ["../shared/src/*"],
       "@babylon/db": ["../db/src/index.ts"],
       "@babylon/db/*": ["../db/src/*"],
-      "@babylon/contracts": ["../contracts/src/index.ts"],
-      "@babylon/contracts/*": ["../contracts/src/*"],
       "@babylon/core": ["../core/markets/index.ts"],
       "@babylon/core/*": ["../core/*"],
       "@babylon/agents": ["../agents/src/index.ts"],

@@ -7,8 +7,8 @@
  * @see https://x402.org
  */
 
-import { logger } from '@babylon/shared';
-import { type Address, type Hex, recoverMessageAddress } from 'viem';
+import { logger } from '@babylon/shared'
+import { type Address, type Hex, recoverMessageAddress } from 'viem'
 
 export type X402Network =
   | 'sepolia'
@@ -16,31 +16,31 @@ export type X402Network =
   | 'ethereum'
   | 'base'
   | 'jeju'
-  | 'jeju-testnet';
+  | 'jeju-testnet'
 
 export interface X402PaymentHeader {
-  scheme: string;
-  network: string;
-  payload: string;
-  asset: string;
-  amount: string;
+  scheme: string
+  network: string
+  payload: string
+  asset: string
+  amount: string
 }
 
 export interface X402PaymentRequirement {
-  x402Version: number;
-  error: string;
+  x402Version: number
+  error: string
   accepts: Array<{
-    scheme: string;
-    network: X402Network | string;
-    maxAmountRequired: string;
-    asset: Address;
-    payTo: Address;
-    resource: string;
-    description: string;
-  }>;
+    scheme: string
+    network: X402Network | string
+    maxAmountRequired: string
+    asset: Address
+    payTo: Address
+    resource: string
+    description: string
+  }>
 }
 
-const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000' as Address;
+const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000' as Address
 
 /**
  * Babylon-specific payment types
@@ -49,7 +49,7 @@ export type BabylonPaymentType =
   | 'dm_priority'
   | 'premium_content'
   | 'npc_interaction'
-  | 'market_creation';
+  | 'market_creation'
 
 /**
  * Babylon payment pricing (in wei, assuming 18 decimals)
@@ -59,7 +59,7 @@ export const BABYLON_PRICING = {
   premium_content: 100000000000000n, // 0.0001 (access premium article)
   npc_interaction: 50000000000000n, // 0.00005 (direct NPC response)
   market_creation: 1000000000000000n, // 0.001 (create prediction market)
-} as const;
+} as const
 
 /**
  * Get payment requirement for a Babylon feature
@@ -67,15 +67,15 @@ export const BABYLON_PRICING = {
 export function getBabylonPaymentRequirement(
   paymentType: BabylonPaymentType,
   payTo: Address,
-  resource: string
+  resource: string,
 ): X402PaymentRequirement {
-  const priceWei = BABYLON_PRICING[paymentType];
+  const priceWei = BABYLON_PRICING[paymentType]
   const descriptions: Record<BabylonPaymentType, string> = {
     dm_priority: 'Priority message delivery to NPC',
     premium_content: 'Access to premium content',
     npc_interaction: 'Direct NPC response',
     market_creation: 'Create new prediction market',
-  };
+  }
 
   return {
     x402Version: 1,
@@ -91,44 +91,44 @@ export function getBabylonPaymentRequirement(
         description: descriptions[paymentType],
       },
     ],
-  };
+  }
 }
 
 /**
  * Check if x402 payments are enabled for Babylon
  */
 export function isBabylonX402Enabled(): boolean {
-  return process.env.BABYLON_X402_ENABLED === 'true';
+  return process.env.BABYLON_X402_ENABLED === 'true'
 }
 
 /**
  * Get Babylon's x402 recipient address
  */
 export function getBabylonX402Recipient(): Address | null {
-  const addr = process.env.BABYLON_X402_RECIPIENT as Address | undefined;
+  const addr = process.env.BABYLON_X402_RECIPIENT as Address | undefined
   if (!addr || addr === ZERO_ADDRESS) {
-    return null;
+    return null
   }
-  return addr;
+  return addr
 }
 
 /**
  * Parse x402 payment header
  */
 export function parseX402Header(header: string): X402PaymentHeader | null {
-  const parts: Record<string, string> = {};
+  const parts: Record<string, string> = {}
   for (const part of header.split(';')) {
-    const [key, value] = part.split('=');
-    if (key && value) parts[key.trim()] = value.trim();
+    const [key, value] = part.split('=')
+    if (key && value) parts[key.trim()] = value.trim()
   }
-  if (!parts.scheme || !parts.network || !parts.payload) return null;
+  if (!parts.scheme || !parts.network || !parts.payload) return null
   return {
     scheme: parts.scheme,
     network: parts.network,
     payload: parts.payload,
     asset: parts.asset || ZERO_ADDRESS,
     amount: parts.amount || '0',
-  };
+  }
 }
 
 /**
@@ -137,15 +137,15 @@ export function parseX402Header(header: string): X402PaymentHeader | null {
 export async function verifyX402Signature(
   payment: X402PaymentHeader,
   providerAddress: Address,
-  expectedUserAddress: Address
+  expectedUserAddress: Address,
 ): Promise<boolean> {
-  if (payment.scheme !== 'exact') return false;
-  const message = `x402:${payment.network}:${providerAddress}:${payment.amount}`;
+  if (payment.scheme !== 'exact') return false
+  const message = `x402:${payment.network}:${providerAddress}:${payment.amount}`
   const recovered = await recoverMessageAddress({
     message,
     signature: payment.payload as Hex,
-  });
-  return recovered.toLowerCase() === expectedUserAddress.toLowerCase();
+  })
+  return recovered.toLowerCase() === expectedUserAddress.toLowerCase()
 }
 
 /**
@@ -154,34 +154,34 @@ export async function verifyX402Signature(
 export function verifyBabylonPayment(
   paymentHeader: string,
   paymentType: BabylonPaymentType,
-  userAddress: Address
+  userAddress: Address,
 ): { valid: boolean; error?: string } {
-  const recipient = getBabylonX402Recipient();
+  const recipient = getBabylonX402Recipient()
   if (!recipient) {
-    return { valid: false, error: 'x402 payments not configured' };
+    return { valid: false, error: 'x402 payments not configured' }
   }
 
-  const payment = parseX402Header(paymentHeader);
+  const payment = parseX402Header(paymentHeader)
   if (!payment) {
-    return { valid: false, error: 'Invalid x402 payment header' };
+    return { valid: false, error: 'Invalid x402 payment header' }
   }
 
-  const priceWei = BABYLON_PRICING[paymentType];
+  const priceWei = BABYLON_PRICING[paymentType]
   if (BigInt(payment.amount) < priceWei) {
-    return { valid: false, error: 'Insufficient payment amount' };
+    return { valid: false, error: 'Insufficient payment amount' }
   }
 
-  const isValid = verifyX402Signature(payment, recipient, userAddress);
+  const isValid = verifyX402Signature(payment, recipient, userAddress)
   if (!isValid) {
-    return { valid: false, error: 'Invalid payment signature' };
+    return { valid: false, error: 'Invalid payment signature' }
   }
 
   logger.info(
     'x402 payment verified',
     { paymentType, userAddress, amount: payment.amount },
-    'X402'
-  );
-  return { valid: true };
+    'X402',
+  )
+  return { valid: true }
 }
 
 /**
@@ -189,21 +189,21 @@ export function verifyBabylonPayment(
  */
 export function generate402Response(
   paymentType: BabylonPaymentType,
-  resource: string
+  resource: string,
 ): Response {
-  const recipient = getBabylonX402Recipient();
+  const recipient = getBabylonX402Recipient()
   if (!recipient) {
     return new Response(JSON.stringify({ error: 'x402 not configured' }), {
       status: 500,
       headers: { 'Content-Type': 'application/json' },
-    });
+    })
   }
 
   const requirement = getBabylonPaymentRequirement(
     paymentType,
     recipient,
-    resource
-  );
+    resource,
+  )
 
   return new Response(JSON.stringify(requirement), {
     status: 402,
@@ -211,5 +211,5 @@ export function generate402Response(
       'Content-Type': 'application/json',
       'X-Payment-Required': 'true',
     },
-  });
+  })
 }

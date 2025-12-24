@@ -10,7 +10,7 @@ import type {
   IAgentRuntime,
   Memory,
   State,
-} from '@elizaos/core';
+} from '@elizaos/core'
 
 /**
  * Create a new post action
@@ -22,25 +22,25 @@ export const createPostAction: Action = {
   examples: [],
   validate: async (
     _runtime: IAgentRuntime,
-    _message: Memory
+    _message: Memory,
   ): Promise<boolean> => {
-    return true;
+    return true
   },
   handler: async (
     _runtime: IAgentRuntime,
     _message: Memory,
     _state: State | undefined,
     _options: Record<string, unknown> | undefined,
-    callback?: HandlerCallback
+    callback?: HandlerCallback,
   ): Promise<void> => {
     if (callback) {
       callback({
         text: 'Post creation is handled by autonomous posting service',
         action: 'CREATE_POST',
-      });
+      })
     }
   },
-};
+}
 
 /**
  * Comment on a post action
@@ -52,25 +52,25 @@ export const commentAction: Action = {
   examples: [],
   validate: async (
     _runtime: IAgentRuntime,
-    _message: Memory
+    _message: Memory,
   ): Promise<boolean> => {
-    return true;
+    return true
   },
   handler: async (
     _runtime: IAgentRuntime,
     _message: Memory,
     _state: State | undefined,
     _options: Record<string, unknown> | undefined,
-    callback?: HandlerCallback
+    callback?: HandlerCallback,
   ): Promise<void> => {
     if (callback) {
       callback({
         text: 'Commenting is handled by autonomous commenting service',
         action: 'COMMENT',
-      });
+      })
     }
   },
-};
+}
 
 /**
  * Like a post action
@@ -82,22 +82,22 @@ export const likePostAction: Action = {
   examples: [],
   validate: async (
     _runtime: IAgentRuntime,
-    _message: Memory
+    _message: Memory,
   ): Promise<boolean> => {
-    return true;
+    return true
   },
   handler: async (
     _runtime: IAgentRuntime,
     _message: Memory,
     _state: State | undefined,
     _options: Record<string, unknown> | undefined,
-    callback?: HandlerCallback
+    callback?: HandlerCallback,
   ): Promise<void> => {
     if (callback) {
       callback({
         text: 'Post liked',
         action: 'LIKE_POST',
-      });
+      })
     }
   },
-};
+}

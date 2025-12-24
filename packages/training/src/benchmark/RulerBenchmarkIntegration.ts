@@ -5,11 +5,11 @@
  * This allows RULER to evaluate agent trajectories against known benchmark outcomes.
  */
 
-import type { MarketOutcomes } from '../training/RulerScoringService';
+import type { MarketOutcomes } from '../training/RulerScoringService'
 import type {
   BenchmarkGameSnapshot,
   GroundTruth,
-} from './BenchmarkDataGenerator';
+} from './BenchmarkDataGenerator'
 
 /**
  * Extract market outcomes from benchmark ground truth for RULER scoring
@@ -28,16 +28,16 @@ import type {
  * ```
  */
 export function extractMarketOutcomesFromBenchmark(
-  snapshot: BenchmarkGameSnapshot
+  snapshot: BenchmarkGameSnapshot,
 ): MarketOutcomes {
-  const gt = snapshot.groundTruth;
+  const gt = snapshot.groundTruth
 
   // Extract prediction market outcomes
   const predictions: Array<{ marketId: string; outcome: 'YES' | 'NO' }> =
     Object.entries(gt.marketOutcomes).map(([marketId, outcome]) => ({
       marketId,
       outcome: outcome ? 'YES' : 'NO',
-    }));
+    }))
 
   // Extract stock/perpetual outcomes from price history
   const stocks = Object.entries(gt.priceHistory).map(([ticker, history]) => {
@@ -45,24 +45,24 @@ export function extractMarketOutcomesFromBenchmark(
       return {
         ticker,
         changePercent: 0,
-      };
+      }
     }
 
-    const startPrice = history[0]?.price || 0;
-    const endPrice = history[history.length - 1]?.price || startPrice;
+    const startPrice = history[0]?.price || 0
+    const endPrice = history[history.length - 1]?.price || startPrice
     const changePercent =
-      startPrice > 0 ? ((endPrice - startPrice) / startPrice) * 100 : 0;
+      startPrice > 0 ? ((endPrice - startPrice) / startPrice) * 100 : 0
 
     return {
       ticker,
       changePercent,
-    };
-  });
+    }
+  })
 
   return {
     stocks,
     predictions,
-  };
+  }
 }
 
 /**
@@ -77,11 +77,11 @@ export function extractMarketOutcomesFromBenchmark(
  */
 export function getHiddenFactsForTick(
   snapshot: BenchmarkGameSnapshot,
-  tickNumber: number
+  tickNumber: number,
 ): GroundTruth['hiddenFacts'] {
   return (snapshot.groundTruth.hiddenFacts || []).filter(
-    (f) => f.tick === tickNumber
-  );
+    (f) => f.tick === tickNumber,
+  )
 }
 
 /**
@@ -96,11 +96,11 @@ export function getHiddenFactsForTick(
  */
 export function getHiddenEventsForTick(
   snapshot: BenchmarkGameSnapshot,
-  tickNumber: number
+  tickNumber: number,
 ): GroundTruth['hiddenEvents'] {
   return (snapshot.groundTruth.hiddenEvents || []).filter(
-    (e) => e.tick === tickNumber
-  );
+    (e) => e.tick === tickNumber,
+  )
 }
 
 /**
@@ -119,20 +119,20 @@ export function wasDecisionOptimal(
   snapshot: BenchmarkGameSnapshot,
   tickNumber: number,
   actionType: string,
-  target: string
+  target: string,
 ): boolean {
-  const optimalActions = snapshot.groundTruth.optimalActions;
+  const optimalActions = snapshot.groundTruth.optimalActions
 
   // Find optimal actions near this tick
-  const window = 2; // Allow 2 tick window
+  const window = 2 // Allow 2 tick window
   const relevantActions = optimalActions.filter(
     (a) =>
       Math.abs(a.tick - tickNumber) <= window &&
       a.type === actionType &&
-      a.target === target
-  );
+      a.target === target,
+  )
 
-  return relevantActions.length > 0;
+  return relevantActions.length > 0
 }
 
 /**
@@ -145,9 +145,9 @@ export function wasDecisionOptimal(
  * @returns Object containing true facts about the world state
  */
 export function getTrueFacts(
-  snapshot: BenchmarkGameSnapshot
+  snapshot: BenchmarkGameSnapshot,
 ): GroundTruth['trueFacts'] {
-  return snapshot.groundTruth.trueFacts || {};
+  return snapshot.groundTruth.trueFacts || {}
 }
 
 /**
@@ -165,11 +165,11 @@ export function getTrueFacts(
  * market outcomes, hidden facts/events, optimal actions, and true facts.
  */
 export function createRulerContext(snapshot: BenchmarkGameSnapshot): {
-  marketOutcomes: MarketOutcomes;
-  trueFacts: GroundTruth['trueFacts'];
-  hiddenFacts: GroundTruth['hiddenFacts'];
-  hiddenEvents: GroundTruth['hiddenEvents'];
-  optimalActions: GroundTruth['optimalActions'];
+  marketOutcomes: MarketOutcomes
+  trueFacts: GroundTruth['trueFacts']
+  hiddenFacts: GroundTruth['hiddenFacts']
+  hiddenEvents: GroundTruth['hiddenEvents']
+  optimalActions: GroundTruth['optimalActions']
 } {
   return {
     marketOutcomes: extractMarketOutcomesFromBenchmark(snapshot),
@@ -177,7 +177,7 @@ export function createRulerContext(snapshot: BenchmarkGameSnapshot): {
     hiddenFacts: snapshot.groundTruth.hiddenFacts || [],
     hiddenEvents: snapshot.groundTruth.hiddenEvents || [],
     optimalActions: snapshot.groundTruth.optimalActions,
-  };
+  }
 }
 
 /**
@@ -201,35 +201,35 @@ export function scoreActionAgainstGroundTruth(
   snapshot: BenchmarkGameSnapshot,
   tickNumber: number,
   actionType: string,
-  target: string
+  target: string,
 ): number {
   // Check if action was optimal
   const wasOptimal = wasDecisionOptimal(
     snapshot,
     tickNumber,
     actionType,
-    target
-  );
+    target,
+  )
 
   if (wasOptimal) {
-    return 1.0;
+    return 1.0
   }
 
   // Check if action was reasonable given hidden facts
-  const hiddenFacts = getHiddenFactsForTick(snapshot, tickNumber);
+  const hiddenFacts = getHiddenFactsForTick(snapshot, tickNumber)
   const relevantFacts = hiddenFacts.filter(
     (f) =>
       f.value &&
       typeof f.value === 'object' &&
       'marketId' in f.value &&
-      (f.value as { marketId: string }).marketId === target
-  );
+      (f.value as { marketId: string }).marketId === target,
+  )
 
   if (relevantFacts.length > 0) {
     // Partial credit for actions that align with hidden facts
-    return 0.5;
+    return 0.5
   }
 
   // No credit for actions that don't align with optimal play or hidden facts
-  return 0.0;
+  return 0.0
 }

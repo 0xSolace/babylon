@@ -12,23 +12,23 @@
  * Run with: bun test packages/testing/e2e/cron-endpoints.e2e.test.ts
  */
 
-import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
-import { asSystem } from '@babylon/db';
-import { generateSnowflakeId } from '@babylon/shared';
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
+import { asSystem } from '@babylon/db'
+import { generateSnowflakeId } from '@babylon/shared'
 
 const BASE_URL =
   process.env.TEST_BASE_URL ||
   process.env.TEST_API_URL ||
-  'http://localhost:3000';
-const CRON_SECRET = process.env.CRON_SECRET || 'development';
+  'http://localhost:3000'
+const CRON_SECRET = process.env.CRON_SECRET || 'development'
 
 // Test timeouts
-const CRON_TIMEOUT = 60000; // 1 minute for cron endpoints
-const HEALTH_TIMEOUT = 10000; // 10 seconds for health check
+const CRON_TIMEOUT = 60000 // 1 minute for cron endpoints
+const HEALTH_TIMEOUT = 10000 // 10 seconds for health check
 
-let serverAvailable = false;
-let gameId: string | null = null;
-let initialGameRunning: boolean | undefined;
+let serverAvailable = false
+let _gameId: string | null = null
+let initialGameRunning: boolean | undefined
 
 describe('Cron Endpoints E2E', () => {
   beforeAll(async () => {
@@ -36,49 +36,50 @@ describe('Cron Endpoints E2E', () => {
     try {
       const response = await fetch(`${BASE_URL}/api/health`, {
         signal: AbortSignal.timeout(5000),
-      });
-      serverAvailable = response.ok;
+      })
+      serverAvailable = response.ok
       console.log(
-        `Server availability: ${serverAvailable ? 'Available' : 'Unavailable'}`
-      );
+        `Server availability: ${serverAvailable ? 'Available' : 'Unavailable'}`,
+      )
     } catch {
-      serverAvailable = false;
-      console.log('Server not available - some tests will be skipped');
+      serverAvailable = false
+      console.log('Server not available - some tests will be skipped')
     }
 
     // Ensure game exists and is running
     const gameState = await asSystem(async (db) => {
       return await db.game.findFirst({
         where: { isContinuous: true },
-      });
-    }, 'cron-e2e-get-game');
+      })
+    }, 'cron-e2e-get-game')
 
     if (!gameState) {
-      gameId = await generateSnowflakeId();
+      const newGameId = await generateSnowflakeId()
+      _gameId = newGameId
       await asSystem(async (db) => {
         await db.game.create({
           data: {
-            id: gameId!,
+            id: newGameId,
             isContinuous: true,
             isRunning: true,
             createdAt: new Date(),
             updatedAt: new Date(),
           },
-        });
-      }, 'cron-e2e-create-game');
+        })
+      }, 'cron-e2e-create-game')
     } else {
-      gameId = gameState.id;
-      initialGameRunning = gameState.isRunning;
+      _gameId = gameState.id
+      initialGameRunning = gameState.isRunning
       if (!gameState.isRunning) {
         await asSystem(async (db) => {
           await db.game.updateMany({
             where: { isContinuous: true },
             data: { isRunning: true },
-          });
-        }, 'cron-e2e-enable-game');
+          })
+        }, 'cron-e2e-enable-game')
       }
     }
-  });
+  })
 
   afterAll(async () => {
     // Restore game state if we changed it
@@ -87,16 +88,16 @@ describe('Cron Endpoints E2E', () => {
         await db.game.updateMany({
           where: { isContinuous: true },
           data: { isRunning: initialGameRunning },
-        });
-      }, 'cron-e2e-restore-game');
+        })
+      }, 'cron-e2e-restore-game')
     }
-  });
+  })
 
   describe('Health Check Endpoint', () => {
     test('GET /api/cron/health-check returns healthy status', async () => {
       if (!serverAvailable) {
-        console.log('⏭️  Skipping - server not available');
-        return;
+        console.log('⏭️  Skipping - server not available')
+        return
       }
 
       const response = await fetch(`${BASE_URL}/api/cron/health-check`, {
@@ -105,22 +106,22 @@ describe('Cron Endpoints E2E', () => {
           Authorization: `Bearer ${CRON_SECRET}`,
         },
         signal: AbortSignal.timeout(HEALTH_TIMEOUT),
-      });
+      })
 
-      expect(response.status).toBe(200);
+      expect(response.status).toBe(200)
 
-      const data = await response.json();
-      expect(data.success).toBe(true);
-      expect(data.status).toBe('healthy');
-      expect(data.database).toBe('connected');
-      expect(data.duration).toBeGreaterThanOrEqual(0);
-      expect(data.timestamp).toBeDefined();
-    });
+      const data = await response.json()
+      expect(data.success).toBe(true)
+      expect(data.status).toBe('healthy')
+      expect(data.database).toBe('connected')
+      expect(data.duration).toBeGreaterThanOrEqual(0)
+      expect(data.timestamp).toBeDefined()
+    })
 
     test('returns 401 without valid auth', async () => {
       if (!serverAvailable) {
-        console.log('⏭️  Skipping - server not available');
-        return;
+        console.log('⏭️  Skipping - server not available')
+        return
       }
 
       const response = await fetch(`${BASE_URL}/api/cron/health-check`, {
@@ -129,21 +130,21 @@ describe('Cron Endpoints E2E', () => {
           Authorization: 'Bearer invalid-secret',
         },
         signal: AbortSignal.timeout(HEALTH_TIMEOUT),
-      });
+      })
 
       // In development mode, may still return 200 due to flexible auth
       // In production, should return 401
-      expect([200, 401]).toContain(response.status);
-    });
-  });
+      expect([200, 401]).toContain(response.status)
+    })
+  })
 
   describe('Game Tick Endpoint', () => {
     test(
       'POST /api/cron/game-tick executes successfully',
       async () => {
         if (!serverAvailable) {
-          console.log('⏭️  Skipping - server not available');
-          return;
+          console.log('⏭️  Skipping - server not available')
+          return
         }
 
         const response = await fetch(`${BASE_URL}/api/cron/game-tick`, {
@@ -153,37 +154,37 @@ describe('Cron Endpoints E2E', () => {
             'Content-Type': 'application/json',
           },
           signal: AbortSignal.timeout(CRON_TIMEOUT),
-        });
+        })
 
-        expect(response.status).toBe(200);
+        expect(response.status).toBe(200)
 
-        const data = await response.json();
-        expect(data.success).toBe(true);
+        const data = await response.json()
+        expect(data.success).toBe(true)
 
         // Should either execute or be skipped with reason
         if (data.skipped) {
-          expect(data.reason).toBeDefined();
-          console.log(`Game tick skipped: ${data.reason}`);
+          expect(data.reason).toBeDefined()
+          console.log(`Game tick skipped: ${data.reason}`)
         } else {
-          expect(data.duration).toBeGreaterThanOrEqual(0);
-          console.log(`Game tick completed in ${data.duration}ms`);
+          expect(data.duration).toBeGreaterThanOrEqual(0)
+          console.log(`Game tick completed in ${data.duration}ms`)
 
           // Verify result structure if execution occurred
           if (data.result) {
-            expect(typeof data.result.postsCreated).toBe('number');
-            expect(typeof data.result.marketsUpdated).toBe('number');
+            expect(typeof data.result.postsCreated).toBe('number')
+            expect(typeof data.result.marketsUpdated).toBe('number')
           }
         }
       },
-      CRON_TIMEOUT + 10000
-    );
+      CRON_TIMEOUT + 10000,
+    )
 
     test(
       'handles concurrent requests with lock',
       async () => {
         if (!serverAvailable) {
-          console.log('⏭️  Skipping - server not available');
-          return;
+          console.log('⏭️  Skipping - server not available')
+          return
         }
 
         // Fire two requests simultaneously
@@ -204,39 +205,39 @@ describe('Cron Endpoints E2E', () => {
             },
             signal: AbortSignal.timeout(CRON_TIMEOUT),
           }),
-        ]);
+        ])
 
-        expect(response1.status).toBe(200);
-        expect(response2.status).toBe(200);
+        expect(response1.status).toBe(200)
+        expect(response2.status).toBe(200)
 
         const [data1, data2] = await Promise.all([
           response1.json(),
           response2.json(),
-        ]);
+        ])
 
         // At least one should succeed, the other may be skipped due to lock
-        const bothSucceeded = data1.success && data2.success;
-        expect(bothSucceeded).toBe(true);
+        const bothSucceeded = data1.success && data2.success
+        expect(bothSucceeded).toBe(true)
 
         // Check if one was locked out
-        const oneSkipped = data1.skipped || data2.skipped;
+        const oneSkipped = data1.skipped || data2.skipped
         if (oneSkipped) {
-          const skippedData = data1.skipped ? data1 : data2;
-          expect(skippedData.reason).toContain('lock');
-          console.log('Concurrent request properly handled with lock');
+          const skippedData = data1.skipped ? data1 : data2
+          expect(skippedData.reason).toContain('lock')
+          console.log('Concurrent request properly handled with lock')
         }
       },
-      CRON_TIMEOUT * 2 + 10000
-    );
-  });
+      CRON_TIMEOUT * 2 + 10000,
+    )
+  })
 
   describe('Agent Tick Endpoint', () => {
     test(
       'POST /api/cron/agent-tick executes successfully',
       async () => {
         if (!serverAvailable) {
-          console.log('⏭️  Skipping - server not available');
-          return;
+          console.log('⏭️  Skipping - server not available')
+          return
         }
 
         const response = await fetch(`${BASE_URL}/api/cron/agent-tick`, {
@@ -246,33 +247,33 @@ describe('Cron Endpoints E2E', () => {
             'Content-Type': 'application/json',
           },
           signal: AbortSignal.timeout(CRON_TIMEOUT),
-        });
+        })
 
-        expect(response.status).toBe(200);
+        expect(response.status).toBe(200)
 
-        const data = await response.json();
-        expect(data.success).toBe(true);
+        const data = await response.json()
+        expect(data.success).toBe(true)
 
         if (data.skipped) {
-          expect(data.reason).toBeDefined();
-          console.log(`Agent tick skipped: ${data.reason}`);
+          expect(data.reason).toBeDefined()
+          console.log(`Agent tick skipped: ${data.reason}`)
         } else {
-          expect(typeof data.processed).toBe('number');
-          expect(typeof data.duration).toBe('number');
+          expect(typeof data.processed).toBe('number')
+          expect(typeof data.duration).toBe('number')
           console.log(
-            `Agent tick processed ${data.processed} agents in ${data.duration}ms`
-          );
+            `Agent tick processed ${data.processed} agents in ${data.duration}ms`,
+          )
         }
       },
-      CRON_TIMEOUT + 10000
-    );
+      CRON_TIMEOUT + 10000,
+    )
 
     test(
       'respects GAME_START environment variable',
       async () => {
         if (!serverAvailable) {
-          console.log('⏭️  Skipping - server not available');
-          return;
+          console.log('⏭️  Skipping - server not available')
+          return
         }
 
         // First pause the game
@@ -280,8 +281,8 @@ describe('Cron Endpoints E2E', () => {
           await db.game.updateMany({
             where: { isContinuous: true },
             data: { isRunning: false },
-          });
-        }, 'cron-e2e-pause-game');
+          })
+        }, 'cron-e2e-pause-game')
 
         try {
           const response = await fetch(`${BASE_URL}/api/cron/agent-tick`, {
@@ -291,31 +292,31 @@ describe('Cron Endpoints E2E', () => {
               'Content-Type': 'application/json',
             },
             signal: AbortSignal.timeout(CRON_TIMEOUT),
-          });
+          })
 
-          const data = await response.json();
-          expect(data.success).toBe(true);
-          expect(data.skipped).toBe(true);
-          expect(data.reason).toBe('Game is paused');
+          const data = await response.json()
+          expect(data.success).toBe(true)
+          expect(data.skipped).toBe(true)
+          expect(data.reason).toBe('Game is paused')
         } finally {
           // Restore game running state
           await asSystem(async (db) => {
             await db.game.updateMany({
               where: { isContinuous: true },
               data: { isRunning: true },
-            });
-          }, 'cron-e2e-restore-game-running');
+            })
+          }, 'cron-e2e-restore-game-running')
         }
       },
-      CRON_TIMEOUT + 10000
-    );
-  });
+      CRON_TIMEOUT + 10000,
+    )
+  })
 
   describe('Realtime Drain Endpoint', () => {
     test('GET /api/cron/realtime-drain executes successfully', async () => {
       if (!serverAvailable) {
-        console.log('⏭️  Skipping - server not available');
-        return;
+        console.log('⏭️  Skipping - server not available')
+        return
       }
 
       const response = await fetch(`${BASE_URL}/api/cron/realtime-drain`, {
@@ -324,23 +325,23 @@ describe('Cron Endpoints E2E', () => {
           Authorization: `Bearer ${CRON_SECRET}`,
         },
         signal: AbortSignal.timeout(HEALTH_TIMEOUT),
-      });
+      })
 
-      expect(response.status).toBe(200);
+      expect(response.status).toBe(200)
 
-      const data = await response.json();
-      expect(data.success).toBe(true);
-      expect(data.timestamp).toBeDefined();
-    });
-  });
+      const data = await response.json()
+      expect(data.success).toBe(true)
+      expect(data.timestamp).toBeDefined()
+    })
+  })
 
   describe('World Facts Endpoint', () => {
     test(
       'POST /api/cron/world-facts executes successfully',
       async () => {
         if (!serverAvailable) {
-          console.log('⏭️  Skipping - server not available');
-          return;
+          console.log('⏭️  Skipping - server not available')
+          return
         }
 
         const response = await fetch(`${BASE_URL}/api/cron/world-facts`, {
@@ -350,33 +351,33 @@ describe('Cron Endpoints E2E', () => {
             'Content-Type': 'application/json',
           },
           signal: AbortSignal.timeout(CRON_TIMEOUT),
-        });
+        })
 
-        expect(response.status).toBe(200);
+        expect(response.status).toBe(200)
 
-        const data = await response.json();
-        expect(data.success).toBe(true);
-        expect(data.duration).toBeGreaterThanOrEqual(0);
+        const data = await response.json()
+        expect(data.success).toBe(true)
+        expect(data.duration).toBeGreaterThanOrEqual(0)
 
         if (data.stats) {
-          expect(typeof data.stats.feedsFetched).toBe('number');
-          expect(typeof data.stats.newHeadlines).toBe('number');
+          expect(typeof data.stats.feedsFetched).toBe('number')
+          expect(typeof data.stats.newHeadlines).toBe('number')
           console.log(
-            `World facts: ${data.stats.feedsFetched} feeds, ${data.stats.newHeadlines} new headlines`
-          );
+            `World facts: ${data.stats.feedsFetched} feeds, ${data.stats.newHeadlines} new headlines`,
+          )
         }
       },
-      CRON_TIMEOUT + 10000
-    );
-  });
+      CRON_TIMEOUT + 10000,
+    )
+  })
 
   describe('Training Status Endpoint', () => {
     test(
       'GET /api/cron/training returns readiness status',
       async () => {
         if (!serverAvailable) {
-          console.log('⏭️  Skipping - server not available');
-          return;
+          console.log('⏭️  Skipping - server not available')
+          return
         }
 
         const response = await fetch(`${BASE_URL}/api/cron/training`, {
@@ -385,23 +386,23 @@ describe('Cron Endpoints E2E', () => {
             Authorization: `Bearer ${CRON_SECRET}`,
           },
           signal: AbortSignal.timeout(CRON_TIMEOUT),
-        });
+        })
 
-        expect(response.status).toBe(200);
+        expect(response.status).toBe(200)
 
-        const data = await response.json();
-        expect(data.success).toBe(true);
-        expect(data.readiness).toBeDefined();
-        expect(typeof data.readiness.ready).toBe('boolean');
+        const data = await response.json()
+        expect(data.success).toBe(true)
+        expect(data.readiness).toBeDefined()
+        expect(typeof data.readiness.ready).toBe('boolean')
 
         console.log(
-          `Training readiness: ${data.readiness.ready ? 'Ready' : 'Not ready'}`
-        );
+          `Training readiness: ${data.readiness.ready ? 'Ready' : 'Not ready'}`,
+        )
         if (!data.readiness.ready && data.readiness.reason) {
-          console.log(`Reason: ${data.readiness.reason}`);
+          console.log(`Reason: ${data.readiness.reason}`)
         }
       },
-      CRON_TIMEOUT + 10000
-    );
-  });
-});
+      CRON_TIMEOUT + 10000,
+    )
+  })
+})

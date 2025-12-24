@@ -1,9 +1,7 @@
-'use client';
-
-import { memo } from 'react';
+import { memo } from 'react'
 
 interface LoginPromptProps {
-  onLogin: () => void;
+  onLogin: () => void
 }
 
 /**
@@ -25,5 +23,5 @@ export const LoginPrompt = memo(function LoginPrompt({
         Connect Wallet
       </button>
     </div>
-  );
-});
+  )
+})

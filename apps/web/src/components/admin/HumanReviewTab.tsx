@@ -16,57 +16,55 @@
  *
  * @returns Human review tab element
  */
-'use client';
-
-import { cn, type JsonValue } from '@babylon/shared';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertCircle, DollarSign } from 'lucide-react';
-import { useState, useTransition } from 'react';
-import { toast } from 'sonner';
-import { Avatar } from '@/components/shared/Avatar';
-import { Skeleton } from '@/components/shared/Skeleton';
+import { cn, type JsonValue } from '@babylon/shared'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { AlertCircle, DollarSign } from 'lucide-react'
+import { useState, useTransition } from 'react'
+import { toast } from 'sonner'
+import { Avatar } from '@/components/shared/Avatar'
+import { Skeleton } from '@/components/shared/Skeleton'
 
 /**
  * Appeal structure for human review tab.
  */
 interface Appeal {
-  id: string;
-  username: string | null;
-  displayName: string | null;
-  profileImageUrl: string | null;
-  bannedAt: Date | null;
-  bannedReason: string | null;
-  bannedBy: string | null;
-  isScammer: boolean;
-  isCSAM: boolean;
-  appealCount: number;
-  appealStaked: boolean;
-  appealStakeAmount: number | null;
-  appealStakeTxHash: string | null;
-  appealSubmittedAt: Date | null;
-  falsePositiveHistory: Array<Record<string, JsonValue>> | null;
-  earnedPoints: number;
-  totalDeposited: number;
-  totalWithdrawn: number;
-  lifetimePnL: number;
+  id: string
+  username: string | null
+  displayName: string | null
+  profileImageUrl: string | null
+  bannedAt: Date | null
+  bannedReason: string | null
+  bannedBy: string | null
+  isScammer: boolean
+  isCSAM: boolean
+  appealCount: number
+  appealStaked: boolean
+  appealStakeAmount: number | null
+  appealStakeTxHash: string | null
+  appealSubmittedAt: Date | null
+  falsePositiveHistory: Array<Record<string, JsonValue>> | null
+  earnedPoints: number
+  totalDeposited: number
+  totalWithdrawn: number
+  lifetimePnL: number
 }
 
 export function HumanReviewTab() {
-  const queryClient = useQueryClient();
-  const [selectedAppeal, setSelectedAppeal] = useState<Appeal | null>(null);
-  const [showActionModal, setShowActionModal] = useState(false);
+  const queryClient = useQueryClient()
+  const [selectedAppeal, setSelectedAppeal] = useState<Appeal | null>(null)
+  const [showActionModal, setShowActionModal] = useState(false)
 
   const { data: appeals = [], isLoading } = useQuery<Appeal[]>({
     queryKey: ['admin', 'human-review'],
     queryFn: async () => {
-      const response = await fetch('/api/admin/moderation/human-review');
+      const response = await fetch('/api/admin/moderation/human-review')
       if (!response.ok) {
-        throw new Error('Failed to load appeals');
+        throw new Error('Failed to load appeals')
       }
-      const data = await response.json();
-      return data.appeals || [];
+      const data = await response.json()
+      return data.appeals || []
     },
-  });
+  })
 
   const actionMutation = useMutation({
     mutationFn: async ({
@@ -74,9 +72,9 @@ export function HumanReviewTab() {
       action,
       reasoning,
     }: {
-      userId: string;
-      action: 'approve' | 'deny';
-      reasoning: string;
+      userId: string
+      action: 'approve' | 'deny'
+      reasoning: string
     }) => {
       const response = await fetch(
         `/api/admin/moderation/human-review/${userId}`,
@@ -84,41 +82,41 @@ export function HumanReviewTab() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ action, reasoning }),
-        }
-      );
+        },
+      )
 
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'Failed to process appeal');
+        const error = await response.json()
+        throw new Error(error.message || 'Failed to process appeal')
       }
 
-      return response.json();
+      return response.json()
     },
     onSuccess: (_, variables) => {
       toast.success(
-        `Appeal ${variables.action === 'approve' ? 'approved' : 'denied'} successfully`
-      );
-      setShowActionModal(false);
-      setSelectedAppeal(null);
-      queryClient.invalidateQueries({ queryKey: ['admin', 'human-review'] });
+        `Appeal ${variables.action === 'approve' ? 'approved' : 'denied'} successfully`,
+      )
+      setShowActionModal(false)
+      setSelectedAppeal(null)
+      queryClient.invalidateQueries({ queryKey: ['admin', 'human-review'] })
     },
     onError: (error) => {
       toast.error(
-        error instanceof Error ? error.message : 'Failed to process appeal'
-      );
+        error instanceof Error ? error.message : 'Failed to process appeal',
+      )
     },
-  });
+  })
 
   const formatDate = (date: Date | null) => {
-    if (!date) return 'N/A';
+    if (!date) return 'N/A'
     return new Date(date).toLocaleString('en-US', {
       month: 'short',
       day: 'numeric',
       year: 'numeric',
       hour: 'numeric',
       minute: '2-digit',
-    });
-  };
+    })
+  }
 
   if (isLoading) {
     return (
@@ -127,7 +125,7 @@ export function HumanReviewTab() {
           <Skeleton key={i} className="h-32 w-full" />
         ))}
       </div>
-    );
+    )
   }
 
   return (
@@ -215,7 +213,7 @@ export function HumanReviewTab() {
                   </div>
 
                   {(() => {
-                    const history = appeal.falsePositiveHistory;
+                    const history = appeal.falsePositiveHistory
                     if (
                       history &&
                       Array.isArray(history) &&
@@ -231,16 +229,17 @@ export function HumanReviewTab() {
                             positive(s)
                           </div>
                         </div>
-                      );
+                      )
                     }
-                    return null;
+                    return null
                   })()}
 
                   <div className="flex gap-2">
                     <button
+                      type="button"
                       onClick={() => {
-                        setSelectedAppeal(appeal);
-                        setShowActionModal(true);
+                        setSelectedAppeal(appeal)
+                        setShowActionModal(true)
                       }}
                       className="rounded-lg bg-primary px-4 py-2 text-primary-foreground transition-colors hover:bg-primary/90"
                     >
@@ -258,8 +257,8 @@ export function HumanReviewTab() {
         <ActionModal
           appeal={selectedAppeal}
           onClose={() => {
-            setShowActionModal(false);
-            setSelectedAppeal(null);
+            setShowActionModal(false)
+            setSelectedAppeal(null)
           }}
           onAction={(userId, action, reasoning) =>
             actionMutation.mutate({ userId, action, reasoning })
@@ -268,18 +267,18 @@ export function HumanReviewTab() {
         />
       )}
     </div>
-  );
+  )
 }
 
 interface ActionModalProps {
-  appeal: Appeal;
-  onClose: () => void;
+  appeal: Appeal
+  onClose: () => void
   onAction: (
     userId: string,
     action: 'approve' | 'deny',
-    reasoning: string
-  ) => void;
-  isPending: boolean;
+    reasoning: string,
+  ) => void
+  isPending: boolean
 }
 
 function ActionModal({
@@ -288,20 +287,20 @@ function ActionModal({
   onClose,
   isPending,
 }: ActionModalProps) {
-  const [action, setAction] = useState<'approve' | 'deny'>('approve');
-  const [reasoning, setReasoning] = useState('');
-  const [, startSubmit] = useTransition();
+  const [action, setAction] = useState<'approve' | 'deny'>('approve')
+  const [reasoning, setReasoning] = useState('')
+  const [, startSubmit] = useTransition()
 
   const handleSubmit = () => {
     if (!reasoning.trim()) {
-      toast.error('Please provide reasoning for your decision');
-      return;
+      toast.error('Please provide reasoning for your decision')
+      return
     }
 
     startSubmit(() => {
-      onAction(appeal.id, action, reasoning);
-    });
-  };
+      onAction(appeal.id, action, reasoning)
+    })
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
@@ -323,10 +322,21 @@ function ActionModal({
         </div>
 
         <div className="mb-4">
-          <label className="mb-2 block font-medium text-sm">Decision</label>
+          <label
+            htmlFor="decision-select"
+            className="mb-2 block font-medium text-sm"
+          >
+            Decision
+          </label>
           <select
+            id="decision-select"
             value={action}
-            onChange={(e) => setAction(e.target.value as 'approve' | 'deny')}
+            onChange={(e) => {
+              const value = e.target.value
+              if (value === 'approve' || value === 'deny') {
+                setAction(value)
+              }
+            }}
             className="w-full rounded-lg border border-border bg-background px-3 py-2"
           >
             <option value="approve">
@@ -337,8 +347,14 @@ function ActionModal({
         </div>
 
         <div className="mb-4">
-          <label className="mb-2 block font-medium text-sm">Reasoning</label>
+          <label
+            htmlFor="reasoning-textarea"
+            className="mb-2 block font-medium text-sm"
+          >
+            Reasoning
+          </label>
           <textarea
+            id="reasoning-textarea"
             value={reasoning}
             onChange={(e) => setReasoning(e.target.value)}
             placeholder="Explain your decision..."
@@ -349,6 +365,7 @@ function ActionModal({
 
         <div className="flex gap-3">
           <button
+            type="button"
             onClick={onClose}
             disabled={isPending}
             className="flex-1 rounded-lg bg-muted px-4 py-2 transition-colors hover:bg-muted/80"
@@ -356,6 +373,7 @@ function ActionModal({
             Cancel
           </button>
           <button
+            type="button"
             onClick={handleSubmit}
             disabled={isPending || !reasoning.trim()}
             className={cn(
@@ -363,7 +381,7 @@ function ActionModal({
               action === 'approve'
                 ? 'bg-green-500 text-white hover:bg-green-600'
                 : 'bg-red-500 text-white hover:bg-red-600',
-              'disabled:opacity-50'
+              'disabled:opacity-50',
             )}
           >
             {isPending
@@ -375,5 +393,5 @@ function ActionModal({
         </div>
       </div>
     </div>
-  );
+  )
 }

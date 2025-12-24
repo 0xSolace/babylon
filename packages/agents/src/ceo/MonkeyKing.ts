@@ -3,14 +3,16 @@
  * training, model deployment, and game parameters.
  */
 
-import { logger } from '@babylon/shared';
+import { logger } from '@babylon/shared'
 import {
   type Address,
   createPublicClient,
   encodeFunctionData,
+  type Hex,
   http,
   parseAbi,
-} from 'viem';
+} from 'viem'
+import { isProductionEnvironment, requireTEEAttestation } from '../config/tee'
 
 export enum ProposalType {
   TREASURY_SPEND = 0,
@@ -31,131 +33,160 @@ export enum ProposalStatus {
 }
 
 export interface CEODecision {
-  type: ProposalType;
-  target: Address;
-  data: `0x${string}`;
-  value: bigint;
-  description: string;
-  reasoning: string;
-  urgency: 'low' | 'medium' | 'high' | 'critical';
-  confidence: number; // 0-1
+  type: ProposalType
+  target: Address
+  data: `0x${string}`
+  value: bigint
+  description: string
+  reasoning: string
+  urgency: 'low' | 'medium' | 'high' | 'critical'
+  confidence: number // 0-1
   expectedImpact: {
-    metric: string;
-    currentValue: number;
-    expectedValue: number;
-  }[];
+    metric: string
+    currentValue: number
+    expectedValue: number
+  }[]
+  /** TEE attestation for this decision (required in production) */
+  attestation?: Hex
+}
+
+export interface DecisionContext {
+  /** TEE attestation proving secure execution context */
+  teeAttestation?: Hex
+  /** Request timestamp */
+  timestamp: number
+  /** Requesting agent or service */
+  requester?: string
 }
 
 export interface CEOMetrics {
-  treasuryBalance: bigint;
-  agentVaultBalance: bigint;
-  pendingTrajectories: Record<string, number>;
-  activeTrainingJob: boolean;
-  lastTrainingTime: Record<string, number>;
-  modelBenchmarks: Record<string, number>;
+  treasuryBalance: bigint
+  agentVaultBalance: bigint
+  pendingTrajectories: Record<string, number>
+  activeTrainingJob: boolean
+  lastTrainingTime: Record<string, number>
+  modelBenchmarks: Record<string, number>
   gameMetrics: {
-    dailyActiveUsers: number;
-    dailyTransactions: number;
-    averageSessionLength: number;
-  };
+    dailyActiveUsers: number
+    dailyTransactions: number
+    averageSessionLength: number
+  }
 }
 
 export interface MonkeyKingConfig {
   /** Wallet address (TEE-derived) */
-  address: Address;
+  address: Address
   /** ERC-8004 agent ID */
-  agentId: bigint;
+  agentId: bigint
   /** BabylonDAO contract address */
-  daoAddress: Address;
+  daoAddress: Address
   /** Treasury contract address */
-  treasuryAddress: Address;
+  treasuryAddress: Address
   /** Agent vault contract address */
-  agentVaultAddress: Address;
+  agentVaultAddress: Address
   /** Training orchestrator address */
-  trainingOrchestratorAddress: Address;
+  trainingOrchestratorAddress: Address
   /** Decision threshold (confidence required to act) */
-  decisionThreshold: number;
+  decisionThreshold: number
   /** Minimum balance to maintain in vault */
-  minVaultBalance: bigint;
+  minVaultBalance: bigint
   /** TEE attestation for signing */
-  attestation?: `0x${string}`;
+  attestation?: Hex
+  /** Whether to require TEE for all operations (defaults to production check) */
+  requireTEE?: boolean
 }
 
 export class MonkeyKing {
-  private config: MonkeyKingConfig;
-  private metrics: CEOMetrics | null = null;
-  private lastDecisionTime = 0;
-  private decisionCooldown = 60_000;
+  private config: MonkeyKingConfig
+  private metrics: CEOMetrics | null = null
+  private lastDecisionTime = 0
+  private decisionCooldown = 60_000
 
   constructor(config: MonkeyKingConfig) {
-    this.config = config;
+    this.config = config
   }
 
-  async analyzeAndDecide(): Promise<CEODecision[]> {
-    if (Date.now() - this.lastDecisionTime < this.decisionCooldown) return [];
+  /**
+   * Analyze current state and make decisions
+   *
+   * @param context - Decision context including TEE attestation (required in production)
+   * @throws Error if TEE attestation is required but not provided in production
+   */
+  async analyzeAndDecide(context?: DecisionContext): Promise<CEODecision[]> {
+    // Enforce TEE attestation in production
+    requireTEEAttestation('CEO decision making', context?.teeAttestation)
 
-    await this.refreshMetrics();
-    if (!this.metrics) return [];
+    if (Date.now() - this.lastDecisionTime < this.decisionCooldown) return []
 
-    const decisions: CEODecision[] = [];
+    await this.refreshMetrics()
+    if (!this.metrics) return []
 
-    const trainingDecision = await this.evaluateTrainingNeed();
-    if (trainingDecision) decisions.push(trainingDecision);
+    const decisions: CEODecision[] = []
 
-    const fundingDecision = await this.evaluateFundingNeed();
+    const trainingDecision = await this.evaluateTrainingNeed()
+    if (trainingDecision) {
+      trainingDecision.attestation = context?.teeAttestation
+      decisions.push(trainingDecision)
+    }
+
+    const fundingDecision = await this.evaluateFundingNeed()
     if (fundingDecision) {
-      decisions.push(fundingDecision);
+      fundingDecision.attestation = context?.teeAttestation
+      decisions.push(fundingDecision)
     }
 
     // 3. Check for game parameter optimizations
-    const gameDecisions = await this.evaluateGameParameters();
-    decisions.push(...gameDecisions);
+    const gameDecisions = await this.evaluateGameParameters()
+    for (const decision of gameDecisions) {
+      decision.attestation = context?.teeAttestation
+    }
+    decisions.push(...gameDecisions)
 
-    this.lastDecisionTime = Date.now();
+    this.lastDecisionTime = Date.now()
     return decisions.filter(
-      (d) => d.confidence >= this.config.decisionThreshold
-    );
+      (d) => d.confidence >= this.config.decisionThreshold,
+    )
   }
 
   /**
    * Evaluate if training should be triggered
    */
   private async evaluateTrainingNeed(): Promise<CEODecision | null> {
-    if (!this.metrics) return null;
+    if (!this.metrics) return null
 
     // Don't trigger if job already active
     if (this.metrics.activeTrainingJob) {
-      return null;
+      return null
     }
 
     // Find archetype with most pending trajectories
-    let bestArchetype: string | null = null;
-    let maxTrajectories = 0;
+    let bestArchetype: string | null = null
+    let maxTrajectories = 0
 
     for (const [archetype, count] of Object.entries(
-      this.metrics.pendingTrajectories
+      this.metrics.pendingTrajectories,
     )) {
       if (count > maxTrajectories) {
-        maxTrajectories = count;
-        bestArchetype = archetype;
+        maxTrajectories = count
+        bestArchetype = archetype
       }
     }
 
     // Need at least 10k trajectories
     if (!bestArchetype || maxTrajectories < 10000) {
-      return null;
+      return null
     }
 
     // Check minimum interval (7 days)
-    const lastTime = this.metrics.lastTrainingTime[bestArchetype] || 0;
-    const minInterval = 7 * 24 * 60 * 60 * 1000; // 7 days in ms
+    const lastTime = this.metrics.lastTrainingTime[bestArchetype] || 0
+    const minInterval = 7 * 24 * 60 * 60 * 1000 // 7 days in ms
 
     if (Date.now() - lastTime < minInterval) {
-      return null;
+      return null
     }
 
     // Calculate confidence based on trajectory count
-    const confidence = Math.min(1, maxTrajectories / 50000);
+    const confidence = Math.min(1, maxTrajectories / 50000)
 
     return {
       type: ProposalType.TRAINING_JOB,
@@ -182,37 +213,37 @@ export class MonkeyKing {
             (this.metrics.modelBenchmarks[bestArchetype] || 0) * 1.1,
         },
       ],
-    };
+    }
   }
 
   /**
    * Evaluate if vault needs funding
    */
   private async evaluateFundingNeed(): Promise<CEODecision | null> {
-    if (!this.metrics) return null;
+    if (!this.metrics) return null
 
-    const vaultBalance = this.metrics.agentVaultBalance;
-    const minBalance = this.config.minVaultBalance;
+    const vaultBalance = this.metrics.agentVaultBalance
+    const minBalance = this.config.minVaultBalance
 
     if (vaultBalance >= minBalance * 2n) {
-      return null; // Plenty of funds
+      return null // Plenty of funds
     }
 
     // Need to fund vault from treasury
-    const treasuryBalance = this.metrics.treasuryBalance;
-    const fundAmount = minBalance * 5n; // Fund 5x minimum
+    const treasuryBalance = this.metrics.treasuryBalance
+    const fundAmount = minBalance * 5n // Fund 5x minimum
 
     if (treasuryBalance < fundAmount) {
-      // Treasury low - emit warning but don't act
-      console.warn(
-        '[MonkeyKing] Treasury balance low:',
-        treasuryBalance.toString()
-      );
-      return null;
+      logger.warn(
+        'Treasury balance low',
+        { treasuryBalance: treasuryBalance.toString() },
+        'MonkeyKing',
+      )
+      return null
     }
 
-    const urgency = vaultBalance < minBalance ? 'critical' : 'medium';
-    const confidence = vaultBalance < minBalance ? 1 : 0.8;
+    const urgency = vaultBalance < minBalance ? 'critical' : 'medium'
+    const confidence = vaultBalance < minBalance ? 1 : 0.8
 
     return {
       type: ProposalType.TREASURY_SPEND,
@@ -238,38 +269,38 @@ export class MonkeyKing {
           expectedValue: Number(vaultBalance + fundAmount),
         },
       ],
-    };
+    }
   }
 
   private async evaluateGameParameters(): Promise<CEODecision[]> {
     // Future: analyze metrics and propose game parameter adjustments
-    return [];
+    return []
   }
 
   private encodeTrainingCall(archetype: string): `0x${string}` {
     const abi = parseAbi([
       'function createJob(string archetype, bytes32 datasetCid, uint256 reward) external returns (uint256)',
-    ]);
+    ])
     const datasetCid =
-      '0x0000000000000000000000000000000000000000000000000000000000000000' as `0x${string}`;
+      '0x0000000000000000000000000000000000000000000000000000000000000000' as `0x${string}`
     return encodeFunctionData({
       abi,
       functionName: 'createJob',
       args: [archetype, datasetCid, 0n],
-    });
+    })
   }
 
   private encodeFundVaultCall(amount: bigint): `0x${string}` {
     // BabylonTreasury.distributeETH(address[] recipients, uint256[] amounts)
     const abi = parseAbi([
       'function distributeETH(address[] recipients, uint256[] amounts) external',
-    ]);
+    ])
 
     return encodeFunctionData({
       abi,
       functionName: 'distributeETH',
       args: [[this.config.agentVaultAddress], [amount]],
-    });
+    })
   }
 
   // --------------------------------------------------------------------------
@@ -277,16 +308,16 @@ export class MonkeyKing {
   // --------------------------------------------------------------------------
 
   async refreshMetrics(): Promise<void> {
-    const rpcUrl = process.env.RPC_URL ?? 'http://localhost:8545';
+    const rpcUrl = process.env.RPC_URL ?? 'http://localhost:6545'
 
     const client = createPublicClient({
       transport: http(rpcUrl),
-    });
+    })
 
     // Treasury and vault balance ABIs
     const balanceAbi = parseAbi([
       'function getBalance() view returns (uint256)',
-    ]);
+    ])
 
     // Training orchestrator ABIs
     const trainingAbi = parseAbi([
@@ -294,9 +325,9 @@ export class MonkeyKing {
       'function getTrajectoryCount(string archetype) view returns (uint256)',
       'function getLastTrainingTime(string archetype) view returns (uint256)',
       'function getBenchmarkScore(string archetype) view returns (uint256)',
-    ]);
+    ])
 
-    const archetypes = ['perps-trader', 'trader', 'social-butterfly'];
+    const archetypes = ['perps-trader', 'trader', 'social-butterfly']
 
     // Fetch balances in parallel
     const [treasuryBalance, agentVaultBalance] = await Promise.all([
@@ -305,22 +336,24 @@ export class MonkeyKing {
           address: this.config.treasuryAddress,
           abi: balanceAbi,
           functionName: 'getBalance',
+          authorizationList: undefined,
         })
         .catch((err) => {
-          logger.warn('[MonkeyKing] Failed to read treasury balance', { err });
-          return 0n;
+          logger.warn('[MonkeyKing] Failed to read treasury balance', { err })
+          return 0n
         }),
       client
         .readContract({
           address: this.config.agentVaultAddress,
           abi: balanceAbi,
           functionName: 'getBalance',
+          authorizationList: undefined,
         })
         .catch((err) => {
-          logger.warn('[MonkeyKing] Failed to read vault balance', { err });
-          return 0n;
+          logger.warn('[MonkeyKing] Failed to read vault balance', { err })
+          return 0n
         }),
-    ]);
+    ])
 
     // Fetch training state
     const [activeJob] = await Promise.all([
@@ -329,14 +362,15 @@ export class MonkeyKing {
           address: this.config.trainingOrchestratorAddress,
           abi: trainingAbi,
           functionName: 'getActiveJob',
+          authorizationList: undefined,
         })
         .catch(() => [0n, '', false] as const),
-    ]);
+    ])
 
     // Fetch per-archetype metrics
-    const pendingTrajectories: Record<string, number> = {};
-    const lastTrainingTime: Record<string, number> = {};
-    const modelBenchmarks: Record<string, number> = {};
+    const pendingTrajectories: Record<string, number> = {}
+    const lastTrainingTime: Record<string, number> = {}
+    const modelBenchmarks: Record<string, number> = {}
 
     await Promise.all(
       archetypes.map(async (archetype) => {
@@ -347,6 +381,7 @@ export class MonkeyKing {
               abi: trainingAbi,
               functionName: 'getTrajectoryCount',
               args: [archetype],
+              authorizationList: undefined,
             })
             .catch(() => 0n),
           client
@@ -355,6 +390,7 @@ export class MonkeyKing {
               abi: trainingAbi,
               functionName: 'getLastTrainingTime',
               args: [archetype],
+              authorizationList: undefined,
             })
             .catch(() => 0n),
           client
@@ -363,15 +399,16 @@ export class MonkeyKing {
               abi: trainingAbi,
               functionName: 'getBenchmarkScore',
               args: [archetype],
+              authorizationList: undefined,
             })
             .catch(() => 0n),
-        ]);
+        ])
 
-        pendingTrajectories[archetype] = Number(count);
-        lastTrainingTime[archetype] = Number(lastTime) * 1000; // Convert to ms
-        modelBenchmarks[archetype] = Number(benchmark);
-      })
-    );
+        pendingTrajectories[archetype] = Number(count)
+        lastTrainingTime[archetype] = Number(lastTime) * 1000 // Convert to ms
+        modelBenchmarks[archetype] = Number(benchmark)
+      }),
+    )
 
     this.metrics = {
       treasuryBalance: treasuryBalance as bigint,
@@ -386,21 +423,21 @@ export class MonkeyKing {
         dailyTransactions: 0,
         averageSessionLength: 0,
       },
-    };
+    }
 
     logger.debug('[MonkeyKing] Metrics refreshed', {
       treasuryBalance: treasuryBalance?.toString(),
       vaultBalance: agentVaultBalance?.toString(),
       activeJob: activeJob?.[2],
-    });
+    })
   }
 
   getMetrics(): CEOMetrics | null {
-    return this.metrics;
+    return this.metrics
   }
 
   getConfig(): MonkeyKingConfig {
-    return this.config;
+    return this.config
   }
 
   // --------------------------------------------------------------------------
@@ -408,21 +445,21 @@ export class MonkeyKing {
   // --------------------------------------------------------------------------
 
   getAgentId(): bigint {
-    return this.config.agentId;
+    return this.config.agentId
   }
 
   getAddress(): Address {
-    return this.config.address;
+    return this.config.address
   }
 
   /**
    * Get agent profile for ERC-8004 registration
    */
   getAgentProfile(): {
-    name: string;
-    description: string;
-    capabilities: string[];
-    version: string;
+    name: string
+    description: string
+    capabilities: string[]
+    version: string
   } {
     return {
       name: 'MonkeyKing',
@@ -436,7 +473,7 @@ export class MonkeyKing {
         'protocol_upgrade_proposal',
       ],
       version: '1.0.0',
-    };
+    }
   }
 }
 
@@ -446,10 +483,22 @@ export class MonkeyKing {
 
 /**
  * Create MonkeyKing instance from environment
+ *
+ * @throws Error if TEE is required in production but not configured
  */
 export function createMonkeyKing(
-  overrides?: Partial<MonkeyKingConfig>
+  overrides?: Partial<MonkeyKingConfig>,
 ): MonkeyKing {
+  const requireTEE = overrides?.requireTEE ?? isProductionEnvironment()
+
+  // Validate TEE configuration in production
+  if (requireTEE && !overrides?.attestation && !process.env.TEE_MODE) {
+    throw new Error(
+      '[MonkeyKing] TEE configuration required in production. ' +
+        'Set TEE_MODE environment variable or provide attestation in config.',
+    )
+  }
+
   const config: MonkeyKingConfig = {
     address: (process.env.AI_CEO_ADDRESS ?? '0x0') as Address,
     agentId: BigInt(process.env.AI_CEO_AGENT_ID ?? '1'),
@@ -460,13 +509,14 @@ export function createMonkeyKing(
     trainingOrchestratorAddress: (process.env.TRAINING_ORCHESTRATOR_ADDRESS ??
       '0x0') as Address,
     decisionThreshold: parseFloat(
-      process.env.AI_CEO_DECISION_THRESHOLD ?? '0.7'
+      process.env.AI_CEO_DECISION_THRESHOLD ?? '0.7',
     ),
     minVaultBalance: BigInt(
-      process.env.AI_CEO_MIN_VAULT_BALANCE ?? '100000000000000000'
+      process.env.AI_CEO_MIN_VAULT_BALANCE ?? '100000000000000000',
     ), // 0.1 ETH
+    requireTEE,
     ...overrides,
-  };
+  }
 
-  return new MonkeyKing(config);
+  return new MonkeyKing(config)
 }

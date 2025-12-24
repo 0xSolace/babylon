@@ -1,0 +1,210 @@
+# DWS Deployment
+
+Deploy Babylon to DWS (Decentralized Web Services) for fully decentralized hosting.
+
+## Overview
+
+DWS deployment consists of:
+- **Static Frontend**: Uploaded to IPFS and pinned via Jeju Storage
+- **Worker Backend**: Elysia-based worker running on Jeju Compute (workerd)
+- **JNS Registration**: Name resolution via Jeju Name Service
+
+## Prerequisites
+
+- Jeju devnet or mainnet running
+- `bun` installed
+- Built static files (`bun run build`)
+
+## Quick Deploy
+
+```bash
+cd apps/docs
+
+# Build static files and worker
+bun run build
+
+# Deploy to DWS
+bun run deploy
+```
+
+## Manual Deployment Steps
+
+### 1. Build Static Files
+
+```bash
+# Build Vocs documentation
+bun run build:static
+
+# Build Elysia worker
+bun run build:worker
+```
+
+This creates:
+- `dist/` - Static HTML, CSS, JS files
+- `dist/worker/` - Compiled worker bundle
+
+### 2. Upload to IPFS
+
+```bash
+# Via Jeju Storage API
+curl -X POST "http://localhost:5001/api/v0/add?pin=true&wrap-with-directory=true" \
+  -F "file=@dist"
+
+# Response includes CID
+# {"Hash": "QmXxx...", "Name": "dist", "Size": "..."}
+```
+
+### 3. Register with JNS
+
+```bash
+# Register JNS name pointing to IPFS content
+curl -X POST "http://localhost:4400/api/v1/register" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "docs.babylon.jeju",
+    "contentHash": "ipfs://QmXxx...",
+    "ttl": 3600
+  }'
+```
+
+### 4. Deploy Worker (Optional)
+
+For dynamic features, deploy the Elysia worker:
+
+```bash
+curl -X POST "http://localhost:4500/api/v1/deploy" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "babylon-docs",
+    "runtime": "workerd",
+    "entrypoint": "dist/worker/worker.js"
+  }'
+```
+
+## Configuration
+
+### Environment Variables
+
+```env
+# Jeju Services
+JEJU_STORAGE_SERVICE_URL="http://localhost:5001"
+JEJU_JNS_URL="http://localhost:4400"
+JEJU_COMPUTE_URL="http://localhost:4500"
+
+# Deployment
+JNS_NAME="docs.babylon.jeju"
+DEPLOY_WORKER="true"
+```
+
+### wrangler.toml
+
+The `wrangler.toml` file configures worker deployment:
+
+```toml
+name = "babylon-docs"
+main = "dist/worker/worker.js"
+
+[vars]
+DIST_DIR = "./dist"
+NODE_ENV = "production"
+
+[site]
+bucket = "./dist"
+
+[dws]
+enabled = true
+ipfs = true
+jns_name = "docs.babylon.jeju"
+```
+
+## Architecture
+
+```
+                    ┌─────────────────┐
+                    │   JNS Resolver  │
+                    │docs.babylon.jeju│
+                    └────────┬────────┘
+                             │
+              ┌──────────────┴──────────────┐
+              │                             │
+              ▼                             ▼
+    ┌─────────────────┐           ┌─────────────────┐
+    │  IPFS Gateway   │           │  Jeju Compute   │
+    │ (Static Files)  │           │    (Worker)     │
+    └────────┬────────┘           └────────┬────────┘
+             │                             │
+             └──────────────┬──────────────┘
+                            │
+                            ▼
+                    ┌─────────────────┐
+                    │     Client      │
+                    └─────────────────┘
+```
+
+## Worker Features
+
+The Elysia worker provides:
+
+- **Static File Serving**: Serves pre-built Vocs pages
+- **SPA Routing**: Falls back to index.html for client-side routing
+- **Cache Control**: Proper headers for CDN caching
+- **Health Checks**: `/health` and `/ready` endpoints
+
+### Health Check
+
+```bash
+curl http://localhost:5008/health
+# {"status":"healthy","service":"babylon-docs","timestamp":"..."}
+```
+
+## CDN & Caching
+
+The deployment includes optimized caching rules:
+
+| Pattern | TTL | Notes |
+|---------|-----|-------|
+| `/assets/**` | 1 year | Immutable hashed assets |
+| `/**/*.html` | 1 minute | HTML with stale-while-revalidate |
+| `/**` | 1 hour | Default caching |
+
+## Troubleshooting
+
+### Build Fails
+
+```bash
+# Clear cache and rebuild
+rm -rf dist node_modules/.vocs
+bun install
+bun run build
+```
+
+### IPFS Upload Fails
+
+Check Jeju Storage is running:
+```bash
+curl http://localhost:5001/health
+```
+
+### Worker Won't Start
+
+Check port availability:
+```bash
+lsof -i :5008
+```
+
+## Production Checklist
+
+- [ ] Build passes: `bun run build`
+- [ ] Worker starts: `bun run start`
+- [ ] Health check responds: `curl localhost:5008/health`
+- [ ] IPFS upload succeeds
+- [ ] JNS name resolves
+- [ ] All pages load correctly
+- [ ] Search works
+- [ ] Mobile responsive
+
+## Next Steps
+
+- [Vercel Deployment](/deployment/vercel) - Alternative deployment
+- [Configuration](/getting-started/configuration) - Environment setup
+- [Troubleshooting](/getting-started/troubleshooting) - Common issues

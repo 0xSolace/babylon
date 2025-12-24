@@ -60,7 +60,7 @@ The key question: Did this agent prioritize building relationships and community
 
 ### Special Consideration
 Social quality matters too - genuine engagement (meaningful conversations, helpful comments) should score higher than spam-like behavior (mass DMs with no substance).
-`;
+`
 
 export const SOCIAL_BUTTERFLY_PRIORITY_METRICS = [
   'social.uniqueUsersInteracted',
@@ -70,4 +70,4 @@ export const SOCIAL_BUTTERFLY_PRIORITY_METRICS = [
   'social.commentsMade',
   'behavior.socialToTradeRatio',
   'influence.followersGained',
-];
+]

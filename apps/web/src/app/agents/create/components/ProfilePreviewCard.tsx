@@ -1,17 +1,15 @@
-'use client';
-
-import { ChevronLeft, ChevronRight, Edit } from 'lucide-react';
-import { memo } from 'react';
-import { Avatar } from '@/components/shared/Avatar';
-import { Skeleton } from '@/components/shared/Skeleton';
-import type { ProfileFormData } from '../hooks/useAgentForm';
+import { ChevronLeft, ChevronRight, Edit } from 'lucide-react'
+import { memo } from 'react'
+import { Avatar } from '@/components/shared/Avatar'
+import { Skeleton } from '@/components/shared/Skeleton'
+import type { ProfileFormData } from '../hooks/useAgentForm'
 
 interface ProfilePreviewCardProps {
-  profileData: ProfileFormData;
-  onEdit: () => void;
-  onCycleProfilePic: (direction: 'next' | 'prev') => void;
-  onCycleBanner: (direction: 'next' | 'prev') => void;
-  isLoading?: boolean;
+  profileData: ProfileFormData
+  onEdit: () => void
+  onCycleProfilePic: (direction: 'next' | 'prev') => void
+  onCycleBanner: (direction: 'next' | 'prev') => void
+  isLoading?: boolean
 }
 
 export const ProfilePreviewCard = memo(function ProfilePreviewCard({
@@ -36,7 +34,7 @@ export const ProfilePreviewCard = memo(function ProfilePreviewCard({
           </div>
         </div>
       </div>
-    );
+    )
   }
 
   return (
@@ -115,6 +113,7 @@ export const ProfilePreviewCard = memo(function ProfilePreviewCard({
               </p>
             </div>
             <button
+              type="button"
               onClick={onEdit}
               className="flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-muted-foreground text-sm transition-colors hover:bg-muted hover:text-foreground"
             >
@@ -131,5 +130,5 @@ export const ProfilePreviewCard = memo(function ProfilePreviewCard({
         </div>
       </div>
     </div>
-  );
-});
+  )
+})

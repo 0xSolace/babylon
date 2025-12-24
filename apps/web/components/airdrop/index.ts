@@ -1,1 +1,0 @@
-export { AirdropCard } from './AirdropCard';

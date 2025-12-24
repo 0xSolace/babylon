@@ -5,19 +5,19 @@
  * All admin API operations should log their actions through this utility.
  */
 
-import { logger } from '@babylon/shared';
+import { logger } from '@babylon/shared'
 
 export interface AdminAuditContext {
   /** Admin user ID performing the action */
-  adminId: string;
+  adminId: string
   /** IP address of the request (if available) */
-  ipAddress?: string;
+  ipAddress?: string
   /** Target resource type (e.g., 'group', 'user', 'message') */
-  resourceType: string;
+  resourceType: string
   /** Target resource ID */
-  resourceId?: string;
+  resourceId?: string
   /** Additional context data */
-  metadata?: Record<string, unknown>;
+  metadata?: Record<string, unknown>
 }
 
 /**
@@ -25,7 +25,7 @@ export interface AdminAuditContext {
  */
 export function logAdminAction(
   action: string,
-  context: AdminAuditContext
+  context: AdminAuditContext,
 ): void {
   logger.info(
     `[ADMIN_AUDIT] ${action}`,
@@ -38,30 +38,27 @@ export function logAdminAction(
       ...context.metadata,
       timestamp: new Date().toISOString(),
     },
-    'AdminAudit'
-  );
+    'AdminAudit',
+  )
 }
 
 /**
  * Log admin viewing/reading a resource
  */
 export function logAdminView(context: AdminAuditContext): void {
-  logAdminAction('VIEW', context);
+  logAdminAction('VIEW', context)
 }
 
 /**
  * Log admin modifying a resource
  */
 export function logAdminModify(context: AdminAuditContext): void {
-  logAdminAction('MODIFY', context);
+  logAdminAction('MODIFY', context)
 }
 
 /**
  * Log admin deleting a resource
  */
 export function logAdminDelete(context: AdminAuditContext): void {
-  logAdminAction('DELETE', context);
+  logAdminAction('DELETE', context)
 }
-
-// Re-export getClientIp from utils for convenience
-export { getClientIp } from './utils';

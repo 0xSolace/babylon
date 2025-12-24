@@ -1,5 +1,5 @@
-import { cn } from '@babylon/shared';
-import type React from 'react';
+import { cn } from '@babylon/shared'
+import type React from 'react'
 
 /**
  * Card component for displaying content in a contained card layout.
@@ -27,7 +27,7 @@ export const Card = ({
   <div className={cn(className)} {...props}>
     {children}
   </div>
-);
+)
 /**
  * Card header component for card title and description.
  *
@@ -44,7 +44,7 @@ export const CardHeader = ({
   <div className={cn(className)} {...props}>
     {children}
   </div>
-);
+)
 /**
  * Card title component.
  *
@@ -61,7 +61,7 @@ export const CardTitle = ({
   <h3 className={cn(className)} {...props}>
     {children}
   </h3>
-);
+)
 /**
  * Card description component.
  *
@@ -78,7 +78,7 @@ export const CardDescription = ({
   <p className={cn(className)} {...props}>
     {children}
   </p>
-);
+)
 /**
  * Card content component for main card body.
  *
@@ -95,4 +95,4 @@ export const CardContent = ({
   <div className={cn(className)} {...props}>
     {children}
   </div>
-);
+)

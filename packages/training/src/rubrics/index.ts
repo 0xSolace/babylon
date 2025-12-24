@@ -7,41 +7,41 @@
  * @packageDocumentation
  */
 
-import { createHash } from 'crypto';
-import { ASS_KISSER_PRIORITY_METRICS, ASS_KISSER_RUBRIC } from './ass-kisser';
-import { DEGEN_PRIORITY_METRICS, DEGEN_RUBRIC } from './degen';
+import { createHash } from 'node:crypto'
+import { ASS_KISSER_PRIORITY_METRICS, ASS_KISSER_RUBRIC } from './ass-kisser'
+import { DEGEN_PRIORITY_METRICS, DEGEN_RUBRIC } from './degen'
 import {
   GOODY_TWOSHOES_PRIORITY_METRICS,
   GOODY_TWOSHOES_RUBRIC,
-} from './goody-twoshoes';
+} from './goody-twoshoes'
 import {
   INFORMATION_TRADER_PRIORITY_METRICS,
   INFORMATION_TRADER_RUBRIC,
-} from './information-trader';
-import { INFOSEC_PRIORITY_METRICS, INFOSEC_RUBRIC } from './infosec';
-import { LIAR_PRIORITY_METRICS, LIAR_RUBRIC } from './liar';
+} from './information-trader'
+import { INFOSEC_PRIORITY_METRICS, INFOSEC_RUBRIC } from './infosec'
+import { LIAR_PRIORITY_METRICS, LIAR_RUBRIC } from './liar'
 import {
   PERPS_TRADER_PRIORITY_METRICS,
   PERPS_TRADER_RUBRIC,
-} from './perps-trader';
-import { RESEARCHER_PRIORITY_METRICS, RESEARCHER_RUBRIC } from './researcher';
-import { SCAMMER_PRIORITY_METRICS, SCAMMER_RUBRIC } from './scammer';
+} from './perps-trader'
+import { RESEARCHER_PRIORITY_METRICS, RESEARCHER_RUBRIC } from './researcher'
+import { SCAMMER_PRIORITY_METRICS, SCAMMER_RUBRIC } from './scammer'
 import {
   SOCIAL_BUTTERFLY_PRIORITY_METRICS,
   SOCIAL_BUTTERFLY_RUBRIC,
-} from './social-butterfly';
+} from './social-butterfly'
 import {
   SUPER_PREDICTOR_PRIORITY_METRICS,
   SUPER_PREDICTOR_RUBRIC,
-} from './super-predictor';
-import { TRADER_PRIORITY_METRICS, TRADER_RUBRIC } from './trader';
+} from './super-predictor'
+import { TRADER_PRIORITY_METRICS, TRADER_RUBRIC } from './trader'
 
 export interface JudgeRubric {
-  id: string;
-  name: string;
-  description: string;
-  criteria: string;
-  priorityMetrics: string[];
+  id: string
+  name: string
+  description: string
+  criteria: string
+  priorityMetrics: string[]
 }
 
 /**
@@ -67,14 +67,14 @@ You are evaluating an AI agent's performance in a prediction market simulation.
 
 Compare trajectories RELATIVE to each other within this group.
 If one trajectory is significantly better, reflect that in score differences.
-`;
+`
 
 export const DEFAULT_PRIORITY_METRICS = [
   'trading.totalPnL',
   'trading.winRate',
   'behavior.actionSuccessRate',
   'behavior.episodeLength',
-];
+]
 
 /**
  * Registry of all archetype rubrics
@@ -99,7 +99,7 @@ export const RUBRICS: Record<string, string> = {
   perpstrader: PERPS_TRADER_RUBRIC,
   superpredictor: SUPER_PREDICTOR_RUBRIC,
   informationtrader: INFORMATION_TRADER_RUBRIC,
-};
+}
 
 /**
  * Priority metrics for each archetype
@@ -117,30 +117,30 @@ export const PRIORITY_METRICS: Record<string, string[]> = {
   'super-predictor': SUPER_PREDICTOR_PRIORITY_METRICS,
   infosec: INFOSEC_PRIORITY_METRICS,
   liar: LIAR_PRIORITY_METRICS,
-};
+}
 
 /**
  * Get the rubric for an archetype
  */
 export function getRubric(archetype: string): string {
-  const normalized = archetype.toLowerCase().trim();
-  return RUBRICS[normalized] || DEFAULT_RUBRIC;
+  const normalized = archetype.toLowerCase().trim()
+  return RUBRICS[normalized] || DEFAULT_RUBRIC
 }
 
 /**
  * Get priority metrics for an archetype
  */
 export function getPriorityMetrics(archetype: string): string[] {
-  const normalized = archetype.toLowerCase().trim();
-  return PRIORITY_METRICS[normalized] || DEFAULT_PRIORITY_METRICS;
+  const normalized = archetype.toLowerCase().trim()
+  return PRIORITY_METRICS[normalized] || DEFAULT_PRIORITY_METRICS
 }
 
 /**
  * Check if an archetype has a custom rubric
  */
 export function hasCustomRubric(archetype: string): boolean {
-  const normalized = archetype.toLowerCase().trim();
-  return normalized in RUBRICS;
+  const normalized = archetype.toLowerCase().trim()
+  return normalized in RUBRICS
 }
 
 /**
@@ -162,10 +162,9 @@ export function getAvailableArchetypes(): string[] {
     'super-predictor',
     'infosec',
     'liar',
-  ];
+  ]
 }
 
-// Re-export individual rubrics
 export {
   TRADER_RUBRIC,
   SOCIAL_BUTTERFLY_RUBRIC,
@@ -179,21 +178,21 @@ export {
   SUPER_PREDICTOR_RUBRIC,
   INFOSEC_RUBRIC,
   LIAR_RUBRIC,
-};
+}
 
 /**
  * Rubrics version - increment when rubrics change significantly
  * Used for cache invalidation
  */
-export const RUBRICS_VERSION = '1.0.0';
+export const RUBRICS_VERSION = '1.0.0'
 
 /**
  * Get a hash of the rubric for an archetype
  * Used for cache invalidation when specific rubrics change
  */
 export function getRubricHash(archetype: string): string {
-  const rubric = getRubric(archetype);
-  return createHash('sha256').update(rubric).digest('hex').substring(0, 16);
+  const rubric = getRubric(archetype)
+  return createHash('sha256').update(rubric).digest('hex').substring(0, 16)
 }
 
 /**
@@ -201,6 +200,6 @@ export function getRubricHash(archetype: string): string {
  * Used for detecting any rubric changes
  */
 export function getAllRubricsHash(): string {
-  const allRubrics = Object.values(RUBRICS).join('::') + DEFAULT_RUBRIC;
-  return createHash('sha256').update(allRubrics).digest('hex').substring(0, 16);
+  const allRubrics = Object.values(RUBRICS).join('::') + DEFAULT_RUBRIC
+  return createHash('sha256').update(allRubrics).digest('hex').substring(0, 16)
 }

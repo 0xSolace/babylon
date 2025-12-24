@@ -1,17 +1,15 @@
-'use client';
-
-import { cn } from '@babylon/shared';
-import { Send } from 'lucide-react';
-import React from 'react';
-import { LoginButton } from '@/components/auth/LoginButton';
-import { Skeleton } from '@/components/shared/Skeleton';
+import { cn } from '@babylon/shared'
+import { Send } from 'lucide-react'
+import type React from 'react'
+import { LoginButton } from '@/components/auth/LoginButton'
+import { Skeleton } from '@/components/shared/Skeleton'
 
 interface MessageInputProps {
-  value: string;
-  onChange: (value: string) => void;
-  onSend: () => void;
-  sending: boolean;
-  authenticated: boolean;
+  value: string
+  onChange: (value: string) => void
+  onSend: () => void
+  sending: boolean
+  authenticated: boolean
 }
 
 export function MessageInput({
@@ -23,10 +21,10 @@ export function MessageInput({
 }: MessageInputProps) {
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      onSend();
+      e.preventDefault()
+      onSend()
     }
-  };
+  }
 
   if (!authenticated) {
     return (
@@ -38,7 +36,7 @@ export function MessageInput({
           <LoginButton />
         </div>
       </div>
-    );
+    )
   }
 
   return (
@@ -56,17 +54,18 @@ export function MessageInput({
             'message-input bg-sidebar-accent/50',
             'text-foreground placeholder:text-muted-foreground',
             'outline-none',
-            'disabled:cursor-not-allowed disabled:opacity-50'
+            'disabled:cursor-not-allowed disabled:opacity-50',
           )}
         />
         <button
+          type="button"
           onClick={onSend}
           disabled={!value.trim() || sending}
           className={cn(
             'flex items-center gap-2 rounded-lg px-4 py-3 font-semibold md:gap-3',
             'chat-button bg-sidebar-accent/50 text-primary',
             'transition-all duration-300',
-            'disabled:cursor-not-allowed disabled:text-muted-foreground disabled:opacity-50'
+            'disabled:cursor-not-allowed disabled:text-muted-foreground disabled:opacity-50',
           )}
         >
           {sending ? (
@@ -77,5 +76,5 @@ export function MessageInput({
         </button>
       </div>
     </div>
-  );
+  )
 }

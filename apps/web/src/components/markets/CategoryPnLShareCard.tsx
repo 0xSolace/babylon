@@ -1,18 +1,18 @@
-import type { User } from '@/stores/authStore';
-import type { MarketCategory } from '@/types/markets';
+import type { User } from '@/stores/authStore'
+import type { MarketCategory } from '@/types/markets'
 
 /**
  * Category PnL data structure for category PnL share card.
  */
 interface CategoryPnLData {
-  unrealizedPnL: number;
-  positionCount: number;
-  totalValue?: number;
+  unrealizedPnL: number
+  positionCount: number
+  totalValue?: number
   categorySpecific?: {
-    openInterest?: number;
-    totalShares?: number;
-    totalInvested?: number;
-  };
+    openInterest?: number
+    totalShares?: number
+    totalInvested?: number
+  }
 }
 
 /**
@@ -42,10 +42,10 @@ interface CategoryPnLData {
  * ```
  */
 interface CategoryPnLShareCardProps {
-  category: MarketCategory;
-  data: CategoryPnLData;
-  user: User;
-  className?: string;
+  category: MarketCategory
+  data: CategoryPnLData
+  user: User
+  className?: string
 }
 
 /**
@@ -55,7 +55,7 @@ const formatter = new Intl.NumberFormat('en-US', {
   style: 'currency',
   currency: 'USD',
   maximumFractionDigits: 2,
-});
+})
 
 /**
  * Format currency value safely.
@@ -66,7 +66,7 @@ const formatter = new Intl.NumberFormat('en-US', {
  * @returns Formatted currency string
  */
 function formatCurrency(value: number) {
-  return formatter.format(Number.isFinite(value) ? value : 0);
+  return formatter.format(Number.isFinite(value) ? value : 0)
 }
 
 /**
@@ -91,7 +91,7 @@ const categoryConfig = {
     gradient:
       'radial-gradient(circle at top left, rgba(249, 115, 22, 0.85), rgba(10, 10, 30, 0.95)), linear-gradient(135deg, rgba(249, 115, 22, 0.3), rgba(0, 102, 255, 0.35))',
   },
-};
+}
 
 export function CategoryPnLShareCard({
   category,
@@ -99,14 +99,14 @@ export function CategoryPnLShareCard({
   user,
   className,
 }: CategoryPnLShareCardProps) {
-  const config = categoryConfig[category];
-  const displayName = user.displayName || 'Babylon Trader';
+  const config = categoryConfig[category]
+  const displayName = user.displayName || 'Babylon Trader'
   const handle =
     user.username ||
     user.farcasterUsername ||
     user.twitterUsername ||
     user.walletAddress ||
-    'anon';
+    'anon'
 
   return (
     <div
@@ -220,6 +220,8 @@ export function CategoryPnLShareCard({
             viewBox="0 0 2578 610"
             fill="none"
             xmlns="http://www.w3.org/2000/svg"
+            role="img"
+            aria-label="Category PnL Chart"
           >
             <circle cx="327" cy="306" r="226" fill="rgba(255,255,255,0.15)" />
             <path
@@ -339,12 +341,12 @@ export function CategoryPnLShareCard({
         </p>
       </footer>
     </div>
-  );
+  )
 }
 
 interface MiniStatProps {
-  title: string;
-  value: string;
+  title: string
+  value: string
 }
 
 function MiniStat({ title, value }: MiniStatProps) {
@@ -378,5 +380,5 @@ function MiniStat({ title, value }: MiniStatProps) {
         {value}
       </p>
     </div>
-  );
+  )
 }

@@ -15,11 +15,11 @@ import {
   getNPCIdentityService,
   getNPCTokenWalletService,
   initializeNPCTokenWalletService,
+  type PaymasterClient,
   STOP_LOSS_CONFIG,
-} from '@babylon/agents';
-import { getPaymasterClient } from '@babylon/api';
-import { db, npcTrades } from '@babylon/db';
-import { generateSnowflakeId, logger } from '@babylon/shared';
+} from '@babylon/agents'
+import { db, npcTrades } from '@babylon/db'
+import { generateSnowflakeId, logger } from '@babylon/shared'
 import {
   type Address,
   type Chain,
@@ -29,28 +29,28 @@ import {
   http,
   keccak256,
   toHex,
-} from 'viem';
-import { privateKeyToAccount } from 'viem/accounts';
-import type { TradingDecision } from '../types/market-decisions';
+} from 'viem'
+import { privateKeyToAccount } from 'viem/accounts'
+import type { TradingDecision } from '../types/market-decisions'
 
 // =============================================================================
 // CONFIGURATION
 // =============================================================================
 
 interface OnChainConfig {
-  rpcUrl: string;
-  diamondAddress: Address;
-  tokenAddress: Address;
-  chainId: number;
+  rpcUrl: string
+  diamondAddress: Address
+  tokenAddress: Address
+  chainId: number
 }
 
 function getOnChainConfig(): OnChainConfig {
   return {
-    rpcUrl: process.env.JEJU_RPC_URL ?? 'http://localhost:9545',
+    rpcUrl: process.env.JEJU_RPC_URL ?? 'http://localhost:6546',
     diamondAddress: (process.env.DIAMOND_ADDRESS ?? '0x0') as Address,
     tokenAddress: (process.env.BBLN_TOKEN_ADDRESS ?? '0x0') as Address,
-    chainId: parseInt(process.env.JEJU_CHAIN_ID ?? '31337'),
-  };
+    chainId: parseInt(process.env.JEJU_CHAIN_ID ?? '31337', 10),
+  }
 }
 
 // =============================================================================
@@ -58,26 +58,26 @@ function getOnChainConfig(): OnChainConfig {
 // =============================================================================
 
 export interface OnChainTradeResult {
-  success: boolean;
-  txHash: Hex | null;
-  gasUsed: bigint;
-  error?: string;
+  success: boolean
+  txHash: Hex | null
+  gasUsed: bigint
+  error?: string
 }
 
 export interface BatchTradeResult {
-  totalDecisions: number;
-  onChainTrades: number;
-  offChainTrades: number;
-  failed: number;
-  stopLossTriggered: number;
-  results: OnChainTradeResult[];
+  totalDecisions: number
+  onChainTrades: number
+  offChainTrades: number
+  failed: number
+  stopLossTriggered: number
+  results: OnChainTradeResult[]
 }
 
 // =============================================================================
 // NPC KEY MANAGEMENT
 // =============================================================================
 
-import { getNPCMasterKey } from '../config/dev-keys';
+import { getNPCMasterKey } from '../config/dev-keys'
 
 /**
  * NPC private key derivation
@@ -85,9 +85,9 @@ import { getNPCMasterKey } from '../config/dev-keys';
  * In production, keys should be managed via KMS
  */
 function getNPCPrivateKey(actorId: string): Hex {
-  const masterKey = getNPCMasterKey();
-  const derivedKey = keccak256(toHex(`${masterKey}:${actorId}`));
-  return derivedKey;
+  const masterKey = getNPCMasterKey()
+  const derivedKey = keccak256(toHex(`${masterKey}:${actorId}`))
+  return derivedKey
 }
 
 // =============================================================================
@@ -95,13 +95,13 @@ function getNPCPrivateKey(actorId: string): Hex {
 // =============================================================================
 
 export class NPCOnChainTradingService {
-  private config: OnChainConfig;
-  private publicClient: ReturnType<typeof createPublicClient>;
-  private chain: Chain;
-  private initialized = false;
+  private config: OnChainConfig
+  private publicClient: ReturnType<typeof createPublicClient>
+  private chain: Chain
+  private initialized = false
 
   constructor() {
-    this.config = getOnChainConfig();
+    this.config = getOnChainConfig()
     this.chain = {
       id: this.config.chainId,
       name: 'Jeju',
@@ -109,37 +109,37 @@ export class NPCOnChainTradingService {
       rpcUrls: {
         default: { http: [this.config.rpcUrl] },
       },
-    };
+    }
     this.publicClient = createPublicClient({
       chain: this.chain,
       transport: http(this.config.rpcUrl),
-    });
+    })
   }
 
   /**
    * Initialize the service
+   * @param getPaymasterClient - Injected from @babylon/api to avoid engine importing api
    */
-  async initialize(): Promise<void> {
-    if (this.initialized) return;
+  async initialize(getPaymasterClient: () => PaymasterClient): Promise<void> {
+    if (this.initialized) return
 
-    // Pass paymaster client getter to avoid circular dependency
-    await initializeNPCTokenWalletService(getPaymasterClient);
-    const walletService = getNPCTokenWalletService();
-    walletService.startStopLossMonitoring();
+    await initializeNPCTokenWalletService(getPaymasterClient)
+    const walletService = getNPCTokenWalletService()
+    walletService.startStopLossMonitoring()
 
-    this.initialized = true;
+    this.initialized = true
     logger.info(
       'NPCOnChainTradingService initialized',
       undefined,
-      'NPCOnChainTradingService'
-    );
+      'NPCOnChainTradingService',
+    )
   }
 
   /**
    * Execute a batch of NPC trading decisions on-chain
    */
   async executeBatchOnChain(
-    decisions: TradingDecision[]
+    decisions: TradingDecision[],
   ): Promise<BatchTradeResult> {
     const result: BatchTradeResult = {
       totalDecisions: decisions.length,
@@ -148,30 +148,30 @@ export class NPCOnChainTradingService {
       failed: 0,
       stopLossTriggered: 0,
       results: [],
-    };
+    }
 
     for (const decision of decisions) {
-      if (decision.action === 'hold') continue;
+      if (decision.action === 'hold') continue
 
-      const stopLossCheck = await this.checkStopLoss(decision.npcId);
+      const stopLossCheck = await this.checkStopLoss(decision.npcId)
       if (stopLossCheck.triggered) {
-        result.stopLossTriggered++;
+        result.stopLossTriggered++
         result.results.push({
           success: false,
           txHash: null,
           gasUsed: 0n,
           error: `Stop-loss triggered: ${stopLossCheck.reason}`,
-        });
-        continue;
+        })
+        continue
       }
 
-      const tradeResult = await this.executeTradeOnChain(decision);
-      result.results.push(tradeResult);
+      const tradeResult = await this.executeTradeOnChain(decision)
+      result.results.push(tradeResult)
 
       if (tradeResult.success) {
-        result.onChainTrades++;
+        result.onChainTrades++
       } else {
-        result.failed++;
+        result.failed++
       }
     }
 
@@ -183,21 +183,21 @@ export class NPCOnChainTradingService {
         failed: result.failed,
         stopLoss: result.stopLossTriggered,
       },
-      'NPCOnChainTradingService'
-    );
+      'NPCOnChainTradingService',
+    )
 
-    return result;
+    return result
   }
 
   /**
    * Execute a single trade on-chain
    */
   async executeTradeOnChain(
-    decision: TradingDecision
+    decision: TradingDecision,
   ): Promise<OnChainTradeResult> {
-    const actorId = decision.npcId.toLowerCase();
-    const identityService = getNPCIdentityService();
-    const identity = await identityService.getNPCIdentity(actorId);
+    const actorId = decision.npcId.toLowerCase()
+    const identityService = getNPCIdentityService()
+    const identity = await identityService.getNPCIdentity(actorId)
 
     if (!identity?.walletAddress) {
       return {
@@ -205,11 +205,11 @@ export class NPCOnChainTradingService {
         txHash: null,
         gasUsed: 0n,
         error: `NPC ${actorId} has no wallet`,
-      };
+      }
     }
 
-    const walletService = getNPCTokenWalletService();
-    const balance = await walletService.getBalance(actorId);
+    const walletService = getNPCTokenWalletService()
+    const balance = await walletService.getBalance(actorId)
 
     if (balance.totalValue < STOP_LOSS_CONFIG.MIN_BALANCE) {
       return {
@@ -217,23 +217,23 @@ export class NPCOnChainTradingService {
         txHash: null,
         gasUsed: 0n,
         error: `NPC ${actorId} below minimum balance`,
-      };
+      }
     }
 
-    const privateKey = getNPCPrivateKey(actorId);
-    const account = privateKeyToAccount(privateKey);
+    const privateKey = getNPCPrivateKey(actorId)
+    const account = privateKeyToAccount(privateKey)
 
     const walletClient = createWalletClient({
       account,
       chain: this.chain,
       transport: http(this.config.rpcUrl),
-    });
+    })
 
     // Determine market type and execute
     if (decision.marketType === 'prediction') {
-      return this.executePredictionTrade(decision, walletClient);
+      return this.executePredictionTrade(decision, walletClient)
     } else {
-      return this.executePerpTrade(decision, walletClient);
+      return this.executePerpTrade(decision, walletClient)
     }
   }
 
@@ -242,7 +242,7 @@ export class NPCOnChainTradingService {
    */
   private async executePredictionTrade(
     decision: TradingDecision,
-    walletClient: ReturnType<typeof createWalletClient>
+    walletClient: ReturnType<typeof createWalletClient>,
   ): Promise<OnChainTradeResult> {
     if (!decision.marketId) {
       return {
@@ -250,15 +250,15 @@ export class NPCOnChainTradingService {
         txHash: null,
         gasUsed: 0n,
         error: 'No market ID provided',
-      };
+      }
     }
 
-    const marketIdBytes = keccak256(toHex(String(decision.marketId)));
-    const outcome = decision.action === 'buy_yes' ? 0 : 1;
-    const shares = BigInt(Math.floor(decision.amount * 1e18));
+    const marketIdBytes = keccak256(toHex(String(decision.marketId)))
+    const outcome = decision.action === 'buy_yes' ? 0 : 1
+    const shares = BigInt(Math.floor(decision.amount * 1e18))
     const functionName = decision.action.startsWith('buy')
       ? 'buyShares'
-      : 'sellShares';
+      : 'sellShares'
 
     const abi = [
       {
@@ -283,30 +283,30 @@ export class NPCOnChainTradingService {
         outputs: [],
         stateMutability: 'nonpayable',
       },
-    ] as const;
+    ] as const
 
     const txHash = await walletClient.writeContract({
       chain: this.chain,
-      account: walletClient.account!,
+      account: walletClient.account ?? null,
       address: this.config.diamondAddress,
       abi,
       functionName,
       args: [marketIdBytes, outcome, shares],
-    });
+    })
 
     const receipt = await this.publicClient.waitForTransactionReceipt({
       hash: txHash,
-    });
-    await this.recordNPCTrade(decision, txHash);
+    })
+    await this.recordNPCTrade(decision, txHash)
 
-    const walletService = getNPCTokenWalletService();
-    await walletService.syncBalanceToDb(decision.npcId);
+    const walletService = getNPCTokenWalletService()
+    await walletService.syncBalanceToDb(decision.npcId)
 
     return {
       success: receipt.status === 'success',
       txHash,
       gasUsed: receipt.gasUsed,
-    };
+    }
   }
 
   /**
@@ -314,7 +314,7 @@ export class NPCOnChainTradingService {
    */
   private async executePerpTrade(
     decision: TradingDecision,
-    walletClient: ReturnType<typeof createWalletClient>
+    walletClient: ReturnType<typeof createWalletClient>,
   ): Promise<OnChainTradeResult> {
     if (!decision.ticker) {
       return {
@@ -322,13 +322,13 @@ export class NPCOnChainTradingService {
         txHash: null,
         gasUsed: 0n,
         error: 'No ticker provided',
-      };
+      }
     }
 
-    const marketIdBytes = keccak256(toHex(decision.ticker));
-    const side = decision.action === 'open_long' ? 0 : 1;
-    const size = BigInt(Math.floor(decision.amount * 1e18));
-    const collateral = size / 5n; // 5x leverage
+    const marketIdBytes = keccak256(toHex(decision.ticker))
+    const side = decision.action === 'open_long' ? 0 : 1
+    const size = BigInt(Math.floor(decision.amount * 1e18))
+    const collateral = size / 5n // 5x leverage
 
     if (decision.action === 'close_position') {
       const closeAbi = [
@@ -342,27 +342,27 @@ export class NPCOnChainTradingService {
           outputs: [],
           stateMutability: 'nonpayable',
         },
-      ] as const;
+      ] as const
 
       const txHash = await walletClient.writeContract({
         chain: this.chain,
-        account: walletClient.account!,
+        account: walletClient.account ?? null,
         address: this.config.diamondAddress,
         abi: closeAbi,
         functionName: 'closePosition',
         args: [marketIdBytes, 0n],
-      });
+      })
 
       const receipt = await this.publicClient.waitForTransactionReceipt({
         hash: txHash,
-      });
-      await this.recordNPCTrade(decision, txHash);
+      })
+      await this.recordNPCTrade(decision, txHash)
 
       return {
         success: receipt.status === 'success',
         txHash,
         gasUsed: receipt.gasUsed,
-      };
+      }
     }
 
     const openAbi = [
@@ -379,31 +379,31 @@ export class NPCOnChainTradingService {
         outputs: [],
         stateMutability: 'nonpayable',
       },
-    ] as const;
+    ] as const
 
-    const maxPrice = BigInt(2) ** BigInt(128) - BigInt(1);
+    const maxPrice = BigInt(2) ** BigInt(128) - BigInt(1)
     const txHash = await walletClient.writeContract({
       chain: this.chain,
-      account: walletClient.account!,
+      account: walletClient.account ?? null,
       address: this.config.diamondAddress,
       abi: openAbi,
       functionName: 'openPosition',
       args: [marketIdBytes, side, size, collateral, maxPrice],
-    });
+    })
 
     const receipt = await this.publicClient.waitForTransactionReceipt({
       hash: txHash,
-    });
-    await this.recordNPCTrade(decision, txHash);
+    })
+    await this.recordNPCTrade(decision, txHash)
 
-    const walletService = getNPCTokenWalletService();
-    await walletService.syncBalanceToDb(decision.npcId);
+    const walletService = getNPCTokenWalletService()
+    await walletService.syncBalanceToDb(decision.npcId)
 
     return {
       success: receipt.status === 'success',
       txHash,
       gasUsed: receipt.gasUsed,
-    };
+    }
   }
 
   /**
@@ -411,7 +411,7 @@ export class NPCOnChainTradingService {
    */
   private async recordNPCTrade(
     decision: TradingDecision,
-    txHash: Hex
+    txHash: Hex,
   ): Promise<void> {
     await db.insert(npcTrades).values({
       id: await generateSnowflakeId(),
@@ -429,67 +429,67 @@ export class NPCOnChainTradingService {
       price: 0,
       sentiment: decision.confidence,
       reason: decision.reasoning,
-    });
+    })
 
     logger.info(
       `Recorded NPC on-chain trade`,
       { npcId: decision.npcId, action: decision.action, txHash },
-      'NPCOnChainTradingService'
-    );
+      'NPCOnChainTradingService',
+    )
   }
 
   /**
    * Check stop-loss status for NPC
    */
   private async checkStopLoss(
-    actorId: string
+    actorId: string,
   ): Promise<{ triggered: boolean; reason: string }> {
-    const walletService = getNPCTokenWalletService();
-    const result = await walletService.checkStopLossForNPC(actorId);
-    return { triggered: result.triggered, reason: result.reason };
+    const walletService = getNPCTokenWalletService()
+    const result = await walletService.checkStopLossForNPC(actorId)
+    return { triggered: result.triggered, reason: result.reason }
   }
 
   /**
    * Get NPC's on-chain positions
    */
   async getNPCPositions(actorId: string): Promise<{
-    prediction: Array<{ marketId: Hex; outcome: number; shares: bigint }>;
+    prediction: Array<{ marketId: Hex; outcome: number; shares: bigint }>
     perp: Array<{
-      marketId: Hex;
-      side: number;
-      size: bigint;
-      collateral: bigint;
-      entryPrice: bigint;
-    }>;
+      marketId: Hex
+      side: number
+      size: bigint
+      collateral: bigint
+      entryPrice: bigint
+    }>
   }> {
-    const identityService = getNPCIdentityService();
-    const identity = await identityService.getNPCIdentity(actorId);
+    const identityService = getNPCIdentityService()
+    const identity = await identityService.getNPCIdentity(actorId)
 
     if (!identity?.walletAddress) {
-      return { prediction: [], perp: [] };
+      return { prediction: [], perp: [] }
     }
 
     // Would read from on-chain contracts here
-    return { prediction: [], perp: [] };
+    return { prediction: [], perp: [] }
   }
 
   /**
    * Emergency close all positions for NPC
    */
   async emergencyCloseAllPositions(actorId: string): Promise<{
-    positionsClosed: number;
-    txHashes: Hex[];
+    positionsClosed: number
+    txHashes: Hex[]
   }> {
-    const positions = await this.getNPCPositions(actorId);
-    const txHashes: Hex[] = [];
+    const positions = await this.getNPCPositions(actorId)
+    const txHashes: Hex[] = []
 
-    const privateKey = getNPCPrivateKey(actorId);
-    const account = privateKeyToAccount(privateKey);
+    const privateKey = getNPCPrivateKey(actorId)
+    const account = privateKeyToAccount(privateKey)
     const walletClient = createWalletClient({
       account,
       chain: this.chain,
       transport: http(this.config.rpcUrl),
-    });
+    })
 
     const closeAbi = [
       {
@@ -502,7 +502,7 @@ export class NPCOnChainTradingService {
         outputs: [],
         stateMutability: 'nonpayable',
       },
-    ] as const;
+    ] as const
 
     const sellAbi = [
       {
@@ -516,7 +516,7 @@ export class NPCOnChainTradingService {
         outputs: [],
         stateMutability: 'nonpayable',
       },
-    ] as const;
+    ] as const
 
     for (const pos of positions.perp) {
       const txHash = await walletClient.writeContract({
@@ -526,8 +526,8 @@ export class NPCOnChainTradingService {
         abi: closeAbi,
         functionName: 'closePosition',
         args: [pos.marketId, 0n],
-      });
-      txHashes.push(txHash);
+      })
+      txHashes.push(txHash)
     }
 
     for (const pos of positions.prediction) {
@@ -538,17 +538,17 @@ export class NPCOnChainTradingService {
         abi: sellAbi,
         functionName: 'sellShares',
         args: [pos.marketId, pos.outcome, pos.shares],
-      });
-      txHashes.push(txHash);
+      })
+      txHashes.push(txHash)
     }
 
     logger.info(
       `Emergency closed all positions for NPC ${actorId}`,
       { positionsClosed: txHashes.length },
-      'NPCOnChainTradingService'
-    );
+      'NPCOnChainTradingService',
+    )
 
-    return { positionsClosed: txHashes.length, txHashes };
+    return { positionsClosed: txHashes.length, txHashes }
   }
 }
 
@@ -556,21 +556,23 @@ export class NPCOnChainTradingService {
 // SINGLETON
 // =============================================================================
 
-let npcOnChainTradingService: NPCOnChainTradingService | null = null;
+let npcOnChainTradingService: NPCOnChainTradingService | null = null
 
 export function getNPCOnChainTradingService(): NPCOnChainTradingService {
   if (!npcOnChainTradingService) {
-    npcOnChainTradingService = new NPCOnChainTradingService();
+    npcOnChainTradingService = new NPCOnChainTradingService()
   }
-  return npcOnChainTradingService;
+  return npcOnChainTradingService
 }
 
-export async function initializeNPCOnChainTradingService(): Promise<NPCOnChainTradingService> {
-  const service = getNPCOnChainTradingService();
-  await service.initialize();
-  return service;
+export async function initializeNPCOnChainTradingService(
+  getPaymasterClient: () => PaymasterClient,
+): Promise<NPCOnChainTradingService> {
+  const service = getNPCOnChainTradingService()
+  await service.initialize(getPaymasterClient)
+  return service
 }
 
 export function resetNPCOnChainTradingService(): void {
-  npcOnChainTradingService = null;
+  npcOnChainTradingService = null
 }

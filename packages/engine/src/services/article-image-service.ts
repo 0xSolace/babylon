@@ -1,60 +1,73 @@
 /**
  * Article Image Generation Service
  *
- * Generates cover images for articles using fal.ai's Flux AI models.
- * Images are uploaded to storage and URLs are returned for database storage.
+ * Generates cover images for articles using Jeju Compute's decentralized
+ * image generation models. Falls back gracefully when not available.
  */
 
-import { logger } from '@babylon/shared';
-import { fal } from '@fal-ai/client';
-import { articleCover, renderPrompt } from '../prompts';
+import { logger } from '@babylon/shared'
+import { articleCover, renderPrompt } from '../prompts'
 
-interface FalImage {
-  url: string;
-  width?: number;
-  height?: number;
-  content_type?: string;
-}
+// Port configuration via env var
+const COMPUTE_PORT = process.env.JEJU_COMPUTE_PORT ?? '5010'
 
-interface FalResponse {
-  data: {
-    images: FalImage[];
-  };
+/**
+ * Jeju Compute endpoint for image generation
+ * Uses decentralized compute marketplace for inference
+ */
+const JEJU_COMPUTE_ENDPOINT =
+  process.env.JEJU_COMPUTE_ENDPOINT ||
+  process.env.JEJU_DWS_ENDPOINT ||
+  (process.env.JEJU_NETWORK === 'mainnet'
+    ? 'https://compute.jeju.network'
+    : process.env.JEJU_NETWORK === 'testnet'
+      ? 'https://compute.testnet.jeju.network'
+      : `http://localhost:${COMPUTE_PORT}`)
+
+interface JejuImageResponse {
+  id: string
+  images: Array<{
+    url: string
+    width?: number
+    height?: number
+  }>
 }
 
 interface ArticleImageParams {
-  title: string;
-  summary: string;
-  category?: string;
+  title: string
+  summary: string
+  category?: string
 }
 
 /**
- * Initialize the fal.ai client with API key
- * Should be called once at startup
+ * Initialize the image generation client
+ * With Jeju Compute, no explicit initialization needed - it's stateless
  */
 export function initFalClient(): boolean {
-  const falKey = process.env.FAL_KEY;
-  if (!falKey) {
+  // Jeju Compute doesn't need explicit initialization
+  // Return true if we have a configured endpoint
+  const available = isImageGenerationAvailable()
+  if (!available) {
     logger.warn(
-      'FAL_KEY not found - article image generation disabled',
+      'Image generation disabled - JEJU_COMPUTE_ENDPOINT not configured',
       {},
-      'ArticleImageService'
-    );
-    return false;
+      'ArticleImageService',
+    )
   }
-
-  fal.config({
-    credentials: falKey,
-  });
-
-  return true;
+  return available
 }
 
 /**
  * Check if image generation is available
+ * Requires Jeju Compute endpoint to be configured
  */
 export function isImageGenerationAvailable(): boolean {
-  return Boolean(process.env.FAL_KEY);
+  // Available if we have a Jeju network configured or explicit endpoint
+  return !!(
+    process.env.JEJU_COMPUTE_ENDPOINT ||
+    process.env.JEJU_DWS_ENDPOINT ||
+    process.env.JEJU_NETWORK
+  )
 }
 
 /**
@@ -67,82 +80,104 @@ export function isImageGenerationAvailable(): boolean {
  * @returns URL of the generated image, or null if generation fails
  */
 export async function generateArticleImage(
-  params: ArticleImageParams
+  params: ArticleImageParams,
 ): Promise<string | null> {
   if (!isImageGenerationAvailable()) {
     logger.debug(
       'Skipping article image generation - FAL_KEY not available',
       { title: params.title },
-      'ArticleImageService'
-    );
-    return null;
+      'ArticleImageService',
+    )
+    return null
   }
 
   const prompt = renderPrompt(articleCover, {
     title: params.title,
     summary: params.summary,
     category: params.category || 'general',
-  });
+  })
 
   logger.debug(
-    'Generating article cover image',
+    'Generating article cover image via Jeju Compute',
     { title: params.title, category: params.category },
-    'ArticleImageService'
-  );
+    'ArticleImageService',
+  )
 
   // EXCEPTION TO FAIL-FAST RULE: External API boundary
   // Image generation is non-critical - failures should not crash the game tick.
   // This try-catch is intentional per PR #651 review to ensure best-effort behavior.
-  // fal.ai can fail for: network issues, rate limits, API changes, timeouts.
-  let result: FalResponse;
+  // Jeju Compute can fail for: network issues, provider unavailable, timeouts.
+  let result: JejuImageResponse
   try {
-    result = (await fal.subscribe('fal-ai/flux/schnell', {
-      input: {
-        prompt,
-        image_size: 'landscape_16_9',
-        num_inference_steps: 4,
-        num_images: 1,
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 30000)
+
+    const response = await fetch(
+      `${JEJU_COMPUTE_ENDPOINT}/v1/images/generations`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(process.env.JEJU_WALLET_ADDRESS && {
+            'x-jeju-address': process.env.JEJU_WALLET_ADDRESS,
+          }),
+        },
+        body: JSON.stringify({
+          model: 'stable-diffusion-xl',
+          prompt,
+          size: '1792x1024', // landscape 16:9
+          n: 1,
+          response_format: 'url',
+        }),
+        signal: controller.signal,
       },
-      logs: false,
-    })) as FalResponse;
+    )
+
+    clearTimeout(timeoutId)
+
+    if (!response.ok) {
+      throw new Error(`Jeju Compute error: ${response.status}`)
+    }
+
+    result = (await response.json()) as JejuImageResponse
   } catch (error) {
     logger.warn(
-      'fal.ai image generation failed (non-critical, continuing)',
+      'Jeju Compute image generation failed (non-critical, continuing)',
       {
         title: params.title,
         error: error instanceof Error ? error.message : String(error),
       },
-      'ArticleImageService'
-    );
-    return null;
+      'ArticleImageService',
+    )
+    return null
   }
 
-  if (!result.data.images || result.data.images.length === 0) {
+  if (!result.images || result.images.length === 0) {
     logger.error(
-      'No images returned from fal.ai',
+      'No images returned from Jeju Compute',
       { title: params.title },
-      'ArticleImageService'
-    );
-    return null;
+      'ArticleImageService',
+    )
+    return null
   }
 
-  const imageUrl = result.data.images[0]?.url;
+  const imageUrl = result.images[0]?.url
   if (!imageUrl) {
     logger.error(
-      'Image URL missing in fal.ai response',
+      'Image URL missing in Jeju Compute response',
       { title: params.title },
-      'ArticleImageService'
-    );
-    return null;
+      'ArticleImageService',
+    )
+    return null
   }
 
   logger.info(
-    'Generated article cover image',
+    'Generated article cover image via Jeju Compute',
     { title: params.title, imageUrl },
-    'ArticleImageService'
-  );
+    'ArticleImageService',
+  )
 
-  return imageUrl;
+  return imageUrl
 }
 
 /**
@@ -154,31 +189,29 @@ export async function generateArticleImage(
  */
 export async function generateArticleImageWithRetry(
   params: ArticleImageParams,
-  maxRetries = 2
+  maxRetries = 2,
 ): Promise<string | null> {
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    const imageUrl = await generateArticleImage(params);
+    const imageUrl = await generateArticleImage(params)
     if (imageUrl) {
-      return imageUrl;
+      return imageUrl
     }
 
     if (attempt < maxRetries) {
       logger.warn(
         `Article image generation attempt ${attempt + 1} failed, retrying...`,
         { title: params.title },
-        'ArticleImageService'
-      );
+        'ArticleImageService',
+      )
       // Wait before retry (exponential backoff)
-      await new Promise((resolve) =>
-        setTimeout(resolve, 1000 * Math.pow(2, attempt))
-      );
+      await new Promise((resolve) => setTimeout(resolve, 1000 * 2 ** attempt))
     }
   }
 
   logger.error(
     `Failed to generate article image after ${maxRetries + 1} attempts`,
     { title: params.title },
-    'ArticleImageService'
-  );
-  return null;
+    'ArticleImageService',
+  )
+  return null
 }

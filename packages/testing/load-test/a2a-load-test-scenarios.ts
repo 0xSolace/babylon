@@ -5,8 +5,8 @@
  * to stress test rate limiting and performance under load.
  */
 
-import type { JsonRpcParams } from '@babylon/a2a';
-import type { LoadTestConfig } from './load-test-simulator';
+import type { JsonRpcParams } from '@babylon/a2a'
+import type { LoadTestConfig } from './load-test-simulator'
 
 /**
  * Generate A2A request body for a given method
@@ -17,7 +17,7 @@ export function generateA2ARequest(method: string, params?: JsonRpcParams) {
     method,
     params: params || {},
     id: Math.floor(Math.random() * 1000000),
-  };
+  }
 }
 
 /**
@@ -29,7 +29,7 @@ export function getA2AHeaders(agentId = 'test-agent-1') {
     'x-agent-id': agentId,
     'x-agent-address': '0x1234567890123456789012345678901234567890',
     'x-agent-token-id': '1',
-  };
+  }
 }
 
 /**
@@ -69,7 +69,7 @@ export const A2A_METHODS = {
     method: 'a2a.paymentReceipt',
     params: { requestId: 'req-1', txHash: '0x...' },
   },
-} as const;
+} as const
 
 /**
  * Generate endpoint configuration for load testing
@@ -77,7 +77,7 @@ export const A2A_METHODS = {
 function generateA2AEndpoint(
   methodConfig: { method: string; params: JsonRpcParams },
   weight: number,
-  agentId = 'test-agent-1'
+  agentId = 'test-agent-1',
 ) {
   return {
     path: '/api/a2a',
@@ -85,7 +85,7 @@ function generateA2AEndpoint(
     weight,
     headers: getA2AHeaders(agentId),
     body: generateA2ARequest(methodConfig.method, methodConfig.params),
-  };
+  }
 }
 
 /**
@@ -102,7 +102,7 @@ export const A2A_LIGHT_SCENARIO: LoadTestConfig = {
     generateA2AEndpoint(A2A_METHODS.GET_MARKET_DATA, 0.25),
     generateA2AEndpoint(A2A_METHODS.GET_USER_WALLET, 0.2),
   ],
-};
+}
 
 /**
  * Normal A2A load test: 100 agents, mixed operations
@@ -121,7 +121,7 @@ export const A2A_NORMAL_SCENARIO: LoadTestConfig = {
     generateA2AEndpoint(A2A_METHODS.DISCOVER, 0.05),
     generateA2AEndpoint(A2A_METHODS.GET_INFO, 0.05),
   ],
-};
+}
 
 /**
  * Heavy A2A load test: 200 agents, stress test all endpoints
@@ -146,7 +146,7 @@ export const A2A_HEAVY_SCENARIO: LoadTestConfig = {
     generateA2AEndpoint(A2A_METHODS.GET_POSITIONS, 0.15),
     generateA2AEndpoint(A2A_METHODS.GET_USER_WALLET, 0.1),
   ],
-};
+}
 
 /**
  * Stress test: Test rate limiting with rapid requests
@@ -162,7 +162,7 @@ export const A2A_RATE_LIMIT_STRESS: LoadTestConfig = {
     generateA2AEndpoint(A2A_METHODS.GET_BALANCE, 0.5),
     generateA2AEndpoint(A2A_METHODS.GET_POSITIONS, 0.5),
   ],
-};
+}
 
 /**
  * All A2A test scenarios
@@ -172,4 +172,4 @@ export const A2A_TEST_SCENARIOS = {
   NORMAL: A2A_NORMAL_SCENARIO,
   HEAVY: A2A_HEAVY_SCENARIO,
   RATE_LIMIT: A2A_RATE_LIMIT_STRESS,
-} as const;
+} as const

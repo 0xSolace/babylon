@@ -6,43 +6,42 @@
  * Sessions expire after 24 hours and are automatically cleaned up.
  */
 
-import { logger } from '@babylon/shared';
+import { logger } from '@babylon/shared'
+import { getDevCredentials, isValidAgentSecret } from './dev-credentials'
+import { type AgentSessionData, parseAgentSession } from './utils/type-guards'
 
 /**
  * Agent session information
+ * @deprecated Use AgentSessionData from utils/type-guards instead
  */
-export interface AgentSession {
-  sessionToken: string;
-  agentId: string;
-  expiresAt: number;
-}
+export type AgentSession = AgentSessionData
 
 /**
  * Session store interface for pluggable storage backends
  */
 export interface SessionStore {
-  get(key: string): Promise<string | null>;
-  set(key: string, value: string, ttlMs: number): Promise<void>;
-  delete(key: string): Promise<void>;
+  get(key: string): Promise<string | null>
+  set(key: string, value: string, ttlMs: number): Promise<void>
+  delete(key: string): Promise<void>
 }
 
 // In-memory session storage (default fallback)
-const agentSessions = new Map<string, AgentSession>();
+const agentSessions = new Map<string, AgentSession>()
 
 // Session duration: 24 hours
-const SESSION_DURATION = 24 * 60 * 60 * 1000;
-const SESSION_PREFIX = 'agent:session:';
-const DEFAULT_TEST_AGENT_ID = 'babylon-agent-alice';
-const isProduction = process.env.NODE_ENV === 'production';
+const SESSION_DURATION = 24 * 60 * 60 * 1000
+const SESSION_PREFIX = 'agent:session:'
+const DEFAULT_TEST_AGENT_ID = 'babylon-agent-alice'
+const isProduction = process.env.NODE_ENV === 'production'
 
 // Configurable session store - defaults to in-memory
-let sessionStore: SessionStore | null = null;
+let sessionStore: SessionStore | null = null
 
 /**
  * Configure a custom session store (e.g., Redis)
  */
 export function setSessionStore(store: SessionStore | null): void {
-  sessionStore = store;
+  sessionStore = store
 }
 
 /**
@@ -50,23 +49,23 @@ export function setSessionStore(store: SessionStore | null): void {
  */
 const inMemoryStore: SessionStore = {
   async get(key: string): Promise<string | null> {
-    const session = agentSessions.get(key.replace(SESSION_PREFIX, ''));
-    return session ? JSON.stringify(session) : null;
+    const session = agentSessions.get(key.replace(SESSION_PREFIX, ''))
+    return session ? JSON.stringify(session) : null
   },
   async set(key: string, value: string, _ttlMs: number): Promise<void> {
-    const session = JSON.parse(value) as AgentSession;
-    agentSessions.set(key.replace(SESSION_PREFIX, ''), session);
+    const session = parseAgentSession(value)
+    agentSessions.set(key.replace(SESSION_PREFIX, ''), session)
   },
   async delete(key: string): Promise<void> {
-    agentSessions.delete(key.replace(SESSION_PREFIX, ''));
+    agentSessions.delete(key.replace(SESSION_PREFIX, ''))
   },
-};
+}
 
 /**
  * Get the current session store
  */
 function getStore(): SessionStore {
-  return sessionStore ?? inMemoryStore;
+  return sessionStore ?? inMemoryStore
 }
 
 /**
@@ -75,19 +74,21 @@ function getStore(): SessionStore {
 export function cleanupExpiredSessions(): void {
   if (sessionStore) {
     // External stores (Redis) handle expiration automatically
-    return;
+    return
   }
 
-  const now = Date.now();
-  const tokensToDelete: string[] = [];
+  const now = Date.now()
+  const tokensToDelete: string[] = []
 
   agentSessions.forEach((session, token) => {
     if (now > session.expiresAt) {
-      tokensToDelete.push(token);
+      tokensToDelete.push(token)
     }
-  });
+  })
 
-  tokensToDelete.forEach((token) => agentSessions.delete(token));
+  for (const token of tokensToDelete) {
+    agentSessions.delete(token)
+  }
 }
 
 /**
@@ -99,23 +100,19 @@ export function cleanupExpiredSessions(): void {
  */
 export function verifyAgentCredentials(
   agentId: string,
-  agentSecret: string
+  agentSecret: string,
 ): boolean {
   const configuredAgentId =
     process.env.BABYLON_AGENT_ID ??
-    (!isProduction ? DEFAULT_TEST_AGENT_ID : undefined);
+    (!isProduction ? DEFAULT_TEST_AGENT_ID : undefined)
 
   // Use separate AGENT_SECRET, fallback to CRON_SECRET for backwards compatibility
   const configuredAgentSecret =
-    process.env.AGENT_SECRET || process.env.CRON_SECRET;
+    process.env.AGENT_SECRET || process.env.CRON_SECRET
 
   // In development, also check dev credentials
   if (!isProduction) {
-    // Lazy import to avoid circular dependency
-    const { isValidAgentSecret, getDevCredentials } =
-      require('./dev-credentials') as typeof import('./dev-credentials');
-
-    const devCreds = getDevCredentials();
+    const devCreds = getDevCredentials()
     if (devCreds) {
       // In dev, accept either the default test agent or the dev credentials
       if (
@@ -123,7 +120,7 @@ export function verifyAgentCredentials(
           agentId === devCreds.adminUserId) &&
         isValidAgentSecret(agentSecret)
       ) {
-        return true;
+        return true
       }
     }
   }
@@ -133,21 +130,21 @@ export function verifyAgentCredentials(
     logger.error(
       'AGENT_SECRET (or CRON_SECRET) not configured in environment',
       undefined,
-      'AgentAuth'
-    );
-    return false;
+      'AgentAuth',
+    )
+    return false
   }
 
   if (!configuredAgentId) {
     logger.error(
       'BABYLON_AGENT_ID must be configured in production environments',
       undefined,
-      'AgentAuth'
-    );
-    return false;
+      'AgentAuth',
+    )
+    return false
   }
 
-  return agentId === configuredAgentId && agentSecret === configuredAgentSecret;
+  return agentId === configuredAgentId && agentSecret === configuredAgentSecret
 }
 
 /**
@@ -155,48 +152,48 @@ export function verifyAgentCredentials(
  */
 export async function createAgentSession(
   agentId: string,
-  sessionToken: string
+  sessionToken: string,
 ): Promise<AgentSession> {
-  const expiresAt = Date.now() + SESSION_DURATION;
+  const expiresAt = Date.now() + SESSION_DURATION
   const session: AgentSession = {
     sessionToken,
     agentId,
     expiresAt,
-  };
+  }
 
-  const store = getStore();
-  const key = `${SESSION_PREFIX}${sessionToken}`;
-  await store.set(key, JSON.stringify(session), SESSION_DURATION);
+  const store = getStore()
+  const key = `${SESSION_PREFIX}${sessionToken}`
+  await store.set(key, JSON.stringify(session), SESSION_DURATION)
 
-  return session;
+  return session
 }
 
 /**
  * Verify agent session token
  */
 export async function verifyAgentSession(
-  sessionToken: string
+  sessionToken: string,
 ): Promise<{ agentId: string } | null> {
-  const store = getStore();
-  const key = `${SESSION_PREFIX}${sessionToken}`;
+  const store = getStore()
+  const key = `${SESSION_PREFIX}${sessionToken}`
 
-  const stored = await store.get(key);
+  const stored = await store.get(key)
   if (stored) {
-    const session = JSON.parse(stored) as AgentSession;
+    const session = parseAgentSession(stored)
     if (Date.now() <= session.expiresAt) {
-      return { agentId: session.agentId };
+      return { agentId: session.agentId }
     }
     // Session expired - delete it
-    await store.delete(key);
-    return null;
+    await store.delete(key)
+    return null
   }
 
-  return null;
+  return null
 }
 
 /**
  * Get session duration in milliseconds
  */
 export function getSessionDuration(): number {
-  return SESSION_DURATION;
+  return SESSION_DURATION
 }

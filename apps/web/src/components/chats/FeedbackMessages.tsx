@@ -1,11 +1,9 @@
-'use client';
-
-import { AlertCircle, Check } from 'lucide-react';
+import { AlertCircle, Check } from 'lucide-react'
 
 interface FeedbackMessagesProps {
-  error: string | null;
-  warning: string | null;
-  success: boolean;
+  error: string | null
+  warning: string | null
+  success: boolean
 }
 
 export function FeedbackMessages({
@@ -14,7 +12,7 @@ export function FeedbackMessages({
   success,
 }: FeedbackMessagesProps) {
   if (!error && !warning && !success) {
-    return null;
+    return null
   }
 
   return (
@@ -38,5 +36,5 @@ export function FeedbackMessages({
         </div>
       )}
     </div>
-  );
+  )
 }

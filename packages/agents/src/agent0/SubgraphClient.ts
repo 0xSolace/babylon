@@ -5,104 +5,134 @@
  * Updated to match the actual Agent0 subgraph schema (agentId, metadata key-value pairs).
  */
 
-import { GraphQLClient } from 'graphql-request';
-import { parseCapabilities } from '../shared/capabilities';
+import { GraphQLClient } from 'graphql-request'
+import { parseCapabilities } from '../shared/capabilities'
 
 // Raw subgraph response structure
 interface RawSubgraphAgent {
-  id: string;
-  chainId: string;
-  agentId: string;
-  agentURI: string;
-  owner: string;
-  createdAt: string;
-  totalFeedback: number;
+  id: string
+  chainId: string
+  agentId: string
+  agentURI: string
+  owner: string
+  createdAt: string
+  totalFeedback: number
   metadata: Array<{
-    key: string;
-    value: string;
-  }>;
+    key: string
+    value: string
+  }>
+}
+
+/** Response type for GetAgent query */
+interface GetAgentResponse {
+  agents: RawSubgraphAgent[]
+}
+
+/** Response type for SearchAgents query */
+interface SearchAgentsResponse {
+  agents: RawSubgraphAgent[]
+}
+
+/** Type guard for GetAgent response */
+function isGetAgentResponse(data: unknown): data is GetAgentResponse {
+  return (
+    typeof data === 'object' &&
+    data !== null &&
+    'agents' in data &&
+    Array.isArray((data as GetAgentResponse).agents)
+  )
+}
+
+/** Type guard for SearchAgents response */
+function isSearchAgentsResponse(data: unknown): data is SearchAgentsResponse {
+  return (
+    typeof data === 'object' &&
+    data !== null &&
+    'agents' in data &&
+    Array.isArray((data as SearchAgentsResponse).agents)
+  )
 }
 
 // Transformed agent structure (backward compatible)
 export interface SubgraphAgent {
-  id: string;
-  tokenId: number;
-  name: string;
-  type?: string;
-  metadataCID: string;
-  walletAddress: string;
-  mcpEndpoint?: string;
-  a2aEndpoint?: string;
-  capabilities?: string; // JSON string
+  id: string
+  tokenId: number
+  name: string
+  type?: string
+  metadataCID: string
+  walletAddress: string
+  mcpEndpoint?: string
+  a2aEndpoint?: string
+  capabilities?: string // JSON string
   reputation?: {
-    totalBets: number;
-    winningBets: number;
-    trustScore: number;
-    accuracyScore: number;
-  };
+    totalBets: number
+    winningBets: number
+    trustScore: number
+    accuracyScore: number
+  }
   feedbacks?: Array<{
-    from: string;
-    rating: number;
-    comment: string;
-    timestamp: number;
-  }>;
+    from: string
+    rating: number
+    comment: string
+    timestamp: number
+  }>
 }
 
 export class SubgraphClient {
-  private client: GraphQLClient | null;
-  private isLocalnet: boolean;
+  private client: GraphQLClient | null
+  private isLocalnet: boolean
 
   constructor() {
-    const subgraphUrl = process.env.AGENT0_SUBGRAPH_URL;
-    const network = process.env.AGENT0_NETWORK || 'sepolia';
-    this.isLocalnet = network === 'localnet';
+    const subgraphUrl = process.env.AGENT0_SUBGRAPH_URL
+    const network = process.env.AGENT0_NETWORK || 'sepolia'
+    this.isLocalnet = network === 'localnet'
 
     if (!subgraphUrl) {
       // For localnet, subgraph might not be available - allow graceful degradation
       if (this.isLocalnet) {
-        this.client = null;
-        return;
+        this.client = null
+        return
       }
-      throw new Error('AGENT0_SUBGRAPH_URL environment variable is required');
+      throw new Error('AGENT0_SUBGRAPH_URL environment variable is required')
     }
 
     this.client = new GraphQLClient(subgraphUrl, {
       headers: {
         'Content-Type': 'application/json',
       },
-    });
+    })
   }
 
   /**
    * Parse metadata key-value pairs into an object
    */
   private parseMetadata(
-    metadata: Array<{ key: string; value: string }>
+    metadata: Array<{ key: string; value: string }>,
   ): Record<string, string> {
-    const result: Record<string, string> = {};
+    const result: Record<string, string> = {}
 
     for (const item of metadata) {
-      let decoded = item.value;
+      let decoded = item.value
       if (item.value.startsWith('0x')) {
-        decoded = Buffer.from(item.value.slice(2), 'hex').toString('utf8');
+        decoded = Buffer.from(item.value.slice(2), 'hex').toString('utf8')
       }
-      result[item.key] = decoded;
+      result[item.key] = decoded
     }
 
-    return result;
+    return result
   }
 
   /**
    * Transform raw subgraph agent to SubgraphAgent format
    */
   private transformAgent(raw: RawSubgraphAgent): SubgraphAgent {
-    const meta = this.parseMetadata(raw.metadata);
+    const meta = this.parseMetadata(raw.metadata)
 
-    let capabilities: string | undefined;
+    let capabilities: string | undefined
     if (meta.capabilities) {
-      const parsed = JSON.parse(meta.capabilities);
-      parseCapabilities(parsed); // Validate
-      capabilities = meta.capabilities;
+      const parsed = JSON.parse(meta.capabilities)
+      parseCapabilities(parsed) // Validate
+      capabilities = meta.capabilities
     }
 
     return {
@@ -117,7 +147,7 @@ export class SubgraphClient {
       capabilities,
       reputation: undefined,
       feedbacks: [],
-    };
+    }
   }
 
   /**
@@ -126,12 +156,12 @@ export class SubgraphClient {
   async getAgent(tokenId: number): Promise<SubgraphAgent> {
     if (!this.client) {
       throw new Error(
-        'Subgraph client not available (localnet mode or AGENT0_SUBGRAPH_URL not set)'
-      );
+        'Subgraph client not available (localnet mode or AGENT0_SUBGRAPH_URL not set)',
+      )
     }
 
     const query = `
-      query GetAgent($agentId: String!) {
+      query GetAgent($agentId: String) {
         agents(where: { agentId: $agentId }) {
           id
           chainId
@@ -146,35 +176,55 @@ export class SubgraphClient {
           }
         }
       }
-    `;
+    `
 
-    const data = (await this.client.request(query, {
+    const data = await this.client.request(query, {
       agentId: tokenId.toString(),
-    })) as { agents: RawSubgraphAgent[] };
+    })
 
-    return this.transformAgent(data.agents[0]!);
+    if (!isGetAgentResponse(data)) {
+      throw new Error('Invalid response from subgraph')
+    }
+
+    const agent = data.agents[0]
+    if (!agent) {
+      throw new Error(`Agent not found: ${tokenId}`)
+    }
+    return this.transformAgent(agent)
+  }
+
+  /**
+   * Safely parse capabilities JSON string
+   */
+  private safeParseCapabilities(
+    caps: string | undefined,
+  ): ReturnType<typeof parseCapabilities> {
+    if (!caps) {
+      return parseCapabilities({})
+    }
+    return parseCapabilities(JSON.parse(caps))
   }
 
   /**
    * Search agents by filters
    */
   async searchAgents(filters: {
-    type?: string;
-    strategies?: string[];
-    markets?: string[];
-    minTrustScore?: number;
-    limit?: number;
+    type?: string
+    strategies?: string[]
+    markets?: string[]
+    minTrustScore?: number
+    limit?: number
   }): Promise<SubgraphAgent[]> {
     if (!this.client) {
       // For localnet without subgraph, return empty array
-      return [];
+      return []
     }
 
-    const limit = filters.limit || 100;
+    const limit = filters.limit || 100
 
     // Query all agents, we'll filter in-memory since metadata is key-value
     const query = `
-      query SearchAgents($limit: Int!) {
+      query SearchAgents($limit: Int) {
         agents(
           first: $limit
           orderBy: agentId
@@ -193,45 +243,48 @@ export class SubgraphClient {
           }
         }
       }
-    `;
+    `
 
-    const data = (await this.client.request(query, { limit })) as {
-      agents: RawSubgraphAgent[];
-    };
-    let results = data.agents.map((raw) => this.transformAgent(raw));
+    const data = await this.client.request(query, { limit })
+
+    if (!isSearchAgentsResponse(data)) {
+      throw new Error('Invalid response from subgraph')
+    }
+
+    let results = data.agents.map((raw) => this.transformAgent(raw))
 
     // Filter by type
     if (filters.type) {
-      results = results.filter((agent) => agent.type === filters.type);
+      results = results.filter((agent) => agent.type === filters.type)
     }
 
     if (filters.strategies && filters.strategies.length > 0) {
       results = results.filter((agent) => {
-        const caps = JSON.parse(agent.capabilities!);
-        const parsed = parseCapabilities(caps);
-        const agentStrategies = parsed.strategies ?? [];
-        return filters.strategies!.some((s) => agentStrategies.includes(s));
-      });
+        if (!agent.capabilities) return false
+        const parsed = this.safeParseCapabilities(agent.capabilities)
+        const agentStrategies = parsed.strategies ?? []
+        return filters.strategies?.some((s) => agentStrategies.includes(s))
+      })
     }
 
     if (filters.markets && filters.markets.length > 0) {
       results = results.filter((agent) => {
-        const caps = JSON.parse(agent.capabilities!);
-        const parsed = parseCapabilities(caps);
-        const agentMarkets = parsed.markets ?? [];
-        return filters.markets!.some((m) => agentMarkets.includes(m));
-      });
+        if (!agent.capabilities) return false
+        const parsed = this.safeParseCapabilities(agent.capabilities)
+        const agentMarkets = parsed.markets ?? []
+        return filters.markets?.some((m) => agentMarkets.includes(m))
+      })
     }
 
-    return results;
+    return results
   }
 
   /**
    * Get all game platforms
    */
   async getGamePlatforms(filters?: {
-    markets?: string[];
-    minTrustScore?: number;
+    markets?: string[]
+    minTrustScore?: number
   }): Promise<SubgraphAgent[]> {
     // searchAgents already handles null client case
     return this.searchAgents({
@@ -239,7 +292,7 @@ export class SubgraphClient {
       markets: filters?.markets,
       minTrustScore: filters?.minTrustScore,
       limit: 50,
-    });
+    })
   }
 
   /**
@@ -247,17 +300,17 @@ export class SubgraphClient {
    */
   async getAgentFeedback(tokenId: number): Promise<
     Array<{
-      from: string;
-      rating: number;
-      comment: string;
-      timestamp: number;
+      from: string
+      rating: number
+      comment: string
+      timestamp: number
     }>
   > {
     if (!this.client) {
       // For localnet without subgraph, return empty array
-      return [];
+      return []
     }
-    const agent = await this.getAgent(tokenId);
-    return agent.feedbacks!;
+    const agent = await this.getAgent(tokenId)
+    return agent.feedbacks ?? []
   }
 }

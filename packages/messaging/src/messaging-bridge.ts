@@ -10,54 +10,65 @@
  * - Writes mirror to both during transition
  */
 
-import { type Address } from 'viem';
+import type { Address } from 'viem'
 import {
   type Conversation,
   getMessaging,
   type Message,
   type SendMessageRequest,
-} from './messaging';
+} from './messaging'
 
-export type MessagingMode = 'centralized' | 'decentralized' | 'hybrid';
+export type MessagingMode = 'centralized' | 'decentralized' | 'hybrid'
+
+const MESSAGING_MODES: readonly MessagingMode[] = [
+  'centralized',
+  'decentralized',
+  'hybrid',
+]
+
+function isMessagingMode(value: string): value is MessagingMode {
+  return MESSAGING_MODES.includes(value as MessagingMode)
+}
 
 interface BridgeConfig {
-  mode: MessagingMode;
-  mirrorToCentralized: boolean;
-  centralizedWriter?: CentralizedWriter;
-  onMessageSent?: (message: Message) => Promise<void>;
+  mode: MessagingMode
+  mirrorToCentralized: boolean
+  centralizedWriter?: CentralizedWriter
+  onMessageSent?: (message: Message) => Promise<void>
 }
 
 interface CentralizedWriter {
   createMessage: (data: {
-    id: string;
-    chatId: string;
-    senderId: string;
-    content: string;
-    createdAt: Date;
-  }) => Promise<void>;
-  updateChat: (chatId: string, lastMessageAt: Date) => Promise<void>;
+    id: string
+    chatId: string
+    senderId: string
+    content: string
+    createdAt: Date
+  }) => Promise<void>
+  updateChat: (chatId: string, lastMessageAt: Date) => Promise<void>
 }
 
 class MessagingBridge {
-  private config: BridgeConfig;
+  private config: BridgeConfig
 
   constructor(config?: Partial<BridgeConfig>) {
+    const envMode = process.env.MESSAGING_MODE
+    const mode: MessagingMode =
+      envMode && isMessagingMode(envMode) ? envMode : 'decentralized'
     this.config = {
       // Default to decentralized mode - use MESSAGING_MODE=centralized to disable
-      mode: (process.env.MESSAGING_MODE as MessagingMode) ?? 'decentralized',
+      mode,
       // Mirror to PostgreSQL for backward compatibility (disable with MIRROR_TO_CENTRALIZED=false)
       mirrorToCentralized: process.env.MIRROR_TO_CENTRALIZED !== 'false',
       ...config,
-    };
+    }
   }
 
   /**
    * Check if decentralized messaging is enabled
    */
   isDecentralizedEnabled(): boolean {
-    return (
-      this.config.mode === 'decentralized' || this.config.mode === 'hybrid'
-    );
+    return this.config.mode === 'decentralized' || this.config.mode === 'hybrid'
   }
 
   /**
@@ -69,16 +80,16 @@ class MessagingBridge {
     senderAddress: Address,
     content: string,
     options: {
-      recipientAddress?: Address;
-      messageType: 'dm' | 'group' | 'channel';
-      encrypt?: boolean;
-    }
+      recipientAddress?: Address
+      messageType: 'dm' | 'group' | 'channel'
+      encrypt?: boolean
+    },
   ): Promise<{ decentralized?: Message; centralizedId?: string }> {
-    const result: { decentralized?: Message; centralizedId?: string } = {};
+    const result: { decentralized?: Message; centralizedId?: string } = {}
 
     // Send to decentralized storage
     if (this.isDecentralizedEnabled()) {
-      const messaging = getMessaging();
+      const messaging = getMessaging()
       const request: SendMessageRequest = {
         conversationId: chatId,
         senderAddress,
@@ -86,13 +97,13 @@ class MessagingBridge {
         content,
         messageType: options.messageType,
         encrypt: options.encrypt,
-      };
+      }
 
-      result.decentralized = await messaging.sendMessage(request);
+      result.decentralized = await messaging.sendMessage(request)
 
       // Notify listeners
       if (this.config.onMessageSent) {
-        await this.config.onMessageSent(result.decentralized);
+        await this.config.onMessageSent(result.decentralized)
       }
     }
 
@@ -102,19 +113,19 @@ class MessagingBridge {
       this.config.mirrorToCentralized
     ) {
       if (this.config.centralizedWriter) {
-        const messageId = result.decentralized?.id ?? `msg-${Date.now()}`;
+        const messageId = result.decentralized?.id ?? `msg-${Date.now()}`
         await this.config.centralizedWriter.createMessage({
           id: messageId,
           chatId,
           senderId,
           content,
           createdAt: new Date(),
-        });
-        result.centralizedId = messageId;
+        })
+        result.centralizedId = messageId
       }
     }
 
-    return result;
+    return result
   }
 
   /**
@@ -122,19 +133,19 @@ class MessagingBridge {
    */
   async getMessages(
     chatId: string,
-    options: { limit?: number; before?: number } = {}
+    options: { limit?: number; before?: number } = {},
   ): Promise<Message[]> {
     if (!this.isDecentralizedEnabled()) {
       // Return empty - caller should use centralized query
-      return [];
+      return []
     }
 
-    const messaging = getMessaging();
+    const messaging = getMessaging()
     return messaging.getMessages({
       conversationId: chatId,
       limit: options.limit,
       before: options.before,
-    });
+    })
   }
 
   /**
@@ -142,14 +153,14 @@ class MessagingBridge {
    */
   async getOrCreateDM(
     user1Address: Address,
-    user2Address: Address
+    user2Address: Address,
   ): Promise<Conversation | null> {
     if (!this.isDecentralizedEnabled()) {
-      return null;
+      return null
     }
 
-    const messaging = getMessaging();
-    return messaging.getOrCreateDMConversation(user1Address, user2Address);
+    const messaging = getMessaging()
+    return messaging.getOrCreateDMConversation(user1Address, user2Address)
   }
 
   /**
@@ -157,11 +168,11 @@ class MessagingBridge {
    */
   async getPendingMessages(address: Address, limit = 100): Promise<Message[]> {
     if (!this.isDecentralizedEnabled()) {
-      return [];
+      return []
     }
 
-    const messaging = getMessaging();
-    return messaging.getPendingMessages(address, limit);
+    const messaging = getMessaging()
+    return messaging.getPendingMessages(address, limit)
   }
 
   /**
@@ -169,11 +180,11 @@ class MessagingBridge {
    */
   async markDelivered(messageId: string): Promise<void> {
     if (!this.isDecentralizedEnabled()) {
-      return;
+      return
     }
 
-    const messaging = getMessaging();
-    await messaging.updateDeliveryStatus(messageId, 'delivered');
+    const messaging = getMessaging()
+    await messaging.updateDeliveryStatus(messageId, 'delivered')
   }
 
   /**
@@ -181,11 +192,11 @@ class MessagingBridge {
    */
   async markRead(messageId: string): Promise<void> {
     if (!this.isDecentralizedEnabled()) {
-      return;
+      return
     }
 
-    const messaging = getMessaging();
-    await messaging.updateDeliveryStatus(messageId, 'read');
+    const messaging = getMessaging()
+    await messaging.updateDeliveryStatus(messageId, 'read')
   }
 
   /**
@@ -193,43 +204,43 @@ class MessagingBridge {
    */
   async getUserConversations(
     address: Address,
-    limit = 50
+    limit = 50,
   ): Promise<Conversation[]> {
     if (!this.isDecentralizedEnabled()) {
-      return [];
+      return []
     }
 
-    const messaging = getMessaging();
-    return messaging.getUserConversations(address, limit);
+    const messaging = getMessaging()
+    return messaging.getUserConversations(address, limit)
   }
 
   /**
    * Set the centralized writer for mirroring
    */
   setCentralizedWriter(writer: CentralizedWriter): void {
-    this.config.centralizedWriter = writer;
+    this.config.centralizedWriter = writer
   }
 
   /**
    * Set callback for message sent events
    */
   onMessageSent(callback: (message: Message) => Promise<void>): void {
-    this.config.onMessageSent = callback;
+    this.config.onMessageSent = callback
   }
 }
 
 // Singleton
-let bridge: MessagingBridge | null = null;
+let bridge: MessagingBridge | null = null
 
 export function getMessagingBridge(): MessagingBridge {
   if (!bridge) {
-    bridge = new MessagingBridge();
+    bridge = new MessagingBridge()
   }
-  return bridge;
+  return bridge
 }
 
 export function resetMessagingBridge(): void {
-  bridge = null;
+  bridge = null
 }
 
-export { MessagingBridge };
+export { MessagingBridge }

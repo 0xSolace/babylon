@@ -21,40 +21,40 @@
  * @packageDocumentation
  */
 
-import type { User } from '@babylon/db';
-import type { JsonValue } from '@babylon/shared';
-import type { IAgentRuntime } from '@elizaos/core';
+import type { User } from '@babylon/db'
+import type { JsonValue } from '@babylon/shared'
+import type { IAgentRuntime } from '@elizaos/core'
 
 /**
  * Parameters for creating an agent
  */
 export interface CreateAgentParams {
-  userId: string;
-  name: string;
-  description?: string;
-  profileImageUrl?: string;
-  coverImageUrl?: string;
-  system: string;
-  bio?: string[];
-  personality?: string;
-  tradingStrategy?: string;
-  initialDeposit?: number;
-  modelTier?: 'lite' | 'standard' | 'pro';
+  userId: string
+  name: string
+  description?: string
+  profileImageUrl?: string
+  coverImageUrl?: string
+  system: string
+  bio?: string[]
+  personality?: string
+  tradingStrategy?: string
+  initialDeposit?: number
+  modelTier?: 'lite' | 'standard' | 'pro'
 }
 
 /**
  * Interface for agent creation service
  */
 export interface IAgentService {
-  createAgent(params: CreateAgentParams): Promise<User>;
+  createAgent(params: CreateAgentParams): Promise<User>
 }
 
 /**
  * Interface for managing agent runtimes
  */
 export interface IAgentRuntimeManager {
-  getRuntime(agentId: string): Promise<IAgentRuntime>;
-  resetRuntime(agentId: string): Promise<void>;
+  getRuntime(agentId: string): Promise<IAgentRuntime>
+  resetRuntime(agentId: string): Promise<void>
 }
 
 /**
@@ -63,170 +63,170 @@ export interface IAgentRuntimeManager {
  * @note callGroqDirect is a legacy name maintained for compatibility
  */
 export interface ILLMCaller {
-  /** @deprecated Use callJejuDirect - this routes through Jeju Compute */
+  /** @deprecated Use callAgentLLM - this routes through Jeju Compute */
   callGroqDirect(params: {
-    prompt: string;
-    system: string;
-    modelSize?: 'small' | 'medium' | 'large';
-    temperature?: number;
-    maxTokens?: number;
-    actionType?: string;
-    responseFormat?: { type: 'json_object' };
-  }): Promise<string>;
+    prompt: string
+    system: string
+    modelSize?: 'small' | 'medium' | 'large'
+    temperature?: number
+    maxTokens?: number
+    actionType?: string
+    responseFormat?: { type: 'json_object' }
+  }): Promise<string>
 }
 
 /**
  * Export function type for trajectory data
  */
 export type ExportGroupedForGRPOFn = (options: {
-  outputPath: string;
-  minTrajectoriesPerGroup?: number;
-  maxGroupSize?: number;
+  outputPath: string
+  minTrajectoriesPerGroup?: number
+  maxGroupSize?: number
 }) => Promise<{
-  success: boolean;
-  groupsExported: number;
-  trajectoriesExported: number;
-  outputPath: string;
-  error?: string;
-}>;
+  success: boolean
+  groupsExported: number
+  trajectoriesExported: number
+  outputPath: string
+  error?: string
+}>
 
 /**
  * Export function type for HuggingFace
  */
 export type ExportToHuggingFaceFn = (options: {
-  datasetName: string;
-  trajectoryIds?: string[];
-  format?: 'parquet' | 'jsonl';
-}) => Promise<{ success: boolean; url?: string; error?: string }>;
+  datasetName: string
+  trajectoryIds?: string[]
+  format?: 'parquet' | 'jsonl'
+}) => Promise<{ success: boolean; url?: string; error?: string }>
 
 /**
  * Convert trajectory to training format messages
  */
 export type ToTrainingMessagesFn = (
-  trajectory: TrajectoryForTraining
-) => TrainingMessage[];
+  trajectory: TrajectoryForTraining,
+) => TrainingMessage[]
 
 /**
  * Rich trajectory type for training and RLAIF scoring
  */
 export interface TrajectoryForTraining {
-  trajectoryId: string;
-  agentId: string;
-  startTime: number;
-  endTime: number;
-  durationMs: number;
-  scenarioId?: string;
-  steps: TrajectoryStepForTraining[];
-  totalReward: number;
-  rewardComponents: Record<string, number>;
+  trajectoryId: string
+  agentId: string
+  startTime: number
+  endTime: number
+  durationMs: number
+  scenarioId?: string
+  steps: TrajectoryStepForTraining[]
+  totalReward: number
+  rewardComponents: Record<string, number>
   metrics: {
-    episodeLength: number;
-    finalStatus: string;
-    finalPnL?: number;
-  };
+    episodeLength: number
+    finalStatus: string
+    finalPnL?: number
+  }
   metadata: {
-    isTrainingData: boolean;
-    [key: string]: JsonValue;
-  };
+    isTrainingData: boolean
+    [key: string]: JsonValue
+  }
 }
 
 export interface TrajectoryStepForTraining {
-  stepId: string;
-  stepNumber: number;
-  timestamp: number;
+  stepId: string
+  stepNumber: number
+  timestamp: number
   environmentState: Record<string, JsonValue> & {
-    timestamp: number;
-    agentPoints: number;
-  };
-  observation: Record<string, JsonValue>;
+    timestamp: number
+    agentPoints: number
+  }
+  observation: Record<string, JsonValue>
   providerAccesses: Array<{
-    providerId: string;
-    providerName: string;
-    timestamp: number;
-    query: Record<string, JsonValue>;
-    data: Record<string, JsonValue>;
-    purpose: string;
-  }>;
+    providerId: string
+    providerName: string
+    timestamp: number
+    query: Record<string, JsonValue>
+    data: Record<string, JsonValue>
+    purpose: string
+  }>
   llmCalls: Array<{
-    callId: string;
-    timestamp: number;
-    model: string;
-    modelVersion?: string;
-    systemPrompt: string;
-    userPrompt: string;
-    response: string;
-    reasoning?: string;
-    temperature: number;
-    maxTokens: number;
-    latencyMs?: number;
-    purpose: 'action' | 'reasoning' | 'evaluation' | 'response' | 'other';
-    actionType?: string;
-  }>;
+    callId: string
+    timestamp: number
+    model: string
+    modelVersion?: string
+    systemPrompt: string
+    userPrompt: string
+    response: string
+    reasoning?: string
+    temperature: number
+    maxTokens: number
+    latencyMs?: number
+    purpose: 'action' | 'reasoning' | 'evaluation' | 'response' | 'other'
+    actionType?: string
+  }>
   action: {
-    attemptId: string;
-    timestamp: number;
-    actionType: string;
-    actionName: string;
-    parameters: Record<string, JsonValue>;
-    reasoning?: string;
-    success: boolean;
-    result?: Record<string, JsonValue>;
-    error?: string;
-  };
-  reward: number;
-  done: boolean;
-  metadata: Record<string, JsonValue>;
+    attemptId: string
+    timestamp: number
+    actionType: string
+    actionName: string
+    parameters: Record<string, JsonValue>
+    reasoning?: string
+    success: boolean
+    result?: Record<string, JsonValue>
+    error?: string
+  }
+  reward: number
+  done: boolean
+  metadata: Record<string, JsonValue>
 }
 
 export interface TrainingMessage {
-  role: 'system' | 'user' | 'assistant';
-  content: string;
+  role: 'system' | 'user' | 'assistant'
+  content: string
 }
 
 /**
  * Global configuration for external dependencies
  * This should be initialized before using the training package
  */
-let _agentService: IAgentService | null = null;
-let _agentRuntimeManager: IAgentRuntimeManager | null = null;
-let _autonomousCoordinator: IAutonomousCoordinator | null = null;
-let _llmCaller: ILLMCaller | null = null;
-let _exportGroupedForGRPO: ExportGroupedForGRPOFn | null = null;
-let _exportToHuggingFace: ExportToHuggingFaceFn | null = null;
-let _toTrainingMessages: ToTrainingMessagesFn | null = null;
+let _agentService: IAgentService | null = null
+let _agentRuntimeManager: IAgentRuntimeManager | null = null
+let _autonomousCoordinator: IAutonomousCoordinator | null = null
+let _llmCaller: ILLMCaller | null = null
+let _exportGroupedForGRPO: ExportGroupedForGRPOFn | null = null
+let _exportToHuggingFace: ExportToHuggingFaceFn | null = null
+let _toTrainingMessages: ToTrainingMessagesFn | null = null
 
 /**
  * Configure external dependencies
  */
 export function configureTrainingDependencies(config: {
-  agentService?: IAgentService;
-  agentRuntimeManager?: IAgentRuntimeManager;
-  autonomousCoordinator?: IAutonomousCoordinator;
-  llmCaller?: ILLMCaller;
-  exportGroupedForGRPO?: ExportGroupedForGRPOFn;
-  exportToHuggingFace?: ExportToHuggingFaceFn;
-  toTrainingMessages?: ToTrainingMessagesFn;
+  agentService?: IAgentService
+  agentRuntimeManager?: IAgentRuntimeManager
+  autonomousCoordinator?: IAutonomousCoordinator
+  llmCaller?: ILLMCaller
+  exportGroupedForGRPO?: ExportGroupedForGRPOFn
+  exportToHuggingFace?: ExportToHuggingFaceFn
+  toTrainingMessages?: ToTrainingMessagesFn
 }): void {
   if (config.agentService) {
-    _agentService = config.agentService;
+    _agentService = config.agentService
   }
   if (config.agentRuntimeManager) {
-    _agentRuntimeManager = config.agentRuntimeManager;
+    _agentRuntimeManager = config.agentRuntimeManager
   }
   if (config.autonomousCoordinator) {
-    _autonomousCoordinator = config.autonomousCoordinator;
+    _autonomousCoordinator = config.autonomousCoordinator
   }
   if (config.llmCaller) {
-    _llmCaller = config.llmCaller;
+    _llmCaller = config.llmCaller
   }
   if (config.exportGroupedForGRPO) {
-    _exportGroupedForGRPO = config.exportGroupedForGRPO;
+    _exportGroupedForGRPO = config.exportGroupedForGRPO
   }
   if (config.exportToHuggingFace) {
-    _exportToHuggingFace = config.exportToHuggingFace;
+    _exportToHuggingFace = config.exportToHuggingFace
   }
   if (config.toTrainingMessages) {
-    _toTrainingMessages = config.toTrainingMessages;
+    _toTrainingMessages = config.toTrainingMessages
   }
 }
 
@@ -237,10 +237,10 @@ export function configureTrainingDependencies(config: {
 export function getAgentService(): IAgentService {
   if (!_agentService) {
     throw new Error(
-      'AgentService not configured. Call configureTrainingDependencies() first.'
-    );
+      'AgentService not configured. Call configureTrainingDependencies() first.',
+    )
   }
-  return _agentService;
+  return _agentService
 }
 
 /**
@@ -250,10 +250,10 @@ export function getAgentService(): IAgentService {
 export function getAgentRuntimeManager(): IAgentRuntimeManager {
   if (!_agentRuntimeManager) {
     throw new Error(
-      'AgentRuntimeManager not configured. Call configureTrainingDependencies() first.'
-    );
+      'AgentRuntimeManager not configured. Call configureTrainingDependencies() first.',
+    )
   }
-  return _agentRuntimeManager;
+  return _agentRuntimeManager
 }
 
 /**
@@ -263,10 +263,10 @@ export function getAgentRuntimeManager(): IAgentRuntimeManager {
 export function getAutonomousCoordinator(): IAutonomousCoordinator {
   if (!_autonomousCoordinator) {
     throw new Error(
-      'AutonomousCoordinator not configured. Call configureTrainingDependencies() first.'
-    );
+      'AutonomousCoordinator not configured. Call configureTrainingDependencies() first.',
+    )
   }
-  return _autonomousCoordinator;
+  return _autonomousCoordinator
 }
 
 /**
@@ -276,10 +276,10 @@ export function getAutonomousCoordinator(): IAutonomousCoordinator {
 export function getLLMCaller(): ILLMCaller {
   if (!_llmCaller) {
     throw new Error(
-      'LLMCaller not configured. Call configureTrainingDependencies() first.'
-    );
+      'LLMCaller not configured. Call configureTrainingDependencies() first.',
+    )
   }
-  return _llmCaller;
+  return _llmCaller
 }
 
 /**
@@ -289,10 +289,10 @@ export function getLLMCaller(): ILLMCaller {
 export function getExportGroupedForGRPO(): ExportGroupedForGRPOFn {
   if (!_exportGroupedForGRPO) {
     throw new Error(
-      'exportGroupedForGRPO not configured. Call configureTrainingDependencies() first.'
-    );
+      'exportGroupedForGRPO not configured. Call configureTrainingDependencies() first.',
+    )
   }
-  return _exportGroupedForGRPO;
+  return _exportGroupedForGRPO
 }
 
 /**
@@ -302,10 +302,10 @@ export function getExportGroupedForGRPO(): ExportGroupedForGRPOFn {
 export function getExportToHuggingFace(): ExportToHuggingFaceFn {
   if (!_exportToHuggingFace) {
     throw new Error(
-      'exportToHuggingFace not configured. Call configureTrainingDependencies() first.'
-    );
+      'exportToHuggingFace not configured. Call configureTrainingDependencies() first.',
+    )
   }
-  return _exportToHuggingFace;
+  return _exportToHuggingFace
 }
 
 /**
@@ -315,10 +315,10 @@ export function getExportToHuggingFace(): ExportToHuggingFaceFn {
 export function getToTrainingMessages(): ToTrainingMessagesFn {
   if (!_toTrainingMessages) {
     throw new Error(
-      'toTrainingMessages not configured. Call configureTrainingDependencies() first.'
-    );
+      'toTrainingMessages not configured. Call configureTrainingDependencies() first.',
+    )
   }
-  return _toTrainingMessages;
+  return _toTrainingMessages
 }
 /**
  * Check if dependencies are configured
@@ -328,7 +328,7 @@ export function areDependenciesConfigured(): boolean {
     _agentService !== null &&
     _agentRuntimeManager !== null &&
     _autonomousCoordinator !== null
-  );
+  )
 }
 
 /**
@@ -339,7 +339,7 @@ export function areAgentDependenciesConfigured(): boolean {
     _agentService !== null &&
     _agentRuntimeManager !== null &&
     _autonomousCoordinator !== null
-  );
+  )
 }
 
 /**
@@ -349,18 +349,18 @@ export interface IAutonomousCoordinator {
   executeAutonomousTick(
     agentUserId: string,
     agentRuntime: IAgentRuntime,
-    recordTrajectories?: boolean
+    recordTrajectories?: boolean,
   ): Promise<{
-    success: boolean;
+    success: boolean
     actionsExecuted?: {
-      trades: number;
-      posts: number;
-      comments: number;
-      messages: number;
-      groupMessages: number;
-      engagements: number;
-    };
-    trajectoryId?: string;
-    error?: string;
-  }>;
+      trades: number
+      posts: number
+      comments: number
+      messages: number
+      groupMessages: number
+      engagements: number
+    }
+    trajectoryId?: string
+    error?: string
+  }>
 }

@@ -12,16 +12,35 @@
  * This ensures each post matches the character's unique voice and style.
  */
 
+import { EventEmitter } from 'node:events'
 import {
   ContentValidator,
   FeedPostSchema,
-  type JsonValue,
   logger,
-} from '@babylon/shared';
-import { EventEmitter } from 'events';
-import { generateActorContext } from './EmotionSystem';
-import type { WorldEvent } from './GameWorld';
-import type { BabylonLLMClient } from './llm/openai-client';
+  unwrapLLMResponse,
+} from '@babylon/shared'
+import { generateActorContext } from './EmotionSystem'
+import type { WorldEvent } from './GameWorld'
+
+/**
+ * Interface for LLM client used by FeedGenerator.
+ * Allows tests to provide mock implementations without casting.
+ */
+export interface FeedGeneratorLLMClient {
+  generateJSON<T>(
+    prompt: string,
+    schema?: { required?: string[]; properties?: Record<string, unknown> },
+    options?: {
+      model?: string
+      temperature?: number
+      maxTokens?: number
+      format?: 'xml' | 'json'
+      promptType?: string
+      promptTemplate?: string
+    },
+  ): Promise<T>
+}
+
 import {
   ambientPosts,
   analystReaction,
@@ -45,10 +64,10 @@ import {
   stockTicker,
   validateFeedPost,
   type WorldContext,
-} from './prompts';
-import { RelationshipEvolutionEngine } from './RelationshipEvolutionEngine';
-import { characterMappingService } from './services/character-mapping-service';
-import type { TrendingTopicsEngine } from './TrendingTopicsEngine';
+} from './prompts'
+import { RelationshipEvolutionEngine } from './RelationshipEvolutionEngine'
+import { characterMappingService } from './services/character-mapping-service'
+import type { TrendingTopicsEngine } from './TrendingTopicsEngine'
 import type {
   Actor,
   ActorConnection,
@@ -59,22 +78,21 @@ import type {
   Organization,
   PriceUpdate,
   Question,
-} from './types/shared';
+} from './types/shared'
 import {
   buildComprehensiveNPCContext,
   type ComprehensiveNPCContext,
   formatComprehensiveContext,
-} from './utils/context-builder';
-import { shuffleArray } from './utils/randomization';
+} from './utils/context-builder'
+import { shuffleArray } from './utils/randomization'
 import {
   buildCharacterFeedContext,
   buildPhaseContext,
   formatActorVoiceContext,
   formatCharacterInfoWithEntropy,
   rateLimitedParallel,
-} from './utils/shared-utils';
+} from './utils/shared-utils'
 
-// Re-export types for backwards compatibility with external consumers
 export type {
   Actor,
   ActorRelationship,
@@ -82,111 +100,80 @@ export type {
   FeedEvent,
   FeedPost,
   Organization,
-};
+}
 
 /**
  * Commentary post from LLM
  */
 interface CommentaryPost {
-  post?: string;
-  tweet?: string;
-  content?: string;
-  sentiment?: number;
-  clueStrength?: number;
-  pointsToward?: boolean | null;
+  post?: string
+  tweet?: string
+  content?: string
+  sentiment?: number
+  clueStrength?: number
+  pointsToward?: boolean | null
 }
-
-/**
- * Conspiracy post from LLM
- */
-interface ConspiracyPost {
-  post?: string;
-  tweet?: string;
-  content?: string;
-  sentiment?: number;
-  clueStrength?: number;
-  pointsToward?: boolean | null;
-}
-
-/**
- * Conspiracy response format 1: Direct array
- */
-interface ConspiracyResponseFormat1 {
-  conspiracy: ConspiracyPost[];
-}
-
-/**
- * Conspiracy response format 2: Wrapped in data array
- */
-interface ConspiracyResponseFormat2 {
-  data: Array<{ conspiracy: ConspiracyPost[] }>;
-}
-
-/**
- * Conspiracy response union type
- */
-type ConspiracyResponse = ConspiracyResponseFormat1 | ConspiracyResponseFormat2;
 
 /** Generates social media posts from world events using LLM-powered content. */
 export class FeedGenerator extends EventEmitter {
-  private llm?: BabylonLLMClient;
-  private actorStates: Map<string, ActorState> = new Map();
-  private relationships: ActorRelationship[] | ActorConnection[] = [];
-  private relationshipContextCache: Map<string, string> = new Map(); // Cache relationship prompts
-  private organizations: Organization[] = [];
-  private actorGroupContexts: Map<string, string> = new Map();
-  private worldContext: WorldContext | null = null;
+  private llm?: FeedGeneratorLLMClient
+  private actorStates: Map<string, ActorState> = new Map()
+  private relationships: ActorRelationship[] | ActorConnection[] = []
+  private relationshipContextCache: Map<string, string> = new Map() // Cache relationship prompts
+  private organizations: Organization[] = []
+  private actorGroupContexts: Map<string, string> = new Map()
+  private worldContext: WorldContext | null = null
   private _npcPersonas: Map<
     string,
     {
-      reliability: number;
-      insiderOrgs: string[];
-      willingToLie: boolean;
-      selfInterest: string;
+      reliability: number
+      insiderOrgs: string[]
+      willingToLie: boolean
+      selfInterest: string
     }
-  > = new Map();
-  private trendingTopics?: TrendingTopicsEngine;
-  private trendContext = '';
+  > = new Map()
+  private trendingTopics?: TrendingTopicsEngine
+  private trendContext = ''
 
   // Comprehensive context storage for rich NPC context
-  private _allPreviousEvents: WorldEvent[] = [];
-  private _allPreviousPosts: FeedPost[] = [];
-  private _questions: Question[] = [];
+  private _allPreviousEvents: WorldEvent[] = []
+  private _allPreviousPosts: FeedPost[] = []
+  private _questions: Question[] = []
 
   private static readonly EMOJI_REGEX =
-    /[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F900}-\u{1F9FF}\u{1FA70}-\u{1FAFF}]/gu;
+    /[\u{1F600}-\u{1F64F}\u{1F300}-\u{1F5FF}\u{1F680}-\u{1F6FF}\u{1F1E0}-\u{1F1FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\u{1F900}-\u{1F9FF}\u{1FA70}-\u{1FAFF}]/gu
 
   /** Strips hashtags/emojis, normalizes whitespace, replaces real names with parody names. */
   private async postProcessContent(content: string): Promise<string> {
-    let processed = content;
+    let processed = content
 
     // 1. Strip hashtags (LLMs love to add them despite instructions)
-    const hashtagMatches = processed.match(/#\w+/g);
+    const hashtagMatches = processed.match(/#\w+/g)
     if (hashtagMatches && hashtagMatches.length > 0) {
       logger.debug(
         `Stripping ${hashtagMatches.length} hashtag(s) from content`,
         { hashtags: hashtagMatches.join(', ') },
-        'FeedGenerator'
-      );
-      processed = processed.replace(/#\w+/g, '');
+        'FeedGenerator',
+      )
+      processed = processed.replace(/#\w+/g, '')
     }
 
     // 2. Strip emojis
-    const emojiMatches = processed.match(FeedGenerator.EMOJI_REGEX);
+    const emojiMatches = processed.match(FeedGenerator.EMOJI_REGEX)
     if (emojiMatches && emojiMatches.length > 0) {
       logger.debug(
         `Stripping ${emojiMatches.length} emoji(s) from content`,
         { emojis: emojiMatches.join('') },
-        'FeedGenerator'
-      );
-      processed = processed.replace(FeedGenerator.EMOJI_REGEX, '');
+        'FeedGenerator',
+      )
+      processed = processed.replace(FeedGenerator.EMOJI_REGEX, '')
     }
 
     // 3. Normalize whitespace (multiple spaces → single space)
-    processed = processed.replace(/\s+/g, ' ').trim();
+    processed = processed.replace(/\s+/g, ' ').trim()
 
     // 4. Replace real names with parody names (existing functionality)
-    const transformed = await characterMappingService.transformText(processed);
+    const transformed = await characterMappingService.transformText(processed)
     if (transformed.replacementCount > 0) {
       logger.warn(
         `Fixed ${transformed.replacementCount} real name(s) in generated content`,
@@ -194,35 +181,35 @@ export class FeedGenerator extends EventEmitter {
           original: content.substring(0, 100),
           fixed: transformed.transformedText.substring(0, 100),
         },
-        'FeedGenerator'
-      );
+        'FeedGenerator',
+      )
     }
 
-    return transformed.transformedText;
+    return transformed.transformedText
   }
 
   private validatePostContent(
     content: string,
-    postType: keyof typeof CHARACTER_LIMITS
+    postType: keyof typeof CHARACTER_LIMITS,
   ): { isValid: boolean; cleanContent: string; violations: string[] } {
     const result = validateFeedPost(content, {
       maxLength: CHARACTER_LIMITS[postType],
       postType,
-    });
+    })
 
     if (!result.isValid) {
       logger.warn('Post validation failed', {
         violations: result.violations,
         postType,
         contentPreview: content.substring(0, 100),
-      });
+      })
     }
 
     return {
       isValid: result.isValid,
       cleanContent: content,
       violations: result.violations,
-    };
+    }
   }
 
   /**
@@ -234,9 +221,9 @@ export class FeedGenerator extends EventEmitter {
    * If LLM is not provided, generation methods will return empty arrays or throw.
    * In production, always provide an LLM client.
    */
-  constructor(llm?: BabylonLLMClient) {
-    super();
-    this.llm = llm;
+  constructor(llm?: FeedGeneratorLLMClient) {
+    super()
+    this.llm = llm
   }
 
   /**
@@ -258,7 +245,7 @@ export class FeedGenerator extends EventEmitter {
    * ```
    */
   setTrendingTopics(engine: TrendingTopicsEngine) {
-    this.trendingTopics = engine;
+    this.trendingTopics = engine
   }
 
   /**
@@ -276,20 +263,20 @@ export class FeedGenerator extends EventEmitter {
   updateTrendContext() {
     if (!this.trendingTopics) {
       // Safe default - compact format
-      this.trendContext = 'TRENDING TOPICS: (not initialized)';
-      return;
+      this.trendContext = 'TRENDING TOPICS: (not initialized)'
+      return
     }
 
-    const context = this.trendingTopics.getDetailedTrendContext();
+    const context = this.trendingTopics.getDetailedTrendContext()
 
     // Validate context is never empty
     if (!context || context.trim().length === 0) {
       throw new Error(
-        'TrendingTopicsEngine returned empty context - this should never happen'
-      );
+        'TrendingTopicsEngine returned empty context - this should never happen',
+      )
     }
 
-    this.trendContext = context;
+    this.trendContext = context
   }
 
   /**
@@ -314,7 +301,7 @@ export class FeedGenerator extends EventEmitter {
    * ```
    */
   setActorGroupContexts(contexts: Map<string, string>) {
-    this.actorGroupContexts = contexts;
+    this.actorGroupContexts = contexts
   }
 
   /**
@@ -330,7 +317,7 @@ export class FeedGenerator extends EventEmitter {
    * Called once during GameEngine initialization.
    */
   setOrganizations(organizations: Organization[]) {
-    this.organizations = organizations || [];
+    this.organizations = organizations || []
   }
 
   /**
@@ -361,14 +348,14 @@ export class FeedGenerator extends EventEmitter {
     personas: Map<
       string,
       {
-        reliability: number;
-        insiderOrgs: string[];
-        willingToLie: boolean;
-        selfInterest: string;
+        reliability: number
+        insiderOrgs: string[]
+        willingToLie: boolean
+        selfInterest: string
       }
-    >
+    >,
   ) {
-    this._npcPersonas = personas;
+    this._npcPersonas = personas
   }
 
   /**
@@ -393,18 +380,16 @@ export class FeedGenerator extends EventEmitter {
    * ```
    */
   setActorStates(states: Map<string, ActorState>) {
-    this.actorStates = states;
+    this.actorStates = states
   }
 
   /**
    * Set relationships between actors
    *
-   * @param relationships - Array of actor relationships (supports both formats)
+   * @param relationships - Array of actor relationships
    *
    * @description
    * Relationships affect how actors reference each other in posts and reactions.
-   * Supports both ActorRelationship (new) and deprecated ActorConnection formats
-   * for backward compatibility.
    *
    * **Relationship Effects:**
    * - Rivals: Critical, competitive posts
@@ -415,9 +400,9 @@ export class FeedGenerator extends EventEmitter {
    * Called once during GameEngine initialization and updated as relationships evolve.
    */
   setRelationships(relationships: ActorRelationship[] | ActorConnection[]) {
-    this.relationships = relationships;
+    this.relationships = relationships
     // Clear cache when relationships are updated
-    this.relationshipContextCache.clear();
+    this.relationshipContextCache.clear()
   }
 
   /**
@@ -427,17 +412,20 @@ export class FeedGenerator extends EventEmitter {
   async getActorRelationships(actorId: string): Promise<string> {
     // Check cache first (efficient - no database query)
     if (this.relationshipContextCache.has(actorId)) {
-      return this.relationshipContextCache.get(actorId)!;
+      const cached = this.relationshipContextCache.get(actorId)
+      if (cached !== undefined) {
+        return cached
+      }
     }
 
     // Fetch from database (only if not cached)
-    const engine = new RelationshipEvolutionEngine();
-    const context = await engine.getRelationshipContextForActor(actorId);
+    const engine = new RelationshipEvolutionEngine()
+    const context = await engine.getRelationshipContextForActor(actorId)
 
     // Cache it (subsequent calls are instant)
-    this.relationshipContextCache.set(actorId, context);
+    this.relationshipContextCache.set(actorId, context)
 
-    return context;
+    return context
   }
 
   /**
@@ -450,52 +438,51 @@ export class FeedGenerator extends EventEmitter {
   private async buildRichCharacterContext(
     actor: Actor,
     day: number,
-    _currentEvents: WorldEvent[] = []
+    _currentEvents: WorldEvent[] = [],
   ): Promise<{
-    characterInfo: string;
-    comprehensiveContext: ComprehensiveNPCContext;
+    characterInfo: string
+    comprehensiveContext: ComprehensiveNPCContext
   }> {
-    const state = this.actorStates.get(actor.id);
+    const state = this.actorStates.get(actor.id)
     const emotionalContext = state
       ? generateActorContext(
           state.mood,
           state.luck,
           undefined,
           this.relationships,
-          actor.id
+          actor.id,
         )
-      : '';
+      : ''
 
-    const persona = this._npcPersonas.get(actor.id);
+    const persona = this._npcPersonas.get(actor.id)
 
     const comprehensiveContext = await buildComprehensiveNPCContext(
       actor,
       day,
       this._allPreviousEvents,
       this._allPreviousPosts,
-      this._questions
-    );
+      this._questions,
+    )
 
     // Format relationship context string for character info
     const relationshipContextStr =
       comprehensiveContext.relationships
         ?.map(
           (r) =>
-            `${r.strength} ${r.type} with ${r.otherActorName} (${r.sentiment})${r.history ? ` - ${r.history}` : ''}`
+            `${r.strength} ${r.type} with ${r.otherActorName} (${r.sentiment})${r.history ? ` - ${r.history}` : ''}`,
         )
-        .join('\n') || '';
+        .join('\n') || ''
 
     // Format position context string for character info
     const positionsContextStr =
       comprehensiveContext.marketPositions
         ?.map(
           (p) =>
-            `${p.market}: ${p.side}${p.pnl !== undefined ? ` (${p.pnl >= 0 ? '+' : ''}${p.pnl.toFixed(2)})` : ''}`
+            `${p.market}: ${p.side}${p.pnl !== undefined ? ` (${p.pnl >= 0 ? '+' : ''}${p.pnl.toFixed(2)})` : ''}`,
         )
-        .join('\n') || '';
+        .join('\n') || ''
 
     // Format character info with ALL available actor data
-    const actorPersona = actor.persona || (persona as typeof actor.persona);
     const characterInfo = formatCharacterInfoWithEntropy({
       name: actor.name,
       description: actor.description || undefined,
@@ -507,30 +494,48 @@ export class FeedGenerator extends EventEmitter {
       personality: actor.personality || undefined,
       affiliations: actor.affiliations || undefined,
       tier: actor.tier || undefined,
-      persona: actorPersona
+      persona: actor.persona
         ? {
-            reliability: actorPersona.reliability,
-            expertise: actorPersona.expertise,
-            willingToLie: actorPersona.willingToLie,
-            selfInterest: actorPersona.selfInterest,
-            favorsActors: actorPersona.favorsActors,
-            opposesActors: actorPersona.opposesActors,
-            favorsOrgs: actorPersona.favorsOrgs,
-            opposesOrgs: actorPersona.opposesOrgs,
+            // Use actor.persona directly - it has the full type
+            // Coerce array fields that may come as {} from DB to proper arrays
+            reliability: actor.persona.reliability,
+            expertise: Array.isArray(actor.persona.expertise)
+              ? actor.persona.expertise
+              : undefined,
+            willingToLie: actor.persona.willingToLie,
+            selfInterest: actor.persona.selfInterest,
+            favorsActors: Array.isArray(actor.persona.favorsActors)
+              ? actor.persona.favorsActors
+              : undefined,
+            opposesActors: Array.isArray(actor.persona.opposesActors)
+              ? actor.persona.opposesActors
+              : undefined,
+            favorsOrgs: Array.isArray(actor.persona.favorsOrgs)
+              ? actor.persona.favorsOrgs
+              : undefined,
+            opposesOrgs: Array.isArray(actor.persona.opposesOrgs)
+              ? actor.persona.opposesOrgs
+              : undefined,
           }
         : persona
           ? {
+              // persona from _npcPersonas has limited fields
               reliability: persona.reliability,
-              expertise: (persona as { expertise?: string[] }).expertise,
+              willingToLie: persona.willingToLie,
+              selfInterest: persona.selfInterest as
+                | 'wealth'
+                | 'reputation'
+                | 'ideology'
+                | 'chaos',
             }
           : undefined,
       emotionalContext: emotionalContext || undefined,
       trackRecord: actor.trackRecord || undefined,
       relationshipContext: relationshipContextStr || undefined,
       currentPositions: positionsContextStr || undefined,
-    });
+    })
 
-    return { characterInfo, comprehensiveContext };
+    return { characterInfo, comprehensiveContext }
   }
 
   /**
@@ -600,75 +605,70 @@ export class FeedGenerator extends EventEmitter {
     worldEvents: WorldEvent[],
     allActors: Actor[],
     options?: {
-      allPreviousEvents?: WorldEvent[];
-      allPreviousPosts?: FeedPost[];
-      questions?: Question[];
-    }
+      allPreviousEvents?: WorldEvent[]
+      allPreviousPosts?: FeedPost[]
+      questions?: Question[]
+    },
   ): Promise<FeedPost[]> {
     // Validate inputs using canonical validator (fail-fast)
-    ContentValidator.validateDayNumber(day, 'generateDayFeed');
-    ContentValidator.validateNotEmpty(
-      allActors,
-      'allActors in generateDayFeed'
-    );
+    ContentValidator.validateDayNumber(day, 'generateDayFeed')
+    ContentValidator.validateNotEmpty(allActors, 'allActors in generateDayFeed')
 
-    const feed: FeedPost[] = [];
+    const feed: FeedPost[] = []
 
     // Generate world context once per day for all prompts
-    this.worldContext = await generateWorldContext({ maxActors: 50 });
+    this.worldContext = await generateWorldContext({ maxActors: 50 })
 
     // Store context for per-character generation
-    this._allPreviousEvents = options?.allPreviousEvents || [];
-    this._allPreviousPosts = options?.allPreviousPosts || [];
-    this._questions = options?.questions || [];
+    this._allPreviousEvents = options?.allPreviousEvents || []
+    this._allPreviousPosts = options?.allPreviousPosts || []
+    this._questions = options?.questions || []
 
     // Derive outcome from events for narrative coherence (not from parameter)
     // Uses majority of event hints to determine overall direction
-    const yesEvents = worldEvents.filter(
-      (e) => e.pointsToward === 'YES'
-    ).length;
-    const noEvents = worldEvents.filter((e) => e.pointsToward === 'NO').length;
-    const derivedOutcome = yesEvents > noEvents;
+    const yesEvents = worldEvents.filter((e) => e.pointsToward === 'YES').length
+    const noEvents = worldEvents.filter((e) => e.pointsToward === 'NO').length
+    const derivedOutcome = yesEvents > noEvents
 
     // For each world event, generate cascading reactions
     for (let eventIndex = 0; eventIndex < worldEvents.length; eventIndex++) {
-      const worldEvent = worldEvents[eventIndex];
-      if (!worldEvent) continue; // Skip if event doesn't exist
+      const worldEvent = worldEvents[eventIndex]
+      if (!worldEvent) continue // Skip if event doesn't exist
       const eventFeed = await this.generateEventCascade(
         day,
         worldEvent,
         allActors,
         derivedOutcome,
-        eventIndex
-      );
-      feed.push(...eventFeed);
+        eventIndex,
+      )
+      feed.push(...eventFeed)
     }
 
     // Add some standalone commentary unrelated to specific events
     const ambientNoise = await this.generateAmbientFeed(
       day,
       allActors,
-      derivedOutcome
-    );
-    feed.push(...ambientNoise);
+      derivedOutcome,
+    )
+    feed.push(...ambientNoise)
 
     // Generate replies (30-50% of existing posts get replies)
-    const replies = await this.generateReplies(day, feed, allActors);
-    feed.push(...replies);
+    const replies = await this.generateReplies(day, feed, allActors)
+    feed.push(...replies)
 
     // Generate reposts (10-20% of existing posts get reposted)
-    const reposts = await this.generateReposts(day, feed, allActors);
-    feed.push(...reposts);
+    const reposts = await this.generateReposts(day, feed, allActors)
+    feed.push(...reposts)
 
     // Sort by timestamp for realistic feed flow
     const sortedFeed = feed.sort((a, b) =>
-      a.timestamp.localeCompare(b.timestamp)
-    );
+      a.timestamp.localeCompare(b.timestamp),
+    )
 
     // Clear world context after generation
-    this.worldContext = null;
+    this.worldContext = null
 
-    return sortedFeed;
+    return sortedFeed
   }
 
   /**
@@ -681,12 +681,12 @@ export class FeedGenerator extends EventEmitter {
     worldEvent: WorldEvent,
     allActors: Actor[],
     outcome: boolean,
-    eventIndex = 0
+    eventIndex = 0,
   ): Promise<FeedPost[]> {
-    const cascade: FeedPost[] = [];
-    const baseTime = `2025-10-${String(day).padStart(2, '0')}T`;
+    const cascade: FeedPost[] = []
+    const baseTime = `2025-10-${String(day).padStart(2, '0')}T`
     // Offset hours based on event index so each event's posts are at different times
-    const baseHourOffset = eventIndex * 4; // Events spaced 4 hours apart
+    const baseHourOffset = eventIndex * 4 // Events spaced 4 hours apart
 
     // 1. MEDIA ORGANIZATIONS BREAK THE STORY (if public event) - BATCHED
     if (
@@ -695,36 +695,37 @@ export class FeedGenerator extends EventEmitter {
     ) {
       const mediaOrgs = this.organizations
         .filter((o) => o.type === 'media')
-        .slice(0, 2);
+        .slice(0, 2)
       const journalists = allActors
         .filter(
-          (a) => a.domain?.includes('media') || a.domain?.includes('journalism')
+          (a) =>
+            a.domain?.includes('media') || a.domain?.includes('journalism'),
         )
-        .slice(0, 1);
+        .slice(0, 1)
 
       // ✅ BATCH: All media + journalists in ONE call
-      const allMediaActors = [...mediaOrgs, ...journalists];
+      const allMediaActors = [...mediaOrgs, ...journalists]
       if (allMediaActors.length > 0) {
         const mediaPosts = await this.generateMediaPostsBatch(
           allMediaActors,
           worldEvent,
           allActors,
-          outcome
-        );
+          outcome,
+        )
 
         mediaPosts.forEach((post, i) => {
-          const isOrg = i < mediaOrgs.length;
+          const isOrg = i < mediaOrgs.length
           const entity = isOrg
             ? mediaOrgs[i]
-            : journalists[i - mediaOrgs.length];
-          if (!entity) return; // Skip if entity doesn't exist
+            : journalists[i - mediaOrgs.length]
+          if (!entity) return // Skip if entity doesn't exist
 
           // Fail-fast: Validate required fields using canonical validator
           ContentValidator.validatePostContent(
             post.post,
-            `media post from ${entity.name}`
-          );
-          ContentValidator.validateEntityName(entity.name, `media entity ${i}`);
+            `media post from ${entity.name}`,
+          )
+          ContentValidator.validateEntityName(entity.name, `media entity ${i}`)
 
           cascade.push({
             id: `${worldEvent.id}-${isOrg ? 'media' : 'news'}-${i}`,
@@ -738,15 +739,15 @@ export class FeedGenerator extends EventEmitter {
             sentiment: post.sentiment ?? 0,
             clueStrength: post.clueStrength ?? 0,
             pointsToward: post.pointsToward ?? null,
-          });
-        });
+          })
+        })
       }
     }
 
     // 2. INVOLVED PARTIES REACT - BATCHED
     const involvedActors = worldEvent.actors
       .map((id) => allActors.find((a) => a.id === id))
-      .filter((a): a is Actor => a !== undefined);
+      .filter((a): a is Actor => a !== undefined)
 
     if (involvedActors.length > 0) {
       // ✅ PER-CHARACTER: Generate reactions individually with full context
@@ -756,27 +757,27 @@ export class FeedGenerator extends EventEmitter {
             actor,
             worldEvent,
             outcome,
-            day
-          );
-          return result;
-        }
-      );
+            day,
+          )
+          return result
+        },
+      )
 
-      const reactionResults = await rateLimitedParallel(reactionTasks, 5, 100);
+      const reactionResults = await rateLimitedParallel(reactionTasks, 5, 100)
       const reactions = reactionResults.filter(
-        (r): r is NonNullable<typeof r> => r !== null
-      );
+        (r): r is NonNullable<typeof r> => r !== null,
+      )
 
       // Collect companies that need to respond
       const companiesToRespond: Array<{
-        company: Organization;
-        actor: Actor;
-        index: number;
-      }> = [];
+        company: Organization
+        actor: Actor
+        index: number
+      }> = []
 
       reactions.forEach((reaction, i) => {
-        const actor = involvedActors[i];
-        if (!actor) return; // Skip if actor doesn't exist
+        const actor = involvedActors[i]
+        if (!actor) return // Skip if actor doesn't exist
 
         cascade.push({
           id: `${worldEvent.id}-reaction-${actor.id}`,
@@ -790,21 +791,21 @@ export class FeedGenerator extends EventEmitter {
           sentiment: reaction.sentiment,
           clueStrength: reaction.clueStrength,
           pointsToward: reaction.pointsToward,
-        });
+        })
 
         // Collect company affiliations for batch processing
         if (actor.affiliations) {
           const affiliatedCompanies = this.organizations
             .filter(
-              (o) => o.type === 'company' && actor.affiliations?.includes(o.id)
+              (o) => o.type === 'company' && actor.affiliations?.includes(o.id),
             )
-            .slice(0, 1); // Usually just one company responds per actor
+            .slice(0, 1) // Usually just one company responds per actor
 
           affiliatedCompanies.forEach((company) => {
-            companiesToRespond.push({ company, actor, index: i });
-          });
+            companiesToRespond.push({ company, actor, index: i })
+          })
         }
-      });
+      })
 
       // Process company responses (usually 0-2 per event, so batching would be minimal gain)
       // Using sequential processing to maintain proper async/await
@@ -813,8 +814,8 @@ export class FeedGenerator extends EventEmitter {
           company,
           worldEvent,
           actor,
-          outcome
-        );
+          outcome,
+        )
 
         cascade.push({
           id: `${worldEvent.id}-company-${company.id}`,
@@ -828,7 +829,7 @@ export class FeedGenerator extends EventEmitter {
           sentiment: companyPost.sentiment,
           clueStrength: companyPost.clueStrength,
           pointsToward: companyPost.pointsToward,
-        });
+        })
       }
     }
 
@@ -836,15 +837,15 @@ export class FeedGenerator extends EventEmitter {
     if (worldEvent.type === 'scandal' || worldEvent.type === 'revelation') {
       const govOrgs = this.organizations
         .filter((o) => o.type === 'government')
-        .slice(0, 1);
+        .slice(0, 1)
 
       for (const gov of govOrgs) {
         const govPost = await this.generateGovernmentPost(
           gov,
           worldEvent,
           allActors,
-          outcome
-        );
+          outcome,
+        )
 
         cascade.push({
           id: `${worldEvent.id}-govt-${gov.id}`,
@@ -858,7 +859,7 @@ export class FeedGenerator extends EventEmitter {
           sentiment: govPost.sentiment,
           clueStrength: govPost.clueStrength,
           pointsToward: govPost.pointsToward,
-        });
+        })
       }
     }
 
@@ -869,9 +870,9 @@ export class FeedGenerator extends EventEmitter {
           !worldEvent.actors.includes(a.id) && // Not directly involved
           (a.domain?.includes('tech') ||
             a.domain?.includes('policy') ||
-            a.role === 'supporting')
+            a.role === 'supporting'),
       )
-      .slice(0, 2);
+      .slice(0, 2)
 
     if (commentators.length > 0) {
       // ✅ PER-CHARACTER: Generate commentary individually for full context
@@ -879,9 +880,9 @@ export class FeedGenerator extends EventEmitter {
         const result = await this.generateCommentaryForCharacter(
           commentator,
           worldEvent,
-          day
-        );
-        if (!result) return null;
+          day,
+        )
+        if (!result) return null
 
         return {
           id: `${worldEvent.id}-expert-${i}`,
@@ -895,15 +896,15 @@ export class FeedGenerator extends EventEmitter {
           sentiment: result.sentiment,
           clueStrength: result.clueStrength,
           pointsToward: result.pointsToward,
-        };
-      });
+        }
+      })
 
-      const commentaryResults = await Promise.all(commentaryPromises);
+      const commentaryResults = await Promise.all(commentaryPromises)
       commentaryResults.forEach((result) => {
         if (result) {
-          cascade.push(result);
+          cascade.push(result)
         }
-      });
+      })
     }
 
     // 4. CONSPIRACISTS AND CONTRARIANS - BATCHED
@@ -912,9 +913,9 @@ export class FeedGenerator extends EventEmitter {
         (a) =>
           a.personality?.includes('contrarian') ||
           a.personality?.includes('paranoid') ||
-          a.description?.toLowerCase().includes('conspiracy')
+          a.description?.toLowerCase().includes('conspiracy'),
       )
-      .slice(0, 1 + Math.floor(Math.random() * 2)); // 1-2 conspiracy posts
+      .slice(0, 1 + Math.floor(Math.random() * 2)) // 1-2 conspiracy posts
 
     if (conspiracists.length > 0) {
       // ✅ PER-CHARACTER: Generate conspiracy posts individually with full context
@@ -923,23 +924,23 @@ export class FeedGenerator extends EventEmitter {
           const result = await this.generateConspiracyForCharacter(
             conspiracist,
             worldEvent,
-            day
-          );
-          return result;
-        }
-      );
+            day,
+          )
+          return result
+        },
+      )
 
       const conspiracyResults = await rateLimitedParallel(
         conspiracyTasks,
         5,
-        100
-      );
+        100,
+      )
       const conspiracyPosts = conspiracyResults.filter(
-        (c): c is NonNullable<typeof c> => c !== null
-      );
+        (c): c is NonNullable<typeof c> => c !== null,
+      )
 
       conspiracyPosts.forEach((post, i) => {
-        const actor = conspiracists[i % conspiracists.length];
+        const actor = conspiracists[i % conspiracists.length]
         if (actor) {
           cascade.push({
             id: `${worldEvent.id}-conspiracy-${i}`,
@@ -953,18 +954,18 @@ export class FeedGenerator extends EventEmitter {
             sentiment: post.sentiment,
             clueStrength: post.clueStrength,
             pointsToward: post.pointsToward,
-          });
+          })
         }
-      });
+      })
     }
 
     // 5. THREAD DEVELOPMENT - BATCHED
     if (cascade.length >= 2) {
-      const thread = await this.generateThread(day, cascade, allActors);
-      cascade.push(...thread);
+      const thread = await this.generateThread(day, cascade, allActors)
+      cascade.push(...thread)
     }
 
-    return cascade;
+    return cascade
   }
 
   /**
@@ -979,27 +980,27 @@ export class FeedGenerator extends EventEmitter {
     mediaEntities: (Organization | Actor)[],
     worldEvent: WorldEvent,
     allActors: Actor[],
-    outcome: boolean
+    outcome: boolean,
   ): Promise<
     Array<{
-      post: string;
-      sentiment: number;
-      clueStrength: number;
-      pointsToward: boolean | null;
+      post: string
+      sentiment: number
+      clueStrength: number
+      pointsToward: boolean | null
     }>
   > {
     if (!this.llm || mediaEntities.length === 0) {
-      return [];
+      return []
     }
 
     const potentialSource = allActors.find((a) =>
-      worldEvent.actors.includes(a.id)
-    );
+      worldEvent.actors.includes(a.id),
+    )
 
     // Format variables for prompt template
     const sourceContext = potentialSource
       ? `Sources close to ${potentialSource.name} leaked information.`
-      : '';
+      : ''
 
     // Frame based on event hint, enhanced with outcome knowledge for subtle guidance
     const baseFrame =
@@ -1007,44 +1008,44 @@ export class FeedGenerator extends EventEmitter {
         ? 'Frame with positive spin on this development'
         : worldEvent.pointsToward === 'NO'
           ? 'Emphasize problems and concerns'
-          : 'Report objectively - implications unclear';
+          : 'Report objectively - implications unclear'
 
     // Use outcome to add subtle directional guidance without being explicit
     const outcomeFrame = outcome
       ? `${baseFrame}. The underlying trend suggests positive momentum, but report objectively without stating conclusions.`
-      : `${baseFrame}. The underlying trend suggests challenges ahead, but report objectively without stating conclusions.`;
+      : `${baseFrame}. The underlying trend suggests challenges ahead, but report objectively without stating conclusions.`
 
     const mediaList = mediaEntities
       .map((entity, i) => {
-        const isOrg = 'type' in entity && entity.type === 'media';
-        const voiceContext = formatActorVoiceContext(entity);
-        let emotionalContext = '';
-        let personaContext = '';
+        const isOrg = 'type' in entity && entity.type === 'media'
+        const voiceContext = formatActorVoiceContext(entity)
+        let emotionalContext = ''
+        let personaContext = ''
 
         if (!isOrg && 'id' in entity) {
-          const state = this.actorStates.get(entity.id);
+          const state = this.actorStates.get(entity.id)
           emotionalContext = state
             ? generateActorContext(
                 state.mood,
                 state.luck,
                 undefined,
                 this.relationships,
-                entity.id
+                entity.id,
               )
-            : '';
+            : ''
 
-          const persona = this._npcPersonas.get(entity.id);
+          const persona = this._npcPersonas.get(entity.id)
           if (persona) {
-            personaContext = `Reliability: ${(persona.reliability * 100).toFixed(0)}%`;
+            personaContext = `Reliability: ${(persona.reliability * 100).toFixed(0)}%`
             if (persona.insiderOrgs.length > 0) {
-              personaContext += ` | Insider at: ${persona.insiderOrgs.join(', ')}`;
+              personaContext += ` | Insider at: ${persona.insiderOrgs.join(', ')}`
             }
           }
         }
 
         const roleStyle = isOrg
           ? 'Role: Media organization - can use "Breaking:", "Exclusive:", "Sources say:"'
-          : 'Role: Journalist - objective reporting with personal flair';
+          : 'Role: Journalist - objective reporting with personal flair'
 
         return `
 ╔══════════════════════════════════════════════════════════════════╗
@@ -1058,9 +1059,9 @@ ${voiceContext}
 
    YOUR TASK: Write a news post AS ${entity.name}.
    RULES: Max 280 chars. Provocative. NO hashtags. NO emojis.
-   VOICE: Match the style above. Sound like ${entity.name}.`;
+   VOICE: Match the style above. Sound like ${entity.name}.`
       })
-      .join('\n');
+      .join('\n')
 
     const prompt = renderPrompt(newsPosts, {
       eventDescription:
@@ -1071,36 +1072,36 @@ ${voiceContext}
       mediaCount: mediaEntities.length.toString(),
       mediaList: mediaList || '',
       ...(this.worldContext || {}),
-    });
+    })
 
-    const params = getPromptParams(newsPosts);
-    const maxRetries = 5;
+    const params = getPromptParams(newsPosts)
+    const maxRetries = 5
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       const response = await this.llm.generateJSON<{
         posts: Array<{
-          post?: string;
-          tweet?: string;
-          sentiment: number;
-          clueStrength: number;
-          pointsToward: boolean | null;
-        }>;
+          post?: string
+          tweet?: string
+          sentiment: number
+          clueStrength: number
+          pointsToward: boolean | null
+        }>
       }>(
         prompt,
         undefined, // Don't validate schema to handle various response formats
-        { ...params, promptType: 'feed_generate_news_posts_batch' }
-      );
+        { ...params, promptType: 'feed_generate_news_posts_batch' },
+      )
 
       if (!response) {
         logger.warn(
           `LLM returned null/undefined media response (attempt ${attempt + 1}/${maxRetries})`,
           undefined,
-          'FeedGenerator'
-        );
+          'FeedGenerator',
+        )
         if (attempt < maxRetries - 1) {
-          await new Promise((resolve) => setTimeout(resolve, 1000));
-          continue;
+          await new Promise((resolve) => setTimeout(resolve, 1000))
+          continue
         }
-        return [];
+        return []
       }
 
       // Check if response is valid object
@@ -1108,62 +1109,66 @@ ${voiceContext}
         logger.warn(
           `LLM returned non-object media response (attempt ${attempt + 1}/${maxRetries})`,
           { type: typeof response },
-          'FeedGenerator'
-        );
+          'FeedGenerator',
+        )
         if (attempt < maxRetries - 1) {
-          await new Promise((resolve) => setTimeout(resolve, 1000));
-          continue;
+          await new Promise((resolve) => setTimeout(resolve, 1000))
+          continue
         }
-        return [];
+        return []
       }
 
       // Log raw response structure on first attempt for monitoring
       if (attempt === 0) {
+        const responsePosts = 'posts' in response ? response.posts : undefined
         logger.info(
           'Media batch raw response structure',
           {
             hasResponse: !!response,
             hasPosts: 'posts' in response,
-            postsType: (response as { posts?: unknown }).posts
-              ? typeof (response as { posts?: unknown }).posts
-              : 'undefined',
-            isArray: Array.isArray((response as { posts?: unknown }).posts),
+            postsType: responsePosts ? typeof responsePosts : 'undefined',
+            isArray: Array.isArray(responsePosts),
             sampleKeys: response ? Object.keys(response).slice(0, 5) : [],
           },
-          'FeedGenerator'
-        );
+          'FeedGenerator',
+        )
       }
 
       // Handle XML nested structure: { posts: [...] } or { posts: { post: [...] } } or { response: { posts: {...} } }
       type PostItem = {
-        post?: string;
-        tweet?: string;
-        content?: string;
-        sentiment: number;
-        clueStrength: number;
-        pointsToward: boolean | null;
-      };
-      let posts: PostItem[] = [];
+        post?: string
+        tweet?: string
+        content?: string
+        sentiment: number
+        clueStrength: number
+        pointsToward: boolean | null
+      }
+      let posts: PostItem[] = []
 
       // Check if wrapped in response object first
-      const responseData =
+      type ResponseWithPosts = {
+        posts?: PostItem[] | { post: PostItem[] | PostItem }
+      }
+
+      // Check if response has a nested 'response' property containing posts
+      const hasNestedResponse =
         'response' in response &&
-        response.response &&
+        response.response !== null &&
         typeof response.response === 'object'
-          ? (response.response as {
-              posts?: PostItem[] | { post: PostItem[] | PostItem };
-            })
-          : response;
+
+      const responseData: ResponseWithPosts = hasNestedResponse
+        ? (response.response as ResponseWithPosts)
+        : response
 
       if ('posts' in responseData && responseData.posts) {
         if (Array.isArray(responseData.posts)) {
-          posts = responseData.posts;
+          posts = responseData.posts
         } else if (
           typeof responseData.posts === 'object' &&
           'post' in responseData.posts
         ) {
-          const nested = responseData.posts.post;
-          posts = Array.isArray(nested) ? nested : [nested];
+          const nested = responseData.posts.post
+          posts = Array.isArray(nested) ? nested : [nested]
         } else {
           // Log unexpected response structure for monitoring
           logger.warn(
@@ -1172,8 +1177,8 @@ ${voiceContext}
               type: typeof responseData.posts,
               keys: Object.keys(responseData.posts),
             },
-            'FeedGenerator'
-          );
+            'FeedGenerator',
+          )
         }
       } else {
         logger.warn(
@@ -1182,57 +1187,58 @@ ${voiceContext}
             responseKeys: Object.keys(responseData),
             hasResponse: 'response' in response,
           },
-          'FeedGenerator'
-        );
+          'FeedGenerator',
+        )
       }
 
       // Log post structure for monitoring
       if (attempt === 0 && posts.length > 0) {
+        const samplePost = posts[0]
         logger.info(
           'Sample post structure',
           {
-            postKeys: Object.keys(posts[0] || {}),
-            hasPost: 'post' in (posts[0] || {}),
-            hasTweet: 'tweet' in (posts[0] || {}),
-            postValue: typeof (posts[0] as Record<string, JsonValue>)?.post,
+            postKeys: samplePost ? Object.keys(samplePost) : [],
+            hasPost: samplePost && 'post' in samplePost,
+            hasTweet: samplePost && 'tweet' in samplePost,
+            postValue: samplePost?.post ? typeof samplePost.post : 'undefined',
           },
-          'FeedGenerator'
-        );
+          'FeedGenerator',
+        )
       }
 
       // Type helper for posts that may have different content field names
       type PostWithContent = {
-        post?: string;
-        tweet?: string;
-        content?: string;
-        sentiment: number;
-        clueStrength: number;
-        pointsToward: boolean | null;
-      };
+        post?: string
+        tweet?: string
+        content?: string
+        sentiment: number
+        clueStrength: number
+        pointsToward: boolean | null
+      }
 
       const validPosts = posts
         .filter((p): p is PostWithContent => {
           // Handle various content field names: post, tweet, or content
-          const content = p.post || p.tweet || p.content;
+          const content = p.post || p.tweet || p.content
           return Boolean(
-            content && typeof content === 'string' && content.trim().length > 0
-          );
+            content && typeof content === 'string' && content.trim().length > 0,
+          )
         })
         .map((p) => ({
-          post: p.post || p.tweet || p.content!,
+          post: p.post || p.tweet || p.content,
           sentiment: p.sentiment ?? 0,
           clueStrength: p.clueStrength ?? 0.5,
           pointsToward: p.pointsToward ?? null,
-        }));
+        }))
 
       // Apply post-processing (hashtag/emoji stripping, name mapping) and validation
       const processedPosts = await Promise.all(
         validPosts.map(async (p) => {
-          const processedPost = await this.postProcessContent(p.post);
+          const processedPost = await this.postProcessContent(p.post ?? '')
           const validation = this.validatePostContent(
             processedPost,
-            'JOURNALIST'
-          );
+            'JOURNALIST',
+          )
           return {
             post: validation.cleanContent,
             sentiment: p.sentiment,
@@ -1240,17 +1246,17 @@ ${voiceContext}
             pointsToward: p.pointsToward,
             isValid: validation.isValid,
             violations: validation.violations,
-          };
-        })
-      );
+          }
+        }),
+      )
 
       // Check if any posts failed validation
-      const invalidPosts = processedPosts.filter((p) => !p.isValid);
+      const invalidPosts = processedPosts.filter((p) => !p.isValid)
       if (invalidPosts.length > 0) {
         const violationCount = invalidPosts.reduce(
           (sum, p) => sum + p.violations.length,
-          0
-        );
+          0,
+        )
         logger.warn(
           `Validation failed for ${invalidPosts.length} media post(s) (attempt ${attempt + 1}/${maxRetries})`,
           {
@@ -1258,13 +1264,13 @@ ${voiceContext}
             violationCount,
             attempt: attempt + 1,
           },
-          'FeedGenerator'
-        );
+          'FeedGenerator',
+        )
 
         // Retry if we haven't exhausted attempts
         if (attempt < maxRetries - 1) {
-          await new Promise((resolve) => setTimeout(resolve, 1000));
-          continue;
+          await new Promise((resolve) => setTimeout(resolve, 1000))
+          continue
         }
       }
 
@@ -1276,13 +1282,13 @@ ${voiceContext}
           sentiment: p.sentiment,
           clueStrength: p.clueStrength,
           pointsToward: p.pointsToward,
-        }));
+        }))
 
-      const minRequired = Math.ceil(mediaEntities.length * 0.5);
+      const minRequired = Math.ceil(mediaEntities.length * 0.5)
 
       if (validProcessedPosts.length >= minRequired) {
         // Limit to requested count to match with entities
-        return validProcessedPosts.slice(0, mediaEntities.length);
+        return validProcessedPosts.slice(0, mediaEntities.length)
       }
 
       logger.warn(
@@ -1295,16 +1301,16 @@ ${voiceContext}
           minRequired,
           postsReceived: posts.length,
         },
-        'FeedGenerator'
-      );
+        'FeedGenerator',
+      )
       if (attempt < maxRetries - 1) {
-        await new Promise((resolve) => setTimeout(resolve, 1000));
+        await new Promise((resolve) => setTimeout(resolve, 1000))
       }
     }
 
     throw new Error(
-      `Failed to generate media posts batch after ${maxRetries} attempts`
-    );
+      `Failed to generate media posts batch after ${maxRetries} attempts`,
+    )
   }
 
   // NOTE: _generateReactionsBatch was removed (unused dead code)
@@ -1322,45 +1328,45 @@ ${voiceContext}
     actor: Actor,
     worldEvent: WorldEvent,
     outcome: boolean,
-    day: number
+    day: number,
   ): Promise<{
-    post: string;
-    sentiment: number;
-    clueStrength: number;
-    pointsToward: boolean | null;
+    post: string
+    sentiment: number
+    clueStrength: number
+    pointsToward: boolean | null
   } | null> {
     if (!this.llm) {
-      return null;
+      return null
     }
 
     // Build rich character context with all available data
     const { characterInfo, comprehensiveContext } =
-      await this.buildRichCharacterContext(actor, day, [worldEvent]);
+      await this.buildRichCharacterContext(actor, day, [worldEvent])
     const comprehensiveContextText =
-      formatComprehensiveContext(comprehensiveContext);
+      formatComprehensiveContext(comprehensiveContext)
 
     // Build full context with trending topics, current events, etc.
-    const groupContext = this.actorGroupContexts.get(actor.id) || '';
+    const groupContext = this.actorGroupContexts.get(actor.id) || ''
     const fullCharacterContext = buildCharacterFeedContext({
       characterInfo,
       comprehensiveContext: comprehensiveContextText,
       trendingTopics: this.trendContext,
       currentEvents: worldEvent.description || worldEvent.type || undefined,
       recentPosts: groupContext || undefined,
-    });
+    })
 
     // Use event's explicit hint, enhanced with outcome knowledge for subtle guidance
     const baseEventContext = worldEvent.pointsToward
       ? `This development suggests things are trending toward ${worldEvent.pointsToward}.`
-      : 'The implications of this development are uncertain. React based on your own perspective and biases.';
+      : 'The implications of this development are uncertain. React based on your own perspective and biases.'
 
     const outcomeContext = outcome
       ? ' The broader context suggests positive momentum, but react based on your own analysis and biases.'
-      : ' The broader context suggests challenges ahead, but react based on your own analysis and biases.';
+      : ' The broader context suggests challenges ahead, but react based on your own analysis and biases.'
 
-    const eventContext = baseEventContext + outcomeContext;
+    const eventContext = baseEventContext + outcomeContext
 
-    const relationshipContext = await this.getActorRelationships(actor.id);
+    const relationshipContext = await this.getActorRelationships(actor.id)
 
     const prompt = renderPrompt(reactions, {
       eventDescription:
@@ -1370,29 +1376,29 @@ ${voiceContext}
       characterInfo: fullCharacterContext,
       relationshipContext: relationshipContext,
       ...(this.worldContext || {}),
-    });
+    })
 
-    const params = getPromptParams(reactions);
-    const maxRetries = 3;
+    const params = getPromptParams(reactions)
+    const maxRetries = 3
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       const response = await this.llm.generateJSON<
         | {
             reaction: {
-              post: string;
-              sentiment: number;
-              clueStrength: number;
-              pointsToward: boolean | null;
-            };
+              post: string
+              sentiment: number
+              clueStrength: number
+              pointsToward: boolean | null
+            }
           }
         | {
             response: {
               reaction: {
-                post: string;
-                sentiment: number;
-                clueStrength: number;
-                pointsToward: boolean | null;
-              };
-            };
+                post: string
+                sentiment: number
+                clueStrength: number
+                pointsToward: boolean | null
+              }
+            }
           }
       >(
         prompt,
@@ -1410,39 +1416,28 @@ ${voiceContext}
           },
           required: ['reaction'],
         },
-        { ...params, promptType: 'feed_generate_reaction_per_character' }
-      );
+        { ...params, promptType: 'feed_generate_reaction_per_character' },
+      )
 
       if (!response) {
         if (attempt < maxRetries - 1) {
-          await new Promise((resolve) => setTimeout(resolve, 1000));
-          continue;
+          await new Promise((resolve) => setTimeout(resolve, 1000))
+          continue
         }
-        return null;
+        return null
       }
 
-      const reactionData =
-        'response' in response && response.response
-          ? (
-              response.response as {
-                reaction: {
-                  post: string;
-                  sentiment: number;
-                  clueStrength: number;
-                  pointsToward: boolean | null;
-                };
-              }
-            ).reaction
-          : (
-              response as {
-                reaction: {
-                  post: string;
-                  sentiment: number;
-                  clueStrength: number;
-                  pointsToward: boolean | null;
-                };
-              }
-            ).reaction;
+      // Unwrap and extract reaction data
+      type ReactionResponse = {
+        reaction: {
+          post: string
+          sentiment: number
+          clueStrength: number
+          pointsToward: boolean | null
+        }
+      }
+      const unwrapped = unwrapLLMResponse<ReactionResponse>(response)
+      const reactionData = unwrapped?.reaction
 
       if (
         !reactionData?.post ||
@@ -1450,23 +1445,23 @@ ${voiceContext}
         reactionData.post.trim().length === 0
       ) {
         if (attempt < maxRetries - 1) {
-          await new Promise((resolve) => setTimeout(resolve, 1000));
-          continue;
+          await new Promise((resolve) => setTimeout(resolve, 1000))
+          continue
         }
-        return null;
+        return null
       }
 
       const processedPost = await this.postProcessContent(
-        reactionData.post.trim()
-      );
-      const validation = this.validatePostContent(processedPost, 'REACTION');
+        reactionData.post.trim(),
+      )
+      const validation = this.validatePostContent(processedPost, 'REACTION')
 
       if (!validation.isValid) {
         if (attempt < maxRetries - 1) {
-          await new Promise((resolve) => setTimeout(resolve, 1000));
-          continue;
+          await new Promise((resolve) => setTimeout(resolve, 1000))
+          continue
         }
-        return null;
+        return null
       }
 
       return {
@@ -1474,10 +1469,10 @@ ${voiceContext}
         sentiment: reactionData.sentiment ?? 0,
         clueStrength: reactionData.clueStrength ?? 0.5,
         pointsToward: reactionData.pointsToward ?? null,
-      };
+      }
     }
 
-    return null;
+    return null
   }
 
   /**
@@ -1491,32 +1486,32 @@ ${voiceContext}
   private async generateCommentaryForCharacter(
     commentator: Actor,
     worldEvent: WorldEvent,
-    day: number
+    day: number,
   ): Promise<{
-    post: string;
-    sentiment: number;
-    clueStrength: number;
-    pointsToward: boolean | null;
+    post: string
+    sentiment: number
+    clueStrength: number
+    pointsToward: boolean | null
   } | null> {
     if (!this.llm) {
-      return null;
+      return null
     }
 
     // Build rich character context with all available data
     const { characterInfo, comprehensiveContext } =
-      await this.buildRichCharacterContext(commentator, day, [worldEvent]);
+      await this.buildRichCharacterContext(commentator, day, [worldEvent])
     const comprehensiveContextText =
-      formatComprehensiveContext(comprehensiveContext);
+      formatComprehensiveContext(comprehensiveContext)
 
     // Build full context with trending topics, current events, etc.
-    const groupContext = this.actorGroupContexts.get(commentator.id) || '';
+    const groupContext = this.actorGroupContexts.get(commentator.id) || ''
     const fullCharacterContext = buildCharacterFeedContext({
       characterInfo,
       comprehensiveContext: comprehensiveContextText,
       trendingTopics: this.trendContext,
       currentEvents: worldEvent.description || worldEvent.type || undefined,
       recentPosts: groupContext || undefined,
-    });
+    })
 
     const prompt = renderPrompt(commentary, {
       eventDescription:
@@ -1524,10 +1519,10 @@ ${voiceContext}
       characterName: commentator.name,
       characterInfo: fullCharacterContext,
       ...(this.worldContext || {}),
-    });
+    })
 
-    const params = getPromptParams(commentary);
-    const maxRetries = 3;
+    const params = getPromptParams(commentary)
+    const maxRetries = 3
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       const response = await this.llm.generateJSON<
         { comment: CommentaryPost } | { response: { comment: CommentaryPost } }
@@ -1547,43 +1542,41 @@ ${voiceContext}
           },
           required: ['comment'],
         },
-        { ...params, promptType: 'feed_generate_commentary_per_character' }
-      );
+        { ...params, promptType: 'feed_generate_commentary_per_character' },
+      )
 
       if (!response) {
         logger.warn(
           `LLM returned null/undefined commentary response for ${commentator.name} (attempt ${attempt + 1}/${maxRetries})`,
           undefined,
-          'FeedGenerator'
-        );
+          'FeedGenerator',
+        )
         if (attempt < maxRetries - 1) {
-          await new Promise((resolve) => setTimeout(resolve, 1000));
-          continue;
+          await new Promise((resolve) => setTimeout(resolve, 1000))
+          continue
         }
-        return null;
+        return null
       }
 
       // Handle nested response structure
-      const commentData =
-        'response' in response && response.response
-          ? (response.response as { comment: CommentaryPost }).comment
-          : (response as { comment: CommentaryPost }).comment;
+      const unwrapped = unwrapLLMResponse<{ comment: CommentaryPost }>(response)
+      const commentData = unwrapped?.comment
 
       if (!commentData || typeof commentData !== 'object') {
         logger.warn(
           `Invalid commentary response structure for ${commentator.name} (attempt ${attempt + 1}/${maxRetries})`,
           undefined,
-          'FeedGenerator'
-        );
+          'FeedGenerator',
+        )
         if (attempt < maxRetries - 1) {
-          await new Promise((resolve) => setTimeout(resolve, 1000));
-          continue;
+          await new Promise((resolve) => setTimeout(resolve, 1000))
+          continue
         }
-        return null;
+        return null
       }
 
       const content =
-        commentData.post || commentData.tweet || commentData.content;
+        commentData.post || commentData.tweet || commentData.content
       if (
         !content ||
         typeof content !== 'string' ||
@@ -1592,18 +1585,18 @@ ${voiceContext}
         logger.warn(
           `Empty commentary post for ${commentator.name} (attempt ${attempt + 1}/${maxRetries})`,
           undefined,
-          'FeedGenerator'
-        );
+          'FeedGenerator',
+        )
         if (attempt < maxRetries - 1) {
-          await new Promise((resolve) => setTimeout(resolve, 1000));
-          continue;
+          await new Promise((resolve) => setTimeout(resolve, 1000))
+          continue
         }
-        return null;
+        return null
       }
 
       // Apply post-processing (hashtag/emoji stripping, name mapping) and validation
-      const processedPost = await this.postProcessContent(content.trim());
-      const validation = this.validatePostContent(processedPost, 'COMMENTARY');
+      const processedPost = await this.postProcessContent(content.trim())
+      const validation = this.validatePostContent(processedPost, 'COMMENTARY')
 
       if (!validation.isValid) {
         logger.warn(
@@ -1612,13 +1605,13 @@ ${voiceContext}
             violations: validation.violations,
             attempt: attempt + 1,
           },
-          'FeedGenerator'
-        );
+          'FeedGenerator',
+        )
         if (attempt < maxRetries - 1) {
-          await new Promise((resolve) => setTimeout(resolve, 1000));
-          continue;
+          await new Promise((resolve) => setTimeout(resolve, 1000))
+          continue
         }
-        return null;
+        return null
       }
 
       return {
@@ -1626,15 +1619,15 @@ ${voiceContext}
         sentiment: commentData.sentiment ?? 0,
         clueStrength: commentData.clueStrength ?? 0.5,
         pointsToward: commentData.pointsToward ?? null,
-      };
+      }
     }
 
     logger.warn(
       `Failed to generate commentary for ${commentator.name} after ${maxRetries} attempts`,
       undefined,
-      'FeedGenerator'
-    );
-    return null;
+      'FeedGenerator',
+    )
+    return null
   }
 
   /**
@@ -1648,32 +1641,32 @@ ${voiceContext}
   private async generateConspiracyForCharacter(
     conspiracist: Actor,
     worldEvent: WorldEvent,
-    day: number
+    day: number,
   ): Promise<{
-    post: string;
-    sentiment: number;
-    clueStrength: number;
-    pointsToward: boolean | null;
+    post: string
+    sentiment: number
+    clueStrength: number
+    pointsToward: boolean | null
   } | null> {
     if (!this.llm) {
-      return null;
+      return null
     }
 
     // Build rich character context with all available data
     const { characterInfo, comprehensiveContext } =
-      await this.buildRichCharacterContext(conspiracist, day, [worldEvent]);
+      await this.buildRichCharacterContext(conspiracist, day, [worldEvent])
     const comprehensiveContextText =
-      formatComprehensiveContext(comprehensiveContext);
+      formatComprehensiveContext(comprehensiveContext)
 
     // Build full context with trending topics, current events, etc.
-    const groupContext = this.actorGroupContexts.get(conspiracist.id) || '';
+    const groupContext = this.actorGroupContexts.get(conspiracist.id) || ''
     const fullCharacterContext = buildCharacterFeedContext({
       characterInfo,
       comprehensiveContext: comprehensiveContextText,
       trendingTopics: this.trendContext,
       currentEvents: worldEvent.description || worldEvent.type || undefined,
       recentPosts: groupContext || undefined,
-    });
+    })
 
     const prompt = renderPrompt(conspiracy, {
       eventDescription:
@@ -1681,29 +1674,29 @@ ${voiceContext}
       characterName: conspiracist.name,
       characterInfo: fullCharacterContext,
       ...(this.worldContext || {}),
-    });
+    })
 
-    const params = getPromptParams(conspiracy);
-    const maxRetries = 3;
+    const params = getPromptParams(conspiracy)
+    const maxRetries = 3
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       const response = await this.llm.generateJSON<
         | {
             theory: {
-              post: string;
-              sentiment: number;
-              clueStrength: number;
-              pointsToward: boolean | null;
-            };
+              post: string
+              sentiment: number
+              clueStrength: number
+              pointsToward: boolean | null
+            }
           }
         | {
             response: {
               theory: {
-                post: string;
-                sentiment: number;
-                clueStrength: number;
-                pointsToward: boolean | null;
-              };
-            };
+                post: string
+                sentiment: number
+                clueStrength: number
+                pointsToward: boolean | null
+              }
+            }
           }
       >(
         prompt,
@@ -1721,39 +1714,28 @@ ${voiceContext}
           },
           required: ['theory'],
         },
-        { ...params, promptType: 'feed_generate_conspiracy_per_character' }
-      );
+        { ...params, promptType: 'feed_generate_conspiracy_per_character' },
+      )
 
       if (!response) {
         if (attempt < maxRetries - 1) {
-          await new Promise((resolve) => setTimeout(resolve, 1000));
-          continue;
+          await new Promise((resolve) => setTimeout(resolve, 1000))
+          continue
         }
-        return null;
+        return null
       }
 
-      const theoryData =
-        'response' in response && response.response
-          ? (
-              response.response as {
-                theory: {
-                  post: string;
-                  sentiment: number;
-                  clueStrength: number;
-                  pointsToward: boolean | null;
-                };
-              }
-            ).theory
-          : (
-              response as {
-                theory: {
-                  post: string;
-                  sentiment: number;
-                  clueStrength: number;
-                  pointsToward: boolean | null;
-                };
-              }
-            ).theory;
+      // Unwrap nested response structure
+      type TheoryResponse = {
+        theory: {
+          post: string
+          sentiment: number
+          clueStrength: number
+          pointsToward: boolean | null
+        }
+      }
+      const unwrapped = unwrapLLMResponse<TheoryResponse>(response)
+      const theoryData = unwrapped?.theory
 
       if (
         !theoryData?.post ||
@@ -1761,23 +1743,23 @@ ${voiceContext}
         theoryData.post.trim().length === 0
       ) {
         if (attempt < maxRetries - 1) {
-          await new Promise((resolve) => setTimeout(resolve, 1000));
-          continue;
+          await new Promise((resolve) => setTimeout(resolve, 1000))
+          continue
         }
-        return null;
+        return null
       }
 
       const processedPost = await this.postProcessContent(
-        theoryData.post.trim()
-      );
-      const validation = this.validatePostContent(processedPost, 'CONSPIRACY');
+        theoryData.post.trim(),
+      )
+      const validation = this.validatePostContent(processedPost, 'CONSPIRACY')
 
       if (!validation.isValid) {
         if (attempt < maxRetries - 1) {
-          await new Promise((resolve) => setTimeout(resolve, 1000));
-          continue;
+          await new Promise((resolve) => setTimeout(resolve, 1000))
+          continue
         }
-        return null;
+        return null
       }
 
       return {
@@ -1785,308 +1767,16 @@ ${voiceContext}
         sentiment: theoryData.sentiment ?? 0,
         clueStrength: theoryData.clueStrength ?? 0.5,
         pointsToward: theoryData.pointsToward ?? null,
-      };
+      }
     }
 
-    return null;
+    return null
   }
 
-  /**
-   * @deprecated Use generateConspiracyForCharacter instead - generates per-character with full context
-   * BATCHED: Generate conspiracy posts for multiple actors in ONE call
-   *
-   * @internal Reserved for future batch processing optimization
-   *
-   * @description
-   * Generates conspiracy theories WITHOUT knowing predetermined outcome.
-   * Conspiracy posts often contradict event hints (contrarians).
-   */
-  // @ts-ignore TS6133 - Deprecated method kept for reference
-  private async _generateConspiracyPostsBatch_DEPRECATED(
-    conspiracists: Actor[],
-    worldEvent: WorldEvent
-  ): Promise<
-    Array<{
-      post: string;
-      sentiment: number;
-      clueStrength: number;
-      pointsToward: boolean | null;
-    }>
-  > {
-    if (!this.llm || conspiracists.length === 0) {
-      return [];
-    }
-
-    // Conspiracy posts often contradict the event hint (contrarian behavior)
-    const conspiracyGuidance =
-      worldEvent.pointsToward === 'YES'
-        ? "Claim it's a distraction from something worse"
-        : worldEvent.pointsToward === 'NO'
-          ? "Say they're hiding that it's actually happening"
-          : 'Spin your own alternative narrative';
-
-    const conspiracistsList = conspiracists
-      .map((actor, i) => {
-        const persona = this._npcPersonas.get(actor.id);
-
-        let personaContext = '';
-        if (persona) {
-          personaContext = `Reliability: ${(persona.reliability * 100).toFixed(0)}% (low - spreads misinformation)`;
-          if (persona.willingToLie) {
-            personaContext += ` | Motivated by: ${persona.selfInterest}`;
-          }
-        }
-
-        const voiceContext = formatActorVoiceContext(actor);
-
-        return `
-╔══════════════════════════════════════════════════════════════════╗
-║ CONSPIRACIST ${i + 1}: ${actor.name.toUpperCase()}
-╚══════════════════════════════════════════════════════════════════╝
-   Identity: ${actor.description}
-   ${personaContext ? `${personaContext}` : ''}
-${voiceContext}
-
-   YOUR TASK: Write a conspiracy post AS ${actor.name}.
-   You don't believe the mainstream narrative.
-   ${conspiracyGuidance}
-   RULES: Max 140 chars. Be dramatic, suspicious. NO hashtags. NO emojis.
-   VOICE: Match the style above. Sound paranoid and unique.`;
-      })
-      .join('\n');
-
-    const prompt = renderPrompt(conspiracy, {
-      eventDescription:
-        worldEvent.description || worldEvent.type || 'Event occurred',
-      conspiracistCount: conspiracists.length.toString(),
-      conspiracistsList: conspiracistsList || '',
-      ...(this.worldContext || {}),
-    });
-
-    const params = getPromptParams(conspiracy);
-    const maxRetries = 5;
-    for (let attempt = 0; attempt < maxRetries; attempt++) {
-      const rawResponse = await this.llm.generateJSON<ConspiracyResponse>(
-        prompt,
-        undefined, // Don't validate schema, we'll handle both formats
-        { ...params, promptType: 'feed_generate_conspiracy_posts_batch' }
-      );
-
-      if (!rawResponse) {
-        logger.warn(
-          `LLM returned null/undefined conspiracy response (attempt ${attempt + 1}/${maxRetries})`,
-          undefined,
-          'FeedGenerator'
-        );
-        if (attempt < maxRetries - 1) {
-          await new Promise((resolve) => setTimeout(resolve, 1000));
-          continue;
-        }
-        return []; // Return empty if failed
-      }
-
-      // Handle multiple response formats with proper type narrowing
-      let conspiracy: ConspiracyPost[] = [];
-
-      if (rawResponse && typeof rawResponse === 'object') {
-        if ('conspiracy' in rawResponse && rawResponse.conspiracy) {
-          if (Array.isArray(rawResponse.conspiracy)) {
-            // Format 1: Direct array
-            conspiracy = rawResponse.conspiracy;
-          } else if (typeof rawResponse.conspiracy === 'object') {
-            const conspiracyObj = rawResponse.conspiracy as Record<
-              string,
-              JsonValue
-            >;
-            // Format 3: XML nested structure { conspiracy: { theory: [...] } } or { conspiracy: { post: [...] } }
-            if ('theory' in conspiracyObj) {
-              const nested = conspiracyObj.theory as
-                | ConspiracyPost[]
-                | ConspiracyPost;
-              conspiracy = Array.isArray(nested) ? nested : [nested];
-            } else if ('post' in conspiracyObj) {
-              const nested = conspiracyObj.post as
-                | ConspiracyPost[]
-                | ConspiracyPost;
-              conspiracy = Array.isArray(nested) ? nested : [nested];
-            }
-          }
-        } else if ('data' in rawResponse && Array.isArray(rawResponse.data)) {
-          // Format 2: Wrapped in data array
-          conspiracy = rawResponse.data.flatMap((d) => {
-            return Array.isArray(d.conspiracy) ? d.conspiracy : [];
-          });
-        } else if (
-          'response' in rawResponse &&
-          rawResponse.response &&
-          typeof rawResponse.response === 'object'
-        ) {
-          // Format 4: Wrapped in response { response: { conspiracy: [...] } }
-          const responseObj = rawResponse.response as Record<string, JsonValue>;
-          if ('conspiracy' in responseObj && responseObj.conspiracy) {
-            if (Array.isArray(responseObj.conspiracy)) {
-              conspiracy = responseObj.conspiracy as ConspiracyPost[];
-            } else if (typeof responseObj.conspiracy === 'object') {
-              const conspiracyObj = responseObj.conspiracy as Record<
-                string,
-                JsonValue
-              >;
-              if ('theory' in conspiracyObj) {
-                const nested = conspiracyObj.theory as
-                  | ConspiracyPost[]
-                  | ConspiracyPost;
-                conspiracy = Array.isArray(nested) ? nested : [nested];
-              } else if ('post' in conspiracyObj) {
-                const nested = conspiracyObj.post as
-                  | ConspiracyPost[]
-                  | ConspiracyPost;
-                conspiracy = Array.isArray(nested) ? nested : [nested];
-              }
-            }
-          }
-        } else {
-          // Log unexpected response structure for monitoring
-          logger.warn(
-            'Conspiracy response has unexpected structure',
-            {
-              responseKeys: Object.keys(rawResponse),
-              hasConspiracy: 'conspiracy' in rawResponse,
-              hasResponse: 'response' in rawResponse,
-            },
-            'FeedGenerator'
-          );
-        }
-      } else {
-        logger.warn(
-          'Conspiracy response is not an object',
-          { type: typeof rawResponse },
-          'FeedGenerator'
-        );
-      }
-
-      // Log sample posts for monitoring
-      if (attempt === 0 && conspiracy.length > 0) {
-        logger.info(
-          'Sample conspiracy structure',
-          {
-            count: conspiracy.length,
-            firstKeys: Object.keys(conspiracy[0] || {}),
-            hasPost: conspiracy[0] ? 'post' in conspiracy[0] : false,
-            hasContent: conspiracy[0]
-              ? 'content' in (conspiracy[0] as Record<string, unknown>)
-              : false,
-          },
-          'FeedGenerator'
-        );
-      }
-
-      const filteredConspiracy = conspiracy
-        .filter((c) => {
-          if (typeof c !== 'object' || c === null) return false;
-          // Handle various content field names: post, tweet, or content
-          const content = c.post || c.tweet || c.content;
-          return (
-            content !== undefined &&
-            typeof content === 'string' &&
-            content.trim().length > 0
-          );
-        })
-        .map((c) => ({
-          post: c.post || c.tweet || c.content || '',
-          sentiment: c.sentiment ?? 0,
-          clueStrength: c.clueStrength ?? 0.5,
-          pointsToward: c.pointsToward ?? null,
-        }));
-
-      // Apply post-processing (hashtag/emoji stripping, name mapping) and validation
-      const processedConspiracy = await Promise.all(
-        filteredConspiracy.map(async (c) => {
-          const processedPost = await this.postProcessContent(c.post);
-          const validation = this.validatePostContent(
-            processedPost,
-            'CONSPIRACY'
-          );
-          return {
-            post: validation.cleanContent,
-            sentiment: c.sentiment,
-            clueStrength: c.clueStrength,
-            pointsToward: c.pointsToward,
-            isValid: validation.isValid,
-            violations: validation.violations,
-          };
-        })
-      );
-
-      // Check if any posts failed validation
-      const invalidConspiracy = processedConspiracy.filter((c) => !c.isValid);
-      if (invalidConspiracy.length > 0) {
-        const violationCount = invalidConspiracy.reduce(
-          (sum, c) => sum + c.violations.length,
-          0
-        );
-        logger.warn(
-          `Validation failed for ${invalidConspiracy.length} conspiracy post(s) (attempt ${attempt + 1}/${maxRetries})`,
-          {
-            violations: invalidConspiracy.flatMap((c) => c.violations),
-            violationCount,
-            attempt: attempt + 1,
-          },
-          'FeedGenerator'
-        );
-
-        // Retry if we haven't exhausted attempts
-        if (attempt < maxRetries - 1) {
-          await new Promise((resolve) => setTimeout(resolve, 1000));
-          continue;
-        }
-      }
-
-      // Filter to only valid conspiracy posts
-      const validConspiracy = processedConspiracy
-        .filter((c) => c.isValid)
-        .map((c) => ({
-          post: c.post,
-          sentiment: c.sentiment,
-          clueStrength: c.clueStrength,
-          pointsToward: c.pointsToward,
-        }));
-
-      const minRequired = Math.ceil(conspiracists.length * 0.5);
-
-      if (validConspiracy.length >= minRequired) {
-        // Limit to requested count to match with conspiracists
-        return validConspiracy.slice(0, conspiracists.length);
-      }
-
-      logger.warn(
-        `Invalid conspiracy batch (attempt ${attempt + 1}/${maxRetries}). Expected ${conspiracists.length}, got ${validConspiracy.length} valid (need ${minRequired}+)`,
-        {
-          attempt: attempt + 1,
-          maxRetries,
-          expected: conspiracists.length,
-          got: validConspiracy.length,
-          minRequired,
-        },
-        'FeedGenerator'
-      );
-      if (attempt < maxRetries - 1) {
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-      }
-    }
-
-    logger.error(
-      `Failed to generate conspiracy posts batch after ${maxRetries} attempts. Returning empty batch.`,
-      undefined,
-      'FeedGenerator'
-    );
-    return [];
-  }
-
-  /**
   /**
    * Generate company PR statement
    * Companies manage crises, spin news, and announce products
-   * 
+   *
    * @description
    * Generates company PR WITHOUT knowing predetermined outcome.
    * Companies defend themselves and spin narratives based on their interests.
@@ -2095,18 +1785,18 @@ ${voiceContext}
     company: Organization,
     event: WorldEvent,
     _affiliatedActor: Actor,
-    outcome: boolean
+    outcome: boolean,
   ): Promise<{
-    post: string;
-    sentiment: number;
-    clueStrength: number;
-    pointsToward: boolean | null;
+    post: string
+    sentiment: number
+    clueStrength: number
+    pointsToward: boolean | null
   }> {
     if (!this.llm) {
-      throw new Error('LLM client required for feed generation');
+      throw new Error('LLM client required for feed generation')
     }
 
-    const isCrisis = event.type === 'scandal' || event.type === 'leak';
+    const isCrisis = event.type === 'scandal' || event.type === 'leak'
 
     // Companies ALWAYS try to frame things positively for themselves
     const frameGuidance =
@@ -2114,16 +1804,16 @@ ${voiceContext}
         ? 'Defensively spin this as minor/temporary - protect company reputation'
         : event.pointsToward === 'YES'
           ? 'Promote this as evidence of company strength and success'
-          : 'Frame neutrally but emphasize company stability and commitment';
+          : 'Frame neutrally but emphasize company stability and commitment'
 
     // Enhance frameGuidance with outcome knowledge for more strategic framing
     const enhancedFrameGuidance = outcome
       ? `${frameGuidance}. The underlying trend supports positive framing - emphasize long-term value and resilience.`
-      : `${frameGuidance}. The underlying trend requires careful management - emphasize proactive response and commitment to stakeholders.`;
+      : `${frameGuidance}. The underlying trend requires careful management - emphasize proactive response and commitment to stakeholders.`
 
     // Ensure world context is available
     if (!this.worldContext) {
-      this.worldContext = await generateWorldContext({ maxActors: 50 });
+      this.worldContext = await generateWorldContext({ maxActors: 50 })
     }
 
     const prompt = renderPrompt(companyPost, {
@@ -2134,35 +1824,35 @@ ${voiceContext}
       postType: isCrisis ? 'crisis management' : 'announcement',
       outcomeFrame: enhancedFrameGuidance,
       ...(this.worldContext || {}),
-    });
+    })
 
-    const params = getPromptParams(companyPost);
-    const maxRetries = 5;
+    const params = getPromptParams(companyPost)
+    const maxRetries = 5
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       const response = await this.llm.generateJSON<{
-        post: string;
-        sentiment: number;
-        clueStrength: number;
-        pointsToward: boolean | null;
+        post: string
+        sentiment: number
+        clueStrength: number
+        pointsToward: boolean | null
       }>(
         prompt,
         { required: ['post', 'sentiment', 'clueStrength', 'pointsToward'] },
-        { ...params, promptType: 'feed_generate_company_post' }
-      );
+        { ...params, promptType: 'feed_generate_company_post' },
+      )
 
       if (!response) {
         logger.warn(
           `LLM returned null/undefined company post response (attempt ${attempt + 1}/${maxRetries})`,
           undefined,
-          'FeedGenerator'
-        );
+          'FeedGenerator',
+        )
         if (attempt < maxRetries - 1) {
-          await new Promise((resolve) => setTimeout(resolve, 1000));
-          continue;
+          await new Promise((resolve) => setTimeout(resolve, 1000))
+          continue
         }
         throw new Error(
-          `Failed to generate valid company post after ${maxRetries} attempts for ${company.name}`
-        );
+          `Failed to generate valid company post after ${maxRetries} attempts for ${company.name}`,
+        )
       }
 
       if (
@@ -2173,30 +1863,22 @@ ${voiceContext}
         return {
           ...response,
           post: await this.postProcessContent(response.post),
-        };
+        }
       }
 
       logger.warn(
         `Invalid company post (attempt ${attempt + 1}/${maxRetries}). Retrying...`,
         { attempt: attempt + 1, maxRetries },
-        'FeedGenerator'
-      );
+        'FeedGenerator',
+      )
       if (attempt < maxRetries - 1) {
-        await new Promise((resolve) => setTimeout(resolve, 1000));
+        await new Promise((resolve) => setTimeout(resolve, 1000))
       }
     }
 
-    logger.error(
-      `Failed to generate valid company post after ${maxRetries} attempts for ${company.name}. Using fallback.`,
-      undefined,
-      'FeedGenerator'
-    );
-    return {
-      post: `${company.name} has issued a statement regarding the recent ${event.type}.`,
-      sentiment: 0,
-      clueStrength: 0.1,
-      pointsToward: null,
-    };
+    throw new Error(
+      `Failed to generate valid company post after ${maxRetries} attempts for ${company.name}`,
+    )
   }
 
   /**
@@ -2211,57 +1893,57 @@ ${voiceContext}
     govt: Organization,
     event: WorldEvent,
     allActors: Actor[],
-    outcome: boolean
+    outcome: boolean,
   ): Promise<{
-    post: string;
-    sentiment: number;
-    clueStrength: number;
-    pointsToward: boolean | null;
+    post: string
+    sentiment: number
+    clueStrength: number
+    pointsToward: boolean | null
   }> {
     if (!this.llm) {
-      throw new Error('LLM client required for feed generation');
+      throw new Error('LLM client required for feed generation')
     }
 
     // Ensure world context is available
     if (!this.worldContext) {
-      this.worldContext = await generateWorldContext({ maxActors: 50 });
+      this.worldContext = await generateWorldContext({ maxActors: 50 })
     }
 
     // Identify actors and organizations involved in the event
     const involvedActors = event.actors
       .map((id) => allActors.find((a) => a.id === id))
-      .filter((a): a is Actor => a !== undefined);
+      .filter((a): a is Actor => a !== undefined)
 
     // Find companies/organizations involved through actor affiliations
     const involvedCompanies = involvedActors
       .flatMap((actor) => actor.affiliations || [])
       .map((orgId) => this.organizations.find((o) => o.id === orgId))
       .filter((o): o is Organization => o !== undefined && o.type === 'company')
-      .slice(0, 3); // Limit to top 3 companies
+      .slice(0, 3) // Limit to top 3 companies
 
     // Build context about who the government is responding to
     const involvedParties = [
       ...involvedActors.map((a) => a.name),
       ...involvedCompanies.map((c) => c.name),
-    ].filter(Boolean);
+    ].filter(Boolean)
 
     const partiesContext =
       involvedParties.length > 0
         ? `This event involves: ${involvedParties.join(', ')}. Address these parties in your statement.`
-        : 'Address the event and any relevant parties mentioned in the event description.';
+        : 'Address the event and any relevant parties mentioned in the event description.'
 
     // Government framing based on event severity and outcome
     const baseFrame =
       event.type === 'scandal' || event.type === 'revelation'
         ? 'Announce investigation, issue vague statement about "reviewing the matter"'
-        : 'Issue official statement addressing the development';
+        : 'Issue official statement addressing the development'
 
     // Enhance with outcome knowledge for subtle guidance
     const enhancedFrame = outcome
       ? `${baseFrame}. The underlying situation suggests manageable resolution, but maintain bureaucratic caution.`
-      : `${baseFrame}. The underlying situation requires careful oversight, but maintain bureaucratic caution.`;
+      : `${baseFrame}. The underlying situation requires careful oversight, but maintain bureaucratic caution.`
 
-    const outcomeFrame = `${enhancedFrame} ${partiesContext}`;
+    const outcomeFrame = `${enhancedFrame} ${partiesContext}`
 
     const prompt = renderPrompt(governmentPost, {
       govName: govt.name,
@@ -2271,35 +1953,35 @@ ${voiceContext}
       eventType: event.type,
       outcomeFrame,
       ...(this.worldContext || {}),
-    });
+    })
 
-    const params = getPromptParams(governmentPost);
-    const maxRetries = 5;
+    const params = getPromptParams(governmentPost)
+    const maxRetries = 5
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       const response = await this.llm.generateJSON<{
-        post: string;
-        sentiment: number;
-        clueStrength: number;
-        pointsToward: boolean | null;
+        post: string
+        sentiment: number
+        clueStrength: number
+        pointsToward: boolean | null
       }>(
         prompt,
         { required: ['post', 'sentiment', 'clueStrength', 'pointsToward'] },
-        { ...params, promptType: 'feed_generate_government_post' }
-      );
+        { ...params, promptType: 'feed_generate_government_post' },
+      )
 
       if (!response) {
         logger.warn(
           `LLM returned null/undefined government post response (attempt ${attempt + 1}/${maxRetries})`,
           undefined,
-          'FeedGenerator'
-        );
+          'FeedGenerator',
+        )
         if (attempt < maxRetries - 1) {
-          await new Promise((resolve) => setTimeout(resolve, 1000));
-          continue;
+          await new Promise((resolve) => setTimeout(resolve, 1000))
+          continue
         }
         throw new Error(
-          `Failed to generate valid government post after ${maxRetries} attempts for ${govt.name}`
-        );
+          `Failed to generate valid government post after ${maxRetries} attempts for ${govt.name}`,
+        )
       }
 
       if (
@@ -2310,22 +1992,22 @@ ${voiceContext}
         return {
           ...response,
           post: await this.postProcessContent(response.post),
-        };
+        }
       }
 
       logger.warn(
         `Invalid government post (attempt ${attempt + 1}/${maxRetries}). Retrying...`,
         { attempt: attempt + 1, maxRetries },
-        'FeedGenerator'
-      );
+        'FeedGenerator',
+      )
       if (attempt < maxRetries - 1) {
-        await new Promise((resolve) => setTimeout(resolve, 1000));
+        await new Promise((resolve) => setTimeout(resolve, 1000))
       }
     }
 
     throw new Error(
-      `Failed to generate valid government post after ${maxRetries} attempts for ${govt.name}`
-    );
+      `Failed to generate valid government post after ${maxRetries} attempts for ${govt.name}`,
+    )
   }
 
   /**
@@ -2340,10 +2022,10 @@ ${voiceContext}
   private async generateAmbientFeed(
     day: number,
     allActors: Actor[],
-    outcome: boolean
+    outcome: boolean,
   ): Promise<FeedPost[]> {
-    const ambient: FeedPost[] = [];
-    const baseTime = `2025-10-${String(day).padStart(2, '0')}T`;
+    const ambient: FeedPost[] = []
+    const baseTime = `2025-10-${String(day).padStart(2, '0')}T`
 
     // DENSE CONTENT: Each actor posts 1-20 times per hour
     // Generate posts for all 24 hours of the day
@@ -2353,10 +2035,10 @@ ${voiceContext}
       // Each hour, 10-30% of actors post (1-20 posts per actor per hour achieved through probability)
       const actorsThisHour = shuffleArray(allActors).slice(
         0,
-        Math.floor(allActors.length * (0.1 + Math.random() * 0.2))
-      );
+        Math.floor(allActors.length * (0.1 + Math.random() * 0.2)),
+      )
 
-      if (actorsThisHour.length === 0) continue;
+      if (actorsThisHour.length === 0) continue
 
       // ✅ PER-CHARACTER: Generate ambient posts individually with full context
       const ambientTasks = shuffleArray(actorsThisHour).map(
@@ -2364,30 +2046,28 @@ ${voiceContext}
           const result = await this.generateAmbientPostForCharacter(
             actor,
             day,
-            outcome
-          );
-          return result;
-        }
-      );
+            outcome,
+          )
+          return result
+        },
+      )
 
-      const ambientResults = await rateLimitedParallel(ambientTasks, 5, 100);
+      const ambientResults = await rateLimitedParallel(ambientTasks, 5, 100)
       const posts = ambientResults
         .filter((p): p is NonNullable<typeof p> => p !== null)
         .map((postContent) => {
-          const actor = actorsThisHour.find(
-            (a) => a.id === postContent.actorId
-          );
-          if (!actor) return null;
-          return { ...postContent, actor };
+          const actor = actorsThisHour.find((a) => a.id === postContent.actorId)
+          if (!actor) return null
+          return { ...postContent, actor }
         })
-        .filter((p): p is NonNullable<typeof p> => p !== null);
+        .filter((p): p is NonNullable<typeof p> => p !== null)
 
       posts.forEach(({ actor, ...postContent }) => {
-        if (!actor) return;
+        if (!actor) return
 
         // Spread posts throughout the hour (random minutes)
-        const minute = Math.floor(Math.random() * 60);
-        const second = Math.floor(Math.random() * 60);
+        const minute = Math.floor(Math.random() * 60)
+        const second = Math.floor(Math.random() * 60)
 
         ambient.push({
           id: `ambient-${day}-${hour}-${actor.id}-${Date.now()}`,
@@ -2400,11 +2080,11 @@ ${voiceContext}
           sentiment: postContent.sentiment,
           clueStrength: postContent.clueStrength,
           pointsToward: postContent.pointsToward,
-        });
-      });
+        })
+      })
     }
 
-    return ambient;
+    return ambient
   }
 
   /**
@@ -2414,22 +2094,22 @@ ${voiceContext}
   private async generateReplies(
     day: number,
     existingPosts: FeedPost[],
-    allActors: Actor[]
+    allActors: Actor[],
   ): Promise<FeedPost[]> {
-    const replies: FeedPost[] = [];
+    const replies: FeedPost[] = []
 
     // Select posts that could get replies (30-50% of posts)
     const postsToReplyTo = shuffleArray(existingPosts).slice(
       0,
-      Math.floor(existingPosts.length * (0.3 + Math.random() * 0.2))
-    );
+      Math.floor(existingPosts.length * (0.3 + Math.random() * 0.2)),
+    )
 
     for (const originalPost of postsToReplyTo) {
       // Select 1-3 actors to reply
-      const replyCount = 1 + Math.floor(Math.random() * 3);
+      const replyCount = 1 + Math.floor(Math.random() * 3)
       const replyingActors = shuffleArray(
-        allActors.filter((a) => a.id !== originalPost.author)
-      ).slice(0, replyCount);
+        allActors.filter((a) => a.id !== originalPost.author),
+      ).slice(0, replyCount)
 
       // ✅ PER-CHARACTER: Generate replies individually with full context
       const replyTasks = shuffleArray(replyingActors).map(
@@ -2437,37 +2117,37 @@ ${voiceContext}
           const result = await this.generateReplyForCharacter(
             actor,
             originalPost,
-            day
-          );
-          return result;
-        }
-      );
+            day,
+          )
+          return result
+        },
+      )
 
-      const replyResults = await rateLimitedParallel(replyTasks, 5, 100);
+      const replyResults = await rateLimitedParallel(replyTasks, 5, 100)
       const batchReplies = replyResults.filter(
-        (r): r is NonNullable<typeof r> => r !== null
-      );
+        (r): r is NonNullable<typeof r> => r !== null,
+      )
 
       batchReplies.forEach((replyContent) => {
-        const actor = replyingActors.find((a) => a.id === replyContent.actorId);
-        if (!actor) return;
+        const actor = replyingActors.find((a) => a.id === replyContent.actorId)
+        if (!actor) return
 
         // Reply timestamp is after original post
-        const originalTime = new Date(originalPost.timestamp);
+        const originalTime = new Date(originalPost.timestamp)
 
         // Validate timestamp
-        if (isNaN(originalTime.getTime())) {
+        if (Number.isNaN(originalTime.getTime())) {
           logger.warn(
             `Invalid timestamp for post ${originalPost.id}, skipping reply generation`,
             { postId: originalPost.id },
-            'FeedGenerator'
-          );
-          return;
+            'FeedGenerator',
+          )
+          return
         }
 
         const replyTime = new Date(
-          originalTime.getTime() + (5 + Math.random() * 55) * 60 * 1000
-        ); // 5-60 minutes later
+          originalTime.getTime() + (5 + Math.random() * 55) * 60 * 1000,
+        ) // 5-60 minutes later
 
         replies.push({
           id: `reply-${originalPost.id}-${actor.id}`,
@@ -2482,11 +2162,11 @@ ${voiceContext}
           sentiment: replyContent.sentiment,
           clueStrength: replyContent.clueStrength,
           pointsToward: replyContent.pointsToward,
-        });
-      });
+        })
+      })
     }
 
-    return replies;
+    return replies
   }
 
   /**
@@ -2496,40 +2176,40 @@ ${voiceContext}
   private async generateReposts(
     day: number,
     existingPosts: FeedPost[],
-    allActors: Actor[]
+    allActors: Actor[],
   ): Promise<FeedPost[]> {
-    const reposts: FeedPost[] = [];
+    const reposts: FeedPost[] = []
 
     // Select posts that could get reposted (10-20% of posts)
     const postsToRepost = shuffleArray(existingPosts).slice(
       0,
-      Math.floor(existingPosts.length * (0.1 + Math.random() * 0.1))
-    );
+      Math.floor(existingPosts.length * (0.1 + Math.random() * 0.1)),
+    )
 
     for (const originalPost of postsToRepost) {
       // Select 1-2 actors to repost
-      const repostCount = 1 + Math.floor(Math.random() * 2);
+      const repostCount = 1 + Math.floor(Math.random() * 2)
       const repostingActors = shuffleArray(
-        allActors.filter((a) => a.id !== originalPost.author)
-      ).slice(0, repostCount);
+        allActors.filter((a) => a.id !== originalPost.author),
+      ).slice(0, repostCount)
 
       for (const actor of repostingActors) {
-        const isQuoteTweet = Math.random() > 0.5; // 50% chance of quote tweet
-        let quoteComment: string | null = null;
+        const isQuoteTweet = Math.random() > 0.5 // 50% chance of quote tweet
+        let quoteComment: string | null = null
 
         if (isQuoteTweet) {
           // Use generateReplyContent for the quote comment as it fits the "reaction" vibe
-          quoteComment = await this.generateReplyContent(actor, originalPost);
+          quoteComment = await this.generateReplyContent(actor, originalPost)
         }
 
         // Repost timestamp is after original post
-        const originalTime = new Date(originalPost.timestamp);
+        const originalTime = new Date(originalPost.timestamp)
 
-        if (isNaN(originalTime.getTime())) continue;
+        if (Number.isNaN(originalTime.getTime())) continue
 
         const repostTime = new Date(
-          originalTime.getTime() + (2 + Math.random() * 30) * 60 * 1000
-        ); // 2-32 minutes later
+          originalTime.getTime() + (2 + Math.random() * 30) * 60 * 1000,
+        ) // 2-32 minutes later
 
         reposts.push({
           id: `repost-${originalPost.id}-${actor.id}`,
@@ -2548,11 +2228,11 @@ ${voiceContext}
           sentiment: originalPost.sentiment, // Inherit sentiment roughly
           clueStrength: (originalPost.clueStrength ?? 0) * 0.8,
           pointsToward: originalPost.pointsToward,
-        });
+        })
       }
     }
 
-    return reposts;
+    return reposts
   }
 
   /**
@@ -2560,63 +2240,60 @@ ${voiceContext}
    */
   private async generateReplyContent(
     actor: Actor,
-    originalPost: FeedPost
+    originalPost: FeedPost,
   ): Promise<string> {
     // Ensure world context is available
     if (!this.worldContext) {
-      this.worldContext = await generateWorldContext({ maxActors: 50 });
+      this.worldContext = await generateWorldContext({ maxActors: 50 })
     }
 
     // Get actor's current emotional state
-    const state = this.actorStates.get(actor.id);
+    const state = this.actorStates.get(actor.id)
     const emotionalContext = state
       ? generateActorContext(
           state.mood,
           state.luck,
           originalPost.author,
           this.relationships,
-          actor.id
+          actor.id,
         )
-      : '';
+      : ''
 
     const relationshipContext = originalPost.author
       ? `Consider your relationship with ${originalPost.authorName} when responding.`
-      : '';
+      : ''
 
     const prompt = renderPrompt(reply, {
       actorName: actor.name,
       actorDescription: actor.description || actor.role || 'actor',
-      emotionalContext: emotionalContext ? emotionalContext + '\n' : '',
+      emotionalContext: emotionalContext ? `${emotionalContext}\n` : '',
       originalAuthorName: originalPost.authorName,
       originalContent: originalPost.content,
       relationshipContext,
       ...(this.worldContext || {}),
-    });
+    })
 
-    const params = getPromptParams(reply);
-    const rawResponse = await this.llm!.generateJSON<
+    const params = getPromptParams(reply)
+    const rawResponse = await this.llm?.generateJSON<
       { post: string } | { response: { post: string } }
     >(prompt, undefined, {
       ...params,
       promptType: 'feed_generate_reply_content',
-    });
+    })
 
     if (!rawResponse || typeof rawResponse !== 'object') {
-      logger.warn(
-        'LLM returned null/undefined/invalid reply content',
-        { type: typeof rawResponse },
-        'FeedGenerator'
-      );
-      return 'Interesting point.'; // Fallback
+      throw new Error(
+        `LLM returned invalid reply content: expected object, got ${typeof rawResponse}`,
+      )
     }
 
-    // Handle XML structure
-    const response =
-      'response' in rawResponse && rawResponse.response
-        ? rawResponse.response
-        : (rawResponse as { post: string });
+    // Handle XML structure - unwrap nested response
+    const unwrapped = unwrapLLMResponse<{ post: string }>(rawResponse)
+    if (!unwrapped?.post) {
+      throw new Error('LLM returned response without post field')
+    }
 
-    return await this.postProcessContent(response.post);
+    return await this.postProcessContent(unwrapped.post)
   }
 
   /**
@@ -2630,32 +2307,32 @@ ${voiceContext}
   private async generateAmbientPostForCharacter(
     actor: Actor,
     day: number,
-    _outcome: boolean
+    _outcome: boolean,
   ): Promise<{
-    post: string;
-    sentiment: number;
-    clueStrength: number;
-    pointsToward: boolean | null;
-    actorId: string;
+    post: string
+    sentiment: number
+    clueStrength: number
+    pointsToward: boolean | null
+    actorId: string
   } | null> {
     if (!this.llm) {
-      return null;
+      return null
     }
 
     // Build rich character context with all available data
     const { characterInfo, comprehensiveContext } =
-      await this.buildRichCharacterContext(actor, day, []);
+      await this.buildRichCharacterContext(actor, day, [])
     const comprehensiveContextText =
-      formatComprehensiveContext(comprehensiveContext);
+      formatComprehensiveContext(comprehensiveContext)
 
     // Build full context with trending topics, current events, etc.
-    const groupContext = this.actorGroupContexts.get(actor.id) || '';
+    const groupContext = this.actorGroupContexts.get(actor.id) || ''
     const fullCharacterContext = buildCharacterFeedContext({
       characterInfo,
       comprehensiveContext: comprehensiveContextText,
       trendingTopics: this.trendContext,
       recentPosts: groupContext || undefined,
-    });
+    })
 
     // Build phase and atmosphere context
     const phase =
@@ -2667,13 +2344,13 @@ ${voiceContext}
             ? 'CONVERGENCE'
             : day <= 29
               ? 'CLIMAX'
-              : 'RESOLUTION';
-    const progressContext = `Phase: ${phase} (Day ${day}/30)`;
+              : 'RESOLUTION'
+    const progressContext = `Phase: ${phase} (Day ${day}/30)`
     const atmosphereContext =
-      'Increasing activity and developments in various areas. Individual perspectives vary.';
+      'Increasing activity and developments in various areas. Individual perspectives vary.'
 
     // Random hour for time-of-day energy variety
-    const hour = Math.floor(Math.random() * 24);
+    const hour = Math.floor(Math.random() * 24)
 
     const prompt = renderPrompt(ambientPosts, {
       day: day.toString(),
@@ -2684,29 +2361,29 @@ ${voiceContext}
       characterName: actor.name,
       characterInfo: fullCharacterContext,
       ...(this.worldContext || {}),
-    });
+    })
 
-    const params = getPromptParams(ambientPosts);
-    const maxRetries = 3;
+    const params = getPromptParams(ambientPosts)
+    const maxRetries = 3
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       const response = await this.llm.generateJSON<
         | {
             post: {
-              content: string;
-              sentiment: number;
-              clueStrength: number;
-              pointsToward: boolean | null;
-            };
+              content: string
+              sentiment: number
+              clueStrength: number
+              pointsToward: boolean | null
+            }
           }
         | {
             response: {
               post: {
-                content: string;
-                sentiment: number;
-                clueStrength: number;
-                pointsToward: boolean | null;
-              };
-            };
+                content: string
+                sentiment: number
+                clueStrength: number
+                pointsToward: boolean | null
+              }
+            }
           }
       >(
         prompt,
@@ -2724,39 +2401,28 @@ ${voiceContext}
           },
           required: ['post'],
         },
-        { ...params, promptType: 'feed_generate_ambient_post_per_character' }
-      );
+        { ...params, promptType: 'feed_generate_ambient_post_per_character' },
+      )
 
       if (!response) {
         if (attempt < maxRetries - 1) {
-          await new Promise((resolve) => setTimeout(resolve, 1000));
-          continue;
+          await new Promise((resolve) => setTimeout(resolve, 1000))
+          continue
         }
-        return null;
+        return null
       }
 
-      const postData =
-        'response' in response && response.response
-          ? (
-              response.response as {
-                post: {
-                  content: string;
-                  sentiment: number;
-                  clueStrength: number;
-                  pointsToward: boolean | null;
-                };
-              }
-            ).post
-          : (
-              response as {
-                post: {
-                  content: string;
-                  sentiment: number;
-                  clueStrength: number;
-                  pointsToward: boolean | null;
-                };
-              }
-            ).post;
+      // Unwrap nested response structure
+      type PostResponse = {
+        post: {
+          content: string
+          sentiment: number
+          clueStrength: number
+          pointsToward: boolean | null
+        }
+      }
+      const unwrapped = unwrapLLMResponse<PostResponse>(response)
+      const postData = unwrapped?.post
 
       if (
         !postData?.content ||
@@ -2764,23 +2430,23 @@ ${voiceContext}
         postData.content.trim().length === 0
       ) {
         if (attempt < maxRetries - 1) {
-          await new Promise((resolve) => setTimeout(resolve, 1000));
-          continue;
+          await new Promise((resolve) => setTimeout(resolve, 1000))
+          continue
         }
-        return null;
+        return null
       }
 
       const processedPost = await this.postProcessContent(
-        postData.content.trim()
-      );
-      const validation = this.validatePostContent(processedPost, 'AMBIENT');
+        postData.content.trim(),
+      )
+      const validation = this.validatePostContent(processedPost, 'AMBIENT')
 
       if (!validation.isValid) {
         if (attempt < maxRetries - 1) {
-          await new Promise((resolve) => setTimeout(resolve, 1000));
-          continue;
+          await new Promise((resolve) => setTimeout(resolve, 1000))
+          continue
         }
-        return null;
+        return null
       }
 
       return {
@@ -2789,329 +2455,10 @@ ${voiceContext}
         clueStrength: postData.clueStrength ?? 0.05,
         pointsToward: postData.pointsToward ?? null,
         actorId: actor.id,
-      };
-    }
-
-    return null;
-  }
-
-  /**
-   * @deprecated Use generateAmbientPostForCharacter instead - generates per-character with full context
-   * BATCHED: Generate ambient posts for multiple actors in ONE call
-   *
-   * @internal Reserved for future batch processing optimization
-   */
-  // @ts-ignore TS6133 - Deprecated method kept for reference
-  private async _generateAmbientPostsBatch_DEPRECATED(
-    actors: Actor[],
-    day: number,
-    outcome: boolean
-  ): Promise<
-    Array<{
-      post: string;
-      sentiment: number;
-      clueStrength: number;
-      pointsToward: boolean | null;
-    }>
-  > {
-    if (!this.llm || actors.length === 0) {
-      return [];
-    }
-
-    // Shuffle actors to add variety to prompts
-    const shuffledActors = shuffleArray(actors);
-
-    const contexts = shuffledActors.map((actor) => {
-      const state = this.actorStates.get(actor.id);
-      const emotionalContext = state
-        ? generateActorContext(
-            state.mood,
-            state.luck,
-            undefined,
-            this.relationships,
-            actor.id
-          )
-        : '';
-
-      return { actor, emotionalContext };
-    });
-
-    // Natural progression: early game is setup, mid-game builds tension, late game escalates
-    const progressContext =
-      day <= 10
-        ? 'Early days - things are just getting started.'
-        : day <= 20
-          ? 'Mid-way through - developments are unfolding.'
-          : 'Late stage - tension is building, things are heating up.';
-
-    // General atmosphere based on phase, enhanced with outcome knowledge for subtle guidance
-    const baseAtmosphere =
-      day <= 10
-        ? 'General activity and routine developments.'
-        : day <= 20
-          ? 'Increasing activity and developments in various areas.'
-          : 'Heightened activity as events accelerate.';
-
-    // Add subtle outcome-based atmosphere without being explicit
-    const outcomeAtmosphere = outcome
-      ? ' The overall momentum feels positive, though individual perspectives vary.'
-      : ' The overall momentum feels challenging, though individual perspectives vary.';
-
-    const atmosphereContext = baseAtmosphere + outcomeAtmosphere;
-
-    const actorsList = contexts
-      .map((ctx, i) => {
-        const persona = this._npcPersonas.get(ctx.actor.id);
-
-        let personaContext = '';
-        if (persona) {
-          personaContext = `Reliability: ${(persona.reliability * 100).toFixed(0)}%`;
-          if (persona.insiderOrgs.length > 0 && Math.random() > 0.7) {
-            personaContext += ` | Insider at: ${persona.insiderOrgs.slice(0, 2).join(', ')}`;
-          }
-        }
-
-        const voiceContext = formatActorVoiceContext(ctx.actor);
-        const groupContext = this.actorGroupContexts.get(ctx.actor.id) || '';
-
-        return `
-╔══════════════════════════════════════════════════════════════════╗
-║ CHARACTER ${i + 1}: ${ctx.actor.name.toUpperCase()}
-╚══════════════════════════════════════════════════════════════════╝
-   Identity: ${ctx.actor.description}
-   Domain: ${ctx.actor.domain?.join(', ')}
-   ${personaContext ? `${personaContext}` : ''}
-   ${ctx.emotionalContext}
-${voiceContext}
-   ${groupContext ? `Private Intel: ${groupContext}` : ''}
-
-   YOUR TASK: Write a post AS ${ctx.actor.name}.
-   You may reference trending topics.
-   RULES: First person. Max 280 chars. NO hashtags. NO emojis.
-   VOICE: Match the examples above EXACTLY.`;
-      })
-      .join('\n');
-
-    // Random hour for time-of-day energy variety in posts
-    const hour = Math.floor(Math.random() * 24);
-
-    const prompt = renderPrompt(ambientPosts, {
-      day: day.toString(),
-      progressContext,
-      atmosphereContext,
-      trendContext: this.trendContext || '',
-      timeEnergy: getTimeOfDayEnergy(hour),
-      actorCount: actors.length.toString(),
-      actorsList,
-      ...(this.worldContext || {}),
-    });
-
-    const params = getPromptParams(ambientPosts);
-    const maxRetries = 5;
-    for (let attempt = 0; attempt < maxRetries; attempt++) {
-      const response = await this.llm.generateJSON<{
-        posts: Array<{
-          post?: string;
-          tweet?: string;
-          sentiment: number;
-          clueStrength: number;
-          pointsToward: boolean | null;
-        }>;
-      }>(
-        prompt,
-        undefined, // Don't validate schema to handle various response formats
-        { ...params, promptType: 'feed_generate_ambient_posts_batch' }
-      );
-
-      if (!response || typeof response !== 'object') {
-        logger.warn(
-          `LLM returned null/undefined/invalid ambient response (attempt ${attempt + 1}/${maxRetries})`,
-          { type: typeof response },
-          'FeedGenerator'
-        );
-        if (attempt < maxRetries - 1) {
-          await new Promise((resolve) => setTimeout(resolve, 1000));
-          continue;
-        }
-        return [];
-      }
-
-      // Handle XML nested structure: { posts: [...] } or { posts: { post: [...] } } or { response: { posts: {...} } }
-      type AmbientPostItem = {
-        post?: string;
-        tweet?: string;
-        content?: string;
-        sentiment: number;
-        clueStrength: number;
-        pointsToward: boolean | null;
-      };
-      let posts: AmbientPostItem[] = [];
-
-      // Check if wrapped in response object first
-      const responseData =
-        'response' in response &&
-        response.response &&
-        typeof response.response === 'object'
-          ? (response.response as {
-              posts?:
-                | AmbientPostItem[]
-                | {
-                    post?: AmbientPostItem[] | AmbientPostItem;
-                    posts?: AmbientPostItem[];
-                  };
-            })
-          : response;
-
-      if ('posts' in responseData && responseData.posts) {
-        if (Array.isArray(responseData.posts)) {
-          posts = responseData.posts;
-        } else if (typeof responseData.posts === 'object') {
-          // Check various nested structures
-          if ('post' in responseData.posts) {
-            const nested = responseData.posts.post;
-            posts = Array.isArray(nested) ? nested : nested ? [nested] : [];
-          } else if (
-            'posts' in responseData.posts &&
-            Array.isArray(responseData.posts.posts)
-          ) {
-            // Double nested: { posts: { posts: [...] } }
-            posts = responseData.posts.posts;
-          } else if ('content' in responseData.posts) {
-            // Single post returned directly: { posts: { content: "...", ... } }
-            posts = [responseData.posts as AmbientPostItem];
-          }
-        }
-      }
-
-      // Log extraction details on first attempt for monitoring
-      if (attempt === 0) {
-        logger.info(
-          'Ambient posts extraction',
-          {
-            postsLength: posts.length,
-            samplePost: posts[0]
-              ? {
-                  hasPost: 'post' in posts[0],
-                  hasTweet: 'tweet' in posts[0],
-                  hasContent: 'content' in posts[0],
-                  postType: typeof (posts[0] as Record<string, JsonValue>).post,
-                  contentType: typeof (posts[0] as Record<string, JsonValue>)
-                    .content,
-                }
-              : null,
-          },
-          'FeedGenerator'
-        );
-      }
-
-      const filteredPosts = posts
-        .filter((p) => {
-          // Handle various content field names: post, tweet, or content
-          const postContent = p.post || p.tweet || p.content;
-          // Also handle case where content might be nested object (XML edge case)
-          const contentValue =
-            typeof postContent === 'object' && postContent !== null
-              ? String(postContent)
-              : postContent;
-          return (
-            contentValue &&
-            typeof contentValue === 'string' &&
-            contentValue.trim().length > 0
-          );
-        })
-        .map((p) => {
-          const rawContent = p.post || p.tweet || p.content;
-          const content =
-            typeof rawContent === 'object' && rawContent !== null
-              ? String(rawContent)
-              : rawContent;
-          return {
-            post: content || '',
-            sentiment: p.sentiment ?? 0,
-            clueStrength: p.clueStrength ?? 0.05,
-            pointsToward: p.pointsToward ?? null,
-          };
-        });
-
-      // Apply post-processing (hashtag/emoji stripping, name mapping) and validation
-      const processedPosts = await Promise.all(
-        filteredPosts.map(async (p) => {
-          const processedPost = await this.postProcessContent(p.post);
-          const validation = this.validatePostContent(processedPost, 'AMBIENT');
-          return {
-            post: validation.cleanContent,
-            sentiment: p.sentiment,
-            clueStrength: p.clueStrength,
-            pointsToward: p.pointsToward,
-            isValid: validation.isValid,
-            violations: validation.violations,
-          };
-        })
-      );
-
-      // Check if any posts failed validation
-      const invalidPosts = processedPosts.filter((p) => !p.isValid);
-      if (invalidPosts.length > 0) {
-        const violationCount = invalidPosts.reduce(
-          (sum, p) => sum + p.violations.length,
-          0
-        );
-        logger.warn(
-          `Validation failed for ${invalidPosts.length} ambient post(s) (attempt ${attempt + 1}/${maxRetries})`,
-          {
-            violations: invalidPosts.flatMap((p) => p.violations),
-            violationCount,
-            attempt: attempt + 1,
-          },
-          'FeedGenerator'
-        );
-
-        // Retry if we haven't exhausted attempts
-        if (attempt < maxRetries - 1) {
-          await new Promise((resolve) => setTimeout(resolve, 1000));
-          continue;
-        }
-      }
-
-      // Filter to only valid posts
-      const validPosts = processedPosts
-        .filter((p) => p.isValid)
-        .map((p) => ({
-          post: p.post,
-          sentiment: p.sentiment,
-          clueStrength: p.clueStrength,
-          pointsToward: p.pointsToward,
-        }));
-
-      const minRequired = Math.ceil(actors.length * 0.5);
-
-      if (validPosts.length >= minRequired) {
-        // Limit to requested count to match with actors
-        return validPosts.slice(0, actors.length);
-      }
-
-      logger.warn(
-        `Invalid ambient posts batch (attempt ${attempt + 1}/${maxRetries}). Expected ${actors.length}, got ${validPosts.length} valid (need ${minRequired}+)`,
-        {
-          attempt: attempt + 1,
-          maxRetries,
-          expected: actors.length,
-          got: validPosts.length,
-          minRequired,
-        },
-        'FeedGenerator'
-      );
-      if (attempt < maxRetries - 1) {
-        await new Promise((resolve) => setTimeout(resolve, 1000));
       }
     }
 
-    logger.error(
-      `Failed to generate ambient posts batch after ${maxRetries} attempts. Returning empty batch.`,
-      undefined,
-      'FeedGenerator'
-    );
-    return [];
+    return null
   }
 
   /**
@@ -3122,51 +2469,51 @@ ${voiceContext}
   private async generateThread(
     day: number,
     existingPosts: FeedPost[],
-    allActors: Actor[]
+    allActors: Actor[],
   ): Promise<FeedPost[]> {
-    const thread: FeedPost[] = [];
+    const thread: FeedPost[] = []
 
-    if (existingPosts.length === 0) return thread;
+    if (existingPosts.length === 0) return thread
 
     // Pick a random post to reply to
     const originalPost =
-      existingPosts[Math.floor(Math.random() * existingPosts.length)];
-    if (!originalPost) return thread;
+      existingPosts[Math.floor(Math.random() * existingPosts.length)]
+    if (!originalPost) return thread
 
     // 1-3 people reply
-    const postingActors = allActors.filter((a) => a.id !== originalPost.author);
+    const postingActors = allActors.filter((a) => a.id !== originalPost.author)
     const repliers = shuffleArray(postingActors).slice(
       0,
-      1 + Math.floor(Math.random() * 3)
-    );
+      1 + Math.floor(Math.random() * 3),
+    )
 
-    if (repliers.length === 0) return thread;
+    if (repliers.length === 0) return thread
 
     // ✅ PER-CHARACTER: Generate replies individually with full context
     const replyTasks = shuffleArray(repliers).map((replier) => async () => {
       const result = await this.generateReplyForCharacter(
         replier,
         originalPost,
-        day
-      );
-      return result;
-    });
+        day,
+      )
+      return result
+    })
 
-    const replyResults = await rateLimitedParallel(replyTasks, 5, 100);
+    const replyResults = await rateLimitedParallel(replyTasks, 5, 100)
     const replies = replyResults
       .filter((r): r is NonNullable<typeof r> => r !== null)
       .map((replyContent) => {
-        const replier = repliers.find((r) => r.id === replyContent.actorId);
-        if (!replier) return null;
-        return { ...replyContent, replier };
+        const replier = repliers.find((r) => r.id === replyContent.actorId)
+        if (!replier) return null
+        return { ...replyContent, replier }
       })
-      .filter((r): r is NonNullable<typeof r> => r !== null);
+      .filter((r): r is NonNullable<typeof r> => r !== null)
 
     replies.forEach(({ replier, ...replyContent }, i) => {
-      if (!replier) return; // Skip if replier doesn't exist
+      if (!replier) return // Skip if replier doesn't exist
 
-      const baseTime = originalPost.timestamp.substring(0, 11);
-      const hour = Number.parseInt(originalPost.timestamp.substring(11, 13));
+      const baseTime = originalPost.timestamp.substring(0, 11)
+      const hour = Number.parseInt(originalPost.timestamp.substring(11, 13), 10)
 
       thread.push({
         id: `${originalPost.id}-reply-${replier.id}`,
@@ -3180,10 +2527,10 @@ ${voiceContext}
         sentiment: replyContent.sentiment,
         clueStrength: replyContent.clueStrength,
         pointsToward: replyContent.pointsToward,
-      });
-    });
+      })
+    })
 
-    return thread;
+    return thread
   }
 
   /**
@@ -3196,33 +2543,33 @@ ${voiceContext}
   private async generateReplyForCharacter(
     replier: Actor,
     originalPost: FeedPost,
-    day: number
+    day: number,
   ): Promise<{
-    post: string;
-    sentiment: number;
-    clueStrength: number;
-    pointsToward: boolean | null;
-    actorId: string;
+    post: string
+    sentiment: number
+    clueStrength: number
+    pointsToward: boolean | null
+    actorId: string
   } | null> {
     if (!this.llm) {
-      return null;
+      return null
     }
 
     // Build rich character context with all available data
     const { characterInfo, comprehensiveContext } =
-      await this.buildRichCharacterContext(replier, day, []);
+      await this.buildRichCharacterContext(replier, day, [])
     const comprehensiveContextText =
-      formatComprehensiveContext(comprehensiveContext);
+      formatComprehensiveContext(comprehensiveContext)
 
     // Build full context with trending topics, current events, etc.
-    const groupContext = this.actorGroupContexts.get(replier.id) || '';
-    const relationshipContext = await this.getActorRelationships(replier.id);
+    const groupContext = this.actorGroupContexts.get(replier.id) || ''
+    const relationshipContext = await this.getActorRelationships(replier.id)
     const fullCharacterContext = buildCharacterFeedContext({
       characterInfo,
       comprehensiveContext: comprehensiveContextText,
       trendingTopics: this.trendContext,
       recentPosts: groupContext || undefined,
-    });
+    })
 
     const prompt = renderPrompt(replies, {
       originalAuthorName: originalPost.authorName,
@@ -3232,29 +2579,29 @@ ${voiceContext}
       relationshipContext: relationshipContext,
       groupContext: groupContext || '',
       ...(this.worldContext || {}),
-    });
+    })
 
-    const params = getPromptParams(replies);
-    const maxRetries = 3;
+    const params = getPromptParams(replies)
+    const maxRetries = 3
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       const response = await this.llm.generateJSON<
         | {
             reply: {
-              post: string;
-              sentiment: number;
-              clueStrength: number;
-              pointsToward: boolean | null;
-            };
+              post: string
+              sentiment: number
+              clueStrength: number
+              pointsToward: boolean | null
+            }
           }
         | {
             response: {
               reply: {
-                post: string;
-                sentiment: number;
-                clueStrength: number;
-                pointsToward: boolean | null;
-              };
-            };
+                post: string
+                sentiment: number
+                clueStrength: number
+                pointsToward: boolean | null
+              }
+            }
           }
       >(
         prompt,
@@ -3272,39 +2619,28 @@ ${voiceContext}
           },
           required: ['reply'],
         },
-        { ...params, promptType: 'feed_generate_reply_per_character' }
-      );
+        { ...params, promptType: 'feed_generate_reply_per_character' },
+      )
 
       if (!response) {
         if (attempt < maxRetries - 1) {
-          await new Promise((resolve) => setTimeout(resolve, 1000));
-          continue;
+          await new Promise((resolve) => setTimeout(resolve, 1000))
+          continue
         }
-        return null;
+        return null
       }
 
-      const replyData =
-        'response' in response && response.response
-          ? (
-              response.response as {
-                reply: {
-                  post: string;
-                  sentiment: number;
-                  clueStrength: number;
-                  pointsToward: boolean | null;
-                };
-              }
-            ).reply
-          : (
-              response as {
-                reply: {
-                  post: string;
-                  sentiment: number;
-                  clueStrength: number;
-                  pointsToward: boolean | null;
-                };
-              }
-            ).reply;
+      // Unwrap nested response structure
+      type ReplyResponse = {
+        reply: {
+          post: string
+          sentiment: number
+          clueStrength: number
+          pointsToward: boolean | null
+        }
+      }
+      const unwrapped = unwrapLLMResponse<ReplyResponse>(response)
+      const replyData = unwrapped?.reply
 
       if (
         !replyData?.post ||
@@ -3312,23 +2648,21 @@ ${voiceContext}
         replyData.post.trim().length === 0
       ) {
         if (attempt < maxRetries - 1) {
-          await new Promise((resolve) => setTimeout(resolve, 1000));
-          continue;
+          await new Promise((resolve) => setTimeout(resolve, 1000))
+          continue
         }
-        return null;
+        return null
       }
 
-      const processedPost = await this.postProcessContent(
-        replyData.post.trim()
-      );
-      const validation = this.validatePostContent(processedPost, 'REPLY');
+      const processedPost = await this.postProcessContent(replyData.post.trim())
+      const validation = this.validatePostContent(processedPost, 'REPLY')
 
       if (!validation.isValid) {
         if (attempt < maxRetries - 1) {
-          await new Promise((resolve) => setTimeout(resolve, 1000));
-          continue;
+          await new Promise((resolve) => setTimeout(resolve, 1000))
+          continue
         }
-        return null;
+        return null
       }
 
       return {
@@ -3337,310 +2671,10 @@ ${voiceContext}
         clueStrength: replyData.clueStrength ?? 0.5,
         pointsToward: replyData.pointsToward ?? null,
         actorId: replier.id,
-      };
-    }
-
-    return null;
-  }
-
-  /**
-   * @deprecated Use generateReplyForCharacter instead - generates per-character with full context
-   * BATCHED: Generate replies for multiple actors in ONE call
-   *
-   * @internal Reserved for future batch processing optimization
-   */
-  // @ts-ignore TS6133 - Deprecated method kept for reference
-  private async _generateRepliesBatch(
-    actors: Actor[],
-    originalPost: FeedPost
-  ): Promise<
-    Array<{
-      post: string;
-      sentiment: number;
-      clueStrength: number;
-      pointsToward: boolean | null;
-    }>
-  > {
-    if (!this.llm || actors.length === 0) {
-      return [];
-    }
-
-    const contexts = actors.map((actor) => {
-      const state = this.actorStates.get(actor.id);
-      const emotionalContext = state
-        ? generateActorContext(
-            state.mood,
-            state.luck,
-            originalPost.author,
-            this.relationships,
-            actor.id
-          )
-        : '';
-
-      return { actor, emotionalContext };
-    });
-
-    const repliersList = contexts
-      .map((ctx, i) => {
-        const voiceContext = formatActorVoiceContext(ctx.actor);
-        const replyBehavior = ctx.actor.personality?.includes('contrarian')
-          ? 'Disagree or challenge the original post'
-          : 'Consider your relationship with author when replying';
-
-        return `
-╔══════════════════════════════════════════════════════════════════╗
-║ REPLIER ${i + 1}: ${ctx.actor.name.toUpperCase()}
-╚══════════════════════════════════════════════════════════════════╝
-   Identity: ${ctx.actor.description}
-   ${ctx.emotionalContext}
-${voiceContext}
-
-   YOUR TASK: Reply to ${originalPost.authorName}'s post AS ${ctx.actor.name}.
-   ${replyBehavior}
-   RULES: Max 140 chars. NO hashtags. NO emojis.
-   VOICE: Match the examples above. Sound like ${ctx.actor.name}.`;
-      })
-      .join('\n');
-
-    const prompt = renderPrompt(replies, {
-      originalAuthorName: originalPost.authorName,
-      originalContent: originalPost.content,
-      replierCount: actors.length.toString(),
-      repliersList,
-      ...(this.worldContext || {}),
-    });
-
-    const params = getPromptParams(replies);
-    const maxRetries = 5;
-    for (let attempt = 0; attempt < maxRetries; attempt++) {
-      const response = await this.llm.generateJSON<{
-        replies: Array<{
-          post?: string;
-          tweet?: string;
-          sentiment: number;
-          clueStrength: number;
-          pointsToward: boolean | null;
-        }>;
-      }>(
-        prompt,
-        undefined, // Don't validate schema to handle various response formats
-        { ...params, promptType: 'feed_generate_replies_batch' }
-      );
-
-      if (!response || typeof response !== 'object') {
-        logger.warn(
-          `LLM returned null/undefined/invalid replies response (attempt ${attempt + 1}/${maxRetries})`,
-          { type: typeof response },
-          'FeedGenerator'
-        );
-        if (attempt < maxRetries - 1) {
-          await new Promise((resolve) => setTimeout(resolve, 1000));
-          continue;
-        }
-        return [];
-      }
-
-      // Handle XML nested structure: { replies: [...] } or { replies: { reply: [...] } } or { response: { replies: {...} } }
-      type ReplyItem = {
-        post?: string;
-        tweet?: string;
-        content?: string;
-        sentiment: number;
-        clueStrength: number;
-        pointsToward: boolean | null;
-      };
-      let replies: ReplyItem[] = [];
-
-      // Check if wrapped in response object first
-      const responseData =
-        'response' in response &&
-        response.response &&
-        typeof response.response === 'object'
-          ? (response.response as {
-              replies?:
-                | ReplyItem[]
-                | { reply?: ReplyItem[] | ReplyItem; replies?: ReplyItem[] };
-            })
-          : response;
-
-      if ('replies' in responseData && responseData.replies) {
-        if (Array.isArray(responseData.replies)) {
-          replies = responseData.replies;
-        } else if (typeof responseData.replies === 'object') {
-          // Check various nested structures
-          if ('reply' in responseData.replies) {
-            const nested = responseData.replies.reply;
-            replies = Array.isArray(nested) ? nested : nested ? [nested] : [];
-          } else if (
-            'replies' in responseData.replies &&
-            Array.isArray(responseData.replies.replies)
-          ) {
-            // Double nested: { replies: { replies: [...] } }
-            replies = responseData.replies.replies;
-          } else if (
-            'content' in responseData.replies ||
-            'post' in responseData.replies
-          ) {
-            // Single reply returned directly: { replies: { content/post: "...", ... } }
-            replies = [responseData.replies as ReplyItem];
-          }
-        }
-      } else if ('reply' in responseData) {
-        // LLM returned singular 'reply' instead of 'replies'
-        const replyData = (
-          responseData as {
-            reply: ReplyItem[] | ReplyItem | { reply: ReplyItem[] | ReplyItem };
-          }
-        ).reply;
-        if (Array.isArray(replyData)) {
-          replies = replyData;
-        } else if (replyData && typeof replyData === 'object') {
-          if ('reply' in replyData) {
-            // Nested: { reply: { reply: [...] } }
-            const nested = (replyData as { reply: ReplyItem[] | ReplyItem })
-              .reply;
-            replies = Array.isArray(nested) ? nested : nested ? [nested] : [];
-          } else if ('post' in replyData || 'content' in replyData) {
-            // Single reply: { reply: { post: "...", ... } }
-            replies = [replyData as ReplyItem];
-          }
-        }
-      }
-
-      // Log extraction details on first attempt for monitoring
-      if (attempt === 0) {
-        logger.info(
-          'Replies extraction',
-          {
-            repliesLength: replies.length,
-            responseKeys: Object.keys(responseData),
-            hasReplies: 'replies' in responseData,
-            hasReply: 'reply' in responseData,
-            sampleReply: replies[0]
-              ? {
-                  hasPost: 'post' in replies[0],
-                  hasTweet: 'tweet' in replies[0],
-                  hasContent: 'content' in replies[0],
-                  postType: typeof (replies[0] as Record<string, JsonValue>)
-                    .post,
-                  contentType: typeof (replies[0] as Record<string, JsonValue>)
-                    .content,
-                }
-              : null,
-          },
-          'FeedGenerator'
-        );
-      }
-
-      // Type helper for replies that may have different content field names
-      const filteredReplies = replies
-        .filter((r): r is ReplyItem => {
-          // Handle various content field names: post, tweet, or content
-          const replyContent = r.post || r.tweet || r.content;
-          // Also handle case where content might be nested object (XML edge case)
-          const contentValue =
-            typeof replyContent === 'object' && replyContent !== null
-              ? String(replyContent)
-              : replyContent;
-          return Boolean(
-            contentValue &&
-              typeof contentValue === 'string' &&
-              contentValue.trim().length > 0
-          );
-        })
-        .map((r) => {
-          const rawContent = r.post || r.tweet || r.content;
-          const content =
-            typeof rawContent === 'object' && rawContent !== null
-              ? String(rawContent)
-              : rawContent;
-          return {
-            post: content || '',
-            sentiment: r.sentiment ?? 0,
-            clueStrength: r.clueStrength ?? 0.3,
-            pointsToward: r.pointsToward ?? null,
-          };
-        });
-
-      // Apply post-processing (hashtag/emoji stripping, name mapping) and validation
-      const processedReplies = await Promise.all(
-        filteredReplies.map(async (r) => {
-          const processedPost = await this.postProcessContent(r.post);
-          const validation = this.validatePostContent(processedPost, 'REPLY');
-          return {
-            post: validation.cleanContent,
-            sentiment: r.sentiment,
-            clueStrength: r.clueStrength,
-            pointsToward: r.pointsToward,
-            isValid: validation.isValid,
-            violations: validation.violations,
-          };
-        })
-      );
-
-      // Check if any replies failed validation
-      const invalidReplies = processedReplies.filter((r) => !r.isValid);
-      if (invalidReplies.length > 0) {
-        const violationCount = invalidReplies.reduce(
-          (sum, r) => sum + r.violations.length,
-          0
-        );
-        logger.warn(
-          `Validation failed for ${invalidReplies.length} reply/replies (attempt ${attempt + 1}/${maxRetries})`,
-          {
-            violations: invalidReplies.flatMap((r) => r.violations),
-            violationCount,
-            attempt: attempt + 1,
-          },
-          'FeedGenerator'
-        );
-
-        // Retry if we haven't exhausted attempts
-        if (attempt < maxRetries - 1) {
-          await new Promise((resolve) => setTimeout(resolve, 1000));
-          continue;
-        }
-      }
-
-      // Filter to only valid replies
-      const validReplies = processedReplies
-        .filter((r) => r.isValid)
-        .map((r) => ({
-          post: r.post,
-          sentiment: r.sentiment,
-          clueStrength: r.clueStrength,
-          pointsToward: r.pointsToward,
-        }));
-
-      const minRequired = Math.ceil(actors.length * 0.5);
-
-      if (validReplies.length >= minRequired) {
-        // Limit to requested count to match with actors
-        return validReplies.slice(0, actors.length);
-      }
-
-      logger.warn(
-        `Invalid replies batch (attempt ${attempt + 1}/${maxRetries}). Expected ${actors.length}, got ${validReplies.length} valid (need ${minRequired}+)`,
-        {
-          attempt: attempt + 1,
-          maxRetries,
-          expected: actors.length,
-          got: validReplies.length,
-          minRequired,
-        },
-        'FeedGenerator'
-      );
-      if (attempt < maxRetries - 1) {
-        await new Promise((resolve) => setTimeout(resolve, 1000));
       }
     }
 
-    logger.error(
-      `Failed to generate valid replies batch after ${maxRetries} attempts. Returning empty batch.`,
-      undefined,
-      'FeedGenerator'
-    );
-    return [];
+    return null
   }
 
   /**
@@ -3652,27 +2686,27 @@ ${voiceContext}
     priceUpdate: PriceUpdate,
     company: Organization,
     day: number,
-    allActors: Actor[]
+    allActors: Actor[],
   ): Promise<FeedPost[]> {
     if (!this.llm) {
-      return [];
+      return []
     }
 
-    const posts: FeedPost[] = [];
-    const baseTime = `2025-10-${String(day).padStart(2, '0')}T`;
-    const direction = priceUpdate.change > 0 ? 'up' : 'down';
-    const phaseContext = buildPhaseContext(day);
+    const posts: FeedPost[] = []
+    const baseTime = `2025-10-${String(day).padStart(2, '0')}T`
+    const direction = priceUpdate.change > 0 ? 'up' : 'down'
+    const phaseContext = buildPhaseContext(day)
 
     // Only generate posts for significant price movements (>2%)
     if (Math.abs(priceUpdate.changePercent) < 2) {
-      return [];
+      return []
     }
 
     // 1. Company announcement (for major moves >5%)
     if (Math.abs(priceUpdate.changePercent) >= 5) {
       // Ensure world context is available
       if (!this.worldContext) {
-        this.worldContext = await generateWorldContext({ maxActors: 50 });
+        this.worldContext = await generateWorldContext({ maxActors: 50 })
       }
 
       const prompt = renderPrompt(priceAnnouncement, {
@@ -3683,39 +2717,40 @@ ${voiceContext}
         eventDescription: priceUpdate.reason,
         phaseContext,
         ...(this.worldContext || {}),
-      });
+      })
 
-      const params = getPromptParams(priceAnnouncement);
+      const params = getPromptParams(priceAnnouncement)
       const rawResponse = await this.llm.generateJSON<
         | {
-            post: string;
-            sentiment: number;
+            post: string
+            sentiment: number
           }
         | { response: { post: string; sentiment: number } }
       >(prompt, undefined, {
         ...params,
         promptType: 'feed_generate_price_announcement',
-      });
+      })
 
-      // Handle XML structure
-      const response =
-        'response' in rawResponse && rawResponse.response
-          ? rawResponse.response
-          : (rawResponse as { post: string; sentiment: number });
-
-      const processedPost = await this.postProcessContent(response.post);
-      posts.push({
-        id: `${company.id}-price-announcement-${day}`,
-        day,
-        timestamp: `${baseTime}${String(9 + Math.floor(Math.random() * 2)).padStart(2, '0')}:${String(Math.floor(Math.random() * 60)).padStart(2, '0')}:00Z`,
-        type: 'news',
-        content: processedPost,
-        author: company.id,
-        authorName: company.name,
-        sentiment: response.sentiment,
-        clueStrength: 0,
-        pointsToward: null,
-      });
+      // Handle XML structure - unwrap nested response
+      const response = unwrapLLMResponse<{ post: string; sentiment: number }>(
+        rawResponse,
+      )
+      if (response?.post) {
+        const processedPost = await this.postProcessContent(response.post)
+        const sentiment = response.sentiment
+        posts.push({
+          id: `${company.id}-price-announcement-${day}`,
+          day,
+          timestamp: `${baseTime}${String(9 + Math.floor(Math.random() * 2)).padStart(2, '0')}:${String(Math.floor(Math.random() * 60)).padStart(2, '0')}:00Z`,
+          type: 'news',
+          content: processedPost,
+          author: company.id,
+          authorName: company.name,
+          sentiment,
+          clueStrength: 0,
+          pointsToward: null,
+        })
+      }
     }
 
     // 2. Stock ticker style post (always for significant moves)
@@ -3727,29 +2762,30 @@ ${voiceContext}
       direction,
       volume: Math.floor(Math.random() * 1000000 + 500000).toString(),
       ...(this.worldContext || {}),
-    });
+    })
 
-    const tickerParams = getPromptParams(stockTicker);
+    const tickerParams = getPromptParams(stockTicker)
     const rawTickerResponse = await this.llm.generateJSON<
       | {
-          post: string;
-          sentiment: number;
+          post: string
+          sentiment: number
         }
       | { response: { post: string; sentiment: number } }
     >(tickerPrompt, undefined, {
       ...tickerParams,
       promptType: 'feed_generate_stock_ticker',
-    });
+    })
 
-    // Handle XML structure
-    const tickerResponse =
-      'response' in rawTickerResponse && rawTickerResponse.response
-        ? rawTickerResponse.response
-        : (rawTickerResponse as { post: string; sentiment: number });
+    // Handle XML structure - unwrap nested response
+    const tickerResponse = unwrapLLMResponse<{
+      post: string
+      sentiment: number
+    }>(rawTickerResponse)
+    if (!tickerResponse?.post) return posts
 
     const processedTickerPost = await this.postProcessContent(
-      tickerResponse.post
-    );
+      tickerResponse.post,
+    )
     posts.push({
       id: `${company.id}-ticker-${day}`,
       day,
@@ -3761,7 +2797,7 @@ ${voiceContext}
       sentiment: tickerResponse.sentiment,
       clueStrength: 0,
       pointsToward: null,
-    });
+    })
 
     // 3. Analyst reactions (1-2 analysts for major moves)
     if (Math.abs(priceUpdate.changePercent) >= 3) {
@@ -3770,12 +2806,12 @@ ${voiceContext}
           (a) =>
             a.domain?.includes('finance') ||
             a.domain?.includes('business') ||
-            a.description?.toLowerCase().includes('analyst')
+            a.description?.toLowerCase().includes('analyst'),
         )
-        .slice(0, Math.abs(priceUpdate.changePercent) >= 5 ? 2 : 1);
+        .slice(0, Math.abs(priceUpdate.changePercent) >= 5 ? 2 : 1)
 
       for (const analyst of analysts) {
-        const state = this.actorStates.get(analyst.id);
+        const state = this.actorStates.get(analyst.id)
 
         const prompt = renderPrompt(analystReaction, {
           analystName: analyst.name,
@@ -3793,29 +2829,29 @@ ${voiceContext}
             : 'neutral',
           phaseContext,
           ...(this.worldContext || {}),
-        });
+        })
 
-        const analystParams = getPromptParams(analystReaction);
+        const analystParams = getPromptParams(analystReaction)
         const rawResponse = await this.llm.generateJSON<
           | {
-              post: string;
-              sentiment: number;
+              post: string
+              sentiment: number
             }
           | { response: { post: string; sentiment: number } }
         >(prompt, undefined, {
           ...analystParams,
           promptType: 'feed_generate_analyst_reaction',
-        });
+        })
 
-        // Handle XML structure
-        const response =
-          'response' in rawResponse && rawResponse.response
-            ? rawResponse.response
-            : (rawResponse as { post: string; sentiment: number });
+        // Handle XML structure - unwrap nested response
+        const response = unwrapLLMResponse<{ post: string; sentiment: number }>(
+          rawResponse,
+        )
+        if (!response?.post) continue
 
         const processedAnalystPost = await this.postProcessContent(
-          response.post
-        );
+          response.post,
+        )
         posts.push({
           id: `${analyst.id}-analyst-${company.id}-${day}`,
           day,
@@ -3827,11 +2863,11 @@ ${voiceContext}
           sentiment: response.sentiment,
           clueStrength: 0,
           pointsToward: null,
-        });
+        })
       }
     }
 
-    return posts;
+    return posts
   }
 
   /**
@@ -3843,39 +2879,39 @@ ${voiceContext}
     day: number,
     previousDayEvents: WorldEvent[],
     questions: Question[],
-    allActors: Actor[]
+    allActors: Actor[],
   ): Promise<FeedPost | null> {
     if (!this.llm || day === 1) {
-      return null; // No transition post for day 1
+      return null // No transition post for day 1
     }
 
-    const baseTime = `2025-10-${String(day).padStart(2, '0')}T06:00:00Z`; // Early morning transition
-    const phaseContext = buildPhaseContext(day);
-    const phaseName = this.getPhaseName(day);
+    const baseTime = `2025-10-${String(day).padStart(2, '0')}T06:00:00Z` // Early morning transition
+    const phaseContext = buildPhaseContext(day)
+    const phaseName = this.getPhaseName(day)
 
     // Format yesterday's key events
     const eventsContext = previousDayEvents
       .slice(0, 3) // Top 3 events
       .map((e) => `- ${e.description}`)
-      .join('\n');
+      .join('\n')
 
     // Format active questions
     const questionsContext = questions
       .filter((q) => !q.status || q.status === 'active')
       .slice(0, 3) // Top 3 questions
       .map((q) => `- ${q.text}`)
-      .join('\n');
+      .join('\n')
 
     // Format key actors (top tier actors)
     const keyActors = allActors
       .filter((a) => a.tier === 'S_TIER' || a.tier === 'A_TIER')
       .slice(0, 5)
       .map((a) => a.name)
-      .join(', ');
+      .join(', ')
 
     // Ensure world context is available
     if (!this.worldContext) {
-      this.worldContext = await generateWorldContext({ maxActors: 50 });
+      this.worldContext = await generateWorldContext({ maxActors: 50 })
     }
 
     const prompt = renderPrompt(dayTransition, {
@@ -3886,28 +2922,30 @@ ${voiceContext}
       activeQuestions: questionsContext || 'No active questions',
       keyActors: keyActors || 'Various industry figures',
       ...(this.worldContext || {}),
-    });
+    })
 
-    const params = getPromptParams(dayTransition);
+    const params = getPromptParams(dayTransition)
     const rawResponse = await this.llm.generateJSON<
       | {
-          event: string;
-          type: string;
-          tone: string;
+          event: string
+          type: string
+          tone: string
         }
       | { response: { event: string; type: string; tone: string } }
     >(prompt, undefined, {
       ...params,
       promptType: 'feed_generate_day_transition',
-    });
+    })
 
-    // Handle XML structure
-    const response =
-      'response' in rawResponse && rawResponse.response
-        ? rawResponse.response
-        : (rawResponse as { event: string; type: string; tone: string });
+    // Handle XML structure - unwrap nested response
+    const response = unwrapLLMResponse<{
+      event: string
+      type: string
+      tone: string
+    }>(rawResponse)
+    if (!response?.event) return null
 
-    const processedEvent = await this.postProcessContent(response.event);
+    const processedEvent = await this.postProcessContent(response.event)
     const post: FeedPost = {
       id: `day-transition-${day}`,
       day,
@@ -3919,11 +2957,11 @@ ${voiceContext}
       sentiment: 0,
       clueStrength: 0,
       pointsToward: null,
-    };
+    }
 
-    FeedPostSchema.parse(post);
+    FeedPostSchema.parse(post)
 
-    return post;
+    return post
   }
 
   /**
@@ -3935,18 +2973,18 @@ ${voiceContext}
     question: Question,
     resolutionEventDescription: string,
     day: number,
-    winningPercentage = 50
+    winningPercentage = 50,
   ): Promise<FeedPost | null> {
     if (!this.llm) {
-      return null;
+      return null
     }
 
-    const baseTime = `2025-10-${String(day).padStart(2, '0')}T20:00:00Z`;
-    const outcomeText = question.resolvedOutcome ? 'YES' : 'NO';
+    const baseTime = `2025-10-${String(day).padStart(2, '0')}T20:00:00Z`
+    const outcomeText = question.resolvedOutcome ? 'YES' : 'NO'
 
     // Ensure world context is available
     if (!this.worldContext) {
-      this.worldContext = await generateWorldContext({ maxActors: 50 });
+      this.worldContext = await generateWorldContext({ maxActors: 50 })
     }
 
     const prompt = renderPrompt(questionResolvedFeed, {
@@ -3955,27 +2993,27 @@ ${voiceContext}
       resolutionEvent: resolutionEventDescription,
       winningPercentage: winningPercentage.toFixed(0),
       ...(this.worldContext || {}),
-    });
+    })
 
-    const params = getPromptParams(questionResolvedFeed);
+    const params = getPromptParams(questionResolvedFeed)
     const rawResponse = await this.llm.generateJSON<
       | {
-          post: string;
-          sentiment: number;
+          post: string
+          sentiment: number
         }
       | { response: { post: string; sentiment: number } }
     >(prompt, undefined, {
       ...params,
       promptType: 'feed_generate_question_resolution',
-    });
+    })
 
-    // Handle XML structure
-    const response =
-      'response' in rawResponse && rawResponse.response
-        ? rawResponse.response
-        : (rawResponse as { post: string; sentiment: number });
+    // Handle XML structure - unwrap nested response
+    const response = unwrapLLMResponse<{ post: string; sentiment: number }>(
+      rawResponse,
+    )
+    if (!response?.post) return null
 
-    const processedPost = await this.postProcessContent(response.post);
+    const processedPost = await this.postProcessContent(response.post)
     const post: FeedPost = {
       id: `question-resolved-${question.id}-${day}`,
       day,
@@ -3987,11 +3025,11 @@ ${voiceContext}
       sentiment: response.sentiment,
       clueStrength: 0,
       pointsToward: null,
-    };
+    }
 
-    FeedPostSchema.parse(post);
+    FeedPostSchema.parse(post)
 
-    return post;
+    return post
   }
 
   /**
@@ -4000,13 +3038,13 @@ ${voiceContext}
    */
   public async generateMinuteAmbientPost(
     actor: {
-      id: string;
-      name: string;
-      description?: string;
-      role?: string;
-      mood?: number;
+      id: string
+      name: string
+      description?: string
+      role?: string
+      mood?: number
     },
-    timestamp: Date
+    timestamp: Date,
   ): Promise<{ content: string; sentiment: number; energy: number }> {
     const formattedTime = timestamp.toLocaleString('en-US', {
       weekday: 'long',
@@ -4014,17 +3052,17 @@ ${voiceContext}
       day: 'numeric',
       hour: 'numeric',
       minute: '2-digit',
-    });
+    })
 
     const emotionalContext = actor.mood
       ? `Current mood: ${actor.mood > 0 ? 'positive' : actor.mood < 0 ? 'negative' : 'neutral'}`
-      : '';
+      : ''
 
-    const atmosphereContext = '';
+    const atmosphereContext = ''
 
     // Ensure world context is available
     if (!this.worldContext) {
-      this.worldContext = await generateWorldContext({ maxActors: 50 });
+      this.worldContext = await generateWorldContext({ maxActors: 50 })
     }
 
     const prompt = renderPrompt(minuteAmbient, {
@@ -4036,43 +3074,47 @@ ${voiceContext}
       ...(this.worldContext || {}),
       // Override currentTime with formatted version for this specific prompt
       currentTime: formattedTime,
-    });
+    })
 
-    const params = getPromptParams(minuteAmbient);
-    const rawResponse = await this.llm!.generateJSON<
+    const params = getPromptParams(minuteAmbient)
+    const rawResponse = await this.llm?.generateJSON<
       | {
-          post: string;
-          sentiment: number;
-          energy: number;
+          post: string
+          sentiment: number
+          energy: number
         }
       | { response: { post: string; sentiment: number; energy: number } }
     >(prompt, undefined, {
       ...params,
       promptType: 'feed_generate_minute_ambient',
-    });
+    })
 
-    // Handle XML structure
-    const response =
-      'response' in rawResponse && rawResponse.response
-        ? rawResponse.response
-        : (rawResponse as { post: string; sentiment: number; energy: number });
+    // Handle XML structure - unwrap nested response
+    const response = unwrapLLMResponse<{
+      post: string
+      sentiment: number
+      energy: number
+    }>(rawResponse)
+    if (!response?.post) {
+      return { content: '', sentiment: 0, energy: 0.5 }
+    }
 
-    const processedPost = await this.postProcessContent(response.post);
+    const processedPost = await this.postProcessContent(response.post)
     return {
       content: processedPost,
-      sentiment: response.sentiment,
-      energy: response.energy,
-    };
+      sentiment: response.sentiment ?? 0,
+      energy: response.energy ?? 0.5,
+    }
   }
 
   /**
    * Get phase name for a given day
    */
   private getPhaseName(day: number): string {
-    if (day <= 10) return 'WILD';
-    if (day <= 20) return 'CONNECTION';
-    if (day <= 25) return 'CONVERGENCE';
-    if (day <= 29) return 'CLIMAX';
-    return 'RESOLUTION';
+    if (day <= 10) return 'WILD'
+    if (day <= 20) return 'CONNECTION'
+    if (day <= 25) return 'CONVERGENCE'
+    if (day <= 29) return 'CLIMAX'
+    return 'RESOLUTION'
   }
 }

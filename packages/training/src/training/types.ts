@@ -2,18 +2,16 @@
  * Training Module Types
  *
  * Type definitions for the training pipeline and automation.
- * Re-exports Zod-inferred types from schemas for consistency.
  */
 
-import type { BenchmarkConfig as BenchmarkConfigInput } from '../benchmark/BenchmarkDataGenerator';
+import type { BenchmarkConfig as BenchmarkConfigInput } from '../benchmark/BenchmarkDataGenerator'
 import type {
   AutomationConfig as ZodAutomationConfig,
   TrainingConfig as ZodTrainingConfig,
   TrainingStats as ZodTrainingStats,
   TrainingTriggerOptions as ZodTrainingTriggerOptions,
-} from '../schemas';
+} from '../schemas'
 
-// Re-export core types from schemas
 export type {
   Action,
   EnvironmentState,
@@ -23,9 +21,8 @@ export type {
   TrajectoryData,
   TrajectoryScoreResponse,
   TrajectoryStep,
-} from '../schemas';
-// Re-export validation functions
-// Re-export schemas for validation
+} from '../schemas'
+
 export {
   ActionSchema,
   AutomationConfigSchema,
@@ -40,49 +37,49 @@ export {
   TrajectoryDataSchema,
   TrajectoryScoreResponseSchema,
   TrajectoryStepSchema,
-} from '../schemas';
+} from '../schemas'
 
 /**
  * Automation pipeline configuration
  */
-export type AutomationConfig = ZodAutomationConfig;
+export type AutomationConfig = ZodAutomationConfig
 
 /**
  * Training configuration
  */
-export type TrainingConfig = ZodTrainingConfig;
+export type TrainingConfig = ZodTrainingConfig
 
 /**
  * Training trigger options
  */
-export type TrainingTriggerOptions = ZodTrainingTriggerOptions;
+export type TrainingTriggerOptions = ZodTrainingTriggerOptions
 
 /**
  * Training readiness result
  */
 export interface TrainingReadinessResult {
-  ready: boolean;
-  reason: string;
-  stats: ZodTrainingStats;
+  ready: boolean
+  reason: string
+  stats: ZodTrainingStats
 }
 
 /**
  * Training trigger result
  */
 export interface TrainingTriggerResult {
-  success: boolean;
-  jobId?: string;
-  error?: string;
+  success: boolean
+  jobId?: string
+  error?: string
 }
 
 /**
  * Training monitoring status
  */
 export interface TrainingMonitoringStatus {
-  status: string;
-  progress?: number;
-  eta?: number;
-  error?: string;
+  status: string
+  progress?: number
+  eta?: number
+  error?: string
 }
 
 /**
@@ -90,32 +87,32 @@ export interface TrainingMonitoringStatus {
  */
 export interface AutomationStatus {
   dataCollection: {
-    last24h: number;
-    last7d: number;
-    ratePerHour: number;
-  };
+    last24h: number
+    last7d: number
+    ratePerHour: number
+  }
   training: {
-    currentJob: string | null;
-    lastCompleted: Date | null;
-    nextScheduled: Date | null;
-  };
+    currentJob: string | null
+    lastCompleted: Date | null
+    nextScheduled: Date | null
+  }
   models: {
-    latest: string | null;
-    deployed: number;
-    training: number;
-  };
+    latest: string | null
+    deployed: number
+    training: number
+  }
   health: {
-    database: boolean;
-    storage: boolean;
-    atropos: boolean;
-  };
+    database: boolean
+    storage: boolean
+    atropos: boolean
+  }
 }
 
 /**
  * Pipeline configuration (combines benchmark, training, and agent configs)
  */
 export interface PipelineConfig {
-  benchmark: BenchmarkConfigInput | null | undefined;
-  training: TrainingConfig;
-  agents: { test_agent_count: number };
+  benchmark: BenchmarkConfigInput | null | undefined
+  training: TrainingConfig
+  agents: { test_agent_count: number }
 }

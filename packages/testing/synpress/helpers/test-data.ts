@@ -61,7 +61,7 @@ export const ROUTES = {
 
   // API docs
   API_DOCS: '/api-docs',
-} as const;
+} as const
 
 /**
  * All routes that should be accessible without authentication
@@ -76,7 +76,7 @@ export const PUBLIC_ROUTES = [
   ROUTES.PROFILE,
   ROUTES.AGENTS,
   ROUTES.API_DOCS,
-];
+]
 
 /**
  * Routes that require authentication
@@ -88,7 +88,7 @@ export const AUTHENTICATED_ROUTES = [
   ROUTES.SETTINGS,
   ROUTES.SETTINGS_MODERATION,
   ROUTES.AGENTS_CREATE,
-];
+]
 
 /**
  * Admin-only routes
@@ -99,7 +99,7 @@ export const ADMIN_ROUTES = [
   ROUTES.ADMIN_PERFORMANCE,
   ROUTES.ADMIN_RL_TRAINING,
   ROUTES.ADMIN_TRAINING,
-];
+]
 
 /**
  * Test selectors for common UI elements
@@ -162,7 +162,7 @@ export const SELECTORS = {
   SELECT: 'select',
   CHECKBOX: 'input[type="checkbox"]',
   SLIDER: 'input[type="range"], [role="slider"]',
-} as const;
+} as const
 
 /**
  * Test form data
@@ -194,7 +194,7 @@ export const TEST_FORM_DATA = {
   LARGE_NUMBER: 999999999999,
   ZERO: 0,
   DECIMAL: 0.001,
-} as const;
+} as const
 
 /**
  * Viewport sizes for responsive testing
@@ -207,7 +207,7 @@ export const VIEWPORTS = {
   DESKTOP: { width: 1280, height: 800 },
   DESKTOP_LARGE: { width: 1920, height: 1080 },
   DESKTOP_ULTRAWIDE: { width: 2560, height: 1440 },
-} as const;
+} as const
 
 /**
  * Timeouts for different operations
@@ -220,7 +220,7 @@ export const TIMEOUTS = {
   PAGE_LOAD: 15000,
   API_CALL: 10000,
   ANIMATION: 500,
-} as const;
+} as const
 
 /**
  * Test data for trading operations
@@ -237,7 +237,7 @@ export const TRADING_TEST_DATA = {
   // Invalid inputs
   INVALID_SIZE: -1,
   INVALID_LEVERAGE: 1000,
-} as const;
+} as const
 
 /**
  * Default test account - uses anvil default wallet
@@ -248,4 +248,4 @@ export const DEFAULT_ANVIL_ACCOUNT = {
   privateKey:
     '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80',
   mnemonic: 'test test test test test test test test test test test junk',
-} as const;
+} as const

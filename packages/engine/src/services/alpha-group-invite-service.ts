@@ -11,62 +11,55 @@
  * - Small random chance each tick (0.5% for highly engaged users)
  */
 
-import {
-  and,
-  count,
-  db,
-  desc,
-  eq,
-  groupChatMemberships,
-  gte,
-} from '@babylon/db';
-import { logger } from '@babylon/shared';
-import { GroupChatService } from './group-chat-service';
-import { NPCInteractionTracker } from './npc-interaction-tracker';
-import { StaticDataRegistry } from './static-data-registry';
+import { and, db, desc, eq, groupChatMemberships } from '@babylon/db'
+import { logger } from '@babylon/shared'
+import { GroupChatService } from './group-chat-service'
+import { NPCInteractionTracker } from './npc-interaction-tracker'
+import { StaticDataRegistry } from './static-data-registry'
 
 export interface AlphaInviteResult {
-  npcId: string;
-  npcName: string;
-  userId: string;
-  invitedToChat: string;
-  engagementScore: number;
-  probability: number;
+  npcId: string
+  npcName: string
+  userId: string
+  invitedToChat: string
+  engagementScore: number
+  probability: number
 }
 
+// biome-ignore lint/complexity/noStaticOnlyClass: Service pattern uses static methods for stateless operations
 export class AlphaGroupInviteService {
   // Base invite probability per tick (0.5% for top engaged users)
-  private static readonly BASE_INVITE_CHANCE = 0.005; // 0.5%
+  private static readonly BASE_INVITE_CHANCE = 0.005 // 0.5%
 
   // Minimum engagement score to be considered (0-100 scale)
-  private static readonly MIN_ENGAGEMENT_SCORE = 40;
+  private static readonly MIN_ENGAGEMENT_SCORE = 40
 
   // Maximum invites per tick (prevent too many at once)
-  private static readonly MAX_INVITES_PER_TICK = 5;
+  private static readonly MAX_INVITES_PER_TICK = 5
 
   // User group participation limits (prevent unlimited accumulation)
-  private static readonly MAX_ACTIVE_USER_GROUPS = 5; // Max groups a user can be in simultaneously
-  private static readonly INVITE_COOLDOWN_HOURS = 4; // Hours after joining before next invite eligible
+  private static readonly MAX_ACTIVE_USER_GROUPS = 5 // Max groups a user can be in simultaneously
+  private static readonly INVITE_COOLDOWN_HOURS = 4 // Hours after joining before next invite eligible
 
   /**
    * Process alpha group invites for one tick
    * Checks all NPCs and their top engaged users
    */
   static async processTickInvites(): Promise<AlphaInviteResult[]> {
-    const startTime = Date.now();
-    const invites: AlphaInviteResult[] = [];
+    const startTime = Date.now()
+    const invites: AlphaInviteResult[] = []
 
     // Get all NPCs (actors) from static registry
     const npcs = StaticDataRegistry.getAllActors().map((a) => ({
       id: a.id,
       name: a.name,
-    }));
+    }))
 
     logger.info(
       `Processing alpha invites for ${npcs.length} NPCs`,
       undefined,
-      'AlphaGroupInviteService'
-    );
+      'AlphaGroupInviteService',
+    )
 
     // Process each NPC
     for (const npc of npcs) {
@@ -74,26 +67,26 @@ export class AlphaGroupInviteService {
         logger.info(
           'Reached max invites per tick',
           { count: invites.length },
-          'AlphaGroupInviteService'
-        );
-        break;
+          'AlphaGroupInviteService',
+        )
+        break
       }
 
       const npcInvites = await AlphaGroupInviteService.processNPCInvites(
         npc.id,
-        npc.name
-      );
-      invites.push(...npcInvites);
+        npc.name,
+      )
+      invites.push(...npcInvites)
     }
 
-    const duration = Date.now() - startTime;
+    const duration = Date.now() - startTime
     logger.info(
       `Alpha invite tick complete: ${invites.length} invites sent`,
       { duration, invites: invites.length },
-      'AlphaGroupInviteService'
-    );
+      'AlphaGroupInviteService',
+    )
 
-    return invites;
+    return invites
   }
 
   /**
@@ -101,19 +94,19 @@ export class AlphaGroupInviteService {
    */
   private static async processNPCInvites(
     npcId: string,
-    npcName: string
+    npcName: string,
   ): Promise<AlphaInviteResult[]> {
-    const invites: AlphaInviteResult[] = [];
+    const invites: AlphaInviteResult[] = []
 
     // Get top engaged users with this NPC
-    const topUsers = await NPCInteractionTracker.getTopEngagedUsers(npcId, 20); // Top 20 users
+    const topUsers = await NPCInteractionTracker.getTopEngagedUsers(npcId, 20) // Top 20 users
 
     for (const userScore of topUsers) {
       // Only consider users with sufficient engagement
       if (
         userScore.engagementScore < AlphaGroupInviteService.MIN_ENGAGEMENT_SCORE
       ) {
-        continue;
+        continue
       }
 
       // Check if already invited to a group with this NPC
@@ -124,27 +117,20 @@ export class AlphaGroupInviteService {
           and(
             eq(groupChatMemberships.userId, userScore.userId),
             eq(groupChatMemberships.npcAdminId, npcId),
-            eq(groupChatMemberships.isActive, true)
-          )
+            eq(groupChatMemberships.isActive, true),
+          ),
         )
-        .limit(1);
+        .limit(1)
 
       if (existingMembership) {
-        continue; // Already in a group
+        continue // Already in a group
       }
 
-      // Check if user is at their group limit
-      const [activeGroupResult] = (await db
-        .select({ count: count() })
-        .from(groupChatMemberships)
-        .where(
-          and(
-            eq(groupChatMemberships.userId, userScore.userId),
-            eq(groupChatMemberships.isActive, true)
-          )
-        )) as unknown as { count: number }[];
-
-      const activeGroupCount = activeGroupResult?.count ?? 0;
+      const activeGroupCount = await db.groupChatMembership.count({
+        where: {
+          AND: [{ userId: userScore.userId }, { isActive: true }],
+        },
+      })
 
       if (activeGroupCount >= AlphaGroupInviteService.MAX_ACTIVE_USER_GROUPS) {
         logger.debug(
@@ -154,9 +140,9 @@ export class AlphaGroupInviteService {
             activeGroups: activeGroupCount,
             maxGroups: AlphaGroupInviteService.MAX_ACTIVE_USER_GROUPS,
           },
-          'AlphaGroupInviteService'
-        );
-        continue;
+          'AlphaGroupInviteService',
+        )
+        continue
       }
 
       // Check if user is in invite cooldown
@@ -166,22 +152,22 @@ export class AlphaGroupInviteService {
         .where(
           and(
             eq(groupChatMemberships.userId, userScore.userId),
-            eq(groupChatMemberships.isActive, true)
-          )
+            eq(groupChatMemberships.isActive, true),
+          ),
         )
         .orderBy(desc(groupChatMemberships.joinedAt))
-        .limit(1);
+        .limit(1)
 
       if (latestMembership) {
         const joinedAt = latestMembership.joinedAt
           ? latestMembership.joinedAt instanceof Date
             ? latestMembership.joinedAt
             : new Date(String(latestMembership.joinedAt))
-          : null;
+          : null
 
         if (joinedAt) {
           const hoursSinceJoin =
-            (Date.now() - joinedAt.getTime()) / (1000 * 60 * 60);
+            (Date.now() - joinedAt.getTime()) / (1000 * 60 * 60)
 
           if (hoursSinceJoin < AlphaGroupInviteService.INVITE_COOLDOWN_HOURS) {
             logger.debug(
@@ -191,33 +177,33 @@ export class AlphaGroupInviteService {
                 hoursSinceJoin: hoursSinceJoin.toFixed(2),
                 cooldownRequired: AlphaGroupInviteService.INVITE_COOLDOWN_HOURS,
               },
-              'AlphaGroupInviteService'
-            );
-            continue;
+              'AlphaGroupInviteService',
+            )
+            continue
           }
         }
       }
 
       // Calculate invite probability based on engagement score
       // Higher engagement = higher chance
-      const scoreFactor = userScore.engagementScore / 100; // 0-1
+      const scoreFactor = userScore.engagementScore / 100 // 0-1
       const inviteProbability =
-        AlphaGroupInviteService.BASE_INVITE_CHANCE * scoreFactor;
+        AlphaGroupInviteService.BASE_INVITE_CHANCE * scoreFactor
 
       // Roll the dice
-      const roll = Math.random();
+      const roll = Math.random()
 
       if (roll < inviteProbability) {
         // User wins the lottery! Invite them
-        const chatId = `${npcId}-alpha-chat`;
-        const chatName = `${npcName}'s Alpha Group`;
+        const chatId = `${npcId}-alpha-chat`
+        const chatName = `${npcName}'s Alpha Group`
 
         await GroupChatService.recordInvite(
           userScore.userId,
           npcId,
           chatId,
-          chatName
-        );
+          chatName,
+        )
 
         invites.push({
           npcId,
@@ -226,7 +212,7 @@ export class AlphaGroupInviteService {
           invitedToChat: chatName,
           engagementScore: userScore.engagementScore,
           probability: inviteProbability,
-        });
+        })
 
         logger.info(
           'User invited to alpha group',
@@ -239,51 +225,41 @@ export class AlphaGroupInviteService {
             probability: inviteProbability,
             roll,
           },
-          'AlphaGroupInviteService'
-        );
+          'AlphaGroupInviteService',
+        )
 
         // Only one invite per NPC per tick
-        break;
+        break
       }
     }
 
-    return invites;
+    return invites
   }
 
   /**
    * Get invite statistics for monitoring and analysis
    */
   static async getInviteStats(): Promise<{
-    totalInvites: number;
-    activeGroups: number;
-    invitesLast24h: number;
+    totalInvites: number
+    activeGroups: number
+    invitesLast24h: number
   }> {
-    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000)
 
-    type CountResult = { count: number };
-
-    const [totalResult] = (await db
-      .select({ count: count() })
-      .from(groupChatMemberships)) as unknown as CountResult[];
-
-    const [activeResult] = (await db
-      .select({ count: count() })
-      .from(groupChatMemberships)
-      .where(
-        eq(groupChatMemberships.isActive, true)
-      )) as unknown as CountResult[];
-
-    const [recentResult] = (await db
-      .select({ count: count() })
-      .from(groupChatMemberships)
-      .where(
-        gte(groupChatMemberships.joinedAt, oneDayAgo)
-      )) as unknown as CountResult[];
+    const [totalInvites, activeGroups, invitesLast24h] = await Promise.all([
+      db.groupChatMembership.count({}),
+      db.groupChatMembership.count({
+        where: { isActive: true },
+      }),
+      db.groupChatMembership.count({
+        where: { joinedAt: { gte: oneDayAgo } },
+      }),
+    ])
 
     return {
-      totalInvites: totalResult?.count ?? 0,
-      activeGroups: activeResult?.count ?? 0,
-      invitesLast24h: recentResult?.count ?? 0,
-    };
+      totalInvites,
+      activeGroups,
+      invitesLast24h,
+    }
   }
 }

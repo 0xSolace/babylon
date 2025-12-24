@@ -1,1 +1,0 @@
-{"version":3,"file":"event-generation-helpers.d.ts","sourceRoot":"","sources":["event-generation-helpers.ts"],"names":[],"mappings":"AAAA,OAAO,EAAM,KAAK,QAAQ,EAAe,MAAM,aAAa,CAAC;AAI7D,KAAK,gBAAgB,GAAG,IAAI,CAAC,QAAQ,EAAE,IAAI,GAAG,MAAM,GAAG,gBAAgB,CAAC,CAAC;AAEzE;;GAEG;AACH,wBAAsB,cAAc,CAClC,SAAS,EAAE,gBAAgB,EAAE,EAC7B,SAAS,EAAE,IAAI,GACd,OAAO,CAAC,MAAM,CAAC,CAyCjB"}

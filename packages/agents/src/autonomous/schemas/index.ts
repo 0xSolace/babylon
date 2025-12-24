@@ -1,7 +1,8 @@
 /**
  * Autonomous Service Schemas
  *
- * Re-exports all Zod schemas used by autonomous services
+ * Zod schemas used by autonomous services
  */
 
-export * from './llm-response-schemas';
+// Import schemas directly from llm-response-schemas when needed
+// This file is kept for potential future expansion

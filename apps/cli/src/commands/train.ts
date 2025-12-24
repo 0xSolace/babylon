@@ -13,18 +13,25 @@
  *   generate    - Generate multi-archetype trajectories
  */
 
-// Light imports that don't initialize database connections
+import { spawn } from 'node:child_process'
+import { mkdir, writeFile } from 'node:fs/promises'
+import { join } from 'node:path'
+import { agentRuntimeManager, autonomousCoordinator } from '@babylon/agents'
+import { closeDatabase, db } from '@babylon/db'
+import { BabylonLLMClient } from '@babylon/engine'
+import { generateSnowflakeId } from '@babylon/shared'
 import {
+  archetypeScoringService,
+  configureTrainingDependencies,
   getAvailableArchetypes,
   getPriorityMetrics,
   getRubric,
   hasCustomRubric,
-} from '@babylon/training';
-import { spawn } from 'child_process';
-import { join } from 'path';
-import { z } from 'zod';
-import { getFlag, getOption, parseArgs, wantsHelp } from '../lib/args.js';
-import { logger } from '../lib/logger.js';
+  trajectoryMetricsExtractor,
+} from '@babylon/training'
+import { z } from 'zod'
+import { getFlag, getOption, parseArgs, wantsHelp } from '../lib/args.js'
+import { logger } from '../lib/logger.js'
 
 // Zod schemas for trajectory step validation
 const AgentActionSchema = z.object({
@@ -32,7 +39,7 @@ const AgentActionSchema = z.object({
   parameters: z.record(z.string(), z.unknown()),
   success: z.boolean(),
   reasoning: z.string().optional(),
-});
+})
 
 const LLMCallSchema = z.object({
   model: z.string(),
@@ -43,13 +50,13 @@ const LLMCallSchema = z.object({
   temperature: z.number(),
   maxTokens: z.number(),
   purpose: z.enum(['reasoning', 'action', 'evaluation']),
-});
+})
 
 const EnvironmentStateSchema = z.object({
   agentBalance: z.number(),
   agentPnL: z.number(),
   openPositions: z.number(),
-});
+})
 
 const TrajectoryStepSchema = z.object({
   stepNumber: z.number(),
@@ -59,81 +66,40 @@ const TrajectoryStepSchema = z.object({
   llmCalls: z.array(LLMCallSchema),
   action: AgentActionSchema,
   reward: z.number(),
-});
+})
 
-const TrajectoryStepsArraySchema = z.array(TrajectoryStepSchema);
+const TrajectoryStepsArraySchema = z.array(TrajectoryStepSchema)
 
-// Heavy imports loaded lazily to avoid initializing connections for simple commands
-async function getDbImports() {
-  const dbMod = await import('@babylon/db');
-  return {
-    db: dbMod.db,
-    eq: dbMod.eq,
-    and: dbMod.and,
-    isNull: dbMod.isNull,
-    not: dbMod.not,
-    count: dbMod.count,
-    trajectories: dbMod.trajectories,
-    closeDatabase: dbMod.closeDatabase,
-    users: dbMod.users,
-    userAgentConfigs: dbMod.userAgentConfigs,
-  };
+// Helper functions for safely extracting typed action parameters
+function getStringParam(
+  params: Record<string, unknown>,
+  key: string,
+  defaultValue = '',
+): string {
+  const value = params[key]
+  return typeof value === 'string' ? value : defaultValue
 }
 
-async function getTrainingImports() {
-  const trainingMod = await import('@babylon/training');
-  return {
-    archetypeScoringService: trainingMod.archetypeScoringService,
-    trajectoryMetricsExtractor: trainingMod.trajectoryMetricsExtractor,
-    configureTrainingDependencies: trainingMod.configureTrainingDependencies,
-  };
+function getNumberParam(
+  params: Record<string, unknown>,
+  key: string,
+  defaultValue: number,
+): number {
+  const value = params[key]
+  return typeof value === 'number' ? value : defaultValue
 }
 
-async function configureLLMCaller() {
-  const { BabylonLLMClient } = await import('@babylon/engine');
-  const { configureTrainingDependencies } = await getTrainingImports();
-
-  // Create LLM client for scoring
-  const llmClient = BabylonLLMClient.forGameTick();
-
-  // Create adapter that implements ILLMCaller interface
-  const llmCaller = {
-    callGroqDirect: async (params: {
-      prompt: string;
-      system: string;
-      modelSize?: 'small' | 'medium' | 'large';
-      temperature?: number;
-      maxTokens?: number;
-      actionType?: string;
-      responseFormat?: { type: 'json_object' };
-    }): Promise<string> => {
-      const fullPrompt = `${params.system}\n\n${params.prompt}`;
-      const response = await llmClient.generateJSON<{ result: string }>(
-        fullPrompt,
-        undefined,
-        {
-          maxTokens: params.maxTokens ?? 1000,
-          temperature: params.temperature ?? 0.3,
-          format: 'json',
-        }
-      );
-      return typeof response === 'string' ? response : JSON.stringify(response);
-    },
-  };
-
-  configureTrainingDependencies({ llmCaller });
-}
-
-async function getAgentImports() {
-  const agentsMod = await import('@babylon/agents');
-  return {
-    agentRuntimeManager: agentsMod.agentRuntimeManager,
-    autonomousCoordinator: agentsMod.autonomousCoordinator,
-  };
+function getBooleanParam(
+  params: Record<string, unknown>,
+  key: string,
+  defaultValue: boolean,
+): boolean {
+  const value = params[key]
+  return typeof value === 'boolean' ? value : defaultValue
 }
 
 function printHelp(): void {
-  const archetypes = getAvailableArchetypes();
+  const archetypes = getAvailableArchetypes()
 
   console.log(`
 Training Commands
@@ -157,6 +123,9 @@ PIPELINE OPTIONS:
   -n, --agents=N           Number of agents (default: 10)
   -t, --ticks=N            Ticks per agent (default: 30)
   -o, --output=DIR         Output directory (default: trained_models)
+  -m, --model=NAME         Base model (default: Qwen/Qwen2.5-3B-Instruct)
+  -i, --iterations=N       Training iterations (default: 5)
+  -j, --use-jeju           Use Jeju DWS training infrastructure
   --no-benchmark           Skip benchmarking
   --dry-run                Show what would be done
 
@@ -183,162 +152,164 @@ ${archetypes.map((a) => `  - ${a}`).join('\n')}
 EXAMPLES:
   babylon train list                          # List all archetypes
   babylon train list --verbose                # Show rubric previews
-  babylon train pipeline -a trader            # Train trader archetype
+  babylon train pipeline -a trader            # Train trader archetype (local)
+  babylon train pipeline -a trader --use-jeju # Train using Jeju DWS
   babylon train pipeline --archetypes=trader,scammer,degen
   babylon train run -a all                    # Train all archetypes
   babylon train archetype -a scammer          # Score & export scammer data
   babylon train collect --count=100           # Collect 100 trajectories
   babylon train generate --episodes=5         # Generate 5 game episodes
-`);
+`)
 }
 
 interface ArchetypeStats {
-  totalTrajectories: number;
-  unscoredTrajectories: number;
-  scoredTrajectories: number;
+  totalTrajectories: number
+  unscoredTrajectories: number
+  scoredTrajectories: number
 }
 
 async function getArchetypeStats(): Promise<ArchetypeStats> {
-  const { db, eq, and, isNull, not, count, trajectories } =
-    await getDbImports();
-
   // Count total training trajectories
-  const totalResult = (await db
-    .select({ count: count() })
-    .from(trajectories)
-    .where(
-      and(
-        eq(trajectories.isTrainingData, true),
-        not(eq(trajectories.stepsJson, 'null')),
-        not(eq(trajectories.stepsJson, '[]'))
-      )
-    )) as unknown as { count: number }[];
-
-  if (totalResult.length === 0) {
-    throw new Error('Count query returned no results');
-  }
-
-  const totalTrajectories = totalResult[0]!.count;
+  const totalTrajectories = await db.trajectory.count({
+    where: {
+      AND: [
+        { isTrainingData: true },
+        { stepsJson: { not: 'null' } },
+        { stepsJson: { not: '[]' } },
+      ],
+    },
+  })
 
   // Count unscored
-  const unscoredResult = (await db
-    .select({ count: count() })
-    .from(trajectories)
-    .where(
-      and(
-        eq(trajectories.isTrainingData, true),
-        isNull(trajectories.aiJudgeReward),
-        not(eq(trajectories.stepsJson, 'null')),
-        not(eq(trajectories.stepsJson, '[]'))
-      )
-    )) as unknown as { count: number }[];
-
-  if (unscoredResult.length === 0) {
-    throw new Error('Count query returned no results');
-  }
-
-  const unscoredTrajectories = unscoredResult[0]!.count;
+  const unscoredTrajectories = await db.trajectory.count({
+    where: {
+      AND: [
+        { isTrainingData: true },
+        { aiJudgeReward: null },
+        { stepsJson: { not: 'null' } },
+        { stepsJson: { not: '[]' } },
+      ],
+    },
+  })
 
   return {
     totalTrajectories,
     unscoredTrajectories,
     scoredTrajectories: totalTrajectories - unscoredTrajectories,
-  };
+  }
 }
 
 async function scoreArchetypeTrajectories(
   archetype: string,
-  dryRun: boolean
+  dryRun: boolean,
 ): Promise<{ scored: number; errors: number }> {
   if (dryRun) {
-    console.log(`[DRY RUN] Would score unscored ${archetype} trajectories`);
-    return { scored: 0, errors: 0 };
+    console.log(`[DRY RUN] Would score unscored ${archetype} trajectories`)
+    return { scored: 0, errors: 0 }
   }
 
-  logger.step(`Scoring trajectories with ${archetype} rubric...`);
+  logger.step(`Scoring trajectories with ${archetype} rubric...`)
 
   // Configure LLM for scoring
-  await configureLLMCaller();
-
-  const { archetypeScoringService } = await getTrainingImports();
-  console.log('   Calling scoring service...');
+  const llmClient = BabylonLLMClient.forGameTick()
+  const llmCaller = {
+    callGroqDirect: async (params: {
+      prompt: string
+      system: string
+      modelSize?: 'small' | 'medium' | 'large'
+      temperature?: number
+      maxTokens?: number
+      actionType?: string
+      responseFormat?: { type: 'json_object' }
+    }): Promise<string> => {
+      const fullPrompt = `${params.system}\n\n${params.prompt}`
+      const response = await llmClient.generateJSON<{ result: string }>(
+        fullPrompt,
+        undefined,
+        {
+          maxTokens: params.maxTokens ?? 1000,
+          temperature: params.temperature ?? 0.3,
+          format: 'json',
+        },
+      )
+      return typeof response === 'string' ? response : JSON.stringify(response)
+    },
+  }
+  configureTrainingDependencies({ llmCaller })
+  console.log('   Calling scoring service...')
   const result = await archetypeScoringService.scoreUnscoredTrajectories(
     archetype,
-    100
-  );
-  console.log(`  ✅ Scored: ${result.scored}`);
+    100,
+  )
+  console.log(`  ✅ Scored: ${result.scored}`)
   if (result.errors > 0) {
-    console.log(`  ⚠️  Errors: ${result.errors}`);
+    console.log(`  ⚠️  Errors: ${result.errors}`)
   }
-  return result;
+  return result
 }
 
 async function exportForTraining(
   archetype: string,
   minTrajectories: number,
-  dryRun: boolean
+  dryRun: boolean,
 ): Promise<{ exported: number; path: string | null }> {
-  const { db, eq, and, isNull, not, trajectories } = await getDbImports();
-  const { trajectoryMetricsExtractor } = await getTrainingImports();
-
   // Get scored trajectories with valid data
-  const scoredResult = await db
-    .select({
-      trajectoryId: trajectories.trajectoryId,
-      agentId: trajectories.agentId,
-      stepsJson: trajectories.stepsJson,
-      aiJudgeReward: trajectories.aiJudgeReward,
-      aiJudgeReasoning: trajectories.aiJudgeReasoning,
-      scenarioId: trajectories.scenarioId,
-      finalPnL: trajectories.finalPnL,
-    })
-    .from(trajectories)
-    .where(
-      and(
-        eq(trajectories.isTrainingData, true),
-        not(isNull(trajectories.aiJudgeReward)),
-        not(eq(trajectories.stepsJson, 'null')),
-        not(eq(trajectories.stepsJson, '[]'))
-      )
-    );
+  const scoredResult = await db.trajectory.findMany({
+    where: {
+      AND: [
+        { isTrainingData: true },
+        { aiJudgeReward: { not: null } },
+        { stepsJson: { not: 'null' } },
+        { stepsJson: { not: '[]' } },
+      ],
+    },
+    select: {
+      trajectoryId: true,
+      agentId: true,
+      stepsJson: true,
+      aiJudgeReward: true,
+      aiJudgeReasoning: true,
+      scenarioId: true,
+      finalPnL: true,
+    },
+  })
 
   if (scoredResult.length < minTrajectories) {
     logger.warn(
-      `Not enough scored trajectories: ${scoredResult.length} < ${minTrajectories}`
-    );
-    return { exported: 0, path: null };
+      `Not enough scored trajectories: ${scoredResult.length} < ${minTrajectories}`,
+    )
+    return { exported: 0, path: null }
   }
 
   if (dryRun) {
     console.log(
-      `[DRY RUN] Would export ${scoredResult.length} trajectories for ${archetype} training`
-    );
-    return { exported: scoredResult.length, path: null };
+      `[DRY RUN] Would export ${scoredResult.length} trajectories for ${archetype} training`,
+    )
+    return { exported: scoredResult.length, path: null }
   }
 
-  logger.step(`Exporting ${scoredResult.length} trajectories for training...`);
+  logger.step(`Exporting ${scoredResult.length} trajectories for training...`)
 
   // Create export directory
-  const exportDir = `./training-data/${archetype}`;
-  const { mkdir, writeFile } = await import('fs/promises');
-  await mkdir(exportDir, { recursive: true });
+  const exportDir = `./training-data/${archetype}`
+  await mkdir(exportDir, { recursive: true })
 
   // Export as JSONL for GRPO training
-  const exportPath = `${exportDir}/trajectories-${Date.now()}.jsonl`;
-  const lines: string[] = [];
+  const exportPath = `${exportDir}/trajectories-${Date.now()}.jsonl`
+  const lines: string[] = []
 
   for (const traj of scoredResult) {
     const metrics = trajectoryMetricsExtractor.extractFromRaw({
       trajectoryId: traj.trajectoryId,
       agentId: traj.agentId,
       stepsJson: traj.stepsJson,
-      scenarioId: traj.scenarioId ?? undefined,
-      finalPnL: traj.finalPnL ?? undefined,
-    });
+      scenarioId: traj.scenarioId,
+      finalPnL: traj.finalPnL,
+    })
 
     const parsedSteps = TrajectoryStepsArraySchema.parse(
-      JSON.parse(traj.stepsJson)
-    );
+      JSON.parse(traj.stepsJson),
+    )
 
     const exportRecord = {
       trajectory_id: traj.trajectoryId,
@@ -350,57 +321,57 @@ async function exportForTraining(
       final_pnl: traj.finalPnL,
       steps: parsedSteps,
       metrics: metrics || {},
-    };
+    }
 
-    lines.push(JSON.stringify(exportRecord));
+    lines.push(JSON.stringify(exportRecord))
   }
 
-  await writeFile(exportPath, lines.join('\n'));
+  await writeFile(exportPath, lines.join('\n'))
 
-  logger.success(`Exported to: ${exportPath}`);
+  logger.success(`Exported to: ${exportPath}`)
 
-  return { exported: scoredResult.length, path: exportPath };
+  return { exported: scoredResult.length, path: exportPath }
 }
 
 async function trainArchetype(
-  args: ReturnType<typeof parseArgs>
+  args: ReturnType<typeof parseArgs>,
 ): Promise<void> {
-  const archetype = (getOption(args, 'archetype', 'a') || '').toLowerCase();
+  const archetype = (getOption(args, 'archetype', 'a') || '').toLowerCase()
   const minTrajectories = parseInt(
     getOption(args, 'min-trajectories', 'm') || '20',
-    10
-  );
-  const dryRun = getFlag(args, 'dry-run', 'd');
-  const scoreOnly = getFlag(args, 'score-only', 's');
-  const verbose = getFlag(args, 'verbose', 'v');
+    10,
+  )
+  const dryRun = getFlag(args, 'dry-run', 'd')
+  const scoreOnly = getFlag(args, 'score-only', 's')
+  const verbose = getFlag(args, 'verbose', 'v')
 
   if (!archetype) {
-    logger.fail('--archetype is required');
-    console.log('\nAvailable archetypes:');
+    logger.fail('--archetype is required')
+    console.log('\nAvailable archetypes:')
     for (const a of getAvailableArchetypes()) {
-      console.log(`  - ${a}`);
+      console.log(`  - ${a}`)
     }
-    process.exit(1);
+    process.exit(1)
   }
 
   if (!hasCustomRubric(archetype)) {
-    logger.warn(`No custom rubric for "${archetype}", using default rubric`);
+    logger.warn(`No custom rubric for "${archetype}", using default rubric`)
   }
 
-  logger.header(`Training: ${archetype.toUpperCase()}`);
+  logger.header(`Training: ${archetype.toUpperCase()}`)
 
   // Get stats
-  logger.step('Gathering statistics...');
-  const stats = await getArchetypeStats();
+  logger.step('Gathering statistics...')
+  const stats = await getArchetypeStats()
 
   console.log(`
    Total trajectories:    ${stats.totalTrajectories}
    Already scored:        ${stats.scoredTrajectories}
    Need scoring:          ${stats.unscoredTrajectories}
-`);
+`)
 
   if (stats.totalTrajectories === 0) {
-    logger.fail(`No trajectories found`);
+    logger.fail(`No trajectories found`)
     console.log(`
 To generate trajectories:
   1. Create agents with this archetype
@@ -411,24 +382,24 @@ Example:
   babylon agent spawn --archetype ${archetype} --count 5
   babylon train collect --count 100
   babylon train archetype -a ${archetype}
-`);
-    process.exit(1);
+`)
+    process.exit(1)
   }
 
   // Show rubric preview
   if (verbose) {
-    console.log('📜 Rubric preview (first 500 chars):');
-    const rubric = getRubric(archetype);
-    console.log(`   ${rubric.substring(0, 500).replace(/\n/g, '\n   ')}...`);
-    console.log('');
+    console.log('📜 Rubric preview (first 500 chars):')
+    const rubric = getRubric(archetype)
+    console.log(`   ${rubric.substring(0, 500).replace(/\n/g, '\n   ')}...`)
+    console.log('')
   }
 
   // Score unscored trajectories
   if (stats.unscoredTrajectories > 0) {
-    const scoreResult = await scoreArchetypeTrajectories(archetype, dryRun);
-    stats.scoredTrajectories += scoreResult.scored;
+    const scoreResult = await scoreArchetypeTrajectories(archetype, dryRun)
+    stats.scoredTrajectories += scoreResult.scored
   } else {
-    logger.success('All trajectories already scored');
+    logger.success('All trajectories already scored')
   }
 
   // Export for training (unless score-only)
@@ -436,8 +407,8 @@ Example:
     const exportResult = await exportForTraining(
       archetype,
       minTrajectories,
-      dryRun
-    );
+      dryRun,
+    )
 
     if (exportResult.path) {
       console.log(`
@@ -448,79 +419,99 @@ Example:
 Data exported to: ${exportResult.path}
 
 Next steps:
-  1. Run GRPO training:
-     python packages/training/python/scripts/train_grpo.py \\
-       --data ${exportResult.path} \\
-       --archetype ${archetype}
+  1. Run GRPO training (via Jeju):
+     jeju training run --env babylon --archetype ${archetype}
 
   2. Or run the full pipeline:
      babylon train pipeline --archetype ${archetype}
-`);
+`)
     }
   } else {
     logger.success(
-      `Scoring complete. Total scored: ${stats.scoredTrajectories}`
-    );
+      `Scoring complete. Total scored: ${stats.scoredTrajectories}`,
+    )
     console.log(`
 To export for training, run without --score-only:
   babylon train archetype -a ${archetype}
-`);
+`)
   }
 }
 
 interface TrainingAgentConfig {
-  id: string;
-  username: string | null;
-  pointsBalance: number;
-  autonomousTrading: boolean;
-  autonomousPosting: boolean;
-  autonomousCommenting: boolean;
-  autonomousDMs: boolean;
-  autonomousGroupChats: boolean;
+  id: string
+  username: string | null
+  pointsBalance: number
+  autonomousTrading: boolean
+  autonomousPosting: boolean
+  autonomousCommenting: boolean
+  autonomousDMs: boolean
+  autonomousGroupChats: boolean
 }
 
 async function collectTrajectories(
-  args: ReturnType<typeof parseArgs>
+  args: ReturnType<typeof parseArgs>,
 ): Promise<void> {
-  const countArg = parseInt(getOption(args, 'count', 'c') || '10', 10);
+  const countArg = parseInt(getOption(args, 'count', 'c') || '10', 10)
 
-  logger.header('Trajectory Collection');
-  logger.success('Trajectory recording is always enabled');
-
-  const { db, eq, users, userAgentConfigs } = await getDbImports();
-  const { agentRuntimeManager, autonomousCoordinator } =
-    await getAgentImports();
+  logger.header('Trajectory Collection')
+  logger.success('Trajectory recording is always enabled')
 
   // Find agents with their configs
-  const agentResults = (await db
-    .select({
-      id: users.id,
-      username: users.username,
-      pointsBalance: userAgentConfigs.pointsBalance,
-      autonomousTrading: userAgentConfigs.autonomousTrading,
-      autonomousPosting: userAgentConfigs.autonomousPosting,
-      autonomousCommenting: userAgentConfigs.autonomousCommenting,
-      autonomousDMs: userAgentConfigs.autonomousDMs,
-      autonomousGroupChats: userAgentConfigs.autonomousGroupChats,
+  const agentUsers = await db.user.findMany({
+    where: { isAgent: true },
+    take: 10,
+    select: {
+      id: true,
+      username: true,
+    },
+  })
+
+  const agentIds = agentUsers.map((u) => u.id)
+  const agentConfigs = await db.userAgentConfig.findMany({
+    where: { userId: { in: agentIds } },
+    select: {
+      userId: true,
+      pointsBalance: true,
+      autonomousTrading: true,
+      autonomousPosting: true,
+      autonomousCommenting: true,
+      autonomousDMs: true,
+      autonomousGroupChats: true,
+    },
+  })
+
+  const configMap = new Map(agentConfigs.map((c) => [c.userId, c]))
+
+  const agents: TrainingAgentConfig[] = agentUsers
+    .map((user) => {
+      const config = configMap.get(user.id)
+      if (!config) return null
+      return {
+        id: user.id,
+        username: user.username,
+        pointsBalance: config.pointsBalance ?? 0,
+        autonomousTrading: config.autonomousTrading ?? false,
+        autonomousPosting: config.autonomousPosting ?? false,
+        autonomousCommenting: config.autonomousCommenting ?? false,
+        autonomousDMs: config.autonomousDMs ?? false,
+        autonomousGroupChats: config.autonomousGroupChats ?? false,
+      }
     })
-    .from(users)
-    .innerJoin(userAgentConfigs, eq(users.id, userAgentConfigs.userId))
-    .where(eq(users.isAgent, true))
-    .limit(10)) as unknown as TrainingAgentConfig[];
+    .filter((a): a is TrainingAgentConfig => a !== null)
 
   // Filter agents with sufficient points and at least one feature enabled
-  const agents = agentResults.filter(
+  const filteredAgents = agents.filter(
     (a) =>
       a.pointsBalance >= 1 &&
       (a.autonomousTrading ||
         a.autonomousPosting ||
         a.autonomousCommenting ||
         a.autonomousDMs ||
-        a.autonomousGroupChats)
-  );
+        a.autonomousGroupChats),
+  )
 
-  if (agents.length === 0) {
-    logger.fail('No agents found!');
+  if (filteredAgents.length === 0) {
+    logger.fail('No agents found!')
     console.log(`
    Agents need:
    - isAgent: true
@@ -528,105 +519,121 @@ async function collectTrajectories(
    - At least one autonomous feature enabled
 
    Create agents with: babylon agent spawn
-`);
-    process.exit(1);
+`)
+    process.exit(1)
   }
 
-  console.log(`Found ${agents.length} agents`);
-  console.log(`Collecting ${countArg} trajectories...\n`);
+  console.log(`Found ${filteredAgents.length} agents`)
+  console.log(`Collecting ${countArg} trajectories...\n`)
 
-  const errors = 0;
+  const errors = 0
 
   // Get initial count
-  const { trajectories, count } = await getDbImports();
-  const initialCountResult = (await db
-    .select({ count: count() })
-    .from(trajectories)) as unknown as { count: number }[];
-  const initialCount = initialCountResult[0]?.count ?? 0;
-  console.log(`Current trajectories in database: ${initialCount}\n`);
+  const initialCount = await db.trajectory.count({})
+  console.log(`Current trajectories in database: ${initialCount}\n`)
 
   for (let i = 0; i < countArg; i++) {
-    const agent = agents[i % agents.length]!;
+    const agent = filteredAgents[i % filteredAgents.length]
+    if (!agent) continue
 
     console.log(
-      `[${i + 1}/${countArg}] Running agent: ${agent.username || agent.id}`
-    );
+      `[${i + 1}/${countArg}] Running agent: ${agent.username || agent.id}`,
+    )
 
-    const runtime = await agentRuntimeManager.getRuntime(agent.id);
+    const runtime = await agentRuntimeManager.getRuntime(agent.id)
     const result = await autonomousCoordinator.executeAutonomousTick(
       agent.id,
       runtime,
-      true // Always record trajectories
-    );
+      true, // Always record trajectories
+    )
 
     if (result.success) {
       console.log(
-        `  ✅ Success - Actions: ${JSON.stringify(result.actionsExecuted)}`
-      );
+        `  ✅ Success - Actions: ${JSON.stringify(result.actionsExecuted)}`,
+      )
       if (result.trajectoryId) {
-        console.log(`  📊 Trajectory ID: ${result.trajectoryId}`);
+        console.log(`  📊 Trajectory ID: ${result.trajectoryId}`)
       }
     } else {
-      console.log('  ⚠️  Completed but not successful');
+      console.log('  ⚠️  Completed but not successful')
     }
 
     // Small delay between runs
     if (i < countArg - 1) {
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      await new Promise((resolve) => setTimeout(resolve, 1000))
     }
   }
 
   // Get final count
-  const finalCountResult = (await db
-    .select({ count: count() })
-    .from(trajectories)) as unknown as { count: number }[];
-  const finalCount = finalCountResult[0]?.count ?? 0;
-  const newTrajectories = finalCount - initialCount;
+  const finalCount = await db.trajectory.count({})
+  const newTrajectories = finalCount - initialCount
 
-  logger.header('Summary');
-  console.log(`Trajectories collected: ${newTrajectories}`);
-  console.log(`Successful runs: ${countArg - errors}`);
-  console.log(`Errors: ${errors}`);
-  console.log(`Total trajectories in database: ${finalCount}`);
+  logger.header('Summary')
+  console.log(`Trajectories collected: ${newTrajectories}`)
+  console.log(`Successful runs: ${countArg - errors}`)
+  console.log(`Errors: ${errors}`)
+  console.log(`Total trajectories in database: ${finalCount}`)
 
   if (newTrajectories > 0) {
-    logger.success('Trajectories successfully collected!');
-    console.log('   Ready for training when you have enough data.\n');
+    logger.success('Trajectories successfully collected!')
+    console.log('   Ready for training when you have enough data.\n')
   } else {
-    logger.warn('No new trajectories collected.');
-    console.log('   Check agent configuration and logs.\n');
+    logger.warn('No new trajectories collected.')
+    console.log('   Check agent configuration and logs.\n')
   }
 }
 
 async function scoreTrajectories(): Promise<void> {
-  logger.header('Score Trajectories');
+  logger.header('Score Trajectories')
 
-  const stats = await getArchetypeStats();
+  const stats = await getArchetypeStats()
 
-  console.log(`Total trajectories: ${stats.totalTrajectories}`);
-  console.log(`Already scored: ${stats.scoredTrajectories}`);
-  console.log(`Need scoring: ${stats.unscoredTrajectories}`);
+  console.log(`Total trajectories: ${stats.totalTrajectories}`)
+  console.log(`Already scored: ${stats.scoredTrajectories}`)
+  console.log(`Need scoring: ${stats.unscoredTrajectories}`)
 
   if (stats.unscoredTrajectories === 0) {
-    logger.success('All trajectories already scored');
-    return;
+    logger.success('All trajectories already scored')
+    return
   }
 
   // Configure LLM for scoring
-  console.log('Configuring LLM for scoring...');
-  await configureLLMCaller();
-
-  const { archetypeScoringService } = await getTrainingImports();
-  console.log('Scoring trajectories with AI judge...');
+  console.log('Configuring LLM for scoring...')
+  const llmClient = BabylonLLMClient.forGameTick()
+  const llmCaller = {
+    callGroqDirect: async (params: {
+      prompt: string
+      system: string
+      modelSize?: 'small' | 'medium' | 'large'
+      temperature?: number
+      maxTokens?: number
+      actionType?: string
+      responseFormat?: { type: 'json_object' }
+    }): Promise<string> => {
+      const fullPrompt = `${params.system}\n\n${params.prompt}`
+      const response = await llmClient.generateJSON<{ result: string }>(
+        fullPrompt,
+        undefined,
+        {
+          maxTokens: params.maxTokens ?? 1000,
+          temperature: params.temperature ?? 0.3,
+          format: 'json',
+        },
+      )
+      return typeof response === 'string' ? response : JSON.stringify(response)
+    },
+  }
+  configureTrainingDependencies({ llmCaller })
+  console.log('Scoring trajectories with AI judge...')
 
   const result = await archetypeScoringService.scoreUnscoredTrajectories(
     'default',
-    100
-  );
+    100,
+  )
 
-  logger.success(`Scored ${result.scored} trajectories`);
+  logger.success(`Scored ${result.scored} trajectories`)
   if (result.errors > 0) {
-    logger.warn(`${result.errors} errors encountered`);
+    logger.warn(`${result.errors} errors encountered`)
   }
 }
 
@@ -635,104 +642,109 @@ async function scoreTrajectories(): Promise<void> {
 // ============================================================================
 
 interface Market {
-  id: string;
-  question: string;
-  yesPrice: number;
-  noPrice: number;
-  volume: number;
-  outcome?: boolean;
+  id: string
+  question: string
+  yesPrice: number
+  noPrice: number
+  volume: number
+  outcome?: boolean
 }
 
 interface PerpMarket {
-  ticker: string;
-  price: number;
-  sentiment: number;
-  volatility: number;
+  ticker: string
+  price: number
+  sentiment: number
+  volatility: number
 }
 
 interface Post {
-  id: string;
-  authorId: string;
-  content: string;
-  sentiment: 'bullish' | 'bearish' | 'neutral' | 'misleading';
-  tick: number;
-  reactions: number;
+  id: string
+  authorId: string
+  content: string
+  sentiment: 'bullish' | 'bearish' | 'neutral' | 'misleading'
+  tick: number
+  reactions: number
 }
 
 interface DirectMessage {
-  id: string;
-  fromId: string;
-  toId: string;
-  content: string;
-  tick: number;
-  isScam: boolean;
+  id: string
+  fromId: string
+  toId: string
+  content: string
+  tick: number
+  isScam: boolean
 }
 
 interface GroupChat {
-  id: string;
-  name: string;
-  members: Set<string>;
-  messages: Array<{ authorId: string; content: string; tick: number }>;
+  id: string
+  name: string
+  members: Set<string>
+  messages: Array<{ authorId: string; content: string; tick: number }>
 }
 
 interface GameState {
-  tick: number;
-  markets: Market[];
-  perpMarkets: PerpMarket[];
-  posts: Post[];
-  directMessages: DirectMessage[];
-  groupChats: GroupChat[];
-  agentBalances: Map<string, number>;
-  agentPnL: Map<string, number>;
-  agentPositions: Map<string, number>;
-  agentReputation: Map<string, number>;
-  agentConnections: Map<string, Set<string>>;
+  tick: number
+  markets: Market[]
+  perpMarkets: PerpMarket[]
+  posts: Post[]
+  directMessages: DirectMessage[]
+  groupChats: GroupChat[]
+  agentBalances: Map<string, number>
+  agentPnL: Map<string, number>
+  agentPositions: Map<string, number>
+  agentReputation: Map<string, number>
+  agentConnections: Map<string, Set<string>>
 }
 
 // Types inferred from Zod schemas
-type AgentAction = z.infer<typeof AgentActionSchema>;
-type LLMCall = z.infer<typeof LLMCallSchema>;
-type TrajectoryStep = z.infer<typeof TrajectoryStepSchema>;
+type AgentAction = z.infer<typeof AgentActionSchema>
+type LLMCall = z.infer<typeof LLMCallSchema>
+type TrajectoryStep = z.infer<typeof TrajectoryStepSchema>
 
 type ArchetypeBehavior = (
   agentId: string,
   archetype: string,
   state: GameState,
-  otherAgents: Map<string, string>
-) => { action: AgentAction; llmCalls: LLMCall[] };
+  otherAgents: Map<string, string>,
+) => { action: AgentAction; llmCalls: LLMCall[] }
 
 // Trader behavior
 const traderBehavior: ArchetypeBehavior = (
   agentId,
   _archetype,
   state,
-  _others
+  _others,
 ) => {
   const action: AgentAction = {
     actionType: 'hold',
     parameters: {},
     success: true,
-  };
-  const llmCalls: LLMCall[] = [];
+  }
+  const llmCalls: LLMCall[] = []
 
   if (state.markets.length === 0) {
-    throw new Error('No markets available in game state');
+    throw new Error('No markets available in game state')
   }
   if (state.perpMarkets.length === 0) {
-    throw new Error('No perp markets available in game state');
+    throw new Error('No perp markets available in game state')
   }
 
-  const market =
-    state.markets[Math.floor(Math.random() * state.markets.length)]!;
+  const market = state.markets[Math.floor(Math.random() * state.markets.length)]
+  if (!market) {
+    throw new Error('Failed to select market from markets array')
+  }
   const perp =
-    state.perpMarkets[Math.floor(Math.random() * state.perpMarkets.length)]!;
-
-  const balance = state.agentBalances.get(agentId);
-  if (balance === undefined) {
-    throw new Error(`Agent ${agentId} not found in agentBalances`);
+    state.perpMarkets[Math.floor(Math.random() * state.perpMarkets.length)]
+  if (!perp) {
+    throw new Error('Failed to select perp from perpMarkets array')
   }
 
-  const reasoning = `Analyzing ${market.question}. Price: YES=${market.yesPrice.toFixed(2)}, NO=${market.noPrice.toFixed(2)}. Looking for edge...`;
+  const balance = state.agentBalances.get(agentId)
+  if (balance === undefined) {
+    throw new Error(`Agent ${agentId} not found in agentBalances`)
+  }
+
+  const reasoning = `Analyzing ${market.question}. Price: YES=${market.yesPrice.toFixed(2)}, NO=${market.noPrice.toFixed(2)}. Looking for edge...`
 
   llmCalls.push({
     model: 'Qwen/Qwen3-4B',
@@ -744,19 +756,19 @@ const traderBehavior: ArchetypeBehavior = (
     temperature: 0.7,
     maxTokens: 500,
     purpose: 'reasoning',
-  });
+  })
 
   if (Math.random() < 0.4 && market) {
-    const isBuy = market.yesPrice < 0.5 ? 'YES' : 'NO';
-    const currentBalance = state.agentBalances.get(agentId);
+    const isBuy = market.yesPrice < 0.5 ? 'YES' : 'NO'
+    const currentBalance = state.agentBalances.get(agentId)
     if (currentBalance === undefined) {
-      throw new Error(`Agent ${agentId} not found in agentBalances`);
+      throw new Error(`Agent ${agentId} not found in agentBalances`)
     }
-    const amount = Math.min(500, currentBalance * 0.1);
+    const amount = Math.min(500, currentBalance * 0.1)
 
-    action.actionType = 'buy_prediction';
-    action.parameters = { marketId: market.id, outcome: isBuy, amount };
-    action.reasoning = `Found value in ${isBuy} at ${isBuy === 'YES' ? market.yesPrice : market.noPrice}`;
+    action.actionType = 'buy_prediction'
+    action.parameters = { marketId: market.id, outcome: isBuy, amount }
+    action.reasoning = `Found value in ${isBuy} at ${isBuy === 'YES' ? market.yesPrice : market.noPrice}`
 
     llmCalls.push({
       model: 'Qwen/Qwen3-4B',
@@ -772,46 +784,48 @@ const traderBehavior: ArchetypeBehavior = (
       temperature: 0.3,
       maxTokens: 200,
       purpose: 'action',
-    });
+    })
   } else if (Math.random() < 0.3 && perp) {
-    const side = perp.sentiment > 0 ? 'LONG' : 'SHORT';
-    action.actionType = 'open_perp';
-    action.parameters = { ticker: perp.ticker, side, size: 0.1, leverage: 2 };
-    action.reasoning = `Sentiment ${perp.sentiment > 0 ? 'bullish' : 'bearish'} on ${perp.ticker}`;
+    const side = perp.sentiment > 0 ? 'LONG' : 'SHORT'
+    action.actionType = 'open_perp'
+    action.parameters = { ticker: perp.ticker, side, size: 0.1, leverage: 2 }
+    action.reasoning = `Sentiment ${perp.sentiment > 0 ? 'bullish' : 'bearish'} on ${perp.ticker}`
   }
 
-  return { action, llmCalls };
-};
+  return { action, llmCalls }
+}
 
 // Social Butterfly behavior
 const socialButterflyBehavior: ArchetypeBehavior = (
   agentId,
   _archetype,
   state,
-  otherAgents
+  otherAgents,
 ) => {
   const action: AgentAction = {
     actionType: 'hold',
     parameters: {},
     success: true,
-  };
-  const llmCalls: LLMCall[] = [];
+  }
+  const llmCalls: LLMCall[] = []
 
-  const connections = state.agentConnections.get(agentId) || new Set();
+  const connections = state.agentConnections.get(agentId) || new Set()
   const potentialFriends = Array.from(otherAgents.entries()).filter(
-    ([id]) => id !== agentId && !connections.has(id)
-  );
+    ([id]) => id !== agentId && !connections.has(id),
+  )
 
   if (Math.random() < 0.6 && potentialFriends.length > 0) {
-    const [targetId, targetArchetype] =
-      potentialFriends[Math.floor(Math.random() * potentialFriends.length)]!;
+    const selected =
+      potentialFriends[Math.floor(Math.random() * potentialFriends.length)]
+    if (!selected) return { action, llmCalls }
+    const [targetId, targetArchetype] = selected
 
-    action.actionType = 'send_dm';
+    action.actionType = 'send_dm'
     action.parameters = {
       toUserId: targetId,
       message: `Hey! Love your ${targetArchetype} strategy! Lets connect!`,
-    };
-    action.reasoning = 'Building my network - gotta know everyone!';
+    }
+    action.reasoning = 'Building my network - gotta know everyone!'
 
     llmCalls.push({
       model: 'Qwen/Qwen3-4B',
@@ -822,45 +836,45 @@ const socialButterflyBehavior: ArchetypeBehavior = (
       temperature: 0.9,
       maxTokens: 200,
       purpose: 'action',
-    });
+    })
   } else if (Math.random() < 0.5) {
-    const groupToJoin = state.groupChats.find((g) => !g.members.has(agentId));
+    const groupToJoin = state.groupChats.find((g) => !g.members.has(agentId))
     if (groupToJoin) {
-      action.actionType = 'join_group_chat';
-      action.parameters = { groupId: groupToJoin.id };
-      action.reasoning = 'More groups = more friends!';
+      action.actionType = 'join_group_chat'
+      action.parameters = { groupId: groupToJoin.id }
+      action.reasoning = 'More groups = more friends!'
     }
   } else if (Math.random() < 0.4) {
-    action.actionType = 'create_post';
+    action.actionType = 'create_post'
     action.parameters = {
       content: 'Loving the vibes in here! Who else is making moves today?',
       sentiment: 'neutral',
-    };
-    action.reasoning = 'Engaging the community';
+    }
+    action.reasoning = 'Engaging the community'
   }
 
-  return { action, llmCalls };
-};
+  return { action, llmCalls }
+}
 
 // Scammer behavior
 const scammerBehavior: ArchetypeBehavior = (
   agentId,
   _archetype,
   _state,
-  otherAgents
+  otherAgents,
 ) => {
   const action: AgentAction = {
     actionType: 'hold',
     parameters: {},
     success: true,
-  };
-  const llmCalls: LLMCall[] = [];
+  }
+  const llmCalls: LLMCall[] = []
 
   const potentialVictims = Array.from(otherAgents.entries()).filter(
     ([id, arch]) =>
       id !== agentId &&
-      ['goody-twoshoes', 'social-butterfly', 'degen'].includes(arch)
-  );
+      ['goody-twoshoes', 'social-butterfly', 'degen'].includes(arch),
+  )
 
   llmCalls.push({
     model: 'Qwen/Qwen3-4B',
@@ -872,60 +886,62 @@ const scammerBehavior: ArchetypeBehavior = (
     temperature: 0.8,
     maxTokens: 300,
     purpose: 'reasoning',
-  });
+  })
 
   if (Math.random() < 0.5 && potentialVictims.length > 0) {
-    const [victimId] =
-      potentialVictims[Math.floor(Math.random() * potentialVictims.length)]!;
+    const victim =
+      potentialVictims[Math.floor(Math.random() * potentialVictims.length)]
+    if (!victim) return { action, llmCalls }
+    const [victimId] = victim
 
-    action.actionType = 'send_dm';
+    action.actionType = 'send_dm'
     action.parameters = {
       toUserId: victimId,
       message:
         'INSIDER INFO: This market is about to MOON! Get in NOW before its too late! Trust me, my source is solid.',
       isScam: true,
-    };
-    action.reasoning = 'Spreading misinformation to influence their trades';
+    }
+    action.reasoning = 'Spreading misinformation to influence their trades'
 
     llmCalls.push({
       model: 'Qwen/Qwen3-4B',
       systemPrompt: 'Craft a convincing but misleading message.',
       userPrompt: 'Write a message to convince someone to make a bad trade.',
-      response: action.parameters.message as string,
+      response: getStringParam(action.parameters, 'message'),
       reasoning: 'Creating urgency and false credibility',
       temperature: 0.9,
       maxTokens: 200,
       purpose: 'action',
-    });
+    })
   } else if (Math.random() < 0.4) {
-    action.actionType = 'create_post';
+    action.actionType = 'create_post'
     action.parameters = {
       content:
         'BREAKING: Just confirmed - massive news incoming on BTC! My sources say ATH this week! Not financial advice but...',
       sentiment: 'misleading',
-    };
+    }
   }
 
-  return { action, llmCalls };
-};
+  return { action, llmCalls }
+}
 
 // Degen behavior
 const degenBehavior: ArchetypeBehavior = (
   agentId,
   _archetype,
   state,
-  _others
+  _others,
 ) => {
   const action: AgentAction = {
     actionType: 'hold',
     parameters: {},
     success: true,
-  };
-  const llmCalls: LLMCall[] = [];
+  }
+  const llmCalls: LLMCall[] = []
 
-  const balance = state.agentBalances.get(agentId);
+  const balance = state.agentBalances.get(agentId)
   if (balance === undefined) {
-    throw new Error(`Agent ${agentId} not found in agentBalances`);
+    throw new Error(`Agent ${agentId} not found in agentBalances`)
   }
 
   llmCalls.push({
@@ -937,57 +953,60 @@ const degenBehavior: ArchetypeBehavior = (
     temperature: 1.0,
     maxTokens: 100,
     purpose: 'reasoning',
-  });
+  })
 
   if (Math.random() < 0.7) {
     const market =
-      state.markets[Math.floor(Math.random() * state.markets.length)];
+      state.markets[Math.floor(Math.random() * state.markets.length)]
     if (market) {
-      const amount = balance * (0.2 + Math.random() * 0.3);
+      const amount = balance * (0.2 + Math.random() * 0.3)
 
-      action.actionType = 'buy_prediction';
+      action.actionType = 'buy_prediction'
       action.parameters = {
         marketId: market.id,
         outcome: Math.random() < 0.5 ? 'YES' : 'NO',
         amount,
-      };
-      action.reasoning = 'YOLO! Fortune favors the bold!';
+      }
+      action.reasoning = 'YOLO! Fortune favors the bold!'
     }
   } else if (Math.random() < 0.5) {
-    const perp = state.perpMarkets[0];
+    const perp = state.perpMarkets[0]
     if (perp) {
-      action.actionType = 'open_perp';
+      action.actionType = 'open_perp'
       action.parameters = {
         ticker: perp.ticker,
         side: Math.random() < 0.5 ? 'LONG' : 'SHORT',
         size: balance * 0.3,
         leverage: 10,
-      };
-      action.reasoning = '10x leverage, lets goooo!';
+      }
+      action.reasoning = '10x leverage, lets goooo!'
     }
   }
 
-  return { action, llmCalls };
-};
+  return { action, llmCalls }
+}
 
 // Researcher behavior
 const researcherBehavior: ArchetypeBehavior = (
   _agentId,
   _archetype,
   state,
-  _others
+  _others,
 ) => {
   const action: AgentAction = {
     actionType: 'hold',
     parameters: {},
     success: true,
-  };
-  const llmCalls: LLMCall[] = [];
+  }
+  const llmCalls: LLMCall[] = []
 
   if (state.markets.length === 0) {
-    throw new Error('No markets available in game state');
+    throw new Error('No markets available in game state')
   }
-  const market = state.markets[0]!;
+  const market = state.markets[0]
+  if (!market) {
+    throw new Error('Failed to get first market from markets array')
+  }
 
   llmCalls.push({
     model: 'Qwen/Qwen3-4B',
@@ -999,7 +1018,7 @@ const researcherBehavior: ArchetypeBehavior = (
     temperature: 0.3,
     maxTokens: 1000,
     purpose: 'reasoning',
-  });
+  })
 
   llmCalls.push({
     model: 'Qwen/Qwen3-4B',
@@ -1011,40 +1030,40 @@ const researcherBehavior: ArchetypeBehavior = (
     temperature: 0.2,
     maxTokens: 500,
     purpose: 'reasoning',
-  });
+  })
 
   if (Math.random() < 0.2 && market) {
-    action.actionType = 'buy_prediction';
+    action.actionType = 'buy_prediction'
     action.parameters = {
       marketId: market.id,
       outcome: market.yesPrice < 0.4 ? 'YES' : 'NO',
       amount: 200,
-    };
-    action.reasoning = 'High conviction trade after thorough analysis';
+    }
+    action.reasoning = 'High conviction trade after thorough analysis'
   } else {
-    action.actionType = 'research';
+    action.actionType = 'research'
     action.parameters = {
       topic: market.question,
-    };
-    action.reasoning = 'Gathering more data before committing capital';
+    }
+    action.reasoning = 'Gathering more data before committing capital'
   }
 
-  return { action, llmCalls };
-};
+  return { action, llmCalls }
+}
 
 // Goody Two-Shoes behavior
 const goodyTwoshoesBehavior: ArchetypeBehavior = (
   _agentId,
   _archetype,
   state,
-  _otherAgents
+  _otherAgents,
 ) => {
   const action: AgentAction = {
     actionType: 'hold',
     parameters: {},
     success: true,
-  };
-  const llmCalls: LLMCall[] = [];
+  }
+  const llmCalls: LLMCall[] = []
 
   llmCalls.push({
     model: 'Qwen/Qwen3-4B',
@@ -1056,50 +1075,53 @@ const goodyTwoshoesBehavior: ArchetypeBehavior = (
     temperature: 0.5,
     maxTokens: 300,
     purpose: 'reasoning',
-  });
+  })
 
   if (Math.random() < 0.5) {
     if (state.markets.length === 0) {
-      throw new Error('No markets available in game state');
+      throw new Error('No markets available in game state')
     }
-    const market = state.markets[0]!;
-    action.actionType = 'create_post';
+    const market = state.markets[0]
+    if (!market) {
+      throw new Error('Failed to get first market from markets array')
+    }
+    action.actionType = 'create_post'
     action.parameters = {
       content: `Honest Analysis: ${market.question}\n\nMy take: Based on available data, I estimate ${(market.yesPrice * 100).toFixed(0)}% probability. Remember to DYOR! Happy to discuss.`,
       sentiment: 'neutral',
-    };
-    action.reasoning = 'Sharing transparent analysis to help others';
+    }
+    action.reasoning = 'Sharing transparent analysis to help others'
   } else if (Math.random() < 0.4) {
     const suspiciousPosts = state.posts.filter(
-      (p) => p.sentiment === 'misleading'
-    );
+      (p) => p.sentiment === 'misleading',
+    )
     if (suspiciousPosts.length > 0) {
-      action.actionType = 'create_post';
+      action.actionType = 'create_post'
       action.parameters = {
         content:
           'PSA: Be careful of unverified claims! Always verify sources and DYOR before making any trading decisions.',
         sentiment: 'neutral',
-      };
-      action.reasoning = 'Warning community about potential misinformation';
+      }
+      action.reasoning = 'Warning community about potential misinformation'
     }
   }
 
-  return { action, llmCalls };
-};
+  return { action, llmCalls }
+}
 
 // Liar behavior
 const liarBehavior: ArchetypeBehavior = (
   _agentId,
   _archetype,
   state,
-  _others
+  _others,
 ) => {
   const action: AgentAction = {
     actionType: 'hold',
     parameters: {},
     success: true,
-  };
-  const llmCalls: LLMCall[] = [];
+  }
+  const llmCalls: LLMCall[] = []
 
   llmCalls.push({
     model: 'Qwen/Qwen3-4B',
@@ -1110,38 +1132,41 @@ const liarBehavior: ArchetypeBehavior = (
     temperature: 0.9,
     maxTokens: 300,
     purpose: 'reasoning',
-  });
+  })
 
   if (Math.random() < 0.6) {
     if (state.markets.length === 0) {
-      throw new Error('No markets available in game state');
+      throw new Error('No markets available in game state')
     }
     const market =
-      state.markets[Math.floor(Math.random() * state.markets.length)]!;
-    action.actionType = 'create_post';
+      state.markets[Math.floor(Math.random() * state.markets.length)]
+    if (!market) {
+      throw new Error('Failed to select market from markets array')
+    }
+    action.actionType = 'create_post'
     action.parameters = {
       content: `EXCLUSIVE: Just heard from a whale friend - ${market.question} outcome is LOCKED IN. They are loading up. NFA but Im all in.`,
       sentiment: 'misleading',
-    };
-    action.reasoning = 'Spreading false but convincing narrative';
+    }
+    action.reasoning = 'Spreading false but convincing narrative'
   }
 
-  return { action, llmCalls };
-};
+  return { action, llmCalls }
+}
 
 // Information Trader behavior
 const infoTraderBehavior: ArchetypeBehavior = (
   agentId,
   _archetype,
   state,
-  otherAgents
+  otherAgents,
 ) => {
   const action: AgentAction = {
     actionType: 'hold',
     parameters: {},
     success: true,
-  };
-  const llmCalls: LLMCall[] = [];
+  }
+  const llmCalls: LLMCall[] = []
 
   llmCalls.push({
     model: 'Qwen/Qwen3-4B',
@@ -1153,55 +1178,55 @@ const infoTraderBehavior: ArchetypeBehavior = (
     temperature: 0.5,
     maxTokens: 400,
     purpose: 'reasoning',
-  });
+  })
 
   if (Math.random() < 0.3) {
     const group = state.groupChats.find(
-      (g) => !g.members.has(agentId) && g.members.size > 2
-    );
+      (g) => !g.members.has(agentId) && g.members.size > 2,
+    )
     if (group) {
-      action.actionType = 'join_group_chat';
-      action.parameters = { groupId: group.id };
-      action.reasoning = 'Joining active group for intel gathering';
+      action.actionType = 'join_group_chat'
+      action.parameters = { groupId: group.id }
+      action.reasoning = 'Joining active group for intel gathering'
     }
   } else if (Math.random() < 0.4) {
     const infoSource = Array.from(otherAgents.entries()).find(
-      ([id, arch]) => id !== agentId && ['researcher', 'trader'].includes(arch)
-    );
+      ([id, arch]) => id !== agentId && ['researcher', 'trader'].includes(arch),
+    )
     if (infoSource) {
-      action.actionType = 'send_dm';
+      action.actionType = 'send_dm'
       action.parameters = {
         toUserId: infoSource[0],
         message:
           'Hey! Whats your take on the current markets? Seeing any opportunities?',
-      };
-      action.reasoning = 'Gathering intel from knowledgeable sources';
+      }
+      action.reasoning = 'Gathering intel from knowledgeable sources'
     }
   } else if (Math.random() < 0.5) {
     const bullishPosts = state.posts.filter(
-      (p) => p.sentiment === 'bullish'
-    ).length;
+      (p) => p.sentiment === 'bullish',
+    ).length
     const bearishPosts = state.posts.filter(
-      (p) => p.sentiment === 'bearish'
-    ).length;
-    const market = state.markets[0];
+      (p) => p.sentiment === 'bearish',
+    ).length
+    const market = state.markets[0]
 
     if (
       market &&
       (bullishPosts > bearishPosts + 2 || bearishPosts > bullishPosts + 2)
     ) {
-      action.actionType = 'buy_prediction';
+      action.actionType = 'buy_prediction'
       action.parameters = {
         marketId: market.id,
         outcome: bullishPosts > bearishPosts ? 'YES' : 'NO',
         amount: 300,
-      };
-      action.reasoning = `Social sentiment strongly ${bullishPosts > bearishPosts ? 'bullish' : 'bearish'}, trading accordingly`;
+      }
+      action.reasoning = `Social sentiment strongly ${bullishPosts > bearishPosts ? 'bullish' : 'bearish'}, trading accordingly`
     }
   }
 
-  return { action, llmCalls };
-};
+  return { action, llmCalls }
+}
 
 // Map archetypes to behaviors
 const ARCHETYPE_BEHAVIORS: Record<string, ArchetypeBehavior> = {
@@ -1217,16 +1242,16 @@ const ARCHETYPE_BEHAVIORS: Record<string, ArchetypeBehavior> = {
   'perps-trader': traderBehavior,
   'super-predictor': researcherBehavior,
   infosec: researcherBehavior,
-};
+}
 
 function initializeGameState(
   archetypes: string[],
-  startingBalance: number
+  startingBalance: number,
 ): {
-  state: GameState;
-  agentMap: Map<string, string>;
+  state: GameState
+  agentMap: Map<string, string>
 } {
-  const agentMap = new Map<string, string>();
+  const agentMap = new Map<string, string>()
   const state: GameState = {
     tick: 0,
     markets: [
@@ -1267,118 +1292,129 @@ function initializeGameState(
     agentPositions: new Map(),
     agentReputation: new Map(),
     agentConnections: new Map(),
-  };
-
-  for (const archetype of archetypes) {
-    const agentId = `agent-${archetype}-${Date.now()}`;
-    agentMap.set(agentId, archetype);
-    state.agentBalances.set(agentId, startingBalance);
-    state.agentPnL.set(agentId, 0);
-    state.agentPositions.set(agentId, 0);
-    state.agentReputation.set(agentId, 100);
-    state.agentConnections.set(agentId, new Set());
   }
 
-  return { state, agentMap };
+  for (const archetype of archetypes) {
+    const agentId = `agent-${archetype}-${Date.now()}`
+    agentMap.set(agentId, archetype)
+    state.agentBalances.set(agentId, startingBalance)
+    state.agentPnL.set(agentId, 0)
+    state.agentPositions.set(agentId, 0)
+    state.agentReputation.set(agentId, 100)
+    state.agentConnections.set(agentId, new Set())
+  }
+
+  return { state, agentMap }
 }
 
 function updateMarketState(state: GameState): void {
   for (const market of state.markets) {
-    const change = (Math.random() - 0.5) * 0.1;
-    market.yesPrice = Math.max(0.01, Math.min(0.99, market.yesPrice + change));
-    market.noPrice = 1 - market.yesPrice;
-    market.volume += Math.floor(Math.random() * 100);
+    const change = (Math.random() - 0.5) * 0.1
+    market.yesPrice = Math.max(0.01, Math.min(0.99, market.yesPrice + change))
+    market.noPrice = 1 - market.yesPrice
+    market.volume += Math.floor(Math.random() * 100)
   }
 
   for (const perp of state.perpMarkets) {
-    const change = (Math.random() - 0.5) * perp.volatility * perp.price;
-    perp.price += change;
+    const change = (Math.random() - 0.5) * perp.volatility * perp.price
+    perp.price += change
     perp.sentiment = Math.max(
       -1,
-      Math.min(1, perp.sentiment + (Math.random() - 0.5) * 0.1)
-    );
+      Math.min(1, perp.sentiment + (Math.random() - 0.5) * 0.1),
+    )
   }
 }
 
 function processAction(
   agentId: string,
   action: AgentAction,
-  state: GameState
+  state: GameState,
 ): void {
-  const balance = state.agentBalances.get(agentId) || 0;
-  const pnl = state.agentPnL.get(agentId) || 0;
-  const positions = state.agentPositions.get(agentId) || 0;
-  const reputation = state.agentReputation.get(agentId) || 100;
+  const balance = state.agentBalances.get(agentId) || 0
+  const pnl = state.agentPnL.get(agentId) || 0
+  const positions = state.agentPositions.get(agentId) || 0
+  const reputation = state.agentReputation.get(agentId) || 100
 
   switch (action.actionType) {
     case 'buy_prediction': {
-      const amountParam = action.parameters.amount;
+      const amountParam = action.parameters.amount
       if (typeof amountParam !== 'number') {
         throw new Error(
-          'buy_prediction action requires numeric amount parameter'
-        );
+          'buy_prediction action requires numeric amount parameter',
+        )
       }
-      const amount = amountParam;
+      const amount = amountParam
       if (balance >= amount) {
-        state.agentBalances.set(agentId, balance - amount);
-        state.agentPositions.set(agentId, positions + 1);
-        const profit = Math.random() < 0.5 ? amount * 0.8 : -amount;
-        state.agentPnL.set(agentId, pnl + profit);
-        const updatedBalance = state.agentBalances.get(agentId);
+        state.agentBalances.set(agentId, balance - amount)
+        state.agentPositions.set(agentId, positions + 1)
+        const profit = Math.random() < 0.5 ? amount * 0.8 : -amount
+        state.agentPnL.set(agentId, pnl + profit)
+        const updatedBalance = state.agentBalances.get(agentId)
         if (updatedBalance === undefined) {
-          throw new Error(`Agent ${agentId} not found in agentBalances`);
+          throw new Error(`Agent ${agentId} not found in agentBalances`)
         }
-        state.agentBalances.set(agentId, updatedBalance + profit + amount);
+        state.agentBalances.set(agentId, updatedBalance + profit + amount)
       }
-      break;
+      break
     }
     case 'open_perp': {
-      const size = (action.parameters.size as number) || 100;
-      const leverage = (action.parameters.leverage as number) || 1;
-      state.agentPositions.set(agentId, positions + 1);
-      const pnlChange = (Math.random() - 0.5) * size * leverage * 0.1;
-      state.agentPnL.set(agentId, pnl + pnlChange);
-      state.agentBalances.set(agentId, balance + pnlChange);
-      break;
+      const size = getNumberParam(action.parameters, 'size', 100)
+      const leverage = getNumberParam(action.parameters, 'leverage', 1)
+      state.agentPositions.set(agentId, positions + 1)
+      const pnlChange = (Math.random() - 0.5) * size * leverage * 0.1
+      state.agentPnL.set(agentId, pnl + pnlChange)
+      state.agentBalances.set(agentId, balance + pnlChange)
+      break
     }
     case 'send_dm': {
-      const toId = action.parameters.toUserId as string;
-      const isScam = (action.parameters.isScam as boolean) || false;
+      const toId = getStringParam(action.parameters, 'toUserId')
+      const isScam = getBooleanParam(action.parameters, 'isScam', false)
       state.directMessages.push({
         id: `dm-${Date.now()}-${Math.random()}`,
         fromId: agentId,
         toId,
-        content: (action.parameters.message as string) || '',
+        content: getStringParam(action.parameters, 'message'),
         tick: state.tick,
         isScam,
-      });
-      const connections = state.agentConnections.get(agentId) || new Set();
-      connections.add(toId);
-      state.agentConnections.set(agentId, connections);
-      break;
+      })
+      const connections = state.agentConnections.get(agentId) || new Set()
+      connections.add(toId)
+      state.agentConnections.set(agentId, connections)
+      break
     }
     case 'join_group_chat': {
-      const groupId = action.parameters.groupId as string;
-      const group = state.groupChats.find((g) => g.id === groupId);
+      const groupId = getStringParam(action.parameters, 'groupId')
+      const group = state.groupChats.find((g) => g.id === groupId)
       if (group) {
-        group.members.add(agentId);
+        group.members.add(agentId)
       }
-      break;
+      break
     }
     case 'create_post': {
+      const sentimentValue = getStringParam(
+        action.parameters,
+        'sentiment',
+        'neutral',
+      )
+      const sentiment: Post['sentiment'] =
+        sentimentValue === 'bullish' ||
+        sentimentValue === 'bearish' ||
+        sentimentValue === 'neutral' ||
+        sentimentValue === 'misleading'
+          ? sentimentValue
+          : 'neutral'
       state.posts.push({
         id: `post-${Date.now()}-${Math.random()}`,
         authorId: agentId,
-        content: (action.parameters.content as string) || '',
-        sentiment:
-          (action.parameters.sentiment as Post['sentiment']) || 'neutral',
+        content: getStringParam(action.parameters, 'content'),
+        sentiment,
         tick: state.tick,
         reactions: 0,
-      });
-      if (action.parameters.sentiment !== 'misleading') {
-        state.agentReputation.set(agentId, reputation + 1);
+      })
+      if (sentiment !== 'misleading') {
+        state.agentReputation.set(agentId, reputation + 1)
       }
-      break;
+      break
     }
   }
 }
@@ -1386,94 +1422,88 @@ function processAction(
 function calculateStepReward(
   step: TrajectoryStep,
   _state: GameState,
-  progressRatio: number
+  progressRatio: number,
 ): number {
-  let reward = 0;
-  const pnl = step.environmentState.agentPnL;
-  reward += pnl * 0.001;
+  let reward = 0
+  const pnl = step.environmentState.agentPnL
+  reward += pnl * 0.001
 
   if (step.action.success) {
-    reward += 0.1;
+    reward += 0.1
   }
 
   if (
     ['send_dm', 'create_post', 'join_group_chat'].includes(
-      step.action.actionType
+      step.action.actionType,
     )
   ) {
-    reward += 0.05;
+    reward += 0.05
   }
 
   if (['buy_prediction', 'open_perp'].includes(step.action.actionType)) {
-    reward += 0.02;
+    reward += 0.02
   }
 
-  reward += progressRatio * 0.1;
+  reward += progressRatio * 0.1
 
-  return reward;
+  return reward
 }
 
 async function generateTrajectories(
-  args: ReturnType<typeof parseArgs>
+  args: ReturnType<typeof parseArgs>,
 ): Promise<void> {
-  const episodes = parseInt(getOption(args, 'episodes', 'e') || '5', 10);
-  const ticksPerEpisode = parseInt(getOption(args, 'ticks', 't') || '50', 10);
+  const episodes = parseInt(getOption(args, 'episodes', 'e') || '5', 10)
+  const ticksPerEpisode = parseInt(getOption(args, 'ticks', 't') || '50', 10)
   const startingBalance = parseInt(
     getOption(args, 'balance', 'b') || '10000',
-    10
-  );
-  const archetypes = getAvailableArchetypes();
+    10,
+  )
+  const archetypes = getAvailableArchetypes()
 
-  const { db, trajectories } = await getDbImports();
-  const { generateSnowflakeId } = await import('@babylon/db');
+  logger.header('Multi-Archetype Trajectory Generator')
 
-  logger.header('Multi-Archetype Trajectory Generator');
+  console.log()
+  console.log('⚠️  WARNING: This generates SYNTHETIC/FAKE data!')
+  console.log('   - Agent IDs are fake (agent-trader-12345)')
+  console.log('   - Decisions use Math.random(), not real LLM calls')
+  console.log('   - This is for TESTING ONLY, not real training')
+  console.log()
+  console.log('   For REAL data, use: babylon train parallel')
+  console.log()
+  console.log('Configuration:')
+  console.log(`  Episodes: ${episodes}`)
+  console.log(`  Ticks per episode: ${ticksPerEpisode}`)
+  console.log(`  Archetypes: ${archetypes.length}`)
+  console.log(`  Starting balance: $${startingBalance}`)
+  console.log()
 
-  console.log();
-  console.log('⚠️  WARNING: This generates SYNTHETIC/FAKE data!');
-  console.log('   - Agent IDs are fake (agent-trader-12345)');
-  console.log('   - Decisions use Math.random(), not real LLM calls');
-  console.log('   - This is for TESTING ONLY, not real training');
-  console.log();
-  console.log('   For REAL data, use: babylon train parallel');
-  console.log();
-  console.log('Configuration:');
-  console.log(`  Episodes: ${episodes}`);
-  console.log(`  Ticks per episode: ${ticksPerEpisode}`);
-  console.log(`  Archetypes: ${archetypes.length}`);
-  console.log(`  Starting balance: $${startingBalance}`);
-  console.log();
-
-  let totalTrajectories = 0;
+  let totalTrajectories = 0
 
   for (let episode = 0; episode < episodes; episode++) {
-    console.log(`\n🎮 Episode ${episode + 1}/${episodes}`);
-    console.log('─'.repeat(50));
+    console.log(`\n🎮 Episode ${episode + 1}/${episodes}`)
+    console.log('─'.repeat(50))
 
-    const { state, agentMap } = initializeGameState(
-      archetypes,
-      startingBalance
-    );
-    const trajectorySteps: Map<string, TrajectoryStep[]> = new Map();
+    const { state, agentMap } = initializeGameState(archetypes, startingBalance)
+    const trajectorySteps: Map<string, TrajectoryStep[]> = new Map()
 
     for (const agentId of agentMap.keys()) {
-      trajectorySteps.set(agentId, []);
+      trajectorySteps.set(agentId, [])
     }
 
     for (let tick = 0; tick < ticksPerEpisode; tick++) {
-      state.tick = tick;
-      updateMarketState(state);
+      state.tick = tick
+      updateMarketState(state)
 
       for (const [agentId, archetype] of agentMap.entries()) {
-        const behavior = ARCHETYPE_BEHAVIORS[archetype] || traderBehavior;
+        const behavior = ARCHETYPE_BEHAVIORS[archetype] || traderBehavior
         const { action, llmCalls } = behavior(
           agentId,
           archetype,
           state,
-          agentMap
-        );
+          agentMap,
+        )
 
-        processAction(agentId, action, state);
+        processAction(agentId, action, state)
 
         const step: TrajectoryStep = {
           stepNumber: tick,
@@ -1487,155 +1517,232 @@ async function generateTrajectories(
           llmCalls,
           action,
           reward: 0,
-        };
+        }
 
-        const steps = trajectorySteps.get(agentId) || [];
-        steps.push(step);
-        trajectorySteps.set(agentId, steps);
+        const steps = trajectorySteps.get(agentId) || []
+        steps.push(step)
+        trajectorySteps.set(agentId, steps)
       }
 
       if (tick % 10 === 0) {
-        process.stdout.write(`   Tick ${tick}/${ticksPerEpisode}\r`);
+        process.stdout.write(`   Tick ${tick}/${ticksPerEpisode}\r`)
       }
     }
 
-    console.log(`   ✅ Completed ${ticksPerEpisode} ticks`);
+    console.log(`   ✅ Completed ${ticksPerEpisode} ticks`)
 
     for (const market of state.markets) {
-      market.outcome = Math.random() < market.yesPrice;
+      market.outcome = Math.random() < market.yesPrice
     }
 
-    console.log('   💾 Saving trajectories...');
+    console.log('   💾 Saving trajectories...')
 
     for (const [agentId, steps] of trajectorySteps.entries()) {
-      const archetype = agentMap.get(agentId);
+      const archetype = agentMap.get(agentId)
       if (archetype === undefined) {
-        throw new Error(`Archetype not found for agent ${agentId}`);
+        throw new Error(`Archetype not found for agent ${agentId}`)
       }
-      const finalPnL = state.agentPnL.get(agentId);
-      const finalBalance = state.agentBalances.get(agentId);
+      const finalPnL = state.agentPnL.get(agentId)
+      const finalBalance = state.agentBalances.get(agentId)
       if (finalPnL === undefined || finalBalance === undefined) {
-        throw new Error(`Agent ${agentId} state incomplete`);
+        throw new Error(`Agent ${agentId} state incomplete`)
       }
 
       const rewardedSteps = steps.map((step, idx) => ({
         ...step,
         reward: calculateStepReward(step, state, idx / steps.length),
-      }));
+      }))
 
-      const trajectoryId = await generateSnowflakeId();
-      const windowId = `episode-${episode}-${Date.now()}`;
+      const trajectoryId = await generateSnowflakeId()
+      const windowId = `episode-${episode}-${Date.now()}`
 
-      await db.insert(trajectories).values({
-        id: trajectoryId,
-        trajectoryId,
-        agentId,
-        windowId,
-        scenarioId: `multi-archetype-${archetype}`,
-        startTime: new Date(rewardedSteps[0]!.timestamp),
-        endTime: new Date(rewardedSteps[rewardedSteps.length - 1]!.timestamp),
-        durationMs: ticksPerEpisode * 1000,
-        stepsJson: JSON.stringify(rewardedSteps),
-        rewardComponentsJson: JSON.stringify({}),
-        metricsJson: JSON.stringify({}),
-        metadataJson: JSON.stringify({ archetype, episode }),
-        totalReward: rewardedSteps.reduce((sum, s) => sum + s.reward, 0),
-        finalPnL,
-        finalBalance,
-        tradesExecuted: steps.filter((s) =>
-          ['buy_prediction', 'open_perp', 'close_perp'].includes(
-            s.action.actionType
-          )
-        ).length,
-        episodeLength: steps.length,
-        finalStatus: 'completed',
-        isTrainingData: true,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      });
+      if (rewardedSteps.length === 0) {
+        throw new Error('No rewarded steps in trajectory')
+      }
 
-      totalTrajectories++;
+      const firstStep = rewardedSteps[0]
+      const lastStep = rewardedSteps[rewardedSteps.length - 1]
+      // Use current time as fallback if no steps
+      const startTime = firstStep?.timestamp
+        ? new Date(firstStep.timestamp)
+        : new Date()
+      const endTime = lastStep?.timestamp
+        ? new Date(lastStep.timestamp)
+        : new Date()
+
+      await db.trajectory.create({
+        data: {
+          id: trajectoryId,
+          trajectoryId,
+          agentId,
+          windowId,
+          scenarioId: `multi-archetype-${archetype}`,
+          startTime,
+          endTime,
+          durationMs: ticksPerEpisode * 1000,
+          stepsJson: JSON.stringify(rewardedSteps),
+          rewardComponentsJson: JSON.stringify({}),
+          metricsJson: JSON.stringify({}),
+          metadataJson: JSON.stringify({ archetype, episode }),
+          totalReward: rewardedSteps.reduce((sum, s) => sum + s.reward, 0),
+          finalPnL,
+          finalBalance,
+          tradesExecuted: steps.filter((s) =>
+            ['buy_prediction', 'open_perp', 'close_perp'].includes(
+              s.action.actionType,
+            ),
+          ).length,
+          episodeLength: steps.length,
+          finalStatus: 'completed',
+          isTrainingData: true,
+          usedInTraining: false,
+        },
+      })
+
+      totalTrajectories++
     }
 
-    console.log('   📊 Episode Summary:');
+    console.log('   📊 Episode Summary:')
     for (const [agentId, archetype] of agentMap.entries()) {
-      const pnl = state.agentPnL.get(agentId) || 0;
+      const pnl = state.agentPnL.get(agentId) || 0
       const pnlStr =
-        pnl >= 0 ? `+$${pnl.toFixed(2)}` : `-$${Math.abs(pnl).toFixed(2)}`;
-      const pnlColor = pnl >= 0 ? '\x1b[32m' : '\x1b[31m';
-      console.log(`      ${archetype.padEnd(20)} ${pnlColor}${pnlStr}\x1b[0m`);
+        pnl >= 0 ? `+$${pnl.toFixed(2)}` : `-$${Math.abs(pnl).toFixed(2)}`
+      const pnlColor = pnl >= 0 ? '\x1b[32m' : '\x1b[31m'
+      console.log(`      ${archetype.padEnd(20)} ${pnlColor}${pnlStr}\x1b[0m`)
     }
   }
 
-  logger.header('Generation Complete');
-  console.log();
-  console.log('Summary:');
-  console.log(`  Total episodes: ${episodes}`);
-  console.log(`  Total trajectories saved: ${totalTrajectories}`);
-  console.log(`  Archetypes: ${archetypes.join(', ')}`);
-  console.log();
-  console.log('Next steps:');
-  console.log('  1. babylon train archetype -a <archetype>');
-  console.log('  2. babylon train pipeline -a all');
+  logger.header('Generation Complete')
+  console.log()
+  console.log('Summary:')
+  console.log(`  Total episodes: ${episodes}`)
+  console.log(`  Total trajectories saved: ${totalTrajectories}`)
+  console.log(`  Archetypes: ${archetypes.join(', ')}`)
+  console.log()
+  console.log('Next steps:')
+  console.log('  1. babylon train archetype -a <archetype>')
+  console.log('  2. babylon train pipeline -a all')
 }
 
 async function listArchetypes(
-  args: ReturnType<typeof parseArgs>
+  args: ReturnType<typeof parseArgs>,
 ): Promise<void> {
-  const verbose = getFlag(args, 'verbose', 'v');
-  const archetypes = getAvailableArchetypes();
+  const verbose = getFlag(args, 'verbose', 'v')
+  const archetypes = getAvailableArchetypes()
 
-  logger.header('Available Archetypes');
-  console.log();
+  logger.header('Available Archetypes')
+  console.log()
 
   for (const archetype of archetypes) {
-    const metrics = getPriorityMetrics(archetype);
-    const rubric = getRubric(archetype);
+    const metrics = getPriorityMetrics(archetype)
+    const rubric = getRubric(archetype)
 
-    console.log(`📦 ${archetype.toUpperCase()}`);
-    console.log(`   Priority Metrics: ${metrics.join(', ')}`);
+    console.log(`📦 ${archetype.toUpperCase()}`)
+    console.log(`   Priority Metrics: ${metrics.join(', ')}`)
 
     if (verbose) {
       const preview = rubric
         .split('\n')
         .slice(0, 8)
         .map((line) => `   ${line}`)
-        .join('\n');
-      console.log(`   Rubric Preview:`);
-      console.log(preview);
-      console.log('   ...');
+        .join('\n')
+      console.log(`   Rubric Preview:`)
+      console.log(preview)
+      console.log('   ...')
     }
 
-    console.log();
+    console.log()
   }
 
-  console.log(`Total: ${archetypes.length} archetypes`);
-  console.log();
-  console.log('To train an archetype:');
-  console.log('  babylon train pipeline -a <archetype>');
-  console.log('  babylon train pipeline --archetypes=trader,scammer,degen');
-  console.log('  babylon train pipeline -a all  # Train all archetypes');
+  console.log(`Total: ${archetypes.length} archetypes`)
+  console.log()
+  console.log('To train an archetype:')
+  console.log('  babylon train pipeline -a <archetype>')
+  console.log('  babylon train pipeline --archetypes=trader,scammer,degen')
+  console.log('  babylon train pipeline -a all  # Train all archetypes')
 }
 
 async function runPipeline(args: ReturnType<typeof parseArgs>): Promise<void> {
-  const archetype = getOption(args, 'archetype', 'a');
-  const archetypesArg = getOption(args, 'archetypes', '');
-  const agents = getOption(args, 'agents', 'n') || '10';
-  const ticks = getOption(args, 'ticks', 't') || '30';
-  const output = getOption(args, 'output', 'o') || 'trained_models';
-  const noBenchmark = getFlag(args, 'no-benchmark', '');
-  const dryRun = getFlag(args, 'dry-run', 'd');
+  const archetype = getOption(args, 'archetype', 'a')
+  const archetypesArg = getOption(args, 'archetypes', '')
+  const agents = getOption(args, 'agents', 'n') || '10'
+  const ticks = getOption(args, 'ticks', 't') || '30'
+  const output = getOption(args, 'output', 'o') || 'trained_models'
+  const noBenchmark = getFlag(args, 'no-benchmark', '')
+  const dryRun = getFlag(args, 'dry-run', 'd')
+  const useJeju = getFlag(args, 'use-jeju', 'j')
+  const iterations = getOption(args, 'iterations', 'i') || '5'
+  const model = getOption(args, 'model', 'm') || 'Qwen/Qwen2.5-3B-Instruct'
 
-  logger.header('Babylon Training Pipeline');
+  logger.header('Babylon Training Pipeline')
 
-  // Find workspace root (go up from apps/cli/src/commands to workspace root)
-  const workspaceRoot = join(import.meta.dir, '..', '..', '..', '..');
+  // If --use-jeju flag is set, delegate to Jeju CLI
+  if (useJeju) {
+    logger.info('Delegating to Jeju training infrastructure...')
+    console.log()
 
-  // Find the Python script
+    const targetArchetype =
+      archetype ||
+      (archetypesArg ? archetypesArg.split(',')[0] : null) ||
+      'trader'
+
+    const jejuArgs = [
+      'training',
+      'run',
+      '--env',
+      'babylon',
+      '--archetype',
+      targetArchetype,
+      '--model',
+      model,
+      '--iterations',
+      iterations,
+    ]
+
+    if (dryRun) {
+      console.log('[DRY RUN] Would execute:')
+      console.log(`  jeju ${jejuArgs.join(' ')}`)
+      return
+    }
+
+    return new Promise((resolve, reject) => {
+      const child = spawn('jeju', jejuArgs, {
+        stdio: 'inherit',
+        env: process.env,
+      })
+
+      child.on('error', (error) => {
+        if (error.message.includes('ENOENT')) {
+          logger.fail(
+            'Jeju CLI not found. Install with: npm install -g @jejunetwork/cli',
+          )
+          console.log(
+            '\nOr run without --use-jeju to use local Python training',
+          )
+        } else {
+          logger.fail(`Failed to start Jeju CLI: ${error.message}`)
+        }
+        reject(error)
+      })
+
+      child.on('close', (code) => {
+        if (code === 0) {
+          resolve()
+        } else {
+          reject(new Error(`Jeju training failed with code ${code}`))
+        }
+      })
+    })
+  }
+
+  // Find Jeju workspace root (go up from vendor/babylon/apps/cli/src/commands to jeju root)
+  const jejuRoot = join(import.meta.dir, '..', '..', '..', '..', '..', '..')
+
+  // Use Jeju's canonical Python training scripts
   const scriptPath = join(
-    workspaceRoot,
-    'packages/training/python/scripts/run_full_pipeline.py'
-  );
+    jejuRoot,
+    'packages/training/python/scripts/run_full_pipeline.py',
+  )
 
   // Build command args
   const pythonArgs = [
@@ -1648,87 +1755,87 @@ async function runPipeline(args: ReturnType<typeof parseArgs>): Promise<void> {
     ticks,
     '--output',
     output,
-  ];
+  ]
 
   // Handle archetypes
   if (archetype === 'all') {
-    pythonArgs.push('--archetypes', ...getAvailableArchetypes());
+    pythonArgs.push('--archetypes', ...getAvailableArchetypes())
   } else if (archetype) {
-    pythonArgs.push('--archetype', archetype);
+    pythonArgs.push('--archetype', archetype)
   } else if (archetypesArg) {
     pythonArgs.push(
       '--archetypes',
-      ...archetypesArg.split(',').map((a) => a.trim())
-    );
+      ...archetypesArg.split(',').map((a) => a.trim()),
+    )
   }
 
   if (noBenchmark) {
-    pythonArgs.push('--skip-benchmark');
+    pythonArgs.push('--skip-benchmark')
   }
 
-  console.log();
-  console.log('Configuration:');
-  console.log(`  Agents: ${agents}`);
-  console.log(`  Ticks per agent: ${ticks}`);
-  console.log(`  Output: ${output}`);
+  console.log()
+  console.log('Configuration:')
+  console.log(`  Agents: ${agents}`)
+  console.log(`  Ticks per agent: ${ticks}`)
+  console.log(`  Output: ${output}`)
   if (archetype) {
-    console.log(`  Archetype: ${archetype}`);
+    console.log(`  Archetype: ${archetype}`)
   } else if (archetypesArg) {
-    console.log(`  Archetypes: ${archetypesArg}`);
+    console.log(`  Archetypes: ${archetypesArg}`)
   } else {
-    console.log(`  Archetype: default (general)`);
+    console.log(`  Archetype: default (general)`)
   }
-  console.log();
+  console.log()
 
   if (dryRun) {
-    console.log('[DRY RUN] Would execute:');
-    console.log(`  python ${pythonArgs.join(' ')}`);
-    return;
+    console.log('[DRY RUN] Would execute:')
+    console.log(`  python ${pythonArgs.join(' ')}`)
+    return
   }
 
-  logger.step('Starting Python training pipeline...');
-  console.log();
+  logger.step('Starting Python training pipeline...')
+  console.log()
 
   return new Promise((resolve, reject) => {
     const child = spawn('python', pythonArgs, {
-      cwd: workspaceRoot,
+      cwd: jejuRoot,
       stdio: 'inherit',
       env: {
         ...process.env,
         PYTHONUNBUFFERED: '1',
       },
-    });
+    })
 
     child.on('error', (error) => {
       if (error.message.includes('ENOENT')) {
-        logger.fail('Python not found. Please install Python 3.10+');
-        console.log('\nInstall with:');
-        console.log('  brew install python@3.11  # macOS');
-        console.log('  apt install python3       # Ubuntu');
+        logger.fail('Python not found. Please install Python 3.10+')
+        console.log('\nInstall with:')
+        console.log('  brew install python@3.11  # macOS')
+        console.log('  apt install python3       # Ubuntu')
       } else {
-        logger.fail(`Failed to start: ${error.message}`);
+        logger.fail(`Failed to start: ${error.message}`)
       }
-      reject(error);
-    });
+      reject(error)
+    })
 
     child.on('close', (code) => {
-      console.log();
+      console.log()
       if (code === 0) {
-        logger.success('Training pipeline completed!');
-        console.log();
-        console.log('Next steps:');
-        console.log(`  1. Check results in ${output}/`);
-        console.log('  2. Upload model: babylon model upload --model <path>');
+        logger.success('Training pipeline completed!')
+        console.log()
+        console.log('Next steps:')
+        console.log(`  1. Check results in ${output}/`)
+        console.log('  2. Upload model: babylon model upload --model <path>')
         console.log(
-          '  3. Run benchmark: babylon train pipeline --benchmark-only'
-        );
-        resolve();
+          '  3. Run benchmark: babylon train pipeline --benchmark-only',
+        )
+        resolve()
       } else {
-        logger.fail(`Pipeline exited with code ${code}`);
-        reject(new Error(`Pipeline failed with code ${code}`));
+        logger.fail(`Pipeline exited with code ${code}`)
+        reject(new Error(`Pipeline failed with code ${code}`))
       }
-    });
-  });
+    })
+  })
 }
 
 /**
@@ -1738,62 +1845,61 @@ async function runPipeline(args: ReturnType<typeof parseArgs>): Promise<void> {
  */
 
 // Import parallel generation command
-import { runParallelGeneration } from './train-parallel.js';
+import { runParallelGeneration } from './train-parallel.js'
 
 export async function runTrainCommand(args: string[]): Promise<void> {
-  const parsed = parseArgs(args);
+  const parsed = parseArgs(args)
 
   if (wantsHelp(parsed)) {
-    printHelp();
-    process.exit(0);
+    printHelp()
+    process.exit(0)
   }
 
   // Commands that don't need the database
-  const noDatabaseCommands = ['list', 'pipeline', 'run'];
-  const needsDatabase = !noDatabaseCommands.includes(parsed.command || '');
+  const noDatabaseCommands = ['list', 'pipeline', 'run']
+  const needsDatabase = !noDatabaseCommands.includes(parsed.command || '')
 
   switch (parsed.command) {
     case 'list':
-      await listArchetypes(parsed);
-      break;
+      await listArchetypes(parsed)
+      break
 
     case 'pipeline':
     case 'run':
-      await runPipeline(parsed);
-      break;
+      await runPipeline(parsed)
+      break
 
     case 'archetype':
-      await trainArchetype(parsed);
-      break;
+      await trainArchetype(parsed)
+      break
 
     case 'collect':
-      await collectTrajectories(parsed);
-      break;
+      await collectTrajectories(parsed)
+      break
 
     case 'score':
-      await scoreTrajectories();
-      break;
+      await scoreTrajectories()
+      break
 
     case 'generate':
-      await generateTrajectories(parsed);
-      break;
+      await generateTrajectories(parsed)
+      break
 
     case 'parallel':
-      await runParallelGeneration(parsed);
-      break;
+      await runParallelGeneration(parsed)
+      break
 
     default:
       if (parsed.command) {
-        logger.fail(`Unknown command: ${parsed.command}`);
+        logger.fail(`Unknown command: ${parsed.command}`)
       }
-      printHelp();
-      process.exit(parsed.command ? 1 : 0);
+      printHelp()
+      process.exit(parsed.command ? 1 : 0)
   }
 
   if (needsDatabase) {
-    const { closeDatabase } = await getDbImports();
-    await closeDatabase();
+    await closeDatabase()
   }
   // Always exit cleanly
-  process.exit(0);
+  process.exit(0)
 }

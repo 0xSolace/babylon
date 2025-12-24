@@ -9,15 +9,16 @@
  * This creates a natural market hierarchy where whales have more influence.
  */
 
-import type { Actor } from '@babylon/shared';
+import type { Actor } from '@babylon/shared'
 
 interface CapitalAllocation {
-  tradingBalance: number;
-  initialPoolBalance: number;
-  reputationPoints: number;
-  reasoning: string;
+  tradingBalance: number
+  initialPoolBalance: number
+  reputationPoints: number
+  reasoning: string
 }
 
+// biome-ignore lint/complexity/noStaticOnlyClass: Service pattern uses static methods for stateless operations
 export class CapitalAllocationService {
   /**
    * Calculate starting capital for an NPC based on their profile
@@ -25,47 +26,47 @@ export class CapitalAllocationService {
   static calculateCapital(actor: Actor): CapitalAllocation {
     // Base capital by tier
     const tierCapital = CapitalAllocationService.getTierCapital(
-      actor.tier || 'C_TIER'
-    );
+      actor.tier || 'C_TIER',
+    )
 
     // Role multiplier
     const roleMultiplier = CapitalAllocationService.getRoleMultiplier(
-      actor.description || ''
-    );
+      actor.description || '',
+    )
 
     // Domain multiplier
     const domainMultiplier = CapitalAllocationService.getDomainMultiplier(
-      actor.domain || []
-    );
+      actor.domain || [],
+    )
 
     // Calculate final amount
     const tradingBalance = Math.round(
-      tierCapital * roleMultiplier * domainMultiplier
-    );
+      tierCapital * roleMultiplier * domainMultiplier,
+    )
 
     // Pool starts with same amount as personal balance
-    const initialPoolBalance = tradingBalance;
+    const initialPoolBalance = tradingBalance
 
     // Reputation points scale with capital (but not 1:1)
     // Formula: sqrt(capital) * 10 gives reasonable scaling
     // $10k → 1,000 points
     // $100k → 3,162 points
     // $500k → 7,071 points
-    const reputationPoints = Math.round(Math.sqrt(tradingBalance) * 10);
+    const reputationPoints = Math.round(Math.sqrt(tradingBalance) * 10)
 
     const reasoning = CapitalAllocationService.generateReasoning(
       actor,
       tierCapital,
       roleMultiplier,
-      domainMultiplier
-    );
+      domainMultiplier,
+    )
 
     return {
       tradingBalance,
       initialPoolBalance,
       reputationPoints,
       reasoning,
-    };
+    }
   }
 
   /**
@@ -77,20 +78,20 @@ export class CapitalAllocationService {
       A_TIER: 75000, // Successful VCs, executives ($75k)
       B_TIER: 25000, // Successful individuals ($25k)
       C_TIER: 10000, // Influencers, reporters ($10k)
-    };
-
-    const capital = tierCapital[tier] || tierCapital['C_TIER'];
-    if (!capital) {
-      throw new Error(`Invalid tier: ${tier}`);
     }
-    return capital;
+
+    const capital = tierCapital[tier] || tierCapital.C_TIER
+    if (!capital) {
+      throw new Error(`Invalid tier: ${tier}`)
+    }
+    return capital
   }
 
   /**
    * Role multiplier based on description keywords
    */
   private static getRoleMultiplier(description: string): number {
-    const descLower = description.toLowerCase();
+    const descLower = description.toLowerCase()
 
     // High capital roles (2x)
     if (
@@ -99,7 +100,7 @@ export class CapitalAllocationService {
       descLower.includes('chairman') ||
       descLower.includes('billionaire')
     ) {
-      return 2.0;
+      return 2.0
     }
 
     // VC/investor roles (1.8x)
@@ -109,7 +110,7 @@ export class CapitalAllocationService {
       descLower.includes('investor') ||
       descLower.includes('fund')
     ) {
-      return 1.8;
+      return 1.8
     }
 
     // Executive roles (1.5x)
@@ -118,7 +119,7 @@ export class CapitalAllocationService {
       descLower.includes('president') ||
       descLower.includes('director')
     ) {
-      return 1.5;
+      return 1.5
     }
 
     // Politician (moderate, 1.2x - they have money but claim not to)
@@ -127,7 +128,7 @@ export class CapitalAllocationService {
       descLower.includes('congress') ||
       descLower.includes('representative')
     ) {
-      return 1.2;
+      return 1.2
     }
 
     // Media/influencer (0.8x)
@@ -137,11 +138,11 @@ export class CapitalAllocationService {
       descLower.includes('podcaster') ||
       descLower.includes('journalist')
     ) {
-      return 0.8;
+      return 0.8
     }
 
     // Default (1.0x)
-    return 1.0;
+    return 1.0
   }
 
   /**
@@ -158,18 +159,18 @@ export class CapitalAllocationService {
       media: 0.8, // Media people less capital
       entertainment: 0.7, // Entertainers less capital
       social_media: 0.7, // Social media influencers less
-    };
+    }
 
     // Take highest domain score
-    let maxScore = 1.0;
+    let maxScore = 1.0
     for (const domain of domains) {
-      const score = domainScores[domain.toLowerCase()];
+      const score = domainScores[domain.toLowerCase()]
       if (score && score > maxScore) {
-        maxScore = score;
+        maxScore = score
       }
     }
 
-    return maxScore;
+    return maxScore
   }
 
   /**
@@ -179,43 +180,43 @@ export class CapitalAllocationService {
     actor: Actor,
     tierCapital: number,
     roleMultiplier: number,
-    domainMultiplier: number
+    domainMultiplier: number,
   ): string {
-    const tier = actor.tier || 'C_TIER';
-    const role = CapitalAllocationService.extractRole(actor.description || '');
-    const primaryDomain = actor.domain?.[0] || 'general';
+    const tier = actor.tier || 'C_TIER'
+    const role = CapitalAllocationService.extractRole(actor.description || '')
+    const primaryDomain = actor.domain?.[0] || 'general'
 
-    return `${tier.replace('_TIER', '-tier')} ${role} in ${primaryDomain}: $${tierCapital.toLocaleString()} base × ${roleMultiplier}aix role × ${domainMultiplier}aix domain`;
+    return `${tier.replace('_TIER', '-tier')} ${role} in ${primaryDomain}: $${tierCapital.toLocaleString()} base × ${roleMultiplier}aix role × ${domainMultiplier}aix domain`
   }
 
   /**
    * Extract primary role from description
    */
   private static extractRole(description: string): string {
-    const descLower = description.toLowerCase();
+    const descLower = description.toLowerCase()
 
-    if (descLower.includes('ceo')) return 'CEO';
-    if (descLower.includes('founder')) return 'founder';
-    if (descLower.includes('chairman')) return 'chairman';
+    if (descLower.includes('ceo')) return 'CEO'
+    if (descLower.includes('founder')) return 'founder'
+    if (descLower.includes('chairman')) return 'chairman'
     if (descLower.includes('vc') || descLower.includes('venture capital'))
-      return 'VC';
-    if (descLower.includes('investor')) return 'investor';
-    if (descLower.includes('senator')) return 'senator';
-    if (descLower.includes('congress')) return 'representative';
-    if (descLower.includes('host')) return 'host';
-    if (descLower.includes('influencer')) return 'influencer';
-    if (descLower.includes('journalist')) return 'journalist';
+      return 'VC'
+    if (descLower.includes('investor')) return 'investor'
+    if (descLower.includes('senator')) return 'senator'
+    if (descLower.includes('congress')) return 'representative'
+    if (descLower.includes('host')) return 'host'
+    if (descLower.includes('influencer')) return 'influencer'
+    if (descLower.includes('journalist')) return 'journalist'
 
-    return 'trader';
+    return 'trader'
   }
 
   /**
    * Get example allocations for common actor types
    */
   static getExampleAllocations(): Array<{
-    description: string;
-    capital: number;
-    reputation: number;
+    description: string
+    capital: number
+    reputation: number
   }> {
     return [
       {
@@ -251,7 +252,7 @@ export class CapitalAllocationService {
       { description: 'C-tier Influencer', capital: 8000, reputation: 894 },
       { description: 'C-tier Journalist', capital: 8000, reputation: 894 },
       { description: 'User (starting)', capital: 1000, reputation: 1000 },
-    ];
+    ]
   }
 
   /**
@@ -259,22 +260,22 @@ export class CapitalAllocationService {
    */
   static validateAllocation(
     actor: Actor,
-    allocation: CapitalAllocation
+    allocation: CapitalAllocation,
   ): boolean {
     // Minimum: $5,000
-    if (allocation.tradingBalance < 5000) return false;
+    if (allocation.tradingBalance < 5000) return false
 
     // Maximum: $1,000,000
-    if (allocation.tradingBalance > 1000000) return false;
+    if (allocation.tradingBalance > 1000000) return false
 
     // S-tier should have at least $100k
     if (actor.tier === 'S_TIER' && allocation.tradingBalance < 100000)
-      return false;
+      return false
 
     // C-tier should have less than $50k
     if (actor.tier === 'C_TIER' && allocation.tradingBalance > 50000)
-      return false;
+      return false
 
-    return true;
+    return true
   }
 }

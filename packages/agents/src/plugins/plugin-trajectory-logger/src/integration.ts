@@ -4,16 +4,16 @@
  * Advanced manual control for trajectory logging
  */
 
-import type { JsonValue } from '@babylon/shared';
-import { logger } from '../../../shared/logger';
-import type { TrajectoryLoggerService } from './TrajectoryLoggerService';
-import type { EnvironmentState } from './types';
+import type { JsonValue } from '@babylon/shared'
+import { logger } from '../../../shared/logger'
+import type { TrajectoryLoggerService } from './TrajectoryLoggerService'
+import type { EnvironmentState } from './types'
 
 /**
  * Trajectory metadata structure
  */
 export interface TrajectoryMetadata {
-  [key: string]: JsonValue;
+  [key: string]: JsonValue
 }
 
 /**
@@ -24,22 +24,22 @@ export interface TrajectoryMetadata {
  * Extends Record<string, JsonValue> to be compatible with endTrajectory method.
  */
 export type FinalMetrics = Record<string, JsonValue> & {
-  totalReward?: number;
-  stepCount?: number;
-  successRate?: number;
-};
+  totalReward?: number
+  stepCount?: number
+  successRate?: number
+}
 
 /**
  * Provider access data structure
  */
 export interface ProviderAccessData {
-  [key: string]: JsonValue;
+  [key: string]: JsonValue
 }
 
 /**
  * Function arguments type for wrapped functions
  */
-export type WrappedFunctionArgs = JsonValue[];
+export type WrappedFunctionArgs = JsonValue[]
 
 /**
  * Start an autonomous tick (creates a new trajectory)
@@ -47,19 +47,19 @@ export type WrappedFunctionArgs = JsonValue[];
 export function startAutonomousTick(
   trajectoryLogger: TrajectoryLoggerService,
   context: {
-    agentId: string;
-    scenarioId?: string;
-    episodeId?: string;
-    batchId?: string;
-    metadata?: TrajectoryMetadata;
-  }
+    agentId: string
+    scenarioId?: string
+    episodeId?: string
+    batchId?: string
+    metadata?: TrajectoryMetadata
+  },
 ): string {
   const trajectoryId = trajectoryLogger.startTrajectory(context.agentId, {
     scenarioId: context.scenarioId,
     episodeId: context.episodeId,
     batchId: context.batchId,
     metadata: context.metadata,
-  });
+  })
 
   // Start first step
   const envState: EnvironmentState = {
@@ -68,9 +68,9 @@ export function startAutonomousTick(
     agentPoints: 0,
     agentPnL: 0,
     openPositions: 0,
-  };
+  }
 
-  trajectoryLogger.startStep(trajectoryId, envState);
+  trajectoryLogger.startStep(trajectoryId, envState)
 
   logger.info(
     'Started autonomous tick trajectory',
@@ -78,10 +78,10 @@ export function startAutonomousTick(
       trajectoryId,
       agentId: context.agentId,
     },
-    'TrajectoryIntegration'
-  );
+    'TrajectoryIntegration',
+  )
 
-  return trajectoryId;
+  return trajectoryId
 }
 
 /**
@@ -91,9 +91,9 @@ export async function endAutonomousTick(
   trajectoryLogger: TrajectoryLoggerService,
   trajectoryId: string,
   status: 'completed' | 'terminated' | 'error' | 'timeout' = 'completed',
-  finalMetrics?: FinalMetrics
+  finalMetrics?: FinalMetrics,
 ): Promise<void> {
-  await trajectoryLogger.endTrajectory(trajectoryId, status, finalMetrics);
+  await trajectoryLogger.endTrajectory(trajectoryId, status, finalMetrics)
 
   logger.info(
     'Ended autonomous tick trajectory',
@@ -101,8 +101,8 @@ export async function endAutonomousTick(
       trajectoryId,
       status,
     },
-    'TrajectoryIntegration'
-  );
+    'TrajectoryIntegration',
+  )
 }
 
 /**
@@ -112,33 +112,33 @@ export async function loggedLLMCall(
   trajectoryLogger: TrajectoryLoggerService,
   trajectoryId: string,
   options: {
-    model: string;
-    modelVersion?: string; // RL model version if using trained model
-    systemPrompt: string;
-    userPrompt: string;
-    temperature?: number;
-    maxTokens?: number;
-    purpose?: 'action' | 'reasoning' | 'evaluation' | 'response' | 'other';
-    actionType?: string;
+    model: string
+    modelVersion?: string // RL model version if using trained model
+    systemPrompt: string
+    userPrompt: string
+    temperature?: number
+    maxTokens?: number
+    purpose?: 'action' | 'reasoning' | 'evaluation' | 'response' | 'other'
+    actionType?: string
   },
   llmCallFn: () => Promise<{
-    text: string;
-    reasoning?: string;
-    tokens?: { prompt?: number; completion?: number };
-    latencyMs?: number;
-  }>
+    text: string
+    reasoning?: string
+    tokens?: { prompt?: number; completion?: number }
+    latencyMs?: number
+  }>,
 ): Promise<string> {
-  const stepId = trajectoryLogger.getCurrentStepId(trajectoryId);
+  const stepId = trajectoryLogger.getCurrentStepId(trajectoryId)
   if (!stepId) {
-    logger.warn('No active step for LLM call', { trajectoryId });
+    logger.warn('No active step for LLM call', { trajectoryId })
     // Execute anyway without logging
-    const result = await llmCallFn();
-    return result.text;
+    const result = await llmCallFn()
+    return result.text
   }
 
-  const startTime = Date.now();
-  const result = await llmCallFn();
-  const latencyMs = Date.now() - startTime;
+  const startTime = Date.now()
+  const result = await llmCallFn()
+  const latencyMs = Date.now() - startTime
 
   // Log the LLM call with model version
   trajectoryLogger.logLLMCall(stepId, {
@@ -155,9 +155,9 @@ export async function loggedLLMCall(
     promptTokens: result.tokens?.prompt,
     completionTokens: result.tokens?.completion,
     latencyMs: result.latencyMs || latencyMs,
-  });
+  })
 
-  return result.text;
+  return result.text
 }
 
 /**
@@ -167,18 +167,18 @@ export function logProviderAccess(
   trajectoryLogger: TrajectoryLoggerService,
   trajectoryId: string,
   access: {
-    providerName: string;
-    data: ProviderAccessData;
-    purpose: string;
-    query?: ProviderAccessData;
-  }
+    providerName: string
+    data: ProviderAccessData
+    purpose: string
+    query?: ProviderAccessData
+  },
 ): void {
   trajectoryLogger.logProviderAccessByTrajectoryId(trajectoryId, {
     providerName: access.providerName,
     data: access.data,
     purpose: access.purpose,
     query: access.query || {},
-  });
+  })
 }
 
 /**
@@ -186,7 +186,7 @@ export function logProviderAccess(
  */
 type AsyncFunction<TArgs extends JsonValue[], TResult extends JsonValue> = (
   ...args: TArgs
-) => Promise<TResult>;
+) => Promise<TResult>
 
 /**
  * Wrap function with trajectory logging
@@ -205,21 +205,21 @@ export function withTrajectoryLogging<
   trajectoryLogger: TrajectoryLoggerService,
   trajectoryId: string,
   context: {
-    actionType?: string;
-    purpose?: string;
-  } = {}
+    actionType?: string
+    purpose?: string
+  } = {},
 ): AsyncFunction<TArgs, TResult> {
   return async (...args: TArgs): Promise<TResult> => {
-    const stepId = trajectoryLogger.getCurrentStepId(trajectoryId);
+    const stepId = trajectoryLogger.getCurrentStepId(trajectoryId)
     if (!stepId) {
       // No active step - execute without logging
-      return fn(...args);
+      return fn(...args)
     }
 
-    let success = false;
-    let error: string | undefined;
-    const result = await fn(...args);
-    success = true;
+    let success = false
+    let error: string | undefined
+    const result = await fn(...args)
+    success = true
     // Log as action attempt
     trajectoryLogger.completeStep(
       trajectoryId,
@@ -235,8 +235,8 @@ export function withTrajectoryLogging<
       },
       {
         reward: success ? 0.05 : -0.05,
-      }
-    );
-    return result;
-  };
+      },
+    )
+    return result
+  }
 }

@@ -13,7 +13,7 @@
  *
  * @returns Rewards skeleton element
  */
-import { Separator } from '@/components/shared/Separator';
+import { Separator } from '@/components/shared/Separator'
 
 /**
  * Skeleton box component for placeholder rectangles.
@@ -25,8 +25,8 @@ function SkeletonBox({
   className = '',
   delay = 0,
 }: {
-  className?: string;
-  delay?: number;
+  className?: string
+  delay?: number
 }) {
   return (
     <div
@@ -34,7 +34,7 @@ function SkeletonBox({
       style={{ animationDelay: `${delay}ms` }}
       aria-hidden="true"
     />
-  );
+  )
 }
 
 /**
@@ -47,8 +47,8 @@ function SkeletonText({
   className = '',
   delay = 0,
 }: {
-  className?: string;
-  delay?: number;
+  className?: string
+  delay?: number
 }) {
   return (
     <div
@@ -56,12 +56,12 @@ function SkeletonText({
       style={{ animationDelay: `${delay}ms` }}
       aria-hidden="true"
     />
-  );
+  )
 }
 
 export function RewardsSkeleton() {
   return (
-    <div role="status" aria-label="Loading rewards...">
+    <section aria-live="polite">
       {/* Desktop Layout */}
       <div className="hidden flex-1 overflow-hidden xl:flex">
         <div className="min-w-0 flex-1 space-y-4 overflow-y-auto overflow-x-hidden p-4 sm:p-6">
@@ -333,6 +333,6 @@ export function RewardsSkeleton() {
 
       {/* Screen reader announcement */}
       <span className="sr-only">Loading rewards content, please wait...</span>
-    </div>
-  );
+    </section>
+  )
 }

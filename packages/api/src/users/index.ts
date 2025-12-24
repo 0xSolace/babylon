@@ -9,10 +9,10 @@ export {
   type EnsureUserOptions,
   ensureUserForAuth,
   getCanonicalUserId,
-} from './ensure-user';
+} from './ensure-user'
 
 export {
   findUserByIdentifier,
   findUserByIdentifierWithSelect,
   requireUserByIdentifier,
-} from './user-lookup';
+} from './user-lookup'

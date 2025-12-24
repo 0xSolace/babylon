@@ -23,39 +23,40 @@ import {
   shares,
   userInteractions,
   users,
-} from '@babylon/db';
-import { logger } from '@babylon/shared';
-import { GroupInviteOrchestrator } from './group-invite-orchestrator';
+} from '@babylon/db'
+import { logger } from '@babylon/shared'
+import { GroupInviteOrchestrator } from './group-invite-orchestrator'
 
 export interface NPCInteractionScore {
-  userId: string;
-  npcId: string;
-  replyCount: number;
-  likeCount: number;
-  shareCount: number;
-  totalInteractions: number;
-  avgQualityScore: number;
-  engagementScore: number; // 0-100 score
-  isEligibleForInvite: boolean;
-  reasons: string[];
+  userId: string
+  npcId: string
+  replyCount: number
+  likeCount: number
+  shareCount: number
+  totalInteractions: number
+  avgQualityScore: number
+  engagementScore: number // 0-100 score
+  isEligibleForInvite: boolean
+  reasons: string[]
 }
 
 export interface InteractionWindow {
-  startDate: Date;
-  endDate: Date;
+  startDate: Date
+  endDate: Date
 }
 
+// biome-ignore lint/complexity/noStaticOnlyClass: Service pattern uses static methods for stateless operations
 export class NPCInteractionTracker {
   // Thresholds for healthy engagement
-  private static readonly MIN_REPLIES = 3;
-  private static readonly MIN_LIKES = 5;
-  private static readonly MIN_TOTAL_INTERACTIONS = 10;
-  private static readonly MAX_INTERACTIONS_PER_DAY = 50; // Prevent spam
+  private static readonly MIN_REPLIES = 3
+  private static readonly MIN_LIKES = 5
+  private static readonly MIN_TOTAL_INTERACTIONS = 10
+  private static readonly MAX_INTERACTIONS_PER_DAY = 50 // Prevent spam
 
   // Weights for engagement score
-  private static readonly REPLY_WEIGHT = 3.0; // Replies are most valuable
-  private static readonly LIKE_WEIGHT = 1.0;
-  private static readonly SHARE_WEIGHT = 2.0;
+  private static readonly REPLY_WEIGHT = 3.0 // Replies are most valuable
+  private static readonly LIKE_WEIGHT = 1.0
+  private static readonly SHARE_WEIGHT = 2.0
 
   /**
    * Track a like interaction
@@ -66,21 +67,23 @@ export class NPCInteractionTracker {
       .select({ authorId: posts.authorId })
       .from(posts)
       .where(eq(posts.id, postId))
-      .limit(1);
+      .limit(1)
 
     if (!post) {
-      return;
+      return
     }
+
+    const authorId = String(post.authorId)
 
     // Check if author is an NPC
     const [author] = await db
       .select({ isActor: users.isActor })
       .from(users)
-      .where(eq(users.id, post.authorId))
-      .limit(1);
+      .where(eq(users.id, authorId))
+      .limit(1)
 
     if (!author?.isActor) {
-      return; // Not an NPC post
+      return // Not an NPC post
     }
 
     // We don't need to store individual likes in UserInteraction
@@ -88,10 +91,10 @@ export class NPCInteractionTracker {
     // This method is just for validation
 
     logger.debug(
-      `User ${userId} liked NPC ${post.authorId}'s post`,
+      `User ${userId} liked NPC ${authorId}'s post`,
       undefined,
-      'NPCInteractionTracker'
-    );
+      'NPCInteractionTracker',
+    )
   }
 
   /**
@@ -106,44 +109,46 @@ export class NPCInteractionTracker {
       .select({ authorId: posts.authorId })
       .from(posts)
       .where(eq(posts.id, postId))
-      .limit(1);
+      .limit(1)
 
     if (!post) {
-      return;
+      return
     }
+
+    const shareAuthorId = String(post.authorId)
 
     // Check if author is an NPC
     const [author] = await db
       .select({ isActor: users.isActor })
       .from(users)
-      .where(eq(users.id, post.authorId))
-      .limit(1);
+      .where(eq(users.id, shareAuthorId))
+      .limit(1)
 
     if (!author?.isActor) {
-      return; // Not an NPC post
+      return // Not an NPC post
     }
 
     // Queue for invite consideration - shares are moderate priority
     const queueResult = await GroupInviteOrchestrator.queueInviteCandidate({
       userId,
-      npcId: post.authorId,
+      npcId: shareAuthorId,
       triggerType: 'share',
       triggerId: postId,
       priorityMultiplier: 1.3, // Shares are valuable but less than follows or quality replies
-    });
+    })
 
     if (queueResult.queued) {
       logger.debug(
         'Queued invite candidate from NPC post share',
-        { userId, npcId: post.authorId, postId },
-        'NPCInteractionTracker'
-      );
+        { userId, npcId: shareAuthorId, postId },
+        'NPCInteractionTracker',
+      )
     } else {
       logger.debug(
-        `User ${userId} shared NPC ${post.authorId}'s post`,
+        `User ${userId} shared NPC ${shareAuthorId}'s post`,
         undefined,
-        'NPCInteractionTracker'
-      );
+        'NPCInteractionTracker',
+      )
     }
   }
 
@@ -153,15 +158,15 @@ export class NPCInteractionTracker {
   static async calculateEngagementScore(
     userId: string,
     npcId: string,
-    window?: InteractionWindow
+    window?: InteractionWindow,
   ): Promise<NPCInteractionScore> {
-    const endDate = window?.endDate || new Date();
+    const endDate = window?.endDate || new Date()
     const startDate =
-      window?.startDate || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000); // 30 days
+      window?.startDate || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) // 30 days
 
     // Get all NPC posts in the time window (up to current time)
-    const now = new Date();
-    const effectiveEndDate = endDate > now ? now : endDate;
+    const now = new Date()
+    const effectiveEndDate = endDate > now ? now : endDate
     const npcPosts = await db
       .select({ id: posts.id })
       .from(posts)
@@ -169,11 +174,11 @@ export class NPCInteractionTracker {
         and(
           eq(posts.authorId, npcId),
           gte(posts.timestamp, startDate),
-          lte(posts.timestamp, effectiveEndDate)
-        )
-      );
+          lte(posts.timestamp, effectiveEndDate),
+        ),
+      )
 
-    const npcPostIds = npcPosts.map((p) => p.id);
+    const npcPostIds: string[] = npcPosts.map((p) => String(p.id))
 
     // Count replies (from UserInteraction table)
     const replyInteractions = await db
@@ -184,22 +189,23 @@ export class NPCInteractionTracker {
           eq(userInteractions.userId, userId),
           eq(userInteractions.npcId, npcId),
           gte(userInteractions.timestamp, startDate),
-          lte(userInteractions.timestamp, endDate)
-        )
-      );
+          lte(userInteractions.timestamp, endDate),
+        ),
+      )
 
-    const replyCount = replyInteractions.length;
+    const replyCount = replyInteractions.length
     const avgQualityScore =
       replyCount > 0
-        ? replyInteractions.reduce((sum, i) => sum + i.qualityScore, 0) /
-          replyCount
-        : 0;
+        ? replyInteractions.reduce(
+            (sum, i) => sum + Number(i.qualityScore),
+            0,
+          ) / replyCount
+        : 0
 
     // Count likes
-    let likeCount = 0;
-    type CountResult = { count: number };
+    let likeCount = 0
     if (npcPostIds.length > 0) {
-      const [likeResult] = (await db
+      const likeResults = await db
         .select({ count: count() })
         .from(reactions)
         .where(
@@ -208,16 +214,17 @@ export class NPCInteractionTracker {
             inArray(reactions.postId, npcPostIds),
             eq(reactions.type, 'like'),
             gte(reactions.createdAt, startDate),
-            lte(reactions.createdAt, endDate)
-          )
-        )) as unknown as CountResult[];
-      likeCount = likeResult?.count ?? 0;
+            lte(reactions.createdAt, endDate),
+          ),
+        )
+      const likeResult = likeResults[0]
+      likeCount = Number(likeResult?.count ?? 0)
     }
 
     // Count shares
-    let shareCount = 0;
+    let shareCount = 0
     if (npcPostIds.length > 0) {
-      const [shareResult] = (await db
+      const shareResults = await db
         .select({ count: count() })
         .from(shares)
         .where(
@@ -225,73 +232,74 @@ export class NPCInteractionTracker {
             eq(shares.userId, userId),
             inArray(shares.postId, npcPostIds),
             gte(shares.createdAt, startDate),
-            lte(shares.createdAt, endDate)
-          )
-        )) as unknown as CountResult[];
-      shareCount = shareResult?.count ?? 0;
+            lte(shares.createdAt, endDate),
+          ),
+        )
+      const shareResult = shareResults[0]
+      shareCount = Number(shareResult?.count ?? 0)
     }
 
-    const totalInteractions = replyCount + likeCount + shareCount;
+    const totalInteractions = replyCount + likeCount + shareCount
 
     // Calculate engagement score (0-100)
-    const replyScore = replyCount * NPCInteractionTracker.REPLY_WEIGHT;
-    const likeScore = likeCount * NPCInteractionTracker.LIKE_WEIGHT;
-    const shareScore = shareCount * NPCInteractionTracker.SHARE_WEIGHT;
+    const replyScore = replyCount * NPCInteractionTracker.REPLY_WEIGHT
+    const likeScore = likeCount * NPCInteractionTracker.LIKE_WEIGHT
+    const shareScore = shareCount * NPCInteractionTracker.SHARE_WEIGHT
 
-    const rawScore = replyScore + likeScore + shareScore;
+    const rawScore = replyScore + likeScore + shareScore
 
     // Normalize to 0-100 scale (cap at reasonable max)
-    const maxExpectedScore = 100; // Roughly 20 replies + 20 likes + 10 shares
-    const engagementScore = Math.min(100, (rawScore / maxExpectedScore) * 100);
+    const maxExpectedScore = 100 // Roughly 20 replies + 20 likes + 10 shares
+    const engagementScore = Math.min(100, (rawScore / maxExpectedScore) * 100)
 
     // Quality multiplier (if avg quality is high, boost score)
-    const qualityMultiplier = avgQualityScore > 0.8 ? 1.2 : 1.0;
-    const finalScore = Math.min(100, engagementScore * qualityMultiplier);
+    const qualityMultiplier = avgQualityScore > 0.8 ? 1.2 : 1.0
+    const finalScore = Math.min(100, engagementScore * qualityMultiplier)
 
     // Determine eligibility
-    const reasons: string[] = [];
-    let isEligible = true;
+    const reasons: string[] = []
+    let isEligible = true
 
     if (replyCount < NPCInteractionTracker.MIN_REPLIES) {
-      isEligible = false;
+      isEligible = false
       reasons.push(
-        `Need ${NPCInteractionTracker.MIN_REPLIES - replyCount} more replies`
-      );
+        `Need ${NPCInteractionTracker.MIN_REPLIES - replyCount} more replies`,
+      )
     }
 
     if (likeCount < NPCInteractionTracker.MIN_LIKES) {
-      isEligible = false;
+      isEligible = false
       reasons.push(
-        `Need ${NPCInteractionTracker.MIN_LIKES - likeCount} more likes`
-      );
+        `Need ${NPCInteractionTracker.MIN_LIKES - likeCount} more likes`,
+      )
     }
 
     if (totalInteractions < NPCInteractionTracker.MIN_TOTAL_INTERACTIONS) {
-      isEligible = false;
+      isEligible = false
       reasons.push(
-        `Need ${NPCInteractionTracker.MIN_TOTAL_INTERACTIONS - totalInteractions} more total interactions`
-      );
+        `Need ${NPCInteractionTracker.MIN_TOTAL_INTERACTIONS - totalInteractions} more total interactions`,
+      )
     }
 
     // Check for spam (too many interactions per day)
     const daysSinceStart =
-      (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24);
-    const interactionsPerDay = totalInteractions / daysSinceStart;
+      (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)
+    const interactionsPerDay = totalInteractions / daysSinceStart
 
     if (interactionsPerDay > NPCInteractionTracker.MAX_INTERACTIONS_PER_DAY) {
-      isEligible = false;
-      reasons.push('Too many interactions per day (possible spam)');
+      isEligible = false
+      reasons.push('Too many interactions per day (possible spam)')
     }
 
     // Quality threshold
     if (avgQualityScore < 0.7 && replyCount > 0) {
-      isEligible = false;
-      reasons.push('Reply quality is too low');
+      isEligible = false
+      reasons.push('Reply quality is too low')
     }
 
     if (isEligible) {
-      reasons.push('Eligible for group invite!');
-      reasons.push(`Engagement score: ${finalScore.toFixed(0)}/100`);
+      reasons.push('Eligible for group invite!')
+      reasons.push(`Engagement score: ${finalScore.toFixed(0)}/100`)
     }
 
     return {
@@ -305,7 +313,7 @@ export class NPCInteractionTracker {
       engagementScore: finalScore,
       isEligibleForInvite: isEligible,
       reasons,
-    };
+    }
   }
 
   /**
@@ -314,34 +322,34 @@ export class NPCInteractionTracker {
   static async getTopEngagedUsers(
     npcId: string,
     limit = 10,
-    window?: InteractionWindow
+    window?: InteractionWindow,
   ): Promise<NPCInteractionScore[]> {
     // Build conditions
-    const conditions = [eq(userInteractions.npcId, npcId)];
+    const conditions = [eq(userInteractions.npcId, npcId)]
     if (window) {
-      conditions.push(gte(userInteractions.timestamp, window.startDate));
-      conditions.push(lte(userInteractions.timestamp, window.endDate));
+      conditions.push(gte(userInteractions.timestamp, window.startDate))
+      conditions.push(lte(userInteractions.timestamp, window.endDate))
     }
 
     // Get all users who have interacted with this NPC
     const interactions = await db
       .selectDistinct({ userId: userInteractions.userId })
       .from(userInteractions)
-      .where(and(...conditions));
+      .where(and(...conditions))
 
-    const userIds = interactions.map((i) => i.userId);
+    const userIds: string[] = interactions.map((i) => String(i.userId))
 
     // Calculate scores for each user
     const scores = await Promise.all(
       userIds.map((userId) =>
-        NPCInteractionTracker.calculateEngagementScore(userId, npcId, window)
-      )
-    );
+        NPCInteractionTracker.calculateEngagementScore(userId, npcId, window),
+      ),
+    )
 
     // Sort by engagement score and return top N
     return scores
       .sort((a, b) => b.engagementScore - a.engagementScore)
-      .slice(0, limit);
+      .slice(0, limit)
   }
 
   /**
@@ -349,20 +357,20 @@ export class NPCInteractionTracker {
    */
   static async getUserEngagedNPCs(
     userId: string,
-    window?: InteractionWindow
+    window?: InteractionWindow,
   ): Promise<string[]> {
     // Build conditions
-    const conditions = [eq(userInteractions.userId, userId)];
+    const conditions = [eq(userInteractions.userId, userId)]
     if (window) {
-      conditions.push(gte(userInteractions.timestamp, window.startDate));
-      conditions.push(lte(userInteractions.timestamp, window.endDate));
+      conditions.push(gte(userInteractions.timestamp, window.startDate))
+      conditions.push(lte(userInteractions.timestamp, window.endDate))
     }
 
     const interactions = await db
       .selectDistinct({ npcId: userInteractions.npcId })
       .from(userInteractions)
-      .where(and(...conditions));
+      .where(and(...conditions))
 
-    return interactions.map((i) => i.npcId);
+    return interactions.map((i) => String(i.npcId))
   }
 }

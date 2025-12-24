@@ -8,7 +8,7 @@
  * @packageDocumentation
  */
 
-import type { Chain, PublicClient, WalletClient } from 'viem';
+import type { Chain, PublicClient, WalletClient } from 'viem'
 import {
   type Address,
   createPublicClient,
@@ -24,15 +24,15 @@ import {
   toHex,
   verifyMessage,
   zeroHash,
-} from 'viem';
-import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
+} from 'viem'
+import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts'
 
 /**
  * Generated wallet interface - contains address and private key
  */
 export interface GeneratedWallet {
-  address: Address;
-  privateKey: Hex;
+  address: Address
+  privateKey: Hex
 }
 
 /**
@@ -40,12 +40,12 @@ export interface GeneratedWallet {
  * Replaces ethers.Wallet.createRandom()
  */
 export function generateRandomWallet(): GeneratedWallet {
-  const privateKey = generatePrivateKey();
-  const account = privateKeyToAccount(privateKey);
+  const privateKey = generatePrivateKey()
+  const account = privateKeyToAccount(privateKey)
   return {
     address: account.address,
     privateKey,
-  };
+  }
 }
 
 /**
@@ -53,14 +53,14 @@ export function generateRandomWallet(): GeneratedWallet {
  * Replaces new ethers.Wallet(privateKey)
  */
 export function createAccount(privateKey: Hex) {
-  return privateKeyToAccount(privateKey);
+  return privateKeyToAccount(privateKey)
 }
 
 /**
  * Get address from a private key
  */
 export function privateKeyToAddress(privateKey: Hex): Address {
-  return privateKeyToAccount(privateKey).address;
+  return privateKeyToAccount(privateKey).address
 }
 
 /**
@@ -68,29 +68,26 @@ export function privateKeyToAddress(privateKey: Hex): Address {
  * Replaces ethers.hexlify(ethers.randomBytes(n))
  */
 export function randomBytesHex(length: number): Hex {
-  const bytes = crypto.getRandomValues(new Uint8Array(length));
-  return toHex(bytes);
+  const bytes = crypto.getRandomValues(new Uint8Array(length))
+  return toHex(bytes)
 }
 
 /**
  * Generate a random 32-byte salt
  */
 export function generateSalt(): Hex {
-  return randomBytesHex(32);
+  return randomBytesHex(32)
 }
 
 /**
  * Create a public client for read operations
  * Replaces new ethers.JsonRpcProvider(rpcUrl)
  */
-export function createViemPublicClient(
-  rpcUrl: string,
-  chain?: Chain
-): PublicClient {
+export function createViemPublicClient(rpcUrl: string, chain?: Chain) {
   return createPublicClient({
     chain,
     transport: http(rpcUrl),
-  });
+  })
 }
 
 /**
@@ -100,14 +97,14 @@ export function createViemPublicClient(
 export function createViemWalletClient(
   privateKey: Hex,
   rpcUrl: string,
-  chain?: Chain
-): WalletClient {
-  const account = privateKeyToAccount(privateKey);
+  chain?: Chain,
+) {
+  const account = privateKeyToAccount(privateKey)
   return createWalletClient({
     account,
     chain,
     transport: http(rpcUrl),
-  });
+  })
 }
 
 /**
@@ -116,63 +113,62 @@ export function createViemWalletClient(
  */
 export async function signMessageWithKey(
   privateKey: Hex,
-  message: string
+  message: string,
 ): Promise<Hex> {
-  const account = privateKeyToAccount(privateKey);
-  return account.signMessage({ message });
+  const account = privateKeyToAccount(privateKey)
+  return account.signMessage({ message })
 }
 
 /**
- * Verify a signed message - re-export from viem
+ * Verify a signed message
  */
-export { verifyMessage };
+export { verifyMessage }
 
 /**
- * Format ETH value from wei - re-export from viem
+ * Format ETH value from wei
  */
-export { formatEther };
+export { formatEther }
 
 /**
- * Parse ETH value to wei - re-export from viem
+ * Parse ETH value to wei
  */
-export { parseEther };
+export { parseEther }
 
 /**
- * Format units - re-export from viem
+ * Format units
  */
-export { formatUnits };
+export { formatUnits }
 
 /**
- * Parse units - re-export from viem
+ * Parse units
  */
-export { parseUnits };
+export { parseUnits }
 
 /**
- * Keccak256 hash - re-export from viem
+ * Keccak256 hash
  */
-export { keccak256 };
+export { keccak256 }
 
 /**
- * Convert to hex - re-export from viem
+ * Convert to hex
  */
-export { toHex };
+export { toHex }
 
 /**
- * Convert string to hex - re-export from viem
+ * Convert string to hex
  */
-export { stringToHex };
+export { stringToHex }
 
 /**
  * Zero hash constant (32 zero bytes)
  * Replaces ethers.ZeroHash
  */
-export { zeroHash };
+export { zeroHash }
 
 /**
  * Zero address constant
  */
 export const ZERO_ADDRESS =
-  '0x0000000000000000000000000000000000000000' as Address;
+  '0x0000000000000000000000000000000000000000' as Address
 
-// Re-export types
-export type { Address, Hex, Chain, PublicClient, WalletClient };
+export type { Address, Hex, Chain, PublicClient, WalletClient }

@@ -16,42 +16,40 @@
  * ```
  */
 
-import { PredictionMarketsResponseSchema } from '@babylon/shared';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useCallback, useMemo, useRef } from 'react';
-import type { PredictionMarket } from '@/types/markets';
-import { MARKETS_CONFIG } from '@/types/markets';
-
-// Re-export for backwards compatibility
-export type { PredictionMarket } from '@/types/markets';
+import { PredictionMarketsResponseSchema } from '@babylon/shared'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useCallback, useMemo, useRef } from 'react'
+import type { PredictionMarket } from '../types/markets'
+import { MARKETS_CONFIG } from '../types/markets'
 
 /** Query key for prediction markets */
-export const PREDICTION_MARKETS_QUERY_KEY = ['markets', 'predictions'] as const;
+export const PREDICTION_MARKETS_QUERY_KEY = ['markets', 'predictions'] as const
 
 /** Build query key with optional userId */
 function buildQueryKey(userId?: string) {
   return userId
     ? ([...PREDICTION_MARKETS_QUERY_KEY, userId] as const)
-    : PREDICTION_MARKETS_QUERY_KEY;
+    : PREDICTION_MARKETS_QUERY_KEY
 }
 
 /** Fetch prediction markets from API */
 async function fetchPredictionMarkets(
-  userId?: string
+  userId?: string,
 ): Promise<PredictionMarket[]> {
   const url = userId
     ? `/api/markets/predictions?userId=${encodeURIComponent(userId)}`
-    : '/api/markets/predictions';
+    : '/api/markets/predictions'
 
-  const response = await fetch(url);
+  const response = await fetch(url)
 
   if (!response.ok) {
-    throw new Error(`Failed to fetch prediction markets: ${response.status}`);
+    throw new Error(`Failed to fetch prediction markets: ${response.status}`)
   }
 
-  const rawData: unknown = await response.json();
-  const validated = PredictionMarketsResponseSchema.parse(rawData);
-  return validated.questions as PredictionMarket[];
+  const rawData: unknown = await response.json()
+  const validated = PredictionMarketsResponseSchema.parse(rawData)
+  // The schema validates the structure, and questions array matches PredictionMarket type
+  return validated.questions
 }
 
 /**
@@ -63,7 +61,7 @@ async function fetchPredictionMarkets(
  */
 export function usePredictionMarkets(
   userId?: string,
-  options?: { pollingInterval?: number }
+  options?: { pollingInterval?: number },
 ) {
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: buildQueryKey(userId),
@@ -72,16 +70,16 @@ export function usePredictionMarkets(
     refetchInterval: options?.pollingInterval,
     // Don't show loading spinner on background refetches
     placeholderData: (previousData) => previousData,
-  });
+  })
 
-  const markets = data ?? [];
+  const markets = data ?? []
 
   return {
     markets,
     loading: isLoading,
     error: error?.message ?? null,
     refetch: useCallback(() => refetch(), [refetch]),
-  };
+  }
 }
 
 /**
@@ -95,11 +93,11 @@ export function usePredictionMarkets(
  */
 export function usePredictionMarketsPolling(
   intervalMs = 30000,
-  userId?: string
+  userId?: string,
 ) {
   // Store params in refs so they don't cause re-renders
-  const intervalRef = useRef(intervalMs);
-  const userIdRef = useRef(userId);
+  const intervalRef = useRef(intervalMs)
+  const userIdRef = useRef(userId)
 
   // This query will be deduplicated with the main usePredictionMarkets query
   // The refetchInterval will be used if it's the shortest interval among all subscribers
@@ -108,42 +106,42 @@ export function usePredictionMarketsPolling(
     queryFn: () => fetchPredictionMarkets(userIdRef.current),
     staleTime: MARKETS_CONFIG.CACHE_TTL_MS,
     refetchInterval: intervalRef.current,
-  });
+  })
 }
 
 /**
  * Get a specific market by ID (memoized)
  */
 export function usePredictionMarket(marketId: string | number) {
-  const { markets, loading, error, refetch } = usePredictionMarkets();
+  const { markets, loading, error, refetch } = usePredictionMarkets()
 
   const market = useMemo(
     () => markets.find((m) => m.id.toString() === marketId.toString()),
-    [markets, marketId]
-  );
+    [markets, marketId],
+  )
 
-  return { market, loading, error, refetch };
+  return { market, loading, error, refetch }
 }
 
 /**
  * Get active markets only (memoized)
  */
 export function useActivePredictionMarkets() {
-  const { markets, loading, error, refetch } = usePredictionMarkets();
+  const { markets, loading, error, refetch } = usePredictionMarkets()
 
   const activeMarkets = useMemo(
     () => markets.filter((m) => m.status === 'active'),
-    [markets]
-  );
+    [markets],
+  )
 
-  return { markets: activeMarkets, loading, error, refetch };
+  return { markets: activeMarkets, loading, error, refetch }
 }
 
 /**
  * Get market statistics (memoized)
  */
 export function usePredictionMarketsStats() {
-  const { markets, loading } = usePredictionMarkets();
+  const { markets, loading } = usePredictionMarkets()
 
   const stats = useMemo(
     () => ({
@@ -152,13 +150,13 @@ export function usePredictionMarketsStats() {
       resolved: markets.filter((m) => m.status === 'resolved').length,
       totalVolume: markets.reduce(
         (sum, m) => sum + (m.yesShares ?? 0) + (m.noShares ?? 0),
-        0
+        0,
       ),
     }),
-    [markets]
-  );
+    [markets],
+  )
 
-  return { stats, loading };
+  return { stats, loading }
 }
 
 /**
@@ -166,11 +164,11 @@ export function usePredictionMarketsStats() {
  * Useful after mutations (buy/sell shares).
  */
 export function useInvalidatePredictionMarkets() {
-  const queryClient = useQueryClient();
+  const queryClient = useQueryClient()
 
   return useCallback(() => {
     return queryClient.invalidateQueries({
       queryKey: PREDICTION_MARKETS_QUERY_KEY,
-    });
-  }, [queryClient]);
+    })
+  }, [queryClient])
 }

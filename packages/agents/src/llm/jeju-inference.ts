@@ -11,56 +11,56 @@
  * 4. Settlement happens on-chain automatically
  */
 
-import type { Address, Hex } from 'viem';
+import type { Address, Hex } from 'viem'
 
 export interface JejuInferenceConfig {
   /** Jeju network: localnet | testnet | mainnet */
-  network: 'localnet' | 'testnet' | 'mainnet';
+  network: 'localnet' | 'testnet' | 'mainnet'
   /** User's wallet address for billing */
-  userAddress: Address;
+  userAddress: Address
   /** Gateway URL (default: https://gateway.jeju.network) */
-  gatewayUrl?: string;
+  gatewayUrl?: string
   /** Preferred model routing */
-  preferredModels?: string[];
+  preferredModels?: string[]
 }
 
 export interface InferenceProvider {
-  address: Address;
-  endpoint: string;
-  models: string[];
-  pricePerInputToken: bigint;
-  pricePerOutputToken: bigint;
-  latency: number; // ms
-  active: boolean;
+  address: Address
+  endpoint: string
+  models: string[]
+  pricePerInputToken: bigint
+  pricePerOutputToken: bigint
+  latency: number // ms
+  active: boolean
 }
 
 export interface ChatMessage {
-  role: 'system' | 'user' | 'assistant';
-  content: string;
+  role: 'system' | 'user' | 'assistant'
+  content: string
 }
 
 export interface InferenceRequest {
-  model: string;
-  messages: ChatMessage[];
-  temperature?: number;
-  maxTokens?: number;
-  stream?: boolean;
+  model: string
+  messages: ChatMessage[]
+  temperature?: number
+  maxTokens?: number
+  stream?: boolean
 }
 
 export interface InferenceResponse {
-  id: string;
-  model: string;
-  content: string;
+  id: string
+  model: string
+  content: string
   usage: {
-    promptTokens: number;
-    completionTokens: number;
-    totalTokens: number;
-  };
-  provider: Address;
+    promptTokens: number
+    completionTokens: number
+    totalTokens: number
+  }
+  provider: Address
   settlement?: {
-    requestHash: Hex;
-    signature: Hex;
-  };
+    requestHash: Hex
+    signature: Hex
+  }
 }
 
 // Model aliases -> actual model names
@@ -72,13 +72,13 @@ const MODEL_ALIASES: Record<string, string[]> = {
   'gpt-4-mini': ['gpt-4o-mini'],
   claude: ['claude-3-5-sonnet-20241022', 'claude-3-opus-20240229'],
   'claude-haiku': ['claude-3-5-haiku-20241022'],
-};
+}
 
 const GATEWAY_URLS: Record<'localnet' | 'testnet' | 'mainnet', string> = {
   localnet: 'http://localhost:4200',
   testnet: 'https://gateway.testnet.jeju.network',
   mainnet: 'https://gateway.jeju.network',
-};
+}
 
 /**
  * Jeju Inference Client
@@ -86,14 +86,14 @@ const GATEWAY_URLS: Record<'localnet' | 'testnet' | 'mainnet', string> = {
  * Decentralized LLM inference through the Jeju marketplace.
  */
 export class JejuInference {
-  private config: JejuInferenceConfig;
-  private gatewayUrl: string;
-  private providerCache: Map<string, InferenceProvider[]> = new Map();
-  private cacheExpiry = 0;
+  private config: JejuInferenceConfig
+  private gatewayUrl: string
+  private providerCache: Map<string, InferenceProvider[]> = new Map()
+  private cacheExpiry = 0
 
   constructor(config: JejuInferenceConfig) {
-    this.config = config;
-    this.gatewayUrl = config.gatewayUrl ?? GATEWAY_URLS[config.network];
+    this.config = config
+    this.gatewayUrl = config.gatewayUrl ?? GATEWAY_URLS[config.network]
   }
 
   /**
@@ -101,29 +101,29 @@ export class JejuInference {
    */
   async listProviders(model?: string): Promise<InferenceProvider[]> {
     // Check cache
-    const now = Date.now();
+    const now = Date.now()
     if (now < this.cacheExpiry && this.providerCache.has(model ?? 'all')) {
-      return this.providerCache.get(model ?? 'all') ?? [];
+      return this.providerCache.get(model ?? 'all') ?? []
     }
 
-    const url = new URL('/v1/providers', this.gatewayUrl);
-    if (model) url.searchParams.set('model', model);
+    const url = new URL('/v1/providers', this.gatewayUrl)
+    if (model) url.searchParams.set('model', model)
 
     const response = await fetch(url.toString(), {
       headers: { 'x-jeju-address': this.config.userAddress },
-    });
+    })
 
     if (!response.ok) {
-      throw new Error(`Gateway error: ${response.status}`);
+      throw new Error(`Gateway error: ${response.status}`)
     }
 
     const data = (await response.json()) as {
-      providers: InferenceProvider[];
-    };
-    this.providerCache.set(model ?? 'all', data.providers);
-    this.cacheExpiry = now + 60_000; // 1 minute cache
+      providers: InferenceProvider[]
+    }
+    this.providerCache.set(model ?? 'all', data.providers)
+    this.cacheExpiry = now + 60_000 // 1 minute cache
 
-    return data.providers;
+    return data.providers
   }
 
   /**
@@ -132,14 +132,14 @@ export class JejuInference {
   async listModels(): Promise<string[]> {
     const response = await fetch(`${this.gatewayUrl}/v1/models`, {
       headers: { 'x-jeju-address': this.config.userAddress },
-    });
+    })
 
     if (!response.ok) {
-      throw new Error(`Failed to list models: ${response.status}`);
+      throw new Error(`Failed to list models: ${response.status}`)
     }
 
-    const data = (await response.json()) as { data: Array<{ id: string }> };
-    return data.data.map((m) => m.id);
+    const data = (await response.json()) as { data: Array<{ id: string }> }
+    return data.data.map((m) => m.id)
   }
 
   /**
@@ -148,20 +148,20 @@ export class JejuInference {
    */
   async inference(request: InferenceRequest): Promise<InferenceResponse> {
     // Resolve model aliases
-    const resolvedModel = this.resolveModel(request.model);
+    const resolvedModel = this.resolveModel(request.model)
 
     // Route through Jeju marketplace only
     return this.inferenceViaMarketplace({
       ...request,
       model: resolvedModel,
-    });
+    })
   }
 
   /**
    * Route inference through Jeju marketplace
    */
   private async inferenceViaMarketplace(
-    request: InferenceRequest
+    request: InferenceRequest,
   ): Promise<InferenceResponse> {
     const response = await fetch(`${this.gatewayUrl}/v1/chat/completions`, {
       method: 'POST',
@@ -176,27 +176,27 @@ export class JejuInference {
         max_tokens: request.maxTokens ?? 2048,
         stream: request.stream ?? false,
       }),
-    });
+    })
 
     if (!response.ok) {
-      throw new Error(`Marketplace inference failed: ${response.status}`);
+      throw new Error(`Marketplace inference failed: ${response.status}`)
     }
 
     const data = (await response.json()) as {
-      id: string;
-      model: string;
-      choices: Array<{ message: { content: string } }>;
+      id: string
+      model: string
+      choices: Array<{ message: { content: string } }>
       usage: {
-        prompt_tokens: number;
-        completion_tokens: number;
-        total_tokens: number;
-      };
+        prompt_tokens: number
+        completion_tokens: number
+        total_tokens: number
+      }
       settlement?: {
-        provider: Address;
-        requestHash: Hex;
-        signature: Hex;
-      };
-    };
+        provider: Address
+        requestHash: Hex
+        signature: Hex
+      }
+    }
 
     return {
       id: data.id,
@@ -214,18 +214,18 @@ export class JejuInference {
             signature: data.settlement.signature,
           }
         : undefined,
-    };
+    }
   }
 
   /**
    * Resolve model alias to actual model name
    */
   private resolveModel(model: string): string {
-    const aliases = MODEL_ALIASES[model.toLowerCase()];
+    const aliases = MODEL_ALIASES[model.toLowerCase()]
     if (aliases?.[0]) {
-      return aliases[0];
+      return aliases[0]
     }
-    return model;
+    return model
   }
 }
 
@@ -233,15 +233,15 @@ export class JejuInference {
  * Create inference client with automatic network detection
  */
 export function createJejuInference(
-  config: Omit<JejuInferenceConfig, 'network'> & { network?: string }
+  config: Omit<JejuInferenceConfig, 'network'> & { network?: string },
 ): JejuInference {
   const network = (config.network ?? process.env.JEJU_NETWORK ?? 'localnet') as
     | 'localnet'
     | 'testnet'
-    | 'mainnet';
+    | 'mainnet'
 
   return new JejuInference({
     ...config,
     network,
-  });
+  })
 }

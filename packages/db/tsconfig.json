@@ -1,19 +1,12 @@
 {
   "extends": "../tsconfig.base.json",
   "compilerOptions": {
-    "outDir": "./dist",
-    "rootDir": "./src",
-    "tsBuildInfoFile": "./dist/.tsbuildinfo",
-    "composite": true,
-    "baseUrl": ".",
-    "paths": {
-      "@babylon/shared": ["../shared/src/index.ts"],
-      "@babylon/shared/*": ["../shared/src/*"],
-      "@babylon/contracts": ["../contracts/src/index.ts"],
-      "@babylon/contracts/*": ["../contracts/src/*"]
-    }
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false,
+    "noEmit": true,
+    "skipLibCheck": true
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "src/__tests__/**/*"],
-  "references": [{ "path": "../shared" }, { "path": "../contracts" }]
+  "exclude": ["node_modules", "dist", "src/__tests__/**/*"]
 }

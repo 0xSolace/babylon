@@ -20,7 +20,6 @@ import {
   db,
   desc,
   eq,
-  generateSnowflakeId,
   getDbInstance,
   gte,
   inArray,
@@ -31,57 +30,57 @@ import {
   type Question,
   users,
   worldEvents,
-} from '@babylon/db';
-import { logger } from '@babylon/shared';
-import type { BabylonLLMClient } from '../llm/openai-client';
-import type { EventContext, FeedPostContext } from '../types/market-context';
-import { stripHashtagsAndEmojis } from '../utils/shared-utils';
-import { generateArticleImageWithRetry } from './article-image-service';
-import { characterMappingService } from './character-mapping-service';
+} from '@babylon/db'
+import { generateSnowflakeId, logger } from '@babylon/shared'
+import type { BabylonLLMClient } from '../llm/openai-client'
+import type { EventContext, FeedPostContext } from '../types/market-context'
+import { stripHashtagsAndEmojis } from '../utils/shared-utils'
+import { generateArticleImageWithRetry } from './article-image-service'
+import { characterMappingService } from './character-mapping-service'
 import {
   getArcPlan,
   getPhaseForDay,
   getPhaseGuidance,
   getSignalDirection,
-} from './narrative-state-service';
-import { StaticDataRegistry } from './static-data-registry';
-import type { GeneratedTag } from './tag-service';
-import { generateTagsFromPost, storeTagsForPost } from './tag-service';
+} from './narrative-state-service'
+import { StaticDataRegistry } from './static-data-registry'
+import type { GeneratedTag } from './tag-service'
+import { generateTagsFromPost, storeTagsForPost } from './tag-service'
 
 /**
  * NPC-to-NPC interaction cooldown tracking (in-memory for simplicity)
  * Key: "replierNpcId:targetNpcId", Value: last interaction timestamp
  */
-const npcInteractionCooldowns = new Map<string, Date>();
+const npcInteractionCooldowns = new Map<string, Date>()
 
 /** Minimum cooldown between NPC interactions with same target NPC (2 hours) */
-const NPC_INTERACTION_COOLDOWN_MS = 2 * 60 * 60 * 1000;
+const NPC_INTERACTION_COOLDOWN_MS = 2 * 60 * 60 * 1000
 
 /**
  * Check if an NPC can reply to another NPC (cooldown check)
  */
 function canNPCReplyToNPC(replierNpcId: string, targetNpcId: string): boolean {
-  const key = `${replierNpcId}:${targetNpcId}`;
-  const lastInteraction = npcInteractionCooldowns.get(key);
+  const key = `${replierNpcId}:${targetNpcId}`
+  const lastInteraction = npcInteractionCooldowns.get(key)
 
-  if (!lastInteraction) return true;
+  if (!lastInteraction) return true
 
-  const timeSince = Date.now() - lastInteraction.getTime();
-  return timeSince >= NPC_INTERACTION_COOLDOWN_MS;
+  const timeSince = Date.now() - lastInteraction.getTime()
+  return timeSince >= NPC_INTERACTION_COOLDOWN_MS
 }
 
 /**
  * Record an NPC-to-NPC interaction for cooldown tracking
  */
 function recordNPCInteraction(replierNpcId: string, targetNpcId: string): void {
-  const key = `${replierNpcId}:${targetNpcId}`;
-  npcInteractionCooldowns.set(key, new Date());
+  const key = `${replierNpcId}:${targetNpcId}`
+  npcInteractionCooldowns.set(key, new Date())
 
   // Clean up old entries (older than 24 hours) to prevent memory leak
-  const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000)
   for (const [k, v] of npcInteractionCooldowns.entries()) {
     if (v < oneDayAgo) {
-      npcInteractionCooldowns.delete(k);
+      npcInteractionCooldowns.delete(k)
     }
   }
 }
@@ -89,28 +88,28 @@ function recordNPCInteraction(replierNpcId: string, targetNpcId: string): void {
 // Minimal question type for post generation (only fields actually used)
 // outcome is optional - only used for arc plan signal direction, and the code handles missing outcome
 type QuestionForPost = Pick<Question, 'id' | 'text' | 'questionNumber'> & {
-  outcome?: boolean | null;
-};
+  outcome?: boolean | null
+}
 
 // Minimal actor type for post generation
 interface ActorForPost {
-  id: string;
-  name: string;
-  description?: string | null;
-  personality?: string | null;
-  postStyle?: string | null;
-  postExample?: string[] | null;
-  tier?: string | null;
-  domain?: string[];
+  id: string
+  name: string
+  description?: string | null
+  personality?: string | null
+  postStyle?: string | null
+  postExample?: string[] | null
+  tier?: string | null
+  domain?: string[]
 }
 
 // Minimal organization type for post generation
 interface OrganizationForPost {
-  id: string;
-  name: string;
-  description?: string;
-  type?: string;
-  ticker?: string | null;
+  id: string
+  name: string
+  description?: string
+  type?: string
+  ticker?: string | null
 }
 
 /**
@@ -119,11 +118,11 @@ interface OrganizationForPost {
  */
 export interface SharedPostContext {
   /** All recent feed posts (with author names resolved) */
-  recentFeedPosts: FeedPostContext[];
+  recentFeedPosts: FeedPostContext[]
   /** All recent events (for filtering per-NPC) */
-  recentEvents: EventContext[];
+  recentEvents: EventContext[]
   /** Map of author ID to recent post IDs (for filtering NPC's own posts) */
-  postsByAuthor: Map<string, FeedPostContext[]>;
+  postsByAuthor: Map<string, FeedPostContext[]>
 }
 
 /**
@@ -131,17 +130,17 @@ export interface SharedPostContext {
  */
 interface NPCContentContext {
   /** Events that happened specifically to this NPC */
-  personalEvents: EventContext[];
+  personalEvents: EventContext[]
   /** NPC's previous posts (for memory/consistency) */
-  previousPosts: FeedPostContext[];
+  previousPosts: FeedPostContext[]
   /** Recent posts from the feed (what's happening in the world) */
-  recentFeedPosts: FeedPostContext[];
+  recentFeedPosts: FeedPostContext[]
   /** NPC's current positions (for informed public discourse) */
-  positions?: { ticker: string; side: string; pnl: number }[];
+  positions?: { ticker: string; side: string; pnl: number }[]
 }
 
-const MAX_POST_TOKENS = 16384; // No practical limit
-const MAX_ARTICLE_TOKENS = 16384; // No practical limit
+const MAX_POST_TOKENS = 16384 // No practical limit
+const MAX_ARTICLE_TOKENS = 16384 // No practical limit
 
 /**
  * Pre-fetch all shared context ONCE before generating posts
@@ -150,10 +149,10 @@ const MAX_ARTICLE_TOKENS = 16384; // No practical limit
  * This eliminates N+1 query problems where each NPC would fetch the same data
  */
 export async function loadSharedPostContext(
-  asOf: Date
+  asOf: Date,
 ): Promise<SharedPostContext> {
-  const twelveHoursAgo = new Date(asOf.getTime() - 12 * 60 * 60 * 1000);
-  const threeDaysAgo = new Date(asOf.getTime() - 3 * 24 * 60 * 60 * 1000);
+  const twelveHoursAgo = new Date(asOf.getTime() - 12 * 60 * 60 * 1000)
+  const threeDaysAgo = new Date(asOf.getTime() - 3 * 24 * 60 * 60 * 1000)
 
   // Fetch feed posts and events in parallel - ONE query each
   const [recentPostsRaw, recentEventsRaw] = await Promise.all([
@@ -165,8 +164,8 @@ export async function loadSharedPostContext(
           eq(posts.type, 'post'),
           gte(posts.timestamp, twelveHoursAgo),
           lte(posts.timestamp, asOf),
-          isNull(posts.deletedAt)
-        )
+          isNull(posts.deletedAt),
+        ),
       )
       .orderBy(desc(posts.timestamp))
       .limit(50),
@@ -177,51 +176,82 @@ export async function loadSharedPostContext(
         and(
           gte(worldEvents.timestamp, threeDaysAgo),
           lte(worldEvents.timestamp, asOf), // Don't include future events
-          eq(worldEvents.visibility, 'public')
-        )
+          eq(worldEvents.visibility, 'public'),
+        ),
       )
       .orderBy(desc(worldEvents.timestamp))
       .limit(100),
-  ]);
+  ])
 
-  // Resolve author names using StaticDataRegistry (NO DB CALL!)
+  // Resolve author names using StaticDataRegistry (NO DB CALL)
   const recentFeedPosts: FeedPostContext[] = recentPostsRaw.map((post) => {
-    const actor = StaticDataRegistry.getActor(post.authorId);
-    const org = StaticDataRegistry.getOrganization(post.authorId);
-    const authorName = actor?.name || org?.name || 'Unknown';
+    const authorId = String(post.authorId)
+    const content = String(post.content ?? '')
+    // DB returns Date objects for timestamp columns
+    const rawTimestamp = post.timestamp
+    const timestamp =
+      rawTimestamp instanceof Date
+        ? rawTimestamp
+        : new Date(rawTimestamp as string | number)
+    // DB articleTitle may be typed as {} due to schema inference - cast to expected type
+    const rawArticleTitle = post.articleTitle as string | null | undefined
+    const articleTitle =
+      typeof rawArticleTitle === 'string' ? rawArticleTitle : undefined
+
+    const actor = StaticDataRegistry.getActor(authorId)
+    const org = StaticDataRegistry.getOrganization(authorId)
+    const authorName = actor?.name || org?.name || 'Unknown'
 
     return {
-      author: post.authorId,
+      author: authorId,
       authorName,
-      content:
-        post.content.length > 150
-          ? post.content.slice(0, 150) + '...'
-          : post.content,
-      timestamp: post.timestamp.toISOString(),
-      articleTitle: post.articleTitle || undefined,
-    };
-  });
+      content: content.length > 150 ? `${content.slice(0, 150)}...` : content,
+      timestamp: timestamp.toISOString(),
+      articleTitle,
+    }
+  })
 
   // Group posts by author for efficient lookup
-  const postsByAuthor = new Map<string, FeedPostContext[]>();
+  const postsByAuthor = new Map<string, FeedPostContext[]>()
   for (const post of recentFeedPosts) {
-    const existing = postsByAuthor.get(post.author) || [];
-    existing.push(post);
-    postsByAuthor.set(post.author, existing);
+    const existing = postsByAuthor.get(post.author) || []
+    existing.push(post)
+    postsByAuthor.set(post.author, existing)
   }
 
   // Convert events to context format
-  const recentEvents: EventContext[] = recentEventsRaw.map((event) => ({
-    type: event.eventType,
-    description:
-      event.description.length > 200
-        ? event.description.slice(0, 200) + '...'
-        : event.description,
-    actors: event.actors as string[] | undefined,
-    timestamp: event.timestamp.toISOString(),
-    relatedQuestion: event.relatedQuestion || undefined,
-    pointsToward: event.pointsToward || undefined,
-  }));
+  const recentEvents: EventContext[] = recentEventsRaw.map((event) => {
+    const eventType = String(event.eventType)
+    const description = String(event.description ?? '')
+    // DB returns Date objects for timestamp columns
+    const rawTimestamp = event.timestamp
+    const timestamp =
+      rawTimestamp instanceof Date
+        ? rawTimestamp
+        : new Date(rawTimestamp as string | number)
+
+    // Filter actors to only include strings
+    const actorsRaw = event.actors
+    const actors = Array.isArray(actorsRaw)
+      ? actorsRaw.filter((a): a is string => typeof a === 'string')
+      : undefined
+
+    return {
+      type: eventType,
+      description:
+        description.length > 200
+          ? `${description.slice(0, 200)}...`
+          : description,
+      actors: actors && actors.length > 0 ? actors : undefined,
+      timestamp: timestamp.toISOString(),
+      relatedQuestion:
+        typeof event.relatedQuestion === 'number'
+          ? event.relatedQuestion
+          : undefined,
+      pointsToward:
+        typeof event.pointsToward === 'string' ? event.pointsToward : undefined,
+    }
+  })
 
   logger.debug(
     'Loaded shared post context',
@@ -230,14 +260,14 @@ export async function loadSharedPostContext(
       events: recentEvents.length,
       uniqueAuthors: postsByAuthor.size,
     },
-    'PostGeneration'
-  );
+    'PostGeneration',
+  )
 
   return {
     recentFeedPosts,
     recentEvents,
     postsByAuthor,
-  };
+  }
 }
 
 /**
@@ -248,78 +278,78 @@ export async function loadSharedPostContext(
  */
 function buildNPCContext(
   actor: ActorForPost,
-  sharedContext: SharedPostContext
+  sharedContext: SharedPostContext,
 ): NPCContentContext {
-  const npcId = actor.id;
-  const npcName = actor.name.toLowerCase();
+  const npcId = actor.id
+  const npcName = actor.name.toLowerCase()
 
   // Filter events where this NPC is involved (word boundary matching)
   const personalEvents = sharedContext.recentEvents
     .filter((event) => {
-      const actorsArray = event.actors || [];
+      const actorsArray = event.actors || []
 
       // Check if NPC ID is in actors array
-      if (actorsArray.includes(npcId)) return true;
+      if (actorsArray.includes(npcId)) return true
 
       // Check if NPC name is in actors array (exact word match)
       const nameMatches = actorsArray.some((a) => {
-        const actorLower = a.toLowerCase();
+        const actorLower = a.toLowerCase()
         // Exact match or word boundary match
         return (
           actorLower === npcName ||
           new RegExp(`\\b${escapeRegex(npcName)}\\b`, 'i').test(a)
-        );
-      });
-      if (nameMatches) return true;
+        )
+      })
+      if (nameMatches) return true
 
       // Check if NPC name mentioned in description (word boundary)
       const descMatch = new RegExp(`\\b${escapeRegex(npcName)}\\b`, 'i').test(
-        event.description
-      );
-      return descMatch;
+        event.description,
+      )
+      return descMatch
     })
-    .slice(0, 10);
+    .slice(0, 10)
 
   // Get NPC's own previous posts from the shared map
   const previousPosts = (sharedContext.postsByAuthor.get(npcId) || []).slice(
     0,
-    5
-  );
+    5,
+  )
 
   // Get feed posts from others (exclude this NPC)
   const recentFeedPosts = sharedContext.recentFeedPosts
     .filter((p) => p.author !== npcId)
-    .slice(0, 15);
+    .slice(0, 15)
 
   return {
     personalEvents,
     previousPosts,
     recentFeedPosts,
-  };
+  }
 }
 
 /**
  * Escape special regex characters in a string
  */
 function escapeRegex(str: string): string {
-  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
 /**
  * Format NPC context into prompt sections
  */
 function formatNPCContext(context: NPCContentContext): string {
-  const sections: string[] = [];
+  const sections: string[] = []
 
   // Personal events - things that happened TO THIS NPC
   if (context.personalEvents.length > 0) {
     const eventLines = context.personalEvents
       .slice(0, 5)
       .map((e) => `- [${e.type}] ${e.description}`)
-      .join('\n');
+      .join('\n')
     sections.push(`=== RECENT EVENTS INVOLVING YOU ===
 These things happened to you or mentioned you - use them if relevant:
-${eventLines}`);
+${eventLines}`)
   }
 
   // Previous posts - NPC's memory of what they've said
@@ -327,9 +357,9 @@ ${eventLines}`);
     const postLines = context.previousPosts
       .slice(0, 3)
       .map((p) => `- "${p.content}"`)
-      .join('\n');
+      .join('\n')
     sections.push(`=== YOUR RECENT POSTS (don't repeat yourself) ===
-${postLines}`);
+${postLines}`)
   }
 
   // Recent feed - what others are saying (WITH AUTHOR NAMES)
@@ -337,10 +367,10 @@ ${postLines}`);
     const feedLines = context.recentFeedPosts
       .slice(0, 8)
       .map((p) => `- @${p.authorName}: "${p.content}"`)
-      .join('\n');
+      .join('\n')
     sections.push(`=== WHAT OTHERS ARE POSTING ===
 Current discourse on the feed (react to, agree with, or challenge these):
-${feedLines}`);
+${feedLines}`)
   }
 
   // Positions context for informed public discourse
@@ -349,14 +379,14 @@ ${feedLines}`);
       .slice(0, 3)
       .map(
         (p) =>
-          `- ${p.ticker}: ${p.side} (${p.pnl >= 0 ? '+' : ''}$${p.pnl.toFixed(0)})`
+          `- ${p.ticker}: ${p.side} (${p.pnl >= 0 ? '+' : ''}$${p.pnl.toFixed(0)})`,
       )
-      .join('\n');
+      .join('\n')
     sections.push(`=== YOUR POSITIONS (influences your public takes) ===
-${posLines}`);
+${posLines}`)
   }
 
-  return sections.join('\n\n');
+  return sections.join('\n\n')
 }
 
 /**
@@ -366,7 +396,7 @@ ${posLines}`);
  * since positions are dynamic and can't be pre-fetched
  */
 async function getNPCPositions(
-  npcId: string
+  npcId: string,
 ): Promise<{ ticker: string; side: string; pnl: number }[]> {
   const positions = await db
     .select({
@@ -376,15 +406,15 @@ async function getNPCPositions(
     })
     .from(poolPositions)
     .where(and(eq(poolPositions.poolId, npcId), isNull(poolPositions.closedAt)))
-    .limit(5);
+    .limit(5)
 
   return positions
     .filter((p) => p.ticker)
     .map((p) => ({
-      ticker: p.ticker || 'Unknown',
-      side: p.side,
+      ticker: String(p.ticker ?? 'Unknown'),
+      side: String(p.side),
       pnl: Number(p.unrealizedPnL),
-    }));
+    }))
 }
 
 /**
@@ -408,55 +438,55 @@ export async function generateNPCPost(
   worldFactsContext: string,
   timestamp: Date,
   sharedContext?: SharedPostContext,
-  currentDay?: number
+  currentDay?: number,
 ): Promise<boolean> {
   // Use provided shared context or load it (fallback for backward compatibility)
-  const context = sharedContext || (await loadSharedPostContext(timestamp));
+  const context = sharedContext || (await loadSharedPostContext(timestamp))
 
   // Build NPC-specific context from shared data (NO DB CALLS)
-  const npcContext = buildNPCContext(actor, context);
+  const npcContext = buildNPCContext(actor, context)
 
   // Optionally fetch positions for this NPC (single small query)
-  const positions = await getNPCPositions(actor.id);
+  const positions = await getNPCPositions(actor.id)
   if (positions.length > 0) {
-    npcContext.positions = positions;
+    npcContext.positions = positions
   }
 
-  const npcContextFormatted = formatNPCContext(npcContext);
+  const npcContextFormatted = formatNPCContext(npcContext)
 
   // Build personality context
   const personalityContext = actor.personality
     ? `Personality: ${actor.personality}`
-    : '';
+    : ''
   const voiceContext = actor.postStyle
     ? `Writing Style: ${actor.postStyle}`
-    : '';
+    : ''
   const examplesContext =
     actor.postExample && actor.postExample.length > 0
       ? `Example posts (MATCH THIS STYLE):\n${actor.postExample
           .slice(0, 3)
           .map((ex, i) => `  ${i + 1}. "${ex}"`)
           .join('\n')}`
-      : '';
+      : ''
 
   // Build signal guidance from arc plan if available
-  let signalGuidance = '';
+  let signalGuidance = ''
   if (currentDay !== undefined) {
-    const arcPlan = await getArcPlan(question.id);
+    const arcPlan = await getArcPlan(question.id)
     if (arcPlan) {
-      const phase = getPhaseForDay(currentDay, arcPlan);
-      const outcome = question.outcome ?? true;
-      const signal = getSignalDirection(arcPlan, phase, actor.id, outcome);
+      const phase = getPhaseForDay(currentDay, arcPlan)
+      const outcome = question.outcome ?? true
+      const signal = getSignalDirection(arcPlan, phase, actor.id, outcome)
 
       if (signal.reason === 'insider') {
         signalGuidance = `[INTERNAL: You have insider knowledge that the answer is likely ${signal.direction}.
-          Subtly reflect this confidence in your post without being too obvious or explicit about predictions.]`;
+          Subtly reflect this confidence in your post without being too obvious or explicit about predictions.]`
       } else if (signal.reason === 'deceiver') {
         signalGuidance = `[INTERNAL: You believe (perhaps incorrectly) that the answer is ${signal.direction}.
-          Post with confidence in this direction. You might be spreading misinformation.]`;
+          Post with confidence in this direction. You might be spreading misinformation.]`
       } else {
         // Regular NPC - phase-appropriate guidance
-        signalGuidance = getPhaseGuidance(phase);
+        signalGuidance = getPhaseGuidance(phase)
       }
 
       logger.debug(
@@ -470,8 +500,8 @@ export async function generateNPCPost(
           signalDirection: signal.direction,
           signalReason: signal.reason,
         },
-        'PostGeneration'
-      );
+        'PostGeneration',
+      )
     }
   }
 
@@ -511,7 +541,7 @@ ${worldFactsContext}
 Return as XML:
 <response>
   <post>your post (max 280 chars)</post>
-</response>`;
+</response>`
 
   const response = await llmClient.generateJSON<
     { post: string } | { response: { post: string } }
@@ -527,31 +557,35 @@ Return as XML:
       temperature: 0.9,
       maxTokens: MAX_POST_TOKENS,
       format: 'xml',
-    }
-  );
+    },
+  )
 
+  // Unwrap nested response structure if present
   const postContent =
     'response' in response &&
     response.response &&
     typeof response.response === 'object' &&
-    'post' in response.response
-      ? (response.response as { post: string }).post
-      : (response as { post: string }).post;
+    'post' in response.response &&
+    typeof response.response.post === 'string'
+      ? response.response.post
+      : 'post' in response && typeof response.post === 'string'
+        ? response.post
+        : ''
 
   if (!postContent || postContent.trim().length === 0) {
     logger.warn(
       'Empty post generated',
       { actorName: actor.name, questionId: question.id },
-      'PostGeneration'
-    );
-    return false;
+      'PostGeneration',
+    )
+    return false
   }
 
   // Strip hashtags and emojis first
-  const cleaned = stripHashtagsAndEmojis(postContent.trim());
+  const cleaned = stripHashtagsAndEmojis(postContent.trim())
 
   // Then replace real names with parody names
-  const transformed = await characterMappingService.transformText(cleaned);
+  const transformed = await characterMappingService.transformText(cleaned)
   if (transformed.replacementCount > 0) {
     logger.warn(
       `Fixed ${transformed.replacementCount} real name(s) in NPC post`,
@@ -559,8 +593,8 @@ Return as XML:
         actor: actor.name,
         questionId: question.id,
       },
-      'PostGeneration'
-    );
+      'PostGeneration',
+    )
   }
 
   await getDbInstance().createPostWithAllFields({
@@ -570,9 +604,9 @@ Return as XML:
     gameId: 'continuous',
     dayNumber: currentDay,
     timestamp,
-  });
+  })
 
-  return true;
+  return true
 }
 
 /**
@@ -584,9 +618,9 @@ export async function generateOrgPost(
   question: QuestionForPost,
   worldFactsContext: string,
   timestamp: Date,
-  currentDay?: number
+  currentDay?: number,
 ): Promise<boolean> {
-  const orgName = org.name || 'Unknown Org';
+  const orgName = org.name || 'Unknown Org'
 
   const prompt = `You are ${orgName}, a media organization.
 
@@ -608,7 +642,7 @@ ${worldFactsContext}
 Return your response as XML in this exact format:
 <response>
   <post>your post content here</post>
-</response>`;
+</response>`
 
   const response = await llmClient.generateJSON<
     { post: string } | { response: { post: string } }
@@ -624,31 +658,35 @@ Return your response as XML in this exact format:
       temperature: 0.9,
       maxTokens: MAX_POST_TOKENS,
       format: 'xml',
-    }
-  );
+    },
+  )
 
+  // Unwrap nested response structure if present
   const postContent =
     'response' in response &&
     response.response &&
     typeof response.response === 'object' &&
-    'post' in response.response
-      ? (response.response as { post: string }).post
-      : (response as { post: string }).post;
+    'post' in response.response &&
+    typeof response.response.post === 'string'
+      ? response.response.post
+      : 'post' in response && typeof response.post === 'string'
+        ? response.post
+        : ''
 
   if (!postContent || postContent.trim().length === 0) {
     logger.warn(
       'Empty org post generated',
       { orgName: org.name, questionId: question.id },
-      'PostGeneration'
-    );
-    return false;
+      'PostGeneration',
+    )
+    return false
   }
 
   // Strip hashtags and emojis first
-  const cleaned = stripHashtagsAndEmojis(postContent.trim());
+  const cleaned = stripHashtagsAndEmojis(postContent.trim())
 
   // Then replace real names with parody names
-  const transformed = await characterMappingService.transformText(cleaned);
+  const transformed = await characterMappingService.transformText(cleaned)
   if (transformed.replacementCount > 0) {
     logger.warn(
       `Fixed ${transformed.replacementCount} real name(s) in org post`,
@@ -656,8 +694,8 @@ Return your response as XML in this exact format:
         org: org.name,
         questionId: question.id,
       },
-      'PostGeneration'
-    );
+      'PostGeneration',
+    )
   }
 
   await getDbInstance().createPostWithAllFields({
@@ -668,9 +706,9 @@ Return your response as XML in this exact format:
     gameId: 'continuous',
     dayNumber: currentDay,
     timestamp,
-  });
+  })
 
-  return true;
+  return true
 }
 
 /**
@@ -682,9 +720,9 @@ export async function generateOrgArticle(
   question: QuestionForPost,
   worldFactsContext: string,
   timestamp: Date,
-  currentDay?: number
+  currentDay?: number,
 ): Promise<boolean> {
-  const orgName = org.name || 'Unknown Org';
+  const orgName = org.name || 'Unknown Org'
 
   const prompt = `You are ${orgName}, a news organization writing a comprehensive article.
 
@@ -718,7 +756,7 @@ Return your response as XML in this exact format:
   <title>news headline here</title>
   <summary>2-3 sentence summary here</summary>
   <article>full article body here with \\n\\n between paragraphs</article>
-</response>`;
+</response>`
 
   const response = await llmClient.generateJSON<
     | { title: string; summary: string; article: string }
@@ -738,31 +776,50 @@ Return your response as XML in this exact format:
       maxTokens: MAX_ARTICLE_TOKENS,
       format: 'xml',
       promptType: 'generate_org_article',
-    }
-  );
+    },
+  )
 
-  const articleData =
-    'response' in response && response.response
-      ? (response.response as {
-          title: string;
-          summary: string;
-          article: string;
-        })
-      : (response as { title: string; summary: string; article: string });
+  // Unwrap nested response structure if present
+  type ArticleData = { title: string; summary: string; article: string }
+  const isValidArticleData = (
+    val: Record<string, unknown>,
+  ): val is ArticleData =>
+    typeof val.title === 'string' &&
+    typeof val.summary === 'string' &&
+    typeof val.article === 'string'
+
+  const articleData: ArticleData | null =
+    'response' in response &&
+    response.response &&
+    typeof response.response === 'object' &&
+    isValidArticleData(response.response)
+      ? response.response
+      : 'title' in response && isValidArticleData(response)
+        ? response
+        : null
+
+  if (!articleData) {
+    logger.warn(
+      'Invalid article data structure',
+      { orgName: org.name, questionId: question.id },
+      'PostGeneration',
+    )
+    return false
+  }
 
   if (!articleData.title || !articleData.summary || !articleData.article) {
     logger.warn(
       'Empty article generated',
       { orgName: org.name, questionId: question.id },
-      'PostGeneration'
-    );
-    return false;
+      'PostGeneration',
+    )
+    return false
   }
 
   // Strip hashtags and emojis first (defense-in-depth)
-  const summary = stripHashtagsAndEmojis(articleData.summary.trim());
-  const articleTitle = stripHashtagsAndEmojis(articleData.title.trim());
-  const articleBody = stripHashtagsAndEmojis(articleData.article.trim());
+  const summary = stripHashtagsAndEmojis(articleData.summary.trim())
+  const articleTitle = stripHashtagsAndEmojis(articleData.title.trim())
+  const articleBody = stripHashtagsAndEmojis(articleData.article.trim())
 
   // Content should be a full article (800-1200 words = ~4000-6000 chars)
   // Minimum 500 chars to ensure it's not just a summary
@@ -770,16 +827,16 @@ Return your response as XML in this exact format:
     logger.warn(
       'Article body too short - rejecting',
       { orgName: org.name, length: articleBody.length, minRequired: 500 },
-      'PostGeneration'
-    );
-    return false;
+      'PostGeneration',
+    )
+    return false
   }
 
   // Transform content to replace real names with parody names
   const transformedSummary =
-    await characterMappingService.transformText(summary);
+    await characterMappingService.transformText(summary)
   const transformedBody =
-    await characterMappingService.transformText(articleBody);
+    await characterMappingService.transformText(articleBody)
   if (
     transformedSummary.replacementCount > 0 ||
     transformedBody.replacementCount > 0
@@ -790,21 +847,21 @@ Return your response as XML in this exact format:
         org: org.name,
         title: articleTitle,
       },
-      'PostGeneration'
-    );
+      'PostGeneration',
+    )
   }
 
   // Generate article cover image (non-blocking, with retry)
-  let imageUrl: string | null = null;
+  let imageUrl: string | null = null
   if (process.env.FAL_KEY) {
     imageUrl = await generateArticleImageWithRetry({
       title: articleTitle,
       summary: transformedSummary.transformedText,
       category: question.text.slice(0, 100), // Use question as category hint
-    });
+    })
   }
 
-  const postId = await generateSnowflakeId();
+  const postId = await generateSnowflakeId()
   await getDbInstance().createPostWithAllFields({
     id: postId,
     type: 'article',
@@ -816,13 +873,13 @@ Return your response as XML in this exact format:
     gameId: 'continuous',
     dayNumber: currentDay,
     timestamp,
-  });
+  })
 
   logger.debug(
     'Created org article',
     { org: org.name, timestamp, hasImage: Boolean(imageUrl) },
-    'PostGeneration'
-  );
+    'PostGeneration',
+  )
 
   // Generate and store tags asynchronously
   void generateTagsFromPost(transformedSummary.transformedText)
@@ -832,48 +889,48 @@ Return your response as XML in this exact format:
           logger.info(
             'Tagged org article',
             { postId, orgName: org.name, tagCount: generatedTags.length },
-            'PostGeneration'
-          );
-        });
+            'PostGeneration',
+          )
+        })
       }
-      return Promise.resolve();
+      return Promise.resolve()
     })
     .catch((tagError: Error) => {
       logger.warn(
         'Failed to tag org article',
         { postId, orgName: org.name, error: tagError },
-        'PostGeneration'
-      );
-    });
+        'PostGeneration',
+      )
+    })
 
-  return true;
+  return true
 }
 
 /**
  * Represents a post that NPCs can reply to
  */
 interface PostForReply {
-  id: string;
-  content: string;
-  authorId: string;
-  authorName: string;
-  timestamp: Date;
+  id: string
+  content: string
+  authorId: string
+  authorName: string
+  timestamp: Date
   /** If this post is a reply, the original post in the chain */
-  originalPostId?: string | null;
+  originalPostId?: string | null
   /** If this post is a reply, what it's replying to */
-  commentOnPostId?: string | null;
+  commentOnPostId?: string | null
 }
 
 /**
  * Minimal actor type for NPC discourse (only fields needed for reply generation)
  */
 export interface DiscourseActor {
-  id: string;
-  name: string;
-  description?: string | null;
-  personality?: string | null;
-  postStyle?: string | null;
-  postExample?: string[];
+  id: string
+  name: string
+  description?: string | null
+  personality?: string | null
+  postStyle?: string | null
+  postExample?: string[]
 }
 
 /**
@@ -895,22 +952,22 @@ export async function generateNPCRepliesFromPreviousTicks(
   worldFactsContext: string,
   timestamp: Date,
   maxReplies = 4,
-  currentDay?: number
+  currentDay?: number,
 ): Promise<number> {
   if (actors.length < 2) {
     logger.debug(
       'Not enough actors for NPC discourse',
       { actorCount: actors.length },
-      'PostGeneration'
-    );
-    return 0;
+      'PostGeneration',
+    )
+    return 0
   }
 
   // Fetch recent posts from other NPCs (last 2 hours, not from current minute)
-  const twoHoursAgo = new Date(timestamp.getTime() - 2 * 60 * 60 * 1000);
-  const oneMinuteAgo = new Date(timestamp.getTime() - 60 * 1000);
+  const twoHoursAgo = new Date(timestamp.getTime() - 2 * 60 * 60 * 1000)
+  const oneMinuteAgo = new Date(timestamp.getTime() - 60 * 1000)
 
-  const actorIds = actors.map((a) => a.id);
+  const actorIds = actors.map((a) => a.id)
 
   // Get recent NPC posts that can be replied to
   // Include both original posts AND first-level replies (for threaded discourse)
@@ -926,23 +983,28 @@ export async function generateNPCRepliesFromPreviousTicks(
       type: posts.type,
     })
     .from(posts)
-    .innerJoin(users, eq(posts.authorId, users.id))
+    // biome-ignore lint/style/noNonNullAssertion: Schema guarantees id is defined
+    .innerJoin(users, eq(posts.authorId, users.id!))
     .where(
       // Post is by an NPC (actor)
-      inArray(posts.authorId, actorIds)
+      inArray(posts.authorId, actorIds),
     )
     .orderBy(desc(posts.timestamp))
-    .limit(40);
+    .limit(40)
 
   // Filter to posts in the right time window
   // Allow replies to:
   // - Original posts (commentOnPostId is null) - direct discourse
   // - First-level replies (originalPostId is set but not chained) - threaded discourse
   // Exclude deep chains (posts that are replies to replies of replies)
-  const eligiblePosts: PostForReply[] = [];
+  const eligiblePosts: PostForReply[] = []
   for (const post of recentNPCPosts) {
-    if (!post.content || !post.timestamp) continue;
-    const postTime = post.timestamp;
+    if (!post.content || !post.timestamp) continue
+    // Database returns Date objects for timestamp columns
+    const postTime =
+      post.timestamp instanceof Date
+        ? post.timestamp
+        : new Date(String(post.timestamp))
     if (postTime >= twoHoursAgo && postTime <= oneMinuteAgo) {
       // Skip posts that are too deep in reply chain
       // A post is "too deep" if it has originalPostId set AND commentOnPostId != originalPostId
@@ -950,21 +1012,26 @@ export async function generateNPCRepliesFromPreviousTicks(
       const isDeepReply =
         post.originalPostId !== null &&
         post.commentOnPostId !== null &&
-        post.originalPostId !== post.commentOnPostId;
+        post.originalPostId !== post.commentOnPostId
 
-      if (isDeepReply) continue; // Skip deep reply chains
+      if (isDeepReply) continue // Skip deep reply chains
 
-      const author = actors.find((a) => a.id === post.authorId);
+      const postAuthorId = String(post.authorId)
+      const author = actors.find((a) => a.id === postAuthorId)
       if (author) {
         eligiblePosts.push({
-          id: post.id,
-          content: post.content,
-          authorId: post.authorId,
+          id: String(post.id),
+          content: String(post.content ?? ''),
+          authorId: postAuthorId,
           authorName: author.name,
-          timestamp: post.timestamp,
-          originalPostId: post.originalPostId,
-          commentOnPostId: post.commentOnPostId,
-        });
+          timestamp: postTime,
+          originalPostId: post.originalPostId
+            ? String(post.originalPostId)
+            : null,
+          commentOnPostId: post.commentOnPostId
+            ? String(post.commentOnPostId)
+            : null,
+        })
       }
     }
   }
@@ -973,17 +1040,17 @@ export async function generateNPCRepliesFromPreviousTicks(
     logger.debug(
       'No eligible posts for NPC discourse',
       { checkedPosts: recentNPCPosts.length },
-      'PostGeneration'
-    );
-    return 0;
+      'PostGeneration',
+    )
+    return 0
   }
 
   // Select random posts to reply to (up to maxReplies)
-  const shuffledPosts = [...eligiblePosts].sort(() => Math.random() - 0.5);
+  const shuffledPosts = [...eligiblePosts].sort(() => Math.random() - 0.5)
   const postsToReplyTo = shuffledPosts.slice(
     0,
-    Math.min(maxReplies, eligiblePosts.length)
-  );
+    Math.min(maxReplies, eligiblePosts.length),
+  )
 
   logger.info(
     `Generating ${postsToReplyTo.length} NPC replies to previous tick posts`,
@@ -991,8 +1058,8 @@ export async function generateNPCRepliesFromPreviousTicks(
       eligiblePosts: eligiblePosts.length,
       targetReplies: postsToReplyTo.length,
     },
-    'PostGeneration'
-  );
+    'PostGeneration',
+  )
 
   // Generate replies and quote posts in parallel
   // 70% chance of reply, 30% chance of quote post for variety
@@ -1002,28 +1069,28 @@ export async function generateNPCRepliesFromPreviousTicks(
     const availableEngagers = actors.filter(
       (a) =>
         a.id !== originalPost.authorId &&
-        canNPCReplyToNPC(a.id, originalPost.authorId)
-    );
+        canNPCReplyToNPC(a.id, originalPost.authorId),
+    )
 
     if (availableEngagers.length === 0) {
       logger.debug(
         'No eligible engagers for post (all on cooldown or same author)',
         { postAuthor: originalPost.authorName },
-        'PostGeneration'
-      );
-      return { type: 'none' as const, success: false };
+        'PostGeneration',
+      )
+      return { type: 'none' as const, success: false }
     }
 
     const engager =
-      availableEngagers[Math.floor(Math.random() * availableEngagers.length)];
-    if (!engager) return { type: 'none' as const, success: false };
+      availableEngagers[Math.floor(Math.random() * availableEngagers.length)]
+    if (!engager) return { type: 'none' as const, success: false }
 
     // Decide: reply (70%) or quote post (30%)
     // Quote posts only for original posts (not replies) to keep it clean
     const shouldQuote =
-      originalPost.commentOnPostId === null && Math.random() < 0.3;
+      originalPost.commentOnPostId === null && Math.random() < 0.3
 
-    let success = false;
+    let success = false
     if (shouldQuote) {
       success = await generateNPCQuotePost(
         llmClient,
@@ -1031,8 +1098,8 @@ export async function generateNPCRepliesFromPreviousTicks(
         originalPost,
         worldFactsContext,
         timestamp,
-        currentDay
-      );
+        currentDay,
+      )
     } else {
       success = await generateNPCReplyToPost(
         llmClient,
@@ -1040,13 +1107,13 @@ export async function generateNPCRepliesFromPreviousTicks(
         originalPost,
         worldFactsContext,
         timestamp,
-        currentDay
-      );
+        currentDay,
+      )
     }
 
     // Record interaction for cooldown tracking if successful
     if (success) {
-      recordNPCInteraction(engager.id, originalPost.authorId);
+      recordNPCInteraction(engager.id, originalPost.authorId)
       logger.debug(
         'Recorded NPC interaction for cooldown',
         {
@@ -1054,44 +1121,44 @@ export async function generateNPCRepliesFromPreviousTicks(
           target: originalPost.authorName,
           type: shouldQuote ? 'quote' : 'reply',
         },
-        'PostGeneration'
-      );
+        'PostGeneration',
+      )
     }
 
     return {
       type: shouldQuote ? ('quote' as const) : ('reply' as const),
       success,
-    };
-  });
+    }
+  })
 
-  const results = await Promise.allSettled(discoursePromises);
+  const results = await Promise.allSettled(discoursePromises)
 
-  let repliesCreated = 0;
-  let quotesCreated = 0;
+  let repliesCreated = 0
+  let quotesCreated = 0
   for (const result of results) {
     if (result.status === 'fulfilled' && result.value.success) {
       if (result.value.type === 'quote') {
-        quotesCreated++;
+        quotesCreated++
       } else {
-        repliesCreated++;
+        repliesCreated++
       }
     } else if (result.status === 'rejected') {
       logger.warn(
         'Failed to generate NPC discourse',
         { error: result.reason },
-        'PostGeneration'
-      );
+        'PostGeneration',
+      )
     }
   }
 
-  const totalCreated = repliesCreated + quotesCreated;
+  const totalCreated = repliesCreated + quotesCreated
   logger.info(
     `NPC discourse complete: ${totalCreated}/${postsToReplyTo.length} (${repliesCreated} replies, ${quotesCreated} quotes)`,
     { repliesCreated, quotesCreated, attempted: postsToReplyTo.length },
-    'PostGeneration'
-  );
+    'PostGeneration',
+  )
 
-  return totalCreated;
+  return totalCreated
 }
 
 /**
@@ -1103,28 +1170,28 @@ async function generateNPCReplyToPost(
   originalPost: PostForReply,
   worldFactsContext: string,
   timestamp: Date,
-  currentDay?: number
+  currentDay?: number,
 ): Promise<boolean> {
   // Build replier's personality context
   const personalityContext = replier.personality
     ? `Personality: ${replier.personality}`
-    : '';
+    : ''
   const voiceContext = replier.postStyle
     ? `Writing Style: ${replier.postStyle}`
-    : '';
+    : ''
   const examplesContext =
     replier.postExample && replier.postExample.length > 0
       ? `Example posts (MATCH THIS STYLE):\n${replier.postExample
           .slice(0, 3)
           .map((ex, i) => `  ${i + 1}. "${ex}"`)
           .join('\n')}`
-      : '';
+      : ''
 
   // Note if this is a thread (replying to a reply)
-  const isThread = originalPost.commentOnPostId !== null;
+  const isThread = originalPost.commentOnPostId !== null
   const threadContext = isThread
     ? '\n(Note: This is a reply in a thread - you can jump into the conversation)'
-    : '';
+    : ''
 
   const prompt = `You ARE ${replier.name}. You're jumping into a public conversation${isThread ? ' thread' : ''} started by ${originalPost.authorName}.
 
@@ -1161,7 +1228,7 @@ ${worldFactsContext}
 Return your response as XML in this exact format:
 <response>
   <reply>your reply content here</reply>
-</response>`;
+</response>`
 
   const response = await llmClient.generateJSON<
     { reply: string } | { response: { reply: string } }
@@ -1178,31 +1245,35 @@ Return your response as XML in this exact format:
       maxTokens: MAX_POST_TOKENS,
       format: 'xml',
       promptType: 'npc_reply_to_post',
-    }
-  );
+    },
+  )
 
+  // Unwrap nested response structure if present
   const replyContent =
     'response' in response &&
     response.response &&
     typeof response.response === 'object' &&
-    'reply' in response.response
-      ? (response.response as { reply: string }).reply
-      : (response as { reply: string }).reply;
+    'reply' in response.response &&
+    typeof response.response.reply === 'string'
+      ? response.response.reply
+      : 'reply' in response && typeof response.reply === 'string'
+        ? response.reply
+        : ''
 
   if (!replyContent || replyContent.trim().length === 0) {
     logger.warn(
       'Empty reply generated',
       { replierName: replier.name, originalPostId: originalPost.id },
-      'PostGeneration'
-    );
-    return false;
+      'PostGeneration',
+    )
+    return false
   }
 
   // Strip hashtags and emojis first
-  const cleaned = stripHashtagsAndEmojis(replyContent.trim());
+  const cleaned = stripHashtagsAndEmojis(replyContent.trim())
 
   // Then replace real names with parody names
-  const transformed = await characterMappingService.transformText(cleaned);
+  const transformed = await characterMappingService.transformText(cleaned)
   if (transformed.replacementCount > 0) {
     logger.warn(
       `Fixed ${transformed.replacementCount} real name(s) in NPC reply`,
@@ -1210,8 +1281,8 @@ Return your response as XML in this exact format:
         replier: replier.name,
         originalPostId: originalPost.id,
       },
-      'PostGeneration'
-    );
+      'PostGeneration',
+    )
   }
 
   // Determine the original post in the chain for proper threading
@@ -1219,7 +1290,7 @@ Return your response as XML in this exact format:
   // If replying to a reply: originalPostId = the root of the chain
   const rootPostId =
     originalPost.originalPostId ?? // If it's a reply, use its original
-    (originalPost.commentOnPostId ? originalPost.commentOnPostId : null); // If it's replying to something
+    (originalPost.commentOnPostId ? originalPost.commentOnPostId : null) // If it's replying to something
 
   await getDbInstance().createPostWithAllFields({
     id: await generateSnowflakeId(),
@@ -1231,7 +1302,7 @@ Return your response as XML in this exact format:
     gameId: 'continuous',
     dayNumber: currentDay,
     timestamp,
-  });
+  })
 
   logger.debug(
     'Created NPC reply',
@@ -1240,10 +1311,10 @@ Return your response as XML in this exact format:
       originalAuthor: originalPost.authorName,
       originalPostId: originalPost.id,
     },
-    'PostGeneration'
-  );
+    'PostGeneration',
+  )
 
-  return true;
+  return true
 }
 
 /**
@@ -1256,22 +1327,22 @@ async function generateNPCQuotePost(
   originalPost: PostForReply,
   worldFactsContext: string,
   timestamp: Date,
-  currentDay?: number
+  currentDay?: number,
 ): Promise<boolean> {
   // Build quoter's personality context
   const personalityContext = quoter.personality
     ? `Personality: ${quoter.personality}`
-    : '';
+    : ''
   const voiceContext = quoter.postStyle
     ? `Writing Style: ${quoter.postStyle}`
-    : '';
+    : ''
   const examplesContext =
     quoter.postExample && quoter.postExample.length > 0
       ? `Example posts (MATCH THIS STYLE):\n${quoter.postExample
           .slice(0, 3)
           .map((ex, i) => `  ${i + 1}. "${ex}"`)
           .join('\n')}`
-      : '';
+      : ''
 
   const prompt = `You ARE ${quoter.name}. You're quote-posting ${originalPost.authorName}'s post to share it with YOUR take.
 
@@ -1309,7 +1380,7 @@ ${worldFactsContext}
 Return your response as XML in this exact format:
 <response>
   <quote_comment>your commentary on top of the quoted post</quote_comment>
-</response>`;
+</response>`
 
   const response = await llmClient.generateJSON<
     { quote_comment: string } | { response: { quote_comment: string } }
@@ -1326,31 +1397,36 @@ Return your response as XML in this exact format:
       maxTokens: MAX_POST_TOKENS,
       format: 'xml',
       promptType: 'npc_quote_post',
-    }
-  );
+    },
+  )
 
+  // Unwrap nested response structure if present
   const quoteComment =
     'response' in response &&
     response.response &&
     typeof response.response === 'object' &&
-    'quote_comment' in response.response
-      ? (response.response as { quote_comment: string }).quote_comment
-      : (response as { quote_comment: string }).quote_comment;
+    'quote_comment' in response.response &&
+    typeof response.response.quote_comment === 'string'
+      ? response.response.quote_comment
+      : 'quote_comment' in response &&
+          typeof response.quote_comment === 'string'
+        ? response.quote_comment
+        : ''
 
   if (!quoteComment || quoteComment.trim().length === 0) {
     logger.warn(
       'Empty quote comment generated',
       { quoterName: quoter.name, originalPostId: originalPost.id },
-      'PostGeneration'
-    );
-    return false;
+      'PostGeneration',
+    )
+    return false
   }
 
   // Strip hashtags and emojis first
-  const cleaned = stripHashtagsAndEmojis(quoteComment.trim());
+  const cleaned = stripHashtagsAndEmojis(quoteComment.trim())
 
   // Then replace real names with parody names
-  const transformed = await characterMappingService.transformText(cleaned);
+  const transformed = await characterMappingService.transformText(cleaned)
   if (transformed.replacementCount > 0) {
     logger.warn(
       `Fixed ${transformed.replacementCount} real name(s) in NPC quote post`,
@@ -1358,8 +1434,8 @@ Return your response as XML in this exact format:
         quoter: quoter.name,
         originalPostId: originalPost.id,
       },
-      'PostGeneration'
-    );
+      'PostGeneration',
+    )
   }
 
   await getDbInstance().createPostWithAllFields({
@@ -1371,7 +1447,7 @@ Return your response as XML in this exact format:
     gameId: 'continuous',
     dayNumber: currentDay,
     timestamp,
-  });
+  })
 
   logger.debug(
     'Created NPC quote post',
@@ -1380,8 +1456,8 @@ Return your response as XML in this exact format:
       originalAuthor: originalPost.authorName,
       originalPostId: originalPost.id,
     },
-    'PostGeneration'
-  );
+    'PostGeneration',
+  )
 
-  return true;
+  return true
 }

@@ -26,17 +26,16 @@ import os
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import List
 
 import numpy as np
 from dotenv import load_dotenv
 from pydantic import BaseModel, Field
 
 from .tinker_client import (
+    TINKER_AVAILABLE,
     BabylonTinkerClient,
     TinkerConfig,
     TinkerDatum,
-    TINKER_AVAILABLE,
 )
 
 logger = logging.getLogger(__name__)
@@ -77,15 +76,9 @@ class TinkerTrainingConfig(BaseModel):
         default_factory=lambda: os.getenv("DATABASE_URL", ""),
         description="PostgreSQL connection URL",
     )
-    lookback_hours: int = Field(
-        default=72, description="Hours to look back for trajectories"
-    )
-    min_agents_per_window: int = Field(
-        default=2, description="Minimum agents per window"
-    )
-    min_actions_per_trajectory: int = Field(
-        default=3, description="Minimum actions per trajectory"
-    )
+    lookback_hours: int = Field(default=72, description="Hours to look back for trajectories")
+    min_agents_per_window: int = Field(default=2, description="Minimum agents per window")
+    min_actions_per_trajectory: int = Field(default=3, description="Minimum actions per trajectory")
     max_steps_per_trajectory: int = Field(
         default=20, description="Max steps to include per trajectory"
     )
@@ -102,12 +95,8 @@ class TinkerTrainingConfig(BaseModel):
     )
 
     # Inference settings
-    inference_max_tokens: int = Field(
-        default=512, description="Max tokens for inference"
-    )
-    inference_temperature: float = Field(
-        default=0.7, description="Temperature for inference"
-    )
+    inference_max_tokens: int = Field(default=512, description="Max tokens for inference")
+    inference_temperature: float = Field(default=0.7, description="Temperature for inference")
 
 
 @dataclass
@@ -145,9 +134,7 @@ class BabylonTinkerTrainer:
 
     def __init__(self, config: TinkerTrainingConfig):
         if not TINKER_AVAILABLE:
-            raise RuntimeError(
-                "Tinker not installed. Install with: pip install tinker"
-            )
+            raise RuntimeError("Tinker not installed. Install with: pip install tinker")
 
         self.config = config
         self.tinker_config = TinkerConfig(
@@ -161,7 +148,7 @@ class BabylonTinkerTrainer:
 
         self.current_step = 0
         self.run_id = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
-        self.all_metrics: List[TrainingMetrics] = []
+        self.all_metrics: list[TrainingMetrics] = []
 
         # Database pool (lazy init)
         self._db_pool = None
@@ -241,7 +228,7 @@ class BabylonTinkerTrainer:
 
         self.all_metrics.append(metrics)
 
-    async def load_trajectory_groups(self) -> List[dict]:
+    async def load_trajectory_groups(self) -> list[dict]:
         """Load trajectory groups from database"""
         if not self._db_pool:
             raise RuntimeError("Database not connected")
@@ -249,7 +236,7 @@ class BabylonTinkerTrainer:
         async with self._db_pool.acquire() as conn:
             rows = await conn.fetch(
                 """
-                SELECT 
+                SELECT
                     t."trajectoryId",
                     t."agentId",
                     t."windowId",
@@ -261,7 +248,7 @@ class BabylonTinkerTrainer:
                     u.username as agent_name
                 FROM trajectories t
                 LEFT JOIN "User" u ON t."agentId" = u.id
-                WHERE 
+                WHERE
                     t."createdAt" > NOW() - $1::interval
                     AND t."stepsJson" IS NOT NULL
                     AND t."stepsJson"::text != 'null'
@@ -309,16 +296,16 @@ class BabylonTinkerTrainer:
         logger.info(f"Loaded {len(valid_groups)} trajectory groups")
         return valid_groups
 
-    def trajectory_to_messages(self, traj: dict) -> List[dict]:
+    def trajectory_to_messages(self, traj: dict) -> list[dict]:
         """Convert trajectory to chat messages format"""
         messages = []
 
         # System message
         system_content = f"""You are a trading agent in Babylon prediction markets.
 
-Agent: {traj.get('agent_name', 'Agent')}
-Window: {traj.get('window_id', 'Unknown')}
-Final P&L: ${traj.get('final_pnl', 0):.2f}
+Agent: {traj.get("agent_name", "Agent")}
+Window: {traj.get("window_id", "Unknown")}
+Final P&L: ${traj.get("final_pnl", 0):.2f}
 
 Your goal is to make profitable trading decisions based on market analysis."""
 
@@ -341,20 +328,14 @@ Your goal is to make profitable trading decisions based on market analysis."""
             if llm_calls:
                 for llm_call in llm_calls:
                     purpose = llm_call.get("purpose", "action")
-                    user_prompt = llm_call.get(
-                        "userPrompt", llm_call.get("user_prompt", "")
-                    )
+                    user_prompt = llm_call.get("userPrompt", llm_call.get("user_prompt", ""))
 
                     # Build user content
                     user_content = f"[Step {step_idx + 1}, {purpose.upper()}]\n"
 
-                    env_state = step.get(
-                        "environmentState", step.get("environment_state", {})
-                    )
+                    env_state = step.get("environmentState", step.get("environment_state", {}))
                     if env_state:
-                        balance = env_state.get(
-                            "agentBalance", env_state.get("agent_balance", 0)
-                        )
+                        balance = env_state.get("agentBalance", env_state.get("agent_balance", 0))
                         pnl = env_state.get("agentPnL", env_state.get("agent_pnl", 0))
                         positions = env_state.get(
                             "openPositions", env_state.get("open_positions", 0)
@@ -380,21 +361,13 @@ Your goal is to make profitable trading decisions based on market analysis."""
                         assistant_content += response
 
                     if assistant_content.strip():
-                        messages.append(
-                            {"role": "assistant", "content": assistant_content}
-                        )
+                        messages.append({"role": "assistant", "content": assistant_content})
             else:
                 # Fallback: build from environment state and action
-                env_state = step.get(
-                    "environmentState", step.get("environment_state", {})
-                )
-                balance = env_state.get(
-                    "agentBalance", env_state.get("agent_balance", 0)
-                )
+                env_state = step.get("environmentState", step.get("environment_state", {}))
+                balance = env_state.get("agentBalance", env_state.get("agent_balance", 0))
                 pnl = env_state.get("agentPnL", env_state.get("agent_pnl", 0))
-                positions = env_state.get(
-                    "openPositions", env_state.get("open_positions", 0)
-                )
+                positions = env_state.get("openPositions", env_state.get("open_positions", 0))
 
                 user_content = (
                     f"[Step {step_idx + 1}]\n"
@@ -408,9 +381,7 @@ Your goal is to make profitable trading decisions based on market analysis."""
 
                 # Action as assistant message
                 action = step.get("action", {})
-                action_type = action.get(
-                    "actionType", action.get("action_type", "wait")
-                )
+                action_type = action.get("actionType", action.get("action_type", "wait"))
                 params = action.get("parameters", {})
                 reasoning = action.get("reasoning", "")
 
@@ -425,9 +396,7 @@ Your goal is to make profitable trading decisions based on market analysis."""
 
         return messages
 
-    async def score_trajectories(
-        self, trajectories: List[dict]
-    ) -> List[float]:
+    async def score_trajectories(self, trajectories: list[dict]) -> list[float]:
         """Score trajectories using LLM judge (RLAIF)"""
         # Build judge prompt
         prompt_parts = [
@@ -446,13 +415,13 @@ Your goal is to make profitable trading decisions based on market analysis."""
             prompt_parts.append(f"- Episode Length: {traj.get('episode_length', 0)}")
 
         prompt_parts.append("\n## Output (JSON only):")
-        prompt_parts.append(
-            '{"scores": [{"trajectory_id": 1, "score": 0.85}, ...]}'
-        )
+        prompt_parts.append('{"scores": [{"trajectory_id": 1, "score": 0.85}, ...]}')
 
         judge_prompt = "\n".join(prompt_parts)
 
         # Call judge
+        if self._judge_client is None:
+            raise RuntimeError("Judge client not initialized. Call setup() first.")
         response = await self._judge_client.chat.completions.create(
             model=self.config.judge_model,
             messages=[
@@ -497,9 +466,7 @@ Your goal is to make profitable trading decisions based on market analysis."""
 
         return [(p - min_pnl) / pnl_range for p in pnls]
 
-    async def train_on_group(
-        self, group: dict
-    ) -> TrainingMetrics | None:
+    async def train_on_group(self, group: dict) -> TrainingMetrics | None:
         """Train on a single trajectory group"""
         trajectories = group["trajectories"]
 
@@ -527,10 +494,10 @@ Your goal is to make profitable trading decisions based on market analysis."""
                 advantages = [a / std for a in advantages]
 
         # Convert to training data
-        data: List[TinkerDatum] = []
-        valid_advantages: List[float] = []
+        data: list[TinkerDatum] = []
+        valid_advantages: list[float] = []
 
-        for traj, advantage in zip(trajectories, advantages):
+        for traj, advantage in zip(trajectories, advantages, strict=False):
             messages = self.trajectory_to_messages(traj)
 
             if len(messages) < 3:  # Need at least system + user + assistant
@@ -587,18 +554,14 @@ Your goal is to make profitable trading decisions based on market analysis."""
             if not all_groups:
                 raise ValueError("No trajectory groups found")
 
-            group_idx = 0
             windows_processed = 0
 
             for step in range(self.config.training_steps):
                 self.current_step = step + 1
-                logger.info(
-                    f"Step {self.current_step}/{self.config.training_steps}"
-                )
+                logger.info(f"Step {self.current_step}/{self.config.training_steps}")
 
                 # Get next group (circular)
-                group = all_groups[group_idx % len(all_groups)]
-                group_idx += 1
+                group = all_groups[step % len(all_groups)]
 
                 # Train on group
                 metrics = await self.train_on_group(group)

@@ -6,6 +6,27 @@
  * are used for benchmark result storage and comparison.
  */
 
+import type {
+  SimulationAgent,
+  SimulationFeedPost,
+  SimulationGroupChat,
+  SimulationPerpetualMarket,
+  SimulationPredictionMarket,
+} from '../type-guards'
+
+/**
+ * Full simulation state returned by getState()
+ */
+export interface SimulationEngineState {
+  tick: number
+  initialized: boolean
+  predictionMarkets: SimulationPredictionMarket[]
+  perpetualMarkets: SimulationPerpetualMarket[]
+  posts?: SimulationFeedPost[]
+  groupChats?: SimulationGroupChat[]
+  agents: SimulationAgent[]
+}
+
 /**
  * Agent action recorded during simulation
  */
@@ -18,16 +39,16 @@ export interface AgentAction {
     | 'query_state'
     | 'post'
     | 'comment'
-    | 'idle';
-  timestamp: number;
-  marketId?: string;
-  amount?: number;
-  direction?: 'long' | 'short';
+    | 'idle'
+  timestamp: number
+  marketId?: string
+  amount?: number
+  direction?: 'long' | 'short'
   correctness?: {
-    predictionCorrect?: boolean;
-    pnl?: number;
-  };
-  metadata?: Record<string, unknown>;
+    predictionCorrect?: boolean
+    pnl?: number
+  }
+  metadata?: Record<string, unknown>
 }
 
 /**
@@ -35,76 +56,76 @@ export interface AgentAction {
  */
 export interface SimulationConfig {
   /** Duration of the simulation in milliseconds */
-  durationMs?: number;
+  durationMs?: number
   /** Interval between ticks in milliseconds */
-  tickIntervalMs?: number;
+  tickIntervalMs?: number
   /** Number of prediction markets to include */
-  numPredictionMarkets?: number;
+  numPredictionMarkets?: number
   /** Number of perpetual markets to include */
-  numPerpMarkets?: number;
+  numPerpMarkets?: number
   /** Random seed for reproducibility */
-  seed?: number;
+  seed?: number
   /** Benchmark snapshot to use */
-  snapshot?: unknown;
+  snapshot?: unknown
   /** Agent ID for the simulation */
-  agentId?: string;
+  agentId?: string
   /** Whether to run in fast-forward mode */
-  fastForward?: boolean;
+  fastForward?: boolean
   /** Response timeout in milliseconds */
-  responseTimeout?: number;
+  responseTimeout?: number
 }
 
 /**
  * Prediction market metrics from simulation
  */
 export interface PredictionMetrics {
-  totalPositions: number;
-  correctPredictions: number;
-  incorrectPredictions: number;
-  accuracy: number;
-  avgPnlPerPosition: number;
+  totalPositions: number
+  correctPredictions: number
+  incorrectPredictions: number
+  accuracy: number
+  avgPnlPerPosition: number
 }
 
 /**
  * Perpetual market metrics from simulation
  */
 export interface PerpMetrics {
-  totalTrades: number;
-  profitableTrades: number;
-  winRate: number;
-  avgPnlPerTrade: number;
-  maxDrawdown: number;
+  totalTrades: number
+  profitableTrades: number
+  winRate: number
+  avgPnlPerTrade: number
+  maxDrawdown: number
 }
 
 /**
  * Social engagement metrics from simulation
  */
 export interface SocialMetrics {
-  postsCreated: number;
-  groupsJoined: number;
-  messagesReceived: number;
-  reputationGained: number;
+  postsCreated: number
+  groupsJoined: number
+  messagesReceived: number
+  reputationGained: number
 }
 
 /**
  * Timing metrics from simulation
  */
 export interface TimingMetrics {
-  avgResponseTime: number;
-  maxResponseTime: number;
-  totalDuration: number;
+  avgResponseTime: number
+  maxResponseTime: number
+  totalDuration: number
 }
 
 /**
  * Complete metrics from a simulation run
  */
 export interface SimulationMetrics {
-  totalPnl: number;
-  predictionMetrics: PredictionMetrics;
-  perpMetrics: PerpMetrics;
-  socialMetrics: SocialMetrics;
-  timing: TimingMetrics;
-  optimalityScore: number;
+  totalPnl: number
+  predictionMetrics: PredictionMetrics
+  perpMetrics: PerpMetrics
+  socialMetrics: SocialMetrics
+  timing: TimingMetrics
+  optimalityScore: number
 }
 
 /**
@@ -112,21 +133,21 @@ export interface SimulationMetrics {
  */
 export interface SimulationResult {
   /** Unique identifier for the simulation run */
-  id: string;
+  id: string
   /** Whether the simulation completed successfully */
-  success: boolean;
+  success: boolean
   /** Detailed metrics from the run */
-  metrics: SimulationMetrics;
+  metrics: SimulationMetrics
   /** Error message if simulation failed */
-  error?: string;
+  error?: string
   /** Duration of the simulation in milliseconds */
-  durationMs: number;
+  durationMs: number
   /** Benchmark ID for comparison */
-  benchmarkId?: string;
+  benchmarkId?: string
   /** Recorded trajectory from the simulation */
-  trajectory?: unknown;
+  trajectory?: unknown
   /** Actions executed during simulation */
-  actions: AgentAction[];
+  actions: AgentAction[]
 }
 
 /**
@@ -137,14 +158,14 @@ export interface SimulationResult {
  * @deprecated Use game engine simulation instead
  */
 export class SimulationEngine {
-  private _tickNumber = 0;
-  private _maxTicks = 100;
-  private _initialized = false;
+  private _tickNumber = 0
+  private _maxTicks = 100
+  private _initialized = false
 
   constructor(config: SimulationConfig) {
     // Calculate max ticks from config if available
     if (config.durationMs && config.tickIntervalMs) {
-      this._maxTicks = Math.ceil(config.durationMs / config.tickIntervalMs);
+      this._maxTicks = Math.ceil(config.durationMs / config.tickIntervalMs)
     }
   }
 
@@ -153,8 +174,8 @@ export class SimulationEngine {
    * @deprecated SimulationEngine is deprecated
    */
   initialize(): void {
-    this._initialized = true;
-    this._tickNumber = 0;
+    this._initialized = true
+    this._tickNumber = 0
   }
 
   /**
@@ -162,7 +183,7 @@ export class SimulationEngine {
    * @deprecated SimulationEngine is deprecated
    */
   isComplete(): boolean {
-    return this._tickNumber >= this._maxTicks;
+    return this._tickNumber >= this._maxTicks
   }
 
   /**
@@ -170,7 +191,7 @@ export class SimulationEngine {
    * @deprecated SimulationEngine is deprecated
    */
   getCurrentTickNumber(): number {
-    return this._tickNumber;
+    return this._tickNumber
   }
 
   /**
@@ -178,7 +199,7 @@ export class SimulationEngine {
    * @deprecated SimulationEngine is deprecated
    */
   advanceTick(): void {
-    this._tickNumber++;
+    this._tickNumber++
   }
 
   async run(): Promise<SimulationResult> {
@@ -218,14 +239,20 @@ export class SimulationEngine {
       error: 'SimulationEngine is deprecated. Use game engine simulation.',
       durationMs: 0,
       actions: [],
-    };
+    }
   }
 
   async runWithAgent(_agent: unknown): Promise<SimulationResult> {
-    return this.run();
+    return this.run()
   }
 
-  getState(): unknown {
-    return { tick: this._tickNumber, initialized: this._initialized };
+  getState(): SimulationEngineState {
+    return {
+      tick: this._tickNumber,
+      initialized: this._initialized,
+      predictionMarkets: [],
+      perpetualMarkets: [],
+      agents: [],
+    }
   }
 }

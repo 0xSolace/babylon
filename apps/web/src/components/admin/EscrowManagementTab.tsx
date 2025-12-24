@@ -1,7 +1,5 @@
-'use client';
-
-import { cn, type Escrow, EscrowSchema, logger } from '@babylon/shared';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { cn, type Escrow, EscrowSchema, logger } from '@babylon/shared'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   AlertCircle,
   ArrowLeftRight,
@@ -10,12 +8,12 @@ import {
   DollarSign,
   RefreshCw,
   XCircle,
-} from 'lucide-react';
-import { useState } from 'react';
-import { toast } from 'sonner';
-import { z } from 'zod';
-import { Avatar } from '@/components/shared/Avatar';
-import { Skeleton } from '@/components/shared/Skeleton';
+} from 'lucide-react'
+import { useState } from 'react'
+import { toast } from 'sonner'
+import { z } from 'zod'
+import { Avatar } from '@/components/shared/Avatar'
+import { Skeleton } from '@/components/shared/Skeleton'
 
 /**
  * Get authentication token from window if available.
@@ -28,17 +26,15 @@ import { Skeleton } from '@/components/shared/Skeleton';
  * @returns Authentication token or null
  */
 function getAuthToken(): string | null {
-  if (typeof window === 'undefined') return null;
+  if (typeof window === 'undefined') return null
   // Try to get token from window if available (some admin components use this)
-  return (
-    (window as { __oauth3AccessToken?: string }).__oauth3AccessToken || null
-  );
+  return window.__oauth3AccessToken || null
 }
 
 /**
  * Status filter type for escrow management tab.
  */
-type StatusFilter = 'all' | 'pending' | 'paid' | 'refunded' | 'expired';
+type StatusFilter = 'all' | 'pending' | 'paid' | 'refunded' | 'expired'
 
 /**
  * Escrow management tab component for managing moderation escrow payments.
@@ -61,12 +57,12 @@ type StatusFilter = 'all' | 'pending' | 'paid' | 'refunded' | 'expired';
  * @returns Escrow management tab element
  */
 export function EscrowManagementTab() {
-  const queryClient = useQueryClient();
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
-  const [selectedEscrow, setSelectedEscrow] = useState<Escrow | null>(null);
-  const [showRefundModal, setShowRefundModal] = useState(false);
-  const [refundTxHash, setRefundTxHash] = useState('');
-  const [refundReason, setRefundReason] = useState('');
+  const queryClient = useQueryClient()
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
+  const [selectedEscrow, setSelectedEscrow] = useState<Escrow | null>(null)
+  const [showRefundModal, setShowRefundModal] = useState(false)
+  const [refundTxHash, setRefundTxHash] = useState('')
+  const [refundReason, setRefundReason] = useState('')
 
   const {
     data: escrows = [],
@@ -76,36 +72,36 @@ export function EscrowManagementTab() {
   } = useQuery<Escrow[]>({
     queryKey: ['admin', 'escrows', statusFilter],
     queryFn: async () => {
-      const token = getAuthToken();
+      const token = getAuthToken()
       const params = new URLSearchParams({
         limit: '100',
-      });
+      })
       if (statusFilter !== 'all') {
-        params.set('status', statusFilter);
+        params.set('status', statusFilter)
       }
 
       const headers: HeadersInit = {
         'Content-Type': 'application/json',
-      };
+      }
       if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
+        headers.Authorization = `Bearer ${token}`
       }
 
       const response = await fetch(
         `/api/admin/moderation-escrow/list?${params}`,
         {
           headers,
-        }
-      );
-      if (!response.ok) throw new Error('Failed to fetch escrows');
-      const data = await response.json();
-      const validation = z.array(EscrowSchema).safeParse(data.escrows);
+        },
+      )
+      if (!response.ok) throw new Error('Failed to fetch escrows')
+      const data = await response.json()
+      const validation = z.array(EscrowSchema).safeParse(data.escrows)
       if (!validation.success) {
-        throw new Error('Invalid escrow data structure');
+        throw new Error('Invalid escrow data structure')
       }
-      return validation.data;
+      return validation.data
     },
-  });
+  })
 
   const refundMutation = useMutation({
     mutationFn: async ({
@@ -113,16 +109,16 @@ export function EscrowManagementTab() {
       txHash,
       reason,
     }: {
-      escrowId: string;
-      txHash: string;
-      reason?: string;
+      escrowId: string
+      txHash: string
+      reason?: string
     }) => {
-      const token = getAuthToken();
+      const token = getAuthToken()
       const headers: HeadersInit = {
         'Content-Type': 'application/json',
-      };
+      }
       if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
+        headers.Authorization = `Bearer ${token}`
       }
 
       const response = await fetch('/api/admin/moderation-escrow/refund', {
@@ -133,81 +129,81 @@ export function EscrowManagementTab() {
           refundTxHash: txHash,
           reason: reason || undefined,
         }),
-      });
+      })
 
-      const data = await response.json();
+      const data = await response.json()
 
       if (!response.ok || !data.success) {
         logger.error(
           'Failed to refund escrow',
           { error: data.error },
-          'EscrowManagementTab'
-        );
-        throw new Error(data.error || 'Failed to refund escrow');
+          'EscrowManagementTab',
+        )
+        throw new Error(data.error || 'Failed to refund escrow')
       }
 
-      return data;
+      return data
     },
     onSuccess: () => {
-      toast.success('Escrow refunded successfully');
-      setShowRefundModal(false);
-      setSelectedEscrow(null);
-      setRefundTxHash('');
-      setRefundReason('');
-      queryClient.invalidateQueries({ queryKey: ['admin', 'escrows'] });
+      toast.success('Escrow refunded successfully')
+      setShowRefundModal(false)
+      setSelectedEscrow(null)
+      setRefundTxHash('')
+      setRefundReason('')
+      queryClient.invalidateQueries({ queryKey: ['admin', 'escrows'] })
     },
     onError: (error) => {
       toast.error(
-        error instanceof Error ? error.message : 'Failed to refund escrow'
-      );
+        error instanceof Error ? error.message : 'Failed to refund escrow',
+      )
     },
-  });
+  })
 
   const formatCurrency = (value: string | number) => {
-    const num = typeof value === 'string' ? parseFloat(value) : value;
-    return `$${num.toFixed(2)}`;
-  };
+    const num = typeof value === 'string' ? parseFloat(value) : value
+    return `$${num.toFixed(2)}`
+  }
 
   const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
+    const date = new Date(dateString)
     return date.toLocaleDateString('en-US', {
       month: 'short',
       day: 'numeric',
       year: 'numeric',
       hour: '2-digit',
       minute: '2-digit',
-    });
-  };
+    })
+  }
 
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'paid':
-        return 'bg-green-500/20 text-green-500';
+        return 'bg-green-500/20 text-green-500'
       case 'refunded':
-        return 'bg-blue-500/20 text-blue-500';
+        return 'bg-blue-500/20 text-blue-500'
       case 'expired':
-        return 'bg-gray-500/20 text-gray-500';
+        return 'bg-gray-500/20 text-gray-500'
       case 'pending':
-        return 'bg-yellow-500/20 text-yellow-500';
+        return 'bg-yellow-500/20 text-yellow-500'
       default:
-        return 'bg-muted text-muted-foreground';
+        return 'bg-muted text-muted-foreground'
     }
-  };
+  }
 
   const getStatusIcon = (status: string) => {
     switch (status) {
       case 'paid':
-        return <CheckCircle className="h-4 w-4" />;
+        return <CheckCircle className="h-4 w-4" />
       case 'refunded':
-        return <ArrowLeftRight className="h-4 w-4" />;
+        return <ArrowLeftRight className="h-4 w-4" />
       case 'expired':
-        return <XCircle className="h-4 w-4" />;
+        return <XCircle className="h-4 w-4" />
       case 'pending':
-        return <Clock className="h-4 w-4" />;
+        return <Clock className="h-4 w-4" />
       default:
-        return <AlertCircle className="h-4 w-4" />;
+        return <AlertCircle className="h-4 w-4" />
     }
-  };
+  }
 
   if (isLoading) {
     return (
@@ -215,7 +211,7 @@ export function EscrowManagementTab() {
         <Skeleton className="h-8 w-48" />
         <Skeleton className="h-64 w-full" />
       </div>
-    );
+    )
   }
 
   return (
@@ -235,6 +231,7 @@ export function EscrowManagementTab() {
 
         <div className="flex gap-2">
           <button
+            type="button"
             onClick={() => refetch()}
             disabled={isFetching}
             className="flex items-center gap-2 rounded bg-muted px-3 py-2 font-medium text-sm transition-colors hover:bg-muted/80 disabled:opacity-50"
@@ -253,13 +250,14 @@ export function EscrowManagementTab() {
           ['all', 'pending', 'paid', 'refunded', 'expired'] as StatusFilter[]
         ).map((status) => (
           <button
+            type="button"
             key={status}
             onClick={() => setStatusFilter(status)}
             className={cn(
               'rounded px-3 py-1.5 font-medium text-sm transition-colors',
               statusFilter === status
                 ? 'bg-primary text-primary-foreground'
-                : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                : 'bg-muted text-muted-foreground hover:bg-muted/80',
             )}
           >
             {status.charAt(0).toUpperCase() + status.slice(1)}
@@ -284,7 +282,7 @@ export function EscrowManagementTab() {
                 <div className="flex-1 space-y-2">
                   <div className="flex items-center gap-3">
                     <Avatar
-                      src={escrow.recipient.profileImageUrl ?? undefined}
+                      src={escrow.recipient.profileImageUrl}
                       alt={
                         escrow.recipient.displayName ||
                         escrow.recipient.username ||
@@ -317,7 +315,7 @@ export function EscrowManagementTab() {
                     <div
                       className={cn(
                         'flex items-center gap-1 rounded px-2 py-0.5 text-xs',
-                        getStatusColor(escrow.status)
+                        getStatusColor(escrow.status),
                       )}
                     >
                       {getStatusIcon(escrow.status)}
@@ -380,9 +378,10 @@ export function EscrowManagementTab() {
 
                 {escrow.status === 'paid' && !escrow.refundTxHash && (
                   <button
+                    type="button"
                     onClick={() => {
-                      setSelectedEscrow(escrow);
-                      setShowRefundModal(true);
+                      setSelectedEscrow(escrow)
+                      setShowRefundModal(true)
                     }}
                     className="flex items-center gap-1 rounded bg-blue-500/20 px-3 py-1.5 font-medium text-blue-500 text-sm transition-colors hover:bg-blue-500/30"
                   >
@@ -420,11 +419,15 @@ export function EscrowManagementTab() {
               </div>
 
               <div>
-                <label className="mb-2 block font-medium text-sm">
+                <label
+                  htmlFor="refund-tx-hash"
+                  className="mb-2 block font-medium text-sm"
+                >
                   Refund Transaction Hash{' '}
                   <span className="text-red-500">*</span>
                 </label>
                 <input
+                  id="refund-tx-hash"
                   type="text"
                   value={refundTxHash}
                   onChange={(e) => setRefundTxHash(e.target.value)}
@@ -434,10 +437,14 @@ export function EscrowManagementTab() {
               </div>
 
               <div>
-                <label className="mb-2 block font-medium text-sm">
+                <label
+                  htmlFor="refund-reason"
+                  className="mb-2 block font-medium text-sm"
+                >
                   Reason (optional)
                 </label>
                 <textarea
+                  id="refund-reason"
                   value={refundReason}
                   onChange={(e) => setRefundReason(e.target.value)}
                   placeholder="Reason for refund..."
@@ -448,11 +455,12 @@ export function EscrowManagementTab() {
 
               <div className="flex gap-3">
                 <button
+                  type="button"
                   onClick={() => {
-                    setShowRefundModal(false);
-                    setSelectedEscrow(null);
-                    setRefundTxHash('');
-                    setRefundReason('');
+                    setShowRefundModal(false)
+                    setSelectedEscrow(null)
+                    setRefundTxHash('')
+                    setRefundReason('')
                   }}
                   disabled={refundMutation.isPending}
                   className="flex-1 rounded-lg bg-muted px-4 py-2 text-foreground transition-colors hover:bg-muted/80 disabled:opacity-50"
@@ -460,6 +468,7 @@ export function EscrowManagementTab() {
                   Cancel
                 </button>
                 <button
+                  type="button"
                   onClick={() =>
                     refundMutation.mutate({
                       escrowId: selectedEscrow.id,
@@ -488,5 +497,5 @@ export function EscrowManagementTab() {
         </div>
       )}
     </div>
-  );
+  )
 }

@@ -7,9 +7,9 @@
  * Facts are loaded directly from TypeScript modules for serverless compatibility.
  */
 
-import { realityGroundingContent } from '../data/reality-grounding';
-import { worldEventExamplesContent } from '../data/world-event-examples';
-import { worldFactsContent } from '../data/world-facts';
+import { realityGroundingContent } from '../data/reality-grounding'
+import { worldEventExamplesContent } from '../data/world-event-examples'
+import { worldFactsContent } from '../data/world-facts'
 
 /**
  * Get current date and time context for prompts.
@@ -27,14 +27,14 @@ import { worldFactsContent } from '../data/world-facts';
  *   - `day`: Current day of month as string
  */
 export function getCurrentDateContext(): {
-  dateISO: string;
-  dateFull: string;
-  time: string;
-  year: string;
-  month: string;
-  day: string;
+  dateISO: string
+  dateFull: string
+  time: string
+  year: string
+  month: string
+  day: string
 } {
-  const now = new Date();
+  const now = new Date()
   return {
     dateISO: now.toISOString(),
     dateFull: now.toLocaleDateString('en-US', {
@@ -51,7 +51,7 @@ export function getCurrentDateContext(): {
     year: now.getFullYear().toString(),
     month: now.toLocaleDateString('en-US', { month: 'long' }),
     day: now.getDate().toString(),
-  };
+  }
 }
 
 /**
@@ -61,7 +61,7 @@ export function getCurrentDateContext(): {
  * examples of the desired satirical/news style.
  */
 export function getWorldEventExamples(): string {
-  return `=== WORLD EVENT EXAMPLES (FOR STYLE AND TONE) ===\n\n${worldEventExamplesContent}`;
+  return `=== WORLD EVENT EXAMPLES (FOR STYLE AND TONE) ===\n\n${worldEventExamplesContent}`
 }
 
 /**
@@ -70,7 +70,7 @@ export function getWorldEventExamples(): string {
  * Returns general facts about the game world.
  */
 export function getWorldFacts(): string {
-  return worldFactsContent;
+  return worldFactsContent
 }
 
 /**
@@ -82,13 +82,13 @@ export function getWorldFacts(): string {
  * @returns Full reality grounding string with current date and all facts
  */
 export function getFullRealityGrounding(): string {
-  const dateCtx = getCurrentDateContext();
+  const dateCtx = getCurrentDateContext()
 
   return `
 === CURRENT DATE: ${dateCtx.dateFull} ===
 
 ${realityGroundingContent}
-`.trim();
+`.trim()
 }
 
 /**
@@ -96,13 +96,13 @@ ${realityGroundingContent}
  * Checks for common outdated references
  */
 export function checkRealityGrounding(text: string): string[] {
-  const warnings: string[] = [];
+  const warnings: string[] = []
 
   // Check for outdated years (hardcoded check - could be improved)
   if (text.includes('2023') || text.includes('2024')) {
     warnings.push(
-      'Content references outdated year - should reference current year'
-    );
+      'Content references outdated year - should reference current year',
+    )
   }
 
   // Check for outdated prices
@@ -110,15 +110,15 @@ export function checkRealityGrounding(text: string): string[] {
     text.includes('Bitcoin') &&
     (text.includes('$30K') || text.includes('$50K'))
   ) {
-    warnings.push('Content references outdated Bitcoin prices');
+    warnings.push('Content references outdated Bitcoin prices')
   }
 
   // Check for wrong president
   if (text.includes('Biden') && text.includes('president')) {
-    warnings.push('Content references wrong president');
+    warnings.push('Content references wrong president')
   }
 
-  return warnings;
+  return warnings
 }
 
 /**
@@ -129,7 +129,7 @@ export function checkRealityGrounding(text: string): string[] {
  * @returns Concise reality grounding string with current date and key facts
  */
 export function getRealityGrounding(): string {
-  const dateCtx = getCurrentDateContext();
+  const dateCtx = getCurrentDateContext()
 
   return `
 === REALITY GROUNDING (${dateCtx.dateFull}) ===
@@ -137,7 +137,7 @@ export function getRealityGrounding(): string {
 ${realityGroundingContent}
 
 CRITICAL: Ground all predictions in this reality. Use current dates, prices, and leadership.
-`.trim();
+`.trim()
 }
 
 /**
@@ -149,12 +149,12 @@ CRITICAL: Ground all predictions in this reality. Use current dates, prices, and
  * @returns Minimal reality grounding string
  */
 export function getMinimalRealityGrounding(): string {
-  const dateCtx = getCurrentDateContext();
+  const dateCtx = getCurrentDateContext()
   const lines = realityGroundingContent
     .split('\n')
     .filter((l) => l.trim().length > 0 && !l.startsWith('#'))
-    .slice(0, 5);
-  const keyFacts = lines.join(' | ');
+    .slice(0, 5)
+  const keyFacts = lines.join(' | ')
 
-  return `DATE: ${dateCtx.dateFull} | ${keyFacts}`;
+  return `DATE: ${dateCtx.dateFull} | ${keyFacts}`
 }

@@ -9,8 +9,8 @@
  * 2. Causal Simulation Mode: Hidden facts → Events → Price movements (learnable signal)
  */
 
-import type { JsonValue } from '@babylon/shared';
-import { logger } from '@babylon/shared';
+import type { JsonValue } from '@babylon/shared'
+import { logger } from '@babylon/shared'
 
 /**
  * Volatility bucket for price movements
@@ -18,7 +18,7 @@ import { logger } from '@babylon/shared';
  * - medium: Moderate price movements (-5% to -10% or +5% to +10%)
  * - high: Large price movements (-15%+ or +15%+)
  */
-export type VolatilityBucket = 'low' | 'medium' | 'high';
+export type VolatilityBucket = 'low' | 'medium' | 'high'
 
 /**
  * Event types that can be generated from hidden facts
@@ -29,7 +29,7 @@ export type CausalEventType =
   | 'scandal'
   | 'development'
   | 'deal'
-  | 'announcement';
+  | 'announcement'
 
 /**
  * Scheduled event in the causal event schedule
@@ -37,19 +37,19 @@ export type CausalEventType =
  */
 export interface ScheduledCausalEvent {
   /** Base day for the event (1-30) */
-  baseDay: number;
+  baseDay: number
   /** Base hour for the event (0-23) */
-  baseHour: number;
+  baseHour: number
   /** Jitter applied to the event timing in hours (calculated from seed) */
-  jitterHours: number;
+  jitterHours: number
   /** Type of event */
-  eventType: CausalEventType;
+  eventType: CausalEventType
   /** Volatility bucket for price impact */
-  volatilityBucket: VolatilityBucket;
+  volatilityBucket: VolatilityBucket
   /** Whether the event is positive (true) or negative (false) for affected tickers */
-  isPositive: boolean;
+  isPositive: boolean
   /** Description template for the event */
-  descriptionTemplate: string;
+  descriptionTemplate: string
 }
 
 /**
@@ -58,123 +58,123 @@ export interface ScheduledCausalEvent {
  */
 export interface HiddenNarrativeFact {
   /** Unique identifier for the fact */
-  id: string;
+  id: string
   /** The hidden fact description (e.g., "TeslAI has a secret battery flaw") */
-  fact: string;
+  fact: string
   /** Tickers affected by this fact */
-  affectsTickers: string[];
+  affectsTickers: string[]
   /** Sequence of events scheduled to occur based on this fact */
-  eventSchedule: ScheduledCausalEvent[];
+  eventSchedule: ScheduledCausalEvent[]
   /** Overall sentiment of the narrative: negative facts lead to price drops */
-  sentiment: 'positive' | 'negative';
+  sentiment: 'positive' | 'negative'
 }
 
 export interface BenchmarkConfig {
   /** Duration of benchmark in minutes */
-  durationMinutes: number;
+  durationMinutes: number
 
   /** Interval between ticks in seconds */
-  tickInterval: number;
+  tickInterval: number
 
   /** Number of prediction markets */
-  numPredictionMarkets: number;
+  numPredictionMarkets: number
 
   /** Number of perpetual markets */
-  numPerpetualMarkets: number;
+  numPerpetualMarkets: number
 
   /** Number of other simulated agents */
-  numAgents: number;
+  numAgents: number
 
   /** Random seed for reproducibility */
-  seed?: number;
+  seed?: number
 
   /**
    * Enable causal simulation mode
    * When true, prices are driven by events from hidden facts instead of random walk
    * Default: false (backward compatible)
    */
-  useCausalSimulation?: boolean;
+  useCausalSimulation?: boolean
 }
 
 export interface GameState {
-  tick: number;
-  timestamp: number;
-  predictionMarkets: PredictionMarket[];
-  perpetualMarkets: PerpetualMarket[];
-  agents: SimulatedAgent[];
-  posts?: Post[];
-  groupChats?: GroupChat[];
+  tick: number
+  timestamp: number
+  predictionMarkets: PredictionMarket[]
+  perpetualMarkets: PerpetualMarket[]
+  agents: SimulatedAgent[]
+  posts?: Post[]
+  groupChats?: GroupChat[]
 }
 
 export interface PredictionMarket {
-  id: string;
-  question: string;
-  yesShares: number;
-  noShares: number;
-  yesPrice: number;
-  noPrice: number;
-  totalVolume: number;
-  liquidity: number;
-  resolved: boolean;
-  createdAt: number;
-  resolveAt: number;
+  id: string
+  question: string
+  yesShares: number
+  noShares: number
+  yesPrice: number
+  noPrice: number
+  totalVolume: number
+  liquidity: number
+  resolved: boolean
+  createdAt: number
+  resolveAt: number
 }
 
 export interface PerpetualMarket {
-  ticker: string;
-  price: number;
-  priceChange24h: number;
-  volume24h: number;
-  openInterest: number;
-  fundingRate: number;
-  nextFundingTime: number;
+  ticker: string
+  price: number
+  priceChange24h: number
+  volume24h: number
+  openInterest: number
+  fundingRate: number
+  nextFundingTime: number
 }
 
 export interface SimulatedAgent {
-  id: string;
-  name: string;
-  reputation: number;
-  totalPnl: number;
+  id: string
+  name: string
+  reputation: number
+  totalPnl: number
 }
 
 export interface Post {
-  id: string;
-  authorId: string;
-  authorName: string;
-  content: string;
-  createdAt: number;
-  likes: number;
-  comments: number;
-  marketId?: string;
+  id: string
+  authorId: string
+  authorName: string
+  content: string
+  createdAt: number
+  likes: number
+  comments: number
+  marketId?: string
 }
 
 export interface GroupChat {
-  id: string;
-  name: string;
-  memberIds: string[];
-  messageCount: number;
-  lastActivity: number;
-  invitedAgent?: boolean;
+  id: string
+  name: string
+  memberIds: string[]
+  messageCount: number
+  lastActivity: number
+  invitedAgent?: boolean
   messages?: Array<{
-    id: string;
-    authorId: string;
-    authorName: string;
-    content: string;
-    timestamp: number;
-  }>;
+    id: string
+    authorId: string
+    authorName: string
+    content: string
+    timestamp: number
+  }>
 }
 
 export interface Tick {
-  number: number;
-  timestamp: number;
-  events: TickEvent[];
-  state: GameState;
+  number: number
+  timestamp: number
+  events: TickEvent[]
+  state: GameState
 }
 
 export interface TickEvent {
-  type: string;
-  timestamp: number;
-  data: Record<string, JsonValue>;
+  type: string
+  timestamp: number
+  data: Record<string, JsonValue>
 }
 
 export interface GroundTruth {
@@ -183,7 +183,7 @@ export interface GroundTruth {
   // =========================================================================
 
   /** Known market outcomes (marketId -> boolean) - REAL */
-  marketOutcomes: Record<string, boolean>;
+  marketOutcomes: Record<string, boolean>
 
   /**
    * Historical price data - REAL
@@ -193,31 +193,31 @@ export interface GroundTruth {
   priceHistory: Record<
     string,
     Array<{ tick: number; timestamp: number; price: number }>
-  >;
+  >
 
   /**
    * Hidden narrative facts that drive causal events - REAL (Causal Mode only)
    * Each fact generates a sequence of events that affect specific tickers
    */
-  hiddenNarrativeFacts?: HiddenNarrativeFact[];
+  hiddenNarrativeFacts?: HiddenNarrativeFact[]
 
   /**
    * Causal events with pre-calculated timing and price changes - REAL (Causal Mode only)
    * These events causally drive price movements, creating a learnable signal
    */
   causalEvents?: Array<{
-    tick: number;
-    day: number;
-    hour: number;
-    eventType: CausalEventType;
-    description: string;
-    affectedTickers: string[];
-    volatilityBucket: VolatilityBucket;
-    isPositive: boolean;
+    tick: number
+    day: number
+    hour: number
+    eventType: CausalEventType
+    description: string
+    affectedTickers: string[]
+    volatilityBucket: VolatilityBucket
+    isPositive: boolean
     /** Pre-calculated percentage change for each ticker (e.g., -0.07 for -7%) */
-    priceChanges: Record<string, number>;
-    sourceFactId: string;
-  }>;
+    priceChanges: Record<string, number>
+    sourceFactId: string
+  }>
 
   // =========================================================================
   // LEGACY/SYNTHETIC DATA - For backward compatibility only
@@ -228,56 +228,56 @@ export interface GroundTruth {
    * @deprecated SYNTHETIC placeholder - simple heuristic, not real optimal actions
    */
   optimalActions: Array<{
-    tick: number;
-    type: string;
-    target: string;
-    expectedValue: number;
-    reason: string;
-  }>;
+    tick: number
+    type: string
+    target: string
+    expectedValue: number
+    reason: string
+  }>
 
   /**
    * @deprecated SYNTHETIC placeholder - not real social opportunities
    */
   socialOpportunities: Array<{
-    tick: number;
-    type: string;
-    value: number;
-    description: string;
-  }>;
+    tick: number
+    type: string
+    value: number
+    description: string
+  }>
 
   /**
    * @deprecated SYNTHETIC - empty array, never meaningfully implemented
    */
   hiddenFacts: Array<{
-    tick: number;
-    fact: string;
-    category: 'market' | 'social' | 'event' | 'insider';
-    value: JsonValue;
-  }>;
+    tick: number
+    fact: string
+    category: 'market' | 'social' | 'event' | 'insider'
+    value: JsonValue
+  }>
 
   /**
    * @deprecated SYNTHETIC - empty array, never meaningfully implemented
    */
   hiddenEvents: Array<{
-    tick: number;
-    type: string;
-    description: string;
-    impact: Record<string, JsonValue>;
-  }>;
+    tick: number
+    type: string
+    description: string
+    impact: Record<string, JsonValue>
+  }>
 
   /** Computed facts from initial state (not synthetic, but not all fields are meaningful) */
-  trueFacts: Record<string, JsonValue>;
+  trueFacts: Record<string, JsonValue>
 }
 
 export interface BenchmarkGameSnapshot {
-  id: string;
-  version: string;
-  createdAt: number;
-  duration: number;
-  tickInterval: number;
-  initialState: GameState;
-  ticks: Tick[];
-  groundTruth: GroundTruth;
+  id: string
+  version: string
+  createdAt: number
+  duration: number
+  tickInterval: number
+  initialState: GameState
+  ticks: Tick[]
+  groundTruth: GroundTruth
 }
 
 /**
@@ -285,15 +285,15 @@ export interface BenchmarkGameSnapshot {
  * Each template defines a hidden fact and its event sequence
  */
 const NARRATIVE_FACT_TEMPLATES: Array<{
-  factTemplate: string;
-  sentiment: 'positive' | 'negative';
+  factTemplate: string
+  sentiment: 'positive' | 'negative'
   /** Event sequence with relative timing and volatility */
   eventSequence: Array<{
-    relativeDay: number; // Days from start (e.g., 5, 10, 15)
-    eventType: CausalEventType;
-    volatilityBucket: VolatilityBucket;
-    descriptionTemplate: string;
-  }>;
+    relativeDay: number // Days from start (e.g., 5, 10, 15)
+    eventType: CausalEventType
+    volatilityBucket: VolatilityBucket
+    descriptionTemplate: string
+  }>
 }> = [
   // Negative narratives (price drops)
   {
@@ -461,7 +461,7 @@ const NARRATIVE_FACT_TEMPLATES: Array<{
       },
     ],
   },
-];
+]
 
 /**
  * Volatility bucket ranges for price changes
@@ -474,17 +474,17 @@ const VOLATILITY_BUCKET_RANGES: Record<
   low: { min: 0.02, max: 0.04 }, // 2% to 4%
   medium: { min: 0.05, max: 0.1 }, // 5% to 10%
   high: { min: 0.15, max: 0.25 }, // 15% to 25%
-};
+}
 
 /**
  * Jitter range in hours for event timing
  * Events are scheduled at base day/hour ± jitter
  */
-const EVENT_JITTER_HOURS = 8;
+const EVENT_JITTER_HOURS = 8
 
 export class BenchmarkDataGenerator {
-  private config: BenchmarkConfig;
-  private rng: SeededRandom;
+  private config: BenchmarkConfig
+  private rng: SeededRandom
 
   constructor(config: BenchmarkConfig) {
     // Validate tickInterval for causal simulation
@@ -492,64 +492,64 @@ export class BenchmarkDataGenerator {
     if (config.useCausalSimulation && config.tickInterval !== 3600) {
       throw new Error(
         `Causal simulation requires tickInterval=3600 (1 hour). Got: ${config.tickInterval}. ` +
-          `The day/hour event scheduling assumes 1 tick per hour.`
-      );
+          `The day/hour event scheduling assumes 1 tick per hour.`,
+      )
     }
 
-    this.config = config;
-    this.rng = new SeededRandom(config.seed || Date.now());
+    this.config = config
+    this.rng = new SeededRandom(config.seed || Date.now())
   }
 
   /**
    * Get the SeededRandom instance for external use (e.g., MarketMoverAgent)
    */
   getRng(): SeededRandom {
-    return this.rng;
+    return this.rng
   }
 
   /**
    * Check if causal simulation mode is enabled
    */
   isCausalSimulationEnabled(): boolean {
-    return this.config.useCausalSimulation === true;
+    return this.config.useCausalSimulation === true
   }
 
   /**
    * Generate a complete benchmark snapshot
    */
   async generate(): Promise<BenchmarkGameSnapshot> {
-    const id = Date.now().toString();
-    const createdAt = Date.now();
+    const id = Date.now().toString()
+    const createdAt = Date.now()
     const numTicks = Math.floor(
-      (this.config.durationMinutes * 60) / this.config.tickInterval
-    );
+      (this.config.durationMinutes * 60) / this.config.tickInterval,
+    )
 
     logger.info('Generating benchmark', {
       id,
       duration: this.config.durationMinutes,
       ticks: numTicks,
-    });
+    })
 
     // Generate initial state
-    const initialState = this.generateInitialState(createdAt);
+    const initialState = this.generateInitialState(createdAt)
 
     // Generate ground truth (outcomes)
-    const groundTruth = this.generateGroundTruth(initialState, numTicks);
+    const groundTruth = this.generateGroundTruth(initialState, numTicks)
 
     // Generate tick-by-tick progression
     const ticks = this.generateTicks(
       initialState,
       groundTruth,
       numTicks,
-      createdAt
-    );
+      createdAt,
+    )
 
     logger.info('Benchmark generated', {
       id,
       ticks: ticks.length,
       markets: initialState.predictionMarkets.length,
       perps: initialState.perpetualMarkets.length,
-    });
+    })
 
     return {
       id,
@@ -560,14 +560,14 @@ export class BenchmarkDataGenerator {
       initialState,
       ticks,
       groundTruth,
-    };
+    }
   }
 
   /**
    * Generate initial game state
    */
   private generateInitialState(timestamp: number): GameState {
-    const predictionMarkets: PredictionMarket[] = [];
+    const predictionMarkets: PredictionMarket[] = []
     const questions = [
       'Will BitcAIn reach $150k by end of month?',
       'Will The FUD announce emergency rate cut?',
@@ -579,25 +579,25 @@ export class BenchmarkDataGenerator {
       'Will AIlon Musk announce Mars colony launch?',
       'Will Mark Zuckerborg rebrand MetAI again?',
       'Will Sam AIltman declare AGI achieved?',
-    ];
+    ]
 
     for (let i = 0; i < this.config.numPredictionMarkets; i++) {
-      const question = questions[i % questions.length];
+      const question = questions[i % questions.length]
       // Generate markets with varied prices (some low, some high)
       // Minimum 10,000 liquidity for acceptable price impact (<5% for $100 trades)
-      const ratio = this.rng.next();
-      const baseLiquidity = 5000; // Each side starts with at least 5000
+      const ratio = this.rng.next()
+      const baseLiquidity = 5000 // Each side starts with at least 5000
       const yesShares =
         ratio < 0.5
           ? baseLiquidity + this.rng.next() * 1500 // 5000-6500 for low side
-          : baseLiquidity + 1500 + this.rng.next() * 3500; // 6500-10000 for high side
+          : baseLiquidity + 1500 + this.rng.next() * 3500 // 6500-10000 for high side
       const noShares =
         ratio < 0.5
           ? baseLiquidity + 1500 + this.rng.next() * 3500 // 6500-10000 for high side
-          : baseLiquidity + this.rng.next() * 1500; // 5000-6500 for low side
-      const totalShares = yesShares + noShares; // Now 10,000 - 16,500 total
-      const yesPrice = yesShares / totalShares;
-      const noPrice = noShares / totalShares;
+          : baseLiquidity + this.rng.next() * 1500 // 5000-6500 for low side
+      const totalShares = yesShares + noShares // Now 10,000 - 16,500 total
+      const yesPrice = yesShares / totalShares
+      const noPrice = noShares / totalShares
 
       if (question) {
         predictionMarkets.push({
@@ -612,17 +612,19 @@ export class BenchmarkDataGenerator {
           resolved: false,
           createdAt: timestamp,
           resolveAt: timestamp + this.config.durationMinutes * 60 * 1000,
-        });
+        })
       }
     }
 
-    const perpetualMarkets: PerpetualMarket[] = [];
-    const tickers = ['BTCAI', 'ETHAI', 'SOLAI', 'TSLAI', 'METAI'];
-    const basePrices = [120000, 4000, 200, 450, 520];
+    const perpetualMarkets: PerpetualMarket[] = []
+    const tickers = ['BTCAI', 'ETHAI', 'SOLAI', 'TSLAI', 'METAI'] as const
+    const basePrices = [120000, 4000, 200, 450, 520] as const
 
     for (let i = 0; i < this.config.numPerpetualMarkets; i++) {
-      const ticker = tickers[i % tickers.length]!;
-      const basePrice = basePrices[i % basePrices.length]!;
+      const tickerIdx = i % tickers.length
+      const priceIdx = i % basePrices.length
+      const ticker = tickers[tickerIdx] ?? 'BTCAI'
+      const basePrice = basePrices[priceIdx] ?? 120000
 
       perpetualMarkets.push({
         ticker,
@@ -632,22 +634,22 @@ export class BenchmarkDataGenerator {
         openInterest: 500000 + this.rng.next() * 1000000,
         fundingRate: (this.rng.next() - 0.5) * 0.002,
         nextFundingTime: timestamp + 8 * 60 * 60 * 1000,
-      });
+      })
     }
 
-    const agents: SimulatedAgent[] = [];
+    const agents: SimulatedAgent[] = []
     for (let i = 0; i < this.config.numAgents; i++) {
       agents.push({
         id: `agent-${i}`,
         name: `Agent ${i}`,
         reputation: 50 + this.rng.next() * 50,
         totalPnl: (this.rng.next() - 0.5) * 1000,
-      });
+      })
     }
 
     // Initialize empty arrays for posts and group chats
-    const posts: Post[] = [];
-    const groupChats: GroupChat[] = [];
+    const posts: Post[] = []
+    const groupChats: GroupChat[] = []
 
     return {
       tick: 0,
@@ -657,7 +659,7 @@ export class BenchmarkDataGenerator {
       agents,
       posts,
       groupChats,
-    };
+    }
   }
 
   /**
@@ -665,22 +667,29 @@ export class BenchmarkDataGenerator {
    * Selects ONE dominant narrative that affects a specific ticker
    */
   private generateHiddenNarrativeFact(
-    initialState: GameState
+    initialState: GameState,
   ): HiddenNarrativeFact {
     // Select a random narrative template
     const templateIndex = Math.floor(
-      this.rng.next() * NARRATIVE_FACT_TEMPLATES.length
-    );
-    const template = NARRATIVE_FACT_TEMPLATES[templateIndex]!;
+      this.rng.next() * NARRATIVE_FACT_TEMPLATES.length,
+    )
+    const template = NARRATIVE_FACT_TEMPLATES[templateIndex]
+    if (!template) {
+      throw new Error('No narrative fact templates available')
+    }
 
     // Select a random ticker to be affected
     const tickerIndex = Math.floor(
-      this.rng.next() * initialState.perpetualMarkets.length
-    );
-    const affectedTicker = initialState.perpetualMarkets[tickerIndex]!.ticker;
+      this.rng.next() * initialState.perpetualMarkets.length,
+    )
+    const market = initialState.perpetualMarkets[tickerIndex]
+    if (!market) {
+      throw new Error('No perpetual markets available for narrative fact')
+    }
+    const affectedTicker = market.ticker
 
     // Generate the fact description by replacing {ticker} placeholder
-    const fact = template.factTemplate.replace(/{ticker}/g, affectedTicker);
+    const fact = template.factTemplate.replace(/{ticker}/g, affectedTicker)
 
     // Generate event schedule with jitter
     const eventSchedule: ScheduledCausalEvent[] = template.eventSequence.map(
@@ -688,11 +697,11 @@ export class BenchmarkDataGenerator {
         // Calculate jitter: ±EVENT_JITTER_HOURS hours
         // Use rng to get a value between -EVENT_JITTER_HOURS and +EVENT_JITTER_HOURS
         const jitterHours = Math.round(
-          (this.rng.next() * 2 - 1) * EVENT_JITTER_HOURS
-        );
+          (this.rng.next() * 2 - 1) * EVENT_JITTER_HOURS,
+        )
 
         // Base hour is random within the day (but during "market hours" 8am-8pm for realism)
-        const baseHour = 8 + Math.floor(this.rng.next() * 12); // 8am to 8pm
+        const baseHour = 8 + Math.floor(this.rng.next() * 12) // 8am to 8pm
 
         return {
           baseDay: event.relativeDay,
@@ -703,11 +712,11 @@ export class BenchmarkDataGenerator {
           isPositive: template.sentiment === 'positive',
           descriptionTemplate: event.descriptionTemplate.replace(
             /{ticker}/g,
-            affectedTicker
+            affectedTicker,
           ),
-        };
-      }
-    );
+        }
+      },
+    )
 
     return {
       id: `narrative-fact-${Date.now()}-${Math.floor(this.rng.next() * 1000000)}`,
@@ -715,7 +724,7 @@ export class BenchmarkDataGenerator {
       affectsTickers: [affectedTicker],
       eventSchedule,
       sentiment: template.sentiment,
-    };
+    }
   }
 
   /**
@@ -724,24 +733,24 @@ export class BenchmarkDataGenerator {
    */
   private calculateEventTick(
     event: ScheduledCausalEvent,
-    ticksPerHour: number
+    ticksPerHour: number,
   ): { tick: number; day: number; hour: number } {
     // Calculate total hours from start: (day - 1) * 24 + hour + jitter
     // Day 1 starts at hour 0, so day 5 hour 12 = (5-1) * 24 + 12 = 108 hours
     const totalHours =
-      (event.baseDay - 1) * 24 + event.baseHour + event.jitterHours;
+      (event.baseDay - 1) * 24 + event.baseHour + event.jitterHours
 
     // Clamp to valid range (at least hour 1, at most day 29)
-    const clampedHours = Math.max(1, Math.min(totalHours, 29 * 24 - 1));
+    const clampedHours = Math.max(1, Math.min(totalHours, 29 * 24 - 1))
 
     // Convert back to day and hour
-    const day = Math.floor(clampedHours / 24) + 1;
-    const hour = clampedHours % 24;
+    const day = Math.floor(clampedHours / 24) + 1
+    const hour = clampedHours % 24
 
     // Calculate tick number
-    const tick = clampedHours * ticksPerHour;
+    const tick = clampedHours * ticksPerHour
 
-    return { tick, day, hour };
+    return { tick, day, hour }
   }
 
   /**
@@ -750,11 +759,11 @@ export class BenchmarkDataGenerator {
    */
   private selectPercentageFromBucket(
     bucket: VolatilityBucket,
-    isPositive: boolean
+    isPositive: boolean,
   ): number {
-    const range = VOLATILITY_BUCKET_RANGES[bucket];
-    const magnitude = range.min + this.rng.next() * (range.max - range.min);
-    return isPositive ? magnitude : -magnitude;
+    const range = VOLATILITY_BUCKET_RANGES[bucket]
+    const magnitude = range.min + this.rng.next() * (range.max - range.min)
+    return isPositive ? magnitude : -magnitude
   }
 
   /**
@@ -762,37 +771,37 @@ export class BenchmarkDataGenerator {
    */
   private generateGroundTruth(
     initialState: GameState,
-    numTicks: number
+    numTicks: number,
   ): GroundTruth {
     // Randomly determine market outcomes
-    const marketOutcomes: Record<string, boolean> = {};
+    const marketOutcomes: Record<string, boolean> = {}
     for (const market of initialState.predictionMarkets) {
-      marketOutcomes[market.id] = this.rng.next() > 0.5;
+      marketOutcomes[market.id] = this.rng.next() > 0.5
     }
 
     // Calculate ticks per hour (for event scheduling)
-    const ticksPerHour = Math.floor(3600 / this.config.tickInterval);
+    const ticksPerHour = Math.floor(3600 / this.config.tickInterval)
 
     // Generate causal simulation data if enabled
-    let hiddenNarrativeFacts: HiddenNarrativeFact[] | undefined;
-    let causalEvents: GroundTruth['causalEvents'] | undefined;
+    let hiddenNarrativeFacts: HiddenNarrativeFact[] | undefined
+    let causalEvents: GroundTruth['causalEvents'] | undefined
 
     if (this.config.useCausalSimulation) {
       // Generate ONE dominant narrative fact
-      const narrativeFact = this.generateHiddenNarrativeFact(initialState);
-      hiddenNarrativeFacts = [narrativeFact];
+      const narrativeFact = this.generateHiddenNarrativeFact(initialState)
+      hiddenNarrativeFacts = [narrativeFact]
 
       // Pre-calculate causal events with their timing and price changes
       causalEvents = narrativeFact.eventSchedule.map((scheduledEvent) => {
-        const timing = this.calculateEventTick(scheduledEvent, ticksPerHour);
+        const timing = this.calculateEventTick(scheduledEvent, ticksPerHour)
 
         // Calculate price changes for each affected ticker
-        const priceChanges: Record<string, number> = {};
+        const priceChanges: Record<string, number> = {}
         for (const ticker of narrativeFact.affectsTickers) {
           priceChanges[ticker] = this.selectPercentageFromBucket(
             scheduledEvent.volatilityBucket,
-            scheduledEvent.isPositive
-          );
+            scheduledEvent.isPositive,
+          )
         }
 
         return {
@@ -806,11 +815,11 @@ export class BenchmarkDataGenerator {
           isPositive: scheduledEvent.isPositive,
           priceChanges,
           sourceFactId: narrativeFact.id,
-        };
-      });
+        }
+      })
 
       // Sort events by tick
-      causalEvents.sort((a, b) => a.tick - b.tick);
+      causalEvents.sort((a, b) => a.tick - b.tick)
 
       logger.info('Generated causal simulation data', {
         narrativeFact: narrativeFact.fact,
@@ -822,7 +831,7 @@ export class BenchmarkDataGenerator {
           hour: e.hour,
           type: e.eventType,
         })),
-      });
+      })
     }
 
     // Generate price history for perpetuals
@@ -831,75 +840,73 @@ export class BenchmarkDataGenerator {
     const priceHistory: Record<
       string,
       Array<{ tick: number; timestamp: number; price: number }>
-    > = {};
+    > = {}
 
     if (!this.config.useCausalSimulation) {
       // Random walk mode (backward compatible)
       for (const perp of initialState.perpetualMarkets) {
         const history: Array<{
-          tick: number;
-          timestamp: number;
-          price: number;
-        }> = [];
-        let currentPrice = perp.price;
+          tick: number
+          timestamp: number
+          price: number
+        }> = []
+        let currentPrice = perp.price
 
         for (let tick = 0; tick < numTicks; tick++) {
           // Random walk with drift
-          const change = (this.rng.next() - 0.48) * 0.02; // Slight upward bias
-          currentPrice = currentPrice * (1 + change);
+          const change = (this.rng.next() - 0.48) * 0.02 // Slight upward bias
+          currentPrice = currentPrice * (1 + change)
 
           history.push({
             tick,
             timestamp: 0, // Will be filled in during tick generation
             price: currentPrice,
-          });
+          })
         }
 
-        priceHistory[perp.ticker] = history;
+        priceHistory[perp.ticker] = history
       }
     } else {
       // Causal simulation mode: generate price history based on events
       // Prices start at initial values and only change when events occur
       for (const perp of initialState.perpetualMarkets) {
         const history: Array<{
-          tick: number;
-          timestamp: number;
-          price: number;
-        }> = [];
-        let currentPrice = perp.price;
+          tick: number
+          timestamp: number
+          price: number
+        }> = []
+        let currentPrice = perp.price
 
         // Build a map of tick -> price change for this ticker
-        const priceChangesByTick = new Map<number, number>();
+        const priceChangesByTick = new Map<number, number>()
         if (causalEvents) {
           for (const event of causalEvents) {
-            if (event.priceChanges[perp.ticker] !== undefined) {
-              priceChangesByTick.set(
-                event.tick,
-                event.priceChanges[perp.ticker]!
-              );
+            const priceChangeForTicker = event.priceChanges[perp.ticker]
+            if (priceChangeForTicker !== undefined) {
+              priceChangesByTick.set(event.tick, priceChangeForTicker)
             }
           }
         }
 
         for (let tick = 0; tick < numTicks; tick++) {
           // Apply price change if there's an event at this tick
-          const priceChange = priceChangesByTick.get(tick);
+          const priceChange = priceChangesByTick.get(tick)
           if (priceChange !== undefined) {
-            currentPrice = currentPrice * (1 + priceChange);
+            currentPrice = currentPrice * (1 + priceChange)
             // Enforce price bounds: 10% to 400% of initial price
-            const minPrice = perp.price * 0.1;
-            const maxPrice = perp.price * 4.0;
-            currentPrice = Math.max(minPrice, Math.min(maxPrice, currentPrice));
+            const minPrice = perp.price * 0.1
+            const maxPrice = perp.price * 4.0
+            currentPrice = Math.max(minPrice, Math.min(maxPrice, currentPrice))
           }
 
           history.push({
             tick,
             timestamp: 0, // Will be filled in during tick generation
             price: currentPrice,
-          });
+          })
         }
 
-        priceHistory[perp.ticker] = history;
+        priceHistory[perp.ticker] = history
       }
     }
 
@@ -912,7 +919,7 @@ export class BenchmarkDataGenerator {
 
     // SYNTHETIC: Simple heuristic - buying the correct outcome at tick 1
     // This is NOT a sophisticated optimal action calculation
-    const optimalActions: GroundTruth['optimalActions'] = [];
+    const optimalActions: GroundTruth['optimalActions'] = []
     for (const [marketId, outcome] of Object.entries(marketOutcomes)) {
       optimalActions.push({
         tick: 1,
@@ -920,41 +927,41 @@ export class BenchmarkDataGenerator {
         target: marketId,
         expectedValue: 100, // Placeholder value
         reason: `[SYNTHETIC] Market ${marketId} will resolve ${outcome ? 'YES' : 'NO'}`,
-      });
+      })
     }
 
     // SYNTHETIC: Placeholder social opportunities at regular intervals
-    const socialOpportunities: GroundTruth['socialOpportunities'] = [];
-    const socialInterval = Math.max(1, Math.floor(numTicks / 5));
+    const socialOpportunities: GroundTruth['socialOpportunities'] = []
+    const socialInterval = Math.max(1, Math.floor(numTicks / 5))
     for (let i = 0; i < numTicks; i += socialInterval) {
       socialOpportunities.push({
         tick: i,
         type: 'synthetic_opportunity',
         value: 100, // Fixed placeholder value
         description: `[SYNTHETIC] Placeholder opportunity at tick ${i}`,
-      });
+      })
     }
 
     // SYNTHETIC: Empty arrays - these were never meaningfully implemented
-    const hiddenFacts: GroundTruth['hiddenFacts'] = [];
-    const hiddenEvents: GroundTruth['hiddenEvents'] = [];
+    const hiddenFacts: GroundTruth['hiddenFacts'] = []
+    const hiddenEvents: GroundTruth['hiddenEvents'] = []
 
     // TRUE FACTS: Actual computed values from initial state
     const trueFacts: GroundTruth['trueFacts'] = {
       totalLiquidity: initialState.predictionMarkets.reduce(
         (sum, m) => sum + m.liquidity,
-        0
+        0,
       ),
       averageMarketPrice:
         initialState.predictionMarkets.length > 0
           ? initialState.predictionMarkets.reduce(
               (sum, m) => sum + m.yesPrice,
-              0
+              0,
             ) / initialState.predictionMarkets.length
           : 0,
       numPerpetualMarkets: initialState.perpetualMarkets.length,
       numAgents: initialState.agents.length,
-    };
+    }
 
     return {
       marketOutcomes,
@@ -966,7 +973,7 @@ export class BenchmarkDataGenerator {
       trueFacts,
       hiddenNarrativeFacts,
       causalEvents,
-    };
+    }
   }
 
   /**
@@ -976,9 +983,9 @@ export class BenchmarkDataGenerator {
     initialState: GameState,
     groundTruth: GroundTruth,
     numTicks: number,
-    startTimestamp: number
+    startTimestamp: number,
   ): Tick[] {
-    const ticks: Tick[] = [];
+    const ticks: Tick[] = []
     // Create a mutable copy of initial state
     const currentState: GameState = {
       ...initialState,
@@ -987,22 +994,22 @@ export class BenchmarkDataGenerator {
       agents: [...initialState.agents],
       posts: initialState.posts ? [...initialState.posts] : [],
       groupChats: initialState.groupChats ? [...initialState.groupChats] : [],
-    };
+    }
 
     // Track group chats across ticks
-    const groupChatMap = new Map<string, GroupChat>();
-    let nextGroupChatId = 0;
+    const groupChatMap = new Map<string, GroupChat>()
+    let nextGroupChatId = 0
 
     for (let i = 0; i < numTicks; i++) {
       const tickTimestamp =
-        startTimestamp + (i + 1) * this.config.tickInterval * 1000;
-      const events: TickEvent[] = [];
+        startTimestamp + (i + 1) * this.config.tickInterval * 1000
+      const events: TickEvent[] = []
 
       // Update perpetual prices
       for (const perp of currentState.perpetualMarkets) {
-        const tickerHistory = groundTruth.priceHistory[perp.ticker];
-        const priceAtTick = tickerHistory?.[i];
-        const newPrice = priceAtTick?.price ?? perp.price;
+        const tickerHistory = groundTruth.priceHistory[perp.ticker]
+        const priceAtTick = tickerHistory?.[i]
+        const newPrice = priceAtTick?.price ?? perp.price
         events.push({
           type: 'price:updated',
           timestamp: tickTimestamp,
@@ -1011,15 +1018,15 @@ export class BenchmarkDataGenerator {
             oldPrice: perp.price,
             newPrice,
           },
-        });
-        perp.price = newPrice;
+        })
+        perp.price = newPrice
       }
 
       // Simulate some agent actions
       if (this.rng.next() > 0.5) {
-        const agentId = `agent-${Math.floor(this.rng.next() * this.config.numAgents)}`;
-        const marketId = `market-${Math.floor(this.rng.next() * this.config.numPredictionMarkets)}`;
-        const outcome = this.rng.next() > 0.5 ? 'YES' : 'NO';
+        const agentId = `agent-${Math.floor(this.rng.next() * this.config.numAgents)}`
+        const marketId = `market-${Math.floor(this.rng.next() * this.config.numPredictionMarkets)}`
+        const outcome = this.rng.next() > 0.5 ? 'YES' : 'NO'
 
         events.push({
           type: 'market:trade',
@@ -1030,21 +1037,21 @@ export class BenchmarkDataGenerator {
             outcome,
             amount: 10 + this.rng.next() * 90,
           },
-        });
+        })
       }
 
       // Simulate social activity - create posts and add to state
       if (this.rng.next() > 0.7) {
-        const agentId = `agent-${Math.floor(this.rng.next() * this.config.numAgents)}`;
+        const agentId = `agent-${Math.floor(this.rng.next() * this.config.numAgents)}`
         const agent = currentState.agents.find(
-          (a: { id: string }) => a.id === agentId
-        );
-        const marketId = `market-${Math.floor(this.rng.next() * this.config.numPredictionMarkets)}`;
+          (a: { id: string }) => a.id === agentId,
+        )
+        const marketId = `market-${Math.floor(this.rng.next() * this.config.numPredictionMarkets)}`
         const market = currentState.predictionMarkets.find(
-          (m: { id: string; question: string }) => m.id === marketId
-        );
+          (m: { id: string; question: string }) => m.id === marketId,
+        )
 
-        const postId = `post-${i}-${Math.floor(this.rng.next() * 1000000)}`;
+        const postId = `post-${i}-${Math.floor(this.rng.next() * 1000000)}`
         const post: Post = {
           id: postId,
           authorId: agentId,
@@ -1054,17 +1061,17 @@ export class BenchmarkDataGenerator {
           likes: Math.floor(this.rng.next() * 20),
           comments: Math.floor(this.rng.next() * 5),
           marketId,
-        };
+        }
 
         // Add post to state
         if (!currentState.posts) {
-          currentState.posts = [];
+          currentState.posts = []
         }
-        currentState.posts.push(post);
+        currentState.posts.push(post)
 
         // Keep only last 50 posts to avoid memory issues
         if (currentState.posts.length > 50) {
-          currentState.posts = currentState.posts.slice(-50);
+          currentState.posts = currentState.posts.slice(-50)
         }
 
         events.push({
@@ -1077,17 +1084,17 @@ export class BenchmarkDataGenerator {
             content: post.content,
             marketId: post.marketId ?? null,
           },
-        });
+        })
       }
 
       // Simulate group chat creation and messages
       if (this.rng.next() > 0.95 && i > 5) {
         // Create a new group chat occasionally
-        const groupChatId = `group-${nextGroupChatId++}`;
-        const adminAgentId = `agent-${Math.floor(this.rng.next() * this.config.numAgents)}`;
+        const groupChatId = `group-${nextGroupChatId++}`
+        const adminAgentId = `agent-${Math.floor(this.rng.next() * this.config.numAgents)}`
         const adminAgent = currentState.agents.find(
-          (a: { id: string }) => a.id === adminAgentId
-        );
+          (a: { id: string }) => a.id === adminAgentId,
+        )
 
         const groupChat: GroupChat = {
           id: groupChatId,
@@ -1097,14 +1104,14 @@ export class BenchmarkDataGenerator {
           lastActivity: tickTimestamp,
           invitedAgent: false,
           messages: [],
-        };
+        }
 
-        groupChatMap.set(groupChatId, groupChat);
+        groupChatMap.set(groupChatId, groupChat)
 
         if (!currentState.groupChats) {
-          currentState.groupChats = [];
+          currentState.groupChats = []
         }
-        currentState.groupChats.push(groupChat);
+        currentState.groupChats.push(groupChat)
 
         events.push({
           type: 'group:created',
@@ -1114,20 +1121,22 @@ export class BenchmarkDataGenerator {
             adminId: adminAgentId,
             name: groupChat.name,
           },
-        });
+        })
       }
 
       // Add messages to existing group chats - INSIDER ALPHA CONTENT
       // These messages should contain actionable information tied to ground truth
       for (const [groupId, groupChat] of groupChatMap.entries()) {
         if (this.rng.next() > 0.8 && groupChat.memberIds.length > 0) {
-          const senderId =
-            groupChat.memberIds[
-              Math.floor(this.rng.next() * groupChat.memberIds.length)
-            ]!;
+          const senderIdx = Math.floor(
+            this.rng.next() * groupChat.memberIds.length,
+          )
+          const senderId = groupChat.memberIds[senderIdx]
+          if (!senderId) continue
+
           const sender = currentState.agents.find(
-            (a: { id: string }) => a.id === senderId
-          );
+            (a: { id: string }) => a.id === senderId,
+          )
 
           // Generate insider-style content tied to market/question outcomes
           const insiderMessages = [
@@ -1145,31 +1154,30 @@ export class BenchmarkDataGenerator {
             `Anyone else seeing the weakness in $PERP-0? Time to short?`,
             // Contradicting public statements
             `Ignore what I posted publicly. Q2 is a buy.`,
-          ];
+          ] as const
 
-          const messageId = `msg-${i}-${groupId}-${Math.floor(this.rng.next() * 1000000)}`;
-          const randomInsiderMsg =
-            insiderMessages[
-              Math.floor(this.rng.next() * insiderMessages.length)
-            ]!;
+          const messageId = `msg-${i}-${groupId}-${Math.floor(this.rng.next() * 1000000)}`
+          const msgIdx = Math.floor(this.rng.next() * insiderMessages.length)
+          const randomInsiderMsg = insiderMessages[msgIdx] ?? insiderMessages[0]
           const message = {
             id: messageId,
             authorId: senderId,
-            authorName: sender?.name || `Agent ${senderId.split('-')[1]}`,
+            authorName:
+              sender?.name ?? `Agent ${senderId.split('-')[1] ?? 'unknown'}`,
             content: randomInsiderMsg,
             timestamp: tickTimestamp,
-          };
+          }
 
           if (!groupChat.messages) {
-            groupChat.messages = [];
+            groupChat.messages = []
           }
-          groupChat.messages.push(message);
-          groupChat.messageCount++;
-          groupChat.lastActivity = tickTimestamp;
+          groupChat.messages.push(message)
+          groupChat.messageCount++
+          groupChat.lastActivity = tickTimestamp
 
           // Keep only last 20 messages per group
           if (groupChat.messages.length > 20) {
-            groupChat.messages = groupChat.messages.slice(-20);
+            groupChat.messages = groupChat.messages.slice(-20)
           }
 
           events.push({
@@ -1181,7 +1189,7 @@ export class BenchmarkDataGenerator {
               authorId: senderId,
               content: message.content,
             },
-          });
+          })
         }
       }
 
@@ -1194,9 +1202,9 @@ export class BenchmarkDataGenerator {
         const groupChat =
           currentState.groupChats[
             Math.floor(this.rng.next() * currentState.groupChats.length)
-          ];
+          ]
         if (groupChat && groupChat.memberIds.length < 10) {
-          groupChat.invitedAgent = true;
+          groupChat.invitedAgent = true
           events.push({
             type: 'group:invite',
             timestamp: tickTimestamp,
@@ -1205,16 +1213,16 @@ export class BenchmarkDataGenerator {
               groupName: groupChat.name,
               inviterId: groupChat.memberIds[0] ?? 'unknown',
             },
-          });
+          })
         }
       }
 
       // Update current state
-      currentState.tick = i + 1;
-      currentState.timestamp = tickTimestamp;
+      currentState.tick = i + 1
+      currentState.timestamp = tickTimestamp
 
       // Update group chats array from map
-      currentState.groupChats = Array.from(groupChatMap.values());
+      currentState.groupChats = Array.from(groupChatMap.values())
 
       // Create snapshot of state (shallow copy is sufficient since we're not mutating nested objects)
       const stateSnapshot: GameState = {
@@ -1230,17 +1238,17 @@ export class BenchmarkDataGenerator {
               messages: gc.messages ? [...gc.messages] : undefined,
             }))
           : [],
-      };
+      }
 
       ticks.push({
         number: i,
         timestamp: tickTimestamp,
         events,
         state: stateSnapshot,
-      });
+      })
     }
 
-    return ticks;
+    return ticks
   }
 }
 
@@ -1249,10 +1257,10 @@ export class BenchmarkDataGenerator {
  * Exported for use by other components (e.g., MarketMoverAgent)
  */
 export class SeededRandom {
-  private seed: number;
+  private seed: number
 
   constructor(seed: number) {
-    this.seed = seed;
+    this.seed = seed
   }
 
   /**
@@ -1260,29 +1268,34 @@ export class SeededRandom {
    */
   next(): number {
     // Linear congruential generator
-    this.seed = (this.seed * 1664525 + 1013904223) % 4294967296;
-    return this.seed / 4294967296;
+    this.seed = (this.seed * 1664525 + 1013904223) % 4294967296
+    return this.seed / 4294967296
   }
 
   /**
    * Generate a random integer in the range [min, max] (inclusive)
    */
   nextInt(min: number, max: number): number {
-    return Math.floor(this.next() * (max - min + 1)) + min;
+    return Math.floor(this.next() * (max - min + 1)) + min
   }
 
   /**
    * Generate a random float in the range [min, max]
    */
   nextFloat(min: number, max: number): number {
-    return min + this.next() * (max - min);
+    return min + this.next() * (max - min)
   }
 
   /**
    * Pick a random element from an array
+   * @throws Error if array is empty
    */
-  pick<T>(array: T[]): T {
-    const index = Math.floor(this.next() * array.length);
-    return array[index]!;
+  pick<T>(array: readonly T[]): T {
+    if (array.length === 0) {
+      throw new Error('Cannot pick from empty array')
+    }
+    const index = Math.floor(this.next() * array.length)
+    // Safe because we checked length > 0
+    return array[index] as T
   }
 }

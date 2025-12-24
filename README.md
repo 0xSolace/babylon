@@ -81,18 +81,36 @@ bun run dev   # ← Automatically starts web + game engine!
 
 Visit `http://localhost:5007` - everything runs and generates content automatically!
 
-### What `bun run dev` Does (Standalone)
+### What `bun run dev` Does
 
-1. **Pre-dev setup** (`pre-dev-local.ts`):
-   - Starts Docker containers (Redis, MinIO)
-   - Initializes CQL database connection
-   - Seeds initial data
+The unified development script (`dev-unified.ts`) starts:
 
-2. **Development wrapper** (`dev-wrapper.ts`):
-   - Starts Hardhat node (local blockchain on port 8545)
-   - Deploys contracts automatically
-   - Starts Next.js web app (port 5007)
-   - Runs local cron simulator (game/agent ticks)
+1. **Elysia backend server** on port 5008
+   - REST API endpoints
+   - WebSocket realtime server
+   - A2A/MCP protocol handlers
+   - API documentation at http://localhost:5008/docs
+
+2. **Next.js frontend** on port 5007
+   - React web application
+   - Connects to backend API automatically
+
+### Alternative Development Modes
+
+```bash
+# Unified mode (recommended)
+bun run dev              # Backend (5008) + Frontend (5007)
+
+# Individual services
+bun run dev:backend      # Elysia backend only
+bun run dev:frontend     # Next.js frontend only
+
+# Standalone mode (with local Docker services)
+bun run dev:standalone   # Includes PostgreSQL, Redis, MinIO setup
+
+# Jeju integrated mode
+bun run dev:jeju         # Uses Jeju decentralized services
+```
 
 ---
 
@@ -189,17 +207,15 @@ Use if you're only working on frontend and don't need live cron-driven content.
 
 ### Real-Time Updates
 
-The application uses **Server-Sent Events (SSE)** for real-time updates (Vercel-compatible):
+The application uses **Server-Sent Events (SSE)** for real-time updates:
 - Feed updates (new posts)
 - Market price changes
 - Breaking news
 - Chat messages
 
-**For Production (Vercel):** Optionally set up Redis for cross-instance broadcasting:
+**For Production:** Optionally set up Redis for cross-instance broadcasting:
 ```bash
-# Add to Vercel environment variables
-UPSTASH_REDIS_REST_URL=https://your-redis-url.upstash.io
-UPSTASH_REDIS_REST_TOKEN=your-token
+REDIS_URL=redis://your-redis-instance:6379
 ```
 
 ---
@@ -234,21 +250,6 @@ bun run contracts:test     # Smart contracts
 
 ## 🚢 Deployment
 
-### Standalone Deployment (Vercel)
-
-```bash
-npm i -g vercel
-vercel deploy --prod
-```
-
-**Required Environment Variables:**
-
-- `CQL_BLOCK_PRODUCER_ENDPOINT` - CovenantQL endpoint
-- `JEJU_OAUTH3_SERVICE_URL` - OAuth3 authentication service
-- `OPENAI_API_KEY` or `GROQ_API_KEY` - AI agents
-
-See `.env.example` for complete list.
-
 ### Contract Deployment
 
 ```bash
@@ -262,9 +263,26 @@ babylon deploy testnet
 babylon deploy mainnet --force
 ```
 
-### Jeju Production Deployment
+### Decentralized Deployment (via Jeju)
 
-When deploying with Jeju, additional environment variables are required:
+Deploy frontend to IPFS/Arweave with JNS resolution:
+
+```bash
+# Build static site
+bun run build:static
+
+# Deploy to decentralized infrastructure
+bun run deploy:frontend
+```
+
+**Required Environment Variables:**
+
+- `JEJU_NETWORK` - Network: localnet, testnet, mainnet
+- `CQL_BLOCK_PRODUCER_ENDPOINT` - CovenantQL endpoint (or auto-resolved via JEJU_NETWORK)
+- `JEJU_OAUTH3_SERVICE_URL` - OAuth3 authentication service
+- `OPENAI_API_KEY` or `GROQ_API_KEY` - AI agents
+
+**Full Decentralized Config:**
 
 ```bash
 # On-chain integration
@@ -283,6 +301,8 @@ PHALA_ENDPOINT=https://...      # Phala CVM endpoint
 STORAGE_MODE=jeju               # Use Jeju decentralized storage
 JEJU_STORAGE_URL=https://...    # Jeju storage endpoint
 ```
+
+See `.env.example` for complete list.
 
 ---
 

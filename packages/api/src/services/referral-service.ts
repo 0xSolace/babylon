@@ -6,9 +6,13 @@
  * each user has a unique referral code for tracking referrals.
  */
 
-import { and, db, eq, ne, users } from '@babylon/db';
-import { logger } from '@babylon/shared';
-import { BadRequestError, ConflictError, NotFoundError } from '../errors';
+import { and, db, eq, ne, users } from '@babylon/db'
+import {
+  BadRequestError,
+  ConflictError,
+  logger,
+  NotFoundError,
+} from '@babylon/shared'
 
 /**
  * Get or create a referral code for a user
@@ -29,7 +33,12 @@ import { BadRequestError, ConflictError, NotFoundError } from '../errors';
  */
 export async function getOrCreateReferralCode(userId: string): Promise<string> {
   // Get user with username and referral code
-  const result = await db
+  type UserRow = {
+    id: string
+    username: string | null
+    referralCode: string | null
+  }
+  const result = (await db
     .select({
       id: users.id,
       username: users.username,
@@ -37,47 +46,49 @@ export async function getOrCreateReferralCode(userId: string): Promise<string> {
     })
     .from(users)
     .where(eq(users.id, userId))
-    .limit(1);
+    .limit(1)) as UserRow[]
 
-  const user = result[0];
+  const user = result[0]
 
   if (!user) {
-    throw new NotFoundError(`User not found: ${userId}`);
+    throw new NotFoundError(`User not found: ${userId}`)
   }
 
   // Username is required during signup, so it should always exist
   if (!user.username) {
     throw new BadRequestError(
-      `User ${userId} does not have a username. Username is required for referral codes.`
-    );
+      `User ${userId} does not have a username. Username is required for referral codes.`,
+    )
   }
+
+  const username = user.username
 
   // Check if username is already used as a referral code by another user
   const existingUserWithCode = await db
     .select({ id: users.id })
     .from(users)
-    .where(and(eq(users.referralCode, user.username), ne(users.id, userId)))
-    .limit(1);
+    .where(and(eq(users.referralCode, username), ne(users.id, userId)))
+    .limit(1)
 
   if (existingUserWithCode.length > 0) {
     throw new ConflictError(
-      `Username "${user.username}" is already used as a referral code by another user`
-    );
+      `Username "${username}" is already used as a referral code by another user`,
+    )
   }
 
   // Update referral code to username if it's different
-  if (user.referralCode !== user.username) {
+  if (user.referralCode !== username) {
     await db
       .update(users)
-      .set({ referralCode: user.username })
-      .where(eq(users.id, userId));
+      .set({ referralCode: username })
+      .where(eq(users.id, userId))
 
     logger.info(
-      `Updated referral code to username for user ${userId}: ${user.username}`,
-      { userId, code: user.username },
-      'ReferralService'
-    );
+      `Updated referral code to username for user ${userId}: ${username}`,
+      { userId, code: username },
+      'ReferralService',
+    )
   }
 
-  return user.username;
+  return username
 }

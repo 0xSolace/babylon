@@ -1,27 +1,25 @@
-'use client';
-
-import { cn } from '@babylon/shared';
-import type { LucideIcon } from 'lucide-react';
+import { cn } from '@babylon/shared'
+import type { LucideIcon } from 'lucide-react'
 
 /**
  * Props for the EmptyState component.
  */
 interface EmptyStateProps {
   /** Optional icon to display */
-  icon?: LucideIcon;
+  icon?: LucideIcon
   /** Title text */
-  title: string;
+  title: string
   /** Description text */
-  description: string;
+  description: string
   /** Optional action button */
   action?: {
     /** Button label */
-    label: string;
+    label: string
     /** Button click handler */
-    onClick: () => void;
-  };
+    onClick: () => void
+  }
   /** Additional CSS classes */
-  className?: string;
+  className?: string
 }
 
 /**
@@ -54,7 +52,7 @@ export function EmptyState({
     <div
       className={cn(
         'flex flex-col items-center justify-center px-4 py-12 text-center',
-        className
+        className,
       )}
     >
       {Icon && (
@@ -68,6 +66,7 @@ export function EmptyState({
       </p>
       {action && (
         <button
+          type="button"
           onClick={action.onClick}
           className="rounded-md bg-primary px-6 py-2 font-medium text-primary-foreground transition-colors hover:bg-primary/90"
         >
@@ -75,5 +74,5 @@ export function EmptyState({
         </button>
       )}
     </div>
-  );
+  )
 }

@@ -5,36 +5,37 @@
  * Uses the games table only (doesn't depend on ActorState/OrganizationState).
  */
 
-import { afterEach, describe, expect, it } from 'bun:test';
-import { db, eq, games, generateSnowflakeId } from '@babylon/db';
+import { afterEach, describe, expect, it } from 'bun:test'
+import { db, eq, games } from '@babylon/db'
+import { generateSnowflakeId } from '@babylon/shared'
 
 // Check if database is available
-const hasDatabase = !!process.env.DATABASE_URL;
+const hasDatabase = !!process.env.DATABASE_URL
 
 // Test game creation/auto-start logic directly on games table
 // Skip tests if database is not available
 describe.skipIf(!hasDatabase)('Game Auto-Start Logic', () => {
-  const createdGameIds: string[] = [];
+  const createdGameIds: string[] = []
 
   afterEach(async () => {
     // Clean up test games
     for (const gameId of createdGameIds) {
-      await db.delete(games).where(eq(games.id, gameId));
+      await db.delete(games).where(eq(games.id, gameId))
     }
-    createdGameIds.length = 0;
-  });
+    createdGameIds.length = 0
+  })
 
   it('should have a continuous game in the database', async () => {
     // Check if a continuous game exists
     const existingGames = await db
       .select()
       .from(games)
-      .where(eq(games.isContinuous, true));
+      .where(eq(games.isContinuous, true))
 
     // If no game exists, create one (simulating what bootstrap does)
     if (existingGames.length === 0) {
-      const gameId = await generateSnowflakeId();
-      createdGameIds.push(gameId);
+      const gameId = await generateSnowflakeId()
+      createdGameIds.push(gameId)
 
       await db.insert(games).values({
         id: gameId,
@@ -43,40 +44,40 @@ describe.skipIf(!hasDatabase)('Game Auto-Start Logic', () => {
         currentDay: 1,
         startedAt: new Date(),
         updatedAt: new Date(),
-      });
+      })
 
       // Verify it was created
       const createdGame = await db
         .select()
         .from(games)
-        .where(eq(games.id, gameId));
+        .where(eq(games.id, gameId))
 
-      expect(createdGame.length).toBe(1);
-      expect(createdGame[0]?.isRunning).toBe(true);
-      expect(createdGame[0]?.isContinuous).toBe(true);
+      expect(createdGame.length).toBe(1)
+      expect(createdGame[0]?.isRunning).toBe(true)
+      expect(createdGame[0]?.isContinuous).toBe(true)
     } else {
       // Game exists - verify it's configured correctly
-      const game = existingGames[0];
-      expect(game?.isContinuous).toBe(true);
+      const game = existingGames[0]
+      expect(game?.isContinuous).toBe(true)
       console.log(
-        `Existing game found: ${game?.id}, isRunning: ${game?.isRunning}`
-      );
+        `Existing game found: ${game?.id}, isRunning: ${game?.isRunning}`,
+      )
     }
-  });
+  })
 
   it('should be able to start a paused game', async () => {
     // Get or create a continuous game
     const existingGames = await db
       .select()
       .from(games)
-      .where(eq(games.isContinuous, true));
+      .where(eq(games.isContinuous, true))
 
-    let gameId: string;
+    let gameId: string
 
     if (existingGames.length === 0) {
       // Create a paused game
-      gameId = await generateSnowflakeId();
-      createdGameIds.push(gameId);
+      gameId = await generateSnowflakeId()
+      createdGameIds.push(gameId)
 
       await db.insert(games).values({
         id: gameId,
@@ -85,9 +86,9 @@ describe.skipIf(!hasDatabase)('Game Auto-Start Logic', () => {
         currentDay: 1,
         pausedAt: new Date(),
         updatedAt: new Date(),
-      });
+      })
     } else {
-      gameId = existingGames[0]!.id;
+      gameId = existingGames[0]?.id
 
       // Pause it for the test
       await db
@@ -96,15 +97,12 @@ describe.skipIf(!hasDatabase)('Game Auto-Start Logic', () => {
           isRunning: false,
           pausedAt: new Date(),
         })
-        .where(eq(games.id, gameId));
+        .where(eq(games.id, gameId))
     }
 
     // Verify it's paused
-    const pausedGame = await db
-      .select()
-      .from(games)
-      .where(eq(games.id, gameId));
-    expect(pausedGame[0]?.isRunning).toBe(false);
+    const pausedGame = await db.select().from(games).where(eq(games.id, gameId))
+    expect(pausedGame[0]?.isRunning).toBe(false)
 
     // Simulate bootstrap starting the game
     await db
@@ -114,22 +112,22 @@ describe.skipIf(!hasDatabase)('Game Auto-Start Logic', () => {
         startedAt: pausedGame[0]?.startedAt || new Date(),
         pausedAt: null,
       })
-      .where(eq(games.id, gameId));
+      .where(eq(games.id, gameId))
 
     // Verify it's running
     const startedGame = await db
       .select()
       .from(games)
-      .where(eq(games.id, gameId));
-    expect(startedGame[0]?.isRunning).toBe(true);
-    expect(startedGame[0]?.pausedAt).toBeNull();
+      .where(eq(games.id, gameId))
+    expect(startedGame[0]?.isRunning).toBe(true)
+    expect(startedGame[0]?.pausedAt).toBeNull()
 
     // Restore original state if we modified an existing game
     if (existingGames.length > 0 && pausedGame[0]?.isRunning === false) {
       // The original was paused, but we need to leave it running for the app
       // Actually we started it, so leave it running
     }
-  });
+  })
 
   it('ensureGameState logic creates running game when none exists', async () => {
     // This tests the same logic as ensureGameState in GameBootstrapService
@@ -139,13 +137,13 @@ describe.skipIf(!hasDatabase)('Game Auto-Start Logic', () => {
       .select()
       .from(games)
       .where(eq(games.isContinuous, true))
-      .limit(1);
+      .limit(1)
 
     if (existingGame.length === 0) {
       // Create a running game (what bootstrap does)
-      const now = new Date();
-      const gameId = await generateSnowflakeId();
-      createdGameIds.push(gameId);
+      const now = new Date()
+      const gameId = await generateSnowflakeId()
+      createdGameIds.push(gameId)
 
       await db.insert(games).values({
         id: gameId,
@@ -156,17 +154,17 @@ describe.skipIf(!hasDatabase)('Game Auto-Start Logic', () => {
         speed: 60000,
         startedAt: now,
         updatedAt: now,
-      });
+      })
 
-      console.log('Created new game with isRunning: true');
+      console.log('Created new game with isRunning: true')
 
       // Verify
-      const newGame = await db.select().from(games).where(eq(games.id, gameId));
-      expect(newGame[0]?.isRunning).toBe(true);
+      const newGame = await db.select().from(games).where(eq(games.id, gameId))
+      expect(newGame[0]?.isRunning).toBe(true)
     } else {
       // Game exists
-      const game = existingGame[0];
-      console.log(`Game exists: ${game?.id}, isRunning: ${game?.isRunning}`);
+      const game = existingGame[0]
+      console.log(`Game exists: ${game?.id}, isRunning: ${game?.isRunning}`)
 
       if (game && !game.isRunning) {
         // Bootstrap would start it
@@ -177,16 +175,16 @@ describe.skipIf(!hasDatabase)('Game Auto-Start Logic', () => {
             startedAt: game.startedAt || new Date(),
             pausedAt: null,
           })
-          .where(eq(games.id, game.id));
+          .where(eq(games.id, game.id))
 
         const startedGame = await db
           .select()
           .from(games)
-          .where(eq(games.id, game.id));
-        expect(startedGame[0]?.isRunning).toBe(true);
+          .where(eq(games.id, game.id))
+        expect(startedGame[0]?.isRunning).toBe(true)
       } else {
-        expect(game?.isRunning).toBe(true);
+        expect(game?.isRunning).toBe(true)
       }
     }
-  });
-});
+  })
+})

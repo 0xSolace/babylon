@@ -1,13 +1,40 @@
-'use client';
-
+import type { PerpPositionFromAPI, PredictionPosition } from '@babylon/shared'
 import {
   calculateExpectedPayout,
+  cn,
+  type JsonValue,
   PredictionPricing,
-} from '@babylon/core/markets/prediction/client';
-import type { PerpPositionFromAPI, PredictionPosition } from '@babylon/shared';
-import { cn, type JsonValue } from '@babylon/shared';
+} from '@babylon/shared'
 
-import { useMutation, useQuery } from '@tanstack/react-query';
+/** Extract error message from API response */
+function getApiErrorMessage(data: unknown, fallback: string): string {
+  if (
+    typeof data === 'object' &&
+    data !== null &&
+    ('error' in data || 'message' in data)
+  ) {
+    const errorData = data as Record<string, unknown>
+    if (typeof errorData.error === 'string') return errorData.error
+    if (typeof errorData.message === 'string') return errorData.message
+  }
+  return fallback
+}
+
+/** Type guard for PredictionPosition */
+function isPredictionPosition(
+  data: PredictionPosition | PerpPositionFromAPI | null,
+): data is PredictionPosition {
+  return data !== null && 'marketId' in data && 'shares' in data
+}
+
+/** Type guard for PerpPositionFromAPI */
+function isPerpPosition(
+  data: PredictionPosition | PerpPositionFromAPI | null,
+): data is PerpPositionFromAPI {
+  return data !== null && 'ticker' in data && 'size' in data
+}
+
+import { useMutation, useQuery } from '@tanstack/react-query'
 
 import {
   AlertTriangle,
@@ -19,59 +46,19 @@ import {
   X,
   XCircle,
   Zap,
-} from 'lucide-react';
+} from 'lucide-react'
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react'
 
-import { toast } from 'sonner';
-import { FollowButton } from '@/components/interactions';
-import { useAuth } from '@/hooks/useAuth';
-import { useFetchPerpMarkets } from '@/hooks/usePerpMarkets';
+import { toast } from 'sonner'
+import { FollowButton } from '@/components/interactions'
+import { useAuth } from '@/hooks/useAuth'
+import { useFetchPerpMarkets } from '@/hooks/usePerpMarkets'
 
-/**
- * Format error message from API response payload.
- *
- * Extracts error message from various API error response formats,
- * falling back to a default message if extraction fails.
- *
- * @param payload - Error payload from API response
- * @param fallback - Fallback error message
- * @returns Formatted error message string
- */
-interface ErrorResponsePayload {
-  error?: string | { message?: string };
-  message?: string;
+/** Format error message from API response payload */
+const formatErrorMessage = (payload: JsonValue, fallback: string): string => {
+  return getApiErrorMessage(payload, fallback)
 }
-
-const formatErrorMessage = (
-  payload: ErrorResponsePayload | JsonValue,
-  fallback: string
-): string => {
-  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
-    return fallback;
-  }
-
-  const data = payload as ErrorResponsePayload;
-
-  if (typeof data.error === 'string') {
-    return data.error;
-  }
-
-  if (
-    data.error &&
-    typeof data.error === 'object' &&
-    'message' in data.error &&
-    typeof data.error.message === 'string'
-  ) {
-    return data.error.message;
-  }
-
-  if (typeof data.message === 'string') {
-    return data.message;
-  }
-
-  return fallback;
-};
 
 /**
  * Position detail modal component for viewing and managing positions.
@@ -105,38 +92,38 @@ const formatErrorMessage = (
  * ```
  */
 interface PositionDetailModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  type: 'prediction' | 'perp';
-  data: PredictionPosition | PerpPositionFromAPI | null;
-  userId?: string; // User ID of the profile being viewed
-  onSuccess?: () => void; // Callback after successful trade
+  isOpen: boolean
+  onClose: () => void
+  type: 'prediction' | 'perp'
+  data: PredictionPosition | PerpPositionFromAPI | null
+  userId?: string // User ID of the profile being viewed
+  onSuccess?: () => void // Callback after successful trade
 }
 
 /**
  * Perpetual market structure for position detail modal.
  */
 interface PerpMarket {
-  ticker: string;
-  name: string;
-  currentPrice: number;
+  ticker: string
+  name: string
+  currentPrice: number
   fundingRate: {
-    rate: number;
-    nextFundingTime: string;
-  };
-  maxLeverage: number;
-  minOrderSize: number;
+    rate: number
+    nextFundingTime: string
+  }
+  maxLeverage: number
+  minOrderSize: number
 }
 
 /**
  * Prediction market structure for position detail modal.
  */
 interface PredictionMarket {
-  id: number | string;
-  text: string;
-  yesShares?: number;
-  noShares?: number;
-  resolutionDate?: string;
+  id: number | string
+  text: string
+  yesShares?: number
+  noShares?: number
+  resolutionDate?: string
 }
 
 export function PositionDetailModal({
@@ -147,91 +134,83 @@ export function PositionDetailModal({
   userId,
   onSuccess,
 }: PositionDetailModalProps) {
-  const { user, authenticated, login, getAccessToken } = useAuth();
-  const [activeTab, setActiveTab] = useState<'details' | 'trade'>('details');
+  const { user, authenticated, login, getAccessToken } = useAuth()
+  const [activeTab, setActiveTab] = useState<'details' | 'trade'>('details')
 
   // Trading state
-  const [side, setSide] = useState<'long' | 'short' | 'yes' | 'no'>('long');
-  const [size, setSize] = useState('100');
-  const [leverage, setLeverage] = useState(10);
-  const [amount, setAmount] = useState('10');
+  const [side, setSide] = useState<'long' | 'short' | 'yes' | 'no'>('long')
+  const [size, setSize] = useState('100')
+  const [leverage, setLeverage] = useState(10)
+  const [amount, setAmount] = useState('10')
 
   // Market data - use react-query for perps
-  const fetchPerpMarkets = useFetchPerpMarkets();
+  const fetchPerpMarkets = useFetchPerpMarkets()
+
+  // Narrow position types for type-safe access
+  const perpData = isPerpPosition(data) ? data : null
+  const predictionData = isPredictionPosition(data) ? data : null
 
   // Query for perp market data
   const { data: perpMarket } = useQuery({
-    queryKey: [
-      'perp',
-      'market',
-      type === 'perp' && data && 'ticker' in data ? data.ticker : null,
-    ],
+    queryKey: ['perp', 'market', perpData?.ticker ?? null],
     queryFn: async (): Promise<PerpMarket | null> => {
-      if (type !== 'perp' || !data || !('ticker' in data)) return null;
+      if (!perpData) return null
 
       // Fetch markets via react-query (uses cache if fresh)
-      const markets = await fetchPerpMarkets();
+      const markets = await fetchPerpMarkets()
       const market = markets.find(
-        (m) =>
-          m.ticker.toLowerCase() ===
-          (data as PerpPositionFromAPI).ticker.toLowerCase()
-      );
-      return market || null;
+        (m) => m.ticker.toLowerCase() === perpData.ticker.toLowerCase(),
+      )
+      return market || null
     },
-    enabled: isOpen && type === 'perp' && !!data && 'ticker' in data,
-  });
+    enabled: isOpen && type === 'perp' && !!perpData,
+  })
 
   // Query for prediction market data
   const { data: predictionMarket } = useQuery({
-    queryKey: [
-      'prediction',
-      'market',
-      type === 'prediction' && data && 'marketId' in data
-        ? data.marketId
-        : null,
-    ],
+    queryKey: ['prediction', 'market', predictionData?.marketId ?? null],
     queryFn: async (): Promise<PredictionMarket | null> => {
-      if (type !== 'prediction' || !data || !('marketId' in data)) return null;
+      if (!predictionData) return null
 
       const response = await fetch(
-        `/api/markets/predictions/${(data as PredictionPosition).marketId}`
-      );
-      if (!response.ok) return null;
-      return response.json();
+        `/api/markets/predictions/${predictionData.marketId}`,
+      )
+      if (!response.ok) return null
+      return response.json()
     },
-    enabled: isOpen && type === 'prediction' && !!data && 'marketId' in data,
-  });
+    enabled: isOpen && type === 'prediction' && !!predictionData,
+  })
 
   // Reset tab and side when modal opens
   useEffect(() => {
     if (isOpen && data) {
-      setActiveTab('details');
+      setActiveTab('details')
       if (type === 'perp') {
-        setSide('long');
+        setSide('long')
       } else if (type === 'prediction') {
-        setSide('yes');
+        setSide('yes')
       }
     }
-  }, [isOpen, type, data]);
+  }, [isOpen, type, data])
 
   // Perp trade mutation
   interface PerpTradeParams {
-    ticker: string;
-    side: 'long' | 'short';
-    size: number;
-    leverage: number;
+    ticker: string
+    side: 'long' | 'short'
+    size: number
+    leverage: number
   }
 
   interface PerpTradeResponse {
-    success: boolean;
-    positionId?: string;
+    success: boolean
+    positionId?: string
   }
 
   const perpTradeMutation = useMutation({
     mutationFn: async (params: PerpTradeParams): Promise<PerpTradeResponse> => {
-      const token = await getAccessToken();
+      const token = await getAccessToken()
       if (!token) {
-        throw new Error('Authentication required. Please log in.');
+        throw new Error('Authentication required. Please log in.')
       }
 
       const response = await fetch('/api/markets/perps/open', {
@@ -241,46 +220,46 @@ export function PositionDetailModal({
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify(params),
-      });
+      })
 
-      const responseData = await response.json();
+      const responseData = await response.json()
       if (!response.ok) {
         throw new Error(
-          formatErrorMessage(responseData, 'Failed to open position')
-        );
+          formatErrorMessage(responseData, 'Failed to open position'),
+        )
       }
 
-      return responseData as PerpTradeResponse;
+      return responseData as PerpTradeResponse
     },
     onSuccess: () => {
-      toast.success('Position opened!');
-      onClose();
-      onSuccess?.();
+      toast.success('Position opened!')
+      onClose()
+      onSuccess?.()
     },
     onError: (error: Error) => {
-      toast.error(error.message);
+      toast.error(error.message)
     },
-  });
+  })
 
   // Prediction trade mutation
   interface PredictionTradeParams {
-    marketId: string | number;
-    side: 'yes' | 'no';
-    amount: number;
+    marketId: string | number
+    side: 'yes' | 'no'
+    amount: number
   }
 
   interface PredictionTradeResponse {
-    success: boolean;
-    shares?: number;
+    success: boolean
+    shares?: number
   }
 
   const predictionTradeMutation = useMutation({
     mutationFn: async (
-      params: PredictionTradeParams
+      params: PredictionTradeParams,
     ): Promise<PredictionTradeResponse> => {
-      const token = await getAccessToken();
+      const token = await getAccessToken()
       if (!token) {
-        throw new Error('Authentication required. Please log in.');
+        throw new Error('Authentication required. Please log in.')
       }
 
       const response = await fetch(
@@ -295,33 +274,33 @@ export function PositionDetailModal({
             side: params.side,
             amount: params.amount,
           }),
-        }
-      );
+        },
+      )
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(formatErrorMessage(errorData, 'Failed to buy shares'));
+        const errorData = await response.json()
+        throw new Error(formatErrorMessage(errorData, 'Failed to buy shares'))
       }
 
-      return response.json() as Promise<PredictionTradeResponse>;
+      return response.json() as Promise<PredictionTradeResponse>
     },
     onSuccess: () => {
-      toast.success(`Bought ${side.toUpperCase()} shares!`);
-      onClose();
-      onSuccess?.();
+      toast.success(`Bought ${side.toUpperCase()} shares!`)
+      onClose()
+      onSuccess?.()
     },
     onError: (error: Error) => {
-      toast.error(error.message);
+      toast.error(error.message)
     },
-  });
+  })
 
   const handlePerpTrade = () => {
-    if (!user || !perpMarket) return;
+    if (!user || !perpMarket) return
 
-    const sizeNum = parseFloat(size) || 0;
+    const sizeNum = parseFloat(size) || 0
     if (sizeNum < perpMarket.minOrderSize) {
-      toast.error(`Minimum order size is $${perpMarket.minOrderSize}`);
-      return;
+      toast.error(`Minimum order size is $${perpMarket.minOrderSize}`)
+      return
     }
 
     perpTradeMutation.mutate({
@@ -329,87 +308,87 @@ export function PositionDetailModal({
       side: side as 'long' | 'short',
       size: sizeNum,
       leverage,
-    });
-  };
+    })
+  }
 
   const handlePredictionTrade = () => {
-    if (!user || !predictionMarket) return;
+    if (!user || !predictionMarket) return
 
-    const amountNum = parseFloat(amount) || 0;
+    const amountNum = parseFloat(amount) || 0
     if (amountNum < 1) {
-      toast.error('Minimum bet is $1');
-      return;
+      toast.error('Minimum bet is $1')
+      return
     }
 
     predictionTradeMutation.mutate({
       marketId: predictionMarket.id,
       side: side as 'yes' | 'no',
       amount: amountNum,
-    });
-  };
+    })
+  }
 
   // Combined loading state from mutations
   const loading =
-    perpTradeMutation.isPending || predictionTradeMutation.isPending;
+    perpTradeMutation.isPending || predictionTradeMutation.isPending
 
-  if (!isOpen || !data) return null;
+  if (!isOpen || !data) return null
 
   const formatPoints = (points: number) => {
     return points.toLocaleString('en-US', {
       maximumFractionDigits: 0,
-    });
-  };
+    })
+  }
 
   const formatPrice = (price: number) => {
-    return `$${price.toFixed(2)}`;
-  };
+    return `$${price.toFixed(2)}`
+  }
 
   const formatPercent = (value: number) => {
-    return `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`;
-  };
+    return `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`
+  }
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
       month: 'short',
       day: 'numeric',
       year: 'numeric',
-    });
-  };
+    })
+  }
 
   // Calculate prediction trade preview
   const getPredictionCalculation = () => {
-    if (!predictionMarket || type !== 'prediction') return null;
-    const yesShares = predictionMarket.yesShares || 500;
-    const noShares = predictionMarket.noShares || 500;
-    const amountNum = parseFloat(amount) || 0;
-    if (amountNum <= 0) return null;
+    if (!predictionMarket || type !== 'prediction') return null
+    const yesShares = predictionMarket.yesShares || 500
+    const noShares = predictionMarket.noShares || 500
+    const amountNum = parseFloat(amount) || 0
+    if (amountNum <= 0) return null
     return PredictionPricing.calculateBuy(
       yesShares,
       noShares,
       side as 'yes' | 'no',
-      amountNum
-    );
-  };
+      amountNum,
+    )
+  }
 
-  const predictionCalc = getPredictionCalculation();
+  const predictionCalc = getPredictionCalculation()
   const expectedPayout = predictionCalc
     ? calculateExpectedPayout(
         predictionCalc.sharesBought,
-        predictionCalc.avgPrice
+        predictionCalc.avgPrice,
       )
-    : 0;
-  const expectedProfit = expectedPayout - (parseFloat(amount) || 0);
+    : 0
+  const expectedProfit = expectedPayout - (parseFloat(amount) || 0)
 
   // Calculate perp trade preview
-  const sizeNum = parseFloat(size) || 0;
-  const marginRequired = perpMarket ? sizeNum / leverage : 0;
-  const positionValue = sizeNum * leverage;
+  const sizeNum = parseFloat(size) || 0
+  const marginRequired = perpMarket ? sizeNum / leverage : 0
+  const positionValue = sizeNum * leverage
   const liquidationPrice =
     perpMarket && type === 'perp' && 'currentPrice' in data
       ? side === 'long'
         ? perpMarket.currentPrice * (1 - 0.9 / leverage)
         : perpMarket.currentPrice * (1 + 0.9 / leverage)
-      : 0;
+      : 0
   const liquidationDistance =
     perpMarket && liquidationPrice > 0
       ? side === 'long'
@@ -419,7 +398,7 @@ export function PositionDetailModal({
         : ((liquidationPrice - perpMarket.currentPrice) /
             perpMarket.currentPrice) *
           100
-      : 0;
+      : 0
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
@@ -441,6 +420,7 @@ export function PositionDetailModal({
             )}
           </div>
           <button
+            type="button"
             onClick={onClose}
             className="rounded-full p-1 transition-colors hover:bg-muted"
             aria-label="Close"
@@ -452,12 +432,13 @@ export function PositionDetailModal({
         {/* Tabs */}
         <div className="flex border-border border-b">
           <button
+            type="button"
             onClick={() => setActiveTab('details')}
             className={cn(
               'flex-1 px-4 py-3 font-medium transition-colors',
               activeTab === 'details'
                 ? 'border-[#0066FF] border-b-2 text-[#0066FF]'
-                : 'text-muted-foreground hover:text-foreground'
+                : 'text-muted-foreground hover:text-foreground',
             )}
           >
             <BarChart3 className="mr-2 inline h-4 w-4" />
@@ -465,18 +446,19 @@ export function PositionDetailModal({
           </button>
           {(type === 'prediction' || type === 'perp') && (
             <button
+              type="button"
               onClick={() => {
                 if (!authenticated) {
-                  login();
-                  return;
+                  login()
+                  return
                 }
-                setActiveTab('trade');
+                setActiveTab('trade')
               }}
               className={cn(
                 'flex-1 px-4 py-3 font-medium transition-colors',
                 activeTab === 'trade'
                   ? 'border-[#0066FF] border-b-2 text-[#0066FF]'
-                  : 'text-muted-foreground hover:text-foreground'
+                  : 'text-muted-foreground hover:text-foreground',
               )}
             >
               <Zap className="mr-2 inline h-4 w-4" />
@@ -494,31 +476,29 @@ export function PositionDetailModal({
                 <>
                   <div>
                     <h3 className="mb-2 font-semibold text-foreground text-lg">
-                      {(data as PredictionPosition).question}
+                      {predictionData?.question}
                     </h3>
                     <div className="flex items-center gap-2">
                       <span
                         className={cn(
                           'rounded px-2 py-1 font-medium text-sm',
-                          (data as PredictionPosition).side === 'YES'
+                          predictionData?.side === 'YES'
                             ? 'bg-green-600/20 text-green-600'
-                            : 'bg-red-600/20 text-red-600'
+                            : 'bg-red-600/20 text-red-600',
                         )}
                       >
-                        {(data as PredictionPosition).side}
+                        {predictionData?.side}
                       </span>
-                      {(data as PredictionPosition).resolved !== undefined && (
+                      {predictionData?.resolved !== undefined && (
                         <span
                           className={cn(
                             'rounded px-2 py-1 text-xs',
-                            (data as PredictionPosition).resolved
+                            predictionData?.resolved
                               ? 'bg-muted text-muted-foreground'
-                              : 'bg-blue-600/20 text-blue-600'
+                              : 'bg-blue-600/20 text-blue-600',
                           )}
                         >
-                          {(data as PredictionPosition).resolved
-                            ? 'Resolved'
-                            : 'Active'}
+                          {predictionData?.resolved ? 'Resolved' : 'Active'}
                         </span>
                       )}
                     </div>
@@ -530,7 +510,7 @@ export function PositionDetailModal({
                         Shares
                       </div>
                       <div className="font-bold text-foreground text-lg">
-                        {(data as PredictionPosition).shares.toLocaleString()}
+                        {predictionData?.shares.toLocaleString()}
                       </div>
                     </div>
                     <div className="rounded-lg bg-muted/30 p-3">
@@ -538,7 +518,7 @@ export function PositionDetailModal({
                         Avg Entry Price
                       </div>
                       <div className="font-bold text-foreground text-lg">
-                        {formatPrice((data as PredictionPosition).avgPrice)}
+                        {formatPrice(predictionData?.avgPrice)}
                       </div>
                     </div>
                     <div className="rounded-lg bg-muted/30 p-3">
@@ -546,7 +526,7 @@ export function PositionDetailModal({
                         Current Price
                       </div>
                       <div className="font-bold text-foreground text-lg">
-                        {formatPrice((data as PredictionPosition).currentPrice)}
+                        {formatPrice(predictionData?.currentPrice)}
                       </div>
                     </div>
                     <div className="rounded-lg bg-muted/30 p-3">
@@ -556,18 +536,18 @@ export function PositionDetailModal({
                       <div
                         className={cn(
                           'font-bold text-lg',
-                          (data as PredictionPosition).currentPrice -
-                            (data as PredictionPosition).avgPrice >=
+                          predictionData?.currentPrice -
+                            predictionData?.avgPrice >=
                             0
                             ? 'text-green-600'
-                            : 'text-red-600'
+                            : 'text-red-600',
                         )}
                       >
                         {formatPercent(
-                          (((data as PredictionPosition).currentPrice -
-                            (data as PredictionPosition).avgPrice) /
-                            (data as PredictionPosition).avgPrice) *
-                            100
+                          ((predictionData?.currentPrice -
+                            predictionData?.avgPrice) /
+                            predictionData?.avgPrice) *
+                            100,
                         )}
                       </div>
                     </div>
@@ -580,9 +560,8 @@ export function PositionDetailModal({
                 <>
                   <div>
                     <h3 className="mb-2 flex items-center gap-2 font-semibold text-foreground text-lg">
-                      {(data as PerpPositionFromAPI).ticker}
-                      {(data as PerpPositionFromAPI).unrealizedPnLPercent >=
-                      0 ? (
+                      {perpData?.ticker}
+                      {perpData?.unrealizedPnLPercent >= 0 ? (
                         <TrendingUp className="h-5 w-5 text-green-600" />
                       ) : (
                         <TrendingDown className="h-5 w-5 text-red-600" />
@@ -592,16 +571,16 @@ export function PositionDetailModal({
                       <span
                         className={cn(
                           'rounded px-2 py-1 font-medium text-sm',
-                          (data as PerpPositionFromAPI).side === 'LONG'
+                          perpData?.side === 'LONG'
                             ? 'bg-green-600/20 text-green-600'
-                            : 'bg-red-600/20 text-red-600'
+                            : 'bg-red-600/20 text-red-600',
                         )}
                       >
-                        {(data as PerpPositionFromAPI).side}
+                        {perpData?.side}
                       </span>
-                      {(data as PerpPositionFromAPI).leverage && (
+                      {perpData?.leverage && (
                         <span className="rounded bg-muted px-2 py-1 text-muted-foreground text-xs">
-                          {(data as PerpPositionFromAPI).leverage}x Leverage
+                          {perpData?.leverage}x Leverage
                         </span>
                       )}
                     </div>
@@ -613,7 +592,7 @@ export function PositionDetailModal({
                         Position Size
                       </div>
                       <div className="font-bold text-foreground text-lg">
-                        {formatPoints((data as PerpPositionFromAPI).size)} pts
+                        {formatPoints(perpData?.size)} pts
                       </div>
                     </div>
                     <div className="rounded-lg bg-muted/30 p-3">
@@ -621,7 +600,7 @@ export function PositionDetailModal({
                         Entry Price
                       </div>
                       <div className="font-bold text-foreground text-lg">
-                        {formatPrice((data as PerpPositionFromAPI).entryPrice)}
+                        {formatPrice(perpData?.entryPrice)}
                       </div>
                     </div>
                     <div className="rounded-lg bg-muted/30 p-3">
@@ -629,9 +608,7 @@ export function PositionDetailModal({
                         Current Price
                       </div>
                       <div className="font-bold text-foreground text-lg">
-                        {formatPrice(
-                          (data as PerpPositionFromAPI).currentPrice
-                        )}
+                        {formatPrice(perpData?.currentPrice)}
                       </div>
                     </div>
                     <div className="rounded-lg bg-muted/30 p-3">
@@ -641,51 +618,42 @@ export function PositionDetailModal({
                       <div
                         className={cn(
                           'font-bold text-lg',
-                          (data as PerpPositionFromAPI).unrealizedPnL >= 0
+                          perpData?.unrealizedPnL >= 0
                             ? 'text-green-600'
-                            : 'text-red-600'
+                            : 'text-red-600',
                         )}
                       >
-                        {formatPoints(
-                          (data as PerpPositionFromAPI).unrealizedPnL
-                        )}{' '}
-                        pts
+                        {formatPoints(perpData?.unrealizedPnL)} pts
                       </div>
                     </div>
-                    {(data as PerpPositionFromAPI).liquidationPrice && (
+                    {perpData?.liquidationPrice && (
                       <div className="rounded-lg bg-muted/30 p-3">
                         <div className="mb-1 text-muted-foreground text-xs">
                           Liquidation Price
                         </div>
                         <div className="font-bold text-lg text-red-600">
-                          {formatPrice(
-                            (data as PerpPositionFromAPI).liquidationPrice
-                          )}
+                          {formatPrice(perpData?.liquidationPrice)}
                         </div>
                       </div>
                     )}
-                    {(data as PerpPositionFromAPI).fundingPaid !==
-                      undefined && (
+                    {perpData?.fundingPaid !== undefined && (
                       <div className="rounded-lg bg-muted/30 p-3">
                         <div className="mb-1 text-muted-foreground text-xs">
                           Funding Paid
                         </div>
                         <div className="font-bold text-foreground text-lg">
-                          {formatPoints(
-                            (data as PerpPositionFromAPI).fundingPaid
-                          )}{' '}
-                          pts
+                          {formatPoints(perpData?.fundingPaid)} pts
                         </div>
                       </div>
                     )}
-                    {(data as PerpPositionFromAPI).openedAt && (
+                    {perpData?.openedAt && (
                       <div className="col-span-2 rounded-lg bg-muted/30 p-3">
                         <div className="mb-1 flex items-center gap-1 text-muted-foreground text-xs">
                           <Clock className="h-3 w-3" />
                           Opened
                         </div>
                         <div className="font-medium text-foreground text-sm">
-                          {formatDate((data as PerpPositionFromAPI).openedAt)}
+                          {formatDate(perpData?.openedAt)}
                         </div>
                       </div>
                     )}
@@ -713,14 +681,14 @@ export function PositionDetailModal({
                         {(() => {
                           const totalShares =
                             (predictionMarket.yesShares || 0) +
-                            (predictionMarket.noShares || 0);
+                            (predictionMarket.noShares || 0)
                           return totalShares === 0
                             ? '50.0'
                             : (
                                 ((predictionMarket.yesShares || 0) /
                                   totalShares) *
                                 100
-                              ).toFixed(1);
+                              ).toFixed(1)
                         })()}%
                       </div>
                     </div>
@@ -730,14 +698,14 @@ export function PositionDetailModal({
                         {(() => {
                           const totalShares =
                             (predictionMarket.yesShares || 0) +
-                            (predictionMarket.noShares || 0);
+                            (predictionMarket.noShares || 0)
                           return totalShares === 0
                             ? '50.0'
                             : (
                                 ((predictionMarket.noShares || 0) /
                                   totalShares) *
                                 100
-                              ).toFixed(1);
+                              ).toFixed(1)
                         })()}%
                       </div>
                     </div>
@@ -745,24 +713,26 @@ export function PositionDetailModal({
 
                   <div className="flex gap-2">
                     <button
+                      type="button"
                       onClick={() => setSide('yes')}
                       className={cn(
                         'flex flex-1 items-center justify-center gap-2 rounded py-3 font-bold transition-all',
                         side === 'yes'
                           ? 'bg-green-600 text-primary-foreground'
-                          : 'bg-muted text-muted-foreground hover:bg-muted'
+                          : 'bg-muted text-muted-foreground hover:bg-muted',
                       )}
                     >
                       <CheckCircle size={18} />
                       BUY YES
                     </button>
                     <button
+                      type="button"
                       onClick={() => setSide('no')}
                       className={cn(
                         'flex flex-1 items-center justify-center gap-2 rounded py-3 font-bold transition-all',
                         side === 'no'
                           ? 'bg-red-600 text-primary-foreground'
-                          : 'bg-muted text-muted-foreground hover:bg-muted'
+                          : 'bg-muted text-muted-foreground hover:bg-muted',
                       )}
                     >
                       <XCircle size={18} />
@@ -771,10 +741,14 @@ export function PositionDetailModal({
                   </div>
 
                   <div>
-                    <label className="mb-2 block text-muted-foreground text-sm">
+                    <label
+                      htmlFor="prediction-amount-input"
+                      className="mb-2 block text-muted-foreground text-sm"
+                    >
                       Amount (USD)
                     </label>
                     <input
+                      id="prediction-amount-input"
                       type="number"
                       value={amount}
                       onChange={(e) => setAmount(e.target.value)}
@@ -812,7 +786,7 @@ export function PositionDetailModal({
                             'font-bold',
                             expectedProfit >= 0
                               ? 'text-green-600'
-                              : 'text-red-600'
+                              : 'text-red-600',
                           )}
                         >
                           {formatPrice(expectedProfit)}
@@ -822,6 +796,7 @@ export function PositionDetailModal({
                   )}
 
                   <button
+                    type="button"
                     onClick={handlePredictionTrade}
                     disabled={loading || parseFloat(amount) < 1}
                     className={cn(
@@ -830,7 +805,7 @@ export function PositionDetailModal({
                         ? 'bg-green-600 hover:bg-green-700'
                         : 'bg-red-600 hover:bg-red-700',
                       (loading || parseFloat(amount) < 1) &&
-                        'cursor-not-allowed opacity-50'
+                        'cursor-not-allowed opacity-50',
                     )}
                   >
                     {loading ? 'Placing Bet...' : `BUY ${side.toUpperCase()}`}
@@ -852,24 +827,26 @@ export function PositionDetailModal({
 
                   <div className="flex gap-2">
                     <button
+                      type="button"
                       onClick={() => setSide('long')}
                       className={cn(
                         'flex flex-1 items-center justify-center gap-2 rounded py-3 font-bold transition-all',
                         side === 'long'
                           ? 'bg-green-600 text-primary-foreground'
-                          : 'bg-muted text-muted-foreground hover:bg-muted'
+                          : 'bg-muted text-muted-foreground hover:bg-muted',
                       )}
                     >
                       <TrendingUp size={18} />
                       LONG
                     </button>
                     <button
+                      type="button"
                       onClick={() => setSide('short')}
                       className={cn(
                         'flex flex-1 items-center justify-center gap-2 rounded py-3 font-bold transition-all',
                         side === 'short'
                           ? 'bg-red-600 text-primary-foreground'
-                          : 'bg-muted text-muted-foreground hover:bg-muted'
+                          : 'bg-muted text-muted-foreground hover:bg-muted',
                       )}
                     >
                       <TrendingDown size={18} />
@@ -879,10 +856,14 @@ export function PositionDetailModal({
 
                   <div className="space-y-4 rounded bg-muted p-4">
                     <div className="flex items-center justify-between">
-                      <label className="font-medium text-muted-foreground text-sm">
+                      <label
+                        htmlFor="perp-size-input"
+                        className="font-medium text-muted-foreground text-sm"
+                      >
                         Position Size (USD)
                       </label>
                       <input
+                        id="perp-size-input"
                         type="number"
                         value={size}
                         onChange={(e) => setSize(e.target.value)}
@@ -894,7 +875,10 @@ export function PositionDetailModal({
                     </div>
                     <div>
                       <div className="flex items-center justify-between">
-                        <label className="font-medium text-muted-foreground text-sm">
+                        <label
+                          htmlFor="leverage-slider"
+                          className="font-medium text-muted-foreground text-sm"
+                        >
                           Leverage
                         </label>
                         <span className="font-bold text-base text-foreground">
@@ -902,11 +886,14 @@ export function PositionDetailModal({
                         </span>
                       </div>
                       <input
+                        id="leverage-slider"
                         type="range"
                         min="1"
                         max={perpMarket.maxLeverage}
                         value={leverage}
-                        onChange={(e) => setLeverage(parseInt(e.target.value))}
+                        onChange={(e) =>
+                          setLeverage(parseInt(e.target.value, 10))
+                        }
                         className="mt-2 h-2 w-full cursor-pointer appearance-none rounded bg-background"
                       />
                       <div className="mt-1 flex justify-between text-muted-foreground text-xs">
@@ -946,7 +933,7 @@ export function PositionDetailModal({
                             ? 'text-green-600'
                             : liquidationDistance > 2
                               ? 'text-yellow-600'
-                              : 'text-red-600'
+                              : 'text-red-600',
                         )}
                       >
                         {liquidationDistance.toFixed(2)}%
@@ -970,6 +957,7 @@ export function PositionDetailModal({
                   )}
 
                   <button
+                    type="button"
                     onClick={handlePerpTrade}
                     disabled={loading || sizeNum < perpMarket.minOrderSize}
                     className={cn(
@@ -978,7 +966,7 @@ export function PositionDetailModal({
                         ? 'bg-green-600 hover:bg-green-700'
                         : 'bg-red-600 hover:bg-red-700',
                       (loading || sizeNum < perpMarket.minOrderSize) &&
-                        'cursor-not-allowed opacity-50'
+                        'cursor-not-allowed opacity-50',
                     )}
                   >
                     {loading
@@ -994,6 +982,7 @@ export function PositionDetailModal({
         {/* Footer */}
         <div className="sticky bottom-0 border-border border-t bg-background p-4">
           <button
+            type="button"
             onClick={onClose}
             className="w-full rounded-lg bg-muted px-4 py-2 font-medium text-foreground transition-colors hover:bg-muted/80"
           >
@@ -1002,5 +991,5 @@ export function PositionDetailModal({
         </div>
       </div>
     </div>
-  );
+  )
 }

@@ -1,54 +1,43 @@
-'use client';
-
-import dynamic from 'next/dynamic';
-import { useRouter } from 'next/navigation';
-import { useState } from 'react';
-import { MarketsToggle } from '@/components/shared/MarketsToggle';
-import { PageContainer } from '@/components/shared/PageContainer';
-import { Skeleton, WidgetPanelSkeleton } from '@/components/shared/Skeleton';
-import type { MarketTab, PerpMarket, PredictionMarket } from '@/types/markets';
+import { lazy, useState } from 'react'
+import { MarketsToggle } from '@/components/shared/MarketsToggle'
+import { PageContainer } from '@/components/shared/PageContainer'
+import { Skeleton, WidgetPanelSkeleton } from '@/components/shared/Skeleton'
+import { useRouter } from '@/lib/navigation'
+import type { MarketTab, PerpMarket, PredictionMarket } from '@/types/markets'
 import {
   DashboardTabContent,
   LoginPrompt,
   MarketsSearchInput,
   PerpsTabContent,
   PredictionsTabContent,
-} from './_components';
-import { useMarketsPageData } from './_hooks';
+} from './_components'
+import { useMarketsPageData } from './_hooks'
 
 // Lazy load modals - not needed for initial render
-const CategoryPnLShareModal = dynamic(
-  () =>
-    import('@/components/markets/CategoryPnLShareModal').then((m) => ({
-      default: m.CategoryPnLShareModal,
-    })),
-  { ssr: false }
-);
+const CategoryPnLShareModal = lazy(() =>
+  import('@/components/markets/CategoryPnLShareModal').then((m) => ({
+    default: m.CategoryPnLShareModal,
+  })),
+)
 
-const PortfolioPnLShareModal = dynamic(
-  () =>
-    import('@/components/markets/PortfolioPnLShareModal').then((m) => ({
-      default: m.PortfolioPnLShareModal,
-    })),
-  { ssr: false }
-);
+const PortfolioPnLShareModal = lazy(() =>
+  import('@/components/markets/PortfolioPnLShareModal').then((m) => ({
+    default: m.PortfolioPnLShareModal,
+  })),
+)
 
-const BuyPointsModal = dynamic(
-  () =>
-    import('@/components/points/BuyPointsModal').then((m) => ({
-      default: m.BuyPointsModal,
-    })),
-  { ssr: false }
-);
+const BuyPointsModal = lazy(() =>
+  import('@/components/points/BuyPointsModal').then((m) => ({
+    default: m.BuyPointsModal,
+  })),
+)
 
 // Lazy load sidebar - only needed on desktop
-const MarketsWidgetSidebar = dynamic(
-  () =>
-    import('@/components/markets/MarketsWidgetSidebar').then((m) => ({
-      default: m.MarketsWidgetSidebar,
-    })),
-  { ssr: false }
-);
+const MarketsWidgetSidebar = lazy(() =>
+  import('@/components/markets/MarketsWidgetSidebar').then((m) => ({
+    default: m.MarketsWidgetSidebar,
+  })),
+)
 
 /**
  * Markets page component.
@@ -65,27 +54,27 @@ const MarketsWidgetSidebar = dynamic(
  * - Responsive layout (desktop sidebar, mobile full-width)
  */
 export default function MarketsPage() {
-  const router = useRouter();
+  const router = useRouter()
 
   // Tab and modal state (UI-only, not in data hook)
-  const [activeTab, setActiveTab] = useState<MarketTab>('dashboard');
-  const [showBuyPointsModal, setShowBuyPointsModal] = useState(false);
-  const [showPnLShareModal, setShowPnLShareModal] = useState(false);
+  const [activeTab, setActiveTab] = useState<MarketTab>('dashboard')
+  const [showBuyPointsModal, setShowBuyPointsModal] = useState(false)
+  const [showPnLShareModal, setShowPnLShareModal] = useState(false)
   const [showCategoryPnLShareModal, setShowCategoryPnLShareModal] = useState<
     'perps' | 'predictions' | null
-  >(null);
+  >(null)
 
   // All data and computed values from centralized hook
-  const data = useMarketsPageData();
+  const data = useMarketsPageData()
 
   // Navigation handlers
   const handleMarketClick = (market: PerpMarket) => {
-    router.push(`/markets/perps/${market.ticker}?from=dashboard`);
-  };
+    router.push(`/markets/perps/${market.ticker}?from=dashboard`)
+  }
 
   const handlePredictionClick = (prediction: PredictionMarket) => {
-    router.push(`/markets/predictions/${prediction.id}?from=dashboard`);
-  };
+    router.push(`/markets/predictions/${prediction.id}?from=dashboard`)
+  }
 
   // Loading state
   if (data.loading) {
@@ -106,7 +95,7 @@ export default function MarketsPage() {
           <WidgetPanelSkeleton />
         </div>
       </PageContainer>
-    );
+    )
   }
 
   // Render active tab content
@@ -131,7 +120,7 @@ export default function MarketsPage() {
             onMarketClick={handleMarketClick}
             onPredictionClick={handlePredictionClick}
           />
-        );
+        )
       case 'perps':
         return (
           <PerpsTabContent
@@ -147,7 +136,7 @@ export default function MarketsPage() {
             filteredMarkets={data.filteredPerpMarkets}
             onMarketClick={handleMarketClick}
           />
-        );
+        )
       case 'predictions':
         return (
           <PredictionsTabContent
@@ -170,9 +159,9 @@ export default function MarketsPage() {
             predictionsError={data.predictionsError}
             compact={isMobile}
           />
-        );
+        )
     }
-  };
+  }
 
   return (
     <PageContainer noPadding className="flex flex-col">
@@ -209,10 +198,10 @@ export default function MarketsPage() {
         {/* Widget Sidebar */}
         <MarketsWidgetSidebar
           onMarketClick={(market) => {
-            router.push(`/markets/perps/${market.ticker}?from=dashboard`);
+            router.push(`/markets/perps/${market.ticker}?from=dashboard`)
           }}
           onPredictionClick={(marketId) => {
-            router.push(`/markets/predictions/${marketId}?from=dashboard`);
+            router.push(`/markets/predictions/${marketId}?from=dashboard`)
           }}
         />
       </div>
@@ -282,11 +271,11 @@ export default function MarketsPage() {
           isOpen={showBuyPointsModal}
           onClose={() => setShowBuyPointsModal(false)}
           onSuccess={() => {
-            data.triggerBalanceRefresh();
-            data.refetchData();
+            data.triggerBalanceRefresh()
+            data.refetchData()
           }}
         />
       )}
     </PageContainer>
-  );
+  )
 }

@@ -1,38 +1,36 @@
-'use client';
-
-import { MessageCircle } from 'lucide-react';
-import React from 'react';
-import { Separator } from '@/components/shared/Separator';
-import { ChatViewHeader } from './ChatViewHeader';
-import { FeedbackMessages } from './FeedbackMessages';
-import { MessageInput } from './MessageInput';
-import { MessageList } from './MessageList';
-import type { ChatDetails } from './types';
+import { MessageCircle } from 'lucide-react'
+import type React from 'react'
+import { Separator } from '@/components/shared/Separator'
+import { ChatViewHeader } from './ChatViewHeader'
+import { FeedbackMessages } from './FeedbackMessages'
+import { MessageInput } from './MessageInput'
+import { MessageList } from './MessageList'
+import type { ChatDetails } from './types'
 
 interface ChatViewProps {
-  chatDetails: ChatDetails | null;
-  currentUserId: string | undefined;
-  authenticated: boolean;
-  sseConnected: boolean;
-  loading: boolean;
-  isLoadingMore: boolean;
-  hasMore: boolean;
-  pullDistance: number;
-  messageInput: string;
-  sending: boolean;
-  sendError: string | null;
-  sendWarning: string | null;
-  sendSuccess: boolean;
-  showBackButton?: boolean;
-  containerRef: (node: HTMLDivElement | null) => void;
-  topSentinelRef: React.RefObject<HTMLDivElement | null>;
-  messagesEndRef: React.RefObject<HTMLDivElement | null>;
-  onBack?: () => void;
-  onManageGroup: () => void;
-  onLeaveChat: () => void;
-  onMessageChange: (value: string) => void;
-  onSendMessage: () => void;
-  onTagClick?: (tag: string) => void;
+  chatDetails: ChatDetails | null
+  currentUserId: string | undefined
+  authenticated: boolean
+  sseConnected: boolean
+  loading: boolean
+  isLoadingMore: boolean
+  hasMore: boolean
+  pullDistance: number
+  messageInput: string
+  sending: boolean
+  sendError: string | null
+  sendWarning: string | null
+  sendSuccess: boolean
+  showBackButton?: boolean
+  containerRef: (node: HTMLDivElement | null) => void
+  topSentinelRef: React.RefObject<HTMLDivElement | null>
+  messagesEndRef: React.RefObject<HTMLDivElement | null>
+  onBack?: () => void
+  onManageGroup: () => void
+  onLeaveChat: () => void
+  onMessageChange: (value: string) => void
+  onSendMessage: () => void
+  onTagClick?: (tag: string) => void
 }
 
 export function ChatView({
@@ -74,7 +72,7 @@ export function ChatView({
           </p>
         </div>
       </div>
-    );
+    )
   }
 
   return (
@@ -142,5 +140,5 @@ export function ChatView({
         />
       </div>
     </div>
-  );
+  )
 }

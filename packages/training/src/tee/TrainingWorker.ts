@@ -9,24 +9,41 @@
  * 5. Encrypt and publish results
  *
  * Deployment targets:
- * - Phala Network TEE (production)
- * - Local simulation (development)
+ * - Phala Network TEE (production) - REQUIRED in production
+ * - Local simulation (development only)
  *
  * Worker Types:
  * - DATA_PREP: CPU-bound data preparation
  * - JUDGING: GPU-bound LLM judging
  * - TRAINING: GPU-bound RL training
  * - BENCHMARK: CPU/GPU benchmarking
+ *
+ * Production Requirements:
+ * - TEE attestation must be verified before processing sensitive data
+ * - Simulated mode is NOT allowed in production
  */
 
-import { logger } from '@babylon/shared';
-import type { Address, Hex } from 'viem';
-import { keccak256, toBytes } from 'viem';
+import { logger } from '@babylon/shared'
+import type { Address, Hex } from 'viem'
+import { keccak256, toBytes } from 'viem'
 import type {
   EncryptedTrajectory,
   TrajectoryBatch,
-} from '../storage/EncryptedTrajectoryStorage';
-import type { TrajectoryStep } from '../training/types';
+} from '../storage/EncryptedTrajectoryStorage'
+import type { TrajectoryStep } from '../training/types'
+import {
+  isArrayOf,
+  isCIDResponse,
+  isGenericObject,
+  isJudgingScoreResponse,
+  isScoredTrainingData,
+  isSimulationResultResponse,
+  isTEEInitResponse,
+  isTEEProvider,
+  isTrainingComputeResponse,
+  type JudgingScoreResponse,
+  type TEEProvider,
+} from '../type-guards'
 
 // ============================================================================
 // Types
@@ -47,88 +64,148 @@ export enum WorkerStatus {
   FAILED = 'FAILED',
 }
 
+// TEEProvider is imported from type-guards
+
 export interface WorkerConfig {
   /** Worker type */
-  type: WorkerType;
+  type: WorkerType
   /** Unique worker ID */
-  workerId: string;
+  workerId: string
   /** Code hash for attestation */
-  codeHash: Hex;
+  codeHash: Hex
   /** Chain ID */
-  chainId: string;
+  chainId: string
   /** Training orchestrator address */
-  trainingOrchestratorAddress: Address;
+  trainingOrchestratorAddress: Address
   /** Model registry address */
-  modelRegistryAddress: Address;
+  modelRegistryAddress: Address
   /** Storage endpoint */
-  storageEndpoint: string;
+  storageEndpoint: string
   /** GPU configuration (for JUDGING/TRAINING workers) */
   gpu?: {
-    type: 'nvidia' | 'amd';
-    memory: number; // GB
-    cudaVersion?: string;
-  };
+    type: 'nvidia' | 'amd'
+    memory: number // GB
+    cudaVersion?: string
+  }
+  /** TEE provider type (defaults to simulated in dev, required real in production) */
+  teeProvider?: TEEProvider
+  /** Whether to require attestation verification (defaults to true in production) */
+  requireAttestation?: boolean
 }
 
 export interface WorkerAttestation {
-  workerId: string;
-  workerType: WorkerType;
-  codeHash: Hex;
-  operatorAddress: Address;
-  timestamp: number;
-  quote: Hex;
-  signature: Hex;
+  workerId: string
+  workerType: WorkerType
+  codeHash: Hex
+  operatorAddress: Address
+  timestamp: number
+  quote: Hex
+  signature: Hex
 }
 
 export interface DataPrepResult {
-  preparedDataCid: string;
-  trajectoryCount: number;
-  stepCount: number;
-  attestation: Hex;
+  preparedDataCid: string
+  trajectoryCount: number
+  stepCount: number
+  attestation: Hex
 }
 
 export interface JudgingResult {
-  scoredDataCid: string;
-  trajectoryCount: number;
-  averageScore: number;
-  scoreDistribution: { min: number; max: number; median: number };
-  attestation: Hex;
+  scoredDataCid: string
+  trajectoryCount: number
+  averageScore: number
+  scoreDistribution: { min: number; max: number; median: number }
+  attestation: Hex
 }
 
 export interface TrainingResult {
-  outputModelCid: string;
-  finalLoss: number;
-  epochs: number;
-  attestation: Hex;
+  outputModelCid: string
+  finalLoss: number
+  epochs: number
+  attestation: Hex
 }
 
 export interface BenchmarkResult {
-  score: number; // Basis points (e.g., 7500 = 75%)
-  samples: number;
+  score: number // Basis points (e.g., 7500 = 75%)
+  samples: number
   metrics: {
-    pnlMean: number;
-    pnlStdDev: number;
-    winRate: number;
-    sharpeRatio: number;
-    maxDrawdown: number;
-  };
-  attestation: Hex;
+    pnlMean: number
+    pnlStdDev: number
+    winRate: number
+    sharpeRatio: number
+    maxDrawdown: number
+  }
+  attestation: Hex
 }
 
 // ============================================================================
 // TEE Training Worker
 // ============================================================================
 
+/**
+ * Check if running in production environment
+ */
+function isProductionEnvironment(): boolean {
+  return process.env.NODE_ENV === 'production'
+}
+
 export class TrainingWorker {
-  private config: WorkerConfig;
-  private status: WorkerStatus = WorkerStatus.IDLE;
-  private operatorAddress: Address | null = null;
-  private privateKey: Hex | null = null;
-  private currentJobId: Hex | null = null;
-  private startTime: number = 0;
+  private config: WorkerConfig
+  private status: WorkerStatus = WorkerStatus.IDLE
+  private operatorAddress: Address | null = null
+  private privateKey: Hex | null = null
+  private currentJobId: Hex | null = null
+  private startTime: number = 0
+  private isProduction: boolean
+  private teeProvider: TEEProvider
 
   constructor(config: WorkerConfig) {
-    this.config = config;
+    this.config = config
+    this.isProduction = isProductionEnvironment()
+
+    // Determine TEE provider with validation
+    const envTeeMode = process.env.TEE_MODE
+    const validatedEnvProvider = isTEEProvider(envTeeMode)
+      ? envTeeMode
+      : undefined
+    this.teeProvider =
+      config.teeProvider ??
+      validatedEnvProvider ??
+      (this.isProduction ? 'phala' : 'simulated')
+
+    // Validate TEE configuration in production
+    this.validateTEEConfig()
+  }
+
+  /**
+   * Validate TEE configuration for production readiness
+   */
+  private validateTEEConfig(): void {
+    if (this.isProduction) {
+      if (this.teeProvider === 'simulated') {
+        throw new Error(
+          '[TrainingWorker] Simulated TEE mode is NOT allowed in production. ' +
+            'Set TEE_MODE to a valid provider (phala, intel-sgx, intel-tdx, amd-sev).',
+        )
+      }
+
+      if (!process.env.TEE_MODE && !this.config.teeProvider) {
+        throw new Error(
+          '[TrainingWorker] TEE_MODE must be set in production environment.',
+        )
+      }
+
+      logger.info('[TrainingWorker] Production TEE validation passed', {
+        provider: this.teeProvider,
+        requireAttestation: this.config.requireAttestation ?? true,
+      })
+    } else {
+      if (this.teeProvider === 'simulated') {
+        logger.warn(
+          '[TrainingWorker] Using simulated TEE mode - dev only, NOT for production',
+        )
+      }
+    }
   }
 
   // --------------------------------------------------------------------------
@@ -137,59 +214,136 @@ export class TrainingWorker {
 
   /**
    * Initialize the worker
+   *
+   * In production, this connects to real TEE hardware for key derivation.
+   * In development, simulated keys are used (NOT secure).
+   *
+   * @throws Error if TEE initialization fails in production
    */
   async initialize(): Promise<WorkerAttestation> {
-    this.status = WorkerStatus.INITIALIZING;
-    this.startTime = Date.now();
+    this.status = WorkerStatus.INITIALIZING
+    this.startTime = Date.now()
 
     logger.info('[TrainingWorker] Initializing', {
       type: this.config.type,
       workerId: this.config.workerId,
-    });
+      teeProvider: this.teeProvider,
+      isProduction: this.isProduction,
+    })
 
-    // In production TEE, derive keys from hardware
-    // For simulation, derive from code hash
-    const measurement = keccak256(
-      toBytes(`${this.config.codeHash}:${this.config.workerId}:${Date.now()}`)
-    );
+    if (this.isProduction && this.teeProvider !== 'simulated') {
+      // Production: Connect to real TEE hardware
+      await this.initializeProductionTEE()
+    } else {
+      // Development: Use simulated keys (NOT secure)
+      if (this.isProduction) {
+        throw new Error(
+          '[TrainingWorker] Cannot use simulated TEE in production',
+        )
+      }
 
-    // Derive operator address (simplified for simulation)
-    this.operatorAddress = `0x${measurement.slice(2, 42)}` as Address;
-    this.privateKey = measurement;
+      logger.warn(
+        '[TrainingWorker] Using simulated TEE - dev only, NOT for production',
+      )
+
+      const measurement = keccak256(
+        toBytes(
+          `${this.config.codeHash}:${this.config.workerId}:${Date.now()}`,
+        ),
+      )
+      this.operatorAddress = `0x${measurement.slice(2, 42)}` as Address
+      this.privateKey = measurement
+    }
 
     // Generate attestation quote
-    const attestation = this.generateAttestation();
+    const attestation = this.generateAttestation()
 
-    this.status = WorkerStatus.IDLE;
+    this.status = WorkerStatus.IDLE
 
     logger.info('[TrainingWorker] Initialized', {
       operatorAddress: this.operatorAddress,
       type: this.config.type,
-    });
+      teeProvider: this.teeProvider,
+    })
 
-    return attestation;
+    return attestation
+  }
+
+  /**
+   * Initialize production TEE connection
+   */
+  private async initializeProductionTEE(): Promise<void> {
+    const teeEndpoint = process.env.TEE_ENDPOINT || process.env.PHALA_ENDPOINT
+
+    if (!teeEndpoint) {
+      throw new Error(
+        '[TrainingWorker] TEE_ENDPOINT or PHALA_ENDPOINT required in production',
+      )
+    }
+
+    logger.info('[TrainingWorker] Connecting to TEE', {
+      provider: this.teeProvider,
+      endpoint: teeEndpoint,
+    })
+
+    // Connect to TEE provider and derive keys
+    const response = await fetch(`${teeEndpoint}/v1/worker/initialize`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        workerId: this.config.workerId,
+        codeHash: this.config.codeHash,
+        workerType: this.config.type,
+      }),
+      signal: AbortSignal.timeout(30000),
+    })
+
+    if (!response.ok) {
+      throw new Error(
+        `[TrainingWorker] TEE initialization failed: ${response.status} ${response.statusText}`,
+      )
+    }
+
+    const data: unknown = await response.json()
+    if (!isTEEInitResponse(data)) {
+      throw new Error('[TrainingWorker] Invalid TEE initialization response')
+    }
+
+    this.operatorAddress = data.operatorAddress as Address
+    // Private key stays in TEE - we only get the address
+    this.privateKey = null
+
+    logger.info('[TrainingWorker] TEE initialization complete', {
+      operatorAddress: this.operatorAddress,
+    })
   }
 
   /**
    * Generate attestation quote
    */
   private generateAttestation(): WorkerAttestation {
-    const timestamp = Date.now();
-    const quoteData = `${this.config.workerId}:${this.config.type}:${this.config.codeHash}:${this.operatorAddress}:${timestamp}`;
-    const quote = keccak256(toBytes(quoteData));
+    if (!this.operatorAddress) {
+      throw new Error(
+        '[TrainingWorker] Cannot generate attestation: worker not initialized',
+      )
+    }
+
+    const timestamp = Date.now()
+    const quoteData = `${this.config.workerId}:${this.config.type}:${this.config.codeHash}:${this.operatorAddress}:${timestamp}`
+    const quote = keccak256(toBytes(quoteData))
 
     // Sign the quote (simplified)
-    const signature = keccak256(toBytes(`${quote}:${this.privateKey}`));
+    const signature = keccak256(toBytes(`${quote}:${this.privateKey}`))
 
     return {
       workerId: this.config.workerId,
       workerType: this.config.type,
       codeHash: this.config.codeHash,
-      operatorAddress: this.operatorAddress!,
+      operatorAddress: this.operatorAddress,
       timestamp,
       quote,
       signature,
-    };
+    }
   }
 
   // --------------------------------------------------------------------------
@@ -197,61 +351,87 @@ export class TrainingWorker {
   // --------------------------------------------------------------------------
 
   /**
+   * Verify attestation before processing sensitive data
+   */
+  private verifyAttestationForSensitiveOp(operation: string): void {
+    const requireAttestation =
+      this.config.requireAttestation ?? this.isProduction
+
+    if (requireAttestation && !this.operatorAddress) {
+      throw new Error(
+        `[TrainingWorker] TEE attestation required for ${operation} - worker not properly initialized`,
+      )
+    }
+
+    if (this.isProduction && this.teeProvider === 'simulated') {
+      throw new Error(
+        `[TrainingWorker] ${operation} requires real TEE in production`,
+      )
+    }
+  }
+
+  /**
    * Prepare data for training (DATA_PREP worker)
+   *
+   * @throws Error if TEE attestation verification fails in production
    */
   async prepareData(
     jobId: Hex,
     batch: TrajectoryBatch,
-    encryptedTrajectories: EncryptedTrajectory[]
+    encryptedTrajectories: EncryptedTrajectory[],
   ): Promise<DataPrepResult> {
     if (this.config.type !== WorkerType.DATA_PREP) {
-      throw new Error(`Wrong worker type: ${this.config.type}`);
+      throw new Error(`Wrong worker type: ${this.config.type}`)
     }
 
-    this.status = WorkerStatus.PROCESSING;
-    this.currentJobId = jobId;
+    // Verify TEE attestation before processing sensitive data
+    this.verifyAttestationForSensitiveOp('data preparation')
+
+    this.status = WorkerStatus.PROCESSING
+    this.currentJobId = jobId
 
     logger.info('[TrainingWorker] Starting data preparation', {
       jobId,
       trajectoryCount: batch.trajectoryCount,
-    });
+      teeProvider: this.teeProvider,
+    })
 
     // Decrypt all trajectories (uses TEE keys when available)
-    const trajectories: TrajectoryStep[][] = [];
+    const trajectories: TrajectoryStep[][] = []
     for (const encrypted of encryptedTrajectories) {
-      const steps = await this.decryptTrajectory(encrypted.encryptedCid);
-      trajectories.push(steps);
+      const steps = await this.decryptTrajectory(encrypted.encryptedCid)
+      trajectories.push(steps)
     }
 
     // Prepare data for training
     const preparedData = await this.formatForTraining(
       trajectories,
-      batch.archetype
-    );
+      batch.archetype,
+    )
 
     // Encrypt prepared data
-    const preparedDataCid = await this.encryptAndUpload(preparedData);
+    const preparedDataCid = await this.encryptAndUpload(preparedData)
 
     // Generate attestation
     const attestation = keccak256(
-      toBytes(`prepared:${jobId}:${preparedDataCid}:${trajectories.length}`)
-    );
+      toBytes(`prepared:${jobId}:${preparedDataCid}:${trajectories.length}`),
+    )
 
-    this.status = WorkerStatus.COMPLETED;
-    this.currentJobId = null;
+    this.status = WorkerStatus.COMPLETED
+    this.currentJobId = null
 
     logger.info('[TrainingWorker] Data preparation complete', {
       jobId,
       cid: preparedDataCid,
       trajectoryCount: trajectories.length,
-    });
+    })
 
     return {
       preparedDataCid,
       trajectoryCount: trajectories.length,
       stepCount: trajectories.reduce((sum, t) => sum + t.length, 0),
       attestation,
-    };
+    }
   }
 
   // --------------------------------------------------------------------------
@@ -260,53 +440,62 @@ export class TrainingWorker {
 
   /**
    * Run LLM judging on trajectories (JUDGING worker)
+   *
+   * @throws Error if TEE attestation verification fails in production
    */
   async judgeTrajectories(
     jobId: Hex,
     preparedDataCid: string,
-    archetype: string
+    archetype: string,
   ): Promise<JudgingResult> {
     if (this.config.type !== WorkerType.JUDGING) {
-      throw new Error(`Wrong worker type: ${this.config.type}`);
+      throw new Error(`Wrong worker type: ${this.config.type}`)
     }
 
-    this.status = WorkerStatus.PROCESSING;
-    this.currentJobId = jobId;
+    // Verify TEE attestation before processing sensitive data
+    this.verifyAttestationForSensitiveOp('LLM judging')
+
+    this.status = WorkerStatus.PROCESSING
+    this.currentJobId = jobId
 
     logger.info('[TrainingWorker] Starting LLM judging', {
       jobId,
       preparedDataCid,
       archetype,
-    });
+      teeProvider: this.teeProvider,
+    })
 
     // Download prepared data and run LLM judging
-    const preparedData = await this.downloadAndDecrypt(preparedDataCid);
-    const scoredData = await this.runLLMJudging(preparedData, archetype);
+    const preparedData = await this.downloadAndDecrypt(
+      preparedDataCid,
+      isGenericObject,
+    )
+    const scoredData = await this.runLLMJudging(preparedData, archetype)
 
     // Calculate score statistics
-    const scores = scoredData.map((d) => d.score).sort((a, b) => a - b);
-    const averageScore = scores.reduce((a, b) => a + b, 0) / scores.length;
+    const scores = scoredData.map((d) => d.score).sort((a, b) => a - b)
+    const averageScore = scores.reduce((a, b) => a + b, 0) / scores.length
     const scoreStats = {
       min: scores[0] ?? 0,
       max: scores[scores.length - 1] ?? 0,
       median: scores[Math.floor(scores.length / 2)] ?? 0,
-    };
+    }
 
     // Encrypt, upload, and generate attestation
-    const scoredDataCid = await this.encryptAndUpload(scoredData);
+    const scoredDataCid = await this.encryptAndUpload(scoredData)
     const attestation = keccak256(
-      toBytes(`judged:${jobId}:${scoredDataCid}:${scores.length}`)
-    );
+      toBytes(`judged:${jobId}:${scoredDataCid}:${scores.length}`),
+    )
 
-    this.status = WorkerStatus.COMPLETED;
-    this.currentJobId = null;
+    this.status = WorkerStatus.COMPLETED
+    this.currentJobId = null
 
     logger.info('[TrainingWorker] LLM judging complete', {
       jobId,
       cid: scoredDataCid,
       averageScore,
       scoreStats,
-    });
+    })
 
     return {
       scoredDataCid,
@@ -314,7 +503,7 @@ export class TrainingWorker {
       averageScore,
       scoreDistribution: scoreStats,
       attestation,
-    };
+    }
   }
 
   // --------------------------------------------------------------------------
@@ -323,67 +512,76 @@ export class TrainingWorker {
 
   /**
    * Run RL training (TRAINING worker)
+   *
+   * @throws Error if TEE attestation verification fails in production
    */
   async train(
     jobId: Hex,
     scoredDataCid: string,
     baseModelCid: string,
     config: {
-      epochs: number;
-      batchSize: number;
-      learningRate: number;
-      temperature: number;
-    }
+      epochs: number
+      batchSize: number
+      learningRate: number
+      temperature: number
+    },
   ): Promise<TrainingResult> {
     if (this.config.type !== WorkerType.TRAINING) {
-      throw new Error(`Wrong worker type: ${this.config.type}`);
+      throw new Error(`Wrong worker type: ${this.config.type}`)
     }
 
-    this.status = WorkerStatus.PROCESSING;
-    this.currentJobId = jobId;
+    // Verify TEE attestation before processing sensitive training data
+    this.verifyAttestationForSensitiveOp('RL training')
+
+    this.status = WorkerStatus.PROCESSING
+    this.currentJobId = jobId
 
     logger.info('[TrainingWorker] Starting training', {
       jobId,
       scoredDataCid,
       baseModelCid,
       epochs: config.epochs,
-    });
+      teeProvider: this.teeProvider,
+    })
 
     // Download scored data and base model
-    const scoredData = await this.downloadAndDecrypt(scoredDataCid);
-    const baseModel = await this.downloadModel(baseModelCid);
+    const scoredData = await this.downloadAndDecrypt(
+      scoredDataCid,
+      isScoredTrainingData,
+    )
+    const baseModel = await this.downloadModel(baseModelCid)
 
     // Run training
     const { trainedModel, finalLoss } = await this.runTraining(
       baseModel,
       scoredData,
-      config
-    );
+      config,
+    )
 
     // Encrypt and upload trained model
-    const outputModelCid = await this.encryptAndUpload(trainedModel);
+    const outputModelCid = await this.encryptAndUpload(trainedModel)
 
     // Generate attestation
     const attestation = keccak256(
-      toBytes(`trained:${jobId}:${outputModelCid}:${config.epochs}`)
-    );
+      toBytes(`trained:${jobId}:${outputModelCid}:${config.epochs}`),
+    )
 
-    this.status = WorkerStatus.COMPLETED;
-    this.currentJobId = null;
+    this.status = WorkerStatus.COMPLETED
+    this.currentJobId = null
 
     logger.info('[TrainingWorker] Training complete', {
       jobId,
       cid: outputModelCid,
       finalLoss,
       epochs: config.epochs,
-    });
+    })
 
     return {
       outputModelCid,
       finalLoss,
       epochs: config.epochs,
       attestation,
-    };
+    }
   }
 
   // --------------------------------------------------------------------------
@@ -392,35 +590,44 @@ export class TrainingWorker {
 
   /**
    * Run benchmark simulations (BENCHMARK worker)
+   *
+   * Benchmarking does not require TEE attestation as it uses public data.
+   * However, in production mode with attestation required, we still verify.
    */
   async benchmark(
     jobId: Hex,
     modelCid: string,
     archetype: string,
-    samples: number
+    samples: number,
   ): Promise<BenchmarkResult> {
     if (this.config.type !== WorkerType.BENCHMARK) {
-      throw new Error(`Wrong worker type: ${this.config.type}`);
+      throw new Error(`Wrong worker type: ${this.config.type}`)
     }
 
-    this.status = WorkerStatus.PROCESSING;
-    this.currentJobId = jobId;
+    // Benchmarking with production models should still verify TEE
+    if (this.config.requireAttestation) {
+      this.verifyAttestationForSensitiveOp('benchmark')
+    }
+
+    this.status = WorkerStatus.PROCESSING
+    this.currentJobId = jobId
 
     logger.info('[TrainingWorker] Starting benchmark', {
       jobId,
       modelCid,
       archetype,
       samples,
-    });
+      teeProvider: this.teeProvider,
+    })
 
     // Download model
-    const model = await this.downloadModel(modelCid);
+    const model = await this.downloadModel(modelCid)
 
     // Run simulations
-    const results = await this.runSimulations(model, archetype, samples);
+    const results = await this.runSimulations(model, archetype, samples)
 
     // Calculate metrics
-    const metrics = this.calculateMetrics(results);
+    const metrics = this.calculateMetrics(results)
 
     // Calculate overall score (basis points)
     const score = Math.round(
@@ -428,30 +635,30 @@ export class TrainingWorker {
         Math.min(1, metrics.sharpeRatio / 2) * 0.3 +
         (1 - Math.min(1, metrics.maxDrawdown)) * 0.2 +
         Math.min(1, metrics.pnlMean / 1000) * 0.2) *
-        10000
-    );
+        10000,
+    )
 
     // Generate attestation
     const attestation = keccak256(
-      toBytes(`benchmark:${jobId}:${modelCid}:${score}:${samples}`)
-    );
+      toBytes(`benchmark:${jobId}:${modelCid}:${score}:${samples}`),
+    )
 
-    this.status = WorkerStatus.COMPLETED;
-    this.currentJobId = null;
+    this.status = WorkerStatus.COMPLETED
+    this.currentJobId = null
 
     logger.info('[TrainingWorker] Benchmark complete', {
       jobId,
       score,
       samples,
       metrics,
-    });
+    })
 
     return {
       score,
       samples,
       metrics,
       attestation,
-    };
+    }
   }
 
   // --------------------------------------------------------------------------
@@ -459,7 +666,7 @@ export class TrainingWorker {
   // --------------------------------------------------------------------------
 
   private async decryptTrajectory(cid: string): Promise<TrajectoryStep[]> {
-    logger.debug('[TrainingWorker] Decrypting trajectory', { cid });
+    logger.debug('[TrainingWorker] Decrypting trajectory', { cid })
 
     const response = await fetch(
       `${this.config.storageEndpoint}/download/${cid}`,
@@ -468,22 +675,26 @@ export class TrainingWorker {
           'X-TEE-Attestation': this.operatorAddress ?? '',
           'X-Decrypt': 'true',
         },
-      }
-    );
+      },
+    )
 
     if (!response.ok) {
       throw new Error(
-        `Failed to decrypt trajectory ${cid}: ${response.status} ${response.statusText}`
-      );
+        `Failed to decrypt trajectory ${cid}: ${response.status} ${response.statusText}`,
+      )
     }
 
-    return response.json() as Promise<TrajectoryStep[]>;
+    const data: unknown = await response.json()
+    if (!Array.isArray(data)) {
+      throw new Error(`Invalid trajectory data for ${cid}`)
+    }
+    return data as TrajectoryStep[]
   }
 
   private async formatForTraining(
     trajectories: TrajectoryStep[][],
-    archetype: string
-  ): Promise<object> {
+    archetype: string,
+  ): Promise<Record<string, unknown>> {
     // Format trajectories for GRPO training
     return {
       archetype,
@@ -493,14 +704,14 @@ export class TrainingWorker {
         actions: t.map((s) => s.action?.actionType ?? 'unknown'),
         rewards: t.map((s) => s.reward ?? 0),
       })),
-    };
+    }
   }
 
   private async runLLMJudging(
-    preparedData: object,
-    archetype: string
-  ): Promise<{ score: number; trajectory: object }[]> {
-    logger.debug('[TrainingWorker] Running LLM judging', { archetype });
+    preparedData: Record<string, unknown>[],
+    archetype: string,
+  ): Promise<JudgingScoreResponse[]> {
+    logger.debug('[TrainingWorker] Running LLM judging', { archetype })
 
     const response = await fetch(
       `${this.config.storageEndpoint}/judging/score`,
@@ -508,42 +719,50 @@ export class TrainingWorker {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ preparedData, archetype }),
-      }
-    );
+      },
+    )
 
     if (!response.ok) {
       throw new Error(
-        `LLM judging service failed: ${response.status} ${response.statusText}`
-      );
+        `LLM judging service failed: ${response.status} ${response.statusText}`,
+      )
     }
 
-    return response.json() as Promise<{ score: number; trajectory: object }[]>;
+    const data: unknown = await response.json()
+    if (!isArrayOf(data, isJudgingScoreResponse)) {
+      throw new Error('Invalid LLM judging response')
+    }
+    return data
   }
 
-  private async downloadModel(cid: string): Promise<object> {
-    logger.debug('[TrainingWorker] Downloading model', { cid });
+  private async downloadModel(cid: string): Promise<Record<string, unknown>> {
+    logger.debug('[TrainingWorker] Downloading model', { cid })
 
     // Fetch from storage endpoint (IPFS gateway or DWS storage)
     const response = await fetch(
-      `${this.config.storageEndpoint}/download/${cid}`
-    );
+      `${this.config.storageEndpoint}/download/${cid}`,
+    )
     if (!response.ok) {
-      throw new Error(`Failed to download model: ${response.statusText}`);
+      throw new Error(`Failed to download model: ${response.statusText}`)
     }
-    return response.json() as Promise<object>;
+    const data: unknown = await response.json()
+    if (typeof data !== 'object' || data === null) {
+      throw new Error('Invalid model data')
+    }
+    return data as Record<string, unknown>
   }
 
   private async runTraining(
-    baseModel: object,
-    scoredData: object[],
-    config: { epochs: number; batchSize: number; learningRate: number }
-  ): Promise<{ trainedModel: object; finalLoss: number }> {
+    baseModel: Record<string, unknown>,
+    scoredData: JudgingScoreResponse[],
+    config: { epochs: number; batchSize: number; learningRate: number },
+  ): Promise<{ trainedModel: Record<string, unknown>; finalLoss: number }> {
     logger.info('[TrainingWorker] Running training', {
       samples: scoredData.length,
       epochs: config.epochs,
       batchSize: config.batchSize,
       learningRate: config.learningRate,
-    });
+    })
 
     // Call Python training service
     const trainingResponse = await fetch(
@@ -556,30 +775,34 @@ export class TrainingWorker {
           scoredData,
           config,
         }),
-      }
-    );
+      },
+    )
 
     if (!trainingResponse.ok) {
       throw new Error(
-        `Training service failed: ${trainingResponse.status} ${trainingResponse.statusText}`
-      );
+        `Training service failed: ${trainingResponse.status} ${trainingResponse.statusText}`,
+      )
     }
 
-    return trainingResponse.json() as Promise<{
-      trainedModel: object;
-      finalLoss: number;
-    }>;
+    const data: unknown = await trainingResponse.json()
+    if (!isTrainingComputeResponse(data)) {
+      throw new Error('Invalid training response')
+    }
+    return {
+      trainedModel: data.trainedModel as Record<string, unknown>,
+      finalLoss: data.finalLoss,
+    }
   }
 
   private async runSimulations(
-    model: object,
+    model: Record<string, unknown>,
     archetype: string,
-    samples: number
+    samples: number,
   ): Promise<{ pnl: number; trades: number }[]> {
     logger.debug('[TrainingWorker] Running simulations', {
       archetype,
       samples,
-    });
+    })
 
     // Call simulation service
     const response = await fetch(
@@ -588,40 +811,44 @@ export class TrainingWorker {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ model, archetype, samples }),
-      }
-    );
+      },
+    )
 
     if (!response.ok) {
       throw new Error(
-        `Simulation service failed: ${response.status} ${response.statusText}`
-      );
+        `Simulation service failed: ${response.status} ${response.statusText}`,
+      )
     }
 
-    return response.json() as Promise<{ pnl: number; trades: number }[]>;
+    const data: unknown = await response.json()
+    if (!isArrayOf(data, isSimulationResultResponse)) {
+      throw new Error('Invalid simulation response')
+    }
+    return data
   }
 
   private calculateMetrics(
-    results: { pnl: number; trades: number }[]
+    results: { pnl: number; trades: number }[],
   ): BenchmarkResult['metrics'] {
-    const pnls = results.map((r) => r.pnl);
-    const mean = pnls.reduce((a, b) => a + b, 0) / pnls.length;
+    const pnls = results.map((r) => r.pnl)
+    const mean = pnls.reduce((a, b) => a + b, 0) / pnls.length
     const variance =
-      pnls.reduce((sum, p) => sum + Math.pow(p - mean, 2), 0) / pnls.length;
-    const stdDev = Math.sqrt(variance);
+      pnls.reduce((sum, p) => sum + (p - mean) ** 2, 0) / pnls.length
+    const stdDev = Math.sqrt(variance)
 
-    const wins = pnls.filter((p) => p > 0).length;
-    const winRate = wins / pnls.length;
+    const wins = pnls.filter((p) => p > 0).length
+    const winRate = wins / pnls.length
 
-    const sharpeRatio = stdDev > 0 ? mean / stdDev : 0;
+    const sharpeRatio = stdDev > 0 ? mean / stdDev : 0
 
-    let maxDrawdown = 0;
-    let peak = 0;
-    let cumulative = 0;
+    let maxDrawdown = 0
+    let peak = 0
+    let cumulative = 0
     for (const pnl of pnls) {
-      cumulative += pnl;
-      if (cumulative > peak) peak = cumulative;
-      const drawdown = peak > 0 ? (peak - cumulative) / peak : 0;
-      if (drawdown > maxDrawdown) maxDrawdown = drawdown;
+      cumulative += pnl
+      if (cumulative > peak) peak = cumulative
+      const drawdown = peak > 0 ? (peak - cumulative) / peak : 0
+      if (drawdown > maxDrawdown) maxDrawdown = drawdown
     }
 
     return {
@@ -630,11 +857,13 @@ export class TrainingWorker {
       winRate,
       sharpeRatio,
       maxDrawdown,
-    };
+    }
   }
 
-  private async encryptAndUpload(data: object): Promise<string> {
-    const jsonData = JSON.stringify(data);
+  private async encryptAndUpload(
+    payload: Record<string, unknown> | unknown[],
+  ): Promise<string> {
+    const jsonData = JSON.stringify(payload)
 
     // Upload to storage endpoint
     const response = await fetch(`${this.config.storageEndpoint}/upload`, {
@@ -645,20 +874,26 @@ export class TrainingWorker {
         encrypt: true, // Request encryption if TEE keys available
         attestation: this.operatorAddress,
       }),
-    });
+    })
 
     if (!response.ok) {
       throw new Error(
-        `Storage upload failed: ${response.status} ${response.statusText}`
-      );
+        `Storage upload failed: ${response.status} ${response.statusText}`,
+      )
     }
 
-    const result = (await response.json()) as { cid: string };
-    return result.cid;
+    const responseData: unknown = await response.json()
+    if (!isCIDResponse(responseData)) {
+      throw new Error('Invalid storage upload response')
+    }
+    return responseData.cid
   }
 
-  private async downloadAndDecrypt(cid: string): Promise<object[]> {
-    logger.debug('[TrainingWorker] Downloading and decrypting', { cid });
+  private async downloadAndDecrypt<T>(
+    cid: string,
+    guard: (item: unknown) => item is T,
+  ): Promise<T[]> {
+    logger.debug('[TrainingWorker] Downloading and decrypting', { cid })
 
     const response = await fetch(
       `${this.config.storageEndpoint}/download/${cid}`,
@@ -666,15 +901,20 @@ export class TrainingWorker {
         headers: {
           'X-Attestation': this.operatorAddress ?? '',
         },
-      }
-    );
+      },
+    )
 
     if (!response.ok) {
-      logger.warn('[TrainingWorker] Download failed, returning empty data');
-      return [];
+      logger.warn('[TrainingWorker] Download failed, returning empty data')
+      return []
     }
 
-    return response.json() as Promise<object[]>;
+    const data: unknown = await response.json()
+    if (!isArrayOf(data, guard)) {
+      logger.warn('[TrainingWorker] Invalid download data, returning empty')
+      return []
+    }
+    return data
   }
 
   // --------------------------------------------------------------------------
@@ -682,11 +922,11 @@ export class TrainingWorker {
   // --------------------------------------------------------------------------
 
   getStatus(): {
-    type: WorkerType;
-    status: WorkerStatus;
-    operatorAddress: Address | null;
-    currentJobId: Hex | null;
-    uptime: number;
+    type: WorkerType
+    status: WorkerStatus
+    operatorAddress: Address | null
+    currentJobId: Hex | null
+    uptime: number
   } {
     return {
       type: this.config.type,
@@ -694,11 +934,11 @@ export class TrainingWorker {
       operatorAddress: this.operatorAddress,
       currentJobId: this.currentJobId,
       uptime: this.startTime > 0 ? Date.now() - this.startTime : 0,
-    };
+    }
   }
 
   getConfig(): WorkerConfig {
-    return this.config;
+    return this.config
   }
 }
 
@@ -708,11 +948,36 @@ export class TrainingWorker {
 
 /**
  * Create a training worker
+ *
+ * In production:
+ * - TEE_MODE must be set to a valid provider
+ * - Simulated mode is NOT allowed
+ * - TEE attestation is required for all sensitive operations
+ *
+ * @throws Error if TEE configuration is invalid for production
  */
 export function createTrainingWorker(
   type: WorkerType,
-  config?: Partial<WorkerConfig>
+  config?: Partial<WorkerConfig>,
 ): TrainingWorker {
+  const isProduction = isProductionEnvironment()
+  const envTeeMode = process.env.TEE_MODE
+  const validatedEnvProvider = isTEEProvider(envTeeMode)
+    ? envTeeMode
+    : undefined
+  const teeProvider =
+    config?.teeProvider ??
+    validatedEnvProvider ??
+    (isProduction ? 'phala' : 'simulated')
+
+  // Validate TEE configuration
+  if (isProduction && teeProvider === 'simulated') {
+    throw new Error(
+      '[createTrainingWorker] Simulated TEE mode is NOT allowed in production. ' +
+        'Set TEE_MODE to a valid provider (phala, intel-sgx, intel-tdx, amd-sev).',
+    )
+  }
+
   const defaultConfig: WorkerConfig = {
     type,
     workerId: `${type.toLowerCase()}-${Date.now()}`,
@@ -725,8 +990,10 @@ export function createTrainingWorker(
       '0x0000000000000000000000000000000000000000') as Address,
     storageEndpoint:
       process.env.JEJU_STORAGE_ENDPOINT ?? 'http://localhost:4400',
+    teeProvider,
+    requireAttestation: config?.requireAttestation ?? isProduction,
     ...config,
-  };
+  }
 
-  return new TrainingWorker(defaultConfig);
+  return new TrainingWorker(defaultConfig)
 }

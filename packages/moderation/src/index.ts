@@ -21,7 +21,7 @@
  *   banManager: '0x...',
  *   identityRegistry: '0x...',
  *   chainId: 1337,
- *   rpcUrl: 'http://localhost:8545',
+ *   rpcUrl: 'http://localhost:6545',
  * });
  *
  * // Check if user is banned
@@ -35,18 +35,22 @@
  * ```
  */
 
-// A2A handler exports
-export { createModerationA2AHandler } from './a2a-handler';
-// ABIs
+// ABIs from @babylon/shared
 export {
   BAN_MANAGER_ABI,
   IDENTITY_REGISTRY_ABI,
   MODERATION_MARKETPLACE_ABI,
-} from './abis';
-// Re-export bridge for cross-chain synchronization
-export { createModerationBridge, ModerationBridge } from './bridge';
+} from '@babylon/shared'
+
+// A2A handler exports
+export { createModerationA2AHandler } from './a2a-handler'
+
+// Bridge for cross-chain synchronization
+export { createModerationBridge, ModerationBridge } from './bridge'
+
 // Core client
-export { createModerationClient, ModerationClient } from './client';
+export { createModerationClient, ModerationClient } from './client'
+
 // Zod schemas for validation
 export {
   AddressSchema,
@@ -68,18 +72,16 @@ export {
   UnstakeParamsSchema,
   VoteParamsSchema,
   VotePositionSchema,
-} from './schemas';
+} from './schemas'
+
 // Types
 export {
   type BabylonModerationConfig,
   type BanAppliedEvent,
-  // Interfaces
   type BanCase,
   type BanRemovedEvent,
-  // Enums
   BanStatus,
   type CaseChallengedEvent,
-  // Events
   type CaseOpenedEvent,
   type CaseResolvedEvent,
   type CrossChainBanSync,
@@ -92,4 +94,4 @@ export {
   type Vote,
   type VoteCastEvent,
   VotePosition,
-} from './types';
+} from './types'

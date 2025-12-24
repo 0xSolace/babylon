@@ -9,9 +9,9 @@ import type {
   Provider,
   ProviderResult,
   State,
-} from '@elizaos/core';
-import { logger } from '../../../shared/logger';
-import type { BabylonRuntime } from '../types';
+} from '@elizaos/core'
+import { logger } from '../../../shared/logger'
+import { toBabylonRuntime } from '../types'
 
 /**
  * Provider: Trending Topics
@@ -25,51 +25,51 @@ export const trendingTopicsProvider: Provider = {
   get: async (
     runtime: IAgentRuntime,
     _message: Memory,
-    _state: State
+    _state: State,
   ): Promise<ProviderResult> => {
-    const babylonRuntime = runtime as BabylonRuntime;
+    const babylonRuntime = toBabylonRuntime(runtime)
 
     // A2A is REQUIRED
     if (!babylonRuntime.a2aClient?.isConnected()) {
       logger.error(
         'A2A client not connected - trending topics provider requires A2A protocol',
         undefined,
-        runtime.agentId
-      );
+        runtime.agentId,
+      )
       return {
         text: 'ERROR: A2A client not connected. Cannot fetch trending topics. Please ensure A2A server is running.',
-      };
+      }
     }
 
     // Get trending tags via A2A
-    const trendingResult = await babylonRuntime.a2aClient.getTrendingTags(20);
+    const trendingResult = await babylonRuntime.a2aClient.getTrendingTags(20)
     const tags =
       (
         trendingResult as {
           tags?: Array<{
-            id: string;
-            name: string;
-            displayName?: string;
-            category?: string;
-            postCount?: number;
-            score?: number;
-          }>;
+            id: string
+            name: string
+            displayName?: string
+            category?: string
+            postCount?: number
+            score?: number
+          }>
         }
-      )?.tags || [];
+      )?.tags || []
 
     if (tags.length === 0) {
-      return { text: 'No trending topics available.' };
+      return { text: 'No trending topics available.' }
     }
 
     const topicsText = tags
       .map(
         (
           t,
-          i
+          i,
         ) => `${i + 1}. #${t.name}${t.displayName ? ` (${t.displayName})` : ''}
-   ${t.category ? `Category: ${t.category}` : ''}${t.postCount !== undefined ? ` | ${t.postCount} posts` : ''}${t.score !== undefined ? ` | Score: ${t.score.toFixed(1)}` : ''}`
+   ${t.category ? `Category: ${t.category}` : ''}${t.postCount !== undefined ? ` | ${t.postCount} posts` : ''}${t.score !== undefined ? ` | Score: ${t.score.toFixed(1)}` : ''}`,
       )
-      .join('\n\n');
+      .join('\n\n')
 
     return {
       text: `🔥 Trending Topics:
@@ -85,6 +85,6 @@ ${topicsText}`,
           score: t.score,
         })),
       },
-    };
+    }
   },
-};
+}

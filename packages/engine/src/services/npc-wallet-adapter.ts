@@ -8,8 +8,9 @@
  * Uses atomic SQL operations to prevent race conditions that could
  * lead to negative balances.
  */
-import type { WalletPort } from '@babylon/core/markets/shared';
-import { actorState, type DbClient, db as defaultDb, eq } from '@babylon/db';
+
+import { actorState, type DbClient, db as defaultDb, eq } from '@babylon/db'
+import { logger, type WalletPort } from '@babylon/shared'
 
 /**
  * Creates a WalletPort implementation for NPC actors.
@@ -20,36 +21,36 @@ import { actorState, type DbClient, db as defaultDb, eq } from '@babylon/db';
  */
 export function createNpcWalletAdapter(
   actorId: string,
-  dbClient?: DbClient
+  dbClient?: DbClient,
 ): WalletPort {
-  const db = dbClient ?? defaultDb;
+  const db = dbClient ?? defaultDb
 
   return {
     async debit({
       amount,
       reason,
     }: {
-      userId?: string;
-      amount: number;
-      reason: string;
-      description?: string;
-      relatedId?: string;
+      userId?: string
+      amount: number
+      reason: string
+      description?: string
+      relatedId?: string
     }) {
       const [actor] = await db
         .select({ tradingBalance: actorState.tradingBalance })
         .from(actorState)
         .where(eq(actorState.id, actorId))
-        .limit(1);
+        .limit(1)
 
       if (!actor) {
-        throw new Error(`Actor not found: ${actorId}`);
+        throw new Error(`Actor not found: ${actorId}`)
       }
 
-      const currentBalance = Number(actor.tradingBalance);
+      const currentBalance = Number(actor.tradingBalance)
       if (currentBalance < amount) {
         throw new Error(
-          `Insufficient trading balance: ${currentBalance.toFixed(2)} < ${amount.toFixed(2)} (${reason})`
-        );
+          `Insufficient trading balance: ${currentBalance.toFixed(2)} < ${amount.toFixed(2)} (${reason})`,
+        )
       }
 
       await db
@@ -58,53 +59,53 @@ export function createNpcWalletAdapter(
           tradingBalance: String(currentBalance - amount),
           updatedAt: new Date(),
         })
-        .where(eq(actorState.id, actorId));
+        .where(eq(actorState.id, actorId))
     },
 
     async credit({
       amount,
     }: {
-      userId?: string;
-      amount: number;
-      reason: string;
-      description?: string;
-      relatedId?: string;
+      userId?: string
+      amount: number
+      reason: string
+      description?: string
+      relatedId?: string
     }) {
       const [actor] = await db
         .select({ tradingBalance: actorState.tradingBalance })
         .from(actorState)
         .where(eq(actorState.id, actorId))
-        .limit(1);
+        .limit(1)
 
       if (!actor) {
-        throw new Error(`Actor not found: ${actorId}`);
+        throw new Error(`Actor not found: ${actorId}`)
       }
 
-      const currentBalance = Number(actor.tradingBalance);
+      const currentBalance = Number(actor.tradingBalance)
       await db
         .update(actorState)
         .set({
           tradingBalance: String(currentBalance + amount),
           updatedAt: new Date(),
         })
-        .where(eq(actorState.id, actorId));
+        .where(eq(actorState.id, actorId))
     },
 
     async recordPnL({
       pnl,
       reason,
     }: {
-      userId?: string;
-      pnl: number;
-      reason: string;
-      relatedId?: string;
+      userId?: string
+      pnl: number
+      reason: string
+      relatedId?: string
     }) {
-      // For NPCs, we just update the trading balance directly
-      // No separate PnL tracking like user wallets
-      // Log PnL for debugging but don't modify balance here
-      // (credit/debit already handles the balance changes)
       if (process.env.NODE_ENV === 'development') {
-        console.log(`[NPC PnL] ${actorId}: ${pnl.toFixed(2)} (${reason})`);
+        logger.debug(
+          'NPC PnL update',
+          { actorId, pnl: pnl.toFixed(2), reason },
+          'NpcWallet',
+        )
       }
     },
 
@@ -113,13 +114,13 @@ export function createNpcWalletAdapter(
         .select({ tradingBalance: actorState.tradingBalance })
         .from(actorState)
         .where(eq(actorState.id, actorId))
-        .limit(1);
+        .limit(1)
 
       if (!actor) {
-        return { balance: 0 };
+        return { balance: 0 }
       }
 
-      return { balance: Number(actor.tradingBalance) };
+      return { balance: Number(actor.tradingBalance) }
     },
-  };
+  }
 }

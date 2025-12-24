@@ -1,7 +1,6 @@
 /**
  * Jeju Network Integration Configuration
  *
- * Consolidated configuration for Jeju decentralized infrastructure integration.
  * When JEJU_NETWORK is set, Babylon uses Jeju's:
  * - Decentralized compute marketplace for LLM inference
  * - Decentralized storage via IPFS/Arweave
@@ -28,37 +27,114 @@
  * ```
  */
 
-import {
-  getJejuNetwork,
-  getNetworkMode,
-  isRunningInJeju,
-} from './constants/chains';
+import { jejuLocalnet, jejuMainnet, jejuTestnet } from './constants/chains'
 
-export type JejuNetworkType = 'localnet' | 'testnet' | 'mainnet';
-export type PaymentToken = 'JEJU' | 'ETH' | 'USDC';
+export type JejuNetworkType = 'localnet' | 'testnet' | 'mainnet'
+export type PaymentToken = 'JEJU' | 'ETH' | 'USDC'
+export type NetworkMode = 'jeju' | 'standalone'
 
 export interface JejuNetworkConfig {
-  rpcUrl: string;
-  computeApiUrl: string;
-  storageApiUrl: string;
-  ipfsGateway: string;
-  explorerUrl: string | null;
-  chainId: number;
+  rpcUrl: string
+  computeApiUrl: string
+  storageApiUrl: string
+  ipfsGateway: string
+  explorerUrl: string | null
+  chainId: number
 }
 
 export interface JejuConfig {
   /** Current network */
-  network: JejuNetworkType;
+  network: JejuNetworkType
   /** Network-specific configuration */
-  networkConfig: JejuNetworkConfig;
+  networkConfig: JejuNetworkConfig
   /** Wallet address for authenticated operations */
-  walletAddress: string | null;
+  walletAddress: string | null
   /** Preferred payment token */
-  paymentToken: PaymentToken;
+  paymentToken: PaymentToken
   /** Whether storage integration is enabled */
-  storageEnabled: boolean;
+  storageEnabled: boolean
   /** Whether compute integration is enabled */
-  computeEnabled: boolean;
+  computeEnabled: boolean
+}
+
+// Port configuration defaults
+const L2_RPC_PORT = '6546'
+const COMPUTE_PORT = '5010'
+const STORAGE_PORT = '5004'
+const IPFS_GATEWAY_PORT = '8080'
+
+// Default Jeju network configuration - can be overridden at build time
+let DEFAULT_JEJU_NETWORK: JejuNetworkType | null = null
+let DEFAULT_JEJU_RPC_URL: string | null = null
+let DEFAULT_JEJU_COMPUTE_API_URL: string | null = null
+let DEFAULT_JEJU_STORAGE_API_URL: string | null = null
+let DEFAULT_JEJU_IPFS_GATEWAY: string | null = null
+let DEFAULT_JEJU_WALLET_ADDRESS: string | null = null
+let DEFAULT_JEJU_PAYMENT_TOKEN: PaymentToken = 'JEJU'
+let DEFAULT_USE_JEJU_STORAGE: boolean = true
+let DEFAULT_USE_JEJU_COMPUTE: boolean = true
+
+/**
+ * Set default Jeju network (for build-time configuration)
+ */
+export function setDefaultJejuNetwork(network: JejuNetworkType | null): void {
+  DEFAULT_JEJU_NETWORK = network
+}
+
+/**
+ * Set default Jeju RPC URL (for build-time configuration)
+ */
+export function setDefaultJejuRpcUrl(url: string | null): void {
+  DEFAULT_JEJU_RPC_URL = url
+}
+
+/**
+ * Set default Jeju compute API URL (for build-time configuration)
+ */
+export function setDefaultJejuComputeApiUrl(url: string | null): void {
+  DEFAULT_JEJU_COMPUTE_API_URL = url
+}
+
+/**
+ * Set default Jeju storage API URL (for build-time configuration)
+ */
+export function setDefaultJejuStorageApiUrl(url: string | null): void {
+  DEFAULT_JEJU_STORAGE_API_URL = url
+}
+
+/**
+ * Set default Jeju IPFS gateway (for build-time configuration)
+ */
+export function setDefaultJejuIpfsGateway(url: string | null): void {
+  DEFAULT_JEJU_IPFS_GATEWAY = url
+}
+
+/**
+ * Set default Jeju wallet address (for build-time configuration)
+ */
+export function setDefaultJejuWalletAddress(address: string | null): void {
+  DEFAULT_JEJU_WALLET_ADDRESS = address
+}
+
+/**
+ * Set default Jeju payment token (for build-time configuration)
+ */
+export function setDefaultJejuPaymentToken(token: PaymentToken): void {
+  DEFAULT_JEJU_PAYMENT_TOKEN = token
+}
+
+/**
+ * Set default Jeju storage enabled (for build-time configuration)
+ */
+export function setDefaultUseJejuStorage(enabled: boolean): void {
+  DEFAULT_USE_JEJU_STORAGE = enabled
+}
+
+/**
+ * Set default Jeju compute enabled (for build-time configuration)
+ */
+export function setDefaultUseJejuCompute(enabled: boolean): void {
+  DEFAULT_USE_JEJU_COMPUTE = enabled
 }
 
 /**
@@ -66,12 +142,12 @@ export interface JejuConfig {
  */
 const NETWORK_CONFIGS: Record<JejuNetworkType, JejuNetworkConfig> = {
   localnet: {
-    rpcUrl: 'http://127.0.0.1:9545',
-    computeApiUrl: 'http://127.0.0.1:5010',
-    storageApiUrl: 'http://127.0.0.1:5004',
-    ipfsGateway: 'http://127.0.0.1:8080',
+    rpcUrl: `http://127.0.0.1:${L2_RPC_PORT}`,
+    computeApiUrl: `http://127.0.0.1:${COMPUTE_PORT}`,
+    storageApiUrl: `http://127.0.0.1:${STORAGE_PORT}`,
+    ipfsGateway: `http://127.0.0.1:${IPFS_GATEWAY_PORT}`,
     explorerUrl: null,
-    chainId: 1337,
+    chainId: jejuLocalnet.id,
   },
   testnet: {
     rpcUrl: 'https://testnet-rpc.jeju.network',
@@ -79,7 +155,7 @@ const NETWORK_CONFIGS: Record<JejuNetworkType, JejuNetworkConfig> = {
     storageApiUrl: 'https://storage.jeju.network',
     ipfsGateway: 'https://ipfs.jeju.network',
     explorerUrl: 'https://testnet-explorer.jeju.network',
-    chainId: 420690,
+    chainId: jejuTestnet.id,
   },
   mainnet: {
     rpcUrl: 'https://rpc.jeju.network',
@@ -87,143 +163,147 @@ const NETWORK_CONFIGS: Record<JejuNetworkType, JejuNetworkConfig> = {
     storageApiUrl: 'https://storage.jeju.network',
     ipfsGateway: 'https://ipfs.jeju.network',
     explorerUrl: 'https://explorer.jeju.network',
-    chainId: 420691,
+    chainId: jejuMainnet.id,
   },
-};
+}
+
+/**
+ * Get the current Jeju network - defaults to null (standalone mode)
+ */
+export function getJejuNetwork(): JejuNetworkType | null {
+  return DEFAULT_JEJU_NETWORK
+}
+
+/**
+ * Check if running inside Jeju ecosystem
+ */
+export function isRunningInJeju(): boolean {
+  return getJejuNetwork() !== null
+}
+
+/**
+ * Get network mode ('jeju' or 'standalone')
+ */
+export function getNetworkMode(): NetworkMode {
+  return isRunningInJeju() ? 'jeju' : 'standalone'
+}
 
 /**
  * Check if running in Jeju mode
  */
 export function isJejuMode(): boolean {
-  return isRunningInJeju();
+  return isRunningInJeju()
 }
 
 /**
  * Get current Jeju network or null if not in Jeju mode
  */
 export function getCurrentJejuNetwork(): JejuNetworkType | null {
-  return getJejuNetwork();
+  return getJejuNetwork()
 }
-
-/**
- * Get current network mode ('jeju' or 'standalone')
- */
-export { getNetworkMode };
 
 /**
  * Get complete Jeju configuration
  * Returns null if not running in Jeju mode
  */
 export function getJejuConfig(): JejuConfig | null {
-  const network = getJejuNetwork();
+  const network = getJejuNetwork()
   if (!network) {
-    return null;
+    return null
   }
 
-  const defaultConfig = NETWORK_CONFIGS[network];
+  const defaultConfig = NETWORK_CONFIGS[network]
 
-  // Allow environment variable overrides
+  // Use defaults or overrides set at build time
   const networkConfig: JejuNetworkConfig = {
-    rpcUrl: process.env.JEJU_RPC_URL || defaultConfig.rpcUrl,
-    computeApiUrl:
-      process.env.JEJU_COMPUTE_API_URL || defaultConfig.computeApiUrl,
-    storageApiUrl:
-      process.env.JEJU_STORAGE_API_URL || defaultConfig.storageApiUrl,
-    ipfsGateway: process.env.JEJU_IPFS_GATEWAY || defaultConfig.ipfsGateway,
+    rpcUrl: DEFAULT_JEJU_RPC_URL || defaultConfig.rpcUrl,
+    computeApiUrl: DEFAULT_JEJU_COMPUTE_API_URL || defaultConfig.computeApiUrl,
+    storageApiUrl: DEFAULT_JEJU_STORAGE_API_URL || defaultConfig.storageApiUrl,
+    ipfsGateway: DEFAULT_JEJU_IPFS_GATEWAY || defaultConfig.ipfsGateway,
     explorerUrl: defaultConfig.explorerUrl,
     chainId: defaultConfig.chainId,
-  };
-
-  const paymentToken =
-    (process.env.JEJU_PAYMENT_TOKEN as PaymentToken) || 'JEJU';
-  const storageEnabled = process.env.USE_JEJU_STORAGE !== 'false';
-  const computeEnabled = process.env.USE_JEJU_COMPUTE !== 'false';
+  }
 
   return {
     network,
     networkConfig,
-    walletAddress: process.env.JEJU_WALLET_ADDRESS || null,
-    paymentToken,
-    storageEnabled,
-    computeEnabled,
-  };
+    walletAddress: DEFAULT_JEJU_WALLET_ADDRESS,
+    paymentToken: DEFAULT_JEJU_PAYMENT_TOKEN,
+    storageEnabled: DEFAULT_USE_JEJU_STORAGE,
+    computeEnabled: DEFAULT_USE_JEJU_COMPUTE,
+  }
 }
 
 /**
  * Get RPC URL for current environment
- * Uses Jeju RPC if in Jeju mode, otherwise falls back to chain-specific defaults
+ * Uses Jeju RPC if in Jeju mode, otherwise falls back to hardhat default
  */
 export function getRpcUrl(): string {
-  const jejuConfig = getJejuConfig();
+  const jejuConfig = getJejuConfig()
   if (jejuConfig) {
-    return jejuConfig.networkConfig.rpcUrl;
+    return jejuConfig.networkConfig.rpcUrl
   }
 
-  // Fallback to explicit env or hardhat default
-  return (
-    process.env.RPC_URL ||
-    process.env.NEXT_PUBLIC_RPC_URL ||
-    'http://localhost:8545'
-  );
+  // Fallback to hardhat default
+  return 'http://localhost:6545'
 }
 
 /**
  * Get chain ID for current environment
  */
 export function getChainId(): number {
-  const jejuConfig = getJejuConfig();
+  const jejuConfig = getJejuConfig()
   if (jejuConfig) {
-    return jejuConfig.networkConfig.chainId;
+    return jejuConfig.networkConfig.chainId
   }
 
-  // Fallback to explicit env or hardhat default
-  const envChainId = process.env.CHAIN_ID || process.env.NEXT_PUBLIC_CHAIN_ID;
-  return envChainId ? parseInt(envChainId, 10) : 31337;
+  // Fallback to hardhat default
+  return 31337
 }
 
 /**
  * Get explorer URL for a transaction hash
  */
 export function getExplorerTxUrl(txHash: string): string | null {
-  const jejuConfig = getJejuConfig();
+  const jejuConfig = getJejuConfig()
   if (jejuConfig?.networkConfig.explorerUrl) {
-    return `${jejuConfig.networkConfig.explorerUrl}/tx/${txHash}`;
+    return `${jejuConfig.networkConfig.explorerUrl}/tx/${txHash}`
   }
-  return null;
+  return null
 }
 
 /**
  * Get explorer URL for an address
  */
 export function getExplorerAddressUrl(address: string): string | null {
-  const jejuConfig = getJejuConfig();
+  const jejuConfig = getJejuConfig()
   if (jejuConfig?.networkConfig.explorerUrl) {
-    return `${jejuConfig.networkConfig.explorerUrl}/address/${address}`;
+    return `${jejuConfig.networkConfig.explorerUrl}/address/${address}`
   }
-  return null;
+  return null
 }
 
 /**
  * Log current Jeju configuration (for debugging)
  */
 export function logJejuConfig(): void {
-  const config = getJejuConfig();
+  const config = getJejuConfig()
   if (!config) {
-    console.log('[Jeju] Not running in Jeju mode (standalone)');
-    return;
+    console.log('[Jeju] Not running in Jeju mode (standalone)')
+    return
   }
 
-  console.log('[Jeju] Configuration:');
-  console.log(`  Network: ${config.network}`);
-  console.log(`  Chain ID: ${config.networkConfig.chainId}`);
-  console.log(`  RPC URL: ${config.networkConfig.rpcUrl}`);
-  console.log(`  Compute API: ${config.networkConfig.computeApiUrl}`);
-  console.log(`  Storage API: ${config.networkConfig.storageApiUrl}`);
-  console.log(`  IPFS Gateway: ${config.networkConfig.ipfsGateway}`);
-  console.log(`  Storage Enabled: ${config.storageEnabled}`);
-  console.log(`  Compute Enabled: ${config.computeEnabled}`);
-  console.log(`  Payment Token: ${config.paymentToken}`);
+  console.log('[Jeju] Configuration:')
+  console.log(`  Network: ${config.network}`)
+  console.log(`  Chain ID: ${config.networkConfig.chainId}`)
+  console.log(`  RPC URL: ${config.networkConfig.rpcUrl}`)
+  console.log(`  Compute API: ${config.networkConfig.computeApiUrl}`)
+  console.log(`  Storage API: ${config.networkConfig.storageApiUrl}`)
+  console.log(`  IPFS Gateway: ${config.networkConfig.ipfsGateway}`)
+  console.log(`  Storage Enabled: ${config.storageEnabled}`)
+  console.log(`  Compute Enabled: ${config.computeEnabled}`)
+  console.log(`  Payment Token: ${config.paymentToken}`)
   if (config.walletAddress) {
-    console.log(`  Wallet: ${config.walletAddress.slice(0, 10)}...`);
+    console.log(`  Wallet: ${config.walletAddress.slice(0, 10)}...`)
   }
 }

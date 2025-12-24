@@ -1,16 +1,24 @@
 /**
  * Training Storage Module
  *
- * Encrypted trajectory storage for decentralized training.
+ * Encrypted trajectory storage for training.
  */
 
 export {
   type AuthSignature,
-  type EncryptedPayload,
   type EncryptedTrajectory,
   EncryptedTrajectoryStorage,
   getEncryptedTrajectoryStorage,
   resetEncryptedTrajectoryStorage,
   type StorageConfig,
   type TrajectoryBatch,
-} from './EncryptedTrajectoryStorage';
+} from './EncryptedTrajectoryStorage'
+export {
+  getStorage,
+  getStorageProvider,
+  type IPFSUploadResult,
+  type ModelMetadata,
+  type StorageOptions,
+  StorageUtil,
+  shouldUseStorage,
+} from './storage-util'

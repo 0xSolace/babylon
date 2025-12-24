@@ -6,8 +6,8 @@
  * decentralized discovery, IPFS frontend, and self-healing infrastructure.
  */
 
-import { logger } from '@babylon/shared';
-import type { Address } from 'viem';
+import { logger } from '@babylon/shared'
+import type { Address } from 'viem'
 
 // ============================================================================
 // Types
@@ -15,86 +15,82 @@ import type { Address } from 'viem';
 
 export interface UnruggableGameConfig {
   // Treasury
-  treasuryAddress: Address;
-  dailyWithdrawalLimit: bigint;
+  treasuryAddress: Address
+  dailyWithdrawalLimit: bigint
 
   // Operator
-  heartbeatTimeoutSeconds: number;
-  takeoverCooldownSeconds: number;
+  heartbeatTimeoutSeconds: number
+  takeoverCooldownSeconds: number
 
   // Security Council
-  councilMembers: Address[];
-  keyRotationThreshold: number;
+  councilMembers: Address[]
+  keyRotationThreshold: number
 
   // Storage
-  ipfsGateway: string;
-  arweaveGateway: string;
+  ipfsGateway: string
+  arweaveGateway: string
 
   // Discovery
-  jnsName?: string;
-  ensName?: string;
-  erc8004ServiceId?: string;
+  jnsName?: string
+  ensName?: string
+  erc8004ServiceId?: string
 
   // Frontend
-  frontendCid?: string;
-  frontendGateways: string[];
+  frontendCid?: string
+  frontendGateways: string[]
 
   // Recovery
-  backupCronNodes: string[];
-  recoveryRegistryAddress?: Address;
+  backupCronNodes: string[]
+  recoveryRegistryAddress?: Address
 }
 
 export interface UnruggableStatus {
   // Overall status
-  isUnruggable: boolean;
-  score: number; // 0-100
-  issues: string[];
-  warnings: string[];
+  isUnruggable: boolean
+  score: number // 0-100
+  issues: string[]
+  warnings: string[]
 
   // Component status
   treasury: {
-    funded: boolean;
-    balance: bigint;
-    dailyLimitSet: boolean;
-  };
+    funded: boolean
+    balance: bigint
+    dailyLimitSet: boolean
+  }
   operator: {
-    registered: boolean;
-    active: boolean;
-    lastHeartbeat: Date;
-    attestationValid: boolean;
-  };
+    registered: boolean
+    active: boolean
+    lastHeartbeat: Date
+    attestationValid: boolean
+  }
   state: {
-    anchored: boolean;
-    lastCid: string;
-    encrypted: boolean;
-    keyVersion: number;
-  };
+    anchored: boolean
+    lastCid: string
+    encrypted: boolean
+    keyVersion: number
+  }
   discovery: {
-    jnsRegistered: boolean;
-    ensRegistered: boolean;
-    erc8004Registered: boolean;
-  };
+    jnsRegistered: boolean
+    ensRegistered: boolean
+    erc8004Registered: boolean
+  }
   frontend: {
-    deployed: boolean;
-    cid: string;
-    gatewaysAvailable: number;
-  };
+    deployed: boolean
+    cid: string
+    gatewaysAvailable: number
+  }
   recovery: {
-    cronNodesAvailable: number;
-    selfHealingEnabled: boolean;
-    onChainRecoveryEnabled: boolean;
-  };
+    cronNodesAvailable: number
+    selfHealingEnabled: boolean
+    onChainRecoveryEnabled: boolean
+  }
 }
 
 export interface RecoveryProcedure {
-  type:
-    | 'operator_takeover'
-    | 'state_recovery'
-    | 'key_rotation'
-    | 'full_restart';
-  steps: string[];
-  requiredApprovals: number;
-  estimatedTime: string;
+  type: 'operator_takeover' | 'state_recovery' | 'key_rotation' | 'full_restart'
+  steps: string[]
+  requiredApprovals: number
+  estimatedTime: string
 }
 
 // ============================================================================
@@ -102,81 +98,79 @@ export interface RecoveryProcedure {
 // ============================================================================
 
 export class UnruggableGameService {
-  private config: UnruggableGameConfig;
+  private config: UnruggableGameConfig
 
   constructor(config: UnruggableGameConfig) {
-    this.config = config;
+    this.config = config
   }
 
   /**
    * Check if the game is completely unruggable
    */
   async checkStatus(): Promise<UnruggableStatus> {
-    const issues: string[] = [];
-    const warnings: string[] = [];
+    const issues: string[] = []
+    const warnings: string[] = []
 
     // Check treasury
-    const treasuryStatus = await this.checkTreasury();
+    const treasuryStatus = await this.checkTreasury()
     if (!treasuryStatus.funded) {
-      issues.push('Treasury is not funded');
+      issues.push('Treasury is not funded')
     }
     if (!treasuryStatus.dailyLimitSet) {
-      issues.push('Daily withdrawal limit not set');
+      issues.push('Daily withdrawal limit not set')
     }
 
     // Check operator
-    const operatorStatus = await this.checkOperator();
+    const operatorStatus = await this.checkOperator()
     if (!operatorStatus.registered) {
-      issues.push('No operator registered');
+      issues.push('No operator registered')
     } else if (!operatorStatus.active) {
-      warnings.push('Operator is inactive - takeover available');
+      warnings.push('Operator is inactive - takeover available')
     }
     if (!operatorStatus.attestationValid) {
-      issues.push('Operator attestation invalid');
+      issues.push('Operator attestation invalid')
     }
 
     // Check state
-    const stateStatus = await this.checkState();
+    const stateStatus = await this.checkState()
     if (!stateStatus.anchored) {
-      issues.push('State not anchored on-chain');
+      issues.push('State not anchored on-chain')
     }
     if (!stateStatus.encrypted) {
-      issues.push('State not encrypted');
+      issues.push('State not encrypted')
     }
 
     // Check discovery
-    const discoveryStatus = await this.checkDiscovery();
+    const discoveryStatus = await this.checkDiscovery()
     if (!discoveryStatus.jnsRegistered && !discoveryStatus.ensRegistered) {
-      warnings.push('No decentralized name registered');
+      warnings.push('No decentralized name registered')
     }
     if (!discoveryStatus.erc8004Registered) {
-      warnings.push('Not registered on ERC-8004 identity registry');
+      warnings.push('Not registered on ERC-8004 identity registry')
     }
 
     // Check frontend
-    const frontendStatus = await this.checkFrontend();
+    const frontendStatus = await this.checkFrontend()
     if (!frontendStatus.deployed) {
-      issues.push('Frontend not deployed to IPFS/Arweave');
+      issues.push('Frontend not deployed to IPFS/Arweave')
     }
     if (frontendStatus.gatewaysAvailable < 2) {
-      warnings.push('Less than 2 frontend gateways available');
+      warnings.push('Less than 2 frontend gateways available')
     }
 
     // Check recovery
-    const recoveryStatus = await this.checkRecovery();
+    const recoveryStatus = await this.checkRecovery()
     if (recoveryStatus.cronNodesAvailable < 2) {
-      warnings.push('Less than 2 backup cron nodes');
+      warnings.push('Less than 2 backup cron nodes')
     }
     if (!recoveryStatus.selfHealingEnabled) {
-      warnings.push('Self-healing not enabled');
+      warnings.push('Self-healing not enabled')
     }
 
     // Calculate score
-    const totalChecks = 10;
-    const failedChecks = issues.length;
-    const score = Math.round(
-      ((totalChecks - failedChecks) / totalChecks) * 100
-    );
+    const totalChecks = 10
+    const failedChecks = issues.length
+    const score = Math.round(((totalChecks - failedChecks) / totalChecks) * 100)
 
     return {
       isUnruggable: issues.length === 0,
@@ -189,7 +183,7 @@ export class UnruggableGameService {
       discovery: discoveryStatus,
       frontend: frontendStatus,
       recovery: recoveryStatus,
-    };
+    }
   }
 
   /**
@@ -200,7 +194,7 @@ export class UnruggableGameService {
       | 'operator_down'
       | 'key_compromised'
       | 'state_corrupted'
-      | 'frontend_unavailable'
+      | 'frontend_unavailable',
   ): RecoveryProcedure {
     switch (scenario) {
       case 'operator_down':
@@ -215,7 +209,7 @@ export class UnruggableGameService {
           ],
           requiredApprovals: 0,
           estimatedTime: '3-4 hours',
-        };
+        }
 
       case 'key_compromised':
         return {
@@ -229,7 +223,7 @@ export class UnruggableGameService {
           ],
           requiredApprovals: 2,
           estimatedTime: '15-30 minutes',
-        };
+        }
 
       case 'state_corrupted':
         return {
@@ -243,7 +237,7 @@ export class UnruggableGameService {
           ],
           requiredApprovals: 0,
           estimatedTime: '10-20 minutes',
-        };
+        }
 
       case 'frontend_unavailable':
         return {
@@ -257,7 +251,7 @@ export class UnruggableGameService {
           ],
           requiredApprovals: 0,
           estimatedTime: '5-15 minutes',
-        };
+        }
     }
   }
 
@@ -265,95 +259,99 @@ export class UnruggableGameService {
    * Deploy frontend to IPFS/Arweave
    */
   async deployFrontend(
-    buildPath: string
+    buildPath: string,
   ): Promise<{ cid: string; urls: string[] }> {
-    logger.info('[Unruggable] Deploying frontend to decentralized storage...');
+    logger.info('[Unruggable] Deploying frontend to decentralized storage...')
 
     // Upload to IPFS
-    const ipfsCid = await this.uploadToIPFS(buildPath);
+    const ipfsCid = await this.uploadToIPFS(buildPath)
 
     // Pin to Arweave for permanent storage
-    const arweaveTx = await this.uploadToArweave(buildPath);
+    const arweaveTx = await this.uploadToArweave(buildPath)
 
     const urls = [
       `${this.config.ipfsGateway}/ipfs/${ipfsCid}`,
       `${this.config.arweaveGateway}/${arweaveTx}`,
       ...this.config.frontendGateways.map((g) => `${g}/ipfs/${ipfsCid}`),
-    ];
+    ]
 
-    logger.info('[Unruggable] Frontend deployed', { cid: ipfsCid, urls });
+    logger.info('[Unruggable] Frontend deployed', { cid: ipfsCid, urls })
 
-    return { cid: ipfsCid, urls };
+    return { cid: ipfsCid, urls }
   }
 
   /**
    * Register game on decentralized naming
    */
   async registerName(name: string, type: 'jns' | 'ens'): Promise<void> {
-    logger.info(`[Unruggable] Registering ${type.toUpperCase()} name: ${name}`);
+    logger.info(`[Unruggable] Registering ${type.toUpperCase()} name: ${name}`)
 
     // Register the name pointing to the treasury contract
     // This would call the actual JNS/ENS registration contract
 
-    logger.info(`[Unruggable] ${type.toUpperCase()} name registered: ${name}`);
+    logger.info(`[Unruggable] ${type.toUpperCase()} name registered: ${name}`)
   }
 
   /**
    * Verify the game is unruggable and log report
    */
   async verifyAndReport(): Promise<boolean> {
-    const status = await this.checkStatus();
+    const status = await this.checkStatus()
 
     console.log(
-      '\n╔══════════════════════════════════════════════════════════════╗'
-    );
+      '\n╔══════════════════════════════════════════════════════════════╗',
+    )
     console.log(
-      '║            UNRUGGABLE GAME VERIFICATION REPORT               ║'
-    );
+      '║            UNRUGGABLE GAME VERIFICATION REPORT               ║',
+    )
     console.log(
-      '╚══════════════════════════════════════════════════════════════╝\n'
-    );
+      '╚══════════════════════════════════════════════════════════════╝\n',
+    )
 
     console.log(
-      `Overall Status: ${status.isUnruggable ? '✅ UNRUGGABLE' : '❌ RUGGABLE'}`
-    );
-    console.log(`Score: ${status.score}/100\n`);
+      `Overall Status: ${status.isUnruggable ? '✅ UNRUGGABLE' : '❌ RUGGABLE'}`,
+    )
+    console.log(`Score: ${status.score}/100\n`)
 
-    console.log('Component Status:');
+    console.log('Component Status:')
     console.log(
-      `  Treasury:   ${status.treasury.funded ? '✅' : '❌'} Funded: ${status.treasury.balance}`
-    );
+      `  Treasury:   ${status.treasury.funded ? '✅' : '❌'} Funded: ${status.treasury.balance}`,
+    )
     console.log(
-      `  Operator:   ${status.operator.active ? '✅' : '⚠️'} Active: ${status.operator.active}`
-    );
+      `  Operator:   ${status.operator.active ? '✅' : '⚠️'} Active: ${status.operator.active}`,
+    )
     console.log(
-      `  State:      ${status.state.anchored ? '✅' : '❌'} CID: ${status.state.lastCid || 'none'}`
-    );
+      `  State:      ${status.state.anchored ? '✅' : '❌'} CID: ${status.state.lastCid || 'none'}`,
+    )
     console.log(
-      `  Discovery:  ${status.discovery.erc8004Registered ? '✅' : '⚠️'} ERC-8004 registered`
-    );
+      `  Discovery:  ${status.discovery.erc8004Registered ? '✅' : '⚠️'} ERC-8004 registered`,
+    )
     console.log(
-      `  Frontend:   ${status.frontend.deployed ? '✅' : '❌'} CID: ${status.frontend.cid || 'none'}`
-    );
+      `  Frontend:   ${status.frontend.deployed ? '✅' : '❌'} CID: ${status.frontend.cid || 'none'}`,
+    )
     console.log(
-      `  Recovery:   ${status.recovery.selfHealingEnabled ? '✅' : '⚠️'} Self-healing enabled`
-    );
+      `  Recovery:   ${status.recovery.selfHealingEnabled ? '✅' : '⚠️'} Self-healing enabled`,
+    )
 
     if (status.issues.length > 0) {
-      console.log('\n❌ Issues (must fix):');
-      status.issues.forEach((issue) => console.log(`  - ${issue}`));
+      console.log('\n❌ Issues (must fix):')
+      for (const issue of status.issues) {
+        console.log(`  - ${issue}`)
+      }
     }
 
     if (status.warnings.length > 0) {
-      console.log('\n⚠️ Warnings (recommended):');
-      status.warnings.forEach((warning) => console.log(`  - ${warning}`));
+      console.log('\n⚠️ Warnings (recommended):')
+      for (const warning of status.warnings) {
+        console.log(`  - ${warning}`)
+      }
     }
 
     console.log(
-      '\n════════════════════════════════════════════════════════════════\n'
-    );
+      '\n════════════════════════════════════════════════════════════════\n',
+    )
 
-    return status.isUnruggable;
+    return status.isUnruggable
   }
 
   // ============================================================================
@@ -366,7 +364,7 @@ export class UnruggableGameService {
       funded: true,
       balance: 100n * 10n ** 18n, // 100 ETH
       dailyLimitSet: true,
-    };
+    }
   }
 
   private async checkOperator(): Promise<UnruggableStatus['operator']> {
@@ -376,7 +374,7 @@ export class UnruggableGameService {
       active: true,
       lastHeartbeat: new Date(),
       attestationValid: true,
-    };
+    }
   }
 
   private async checkState(): Promise<UnruggableStatus['state']> {
@@ -386,7 +384,7 @@ export class UnruggableGameService {
       lastCid: 'QmExample...',
       encrypted: true,
       keyVersion: 1,
-    };
+    }
   }
 
   private async checkDiscovery(): Promise<UnruggableStatus['discovery']> {
@@ -394,16 +392,16 @@ export class UnruggableGameService {
       jnsRegistered: !!this.config.jnsName,
       ensRegistered: !!this.config.ensName,
       erc8004Registered: !!this.config.erc8004ServiceId,
-    };
+    }
   }
 
   private async checkFrontend(): Promise<UnruggableStatus['frontend']> {
-    const gatewaysAvailable = await this.checkGatewayAvailability();
+    const gatewaysAvailable = await this.checkGatewayAvailability()
     return {
       deployed: !!this.config.frontendCid,
       cid: this.config.frontendCid ?? '',
       gatewaysAvailable,
-    };
+    }
   }
 
   private async checkRecovery(): Promise<UnruggableStatus['recovery']> {
@@ -411,32 +409,32 @@ export class UnruggableGameService {
       cronNodesAvailable: this.config.backupCronNodes.length,
       selfHealingEnabled: true,
       onChainRecoveryEnabled: !!this.config.recoveryRegistryAddress,
-    };
+    }
   }
 
   private async checkGatewayAvailability(): Promise<number> {
-    let available = 0;
+    let available = 0
     for (const gateway of this.config.frontendGateways) {
       try {
         const response = await fetch(`${gateway}/health`, {
           signal: AbortSignal.timeout(5000),
-        });
-        if (response.ok) available++;
+        })
+        if (response.ok) available++
       } catch {
         // Gateway not available
       }
     }
-    return available;
+    return available
   }
 
   private async uploadToIPFS(_path: string): Promise<string> {
     // Would upload to IPFS
-    return 'QmExample...';
+    return 'QmExample...'
   }
 
   private async uploadToArweave(_path: string): Promise<string> {
     // Would upload to Arweave
-    return 'arweave-tx-id';
+    return 'arweave-tx-id'
   }
 }
 
@@ -482,20 +480,20 @@ export const UNRUGGABLE_CHECKLIST = {
     { id: 'council_multisig', label: 'Security council has 2+ members' },
     { id: 'on_chain_recovery', label: 'On-chain recovery registry is set up' },
   ],
-};
+}
 
 // ============================================================================
 // Factory
 // ============================================================================
 
 export function createUnruggableGameService(
-  config?: Partial<UnruggableGameConfig>
+  config?: Partial<UnruggableGameConfig>,
 ): UnruggableGameService {
   const defaultConfig: UnruggableGameConfig = {
     treasuryAddress: (process.env.BABYLON_TREASURY_ADDRESS ??
       '0x0000000000000000000000000000000000000000') as Address,
     dailyWithdrawalLimit: BigInt(
-      process.env.DAILY_WITHDRAWAL_LIMIT ?? '10000000000000000000'
+      process.env.DAILY_WITHDRAWAL_LIMIT ?? '10000000000000000000',
     ), // 10 ETH
     heartbeatTimeoutSeconds: 3600, // 1 hour
     takeoverCooldownSeconds: 7200, // 2 hours
@@ -518,7 +516,7 @@ export function createUnruggableGameService(
       | Address
       | undefined,
     ...config,
-  };
+  }
 
-  return new UnruggableGameService(defaultConfig);
+  return new UnruggableGameService(defaultConfig)
 }

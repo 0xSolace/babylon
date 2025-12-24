@@ -1,37 +1,37 @@
-import { ChatMessagesApiResponseSchema, logger } from '@babylon/shared';
-import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { useSSEChannel } from './useSSE';
+import { ChatMessagesApiResponseSchema, logger } from '@babylon/shared'
+import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { useSSEChannel } from './useSSE'
 
 /**
  * Represents a chat message in the system.
  */
 export interface ChatMessage {
   /** Unique message identifier */
-  id: string;
+  id: string
   /** Message content/text */
-  content: string;
+  content: string
   /** ID of the chat this message belongs to */
-  chatId: string;
+  chatId: string
   /** ID of the user who sent the message */
-  senderId: string;
+  senderId: string
   /** ISO timestamp when the message was created */
-  createdAt: string;
+  createdAt: string
   /** Whether this is a game chat message */
-  isGameChat?: boolean;
+  isGameChat?: boolean
 }
 
 interface ApiMessage {
-  id: string;
-  content: string;
-  senderId: string;
-  createdAt: string | Date;
+  id: string
+  content: string
+  senderId: string
+  createdAt: string | Date
 }
 
 interface ChatPage {
-  messages: ChatMessage[];
-  nextCursor: string | null;
-  hasMore: boolean;
+  messages: ChatMessage[]
+  nextCursor: string | null
+  hasMore: boolean
 }
 
 /**
@@ -78,12 +78,12 @@ const formatMessage = (msg: ApiMessage, targetChatId: string): ChatMessage => ({
     typeof msg.createdAt === 'string'
       ? msg.createdAt
       : msg.createdAt.toISOString(),
-});
+})
 
 export function useChatMessages(chatId: string | null) {
-  const queryClient = useQueryClient();
-  const [sseMessages, setSseMessages] = useState<ChatMessage[]>([]);
-  const previousChatIdRef = useRef<string | null>(null);
+  const queryClient = useQueryClient()
+  const [sseMessages, setSseMessages] = useState<ChatMessage[]>([])
+  const previousChatIdRef = useRef<string | null>(null)
 
   const {
     data,
@@ -97,32 +97,32 @@ export function useChatMessages(chatId: string | null) {
     queryFn: async ({ pageParam }): Promise<ChatPage> => {
       const url = pageParam
         ? `/api/chats/${chatId}?cursor=${pageParam}&limit=50`
-        : `/api/chats/${chatId}?limit=50`;
+        : `/api/chats/${chatId}?limit=50`
 
       logger.debug(
         `Loading messages for chat ${chatId}`,
         { chatId, cursor: pageParam },
-        'useChatMessages'
-      );
+        'useChatMessages',
+      )
 
-      const response = await fetch(url);
+      const response = await fetch(url)
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => null);
+        const errorData = await response.json().catch(() => null)
         logger.error(
           'Failed to load messages',
           { chatId, errorData, status: response.status },
-          'useChatMessages'
-        );
-        throw new Error('Failed to load messages');
+          'useChatMessages',
+        )
+        throw new Error('Failed to load messages')
       }
 
-      const json: unknown = await response.json();
-      const responseData = ChatMessagesApiResponseSchema.parse(json);
+      const json = await response.json()
+      const responseData = ChatMessagesApiResponseSchema.parse(json)
 
       const formattedMessages: ChatMessage[] = (
         responseData.messages ?? []
-      ).map((msg) => formatMessage(msg as ApiMessage, chatId!));
+      ).map((msg) => formatMessage(msg as ApiMessage, chatId))
 
       logger.debug(
         `Loaded ${formattedMessages.length} messages for chat ${chatId}`,
@@ -131,27 +131,27 @@ export function useChatMessages(chatId: string | null) {
           count: formattedMessages.length,
           hasMore: responseData.pagination?.hasMore,
         },
-        'useChatMessages'
-      );
+        'useChatMessages',
+      )
 
       return {
         messages: formattedMessages,
         nextCursor: responseData.pagination?.nextCursor ?? null,
         hasMore: responseData.pagination?.hasMore ?? false,
-      };
+      }
     },
     initialPageParam: null as string | null,
     getNextPageParam: (lastPage) =>
       lastPage.hasMore ? lastPage.nextCursor : undefined,
     enabled: !!chatId,
     staleTime: 30000,
-  });
+  })
 
   // Handle SSE updates for this chat
   const handleChatUpdate = useCallback(
     (eventData: Record<string, unknown>) => {
       if (eventData.type === 'new_message' && eventData.message) {
-        const messageData = eventData.message as Record<string, unknown>;
+        const messageData = eventData.message as Record<string, unknown>
 
         if (
           typeof messageData.id === 'string' &&
@@ -170,52 +170,52 @@ export function useChatMessages(chatId: string | null) {
               typeof messageData.isGameChat === 'boolean'
                 ? messageData.isGameChat
                 : undefined,
-          };
+          }
 
           if (newMessage.chatId === chatId) {
             setSseMessages((prev) => {
               if (prev.some((msg) => msg.id === newMessage.id)) {
-                return prev;
+                return prev
               }
-              return [...prev, newMessage];
-            });
+              return [...prev, newMessage]
+            })
           }
         }
       }
     },
-    [chatId]
-  );
+    [chatId],
+  )
 
-  const channel: `chat:${string}` | null = chatId ? `chat:${chatId}` : null;
-  const { isConnected } = useSSEChannel(channel, handleChatUpdate);
+  const channel: `chat:${string}` | null = chatId ? `chat:${chatId}` : null
+  const { isConnected } = useSSEChannel(channel, handleChatUpdate)
 
   // Reset SSE messages when chat changes
   useEffect(() => {
     if (previousChatIdRef.current !== chatId) {
-      setSseMessages([]);
-      previousChatIdRef.current = chatId;
+      setSseMessages([])
+      previousChatIdRef.current = chatId
     }
-  }, [chatId]);
+  }, [chatId])
 
   // Polling fallback: Refresh chat every 15 seconds
   useEffect(() => {
-    if (!chatId) return;
+    if (!chatId) return
 
     const interval = setInterval(async () => {
       logger.debug(
         `Polling for new messages in chat ${chatId}`,
         { chatId },
-        'useChatMessages'
-      );
+        'useChatMessages',
+      )
 
-      const response = await fetch(`/api/chats/${chatId}?limit=50`);
+      const response = await fetch(`/api/chats/${chatId}?limit=50`)
       if (response.ok) {
-        const json: unknown = await response.json();
-        const responseData = ChatMessagesApiResponseSchema.parse(json);
+        const json = await response.json()
+        const responseData = ChatMessagesApiResponseSchema.parse(json)
         if (responseData.messages) {
           const formattedMessages: ChatMessage[] = responseData.messages.map(
-            (msg) => formatMessage(msg as ApiMessage, chatId)
-          );
+            (msg) => formatMessage(msg as ApiMessage, chatId),
+          )
 
           // Check for new messages and add them via SSE messages
           setSseMessages((prev) => {
@@ -223,71 +223,70 @@ export function useChatMessages(chatId: string | null) {
               ...prev.map((m) => m.id),
               ...(data?.pages.flatMap((p) => p.messages.map((m) => m.id)) ??
                 []),
-            ]);
+            ])
             const newMessages = formattedMessages.filter(
-              (m) => !existingIds.has(m.id)
-            );
+              (m) => !existingIds.has(m.id),
+            )
             if (newMessages.length > 0) {
               logger.debug(
                 `Polling found ${newMessages.length} new messages`,
                 { chatId, count: newMessages.length },
-                'useChatMessages'
-              );
-              return [...prev, ...newMessages];
+                'useChatMessages',
+              )
+              return [...prev, ...newMessages]
             }
-            return prev;
-          });
+            return prev
+          })
         }
       }
-    }, 15000);
+    }, 15000)
 
-    return () => clearInterval(interval);
-  }, [chatId, data?.pages]);
+    return () => clearInterval(interval)
+  }, [chatId, data?.pages])
 
   // Combine paginated data with SSE messages
   const allMessages = useCallback((): ChatMessage[] => {
-    const paginatedMessages =
-      data?.pages.flatMap((page) => page.messages) ?? [];
-    const allMsgs = [...paginatedMessages, ...sseMessages];
+    const paginatedMessages = data?.pages.flatMap((page) => page.messages) ?? []
+    const allMsgs = [...paginatedMessages, ...sseMessages]
 
     // Deduplicate by id
-    const seen = new Set<string>();
+    const seen = new Set<string>()
     const unique = allMsgs.filter((msg) => {
-      if (seen.has(msg.id)) return false;
-      seen.add(msg.id);
-      return true;
-    });
+      if (seen.has(msg.id)) return false
+      seen.add(msg.id)
+      return true
+    })
 
     return unique.sort(
       (a, b) =>
-        new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-    );
-  }, [data?.pages, sseMessages]);
+        new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+    )
+  }, [data?.pages, sseMessages])
 
   const loadMore = useCallback(() => {
     if (hasMore && !isLoadingMore) {
-      void fetchNextPage();
+      void fetchNextPage()
     }
-  }, [hasMore, isLoadingMore, fetchNextPage]);
+  }, [hasMore, isLoadingMore, fetchNextPage])
 
   const addMessage = useCallback((message: ChatMessage) => {
     setSseMessages((prev) => {
       if (prev.some((msg) => msg.id === message.id)) {
-        return prev;
+        return prev
       }
-      return [...prev, message];
-    });
-  }, []);
+      return [...prev, message]
+    })
+  }, [])
 
   const clearMessages = useCallback(() => {
-    setSseMessages([]);
-    void queryClient.resetQueries({ queryKey: ['chatMessages', chatId] });
-  }, [queryClient, chatId]);
+    setSseMessages([])
+    void queryClient.resetQueries({ queryKey: ['chatMessages', chatId] })
+  }, [queryClient, chatId])
 
   const reloadMessages = useCallback(() => {
-    setSseMessages([]);
-    void refetch();
-  }, [refetch]);
+    setSseMessages([])
+    void refetch()
+  }, [refetch])
 
   return {
     messages: allMessages(),
@@ -299,5 +298,5 @@ export function useChatMessages(chatId: string | null) {
     clearMessages,
     reloadMessages,
     isConnected,
-  };
+  }
 }

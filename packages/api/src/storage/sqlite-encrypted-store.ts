@@ -12,12 +12,12 @@
  * State is stored locally in SQLite, encrypted, and synced to IPFS.
  */
 
-import { Database } from 'bun:sqlite';
-import { logger } from '@babylon/shared';
-import type { Hex } from 'viem';
-import { keccak256, toBytes } from 'viem';
-import { getBabylonEnclave } from '../tee/babylon-enclave';
-import { getJejuStorageClient, isJejuStorageAvailable } from './jeju-storage';
+import { Database } from 'bun:sqlite'
+import { logger } from '@babylon/shared'
+import type { Hex } from 'viem'
+import { keccak256, toBytes } from 'viem'
+import { getBabylonEnclave } from '../tee/babylon-enclave'
+import { getJejuStorageClient, isJejuStorageAvailable } from './jeju-storage'
 
 // ============================================================================
 // Types
@@ -25,30 +25,30 @@ import { getJejuStorageClient, isJejuStorageAvailable } from './jeju-storage';
 
 export interface SqliteStoreConfig {
   /** Database file path */
-  dbPath: string;
+  dbPath: string
   /** Enable encryption (requires TEE enclave) */
-  encrypted: boolean;
+  encrypted: boolean
   /** Auto-sync to IPFS */
-  autoSync: boolean;
+  autoSync: boolean
   /** Sync interval in ms */
-  syncIntervalMs: number;
+  syncIntervalMs: number
   /** Enable verbose logging */
-  verbose?: boolean;
+  verbose?: boolean
 }
 
 export interface StateEntry {
-  key: string;
-  value: string;
-  version: number;
-  updatedAt: number;
-  hash: Hex;
+  key: string
+  value: string
+  version: number
+  updatedAt: number
+  hash: Hex
 }
 
 export interface SyncStatus {
-  lastSyncAt: number;
-  pendingChanges: number;
-  lastIpfsCid: string | null;
-  syncInProgress: boolean;
+  lastSyncAt: number
+  pendingChanges: number
+  lastIpfsCid: string | null
+  syncInProgress: boolean
 }
 
 // ============================================================================
@@ -56,14 +56,14 @@ export interface SyncStatus {
 // ============================================================================
 
 export class SqliteEncryptedStore {
-  private config: SqliteStoreConfig;
-  private db: Database | null = null;
-  private encryptionKey: Uint8Array | null = null;
-  private syncTimer: ReturnType<typeof setInterval> | null = null;
-  private pendingChanges = 0;
-  private lastSyncAt = 0;
-  private lastIpfsCid: string | null = null;
-  private syncInProgress = false;
+  private config: SqliteStoreConfig
+  private db: Database | null = null
+  private encryptionKey: Uint8Array | null = null
+  private syncTimer: ReturnType<typeof setInterval> | null = null
+  private pendingChanges = 0
+  private lastSyncAt = 0
+  private lastIpfsCid: string | null = null
+  private syncInProgress = false
 
   constructor(config: Partial<SqliteStoreConfig> = {}) {
     this.config = {
@@ -72,7 +72,7 @@ export class SqliteEncryptedStore {
       autoSync: config.autoSync ?? true,
       syncIntervalMs: config.syncIntervalMs ?? 5 * 60 * 1000, // 5 minutes
       verbose: config.verbose ?? false,
-    };
+    }
   }
 
   /**
@@ -81,28 +81,28 @@ export class SqliteEncryptedStore {
   async initialize(): Promise<void> {
     // Initialize encryption key from TEE if enabled
     if (this.config.encrypted) {
-      const enclave = await getBabylonEnclave({ verbose: this.config.verbose });
-      const attestation = enclave.getAttestation();
+      const enclave = await getBabylonEnclave({ verbose: this.config.verbose })
+      const attestation = enclave.getAttestation()
       this.encryptionKey = new Uint8Array(
-        Buffer.from(attestation.measurement.slice(2), 'hex')
-      );
+        Buffer.from(attestation.measurement.slice(2), 'hex'),
+      )
     }
 
     // Open SQLite database
-    this.db = new Database(this.config.dbPath);
+    this.db = new Database(this.config.dbPath)
 
     // Create schema
-    this.createSchema();
+    this.createSchema()
 
     // Start auto-sync if enabled
     if (this.config.autoSync && this.config.syncIntervalMs > 0) {
       this.syncTimer = setInterval(
         () => this.syncToIpfs(),
-        this.config.syncIntervalMs
-      );
+        this.config.syncIntervalMs,
+      )
     }
 
-    this.log('Store initialized', { dbPath: this.config.dbPath });
+    this.log('Store initialized', { dbPath: this.config.dbPath })
   }
 
   /**
@@ -110,21 +110,21 @@ export class SqliteEncryptedStore {
    */
   async close(): Promise<void> {
     if (this.syncTimer) {
-      clearInterval(this.syncTimer);
-      this.syncTimer = null;
+      clearInterval(this.syncTimer)
+      this.syncTimer = null
     }
 
     // Final sync before closing
     if (this.pendingChanges > 0) {
-      await this.syncToIpfs();
+      await this.syncToIpfs()
     }
 
     if (this.db) {
-      this.db.close();
-      this.db = null;
+      this.db.close()
+      this.db = null
     }
 
-    this.log('Store closed');
+    this.log('Store closed')
   }
 
   /**
@@ -132,24 +132,24 @@ export class SqliteEncryptedStore {
    */
   async set(key: string, value: object): Promise<void> {
     if (!this.db) {
-      throw new Error('Store not initialized');
+      throw new Error('Store not initialized')
     }
 
-    const serialized = JSON.stringify(value);
+    const serialized = JSON.stringify(value)
     const data = this.config.encrypted
       ? await this.encrypt(serialized)
-      : serialized;
-    const hash = keccak256(toBytes(serialized));
+      : serialized
+    const hash = keccak256(toBytes(serialized))
 
     const stmt = this.db.prepare(`
       INSERT OR REPLACE INTO state (key, value, version, updated_at, hash)
       VALUES (?, ?, COALESCE((SELECT version + 1 FROM state WHERE key = ?), 1), ?, ?)
-    `);
+    `)
 
-    stmt.run(key, data, key, Date.now(), hash);
-    this.pendingChanges++;
+    stmt.run(key, data, key, Date.now(), hash)
+    this.pendingChanges++
 
-    this.log('Set value', { key, hash });
+    this.log('Set value', { key, hash })
   }
 
   /**
@@ -157,19 +157,19 @@ export class SqliteEncryptedStore {
    */
   async get<T extends object>(key: string): Promise<T | null> {
     if (!this.db) {
-      throw new Error('Store not initialized');
+      throw new Error('Store not initialized')
     }
 
-    const stmt = this.db.prepare('SELECT value, hash FROM state WHERE key = ?');
-    const row = stmt.get(key) as { value: string; hash: string } | null;
+    const stmt = this.db.prepare('SELECT value, hash FROM state WHERE key = ?')
+    const row = stmt.get(key) as { value: string; hash: string } | null
 
-    if (!row) return null;
+    if (!row) return null
 
     const serialized = this.config.encrypted
       ? await this.decrypt(row.value)
-      : row.value;
+      : row.value
 
-    return JSON.parse(serialized) as T;
+    return JSON.parse(serialized) as T
   }
 
   /**
@@ -177,14 +177,14 @@ export class SqliteEncryptedStore {
    */
   async delete(key: string): Promise<void> {
     if (!this.db) {
-      throw new Error('Store not initialized');
+      throw new Error('Store not initialized')
     }
 
-    const stmt = this.db.prepare('DELETE FROM state WHERE key = ?');
-    stmt.run(key);
-    this.pendingChanges++;
+    const stmt = this.db.prepare('DELETE FROM state WHERE key = ?')
+    stmt.run(key)
+    this.pendingChanges++
 
-    this.log('Deleted value', { key });
+    this.log('Deleted value', { key })
   }
 
   /**
@@ -192,18 +192,18 @@ export class SqliteEncryptedStore {
    */
   async keys(prefix?: string): Promise<string[]> {
     if (!this.db) {
-      throw new Error('Store not initialized');
+      throw new Error('Store not initialized')
     }
 
     const stmt = prefix
       ? this.db.prepare('SELECT key FROM state WHERE key LIKE ?')
-      : this.db.prepare('SELECT key FROM state');
+      : this.db.prepare('SELECT key FROM state')
 
     const rows = prefix
       ? (stmt.all(`${prefix}%`) as { key: string }[])
-      : (stmt.all() as { key: string }[]);
+      : (stmt.all() as { key: string }[])
 
-    return rows.map((r) => r.key);
+    return rows.map((r) => r.key)
   }
 
   /**
@@ -211,21 +211,21 @@ export class SqliteEncryptedStore {
    */
   async getAll(): Promise<Map<string, object>> {
     if (!this.db) {
-      throw new Error('Store not initialized');
+      throw new Error('Store not initialized')
     }
 
-    const stmt = this.db.prepare('SELECT key, value FROM state');
-    const rows = stmt.all() as { key: string; value: string }[];
+    const stmt = this.db.prepare('SELECT key, value FROM state')
+    const rows = stmt.all() as { key: string; value: string }[]
 
-    const result = new Map<string, object>();
+    const result = new Map<string, object>()
     for (const row of rows) {
       const serialized = this.config.encrypted
         ? await this.decrypt(row.value)
-        : row.value;
-      result.set(row.key, JSON.parse(serialized));
+        : row.value
+      result.set(row.key, JSON.parse(serialized))
     }
 
-    return result;
+    return result
   }
 
   /**
@@ -233,31 +233,31 @@ export class SqliteEncryptedStore {
    */
   async syncToIpfs(): Promise<string | null> {
     if (!isJejuStorageAvailable()) {
-      this.log('IPFS storage not available, skipping sync');
-      return null;
+      this.log('IPFS storage not available, skipping sync')
+      return null
     }
 
     if (this.syncInProgress) {
-      this.log('Sync already in progress, skipping');
-      return null;
+      this.log('Sync already in progress, skipping')
+      return null
     }
 
-    this.syncInProgress = true;
+    this.syncInProgress = true
 
-    const storage = getJejuStorageClient();
+    const storage = getJejuStorageClient()
     if (!storage) {
-      this.syncInProgress = false;
-      return null;
+      this.syncInProgress = false
+      return null
     }
 
     // Export database state
-    const snapshot = await this.exportSnapshot();
-    const snapshotJson = JSON.stringify(snapshot);
+    const snapshot = await this.exportSnapshot()
+    const snapshotJson = JSON.stringify(snapshot)
 
     // Encrypt the entire snapshot if encryption is enabled
     const data = this.config.encrypted
       ? await this.encrypt(snapshotJson)
-      : snapshotJson;
+      : snapshotJson
 
     // Upload to IPFS
     const result = await storage.uploadImage({
@@ -270,16 +270,16 @@ export class SqliteEncryptedStore {
         encrypted: String(this.config.encrypted),
         entryCount: String(snapshot.entries.length),
       },
-    });
+    })
 
-    this.lastIpfsCid = result.cid;
-    this.lastSyncAt = Date.now();
-    this.pendingChanges = 0;
-    this.syncInProgress = false;
+    this.lastIpfsCid = result.cid
+    this.lastSyncAt = Date.now()
+    this.pendingChanges = 0
+    this.syncInProgress = false
 
-    this.log('Synced to IPFS', { cid: result.cid });
+    this.log('Synced to IPFS', { cid: result.cid })
 
-    return result.cid;
+    return result.cid
   }
 
   /**
@@ -287,33 +287,33 @@ export class SqliteEncryptedStore {
    */
   async restoreFromIpfs(cid: string): Promise<void> {
     if (!isJejuStorageAvailable()) {
-      throw new Error('IPFS storage not available');
+      throw new Error('IPFS storage not available')
     }
 
-    const storage = getJejuStorageClient();
+    const storage = getJejuStorageClient()
     if (!storage) {
-      throw new Error('Storage client not available');
+      throw new Error('Storage client not available')
     }
 
     // Download snapshot
-    const data = await storage.download(cid);
+    const data = await storage.download(cid)
     const snapshotJson = this.config.encrypted
       ? await this.decrypt(data.toString('utf-8'))
-      : data.toString('utf-8');
+      : data.toString('utf-8')
 
     const snapshot = JSON.parse(snapshotJson) as {
-      version: number;
-      entries: StateEntry[];
-    };
+      version: number
+      entries: StateEntry[]
+    }
 
     // Import snapshot
-    await this.importSnapshot(snapshot);
+    await this.importSnapshot(snapshot)
 
-    this.lastIpfsCid = cid;
+    this.lastIpfsCid = cid
     this.log('Restored from IPFS', {
       cid,
       entryCount: snapshot.entries.length,
-    });
+    })
   }
 
   /**
@@ -321,19 +321,19 @@ export class SqliteEncryptedStore {
    */
   async exportSnapshot(): Promise<{ version: number; entries: StateEntry[] }> {
     if (!this.db) {
-      throw new Error('Store not initialized');
+      throw new Error('Store not initialized')
     }
 
     const stmt = this.db.prepare(
-      'SELECT key, value, version, updated_at, hash FROM state'
-    );
+      'SELECT key, value, version, updated_at, hash FROM state',
+    )
     const rows = stmt.all() as {
-      key: string;
-      value: string;
-      version: number;
-      updated_at: number;
-      hash: string;
-    }[];
+      key: string
+      value: string
+      version: number
+      updated_at: number
+      hash: string
+    }[]
 
     const entries: StateEntry[] = rows.map((row) => ({
       key: row.key,
@@ -341,38 +341,38 @@ export class SqliteEncryptedStore {
       version: row.version,
       updatedAt: row.updated_at,
       hash: row.hash as Hex,
-    }));
+    }))
 
     // Get max version
     const versionStmt = this.db.prepare(
-      'SELECT MAX(version) as max_version FROM state'
-    );
-    const versionRow = versionStmt.get() as { max_version: number | null };
+      'SELECT MAX(version) as max_version FROM state',
+    )
+    const versionRow = versionStmt.get() as { max_version: number | null }
 
     return {
       version: versionRow.max_version ?? 0,
       entries,
-    };
+    }
   }
 
   /**
    * Import snapshot
    */
   async importSnapshot(snapshot: {
-    version: number;
-    entries: StateEntry[];
+    version: number
+    entries: StateEntry[]
   }): Promise<void> {
     if (!this.db) {
-      throw new Error('Store not initialized');
+      throw new Error('Store not initialized')
     }
 
     // Clear existing data
-    this.db.run('DELETE FROM state');
+    this.db.run('DELETE FROM state')
 
     // Insert entries
     const stmt = this.db.prepare(
-      'INSERT INTO state (key, value, version, updated_at, hash) VALUES (?, ?, ?, ?, ?)'
-    );
+      'INSERT INTO state (key, value, version, updated_at, hash) VALUES (?, ?, ?, ?, ?)',
+    )
 
     for (const entry of snapshot.entries) {
       stmt.run(
@@ -380,11 +380,11 @@ export class SqliteEncryptedStore {
         entry.value,
         entry.version,
         entry.updatedAt,
-        entry.hash
-      );
+        entry.hash,
+      )
     }
 
-    this.log('Imported snapshot', { entryCount: snapshot.entries.length });
+    this.log('Imported snapshot', { entryCount: snapshot.entries.length })
   }
 
   /**
@@ -396,14 +396,14 @@ export class SqliteEncryptedStore {
       pendingChanges: this.pendingChanges,
       lastIpfsCid: this.lastIpfsCid,
       syncInProgress: this.syncInProgress,
-    };
+    }
   }
 
   /**
    * Force sync
    */
   async forceSync(): Promise<string | null> {
-    return this.syncToIpfs();
+    return this.syncToIpfs()
   }
 
   // ============================================================================
@@ -411,7 +411,7 @@ export class SqliteEncryptedStore {
   // ============================================================================
 
   private createSchema(): void {
-    if (!this.db) return;
+    if (!this.db) return
 
     this.db.run(`
       CREATE TABLE IF NOT EXISTS state (
@@ -421,76 +421,76 @@ export class SqliteEncryptedStore {
         updated_at INTEGER NOT NULL,
         hash TEXT NOT NULL
       )
-    `);
+    `)
 
     this.db.run(
-      'CREATE INDEX IF NOT EXISTS idx_state_updated_at ON state(updated_at)'
-    );
+      'CREATE INDEX IF NOT EXISTS idx_state_updated_at ON state(updated_at)',
+    )
   }
 
   private async encrypt(data: string): Promise<string> {
     if (!this.encryptionKey) {
-      return data;
+      return data
     }
 
     // Use Web Crypto API for encryption
-    const ivBytes = new Uint8Array(12);
-    crypto.getRandomValues(ivBytes);
+    const ivBytes = new Uint8Array(12)
+    crypto.getRandomValues(ivBytes)
 
-    const keyBuffer = new Uint8Array(this.encryptionKey).buffer;
+    const keyBuffer = new Uint8Array(this.encryptionKey).buffer
     const key = await crypto.subtle.importKey(
       'raw',
       keyBuffer,
       { name: 'AES-GCM' },
       false,
-      ['encrypt']
-    );
+      ['encrypt'],
+    )
 
-    const ivBuffer = new Uint8Array(ivBytes).buffer;
+    const ivBuffer = new Uint8Array(ivBytes).buffer
     const ciphertext = await crypto.subtle.encrypt(
       { name: 'AES-GCM', iv: ivBuffer },
       key,
-      new TextEncoder().encode(data)
-    );
+      new TextEncoder().encode(data),
+    )
 
     // Combine IV and ciphertext
-    const combined = new Uint8Array(ivBytes.length + ciphertext.byteLength);
-    combined.set(ivBytes, 0);
-    combined.set(new Uint8Array(ciphertext), ivBytes.length);
+    const combined = new Uint8Array(ivBytes.length + ciphertext.byteLength)
+    combined.set(ivBytes, 0)
+    combined.set(new Uint8Array(ciphertext), ivBytes.length)
 
-    return Buffer.from(combined).toString('base64');
+    return Buffer.from(combined).toString('base64')
   }
 
   private async decrypt(encryptedData: string): Promise<string> {
     if (!this.encryptionKey) {
-      return encryptedData;
+      return encryptedData
     }
 
-    const combined = Buffer.from(encryptedData, 'base64');
-    const iv = combined.subarray(0, 12);
-    const ciphertext = combined.subarray(12);
+    const combined = Buffer.from(encryptedData, 'base64')
+    const iv = combined.subarray(0, 12)
+    const ciphertext = combined.subarray(12)
 
-    const keyBuffer = new Uint8Array(this.encryptionKey).buffer;
+    const keyBuffer = new Uint8Array(this.encryptionKey).buffer
     const key = await crypto.subtle.importKey(
       'raw',
       keyBuffer,
       { name: 'AES-GCM' },
       false,
-      ['decrypt']
-    );
+      ['decrypt'],
+    )
 
     const plaintext = await crypto.subtle.decrypt(
       { name: 'AES-GCM', iv: new Uint8Array(iv).buffer },
       key,
-      new Uint8Array(ciphertext).buffer
-    );
+      new Uint8Array(ciphertext).buffer,
+    )
 
-    return new TextDecoder().decode(plaintext);
+    return new TextDecoder().decode(plaintext)
   }
 
   private log(message: string, data?: Record<string, unknown>): void {
     if (this.config.verbose) {
-      logger.info(`[SqliteEncryptedStore] ${message}`, data);
+      logger.info(`[SqliteEncryptedStore] ${message}`, data)
     }
   }
 }
@@ -499,21 +499,21 @@ export class SqliteEncryptedStore {
 // Factory
 // ============================================================================
 
-let sqliteStore: SqliteEncryptedStore | null = null;
+let sqliteStore: SqliteEncryptedStore | null = null
 
 export function getSqliteStore(
-  config?: Partial<SqliteStoreConfig>
+  config?: Partial<SqliteStoreConfig>,
 ): SqliteEncryptedStore {
   if (!sqliteStore) {
-    sqliteStore = new SqliteEncryptedStore(config);
+    sqliteStore = new SqliteEncryptedStore(config)
   }
-  return sqliteStore;
+  return sqliteStore
 }
 
 export async function initializeSqliteStore(
-  config?: Partial<SqliteStoreConfig>
+  config?: Partial<SqliteStoreConfig>,
 ): Promise<SqliteEncryptedStore> {
-  const store = getSqliteStore(config);
-  await store.initialize();
-  return store;
+  const store = getSqliteStore(config)
+  await store.initialize()
+  return store
 }

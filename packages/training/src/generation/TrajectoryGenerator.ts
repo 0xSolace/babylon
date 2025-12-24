@@ -9,47 +9,47 @@
  * @packageDocumentation
  */
 
-import { db, type User } from '@babylon/db';
-import { logger } from '@babylon/shared';
-import type { IAgentRuntime } from '@elizaos/core';
-import { ArchetypeConfigService } from '../archetypes/ArchetypeConfigService';
+import { db, type User } from '@babylon/db'
+import { logger } from '@babylon/shared'
+import type { IAgentRuntime } from '@elizaos/core'
+import { ArchetypeConfigService } from '../archetypes/ArchetypeConfigService'
 import {
   areAgentDependenciesConfigured,
   getAgentRuntimeManager,
   getAgentService,
   getAutonomousCoordinator,
-} from '../dependencies';
+} from '../dependencies'
 
 export interface ParallelGenerationConfig {
   // Agent configuration
-  archetypes: string[];
-  agentsPerArchetype: number;
+  archetypes: string[]
+  agentsPerArchetype: number
 
   // Simulation configuration
-  ticksPerAgent: number;
-  parallelAgents: number; // How many agents to run simultaneously
+  ticksPerAgent: number
+  parallelAgents: number // How many agents to run simultaneously
 
   // Recording configuration
-  recordTrajectories: boolean;
+  recordTrajectories: boolean
 
   // Manager
-  managerId: string;
+  managerId: string
 }
 
 export interface ParallelGenerationResult {
-  agentsCreated: string[];
-  trajectoryIds: string[];
-  totalTicks: number;
-  duration: number;
-  errors: string[];
+  agentsCreated: string[]
+  trajectoryIds: string[]
+  totalTicks: number
+  duration: number
+  errors: string[]
   archetypeStats: Record<
     string,
     {
-      agents: number;
-      trajectories: number;
-      avgTicksPerAgent: number;
+      agents: number
+      trajectories: number
+      avgTicksPerAgent: number
     }
-  >;
+  >
 }
 
 /**
@@ -58,8 +58,8 @@ export interface ParallelGenerationResult {
 function ensureDependencies(): void {
   if (!areAgentDependenciesConfigured()) {
     throw new Error(
-      'Training dependencies not configured. Call configureTrainingDependencies() with agentService, agentRuntimeManager, and autonomousCoordinator first.'
-    );
+      'Training dependencies not configured. Call configureTrainingDependencies() with agentService, agentRuntimeManager, and autonomousCoordinator first.',
+    )
   }
 }
 
@@ -67,23 +67,23 @@ function ensureDependencies(): void {
  * Generator that creates and runs real agents in parallel
  */
 export class TrajectoryGenerator {
-  private config: ParallelGenerationConfig;
-  private agents: Map<string, { user: User; archetype: string }> = new Map();
+  private config: ParallelGenerationConfig
+  private agents: Map<string, { user: User; archetype: string }> = new Map()
 
   constructor(config: ParallelGenerationConfig) {
     this.config = {
       ...config,
       recordTrajectories: true, // Always record for training
       parallelAgents: Math.min(config.parallelAgents || 5, 10), // Cap at 10 for safety
-    };
+    }
   }
 
   /**
    * Create agents based on archetypes
    */
   private async createArchetypeAgents(): Promise<void> {
-    ensureDependencies();
-    const agentService = getAgentService();
+    ensureDependencies()
+    const agentService = getAgentService()
 
     logger.info(
       'Creating archetype-based agents...',
@@ -91,11 +91,11 @@ export class TrajectoryGenerator {
         archetypes: this.config.archetypes,
         perArchetype: this.config.agentsPerArchetype,
       },
-      'TrajectoryGenerator'
-    );
+      'TrajectoryGenerator',
+    )
 
     for (const archetype of this.config.archetypes) {
-      const archetypeConfig = ArchetypeConfigService.getConfig(archetype);
+      const archetypeConfig = ArchetypeConfigService.getConfig(archetype)
 
       for (let i = 0; i < this.config.agentsPerArchetype; i++) {
         // Create agent using the actual AgentService
@@ -109,7 +109,7 @@ export class TrajectoryGenerator {
           tradingStrategy: archetypeConfig.tradingStrategy,
           system: archetypeConfig.system,
           initialDeposit: 100, // Small deposit for training agents
-        });
+        })
 
         // Update autonomous settings in agent config based on archetype
         // Disable A2A to allow offline training without localhost server
@@ -127,101 +127,101 @@ export class TrajectoryGenerator {
             a2aEnabled: false, // Disable A2A for training
             updatedAt: new Date(),
           },
-        });
+        })
 
-        this.agents.set(agent.id, { user: agent, archetype });
+        this.agents.set(agent.id, { user: agent, archetype })
 
         logger.info(
           `Created ${archetype} agent: ${agent.username}`,
           {},
-          'TrajectoryGenerator'
-        );
+          'TrajectoryGenerator',
+        )
       }
     }
 
     logger.info(
       `Created ${this.agents.size} agents total`,
       {},
-      'TrajectoryGenerator'
-    );
+      'TrajectoryGenerator',
+    )
   }
 
   /**
    * Run agents in parallel batches
    */
   private async runParallelBatch(agentIds: string[]): Promise<{
-    trajectoryIds: string[];
-    errors: string[];
+    trajectoryIds: string[]
+    errors: string[]
   }> {
-    ensureDependencies();
-    const agentRuntimeManager = getAgentRuntimeManager();
-    const autonomousCoordinator = getAutonomousCoordinator();
+    ensureDependencies()
+    const agentRuntimeManager = getAgentRuntimeManager()
+    const autonomousCoordinator = getAutonomousCoordinator()
 
-    const trajectoryIds: string[] = [];
-    const errors: string[] = [];
+    const trajectoryIds: string[] = []
+    const errors: string[] = []
 
     // Create promises for parallel execution
     const promises = agentIds.map(async (agentId) => {
-      const agentInfo = this.agents.get(agentId);
-      if (!agentInfo) return;
+      const agentInfo = this.agents.get(agentId)
+      if (!agentInfo) return
 
       // Get agent runtime - disable A2A for training to avoid connection errors
-      let runtime: IAgentRuntime;
-      const runtimeResult = await agentRuntimeManager.getRuntime(agentId);
+      let runtime: IAgentRuntime
+      const runtimeResult = await agentRuntimeManager.getRuntime(agentId)
 
       // If runtime creation returns null/undefined, skip
       if (!runtimeResult) {
         logger.warn(
           `Runtime creation returned null for ${agentId}, skipping`,
           {},
-          'TrajectoryGenerator'
-        );
-        return;
+          'TrajectoryGenerator',
+        )
+        return
       }
-      runtime = runtimeResult;
+      runtime = runtimeResult
 
       // Apply archetype configuration to runtime character if available
       const archetypeConfig = ArchetypeConfigService.getConfig(
-        agentInfo.archetype
-      );
+        agentInfo.archetype,
+      )
       if (runtime.character) {
-        runtime.character.name = archetypeConfig.name;
-        runtime.character.bio = archetypeConfig.bio.join(' ');
+        runtime.character.name = archetypeConfig.name
+        runtime.character.bio = archetypeConfig.bio.join(' ')
         if (!runtime.character.topics) {
-          runtime.character.topics = [];
+          runtime.character.topics = []
         }
 
         // Add archetype-specific topics
         if (archetypeConfig.preferredMarkets.includes('perpetual')) {
-          runtime.character.topics.push('perpetual_trading', 'leverage');
+          runtime.character.topics.push('perpetual_trading', 'leverage')
         }
         if (archetypeConfig.preferredMarkets.includes('prediction')) {
-          runtime.character.topics.push('prediction_markets', 'forecasting');
+          runtime.character.topics.push('prediction_markets', 'forecasting')
         }
       }
 
       // Run ticks for this agent
       for (let tick = 0; tick < this.config.ticksPerAgent; tick++) {
         logger.debug(
-          `Agent ${agentInfo.user.username} - Tick ${tick + 1}/${this.config.ticksPerAgent}`
-        );
+          `Agent ${agentInfo.user.username} - Tick ${tick + 1}/${this.config.ticksPerAgent}`,
+        )
 
         // Execute autonomous tick with trajectory recording
         const result = await autonomousCoordinator.executeAutonomousTick(
           agentId,
           runtime,
-          true // Enable trajectory recording
-        );
+          true, // Enable trajectory recording
+        )
 
         if (result.trajectoryId) {
-          trajectoryIds.push(result.trajectoryId);
+          trajectoryIds.push(result.trajectoryId)
           logger.debug(
-            `Recorded trajectory ${result.trajectoryId} for ${agentInfo.user.username}`
-          );
+            `Recorded trajectory ${result.trajectoryId} for ${agentInfo.user.username}`,
+          )
         }
 
         // Small delay between ticks
-        await new Promise((resolve) => setTimeout(resolve, 500));
+        await new Promise((resolve) => setTimeout(resolve, 500))
       }
 
       logger.info(
@@ -230,33 +230,33 @@ export class TrajectoryGenerator {
           trajectories: trajectoryIds.length,
           archetype: agentInfo.archetype,
         },
-        'TrajectoryGenerator'
-      );
-    });
+        'TrajectoryGenerator',
+      )
+    })
 
     // Wait for all agents in batch to complete
     await Promise.allSettled(promises).then((results) => {
       for (const result of results) {
         if (result.status === 'rejected') {
-          const errorMsg = `Agent batch error: ${result.reason instanceof Error ? result.reason.message : String(result.reason)}`;
+          const errorMsg = `Agent batch error: ${result.reason instanceof Error ? result.reason.message : String(result.reason)}`
           logger.error(
             errorMsg,
             { error: result.reason },
-            'TrajectoryGenerator'
-          );
-          errors.push(errorMsg);
+            'TrajectoryGenerator',
+          )
+          errors.push(errorMsg)
         }
       }
-    });
+    })
 
-    return { trajectoryIds, errors };
+    return { trajectoryIds, errors }
   }
 
   /**
    * Generate trajectories with parallel agent execution
    */
   async generate(): Promise<ParallelGenerationResult> {
-    const startTime = Date.now();
+    const startTime = Date.now()
     const result: ParallelGenerationResult = {
       agentsCreated: [],
       trajectoryIds: [],
@@ -264,11 +264,11 @@ export class TrajectoryGenerator {
       duration: 0,
       errors: [],
       archetypeStats: {},
-    };
+    }
 
     // Create agents
-    await this.createArchetypeAgents();
-    result.agentsCreated = Array.from(this.agents.keys());
+    await this.createArchetypeAgents()
+    result.agentsCreated = Array.from(this.agents.keys())
 
     // Initialize stats
     for (const archetype of this.config.archetypes) {
@@ -276,14 +276,14 @@ export class TrajectoryGenerator {
         agents: 0,
         trajectories: 0,
         avgTicksPerAgent: 0,
-      };
+      }
     }
 
     // Count agents per archetype
     for (const [_, agentInfo] of this.agents) {
-      const stat = result.archetypeStats[agentInfo.archetype];
+      const stat = result.archetypeStats[agentInfo.archetype]
       if (stat) {
-        stat.agents++;
+        stat.agents++
       }
     }
 
@@ -292,30 +292,30 @@ export class TrajectoryGenerator {
       {
         totalAgents: this.agents.size,
         parallelBatches: Math.ceil(
-          this.agents.size / this.config.parallelAgents
+          this.agents.size / this.config.parallelAgents,
         ),
         ticksPerAgent: this.config.ticksPerAgent,
       },
-      'TrajectoryGenerator'
-    );
+      'TrajectoryGenerator',
+    )
 
     // Process agents in parallel batches
-    const agentIds = Array.from(this.agents.keys());
+    const agentIds = Array.from(this.agents.keys())
     for (let i = 0; i < agentIds.length; i += this.config.parallelAgents) {
-      const batch = agentIds.slice(i, i + this.config.parallelAgents);
+      const batch = agentIds.slice(i, i + this.config.parallelAgents)
 
       logger.info(
         `Processing batch ${Math.floor(i / this.config.parallelAgents) + 1}/${Math.ceil(agentIds.length / this.config.parallelAgents)}`,
         {
           agents: batch.length,
         },
-        'TrajectoryGenerator'
-      );
+        'TrajectoryGenerator',
+      )
 
-      const batchResult = await this.runParallelBatch(batch);
-      result.trajectoryIds.push(...batchResult.trajectoryIds);
-      result.errors.push(...batchResult.errors);
-      result.totalTicks += batch.length * this.config.ticksPerAgent;
+      const batchResult = await this.runParallelBatch(batch)
+      result.trajectoryIds.push(...batchResult.trajectoryIds)
+      result.errors.push(...batchResult.errors)
+      result.totalTicks += batch.length * this.config.ticksPerAgent
     }
 
     // Calculate stats
@@ -323,14 +323,14 @@ export class TrajectoryGenerator {
       // Get trajectory to determine archetype
       const trajectory = await db.trajectory.findUnique({
         where: { trajectoryId: trajId },
-      });
+      })
 
       if (trajectory) {
-        const agentInfo = this.agents.get(trajectory.agentId);
+        const agentInfo = this.agents.get(trajectory.agentId)
         if (agentInfo) {
-          const stat = result.archetypeStats[agentInfo.archetype];
+          const stat = result.archetypeStats[agentInfo.archetype]
           if (stat) {
-            stat.trajectories++;
+            stat.trajectories++
           }
         }
       }
@@ -339,11 +339,11 @@ export class TrajectoryGenerator {
     // Calculate averages
     for (const stats of Object.values(result.archetypeStats)) {
       if (stats.agents > 0) {
-        stats.avgTicksPerAgent = stats.trajectories / stats.agents;
+        stats.avgTicksPerAgent = stats.trajectories / stats.agents
       }
     }
 
-    result.duration = Date.now() - startTime;
+    result.duration = Date.now() - startTime
 
     logger.info(
       'Parallel generation complete',
@@ -354,10 +354,10 @@ export class TrajectoryGenerator {
         durationSeconds: result.duration / 1000,
         errors: result.errors.length,
       },
-      'TrajectoryGenerator'
-    );
+      'TrajectoryGenerator',
+    )
 
-    return result;
+    return result
   }
 
   /**
@@ -367,14 +367,14 @@ export class TrajectoryGenerator {
     logger.info(
       `Cleaning up ${this.agents.size} agents...`,
       {},
-      'TrajectoryGenerator'
-    );
+      'TrajectoryGenerator',
+    )
 
     for (const [agentId] of this.agents) {
-      await db.user.deleteMany({ where: { id: agentId } });
+      await db.user.deleteMany({ where: { id: agentId } })
     }
 
-    logger.info('Cleanup complete', {}, 'TrajectoryGenerator');
+    logger.info('Cleanup complete', {}, 'TrajectoryGenerator')
   }
 }
 
@@ -382,7 +382,7 @@ export class TrajectoryGenerator {
  * Factory function for creating parallel generator
  */
 export async function createParallelGenerator(
-  config: ParallelGenerationConfig
+  config: ParallelGenerationConfig,
 ): Promise<TrajectoryGenerator> {
-  return new TrajectoryGenerator(config);
+  return new TrajectoryGenerator(config)
 }

@@ -1,5 +1,3 @@
-'use client';
-
 /**
  * Airdrop Status Widget
  *
@@ -10,8 +8,8 @@
  * - Countdown to next available drip
  */
 
-import { cn } from '@babylon/shared';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { cn } from '@babylon/shared'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   ArrowRightLeft,
   CheckCircle,
@@ -23,79 +21,79 @@ import {
   Sparkles,
   Timer,
   TrendingUp,
-} from 'lucide-react';
-import { useEffect, useState } from 'react';
-import { toast } from 'sonner';
+} from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { toast } from 'sonner'
 
 interface AirdropStatus {
-  success: boolean;
-  registered: boolean;
+  success: boolean
+  registered: boolean
   allocation?: {
-    total: string;
-    totalFormatted: string;
-    bonusMultiplier: number;
-    isElizaHolder: boolean;
-  };
+    total: string
+    totalFormatted: string
+    bonusMultiplier: number
+    isElizaHolder: boolean
+  }
   drip?: {
-    dripsUnlocked: number;
-    totalDrips: number;
-    percentUnlocked: number;
-    canDripNow: boolean;
-    isInitialClaimed: boolean;
-    nextDripTime: string | null;
-    nextDripAmount: string;
-    nextDripAmountFormatted: string;
-    cooldownHours: number;
-  };
+    dripsUnlocked: number
+    totalDrips: number
+    percentUnlocked: number
+    canDripNow: boolean
+    isInitialClaimed: boolean
+    nextDripTime: string | null
+    nextDripAmount: string
+    nextDripAmountFormatted: string
+    cooldownHours: number
+  }
   claim?: {
-    totalClaimed: string;
-    totalClaimedFormatted: string;
-    claimable: string;
-    claimableFormatted: string;
-    registeredOnChain: boolean;
-  };
+    totalClaimed: string
+    totalClaimedFormatted: string
+    claimable: string
+    claimableFormatted: string
+    registeredOnChain: boolean
+  }
   action?: {
-    required: boolean;
-    type: 'initial_claim' | 'daily_drip' | 'wait' | 'complete';
-    message: string;
-    ctaText?: string;
-  };
+    required: boolean
+    type: 'initial_claim' | 'daily_drip' | 'wait' | 'complete'
+    message: string
+    ctaText?: string
+  }
   engagement?: {
-    dateKey: string;
+    dateKey: string
     socialTrack: {
-      liked: boolean;
-      commented: boolean;
-      posted: boolean;
-      actionsComplete: number;
-      required: number;
-      complete: boolean;
-    };
+      liked: boolean
+      commented: boolean
+      posted: boolean
+      actionsComplete: number
+      required: number
+      complete: boolean
+    }
     tradingTrack: {
-      traded: boolean;
-      complete: boolean;
-    };
-    qualifiedForDrip: boolean;
-    nextResetTime: string;
-    gracePeriodActive: boolean;
-  };
-  message?: string;
+      traded: boolean
+      complete: boolean
+    }
+    qualifiedForDrip: boolean
+    nextResetTime: string
+    gracePeriodActive: boolean
+  }
+  message?: string
 }
 
 interface DripResponse {
-  success: boolean;
-  canDrip: boolean;
-  dripDay: number;
-  amount: string;
-  amountFormatted: string;
-  isInitialClaim: boolean;
-  nextDripTime: string | null;
-  percentUnlocked: number;
-  message: string;
+  success: boolean
+  canDrip: boolean
+  dripDay: number
+  amount: string
+  amountFormatted: string
+  isInitialClaim: boolean
+  nextDripTime: string | null
+  percentUnlocked: number
+  message: string
 }
 
 export function AirdropStatusWidget() {
-  const queryClient = useQueryClient();
-  const [countdown, setCountdown] = useState<string | null>(null);
+  const queryClient = useQueryClient()
+  const [countdown, setCountdown] = useState<string | null>(null)
 
   // Fetch airdrop status
   const {
@@ -105,51 +103,51 @@ export function AirdropStatusWidget() {
   } = useQuery({
     queryKey: ['airdrop', 'status'],
     queryFn: async (): Promise<AirdropStatus> => {
-      const res = await fetch('/api/airdrop/status');
-      return res.json() as Promise<AirdropStatus>;
+      const res = await fetch('/api/airdrop/status')
+      return res.json() as Promise<AirdropStatus>
     },
-  });
+  })
 
   // Countdown timer
   useEffect(() => {
     if (!status?.drip?.nextDripTime || status.drip.canDripNow) {
-      setCountdown(null);
-      return;
+      setCountdown(null)
+      return
     }
 
     const updateCountdown = () => {
-      const nextTime = new Date(status.drip!.nextDripTime!).getTime();
-      const now = Date.now();
-      const diff = Math.max(0, nextTime - now);
+      const nextTime = new Date(status.drip?.nextDripTime).getTime()
+      const now = Date.now()
+      const diff = Math.max(0, nextTime - now)
 
       if (diff === 0) {
-        setCountdown(null);
-        fetchStatus(); // Refresh status when cooldown ends
-        return;
+        setCountdown(null)
+        fetchStatus() // Refresh status when cooldown ends
+        return
       }
 
-      const hours = Math.floor(diff / (1000 * 60 * 60));
-      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-      const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+      const hours = Math.floor(diff / (1000 * 60 * 60))
+      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))
+      const seconds = Math.floor((diff % (1000 * 60)) / 1000)
 
       if (hours > 0) {
-        setCountdown(`${hours}h ${minutes}m`);
+        setCountdown(`${hours}h ${minutes}m`)
       } else if (minutes > 0) {
-        setCountdown(`${minutes}m ${seconds}s`);
+        setCountdown(`${minutes}m ${seconds}s`)
       } else {
-        setCountdown(`${seconds}s`);
+        setCountdown(`${seconds}s`)
       }
-    };
+    }
 
-    updateCountdown();
-    const interval = setInterval(updateCountdown, 1000);
-    return () => clearInterval(interval);
+    updateCountdown()
+    const interval = setInterval(updateCountdown, 1000)
+    return () => clearInterval(interval)
   }, [
     status?.drip?.nextDripTime,
     status?.drip?.canDripNow,
     fetchStatus,
     status?.drip,
-  ]);
+  ])
 
   // Claim drip mutation
   const claimMutation = useMutation({
@@ -158,29 +156,29 @@ export function AirdropStatusWidget() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'visit' }),
-      });
-      return res.json() as Promise<DripResponse>;
+      })
+      return res.json() as Promise<DripResponse>
     },
     onSuccess: (data) => {
       if (data.success && data.canDrip) {
         toast.success(data.message, {
           icon: data.isInitialClaim ? '🚀' : '💧',
           description: `${data.percentUnlocked}% of your airdrop is now unlocked!`,
-        });
-        queryClient.invalidateQueries({ queryKey: ['airdrop', 'status'] });
+        })
+        queryClient.invalidateQueries({ queryKey: ['airdrop', 'status'] })
       } else {
         toast.info(data.message, {
           icon: '⏳',
-        });
+        })
       }
     },
-  });
+  })
 
   const handleClaim = () => {
-    claimMutation.mutate();
-  };
+    claimMutation.mutate()
+  }
 
-  const claiming = claimMutation.isPending;
+  const claiming = claimMutation.isPending
 
   if (loading) {
     return (
@@ -189,7 +187,7 @@ export function AirdropStatusWidget() {
         <div className="mt-3 h-4 w-full rounded bg-muted" />
         <div className="mt-2 h-10 w-full rounded bg-muted" />
       </div>
-    );
+    )
   }
 
   if (!status?.success || !status.registered) {
@@ -212,18 +210,18 @@ export function AirdropStatusWidget() {
           View Airdrop Details
         </a>
       </div>
-    );
+    )
   }
 
   if (!status) {
-    throw new Error('Status is required');
+    throw new Error('Status is required')
   }
 
-  const { allocation, drip, claim, action, engagement } = status;
+  const { allocation, drip, claim, action, engagement } = status
 
   // Check if engagement is required for drip
   const needsEngagement =
-    engagement && drip?.canDripNow && !engagement.qualifiedForDrip;
+    engagement && drip?.canDripNow && !engagement.qualifiedForDrip
 
   return (
     <div className="rounded-xl border border-amber-500/30 bg-gradient-to-br from-amber-500/5 to-orange-500/5 p-4">
@@ -306,7 +304,7 @@ export function AirdropStatusWidget() {
                   'flex items-center gap-1 rounded px-2 py-1 text-xs',
                   engagement.socialTrack.liked
                     ? 'bg-green-500/20 text-green-400'
-                    : 'bg-muted/50 text-muted-foreground'
+                    : 'bg-muted/50 text-muted-foreground',
                 )}
               >
                 {engagement.socialTrack.liked ? (
@@ -321,7 +319,7 @@ export function AirdropStatusWidget() {
                   'flex items-center gap-1 rounded px-2 py-1 text-xs',
                   engagement.socialTrack.commented
                     ? 'bg-green-500/20 text-green-400'
-                    : 'bg-muted/50 text-muted-foreground'
+                    : 'bg-muted/50 text-muted-foreground',
                 )}
               >
                 {engagement.socialTrack.commented ? (
@@ -336,7 +334,7 @@ export function AirdropStatusWidget() {
                   'flex items-center gap-1 rounded px-2 py-1 text-xs',
                   engagement.socialTrack.posted
                     ? 'bg-green-500/20 text-green-400'
-                    : 'bg-muted/50 text-muted-foreground'
+                    : 'bg-muted/50 text-muted-foreground',
                 )}
               >
                 {engagement.socialTrack.posted ? (
@@ -369,7 +367,7 @@ export function AirdropStatusWidget() {
                   'flex items-center gap-1 rounded px-2 py-1 text-xs',
                   engagement.tradingTrack.traded
                     ? 'bg-green-500/20 text-green-400'
-                    : 'bg-muted/50 text-muted-foreground'
+                    : 'bg-muted/50 text-muted-foreground',
                 )}
               >
                 {engagement.tradingTrack.traded ? (
@@ -402,6 +400,7 @@ export function AirdropStatusWidget() {
           </div>
         ) : action?.required ? (
           <button
+            type="button"
             onClick={handleClaim}
             disabled={claiming}
             className={cn(
@@ -409,7 +408,7 @@ export function AirdropStatusWidget() {
               action.type === 'initial_claim'
                 ? 'bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600'
                 : 'bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600',
-              claiming && 'opacity-50'
+              claiming && 'opacity-50',
             )}
           >
             {claiming ? (
@@ -447,7 +446,7 @@ export function AirdropStatusWidget() {
         </p>
       )}
     </div>
-  );
+  )
 }
 
 /**
@@ -457,14 +456,14 @@ export function AirdropStatusBadge() {
   const { data: status } = useQuery({
     queryKey: ['airdrop', 'status'],
     queryFn: async (): Promise<AirdropStatus> => {
-      const res = await fetch('/api/airdrop/status');
-      return res.json() as Promise<AirdropStatus>;
+      const res = await fetch('/api/airdrop/status')
+      return res.json() as Promise<AirdropStatus>
     },
     staleTime: 30000, // Consider data stale after 30 seconds
-  });
+  })
 
   if (!status?.registered || !status.drip?.canDripNow) {
-    return null;
+    return null
   }
 
   return (
@@ -480,5 +479,5 @@ export function AirdropStatusBadge() {
       </span>
       <span className="animate-pulse">✨</span>
     </a>
-  );
+  )
 }

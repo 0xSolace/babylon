@@ -17,7 +17,7 @@ export {
   type SponsorResult,
   type UserCredits,
   type UserOperation,
-} from './paymaster-client';
+} from './paymaster-client'
 
 // x402 HTTP 402 Micropayments
 export {
@@ -27,4 +27,4 @@ export {
   getBabylonX402Recipient,
   isBabylonX402Enabled,
   verifyBabylonPayment,
-} from './x402-client';
+} from './x402-client'

@@ -1,7 +1,5 @@
-'use client';
-
 interface MarketsCTAProps {
-  onLogin: () => void;
+  onLogin: () => void
 }
 
 /**
@@ -23,5 +21,5 @@ export function MarketsCTA({ onLogin }: MarketsCTAProps) {
         Connect Wallet
       </button>
     </div>
-  );
+  )
 }

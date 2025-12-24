@@ -13,22 +13,22 @@ export function cleanMarkdownCodeBlocks(text: string): string {
     .replace(/```json\n?/g, '')
     .replace(/```xml\n?/g, '')
     .replace(/```\n?/g, '')
-    .trim();
+    .trim()
 }
 
 /**
  * Extract JSON from text that may contain other content (lowercase alias)
  */
 export function extractJsonFromText(text: string): string {
-  return extractJSONFromText(text);
+  return extractJSONFromText(text)
 }
 
 /**
  * Parse continuation content from LLM responses
  */
 export function parseContinuationContent<T>(text: string): T | null {
-  const cleaned = cleanMarkdownCodeBlocks(text);
-  return cleanAndParseJSON<T>(cleaned);
+  const cleaned = cleanMarkdownCodeBlocks(text)
+  return cleanAndParseJSON<T>(cleaned)
 }
 
 /**
@@ -37,7 +37,7 @@ export function parseContinuationContent<T>(text: string): T | null {
 export function parseIncompleteJSON<T>(jsonString: string): T | null {
   // First try standard parse
   try {
-    return JSON.parse(jsonString) as T;
+    return JSON.parse(jsonString) as T
   } catch {
     // Continue to repair attempts
   }
@@ -46,22 +46,22 @@ export function parseIncompleteJSON<T>(jsonString: string): T | null {
   let cleaned = jsonString
     .replace(/```json\n?/g, '')
     .replace(/```\n?/g, '')
-    .trim();
+    .trim()
 
   // Try again after cleaning
   try {
-    return JSON.parse(cleaned) as T;
+    return JSON.parse(cleaned) as T
   } catch {
     // Continue to repair attempts
   }
 
   // Try to repair common truncation issues
-  cleaned = repairTruncatedJSON(cleaned);
+  cleaned = repairTruncatedJSON(cleaned)
 
   try {
-    return JSON.parse(cleaned) as T;
+    return JSON.parse(cleaned) as T
   } catch {
-    return null;
+    return null
   }
 }
 
@@ -69,59 +69,59 @@ export function parseIncompleteJSON<T>(jsonString: string): T | null {
  * Repair truncated JSON by closing open brackets/braces
  */
 function repairTruncatedJSON(json: string): string {
-  let repaired = json.trim();
+  let repaired = json.trim()
 
   // Remove trailing commas
-  repaired = repaired.replace(/,(\s*[}\]])/g, '$1');
-  repaired = repaired.replace(/,\s*$/g, '');
+  repaired = repaired.replace(/,(\s*[}\]])/g, '$1')
+  repaired = repaired.replace(/,\s*$/g, '')
 
   // Count open brackets and braces
-  let openBraces = 0;
-  let openBrackets = 0;
-  let inString = false;
-  let escaped = false;
+  let openBraces = 0
+  let openBrackets = 0
+  let inString = false
+  let escaped = false
 
   for (const char of repaired) {
     if (escaped) {
-      escaped = false;
-      continue;
+      escaped = false
+      continue
     }
 
     if (char === '\\') {
-      escaped = true;
-      continue;
+      escaped = true
+      continue
     }
 
     if (char === '"' && !escaped) {
-      inString = !inString;
-      continue;
+      inString = !inString
+      continue
     }
 
-    if (inString) continue;
+    if (inString) continue
 
-    if (char === '{') openBraces++;
-    else if (char === '}') openBraces--;
-    else if (char === '[') openBrackets++;
-    else if (char === ']') openBrackets--;
+    if (char === '{') openBraces++
+    else if (char === '}') openBraces--
+    else if (char === '[') openBrackets++
+    else if (char === ']') openBrackets--
   }
 
   // Close unclosed structures
   // If we're in a string, close it
   if (inString) {
-    repaired += '"';
+    repaired += '"'
   }
 
   // Close brackets and braces
   while (openBrackets > 0) {
-    repaired += ']';
-    openBrackets--;
+    repaired += ']'
+    openBrackets--
   }
   while (openBraces > 0) {
-    repaired += '}';
-    openBraces--;
+    repaired += '}'
+    openBraces--
   }
 
-  return repaired;
+  return repaired
 }
 
 /**
@@ -129,42 +129,42 @@ function repairTruncatedJSON(json: string): string {
  */
 export function extractJSONFromText(text: string): string {
   // Find the first { or [
-  const objectStart = text.indexOf('{');
-  const arrayStart = text.indexOf('[');
+  const objectStart = text.indexOf('{')
+  const arrayStart = text.indexOf('[')
 
-  let startIndex: number;
+  let startIndex: number
   if (objectStart === -1) {
-    startIndex = arrayStart;
+    startIndex = arrayStart
   } else if (arrayStart === -1) {
-    startIndex = objectStart;
+    startIndex = objectStart
   } else {
-    startIndex = Math.min(objectStart, arrayStart);
+    startIndex = Math.min(objectStart, arrayStart)
   }
 
   if (startIndex === -1) {
-    return text;
+    return text
   }
 
   // Extract from start to end
-  const extracted = text.slice(startIndex);
+  const extracted = text.slice(startIndex)
 
   // Try to find the matching end bracket/brace
-  const isArray = extracted[0] === '[';
-  const endChar = isArray ? ']' : '}';
+  const isArray = extracted[0] === '['
+  const endChar = isArray ? ']' : '}'
 
   // Find the last occurrence of the end character
-  const endIndex = extracted.lastIndexOf(endChar);
+  const endIndex = extracted.lastIndexOf(endChar)
   if (endIndex === -1) {
-    return extracted;
+    return extracted
   }
 
-  return extracted.slice(0, endIndex + 1);
+  return extracted.slice(0, endIndex + 1)
 }
 
 /**
  * Clean and parse JSON from LLM response
  */
 export function cleanAndParseJSON<T>(text: string): T | null {
-  const extracted = extractJSONFromText(text);
-  return parseIncompleteJSON<T>(extracted);
+  const extracted = extractJSONFromText(text)
+  return parseIncompleteJSON<T>(extracted)
 }

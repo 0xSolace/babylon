@@ -37,7 +37,7 @@ RIGHT: "Trump Terminal said BitcAIn will reach $200k..."
 WRONG: "Mark Zuckerberg's Meta is working on AI..."
 RIGHT: "Mark Zuckerborg's MetAI is working on AI..."
 
-DO NOT "auto-correct" parody names back to real names. The parody names ARE correct.`;
+DO NOT "auto-correct" parody names back to real names. The parody names ARE correct.`
 
 /**
  * Standard content requirements for posts.
@@ -50,7 +50,7 @@ export const CONTENT_REQUIREMENTS = `CONTENT REQUIREMENTS:
 - MUST reference specific trades or market movements when relevant
 - Use @username format when mentioning users (e.g., "@ailonmusk said...")
 - Avoid generic statements - be SPECIFIC about who/what/when
-- Reference current markets, predictions, or recent trades naturally`;
+- Reference current markets, predictions, or recent trades naturally`
 
 /**
  * Standard world context block header.
@@ -59,7 +59,7 @@ export const WORLD_CONTEXT_HEADER = `WORLD CONTEXT:
 {{worldActors}}
 {{currentMarkets}}
 {{activePredictions}}
-{{recentTrades}}`;
+{{recentTrades}}`
 
 /**
  * Standard value ranges documentation for post metadata.
@@ -67,14 +67,14 @@ export const WORLD_CONTEXT_HEADER = `WORLD CONTEXT:
 export const VALUE_RANGES = `VALUE RANGES:
 - sentiment: -1 (very negative) to 1 (very positive)
 - clueStrength: 0 (no info) to 1 (smoking gun)
-- pointsToward: true (suggests positive outcome) | false (suggests negative) | null (unclear)`;
+- pointsToward: true (suggests positive outcome) | false (suggests negative) | null (unclear)`
 
 /**
  * Combined rules section for standard feed posts.
  */
 export const STANDARD_FEED_RULES = `${IMPORTANT_RULES}
 
-${CONTENT_REQUIREMENTS}`;
+${CONTENT_REQUIREMENTS}`
 
 /**
  * Helper to generate character voice guidance section.
@@ -83,7 +83,7 @@ ${CONTENT_REQUIREMENTS}`;
  * @param actorVariableName - The template variable containing actor info (e.g., 'actorsList')
  */
 export function characterVoiceGuidance(
-  actorVariableName = 'actorsList'
+  actorVariableName = 'actorsList',
 ): string {
   return `
 === CRITICAL: UNIQUE VOICES FOR EACH CHARACTER ===
@@ -131,7 +131,7 @@ These patterns indicate generic AI output - reject immediately:
 - Sounding like you're writing a market report or news article
 
 REMEMBER: A reader should be able to guess WHO wrote each post without seeing the name.
-The character's postStyle, voice, and postExample define HOW they post - match those exactly.`;
+The character's postStyle, voice, and postExample define HOW they post - match those exactly.`
 }
 
 /**
@@ -140,18 +140,18 @@ The character's postStyle, voice, and postExample define HOW they post - match t
  */
 export function getTimeOfDayEnergy(hour: number): string {
   if (hour >= 2 && hour < 6) {
-    return 'ENERGY: 3am unhinged - philosophical, conspiratorial, unfiltered';
+    return 'ENERGY: 3am unhinged - philosophical, conspiratorial, unfiltered'
   }
   if (hour >= 6 && hour < 10) {
-    return 'ENERGY: Morning professional - announcements, fresh start optimism';
+    return 'ENERGY: Morning professional - announcements, fresh start optimism'
   }
   if (hour >= 10 && hour < 15) {
-    return 'ENERGY: Peak hours - hot takes, controversy, ratio attempts';
+    return 'ENERGY: Peak hours - hot takes, controversy, ratio attempts'
   }
   if (hour >= 15 && hour < 20) {
-    return "ENERGY: Afternoon - commentary on day's events, dunks on bad takes";
+    return "ENERGY: Afternoon - commentary on day's events, dunks on bad takes"
   }
-  return 'ENERGY: Night - introspective, shitposting, less corporate';
+  return 'ENERGY: Night - introspective, shitposting, less corporate'
 }
 
 /**
@@ -167,7 +167,7 @@ Examples of WRONG → RIGHT:
 - "Elon Musk" → "AIlon Musk"
 - "Trump" → "Trump Terminal"
 - "OpenAI" → "OpenAGI"
-- "Bitcoin" → "BitcAIn"`;
+- "Bitcoin" → "BitcAIn"`
 
 /**
  * Private vs public content guidance for group chats.
@@ -175,7 +175,7 @@ Examples of WRONG → RIGHT:
 export const PRIVATE_CONTENT_GUIDANCE = `PRIVATE vs PUBLIC:
 - PUBLIC feed: What you want market to think
 - PRIVATE chat: What you actually know/plan
-- Be STRATEGIC: Help friends, hurt enemies`;
+- Be STRATEGIC: Help friends, hurt enemies`
 
 /**
  * Rich narrative context header for prompts that need full history.
@@ -191,7 +191,7 @@ export const RICH_NARRATIVE_CONTEXT_HEADER = `=== COMPLETE NARRATIVE CONTEXT ===
 
 {{feedActivityContext}}
 
-{{worldFactsContext}}`;
+{{worldFactsContext}}`
 
 /**
  * Character roster header for prompts that need character context.
@@ -203,7 +203,7 @@ export const CHARACTER_ROSTER_HEADER = `=== WORLD CHARACTERS ===
 
 {{detailedCharacterProfiles}}
 
-{{organizationRoster}}`;
+{{organizationRoster}}`
 
 /**
  * Combined full context header with all elements (characters, events, narratives).
@@ -226,7 +226,7 @@ export const FULL_CONTEXT_HEADER = `{{realityGrounding}}
 Day {{currentDay}} of 30
 Phase: {{currentPhase}}
 
-{{phaseGuidance}}`;
+{{phaseGuidance}}`
 
 /**
  * Anti-repetition and distinctness guidance for content generation.
@@ -252,7 +252,7 @@ export const ANTI_REPETITION_RULES = `=== ANTI-REPETITION RULES (CRITICAL) ===
 4. **Each piece must add NEW information:**
    - New events = new information revealed
    - New posts = new opinions or reactions
-   - If content doesn't add something new, DON'T generate it`;
+   - If content doesn't add something new, DON'T generate it`
 
 /**
  * Narrative continuity guidance for maintaining story coherence.
@@ -282,7 +282,7 @@ export const NARRATIVE_CONTINUITY_RULES = `=== NARRATIVE CONTINUITY RULES ===
 5. **Phase-appropriate content:**
    - Early phases: hints, speculation, disconnected events
    - Middle phases: connections emerge, threads interweave
-   - Late phases: convergence, revelations, resolution`;
+   - Late phases: convergence, revelations, resolution`
 
 /**
  * Question generation continuity guidance.
@@ -307,7 +307,7 @@ export const QUESTION_CONTINUITY_RULES = `=== QUESTION GENERATION CONTINUITY ===
 4. **Avoid question patterns:**
    - Don't just swap actor names in similar question templates
    - Each question needs a unique angle or framing
-   - Vary the resolution timeframes for pacing`;
+   - Vary the resolution timeframes for pacing`
 
 /**
  * Event generation continuity guidance.
@@ -332,7 +332,7 @@ export const EVENT_CONTINUITY_RULES = `=== EVENT GENERATION CONTINUITY ===
 4. **Maintain cause and effect:**
    - Major events have consequences
    - Subsequent events should reflect previous happenings
-   - The world reacts to what occurred`;
+   - The world reacts to what occurred`
 
 /**
  * Final reminders section for feed prompts (sandwich structure - reinforcement at end).
@@ -345,7 +345,7 @@ export const FINAL_REMINDERS = `FINAL REMINDERS:
 - NO emojis - plain text only
 - Match each character's postStyle, voice, and postExample EXACTLY
 - Each character must sound DISTINCT - a blind reader should identify who wrote each post
-- NO market analyst speak ("by Dec 13", "cautiously optimistic", "this suggests")`;
+- NO market analyst speak ("by Dec 13", "cautiously optimistic", "this suggests")`
 
 /**
  * Quality rules for NPC posts - prevents robotic/technical content
@@ -392,41 +392,41 @@ GOOD: "AIlon's snow cone wager"
 === VOICE MATCHING ===
 Your post must sound like YOUR character's examples, not generic AI.
 Check: Could someone identify you without seeing your name?
-`;
+`
 
 /**
  * Helper to build a complete prompt section combining common elements.
  */
 export function buildStandardPromptSections(
   options: {
-    includeWorldContext?: boolean;
-    includeValueRanges?: boolean;
-    includeVoiceGuidance?: boolean;
-    actorVariableName?: string;
-  } = {}
+    includeWorldContext?: boolean
+    includeValueRanges?: boolean
+    includeVoiceGuidance?: boolean
+    actorVariableName?: string
+  } = {},
 ): string {
   const {
     includeWorldContext = true,
     includeValueRanges = true,
     includeVoiceGuidance = false,
     actorVariableName = 'actorsList',
-  } = options;
+  } = options
 
-  const sections: string[] = [];
+  const sections: string[] = []
 
   if (includeWorldContext) {
-    sections.push(WORLD_CONTEXT_HEADER);
+    sections.push(WORLD_CONTEXT_HEADER)
   }
 
-  sections.push(STANDARD_FEED_RULES);
+  sections.push(STANDARD_FEED_RULES)
 
   if (includeVoiceGuidance) {
-    sections.push(characterVoiceGuidance(actorVariableName));
+    sections.push(characterVoiceGuidance(actorVariableName))
   }
 
   if (includeValueRanges) {
-    sections.push(VALUE_RANGES);
+    sections.push(VALUE_RANGES)
   }
 
-  return sections.join('\n\n');
+  return sections.join('\n\n')
 }

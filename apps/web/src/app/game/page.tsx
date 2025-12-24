@@ -1,27 +1,25 @@
-'use client';
-
-import { cn } from '@babylon/shared';
-import { useQuery } from '@tanstack/react-query';
-import { Activity } from 'lucide-react';
-import { PageContainer } from '@/components/shared/PageContainer';
+import { cn } from '@babylon/shared'
+import { useQuery } from '@tanstack/react-query'
+import { Activity } from 'lucide-react'
+import { PageContainer } from '@/components/shared/PageContainer'
 
 interface GameStats {
-  totalPosts: number;
-  activeQuestions: number;
-  totalCompanies: number;
+  totalPosts: number
+  activeQuestions: number
+  totalCompanies: number
 }
 
 interface EngineStatus {
-  isRunning: boolean;
-  currentDay?: number;
-  currentDate?: string;
-  speed?: number;
-  lastTickAt?: string;
+  isRunning: boolean
+  currentDay?: number
+  currentDate?: string
+  speed?: number
+  lastTickAt?: string
 }
 
 interface GameDataResponse {
-  stats: GameStats;
-  engineStatus: EngineStatus;
+  stats: GameStats
+  engineStatus: EngineStatus
 }
 
 export default function GamePage() {
@@ -34,22 +32,22 @@ export default function GamePage() {
   } = useQuery({
     queryKey: ['game', 'stats'],
     queryFn: async (): Promise<GameDataResponse> => {
-      const response = await fetch('/api/stats');
+      const response = await fetch('/api/stats')
       if (!response.ok) {
-        throw new Error('Failed to load game data');
+        throw new Error('Failed to load game data')
       }
-      return (await response.json()) as GameDataResponse;
+      return (await response.json()) as GameDataResponse
     },
     refetchInterval: 10000, // Refresh every 10 seconds
-  });
+  })
 
-  const stats = data?.stats || null;
-  const engineStatus = data?.engineStatus || null;
-  const error = queryError instanceof Error ? queryError.message : null;
+  const stats = data?.stats || null
+  const engineStatus = data?.engineStatus || null
+  const error = queryError instanceof Error ? queryError.message : null
 
   const loadGameData = () => {
-    void refetch();
-  };
+    void refetch()
+  }
 
   if (loading) {
     return (
@@ -58,7 +56,7 @@ export default function GamePage() {
           Loading game status...
         </div>
       </PageContainer>
-    );
+    )
   }
 
   if (error) {
@@ -70,15 +68,15 @@ export default function GamePage() {
           <code className="rounded bg-muted px-2 py-1">bun run dev</code>
         </p>
       </PageContainer>
-    );
+    )
   }
 
   const currentDate = engineStatus?.currentDate
     ? new Date(engineStatus.currentDate)
-    : new Date();
+    : new Date()
   const lastTick = engineStatus?.lastTickAt
     ? new Date(engineStatus.lastTickAt)
-    : null;
+    : null
 
   return (
     <PageContainer className="overflow-y-auto pb-24 md:pb-4">
@@ -87,7 +85,7 @@ export default function GamePage() {
         <div
           className={cn(
             'rounded-2xl border border-border bg-card p-6',
-            'shadow-md'
+            'shadow-md',
           )}
         >
           <div className="mb-4 flex items-center justify-between">
@@ -98,7 +96,7 @@ export default function GamePage() {
                   'h-4 w-4',
                   engineStatus?.isRunning
                     ? 'animate-pulse text-green-500'
-                    : 'text-muted-foreground'
+                    : 'text-muted-foreground',
                 )}
               />
               <span
@@ -106,7 +104,7 @@ export default function GamePage() {
                   'font-medium text-sm',
                   engineStatus?.isRunning
                     ? 'text-green-500'
-                    : 'text-muted-foreground'
+                    : 'text-muted-foreground',
                 )}
               >
                 {engineStatus?.isRunning ? 'Running' : 'Stopped'}
@@ -153,7 +151,7 @@ export default function GamePage() {
         <div
           className={cn(
             'rounded-2xl border border-border bg-card p-6',
-            'shadow-md'
+            'shadow-md',
           )}
         >
           <h3 className="mb-4 font-semibold text-sm">Game Statistics</h3>
@@ -188,6 +186,7 @@ export default function GamePage() {
         {/* Refresh Button */}
         <div className="flex justify-center">
           <button
+            type="button"
             onClick={loadGameData}
             disabled={refreshing}
             className={cn(
@@ -195,7 +194,7 @@ export default function GamePage() {
               'bg-primary text-primary-foreground',
               'hover:bg-primary/90',
               'disabled:cursor-not-allowed disabled:opacity-50',
-              'transition-all duration-300'
+              'transition-all duration-300',
             )}
           >
             {refreshing ? 'Refreshing...' : 'Refresh Stats'}
@@ -206,7 +205,7 @@ export default function GamePage() {
         <div
           className={cn(
             'rounded-2xl border border-border bg-card p-6',
-            'shadow-md'
+            'shadow-md',
           )}
         >
           <h3 className="mb-3 font-semibold text-sm">About Continuous Mode</h3>
@@ -229,5 +228,5 @@ export default function GamePage() {
         </div>
       </div>
     </PageContainer>
-  );
+  )
 }

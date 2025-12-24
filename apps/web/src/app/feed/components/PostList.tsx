@@ -1,19 +1,17 @@
-'use client';
-
-import type { FeedPost } from '@babylon/shared';
-import { memo, useCallback, useEffect, useRef, useState } from 'react';
-import { ArticleCard } from '@/components/articles/ArticleCard';
-import type { PostCardProps } from '@/components/posts/PostCard';
-import { PostCard } from '@/components/posts/PostCard';
-import { InviteFriendsBanner } from '@/components/shared/InviteFriendsBanner';
-import { useAuthStore } from '@/stores/authStore';
+import type { FeedPost } from '@babylon/shared'
+import { memo, useCallback, useEffect, useRef, useState } from 'react'
+import { ArticleCard } from '@/components/articles/ArticleCard'
+import type { PostCardProps } from '@/components/posts/PostCard'
+import { PostCard } from '@/components/posts/PostCard'
+import { InviteFriendsBanner } from '@/components/shared/InviteFriendsBanner'
+import { useAuthStore } from '@/stores/authStore'
 
 interface PostListProps {
-  posts: FeedPost[];
-  actorNames: Map<string, string>;
-  hasMore: boolean;
-  loadingMore: boolean;
-  onLoadMore: () => void;
+  posts: FeedPost[]
+  actorNames: Map<string, string>
+  hasMore: boolean
+  loadingMore: boolean
+  onLoadMore: () => void
 }
 
 /**
@@ -32,64 +30,64 @@ export const PostList = memo(function PostList({
   loadingMore,
   onLoadMore,
 }: PostListProps) {
-  const { user } = useAuthStore();
-  const loadMoreRef = useRef<HTMLDivElement | null>(null);
-  const [bannerDismissed, setBannerDismissed] = useState(false);
+  const { user } = useAuthStore()
+  const loadMoreRef = useRef<HTMLDivElement | null>(null)
+  const [bannerDismissed, setBannerDismissed] = useState(false)
 
   // Smart banner interval based on referrals
   const calculateBannerInterval = useCallback(() => {
-    if (!user) return Math.floor(Math.random() * 51) + 50;
+    if (!user) return Math.floor(Math.random() * 51) + 50
 
-    const referralCount = user.referralCount ?? 0;
-    const dismissKey = `banner_dismiss_time_${user.id}`;
+    const referralCount = user.referralCount ?? 0
+    const dismissKey = `banner_dismiss_time_${user.id}`
     const lastDismiss =
-      typeof window !== 'undefined' ? localStorage.getItem(dismissKey) : null;
+      typeof window !== 'undefined' ? localStorage.getItem(dismissKey) : null
 
     if (lastDismiss) {
       const daysSinceDismiss =
-        (Date.now() - Number.parseInt(lastDismiss)) / 86400000;
-      if (daysSinceDismiss < 7) return 999999;
+        (Date.now() - Number.parseInt(lastDismiss, 10)) / 86400000
+      if (daysSinceDismiss < 7) return 999999
     }
 
-    if (referralCount === 0) return Math.floor(Math.random() * 21) + 30;
-    if (referralCount < 5) return Math.floor(Math.random() * 31) + 50;
-    if (referralCount < 10) return Math.floor(Math.random() * 41) + 80;
-    return Math.floor(Math.random() * 51) + 150;
-  }, [user]);
+    if (referralCount === 0) return Math.floor(Math.random() * 21) + 30
+    if (referralCount < 5) return Math.floor(Math.random() * 31) + 50
+    if (referralCount < 10) return Math.floor(Math.random() * 41) + 80
+    return Math.floor(Math.random() * 51) + 150
+  }, [user])
 
-  const bannerInterval = useRef(calculateBannerInterval());
+  const bannerInterval = useRef(calculateBannerInterval())
 
   // Infinite scroll observer
   useEffect(() => {
-    const target = loadMoreRef.current;
-    if (!target) return;
+    const target = loadMoreRef.current
+    if (!target) return
 
     const observer = new IntersectionObserver(
       (entries) => {
-        const entry = entries[0];
+        const entry = entries[0]
         if (entry?.isIntersecting && hasMore && !loadingMore) {
-          onLoadMore();
+          onLoadMore()
         }
       },
-      { rootMargin: '200px' }
-    );
+      { rootMargin: '200px' },
+    )
 
-    observer.observe(target);
-    return () => observer.disconnect();
-  }, [hasMore, loadingMore, onLoadMore]);
+    observer.observe(target)
+    return () => observer.disconnect()
+  }, [hasMore, loadingMore, onLoadMore])
 
   return (
     <div className="w-full space-y-0">
       {posts.map((post, i) => {
         const authorId =
-          ('authorId' in post ? post.authorId : post.author) || '';
+          ('authorId' in post ? post.authorId : post.author) || ''
         const authorName =
           actorNames.get(authorId) ||
           ('authorName' in post ? post.authorName : '') ||
-          authorId;
+          authorId
 
         const showBannerAfterThisPost =
-          !bannerDismissed && i === bannerInterval.current - 1;
+          !bannerDismissed && i === bannerInterval.current - 1
 
         const postData = {
           id: post.id,
@@ -133,7 +131,7 @@ export const PostList = memo(function PostList({
             ('originalPost' in post
               ? (post.originalPost as PostCardProps['post']['originalPost'])
               : null) || null,
-        };
+        }
 
         return (
           <div key={`post-wrapper-${post.id}-${i}`}>
@@ -145,13 +143,13 @@ export const PostList = memo(function PostList({
             {showBannerAfterThisPost && (
               <InviteFriendsBanner
                 onDismiss={() => {
-                  setBannerDismissed(true);
-                  bannerInterval.current = calculateBannerInterval();
+                  setBannerDismissed(true)
+                  bannerInterval.current = calculateBannerInterval()
                 }}
               />
             )}
           </div>
-        );
+        )
       })}
 
       {/* Infinite scroll trigger */}
@@ -169,5 +167,5 @@ export const PostList = memo(function PostList({
         </div>
       )}
     </div>
-  );
-});
+  )
+})

@@ -68,7 +68,7 @@ The question isn't "did they make money?" but "did they TRADE like a degen?"
 - Long analysis before trading
 - Waiting for "perfect" setups
 - Safe, boring trades
-`;
+`
 
 export const DEGEN_PRIORITY_METRICS = [
   'trading.tradesExecuted',
@@ -77,4 +77,4 @@ export const DEGEN_PRIORITY_METRICS = [
   'trading.largestLoss',
   'trading.marketsTraded',
   'behavior.actionsPerTick',
-];
+]

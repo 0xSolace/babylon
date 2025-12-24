@@ -1,10 +1,10 @@
-import { definePrompt } from '../define-prompt';
+import { definePrompt } from '../define-prompt'
 import {
   ANTI_REPETITION_RULES,
   FINAL_REMINDERS,
   STANDARD_FEED_RULES,
   WORLD_CONTEXT_HEADER,
-} from '../shared-sections';
+} from '../shared-sections'
 
 /**
  * Prompt for generating individual reply posts to existing content.
@@ -82,4 +82,4 @@ ${FINAL_REMINDERS}
 
 No other text.
 `.trim(),
-});
+})

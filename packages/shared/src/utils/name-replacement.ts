@@ -4,10 +4,10 @@
  */
 
 export interface NameParts {
-  firstName: string;
-  lastName: string;
-  originalFirstName: string;
-  originalLastName: string;
+  firstName: string
+  lastName: string
+  originalFirstName: string
+  originalLastName: string
 }
 
 /**
@@ -15,61 +15,61 @@ export interface NameParts {
  */
 export function generateNameVariations(
   firstName: string,
-  lastName: string
+  lastName: string,
 ): string[] {
-  const variations: Set<string> = new Set();
+  const variations: Set<string> = new Set()
 
   // Individual parts
-  variations.add(firstName.toLowerCase());
-  variations.add(firstName);
-  variations.add(firstName.toUpperCase());
-  variations.add(lastName.toLowerCase());
-  variations.add(lastName);
-  variations.add(lastName.toUpperCase());
+  variations.add(firstName.toLowerCase())
+  variations.add(firstName)
+  variations.add(firstName.toUpperCase())
+  variations.add(lastName.toLowerCase())
+  variations.add(lastName)
+  variations.add(lastName.toUpperCase())
 
   // Combined variations
-  const firstLower = firstName.toLowerCase();
-  const lastLower = lastName.toLowerCase();
-  const firstUpper = firstName.toUpperCase();
-  const lastUpper = lastName.toUpperCase();
+  const firstLower = firstName.toLowerCase()
+  const lastLower = lastName.toLowerCase()
+  const firstUpper = firstName.toUpperCase()
+  const lastUpper = lastName.toUpperCase()
   const firstTitle =
-    firstName.charAt(0).toUpperCase() + firstName.slice(1).toLowerCase();
+    firstName.charAt(0).toUpperCase() + firstName.slice(1).toLowerCase()
   const lastTitle =
-    lastName.charAt(0).toUpperCase() + lastName.slice(1).toLowerCase();
+    lastName.charAt(0).toUpperCase() + lastName.slice(1).toLowerCase()
 
   // firstlast (all lowercase)
-  variations.add(firstLower + lastLower);
+  variations.add(firstLower + lastLower)
 
   // FirstLast (title case)
-  variations.add(firstTitle + lastTitle);
+  variations.add(firstTitle + lastTitle)
 
   // FIRSTLAST (all uppercase)
-  variations.add(firstUpper + lastUpper);
+  variations.add(firstUpper + lastUpper)
 
   // firstLast (camelCase)
-  variations.add(firstLower + lastTitle);
+  variations.add(firstLower + lastTitle)
 
   // First_Last (with underscore)
-  variations.add(firstTitle + '_' + lastTitle);
-  variations.add(firstLower + '_' + lastLower);
-  variations.add(firstUpper + '_' + lastUpper);
+  variations.add(`${firstTitle}_${lastTitle}`)
+  variations.add(`${firstLower}_${lastLower}`)
+  variations.add(`${firstUpper}_${lastUpper}`)
 
   // First-Last (with hyphen)
-  variations.add(firstTitle + '-' + lastTitle);
-  variations.add(firstLower + '-' + lastLower);
-  variations.add(firstUpper + '-' + lastUpper);
+  variations.add(`${firstTitle}-${lastTitle}`)
+  variations.add(`${firstLower}-${lastLower}`)
+  variations.add(`${firstUpper}-${lastUpper}`)
 
   // First Last (with space)
-  variations.add(firstTitle + ' ' + lastTitle);
-  variations.add(firstLower + ' ' + lastLower);
-  variations.add(firstUpper + ' ' + lastUpper);
+  variations.add(`${firstTitle} ${lastTitle}`)
+  variations.add(`${firstLower} ${lastLower}`)
+  variations.add(`${firstUpper} ${lastUpper}`)
 
   // First, Last (with comma)
-  variations.add(firstTitle + ', ' + lastTitle);
-  variations.add(firstLower + ', ' + lastLower);
-  variations.add(firstUpper + ', ' + lastUpper);
+  variations.add(`${firstTitle}, ${lastTitle}`)
+  variations.add(`${firstLower}, ${lastLower}`)
+  variations.add(`${firstUpper}, ${lastUpper}`)
 
-  return Array.from(variations).filter((v) => v.length > 0);
+  return Array.from(variations).filter((v) => v.length > 0)
 }
 
 /**
@@ -78,20 +78,20 @@ export function generateNameVariations(
 export function containsNameVariation(
   text: string,
   firstName: string,
-  lastName: string
+  lastName: string,
 ): boolean {
-  const variations = generateNameVariations(firstName, lastName);
-  const lowerText = text.toLowerCase();
+  const variations = generateNameVariations(firstName, lastName)
+  const lowerText = text.toLowerCase()
 
   return variations.some((variation) => {
-    const lowerVariation = variation.toLowerCase();
+    const lowerVariation = variation.toLowerCase()
     // Check for exact word boundaries or as part of larger words
     const regex = new RegExp(
       `\\b${lowerVariation.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`,
-      'i'
-    );
-    return regex.test(lowerText);
-  });
+      'i',
+    )
+    return regex.test(lowerText)
+  })
 }
 
 /**
@@ -102,43 +102,43 @@ export function replaceNameVariations(
   oldFirstName: string,
   oldLastName: string,
   newFirstName: string,
-  newLastName: string
+  newLastName: string,
 ): string {
-  let result = text;
-  const oldVariations = generateNameVariations(oldFirstName, oldLastName);
-  const newVariations = generateNameVariations(newFirstName, newLastName);
+  let result = text
+  const oldVariations = generateNameVariations(oldFirstName, oldLastName)
+  const newVariations = generateNameVariations(newFirstName, newLastName)
 
   // Sort by length (longest first) to avoid partial replacements
-  const sortedOld = oldVariations.sort((a, b) => b.length - a.length);
-  const sortedNew = newVariations.sort((a, b) => b.length - a.length);
+  const sortedOld = oldVariations.sort((a, b) => b.length - a.length)
+  const sortedNew = newVariations.sort((a, b) => b.length - a.length)
 
   // Replace each variation
   for (let i = 0; i < sortedOld.length; i++) {
-    const oldVar = sortedOld[i];
+    const oldVar = sortedOld[i]
     if (!oldVar) {
-      continue;
+      continue
     }
-    const newVar = sortedNew[i] || newFirstName + ' ' + newLastName;
+    const newVar = sortedNew[i] || `${newFirstName} ${newLastName}`
 
     // Use word boundaries for replacement
     const regex = new RegExp(
       `\\b${oldVar.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`,
-      'gi'
-    );
-    result = result.replace(regex, newVar);
+      'gi',
+    )
+    result = result.replace(regex, newVar)
   }
 
-  return result;
+  return result
 }
 
 /**
  * Extracts name parts from an actor object
  */
 export function extractNameParts(actor: {
-  firstName?: string;
-  lastName?: string;
-  originalFirstName?: string;
-  originalLastName?: string;
+  firstName?: string
+  lastName?: string
+  originalFirstName?: string
+  originalLastName?: string
 }): NameParts | null {
   if (
     !actor.firstName ||
@@ -146,7 +146,7 @@ export function extractNameParts(actor: {
     !actor.originalFirstName ||
     actor.originalLastName === undefined
   ) {
-    return null;
+    return null
   }
 
   return {
@@ -154,5 +154,5 @@ export function extractNameParts(actor: {
     lastName: actor.lastName,
     originalFirstName: actor.originalFirstName,
     originalLastName: actor.originalLastName,
-  };
+  }
 }

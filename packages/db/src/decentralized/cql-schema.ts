@@ -1,19 +1,13 @@
 /**
  * CovenantSQL Schema Definitions
  *
- * Converts Drizzle-style schema to CovenantSQL DDL.
- * Handles type mapping and constraint generation.
+ * Pure TypeScript schema definitions for CovenantSQL.
+ * All schemas defined statically.
  */
 
-import {
-  getTableConfig,
-  type PgColumn,
-  type PgTable,
-} from 'drizzle-orm/pg-core';
-import * as drizzleSchema from '../schema';
-import type { CQLColumn, CQLTableSchema } from './types';
+import type { CQLColumn, CQLTableSchema } from './types'
 
-/** Map Drizzle types to CQL types */
+/** Map type names to CQL types */
 const TYPE_MAP: Record<string, CQLColumn['type']> = {
   text: 'TEXT',
   integer: 'INTEGER',
@@ -24,68 +18,68 @@ const TYPE_MAP: Record<string, CQLColumn['type']> = {
   doublePrecision: 'DOUBLE',
   json: 'JSON',
   jsonb: 'JSON',
-};
+}
 
 /** Generate CREATE TABLE SQL from schema */
 export function generateCreateTableSQL(schema: CQLTableSchema): string {
   const columnDefs = schema.columns.map((col) => {
-    let def = `"${col.name}" ${col.type}`;
+    let def = `"${col.name}" ${col.type}`
 
     if (col.type === 'DECIMAL' && col.precision && col.scale) {
-      def = `"${col.name}" DECIMAL(${col.precision}, ${col.scale})`;
+      def = `"${col.name}" DECIMAL(${col.precision}, ${col.scale})`
     }
 
-    if (!col.nullable) def += ' NOT NULL';
+    if (!col.nullable) def += ' NOT NULL'
     if (col.default !== undefined) {
       if (col.default === null) {
-        def += ' DEFAULT NULL';
+        def += ' DEFAULT NULL'
       } else if (typeof col.default === 'string') {
         if (col.default === 'NOW()' || col.default === 'CURRENT_TIMESTAMP') {
-          def += ' DEFAULT CURRENT_TIMESTAMP';
+          def += ' DEFAULT CURRENT_TIMESTAMP'
         } else {
-          def += ` DEFAULT '${col.default}'`;
+          def += ` DEFAULT '${col.default}'`
         }
       } else if (typeof col.default === 'boolean') {
-        def += ` DEFAULT ${col.default ? 'TRUE' : 'FALSE'}`;
+        def += ` DEFAULT ${col.default ? 'TRUE' : 'FALSE'}`
       } else {
-        def += ` DEFAULT ${col.default}`;
+        def += ` DEFAULT ${col.default}`
       }
     }
-    if (col.unique && !col.primaryKey) def += ' UNIQUE';
+    if (col.unique && !col.primaryKey) def += ' UNIQUE'
 
-    return def;
-  });
+    return def
+  })
 
-  const constraints: string[] = [];
+  const constraints: string[] = []
 
   if (schema.primaryKey.length > 0) {
     constraints.push(
-      `PRIMARY KEY (${schema.primaryKey.map((k) => `"${k}"`).join(', ')})`
-    );
+      `PRIMARY KEY (${schema.primaryKey.map((k) => `"${k}"`).join(', ')})`,
+    )
   }
 
-  for (const uc of schema.uniqueConstraints) {
+  for (const uc of schema.uniqueConstraints ?? []) {
     constraints.push(
-      `CONSTRAINT "${uc.name}" UNIQUE (${uc.columns.map((c) => `"${c}"`).join(', ')})`
-    );
+      `CONSTRAINT "${uc.name}" UNIQUE (${uc.columns.map((c) => `"${c}"`).join(', ')})`,
+    )
   }
 
-  const allDefs = [...columnDefs, ...constraints];
+  const allDefs = [...columnDefs, ...constraints]
 
-  return `CREATE TABLE IF NOT EXISTS "${schema.name}" (\n  ${allDefs.join(',\n  ')}\n)`;
+  return `CREATE TABLE IF NOT EXISTS "${schema.name}" (\n  ${allDefs.join(',\n  ')}\n)`
 }
 
 /** Generate CREATE INDEX SQL statements */
 export function generateIndexSQL(schema: CQLTableSchema): string[] {
-  return schema.indexes.map((idx) => {
-    const unique = idx.unique ? 'UNIQUE ' : '';
-    const columns = idx.columns.map((c) => `"${c}"`).join(', ');
-    return `CREATE ${unique}INDEX IF NOT EXISTS "${idx.name}" ON "${schema.name}" (${columns})`;
-  });
+  return (schema.indexes ?? []).map((idx) => {
+    const unique = idx.unique ? 'UNIQUE ' : ''
+    const columns = idx.columns.map((c) => `"${c}"`).join(', ')
+    return `CREATE ${unique}INDEX IF NOT EXISTS "${idx.name}" ON "${schema.name}" (${columns})`
+  })
 }
 
-/** Legacy manual Babylon tables for CovenantSQL (deprecated). */
-export const LEGACY_BABYLON_SCHEMAS: CQLTableSchema[] = [
+/** Babylon tables for CovenantSQL. */
+export const BABYLON_SCHEMAS = [
   // Users
   {
     name: 'User',
@@ -104,6 +98,9 @@ export const LEGACY_BABYLON_SCHEMAS: CQLTableSchema[] = [
         default: 'NOW()',
       },
       { name: 'updatedAt', type: 'TIMESTAMP', nullable: false },
+      { name: 'personality', type: 'TEXT', nullable: true },
+      { name: 'postStyle', type: 'TEXT', nullable: true },
+      { name: 'postExample', type: 'TEXT', nullable: true },
       {
         name: 'virtualBalance',
         type: 'DECIMAL',
@@ -143,34 +140,297 @@ export const LEGACY_BABYLON_SCHEMAS: CQLTableSchema[] = [
         default: false,
       },
       {
+        name: 'hasProfileImage',
+        type: 'BOOLEAN',
+        nullable: false,
+        default: false,
+      },
+      { name: 'hasUsername', type: 'BOOLEAN', nullable: false, default: false },
+      { name: 'hasBio', type: 'BOOLEAN', nullable: false, default: false },
+      { name: 'profileSetupCompletedAt', type: 'TIMESTAMP', nullable: true },
+      { name: 'farcasterUsername', type: 'TEXT', nullable: true },
+      {
+        name: 'hasFarcaster',
+        type: 'BOOLEAN',
+        nullable: false,
+        default: false,
+      },
+      { name: 'hasTwitter', type: 'BOOLEAN', nullable: false, default: false },
+      { name: 'hasDiscord', type: 'BOOLEAN', nullable: false, default: false },
+      { name: 'nftTokenId', type: 'INTEGER', nullable: true, unique: true },
+      {
+        name: 'onChainRegistered',
+        type: 'BOOLEAN',
+        nullable: false,
+        default: false,
+      },
+      {
+        name: 'pointsAwardedForFarcaster',
+        type: 'BOOLEAN',
+        nullable: false,
+        default: false,
+      },
+      {
+        name: 'pointsAwardedForFarcasterFollow',
+        type: 'BOOLEAN',
+        nullable: false,
+        default: false,
+      },
+      {
+        name: 'pointsAwardedForProfile',
+        type: 'BOOLEAN',
+        nullable: false,
+        default: false,
+      },
+      {
+        name: 'pointsAwardedForProfileImage',
+        type: 'BOOLEAN',
+        nullable: false,
+        default: false,
+      },
+      {
+        name: 'pointsAwardedForTwitter',
+        type: 'BOOLEAN',
+        nullable: false,
+        default: false,
+      },
+      {
+        name: 'pointsAwardedForTwitterFollow',
+        type: 'BOOLEAN',
+        nullable: false,
+        default: false,
+      },
+      {
+        name: 'pointsAwardedForDiscord',
+        type: 'BOOLEAN',
+        nullable: false,
+        default: false,
+      },
+      {
+        name: 'pointsAwardedForDiscordJoin',
+        type: 'BOOLEAN',
+        nullable: false,
+        default: false,
+      },
+      {
+        name: 'pointsAwardedForUsername',
+        type: 'BOOLEAN',
+        nullable: false,
+        default: false,
+      },
+      {
+        name: 'pointsAwardedForWallet',
+        type: 'BOOLEAN',
+        nullable: false,
+        default: false,
+      },
+      {
+        name: 'pointsAwardedForReferralBonus',
+        type: 'BOOLEAN',
+        nullable: false,
+        default: false,
+      },
+      {
+        name: 'pointsAwardedForShare',
+        type: 'BOOLEAN',
+        nullable: false,
+        default: false,
+      },
+      {
+        name: 'pointsAwardedForPrivateGroup',
+        type: 'BOOLEAN',
+        nullable: false,
+        default: false,
+      },
+      {
+        name: 'pointsAwardedForPrivateChannel',
+        type: 'BOOLEAN',
+        nullable: false,
+        default: false,
+      },
+      { name: 'referralCode', type: 'TEXT', nullable: true, unique: true },
+      { name: 'referralCount', type: 'INTEGER', nullable: false, default: 0 },
+      { name: 'referredBy', type: 'TEXT', nullable: true },
+      { name: 'registrationIpHash', type: 'TEXT', nullable: true },
+      { name: 'lastReferralIpHash', type: 'TEXT', nullable: true },
+      { name: 'registrationTxHash', type: 'TEXT', nullable: true },
+      {
         name: 'reputationPoints',
         type: 'INTEGER',
         nullable: false,
         default: 1000,
       },
-      { name: 'referralCode', type: 'TEXT', nullable: true, unique: true },
-      { name: 'referralCount', type: 'INTEGER', nullable: false, default: 0 },
-      { name: 'referredBy', type: 'TEXT', nullable: true },
-      { name: 'oauth3Id', type: 'TEXT', nullable: true, unique: true },
+      { name: 'twitterUsername', type: 'TEXT', nullable: true },
+      {
+        name: 'bannerDismissCount',
+        type: 'INTEGER',
+        nullable: false,
+        default: 0,
+      },
+      { name: 'bannerLastShown', type: 'TIMESTAMP', nullable: true },
+      { name: 'coverImageUrl', type: 'TEXT', nullable: true },
+      {
+        name: 'showFarcasterPublic',
+        type: 'BOOLEAN',
+        nullable: false,
+        default: true,
+      },
+      {
+        name: 'showTwitterPublic',
+        type: 'BOOLEAN',
+        nullable: false,
+        default: true,
+      },
+      {
+        name: 'showWalletPublic',
+        type: 'BOOLEAN',
+        nullable: false,
+        default: true,
+      },
+      { name: 'usernameChangedAt', type: 'TIMESTAMP', nullable: true },
+      { name: 'agent0FeedbackCount', type: 'INTEGER', nullable: true },
+      { name: 'agent0MetadataCID', type: 'TEXT', nullable: true },
+      { name: 'agent0RegisteredAt', type: 'TIMESTAMP', nullable: true },
+      { name: 'agent0TokenId', type: 'INTEGER', nullable: true },
+      { name: 'agent0TrustScore', type: 'DOUBLE', nullable: true },
+      { name: 'bannedAt', type: 'TIMESTAMP', nullable: true },
+      { name: 'bannedBy', type: 'TEXT', nullable: true },
+      { name: 'bannedReason', type: 'TEXT', nullable: true },
+      { name: 'farcasterDisplayName', type: 'TEXT', nullable: true },
+      { name: 'farcasterFid', type: 'TEXT', nullable: true, unique: true },
+      { name: 'farcasterPfpUrl', type: 'TEXT', nullable: true },
+      { name: 'farcasterVerifiedAt', type: 'TIMESTAMP', nullable: true },
       { name: 'isAdmin', type: 'BOOLEAN', nullable: false, default: false },
       { name: 'isBanned', type: 'BOOLEAN', nullable: false, default: false },
-      { name: 'isAgent', type: 'BOOLEAN', nullable: false, default: false },
-      { name: 'managedBy', type: 'TEXT', nullable: true },
-      { name: 'farcasterFid', type: 'TEXT', nullable: true, unique: true },
+      { name: 'isScammer', type: 'BOOLEAN', nullable: false, default: false },
+      { name: 'isCSAM', type: 'BOOLEAN', nullable: false, default: false },
+      { name: 'appealCount', type: 'INTEGER', nullable: false, default: 0 },
+      {
+        name: 'appealStaked',
+        type: 'BOOLEAN',
+        nullable: false,
+        default: false,
+      },
+      {
+        name: 'appealStakeAmount',
+        type: 'DECIMAL',
+        nullable: true,
+        precision: 18,
+        scale: 2,
+      },
+      { name: 'appealStakeTxHash', type: 'TEXT', nullable: true },
+      { name: 'appealStatus', type: 'TEXT', nullable: true },
+      { name: 'appealSubmittedAt', type: 'TIMESTAMP', nullable: true },
+      { name: 'appealReviewedAt', type: 'TIMESTAMP', nullable: true },
+      { name: 'falsePositiveHistory', type: 'JSON', nullable: true },
+      { name: 'privyId', type: 'TEXT', nullable: true, unique: true },
+      { name: 'oauth3Id', type: 'TEXT', nullable: true, unique: true },
+      { name: 'kmsKeyId', type: 'TEXT', nullable: true, unique: true },
+      { name: 'registrationBlockNumber', type: 'BIGINT', nullable: true },
+      { name: 'registrationGasUsed', type: 'BIGINT', nullable: true },
+      { name: 'registrationTimestamp', type: 'TIMESTAMP', nullable: true },
+      { name: 'role', type: 'TEXT', nullable: true },
+      {
+        name: 'totalFeesEarned',
+        type: 'DECIMAL',
+        nullable: false,
+        default: '0',
+        precision: 18,
+        scale: 2,
+      },
+      {
+        name: 'totalFeesPaid',
+        type: 'DECIMAL',
+        nullable: false,
+        default: '0',
+        precision: 18,
+        scale: 2,
+      },
+      { name: 'twitterAccessToken', type: 'TEXT', nullable: true },
       { name: 'twitterId', type: 'TEXT', nullable: true, unique: true },
+      { name: 'twitterRefreshToken', type: 'TEXT', nullable: true },
+      { name: 'twitterTokenExpiresAt', type: 'TIMESTAMP', nullable: true },
+      { name: 'twitterVerifiedAt', type: 'TIMESTAMP', nullable: true },
       { name: 'discordId', type: 'TEXT', nullable: true, unique: true },
-      { name: 'email', type: 'TEXT', nullable: true },
+      { name: 'discordUsername', type: 'TEXT', nullable: true },
+      { name: 'discordAccessToken', type: 'TEXT', nullable: true },
+      { name: 'discordRefreshToken', type: 'TEXT', nullable: true },
+      { name: 'discordTokenExpiresAt', type: 'TIMESTAMP', nullable: true },
+      { name: 'discordVerifiedAt', type: 'TIMESTAMP', nullable: true },
       { name: 'tosAccepted', type: 'BOOLEAN', nullable: false, default: false },
+      { name: 'tosAcceptedAt', type: 'TIMESTAMP', nullable: true },
+      {
+        name: 'tosAcceptedVersion',
+        type: 'TEXT',
+        nullable: true,
+        default: '2025-11-11',
+      },
+      {
+        name: 'privacyPolicyAccepted',
+        type: 'BOOLEAN',
+        nullable: false,
+        default: false,
+      },
+      { name: 'privacyPolicyAcceptedAt', type: 'TIMESTAMP', nullable: true },
+      {
+        name: 'privacyPolicyAcceptedVersion',
+        type: 'TEXT',
+        nullable: true,
+        default: '2025-11-11',
+      },
       { name: 'invitePoints', type: 'INTEGER', nullable: false, default: 0 },
       { name: 'earnedPoints', type: 'INTEGER', nullable: false, default: 0 },
+      { name: 'bonusPoints', type: 'INTEGER', nullable: false, default: 0 },
+      { name: 'waitlistPosition', type: 'INTEGER', nullable: true },
+      { name: 'waitlistJoinedAt', type: 'TIMESTAMP', nullable: true },
+      {
+        name: 'isWaitlistActive',
+        type: 'BOOLEAN',
+        nullable: false,
+        default: false,
+      },
+      { name: 'isTest', type: 'BOOLEAN', nullable: false, default: false },
+      {
+        name: 'pointsAwardedForEmail',
+        type: 'BOOLEAN',
+        nullable: false,
+        default: false,
+      },
+      {
+        name: 'emailVerified',
+        type: 'BOOLEAN',
+        nullable: false,
+        default: false,
+      },
+      { name: 'email', type: 'TEXT', nullable: true },
+      { name: 'waitlistGraduatedAt', type: 'TIMESTAMP', nullable: true },
+      { name: 'isAgent', type: 'BOOLEAN', nullable: false, default: false },
+      { name: 'managedBy', type: 'TEXT', nullable: true },
     ],
     primaryKey: ['id'],
     indexes: [
-      { name: 'User_walletAddress_idx', columns: ['walletAddress'] },
-      { name: 'User_username_idx', columns: ['username'] },
-      { name: 'User_isAgent_idx', columns: ['isAgent'] },
+      { name: 'User_displayName_idx', columns: ['displayName'] },
+      { name: 'User_earnedPoints_idx', columns: ['earnedPoints'] },
+      { name: 'User_invitePoints_idx', columns: ['invitePoints'] },
       { name: 'User_isActor_idx', columns: ['isActor'] },
+      { name: 'User_isAgent_idx', columns: ['isAgent'] },
+      { name: 'User_isAgent_managedBy_idx', columns: ['isAgent', 'managedBy'] },
+      { name: 'User_isBanned_isActor_idx', columns: ['isBanned', 'isActor'] },
+      { name: 'User_isScammer_idx', columns: ['isScammer'] },
+      { name: 'User_isCSAM_idx', columns: ['isCSAM'] },
+      { name: 'User_managedBy_idx', columns: ['managedBy'] },
+      {
+        name: 'User_profileComplete_createdAt_idx',
+        columns: ['profileComplete', 'createdAt'],
+      },
+      { name: 'User_referralCode_idx', columns: ['referralCode'] },
       { name: 'User_reputationPoints_idx', columns: ['reputationPoints'] },
+      { name: 'User_username_idx', columns: ['username'] },
+      { name: 'User_waitlistJoinedAt_idx', columns: ['waitlistJoinedAt'] },
+      { name: 'User_waitlistPosition_idx', columns: ['waitlistPosition'] },
+      { name: 'User_walletAddress_idx', columns: ['walletAddress'] },
+      { name: 'User_registrationIpHash_idx', columns: ['registrationIpHash'] },
+      { name: 'User_lastReferralIpHash_idx', columns: ['lastReferralIpHash'] },
     ],
     uniqueConstraints: [],
   },
@@ -466,74 +726,6 @@ export const LEGACY_BABYLON_SCHEMAS: CQLTableSchema[] = [
     uniqueConstraints: [],
   },
 
-  // PerpPositions
-  {
-    name: 'PerpPosition',
-    columns: [
-      { name: 'id', type: 'TEXT', nullable: false, primaryKey: true },
-      { name: 'userId', type: 'TEXT', nullable: false },
-      { name: 'ticker', type: 'TEXT', nullable: false },
-      { name: 'organizationId', type: 'TEXT', nullable: false },
-      { name: 'side', type: 'TEXT', nullable: false },
-      { name: 'entryPrice', type: 'DOUBLE', nullable: false },
-      { name: 'currentPrice', type: 'DOUBLE', nullable: false },
-      { name: 'size', type: 'DOUBLE', nullable: false },
-      { name: 'leverage', type: 'INTEGER', nullable: false },
-      { name: 'liquidationPrice', type: 'DOUBLE', nullable: false },
-      { name: 'unrealizedPnL', type: 'DOUBLE', nullable: false },
-      { name: 'unrealizedPnLPercent', type: 'DOUBLE', nullable: false },
-      {
-        name: 'openedAt',
-        type: 'TIMESTAMP',
-        nullable: false,
-        default: 'NOW()',
-      },
-      { name: 'lastUpdated', type: 'TIMESTAMP', nullable: false },
-      { name: 'closedAt', type: 'TIMESTAMP', nullable: true },
-      { name: 'realizedPnL', type: 'DOUBLE', nullable: true },
-    ],
-    primaryKey: ['id'],
-    indexes: [
-      { name: 'PerpPosition_userId_idx', columns: ['userId'] },
-      { name: 'PerpPosition_ticker_idx', columns: ['ticker'] },
-    ],
-    uniqueConstraints: [],
-  },
-
-  // Organizations (Companies for perps)
-  {
-    name: 'Organization',
-    columns: [
-      { name: 'id', type: 'TEXT', nullable: false, primaryKey: true },
-      { name: 'name', type: 'TEXT', nullable: false },
-      { name: 'ticker', type: 'TEXT', nullable: true },
-      { name: 'description', type: 'TEXT', nullable: false },
-      { name: 'type', type: 'TEXT', nullable: false },
-      {
-        name: 'canBeInvolved',
-        type: 'BOOLEAN',
-        nullable: false,
-        default: true,
-      },
-      { name: 'initialPrice', type: 'DOUBLE', nullable: true },
-      { name: 'currentPrice', type: 'DOUBLE', nullable: true },
-      { name: 'imageUrl', type: 'TEXT', nullable: true },
-      {
-        name: 'createdAt',
-        type: 'TIMESTAMP',
-        nullable: false,
-        default: 'NOW()',
-      },
-      { name: 'updatedAt', type: 'TIMESTAMP', nullable: false },
-    ],
-    primaryKey: ['id'],
-    indexes: [
-      { name: 'Organization_ticker_idx', columns: ['ticker'] },
-      { name: 'Organization_type_idx', columns: ['type'] },
-    ],
-    uniqueConstraints: [],
-  },
-
   // Follows
   {
     name: 'Follow',
@@ -588,226 +780,232 @@ export const LEGACY_BABYLON_SCHEMAS: CQLTableSchema[] = [
     ],
     uniqueConstraints: [],
   },
-];
 
-/**
- * Generated Babylon tables for CovenantSQL (authoritative).
- *
- * Source of truth is Drizzle schema in `packages/db/src/schema/*`.
- */
-const DRIZZLE_IS_TABLE = Symbol.for('drizzle:IsDrizzleTable');
+  // ChatParticipants
+  {
+    name: 'ChatParticipant',
+    columns: [
+      { name: 'id', type: 'TEXT', nullable: false, primaryKey: true },
+      { name: 'chatId', type: 'TEXT', nullable: false },
+      { name: 'userId', type: 'TEXT', nullable: false },
+      {
+        name: 'joinedAt',
+        type: 'TIMESTAMP',
+        nullable: false,
+        default: 'NOW()',
+      },
+    ],
+    primaryKey: ['id'],
+    indexes: [
+      { name: 'ChatParticipant_chatId_idx', columns: ['chatId'] },
+      { name: 'ChatParticipant_userId_idx', columns: ['userId'] },
+    ],
+    uniqueConstraints: [
+      {
+        name: 'ChatParticipant_chatId_userId_key',
+        columns: ['chatId', 'userId'],
+      },
+    ],
+  },
 
-function isDrizzleTable(value: unknown): value is PgTable {
-  return (
-    typeof value === 'object' && value !== null && DRIZZLE_IS_TABLE in value
-  );
-}
+  // Pools
+  {
+    name: 'Pool',
+    columns: [
+      { name: 'id', type: 'TEXT', nullable: false, primaryKey: true },
+      { name: 'name', type: 'TEXT', nullable: false },
+      { name: 'npcActorId', type: 'TEXT', nullable: false },
+      {
+        name: 'createdAt',
+        type: 'TIMESTAMP',
+        nullable: false,
+        default: 'NOW()',
+      },
+      { name: 'updatedAt', type: 'TIMESTAMP', nullable: false },
+    ],
+    primaryKey: ['id'],
+    indexes: [{ name: 'Pool_npcActorId_idx', columns: ['npcActorId'] }],
+    uniqueConstraints: [],
+  },
 
-function mapPgTypeToCql(
-  sqlType: string
-): Pick<CQLColumn, 'type' | 'precision' | 'scale'> {
-  const normalized = sqlType.toLowerCase().trim();
+  // ActorState
+  {
+    name: 'ActorState',
+    columns: [
+      { name: 'id', type: 'TEXT', nullable: false, primaryKey: true },
+      { name: 'actorId', type: 'TEXT', nullable: false },
+      { name: 'state', type: 'JSON', nullable: false },
+      {
+        name: 'createdAt',
+        type: 'TIMESTAMP',
+        nullable: false,
+        default: 'NOW()',
+      },
+      { name: 'updatedAt', type: 'TIMESTAMP', nullable: false },
+    ],
+    primaryKey: ['id'],
+    indexes: [{ name: 'ActorState_actorId_idx', columns: ['actorId'] }],
+    uniqueConstraints: [],
+  },
 
-  // Arrays -> JSON (CQL doesn't support PG arrays)
-  if (normalized.endsWith('[]')) {
-    return { type: 'JSON' };
-  }
+  // Referrals
+  {
+    name: 'Referral',
+    columns: [
+      { name: 'id', type: 'TEXT', nullable: false, primaryKey: true },
+      { name: 'referrerId', type: 'TEXT', nullable: false },
+      { name: 'referredUserId', type: 'TEXT', nullable: true },
+      { name: 'referralCode', type: 'TEXT', nullable: false },
+      { name: 'status', type: 'TEXT', nullable: false, default: 'pending' },
+      {
+        name: 'createdAt',
+        type: 'TIMESTAMP',
+        nullable: false,
+        default: 'NOW()',
+      },
+      { name: 'completedAt', type: 'TIMESTAMP', nullable: true },
+      { name: 'qualifiedAt', type: 'TIMESTAMP', nullable: true },
+      {
+        name: 'signupPointsAwarded',
+        type: 'BOOLEAN',
+        nullable: false,
+        default: false,
+      },
+      { name: 'suspiciousReferralFlags', type: 'JSON', nullable: true },
+    ],
+    primaryKey: ['id'],
+    indexes: [
+      { name: 'Referral_referralCode_idx', columns: ['referralCode'] },
+      { name: 'Referral_referrerId_idx', columns: ['referrerId'] },
+      { name: 'Referral_referredUserId_idx', columns: ['referredUserId'] },
+      {
+        name: 'Referral_status_createdAt_idx',
+        columns: ['status', 'createdAt'],
+      },
+    ],
+    uniqueConstraints: [
+      {
+        name: 'Referral_referralCode_referredUserId_key',
+        columns: ['referralCode', 'referredUserId'],
+      },
+    ],
+  },
 
-  if (
-    normalized === 'text' ||
-    normalized.startsWith('varchar') ||
-    normalized.startsWith('character varying') ||
-    normalized === 'uuid'
-  ) {
-    return { type: 'TEXT' };
-  }
+  // OnboardingIntents
+  {
+    name: 'OnboardingIntent',
+    columns: [
+      { name: 'id', type: 'TEXT', nullable: false, primaryKey: true },
+      { name: 'userId', type: 'TEXT', nullable: false, unique: true },
+      {
+        name: 'status',
+        type: 'TEXT',
+        nullable: false,
+        default: 'PENDING_PROFILE',
+      },
+      { name: 'referralCode', type: 'TEXT', nullable: true },
+      { name: 'payload', type: 'JSON', nullable: true },
+      {
+        name: 'profileApplied',
+        type: 'BOOLEAN',
+        nullable: false,
+        default: false,
+      },
+      { name: 'profileCompletedAt', type: 'TIMESTAMP', nullable: true },
+      { name: 'onchainStartedAt', type: 'TIMESTAMP', nullable: true },
+      { name: 'onchainCompletedAt', type: 'TIMESTAMP', nullable: true },
+      { name: 'lastError', type: 'JSON', nullable: true },
+      {
+        name: 'createdAt',
+        type: 'TIMESTAMP',
+        nullable: false,
+        default: 'NOW()',
+      },
+      { name: 'updatedAt', type: 'TIMESTAMP', nullable: false },
+    ],
+    primaryKey: ['id'],
+    indexes: [
+      { name: 'OnboardingIntent_createdAt_idx', columns: ['createdAt'] },
+      { name: 'OnboardingIntent_status_idx', columns: ['status'] },
+    ],
+    uniqueConstraints: [],
+  },
 
-  if (
-    normalized === 'integer' ||
-    normalized === 'int' ||
-    normalized === 'int4'
-  ) {
-    return { type: 'INTEGER' };
-  }
+  // AgentRegistries
+  {
+    name: 'AgentRegistry',
+    columns: [
+      { name: 'id', type: 'TEXT', nullable: false, primaryKey: true },
+      { name: 'userId', type: 'TEXT', nullable: false, unique: true },
+      { name: 'name', type: 'TEXT', nullable: false },
+      { name: 'description', type: 'TEXT', nullable: true },
+      { name: 'status', type: 'TEXT', nullable: false, default: 'active' },
+      {
+        name: 'createdAt',
+        type: 'TIMESTAMP',
+        nullable: false,
+        default: 'NOW()',
+      },
+      { name: 'updatedAt', type: 'TIMESTAMP', nullable: false },
+    ],
+    primaryKey: ['id'],
+    indexes: [
+      { name: 'AgentRegistry_userId_idx', columns: ['userId'] },
+      { name: 'AgentRegistry_status_idx', columns: ['status'] },
+    ],
+    uniqueConstraints: [],
+  },
 
-  if (normalized === 'bigint' || normalized === 'int8') {
-    return { type: 'BIGINT' };
-  }
+  // Games
+  {
+    name: 'Game',
+    columns: [
+      { name: 'id', type: 'TEXT', nullable: false, primaryKey: true },
+      { name: 'name', type: 'TEXT', nullable: false },
+      { name: 'status', type: 'TEXT', nullable: false, default: 'active' },
+      { name: 'dayNumber', type: 'INTEGER', nullable: false, default: 1 },
+      {
+        name: 'createdAt',
+        type: 'TIMESTAMP',
+        nullable: false,
+        default: 'NOW()',
+      },
+      { name: 'updatedAt', type: 'TIMESTAMP', nullable: false },
+    ],
+    primaryKey: ['id'],
+    indexes: [{ name: 'Game_status_idx', columns: ['status'] }],
+    uniqueConstraints: [],
+  },
+].sort((a, b) => a.name.localeCompare(b.name)) as CQLTableSchema[]
 
-  if (normalized === 'boolean') {
-    return { type: 'BOOLEAN' };
-  }
-
-  if (normalized.startsWith('timestamp')) {
-    return { type: 'TIMESTAMP' };
-  }
-
-  if (
-    normalized === 'double precision' ||
-    normalized === 'real' ||
-    normalized === 'float8' ||
-    normalized === 'float4'
-  ) {
-    return { type: 'DOUBLE' };
-  }
-
-  if (normalized === 'json' || normalized === 'jsonb') {
-    return { type: 'JSON' };
-  }
-
-  if (normalized.startsWith('numeric') || normalized.startsWith('decimal')) {
-    const match = normalized.match(/\((\d+)\s*,\s*(\d+)\)/);
-    if (match) {
-      const precision = Number.parseInt(match[1] ?? '', 10);
-      const scale = Number.parseInt(match[2] ?? '', 10);
-      if (Number.isFinite(precision) && Number.isFinite(scale)) {
-        return { type: 'DECIMAL', precision, scale };
-      }
-    }
-    return { type: 'DECIMAL' };
-  }
-
-  // Fallback: represent unknown/PG-specific types as TEXT
-  return { type: 'TEXT' };
-}
-
-function extractColumnDefault(
-  col: PgColumn,
-  cqlType: CQLColumn['type']
-): CQLColumn['default'] | undefined {
-  if (!col.hasDefault) return undefined;
-
-  const def = col.default;
-
-  if (
-    typeof def === 'string' ||
-    typeof def === 'number' ||
-    typeof def === 'boolean'
-  ) {
-    return def;
-  }
-
-  // Empty array/object defaults (e.g. text[].default([])) -> JSON literal
-  if (Array.isArray(def) || (typeof def === 'object' && def !== null)) {
-    if (cqlType === 'JSON') {
-      return JSON.stringify(def);
-    }
-    if (cqlType === 'TIMESTAMP') {
-      // Drizzle defaultNow() uses a SQL expression object (now()).
-      return 'NOW()';
-    }
-  }
-
-  return undefined;
-}
-
-function drizzleTableToCqlSchema(table: PgTable): CQLTableSchema {
-  const cfg = getTableConfig(table);
-
-  const columns: CQLColumn[] = cfg.columns.map((col) => {
-    const { type, precision, scale } = mapPgTypeToCql(col.getSQLType());
-    const defaultValue = extractColumnDefault(col, type);
-
-    const isPrimary = (col as { primary?: boolean }).primary === true;
-    const isUnique = (col as { isUnique?: boolean }).isUnique === true;
-
-    const cqlCol: CQLColumn = {
-      name: col.name,
-      type,
-      nullable: !col.notNull,
-    };
-
-    if (isPrimary) cqlCol.primaryKey = true;
-    if (isUnique && !isPrimary) cqlCol.unique = true;
-    if (defaultValue !== undefined) cqlCol.default = defaultValue;
-    if (precision !== undefined) cqlCol.precision = precision;
-    if (scale !== undefined) cqlCol.scale = scale;
-
-    return cqlCol;
-  });
-
-  const primaryKey = columns.filter((c) => c.primaryKey).map((c) => c.name);
-  const uniqueConstraints = cfg.uniqueConstraints.map((uc) => {
-    const name = uc.name;
-    if (!name) {
-      throw new Error(
-        `[CQL Schema] Unique constraint missing name on table "${cfg.name}"`
-      );
-    }
-    const columns = uc.columns.map((c) => {
-      const colName = (c as { name?: string }).name;
-      if (!colName) {
-        throw new Error(
-          `[CQL Schema] Unique constraint "${name}" has a column without a name on table "${cfg.name}"`
-        );
-      }
-      return colName;
-    });
-    return { name, columns };
-  });
-
-  const indexes = cfg.indexes.map((idx) => {
-    const name = idx.config.name;
-    if (!name) {
-      throw new Error(`[CQL Schema] Index missing name on table "${cfg.name}"`);
-    }
-    const columns = idx.config.columns.map((c) => {
-      const colName = (c as { name?: string }).name;
-      if (!colName) {
-        throw new Error(
-          `[CQL Schema] Index "${name}" has a column without a name on table "${cfg.name}"`
-        );
-      }
-      return colName;
-    });
-    return { name, columns, unique: idx.config.unique };
-  });
-
-  return {
-    name: cfg.name,
-    columns,
-    primaryKey,
-    uniqueConstraints,
-    indexes,
-  };
-}
-
-const DRIZZLE_SCHEMA_EXPORTS = Object.values(drizzleSchema) as unknown[];
-
-export const BABYLON_SCHEMAS: CQLTableSchema[] = DRIZZLE_SCHEMA_EXPORTS.filter(
-  isDrizzleTable
-)
-  .map(drizzleTableToCqlSchema)
-  .sort((a, b) => a.name.localeCompare(b.name));
+/** Alias for backward compatibility */
+export const CQL_SCHEMA = BABYLON_SCHEMAS
 
 /** Generate all DDL statements for Babylon */
 export function generateAllDDL(): string[] {
-  const statements: string[] = [];
+  const statements: string[] = []
 
   for (const schema of BABYLON_SCHEMAS) {
-    statements.push(generateCreateTableSQL(schema));
-    statements.push(...generateIndexSQL(schema));
+    statements.push(generateCreateTableSQL(schema))
+    statements.push(...generateIndexSQL(schema))
   }
 
-  return statements;
+  return statements
 }
 
 /** Get schema by table name */
 export function getSchemaByName(name: string): CQLTableSchema | undefined {
-  return BABYLON_SCHEMAS.find((s) => s.name === name);
+  return BABYLON_SCHEMAS.find((s) => s.name === name)
 }
 
-export { TYPE_MAP };
-
-// Aliases for index.ts exports
-export const CQL_SCHEMA = BABYLON_SCHEMAS;
+export { TYPE_MAP }
 
 /** Create all tables in CovenantSQL */
 export async function createCQLTables(client: {
-  exec: (sql: string) => Promise<unknown>;
+  exec: (sql: string) => Promise<unknown>
 }): Promise<void> {
-  const statements = generateAllDDL();
+  const statements = generateAllDDL()
   for (const sql of statements) {
-    await client.exec(sql);
+    await client.exec(sql)
   }
 }

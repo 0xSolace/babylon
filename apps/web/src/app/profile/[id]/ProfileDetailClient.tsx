@@ -1,92 +1,88 @@
-'use client';
-
-import type { ProfileInfo } from '@babylon/shared';
+import type { ProfileInfo } from '@babylon/shared'
 import {
-  type Actor,
   cn,
   extractUsername,
   type FeedPost,
   getBannerImageUrl,
   isUsername,
-  type Organization,
   POST_TYPES,
-} from '@babylon/shared';
-import { useQuery } from '@tanstack/react-query';
-import { ArrowLeft, Coins, MessageCircle, Search } from 'lucide-react';
-
-import Link from 'next/link';
-import { useParams, useRouter } from 'next/navigation';
-import { useEffect, useLayoutEffect, useMemo, useState } from 'react';
-import { ArticleCard } from '@/components/articles/ArticleCard';
-import { FollowButton } from '@/components/interactions/FollowButton';
-import { ModerationMenu } from '@/components/moderation/ModerationMenu';
-import { SendPointsModal } from '@/components/points/SendPointsModal';
-import { PostCard } from '@/components/posts/PostCard';
-import { OnChainBadge } from '@/components/profile/OnChainBadge';
-import { ProfileWidget } from '@/components/profile/ProfileWidget';
-import { Avatar } from '@/components/shared/Avatar';
-import { PageContainer } from '@/components/shared/PageContainer';
+} from '@babylon/shared'
+import { useQuery } from '@tanstack/react-query'
+import { ArrowLeft, Coins, MessageCircle, Search } from 'lucide-react'
+import { useEffect, useLayoutEffect, useMemo, useState } from 'react'
+import { Link, useParams } from 'react-router-dom'
+import { ArticleCard } from '@/components/articles/ArticleCard'
+import { FollowButton } from '@/components/interactions/FollowButton'
+import { ModerationMenu } from '@/components/moderation/ModerationMenu'
+import { SendPointsModal } from '@/components/points/SendPointsModal'
+import { PostCard } from '@/components/posts/PostCard'
+import { OnChainBadge } from '@/components/profile/OnChainBadge'
+import { ProfileWidget } from '@/components/profile/ProfileWidget'
+import { Avatar } from '@/components/shared/Avatar'
+import { PageContainer } from '@/components/shared/PageContainer'
 import {
   FeedSkeleton,
   ProfileHeaderSkeleton,
-} from '@/components/shared/Skeleton';
-import { VerifiedBadge } from '@/components/shared/VerifiedBadge';
-import { TradesFeed } from '@/components/trades/TradesFeed';
-import { useAuth } from '@/hooks/useAuth';
-import { useErrorToasts } from '@/hooks/useErrorToasts';
-import { useGameStore } from '@/stores/gameStore';
+} from '@/components/shared/Skeleton'
+import { VerifiedBadge } from '@/components/shared/VerifiedBadge'
+import { TradesFeed } from '@/components/trades/TradesFeed'
+import { useAuth } from '@/hooks/useAuth'
+import { useErrorToasts } from '@/hooks/useErrorToasts'
+import { api, extractDataOrNull } from '@/lib/eden-client'
+import { useRouter } from '@/lib/navigation'
+import { useGameStore } from '@/stores/gameStore'
 
 interface ApiPost {
-  id: string;
-  content: string;
-  author: string;
-  authorId: string;
-  timestamp: string;
-  authorName?: string;
-  authorUsername?: string | null;
-  authorProfileImageUrl?: string | null;
-  likeCount?: number;
-  commentCount?: number;
-  shareCount?: number;
-  isLiked?: boolean;
-  isShared?: boolean;
-  isRepost?: boolean;
-  isQuote?: boolean;
-  quoteComment?: string | null;
-  originalPostId?: string | null;
+  id: string
+  content: string
+  author: string
+  authorId: string
+  timestamp: string
+  authorName?: string
+  authorUsername?: string | null
+  authorProfileImageUrl?: string | null
+  likeCount?: number
+  commentCount?: number
+  shareCount?: number
+  isLiked?: boolean
+  isShared?: boolean
+  isRepost?: boolean
+  isQuote?: boolean
+  quoteComment?: string | null
+  originalPostId?: string | null
   originalPost?: {
-    id: string;
-    content: string;
-    authorId: string;
-    authorName: string;
-    authorUsername: string | null;
-    authorProfileImageUrl: string | null;
-    timestamp: string;
-  } | null;
+    id: string
+    content: string
+    authorId: string
+    authorName: string
+    authorUsername: string | null
+    authorProfileImageUrl: string | null
+    timestamp: string
+  } | null
 }
 
 export default function ProfileDetailClient() {
-  const params = useParams();
-  const router = useRouter();
+  const params = useParams()
+  const router = useRouter()
   // Dynamic route: params.id is string
-  const rawId = params.id as string | undefined;
-  const identifier = rawId ? decodeURIComponent(rawId) : '';
-  const isUsernameParam = identifier ? isUsername(identifier) : false;
-  const actorId = isUsernameParam ? extractUsername(identifier) : identifier;
-  const { user, authenticated, getAccessToken } = useAuth();
+  const rawId = params.id as string | undefined
+  const identifier = rawId ? decodeURIComponent(rawId) : ''
+  const isUsernameParam = identifier ? isUsername(identifier) : false
+  const actorId = isUsernameParam ? extractUsername(identifier) : identifier
+  const { user, authenticated, getAccessToken } = useAuth()
 
   useEffect(() => {
     if (!identifier) {
-      router.replace('/');
+      router.replace('/')
     }
-  }, [identifier, router]);
+  }, [identifier, router])
 
-  const [searchQuery, setSearchQuery] = useState('');
-  const [tab, setTab] = useState<'posts' | 'replies' | 'trades'>('posts');
-  const { allGames } = useGameStore();
+  const [searchQuery, setSearchQuery] = useState('')
+  const [tab, setTab] = useState<'posts' | 'replies' | 'trades'>('posts')
+  const { allGames } = useGameStore()
   const [optimisticFollowerCount, setOptimisticFollowerCount] = useState<
     number | null
-  >(null);
+  >(null)
 
   const isOwnProfile =
     authenticated &&
@@ -94,32 +90,30 @@ export default function ProfileDetailClient() {
     (user.id === actorId ||
       user.id === decodeURIComponent(identifier) ||
       user.username === actorId ||
-      (user.username &&
-        user.username.startsWith('@') &&
-        user.username.slice(1) === actorId) ||
+      (user.username?.startsWith('@') && user.username.slice(1) === actorId) ||
       (user.username &&
         !user.username.startsWith('@') &&
-        user.username === actorId));
+        user.username === actorId))
 
   useLayoutEffect(() => {
     if (authenticated && user?.username && !isUsernameParam) {
-      const decodedIdentifier = decodeURIComponent(identifier);
+      const decodedIdentifier = decodeURIComponent(identifier)
       const viewingOwnId =
         user.id === actorId ||
         user.id === decodedIdentifier ||
-        user.id === identifier;
+        user.id === identifier
 
       if (viewingOwnId && user.username) {
         const cleanUsername = user.username.startsWith('@')
           ? user.username.slice(1)
-          : user.username;
+          : user.username
         if (
           cleanUsername &&
           identifier !== cleanUsername &&
           decodedIdentifier !== cleanUsername &&
           actorId !== cleanUsername
         ) {
-          router.replace(`/profile/${cleanUsername}`);
+          router.replace(`/profile/${cleanUsername}`)
         }
       }
     }
@@ -131,12 +125,12 @@ export default function ProfileDetailClient() {
     identifier,
     isUsernameParam,
     router,
-  ]);
+  ])
 
-  useErrorToasts();
+  useErrorToasts()
 
-  const [isCreatingDM, setIsCreatingDM] = useState(false);
-  const [sendPointsModalOpen, setSendPointsModalOpen] = useState(false);
+  const [isCreatingDM, setIsCreatingDM] = useState(false)
+  const [sendPointsModalOpen, setSendPointsModalOpen] = useState(false)
 
   const {
     data: actorInfo,
@@ -145,26 +139,55 @@ export default function ProfileDetailClient() {
   } = useQuery({
     queryKey: ['profile', actorId],
     queryFn: async (): Promise<ProfileInfo | null> => {
-      const token = await getAccessToken();
-      const headers: HeadersInit = {
+      const token = await getAccessToken()
+      const headers: Record<string, string> = {
         'Content-Type': 'application/json',
-      };
+      }
       if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
+        headers.Authorization = `Bearer ${token}`
       }
 
-      const userResponse = await fetch(
-        `/api/users/${encodeURIComponent(actorId)}/profile`,
-        { headers }
-      ).catch((error: Error) => {
-        console.error('Error loading user by ID:', error);
-        return null;
-      });
+      // Try loading user by ID using typed API
+      const userResponse = await api.users.byId(actorId).profile.get(headers)
+      const userData = extractDataOrNull(userResponse)
 
-      if (userResponse?.ok) {
-        const userData = await userResponse.json();
-        if (userData.user) {
-          const fetchedUser = userData.user;
+      if (userData?.user) {
+        const fetchedUser = userData.user
+        const profileInfo: ProfileInfo = {
+          id: fetchedUser.id,
+          name: fetchedUser.displayName || fetchedUser.username || 'User',
+          description: fetchedUser.bio || '',
+          role: fetchedUser.isActor ? 'Actor' : 'User',
+          type: fetchedUser.isActor ? 'actor' : ('user' as const),
+          isUser: true,
+          username: fetchedUser.username,
+          profileImageUrl: fetchedUser.profileImageUrl,
+          coverImageUrl: fetchedUser.coverImageUrl,
+          stats: fetchedUser.stats,
+        }
+
+        if (fetchedUser.username && !isUsernameParam && !isOwnProfile) {
+          const cleanUsername = fetchedUser.username.startsWith('@')
+            ? fetchedUser.username.slice(1)
+            : fetchedUser.username
+          router.replace(`/profile/${cleanUsername}`)
+        }
+
+        return profileInfo
+      }
+
+      // Try username lookup if appropriate
+      if (
+        isUsernameParam ||
+        (!actorId.startsWith('did:') &&
+          actorId.length <= 42 &&
+          !actorId.includes('-'))
+      ) {
+        const usernameLookupResponse = await api.users.byUsername(actorId).get()
+        const usernameData = extractDataOrNull(usernameLookupResponse)
+
+        if (usernameData?.user) {
+          const fetchedUser = usernameData.user
           const profileInfo: ProfileInfo = {
             id: fetchedUser.id,
             name: fetchedUser.displayName || fetchedUser.username || 'User',
@@ -176,104 +199,51 @@ export default function ProfileDetailClient() {
             profileImageUrl: fetchedUser.profileImageUrl,
             coverImageUrl: fetchedUser.coverImageUrl,
             stats: fetchedUser.stats,
-          };
+          }
 
-          if (fetchedUser.username && !isUsernameParam && !isOwnProfile) {
+          if (!isUsernameParam && fetchedUser.username && !isOwnProfile) {
             const cleanUsername = fetchedUser.username.startsWith('@')
               ? fetchedUser.username.slice(1)
-              : fetchedUser.username;
-            router.replace(`/profile/${cleanUsername}`);
+              : fetchedUser.username
+            router.replace(`/profile/${cleanUsername}`)
           }
 
-          return profileInfo;
+          return profileInfo
         }
       }
 
-      if (
-        isUsernameParam ||
-        (!actorId.startsWith('did:') &&
-          actorId.length <= 42 &&
-          !actorId.includes('-'))
-      ) {
-        const usernameLookupResponse = await fetch(
-          `/api/users/by-username/${encodeURIComponent(actorId)}`,
-          { headers }
-        ).catch((error: Error) => {
-          console.error('Error loading user by username:', error);
-          return null;
-        });
+      // Fall back to actors API
+      const actorsResponse = await api.actors.get()
+      const actorsDb = extractDataOrNull(actorsResponse)
+      if (!actorsDb) throw new Error('Failed to load actors')
 
-        if (usernameLookupResponse?.ok) {
-          const usernameData = await usernameLookupResponse.json();
-          if (usernameData.user) {
-            const fetchedUser = usernameData.user;
-            const profileInfo: ProfileInfo = {
-              id: fetchedUser.id,
-              name: fetchedUser.displayName || fetchedUser.username || 'User',
-              description: fetchedUser.bio || '',
-              role: fetchedUser.isActor ? 'Actor' : 'User',
-              type: fetchedUser.isActor ? 'actor' : ('user' as const),
-              isUser: true,
-              username: fetchedUser.username,
-              profileImageUrl: fetchedUser.profileImageUrl,
-              coverImageUrl: fetchedUser.coverImageUrl,
-              stats: fetchedUser.stats,
-            };
-
-            if (!isUsernameParam && fetchedUser.username && !isOwnProfile) {
-              const cleanUsername = fetchedUser.username.startsWith('@')
-                ? fetchedUser.username.slice(1)
-                : fetchedUser.username;
-              router.replace(`/profile/${cleanUsername}`);
-            }
-
-            return profileInfo;
-          }
-        }
-      }
-
-      const response = await fetch('/api/actors');
-      if (!response.ok) throw new Error('Failed to load actors');
-
-      const actorsDb = (await response.json()) as {
-        actors?: Actor[];
-        organizations?: Organization[];
-      };
-
-      let actor = actorsDb.actors?.find((a) => a.id === actorId);
+      let actor = actorsDb.actors?.find((a) => a.id === actorId)
       if (!actor) {
-        actor = actorsDb.actors?.find((a) => a.name === actorId);
+        actor = actorsDb.actors?.find((a) => a.name === actorId)
       }
       if (actor) {
-        let gameId: string | null = null;
+        let gameId: string | null = null
         for (const game of allGames) {
           const allActors = [
             ...(game.setup?.mainActors || []),
             ...(game.setup?.supportingActors || []),
             ...(game.setup?.extras || []),
-          ];
+          ]
           if (allActors.some((a) => a.id === actorId)) {
-            gameId = game.id;
-            break;
+            gameId = game.id
+            break
           }
         }
 
-        let stats = { followers: 0, following: 0, posts: 0 };
-        const statsResponse = await fetch(
-          `/api/actors/${encodeURIComponent(actor.id)}/stats`
-        ).catch((error: Error) => {
-          console.error('Failed to load actor stats:', error);
-          return null;
-        });
+        let stats = { followers: 0, following: 0, posts: 0 }
+        const statsResponse = await api.actors.byId(actor.id).stats.get()
+        const statsData = extractDataOrNull(statsResponse)
 
-        if (statsResponse?.ok) {
-          const statsData = await statsResponse.json();
-          if (statsData.stats) {
-            stats = {
-              followers: statsData.stats.followers || 0,
-              following: statsData.stats.following || 0,
-              posts: statsData.stats.posts || 0,
-            };
+        if (statsData?.stats) {
+          stats = {
+            followers: statsData.stats.followers || 0,
+            following: statsData.stats.following || 0,
+            posts: statsData.stats.posts || 0,
           }
         }
 
@@ -283,7 +253,7 @@ export default function ProfileDetailClient() {
           description: actor.description,
           profileDescription: actor.profileDescription,
           tier: actor.tier,
-          domain: actor.domain,
+          domain: actor.domain ? [actor.domain] : undefined,
           personality: actor.personality,
           affiliations: actor.affiliations,
           role: actor.role || actor.tier || 'Actor',
@@ -293,30 +263,23 @@ export default function ProfileDetailClient() {
             ? (actor.username as string)
             : actor.id) as string | undefined,
           stats,
-        };
+        }
       }
 
-      let org = actorsDb.organizations?.find((o) => o.id === actorId);
+      let org = actorsDb?.organizations?.find((o) => o.id === actorId)
       if (!org) {
-        org = actorsDb.organizations?.find((o) => o.name === actorId);
+        org = actorsDb?.organizations?.find((o) => o.name === actorId)
       }
       if (org) {
-        let stats = { followers: 0, following: 0, posts: 0 };
-        const statsResponse = await fetch(
-          `/api/actors/${encodeURIComponent(org.id)}/stats`
-        ).catch((error: Error) => {
-          console.error('Failed to load organization stats:', error);
-          return null;
-        });
+        let stats = { followers: 0, following: 0, posts: 0 }
+        const statsResponse = await api.actors.byId(org.id).stats.get()
+        const statsData = extractDataOrNull(statsResponse)
 
-        if (statsResponse?.ok) {
-          const statsData = await statsResponse.json();
-          if (statsData.stats) {
-            stats = {
-              followers: statsData.stats.followers || 0,
-              following: statsData.stats.following || 0,
-              posts: statsData.stats.posts || 0,
-            };
+        if (statsData?.stats) {
+          stats = {
+            followers: statsData.stats.followers || 0,
+            following: statsData.stats.following || 0,
+            posts: statsData.stats.posts || 0,
           }
         }
 
@@ -328,103 +291,105 @@ export default function ProfileDetailClient() {
           type: 'organization' as const,
           role: 'Organization',
           stats,
-        };
+        }
       }
 
-      return null;
+      return null
     },
     enabled: !!actorId,
-  });
+  })
 
   const { data: apiPosts = [] as ApiPost[], isLoading: loadingPosts } =
     useQuery<ApiPost[]>({
       queryKey: ['profilePosts', actorInfo?.id ?? actorId],
       queryFn: async (): Promise<ApiPost[]> => {
-        const searchId = actorInfo?.id || actorId;
-        const response = await fetch(
-          `/api/posts?actorId=${encodeURIComponent(searchId)}&limit=100`
-        );
-        if (response.ok) {
-          const data = await response.json();
-          if (data.posts && Array.isArray(data.posts)) {
-            return data.posts as ApiPost[];
-          }
+        const searchId = actorInfo?.id || actorId
+        const response = await api.posts.get({
+          actorId: searchId,
+          limit: '100',
+        })
+        const data = extractDataOrNull(response)
+        if (data?.posts && Array.isArray(data.posts)) {
+          return data.posts.map((post) => ({
+            ...post,
+            author: post.authorName || post.authorId,
+          }))
         }
-        return [];
+        return []
       },
       enabled: !!actorInfo?.id,
-    });
+    })
 
   const handleMessageClick = async () => {
-    if (!authenticated || !actorInfo?.id || isCreatingDM || !user?.id) return;
+    if (!authenticated || !actorInfo?.id || isCreatingDM || !user?.id) return
 
-    setIsCreatingDM(true);
+    setIsCreatingDM(true)
 
-    const sortedIds = [user.id, actorInfo.id].sort();
-    const chatId = `dm-${sortedIds.join('-')}`;
+    const sortedIds = [user.id, actorInfo.id].sort()
+    const chatId = `dm-${sortedIds.join('-')}`
 
-    router.push(`/chats?chat=${chatId}&newDM=${actorInfo.id}`);
+    router.push(`/chats?chat=${chatId}&newDM=${actorInfo.id}`)
 
-    setIsCreatingDM(false);
-  };
+    setIsCreatingDM(false)
+  }
 
   useEffect(() => {
     const handleProfileUpdate = () => {
       setTimeout(() => {
-        setOptimisticFollowerCount(null);
-        loadActorInfo();
-      }, 1000);
-    };
+        setOptimisticFollowerCount(null)
+        loadActorInfo()
+      }, 1000)
+    }
 
-    window.addEventListener('profile-updated', handleProfileUpdate);
+    window.addEventListener('profile-updated', handleProfileUpdate)
     return () =>
-      window.removeEventListener('profile-updated', handleProfileUpdate);
-  }, [loadActorInfo]);
+      window.removeEventListener('profile-updated', handleProfileUpdate)
+  }, [loadActorInfo])
 
   useEffect(() => {
     if (actorInfo && optimisticFollowerCount !== null) {
       const timer = setTimeout(() => {
-        setOptimisticFollowerCount(null);
-      }, 2000);
-      return () => clearTimeout(timer);
+        setOptimisticFollowerCount(null)
+      }, 2000)
+      return () => clearTimeout(timer)
     }
-    return undefined;
-  }, [actorInfo, optimisticFollowerCount]);
+    return undefined
+  }, [actorInfo, optimisticFollowerCount])
 
   const gameStorePosts = useMemo(() => {
     const posts: Array<{
-      post: FeedPost;
-      gameId: string;
-      gameName: string;
-      timestampMs: number;
-    }> = [];
+      post: FeedPost
+      gameId: string
+      gameName: string
+      timestampMs: number
+    }> = []
 
     allGames.forEach((game) => {
       game.timeline?.forEach((day) => {
         day.feedPosts?.forEach((post) => {
           if (post.author === actorId) {
-            const postDate = new Date(post.timestamp);
+            const postDate = new Date(post.timestamp)
             posts.push({
               post,
               gameId: game.id,
               gameName: game.id,
               timestampMs: postDate.getTime(),
-            });
+            })
           }
-        });
-      });
-    });
+        })
+      })
+    })
 
-    return posts.sort((a, b) => b.timestampMs - a.timestampMs);
-  }, [allGames, actorId]);
+    return posts.sort((a, b) => b.timestampMs - a.timestampMs)
+  }, [allGames, actorId])
 
   const actorPosts = useMemo(() => {
     const combined: Array<{
-      post: FeedPost;
-      gameId: string;
-      gameName: string;
-      timestampMs: number;
-    }> = [];
+      post: FeedPost
+      gameId: string
+      gameName: string
+      timestampMs: number
+    }> = []
 
     apiPosts.forEach((apiPost) => {
       combined.push({
@@ -456,10 +421,10 @@ export default function ProfileDetailClient() {
         gameId: '',
         gameName: '',
         timestampMs: new Date(apiPost.timestamp).getTime(),
-      });
-    });
+      })
+    })
 
-    const apiPostIds = new Set(apiPosts.map((p) => p.id));
+    const apiPostIds = new Set(apiPosts.map((p) => p.id))
     gameStorePosts.forEach((gamePost) => {
       if (!apiPostIds.has(gamePost.post.id)) {
         combined.push({
@@ -471,41 +436,41 @@ export default function ProfileDetailClient() {
               actorInfo?.profileImageUrl ||
               null,
           },
-        });
+        })
       }
-    });
+    })
 
-    return combined.sort((a, b) => b.timestampMs - a.timestampMs);
-  }, [apiPosts, gameStorePosts, actorInfo]);
+    return combined.sort((a, b) => b.timestampMs - a.timestampMs)
+  }, [apiPosts, gameStorePosts, actorInfo])
 
   const originalPosts = useMemo(() => {
-    return actorPosts.filter((item) => !item.post.replyTo);
-  }, [actorPosts]);
+    return actorPosts.filter((item) => !item.post.replyTo)
+  }, [actorPosts])
 
   const replyPosts = useMemo(() => {
-    return actorPosts.filter((item) => item.post.replyTo);
-  }, [actorPosts]);
+    return actorPosts.filter((item) => item.post.replyTo)
+  }, [actorPosts])
 
   const tabFilteredPosts = useMemo(() => {
-    return tab === 'posts' ? originalPosts : replyPosts;
-  }, [tab, originalPosts, replyPosts]);
+    return tab === 'posts' ? originalPosts : replyPosts
+  }, [tab, originalPosts, replyPosts])
 
   const filteredPosts = useMemo(() => {
-    if (!searchQuery.trim()) return tabFilteredPosts;
+    if (!searchQuery.trim()) return tabFilteredPosts
 
-    const query = searchQuery.toLowerCase();
+    const query = searchQuery.toLowerCase()
     return tabFilteredPosts.filter((item) =>
-      item.post.content?.toLowerCase().includes(query)
-    );
-  }, [tabFilteredPosts, searchQuery]);
+      item.post.content?.toLowerCase().includes(query),
+    )
+  }, [tabFilteredPosts, searchQuery])
 
   if (!identifier) {
-    return null;
+    return null
   }
 
   if (loading) {
     if (isOwnProfile && user?.username && !isUsernameParam) {
-      return null;
+      return null
     }
 
     return (
@@ -517,7 +482,7 @@ export default function ProfileDetailClient() {
           </div>
         </div>
       </PageContainer>
-    );
+    )
   }
 
   if (!actorInfo) {
@@ -526,7 +491,7 @@ export default function ProfileDetailClient() {
         <div className="sticky top-0 z-10 bg-background">
           <div className="flex items-center gap-4 px-4 py-3">
             <Link
-              href="/feed"
+              to="/feed"
               className="rounded-full p-2 transition-colors hover:bg-muted/50"
             >
               <ArrowLeft className="h-5 w-5" />
@@ -539,14 +504,14 @@ export default function ProfileDetailClient() {
             User or Actor &quot;{actorId}&quot; not found
           </p>
           <Link
-            href="/feed"
+            to="/feed"
             className="rounded-lg bg-primary px-6 py-3 font-semibold text-primary-foreground transition-all hover:bg-primary/90"
           >
             Back to Feed
           </Link>
         </div>
       </PageContainer>
-    );
+    )
   }
 
   return (
@@ -557,7 +522,7 @@ export default function ProfileDetailClient() {
           <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm">
             <div className="flex items-center gap-4 px-4 py-3">
               <Link
-                href="/feed"
+                to="/feed"
                 className="rounded-full p-2 transition-colors hover:bg-muted/50"
               >
                 <ArrowLeft className="h-5 w-5" />
@@ -585,8 +550,8 @@ export default function ProfileDetailClient() {
                           actorInfo.id,
                           actorInfo.type === 'organization'
                             ? 'organization'
-                            : 'actor'
-                        );
+                            : 'actor',
+                        )
 
                   return bannerUrl ? (
                     <img
@@ -594,13 +559,13 @@ export default function ProfileDetailClient() {
                       alt={`${actorInfo.name} banner`}
                       className="h-full w-full object-cover"
                       onError={(e) => {
-                        e.currentTarget.style.display = 'none';
+                        e.currentTarget.style.display = 'none'
                         e.currentTarget.nextElementSibling?.classList.remove(
-                          'hidden'
-                        );
+                          'hidden',
+                        )
                       }}
                     />
-                  ) : null;
+                  ) : null
                 })()}
                 <div
                   className={cn(
@@ -608,7 +573,7 @@ export default function ProfileDetailClient() {
                     actorInfo.type === 'actor' ||
                       actorInfo.type === 'organization'
                       ? 'hidden'
-                      : ''
+                      : '',
                   )}
                 />
               </div>
@@ -641,6 +606,7 @@ export default function ProfileDetailClient() {
                       <>
                         {actorInfo.isUser && actorInfo.type === 'user' && (
                           <button
+                            type="button"
                             onClick={handleMessageClick}
                             disabled={isCreatingDM}
                             className="rounded-full border border-border p-2 transition-colors hover:bg-muted/50 disabled:cursor-not-allowed disabled:opacity-50"
@@ -650,6 +616,7 @@ export default function ProfileDetailClient() {
                           </button>
                         )}
                         <button
+                          type="button"
                           onClick={() => setSendPointsModalOpen(true)}
                           className="rounded-full border border-border p-2 transition-colors hover:bg-muted/50"
                           title="Send points"
@@ -665,21 +632,19 @@ export default function ProfileDetailClient() {
                               const currentCount =
                                 prev !== null
                                   ? prev
-                                  : actorInfo.stats?.followers || 0;
-                              return Math.max(0, currentCount + delta);
-                            });
+                                  : actorInfo.stats?.followers || 0
+                              return Math.max(0, currentCount + delta)
+                            })
                           }}
                         />
                         {actorInfo.isUser && actorInfo.type === 'user' && (
                           <ModerationMenu
                             targetUserId={actorInfo.id}
-                            targetUsername={actorInfo.username ?? undefined}
-                            targetDisplayName={actorInfo.name ?? undefined}
-                            targetProfileImageUrl={
-                              actorInfo.profileImageUrl ?? undefined
-                            }
+                            targetUsername={actorInfo.username}
+                            targetDisplayName={actorInfo.name}
+                            targetProfileImageUrl={actorInfo.profileImageUrl}
                             onActionComplete={() => {
-                              loadActorInfo();
+                              loadActorInfo()
                             }}
                           />
                         )}
@@ -687,7 +652,7 @@ export default function ProfileDetailClient() {
                     )}
                     {isOwnProfile && (
                       <Link
-                        href="/settings"
+                        to="/settings"
                         className="rounded-full border border-border px-4 py-2 font-bold transition-colors hover:bg-muted/50"
                       >
                         Edit profile
@@ -726,7 +691,7 @@ export default function ProfileDetailClient() {
                 )}
 
                 <div className="flex gap-4 text-[15px]">
-                  <Link href="#" className="hover:underline">
+                  <Link to="#" className="hover:underline">
                     <span className="font-bold text-foreground">
                       {actorInfo.stats?.following || 0}
                     </span>
@@ -734,7 +699,7 @@ export default function ProfileDetailClient() {
                       Following
                     </span>
                   </Link>
-                  <Link href="#" className="hover:underline">
+                  <Link to="#" className="hover:underline">
                     <span className="font-bold text-foreground">
                       {optimisticFollowerCount !== null
                         ? optimisticFollowerCount
@@ -752,34 +717,37 @@ export default function ProfileDetailClient() {
               <div className="flex h-14 items-center justify-between px-4">
                 <div className="flex flex-1 items-center">
                   <button
+                    type="button"
                     onClick={() => setTab('posts')}
                     className={cn(
                       'relative h-full px-4 font-semibold transition-all duration-300 hover:bg-muted/30',
                       tab === 'posts'
                         ? 'text-foreground opacity-100'
-                        : 'text-foreground opacity-50'
+                        : 'text-foreground opacity-50',
                     )}
                   >
                     Posts
                   </button>
                   <button
+                    type="button"
                     onClick={() => setTab('replies')}
                     className={cn(
                       'relative h-full px-4 font-semibold transition-all duration-300 hover:bg-muted/30',
                       tab === 'replies'
                         ? 'text-foreground opacity-100'
-                        : 'text-foreground opacity-50'
+                        : 'text-foreground opacity-50',
                     )}
                   >
                     Replies
                   </button>
                   <button
+                    type="button"
                     onClick={() => setTab('trades')}
                     className={cn(
                       'relative h-full px-4 font-semibold transition-all duration-300 hover:bg-muted/30',
                       tab === 'trades'
                         ? 'text-foreground opacity-100'
-                        : 'text-foreground opacity-50'
+                        : 'text-foreground opacity-50',
                     )}
                   >
                     Trades
@@ -844,7 +812,7 @@ export default function ProfileDetailClient() {
                       quoteComment: item.post.quoteComment || null,
                       originalPostId: item.post.originalPostId || null,
                       originalPost: item.post.originalPost || null,
-                    };
+                    }
 
                     return postData.type && postData.type === 'article' ? (
                       <ArticleCard
@@ -857,7 +825,7 @@ export default function ProfileDetailClient() {
                         post={postData}
                         showInteractions={true}
                       />
-                    );
+                    )
                   })}
                 </div>
               )}
@@ -865,7 +833,7 @@ export default function ProfileDetailClient() {
           </div>
         </div>
 
-        {actorInfo && actorInfo.isUser && (
+        {actorInfo?.isUser && (
           <div className="hidden w-96 flex-shrink-0 flex-col overflow-y-auto bg-sidebar p-4 xl:flex">
             <ProfileWidget userId={actorInfo.id} />
           </div>
@@ -877,7 +845,7 @@ export default function ProfileDetailClient() {
         <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm">
           <div className="flex items-center gap-4 px-4 py-3">
             <Link
-              href="/feed"
+              to="/feed"
               className="rounded-full p-2 transition-colors hover:bg-muted/50"
             >
               <ArrowLeft className="h-5 w-5" />
@@ -905,8 +873,8 @@ export default function ProfileDetailClient() {
                         actorInfo.id,
                         actorInfo.type === 'organization'
                           ? 'organization'
-                          : 'actor'
-                      );
+                          : 'actor',
+                      )
 
                 return bannerUrl ? (
                   <img
@@ -914,13 +882,13 @@ export default function ProfileDetailClient() {
                     alt={`${actorInfo.name} banner`}
                     className="h-full w-full object-cover"
                     onError={(e) => {
-                      e.currentTarget.style.display = 'none';
+                      e.currentTarget.style.display = 'none'
                       e.currentTarget.nextElementSibling?.classList.remove(
-                        'hidden'
-                      );
+                        'hidden',
+                      )
                     }}
                   />
-                ) : null;
+                ) : null
               })()}
               <div
                 className={cn(
@@ -928,7 +896,7 @@ export default function ProfileDetailClient() {
                   actorInfo.type === 'actor' ||
                     actorInfo.type === 'organization'
                     ? 'hidden'
-                    : ''
+                    : '',
                 )}
               />
             </div>
@@ -961,6 +929,7 @@ export default function ProfileDetailClient() {
                     <>
                       {actorInfo.isUser && actorInfo.type === 'user' && (
                         <button
+                          type="button"
                           onClick={handleMessageClick}
                           disabled={isCreatingDM}
                           className="rounded-full border border-border p-2 transition-colors hover:bg-muted/50 disabled:cursor-not-allowed disabled:opacity-50"
@@ -970,6 +939,7 @@ export default function ProfileDetailClient() {
                         </button>
                       )}
                       <button
+                        type="button"
                         onClick={() => setSendPointsModalOpen(true)}
                         className="rounded-full border border-border p-2 transition-colors hover:bg-muted/50"
                         title="Send points"
@@ -985,16 +955,16 @@ export default function ProfileDetailClient() {
                             const currentCount =
                               prev !== null
                                 ? prev
-                                : actorInfo.stats?.followers || 0;
-                            return Math.max(0, currentCount + delta);
-                          });
+                                : actorInfo.stats?.followers || 0
+                            return Math.max(0, currentCount + delta)
+                          })
                         }}
                       />
                     </>
                   )}
                   {isOwnProfile && (
                     <Link
-                      href="/settings"
+                      to="/settings"
                       className="rounded-full border border-border px-4 py-2 font-bold transition-colors hover:bg-muted/50"
                     >
                       Edit profile
@@ -1026,13 +996,13 @@ export default function ProfileDetailClient() {
               )}
 
               <div className="flex gap-4 text-[15px]">
-                <Link href="#" className="hover:underline">
+                <Link to="#" className="hover:underline">
                   <span className="font-bold text-foreground">
                     {actorInfo.stats?.following || 0}
                   </span>
                   <span className="ml-1 text-muted-foreground">Following</span>
                 </Link>
-                <Link href="#" className="hover:underline">
+                <Link to="#" className="hover:underline">
                   <span className="font-bold text-foreground">
                     {optimisticFollowerCount !== null
                       ? optimisticFollowerCount
@@ -1048,23 +1018,25 @@ export default function ProfileDetailClient() {
             <div className="flex flex-col px-4 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex flex-1 items-center">
                 <button
+                  type="button"
                   onClick={() => setTab('posts')}
                   className={cn(
                     'relative h-14 px-4 font-semibold transition-all duration-300 hover:bg-muted/30',
                     tab === 'posts'
                       ? 'text-foreground opacity-100'
-                      : 'text-foreground opacity-50'
+                      : 'text-foreground opacity-50',
                   )}
                 >
                   Posts
                 </button>
                 <button
+                  type="button"
                   onClick={() => setTab('replies')}
                   className={cn(
                     'relative h-14 px-4 font-semibold transition-all duration-300 hover:bg-muted/30',
                     tab === 'replies'
                       ? 'text-foreground opacity-100'
-                      : 'text-foreground opacity-50'
+                      : 'text-foreground opacity-50',
                   )}
                 >
                   Replies
@@ -1125,7 +1097,7 @@ export default function ProfileDetailClient() {
                     quoteComment: item.post.quoteComment || null,
                     originalPostId: item.post.originalPostId || null,
                     originalPost: item.post.originalPost || null,
-                  };
+                  }
 
                   return postData.type && postData.type === 'article' ? (
                     <ArticleCard key={`${item.post.id}-${i}`} post={postData} />
@@ -1135,7 +1107,7 @@ export default function ProfileDetailClient() {
                       post={postData}
                       showInteractions={true}
                     />
-                  );
+                  )
                 })}
               </div>
             )}
@@ -1151,10 +1123,10 @@ export default function ProfileDetailClient() {
           recipientName={actorInfo.name ?? actorInfo.username ?? ''}
           recipientUsername={actorInfo.username}
           onSuccess={() => {
-            loadActorInfo();
+            loadActorInfo()
           }}
         />
       )}
     </PageContainer>
-  );
+  )
 }

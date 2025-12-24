@@ -12,17 +12,23 @@
  * - Verifiable credentials
  */
 
+import type { JsonValue } from '@babylon/shared'
 import {
   AuthenticationError,
   ExternalServiceError,
+  hasNumberProperty,
+  hasProperty,
+  hasStringProperty,
+  isObject,
   logger,
   retryIfRetryable,
   ValidationError,
-} from '@babylon/shared';
-import type { Address, Hex } from 'viem';
+} from '@babylon/shared'
+import type { Address, Hex } from 'viem'
+import { HttpError } from '../types/guards'
 
 // ============================================================================
-// Types (from @jeju/oauth3)
+// Types (from @jejunetwork/oauth3)
 // ============================================================================
 
 export enum AuthProvider {
@@ -36,51 +42,93 @@ export enum AuthProvider {
 }
 
 export interface OAuth3Identity {
-  id: Hex;
-  owner: Address;
-  smartAccount: Address;
-  providers: LinkedProvider[];
-  createdAt: number;
-  updatedAt: number;
-  metadata: IdentityMetadata;
+  id: Hex
+  owner: Address
+  smartAccount: Address
+  providers: LinkedProvider[]
+  createdAt: number
+  updatedAt: number
+  metadata: IdentityMetadata
 }
 
 export interface LinkedProvider {
-  provider: AuthProvider;
-  providerId: string;
-  providerHandle: string;
-  linkedAt: number;
-  verified: boolean;
+  provider: AuthProvider
+  providerId: string
+  providerHandle: string
+  linkedAt: number
+  verified: boolean
 }
 
 export interface IdentityMetadata {
-  name: string;
-  avatar: string;
-  bio: string;
-  url: string;
-  jnsName: string | null;
+  name: string
+  avatar: string
+  bio: string
+  url: string
+  jnsName: string | null
 }
 
 export interface OAuth3Session {
-  sessionId: Hex;
-  identityId: Hex;
-  smartAccount: Address;
-  expiresAt: number;
-  signingKey: Hex;
+  sessionId: Hex
+  identityId: Hex
+  smartAccount: Address
+  expiresAt: number
+  signingKey: Hex
 }
 
 export interface AuthResult {
-  identity: OAuth3Identity;
-  session: OAuth3Session;
-  accessToken: string;
-  refreshToken: string;
+  identity: OAuth3Identity
+  session: OAuth3Session
+  accessToken: string
+  refreshToken: string
+}
+
+// ============================================================================
+// OAuth3 Type Guards
+// ============================================================================
+
+/**
+ * Check if value is a valid OAuth3Identity
+ */
+function isOAuth3Identity(value: unknown): value is OAuth3Identity {
+  if (!isObject(value)) return false
+  if (!hasStringProperty(value, 'id')) return false
+  if (!hasStringProperty(value, 'owner')) return false
+  if (!hasStringProperty(value, 'smartAccount')) return false
+  if (!hasNumberProperty(value, 'createdAt')) return false
+  return true
+}
+
+/**
+ * Check if value is a valid OAuth3Session
+ */
+function isOAuth3Session(value: unknown): value is OAuth3Session {
+  if (!isObject(value)) return false
+  if (!hasStringProperty(value, 'sessionId')) return false
+  if (!hasStringProperty(value, 'identityId')) return false
+  if (!hasStringProperty(value, 'smartAccount')) return false
+  if (!hasNumberProperty(value, 'expiresAt')) return false
+  return true
+}
+
+/**
+ * Check if value is a valid AuthResult
+ */
+function isAuthResult(value: unknown): value is AuthResult {
+  if (!isObject(value)) return false
+  if (!hasStringProperty(value, 'accessToken')) return false
+  if (!hasStringProperty(value, 'refreshToken')) return false
+  if (!hasProperty(value, 'identity') || !isOAuth3Identity(value.identity))
+    return false
+  if (!hasProperty(value, 'session') || !isOAuth3Session(value.session))
+    return false
+  return true
 }
 
 export interface OAuth3Config {
-  serviceUrl: string;
-  appId: string;
-  redirectUri: string;
-  chainId: number;
+  serviceUrl: string
+  appId: string
+  redirectUri: string
+  chainId: number
 }
 
 // ============================================================================
@@ -88,56 +136,57 @@ export interface OAuth3Config {
 // ============================================================================
 
 class OAuth3Client {
-  private config: OAuth3Config;
-  private initialized = false;
-  private currentSession: OAuth3Session | null = null;
+  private config: OAuth3Config
+  private initialized = false
+  private currentSession: OAuth3Session | null = null
 
   constructor() {
-    const serviceUrl = process.env.JEJU_OAUTH3_SERVICE_URL;
+    const serviceUrl = process.env.JEJU_OAUTH3_SERVICE_URL
     if (!serviceUrl) {
       throw new ValidationError(
         '[OAuth3] JEJU_OAUTH3_SERVICE_URL is required. ' +
           'Decentralized auth is mandatory.',
-        ['JEJU_OAUTH3_SERVICE_URL']
-      );
+        ['JEJU_OAUTH3_SERVICE_URL'],
+      )
     }
 
+    const BABYLON_API_PORT = process.env.BABYLON_API_PORT ?? '5009'
     this.config = {
       serviceUrl,
       appId: process.env.BABYLON_OAUTH3_APP_ID ?? 'babylon',
       redirectUri:
         process.env.BABYLON_OAUTH3_REDIRECT_URI ??
-        'http://localhost:5007/auth/callback',
+        `http://localhost:${BABYLON_API_PORT}/auth/callback`,
       chainId: parseInt(process.env.CHAIN_ID ?? '420691', 10),
-    };
+    }
   }
 
   async initialize(): Promise<void> {
-    if (this.initialized) return;
+    if (this.initialized) return
 
-    const healthy = await this.healthCheck();
+    const healthy = await this.healthCheck()
     if (!healthy) {
       throw new ExternalServiceError(
         'OAuth3 Service',
         `Service at ${this.config.serviceUrl} is not healthy. ` +
-          'Start Jeju services: cd /path/to/jeju && bun run dev'
-      );
+          'Start Jeju services: cd /path/to/jeju && bun run dev',
+      )
     }
 
     logger.info(
       '[OAuth3] Connected to Jeju OAuth3',
       { url: this.config.serviceUrl },
-      'OAuth3'
-    );
-    this.initialized = true;
+      'OAuth3',
+    )
+    this.initialized = true
   }
 
   private requireInitialized(): void {
     if (!this.initialized) {
       throw new ValidationError(
         '[OAuth3] Client not initialized. Call initialize() first.',
-        ['initialized']
-      );
+        ['initialized'],
+      )
     }
   }
 
@@ -150,13 +199,13 @@ class OAuth3Client {
       async () => {
         const res = await fetch(`${this.config.serviceUrl}/health`, {
           signal: AbortSignal.timeout(5000),
-        });
-        return res;
+        })
+        return res
       },
-      { maxAttempts: 3, initialDelayMs: 100 }
-    ).catch(() => null);
+      { maxAttempts: 3, initialDelayMs: 100 },
+    ).catch(() => null)
 
-    return response?.ok ?? false;
+    return response?.ok ?? false
   }
 
   // ============================================================================
@@ -169,13 +218,13 @@ class OAuth3Client {
       provider,
       redirect_uri: this.config.redirectUri,
       chain_id: String(this.config.chainId),
-    });
-    if (state) params.set('state', state);
-    return `${this.config.serviceUrl}/auth/authorize?${params}`;
+    })
+    if (state) params.set('state', state)
+    return `${this.config.serviceUrl}/auth/authorize?${params}`
   }
 
   async handleCallback(code: string, state?: string): Promise<AuthResult> {
-    this.requireInitialized();
+    this.requireInitialized()
 
     const response = await retryIfRetryable(
       async () => {
@@ -190,37 +239,43 @@ class OAuth3Client {
             state,
           }),
           signal: AbortSignal.timeout(30000),
-        });
+        })
 
         if (!res.ok) {
-          const errorWithStatus = new Error(
-            `OAuth3 token exchange failed: ${res.status}`
-          ) as Error & { status: number };
-          errorWithStatus.status = res.status;
-          throw errorWithStatus;
+          throw new HttpError(
+            `OAuth3 token exchange failed: ${res.status}`,
+            res.status,
+          )
         }
 
-        return res;
+        return res
       },
-      { maxAttempts: 3, initialDelayMs: 100 }
-    );
+      { maxAttempts: 3, initialDelayMs: 100 },
+    )
 
     if (!response.ok) {
-      const text = await response.text();
+      const text = await response.text()
       throw new ExternalServiceError(
         'OAuth3 Service',
         `Token exchange failed: ${text}`,
-        response.status
-      );
+        response.status,
+      )
     }
 
-    const result = (await response.json()) as AuthResult;
-    this.currentSession = result.session;
-    return result;
+    const result: unknown = await response.json()
+    if (!isAuthResult(result)) {
+      throw new ExternalServiceError(
+        'OAuth3 Service',
+        'Invalid auth result format',
+        500,
+      )
+    }
+    this.currentSession = result.session
+    return result
   }
 
   async refreshSession(refreshToken: string): Promise<AuthResult> {
-    this.requireInitialized();
+    this.requireInitialized()
 
     const response = await retryIfRetryable(
       async () => {
@@ -233,32 +288,37 @@ class OAuth3Client {
             app_id: this.config.appId,
           }),
           signal: AbortSignal.timeout(10000),
-        });
+        })
 
         if (!res.ok) {
-          const errorWithStatus = new Error(
-            `OAuth3 token refresh failed: ${res.status}`
-          ) as Error & { status: number };
-          errorWithStatus.status = res.status;
-          throw errorWithStatus;
+          throw new HttpError(
+            `OAuth3 token refresh failed: ${res.status}`,
+            res.status,
+          )
         }
 
-        return res;
+        return res
       },
-      { maxAttempts: 3, initialDelayMs: 100 }
-    );
+      { maxAttempts: 3, initialDelayMs: 100 },
+    )
 
     if (!response.ok) {
-      const text = await response.text();
+      const text = await response.text()
       throw new AuthenticationError(
         `Token refresh failed: ${text}`,
-        'EXPIRED_TOKEN'
-      );
+        'EXPIRED_TOKEN',
+      )
     }
 
-    const result = (await response.json()) as AuthResult;
-    this.currentSession = result.session;
-    return result;
+    const result: unknown = await response.json()
+    if (!isAuthResult(result)) {
+      throw new AuthenticationError(
+        'Invalid auth result format from server',
+        'INVALID_TOKEN',
+      )
+    }
+    this.currentSession = result.session
+    return result
   }
 
   // ============================================================================
@@ -268,9 +328,9 @@ class OAuth3Client {
   async loginWithWallet(
     address: Address,
     signature: Hex,
-    message: string
+    message: string,
   ): Promise<AuthResult> {
-    this.requireInitialized();
+    this.requireInitialized()
 
     const response = await retryIfRetryable(
       async () => {
@@ -285,40 +345,45 @@ class OAuth3Client {
             chain_id: this.config.chainId,
           }),
           signal: AbortSignal.timeout(30000),
-        });
+        })
 
         if (!res.ok) {
-          const errorWithStatus = new Error(
-            `OAuth3 wallet login failed: ${res.status}`
-          ) as Error & { status: number };
-          errorWithStatus.status = res.status;
-          throw errorWithStatus;
+          throw new HttpError(
+            `OAuth3 wallet login failed: ${res.status}`,
+            res.status,
+          )
         }
 
-        return res;
+        return res
       },
-      { maxAttempts: 3, initialDelayMs: 100 }
-    );
+      { maxAttempts: 3, initialDelayMs: 100 },
+    )
 
     if (!response.ok) {
-      const text = await response.text();
+      const text = await response.text()
       throw new AuthenticationError(
         `Wallet login failed: ${text}`,
-        'INVALID_CREDENTIALS'
-      );
+        'INVALID_CREDENTIALS',
+      )
     }
 
-    const result = (await response.json()) as AuthResult;
-    this.currentSession = result.session;
-    return result;
+    const result: unknown = await response.json()
+    if (!isAuthResult(result)) {
+      throw new AuthenticationError(
+        'Invalid auth result format from server',
+        'INVALID_TOKEN',
+      )
+    }
+    this.currentSession = result.session
+    return result
   }
 
   getWalletSignMessage(nonce: string): string {
-    return `Sign in to Babylon\n\nNonce: ${nonce}\nTimestamp: ${Date.now()}`;
+    return `Sign in to Babylon\n\nNonce: ${nonce}\nTimestamp: ${Date.now()}`
   }
 
   async getWalletNonce(address: Address): Promise<string> {
-    this.requireInitialized();
+    this.requireInitialized()
 
     const response = await retryIfRetryable(
       async () => {
@@ -326,33 +391,32 @@ class OAuth3Client {
           `${this.config.serviceUrl}/auth/nonce?address=${address}`,
           {
             signal: AbortSignal.timeout(5000),
-          }
-        );
+          },
+        )
 
         if (!res.ok) {
-          const errorWithStatus = new Error(
-            `OAuth3 get nonce failed: ${res.status}`
-          ) as Error & { status: number };
-          errorWithStatus.status = res.status;
-          throw errorWithStatus;
+          throw new HttpError(
+            `OAuth3 get nonce failed: ${res.status}`,
+            res.status,
+          )
         }
 
-        return res;
+        return res
       },
-      { maxAttempts: 3, initialDelayMs: 100 }
-    );
+      { maxAttempts: 3, initialDelayMs: 100 },
+    )
 
     if (!response.ok) {
-      const text = await response.text();
+      const text = await response.text()
       throw new ExternalServiceError(
         'OAuth3 Service',
         `Get nonce failed: ${text}`,
-        response.status
-      );
+        response.status,
+      )
     }
 
-    const data = (await response.json()) as { nonce: string };
-    return data.nonce;
+    const data = (await response.json()) as { nonce: string }
+    return data.nonce
   }
 
   // ============================================================================
@@ -360,46 +424,45 @@ class OAuth3Client {
   // ============================================================================
 
   async getIdentity(accessToken: string): Promise<OAuth3Identity> {
-    this.requireInitialized();
+    this.requireInitialized()
 
     const response = await retryIfRetryable(
       async () => {
         const res = await fetch(`${this.config.serviceUrl}/identity`, {
           headers: { Authorization: `Bearer ${accessToken}` },
           signal: AbortSignal.timeout(10000),
-        });
+        })
 
         if (!res.ok) {
-          const errorWithStatus = new Error(
-            `OAuth3 get identity failed: ${res.status}`
-          ) as Error & { status: number };
-          errorWithStatus.status = res.status;
-          throw errorWithStatus;
+          throw new HttpError(
+            `OAuth3 get identity failed: ${res.status}`,
+            res.status,
+          )
         }
 
-        return res;
+        return res
       },
-      { maxAttempts: 3, initialDelayMs: 100 }
-    );
+      { maxAttempts: 3, initialDelayMs: 100 },
+    )
 
     if (!response.ok) {
-      const text = await response.text();
+      const text = await response.text()
       throw new ExternalServiceError(
         'OAuth3 Service',
         `Get identity failed: ${text}`,
-        response.status
-      );
+        response.status,
+      )
     }
 
-    return response.json() as Promise<OAuth3Identity>;
+    return response.json() as Promise<OAuth3Identity>
   }
 
   async linkProvider(
     accessToken: string,
     provider: AuthProvider,
-    providerToken: string
+    providerToken: string,
   ): Promise<OAuth3Identity> {
-    this.requireInitialized();
+    this.requireInitialized()
 
     const response = await retryIfRetryable(
       async () => {
@@ -411,38 +474,37 @@ class OAuth3Client {
           },
           body: JSON.stringify({ provider, provider_token: providerToken }),
           signal: AbortSignal.timeout(30000),
-        });
+        })
 
         if (!res.ok) {
-          const errorWithStatus = new Error(
-            `OAuth3 link provider failed: ${res.status}`
-          ) as Error & { status: number };
-          errorWithStatus.status = res.status;
-          throw errorWithStatus;
+          throw new HttpError(
+            `OAuth3 link provider failed: ${res.status}`,
+            res.status,
+          )
         }
 
-        return res;
+        return res
       },
-      { maxAttempts: 3, initialDelayMs: 100 }
-    );
+      { maxAttempts: 3, initialDelayMs: 100 },
+    )
 
     if (!response.ok) {
-      const text = await response.text();
+      const text = await response.text()
       throw new ExternalServiceError(
         'OAuth3 Service',
         `Link provider failed: ${text}`,
-        response.status
-      );
+        response.status,
+      )
     }
 
-    return response.json() as Promise<OAuth3Identity>;
+    return response.json() as Promise<OAuth3Identity>
   }
 
   async unlinkProvider(
     accessToken: string,
-    provider: AuthProvider
+    provider: AuthProvider,
   ): Promise<OAuth3Identity> {
-    this.requireInitialized();
+    this.requireInitialized()
 
     const response = await retryIfRetryable(
       async () => {
@@ -454,38 +516,37 @@ class OAuth3Client {
           },
           body: JSON.stringify({ provider }),
           signal: AbortSignal.timeout(10000),
-        });
+        })
 
         if (!res.ok) {
-          const errorWithStatus = new Error(
-            `OAuth3 unlink provider failed: ${res.status}`
-          ) as Error & { status: number };
-          errorWithStatus.status = res.status;
-          throw errorWithStatus;
+          throw new HttpError(
+            `OAuth3 unlink provider failed: ${res.status}`,
+            res.status,
+          )
         }
 
-        return res;
+        return res
       },
-      { maxAttempts: 3, initialDelayMs: 100 }
-    );
+      { maxAttempts: 3, initialDelayMs: 100 },
+    )
 
     if (!response.ok) {
-      const text = await response.text();
+      const text = await response.text()
       throw new ExternalServiceError(
         'OAuth3 Service',
         `Unlink provider failed: ${text}`,
-        response.status
-      );
+        response.status,
+      )
     }
 
-    return response.json() as Promise<OAuth3Identity>;
+    return response.json() as Promise<OAuth3Identity>
   }
 
   async updateMetadata(
     accessToken: string,
-    metadata: Partial<IdentityMetadata>
+    metadata: Partial<IdentityMetadata>,
   ): Promise<OAuth3Identity> {
-    this.requireInitialized();
+    this.requireInitialized()
 
     const response = await retryIfRetryable(
       async () => {
@@ -497,31 +558,30 @@ class OAuth3Client {
           },
           body: JSON.stringify(metadata),
           signal: AbortSignal.timeout(10000),
-        });
+        })
 
         if (!res.ok) {
-          const errorWithStatus = new Error(
-            `OAuth3 update metadata failed: ${res.status}`
-          ) as Error & { status: number };
-          errorWithStatus.status = res.status;
-          throw errorWithStatus;
+          throw new HttpError(
+            `OAuth3 update metadata failed: ${res.status}`,
+            res.status,
+          )
         }
 
-        return res;
+        return res
       },
-      { maxAttempts: 3, initialDelayMs: 100 }
-    );
+      { maxAttempts: 3, initialDelayMs: 100 },
+    )
 
     if (!response.ok) {
-      const text = await response.text();
+      const text = await response.text()
       throw new ExternalServiceError(
         'OAuth3 Service',
         `Update metadata failed: ${text}`,
-        response.status
-      );
+        response.status,
+      )
     }
 
-    return response.json() as Promise<OAuth3Identity>;
+    return response.json() as Promise<OAuth3Identity>
   }
 
   // ============================================================================
@@ -529,48 +589,47 @@ class OAuth3Client {
   // ============================================================================
 
   async validateSession(accessToken: string): Promise<OAuth3Session | null> {
-    this.requireInitialized();
+    this.requireInitialized()
 
     const response = await retryIfRetryable(
       async () => {
         const res = await fetch(`${this.config.serviceUrl}/session/validate`, {
           headers: { Authorization: `Bearer ${accessToken}` },
           signal: AbortSignal.timeout(5000),
-        });
+        })
 
         // 401 is not retryable - it means session is invalid
-        if (res.status === 401) return res;
+        if (res.status === 401) return res
 
         if (!res.ok) {
-          const errorWithStatus = new Error(
-            `OAuth3 validate session failed: ${res.status}`
-          ) as Error & { status: number };
-          errorWithStatus.status = res.status;
-          throw errorWithStatus;
+          throw new HttpError(
+            `OAuth3 validate session failed: ${res.status}`,
+            res.status,
+          )
         }
 
-        return res;
+        return res
       },
-      { maxAttempts: 3, initialDelayMs: 100 }
-    );
+      { maxAttempts: 3, initialDelayMs: 100 },
+    )
 
-    if (response.status === 401) return null;
+    if (response.status === 401) return null
     if (!response.ok) {
-      const text = await response.text();
+      const text = await response.text()
       throw new ExternalServiceError(
         'OAuth3 Service',
         `Validate session failed: ${text}`,
-        response.status
-      );
+        response.status,
+      )
     }
 
-    const session = (await response.json()) as OAuth3Session;
-    this.currentSession = session;
-    return session;
+    const session = (await response.json()) as OAuth3Session
+    this.currentSession = session
+    return session
   }
 
   async revokeSession(accessToken: string): Promise<void> {
-    this.requireInitialized();
+    this.requireInitialized()
 
     const response = await retryIfRetryable(
       async () => {
@@ -578,35 +637,34 @@ class OAuth3Client {
           method: 'POST',
           headers: { Authorization: `Bearer ${accessToken}` },
           signal: AbortSignal.timeout(5000),
-        });
+        })
 
         if (!res.ok) {
-          const errorWithStatus = new Error(
-            `OAuth3 revoke session failed: ${res.status}`
-          ) as Error & { status: number };
-          errorWithStatus.status = res.status;
-          throw errorWithStatus;
+          throw new HttpError(
+            `OAuth3 revoke session failed: ${res.status}`,
+            res.status,
+          )
         }
 
-        return res;
+        return res
       },
-      { maxAttempts: 3, initialDelayMs: 100 }
-    );
+      { maxAttempts: 3, initialDelayMs: 100 },
+    )
 
     if (!response.ok) {
-      const text = await response.text();
+      const text = await response.text()
       throw new ExternalServiceError(
         'OAuth3 Service',
         `Revoke session failed: ${text}`,
-        response.status
-      );
+        response.status,
+      )
     }
 
-    this.currentSession = null;
+    this.currentSession = null
   }
 
   getCurrentSession(): OAuth3Session | null {
-    return this.currentSession;
+    return this.currentSession
   }
 
   // ============================================================================
@@ -614,7 +672,7 @@ class OAuth3Client {
   // ============================================================================
 
   async signMessage(accessToken: string, message: string): Promise<Hex> {
-    this.requireInitialized();
+    this.requireInitialized()
 
     const response = await retryIfRetryable(
       async () => {
@@ -626,36 +684,38 @@ class OAuth3Client {
           },
           body: JSON.stringify({ message }),
           signal: AbortSignal.timeout(30000),
-        });
+        })
 
         if (!res.ok) {
-          const errorWithStatus = new Error(
-            `OAuth3 sign message failed: ${res.status}`
-          ) as Error & { status: number };
-          errorWithStatus.status = res.status;
-          throw errorWithStatus;
+          throw new HttpError(
+            `OAuth3 sign message failed: ${res.status}`,
+            res.status,
+          )
         }
 
-        return res;
+        return res
       },
-      { maxAttempts: 3, initialDelayMs: 100 }
-    );
+      { maxAttempts: 3, initialDelayMs: 100 },
+    )
 
     if (!response.ok) {
-      const text = await response.text();
+      const text = await response.text()
       throw new ExternalServiceError(
         'OAuth3 Service',
         `Sign message failed: ${text}`,
-        response.status
-      );
+        response.status,
+      )
     }
 
-    const data = (await response.json()) as { signature: Hex };
-    return data.signature;
+    const data = (await response.json()) as { signature: Hex }
+    return data.signature
   }
 
-  async signTypedData(accessToken: string, typedData: unknown): Promise<Hex> {
-    this.requireInitialized();
+  async signTypedData(
+    accessToken: string,
+    typedData: Record<string, JsonValue>,
+  ): Promise<Hex> {
+    this.requireInitialized()
 
     const response = await retryIfRetryable(
       async () => {
@@ -667,36 +727,35 @@ class OAuth3Client {
           },
           body: JSON.stringify({ typed_data: typedData }),
           signal: AbortSignal.timeout(30000),
-        });
+        })
 
         if (!res.ok) {
-          const errorWithStatus = new Error(
-            `OAuth3 sign typed data failed: ${res.status}`
-          ) as Error & { status: number };
-          errorWithStatus.status = res.status;
-          throw errorWithStatus;
+          throw new HttpError(
+            `OAuth3 sign typed data failed: ${res.status}`,
+            res.status,
+          )
         }
 
-        return res;
+        return res
       },
-      { maxAttempts: 3, initialDelayMs: 100 }
-    );
+      { maxAttempts: 3, initialDelayMs: 100 },
+    )
 
     if (!response.ok) {
-      const text = await response.text();
+      const text = await response.text()
       throw new ExternalServiceError(
         'OAuth3 Service',
         `Sign typed data failed: ${text}`,
-        response.status
-      );
+        response.status,
+      )
     }
 
-    const data = (await response.json()) as { signature: Hex };
-    return data.signature;
+    const data = (await response.json()) as { signature: Hex }
+    return data.signature
   }
 
   isInitialized(): boolean {
-    return this.initialized;
+    return this.initialized
   }
 }
 
@@ -704,23 +763,23 @@ class OAuth3Client {
 // Singleton Export
 // ============================================================================
 
-let oauth3Client: OAuth3Client | null = null;
+let oauth3Client: OAuth3Client | null = null
 
 export function getOAuth3Client(): OAuth3Client {
   if (!oauth3Client) {
-    oauth3Client = new OAuth3Client();
+    oauth3Client = new OAuth3Client()
   }
-  return oauth3Client;
+  return oauth3Client
 }
 
 export async function initializeOAuth3(): Promise<OAuth3Client> {
-  const client = getOAuth3Client();
-  await client.initialize();
-  return client;
+  const client = getOAuth3Client()
+  await client.initialize()
+  return client
 }
 
 export function resetOAuth3Client(): void {
-  oauth3Client = null;
+  oauth3Client = null
 }
 
-export { OAuth3Client };
+export { OAuth3Client }

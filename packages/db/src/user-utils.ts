@@ -2,9 +2,7 @@
  * User utility functions for blocking, muting, etc.
  */
 
-import { and, eq } from 'drizzle-orm';
-import { db } from './cql-client';
-import { userBlocks, userMutes } from './schema';
+import { db } from './cql-client'
 
 /**
  * Check if a user has blocked another user
@@ -14,19 +12,12 @@ import { userBlocks, userMutes } from './schema';
  */
 export async function hasBlocked(
   blockerId: string,
-  blockedId: string
+  blockedId: string,
 ): Promise<boolean> {
-  const [result] = await db
-    .select({ id: userBlocks.id })
-    .from(userBlocks)
-    .where(
-      and(
-        eq(userBlocks.blockerId, blockerId),
-        eq(userBlocks.blockedId, blockedId)
-      )
-    )
-    .limit(1);
-  return result !== undefined;
+  const result = await db.userBlock.findFirst({
+    where: { blockerId, blockedId },
+  })
+  return result !== null
 }
 
 /**
@@ -35,11 +26,10 @@ export async function hasBlocked(
  * @returns Array of blocked user IDs
  */
 export async function getBlockedUserIds(userId: string): Promise<string[]> {
-  const results = await db
-    .select({ blockedId: userBlocks.blockedId })
-    .from(userBlocks)
-    .where(eq(userBlocks.blockerId, userId));
-  return results.map((r) => r.blockedId);
+  const results = await db.userBlock.findMany({
+    where: { blockerId: userId },
+  })
+  return results.map((r: { blockedId: string }) => r.blockedId)
 }
 
 /**
@@ -48,11 +38,10 @@ export async function getBlockedUserIds(userId: string): Promise<string[]> {
  * @returns Array of user IDs who have blocked this user
  */
 export async function getBlockedByUserIds(userId: string): Promise<string[]> {
-  const results = await db
-    .select({ blockerId: userBlocks.blockerId })
-    .from(userBlocks)
-    .where(eq(userBlocks.blockedId, userId));
-  return results.map((r) => r.blockerId);
+  const results = await db.userBlock.findMany({
+    where: { blockedId: userId },
+  })
+  return results.map((r: { blockerId: string }) => r.blockerId)
 }
 
 /**
@@ -61,11 +50,10 @@ export async function getBlockedByUserIds(userId: string): Promise<string[]> {
  * @returns Array of muted user IDs
  */
 export async function getMutedUserIds(userId: string): Promise<string[]> {
-  const results = await db
-    .select({ mutedId: userMutes.mutedId })
-    .from(userMutes)
-    .where(eq(userMutes.muterId, userId));
-  return results.map((r) => r.mutedId);
+  const results = await db.userMute.findMany({
+    where: { muterId: userId },
+  })
+  return results.map((r: { mutedId: string }) => r.mutedId)
 }
 
 /**
@@ -76,12 +64,10 @@ export async function getMutedUserIds(userId: string): Promise<string[]> {
  */
 export async function hasMuted(
   muterId: string,
-  mutedId: string
+  mutedId: string,
 ): Promise<boolean> {
-  const [result] = await db
-    .select({ id: userMutes.id })
-    .from(userMutes)
-    .where(and(eq(userMutes.muterId, muterId), eq(userMutes.mutedId, mutedId)))
-    .limit(1);
-  return result !== undefined;
+  const result = await db.userMute.findFirst({
+    where: { muterId, mutedId },
+  })
+  return result !== null
 }

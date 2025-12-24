@@ -1,32 +1,17 @@
-'use client';
-
-import { cn } from '@babylon/shared';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { TrendingDown, TrendingUp } from 'lucide-react';
-import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useMemo } from 'react';
-import { Skeleton } from '@/components/shared/Skeleton';
-import { useWidgetRefresh } from '@/contexts/WidgetRefreshContext';
-import { usePerpMarkets } from '@/hooks/usePerpMarkets';
+import { cn } from '@babylon/shared'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { TrendingDown, TrendingUp } from 'lucide-react'
+import { useCallback, useEffect, useMemo } from 'react'
+import { Skeleton } from '@/components/shared/Skeleton'
+import { useWidgetRefresh } from '@/contexts/WidgetRefreshContext'
+import { usePerpMarkets } from '@/hooks/usePerpMarkets'
+import { api, extractDataOrNull, type WidgetMarket } from '@/lib/eden-client'
+import { useRouter } from '@/lib/navigation'
 
 /**
  * Prediction market structure for markets panel.
  */
-interface Market {
-  id: string;
-  question: string;
-  yesPrice: number;
-  noPrice: number;
-  volume: number;
-  endDate: string;
-  priceChange24h?: number;
-  changePercent24h?: number;
-}
-
-interface MarketsResponse {
-  success: boolean;
-  markets?: Market[];
-}
+type Market = WidgetMarket
 
 /**
  * Markets panel component for displaying prediction and perpetual markets.
@@ -45,49 +30,30 @@ interface MarketsResponse {
  * @returns Markets panel element
  */
 export function MarketsPanel() {
-  const router = useRouter();
-  const queryClient = useQueryClient();
-  const { registerRefresh, unregisterRefresh } = useWidgetRefresh();
+  const router = useRouter()
+  const queryClient = useQueryClient()
+  const { registerRefresh, unregisterRefresh } = useWidgetRefresh()
 
   // Use shared perp markets store
   const {
     markets: perpMarkets,
     loading: perpLoading,
     refetch: refetchPerps,
-  } = usePerpMarkets();
+  } = usePerpMarkets()
 
   const { data: markets = [], isLoading: predictionsLoading } = useQuery({
     queryKey: ['feed', 'markets', 'predictions'],
     queryFn: async (): Promise<Market[]> => {
-      const response = await fetch('/api/feed/widgets/markets');
-
-      if (!response.ok) {
-        console.error(
-          'Failed to fetch markets:',
-          response.status,
-          response.statusText
-        );
-        return [];
+      const response = await api.feed.widgets.markets.get()
+      const data = extractDataOrNull(response)
+      if (!data?.success || !data.markets) {
+        return []
       }
-
-      const text = await response.text();
-      if (!text) {
-        console.error('Empty response from markets API');
-        return [];
-      }
-
-      const data: MarketsResponse = JSON.parse(text);
-      if (!data.success) {
-        return [];
-      }
-      if (!data.markets) {
-        throw new Error('Markets API returned success without markets data');
-      }
-      return data.markets;
+      return data.markets
     },
-  });
+  })
 
-  const loading = predictionsLoading && perpLoading;
+  const loading = predictionsLoading && perpLoading
 
   const refetchAll = useCallback(async () => {
     await Promise.all([
@@ -95,22 +61,22 @@ export function MarketsPanel() {
         queryKey: ['feed', 'markets', 'predictions'],
       }),
       refetchPerps(),
-    ]);
-  }, [queryClient, refetchPerps]);
+    ])
+  }, [queryClient, refetchPerps])
 
   // Register refresh function (includes both predictions and perps)
   useEffect(() => {
-    registerRefresh('markets', refetchAll);
-    return () => unregisterRefresh('markets');
-  }, [registerRefresh, unregisterRefresh, refetchAll]);
+    registerRefresh('markets', refetchAll)
+    return () => unregisterRefresh('markets')
+  }, [registerRefresh, unregisterRefresh, refetchAll])
 
   const handleMarketClick = (marketId: string) => {
-    router.push(`/markets/predictions/${marketId}`);
-  };
+    router.push(`/markets/predictions/${marketId}`)
+  }
 
   const handleTokenClick = (ticker: string) => {
-    router.push(`/markets/perps/${ticker}`);
-  };
+    router.push(`/markets/perps/${ticker}`)
+  }
 
   // Memoize computed values
   const topMovers = useMemo(
@@ -118,24 +84,24 @@ export function MarketsPanel() {
       markets
         .filter(
           (m): m is Market & { changePercent24h: number } =>
-            m.changePercent24h !== undefined && m.changePercent24h !== 0
+            m.changePercent24h !== undefined && m.changePercent24h !== 0,
         )
         .sort(
-          (a, b) => Math.abs(b.changePercent24h) - Math.abs(a.changePercent24h)
+          (a, b) => Math.abs(b.changePercent24h) - Math.abs(a.changePercent24h),
         )
         .slice(0, 3),
-    [markets]
-  );
+    [markets],
+  )
 
   const { tokenGainers, tokenLosers } = useMemo(() => {
     const sorted = [...perpMarkets].sort(
-      (a, b) => b.changePercent24h - a.changePercent24h
-    );
+      (a, b) => b.changePercent24h - a.changePercent24h,
+    )
     return {
       tokenGainers: sorted.slice(0, 3),
       tokenLosers: sorted.slice(-3).reverse(),
-    };
-  }, [perpMarkets]);
+    }
+  }, [perpMarkets])
 
   return (
     <div className="flex flex-1 flex-col rounded-2xl bg-sidebar px-4 py-3">
@@ -165,10 +131,11 @@ export function MarketsPanel() {
               </div>
               <div className="space-y-2">
                 {topMovers.map((market) => (
-                  <div
+                  <button
+                    type="button"
                     key={`mover-${market.id}`}
                     onClick={() => handleMarketClick(market.id)}
-                    className="-ml-1.5 flex cursor-pointer items-start gap-3 rounded-lg px-2 py-2 transition-colors duration-200 hover:bg-muted/50"
+                    className="-ml-1.5 flex w-full cursor-pointer items-start gap-3 rounded-lg px-2 py-2 text-left transition-colors duration-200 hover:bg-muted/50"
                   >
                     <div className="min-w-0 flex-1">
                       <p className="line-clamp-1 font-medium text-foreground text-sm leading-snug">
@@ -183,7 +150,7 @@ export function MarketsPanel() {
                             'flex items-center gap-0.5 font-semibold text-xs',
                             market.changePercent24h >= 0
                               ? 'text-green-600'
-                              : 'text-red-600'
+                              : 'text-red-600',
                           )}
                         >
                           {market.changePercent24h >= 0 ? (
@@ -196,7 +163,7 @@ export function MarketsPanel() {
                         </div>
                       </div>
                     </div>
-                  </div>
+                  </button>
                 ))}
               </div>
               <div className="mt-3 border-border border-t pt-3" />
@@ -217,10 +184,11 @@ export function MarketsPanel() {
                   </div>
                   <div className="space-y-1.5">
                     {tokenGainers.map((token) => (
-                      <div
+                      <button
+                        type="button"
                         key={`gainer-${token.ticker}`}
                         onClick={() => handleTokenClick(token.ticker)}
-                        className="cursor-pointer rounded p-1.5 transition-colors duration-200 hover:bg-muted/50"
+                        className="w-full cursor-pointer rounded p-1.5 text-left transition-colors duration-200 hover:bg-muted/50"
                       >
                         <p className="font-bold text-foreground text-xs">
                           ${token.ticker}
@@ -234,14 +202,14 @@ export function MarketsPanel() {
                               'font-semibold text-xs',
                               token.changePercent24h >= 0
                                 ? 'text-green-600'
-                                : 'text-muted-foreground'
+                                : 'text-muted-foreground',
                             )}
                           >
                             {token.changePercent24h >= 0 ? '+' : ''}
                             {token.changePercent24h.toFixed(1)}%
                           </span>
                         </div>
-                      </div>
+                      </button>
                     ))}
                   </div>
                 </div>
@@ -256,10 +224,11 @@ export function MarketsPanel() {
                   </div>
                   <div className="space-y-1.5">
                     {tokenLosers.map((token) => (
-                      <div
+                      <button
+                        type="button"
                         key={`loser-${token.ticker}`}
                         onClick={() => handleTokenClick(token.ticker)}
-                        className="cursor-pointer rounded p-1.5 transition-colors duration-200 hover:bg-muted/50"
+                        className="w-full cursor-pointer rounded p-1.5 text-left transition-colors duration-200 hover:bg-muted/50"
                       >
                         <p className="font-bold text-foreground text-xs">
                           ${token.ticker}
@@ -273,13 +242,13 @@ export function MarketsPanel() {
                               'font-semibold text-xs',
                               token.changePercent24h < 0
                                 ? 'text-red-600'
-                                : 'text-muted-foreground'
+                                : 'text-muted-foreground',
                             )}
                           >
                             {token.changePercent24h.toFixed(1)}%
                           </span>
                         </div>
-                      </div>
+                      </button>
                     ))}
                   </div>
                 </div>
@@ -292,10 +261,11 @@ export function MarketsPanel() {
             <div className="flex-1 pl-3">
               <div className="space-y-2.5">
                 {markets.slice(0, 5).map((market) => (
-                  <div
+                  <button
+                    type="button"
                     key={market.id}
                     onClick={() => handleMarketClick(market.id)}
-                    className="-ml-1.5 flex cursor-pointer items-start gap-3 rounded-lg px-2 py-2 transition-colors duration-200 hover:bg-muted/50"
+                    className="-ml-1.5 flex w-full cursor-pointer items-start gap-3 rounded-lg px-2 py-2 text-left transition-colors duration-200 hover:bg-muted/50"
                   >
                     <div className="min-w-0 flex-1">
                       {/* Market question */}
@@ -315,14 +285,14 @@ export function MarketsPanel() {
                             ${market.volume.toFixed(0)}
                           </span>
                         )}
-                        {market.changePercent24h !== undefined &&
+                        {market.changePercent24h != null &&
                           market.changePercent24h !== 0 && (
                             <span
                               className={cn(
                                 'font-medium text-xs',
                                 market.changePercent24h >= 0
                                   ? 'text-green-600'
-                                  : 'text-red-600'
+                                  : 'text-red-600',
                               )}
                             >
                               {market.changePercent24h >= 0 ? '+' : ''}
@@ -331,7 +301,7 @@ export function MarketsPanel() {
                           )}
                       </div>
                     </div>
-                  </div>
+                  </button>
                 ))}
               </div>
             </div>
@@ -339,5 +309,5 @@ export function MarketsPanel() {
         </>
       )}
     </div>
-  );
+  )
 }

@@ -1,8 +1,5 @@
-'use client';
-
-import { FEE_CONFIG } from '@babylon/engine/client';
-import { cn } from '@babylon/shared';
-import { useMutation } from '@tanstack/react-query';
+import { cn, FEE_CONFIG } from '@babylon/shared'
+import { useMutation } from '@tanstack/react-query'
 import {
   AlertTriangle,
   ArrowLeft,
@@ -10,206 +7,215 @@ import {
   TrendingDown,
   TrendingUp,
   Wallet,
-} from 'lucide-react';
-import { useParams, useRouter, useSearchParams } from 'next/navigation';
-
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { toast } from 'sonner';
-import { AssetTradesFeed } from '@/components/markets/AssetTradesFeed';
-import { PerpPositionsList } from '@/components/markets/PerpPositionsList';
-import { PerpPriceChart } from '@/components/markets/PerpPriceChart';
+} from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useParams } from 'react-router-dom'
+import { toast } from 'sonner'
+import { AssetTradesFeed } from '@/components/markets/AssetTradesFeed'
+import { PerpPositionsList } from '@/components/markets/PerpPositionsList'
+import { PerpPriceChart } from '@/components/markets/PerpPriceChart'
 import {
   type OpenPerpDetails,
   TradeConfirmationDialog,
-} from '@/components/markets/TradeConfirmationDialog';
-import { PageContainer } from '@/components/shared/PageContainer';
-import { Skeleton } from '@/components/shared/Skeleton';
-import { useAuth } from '@/hooks/useAuth';
-import { useMarketPrices } from '@/hooks/useMarketPrices';
-import { usePerpTrade } from '@/hooks/usePerpTrade';
-import { useMarketTracking } from '@/hooks/usePostHog';
-import { useUserPositions } from '@/hooks/useUserPositions';
-import { useWalletBalance } from '@/hooks/useWalletBalance';
-import { usePerpMarket } from '@/stores/perpMarketsStore';
+} from '@/components/markets/TradeConfirmationDialog'
+import { PageContainer } from '@/components/shared/PageContainer'
+import { Skeleton } from '@/components/shared/Skeleton'
+import { useAuth } from '@/hooks/useAuth'
+import { useMarketPrices } from '@/hooks/useMarketPrices'
+import { usePerpTrade } from '@/hooks/usePerpTrade'
+import { useMarketTracking } from '@/hooks/usePostHog'
+import { useUserPositions } from '@/hooks/useUserPositions'
+import { useWalletBalance } from '@/hooks/useWalletBalance'
+import { useRouter, useSearchParams } from '@/lib/navigation'
+import { usePerpMarket } from '@/stores/perpMarketsStore'
 
 interface PricePoint {
-  time: number;
-  price: number;
+  time: number
+  price: number
 }
 
 export default function PerpsDetailClient() {
-  const params = useParams();
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const { user, authenticated, login, getAccessToken } = useAuth();
+  const params = useParams()
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const { user, authenticated, login, getAccessToken } = useAuth()
   // Catch-all route: params.ticker is string[] or undefined
-  const tickerParam = params.ticker;
-  const ticker = Array.isArray(tickerParam) ? tickerParam[0] : tickerParam;
-  const { trackMarketView } = useMarketTracking();
+  const tickerParam = params.ticker
+  const ticker = Array.isArray(tickerParam) ? tickerParam[0] : tickerParam
+  const { trackMarketView } = useMarketTracking()
 
   // Redirect to markets list if no ticker provided
   useEffect(() => {
     if (!ticker) {
-      router.replace('/markets/perps');
+      router.replace('/markets/perps')
     }
-  }, [ticker, router]);
+  }, [ticker, router])
 
-  // Don't render with missing ticker - redirect will happen via useEffect
-  if (!ticker) {
-    return null;
-  }
-  const from = searchParams.get('from');
+  const from = searchParams.get('from')
 
-  // Use shared perp markets store
-  const { market, loading, refetch } = usePerpMarket(ticker);
+  // Use shared perp markets store - hooks must be called unconditionally
+  const { market, loading, refetch } = usePerpMarket(ticker ?? '')
 
-  const [priceHistory, setPriceHistory] = useState<PricePoint[]>([]);
-  const [side, setSide] = useState<'long' | 'short'>('long');
-  const [size, setSize] = useState('100');
-  const [leverage, setLeverage] = useState(10);
-  const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
-  const pageContainerRef = useRef<HTMLDivElement | null>(null);
+  const [priceHistory, setPriceHistory] = useState<PricePoint[]>([])
+  const [side, setSide] = useState<'long' | 'short'>('long')
+  const [size, setSize] = useState('100')
+  const [leverage, setLeverage] = useState(10)
+  const [confirmDialogOpen, setConfirmDialogOpen] = useState(false)
+  const pageContainerRef = useRef<HTMLDivElement | null>(null)
   const { perpPositions, refresh: refreshUserPositions } = useUserPositions(
     user?.id,
     {
       enabled: authenticated,
-    }
-  );
+    },
+  )
   const userPositions = useMemo(
-    () => perpPositions.filter((position) => position.ticker === ticker),
-    [perpPositions, ticker]
-  );
+    () =>
+      ticker
+        ? perpPositions.filter(
+            (position: { ticker: string }) => position.ticker === ticker,
+          )
+        : [],
+    [perpPositions, ticker],
+  )
   const { openPosition } = usePerpTrade({
     getAccessToken,
-  });
+  })
   const {
     balance,
     loading: balanceLoading,
     refresh: refreshWalletBalance,
-  } = useWalletBalance(user?.id, { enabled: authenticated });
+  } = useWalletBalance(user?.id, { enabled: authenticated })
 
-  const trackedTicker = market ? market.ticker : ticker;
-  const livePrices = useMarketPrices(trackedTicker ? [trackedTicker] : []);
-  const livePrice = trackedTicker ? livePrices.get(trackedTicker) : undefined;
+  const trackedTicker = market ? market.ticker : (ticker ?? '')
+  const livePrices = useMarketPrices(trackedTicker ? [trackedTicker] : [])
+  const livePrice = trackedTicker ? livePrices.get(trackedTicker) : undefined
   const displayPrice = livePrice
     ? livePrice.price
     : market
       ? market.currentPrice
-      : 0;
+      : 0
 
   // Track market view
   useEffect(() => {
     if (ticker && market) {
-      trackMarketView(ticker, 'perp');
+      trackMarketView(ticker, 'perp')
     }
-  }, [ticker, market, trackMarketView]);
+  }, [ticker, market, trackMarketView])
 
   // Redirect if market not found after loading
   useEffect(() => {
-    if (!loading && !market) {
-      toast.error('Market not found');
-      router.push(from === 'dashboard' ? '/markets' : '/markets/perps');
+    if (!loading && !market && ticker) {
+      toast.error('Market not found')
+      router.push(from === 'dashboard' ? '/markets' : '/markets/perps')
     }
-  }, [loading, market, router, from]);
+  }, [loading, market, router, from, ticker])
 
   // Generate price history when market loads
   useEffect(() => {
-    if (!market) return;
+    if (!market) return
 
     // Generate mock price history (you'll want to replace this with real data)
-    const now = Date.now();
-    const history: PricePoint[] = [];
-    const basePrice = market.currentPrice;
-    const volatility = basePrice * 0.02; // 2% volatility
+    const now = Date.now()
+    const history: PricePoint[] = []
+    const basePrice = market.currentPrice
+    const volatility = basePrice * 0.02 // 2% volatility
 
     for (let i = 100; i >= 0; i--) {
-      const time = now - i * 15 * 60 * 1000; // 15 min intervals for last ~25 hours
-      const randomChange = (Math.random() - 0.5) * volatility;
+      const time = now - i * 15 * 60 * 1000 // 15 min intervals for last ~25 hours
+      const randomChange = (Math.random() - 0.5) * volatility
       const price =
-        basePrice + randomChange + ((market.change24h / 100) * (100 - i)) / 100;
-      history.push({ time, price });
+        basePrice + randomChange + ((market.change24h / 100) * (100 - i)) / 100
+      history.push({ time, price })
     }
 
-    setPriceHistory(history);
-  }, [market]);
+    setPriceHistory(history)
+  }, [market])
 
   const handlePositionClosed = useCallback(async () => {
     await Promise.all([
       refreshUserPositions(),
       refreshWalletBalance(),
       refetch(),
-    ]);
-  }, [refreshUserPositions, refreshWalletBalance, refetch]);
+    ])
+  }, [refreshUserPositions, refreshWalletBalance, refetch])
 
   // Mutation for opening position
   const openPositionMutation = useMutation({
     mutationFn: async (params: {
-      positionTicker: string;
-      positionSide: 'long' | 'short';
-      positionSize: number;
-      positionLeverage: number;
+      positionTicker: string
+      positionSide: 'long' | 'short'
+      positionSize: number
+      positionLeverage: number
     }) => {
       return openPosition({
         ticker: params.positionTicker,
         side: params.positionSide,
         size: params.positionSize,
         leverage: params.positionLeverage,
-      });
+      })
     },
-    onSuccess: async (_result, params) => {
+    onSuccess: async (
+      _result: Awaited<ReturnType<typeof openPosition>>,
+      params: {
+        positionTicker: string
+        positionSide: 'long' | 'short'
+        positionSize: number
+        positionLeverage: number
+      },
+    ) => {
       toast.success('Position opened!', {
         description: `Opened ${params.positionLeverage}x ${params.positionSide} on ${params.positionTicker} at $${displayPrice.toFixed(2)}`,
-      });
+      })
 
       await Promise.all([
         refetch(),
         refreshUserPositions(),
         refreshWalletBalance(),
-      ]);
+      ])
     },
     onError: (error: Error) => {
-      toast.error(error.message);
+      toast.error(error.message)
     },
-  });
+  })
 
-  const submitting = openPositionMutation.isPending;
+  const submitting = openPositionMutation.isPending
 
   const handleSubmit = () => {
     if (!authenticated) {
-      login();
-      return;
+      login()
+      return
     }
 
-    if (!market || !user) return;
+    if (!market || !user) return
 
-    const sizeNum = Number.parseFloat(size) || 0;
+    const sizeNum = Number.parseFloat(size) || 0
     if (sizeNum < market.minOrderSize) {
-      toast.error(`Minimum order size is $${market.minOrderSize}`);
-      return;
+      toast.error(`Minimum order size is $${market.minOrderSize}`)
+      return
     }
 
     if (authenticated && showBalanceWarning) {
-      toast.error('Insufficient balance for margin + fees');
-      return;
+      toast.error('Insufficient balance for margin + fees')
+      return
     }
 
     // Open confirmation dialog
-    setConfirmDialogOpen(true);
-  };
+    setConfirmDialogOpen(true)
+  }
 
   const handleConfirmOpen = async () => {
-    if (!market) return;
+    if (!market) return
 
-    const sizeNum = Number.parseFloat(size) || 0;
-    setConfirmDialogOpen(false);
+    const sizeNum = Number.parseFloat(size) || 0
+    setConfirmDialogOpen(false)
 
     openPositionMutation.mutate({
       positionTicker: market.ticker,
       positionSide: side,
       positionSize: sizeNum,
       positionLeverage: leverage,
-    });
-  };
+    })
+  }
 
   const formatPrice = (price: number) => {
     return new Intl.NumberFormat('en-US', {
@@ -217,46 +223,52 @@ export default function PerpsDetailClient() {
       currency: 'USD',
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
-    }).format(price);
-  };
+    }).format(price)
+  }
 
   const formatVolume = (v: number) => {
-    if (v >= 1e9) return `$${(v / 1e9).toFixed(2)}B`;
-    if (v >= 1e6) return `$${(v / 1e6).toFixed(2)}M`;
-    return `$${(v / 1e3).toFixed(2)}K`;
-  };
+    if (v >= 1e9) return `$${(v / 1e9).toFixed(2)}B`
+    if (v >= 1e6) return `$${(v / 1e6).toFixed(2)}M`
+    return `$${(v / 1e3).toFixed(2)}K`
+  }
 
-  const sizeNum = Number.parseFloat(size) || 0;
-  const baseMargin = sizeNum > 0 ? sizeNum / leverage : 0;
-  const estimatedFee = sizeNum > 0 ? sizeNum * FEE_CONFIG.TRADING_FEE_RATE : 0;
-  const totalRequired = sizeNum > 0 ? baseMargin + estimatedFee : 0;
-  const hasSufficientBalance = !authenticated || balance >= totalRequired;
+  const sizeNum = Number.parseFloat(size) || 0
+  const baseMargin = sizeNum > 0 ? sizeNum / leverage : 0
+  const estimatedFee = sizeNum > 0 ? sizeNum * FEE_CONFIG.TRADING_FEE_RATE : 0
+  const totalRequired = sizeNum > 0 ? baseMargin + estimatedFee : 0
+  const hasSufficientBalance = !authenticated || balance >= totalRequired
   const showBalanceWarning =
-    authenticated && sizeNum > 0 && !hasSufficientBalance;
+    authenticated && sizeNum > 0 && !hasSufficientBalance
+
   // Update price history when live price changes
   useEffect(() => {
-    if (!livePrice) return;
-    setPriceHistory((prev) => {
-      const last = prev[prev.length - 1];
+    if (!livePrice) return
+    setPriceHistory((prev: PricePoint[]) => {
+      const last = prev[prev.length - 1]
       if (last && Math.abs(last.price - livePrice.price) < 1e-6) {
-        return prev;
+        return prev
       }
-      const next = [...prev, { time: Date.now(), price: livePrice.price }];
-      const maxPoints = 200;
-      return next.slice(Math.max(0, next.length - maxPoints));
-    });
-  }, [livePrice]);
+      const next = [...prev, { time: Date.now(), price: livePrice.price }]
+      const maxPoints = 200
+      return next.slice(Math.max(0, next.length - maxPoints))
+    })
+  }, [livePrice])
+
+  // Don't render with missing ticker - redirect will happen via useEffect
+  if (!ticker) {
+    return null
+  }
 
   const liquidationPrice =
     side === 'long'
       ? displayPrice * (1 - 0.9 / leverage)
-      : displayPrice * (1 + 0.9 / leverage);
+      : displayPrice * (1 + 0.9 / leverage)
 
-  const positionValue = sizeNum * leverage;
+  const positionValue = sizeNum * leverage
   const liquidationDistance =
     side === 'long'
       ? ((displayPrice - liquidationPrice) / displayPrice) * 100
-      : ((liquidationPrice - displayPrice) / displayPrice) * 100;
+      : ((liquidationPrice - displayPrice) / displayPrice) * 100
 
   if (loading) {
     return (
@@ -273,23 +285,24 @@ export default function PerpsDetailClient() {
           </div>
         </div>
       </PageContainer>
-    );
+    )
   }
 
-  if (!market) return null;
+  if (!market) return null
 
-  const isHighRisk = leverage > 50 || baseMargin > 1000;
+  const isHighRisk = leverage > 50 || baseMargin > 1000
 
   return (
     <PageContainer className="mx-auto max-w-7xl" ref={pageContainerRef}>
       {/* Header */}
       <div className="mb-6">
         <button
+          type="button"
           onClick={() => {
             if (from === 'dashboard') {
-              router.push('/markets');
+              router.push('/markets')
             } else {
-              router.push('/markets/perps');
+              router.push('/markets/perps')
             }
           }}
           className="mb-4 flex items-center gap-2 text-muted-foreground transition-colors hover:text-foreground"
@@ -310,7 +323,7 @@ export default function PerpsDetailClient() {
             <div
               className={cn(
                 'flex items-center justify-end gap-2 font-bold text-lg',
-                market.change24h >= 0 ? 'text-green-600' : 'text-red-600'
+                market.change24h >= 0 ? 'text-green-600' : 'text-red-600',
               )}
             >
               {market.change24h >= 0 ? (
@@ -384,7 +397,7 @@ export default function PerpsDetailClient() {
                       'font-bold',
                       market.fundingRate.rate >= 0
                         ? 'text-orange-500'
-                        : 'text-blue-500'
+                        : 'text-blue-500',
                     )}
                   >
                     {(market.fundingRate.rate * 100).toFixed(4)}% / 8h
@@ -429,24 +442,26 @@ export default function PerpsDetailClient() {
             {/* Long/Short Tabs */}
             <div className="mb-4 flex gap-2">
               <button
+                type="button"
                 onClick={() => setSide('long')}
                 className={cn(
                   'flex flex-1 cursor-pointer items-center justify-center gap-2 rounded py-3 font-bold transition-all',
                   side === 'long'
                     ? 'bg-green-600 text-primary-foreground'
-                    : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                    : 'bg-muted text-muted-foreground hover:bg-muted/80',
                 )}
               >
                 <TrendingUp size={18} />
                 LONG
               </button>
               <button
+                type="button"
                 onClick={() => setSide('short')}
                 className={cn(
                   'flex flex-1 cursor-pointer items-center justify-center gap-2 rounded py-3 font-bold transition-all',
                   side === 'short'
                     ? 'bg-red-600 text-primary-foreground'
-                    : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                    : 'bg-muted text-muted-foreground hover:bg-muted/80',
                 )}
               >
                 <TrendingDown size={18} />
@@ -457,10 +472,14 @@ export default function PerpsDetailClient() {
             {/* Size & Leverage */}
             <div className="mb-4 space-y-4 rounded-lg bg-muted/30 p-4">
               <div>
-                <label className="mb-2 block font-medium text-muted-foreground text-sm">
+                <label
+                  htmlFor="position-size"
+                  className="mb-2 block font-medium text-muted-foreground text-sm"
+                >
                   Position Size (USD)
                 </label>
                 <input
+                  id="position-size"
                   type="number"
                   value={size}
                   onChange={(e) => setSize(e.target.value)}
@@ -472,17 +491,23 @@ export default function PerpsDetailClient() {
               </div>
               <div>
                 <div className="mb-2 flex items-center justify-between">
-                  <label className="font-medium text-muted-foreground text-sm">
+                  <label
+                    htmlFor="leverage-slider"
+                    className="font-medium text-muted-foreground text-sm"
+                  >
                     Leverage
                   </label>
                   <span className="font-bold text-xl">{leverage}x</span>
                 </div>
                 <input
+                  id="leverage-slider"
                   type="range"
                   min="1"
                   max={market.maxLeverage}
                   value={leverage}
-                  onChange={(e) => setLeverage(Number.parseInt(e.target.value))}
+                  onChange={(e) =>
+                    setLeverage(Number.parseInt(e.target.value, 10))
+                  }
                   className="h-3 w-full cursor-pointer appearance-none rounded-lg bg-muted"
                   style={{
                     background: `linear-gradient(to right, ${side === 'long' ? '#16a34a' : '#dc2626'} 0%, ${side === 'long' ? '#16a34a' : '#dc2626'} ${(leverage / market.maxLeverage) * 100}%, hsl(var(--muted)) ${(leverage / market.maxLeverage) * 100}%, hsl(var(--muted)) 100%)`,
@@ -534,7 +559,7 @@ export default function PerpsDetailClient() {
                         ? 'text-green-600'
                         : liquidationDistance > 2
                           ? 'text-yellow-600'
-                          : 'text-red-600'
+                          : 'text-red-600',
                     )}
                   >
                     {liquidationDistance.toFixed(2)}%
@@ -598,6 +623,7 @@ export default function PerpsDetailClient() {
 
             {/* Submit Button */}
             <button
+              type="button"
               onClick={handleSubmit}
               disabled={
                 submitting ||
@@ -614,7 +640,7 @@ export default function PerpsDetailClient() {
                   sizeNum < market.minOrderSize ||
                   (authenticated && showBalanceWarning) ||
                   balanceLoading) &&
-                  'cursor-not-allowed opacity-50'
+                  'cursor-not-allowed opacity-50',
               )}
             >
               {submitting ? (
@@ -656,5 +682,5 @@ export default function PerpsDetailClient() {
         }
       />
     </PageContainer>
-  );
+  )
 }

@@ -1,11 +1,11 @@
-import { cn } from '@babylon/shared';
+import { cn } from '@babylon/shared'
 
 /**
  * Props for the Skeleton component.
  */
 interface SkeletonProps {
   /** Additional CSS classes */
-  className?: string;
+  className?: string
 }
 
 /**
@@ -28,7 +28,7 @@ export function Skeleton({ className }: SkeletonProps) {
       className={cn('animate-pulse rounded bg-muted/50', className)}
       aria-hidden="true"
     />
-  );
+  )
 }
 
 /**
@@ -73,7 +73,7 @@ export function PostCardSkeleton() {
         <Skeleton className="h-4 w-10 sm:w-12" />
       </div>
     </div>
-  );
+  )
 }
 
 /**
@@ -88,11 +88,13 @@ export function PostCardSkeleton() {
 export function FeedSkeleton({ count = 5 }: { count?: number }) {
   return (
     <div className="w-full">
-      {Array.from({ length: count }).map((_, i) => (
-        <PostCardSkeleton key={i} />
-      ))}
+      {Array.from({ length: count }, (_, i) => `feed-skeleton-${i}`).map(
+        (id) => (
+          <PostCardSkeleton key={id} />
+        ),
+      )}
     </div>
-  );
+  )
 }
 
 /**
@@ -122,7 +124,7 @@ export function MarketCardSkeleton() {
         <Skeleton className="h-3 w-16 sm:w-20" />
       </div>
     </div>
-  );
+  )
 }
 
 /**
@@ -137,11 +139,13 @@ export function MarketCardSkeleton() {
 export function MarketsListSkeleton({ count = 6 }: { count?: number }) {
   return (
     <div className="space-y-2">
-      {Array.from({ length: count }).map((_, i) => (
-        <MarketCardSkeleton key={i} />
-      ))}
+      {Array.from({ length: count }, (_, i) => `markets-skeleton-${i}`).map(
+        (id) => (
+          <MarketCardSkeleton key={id} />
+        ),
+      )}
     </div>
-  );
+  )
 }
 
 /**
@@ -163,7 +167,7 @@ export function ChatListItemSkeleton() {
         </div>
       </div>
     </div>
-  );
+  )
 }
 
 /**
@@ -178,11 +182,13 @@ export function ChatListItemSkeleton() {
 export function ChatListSkeleton({ count = 8 }: { count?: number }) {
   return (
     <div className="w-full">
-      {Array.from({ length: count }).map((_, i) => (
-        <ChatListItemSkeleton key={i} />
-      ))}
+      {Array.from({ length: count }, (_, i) => `chat-skeleton-${i}`).map(
+        (id) => (
+          <ChatListItemSkeleton key={id} />
+        ),
+      )}
     </div>
-  );
+  )
 }
 
 /**
@@ -197,13 +203,13 @@ export function ChatListSkeleton({ count = 8 }: { count?: number }) {
 export function ChatMessageSkeleton({
   isCurrentUser = false,
 }: {
-  isCurrentUser?: boolean;
+  isCurrentUser?: boolean
 }) {
   return (
     <div
       className={cn(
         'flex gap-3',
-        isCurrentUser ? 'justify-end' : 'items-start'
+        isCurrentUser ? 'justify-end' : 'items-start',
       )}
     >
       {!isCurrentUser && (
@@ -212,19 +218,19 @@ export function ChatMessageSkeleton({
       <div
         className={cn(
           'min-w-0 max-w-[70%] space-y-2',
-          isCurrentUser ? 'items-end' : 'items-start'
+          isCurrentUser ? 'items-end' : 'items-start',
         )}
       >
         <Skeleton className="h-3 w-24 max-w-full" />
         <Skeleton
           className={cn(
             'h-20 max-w-full rounded-2xl',
-            isCurrentUser ? 'w-36 sm:w-48' : 'w-40 sm:w-56'
+            isCurrentUser ? 'w-36 sm:w-48' : 'w-40 sm:w-56',
           )}
         />
       </div>
     </div>
-  );
+  )
 }
 
 /**
@@ -239,11 +245,14 @@ export function ChatMessageSkeleton({
 export function ChatMessagesSkeleton({ count = 5 }: { count?: number }) {
   return (
     <div className="space-y-4 p-4">
-      {Array.from({ length: count }).map((_, i) => (
-        <ChatMessageSkeleton key={i} isCurrentUser={i % 3 === 0} />
+      {Array.from({ length: count }, (_, i) => ({
+        id: `chat-message-skeleton-${i}`,
+        isCurrentUser: i % 3 === 0,
+      })).map(({ id, isCurrentUser }) => (
+        <ChatMessageSkeleton key={id} isCurrentUser={isCurrentUser} />
       ))}
     </div>
-  );
+  )
 }
 
 /**
@@ -295,7 +304,7 @@ export function ProfileHeaderSkeleton() {
         </div>
       </div>
     </div>
-  );
+  )
 }
 
 /**
@@ -322,7 +331,7 @@ export function LeaderboardItemSkeleton() {
         </div>
       </div>
     </div>
-  );
+  )
 }
 
 /**
@@ -337,11 +346,13 @@ export function LeaderboardItemSkeleton() {
 export function LeaderboardSkeleton({ count = 10 }: { count?: number }) {
   return (
     <div className="w-full">
-      {Array.from({ length: count }).map((_, i) => (
-        <LeaderboardItemSkeleton key={i} />
-      ))}
+      {Array.from({ length: count }, (_, i) => `leaderboard-skeleton-${i}`).map(
+        (id) => (
+          <LeaderboardItemSkeleton key={id} />
+        ),
+      )}
     </div>
-  );
+  )
 }
 
 /**
@@ -357,15 +368,15 @@ export function WidgetPanelSkeleton() {
     <div className="rounded-2xl border border-border bg-card/50 p-4 backdrop-blur">
       <Skeleton className="mb-3 h-5 w-32 max-w-full" />
       <div className="space-y-2">
-        {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} className="space-y-2 rounded-lg bg-muted/30 p-3">
+        {['widget-1', 'widget-2', 'widget-3', 'widget-4'].map((id) => (
+          <div key={id} className="space-y-2 rounded-lg bg-muted/30 p-3">
             <Skeleton className="h-4 w-3/4 max-w-full" />
             <Skeleton className="h-3 w-1/2 max-w-full" />
           </div>
         ))}
       </div>
     </div>
-  );
+  )
 }
 
 /**
@@ -393,7 +404,7 @@ export function PredictionCardSkeleton() {
         </div>
       </div>
     </div>
-  );
+  )
 }
 
 /**
@@ -419,7 +430,7 @@ export function PoolCardSkeleton() {
         <Skeleton className="h-3 w-16 sm:w-20" />
       </div>
     </div>
-  );
+  )
 }
 
 /**
@@ -437,7 +448,7 @@ export function StatsCardSkeleton() {
       <Skeleton className="mb-1 h-6 w-28 max-w-full sm:h-8 sm:w-32" />
       <Skeleton className="h-3 w-20 max-w-full" />
     </div>
-  );
+  )
 }
 
 /**
@@ -452,13 +463,15 @@ export function StatsCardSkeleton() {
 export function TableRowSkeleton({ columns = 4 }: { columns?: number }) {
   return (
     <div className="flex items-center gap-2 border-border/5 border-b p-2 sm:gap-4 sm:p-3">
-      {Array.from({ length: columns }).map((_, i) => (
-        <div key={i} className="min-w-0 flex-1">
-          <Skeleton className="h-4 w-full" />
-        </div>
-      ))}
+      {Array.from({ length: columns }, (_, i) => `table-row-skeleton-${i}`).map(
+        (id) => (
+          <div key={id} className="min-w-0 flex-1">
+            <Skeleton className="h-4 w-full" />
+          </div>
+        ),
+      )}
     </div>
-  );
+  )
 }
 
 /**
@@ -481,7 +494,7 @@ export function NotificationItemSkeleton() {
         </div>
       </div>
     </div>
-  );
+  )
 }
 
 /**
@@ -502,5 +515,5 @@ export function PageHeaderSkeleton() {
         <Skeleton className="h-10 w-28 sm:w-32" />
       </div>
     </div>
-  );
+  )
 }

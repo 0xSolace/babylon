@@ -26,29 +26,27 @@
  * />
  * ```
  */
-'use client';
-
-import { VolumeX, X } from 'lucide-react';
-import { useState, useTransition } from 'react';
-import { toast } from 'sonner';
+import { VolumeX, X } from 'lucide-react'
+import { useState, useTransition } from 'react'
+import { toast } from 'sonner'
 
 interface MuteUserModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  targetUserId: string;
-  targetDisplayName: string;
-  isNPC?: boolean;
-  onSuccess?: () => void;
+  isOpen: boolean
+  onClose: () => void
+  targetUserId: string
+  targetDisplayName: string
+  isNPC?: boolean
+  onSuccess?: () => void
 }
 
-type MuteDuration = '1d' | '7d' | '30d' | 'forever';
+type MuteDuration = '1d' | '7d' | '30d' | 'forever'
 
 const durationLabels: Record<MuteDuration, string> = {
   '1d': '1 day',
   '7d': '1 week',
   '30d': '1 month',
   forever: 'Forever',
-};
+}
 
 export function MuteUserModal({
   isOpen,
@@ -58,8 +56,8 @@ export function MuteUserModal({
   isNPC = false,
   onSuccess,
 }: MuteUserModalProps) {
-  const [duration, setDuration] = useState<MuteDuration>('7d');
-  const [isMuting, startMuting] = useTransition();
+  const [duration, setDuration] = useState<MuteDuration>('7d')
+  const [isMuting, startMuting] = useTransition()
 
   const handleMute = () => {
     startMuting(async () => {
@@ -70,21 +68,21 @@ export function MuteUserModal({
           action: 'mute',
           duration: duration === 'forever' ? null : duration,
         }),
-      });
+      })
 
       if (!response.ok) {
-        const error = (await response.json()) as { message?: string };
-        toast.error(error.message ?? 'Failed to mute user');
-        return;
+        const error = (await response.json()) as { message?: string }
+        toast.error(error.message ?? 'Failed to mute user')
+        return
       }
 
-      toast.success(`Muted ${targetDisplayName}`);
-      onClose();
-      onSuccess?.();
-    });
-  };
+      toast.success(`Muted ${targetDisplayName}`)
+      onClose()
+      onSuccess?.()
+    })
+  }
 
-  if (!isOpen) return null;
+  if (!isOpen) return null
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
@@ -95,6 +93,7 @@ export function MuteUserModal({
             Mute User
           </h2>
           <button
+            type="button"
             onClick={onClose}
             className="rounded-lg p-1 transition-colors hover:bg-muted"
           >
@@ -119,10 +118,13 @@ export function MuteUserModal({
         </div>
 
         <div className="mb-4">
-          <label className="mb-2 block font-medium text-sm">
+          <label
+            htmlFor="mute-duration-buttons"
+            className="mb-2 block font-medium text-sm"
+          >
             Mute duration
           </label>
-          <div className="grid grid-cols-2 gap-2">
+          <div id="mute-duration-buttons" className="grid grid-cols-2 gap-2">
             {(Object.keys(durationLabels) as MuteDuration[]).map((key) => (
               <button
                 key={key}
@@ -142,6 +144,7 @@ export function MuteUserModal({
 
         <div className="flex gap-3">
           <button
+            type="button"
             onClick={onClose}
             disabled={isMuting}
             className="flex-1 rounded-lg bg-muted px-4 py-2 text-foreground transition-colors hover:bg-muted/80 disabled:opacity-50"
@@ -149,6 +152,7 @@ export function MuteUserModal({
             Cancel
           </button>
           <button
+            type="button"
             onClick={handleMute}
             disabled={isMuting}
             className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-yellow-500 px-4 py-2 text-black transition-colors hover:bg-yellow-600 disabled:opacity-50"
@@ -165,5 +169,5 @@ export function MuteUserModal({
         </div>
       </div>
     </div>
-  );
+  )
 }

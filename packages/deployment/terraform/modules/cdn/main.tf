@@ -288,7 +288,30 @@ resource "aws_cloudfront_distribution" "frontend" {
 
   # Cache behavior for hashed static assets (immutable)
   ordered_cache_behavior {
-    path_pattern     = "/_next/static/*"
+    path_pattern     = "/assets/*"
+    allowed_methods  = ["GET", "HEAD"]
+    cached_methods   = ["GET", "HEAD"]
+    target_origin_id = "S3-frontend"
+
+    forwarded_values {
+      query_string = false
+      cookies {
+        forward = "none"
+      }
+    }
+
+    min_ttl                = 31536000 # 1 year
+    default_ttl            = 31536000
+    max_ttl                = 31536000
+    compress               = true
+    viewer_protocol_policy = "redirect-to-https"
+
+    response_headers_policy_id = aws_cloudfront_response_headers_policy.immutable.id
+  }
+
+  # Cache behavior for static directory
+  ordered_cache_behavior {
+    path_pattern     = "/static/*"
     allowed_methods  = ["GET", "HEAD"]
     cached_methods   = ["GET", "HEAD"]
     target_origin_id = "S3-frontend"

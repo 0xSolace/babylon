@@ -2,19 +2,29 @@
  * Service for creating and managing prediction markets on-chain
  */
 
-import { db, eq, markets } from '@babylon/db';
-import { DIAMOND_ADDRESS, getCurrentRpcUrl, logger } from '@babylon/shared';
+import { db, eq, markets } from '@babylon/db'
+import { DIAMOND_ADDRESS, getCurrentRpcUrl, logger } from '@babylon/shared'
 import {
   type Address,
   createPublicClient,
   createWalletClient,
+  type Hex,
   http,
   keccak256,
   toBytes,
-} from 'viem';
-import { privateKeyToAccount } from 'viem/accounts';
-import { baseSepolia } from 'viem/chains';
-import { getDeployerPrivateKey, hasDeployerKey } from '../config/dev-keys';
+} from 'viem'
+import { privateKeyToAccount } from 'viem/accounts'
+import { baseSepolia } from 'viem/chains'
+import { getDeployerPrivateKey, hasDeployerKey } from '../config/dev-keys'
+
+// Type for log with topics (viem logs may not include topics in type)
+type LogWithTopics = {
+  address: Address
+  topics: Hex[]
+  data: Hex
+  blockNumber: bigint
+  transactionHash: Hex
+}
 
 /**
  * Create a prediction market on-chain
@@ -26,10 +36,10 @@ import { getDeployerPrivateKey, hasDeployerKey } from '../config/dev-keys';
 export async function createMarketOnChain(
   question: string,
   endDate: Date,
-  oracleAddress?: Address
+  oracleAddress?: Address,
 ): Promise<`0x${string}` | null> {
-  const diamondAddress = DIAMOND_ADDRESS as Address;
-  const rpcUrl = getCurrentRpcUrl();
+  const diamondAddress = DIAMOND_ADDRESS as Address
+  const rpcUrl = getCurrentRpcUrl()
 
   if (!diamondAddress || !hasDeployerKey()) {
     logger.debug(
@@ -39,12 +49,12 @@ export async function createMarketOnChain(
         hasKey: hasDeployerKey(),
         hasRpc: !!rpcUrl,
       },
-      'OnChainMarketService'
-    );
-    return null;
+      'OnChainMarketService',
+    )
+    return null
   }
 
-  const deployerPrivateKey = getDeployerPrivateKey();
+  const deployerPrivateKey = getDeployerPrivateKey()
 
   const publicClient = createPublicClient({
     chain: rpcUrl.includes('localhost')
@@ -56,9 +66,9 @@ export async function createMarketOnChain(
         }
       : baseSepolia,
     transport: http(rpcUrl),
-  });
+  })
 
-  const account = privateKeyToAccount(deployerPrivateKey);
+  const account = privateKeyToAccount(deployerPrivateKey)
   const walletClient = createWalletClient({
     account,
     chain: rpcUrl.includes('localhost')
@@ -70,16 +80,16 @@ export async function createMarketOnChain(
         }
       : baseSepolia,
     transport: http(rpcUrl),
-  });
+  })
 
   // Use deployer address as oracle if none provided
-  const oracle = oracleAddress || account.address;
+  const oracle = oracleAddress || account.address
 
   // Convert endDate to Unix timestamp
-  const resolveAt = BigInt(Math.floor(endDate.getTime() / 1000));
+  const resolveAt = BigInt(Math.floor(endDate.getTime() / 1000))
 
   // Binary market: Yes/No outcomes
-  const outcomes = ['Yes', 'No'];
+  const outcomes = ['Yes', 'No']
 
   logger.info(
     'Creating market on-chain',
@@ -88,12 +98,12 @@ export async function createMarketOnChain(
       resolveAt: resolveAt.toString(),
       oracle,
     },
-    'OnChainMarketService'
-  );
+    'OnChainMarketService',
+  )
 
   // Get oracle address - use deployer if none provided
   // In production, this should be a proper oracle contract address
-  const oracleAddr = oracleAddress || account.address;
+  const oracleAddr = oracleAddress || account.address
 
   // Use object-based ABI format for viem compatibility
   const createMarketAbi = [
@@ -109,26 +119,26 @@ export async function createMarketOnChain(
       outputs: [{ name: 'marketId', type: 'bytes32' }],
       stateMutability: 'nonpayable',
     },
-  ] as const;
+  ] as const
 
   const txHash = await walletClient.writeContract({
     address: diamondAddress,
     abi: createMarketAbi,
     functionName: 'createMarket',
     args: [question, outcomes, resolveAt, oracleAddr],
-  });
+  } as Parameters<typeof walletClient.writeContract>[0])
 
   logger.info(
     'Market creation transaction sent',
     { txHash },
-    'OnChainMarketService'
-  );
+    'OnChainMarketService',
+  )
 
   // Wait for confirmation
   const receipt = await publicClient.waitForTransactionReceipt({
     hash: txHash,
     confirmations: 1,
-  });
+  })
 
   if (receipt.status === 'success') {
     // Extract market ID from events
@@ -138,25 +148,27 @@ export async function createMarketOnChain(
     // topics[1] = marketId (indexed, first parameter)
 
     // Calculate event signature hash
-    const eventSignature = 'MarketCreated(bytes32,string,uint8,uint256)';
-    const eventSignatureHash = keccak256(toBytes(eventSignature));
+    const eventSignature = 'MarketCreated(bytes32,string,uint8,uint256)'
+    const eventSignatureHash = keccak256(toBytes(eventSignature))
 
-    const marketCreatedEvent = receipt.logs.find((log) => {
+    // Viem Log type includes topics, cast is safe as structure matches
+    const logsWithTopics = receipt.logs as LogWithTopics[]
+    const marketCreatedEvent = logsWithTopics.find((log) => {
       // Check if this log matches the MarketCreated event
       return (
         log.topics[0]?.toLowerCase() === eventSignatureHash.toLowerCase() &&
         log.topics.length >= 2
-      );
-    });
+      )
+    })
 
-    if (marketCreatedEvent && marketCreatedEvent.topics[1]) {
-      const marketId = marketCreatedEvent.topics[1] as `0x${string}`;
+    if (marketCreatedEvent?.topics[1]) {
+      const marketId = marketCreatedEvent.topics[1] as `0x${string}`
       logger.info(
         'Market created on-chain successfully',
         { marketId, txHash },
-        'OnChainMarketService'
-      );
-      return marketId;
+        'OnChainMarketService',
+      )
+      return marketId
     }
     // Fallback: try to read the return value from the transaction
     // The createMarket function returns bytes32 marketId
@@ -175,33 +187,33 @@ export async function createMarketOnChain(
       },
       fromBlock: receipt.blockNumber,
       toBlock: receipt.blockNumber,
-    });
+    })
 
-    const firstEvent = events[0];
+    const firstEvent = events[0]
     if (firstEvent?.args.marketId) {
-      const marketId = firstEvent.args.marketId as `0x${string}`;
+      const marketId = firstEvent.args.marketId as `0x${string}`
       logger.info(
         'Market created on-chain successfully (from event logs)',
         { marketId, txHash },
-        'OnChainMarketService'
-      );
-      return marketId;
+        'OnChainMarketService',
+      )
+      return marketId
     }
 
     logger.warn(
       'Could not extract market ID from events, will retry later',
       { txHash },
-      'OnChainMarketService'
-    );
+      'OnChainMarketService',
+    )
     // Return null - caller can retry with getMarketIdFromTx
-    return null;
+    return null
   }
   logger.error(
     'Market creation transaction failed',
     { txHash },
-    'OnChainMarketService'
-  );
-  return null;
+    'OnChainMarketService',
+  )
+  return null
 }
 
 /**
@@ -209,9 +221,9 @@ export async function createMarketOnChain(
  * This is a fallback if we couldn't extract it from the receipt
  */
 export async function getMarketIdFromTx(
-  txHash: `0x${string}`
+  txHash: `0x${string}`,
 ): Promise<`0x${string}` | null> {
-  const rpcUrl = getCurrentRpcUrl();
+  const rpcUrl = getCurrentRpcUrl()
 
   const publicClient = createPublicClient({
     chain: rpcUrl.includes('localhost')
@@ -223,23 +235,25 @@ export async function getMarketIdFromTx(
         }
       : baseSepolia,
     transport: http(rpcUrl),
-  });
+  })
 
-  const receipt = await publicClient.getTransactionReceipt({ hash: txHash });
+  const receipt = await publicClient.getTransactionReceipt({ hash: txHash })
 
   // Look for MarketCreated event using event signature
-  const eventSignature = 'MarketCreated(bytes32,string,uint8,uint256)';
-  const eventSignatureHash = keccak256(toBytes(eventSignature));
+  const eventSignature = 'MarketCreated(bytes32,string,uint8,uint256)'
+  const eventSignatureHash = keccak256(toBytes(eventSignature))
 
-  const marketCreatedEvent = receipt.logs.find((log) => {
+  // Viem Log type includes topics, cast is safe as structure matches
+  const logsWithTopics = receipt.logs as LogWithTopics[]
+  const marketCreatedEvent = logsWithTopics.find((log) => {
     return (
       log.topics[0]?.toLowerCase() === eventSignatureHash.toLowerCase() &&
       log.topics.length >= 2
-    );
-  });
+    )
+  })
 
-  if (marketCreatedEvent && marketCreatedEvent.topics[1]) {
-    return marketCreatedEvent.topics[1] as `0x${string}`;
+  if (marketCreatedEvent?.topics[1]) {
+    return marketCreatedEvent.topics[1] as `0x${string}`
   }
 
   // Try reading events using getLogs
@@ -257,14 +271,14 @@ export async function getMarketIdFromTx(
     },
     fromBlock: receipt.blockNumber,
     toBlock: receipt.blockNumber,
-  });
+  })
 
-  const firstEvent = events[0];
+  const firstEvent = events[0]
   if (firstEvent?.args.marketId) {
-    return firstEvent.args.marketId as `0x${string}`;
+    return firstEvent.args.marketId as `0x${string}`
   }
 
-  return null;
+  return null
 }
 
 /**
@@ -276,38 +290,63 @@ export async function ensureMarketOnChain(marketId: string): Promise<boolean> {
     .select()
     .from(markets)
     .where(eq(markets.id, marketId))
-    .limit(1);
+    .limit(1)
 
-  const market = result[0];
+  const row = result[0]
 
-  if (!market) {
-    logger.warn('Market not found', { marketId }, 'OnChainMarketService');
-    return false;
+  if (!row) {
+    logger.warn('Market not found', { marketId }, 'OnChainMarketService')
+    return false
   }
+
+  // Extract market properties with proper type coercion
+  const marketOnChainId = row.onChainMarketId
+    ? String(row.onChainMarketId)
+    : null
 
   // If already has onChainMarketId, skip
-  if (market.onChainMarketId) {
+  if (marketOnChainId) {
     logger.debug(
       'Market already has onChainMarketId',
-      { marketId, onChainMarketId: market.onChainMarketId },
-      'OnChainMarketService'
-    );
-    return true;
+      { marketId, onChainMarketId: marketOnChainId },
+      'OnChainMarketService',
+    )
+    return true
   }
 
-  // Create market on-chain
+  // Create market on-chain - coerce endDate to Date if present
+  const rawEndDate = row.endDate
+  const marketEndDate =
+    rawEndDate instanceof Date
+      ? rawEndDate
+      : rawEndDate
+        ? new Date(String(rawEndDate))
+        : null
+  if (!marketEndDate) {
+    logger.warn(
+      'Market has no end date, cannot create on-chain',
+      { marketId },
+      'OnChainMarketService',
+    )
+    return false
+  }
+
+  // Extract question and oracle address with proper coercion
+  const marketQuestion = row.question ? String(row.question) : ''
+  const rawOracleAddress = row.oracleAddress ? String(row.oracleAddress) : null
+
   const onChainMarketId = await createMarketOnChain(
-    market.question,
-    market.endDate,
-    market.oracleAddress as Address | undefined
-  );
+    marketQuestion,
+    marketEndDate,
+    rawOracleAddress as Address | undefined,
+  )
 
   if (onChainMarketId) {
     // Update database with onChainMarketId
     // Get oracle address from deployer private key if not set
-    let oracleAddr: string | null = market.oracleAddress;
+    let oracleAddr: string | null = rawOracleAddress
     if (!oracleAddr && hasDeployerKey()) {
-      oracleAddr = privateKeyToAccount(getDeployerPrivateKey()).address;
+      oracleAddr = privateKeyToAccount(getDeployerPrivateKey()).address
     }
 
     await db
@@ -316,19 +355,19 @@ export async function ensureMarketOnChain(marketId: string): Promise<boolean> {
         onChainMarketId,
         oracleAddress: oracleAddr,
       })
-      .where(eq(markets.id, marketId));
+      .where(eq(markets.id, marketId))
 
     logger.info(
       'Market linked to on-chain market',
       { marketId, onChainMarketId },
-      'OnChainMarketService'
-    );
-    return true;
+      'OnChainMarketService',
+    )
+    return true
   }
   logger.warn(
     'Failed to create market on-chain',
     { marketId },
-    'OnChainMarketService'
-  );
-  return false;
+    'OnChainMarketService',
+  )
+  return false
 }

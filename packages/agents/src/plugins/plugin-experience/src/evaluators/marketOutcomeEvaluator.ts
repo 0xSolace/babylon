@@ -1,7 +1,7 @@
 /**
  * Market Outcome Evaluator
  *
- * Consolidated evaluator that:
+ * Evaluator that:
  * 1. Tracks NPC trust scores (who to believe)
  * 2. Evaluates agent's own performance (win/loss tracking)
  * 3. Records learning experiences from market outcomes
@@ -9,35 +9,35 @@
  * Runs automatically when markets resolve.
  */
 
-import { db } from '@babylon/db';
+import { db } from '@babylon/db'
 import {
   type Evaluator,
   type IAgentRuntime,
   logger,
   type Memory,
   type State,
-} from '@elizaos/core';
+} from '@elizaos/core'
 
 interface NPCTrustScore {
-  accuracy: number; // 0-1, percentage of correct predictions
-  sampleSize: number; // Number of predictions tracked
-  lastUpdated: string;
+  accuracy: number // 0-1, percentage of correct predictions
+  sampleSize: number // Number of predictions tracked
+  lastUpdated: string
 }
 
 interface AgentPerformanceScore {
-  marketsTraded: number;
-  correctPredictions: number;
-  incorrectPredictions: number;
-  winRate: number;
-  totalPnL: number;
-  lastUpdated: string;
+  marketsTraded: number
+  correctPredictions: number
+  incorrectPredictions: number
+  winRate: number
+  totalPnL: number
+  lastUpdated: string
 }
 
 /**
  * Extract YES/NO prediction from post content
  */
 function extractPredictionFromContent(content: string): 'YES' | 'NO' | null {
-  const lower = content.toLowerCase();
+  const lower = content.toLowerCase()
 
   // Strong indicators
   if (
@@ -46,7 +46,7 @@ function extractPredictionFromContent(content: string): 'YES' | 'NO' | null {
     lower.includes('bullish') ||
     lower.includes('going to win')
   ) {
-    return 'YES';
+    return 'YES'
   }
 
   if (
@@ -55,21 +55,21 @@ function extractPredictionFromContent(content: string): 'YES' | 'NO' | null {
     lower.includes('bearish') ||
     lower.includes('going to lose')
   ) {
-    return 'NO';
+    return 'NO'
   }
 
   // Sentiment analysis
   const positiveCount = (
     content.match(/succeed|success|win|positive|optimistic|confident/gi) || []
-  ).length;
+  ).length
   const negativeCount = (
     content.match(/fail|failure|lose|negative|pessimistic|doubt/gi) || []
-  ).length;
+  ).length
 
-  if (positiveCount > negativeCount + 2) return 'YES';
-  if (negativeCount > positiveCount + 2) return 'NO';
+  if (positiveCount > negativeCount + 2) return 'YES'
+  if (negativeCount > positiveCount + 2) return 'NO'
 
-  return null;
+  return null
 }
 
 export const marketOutcomeEvaluator: Evaluator = {
@@ -83,39 +83,39 @@ export const marketOutcomeEvaluator: Evaluator = {
   validate: async (
     _runtime: IAgentRuntime,
     message: Memory,
-    _state?: State
+    _state?: State,
   ): Promise<boolean> => {
-    const content = message.content;
+    const content = message.content
 
     // Run when a market has resolved
     const isResolution =
       content.text?.includes('market resolved') ||
       content.text?.includes('question resolved') ||
-      content.action === 'MARKET_RESOLVED';
+      content.action === 'MARKET_RESOLVED'
 
-    return isResolution;
+    return isResolution
   },
 
   handler: async (
     runtime: IAgentRuntime,
     message: Memory,
-    _state?: State
+    _state?: State,
   ): Promise<void> => {
-    const questionNumber = message.content.questionNumber as number;
-    const outcome = message.content.outcome as boolean;
+    const questionNumber = message.content.questionNumber as number
+    const outcome = message.content.outcome as boolean
 
     if (!questionNumber || outcome === undefined) {
-      return;
+      return
     }
 
     logger.info(
-      `[Market Learning] Processing market ${questionNumber} outcome: ${outcome ? 'YES' : 'NO'}`
-    );
+      `[Market Learning] Processing market ${questionNumber} outcome: ${outcome ? 'YES' : 'NO'}`,
+    )
 
     // === 1. UPDATE NPC TRUST SCORES ===
 
     // Only analyze posts up to resolution time (no future posts)
-    const now = new Date();
+    const now = new Date()
     const posts = await db.post.findMany({
       where: {
         gameId: questionNumber.toString(),
@@ -128,62 +128,62 @@ export const marketOutcomeEvaluator: Evaluator = {
         authorId: true,
       },
       take: 500,
-    });
+    })
 
     // Fetch author details separately
-    const authorIds = [...new Set(posts.map((p) => p.authorId))];
+    const authorIds = [...new Set(posts.map((p) => p.authorId))]
     const authors = await db.user.findMany({
       where: { id: { in: authorIds } },
       select: { id: true, displayName: true, isActor: true },
-    });
-    const authorMap = new Map(authors.map((a) => [a.id, a]));
+    })
+    const authorMap = new Map(authors.map((a) => [a.id, a]))
 
-    const npcPosts = posts.filter((p) => authorMap.get(p.authorId)?.isActor);
+    const npcPosts = posts.filter((p) => authorMap.get(p.authorId)?.isActor)
 
     /**
      * Get current trust scores from database.
      *
      * Trust scores are computed from historical performance and stored in AgentPerformanceMetrics.
      */
-    const npcTrust: Record<string, NPCTrustScore> = {};
+    const npcTrust: Record<string, NPCTrustScore> = {}
 
     // Trust scores are computed from post outcomes, not from AgentPerformanceMetrics
     // AgentPerformanceMetrics is for user-controlled agents, not NPCs
     // NPC trust scores are built incrementally as we evaluate their predictions
 
-    let npcUpdated = 0;
+    let npcUpdated = 0
 
     for (const post of npcPosts) {
-      const author = authorMap.get(post.authorId);
-      const npcName = author?.displayName || 'Unknown';
-      const predicted = extractPredictionFromContent(post.content);
+      const author = authorMap.get(post.authorId)
+      const npcName = author?.displayName || 'Unknown'
+      const predicted = extractPredictionFromContent(post.content)
 
-      if (!predicted) continue;
+      if (!predicted) continue
 
-      const npcSaidYes = predicted === 'YES';
-      const correct = npcSaidYes === outcome;
+      const npcSaidYes = predicted === 'YES'
+      const correct = npcSaidYes === outcome
 
       const current: NPCTrustScore = npcTrust[npcName] || {
         accuracy: 0.5,
         sampleSize: 0,
         lastUpdated: new Date().toISOString(),
-      };
-
-      current.sampleSize++;
-
-      const learningRate = 0.1;
-      if (correct) {
-        current.accuracy =
-          current.accuracy + learningRate * (1.0 - current.accuracy);
-      } else {
-        current.accuracy = current.accuracy - learningRate * current.accuracy;
       }
 
-      current.accuracy = Math.max(0.1, Math.min(0.9, current.accuracy));
-      current.lastUpdated = new Date().toISOString();
+      current.sampleSize++
 
-      npcTrust[npcName] = current;
-      npcUpdated++;
+      const learningRate = 0.1
+      if (correct) {
+        current.accuracy =
+          current.accuracy + learningRate * (1.0 - current.accuracy)
+      } else {
+        current.accuracy = current.accuracy - learningRate * current.accuracy
+      }
+
+      current.accuracy = Math.max(0.1, Math.min(0.9, current.accuracy))
+      current.lastUpdated = new Date().toISOString()
+
+      npcTrust[npcName] = current
+      npcUpdated++
     }
 
     /**
@@ -192,8 +192,8 @@ export const marketOutcomeEvaluator: Evaluator = {
      * messageManager API not available - trust scores updated in memory only.
      */
     logger.info(
-      `[NPC Trust] Updated ${npcUpdated} NPC trust scores (in-memory only)`
-    );
+      `[NPC Trust] Updated ${npcUpdated} NPC trust scores (in-memory only)`,
+    )
 
     // === 2. EVALUATE AGENT'S OWN PERFORMANCE ===
 
@@ -208,7 +208,7 @@ export const marketOutcomeEvaluator: Evaluator = {
         shares: true,
         avgPrice: true,
       },
-    });
+    })
 
     if (agentPosition) {
       /**
@@ -223,54 +223,56 @@ export const marketOutcomeEvaluator: Evaluator = {
         winRate: 0,
         totalPnL: 0,
         lastUpdated: new Date().toISOString(),
-      };
+      }
 
-      performance.marketsTraded++;
+      performance.marketsTraded++
 
-      const agentPredictedYes = agentPosition.side;
-      const agentCorrect = agentPredictedYes === outcome;
+      // side is boolean in the database (true = YES, false = NO)
+      const agentPredictedYes =
+        agentPosition.side === true || agentPosition.side === 'true'
+      const agentCorrect = agentPredictedYes === outcome
 
       if (agentCorrect) {
-        performance.correctPredictions++;
+        performance.correctPredictions++
         const profit =
           parseFloat(agentPosition.shares.toString()) *
-          (1 - parseFloat(agentPosition.avgPrice.toString()));
-        performance.totalPnL += profit;
+          (1 - parseFloat(agentPosition.avgPrice.toString()))
+        performance.totalPnL += profit
       } else {
-        performance.incorrectPredictions++;
+        performance.incorrectPredictions++
         const loss =
           parseFloat(agentPosition.shares.toString()) *
-          parseFloat(agentPosition.avgPrice.toString());
-        performance.totalPnL -= loss;
+          parseFloat(agentPosition.avgPrice.toString())
+        performance.totalPnL -= loss
       }
 
       performance.winRate =
-        performance.correctPredictions / performance.marketsTraded;
-      performance.lastUpdated = new Date().toISOString();
+        performance.correctPredictions / performance.marketsTraded
+      performance.lastUpdated = new Date().toISOString()
 
       // Save performance
       /**
        * messageManager API not available - performance tracked in-memory only.
        */
       logger.info(
-        `[Performance] ${agentCorrect ? 'WIN' : 'LOSS'} - Win rate: ${(performance.winRate * 100).toFixed(0)}% (${performance.correctPredictions}/${performance.marketsTraded}), P&L: $${performance.totalPnL.toFixed(2)}`
-      );
+        `[Performance] ${agentCorrect ? 'WIN' : 'LOSS'} - Win rate: ${(performance.winRate * 100).toFixed(0)}% (${performance.correctPredictions}/${performance.marketsTraded}), P&L: $${performance.totalPnL.toFixed(2)}`,
+      )
     }
 
     // === 3. LOG TOP PERFORMERS ===
 
     const sorted = Object.entries(npcTrust).sort(
-      (a, b) => b[1].accuracy - a[1].accuracy
-    );
+      (a, b) => b[1].accuracy - a[1].accuracy,
+    )
     if (sorted.length > 0) {
-      const top3 = sorted.slice(0, 3);
+      const top3 = sorted.slice(0, 3)
       const topNPCsInfo = top3
         .map(
           ([name, data]) =>
-            `${name}: ${(data.accuracy * 100).toFixed(0)}% (${data.sampleSize} samples)`
+            `${name}: ${(data.accuracy * 100).toFixed(0)}% (${data.sampleSize} samples)`,
         )
-        .join(', ');
-      logger.info(`[Top NPCs] ${topNPCsInfo}`);
+        .join(', ')
+      logger.info(`[Top NPCs] ${topNPCsInfo}`)
     }
   },
-};
+}

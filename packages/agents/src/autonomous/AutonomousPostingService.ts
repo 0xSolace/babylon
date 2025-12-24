@@ -4,36 +4,37 @@
  * Handles agents creating posts autonomously
  */
 
-import { countTokensSync, truncateToTokenLimitSync } from '@babylon/api';
-import { agentTrades, db, desc, eq, posts } from '@babylon/db';
+import { countTokensSync, truncateToTokenLimitSync } from '@babylon/api'
+import { agentTrades, db, desc, eq, posts } from '@babylon/db'
 import {
   characterMappingService,
   formatRandomContext,
   generateRandomMarketContext,
   generateWorldContext,
-} from '@babylon/engine';
-import type { IAgentRuntime } from '@elizaos/core';
-import { parseKeyValueXml } from '@elizaos/core';
-import { callJejuDirect } from '../llm';
-import { getAgentConfig } from '../shared/agent-config';
-import { logger } from '../shared/logger';
-import { getAgentContext } from './agent-context';
-import { executeDirectPost } from './DirectExecutors';
+} from '@babylon/engine'
+import { toNull } from '@babylon/shared'
+import type { IAgentRuntime } from '@elizaos/core'
+import { parseKeyValueXml } from '@elizaos/core'
+import { callAgentLLM } from '../llm'
+import { getAgentConfig } from '../shared/agent-config'
+import { logger } from '../shared/logger'
+import { getAgentContext } from './agent-context'
+import { executeDirectPost } from './DirectExecutors'
 
 /**
  * Format relative time for recent posts (e.g., "2h ago", "15m ago")
  */
 function getTimeAgo(date: Date): string {
-  const now = Date.now();
-  const diffMs = now - date.getTime();
-  const diffMins = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMs / 3600000);
-  const diffDays = Math.floor(diffMs / 86400000);
+  const now = Date.now()
+  const diffMs = now - date.getTime()
+  const diffMins = Math.floor(diffMs / 60000)
+  const diffHours = Math.floor(diffMs / 3600000)
+  const diffDays = Math.floor(diffMs / 86400000)
 
-  if (diffMins < 1) return 'just now';
-  if (diffMins < 60) return `${diffMins}m ago`;
-  if (diffHours < 24) return `${diffHours}h ago`;
-  return `${diffDays}d ago`;
+  if (diffMins < 1) return 'just now'
+  if (diffMins < 60) return `${diffMins}m ago`
+  if (diffHours < 24) return `${diffHours}h ago`
+  return `${diffDays}d ago`
 }
 
 export class AutonomousPostingService {
@@ -44,13 +45,13 @@ export class AutonomousPostingService {
    */
   async createAgentPost(
     agentUserId: string,
-    _runtime: IAgentRuntime
+    _runtime: IAgentRuntime,
   ): Promise<string | null> {
     // Resolve agent context (NPC vs USER_CONTROLLED)
     const { displayName: agentDisplayName, lifetimePnL: agentLifetimePnL } =
-      await getAgentContext(agentUserId);
+      await getAgentContext(agentUserId)
 
-    const config = await getAgentConfig(agentUserId);
+    const config = await getAgentConfig(agentUserId)
 
     // Get recent agent activity for context
     const recentTrades = await db
@@ -58,9 +59,9 @@ export class AutonomousPostingService {
       .from(agentTrades)
       .where(eq(agentTrades.agentUserId, agentUserId))
       .orderBy(desc(agentTrades.executedAt))
-      .limit(5);
+      .limit(5)
 
-    const recentPosts = await db
+    const recentPostsRaw = await db
       .select({
         id: posts.id,
         content: posts.content,
@@ -69,7 +70,10 @@ export class AutonomousPostingService {
       .from(posts)
       .where(eq(posts.authorId, agentUserId))
       .orderBy(desc(posts.createdAt))
-      .limit(5);
+      .limit(5)
+
+    // Drizzle select returns properly typed results based on the schema
+    const recentPosts = recentPostsRaw
 
     // Get random market context for variety
     const marketContext = await generateRandomMarketContext({
@@ -78,14 +82,14 @@ export class AutonomousPostingService {
       includeQuestions: true,
       includePosts: true,
       includeEvents: false,
-    });
-    const contextString = formatRandomContext(marketContext);
+    })
+    const contextString = formatRandomContext(marketContext)
 
     // Get world context for consistent parody names
-    const worldContext = await generateWorldContext({ maxActors: 20 });
+    const worldContext = await generateWorldContext({ maxActors: 20 })
 
     // Build prompt for post generation
-    const MAX_TOKENS = 280;
+    const MAX_TOKENS = 280
     const prompt = `CRITICAL: You have only ${MAX_TOKENS} tokens. Your response MUST start with <response> immediately. No <think> tags. No reasoning.
 
 ${config?.systemPrompt ?? 'You are an AI agent on Babylon.'}
@@ -155,8 +159,8 @@ BASE POINTS (pick ONE main strategy):
 +10 points: Comparison between 2+ assets
 +10 points: Urgent breaking news style
 
-VARIATION BONUS POINTS (stack these!):
-+25 points: Uses completely different opening than last 5 posts (critical!)
+VARIATION BONUS POINTS (stack these):
++25 points: Uses completely different opening than last 5 posts (critical)
 +20 points: Combines 2+ strategies (e.g., question + sarcasm, prediction + data)
 +15 points: References specific price/percentage/number
 +15 points: Mentions 2+ different actors/entities
@@ -236,7 +240,7 @@ CRITICAL SCORING CHECK:
 1. Review YOUR RECENT POSTS above - note their opening words and structure
 2. Pick a DIFFERENT strategy and opening than you've used recently
 3. Mentally calculate your score using the rubric above
-4. TARGET: 90+ points (must get variation bonuses!)
+4. TARGET: 90+ points (must get variation bonuses)
 5. If below 70 points, try a completely different approach
 6. NEVER post anything with banned patterns (-100 pts = instant fail)
 7. NEVER repeat the same topic/market you just posted about
@@ -254,51 +258,51 @@ To skip (if you've recently covered this topic or have nothing new to add):
 <response>
 <action>skip</action>
 <reason>brief reason why you're skipping</reason>
-</response>`;
+</response>`
 
     // Ensure prompt fits within 32K context limit (W&B trained models)
-    const estimatedTokens = countTokensSync(prompt);
-    let finalPrompt = prompt;
+    const estimatedTokens = countTokensSync(prompt)
+    let finalPrompt = prompt
 
     if (estimatedTokens > 30000) {
       // 30K with 2K safety margin
       logger.warn(
         `Post generation prompt too long: ${estimatedTokens} tokens, truncating`,
-        { agentUserId }
-      );
+        { agentUserId },
+      )
       const truncated = truncateToTokenLimitSync(prompt, 30000, {
         ellipsis: true,
-      });
-      finalPrompt = truncated.text;
-      logger.info(`Truncated to ${truncated.tokens} tokens`, { agentUserId });
+      })
+      finalPrompt = truncated.text
+      logger.info(`Truncated to ${truncated.tokens} tokens`, { agentUserId })
     }
 
     // Use large model (qwen3-32b or trained W&B model) for post generation with retry loop
-    const MAX_ATTEMPTS = 3;
-    let cleanContent: string | null = null;
+    const MAX_ATTEMPTS = 3
+    let cleanContent: string | null = null
 
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
       try {
-        const isRetry = attempt > 1;
+        const isRetry = attempt > 1
         const currentPrompt = isRetry
           ? `${finalPrompt}\n\nREMINDER: You MUST output valid XML. Start with <response>, include <action> (post or skip), and <text> for posts. No <think> tags.`
-          : finalPrompt;
+          : finalPrompt
 
-        const postContent = await callJejuDirect({
+        const postContent = await callAgentLLM({
           prompt: currentPrompt,
-          system: config?.systemPrompt ?? undefined,
+          system: config?.systemPrompt,
           modelSize: 'large', // Uses trained W&B model if available, else qwen3-32b
           runtime: _runtime, // Pass runtime to access W&B trained models AND trajectory context
           temperature: isRetry ? 0.6 : 0.8,
           maxTokens: MAX_TOKENS,
           actionType: 'generate_autonomous_post',
           purpose: 'action', // RLAIF: This is a content generation action
-        });
+        })
 
         // Extract <response>...</response> block before parsing
         const responseMatch = postContent.match(
-          /<response>([\s\S]*?)<\/response>/i
-        );
+          /<response>([\s\S]*?)<\/response>/i,
+        )
         if (!responseMatch) {
           logger.warn(
             'No <response> block found in post generation',
@@ -307,33 +311,43 @@ To skip (if you've recently covered this topic or have nothing new to add):
               attempt,
               raw: postContent.substring(0, 300),
             },
-            'AutonomousPosting'
-          );
-          continue;
+            'AutonomousPosting',
+          )
+          continue
         }
 
         // Parse the extracted XML response
-        const parsed = parseKeyValueXml(responseMatch[0]) as {
-          action?: string;
-          text?: string;
-          reason?: string;
-        } | null;
+        const rawParsed = parseKeyValueXml(responseMatch[0])
+        const parsed =
+          rawParsed && typeof rawParsed === 'object'
+            ? (rawParsed as Record<string, unknown>)
+            : null
+        const action =
+          parsed && typeof parsed.action === 'string'
+            ? parsed.action
+            : undefined
+        const text =
+          parsed && typeof parsed.text === 'string' ? parsed.text : undefined
+        const reason =
+          parsed && typeof parsed.reason === 'string'
+            ? parsed.reason
+            : undefined
 
         // Check if agent chose to skip
-        if (parsed?.action === 'skip') {
+        if (action === 'skip') {
           logger.info(
             `Agent ${agentDisplayName} chose to skip posting`,
             {
               agentUserId,
-              reason: parsed.reason || 'No reason given',
+              reason: reason || 'No reason given',
             },
-            'AutonomousPosting'
-          );
-          return null;
+            'AutonomousPosting',
+          )
+          return null
         }
 
         // Check if we got valid text
-        if (!parsed?.text || parsed.text.trim().length === 0) {
+        if (!text || text.trim().length === 0) {
           logger.warn(
             'Failed to parse XML response in post generation',
             {
@@ -341,19 +355,19 @@ To skip (if you've recently covered this topic or have nothing new to add):
               attempt,
               raw: postContent.substring(0, 300),
             },
-            'AutonomousPosting'
-          );
-          continue;
+            'AutonomousPosting',
+          )
+          continue
         }
 
         // Success! Clean up the response
-        cleanContent = parsed.text.trim().replace(/^["']|["']$/g, '');
-        break;
+        cleanContent = text.trim().replace(/^["']|["']$/g, '')
+        break
       } catch (error) {
         logger.warn(`Post generation attempt ${attempt} failed`, {
           agentUserId,
           error: String(error),
-        });
+        })
       }
     }
 
@@ -362,14 +376,14 @@ To skip (if you've recently covered this topic or have nothing new to add):
       logger.error(
         `Failed to generate valid post after ${MAX_ATTEMPTS} attempts`,
         { agentUserId },
-        'AutonomousPosting'
-      );
-      return null;
+        'AutonomousPosting',
+      )
+      return null
     }
 
     // Post-process to fix any real names that slipped through
-    const processed = await characterMappingService.transformText(cleanContent);
-    cleanContent = processed.transformedText;
+    const processed = await characterMappingService.transformText(cleanContent)
+    cleanContent = processed.transformedText
 
     if (processed.replacementCount > 0) {
       logger.warn(
@@ -378,8 +392,8 @@ To skip (if you've recently covered this topic or have nothing new to add):
           original: cleanContent.substring(0, 100),
           fixed: processed.transformedText.substring(0, 100),
         },
-        'AutonomousPosting'
-      );
+        'AutonomousPosting',
+      )
     }
 
     logger.info(
@@ -389,8 +403,8 @@ To skip (if you've recently covered this topic or have nothing new to add):
         content: cleanContent,
         length: cleanContent.length,
       },
-      'AutonomousPosting'
-    );
+      'AutonomousPosting',
+    )
 
     if (!cleanContent || cleanContent.length < 10) {
       logger.warn(
@@ -399,34 +413,34 @@ To skip (if you've recently covered this topic or have nothing new to add):
           content: cleanContent,
           length: cleanContent.length,
         },
-        'AutonomousPosting'
-      );
-      return null;
+        'AutonomousPosting',
+      )
+      return null
     }
 
     // Execute via DirectExecutors (handles DB insert and tagging)
     const result = await executeDirectPost({
       agentUserId,
       content: cleanContent,
-    });
+    })
 
     if (!result.success) {
       logger.warn(
         `Failed to create post: ${result.error}`,
         { agentUserId },
-        'AutonomousPosting'
-      );
-      return null;
+        'AutonomousPosting',
+      )
+      return null
     }
 
     logger.info(
       `Agent ${agentDisplayName} created post: ${result.postId}`,
       undefined,
-      'AutonomousPosting'
-    );
+      'AutonomousPosting',
+    )
 
-    return result.postId ?? null;
+    return toNull(result.postId)
   }
 }
 
-export const autonomousPostingService = new AutonomousPostingService();
+export const autonomousPostingService = new AutonomousPostingService()

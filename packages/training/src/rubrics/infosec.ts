@@ -89,7 +89,7 @@ For infosec, steady beats spectacular:
 - Low variance, positive P&L = Excellent
 - High variance with some losses from schemes = Poor
 - No trading due to over-caution = Below average
-`;
+`
 
 export const INFOSEC_PRIORITY_METRICS = [
   'trading.maxDrawdown',
@@ -98,4 +98,4 @@ export const INFOSEC_PRIORITY_METRICS = [
   'social.dmResponseRate',
   'behavior.consistencyScore',
   'trading.totalPnL',
-];
+]

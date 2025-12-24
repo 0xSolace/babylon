@@ -4,6 +4,7 @@
     "lib": ["ES2022", "DOM"],
     "module": "ESNext",
     "moduleResolution": "bundler",
+    "jsx": "react-jsx",
     "strict": true,
     "noImplicitAny": true,
     "strictNullChecks": true,
@@ -43,12 +44,12 @@
       "@babylon/api/*": ["../../packages/api/src/*"],
       "@babylon/messaging": ["../../packages/messaging/src/index.ts"],
       "@babylon/messaging/*": ["../../packages/messaging/src/*"],
-      "@babylon/contracts": ["../../packages/contracts/src/index.ts"],
-      "@babylon/contracts/*": ["../../packages/contracts/*"],
       "@babylon/agents": ["../../packages/agents/src/index.ts"],
       "@babylon/agents/*": ["../../packages/agents/src/*"],
       "@babylon/a2a": ["../../packages/a2a/src/index.ts"],
       "@babylon/a2a/*": ["../../packages/a2a/src/*"],
+      "@babylon/auth": ["../../packages/auth/src/index.ts"],
+      "@babylon/auth/*": ["../../packages/auth/src/*"],
       "@babylon/mcp": ["../../packages/mcp/src/index.ts"],
       "@babylon/training": ["../../packages/training/src/index.ts"],
       "@babylon/training/*": ["../../packages/training/src/*"],
@@ -65,7 +66,6 @@
     "**/__tests__/**/*",
     "src/generate-actor-images.ts",
     "src/migrate-images-to-blob.ts",
-    "src/realtime-daemon.ts",
-    "src/autonomous-agents-demo.ts"
+    "src/realtime-daemon.ts"
   ]
 }

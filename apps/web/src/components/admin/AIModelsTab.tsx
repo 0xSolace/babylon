@@ -1,18 +1,16 @@
-'use client';
-
-import { cn } from '@babylon/shared';
-import { useMutation, useQuery } from '@tanstack/react-query';
-import { AlertCircle, Bot, Check, RefreshCw, Zap } from 'lucide-react';
-import { useState } from 'react';
-import { toast } from 'sonner';
+import { cn } from '@babylon/shared'
+import { useMutation, useQuery } from '@tanstack/react-query'
+import { AlertCircle, Bot, Check, RefreshCw, Zap } from 'lucide-react'
+import { useState } from 'react'
+import { toast } from 'sonner'
 
 /**
  * AI model info structure.
  */
 interface ModelInfo {
-  id: string;
-  name: string;
-  description?: string;
+  id: string
+  name: string
+  description?: string
 }
 
 /**
@@ -20,12 +18,12 @@ interface ModelInfo {
  */
 interface AIModelsData {
   providers: {
-    groq: boolean;
-    claude: boolean;
-    openai: boolean;
-  };
-  activeProvider: 'groq' | 'claude' | 'openai';
-  recommendedModels: ModelInfo[];
+    groq: boolean
+    claude: boolean
+    openai: boolean
+  }
+  activeProvider: 'groq' | 'claude' | 'openai'
+  recommendedModels: ModelInfo[]
 }
 
 /**
@@ -45,39 +43,39 @@ interface AIModelsData {
  */
 export function AIModelsTab() {
   const [testResult, setTestResult] = useState<Record<string, unknown> | null>(
-    null
-  );
+    null,
+  )
 
   const { data, isLoading, refetch } = useQuery<AIModelsData>({
     queryKey: ['admin', 'ai-models'],
     queryFn: async () => {
       const token =
-        typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
+        typeof window !== 'undefined' ? window.__oauth3AccessToken : null
       if (!token) {
-        throw new Error('Not authenticated');
+        throw new Error('Not authenticated')
       }
 
       const response = await fetch('/api/admin/ai-models', {
         headers: {
           Authorization: `Bearer ${token}`,
         },
-      });
+      })
 
       if (!response.ok) {
-        throw new Error('Failed to load AI models');
+        throw new Error('Failed to load AI models')
       }
 
-      const result = await response.json();
-      return result.data;
+      const result = await response.json()
+      return result.data
     },
-  });
+  })
 
   const testMutation = useMutation({
     mutationFn: async () => {
       const token =
-        typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
+        typeof window !== 'undefined' ? window.__oauth3AccessToken : null
       if (!token) {
-        throw new Error('Not authenticated');
+        throw new Error('Not authenticated')
       }
 
       const response = await fetch('/api/admin/ai-models/test', {
@@ -85,58 +83,58 @@ export function AIModelsTab() {
         headers: {
           Authorization: `Bearer ${token}`,
         },
-      });
+      })
 
-      const result = await response.json();
+      const result = await response.json()
 
       if (!response.ok) {
-        setTestResult({ error: result.error, details: result.details });
-        throw new Error(result.error || 'Test failed');
+        setTestResult({ error: result.error, details: result.details })
+        throw new Error(result.error || 'Test failed')
       }
 
-      return result.data;
+      return result.data
     },
     onSuccess: (data) => {
-      setTestResult(data);
-      toast.success(`Test successful! Using ${data.provider}`);
+      setTestResult(data)
+      toast.success(`Test successful! Using ${data.provider}`)
     },
     onError: (error) => {
-      toast.error(error instanceof Error ? error.message : 'Test failed');
+      toast.error(error instanceof Error ? error.message : 'Test failed')
     },
-  });
+  })
 
   const getProviderIcon = (provider: string) => {
     switch (provider) {
       case 'groq':
-        return <Zap className="h-4 w-4" />;
+        return <Zap className="h-4 w-4" />
       case 'claude':
-        return <Bot className="h-4 w-4" />;
+        return <Bot className="h-4 w-4" />
       case 'openai':
-        return <Bot className="h-4 w-4" />;
+        return <Bot className="h-4 w-4" />
       default:
-        return <Bot className="h-4 w-4" />;
+        return <Bot className="h-4 w-4" />
     }
-  };
+  }
 
   const getProviderName = (provider: string) => {
     switch (provider) {
       case 'groq':
-        return 'Groq';
+        return 'Groq'
       case 'claude':
-        return 'Claude (Anthropic)';
+        return 'Claude (Anthropic)'
       case 'openai':
-        return 'OpenAI';
+        return 'OpenAI'
       default:
-        return provider;
+        return provider
     }
-  };
+  }
 
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
         <div className="h-8 w-8 animate-spin rounded-full border-primary border-b-2" />
       </div>
-    );
+    )
   }
 
   if (!data) {
@@ -144,7 +142,7 @@ export function AIModelsTab() {
       <div className="flex items-center justify-center py-12 text-muted-foreground">
         Failed to load AI models configuration
       </div>
-    );
+    )
   }
 
   return (
@@ -158,6 +156,7 @@ export function AIModelsTab() {
           </p>
         </div>
         <button
+          type="button"
           onClick={() => refetch()}
           disabled={isLoading}
           className="rounded-lg p-2 transition-colors hover:bg-accent"
@@ -193,7 +192,7 @@ export function AIModelsTab() {
                 'rounded-lg border p-4 transition-colors',
                 available
                   ? 'border-green-500/30 bg-green-500/5'
-                  : 'border-border bg-muted/20'
+                  : 'border-border bg-muted/20',
               )}
             >
               <div className="flex items-center justify-between">
@@ -278,7 +277,7 @@ export function AIModelsTab() {
             'rounded-lg border p-6',
             testResult.error
               ? 'border-red-500/20 bg-red-500/10'
-              : 'border-green-500/20 bg-green-500/10'
+              : 'border-green-500/20 bg-green-500/10',
           )}
         >
           <h3 className="mb-3 font-semibold text-lg">
@@ -335,12 +334,13 @@ export function AIModelsTab() {
       {/* Action Buttons */}
       <div className="flex items-center justify-end gap-4 border-border border-t pt-4">
         <button
+          type="button"
           onClick={() => testMutation.mutate()}
           disabled={testMutation.isPending}
           className={cn(
             'rounded-lg px-6 py-2 font-medium transition-all',
             'bg-primary text-primary-foreground hover:bg-primary/90',
-            'disabled:cursor-not-allowed disabled:opacity-50'
+            'disabled:cursor-not-allowed disabled:opacity-50',
           )}
         >
           {testMutation.isPending ? (
@@ -357,5 +357,5 @@ export function AIModelsTab() {
         </button>
       </div>
     </div>
-  );
+  )
 }

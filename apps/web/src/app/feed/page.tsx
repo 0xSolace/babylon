@@ -1,6 +1,6 @@
-import { Suspense } from 'react';
-import { FeedSkeleton } from '@/components/shared/Skeleton';
-import { FeedClient } from './FeedClient';
+import { Suspense } from 'react'
+import { FeedSkeleton } from '@/components/shared/Skeleton'
+import { FeedClient } from './FeedClient'
 
 // Server component - fetches initial posts for better FCP/LCP
 // The actual posts fetch happens in FeedClient for now to maintain SSE integration
@@ -20,5 +20,5 @@ export default function FeedPage() {
     <Suspense fallback={<FeedSkeleton />}>
       <FeedClient />
     </Suspense>
-  );
+  )
 }

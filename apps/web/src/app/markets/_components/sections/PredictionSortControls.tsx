@@ -1,28 +1,26 @@
-'use client';
-
-import { cn } from '@babylon/shared';
-import type { LucideIcon } from 'lucide-react';
-import { ArrowUpDown, Clock, Flame } from 'lucide-react';
-import { memo } from 'react';
-import type { PredictionSort } from '@/types/markets';
+import { cn } from '@babylon/shared'
+import type { LucideIcon } from 'lucide-react'
+import { ArrowUpDown, Clock, Flame } from 'lucide-react'
+import { memo } from 'react'
+import type { PredictionSort } from '@/types/markets'
 
 interface PredictionSortControlsProps {
-  activeSort: PredictionSort;
-  onSortChange: (sort: PredictionSort) => void;
+  activeSort: PredictionSort
+  onSortChange: (sort: PredictionSort) => void
   /** If true, uses horizontal scroll on mobile */
-  compact?: boolean;
+  compact?: boolean
 }
 
 const SORT_OPTIONS: Array<{
-  value: PredictionSort;
-  label: string;
-  icon?: LucideIcon;
+  value: PredictionSort
+  label: string
+  icon?: LucideIcon
 }> = [
   { value: 'trending', label: 'Trending', icon: Flame },
   { value: 'volume', label: 'Volume', icon: ArrowUpDown },
   { value: 'newest', label: 'Newest' },
   { value: 'ending-soon', label: 'Ending Soon', icon: Clock },
-];
+]
 
 /**
  * Sort control buttons for prediction markets.
@@ -35,12 +33,11 @@ export const PredictionSortControls = memo(function PredictionSortControls({
   compact = false,
 }: PredictionSortControlsProps) {
   return (
-    <div
-      role="group"
+    <fieldset
       aria-label="Sort options"
       className={cn(
-        'flex gap-2',
-        compact && 'scrollbar-hide overflow-x-auto pb-2'
+        'flex gap-2 border-0 p-0',
+        compact && 'scrollbar-hide overflow-x-auto pb-2',
       )}
     >
       {SORT_OPTIONS.map(({ value, label, icon: Icon }) => (
@@ -54,13 +51,13 @@ export const PredictionSortControls = memo(function PredictionSortControls({
             compact && 'flex-shrink-0 whitespace-nowrap',
             activeSort === value
               ? 'bg-[#0066FF] text-primary-foreground'
-              : 'bg-muted/50 text-muted-foreground hover:bg-muted'
+              : 'bg-muted/50 text-muted-foreground hover:bg-muted',
           )}
         >
           {Icon && <Icon className="mr-1 inline h-3 w-3" />}
           {label}
         </button>
       ))}
-    </div>
-  );
-});
+    </fieldset>
+  )
+})

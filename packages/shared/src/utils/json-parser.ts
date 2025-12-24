@@ -3,12 +3,12 @@
  * Replaces the dangerous `.catch(() => ({}))` pattern
  */
 
-import { logger } from './logger';
+import { logger } from './logger'
 
 export interface ParseResult<T> {
-  success: boolean;
-  data?: T;
-  error?: string;
+  success: boolean
+  data?: T
+  error?: string
 }
 
 /**
@@ -34,21 +34,21 @@ export interface ParseResult<T> {
  */
 export async function parseJsonResponse<T = unknown>(
   response: Response,
-  context?: string
+  context?: string,
 ): Promise<ParseResult<T>> {
   try {
-    const data = (await response.json()) as T;
-    return { success: true, data };
+    const data = (await response.json()) as T
+    return { success: true, data }
   } catch (error) {
     const errorMessage =
-      error instanceof Error ? error.message : 'Failed to parse JSON';
+      error instanceof Error ? error.message : 'Failed to parse JSON'
     logger.warn('JSON parse failed', {
       context,
       status: response.status,
       contentType: response.headers.get('content-type'),
       error: errorMessage,
-    });
-    return { success: false, error: errorMessage };
+    })
+    return { success: false, error: errorMessage }
   }
 }
 
@@ -74,24 +74,24 @@ export async function parseJsonResponse<T = unknown>(
  */
 export function parseJsonString<T = unknown>(
   jsonString: string | null | undefined,
-  context?: string
+  context?: string,
 ): ParseResult<T> {
   if (!jsonString) {
-    return { success: false, error: 'Empty or null input' };
+    return { success: false, error: 'Empty or null input' }
   }
 
   try {
-    const data = JSON.parse(jsonString);
-    return { success: true, data };
+    const data = JSON.parse(jsonString)
+    return { success: true, data }
   } catch (error) {
     const errorMessage =
-      error instanceof Error ? error.message : 'Failed to parse JSON';
+      error instanceof Error ? error.message : 'Failed to parse JSON'
     logger.warn('JSON string parse failed', {
       context,
       preview: jsonString.substring(0, 100),
       error: errorMessage,
-    });
-    return { success: false, error: errorMessage };
+    })
+    return { success: false, error: errorMessage }
   }
 }
 
@@ -116,11 +116,11 @@ export function parseJsonString<T = unknown>(
 export function parseJsonWithFallback<T>(
   jsonString: string | null | undefined,
   fallback: T,
-  context?: string
+  context?: string,
 ): T {
-  const result = parseJsonString<T>(jsonString, context);
+  const result = parseJsonString<T>(jsonString, context)
   if (result.success && result.data !== undefined) {
-    return result.data;
+    return result.data
   }
-  return fallback;
+  return fallback
 }

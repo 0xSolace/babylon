@@ -13,4 +13,4 @@ export {
   type ResourceConfig,
   ResourceType,
   resetBabylonKeepalive,
-} from './BabylonKeepalive';
+} from './BabylonKeepalive'

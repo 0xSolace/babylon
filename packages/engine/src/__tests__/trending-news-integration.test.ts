@@ -7,18 +7,13 @@
 
 /// <reference types="bun-types" />
 
-import { beforeEach, describe, expect, it, mock } from 'bun:test';
-import type { BabylonLLMClient } from '../../engine/llm/openai-client';
-import type {
-  Actor,
-  FeedPost,
-  Organization,
-  Question,
-} from '../../shared/types';
-import { type Article, ArticleGenerator } from '../ArticleGenerator';
-import { FeedGenerator } from '../FeedGenerator';
-import { NewsArticlePacingEngine } from '../NewsArticlePacingEngine';
-import { TrendingTopicsEngine } from '../TrendingTopicsEngine';
+import { beforeEach, describe, expect, it, mock } from 'bun:test'
+import type { Actor, FeedPost, Organization, Question } from '@babylon/shared'
+import { type Article, ArticleGenerator } from '../ArticleGenerator'
+import { FeedGenerator } from '../FeedGenerator'
+import type { BabylonLLMClient } from '../llm/openai-client'
+import { NewsArticlePacingEngine } from '../NewsArticlePacingEngine'
+import { TrendingTopicsEngine } from '../TrendingTopicsEngine'
 
 /**
  * Mock LLM client interface for testing
@@ -27,11 +22,11 @@ interface MockLLMClient
   extends Pick<BabylonLLMClient, 'generateJSON' | 'getProvider'> {}
 
 describe('Trending Topics & News Integration', () => {
-  let trendEngine: TrendingTopicsEngine;
-  let pacingEngine: NewsArticlePacingEngine;
-  let articleGen: ArticleGenerator;
-  let feedGen: FeedGenerator;
-  let mockLLM: BabylonLLMClient;
+  let trendEngine: TrendingTopicsEngine
+  let pacingEngine: NewsArticlePacingEngine
+  let articleGen: ArticleGenerator
+  let feedGen: FeedGenerator
+  let mockLLM: BabylonLLMClient
 
   const mockQuestion: Question = {
     id: 1,
@@ -42,7 +37,7 @@ describe('Trending Topics & News Integration', () => {
     status: 'active',
     createdDate: '2025-11-01',
     resolutionDate: '2025-11-05',
-  };
+  }
 
   const mockOrgs: Organization[] = [
     {
@@ -80,7 +75,7 @@ describe('Trending Topics & News Integration', () => {
       description: 'Global news',
       canBeInvolved: true,
     },
-  ];
+  ]
 
   const mockActors: Actor[] = [
     {
@@ -93,7 +88,7 @@ describe('Trending Topics & News Integration', () => {
       personality: 'bold',
       affiliations: ['tech-corp'],
     },
-  ];
+  ]
 
   beforeEach(() => {
     const mockImpl: MockLLMClient = {
@@ -112,7 +107,7 @@ describe('Trending Topics & News Integration', () => {
                 description: 'Traders position ahead of expected news.',
               },
             ],
-          };
+          }
         }
 
         if (prompt.includes('journalist writing for')) {
@@ -123,81 +118,81 @@ describe('Trending Topics & News Integration', () => {
                 'Multiple sources confirm TechCorp preparing major AI reveal.',
               content:
                 'Lorem ipsum dolor sit amet, consectetur adipiscing elit. '.repeat(
-                  50
+                  50,
                 ),
               slant: 'Optimistic about breakthrough potential',
               sentiment: 'positive',
               category: 'tech',
               tags: { tag: ['ai', 'techcorp', 'breakthrough'] },
             },
-          };
+          }
         }
 
-        return {};
-      }),
-    };
-    mockLLM = mockImpl as BabylonLLMClient;
+        return {}
+      }) as BabylonLLMClient['generateJSON'],
+    }
+    mockLLM = mockImpl as BabylonLLMClient
 
-    trendEngine = new TrendingTopicsEngine(mockLLM);
+    trendEngine = new TrendingTopicsEngine(mockLLM)
     // Use default interval of 4 ticks (every 4 hours, 6x per day)
-    pacingEngine = new NewsArticlePacingEngine();
-    articleGen = new ArticleGenerator(mockLLM);
-    feedGen = new FeedGenerator(mockLLM);
+    pacingEngine = new NewsArticlePacingEngine()
+    articleGen = new ArticleGenerator(mockLLM)
+    feedGen = new FeedGenerator(mockLLM)
 
-    feedGen.setTrendingTopics(trendEngine);
-  });
+    feedGen.setTrendingTopics(trendEngine)
+  })
 
   describe('Complete Question Lifecycle', () => {
     it('should generate breaking articles when question created', async () => {
       const breakingOrgs = pacingEngine.selectOrgsForStage(
         mockOrgs,
         mockQuestion.id as number,
-        'breaking'
-      );
+        'breaking',
+      )
 
-      expect(breakingOrgs.length).toBeGreaterThanOrEqual(1);
-      expect(breakingOrgs.length).toBeLessThanOrEqual(2);
+      expect(breakingOrgs.length).toBeGreaterThanOrEqual(1)
+      expect(breakingOrgs.length).toBeLessThanOrEqual(2)
 
-      const articles: Article[] = [];
+      const articles: Article[] = []
       for (const org of breakingOrgs) {
         const article = await articleGen.generateArticleForQuestion(
           mockQuestion,
           org,
           'breaking',
           mockActors,
-          []
-        );
+          [],
+        )
 
-        expect(article).toBeDefined();
-        expect(article.title).toBeTruthy();
-        expect(article.content.length).toBeGreaterThan(100);
+        expect(article).toBeDefined()
+        expect(article.title).toBeTruthy()
+        expect(article.content.length).toBeGreaterThan(100)
 
         pacingEngine.recordArticle(
           mockQuestion.id as number,
           org.id,
           'breaking',
           article.id,
-          10
-        );
+          10,
+        )
 
-        articles.push(article);
+        articles.push(article)
       }
 
-      const stats = pacingEngine.getStageStats(mockQuestion.id as number);
-      expect(stats.breaking).toBe(breakingOrgs.length);
-      expect(stats.commentary).toBe(0);
-      expect(stats.resolution).toBe(0);
-    });
+      const stats = pacingEngine.getStageStats(mockQuestion.id as number)
+      expect(stats.breaking).toBe(breakingOrgs.length)
+      expect(stats.commentary).toBe(0)
+      expect(stats.resolution).toBe(0)
+    })
 
     it('should generate commentary articles at midpoint', async () => {
       const commentaryOrgs = pacingEngine.selectOrgsForStage(
         mockOrgs,
         mockQuestion.id as number,
-        'commentary'
-      );
+        'commentary',
+      )
 
-      expect(commentaryOrgs.length).toBeGreaterThanOrEqual(2);
-      expect(commentaryOrgs.length).toBeLessThanOrEqual(3);
+      expect(commentaryOrgs.length).toBeGreaterThanOrEqual(2)
+      expect(commentaryOrgs.length).toBeLessThanOrEqual(3)
 
       for (const org of commentaryOrgs) {
         const article = await articleGen.generateArticleForQuestion(
@@ -205,32 +200,32 @@ describe('Trending Topics & News Integration', () => {
           org,
           'commentary',
           mockActors,
-          []
-        );
+          [],
+        )
 
-        expect(article).toBeDefined();
+        expect(article).toBeDefined()
         pacingEngine.recordArticle(
           mockQuestion.id as number,
           org.id,
           'commentary',
           article.id,
-          50
-        );
+          50,
+        )
       }
 
-      const stats = pacingEngine.getStageStats(mockQuestion.id as number);
-      expect(stats.commentary).toBe(commentaryOrgs.length);
-    });
+      const stats = pacingEngine.getStageStats(mockQuestion.id as number)
+      expect(stats.commentary).toBe(commentaryOrgs.length)
+    })
 
     it('should generate resolution articles when question resolves', async () => {
       const resolutionOrgs = pacingEngine.selectOrgsForStage(
         mockOrgs,
         mockQuestion.id as number,
-        'resolution'
-      );
+        'resolution',
+      )
 
-      expect(resolutionOrgs.length).toBeGreaterThan(0);
-      expect(resolutionOrgs.length).toBeLessThanOrEqual(5);
+      expect(resolutionOrgs.length).toBeGreaterThan(0)
+      expect(resolutionOrgs.length).toBeLessThanOrEqual(5)
 
       for (const org of resolutionOrgs) {
         const article = await articleGen.generateArticleForQuestion(
@@ -238,69 +233,69 @@ describe('Trending Topics & News Integration', () => {
           org,
           'resolution',
           mockActors,
-          []
-        );
+          [],
+        )
 
-        expect(article).toBeDefined();
+        expect(article).toBeDefined()
         pacingEngine.recordArticle(
           mockQuestion.id as number,
           org.id,
           'resolution',
           article.id,
-          100
-        );
+          100,
+        )
       }
 
-      const stats = pacingEngine.getStageStats(mockQuestion.id as number);
-      expect(stats.resolution).toBe(resolutionOrgs.length);
-    });
+      const stats = pacingEngine.getStageStats(mockQuestion.id as number)
+      expect(stats.resolution).toBe(resolutionOrgs.length)
+    })
 
     it('should maintain total article count < 10 per question', async () => {
-      const breaking = pacingEngine.selectOrgsForStage(mockOrgs, 1, 'breaking');
+      const breaking = pacingEngine.selectOrgsForStage(mockOrgs, 1, 'breaking')
       breaking.forEach((org) => {
         pacingEngine.recordArticle(
           1,
           org.id,
           'breaking',
           `article-${org.id}-1`,
-          10
-        );
-      });
+          10,
+        )
+      })
 
       const commentary = pacingEngine.selectOrgsForStage(
         mockOrgs,
         1,
-        'commentary'
-      );
+        'commentary',
+      )
       commentary.forEach((org) => {
         pacingEngine.recordArticle(
           1,
           org.id,
           'commentary',
           `article-${org.id}-2`,
-          50
-        );
-      });
+          50,
+        )
+      })
 
       const resolution = pacingEngine.selectOrgsForStage(
         mockOrgs,
         1,
-        'resolution'
-      );
+        'resolution',
+      )
       resolution.forEach((org) => {
         pacingEngine.recordArticle(
           1,
           org.id,
           'resolution',
           `article-${org.id}-3`,
-          100
-        );
-      });
+          100,
+        )
+      })
 
-      const total = pacingEngine.getArticlesForQuestion(1).length;
-      expect(total).toBeLessThan(11); // 2 + 3 + 5 = 10 max
-    });
-  });
+      const total = pacingEngine.getArticlesForQuestion(1).length
+      expect(total).toBeLessThan(11) // 2 + 3 + 5 = 10 max
+    })
+  })
 
   describe('Trending Topics Integration', () => {
     it('should update trends from feed posts', async () => {
@@ -325,23 +320,23 @@ describe('Trending Topics & News Integration', () => {
           tags: ['techcorp', 'ai'],
           relatedQuestion: 1,
         },
-      ];
+      ]
 
-      await trendEngine.updateTrends(posts, 10);
-      const trends = trendEngine.getTrends();
+      await trendEngine.updateTrends(posts, 10)
+      const trends = trendEngine.getTrends()
 
-      expect(trends.length).toBeGreaterThan(0);
-      expect(trends[0]?.relatedQuestions).toContain(1);
-    });
+      expect(trends.length).toBeGreaterThan(0)
+      expect(trends[0]?.relatedQuestions).toContain(1)
+    })
 
     it('should provide trend context to feed generator', () => {
-      feedGen.updateTrendContext();
+      feedGen.updateTrendContext()
 
-      const context = feedGen['trendContext'];
-      expect(context).toBeDefined();
-      expect(context.trim().length).toBeGreaterThan(0);
-      expect(context).toContain('TRENDING TOPICS');
-    });
+      const context = feedGen.trendContext
+      expect(context).toBeDefined()
+      expect(context.trim().length).toBeGreaterThan(0)
+      expect(context).toContain('TRENDING TOPICS')
+    })
 
     it('should include trends in ambient post prompts', async () => {
       const posts: FeedPost[] = [
@@ -354,16 +349,16 @@ describe('Trending Topics & News Integration', () => {
           day: 1,
           tags: ['ai', 'breakthrough'],
         },
-      ];
+      ]
 
-      await trendEngine.updateTrends(posts, 10);
-      feedGen.updateTrendContext();
+      await trendEngine.updateTrends(posts, 10)
+      feedGen.updateTrendContext()
 
-      const context = feedGen['trendContext'];
+      const context = feedGen.trendContext
       // Context should contain the trend topics from the posts
-      expect(context).toContain('ai');
-    });
-  });
+      expect(context).toContain('ai')
+    })
+  })
 
   describe('Post Volume Balance', () => {
     it('should maintain high normal post to article ratio', async () => {
@@ -375,19 +370,19 @@ describe('Trending Topics & News Integration', () => {
         timestamp: '2025-11-15T10:00:00Z',
         day: 1,
         tags: ['general'],
-      }));
+      }))
 
       const breakingOrgs = pacingEngine.selectOrgsForStage(
         mockOrgs,
         1,
-        'breaking'
-      );
-      const articleCount = breakingOrgs.length;
+        'breaking',
+      )
+      const articleCount = breakingOrgs.length
 
-      const ratio = normalPosts.length / articleCount;
-      expect(ratio).toBeGreaterThan(10);
-    });
-  });
+      const ratio = normalPosts.length / articleCount
+      expect(ratio).toBeGreaterThan(10)
+    })
+  })
 
   describe('Error Handling', () => {
     it('should throw on invalid question for article generation', async () => {
@@ -397,18 +392,18 @@ describe('Trending Topics & News Integration', () => {
         scenario: 1,
         outcome: true,
         rank: 1,
-      } as Question;
+      } as Question
 
       await expect(async () => {
         await articleGen.generateArticleForQuestion(
           invalidQuestion,
-          mockOrgs[0]!,
+          mockOrgs[0],
           'breaking',
           mockActors,
-          []
-        );
-      }).toThrow('Invalid question');
-    });
+          [],
+        )
+      }).toThrow('Invalid question')
+    })
 
     it('should throw on invalid organization for article generation', async () => {
       const invalidOrg = {
@@ -417,7 +412,7 @@ describe('Trending Topics & News Integration', () => {
         type: 'media',
         description: 'Invalid org',
         canBeInvolved: false,
-      } as Organization;
+      } as Organization
 
       await expect(async () => {
         await articleGen.generateArticleForQuestion(
@@ -425,34 +420,34 @@ describe('Trending Topics & News Integration', () => {
           invalidOrg,
           'breaking',
           mockActors,
-          []
-        );
-      }).toThrow('Invalid organization');
-    });
+          [],
+        )
+      }).toThrow('Invalid organization')
+    })
 
     it('should throw on empty actors array', async () => {
       await expect(async () => {
         await articleGen.generateArticleForQuestion(
           mockQuestion,
-          mockOrgs[0]!,
+          mockOrgs[0],
           'breaking',
           [], // Empty!
-          []
-        );
-      }).toThrow('Actors array cannot be empty');
-    });
+          [],
+        )
+      }).toThrow('Actors array cannot be empty')
+    })
 
     it('should propagate LLM failures (fail-fast)', async () => {
       const failingImpl: MockLLMClient = {
         generateJSON: mock(async () => {
-          throw new Error('LLM timeout');
-        }),
+          throw new Error('LLM timeout')
+        }) as BabylonLLMClient['generateJSON'],
         getProvider: () => 'openai',
-      };
-      const failingLLM = failingImpl as BabylonLLMClient;
+      }
+      const failingLLM = failingImpl as BabylonLLMClient
 
-      const engine = new TrendingTopicsEngine(failingLLM);
-      engine.setUpdateInterval(10);
+      const engine = new TrendingTopicsEngine(failingLLM)
+      engine.setUpdateInterval(10)
 
       const posts: FeedPost[] = [
         {
@@ -464,28 +459,28 @@ describe('Trending Topics & News Integration', () => {
           day: 1,
           tags: ['test'],
         },
-      ];
+      ]
 
       // LLM failures should propagate, not be swallowed
       await expect(engine.updateTrends(posts, 10)).rejects.toThrow(
-        'LLM timeout'
-      );
-    });
-  });
+        'LLM timeout',
+      )
+    })
+  })
 
   describe('Context Validation', () => {
     it('should never provide empty trend context to agents', () => {
-      feedGen.updateTrendContext();
-      let context = feedGen['trendContext'];
-      expect(context.trim()).not.toBe('');
-      expect(context).toContain('TRENDING TOPICS');
+      feedGen.updateTrendContext()
+      let context = feedGen.trendContext
+      expect(context.trim()).not.toBe('')
+      expect(context).toContain('TRENDING TOPICS')
 
-      trendEngine.updateTrends([], 10);
-      feedGen.updateTrendContext();
-      context = feedGen['trendContext'];
-      expect(context.trim()).not.toBe('');
-      expect(context).toContain('TRENDING TOPICS');
-    });
+      trendEngine.updateTrends([], 10)
+      feedGen.updateTrendContext()
+      context = feedGen.trendContext
+      expect(context.trim()).not.toBe('')
+      expect(context).toContain('TRENDING TOPICS')
+    })
 
     it('should throw if trending engine returns invalid context', () => {
       const badEngine = {
@@ -493,15 +488,15 @@ describe('Trending Topics & News Integration', () => {
       } as Pick<
         TrendingTopicsEngine,
         'getDetailedTrendContext'
-      > as TrendingTopicsEngine;
+      > as TrendingTopicsEngine
 
-      feedGen.setTrendingTopics(badEngine);
+      feedGen.setTrendingTopics(badEngine)
 
       expect(() => {
-        feedGen.updateTrendContext();
-      }).toThrow('TrendingTopicsEngine returned empty context');
-    });
-  });
+        feedGen.updateTrendContext()
+      }).toThrow('TrendingTopicsEngine returned empty context')
+    })
+  })
 
   describe('Article Quality Validation', () => {
     it('should throw if article has empty title', async () => {
@@ -517,22 +512,22 @@ describe('Trending Topics & News Integration', () => {
             category: 'tech',
             tags: { tag: ['test'] },
           },
-        })),
-      };
-      const badLLM = badImpl as BabylonLLMClient;
+        })) as BabylonLLMClient['generateJSON'],
+      }
+      const badLLM = badImpl as BabylonLLMClient
 
-      const badArticleGen = new ArticleGenerator(badLLM);
+      const badArticleGen = new ArticleGenerator(badLLM)
 
       await expect(async () => {
         await badArticleGen.generateArticleForQuestion(
           mockQuestion,
-          mockOrgs[0]!,
+          mockOrgs[0],
           'breaking',
           mockActors,
-          []
-        );
-      }).toThrow('empty title');
-    });
+          [],
+        )
+      }).toThrow('empty title')
+    })
 
     it('should throw if article has empty summary', async () => {
       const badImpl: MockLLMClient = {
@@ -547,22 +542,22 @@ describe('Trending Topics & News Integration', () => {
             category: 'tech',
             tags: { tag: ['test'] },
           },
-        })),
-      };
-      const badLLM = badImpl as BabylonLLMClient;
+        })) as BabylonLLMClient['generateJSON'],
+      }
+      const badLLM = badImpl as BabylonLLMClient
 
-      const badArticleGen = new ArticleGenerator(badLLM);
+      const badArticleGen = new ArticleGenerator(badLLM)
 
       await expect(async () => {
         await badArticleGen.generateArticleForQuestion(
           mockQuestion,
-          mockOrgs[0]!,
+          mockOrgs[0],
           'breaking',
           mockActors,
-          []
-        );
-      }).toThrow('empty summary');
-    });
+          [],
+        )
+      }).toThrow('empty summary')
+    })
 
     it('should throw if article content is too short', async () => {
       const badImpl: MockLLMClient = {
@@ -577,28 +572,28 @@ describe('Trending Topics & News Integration', () => {
             category: 'tech',
             tags: { tag: ['test'] },
           },
-        })),
-      };
-      const badLLM = badImpl as BabylonLLMClient;
+        })) as BabylonLLMClient['generateJSON'],
+      }
+      const badLLM = badImpl as BabylonLLMClient
 
-      const badArticleGen = new ArticleGenerator(badLLM);
+      const badArticleGen = new ArticleGenerator(badLLM)
 
       await expect(async () => {
         await badArticleGen.generateArticleForQuestion(
           mockQuestion,
-          mockOrgs[0]!,
+          mockOrgs[0],
           'breaking',
           mockActors,
-          []
-        );
-      }).toThrow('content too short');
-    });
-  });
+          [],
+        )
+      }).toThrow('content too short')
+    })
+  })
 
   describe('Multi-Question Scenario', () => {
     it('should handle multiple questions with independent article counts', async () => {
-      const q1Orgs = pacingEngine.selectOrgsForStage(mockOrgs, 1, 'breaking');
-      const q2Orgs = pacingEngine.selectOrgsForStage(mockOrgs, 2, 'breaking');
+      const q1Orgs = pacingEngine.selectOrgsForStage(mockOrgs, 1, 'breaking')
+      const q2Orgs = pacingEngine.selectOrgsForStage(mockOrgs, 2, 'breaking')
 
       q1Orgs.forEach((org) => {
         pacingEngine.recordArticle(
@@ -606,9 +601,9 @@ describe('Trending Topics & News Integration', () => {
           org.id,
           'breaking',
           `article-q1-${org.id}`,
-          10
-        );
-      });
+          10,
+        )
+      })
 
       q2Orgs.forEach((org) => {
         pacingEngine.recordArticle(
@@ -616,20 +611,20 @@ describe('Trending Topics & News Integration', () => {
           org.id,
           'breaking',
           `article-q2-${org.id}`,
-          15
-        );
-      });
+          15,
+        )
+      })
 
-      expect(pacingEngine.getArticlesForQuestion(1).length).toBe(q1Orgs.length);
-      expect(pacingEngine.getArticlesForQuestion(2).length).toBe(q2Orgs.length);
+      expect(pacingEngine.getArticlesForQuestion(1).length).toBe(q1Orgs.length)
+      expect(pacingEngine.getArticlesForQuestion(2).length).toBe(q2Orgs.length)
 
-      const stats1 = pacingEngine.getStageStats(1);
-      const stats2 = pacingEngine.getStageStats(2);
+      const stats1 = pacingEngine.getStageStats(1)
+      const stats2 = pacingEngine.getStageStats(2)
       expect(stats1.breaking + stats2.breaking).toBeLessThanOrEqual(
-        mockOrgs.length
-      );
-    });
-  });
+        mockOrgs.length,
+      )
+    })
+  })
 
   describe('Trend Evolution', () => {
     it('should evolve trends as new posts arrive', async () => {
@@ -643,10 +638,10 @@ describe('Trending Topics & News Integration', () => {
           day: 1,
           tags: ['ai'],
         },
-      ];
+      ]
 
-      await trendEngine.updateTrends(initialPosts, 10);
-      const trends1 = trendEngine.getTrends();
+      await trendEngine.updateTrends(initialPosts, 10)
+      const trends1 = trendEngine.getTrends()
 
       const newPosts: FeedPost[] = [
         ...initialPosts,
@@ -668,14 +663,14 @@ describe('Trending Topics & News Integration', () => {
           day: 10,
           tags: ['crypto'],
         },
-      ];
+      ]
 
-      await trendEngine.updateTrends(newPosts, 20);
-      const trends2 = trendEngine.getTrends();
+      await trendEngine.updateTrends(newPosts, 20)
+      const trends2 = trendEngine.getTrends()
 
-      expect(trends2).not.toEqual(trends1);
-    });
-  });
+      expect(trends2).not.toEqual(trends1)
+    })
+  })
 
   describe('Performance & Scalability', () => {
     it('should handle 100+ posts efficiently', async () => {
@@ -687,17 +682,17 @@ describe('Trending Topics & News Integration', () => {
         timestamp: '2025-11-15T10:00:00Z',
         day: 1,
         tags: [`tag-${i % 10}`], // 10 different tags
-      }));
+      }))
 
-      const start = Date.now();
-      await trendEngine.updateTrends(posts, 10);
-      const duration = Date.now() - start;
+      const start = Date.now()
+      await trendEngine.updateTrends(posts, 10)
+      const duration = Date.now() - start
 
-      expect(duration).toBeLessThan(5000);
+      expect(duration).toBeLessThan(5000)
 
-      const trends = trendEngine.getTrends();
-      expect(trends.length).toBeLessThanOrEqual(5);
-    });
+      const trends = trendEngine.getTrends()
+      expect(trends.length).toBeLessThanOrEqual(5)
+    })
 
     it('should batch LLM calls for trend descriptions', async () => {
       const posts: FeedPost[] = Array.from({ length: 20 }, (_, i) => ({
@@ -708,13 +703,13 @@ describe('Trending Topics & News Integration', () => {
         timestamp: '2025-11-15T10:00:00Z',
         day: 1,
         tags: [`tag-${i % 10}`],
-      }));
+      }))
 
-      await trendEngine.updateTrends(posts, 10);
+      await trendEngine.updateTrends(posts, 10)
 
       expect(
-        (mockLLM.generateJSON as ReturnType<typeof mock>).mock.calls.length
-      ).toBe(1);
-    });
-  });
-});
+        (mockLLM.generateJSON as ReturnType<typeof mock>).mock.calls.length,
+      ).toBe(1)
+    })
+  })
+})

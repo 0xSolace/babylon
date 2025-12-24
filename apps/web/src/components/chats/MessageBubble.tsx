@@ -1,11 +1,9 @@
-'use client';
-
-import { cn } from '@babylon/shared';
-import Link from 'next/link';
-import { Avatar } from '@/components/shared/Avatar';
-import { TaggedText } from '@/components/shared/TaggedText';
-import type { ChatParticipant, Message } from './types';
-import { getProfilePath } from './types';
+import { cn } from '@babylon/shared'
+import { Link } from 'react-router-dom'
+import { Avatar } from '@/components/shared/Avatar'
+import { TaggedText } from '@/components/shared/TaggedText'
+import type { ChatParticipant, Message } from './types'
+import { getProfilePath } from './types'
 
 /**
  * Extracts the displayable content from a message, showing only content after the last `</think>` tag.
@@ -13,18 +11,18 @@ import { getProfilePath } from './types';
  * The original message data is preserved in storage, this only affects display.
  */
 function getDisplayContent(content: string): string {
-  const lastThinkCloseIndex = content.lastIndexOf('</think>');
+  const lastThinkCloseIndex = content.lastIndexOf('</think>')
   if (lastThinkCloseIndex !== -1) {
-    return content.slice(lastThinkCloseIndex + '</think>'.length).trim();
+    return content.slice(lastThinkCloseIndex + '</think>'.length).trim()
   }
-  return content;
+  return content
 }
 
 interface MessageBubbleProps {
-  message: Message;
-  sender: ChatParticipant | undefined;
-  isCurrentUser: boolean;
-  onTagClick?: (tag: string) => void;
+  message: Message
+  sender: ChatParticipant | undefined
+  isCurrentUser: boolean
+  onTagClick?: (tag: string) => void
 }
 
 export function MessageBubble({
@@ -33,19 +31,19 @@ export function MessageBubble({
   isCurrentUser,
   onTagClick,
 }: MessageBubbleProps) {
-  const msgDate = new Date(message.createdAt);
-  const senderName = sender?.displayName || 'Unknown';
+  const msgDate = new Date(message.createdAt)
+  const senderName = sender?.displayName || 'Unknown'
 
   return (
     <div
       className={cn(
         'flex gap-3',
-        isCurrentUser ? 'justify-end' : 'items-start'
+        isCurrentUser ? 'justify-end' : 'items-start',
       )}
     >
       {!isCurrentUser && sender && (
         <Link
-          href={getProfilePath(sender)}
+          to={getProfilePath(sender)}
           className="shrink-0 transition-opacity hover:opacity-80"
         >
           <Avatar
@@ -63,13 +61,13 @@ export function MessageBubble({
       <div
         className={cn(
           'flex max-w-[70%] flex-col',
-          isCurrentUser ? 'items-end' : 'items-start'
+          isCurrentUser ? 'items-end' : 'items-start',
         )}
       >
         <div className="mb-1 flex flex-wrap items-center gap-2">
           {!isCurrentUser && sender && (
             <Link
-              href={getProfilePath(sender)}
+              to={getProfilePath(sender)}
               className="font-bold text-foreground text-sm transition-colors hover:text-primary"
             >
               {senderName}
@@ -98,7 +96,7 @@ export function MessageBubble({
             'message-bubble whitespace-pre-wrap break-words rounded-2xl px-4 py-3 text-sm',
             isCurrentUser
               ? 'rounded-tr-sm bg-primary/20'
-              : 'rounded-tl-sm bg-sidebar-accent/50'
+              : 'rounded-tl-sm bg-sidebar-accent/50',
           )}
         >
           <TaggedText
@@ -109,5 +107,5 @@ export function MessageBubble({
         </div>
       </div>
     </div>
-  );
+  )
 }

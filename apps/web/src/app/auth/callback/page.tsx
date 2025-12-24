@@ -1,33 +1,31 @@
-'use client';
-
-import { useJejuAuth } from '@babylon/auth/client';
-import { useMutation } from '@tanstack/react-query';
-import { useRouter, useSearchParams } from 'next/navigation';
-import { Suspense, useEffect, useState } from 'react';
+import { useJejuAuth } from '@babylon/auth'
+import { useMutation } from '@tanstack/react-query'
+import { Suspense, useEffect, useState } from 'react'
+import { useRouter, useSearchParams } from '@/lib/navigation'
 
 interface AuthCallbackPayload {
-  code: string;
-  state: string | null;
+  code: string
+  state: string | null
 }
 
 interface AuthCallbackError {
-  error: string;
+  error: string
 }
 
 async function exchangeCodeForSession(
-  payload: AuthCallbackPayload
+  payload: AuthCallbackPayload,
 ): Promise<void> {
   const response = await fetch('/api/auth/jeju/callback', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
-  });
+  })
 
   if (!response.ok) {
     const data: AuthCallbackError = await response
       .json()
-      .catch(() => ({ error: 'Unknown error' }));
-    throw new Error(data.error || 'Authentication failed');
+      .catch(() => ({ error: 'Unknown error' }))
+    throw new Error(data.error || 'Authentication failed')
   }
 }
 
@@ -38,25 +36,25 @@ async function exchangeCodeForSession(
  * Exchanges authorization codes for sessions and redirects to the app.
  */
 function CallbackContent() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const { authenticated, ready } = useJejuAuth();
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const { authenticated, ready } = useJejuAuth()
 
   // Track OAuth errors from URL params (not mutation errors)
-  const [oauthError, setOauthError] = useState<string | null>(null);
+  const [oauthError, setOauthError] = useState<string | null>(null)
 
   const exchangeMutation = useMutation({
     mutationFn: exchangeCodeForSession,
     onSuccess: () => {
-      router.replace('/');
+      router.replace('/')
     },
-  });
+  })
 
   useEffect(() => {
     // If already authenticated, redirect to home
     if (ready && authenticated) {
-      router.replace('/');
-      return;
+      router.replace('/')
+      return
     }
 
     if (
@@ -67,43 +65,36 @@ function CallbackContent() {
       !exchangeMutation.isError &&
       !oauthError
     ) {
-      const code = searchParams.get('code');
-      const state = searchParams.get('state');
-      const errorParam = searchParams.get('error');
-      const errorDescription = searchParams.get('error_description');
+      const code = searchParams.get('code')
+      const state = searchParams.get('state')
+      const errorParam = searchParams.get('error')
+      const errorDescription = searchParams.get('error_description')
 
       // Handle OAuth error from provider
       if (errorParam) {
-        setOauthError(errorDescription ?? errorParam);
-        return;
+        setOauthError(errorDescription ?? errorParam)
+        return
       }
 
       if (!code) {
-        setOauthError('No authorization code received');
-        return;
+        setOauthError('No authorization code received')
+        return
       }
 
       // Exchange code for session via mutation
-      exchangeMutation.mutate({ code, state });
+      exchangeMutation.mutate({ code, state })
     }
-  }, [
-    ready,
-    authenticated,
-    searchParams,
-    router,
-    exchangeMutation,
-    oauthError,
-  ]);
+  }, [ready, authenticated, searchParams, router, exchangeMutation, oauthError])
 
   // Derive status from mutation state and oauth errors
-  const hasError = oauthError || exchangeMutation.isError;
+  const hasError = oauthError || exchangeMutation.isError
   const errorMessage =
     oauthError ??
     (exchangeMutation.error instanceof Error
       ? exchangeMutation.error.message
-      : 'Authentication failed');
-  const isSuccess = exchangeMutation.isSuccess;
-  const isProcessing = !hasError && !isSuccess;
+      : 'Authentication failed')
+  const isSuccess = exchangeMutation.isSuccess
+  const isProcessing = !hasError && !isSuccess
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-background">
@@ -123,6 +114,8 @@ function CallbackContent() {
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
+                role="img"
+                aria-label="Success"
               >
                 <path
                   strokeLinecap="round"
@@ -145,6 +138,8 @@ function CallbackContent() {
                 fill="none"
                 viewBox="0 0 24 24"
                 stroke="currentColor"
+                role="img"
+                aria-label="Error icon"
               >
                 <path
                   strokeLinecap="round"
@@ -167,7 +162,7 @@ function CallbackContent() {
         )}
       </div>
     </div>
-  );
+  )
 }
 
 /**
@@ -184,5 +179,5 @@ export default function AuthCallbackPage() {
     >
       <CallbackContent />
     </Suspense>
-  );
+  )
 }

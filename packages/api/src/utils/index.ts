@@ -2,7 +2,7 @@
  * API Utilities
  *
  * Server-side utilities that require Node.js crypto module.
- * These are exported from @babylon/api for server-side use only.
+ * For base type guards, import from @babylon/shared.
  */
 
 export {
@@ -10,7 +10,7 @@ export {
   generateTestApiKey,
   hashApiKey,
   verifyApiKey,
-} from './api-keys';
+} from './api-keys'
 export {
   checkDuplicate,
   cleanupDuplicates,
@@ -18,19 +18,19 @@ export {
   clearDuplicates,
   DUPLICATE_DETECTION_CONFIGS,
   getDuplicateStats,
-} from './duplicate-detector';
+} from './duplicate-detector'
 export {
   getClientIp,
   getHashedClientIp,
   hashIpAddress,
-} from './ip-utils';
+} from './ip-utils'
 // Production guards
 export {
   isProductionMode,
   requireRealImplementation,
   warnSimulationInProduction,
-} from './production-guards';
-// Token counter utilities (moved from @babylon/shared)
+} from './production-guards'
+// Token counter utilities
 export {
   budgetTokens,
   countTokens,
@@ -40,4 +40,41 @@ export {
   MODEL_TOKEN_LIMITS,
   truncateToTokenLimit,
   truncateToTokenLimitSync,
-} from './token-counter';
+} from './token-counter'
+// API-specific type guards
+export {
+  type AgentSessionData,
+  type CacheEntriesResponse,
+  type CacheGetResponse,
+  type CacheHealthResponse,
+  type CacheKeysResponse,
+  type CacheSuccessResponse,
+  type CacheTtlResponse,
+  type ComputeProofData,
+  first,
+  hasDbUserId,
+  hasWalletAddress,
+  isAddress,
+  isAgentSession,
+  isCacheEntriesResponse,
+  isCacheGetResponse,
+  isCacheHealthResponse,
+  isCacheKeysResponse,
+  isCacheSuccessResponse,
+  isCacheTtlResponse,
+  isComputeProof,
+  isHex,
+  isHexSignature,
+  isJejuCacheStatsResponse,
+  type JejuCacheStatsResponse,
+  parseAddress,
+  parseAgentSession,
+  parseComputeProof,
+  parseHex,
+  parseJson,
+  requireAddress,
+  requireHex,
+  safeToJsonRecord,
+  toJsonRecord,
+  toJsonValue,
+} from './type-guards'

@@ -1,7 +1,5 @@
-'use client';
-
-import { cn, getDisplayReferralUrl, getReferralUrl } from '@babylon/shared';
-import { useQuery } from '@tanstack/react-query';
+import { cn, getDisplayReferralUrl, getReferralUrl } from '@babylon/shared'
+import { useQuery } from '@tanstack/react-query'
 import {
   Bell,
   Check,
@@ -13,33 +11,34 @@ import {
   TrendingUp,
   Trophy,
   X,
-} from 'lucide-react';
-import Image from 'next/image';
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { useEffect, useState } from 'react';
-import { AirdropStatusWidget } from '@/components/airdrop';
-import { Avatar } from '@/components/shared/Avatar';
-import { useAuth } from '@/hooks/useAuth';
-import { useUnreadNotifications } from '@/hooks/useUnreadNotifications';
-import { useAuthStore } from '@/stores/authStore';
+} from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
+import { AirdropStatusWidget } from '@/components/airdrop'
+import { Avatar } from '@/components/shared/Avatar'
+import Image from '@/components/shared/Image'
+import { isWaitlistMode } from '@/config'
+import { useAuth } from '@/hooks/useAuth'
+import { useUnreadNotifications } from '@/hooks/useUnreadNotifications'
+import { usePathname } from '@/lib/navigation'
+import { useAuthStore } from '@/stores/authStore'
 
 /**
  * Profile API response for mobile header.
  */
 interface ProfileResponse {
   user?: {
-    profileImageUrl?: string;
-    coverImageUrl?: string;
-    reputationPoints?: number;
-  };
+    profileImageUrl?: string
+    coverImageUrl?: string
+    reputationPoints?: number
+  }
 }
 
 /**
  * Balance API response.
  */
 interface BalanceResponse {
-  balance: number | string;
+  balance: number | string
 }
 
 /**
@@ -47,59 +46,58 @@ interface BalanceResponse {
  *
  * Provides a fixed header with logo, profile menu trigger, and slide-out
  * side menu. Shows user profile, navigation links, points balance, referral
- * code, and logout. Automatically hides when WAITLIST_MODE is enabled on
+ * code, and logout. Automatically hides when waitlist mode is enabled on
  * home page.
  *
  * @returns Mobile header element or null if hidden
  */
 function MobileHeaderContent() {
-  const { authenticated, logout } = useAuth();
-  const { user, setUser } = useAuthStore();
-  const [showSideMenu, setShowSideMenu] = useState(false);
-  const [copiedReferral, setCopiedReferral] = useState(false);
-  const pathname = usePathname();
+  const { authenticated, logout } = useAuth()
+  const { user, setUser } = useAuthStore()
+  const [showSideMenu, setShowSideMenu] = useState(false)
+  const [copiedReferral, setCopiedReferral] = useState(false)
+  const pathname = usePathname()
 
-  // Hide mobile header when WAITLIST_MODE is enabled on home page
-  const isWaitlistMode = process.env.NEXT_PUBLIC_WAITLIST_MODE === 'true';
-  const isHomePage = pathname === '/';
-  const shouldHide = isWaitlistMode && isHomePage;
+  // Hide mobile header when waitlist mode is enabled on home page
+  const isHomePage = pathname === '/'
+  const shouldHide = isWaitlistMode() && isHomePage
 
   // Fetch profile data to hydrate profile image if missing
   const { data: profileData } = useQuery({
     queryKey: ['mobileHeader', 'profile', user?.id],
     queryFn: async (): Promise<ProfileResponse> => {
-      if (!user?.id) return {};
+      if (!user?.id) return {}
 
       const token =
-        typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
+        typeof window !== 'undefined' ? window.__oauth3AccessToken : null
 
       const headers: HeadersInit = token
         ? {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${token}`,
           }
-        : { 'Content-Type': 'application/json' };
+        : { 'Content-Type': 'application/json' }
 
       const response = await fetch(
         `/api/users/${encodeURIComponent(user.id)}/profile`,
-        { headers }
-      );
+        { headers },
+      )
 
-      if (!response.ok) return {};
-      return response.json() as Promise<ProfileResponse>;
+      if (!response.ok) return {}
+      return response.json() as Promise<ProfileResponse>
     },
     enabled: authenticated && !!user?.id,
     refetchInterval: 30000, // Refresh every 30 seconds
-  });
+  })
 
   // Fetch trading balance
   const { data: balanceData } = useQuery({
     queryKey: ['mobileHeader', 'balance', user?.id],
     queryFn: async (): Promise<BalanceResponse> => {
       const token =
-        typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
+        typeof window !== 'undefined' ? window.__oauth3AccessToken : null
       if (!token || !user?.id) {
-        return { balance: 0 };
+        return { balance: 0 }
       }
 
       const response = await fetch(
@@ -109,66 +107,66 @@ function MobileHeaderContent() {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${token}`,
           },
-        }
-      );
+        },
+      )
 
       if (!response.ok) {
-        return { balance: 0 };
+        return { balance: 0 }
       }
 
-      return response.json() as Promise<BalanceResponse>;
+      return response.json() as Promise<BalanceResponse>
     },
     enabled: authenticated && !!user?.id,
     refetchInterval: 30000, // Refresh every 30 seconds
-  });
+  })
 
   // Use shared unread notifications hook for consistent caching
-  const { unreadCount: unreadNotifications } = useUnreadNotifications();
+  const { unreadCount: unreadNotifications } = useUnreadNotifications()
 
   const pointsData = {
     available: Number(balanceData?.balance ?? 0),
     total: user?.reputationPoints ?? 0,
-  };
+  }
 
   // Update user profile image from profile data if missing
   useEffect(() => {
-    if (!user || user.profileImageUrl) return;
+    if (!user || user.profileImageUrl) return
 
-    const profileUrl = profileData?.user?.profileImageUrl;
-    const coverUrl = profileData?.user?.coverImageUrl;
+    const profileUrl = profileData?.user?.profileImageUrl
+    const coverUrl = profileData?.user?.coverImageUrl
     if (profileUrl || coverUrl) {
       setUser({
         ...user,
         profileImageUrl: profileUrl ?? user.profileImageUrl,
         coverImageUrl: coverUrl ?? user.coverImageUrl,
-      });
+      })
     }
-  }, [profileData, user, setUser]);
+  }, [profileData, user, setUser])
 
   // Update reputation points from profile data if changed
   useEffect(() => {
-    if (!user || !profileData?.user?.reputationPoints) return;
+    if (!user || !profileData?.user?.reputationPoints) return
 
     if (profileData.user.reputationPoints !== user.reputationPoints) {
       setUser({
         ...user,
         reputationPoints: profileData.user.reputationPoints,
-      });
+      })
     }
-  }, [profileData?.user?.reputationPoints, user, setUser]);
+  }, [profileData?.user?.reputationPoints, user, setUser])
 
   const copyReferralCode = async () => {
-    if (!user?.referralCode) return;
+    if (!user?.referralCode) return
 
-    const referralUrl = getReferralUrl(user.referralCode);
-    await navigator.clipboard.writeText(referralUrl);
-    setCopiedReferral(true);
-    setTimeout(() => setCopiedReferral(false), 2000);
-  };
+    const referralUrl = getReferralUrl(user.referralCode)
+    await navigator.clipboard.writeText(referralUrl)
+    setCopiedReferral(true)
+    setTimeout(() => setCopiedReferral(false), 2000)
+  }
 
   // Render nothing if should be hidden (after all hooks)
   if (shouldHide) {
-    return null;
+    return null
   }
 
   const menuItems = [
@@ -208,7 +206,7 @@ function MobileHeaderContent() {
       icon: Bell,
       active: pathname === '/notifications',
     },
-  ];
+  ]
 
   return (
     <>
@@ -216,7 +214,7 @@ function MobileHeaderContent() {
         className={cn(
           'md:hidden',
           'fixed top-0 right-0 left-0 z-40',
-          'bg-sidebar/95'
+          'bg-sidebar/95',
         )}
       >
         <div className="flex h-14 items-center justify-between px-4">
@@ -224,6 +222,7 @@ function MobileHeaderContent() {
           <div className="w-8 shrink-0">
             {authenticated && user ? (
               <button
+                type="button"
                 onClick={() => setShowSideMenu(true)}
                 className="transition-opacity hover:opacity-80"
                 aria-label="Open profile menu"
@@ -245,7 +244,7 @@ function MobileHeaderContent() {
           {/* Center: Logo */}
           <div className="absolute left-1/2 -translate-x-1/2 transform">
             <Link
-              href="/feed"
+              to="/feed"
               className="transition-transform duration-300 hover:scale-105"
             >
               <Image
@@ -267,16 +266,18 @@ function MobileHeaderContent() {
       {showSideMenu && authenticated && user && (
         <>
           {/* Backdrop */}
-          <div
+          <button
+            type="button"
             className="fixed inset-0 z-50 bg-background/80 backdrop-blur-sm md:hidden"
             onClick={() => setShowSideMenu(false)}
+            aria-label="Close menu"
           />
 
           {/* Menu Panel - slides in from left */}
           <div className="slide-in-from-left fixed top-0 bottom-0 left-0 z-50 flex w-[280px] animate-in flex-col bg-sidebar duration-300 md:hidden">
             {/* Header - User Profile */}
             <Link
-              href="/profile"
+              to="/profile"
               onClick={() => setShowSideMenu(false)}
               className="flex shrink-0 items-center justify-between p-4 transition-colors hover:bg-sidebar-accent"
             >
@@ -300,9 +301,10 @@ function MobileHeaderContent() {
                 </div>
               </div>
               <button
+                type="button"
                 onClick={(e) => {
-                  e.preventDefault();
-                  setShowSideMenu(false);
+                  e.preventDefault()
+                  setShowSideMenu(false)
                 }}
                 className="shrink-0 p-2 transition-colors hover:bg-muted"
               >
@@ -348,19 +350,19 @@ function MobileHeaderContent() {
             {/* Menu Items - Scrollable */}
             <nav className="min-h-0 flex-1 overflow-y-auto">
               {menuItems.map((item) => {
-                const Icon = item.icon;
+                const Icon = item.icon
                 const hasNotifications =
-                  item.name === 'Notifications' && unreadNotifications > 0;
+                  item.name === 'Notifications' && unreadNotifications > 0
                 return (
                   <Link
                     key={item.name}
-                    href={item.href}
+                    to={item.href}
                     onClick={() => setShowSideMenu(false)}
                     className={cn(
                       'relative flex items-center gap-4 px-4 py-3 transition-colors',
                       item.active
                         ? 'bg-[#0066FF] font-bold text-primary-foreground'
-                        : 'font-semibold text-sidebar-foreground hover:bg-sidebar-accent'
+                        : 'font-semibold text-sidebar-foreground hover:bg-sidebar-accent',
                     )}
                   >
                     <div className="relative">
@@ -371,7 +373,7 @@ function MobileHeaderContent() {
                     </div>
                     <span className="text-base">{item.name}</span>
                   </Link>
-                );
+                )
               })}
             </nav>
 
@@ -380,6 +382,7 @@ function MobileHeaderContent() {
               {/* Referral Code Button */}
               {user.referralCode && (
                 <button
+                  type="button"
                   onClick={copyReferralCode}
                   className="flex w-full items-center gap-4 px-4 py-3 text-left font-semibold transition-colors hover:bg-sidebar-accent"
                 >
@@ -411,9 +414,10 @@ function MobileHeaderContent() {
 
               {/* Logout Button */}
               <button
+                type="button"
                 onClick={() => {
-                  setShowSideMenu(false);
-                  logout();
+                  setShowSideMenu(false)
+                  logout()
                 }}
                 className="flex w-full items-center gap-4 px-4 py-3 text-left font-semibold text-destructive transition-colors hover:bg-destructive/10"
               >
@@ -425,17 +429,17 @@ function MobileHeaderContent() {
         </>
       )}
     </>
-  );
+  )
 }
 
 /**
  * Mobile header component for mobile devices.
  *
  * Provides a fixed header with logo, profile menu trigger, and slide-out
- * side menu. Automatically hides when WAITLIST_MODE is enabled on home page.
+ * side menu. Automatically hides when waitlist mode is enabled on home page.
  *
  * @returns Mobile header element or null if hidden
  */
 export function MobileHeader() {
-  return <MobileHeaderContent />;
+  return <MobileHeaderContent />
 }

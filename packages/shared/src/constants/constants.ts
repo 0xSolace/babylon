@@ -12,7 +12,7 @@ export const ACTOR_TIERS = {
   A_TIER: 'A_TIER',
   B_TIER: 'B_TIER',
   C_TIER: 'C_TIER',
-} as const;
+} as const
 
 /**
  * ActorTier type is exported from @babylon/shared/types to avoid duplication
@@ -41,7 +41,7 @@ export const FEED_WIDGET_CONFIG = {
   MAX_WORLD_EVENTS_QUERY: 100,
   MAX_PRICE_UPDATES_QUERY: 50,
   MAX_POSTS_QUERY: 100,
-} as const;
+} as const
 
 /**
  * Feed post types
@@ -55,7 +55,7 @@ export const POST_TYPES = {
   POST: 'post',
   REPLY: 'reply',
   ARTICLE: 'article',
-} as const;
+} as const
 
 /**
  * PostType is exported from @babylon/shared/types to avoid duplication
@@ -69,7 +69,7 @@ export const DAY_RANGES = {
   EARLY: { min: 1, max: 10 }, // Days 1-10: Setup, introductions
   MID: { min: 11, max: 20 }, // Days 11-20: Rising action
   LATE: { min: 21, max: 30 }, // Days 21-30: Peak chaos
-} as const;
+} as const
 
 /**
  * Organization types
@@ -80,9 +80,9 @@ export const ORG_TYPES = {
   GOVERNMENT: 'government',
   NONPROFIT: 'nonprofit',
   CRYPTO: 'crypto',
-} as const;
+} as const
 
-export type OrgType = (typeof ORG_TYPES)[keyof typeof ORG_TYPES];
+export type OrgType = (typeof ORG_TYPES)[keyof typeof ORG_TYPES]
 
 /**
  * Actor selection counts for game generation
@@ -91,7 +91,7 @@ export const ACTOR_COUNTS = {
   MAIN: 3,
   SUPPORTING: 15,
   EXTRAS: 50,
-} as const;
+} as const
 
 /**
  * Scenario and question counts
@@ -100,7 +100,7 @@ export const GAME_STRUCTURE = {
   SCENARIOS: 3,
   QUESTIONS_PER_SCENARIO: 1,
   DAYS: 30,
-} as const;
+} as const
 
 /**
  * Feed generation targets
@@ -110,18 +110,18 @@ export const FEED_TARGETS = {
   MAX_POSTS: 500,
   MIN_GROUP_MESSAGES: 100,
   MAX_GROUP_MESSAGES: 200,
-} as const;
+} as const
 
 /**
  * Escalation rules for content intensity
  * Controls how wild content can get based on day number
  */
 export function getEscalationLevel(
-  day: number
+  day: number,
 ): 'mild' | 'moderate' | 'intense' {
-  if (day <= DAY_RANGES.EARLY.max) return 'mild';
-  if (day <= DAY_RANGES.MID.max) return 'moderate';
-  return 'intense';
+  if (day <= DAY_RANGES.EARLY.max) return 'mild'
+  if (day <= DAY_RANGES.MID.max) return 'moderate'
+  return 'intense'
 }
 
 /**
@@ -149,4 +149,4 @@ export const RELATIONSHIP_TYPES = {
   FRIENDS: 'friends',
   ACQUAINTANCES: 'acquaintances',
   FORMER_COLLEAGUES: 'former-colleagues',
-} as const;
+} as const

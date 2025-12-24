@@ -2,4 +2,4 @@
  * Babylon Configuration
  */
 
-export * from './environment';
+export * from './environment'

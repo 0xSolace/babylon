@@ -1,21 +1,19 @@
-'use client';
-
-import type { User } from '@/stores/authStore';
-import type { MarketCategory } from '@/types/markets';
-import { PnLShareModal } from './PnLShareModal';
+import type { User } from '@/stores/authStore'
+import type { MarketCategory } from '@/types/markets'
+import { PnLShareModal } from './PnLShareModal'
 
 /**
  * Category PnL data structure for category PnL share modal.
  */
 interface CategoryPnLData {
-  unrealizedPnL: number;
-  positionCount: number;
-  totalValue?: number;
+  unrealizedPnL: number
+  positionCount: number
+  totalValue?: number
   categorySpecific?: {
-    openInterest?: number;
-    totalShares?: number;
-    totalInvested?: number;
-  };
+    openInterest?: number
+    totalShares?: number
+    totalInvested?: number
+  }
 }
 
 /**
@@ -45,12 +43,12 @@ interface CategoryPnLData {
  * ```
  */
 interface CategoryPnLShareModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  category: MarketCategory;
-  data: CategoryPnLData | null | undefined;
-  user: User | null;
-  lastUpdated?: Date | null | number;
+  isOpen: boolean
+  onClose: () => void
+  category: MarketCategory
+  data: CategoryPnLData | null | undefined
+  user: User | null
+  lastUpdated?: Date | null | number
 }
 
 export function CategoryPnLShareModal({
@@ -69,5 +67,5 @@ export function CategoryPnLShareModal({
       categoryData={data ?? null}
       user={user}
     />
-  );
+  )
 }

@@ -4,117 +4,117 @@
  * Types specific to MPC network operations.
  */
 
-import type { Address, Hex } from 'viem';
-import type { DID } from '../types/index';
+import type { Address, Hex } from 'viem'
+import type { DID } from '../types/index'
 
 export interface MPCClientConfig {
   /** MPC network endpoints (at least 2 for redundancy) */
-  endpoints: string[];
+  endpoints: string[]
   /** Network identifier (e.g., 'jeju-testnet', 'jeju-mainnet') */
-  networkId: string;
+  networkId: string
   /** Threshold for operations (e.g., 2 of 3) */
-  threshold: number;
+  threshold: number
   /** Request timeout in ms */
-  timeout: number;
+  timeout: number
   /** Whether to use dev mode (simulated TEE) */
-  devMode: boolean;
+  devMode: boolean
 }
 
 export interface SigningRequest {
   /** User's DID */
-  userId: DID;
+  userId: DID
   /** Message to sign (hex-encoded) */
-  message: Hex;
+  message: Hex
   /** Type of signature */
-  signatureType: 'message' | 'transaction' | 'typedData';
+  signatureType: 'message' | 'transaction' | 'typedData'
   /** Optional: EIP-712 domain for typed data */
-  domain?: EIP712Domain;
+  domain?: EIP712Domain
   /** Request timestamp */
-  timestamp: number;
+  timestamp: number
   /** Request nonce */
-  nonce: Hex;
+  nonce: Hex
 }
 
 export interface EIP712Domain {
-  name: string;
-  version: string;
-  chainId: number;
-  verifyingContract: Address;
+  name: string
+  version: string
+  chainId: number
+  verifyingContract: Address
 }
 
 export interface ThresholdSignatureResult {
   /** The signature bytes */
-  signature: Hex;
+  signature: Hex
   /** Which nodes participated */
-  participants: string[];
+  participants: string[]
   /** Threshold used (e.g., 2 of 3) */
-  threshold: number;
+  threshold: number
   /** Total nodes in network */
-  totalNodes: number;
+  totalNodes: number
   /** Recovery ID for signature */
-  recoveryId: number;
+  recoveryId: number
 }
 
 export interface SigningResponse {
   /** Whether signing succeeded */
-  success: boolean;
+  success: boolean
   /** The threshold signature */
-  signature?: ThresholdSignatureResult;
+  signature?: ThresholdSignatureResult
   /** Error message if failed */
-  error?: string;
+  error?: string
   /** Participating nodes */
-  participants?: string[];
+  participants?: string[]
 }
 
 export interface KeyGenRequest {
   /** User's DID to generate key for */
-  userId: DID;
+  userId: DID
   /** Auth proof that user owns this DID */
-  authProof: AuthProofData;
+  authProof: AuthProofData
   /** Request timestamp */
-  timestamp: number;
+  timestamp: number
 }
 
 export interface AuthProofData {
   /** Type of auth */
-  type: 'email' | 'wallet' | 'farcaster' | 'twitter' | 'discord';
+  type: 'email' | 'wallet' | 'farcaster' | 'twitter' | 'discord'
   /** Proof data (signature, token, etc.) */
-  proof: Hex | string;
+  proof: Hex | string
   /** Identifier (email, address, username) */
-  identifier: string;
+  identifier: string
 }
 
 export interface KeyGenResponse {
   /** Whether key generation succeeded */
-  success: boolean;
+  success: boolean
   /** User's new wallet address */
-  walletAddress?: Address;
+  walletAddress?: Address
   /** Public key */
-  publicKey?: Hex;
+  publicKey?: Hex
   /** Error message if failed */
-  error?: string;
+  error?: string
 }
 
 export interface NodeStatus {
-  nodeId: string;
-  healthy: boolean;
-  latencyMs: number;
+  nodeId: string
+  healthy: boolean
+  latencyMs: number
   attestation: {
-    valid: boolean;
-    isSimulated: boolean;
-    mrEnclave: Hex;
-  };
+    valid: boolean
+    isSimulated: boolean
+    mrEnclave: Hex
+  }
 }
 
 export interface NetworkStatus {
   /** Whether network is operational */
-  operational: boolean;
+  operational: boolean
   /** Number of healthy nodes */
-  healthyNodes: number;
+  healthyNodes: number
   /** Total nodes in network */
-  totalNodes: number;
+  totalNodes: number
   /** Whether threshold is met */
-  thresholdMet: boolean;
+  thresholdMet: boolean
   /** Individual node statuses */
-  nodes: NodeStatus[];
+  nodes: NodeStatus[]
 }

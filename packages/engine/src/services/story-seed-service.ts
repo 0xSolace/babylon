@@ -27,27 +27,27 @@
  * ```
  */
 
-import { logger } from '@babylon/shared';
-import type { BabylonLLMClient } from '../llm/openai-client';
-import { StaticDataRegistry } from './static-data-registry';
+import { logger } from '@babylon/shared'
+import type { BabylonLLMClient } from '../llm/openai-client'
+import { StaticDataRegistry } from './static-data-registry'
 import {
   type EditorialBeat,
   getTopicDiversityService,
   ORGANIZATION_BEATS,
-} from './topic-diversity-service';
+} from './topic-diversity-service'
 
 /**
  * A story seed that can be developed into an article
  */
 export interface StorySeed {
   /** Unique seed identifier */
-  id: string;
+  id: string
   /** Story headline/angle */
-  headline: string;
+  headline: string
   /** Brief description of the story */
-  description: string;
+  description: string
   /** Editorial beat this covers */
-  beat: EditorialBeat;
+  beat: EditorialBeat
   /** Story type */
   type:
     | 'beat'
@@ -55,24 +55,24 @@ export interface StorySeed {
     | 'analysis'
     | 'profile'
     | 'breaking'
-    | 'opinion';
+    | 'opinion'
   /** Key actors/entities involved (game character IDs) */
-  involvedActors: string[];
+  involvedActors: string[]
   /** Whether this could inspire a prediction market question */
-  couldBecomeQuestion: boolean;
+  couldBecomeQuestion: boolean
   /** Priority score 0-1 */
-  priority: number;
+  priority: number
   /** Suggested angle/take for the story */
-  suggestedAngle: string;
+  suggestedAngle: string
 }
 
 /**
  * Templates for generating diverse stories
  */
 const STORY_TEMPLATES: Array<{
-  beat: EditorialBeat;
-  type: StorySeed['type'];
-  templates: string[];
+  beat: EditorialBeat
+  type: StorySeed['type']
+  templates: string[]
 }> = [
   // Tech/AI stories
   {
@@ -240,7 +240,7 @@ const STORY_TEMPLATES: Array<{
       'Social media as infrastructure: who should control it?',
     ],
   },
-];
+]
 
 /**
  * Story Seed Service
@@ -250,10 +250,10 @@ const STORY_TEMPLATES: Array<{
  */
 export class StorySeedService {
   /** LLM client for future use in LLM-powered story generation */
-  public readonly llm: BabylonLLMClient;
+  public readonly llm: BabylonLLMClient
 
   constructor(llm: BabylonLLMClient) {
-    this.llm = llm;
+    this.llm = llm
   }
 
   /**
@@ -265,41 +265,47 @@ export class StorySeedService {
    */
   async generateBeatStory(
     orgId: string,
-    beat?: EditorialBeat
+    beat?: EditorialBeat,
   ): Promise<StorySeed> {
     // Use org's beats if no specific beat provided
-    const orgBeats = ORGANIZATION_BEATS[orgId] || ['tech', 'business'];
+    const orgBeats = ORGANIZATION_BEATS[orgId] || ['tech', 'business']
     const targetBeat =
-      beat || orgBeats[Math.floor(Math.random() * orgBeats.length)] || 'tech';
+      beat || orgBeats[Math.floor(Math.random() * orgBeats.length)] || 'tech'
 
     // Check topic diversity - prefer underrepresented beats
-    const diversityService = getTopicDiversityService();
-    const suggestions = await diversityService.suggestDiverseTopics(3);
+    const diversityService = getTopicDiversityService()
+    const suggestions = await diversityService.suggestDiverseTopics(3)
 
     // If we have underrepresented beats, bias toward them
-    let finalBeat = targetBeat;
+    let finalBeat = targetBeat
     if (suggestions.length > 0 && Math.random() < 0.4) {
       // 40% chance to use underrepresented beat
-      const underrep = suggestions.find((s) => orgBeats.includes(s.beat));
+      const underrep = suggestions.find((s) => orgBeats.includes(s.beat))
       if (underrep) {
-        finalBeat = underrep.beat;
+        finalBeat = underrep.beat
       }
     }
 
     // Find templates for this beat
-    const beatTemplates = STORY_TEMPLATES.filter((t) => t.beat === finalBeat);
+    const beatTemplates = STORY_TEMPLATES.filter((t) => t.beat === finalBeat)
     if (beatTemplates.length === 0) {
       // Fallback to any template
-      const fallback =
-        STORY_TEMPLATES[Math.floor(Math.random() * STORY_TEMPLATES.length)];
-      return this.templateToSeed(fallback!, orgId);
+      const fallbackIndex = Math.floor(Math.random() * STORY_TEMPLATES.length)
+      const fallback = STORY_TEMPLATES[fallbackIndex]
+      if (!fallback) {
+        throw new Error('No story templates available')
+      }
+      return this.templateToSeed(fallback, orgId)
     }
 
     // Pick a random template set and story
-    const templateSet =
-      beatTemplates[Math.floor(Math.random() * beatTemplates.length)]!;
+    const templateSetIndex = Math.floor(Math.random() * beatTemplates.length)
+    const templateSet = beatTemplates[templateSetIndex]
+    if (!templateSet) {
+      throw new Error('No beat templates available')
+    }
 
-    return this.templateToSeed(templateSet, orgId);
+    return this.templateToSeed(templateSet, orgId)
   }
 
   /**
@@ -307,22 +313,22 @@ export class StorySeedService {
    */
   private templateToSeed(
     templateSet: (typeof STORY_TEMPLATES)[number],
-    orgId: string
+    orgId: string,
   ): StorySeed {
     const headline =
       templateSet.templates[
         Math.floor(Math.random() * templateSet.templates.length)
-      ] || 'Breaking developments in the industry';
+      ] || 'Breaking developments in the industry'
 
     // Find relevant actors for this beat
-    const actors = StaticDataRegistry.getAllActors();
+    const actors = StaticDataRegistry.getAllActors()
     const relevantActors = actors
       .filter((a) => {
-        const domain = Array.isArray(a.domain) ? a.domain : [a.domain];
-        return domain.some((d) => d?.toLowerCase().includes(templateSet.beat));
+        const domain = Array.isArray(a.domain) ? a.domain : [a.domain]
+        return domain.some((d) => d?.toLowerCase().includes(templateSet.beat))
       })
       .slice(0, 3)
-      .map((a) => a.id);
+      .map((a) => a.id)
 
     return {
       id: `seed-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
@@ -334,7 +340,7 @@ export class StorySeedService {
       couldBecomeQuestion: templateSet.type === 'investigative',
       priority: Math.random() * 0.5 + 0.5, // 0.5-1.0
       suggestedAngle: this.getSuggestedAngle(templateSet.beat, orgId),
-    };
+    }
   }
 
   /**
@@ -385,10 +391,10 @@ export class StorySeedService {
         startups: 'Political connections of founders',
         media: 'Media power dynamics',
       },
-    };
+    }
 
-    const defaultAngle = `Balanced coverage with focus on implications for ${beat} sector`;
-    return orgAngles[orgId]?.[beat] || defaultAngle;
+    const defaultAngle = `Balanced coverage with focus on implications for ${beat} sector`
+    return orgAngles[orgId]?.[beat] || defaultAngle
   }
 
   /**
@@ -400,29 +406,29 @@ export class StorySeedService {
    */
   async generateDiverseStories(
     count: number,
-    excludeBeats: EditorialBeat[] = []
+    excludeBeats: EditorialBeat[] = [],
   ): Promise<StorySeed[]> {
-    const seeds: StorySeed[] = [];
-    const usedBeats = new Set<EditorialBeat>();
-    const usedTypes = new Set<string>();
+    const seeds: StorySeed[] = []
+    const usedBeats = new Set<EditorialBeat>()
+    const usedTypes = new Set<string>()
 
     // Get underrepresented beats from diversity service
-    const diversityService = getTopicDiversityService();
-    const suggestions = await diversityService.suggestDiverseTopics(count);
+    const diversityService = getTopicDiversityService()
+    const suggestions = await diversityService.suggestDiverseTopics(count)
 
     // Prioritize underrepresented beats
     for (const suggestion of suggestions) {
-      if (seeds.length >= count) break;
-      if (excludeBeats.includes(suggestion.beat)) continue;
-      if (usedBeats.has(suggestion.beat) && seeds.length > 3) continue;
+      if (seeds.length >= count) break
+      if (excludeBeats.includes(suggestion.beat)) continue
+      if (usedBeats.has(suggestion.beat) && seeds.length > 3) continue
 
       const template = STORY_TEMPLATES.find(
-        (t) => t.beat === suggestion.beat && !usedTypes.has(t.type)
-      );
+        (t) => t.beat === suggestion.beat && !usedTypes.has(t.type),
+      )
       if (template) {
-        seeds.push(this.templateToSeed(template, 'generic'));
-        usedBeats.add(suggestion.beat);
-        usedTypes.add(template.type);
+        seeds.push(this.templateToSeed(template, 'generic'))
+        usedBeats.add(suggestion.beat)
+        usedTypes.add(template.type)
       }
     }
 
@@ -431,21 +437,22 @@ export class StorySeedService {
       const availableTemplates = STORY_TEMPLATES.filter(
         (t) =>
           !excludeBeats.includes(t.beat) &&
-          (!usedBeats.has(t.beat) || seeds.length > count / 2)
-      );
+          (!usedBeats.has(t.beat) || seeds.length > count / 2),
+      )
 
-      if (availableTemplates.length === 0) break;
+      if (availableTemplates.length === 0) break
 
-      const template =
-        availableTemplates[
-          Math.floor(Math.random() * availableTemplates.length)
-        ]!;
-      seeds.push(this.templateToSeed(template, 'generic'));
-      usedBeats.add(template.beat);
-      usedTypes.add(template.type);
+      const templateIndex = Math.floor(
+        Math.random() * availableTemplates.length,
+      )
+      const template = availableTemplates[templateIndex]
+      if (!template) break
+      seeds.push(this.templateToSeed(template, 'generic'))
+      usedBeats.add(template.beat)
+      usedTypes.add(template.type)
     }
 
-    return seeds;
+    return seeds
   }
 
   /**
@@ -455,18 +462,18 @@ export class StorySeedService {
    * @returns Story seed focused on the actor
    */
   async generateProfileStory(actorId: string): Promise<StorySeed | null> {
-    const actor = StaticDataRegistry.getActor(actorId);
+    const actor = StaticDataRegistry.getActor(actorId)
     if (!actor) {
       logger.warn(
         'Actor not found for profile story',
         { actorId },
-        'StorySeedService'
-      );
-      return null;
+        'StorySeedService',
+      )
+      return null
     }
 
-    const domain = Array.isArray(actor.domain) ? actor.domain[0] : actor.domain;
-    const beat = this.domainToBeat(domain || 'tech');
+    const domain = Array.isArray(actor.domain) ? actor.domain[0] : actor.domain
+    const beat = this.domainToBeat(domain || 'tech')
 
     return {
       id: `profile-${actorId}-${Date.now()}`,
@@ -478,23 +485,23 @@ export class StorySeedService {
       couldBecomeQuestion: false,
       priority: 0.7,
       suggestedAngle: `Focus on recent activities and industry influence`,
-    };
+    }
   }
 
   /**
    * Convert a domain to an editorial beat
    */
   private domainToBeat(domain: string): EditorialBeat {
-    const domainLower = domain.toLowerCase();
+    const domainLower = domain.toLowerCase()
     if (domainLower.includes('crypto') || domainLower.includes('web3'))
-      return 'crypto';
-    if (domainLower.includes('ai') || domainLower.includes('ml')) return 'ai';
-    if (domainLower.includes('politic')) return 'politics';
+      return 'crypto'
+    if (domainLower.includes('ai') || domainLower.includes('ml')) return 'ai'
+    if (domainLower.includes('politic')) return 'politics'
     if (domainLower.includes('financ') || domainLower.includes('invest'))
-      return 'finance';
-    if (domainLower.includes('media')) return 'media';
-    if (domainLower.includes('startup')) return 'startups';
-    return 'tech';
+      return 'finance'
+    if (domainLower.includes('media')) return 'media'
+    if (domainLower.includes('startup')) return 'startups'
+    return 'tech'
   }
 
   /**
@@ -528,10 +535,13 @@ export class StorySeedService {
         beat: 'politics' as EditorialBeat,
         headline: 'Key policy vote approaches with uncertain outcome',
       },
-    ];
+    ]
 
-    const template =
-      breakingTemplates[Math.floor(Math.random() * breakingTemplates.length)]!;
+    const templateIndex = Math.floor(Math.random() * breakingTemplates.length)
+    const template = breakingTemplates[templateIndex]
+    if (!template) {
+      throw new Error('No breaking templates available')
+    }
 
     return {
       id: `breaking-${Date.now()}`,
@@ -543,26 +553,26 @@ export class StorySeedService {
       couldBecomeQuestion: true,
       priority: 1.0, // Breaking news is always high priority
       suggestedAngle: 'Fast, factual reporting with expert reaction quotes',
-    };
+    }
   }
 }
 
 // Singleton instance
-let storySeedServiceInstance: StorySeedService | null = null;
+let storySeedServiceInstance: StorySeedService | null = null
 
 /**
  * Get the singleton StorySeedService instance
  */
 export function getStorySeedService(llm: BabylonLLMClient): StorySeedService {
   if (!storySeedServiceInstance) {
-    storySeedServiceInstance = new StorySeedService(llm);
+    storySeedServiceInstance = new StorySeedService(llm)
   }
-  return storySeedServiceInstance;
+  return storySeedServiceInstance
 }
 
 /**
  * Reset the singleton (for testing)
  */
 export function resetStorySeedService(): void {
-  storySeedServiceInstance = null;
+  storySeedServiceInstance = null
 }

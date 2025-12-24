@@ -7,85 +7,81 @@ import {
   getKMSClient,
   type PolicyCondition,
   type SecretPolicy,
-} from '@babylon/api';
-import { generateSnowflakeId, logger } from '@babylon/shared';
-import type { Address, Hex } from 'viem';
+} from '@babylon/api'
+import { generateSnowflakeId, logger } from '@babylon/shared'
+import type { Address, Hex } from 'viem'
 import type {
   AccessCondition,
   AccessControlPolicy,
-} from '../mpc/ProductionMPCConfig';
-import type { TrajectoryStep } from '../training/types';
-
-export interface EncryptedPayload {
-  ciphertext: string;
-  dataHash: string;
-  accessControlConditions: AccessCondition[];
-  accessControlConditionType: 'unified';
-  encryptedSymmetricKey: string;
-  chain?: string;
-}
+} from '../mpc/ProductionMPCConfig'
+import type { TrajectoryStep } from '../training/types'
+import {
+  type EncryptedPayload,
+  isCIDResponse,
+  isEncryptedPayload,
+} from '../type-guards'
 
 export interface EncryptedTrajectory {
-  id: string;
-  agentId: string;
-  archetype: string;
-  scenarioId: string;
-  windowId: string;
-  stepCount: number;
-  totalReward: number;
-  createdAt: number;
+  id: string
+  agentId: string
+  archetype: string
+  scenarioId: string
+  windowId: string
+  stepCount: number
+  totalReward: number
+  createdAt: number
   /** CID of encrypted data on IPFS */
-  encryptedCid: string;
+  encryptedCid: string
   /** Policy for decryption */
-  policyHash: string;
+  policyHash: string
   /** Metadata (unencrypted) */
   metadata: {
-    durationMs: number;
-    finalBalance?: number;
-    finalPnL?: number;
-    episodeLength: number;
-    finalStatus: string;
-  };
+    durationMs: number
+    finalBalance?: number
+    finalPnL?: number
+    episodeLength: number
+    finalStatus: string
+  }
 }
 
 export interface TrajectoryBatch {
-  batchId: string;
-  archetype: string;
-  trajectoryCount: number;
-  totalSteps: number;
-  trajectoryIds: string[];
-  encryptedCid: string;
-  createdAt: number;
+  batchId: string
+  archetype: string
+  trajectoryCount: number
+  totalSteps: number
+  trajectoryIds: string[]
+  encryptedCid: string
+  createdAt: number
   /** For training orchestrator */
-  datasetCidBytes32: `0x${string}`;
+  datasetCidBytes32: `0x${string}`
 }
 
 export interface StorageConfig {
   /** Jeju storage endpoint */
-  storageEndpoint: string;
+  storageEndpoint: string
   /** Chain ID for policy conditions */
-  chainId: string;
+  chainId: string
   /** Training orchestrator address (for policy) */
-  trainingOrchestratorAddress: Address;
+  trainingOrchestratorAddress: Address
   /** AI CEO address (for policy) */
-  aiCEOAddress: Address;
+  aiCEOAddress: Address
   /** TEE registry address (for worker attestation) */
-  teeRegistryAddress: Address;
+  teeRegistryAddress: Address
   /** Minimum TEE stake to decrypt */
-  minTEEStakeUSD: number;
+  minTEEStakeUSD: number
   /** Enable MPC encryption (vs simpler AES for dev) */
-  useMPC: boolean;
+  useMPC: boolean
   /** MPC threshold (e.g., 3 of 5) */
-  mpcThreshold: number;
+  mpcThreshold: number
   /** MPC party count */
-  mpcParties: number;
+  mpcParties: number
 }
 
 export interface AuthSignature {
-  sig: string;
-  derivedVia: string;
-  signedMessage: string;
-  address: string;
+  sig: string
+  derivedVia: string
+  signedMessage: string
+  address: string
 }
 
 // ============================================================================
@@ -105,33 +101,33 @@ const defaultConfig: StorageConfig = {
   useMPC: process.env.USE_MPC_ENCRYPTION === 'true',
   mpcThreshold: parseInt(process.env.MPC_THRESHOLD ?? '3', 10),
   mpcParties: parseInt(process.env.MPC_PARTIES ?? '5', 10),
-};
+}
 
 function policyToKMSPolicy(policy: AccessControlPolicy): SecretPolicy {
   const conditions: PolicyCondition[] = policy.conditions.map((c) => {
     if (c.type === 'role' && c.address)
-      return { type: 'address' as const, value: c.address };
+      return { type: 'address' as const, value: c.address }
     if (c.type === 'contract' && c.address)
-      return { type: 'tee' as const, value: c.address };
-    return { type: 'timestamp' as const, value: 0 };
-  });
-  return { conditions, operator: policy.operator };
+      return { type: 'tee' as const, value: c.address }
+    return { type: 'timestamp' as const, value: 0 }
+  })
+  return { conditions, operator: policy.operator }
 }
 
 async function encryptWithPolicy(
   data: string,
   policy: AccessControlPolicy,
-  options: { metadata?: Record<string, string> }
+  options: { metadata?: Record<string, string> },
 ): Promise<EncryptedPayload> {
-  const kms = getKMSClient();
-  if (!kms.isInitialized()) await kms.initialize();
+  const kms = getKMSClient()
+  if (!kms.isInitialized()) await kms.initialize()
 
-  const kmsPolicy = policyToKMSPolicy(policy);
+  const kmsPolicy = policyToKMSPolicy(policy)
 
   logger.debug('[EncryptedStorage] Encrypting with KMS', {
     conditions: policy.conditions.length,
     metadata: options.metadata,
-  });
+  })
 
   // Call real KMS encryption
   const result = await kms.encrypt({
@@ -139,10 +135,10 @@ async function encryptWithPolicy(
     name: options.metadata?.trajectoryId ?? `trajectory-${Date.now()}`,
     policy: kmsPolicy,
     metadata: options.metadata,
-  });
+  })
 
   // Compute data hash
-  const dataHash = hashString(data);
+  const dataHash = hashString(data)
 
   return {
     ciphertext: result.encryptedPayload,
@@ -151,37 +147,37 @@ async function encryptWithPolicy(
     accessControlConditionType: 'unified',
     encryptedSymmetricKey: result.id,
     chain: policy.conditions[0]?.chainId,
-  };
+  }
 }
 
 async function decryptJSON<T>(
   encrypted: EncryptedPayload,
-  authSig: AuthSignature
+  authSig: AuthSignature,
 ): Promise<T> {
-  const kms = getKMSClient();
-  if (!kms.isInitialized()) await kms.initialize();
+  const kms = getKMSClient()
+  if (!kms.isInitialized()) await kms.initialize()
 
   logger.debug('[EncryptedStorage] Decrypting', {
     keyId: encrypted.encryptedSymmetricKey,
-  });
+  })
 
   const decrypted = await kms.decrypt({
     payload: encrypted.ciphertext as Hex,
     proof: authSig.sig as Hex,
-  });
-  return JSON.parse(decrypted) as T;
+  })
+  return JSON.parse(decrypted) as T
 }
 
 function hashString(str: string): string {
-  const data = new TextEncoder().encode(str);
+  const data = new TextEncoder().encode(str)
 
   // Simple hash for now - in production use crypto.subtle.digest
-  let hash = 0;
+  let hash = 0
   for (const byte of data) {
-    hash = (hash << 5) - hash + byte;
-    hash = hash & hash;
+    hash = (hash << 5) - hash + byte
+    hash = hash & hash
   }
-  return Math.abs(hash).toString(16).padStart(8, '0');
+  return Math.abs(hash).toString(16).padStart(8, '0')
 }
 
 // ============================================================================
@@ -189,11 +185,11 @@ function hashString(str: string): string {
 // ============================================================================
 
 export class EncryptedTrajectoryStorage {
-  private config: StorageConfig;
-  private initialized: boolean = false;
+  private config: StorageConfig
+  private initialized: boolean = false
 
   constructor(config: Partial<StorageConfig> = {}) {
-    this.config = { ...defaultConfig, ...config };
+    this.config = { ...defaultConfig, ...config }
   }
 
   // --------------------------------------------------------------------------
@@ -201,27 +197,27 @@ export class EncryptedTrajectoryStorage {
   // --------------------------------------------------------------------------
 
   async initialize(): Promise<void> {
-    if (this.initialized) return;
+    if (this.initialized) return
 
     // Verify storage endpoint is available
     const response = await fetch(`${this.config.storageEndpoint}/health`, {
       signal: AbortSignal.timeout(5000),
-    }).catch(() => null);
+    }).catch(() => null)
 
     if (!response?.ok) {
       logger.warn(
-        '[EncryptedStorage] Storage endpoint not available, using fallback'
-      );
+        '[EncryptedStorage] Storage endpoint not available, using fallback',
+      )
     }
 
-    this.initialized = true;
+    this.initialized = true
     logger.info('[EncryptedStorage] Initialized', {
       storageEndpoint: this.config.storageEndpoint,
       useMPC: this.config.useMPC,
       mpcConfig: this.config.useMPC
         ? `${this.config.mpcThreshold}-of-${this.config.mpcParties}`
         : 'disabled',
-    });
+    })
   }
 
   // --------------------------------------------------------------------------
@@ -237,38 +233,38 @@ export class EncryptedTrajectoryStorage {
    */
   async storeTrajectory(
     trajectory: {
-      agentId: string;
-      archetype: string;
-      scenarioId: string;
-      windowId: string;
-      startTime: number;
-      endTime: number;
-      totalReward: number;
-      finalBalance?: number;
-      finalPnL?: number;
-      finalStatus: string;
+      agentId: string
+      archetype: string
+      scenarioId: string
+      windowId: string
+      startTime: number
+      endTime: number
+      totalReward: number
+      finalBalance?: number
+      finalPnL?: number
+      finalStatus: string
     },
-    steps: TrajectoryStep[]
+    steps: TrajectoryStep[],
   ): Promise<EncryptedTrajectory> {
-    await this.initialize();
+    await this.initialize()
 
-    const trajectoryId = await generateSnowflakeId();
+    const trajectoryId = await generateSnowflakeId()
 
     // Build access policy
-    const policy = this.buildTrajectoryPolicy();
+    const policy = this.buildTrajectoryPolicy()
 
     // Encrypt steps
-    const stepsJson = JSON.stringify(steps);
+    const stepsJson = JSON.stringify(steps)
     const encrypted = await encryptWithPolicy(stepsJson, policy, {
       metadata: {
         trajectoryId,
         archetype: trajectory.archetype,
         type: 'trajectory-steps',
       },
-    });
+    })
 
     // Upload to IPFS
-    const encryptedCid = await this.uploadToIPFS(encrypted);
+    const encryptedCid = await this.uploadToIPFS(encrypted)
 
     // Create metadata record
     const encryptedTrajectory: EncryptedTrajectory = {
@@ -289,16 +285,16 @@ export class EncryptedTrajectoryStorage {
         episodeLength: steps.length,
         finalStatus: trajectory.finalStatus,
       },
-    };
+    }
 
     logger.info('[EncryptedStorage] Stored trajectory', {
       trajectoryId,
       archetype: trajectory.archetype,
       steps: steps.length,
       cid: encryptedCid,
-    });
+    })
 
-    return encryptedTrajectory;
+    return encryptedTrajectory
   }
 
   // --------------------------------------------------------------------------
@@ -314,11 +310,11 @@ export class EncryptedTrajectoryStorage {
    */
   async createBatch(
     archetype: string,
-    trajectories: EncryptedTrajectory[]
+    trajectories: EncryptedTrajectory[],
   ): Promise<TrajectoryBatch> {
-    await this.initialize();
+    await this.initialize()
 
-    const batchId = await generateSnowflakeId();
+    const batchId = await generateSnowflakeId()
 
     // Create batch manifest
     const manifest = {
@@ -333,10 +329,10 @@ export class EncryptedTrajectoryStorage {
         reward: t.totalReward,
       })),
       createdAt: Date.now(),
-    };
+    }
 
     // Build policy for batch
-    const policy = this.buildTrajectoryPolicy();
+    const policy = this.buildTrajectoryPolicy()
 
     // Encrypt manifest
     const encrypted = await encryptWithPolicy(
@@ -348,14 +344,14 @@ export class EncryptedTrajectoryStorage {
           archetype,
           type: 'trajectory-batch',
         },
-      }
-    );
+      },
+    )
 
     // Upload to IPFS
-    const encryptedCid = await this.uploadToIPFS(encrypted);
+    const encryptedCid = await this.uploadToIPFS(encrypted)
 
     // Convert CID to bytes32 for contract
-    const datasetCidBytes32 = this.cidToBytes32(encryptedCid);
+    const datasetCidBytes32 = this.cidToBytes32(encryptedCid)
 
     const batch: TrajectoryBatch = {
       batchId,
@@ -366,7 +362,7 @@ export class EncryptedTrajectoryStorage {
       encryptedCid,
       createdAt: Date.now(),
       datasetCidBytes32,
-    };
+    }
 
     logger.info('[EncryptedStorage] Created batch', {
       batchId,
@@ -374,9 +370,9 @@ export class EncryptedTrajectoryStorage {
       trajectoryCount: trajectories.length,
       totalSteps: manifest.totalSteps,
       cid: encryptedCid,
-    });
+    })
 
-    return batch;
+    return batch
   }
 
   // --------------------------------------------------------------------------
@@ -392,22 +388,22 @@ export class EncryptedTrajectoryStorage {
    */
   async retrieveTrajectory(
     encryptedCid: string,
-    authSig: AuthSignature
+    authSig: AuthSignature,
   ): Promise<TrajectoryStep[]> {
-    await this.initialize();
+    await this.initialize()
 
     // Download from IPFS
-    const encrypted = await this.downloadFromIPFS(encryptedCid);
+    const encrypted = await this.downloadFromIPFS(encryptedCid)
 
     // Decrypt with auth
-    const decrypted = await decryptJSON<TrajectoryStep[]>(encrypted, authSig);
+    const decrypted = await decryptJSON<TrajectoryStep[]>(encrypted, authSig)
 
     logger.info('[EncryptedStorage] Retrieved trajectory', {
       cid: encryptedCid,
       steps: decrypted.length,
-    });
+    })
 
-    return decrypted;
+    return decrypted
   }
 
   // --------------------------------------------------------------------------
@@ -438,13 +434,13 @@ export class EncryptedTrajectoryStorage {
         address: this.config.trainingOrchestratorAddress,
         role: 'AI_CEO',
       },
-    ];
+    ]
 
     // Either condition allows access
     return {
       conditions,
       operator: 'or',
-    };
+    }
   }
 
   /**
@@ -467,7 +463,7 @@ export class EncryptedTrajectoryStorage {
         },
       ],
       operator: 'and',
-    };
+    }
   }
 
   // --------------------------------------------------------------------------
@@ -483,27 +479,33 @@ export class EncryptedTrajectoryStorage {
         pin: true,
         encrypt: false, // Already encrypted
       }),
-    });
+    })
 
     if (!response.ok) {
-      throw new Error(`Failed to upload to IPFS: ${response.statusText}`);
+      throw new Error(`Failed to upload to IPFS: ${response.statusText}`)
     }
 
-    const result = (await response.json()) as { cid: string };
-    return result.cid;
+    const result: unknown = await response.json()
+    if (!isCIDResponse(result)) {
+      throw new Error('Invalid IPFS upload response')
+    }
+    return result.cid
   }
 
   private async downloadFromIPFS(cid: string): Promise<EncryptedPayload> {
     const response = await fetch(
-      `${this.config.storageEndpoint}/download/${cid}`
-    );
+      `${this.config.storageEndpoint}/download/${cid}`,
+    )
 
     if (!response.ok) {
-      throw new Error(`Failed to download from IPFS: ${response.statusText}`);
+      throw new Error(`Failed to download from IPFS: ${response.statusText}`)
     }
 
-    const data = await response.json();
-    return data as EncryptedPayload;
+    const data: unknown = await response.json()
+    if (!isEncryptedPayload(data)) {
+      throw new Error('Invalid encrypted payload from IPFS')
+    }
+    return data
   }
 
   // --------------------------------------------------------------------------
@@ -512,15 +514,15 @@ export class EncryptedTrajectoryStorage {
 
   private hashPolicy(policy: AccessControlPolicy): string {
     // Simple hash for policy identification
-    const policyStr = JSON.stringify(policy);
-    return `policy-${hashString(policyStr)}`;
+    const policyStr = JSON.stringify(policy)
+    return `policy-${hashString(policyStr)}`
   }
 
   private cidToBytes32(cid: string): `0x${string}` {
     // Convert CID to bytes32 for contract storage
     // In production, use proper CID encoding
-    const hex = Buffer.from(cid).toString('hex').padEnd(64, '0').slice(0, 64);
-    return `0x${hex}` as `0x${string}`;
+    const hex = Buffer.from(cid).toString('hex').padEnd(64, '0').slice(0, 64)
+    return `0x${hex}` as `0x${string}`
   }
 
   // --------------------------------------------------------------------------
@@ -528,11 +530,11 @@ export class EncryptedTrajectoryStorage {
   // --------------------------------------------------------------------------
 
   getConfig(): StorageConfig {
-    return this.config;
+    return this.config
   }
 
   isInitialized(): boolean {
-    return this.initialized;
+    return this.initialized
   }
 }
 
@@ -540,17 +542,17 @@ export class EncryptedTrajectoryStorage {
 // Singleton
 // ============================================================================
 
-let _storage: EncryptedTrajectoryStorage | null = null;
+let _storage: EncryptedTrajectoryStorage | null = null
 
 export function getEncryptedTrajectoryStorage(
-  config?: Partial<StorageConfig>
+  config?: Partial<StorageConfig>,
 ): EncryptedTrajectoryStorage {
   if (!_storage) {
-    _storage = new EncryptedTrajectoryStorage(config);
+    _storage = new EncryptedTrajectoryStorage(config)
   }
-  return _storage;
+  return _storage
 }
 
 export function resetEncryptedTrajectoryStorage(): void {
-  _storage = null;
+  _storage = null
 }

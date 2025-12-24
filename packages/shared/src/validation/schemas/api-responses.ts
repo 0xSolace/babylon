@@ -5,7 +5,7 @@
  * These schemas match the actual API response structures.
  */
 
-import { z } from 'zod';
+import { z } from 'zod'
 
 // =============================================================================
 // Feed Posts API Response Schemas
@@ -24,7 +24,7 @@ const OriginalPostSchema = z
     authorProfileImageUrl: z.string().nullable(),
     timestamp: z.string(),
   })
-  .nullable();
+  .nullable()
 
 /**
  * FeedPost schema matching the FeedPost type from game-types.ts
@@ -71,7 +71,7 @@ export const FeedPostSchema = z.object({
   originalAuthorUsername: z.string().nullable().optional(),
   originalAuthorProfileImageUrl: z.string().nullable().optional(),
   originalContent: z.string().nullable().optional(),
-});
+})
 
 /**
  * Feed posts API response schema
@@ -80,7 +80,7 @@ export const FeedPostsApiResponseSchema = z.object({
   posts: z.array(FeedPostSchema),
   cursor: z.string().nullable(),
   hasMore: z.boolean(),
-});
+})
 
 // =============================================================================
 // User Positions API Response Schemas
@@ -105,7 +105,7 @@ const PerpPositionApiSchema = z.object({
   fundingPaid: z.union([z.number(), z.string()]).optional(),
   openedAt: z.string(),
   lastUpdated: z.string().optional(),
-});
+})
 
 /**
  * Prediction position from API (allows string or number for numeric fields)
@@ -124,7 +124,7 @@ const PredictionPositionApiSchema = z.object({
   currentProbability: z.union([z.number(), z.string()]).optional(),
   resolved: z.boolean().optional(),
   resolution: z.boolean().nullable().optional(),
-});
+})
 
 /**
  * Perp stats schema
@@ -133,7 +133,7 @@ const PerpStatsSchema = z.object({
   totalPositions: z.number(),
   totalPnL: z.number(),
   totalFunding: z.number(),
-});
+})
 
 /**
  * User positions API response schema
@@ -150,7 +150,7 @@ export const UserPositionsApiResponseSchema = z.object({
       positions: z.array(PredictionPositionApiSchema).optional(),
     })
     .optional(),
-});
+})
 
 // =============================================================================
 // Perp History API Response Schemas
@@ -165,7 +165,7 @@ const PerpHistoryPointApiSchema = z.object({
   changePercent: z.union([z.number(), z.string()]).optional(),
   volume: z.union([z.number(), z.string()]).nullable().optional(),
   timestamp: z.string(),
-});
+})
 
 /**
  * Perp history API response schema
@@ -173,7 +173,7 @@ const PerpHistoryPointApiSchema = z.object({
 export const PerpHistoryApiResponseSchema = z.object({
   history: z.array(PerpHistoryPointApiSchema).optional(),
   error: z.string().optional(),
-});
+})
 
 // =============================================================================
 // Prediction History API Response Schemas
@@ -187,14 +187,14 @@ const PredictionHistoryPointApiSchema = z.object({
   noPrice: z.number(),
   liquidity: z.number().optional(),
   timestamp: z.string(),
-});
+})
 
 /**
  * Prediction history API response schema
  */
 export const PredictionHistoryApiResponseSchema = z.object({
   history: z.array(PredictionHistoryPointApiSchema).optional(),
-});
+})
 
 // =============================================================================
 // Wallet Balance API Response Schemas
@@ -206,7 +206,7 @@ export const PredictionHistoryApiResponseSchema = z.object({
 export const WalletBalanceApiResponseSchema = z.object({
   balance: z.union([z.number(), z.string()]),
   lifetimePnL: z.union([z.number(), z.string()]),
-});
+})
 
 // =============================================================================
 // Auth (User Me) API Response Schemas
@@ -224,7 +224,7 @@ const UserStatsSchema = z
     comments: z.number().optional(),
     reactions: z.number().optional(),
   })
-  .optional();
+  .optional()
 
 /**
  * User schema for /api/users/me response
@@ -260,7 +260,7 @@ const UserMeSchema = z
     updatedAt: z.string().optional(),
     onChainRegistered: z.boolean().optional(),
   })
-  .nullable();
+  .nullable()
 
 /**
  * User me API response schema
@@ -270,7 +270,7 @@ export const UserMeApiResponseSchema = z.object({
   needsOnboarding: z.boolean(),
   needsOnchain: z.boolean(),
   user: UserMeSchema,
-});
+})
 
 // =============================================================================
 // Unread Messages API Response Schemas
@@ -282,7 +282,7 @@ export const UserMeApiResponseSchema = z.object({
 export const UnreadMessagesApiResponseSchema = z.object({
   pendingDMs: z.number(),
   hasNewMessages: z.boolean(),
-});
+})
 
 // =============================================================================
 // Notifications Count API Response Schemas
@@ -293,7 +293,7 @@ export const UnreadMessagesApiResponseSchema = z.object({
  */
 export const NotificationsCountApiResponseSchema = z.object({
   unreadCount: z.number(),
-});
+})
 
 // =============================================================================
 // Chat Messages API Response Schemas
@@ -307,7 +307,7 @@ const ChatMessageApiSchema = z.object({
   content: z.string(),
   senderId: z.string(),
   createdAt: z.union([z.string(), z.date()]),
-});
+})
 
 /**
  * Chat messages API response schema
@@ -320,7 +320,7 @@ export const ChatMessagesApiResponseSchema = z.object({
       nextCursor: z.string().optional(),
     })
     .optional(),
-});
+})
 
 // =============================================================================
 // Agent Details API Response Schemas
@@ -338,7 +338,7 @@ const AgentReputationApiSchema = z
     feedbackCount: z.number().optional(),
     averageScore: z.number().optional(),
   })
-  .optional();
+  .optional()
 
 /**
  * Agent details from API response
@@ -351,14 +351,14 @@ const AgentDetailsApiSchema = z
     isActive: z.boolean(),
     reputation: AgentReputationApiSchema,
   })
-  .optional();
+  .optional()
 
 /**
  * Agent details API response schema
  */
 export const AgentDetailsApiResponseSchema = z.object({
   agent: AgentDetailsApiSchema,
-});
+})
 
 // =============================================================================
 // Portfolio PnL API Response Schemas
@@ -372,7 +372,7 @@ export const BalanceApiResponseSchema = z.object({
   totalWithdrawn: z.union([z.number(), z.string()]).optional(),
   lifetimePnL: z.union([z.number(), z.string()]).optional(),
   balance: z.union([z.number(), z.string()]).optional(),
-});
+})
 
 // =============================================================================
 // Decentralized Messaging API Response Schemas
@@ -383,7 +383,7 @@ export const BalanceApiResponseSchema = z.object({
  */
 export const MessagingPublicKeyApiResponseSchema = z.object({
   publicKey: z.string(),
-});
+})
 
 /**
  * Message sender schema
@@ -393,7 +393,7 @@ const MessageSenderApiSchema = z.object({
   displayName: z.string(),
   username: z.string().nullable(),
   profileImageUrl: z.string().nullable(),
-});
+})
 
 /**
  * Raw message from inbox
@@ -405,14 +405,14 @@ const InboxMessageApiSchema = z.object({
   encryptedContent: z.string(),
   timestamp: z.number(),
   sender: MessageSenderApiSchema,
-});
+})
 
 /**
  * Inbox API response schema
  */
 export const InboxApiResponseSchema = z.object({
   messages: z.array(InboxMessageApiSchema),
-});
+})
 
 /**
  * Send message API response schema
@@ -420,14 +420,14 @@ export const InboxApiResponseSchema = z.object({
 export const SendMessageApiResponseSchema = z.object({
   messageId: z.string(),
   timestamp: z.number(),
-});
+})
 
 /**
  * Error API response schema
  */
 export const ErrorApiResponseSchema = z.object({
   error: z.string().optional(),
-});
+})
 
 // =============================================================================
 // Profile/Upload API Response Schemas
@@ -439,14 +439,14 @@ export const ErrorApiResponseSchema = z.object({
 export const UsernameCheckApiResponseSchema = z.object({
   available: z.boolean(),
   suggestion: z.string().optional(),
-});
+})
 
 /**
  * File upload API response schema
  */
 export const FileUploadApiResponseSchema = z.object({
   url: z.string(),
-});
+})
 
 // =============================================================================
 // Agent Template/Form API Response Schemas
@@ -464,7 +464,7 @@ const AgentTemplateApiSchema = z.object({
   bio: z.string().optional(),
   tradingStrategy: z.string(),
   archetype: z.string().optional(),
-});
+})
 
 /**
  * Agent template index response schema
@@ -472,12 +472,12 @@ const AgentTemplateApiSchema = z.object({
 export const AgentTemplateIndexApiResponseSchema = z.object({
   templates: z.array(z.string()),
   templatesData: z.record(z.string(), AgentTemplateApiSchema).optional(),
-});
+})
 
 /**
  * Single agent template response schema
  */
-export const AgentTemplateApiResponseSchema = AgentTemplateApiSchema;
+export const AgentTemplateApiResponseSchema = AgentTemplateApiSchema
 
 /**
  * Generate field API response schema
@@ -485,56 +485,56 @@ export const AgentTemplateApiResponseSchema = AgentTemplateApiSchema;
 export const GenerateFieldApiResponseSchema = z.object({
   success: z.boolean(),
   value: z.string(),
-});
+})
 
 // =============================================================================
 // Type exports for inferred types
 // =============================================================================
 
-export type FeedPostsApiResponse = z.infer<typeof FeedPostsApiResponseSchema>;
+export type FeedPostsApiResponse = z.infer<typeof FeedPostsApiResponseSchema>
 export type UserPositionsApiResponse = z.infer<
   typeof UserPositionsApiResponseSchema
->;
+>
 export type PerpHistoryApiResponse = z.infer<
   typeof PerpHistoryApiResponseSchema
->;
+>
 export type PredictionHistoryApiResponse = z.infer<
   typeof PredictionHistoryApiResponseSchema
->;
+>
 export type WalletBalanceApiResponse = z.infer<
   typeof WalletBalanceApiResponseSchema
->;
-export type UserMeApiResponse = z.infer<typeof UserMeApiResponseSchema>;
+>
+export type UserMeApiResponse = z.infer<typeof UserMeApiResponseSchema>
 export type UnreadMessagesApiResponse = z.infer<
   typeof UnreadMessagesApiResponseSchema
->;
+>
 export type NotificationsCountApiResponse = z.infer<
   typeof NotificationsCountApiResponseSchema
->;
+>
 export type ChatMessagesApiResponse = z.infer<
   typeof ChatMessagesApiResponseSchema
->;
+>
 export type AgentDetailsApiResponse = z.infer<
   typeof AgentDetailsApiResponseSchema
->;
-export type BalanceApiResponse = z.infer<typeof BalanceApiResponseSchema>;
+>
+export type BalanceApiResponse = z.infer<typeof BalanceApiResponseSchema>
 export type MessagingPublicKeyApiResponse = z.infer<
   typeof MessagingPublicKeyApiResponseSchema
->;
-export type InboxApiResponse = z.infer<typeof InboxApiResponseSchema>;
+>
+export type InboxApiResponse = z.infer<typeof InboxApiResponseSchema>
 export type SendMessageApiResponse = z.infer<
   typeof SendMessageApiResponseSchema
->;
+>
 export type UsernameCheckApiResponse = z.infer<
   typeof UsernameCheckApiResponseSchema
->;
-export type FileUploadApiResponse = z.infer<typeof FileUploadApiResponseSchema>;
+>
+export type FileUploadApiResponse = z.infer<typeof FileUploadApiResponseSchema>
 export type AgentTemplateIndexApiResponse = z.infer<
   typeof AgentTemplateIndexApiResponseSchema
->;
+>
 export type AgentTemplateApiResponse = z.infer<
   typeof AgentTemplateApiResponseSchema
->;
+>
 export type GenerateFieldApiResponse = z.infer<
   typeof GenerateFieldApiResponseSchema
->;
+>

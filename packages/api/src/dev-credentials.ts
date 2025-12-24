@@ -12,42 +12,42 @@
  * - In production, this module is essentially a no-op
  */
 
-import { logger } from '@babylon/shared';
-import { createHash } from 'crypto';
+import { createHash } from 'node:crypto'
+import { logger } from '@babylon/shared'
 
-const isDevelopment = process.env.NODE_ENV !== 'production';
+const isDevelopment = process.env.NODE_ENV !== 'production'
 
 /**
  * Hardhat account #0 - standard development wallet
  * This is a well-known test private key from Hardhat's default accounts
  */
 const HARDHAT_DEV_PRIVATE_KEY =
-  '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80';
-const HARDHAT_DEV_ADDRESS = '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266';
+  '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80'
+const HARDHAT_DEV_ADDRESS = '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266'
 
 /**
  * Dev admin user ID - consistent across sessions
  */
-const DEV_ADMIN_USER_ID = 'dev-admin-local';
+const DEV_ADMIN_USER_ID = 'dev-admin-local'
 
 /**
  * Development credentials structure
  */
 export interface DevCredentials {
   /** Whether dev mode is active */
-  isDevMode: boolean;
+  isDevMode: boolean
   /** Dev admin user ID */
-  adminUserId: string;
+  adminUserId: string
   /** Dev admin wallet address */
-  walletAddress: string;
+  walletAddress: string
   /** Dev admin private key (for wallet signing) */
-  privateKey: string;
+  privateKey: string
   /** Dev admin token for direct API auth */
-  devAdminToken: string;
+  devAdminToken: string
   /** Dev cron secret */
-  cronSecret: string;
+  cronSecret: string
   /** Dev agent secret (separate from cron) */
-  agentSecret: string;
+  agentSecret: string
 }
 
 /**
@@ -57,8 +57,8 @@ export interface DevCredentials {
 function deriveSecret(seed: string, purpose: string): string {
   const hash = createHash('sha256')
     .update(`babylon-dev:${seed}:${purpose}`)
-    .digest('hex');
-  return `dev_${purpose}_${hash.substring(0, 32)}`;
+    .digest('hex')
+  return `dev_${purpose}_${hash.substring(0, 32)}`
 }
 
 /**
@@ -67,11 +67,11 @@ function deriveSecret(seed: string, purpose: string): string {
  */
 export function getDevCredentials(): DevCredentials | null {
   if (!isDevelopment) {
-    return null;
+    return null
   }
 
   // Use the machine hostname or a fixed seed for consistency
-  const seed = process.env.HOSTNAME || 'localhost';
+  const seed = process.env.HOSTNAME || 'localhost'
 
   return {
     isDevMode: true,
@@ -81,7 +81,7 @@ export function getDevCredentials(): DevCredentials | null {
     devAdminToken: deriveSecret(seed, 'admin'),
     cronSecret: deriveSecret(seed, 'cron'),
     agentSecret: deriveSecret(seed, 'agent'),
-  };
+  }
 }
 
 /**
@@ -89,39 +89,39 @@ export function getDevCredentials(): DevCredentials | null {
  */
 export function isValidDevAdminToken(token: string): boolean {
   if (!isDevelopment) {
-    return false;
+    return false
   }
 
-  const creds = getDevCredentials();
+  const creds = getDevCredentials()
   if (!creds) {
-    return false;
+    return false
   }
 
-  return token === creds.devAdminToken;
+  return token === creds.devAdminToken
 }
 
 /**
  * Get the dev admin user info for authenticated sessions
  */
 export function getDevAdminUser(): {
-  userId: string;
-  dbUserId: string;
-  walletAddress: string;
+  userId: string
+  dbUserId: string
+  walletAddress: string
 } | null {
   if (!isDevelopment) {
-    return null;
+    return null
   }
 
-  const creds = getDevCredentials();
+  const creds = getDevCredentials()
   if (!creds) {
-    return null;
+    return null
   }
 
   return {
     userId: creds.adminUserId,
     dbUserId: creds.adminUserId,
     walletAddress: creds.walletAddress,
-  };
+  }
 }
 
 /**
@@ -129,20 +129,20 @@ export function getDevAdminUser(): {
  */
 export function isValidCronSecret(secret: string): boolean {
   // First check environment variable
-  const envSecret = process.env.CRON_SECRET;
+  const envSecret = process.env.CRON_SECRET
   if (envSecret && secret === envSecret) {
-    return true;
+    return true
   }
 
   // In dev mode, also accept dev cron secret
   if (isDevelopment) {
-    const creds = getDevCredentials();
+    const creds = getDevCredentials()
     if (creds && secret === creds.cronSecret) {
-      return true;
+      return true
     }
   }
 
-  return false;
+  return false
 }
 
 /**
@@ -150,24 +150,24 @@ export function isValidCronSecret(secret: string): boolean {
  */
 export function isValidAgentSecret(secret: string): boolean {
   // First check environment variable (use separate AGENT_SECRET, fallback to CRON_SECRET)
-  const envSecret = process.env.AGENT_SECRET || process.env.CRON_SECRET;
+  const envSecret = process.env.AGENT_SECRET || process.env.CRON_SECRET
   if (envSecret && secret === envSecret) {
-    return true;
+    return true
   }
 
   // In dev mode, also accept dev agent secret
   if (isDevelopment) {
-    const creds = getDevCredentials();
+    const creds = getDevCredentials()
     if (creds && secret === creds.agentSecret) {
-      return true;
+      return true
     }
   }
 
-  return false;
+  return false
 }
 
 // Track if we've logged credentials this session
-let hasLoggedCredentials = false;
+let hasLoggedCredentials = false
 
 /**
  * Log development credentials to console (only once per session)
@@ -175,15 +175,15 @@ let hasLoggedCredentials = false;
  */
 export function logDevCredentials(): void {
   if (!isDevelopment || hasLoggedCredentials) {
-    return;
+    return
   }
 
-  const creds = getDevCredentials();
+  const creds = getDevCredentials()
   if (!creds) {
-    return;
+    return
   }
 
-  hasLoggedCredentials = true;
+  hasLoggedCredentials = true
 
   const banner = `
 ╔════════════════════════════════════════════════════════════════════════════╗
@@ -203,10 +203,10 @@ export function logDevCredentials(): void {
 ║                                                                            ║
 ║  ⚠️  These credentials are ONLY valid in development mode!                 ║
 ╚════════════════════════════════════════════════════════════════════════════╝
-`;
+`
 
   // Use direct console.log to ensure this is visible
-  console.log(banner);
+  console.log(banner)
 
   // Also log via logger for structured logs
   logger.info(
@@ -215,6 +215,6 @@ export function logDevCredentials(): void {
       walletAddress: creds.walletAddress,
       adminUserId: creds.adminUserId,
     },
-    'DevCredentials'
-  );
+    'DevCredentials',
+  )
 }

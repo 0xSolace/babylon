@@ -4,87 +4,110 @@
  * Core types for database operations including JSON values, decimals, errors, and query inputs.
  */
 
-import type { JsonValue } from '@babylon/shared';
+/**
+ * JSON value type - represents any valid JSON value.
+ * Used for JSONB columns and metadata fields.
+ */
+export type JsonValue =
+  | string
+  | number
+  | boolean
+  | null
+  | JsonValue[]
+  | { [key: string]: JsonValue }
 
 /**
- * Re-export JsonValue from shared for convenience.
+ * SQL value types - all valid types that can be used in database columns.
+ * Includes primitives, arrays, objects (JSON/JSONB).
  */
-export type { JsonValue };
+export type SQLValue =
+  | string
+  | number
+  | boolean
+  | null
+  | Date
+  | bigint
+  | Uint8Array
+  | string[]
+  | number[]
+  | boolean[]
+  | JsonValue
+  | JsonValue[]
 
 /**
  * JSON object type for database fields.
  */
-export type JsonObject = { [key: string]: JsonValue };
+export type JsonObject = { [key: string]: JsonValue }
 
 /**
  * JSON array type for database fields.
  */
-export type JsonArray = JsonValue[];
+export type JsonArray = JsonValue[]
 
 /**
  * Input JSON value type (alias for JsonValue).
  */
-export type InputJsonValue = JsonValue;
+export type InputJsonValue = JsonValue
 
 /**
  * Decimal number class for precise decimal arithmetic.
  * Uses string representation for database storage to avoid floating-point precision issues.
  */
 export class Decimal {
-  private value: string;
+  private value: string
 
   constructor(value: string | number | Decimal) {
     if (value instanceof Decimal) {
-      this.value = value.toString();
+      this.value = value.toString()
     } else if (typeof value === 'number') {
-      this.value = value.toString();
+      this.value = value.toString()
     } else {
-      this.value = value;
+      this.value = value
     }
   }
 
   toString(): string {
-    return this.value;
+    return this.value
   }
 
   toNumber(): number {
-    return Number.parseFloat(this.value);
+    return Number.parseFloat(this.value)
   }
 
   static add(
     a: Decimal | string | number,
-    b: Decimal | string | number
+    b: Decimal | string | number,
   ): Decimal {
-    const aNum = typeof a === 'number' ? a : Number.parseFloat(a.toString());
-    const bNum = typeof b === 'number' ? b : Number.parseFloat(b.toString());
-    return new Decimal((aNum + bNum).toString());
+    const aNum = typeof a === 'number' ? a : Number.parseFloat(a.toString())
+    const bNum = typeof b === 'number' ? b : Number.parseFloat(b.toString())
+    return new Decimal((aNum + bNum).toString())
   }
 
   static sub(
     a: Decimal | string | number,
-    b: Decimal | string | number
+    b: Decimal | string | number,
   ): Decimal {
-    const aNum = typeof a === 'number' ? a : Number.parseFloat(a.toString());
-    const bNum = typeof b === 'number' ? b : Number.parseFloat(b.toString());
-    return new Decimal((aNum - bNum).toString());
+    const aNum = typeof a === 'number' ? a : Number.parseFloat(a.toString())
+    const bNum = typeof b === 'number' ? b : Number.parseFloat(b.toString())
+    return new Decimal((aNum - bNum).toString())
   }
 
   static mul(
     a: Decimal | string | number,
-    b: Decimal | string | number
+    b: Decimal | string | number,
   ): Decimal {
-    const aNum = typeof a === 'number' ? a : Number.parseFloat(a.toString());
-    const bNum = typeof b === 'number' ? b : Number.parseFloat(b.toString());
-    return new Decimal((aNum * bNum).toString());
+    const aNum = typeof a === 'number' ? a : Number.parseFloat(a.toString())
+    const bNum = typeof b === 'number' ? b : Number.parseFloat(b.toString())
+    return new Decimal((aNum * bNum).toString())
   }
 
   static div(
     a: Decimal | string | number,
-    b: Decimal | string | number
+    b: Decimal | string | number,
   ): Decimal {
-    const aNum = typeof a === 'number' ? a : Number.parseFloat(a.toString());
-    const bNum = typeof b === 'number' ? b : Number.parseFloat(b.toString());
-    return new Decimal((aNum / bNum).toString());
+    const aNum = typeof a === 'number' ? a : Number.parseFloat(a.toString())
+    const bNum = typeof b === 'number' ? b : Number.parseFloat(b.toString())
+    return new Decimal((aNum / bNum).toString())
   }
 }
 
@@ -96,18 +119,18 @@ export const DbErrorCodes = {
   FOREIGN_KEY_VIOLATION: '23503',
   NOT_NULL_VIOLATION: '23502',
   CHECK_VIOLATION: '23514',
-} as const;
+} as const
 
 /**
  * Database error class with error code support.
  */
 export class DatabaseError extends Error {
-  code: string;
+  code: string
 
   constructor(message: string, code: string) {
-    super(message);
-    this.name = 'DatabaseError';
-    this.code = code;
+    super(message)
+    this.name = 'DatabaseError'
+    this.code = code
   }
 }
 
@@ -117,7 +140,7 @@ export class DatabaseError extends Error {
 export type DatabaseErrorType =
   | DatabaseError
   | Error
-  | { code?: string; message?: string; name?: string };
+  | { code?: string; message?: string; name?: string }
 
 /**
  * Convert an unknown error to DatabaseErrorType.
@@ -127,12 +150,12 @@ export type DatabaseErrorType =
  */
 export function toDatabaseErrorType(error: unknown): DatabaseErrorType {
   if (error instanceof DatabaseError || error instanceof Error) {
-    return error;
+    return error
   }
   if (typeof error === 'object' && error !== null) {
-    return error as DatabaseErrorType;
+    return error as DatabaseErrorType
   }
-  return new Error(String(error));
+  return new Error(String(error))
 }
 
 /**
@@ -143,13 +166,13 @@ export function toDatabaseErrorType(error: unknown): DatabaseErrorType {
  */
 export function isUniqueConstraintError(error: DatabaseErrorType): boolean {
   if (error instanceof DatabaseError) {
-    return error.code === DbErrorCodes.UNIQUE_VIOLATION;
+    return error.code === DbErrorCodes.UNIQUE_VIOLATION
   }
   if (typeof error === 'object' && error !== null && 'code' in error) {
-    const pgError = error as { code?: string };
-    return pgError.code === DbErrorCodes.UNIQUE_VIOLATION;
+    const pgError = error as { code?: string }
+    return pgError.code === DbErrorCodes.UNIQUE_VIOLATION
   }
-  return false;
+  return false
 }
 
 /**
@@ -159,37 +182,37 @@ export type WhereInput<T> = Partial<{
   [K in keyof T]:
     | T[K]
     | {
-        equals?: T[K];
-        not?: T[K];
-        in?: T[K][];
-        notIn?: T[K][];
-        lt?: T[K];
-        lte?: T[K];
-        gt?: T[K];
-        gte?: T[K];
-        contains?: string;
-        startsWith?: string;
-        endsWith?: string;
-      };
+        equals?: T[K]
+        not?: T[K]
+        in?: T[K][]
+        notIn?: T[K][]
+        lt?: T[K]
+        lte?: T[K]
+        gt?: T[K]
+        gte?: T[K]
+        contains?: string
+        startsWith?: string
+        endsWith?: string
+      }
 }> & {
-  AND?: WhereInput<T> | WhereInput<T>[];
-  OR?: WhereInput<T>[];
-  NOT?: WhereInput<T> | WhereInput<T>[];
-};
+  AND?: WhereInput<T> | WhereInput<T>[]
+  OR?: WhereInput<T>[]
+  NOT?: WhereInput<T> | WhereInput<T>[]
+}
 
 /**
  * Order by input type for sorting query results.
  */
 export type OrderByInput<T> = Partial<{
-  [K in keyof T]: 'asc' | 'desc';
-}>;
+  [K in keyof T]: 'asc' | 'desc'
+}>
 
 /**
  * Select input type for specifying which fields to return.
  */
 export type SelectInput<T> = Partial<{
-  [K in keyof T]: boolean;
-}>;
+  [K in keyof T]: boolean
+}>
 
 /**
  * Include input type for loading relations in queries.
@@ -197,4 +220,4 @@ export type SelectInput<T> = Partial<{
 export type IncludeInput = Record<
   string,
   boolean | { select?: Record<string, boolean>; include?: IncludeInput }
->;
+>

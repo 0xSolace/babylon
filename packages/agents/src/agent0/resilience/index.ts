@@ -4,13 +4,13 @@
  * Centralized configuration for circuit breaker and rate limiter
  */
 
-export type { CircuitBreakerOptions } from './circuit-breaker';
-export { CircuitBreaker, CircuitState } from './circuit-breaker';
-export type { RateLimiterOptions } from './rate-limiter';
-export { RateLimiter } from './rate-limiter';
+export type { CircuitBreakerOptions } from './circuit-breaker'
+export { CircuitBreaker, CircuitState } from './circuit-breaker'
+export type { RateLimiterOptions } from './rate-limiter'
+export { RateLimiter } from './rate-limiter'
 
-import { CircuitBreaker } from './circuit-breaker';
-import { RateLimiter } from './rate-limiter';
+import { CircuitBreaker } from './circuit-breaker'
+import { RateLimiter } from './rate-limiter'
 
 /**
  * Agent0 Circuit Breaker
@@ -21,7 +21,7 @@ export const agent0CircuitBreaker = new CircuitBreaker({
   successThreshold: 2,
   timeout: 30000, // 30 seconds
   name: 'Agent0',
-});
+})
 
 /**
  * Agent0 Rate Limiter
@@ -31,7 +31,7 @@ export const agent0RateLimiter = new RateLimiter({
   tokensPerInterval: 10,
   intervalMs: 60000, // 1 minute
   name: 'Agent0',
-});
+})
 
 /**
  * Agent0 Feedback Rate Limiter
@@ -41,4 +41,4 @@ export const agent0FeedbackRateLimiter = new RateLimiter({
   tokensPerInterval: 5,
   intervalMs: 60000, // 1 minute
   name: 'Agent0Feedback',
-});
+})

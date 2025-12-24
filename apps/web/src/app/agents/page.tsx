@@ -1,74 +1,72 @@
-'use client';
-
-import { cn } from '@babylon/shared';
-import { useQuery } from '@tanstack/react-query';
-import { Activity, Bot, Plus, TrendingUp } from 'lucide-react';
-import Link from 'next/link';
-import { useState } from 'react';
-import { LoginButton } from '@/components/auth/LoginButton';
-import { Avatar } from '@/components/shared/Avatar';
-import { PageContainer } from '@/components/shared/PageContainer';
-import { Skeleton } from '@/components/shared/Skeleton';
-import { Button } from '@/components/ui/button';
-import { useAuth } from '@/hooks/useAuth';
+import { cn } from '@babylon/shared'
+import { useQuery } from '@tanstack/react-query'
+import { Activity, Bot, Plus, TrendingUp } from 'lucide-react'
+import { useState } from 'react'
+import { Link } from 'react-router-dom'
+import { LoginButton } from '@/components/auth/LoginButton'
+import { Avatar } from '@/components/shared/Avatar'
+import { PageContainer } from '@/components/shared/PageContainer'
+import { Skeleton } from '@/components/shared/Skeleton'
+import { Button } from '@/components/ui/button'
+import { useAuth } from '@/hooks/useAuth'
 
 interface Agent {
-  id: string;
-  name: string;
-  description?: string;
-  profileImageUrl?: string;
-  pointsBalance: number;
-  isActive: boolean;
-  autonomousEnabled: boolean;
-  modelTier: 'free' | 'pro';
-  status: string;
-  lifetimePnL: string;
-  totalTrades: number;
-  winRate: number;
-  lastTickAt?: string;
-  lastChatAt?: string;
-  createdAt: string;
+  id: string
+  name: string
+  description?: string
+  profileImageUrl?: string
+  pointsBalance: number
+  isActive: boolean
+  autonomousEnabled: boolean
+  modelTier: 'free' | 'pro'
+  status: string
+  lifetimePnL: string
+  totalTrades: number
+  winRate: number
+  lastTickAt?: string
+  lastChatAt?: string
+  createdAt: string
 }
 
 interface AgentsResponse {
-  agents: Agent[];
+  agents: Agent[]
 }
 
 export default function AgentsPage() {
-  const { authenticated, ready, getAccessToken } = useAuth();
-  const [filter, setFilter] = useState<'all' | 'active' | 'idle'>('all');
+  const { authenticated, ready, getAccessToken } = useAuth()
+  const [filter, setFilter] = useState<'all' | 'active' | 'idle'>('all')
 
   const { data: agents = [], isLoading: loading } = useQuery({
     queryKey: ['agents', filter],
     queryFn: async (): Promise<Agent[]> => {
-      const token = await getAccessToken();
+      const token = await getAccessToken()
 
       if (!token) {
-        throw new Error('No access token available');
+        throw new Error('No access token available')
       }
 
-      let url = '/api/agents';
+      let url = '/api/agents'
       if (filter === 'active') {
-        url += '?autonomousTrading=true';
+        url += '?autonomousTrading=true'
       } else if (filter === 'idle') {
-        url += '?autonomousTrading=false';
+        url += '?autonomousTrading=false'
       }
 
       const res = await fetch(url, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
-      });
+      })
 
       if (!res.ok) {
-        throw new Error('Failed to fetch agents');
+        throw new Error('Failed to fetch agents')
       }
 
-      const data = (await res.json()) as AgentsResponse;
-      return data.agents || [];
+      const data = (await res.json()) as AgentsResponse
+      return data.agents || []
     },
     enabled: ready && authenticated,
-  });
+  })
 
   if (ready && !authenticated) {
     return (
@@ -85,7 +83,7 @@ export default function AgentsPage() {
           </div>
         </div>
       </PageContainer>
-    );
+    )
   }
 
   return (
@@ -99,7 +97,7 @@ export default function AgentsPage() {
               Create and manage AI agents that can chat and trade autonomously
             </p>
           </div>
-          <Link href="/agents/create">
+          <Link to="/agents/create">
             <Button className="flex items-center gap-2 bg-[#0066FF] px-4 py-2 text-primary-foreground hover:bg-[#2952d9]">
               <Plus className="h-5 w-5" />
               Create Agent
@@ -110,34 +108,37 @@ export default function AgentsPage() {
         {/* Filters */}
         <div className="flex gap-2">
           <button
+            type="button"
             onClick={() => setFilter('all')}
             className={cn(
               'rounded-full px-4 py-2 font-medium text-sm transition-all',
               filter === 'all'
                 ? 'bg-[#0066FF] text-primary-foreground'
-                : 'bg-muted/50 text-muted-foreground hover:bg-muted'
+                : 'bg-muted/50 text-muted-foreground hover:bg-muted',
             )}
           >
             All
           </button>
           <button
+            type="button"
             onClick={() => setFilter('active')}
             className={cn(
               'rounded-full px-4 py-2 font-medium text-sm transition-all',
               filter === 'active'
                 ? 'bg-[#0066FF] text-primary-foreground'
-                : 'bg-muted/50 text-muted-foreground hover:bg-muted'
+                : 'bg-muted/50 text-muted-foreground hover:bg-muted',
             )}
           >
             Active
           </button>
           <button
+            type="button"
             onClick={() => setFilter('idle')}
             className={cn(
               'rounded-full px-4 py-2 font-medium text-sm transition-all',
               filter === 'idle'
                 ? 'bg-[#0066FF] text-primary-foreground'
-                : 'bg-muted/50 text-muted-foreground hover:bg-muted'
+                : 'bg-muted/50 text-muted-foreground hover:bg-muted',
             )}
           >
             Idle
@@ -170,7 +171,7 @@ export default function AgentsPage() {
             <p className="mb-6 max-w-md text-center text-muted-foreground text-sm">
               Create your first AI agent to start trading and chatting
             </p>
-            <Link href="/agents/create">
+            <Link to="/agents/create">
               <Button className="flex items-center gap-2 bg-[#0066FF] px-4 py-2 text-primary-foreground hover:bg-[#2952d9]">
                 <Plus className="h-5 w-5" />
                 Create Agent
@@ -180,7 +181,7 @@ export default function AgentsPage() {
         ) : (
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
             {agents.map((agent) => (
-              <Link key={agent.id} href={`/agents/${agent.id}`}>
+              <Link key={agent.id} to={`/agents/${agent.id}`}>
                 <div className="cursor-pointer rounded-lg border border-transparent bg-muted/30 p-6 transition-all hover:border-[#0066FF]/30 hover:bg-muted">
                   {/* Header */}
                   <div className="mb-4 flex items-start gap-4">
@@ -247,7 +248,7 @@ export default function AgentsPage() {
                           'flex items-center gap-1 font-semibold',
                           parseFloat(agent.lifetimePnL) >= 0
                             ? 'text-green-600'
-                            : 'text-red-600'
+                            : 'text-red-600',
                         )}
                       >
                         <TrendingUp className="h-3 w-3" />
@@ -276,5 +277,5 @@ export default function AgentsPage() {
         )}
       </div>
     </PageContainer>
-  );
+  )
 }

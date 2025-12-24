@@ -1,53 +1,51 @@
-'use client';
-
-import { cn } from '@babylon/shared';
-import { useQuery } from '@tanstack/react-query';
+import { cn } from '@babylon/shared'
+import { useQuery } from '@tanstack/react-query'
 import {
   AlertCircle,
   CheckCircle,
   Database,
   RefreshCw,
   TrendingUp,
-} from 'lucide-react';
-import { toast } from 'sonner';
+} from 'lucide-react'
+import { toast } from 'sonner'
 
 /**
  * Training data statistics structure for training data tab.
  */
 interface TrainingDataStats {
   summary: {
-    totalTrajectories: number;
-    totalWindows: number;
-    readyWindows: number;
-    minAgentsRequired: number;
-  };
+    totalTrajectories: number
+    totalWindows: number
+    readyWindows: number
+    minAgentsRequired: number
+  }
   windows: Array<{
-    windowId: string;
-    trajectoryCount: number;
-    avgSteps: number;
-    avgPnl: number;
-  }>;
+    windowId: string
+    trajectoryCount: number
+    avgSteps: number
+    avgPnl: number
+  }>
   readyWindows: Array<{
-    windowId: string;
-    trajectoryCount: number;
-    avgSteps: number;
-    avgPnl: number;
-  }>;
+    windowId: string
+    trajectoryCount: number
+    avgSteps: number
+    avgPnl: number
+  }>
   recentTrajectories: Array<{
-    id: string;
-    trajectoryId: string;
-    agentId: string;
-    windowId: string;
-    episodeLength: number;
-    finalPnL: number | null;
-    tradesExecuted: number | null;
-    createdAt: string;
-  }>;
+    id: string
+    trajectoryId: string
+    agentId: string
+    windowId: string
+    episodeLength: number
+    finalPnL: number | null
+    tradesExecuted: number | null
+    createdAt: string
+  }>
   qualityMetrics: {
-    avgEpisodeLength: number;
-    avgPnl: number;
-    trainingDataQuality: string;
-  };
+    avgEpisodeLength: number
+    avgPnl: number
+    trainingDataQuality: string
+  }
 }
 
 /**
@@ -73,33 +71,33 @@ export function TrainingDataTab() {
     queryKey: ['admin', 'training-data'],
     queryFn: async () => {
       const token =
-        typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
+        typeof window !== 'undefined' ? window.__oauth3AccessToken : null
       if (!token) {
-        toast.error('Not authenticated');
-        throw new Error('Not authenticated');
+        toast.error('Not authenticated')
+        throw new Error('Not authenticated')
       }
 
       const response = await fetch('/api/admin/training-data', {
         headers: {
           Authorization: `Bearer ${token}`,
         },
-      });
+      })
 
       if (!response.ok) {
-        throw new Error('Failed to load training data');
+        throw new Error('Failed to load training data')
       }
 
-      const result = await response.json();
-      return result.data;
+      const result = await response.json()
+      return result.data
     },
-  });
+  })
 
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
         <div className="h-8 w-8 animate-spin rounded-full border-primary border-b-2" />
       </div>
-    );
+    )
   }
 
   if (!data) {
@@ -107,21 +105,21 @@ export function TrainingDataTab() {
       <div className="flex items-center justify-center py-12 text-muted-foreground">
         Failed to load training data statistics
       </div>
-    );
+    )
   }
 
   const getQualityColor = (quality: string) => {
     switch (quality) {
       case 'good':
-        return 'text-green-500';
+        return 'text-green-500'
       case 'fair':
-        return 'text-yellow-500';
+        return 'text-yellow-500'
       case 'low':
-        return 'text-red-500';
+        return 'text-red-500'
       default:
-        return 'text-muted-foreground';
+        return 'text-muted-foreground'
     }
-  };
+  }
 
   return (
     <div className="space-y-6">
@@ -134,6 +132,7 @@ export function TrainingDataTab() {
           </p>
         </div>
         <button
+          type="button"
           onClick={() => refetch()}
           disabled={isFetching}
           className="rounded-lg p-2 transition-colors hover:bg-accent"
@@ -186,13 +185,13 @@ export function TrainingDataTab() {
             <AlertCircle
               className={cn(
                 'h-5 w-5',
-                getQualityColor(data.qualityMetrics.trainingDataQuality)
+                getQualityColor(data.qualityMetrics.trainingDataQuality),
               )}
             />
             <span
               className={cn(
                 'font-bold text-2xl capitalize',
-                getQualityColor(data.qualityMetrics.trainingDataQuality)
+                getQualityColor(data.qualityMetrics.trainingDataQuality),
               )}
             >
               {data.qualityMetrics.trainingDataQuality}
@@ -221,7 +220,7 @@ export function TrainingDataTab() {
                 'font-mono text-2xl',
                 data.qualityMetrics.avgPnl >= 0
                   ? 'text-green-500'
-                  : 'text-red-500'
+                  : 'text-red-500',
               )}
             >
               ${data.qualityMetrics.avgPnl.toFixed(2)}
@@ -254,7 +253,7 @@ export function TrainingDataTab() {
                     <div
                       className={cn(
                         'font-mono text-sm',
-                        window.avgPnl >= 0 ? 'text-green-500' : 'text-red-500'
+                        window.avgPnl >= 0 ? 'text-green-500' : 'text-red-500',
                       )}
                     >
                       {window.avgPnl >= 0 ? '+' : ''}${window.avgPnl.toFixed(2)}
@@ -303,7 +302,9 @@ export function TrainingDataTab() {
                       <div
                         className={cn(
                           'font-mono text-sm',
-                          traj.finalPnL >= 0 ? 'text-green-500' : 'text-red-500'
+                          traj.finalPnL >= 0
+                            ? 'text-green-500'
+                            : 'text-red-500',
                         )}
                       >
                         {traj.finalPnL >= 0 ? '+' : ''}$
@@ -384,5 +385,5 @@ export function TrainingDataTab() {
         </div>
       )}
     </div>
-  );
+  )
 }

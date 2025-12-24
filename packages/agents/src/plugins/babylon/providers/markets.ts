@@ -11,10 +11,9 @@ import type {
   Provider,
   ProviderResult,
   State,
-} from '@elizaos/core';
-import { logger } from '../../../shared/logger';
-import type { BabylonRuntime } from '../types';
-// import type { A2APredictionsResponse, A2APerpetualsResponse } from '../../../types/a2a-responses' // Commented out - not needed
+} from '@elizaos/core'
+import { logger } from '../../../shared/logger'
+import { toBabylonRuntime } from '../types'
 
 /**
  * Provider: Current Markets
@@ -28,53 +27,53 @@ export const marketsProvider: Provider = {
   get: async (
     runtime: IAgentRuntime,
     _message: Memory,
-    _state: State
+    _state: State,
   ): Promise<ProviderResult> => {
-    const babylonRuntime = runtime as BabylonRuntime;
+    const babylonRuntime = toBabylonRuntime(runtime)
 
     // A2A is REQUIRED
     if (!babylonRuntime.a2aClient?.isConnected()) {
       logger.error(
         'A2A client not connected - markets provider requires A2A protocol',
         undefined,
-        runtime.agentId
-      );
+        runtime.agentId,
+      )
       return {
         text: 'ERROR: A2A client not connected. Cannot fetch markets data. Please ensure A2A server is running.',
-      };
+      }
     }
 
     const [predictionsResult, perpetualsResult] = await Promise.all([
       babylonRuntime.a2aClient.getPredictions({ status: 'active' }),
       babylonRuntime.a2aClient.getPerpetuals(),
-    ]);
+    ])
 
     // Type assertion using A2A response types
     interface PredictionMarket {
-      id: string;
-      question: string;
-      yesShares: number;
-      noShares: number;
-      liquidity: number;
-      resolved: boolean;
-      endDate: string | Date;
+      id: string
+      question: string
+      yesShares: number
+      noShares: number
+      liquidity: number
+      resolved: boolean
+      endDate: string | Date
     }
 
     interface PerpetualMarket {
-      name: string;
-      type: string;
-      currentPrice: number;
+      name: string
+      type: string
+      currentPrice: number
     }
 
     const predictionsData = predictionsResult as {
-      predictions?: PredictionMarket[];
-    };
+      predictions?: PredictionMarket[]
+    }
     const perpetualsData = perpetualsResult as {
-      perpetuals?: PerpetualMarket[];
-    };
+      perpetuals?: PerpetualMarket[]
+    }
 
-    const predictions = predictionsData.predictions || [];
-    const perpetuals = perpetualsData.perpetuals || [];
+    const predictions = predictionsData.predictions || []
+    const perpetuals = perpetualsData.perpetuals || []
 
     const predictionsText =
       predictions.length > 0
@@ -82,10 +81,10 @@ export const marketsProvider: Provider = {
             .slice(0, 10)
             .map(
               (m) =>
-                `- ${m.question} (ID: ${m.id}) | YES: ${m.yesShares.toFixed(2)}, NO: ${m.noShares.toFixed(2)}, Liquidity: $${m.liquidity.toFixed(2)}`
+                `- ${m.question} (ID: ${m.id}) | YES: ${m.yesShares.toFixed(2)}, NO: ${m.noShares.toFixed(2)}, Liquidity: $${m.liquidity.toFixed(2)}`,
             )
             .join('\n')}`
-        : 'No active prediction markets available.';
+        : 'No active prediction markets available.'
 
     const perpetualsText =
       perpetuals.length > 0
@@ -93,13 +92,13 @@ export const marketsProvider: Provider = {
             .slice(0, 10)
             .map(
               (p) =>
-                `- ${p.name} (${p.type}) | Price: $${p.currentPrice.toFixed(2)}`
+                `- ${p.name} (${p.type}) | Price: $${p.currentPrice.toFixed(2)}`,
             )
             .join('\n')}`
-        : 'No perpetual markets available.';
+        : 'No perpetual markets available.'
 
     return {
       text: `${predictionsText}\n\n${perpetualsText}`,
-    };
+    }
   },
-};
+}

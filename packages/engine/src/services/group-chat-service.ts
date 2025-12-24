@@ -29,9 +29,10 @@ import {
   gte,
   messages,
   userInteractions,
-} from '@babylon/db';
-import type { GroupChat } from '@babylon/shared';
-import { generateSnowflakeId } from '@babylon/shared';
+} from '@babylon/db'
+import type { GroupChat } from '@babylon/shared'
+import { generateSnowflakeId } from '@babylon/shared'
+import { engineEvents } from '../events'
 
 // =============================================================================
 // Types
@@ -41,60 +42,61 @@ import { generateSnowflakeId } from '@babylon/shared';
  * Group chat data (without messages for list views)
  */
 type GroupChatData = Omit<GroupChat, 'messages'> & {
-  messageCount?: number;
-};
+  messageCount?: number
+}
 
 /**
  * Invite chance calculation result
  */
 export interface InviteChance {
-  willInvite: boolean;
-  probability: number;
-  chatId?: string;
-  chatName?: string;
-  isOwned: boolean;
-  reasons: string[];
+  willInvite: boolean
+  probability: number
+  chatId?: string
+  chatName?: string
+  isOwned: boolean
+  reasons: string[]
 }
 
 /**
  * Sweep decision for a user in a chat
  */
 export interface SweepDecision {
-  kickChance: number;
-  reason?: string;
+  kickChance: number
+  reason?: string
   stats: {
-    hoursSinceLastMessage: number;
-    messagesLast24h: number;
-    averageQuality: number;
-    totalMessages: number;
-  };
+    hoursSinceLastMessage: number
+    messagesLast24h: number
+    averageQuality: number
+    totalMessages: number
+  }
 }
 
 // =============================================================================
 // Group Chat Service
 // =============================================================================
 
+// biome-ignore lint/complexity/noStaticOnlyClass: Service pattern uses static methods for stateless operations
 export class GroupChatService {
   // ---------------------------------------------------------------------------
   // Invite Constants
   // ---------------------------------------------------------------------------
-  private static readonly MIN_FOLLOW_DURATION_HOURS = 24;
-  private static readonly MIN_QUALITY_SCORE = 0.75;
-  private static readonly MIN_REPLIES_SINCE_FOLLOW = 5;
-  private static readonly BASE_INVITE_PROBABILITY = 0.1;
-  private static readonly MAX_INVITE_PROBABILITY = 0.6;
-  private static readonly OWNED_CHAT_WEIGHT = 0.7;
-  private static readonly MEMBER_CHAT_WEIGHT = 0.3;
+  private static readonly MIN_FOLLOW_DURATION_HOURS = 24
+  private static readonly MIN_QUALITY_SCORE = 0.75
+  private static readonly MIN_REPLIES_SINCE_FOLLOW = 5
+  private static readonly BASE_INVITE_PROBABILITY = 0.1
+  private static readonly MAX_INVITE_PROBABILITY = 0.6
+  private static readonly OWNED_CHAT_WEIGHT = 0.7
+  private static readonly MEMBER_CHAT_WEIGHT = 0.3
 
   // ---------------------------------------------------------------------------
   // Sweep Constants
   // ---------------------------------------------------------------------------
-  private static readonly BASE_KICK_PROBABILITY = 0.00007;
-  private static readonly INACTIVITY_GRACE_PERIOD_TICKS = 1440; // 1 day
-  private static readonly INACTIVITY_MAX_TICKS = 7200; // 5 days
-  private static readonly ACTIVITY_SWEET_SPOT_MIN = 1;
-  private static readonly ACTIVITY_SWEET_SPOT_MAX = 3;
-  private static readonly ACTIVITY_HARD_CAP = 10;
+  private static readonly BASE_KICK_PROBABILITY = 0.00007
+  private static readonly INACTIVITY_GRACE_PERIOD_TICKS = 1440 // 1 day
+  private static readonly INACTIVITY_MAX_TICKS = 7200 // 5 days
+  private static readonly ACTIVITY_SWEET_SPOT_MIN = 1
+  private static readonly ACTIVITY_SWEET_SPOT_MAX = 3
+  private static readonly ACTIVITY_HARD_CAP = 10
 
   // ---------------------------------------------------------------------------
   // Invite Methods
@@ -103,15 +105,15 @@ export class GroupChatService {
   private static calculateChatTypeWeight(isOwned: boolean): number {
     return isOwned
       ? GroupChatService.OWNED_CHAT_WEIGHT
-      : GroupChatService.MEMBER_CHAT_WEIGHT;
+      : GroupChatService.MEMBER_CHAT_WEIGHT
   }
 
   private static calculateInviteProbability(
     baseProb: number,
-    isOwned: boolean
+    isOwned: boolean,
   ): number {
-    const weight = GroupChatService.calculateChatTypeWeight(isOwned);
-    return Math.min(baseProb * weight, GroupChatService.MAX_INVITE_PROBABILITY);
+    const weight = GroupChatService.calculateChatTypeWeight(isOwned)
+    return Math.min(baseProb * weight, GroupChatService.MAX_INVITE_PROBABILITY)
   }
 
   /**
@@ -119,16 +121,16 @@ export class GroupChatService {
    */
   static async calculateInviteChance(
     userId: string,
-    npcId: string
+    npcId: string,
   ): Promise<InviteChance> {
     // Must be followed first
     const [followStatus] = await db
       .select()
       .from(followStatuses)
       .where(
-        and(eq(followStatuses.userId, userId), eq(followStatuses.npcId, npcId))
+        and(eq(followStatuses.userId, userId), eq(followStatuses.npcId, npcId)),
       )
-      .limit(1);
+      .limit(1)
 
     if (!followStatus || !followStatus.isActive) {
       return {
@@ -136,15 +138,15 @@ export class GroupChatService {
         probability: 0,
         isOwned: false,
         reasons: ['Must be followed by NPC first'],
-      };
+      }
     }
 
     // Check follow duration
     const followedAtDate = followStatus.followedAt
       ? new Date(String(followStatus.followedAt))
-      : new Date();
+      : new Date()
     const hoursSinceFollow =
-      (Date.now() - followedAtDate.getTime()) / (1000 * 60 * 60);
+      (Date.now() - followedAtDate.getTime()) / (1000 * 60 * 60)
 
     if (hoursSinceFollow < GroupChatService.MIN_FOLLOW_DURATION_HOURS) {
       return {
@@ -154,7 +156,7 @@ export class GroupChatService {
         reasons: [
           `Need ${Math.ceil(GroupChatService.MIN_FOLLOW_DURATION_HOURS - hoursSinceFollow)} more hours of being followed`,
         ],
-      };
+      }
     }
 
     // Check if already in a chat with this NPC
@@ -165,10 +167,10 @@ export class GroupChatService {
         and(
           eq(groupChatMemberships.userId, userId),
           eq(groupChatMemberships.npcAdminId, npcId),
-          eq(groupChatMemberships.isActive, true)
-        )
+          eq(groupChatMemberships.isActive, true),
+        ),
       )
-      .limit(1);
+      .limit(1)
 
     if (existingMembership) {
       return {
@@ -176,7 +178,7 @@ export class GroupChatService {
         probability: 0,
         isOwned: false,
         reasons: ['Already in a group chat with this NPC'],
-      };
+      }
     }
 
     // Get interactions since follow
@@ -187,9 +189,9 @@ export class GroupChatService {
         and(
           eq(userInteractions.userId, userId),
           eq(userInteractions.npcId, npcId),
-          gte(userInteractions.timestamp, followedAtDate)
-        )
-      );
+          gte(userInteractions.timestamp, followedAtDate),
+        ),
+      )
 
     if (
       interactionsSinceFollow.length < GroupChatService.MIN_REPLIES_SINCE_FOLLOW
@@ -201,15 +203,15 @@ export class GroupChatService {
         reasons: [
           `Need ${GroupChatService.MIN_REPLIES_SINCE_FOLLOW - interactionsSinceFollow.length} more quality replies since being followed`,
         ],
-      };
+      }
     }
 
     // Calculate average quality since follow
     const avgQuality =
       interactionsSinceFollow.reduce(
         (sum, i) => sum + Number(i.qualityScore ?? 0),
-        0
-      ) / interactionsSinceFollow.length;
+        0,
+      ) / interactionsSinceFollow.length
 
     if (avgQuality < GroupChatService.MIN_QUALITY_SCORE) {
       return {
@@ -219,36 +221,36 @@ export class GroupChatService {
         reasons: [
           `Quality score ${(avgQuality * 100).toFixed(0)}% is below ${(GroupChatService.MIN_QUALITY_SCORE * 100).toFixed(0)}% threshold`,
         ],
-      };
+      }
     }
 
     // Get available chats
-    const ownedChatId = `${npcId}-owned-chat`;
-    const ownedChatName = `${npcId}'s Inner Circle`;
+    const ownedChatId = `${npcId}-owned-chat`
+    const ownedChatName = `${npcId}'s Inner Circle`
 
     // Determine which chat type
-    const isOwned = Math.random() < GroupChatService.OWNED_CHAT_WEIGHT;
+    const isOwned = Math.random() < GroupChatService.OWNED_CHAT_WEIGHT
 
     // Calculate probability based on quality and engagement
-    const qualityFactor = avgQuality / GroupChatService.MIN_QUALITY_SCORE;
+    const qualityFactor = avgQuality / GroupChatService.MIN_QUALITY_SCORE
     const engagementFactor = Math.min(
       interactionsSinceFollow.length /
         GroupChatService.MIN_REPLIES_SINCE_FOLLOW,
-      1.5
-    );
+      1.5,
+    )
 
     const baseProbability =
       GroupChatService.BASE_INVITE_PROBABILITY +
       (GroupChatService.MAX_INVITE_PROBABILITY -
         GroupChatService.BASE_INVITE_PROBABILITY) *
-        (qualityFactor * 0.6 + engagementFactor * 0.4);
+        (qualityFactor * 0.6 + engagementFactor * 0.4)
 
     const probability = GroupChatService.calculateInviteProbability(
       baseProbability,
-      isOwned
-    );
+      isOwned,
+    )
 
-    const willInvite = Math.random() < probability;
+    const willInvite = Math.random() < probability
 
     return {
       willInvite,
@@ -261,7 +263,7 @@ export class GroupChatService {
         `${interactionsSinceFollow.length} quality replies since follow`,
         `${isOwned ? 'Invited to owned chat' : 'Invited to member chat'}`,
       ],
-    };
+    }
   }
 
   /**
@@ -271,14 +273,14 @@ export class GroupChatService {
     userId: string,
     npcId: string,
     chatId: string,
-    chatName: string
+    chatName: string,
   ): Promise<void> {
     // Check if chat exists
     const [existingChat] = await db
       .select()
       .from(chats)
       .where(eq(chats.id, chatId))
-      .limit(1);
+      .limit(1)
 
     if (!existingChat) {
       await db.insert(chats).values({
@@ -287,7 +289,7 @@ export class GroupChatService {
         isGroup: true,
         gameId: 'realtime',
         updatedAt: new Date(),
-      });
+      })
     }
 
     // Check if participant exists
@@ -297,17 +299,17 @@ export class GroupChatService {
       .where(
         and(
           eq(chatParticipants.chatId, chatId),
-          eq(chatParticipants.userId, userId)
-        )
+          eq(chatParticipants.userId, userId),
+        ),
       )
-      .limit(1);
+      .limit(1)
 
     if (!existingParticipant) {
       await db.insert(chatParticipants).values({
         id: await generateSnowflakeId(),
         chatId,
         userId,
-      });
+      })
     }
 
     // Record membership
@@ -316,7 +318,7 @@ export class GroupChatService {
       userId,
       chatId,
       npcAdminId: npcId,
-    });
+    })
 
     // Mark interaction as leading to invite
     await db
@@ -325,13 +327,17 @@ export class GroupChatService {
       .where(
         and(
           eq(userInteractions.userId, userId),
-          eq(userInteractions.npcId, npcId)
-        )
-      );
+          eq(userInteractions.npcId, npcId),
+        ),
+      )
 
-    // Send notification to user about the invite
-    const { notifyGroupChatInvite } = await import('@babylon/api');
-    await notifyGroupChatInvite(userId, npcId, chatId, chatName);
+    // Emit invite event - listeners can send notifications
+    engineEvents.emit('groupChatInvite', {
+      userId,
+      inviterId: npcId,
+      chatId,
+      chatName,
+    })
   }
 
   /**
@@ -344,10 +350,11 @@ export class GroupChatService {
       .where(
         and(
           eq(groupChatMemberships.userId, userId),
-          eq(groupChatMemberships.isActive, true)
-        )
+          eq(groupChatMemberships.isActive, true),
+        ),
       )
-      .orderBy(groupChatMemberships.joinedAt);
+      // biome-ignore lint/style/noNonNullAssertion: Schema guarantees joinedAt is defined
+      .orderBy(desc(groupChatMemberships.joinedAt!))
 
     return memberships.map((m) => ({
       id: String(m.chatId),
@@ -356,7 +363,7 @@ export class GroupChatService {
       members: [userId],
       theme: 'default',
       messageCount: 0,
-    }));
+    }))
   }
 
   /**
@@ -369,12 +376,12 @@ export class GroupChatService {
       .where(
         and(
           eq(groupChatMemberships.userId, userId),
-          eq(groupChatMemberships.chatId, chatId)
-        )
+          eq(groupChatMemberships.chatId, chatId),
+        ),
       )
-      .limit(1);
+      .limit(1)
 
-    return Boolean(membership?.isActive) ?? false;
+    return Boolean(membership?.isActive) ?? false
   }
 
   // ---------------------------------------------------------------------------
@@ -386,7 +393,7 @@ export class GroupChatService {
    */
   static async calculateKickChance(
     userId: string,
-    chatId: string
+    chatId: string,
   ): Promise<SweepDecision> {
     const [membership] = await db
       .select()
@@ -394,37 +401,37 @@ export class GroupChatService {
       .where(
         and(
           eq(groupChatMemberships.userId, userId),
-          eq(groupChatMemberships.chatId, chatId)
-        )
+          eq(groupChatMemberships.chatId, chatId),
+        ),
       )
-      .limit(1);
+      .limit(1)
 
     const baseStats = {
       hoursSinceLastMessage: 0,
       messagesLast24h: 0,
       averageQuality: 0,
       totalMessages: 0,
-    };
+    }
 
     if (!membership || !membership.isActive) {
       return {
         kickChance: 0,
         reason: 'Not an active member',
         stats: baseStats,
-      };
+      }
     }
 
     const allMessages = await db
       .select()
       .from(messages)
       .where(and(eq(messages.chatId, chatId), eq(messages.senderId, userId)))
-      .orderBy(desc(messages.createdAt));
+      .orderBy(desc(messages.createdAt))
 
-    const totalMessages = allMessages.length;
+    const totalMessages = allMessages.length
     const joinedAtDate = membership.joinedAt
       ? new Date(String(membership.joinedAt))
-      : new Date();
-    const ticksSinceJoin = (Date.now() - joinedAtDate.getTime()) / (1000 * 60);
+      : new Date()
+    const ticksSinceJoin = (Date.now() - joinedAtDate.getTime()) / (1000 * 60)
 
     if (totalMessages === 0) {
       if (ticksSinceJoin > GroupChatService.INACTIVITY_GRACE_PERIOD_TICKS) {
@@ -432,74 +439,74 @@ export class GroupChatService {
           kickChance: GroupChatService.BASE_KICK_PROBABILITY * 100,
           reason: `Never posted after joining (${Math.floor(ticksSinceJoin / 60)} hours ago)`,
           stats: { ...baseStats, hoursSinceLastMessage: ticksSinceJoin / 60 },
-        };
+        }
       }
       return {
         kickChance: 0,
         stats: { ...baseStats, hoursSinceLastMessage: ticksSinceJoin / 60 },
-      };
+      }
     }
 
-    const lastMessage = allMessages[0];
+    const lastMessage = allMessages[0]
     if (!lastMessage) {
       return {
         kickChance: 0,
         reason: 'No messages found',
         stats: baseStats,
-      };
+      }
     }
 
     const lastMessageDate = lastMessage.createdAt
       ? new Date(String(lastMessage.createdAt))
-      : new Date();
+      : new Date()
     const ticksSinceLastMessage =
-      (Date.now() - lastMessageDate.getTime()) / (1000 * 60);
+      (Date.now() - lastMessageDate.getTime()) / (1000 * 60)
 
-    let inactivityMultiplier = 1;
-    let reason = '';
+    let inactivityMultiplier = 1
+    let reason = ''
 
     if (
       ticksSinceLastMessage > GroupChatService.INACTIVITY_GRACE_PERIOD_TICKS
     ) {
       const excessTicks =
-        ticksSinceLastMessage - GroupChatService.INACTIVITY_GRACE_PERIOD_TICKS;
+        ticksSinceLastMessage - GroupChatService.INACTIVITY_GRACE_PERIOD_TICKS
       const range =
         GroupChatService.INACTIVITY_MAX_TICKS -
-        GroupChatService.INACTIVITY_GRACE_PERIOD_TICKS;
-      inactivityMultiplier = 1 + Math.min(excessTicks / range, 1) * 9;
-      reason = `Inactive for ${Math.floor(ticksSinceLastMessage / 60)} hours`;
+        GroupChatService.INACTIVITY_GRACE_PERIOD_TICKS
+      inactivityMultiplier = 1 + Math.min(excessTicks / range, 1) * 9
+      reason = `Inactive for ${Math.floor(ticksSinceLastMessage / 60)} hours`
     }
 
-    let overactivityMultiplier = 1;
-    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    let overactivityMultiplier = 1
+    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000)
     const messagesLast24h = allMessages.filter((m) => {
-      const msgDate = m.createdAt ? new Date(String(m.createdAt)) : new Date(0);
-      return msgDate >= oneDayAgo;
-    }).length;
+      const msgDate = m.createdAt ? new Date(String(m.createdAt)) : new Date(0)
+      return msgDate >= oneDayAgo
+    }).length
 
     if (messagesLast24h > GroupChatService.ACTIVITY_HARD_CAP) {
-      overactivityMultiplier = 20;
-      reason = `Spamming: ${messagesLast24h} messages in 24h`;
+      overactivityMultiplier = 20
+      reason = `Spamming: ${messagesLast24h} messages in 24h`
     } else if (messagesLast24h > GroupChatService.ACTIVITY_SWEET_SPOT_MAX) {
-      const excess = messagesLast24h - GroupChatService.ACTIVITY_SWEET_SPOT_MAX;
+      const excess = messagesLast24h - GroupChatService.ACTIVITY_SWEET_SPOT_MAX
       const range =
         GroupChatService.ACTIVITY_HARD_CAP -
-        GroupChatService.ACTIVITY_SWEET_SPOT_MAX;
-      overactivityMultiplier = 2 + (excess / range) * 3;
-      reason = `Over-active: ${messagesLast24h} messages in 24h`;
+        GroupChatService.ACTIVITY_SWEET_SPOT_MAX
+      overactivityMultiplier = 2 + (excess / range) * 3
+      reason = `Over-active: ${messagesLast24h} messages in 24h`
     } else if (messagesLast24h < GroupChatService.ACTIVITY_SWEET_SPOT_MIN) {
-      overactivityMultiplier = 3;
-      reason = `Low participation: ${messagesLast24h} messages in 24h`;
+      overactivityMultiplier = 3
+      reason = `Low participation: ${messagesLast24h} messages in 24h`
     }
 
     const finalMultiplier = Math.max(
       inactivityMultiplier,
-      overactivityMultiplier
-    );
+      overactivityMultiplier,
+    )
     const kickChance = Math.min(
       1,
-      GroupChatService.BASE_KICK_PROBABILITY * finalMultiplier
-    );
+      GroupChatService.BASE_KICK_PROBABILITY * finalMultiplier,
+    )
 
     return {
       kickChance,
@@ -513,7 +520,7 @@ export class GroupChatService {
         averageQuality: Number(membership.qualityScore ?? 0),
         totalMessages,
       },
-    };
+    }
   }
 
   /**
@@ -522,7 +529,7 @@ export class GroupChatService {
   static async removeFromChat(
     userId: string,
     chatId: string,
-    reason: string
+    reason: string,
   ): Promise<void> {
     await db
       .update(groupChatMemberships)
@@ -535,18 +542,18 @@ export class GroupChatService {
         and(
           eq(groupChatMemberships.userId, userId),
           eq(groupChatMemberships.chatId, chatId),
-          eq(groupChatMemberships.isActive, true)
-        )
-      );
+          eq(groupChatMemberships.isActive, true),
+        ),
+      )
   }
 
   /**
    * Run sweep on all members of a chat
    */
   static async sweepChat(chatId: string): Promise<{
-    checked: number;
-    removed: number;
-    reasons: Record<string, number>;
+    checked: number
+    removed: number
+    reasons: Record<string, number>
   }> {
     const memberships = await db
       .select()
@@ -554,62 +561,62 @@ export class GroupChatService {
       .where(
         and(
           eq(groupChatMemberships.chatId, chatId),
-          eq(groupChatMemberships.isActive, true)
-        )
-      );
+          eq(groupChatMemberships.isActive, true),
+        ),
+      )
 
-    let removed = 0;
-    const reasons: Record<string, number> = {};
+    let removed = 0
+    const reasons: Record<string, number> = {}
 
     for (const membership of memberships) {
-      const memberUserId = String(membership.userId);
+      const memberUserId = String(membership.userId)
       const decision = await GroupChatService.calculateKickChance(
         memberUserId,
-        chatId
-      );
+        chatId,
+      )
 
       if (Math.random() < decision.kickChance && decision.reason) {
         await GroupChatService.removeFromChat(
           memberUserId,
           chatId,
-          decision.reason
-        );
-        removed++;
+          decision.reason,
+        )
+        removed++
 
-        const genericReason = decision.reason.split(':')[0] || 'Unknown';
-        reasons[genericReason] = (reasons[genericReason] || 0) + 1;
+        const genericReason = decision.reason.split(':')[0] || 'Unknown'
+        reasons[genericReason] = (reasons[genericReason] || 0) + 1
       }
     }
 
-    return { checked: memberships.length, removed, reasons };
+    return { checked: memberships.length, removed, reasons }
   }
 
   /**
    * Run sweep on all group chats
    */
   static async sweepAllChats(): Promise<{
-    chatsChecked: number;
-    totalRemoved: number;
-    reasonsSummary: Record<string, number>;
+    chatsChecked: number
+    totalRemoved: number
+    reasonsSummary: Record<string, number>
   }> {
     const groupChats = await db
       .select({ id: chats.id })
       .from(chats)
-      .where(eq(chats.isGroup, true));
+      .where(eq(chats.isGroup, true))
 
-    let totalRemoved = 0;
-    const reasonsSummary: Record<string, number> = {};
+    let totalRemoved = 0
+    const reasonsSummary: Record<string, number> = {}
 
     for (const chat of groupChats) {
-      const result = await GroupChatService.sweepChat(String(chat.id));
-      totalRemoved += result.removed;
+      const result = await GroupChatService.sweepChat(String(chat.id))
+      totalRemoved += result.removed
 
       for (const [reason, count] of Object.entries(result.reasons)) {
-        reasonsSummary[reason] = (reasonsSummary[reason] || 0) + count;
+        reasonsSummary[reason] = (reasonsSummary[reason] || 0) + count
       }
     }
 
-    return { chatsChecked: groupChats.length, totalRemoved, reasonsSummary };
+    return { chatsChecked: groupChats.length, totalRemoved, reasonsSummary }
   }
 
   /**
@@ -618,7 +625,7 @@ export class GroupChatService {
   static async updateQualityScore(
     userId: string,
     chatId: string,
-    newMessageQuality: number
+    newMessageQuality: number,
   ): Promise<void> {
     const [membership] = await db
       .select()
@@ -626,19 +633,19 @@ export class GroupChatService {
       .where(
         and(
           eq(groupChatMemberships.userId, userId),
-          eq(groupChatMemberships.chatId, chatId)
-        )
+          eq(groupChatMemberships.chatId, chatId),
+        ),
       )
-      .limit(1);
+      .limit(1)
 
-    if (!membership) return;
+    if (!membership) return
 
-    const currentMessageCount = Number(membership.messageCount ?? 0);
-    const currentQualityScore = Number(membership.qualityScore ?? 0);
-    const totalMessages = currentMessageCount + 1;
+    const currentMessageCount = Number(membership.messageCount ?? 0)
+    const currentQualityScore = Number(membership.qualityScore ?? 0)
+    const totalMessages = currentMessageCount + 1
     const newAvgQuality =
       (currentQualityScore * currentMessageCount + newMessageQuality) /
-      totalMessages;
+      totalMessages
 
     await db
       .update(groupChatMemberships)
@@ -650,8 +657,8 @@ export class GroupChatService {
       .where(
         and(
           eq(groupChatMemberships.userId, userId),
-          eq(groupChatMemberships.chatId, chatId)
-        )
-      );
+          eq(groupChatMemberships.chatId, chatId),
+        ),
+      )
   }
 }

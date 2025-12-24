@@ -7,27 +7,28 @@
  * Enable via environment variables:
  * - DEBUG_SAVE_PROMPTS=true
  * - DEBUG_PROMPTS=true
+ *
+ * NOTE: Uses dynamic imports for fs/path to remain browser-safe.
+ * In browser environments, logging is a no-op.
  */
 
-import { logger } from '@babylon/shared';
-import * as fs from 'fs';
-import * as path from 'path';
+import { logger } from '@babylon/shared'
 
 export interface PromptLogEntry {
-  promptType: string;
-  promptTemplate?: string;
-  input: string;
-  output: string;
-  parsedOutput?: string;
+  promptType: string
+  promptTemplate?: string
+  input: string
+  output: string
+  parsedOutput?: string
   metadata?: {
-    provider?: string;
-    model?: string;
-    temperature?: number;
-    maxTokens?: number;
-    format?: string;
-    latencyMs?: number;
-    settlement?: unknown;
-  };
+    provider?: string
+    model?: string
+    temperature?: number
+    maxTokens?: number
+    format?: string
+    latencyMs?: number
+    settlement?: unknown
+  }
 }
 
 /**
@@ -39,7 +40,7 @@ export function isPromptLoggingEnabled(): boolean {
     process.env.DEBUG_SAVE_PROMPTS === '1' ||
     process.env.DEBUG_PROMPTS === 'true' ||
     process.env.DEBUG_PROMPTS === '1'
-  );
+  )
 }
 
 /**
@@ -47,18 +48,29 @@ export function isPromptLoggingEnabled(): boolean {
  */
 export async function logPrompt(entry: PromptLogEntry): Promise<void> {
   if (!isPromptLoggingEnabled()) {
-    return;
+    return
   }
 
-  const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-  const safePromptType = entry.promptType.replace(/[^a-zA-Z0-9-_]/g, '_');
-  const filename = `${timestamp}_${safePromptType}.md`;
-  const debugDir = path.join(process.cwd(), 'debug', 'prompts');
-  const filepath = path.join(debugDir, filename);
+  // Dynamic import for server-only fs/path - no-op in browser
+  let fs: typeof import('fs') | undefined
+  let path: typeof import('path') | undefined
+  try {
+    fs = await import('node:fs')
+    path = await import('node:path')
+  } catch {
+    // In browser - just return silently
+    return
+  }
+
+  const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
+  const safePromptType = entry.promptType.replace(/[^a-zA-Z0-9-_]/g, '_')
+  const filename = `${timestamp}_${safePromptType}.md`
+  const debugDir = path.join(process.cwd(), 'debug', 'prompts')
+  const filepath = path.join(debugDir, filename)
 
   // Ensure prompt log directory exists
   if (!fs.existsSync(debugDir)) {
-    fs.mkdirSync(debugDir, { recursive: true });
+    fs.mkdirSync(debugDir, { recursive: true })
   }
 
   // Build markdown content
@@ -67,62 +79,61 @@ export async function logPrompt(entry: PromptLogEntry): Promise<void> {
     ``,
     `**Timestamp:** ${new Date().toISOString()}`,
     ``,
-  ];
+  ]
 
   // Add metadata if present
   if (entry.metadata) {
-    lines.push(`## Metadata`, ``);
+    lines.push(`## Metadata`, ``)
     if (entry.metadata.provider)
-      lines.push(`- **Provider:** ${entry.metadata.provider}`);
-    if (entry.metadata.model)
-      lines.push(`- **Model:** ${entry.metadata.model}`);
+      lines.push(`- **Provider:** ${entry.metadata.provider}`)
+    if (entry.metadata.model) lines.push(`- **Model:** ${entry.metadata.model}`)
     if (entry.metadata.temperature !== undefined)
-      lines.push(`- **Temperature:** ${entry.metadata.temperature}`);
+      lines.push(`- **Temperature:** ${entry.metadata.temperature}`)
     if (entry.metadata.maxTokens)
-      lines.push(`- **Max Tokens:** ${entry.metadata.maxTokens}`);
+      lines.push(`- **Max Tokens:** ${entry.metadata.maxTokens}`)
     if (entry.metadata.format)
-      lines.push(`- **Format:** ${entry.metadata.format}`);
-    lines.push(``);
+      lines.push(`- **Format:** ${entry.metadata.format}`)
+    lines.push(``)
   }
 
   // Include prompt template in log if provided
   if (entry.promptTemplate) {
-    lines.push(`## Prompt Template`, ``);
-    lines.push('```');
-    lines.push(entry.promptTemplate);
-    lines.push('```');
-    lines.push(``);
+    lines.push(`## Prompt Template`, ``)
+    lines.push('```')
+    lines.push(entry.promptTemplate)
+    lines.push('```')
+    lines.push(``)
   }
 
   // Add rendered input
-  lines.push(`# Input`, ``);
-  lines.push('```');
-  lines.push(entry.input);
-  lines.push('```');
-  lines.push(``);
+  lines.push(`# Input`, ``)
+  lines.push('```')
+  lines.push(entry.input)
+  lines.push('```')
+  lines.push(``)
 
   // Add raw output
-  lines.push(`# Output`, ``);
-  lines.push('```');
-  lines.push(entry.output);
-  lines.push('```');
-  lines.push(``);
+  lines.push(`# Output`, ``)
+  lines.push('```')
+  lines.push(entry.output)
+  lines.push('```')
+  lines.push(``)
 
   // Add parsed output if available
   if (entry.parsedOutput) {
-    lines.push(`## Parsed Output`, ``);
-    lines.push('```json');
-    lines.push(entry.parsedOutput);
-    lines.push('```');
-    lines.push(``);
+    lines.push(`## Parsed Output`, ``)
+    lines.push('```json')
+    lines.push(entry.parsedOutput)
+    lines.push('```')
+    lines.push(``)
   }
 
-  lines.push(`---`);
-  lines.push(`Generated by Babylon Engine Prompt Logger`);
-  lines.push(``);
+  lines.push(`---`)
+  lines.push(`Generated by Babylon Engine Prompt Logger`)
+  lines.push(``)
 
   // Write to file
-  fs.writeFileSync(filepath, lines.join('\n'), 'utf-8');
+  fs.writeFileSync(filepath, lines.join('\n'), 'utf-8')
 
   logger.debug(
     `Logged prompt to ${filename}`,
@@ -130,6 +141,6 @@ export async function logPrompt(entry: PromptLogEntry): Promise<void> {
       promptType: entry.promptType,
       filepath,
     },
-    'PromptLogger'
-  );
+    'PromptLogger',
+  )
 }

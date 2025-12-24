@@ -1,46 +1,44 @@
-'use client';
-
-import { cn } from '@babylon/shared';
-import { useSearchParams } from 'next/navigation';
-import { Suspense } from 'react';
-import { useAuth } from '@/hooks/useAuth';
+import { cn } from '@babylon/shared'
+import { Suspense } from 'react'
+import { isWaitlistMode } from '@/config'
+import { useAuth } from '@/hooks/useAuth'
+import { useSearchParams } from '@/lib/navigation'
 
 /**
  * Feed authentication banner content component.
  *
  * Displays a fixed bottom banner prompting unauthenticated users to log in.
- * Automatically hides when WAITLIST_MODE is enabled on home page unless
+ * Automatically hides when waitlist mode is enabled on home page unless
  * dev mode is enabled via URL parameter (?dev=true). Only shows when auth
  * state is ready and user is not authenticated.
  *
  * @returns Feed auth banner element or null if hidden/not needed
  */
 function FeedAuthBannerContent() {
-  const { login, authenticated, ready } = useAuth();
-  const searchParams = useSearchParams();
+  const { login, authenticated, ready } = useAuth()
+  const searchParams = useSearchParams()
 
   // Check if dev mode is enabled via URL parameter (for staging testing)
-  const isDevMode = searchParams.get('dev') === 'true';
+  const isDevMode = searchParams.get('dev') === 'true'
 
-  // Hide when WAITLIST_MODE is enabled on home page (unless ?dev=true)
-  const isWaitlistMode = process.env.NEXT_PUBLIC_WAITLIST_MODE === 'true';
+  // Hide when waitlist mode is enabled on home page (unless ?dev=true)
   const isHomePage =
-    typeof window !== 'undefined' && window.location.pathname === '/';
-  const shouldHide = isWaitlistMode && isHomePage && !isDevMode;
+    typeof window !== 'undefined' && window.location.pathname === '/'
+  const shouldHide = isWaitlistMode() && isHomePage && !isDevMode
 
   // If should be hidden, don't render anything
   if (shouldHide) {
-    return null;
+    return null
   }
 
   // Don't show until auth state is ready (prevents flash on load)
   if (!ready) {
-    return null;
+    return null
   }
 
   // Don't show if user is authenticated
   if (authenticated) {
-    return null;
+    return null
   }
 
   return (
@@ -48,7 +46,7 @@ function FeedAuthBannerContent() {
       className={cn(
         'fixed right-0 bottom-0 left-0 z-50',
         'bg-background text-foreground',
-        'border-border border-t-2'
+        'border-border border-t-2',
       )}
     >
       <div className="mx-auto max-w-7xl px-4 py-4">
@@ -59,13 +57,14 @@ function FeedAuthBannerContent() {
           </div>
           <div className="flex items-center gap-3">
             <button
+              type="button"
               onClick={login}
               className={cn(
                 'px-6 py-2 font-bold',
                 'bg-background text-foreground',
                 'hover:bg-background/90 hover:text-foreground',
                 'transition-colors',
-                'bg-primary text-primary-foreground'
+                'bg-primary text-primary-foreground',
               )}
             >
               Log in
@@ -74,7 +73,7 @@ function FeedAuthBannerContent() {
         </div>
       </div>
     </div>
-  );
+  )
 }
 
 /**
@@ -90,5 +89,5 @@ export function FeedAuthBanner() {
     <Suspense fallback={null}>
       <FeedAuthBannerContent />
     </Suspense>
-  );
+  )
 }

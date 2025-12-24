@@ -4,26 +4,24 @@
  * Pre-built login button with method selection.
  */
 
-'use client';
+import { type ChangeEvent, type ReactNode, useCallback, useState } from 'react'
+import { useJejuAuth } from './use-jeju-auth'
 
-import { type ChangeEvent, type ReactNode, useCallback, useState } from 'react';
-import { useJejuAuth } from './use-jeju-auth';
-
-type LoginMethod = 'wallet' | 'email' | 'farcaster' | 'twitter' | 'discord';
+type LoginMethod = 'wallet' | 'email' | 'farcaster' | 'twitter' | 'discord'
 
 export interface LoginButtonProps {
   /** Button variant */
-  variant?: 'default' | 'outline' | 'ghost';
+  variant?: 'default' | 'outline' | 'ghost'
   /** Button size */
-  size?: 'sm' | 'md' | 'lg';
+  size?: 'sm' | 'md' | 'lg'
   /** Custom class name */
-  className?: string;
+  className?: string
   /** Custom children (replaces default text) */
-  children?: ReactNode;
+  children?: ReactNode
   /** Callback on successful login */
-  onSuccess?: () => void;
+  onSuccess?: () => void
   /** Callback on error */
-  onError?: (error: string) => void;
+  onError?: (error: string) => void
 }
 
 /**
@@ -54,36 +52,36 @@ export function LoginButton({
     loginWithDiscord,
     verifyEmailCode,
     logout,
-  } = useJejuAuth();
+  } = useJejuAuth()
 
-  const [showMethods, setShowMethods] = useState(false);
-  const [email, setEmail] = useState('');
-  const [code, setCode] = useState('');
+  const [showMethods, setShowMethods] = useState(false)
+  const [email, setEmail] = useState('')
+  const [code, setCode] = useState('')
   const [step, setStep] = useState<'select' | 'email-input' | 'email-verify'>(
-    'select'
-  );
+    'select',
+  )
 
   const handleMethodSelect = useCallback(
     async (method: LoginMethod) => {
       switch (method) {
         case 'wallet':
-          await loginWithWallet().catch((err) => onError?.(err.message));
-          setShowMethods(false);
-          onSuccess?.();
-          break;
+          await loginWithWallet().catch((err) => onError?.(err.message))
+          setShowMethods(false)
+          onSuccess?.()
+          break
         case 'email':
-          setStep('email-input');
-          break;
+          setStep('email-input')
+          break
         case 'farcaster':
-          await loginWithFarcaster().catch((err) => onError?.(err.message));
-          setShowMethods(false);
-          break;
+          await loginWithFarcaster().catch((err) => onError?.(err.message))
+          setShowMethods(false)
+          break
         case 'twitter':
-          await loginWithTwitter();
-          break;
+          await loginWithTwitter()
+          break
         case 'discord':
-          await loginWithDiscord();
-          break;
+          await loginWithDiscord()
+          break
       }
     },
     [
@@ -93,47 +91,49 @@ export function LoginButton({
       loginWithDiscord,
       onSuccess,
       onError,
-    ]
-  );
+    ],
+  )
 
   const handleEmailSubmit = useCallback(async () => {
-    await loginWithEmail(email);
-    setStep('email-verify');
-  }, [loginWithEmail, email]);
+    await loginWithEmail(email)
+    setStep('email-verify')
+  }, [loginWithEmail, email])
 
   const handleCodeSubmit = useCallback(async () => {
-    await verifyEmailCode(code).catch((err) => onError?.(err.message));
-    setShowMethods(false);
-    setStep('select');
-    onSuccess?.();
-  }, [verifyEmailCode, code, onSuccess, onError]);
+    await verifyEmailCode(code).catch((err) => onError?.(err.message))
+    setShowMethods(false)
+    setStep('select')
+    onSuccess?.()
+  }, [verifyEmailCode, code, onSuccess, onError])
 
   const sizeClasses = {
     sm: 'px-3 py-1.5 text-sm',
     md: 'px-4 py-2 text-base',
     lg: 'px-6 py-3 text-lg',
-  };
+  }
 
   const variantClasses = {
     default: 'bg-blue-600 text-white hover:bg-blue-700',
     outline: 'border border-blue-600 text-blue-600 hover:bg-blue-50',
     ghost: 'text-blue-600 hover:bg-blue-50',
-  };
+  }
 
   if (authenticated) {
     return (
       <button
+        type="button"
         onClick={() => logout()}
         className={`rounded-lg font-medium ${sizeClasses[size]} ${variantClasses.outline} ${className}`}
       >
         Sign Out
       </button>
-    );
+    )
   }
 
   return (
     <div className="relative">
       <button
+        type="button"
         onClick={() => setShowMethods(!showMethods)}
         disabled={loading}
         className={`rounded-lg font-medium ${sizeClasses[size]} ${variantClasses[variant]} ${className} ${
@@ -152,6 +152,7 @@ export function LoginButton({
               </p>
 
               <button
+                type="button"
                 onClick={() => handleMethodSelect('wallet')}
                 className="flex w-full items-center gap-3 rounded-lg p-3 transition-colors hover:bg-gray-50"
               >
@@ -160,6 +161,7 @@ export function LoginButton({
               </button>
 
               <button
+                type="button"
                 onClick={() => handleMethodSelect('email')}
                 className="flex w-full items-center gap-3 rounded-lg p-3 transition-colors hover:bg-gray-50"
               >
@@ -168,6 +170,7 @@ export function LoginButton({
               </button>
 
               <button
+                type="button"
                 onClick={() => handleMethodSelect('farcaster')}
                 className="flex w-full items-center gap-3 rounded-lg p-3 transition-colors hover:bg-gray-50"
               >
@@ -176,6 +179,7 @@ export function LoginButton({
               </button>
 
               <button
+                type="button"
                 onClick={() => handleMethodSelect('twitter')}
                 className="flex w-full items-center gap-3 rounded-lg p-3 transition-colors hover:bg-gray-50"
               >
@@ -184,6 +188,7 @@ export function LoginButton({
               </button>
 
               <button
+                type="button"
                 onClick={() => handleMethodSelect('discord')}
                 className="flex w-full items-center gap-3 rounded-lg p-3 transition-colors hover:bg-gray-50"
               >
@@ -196,6 +201,7 @@ export function LoginButton({
           {step === 'email-input' && (
             <div className="space-y-3">
               <button
+                type="button"
                 onClick={() => setStep('select')}
                 className="text-gray-500 text-sm hover:text-gray-700"
               >
@@ -211,6 +217,7 @@ export function LoginButton({
                 className="w-full rounded-lg border p-2"
               />
               <button
+                type="button"
                 onClick={handleEmailSubmit}
                 disabled={!email.includes('@')}
                 className="w-full rounded-lg bg-blue-600 p-2 text-white hover:bg-blue-700 disabled:opacity-50"
@@ -235,6 +242,7 @@ export function LoginButton({
                 className="w-full rounded-lg border p-2"
               />
               <button
+                type="button"
                 onClick={handleCodeSubmit}
                 disabled={code.length < 4}
                 className="w-full rounded-lg bg-blue-600 p-2 text-white hover:bg-blue-700 disabled:opacity-50"
@@ -246,5 +254,5 @@ export function LoginButton({
         </div>
       )}
     </div>
-  );
+  )
 }

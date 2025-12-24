@@ -1,4 +1,4 @@
-import { cn } from '@babylon/shared';
+import { cn } from '@babylon/shared'
 
 /**
  * Visual indicator component for pull-to-refresh gesture.
@@ -20,9 +20,9 @@ import { cn } from '@babylon/shared';
  * ```
  */
 interface PullToRefreshIndicatorProps {
-  pullDistance: number;
-  isRefreshing: boolean;
-  threshold?: number;
+  pullDistance: number
+  isRefreshing: boolean
+  threshold?: number
 }
 
 export function PullToRefreshIndicator({
@@ -31,10 +31,10 @@ export function PullToRefreshIndicator({
   threshold = 80,
 }: PullToRefreshIndicatorProps) {
   // Fully hide when not pulling and not refreshing
-  if (pullDistance === 0 && !isRefreshing) return null;
+  if (pullDistance === 0 && !isRefreshing) return null
 
-  const opacity = Math.min(pullDistance / threshold, 1);
-  const isReady = pullDistance >= threshold;
+  const opacity = Math.min(pullDistance / threshold, 1)
+  const isReady = pullDistance >= threshold
 
   return (
     <div
@@ -43,7 +43,7 @@ export function PullToRefreshIndicator({
         // Smooth collapse when refreshing ends
         !isRefreshing && pullDistance > 0
           ? 'transition-all duration-300 ease-out'
-          : 'transition-opacity duration-100'
+          : 'transition-opacity duration-100',
       )}
       style={{
         height: `${pullDistance}px`,
@@ -53,18 +53,23 @@ export function PullToRefreshIndicator({
       <div
         className={cn(
           'flex flex-col items-center gap-1 transition-colors duration-200',
-          isReady || isRefreshing ? 'text-[#3462f3]' : 'text-muted-foreground'
+          isReady || isRefreshing ? 'text-[#3462f3]' : 'text-muted-foreground',
         )}
       >
         <div
           className={cn(
             'transition-transform duration-200',
-            isRefreshing && 'animate-spin'
+            isRefreshing && 'animate-spin',
           )}
         >
           {isRefreshing ? (
             // Spinner during refresh
-            <svg className="h-5 w-5" viewBox="0 0 24 24">
+            <svg
+              className="h-5 w-5"
+              viewBox="0 0 24 24"
+              aria-label="Refreshing"
+            >
+              <title>Refreshing</title>
               <circle
                 className="opacity-25"
                 cx="12"
@@ -87,7 +92,9 @@ export function PullToRefreshIndicator({
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
+              aria-label="Pull to refresh"
             >
+              <title>Pull to refresh</title>
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -106,5 +113,5 @@ export function PullToRefreshIndicator({
         </span>
       </div>
     </div>
-  );
+  )
 }

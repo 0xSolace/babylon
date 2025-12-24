@@ -1,391 +1,765 @@
 /**
- * Drizzle-Compatible Transaction Layer
+ * Drizzle-Compatible Query Builders
  *
- * Provides Drizzle-like chainable API that converts to raw SQL for CQL.
- * This allows existing code using `tx.update(table).set({}).where()` to work
- * with the CQL backend without changes.
+ * Provides Drizzle-like query builders that translate to raw SQL.
+ * This allows gradual migration from Drizzle without changing existing code patterns.
  */
 
-import type { ExecResult, QueryParam } from '@jeju/db';
-import {
-  and,
-  eq,
-  gt,
-  gte,
-  inArray,
-  isNull,
-  lt,
-  lte,
-  ne,
-  or,
-} from 'drizzle-orm';
-import type { PgTable, TableConfig } from 'drizzle-orm/pg-core';
-
-// Use a broader table type that accepts any PgTable
-type AnyPgTable = PgTable<TableConfig>;
+import type { QueryParam } from '@jejunetwork/db'
+import { getTableName } from '../table-registry'
+import { isColumnRef as isColumnRefFromGuards } from '../type-guards'
 
 // ============================================================================
 // Types
 // ============================================================================
 
-export type DrizzleSQLValue =
+export type SQLValue =
   | string
   | number
   | boolean
   | null
   | Date
   | bigint
-  | string[]
-  | number[]
-  | boolean[]
-  | undefined;
+  | Uint8Array
+  | Record<string, unknown>
+  | SQLValue[]
 
-export interface DrizzleCondition {
-  toSQL(): { sql: string; params: QueryParam[] };
-}
-
-export interface TransactionExecutor {
-  query<T>(sql: string, params?: QueryParam[]): Promise<T[]>;
-  queryOne<T>(sql: string, params?: QueryParam[]): Promise<T | null>;
-  exec(sql: string, params?: QueryParam[]): Promise<ExecResult>;
+type Executor = {
+  query: <T>(sql: string, params?: QueryParam[]) => Promise<T[]>
+  queryOne: <T>(sql: string, params?: QueryParam[]) => Promise<T | null>
+  exec: (
+    sql: string,
+    params?: QueryParam[],
+  ) => Promise<{ rowsAffected: number }>
 }
 
 // ============================================================================
-// Query Builders
+// SQL Condition Types
 // ============================================================================
 
-class SelectBuilder<T> {
-  private tableName: string;
-  private whereClause: string = '';
-  private whereParams: QueryParam[] = [];
-  private orderByClause: string = '';
-  private limitValue: number | null = null;
-  private executor: TransactionExecutor;
+interface SQLCondition {
+  readonly type:
+    | 'eq'
+    | 'ne'
+    | 'gt'
+    | 'gte'
+    | 'lt'
+    | 'lte'
+    | 'like'
+    | 'ilike'
+    | 'in'
+    | 'notIn'
+    | 'isNull'
+    | 'isNotNull'
+    | 'and'
+    | 'or'
+    | 'not'
+    | 'between'
+    | 'raw'
+  readonly column?: string
+  readonly value?: SQLValue
+  readonly values?: SQLValue[]
+  readonly conditions?: SQLCondition[]
+  readonly sql?: string
+  readonly params?: QueryParam[]
+}
 
-  constructor(table: AnyPgTable, executor: TransactionExecutor) {
-    // Extract table name from Drizzle table object
-    this.tableName = (table as unknown as { _: { name: string } })._.name;
-    this.executor = executor;
-  }
+// ============================================================================
+// Column Input Type
+// ============================================================================
 
-  where(condition: ReturnType<typeof eq | typeof and | typeof or>): this {
-    const { sql, params } = serializeCondition(condition);
-    this.whereClause = sql;
-    this.whereParams = params;
-    return this;
-  }
+/** Column input - accepts string, object with name, or undefined from index access */
+type ColumnInput = string | { name: string } | undefined
 
-  orderBy(
-    ...columns: Array<{ column: string; direction: 'asc' | 'desc' }>
-  ): this {
-    this.orderByClause = columns
-      .map((c) => `"${c.column}" ${c.direction.toUpperCase()}`)
-      .join(', ');
-    return this;
-  }
+/** Get column name from various input types */
+function getColName(column: ColumnInput): string {
+  if (!column) throw new Error('Column reference is undefined')
+  return typeof column === 'string' ? column : column.name
+}
 
-  limit(n: number): this {
-    this.limitValue = n;
-    return this;
-  }
+// ============================================================================
+// Condition Builders
+// ============================================================================
 
-  async then<TResult1 = T[], TResult2 = never>(
-    onfulfilled?: ((value: T[]) => TResult1 | PromiseLike<TResult1>) | null,
-    _onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null
-  ): Promise<TResult1 | TResult2> {
-    let sql = `SELECT * FROM "${this.tableName}"`;
-    if (this.whereClause) {
-      sql += ` WHERE ${this.whereClause}`;
-    }
-    if (this.orderByClause) {
-      sql += ` ORDER BY ${this.orderByClause}`;
-    }
-    if (this.limitValue !== null) {
-      sql += ` LIMIT ${this.limitValue}`;
-    }
+export function eq<T extends SQLValue>(
+  column: ColumnInput,
+  value: T,
+): SQLCondition {
+  return { type: 'eq', column: getColName(column), value }
+}
 
-    const result = await this.executor.query<T>(sql, this.whereParams);
-    return onfulfilled ? onfulfilled(result) : (result as unknown as TResult1);
+export function ne<T extends SQLValue>(
+  column: ColumnInput,
+  value: T,
+): SQLCondition {
+  return { type: 'ne', column: getColName(column), value }
+}
+
+export function gt<T extends SQLValue>(
+  column: ColumnInput,
+  value: T,
+): SQLCondition {
+  return { type: 'gt', column: getColName(column), value }
+}
+
+export function gte<T extends SQLValue>(
+  column: ColumnInput,
+  value: T,
+): SQLCondition {
+  return { type: 'gte', column: getColName(column), value }
+}
+
+export function lt<T extends SQLValue>(
+  column: ColumnInput,
+  value: T,
+): SQLCondition {
+  return { type: 'lt', column: getColName(column), value }
+}
+
+export function lte<T extends SQLValue>(
+  column: ColumnInput,
+  value: T,
+): SQLCondition {
+  return { type: 'lte', column: getColName(column), value }
+}
+
+export function like(column: ColumnInput, pattern: string): SQLCondition {
+  return { type: 'like', column: getColName(column), value: pattern }
+}
+
+export function ilike(column: ColumnInput, pattern: string): SQLCondition {
+  return { type: 'ilike', column: getColName(column), value: pattern }
+}
+
+export function inArray<T extends SQLValue>(
+  column: ColumnInput,
+  values: T[],
+): SQLCondition {
+  return {
+    type: 'in',
+    column: getColName(column),
+    values,
   }
 }
 
-class UpdateBuilder<T> {
-  private tableName: string;
-  private setData: Record<string, DrizzleSQLValue> = {};
-  private whereClause: string = '';
-  private whereParams: QueryParam[] = [];
-  private executor: TransactionExecutor;
-
-  constructor(table: AnyPgTable, executor: TransactionExecutor) {
-    this.tableName = (table as unknown as { _: { name: string } })._.name;
-    this.executor = executor;
-  }
-
-  set(data: Partial<T>): this {
-    this.setData = data as Record<string, DrizzleSQLValue>;
-    return this;
-  }
-
-  where(condition: ReturnType<typeof eq | typeof and | typeof or>): this {
-    const { sql, params } = serializeCondition(condition);
-    this.whereClause = sql;
-    this.whereParams = params;
-    return this;
-  }
-
-  async then<TResult1 = T[], TResult2 = never>(
-    onfulfilled?: ((value: T[]) => TResult1 | PromiseLike<TResult1>) | null,
-    _onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null
-  ): Promise<TResult1 | TResult2> {
-    const columns = Object.keys(this.setData);
-    const values = Object.values(this.setData);
-    const setClauses = columns.map((col, i) => `"${col}" = $${i + 1}`);
-
-    // Adjust where params offset
-    const adjustedWhere = this.whereClause.replace(
-      /\$(\d+)/g,
-      (_, num) => `$${parseInt(num, 10) + columns.length}`
-    );
-
-    let sql = `UPDATE "${this.tableName}" SET ${setClauses.join(', ')}`;
-    if (adjustedWhere) {
-      sql += ` WHERE ${adjustedWhere}`;
-    }
-    sql += ' RETURNING *';
-
-    const result = await this.executor.query<T>(sql, [
-      ...(values as QueryParam[]),
-      ...this.whereParams,
-    ]);
-    return onfulfilled ? onfulfilled(result) : (result as unknown as TResult1);
+export function notInArray<T extends SQLValue>(
+  column: ColumnInput,
+  values: T[],
+): SQLCondition {
+  return {
+    type: 'notIn',
+    column: getColName(column),
+    values,
   }
 }
 
-class InsertBuilder<T> {
-  private tableName: string;
-  private data: Record<string, DrizzleSQLValue>[] = [];
-  private executor: TransactionExecutor;
+export function isNull(column: ColumnInput): SQLCondition {
+  return { type: 'isNull', column: getColName(column) }
+}
 
-  constructor(table: AnyPgTable, executor: TransactionExecutor) {
-    this.tableName = (table as unknown as { _: { name: string } })._.name;
-    this.executor = executor;
-  }
+export function isNotNull(column: ColumnInput): SQLCondition {
+  return { type: 'isNotNull', column: getColName(column) }
+}
 
-  values(data: Partial<T> | Partial<T>[]): this {
-    this.data = (Array.isArray(data) ? data : [data]) as Record<
-      string,
-      DrizzleSQLValue
-    >[];
-    return this;
-  }
-
-  async then<TResult1 = T[], TResult2 = never>(
-    onfulfilled?: ((value: T[]) => TResult1 | PromiseLike<TResult1>) | null,
-    _onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null
-  ): Promise<TResult1 | TResult2> {
-    if (this.data.length === 0) {
-      return onfulfilled ? onfulfilled([]) : ([] as unknown as TResult1);
-    }
-
-    const firstRecord = this.data[0];
-    if (!firstRecord) {
-      return onfulfilled ? onfulfilled([]) : ([] as unknown as TResult1);
-    }
-
-    const columns = Object.keys(firstRecord);
-    const allValues: QueryParam[] = [];
-    const valueSets: string[] = [];
-
-    this.data.forEach((record, rowIndex) => {
-      const placeholders = columns.map((col, colIndex) => {
-        allValues.push(record[col] as QueryParam);
-        return `$${rowIndex * columns.length + colIndex + 1}`;
-      });
-      valueSets.push(`(${placeholders.join(', ')})`);
-    });
-
-    const sql = `INSERT INTO "${this.tableName}" (${columns.map((c) => `"${c}"`).join(', ')}) VALUES ${valueSets.join(', ')} RETURNING *`;
-
-    const result = await this.executor.query<T>(sql, allValues);
-    return onfulfilled ? onfulfilled(result) : (result as unknown as TResult1);
+export function between<T extends SQLValue>(
+  column: ColumnInput,
+  min: T,
+  max: T,
+): SQLCondition {
+  return {
+    type: 'between',
+    column: getColName(column),
+    values: [min, max],
   }
 }
 
-class DeleteBuilder<T> {
-  private tableName: string;
-  private whereClause: string = '';
-  private whereParams: QueryParam[] = [];
-  private executor: TransactionExecutor;
+export function and(...conditions: (SQLCondition | undefined)[]): SQLCondition {
+  const filtered = conditions.filter((c): c is SQLCondition => c !== undefined)
+  return { type: 'and', conditions: filtered }
+}
 
-  constructor(table: AnyPgTable, executor: TransactionExecutor) {
-    this.tableName = (table as unknown as { _: { name: string } })._.name;
-    this.executor = executor;
-  }
+export function or(...conditions: (SQLCondition | undefined)[]): SQLCondition {
+  const filtered = conditions.filter((c): c is SQLCondition => c !== undefined)
+  return { type: 'or', conditions: filtered }
+}
 
-  where(condition: ReturnType<typeof eq | typeof and | typeof or>): this {
-    const { sql, params } = serializeCondition(condition);
-    this.whereClause = sql;
-    this.whereParams = params;
-    return this;
-  }
+export function not(condition: SQLCondition): SQLCondition {
+  return { type: 'not', conditions: [condition] }
+}
 
-  async then<TResult1 = T[], TResult2 = never>(
-    onfulfilled?: ((value: T[]) => TResult1 | PromiseLike<TResult1>) | null,
-    _onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null
-  ): Promise<TResult1 | TResult2> {
-    let sql = `DELETE FROM "${this.tableName}"`;
-    if (this.whereClause) {
-      sql += ` WHERE ${this.whereClause}`;
+/** Column reference type */
+interface ColumnRef {
+  name: string
+}
+
+// Use isColumnRef from type-guards
+const isColumnRef = isColumnRefFromGuards
+
+export function sql(
+  strings: TemplateStringsArray,
+  ...values: (SQLValue | ColumnRef | undefined)[]
+): SQLCondition {
+  let sqlStr = ''
+  const params: QueryParam[] = []
+  let paramIndex = 1
+
+  strings.forEach((str, i) => {
+    sqlStr += str
+    const val = values[i]
+    if (val !== undefined && val !== null) {
+      // Column references are embedded directly as quoted identifiers
+      if (isColumnRef(val)) {
+        sqlStr += `"${val.name}"`
+      } else {
+        // val is SQLValue at this point (not ColumnRef, not undefined, not null)
+        params.push(toQueryParam(val as SQLValue))
+        sqlStr += `$${paramIndex++}`
+      }
     }
-    sql += ' RETURNING *';
+  })
 
-    const result = await this.executor.query<T>(sql, this.whereParams);
-    return onfulfilled ? onfulfilled(result) : (result as unknown as TResult1);
-  }
+  return { type: 'raw', sql: sqlStr, params }
+}
+
+// ============================================================================
+// Parameter Conversion
+// ============================================================================
+
+function toQueryParam(value: SQLValue): QueryParam {
+  if (value === null) return null
+  if (typeof value === 'string') return value
+  if (typeof value === 'number') return value
+  if (typeof value === 'boolean') return value
+  if (typeof value === 'bigint') return value
+  if (value instanceof Uint8Array) return value
+  if (value instanceof Date) return value.toISOString()
+  return JSON.stringify(value)
 }
 
 // ============================================================================
 // Condition Serialization
 // ============================================================================
 
+interface SerializedCondition {
+  sql: string
+  params: QueryParam[]
+}
+
 function serializeCondition(
-  condition: ReturnType<
-    | typeof eq
-    | typeof and
-    | typeof or
-    | typeof gt
-    | typeof gte
-    | typeof lt
-    | typeof lte
-    | typeof ne
-    | typeof inArray
-    | typeof isNull
-  >
-): { sql: string; params: QueryParam[] } {
-  // Handle null/undefined
-  if (!condition) {
-    return { sql: '', params: [] };
-  }
+  condition: SQLCondition,
+  paramOffset: number,
+): SerializedCondition {
+  const idx = paramOffset
+  const params: QueryParam[] = []
 
-  // Drizzle conditions have a getSQL() method that returns SQL chunks
-  // We need to serialize these to raw SQL
-  const chunks = (
-    condition as unknown as { getSQL(): { queryChunks: unknown[] } }
-  ).getSQL?.();
+  switch (condition.type) {
+    case 'eq':
+      params.push(toQueryParam(condition.value ?? null))
+      return { sql: `"${condition.column}" = $${idx}`, params }
 
-  if (!chunks?.queryChunks) {
-    // Fallback for simple conditions
-    return serializeSimpleCondition(condition);
-  }
+    case 'ne':
+      params.push(toQueryParam(condition.value ?? null))
+      return { sql: `"${condition.column}" != $${idx}`, params }
 
-  return serializeChunks(chunks.queryChunks);
-}
+    case 'gt':
+      params.push(toQueryParam(condition.value ?? null))
+      return { sql: `"${condition.column}" > $${idx}`, params }
 
-function serializeSimpleCondition(condition: unknown): {
-  sql: string;
-  params: QueryParam[];
-} {
-  // Try to extract from the condition object structure
-  const cond = condition as {
-    _?: { column?: { name: string }; value?: unknown; operator?: string };
-    column?: { name: string };
-    value?: unknown;
-    operator?: string;
-  };
+    case 'gte':
+      params.push(toQueryParam(condition.value ?? null))
+      return { sql: `"${condition.column}" >= $${idx}`, params }
 
-  const column = cond._?.column?.name ?? cond.column?.name;
-  const value = cond._?.value ?? cond.value;
-  const operator = cond._?.operator ?? cond.operator ?? '=';
+    case 'lt':
+      params.push(toQueryParam(condition.value ?? null))
+      return { sql: `"${condition.column}" < $${idx}`, params }
 
-  if (!column) {
-    return { sql: '1=1', params: [] };
-  }
+    case 'lte':
+      params.push(toQueryParam(condition.value ?? null))
+      return { sql: `"${condition.column}" <= $${idx}`, params }
 
-  return { sql: `"${column}" ${operator} $1`, params: [value as QueryParam] };
-}
+    case 'like':
+      params.push(toQueryParam(condition.value ?? null))
+      return { sql: `"${condition.column}" LIKE $${idx}`, params }
 
-function serializeChunks(chunks: unknown[]): {
-  sql: string;
-  params: QueryParam[];
-} {
-  const sqlParts: string[] = [];
-  const params: QueryParam[] = [];
-  let paramIndex = 1;
+    case 'ilike':
+      params.push(toQueryParam(condition.value ?? null))
+      return { sql: `LOWER("${condition.column}") LIKE LOWER($${idx})`, params }
 
-  for (const chunk of chunks) {
-    if (typeof chunk === 'string') {
-      sqlParts.push(chunk);
-    } else if (chunk && typeof chunk === 'object') {
-      const c = chunk as { name?: string; value?: unknown };
-      if ('name' in c && c.name) {
-        // Column reference
-        sqlParts.push(`"${c.name}"`);
-      } else if ('value' in c) {
-        // Parameter value
-        sqlParts.push(`$${paramIndex++}`);
-        params.push(c.value as QueryParam);
+    case 'in': {
+      const values = condition.values ?? []
+      const placeholders = values.map((v, i) => {
+        params.push(toQueryParam(v))
+        return `$${idx + i}`
+      })
+      return {
+        sql: `"${condition.column}" IN (${placeholders.join(', ')})`,
+        params,
       }
+    }
+
+    case 'notIn': {
+      const values = condition.values ?? []
+      const placeholders = values.map((v, i) => {
+        params.push(toQueryParam(v))
+        return `$${idx + i}`
+      })
+      return {
+        sql: `"${condition.column}" NOT IN (${placeholders.join(', ')})`,
+        params,
+      }
+    }
+
+    case 'isNull':
+      return { sql: `"${condition.column}" IS NULL`, params: [] }
+
+    case 'isNotNull':
+      return { sql: `"${condition.column}" IS NOT NULL`, params: [] }
+
+    case 'between': {
+      const min = condition.values?.[0]
+      const max = condition.values?.[1]
+      if (min === undefined || max === undefined) {
+        throw new Error('[SQL] BETWEEN requires two values')
+      }
+      params.push(toQueryParam(min))
+      params.push(toQueryParam(max))
+      return {
+        sql: `"${condition.column}" BETWEEN $${idx} AND $${idx + 1}`,
+        params,
+      }
+    }
+
+    case 'and': {
+      if (!condition.conditions?.length) return { sql: '1=1', params: [] }
+      const parts: string[] = []
+      let offset = idx
+      for (const c of condition.conditions) {
+        const result = serializeCondition(c, offset)
+        parts.push(result.sql)
+        params.push(...result.params)
+        offset += result.params.length
+      }
+      return { sql: `(${parts.join(' AND ')})`, params }
+    }
+
+    case 'or': {
+      if (!condition.conditions?.length) return { sql: '1=0', params: [] }
+      const parts: string[] = []
+      let offset = idx
+      for (const c of condition.conditions) {
+        const result = serializeCondition(c, offset)
+        parts.push(result.sql)
+        params.push(...result.params)
+        offset += result.params.length
+      }
+      return { sql: `(${parts.join(' OR ')})`, params }
+    }
+
+    case 'not': {
+      const notCondition = condition.conditions?.[0]
+      if (!notCondition) {
+        throw new Error('[SQL] NOT requires a condition')
+      }
+      const inner = serializeCondition(notCondition, idx)
+      return { sql: `NOT (${inner.sql})`, params: inner.params }
+    }
+
+    case 'raw':
+      return { sql: condition.sql ?? '', params: condition.params ?? [] }
+
+    default:
+      throw new Error(
+        `Unknown condition type: ${(condition as SQLCondition).type}`,
+      )
+  }
+}
+
+// ============================================================================
+// Typed Table Reference
+// ============================================================================
+
+/**
+ * Symbol used to carry the row type on table references
+ */
+export const TABLE_ROW_TYPE = Symbol.for('cql:RowType')
+
+/**
+ * Typed table reference that carries the row type.
+ * Supports multiple patterns:
+ * - TypedTable from table-registry (uses __schema)
+ * - TypedTableRef from typed-tables (uses $inferSelect)
+ */
+export interface TypedTableRef<TRow> {
+  _: { name: string }
+  /** Phantom type for schema inference (typed-tables pattern) */
+  readonly $inferSelect?: TRow
+  /** Phantom type for schema inference (table-registry pattern) */
+  readonly __schema?: TRow
+  [column: string]: { name: string } | TRow | undefined
+}
+
+/**
+ * Extract row type from a typed table reference.
+ * Supports both __schema and $inferSelect patterns.
+ */
+export type InferTableRow<T> = T extends { readonly $inferSelect: infer R }
+  ? R
+  : T extends { readonly __schema?: infer R }
+    ? R extends undefined
+      ? Record<string, unknown>
+      : R
+    : Record<string, unknown>
+
+// ============================================================================
+// Query Builders
+// ============================================================================
+
+export class SelectBuilder<T extends Record<string, unknown>>
+  implements PromiseLike<T[]>
+{
+  private _table = ''
+  private _fields = '*'
+  private _where: SQLCondition | null = null
+  private _orderBy: string[] = []
+  private _limit: number | null = null
+  private _offset: number | null = null
+
+  constructor(
+    private executor: Executor,
+    fields?: Record<string, unknown>,
+  ) {
+    if (fields) {
+      this._fields = Object.keys(fields)
+        .map((k) => `"${k}"`)
+        .join(', ')
     }
   }
 
-  return { sql: sqlParts.join(''), params };
+  from<
+    TTable extends TypedTableRef<TRow>,
+    TRow extends Record<string, unknown>,
+  >(table: TTable): SelectBuilder<InferTableRow<TTable>>
+  from(table: object | string): SelectBuilder<T>
+  from(table: object | string): SelectBuilder<T> {
+    this._table = typeof table === 'string' ? table : getTableName(table)
+    return this
+  }
+
+  where(condition: SQLCondition): SelectBuilder<T> {
+    this._where = condition
+    return this
+  }
+
+  orderBy(
+    column: string | { name: string },
+    direction: 'asc' | 'desc' = 'asc',
+  ): SelectBuilder<T> {
+    const colName = typeof column === 'string' ? column : column.name
+    this._orderBy.push(`"${colName}" ${direction.toUpperCase()}`)
+    return this
+  }
+
+  limit(n: number): SelectBuilder<T> {
+    this._limit = n
+    return this
+  }
+
+  offset(n: number): SelectBuilder<T> {
+    this._offset = n
+    return this
+  }
+
+  private build(): { sql: string; params: QueryParam[] } {
+    let sql = `SELECT ${this._fields} FROM "${this._table}"`
+    const params: QueryParam[] = []
+
+    if (this._where) {
+      const whereResult = serializeCondition(this._where, 1)
+      sql += ` WHERE ${whereResult.sql}`
+      params.push(...whereResult.params)
+    }
+
+    if (this._orderBy.length) {
+      sql += ` ORDER BY ${this._orderBy.join(', ')}`
+    }
+
+    if (this._limit !== null) {
+      sql += ` LIMIT ${this._limit}`
+    }
+
+    if (this._offset !== null) {
+      sql += ` OFFSET ${this._offset}`
+    }
+
+    return { sql, params }
+  }
+
+  async execute(): Promise<T[]> {
+    const { sql, params } = this.build()
+    return this.executor.query<T>(sql, params)
+  }
+
+  // biome-ignore lint/suspicious/noThenProperty: Required for PromiseLike implementation
+  then<TResult1 = T[], TResult2 = never>(
+    onfulfilled?: ((value: T[]) => TResult1 | PromiseLike<TResult1>) | null,
+    onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
+  ): Promise<TResult1 | TResult2> {
+    return this.execute().then(onfulfilled, onrejected)
+  }
+}
+
+export class InsertBuilder<T extends Record<string, unknown>>
+  implements PromiseLike<T[]>
+{
+  private _table = ''
+  private _values: Record<string, SQLValue>[] = []
+  private _returning = false
+
+  constructor(
+    private executor: Executor,
+    table: object | string,
+  ) {
+    this._table = typeof table === 'string' ? table : getTableName(table)
+  }
+
+  values(
+    data: Record<string, SQLValue> | Record<string, SQLValue>[],
+  ): InsertBuilder<T> {
+    this._values = Array.isArray(data) ? data : [data]
+    return this
+  }
+
+  returning(): InsertBuilder<T> {
+    this._returning = true
+    return this
+  }
+
+  private build(): { sql: string; params: QueryParam[] } {
+    const firstRow = this._values[0]
+    if (!firstRow) {
+      throw new Error('[InsertBuilder] No values provided')
+    }
+
+    const columns = Object.keys(firstRow)
+    const params: QueryParam[] = []
+    const valueGroups: string[] = []
+
+    for (const row of this._values) {
+      const placeholders: string[] = []
+      for (const col of columns) {
+        const value = row[col]
+        params.push(value !== undefined ? toQueryParam(value) : null)
+        placeholders.push(`$${params.length}`)
+      }
+      valueGroups.push(`(${placeholders.join(', ')})`)
+    }
+
+    let sql = `INSERT INTO "${this._table}" (${columns.map((c) => `"${c}"`).join(', ')}) VALUES ${valueGroups.join(', ')}`
+
+    if (this._returning) {
+      sql += ' RETURNING *'
+    }
+
+    return { sql, params }
+  }
+
+  async execute(): Promise<T[]> {
+    const { sql, params } = this.build()
+    if (this._returning) {
+      return this.executor.query<T>(sql, params)
+    }
+    await this.executor.exec(sql, params)
+    return []
+  }
+
+  // biome-ignore lint/suspicious/noThenProperty: Required for PromiseLike implementation
+  then<TResult1 = T[], TResult2 = never>(
+    onfulfilled?: ((value: T[]) => TResult1 | PromiseLike<TResult1>) | null,
+    onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
+  ): Promise<TResult1 | TResult2> {
+    return this.execute().then(onfulfilled, onrejected)
+  }
+}
+
+export class UpdateBuilder<T extends Record<string, unknown>>
+  implements PromiseLike<T[]>
+{
+  private _table = ''
+  private _set: Record<string, SQLValue> = {}
+  private _where: SQLCondition | null = null
+  private _returning = false
+
+  constructor(
+    private executor: Executor,
+    table: object | string,
+  ) {
+    this._table = typeof table === 'string' ? table : getTableName(table)
+  }
+
+  set(data: Record<string, SQLValue>): UpdateBuilder<T> {
+    this._set = data
+    return this
+  }
+
+  where(condition: SQLCondition): UpdateBuilder<T> {
+    this._where = condition
+    return this
+  }
+
+  returning(): UpdateBuilder<T> {
+    this._returning = true
+    return this
+  }
+
+  private build(): { sql: string; params: QueryParam[] } {
+    const params: QueryParam[] = []
+    const setParts: string[] = []
+
+    for (const [col, val] of Object.entries(this._set)) {
+      params.push(toQueryParam(val))
+      setParts.push(`"${col}" = $${params.length}`)
+    }
+
+    let sql = `UPDATE "${this._table}" SET ${setParts.join(', ')}`
+
+    if (this._where) {
+      const whereResult = serializeCondition(this._where, params.length + 1)
+      sql += ` WHERE ${whereResult.sql}`
+      params.push(...whereResult.params)
+    }
+
+    if (this._returning) {
+      sql += ' RETURNING *'
+    }
+
+    return { sql, params }
+  }
+
+  async execute(): Promise<T[]> {
+    const { sql, params } = this.build()
+    if (this._returning) {
+      return this.executor.query<T>(sql, params)
+    }
+    await this.executor.exec(sql, params)
+    return []
+  }
+
+  // biome-ignore lint/suspicious/noThenProperty: Required for PromiseLike implementation
+  then<TResult1 = T[], TResult2 = never>(
+    onfulfilled?: ((value: T[]) => TResult1 | PromiseLike<TResult1>) | null,
+    onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
+  ): Promise<TResult1 | TResult2> {
+    return this.execute().then(onfulfilled, onrejected)
+  }
+}
+
+export class DeleteBuilder<T extends Record<string, unknown>>
+  implements PromiseLike<T[]>
+{
+  private _table = ''
+  private _where: SQLCondition | null = null
+  private _returning = false
+
+  constructor(
+    private executor: Executor,
+    table: object | string,
+  ) {
+    this._table = typeof table === 'string' ? table : getTableName(table)
+  }
+
+  where(condition: SQLCondition): DeleteBuilder<T> {
+    this._where = condition
+    return this
+  }
+
+  returning(): DeleteBuilder<T> {
+    this._returning = true
+    return this
+  }
+
+  private build(): { sql: string; params: QueryParam[] } {
+    let sql = `DELETE FROM "${this._table}"`
+    const params: QueryParam[] = []
+
+    if (this._where) {
+      const whereResult = serializeCondition(this._where, 1)
+      sql += ` WHERE ${whereResult.sql}`
+      params.push(...whereResult.params)
+    }
+
+    if (this._returning) {
+      sql += ' RETURNING *'
+    }
+
+    return { sql, params }
+  }
+
+  async execute(): Promise<T[]> {
+    const { sql, params } = this.build()
+    if (this._returning) {
+      return this.executor.query<T>(sql, params)
+    }
+    await this.executor.exec(sql, params)
+    return []
+  }
+
+  // biome-ignore lint/suspicious/noThenProperty: Required for PromiseLike implementation
+  then<TResult1 = T[], TResult2 = never>(
+    onfulfilled?: ((value: T[]) => TResult1 | PromiseLike<TResult1>) | null,
+    onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
+  ): Promise<TResult1 | TResult2> {
+    return this.execute().then(onfulfilled, onrejected)
+  }
 }
 
 // ============================================================================
-// Drizzle-Compatible Transaction
+// Query Transaction (Drizzle-like interface)
 // ============================================================================
 
-export class DrizzleTransaction implements TransactionExecutor {
-  private executor: TransactionExecutor;
-
-  constructor(executor: TransactionExecutor) {
-    this.executor = executor;
+export interface QueryTransaction {
+  select: <TFields extends Record<string, unknown> | undefined = undefined>(
+    fields?: TFields,
+  ) => {
+    from: <
+      TTable extends TypedTableRef<TRow>,
+      TRow extends Record<string, unknown>,
+    >(
+      table: TTable,
+    ) => SelectBuilder<
+      TFields extends undefined ? InferTableRow<TTable> : TFields
+    >
   }
-
-  // Raw SQL methods (from TransactionContext)
-  query<T>(sql: string, params?: QueryParam[]): Promise<T[]> {
-    return this.executor.query<T>(sql, params);
-  }
-
-  queryOne<T>(sql: string, params?: QueryParam[]): Promise<T | null> {
-    return this.executor.queryOne<T>(sql, params);
-  }
-
-  exec(sql: string, params?: QueryParam[]): Promise<ExecResult> {
-    return this.executor.exec(sql, params);
-  }
-
-  // Drizzle-style chainable methods
-  // select() can optionally take field mappings like db.select({ col: table.col })
-  select<T extends Record<string, unknown> = Record<string, unknown>>(
-    _fields?: T
-  ): { from: (table: AnyPgTable) => SelectBuilder<T> } {
-    // Note: _fields is used for TypeScript type inference but the actual
-    // SQL always selects *, and we let TypeScript narrow the result type
-    return {
-      from: (table: AnyPgTable) => new SelectBuilder<T>(table, this),
-    };
-  }
-
-  update<T>(table: AnyPgTable): UpdateBuilder<T> {
-    return new UpdateBuilder<T>(table, this);
-  }
-
-  insert<T>(table: AnyPgTable): InsertBuilder<T> {
-    return new InsertBuilder<T>(table, this);
-  }
-
-  delete<T>(table: AnyPgTable): DeleteBuilder<T> {
-    return new DeleteBuilder<T>(table, this);
-  }
+  insert: (table: object | string) => InsertBuilder<Record<string, unknown>>
+  update: (table: object | string) => UpdateBuilder<Record<string, unknown>>
+  delete: (table: object | string) => DeleteBuilder<Record<string, unknown>>
 }
 
-// ============================================================================
-// Export compatibility helpers
-// ============================================================================
-
-export function createDrizzleTransaction(
-  executor: TransactionExecutor
-): DrizzleTransaction {
-  return new DrizzleTransaction(executor);
+export function createQueryTransaction(executor: Executor): QueryTransaction {
+  return {
+    select: <TFields extends Record<string, unknown> | undefined = undefined>(
+      fields?: TFields,
+    ) => ({
+      from: <
+        TTable extends TypedTableRef<TRow>,
+        TRow extends Record<string, unknown>,
+      >(
+        table: TTable,
+      ): SelectBuilder<
+        TFields extends undefined ? InferTableRow<TTable> : TFields
+      > => {
+        type ResultType = TFields extends undefined
+          ? InferTableRow<TTable>
+          : TFields
+        const builder = new SelectBuilder<ResultType>(executor, fields)
+        builder.from(table)
+        return builder
+      },
+    }),
+    insert: (table: object | string) =>
+      new InsertBuilder<Record<string, unknown>>(executor, table),
+    update: (table: object | string) =>
+      new UpdateBuilder<Record<string, unknown>>(executor, table),
+    delete: (table: object | string) =>
+      new DeleteBuilder<Record<string, unknown>>(executor, table),
+  }
 }

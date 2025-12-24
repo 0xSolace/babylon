@@ -11,10 +11,10 @@
  * These tests verify the training data collection for GRPO training.
  */
 
-import { describe, expect, mock, test } from 'bun:test';
+import { describe, expect, mock, test } from 'bun:test'
 
 // Mock database and simulation mode
-const mockIsSimulationMode = mock(() => true);
+const mockIsSimulationMode = mock(() => true)
 mock.module('@babylon/db', () => ({
   db: {
     insert: mock(() => ({
@@ -24,7 +24,7 @@ mock.module('@babylon/db', () => ({
   trajectories: {},
   llmCallLogs: {},
   isSimulationMode: mockIsSimulationMode,
-}));
+}))
 
 // Note: We don't mock 'fs' globally as it can interfere with other tests
 // that import fs (like BenchmarkRunner). Instead we test the logic without file I/O.
@@ -34,7 +34,7 @@ import type {
   EnvironmentState,
   LLMCall,
   TrajectoryStep,
-} from '../types';
+} from '../types'
 
 // =============================================================================
 // Trajectory Lifecycle Tests
@@ -43,49 +43,49 @@ import type {
 describe('TrajectoryRecorder - Lifecycle', () => {
   test('generates unique trajectory IDs', () => {
     const generateId = () =>
-      `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+      `${Date.now()}-${Math.random().toString(36).slice(2)}`
 
-    const id1 = generateId();
-    const id2 = generateId();
+    const id1 = generateId()
+    const id2 = generateId()
 
-    expect(id1).not.toBe(id2);
-    expect(id1.length).toBeGreaterThan(10);
-  });
+    expect(id1).not.toBe(id2)
+    expect(id1.length).toBeGreaterThan(10)
+  })
 
   test('trajectory starts with empty steps', () => {
     interface ActiveTrajectory {
-      trajectoryId: string;
-      agentId: string;
-      steps: TrajectoryStep[];
+      trajectoryId: string
+      agentId: string
+      steps: TrajectoryStep[]
     }
 
     const trajectory: ActiveTrajectory = {
       trajectoryId: 'test-123',
       agentId: 'agent-456',
       steps: [],
-    };
+    }
 
-    expect(trajectory.steps).toHaveLength(0);
-  });
+    expect(trajectory.steps).toHaveLength(0)
+  })
 
   test('trajectory tracks start time', () => {
-    const startTime = Date.now();
+    const startTime = Date.now()
 
     // Simulate some delay
-    const elapsedCheck = Date.now() - startTime;
+    const elapsedCheck = Date.now() - startTime
 
-    expect(elapsedCheck).toBeGreaterThanOrEqual(0);
-  });
+    expect(elapsedCheck).toBeGreaterThanOrEqual(0)
+  })
 
   test('trajectory calculates duration on end', () => {
-    const startTime = Date.now() - 5000; // Started 5 seconds ago
-    const endTime = Date.now();
+    const startTime = Date.now() - 5000 // Started 5 seconds ago
+    const endTime = Date.now()
 
-    const durationMs = endTime - startTime;
+    const durationMs = endTime - startTime
 
-    expect(durationMs).toBeGreaterThanOrEqual(5000);
-  });
-});
+    expect(durationMs).toBeGreaterThanOrEqual(5000)
+  })
+})
 
 // =============================================================================
 // Environment State Tests
@@ -99,14 +99,14 @@ describe('TrajectoryRecorder - Environment State', () => {
       agentPnL: 250.5,
       openPositions: 3,
       timestamp: Date.now(),
-    };
+    }
 
-    expect(state.agentBalance).toBeDefined();
-    expect(state.agentPoints).toBeDefined();
-    expect(state.agentPnL).toBeDefined();
-    expect(state.openPositions).toBeDefined();
-    expect(state.timestamp).toBeDefined();
-  });
+    expect(state.agentBalance).toBeDefined()
+    expect(state.agentPoints).toBeDefined()
+    expect(state.agentPnL).toBeDefined()
+    expect(state.openPositions).toBeDefined()
+    expect(state.timestamp).toBeDefined()
+  })
 
   test('handles zero balance state', () => {
     const state: EnvironmentState = {
@@ -115,11 +115,11 @@ describe('TrajectoryRecorder - Environment State', () => {
       agentPnL: 0,
       openPositions: 0,
       timestamp: Date.now(),
-    };
+    }
 
-    expect(state.agentBalance).toBe(0);
-    expect(state.agentPnL).toBe(0);
-  });
+    expect(state.agentBalance).toBe(0)
+    expect(state.agentPnL).toBe(0)
+  })
 
   test('handles negative PnL', () => {
     const state: EnvironmentState = {
@@ -128,10 +128,10 @@ describe('TrajectoryRecorder - Environment State', () => {
       agentPnL: -2500,
       openPositions: 2,
       timestamp: Date.now(),
-    };
+    }
 
-    expect(state.agentPnL).toBeLessThan(0);
-  });
+    expect(state.agentPnL).toBeLessThan(0)
+  })
 
   test('handles large balance values', () => {
     const state: EnvironmentState = {
@@ -140,11 +140,11 @@ describe('TrajectoryRecorder - Environment State', () => {
       agentPnL: 5e8,
       openPositions: 100,
       timestamp: Date.now(),
-    };
+    }
 
-    expect(state.agentBalance).toBe(1e12);
-  });
-});
+    expect(state.agentBalance).toBe(1e12)
+  })
+})
 
 // =============================================================================
 // LLM Call Recording Tests
@@ -162,15 +162,15 @@ describe('TrajectoryRecorder - LLM Calls', () => {
       temperature: 0.7,
       maxTokens: 2000,
       latencyMs: 450,
-    };
+    }
 
-    expect(llmCall.model).toBeDefined();
-    expect(llmCall.purpose).toBeDefined();
-    expect(llmCall.systemPrompt).toBeDefined();
-    expect(llmCall.userPrompt).toBeDefined();
-    expect(llmCall.response).toBeDefined();
-    expect(llmCall.latencyMs).toBeGreaterThanOrEqual(0);
-  });
+    expect(llmCall.model).toBeDefined()
+    expect(llmCall.purpose).toBeDefined()
+    expect(llmCall.systemPrompt).toBeDefined()
+    expect(llmCall.userPrompt).toBeDefined()
+    expect(llmCall.response).toBeDefined()
+    expect(llmCall.latencyMs).toBeGreaterThanOrEqual(0)
+  })
 
   test('handles missing optional fields', () => {
     const llmCall: Partial<LLMCall> = {
@@ -179,14 +179,14 @@ describe('TrajectoryRecorder - LLM Calls', () => {
       userPrompt: 'Analyze this market',
       response: 'Market looks bullish',
       latencyMs: 300,
-    };
+    }
 
-    expect(llmCall.reasoning).toBeUndefined();
-    expect(llmCall.systemPrompt).toBeUndefined();
-  });
+    expect(llmCall.reasoning).toBeUndefined()
+    expect(llmCall.systemPrompt).toBeUndefined()
+  })
 
   test('records latency accurately', () => {
-    const latencies = [50, 100, 500, 1000, 5000];
+    const latencies = [50, 100, 500, 1000, 5000]
 
     for (const latency of latencies) {
       const llmCall: LLMCall = {
@@ -199,14 +199,14 @@ describe('TrajectoryRecorder - LLM Calls', () => {
         temperature: 0.5,
         maxTokens: 100,
         latencyMs: latency,
-      };
+      }
 
-      expect(llmCall.latencyMs).toBe(latency);
+      expect(llmCall.latencyMs).toBe(latency)
     }
-  });
+  })
 
   test('handles very long prompts', () => {
-    const longPrompt = 'A'.repeat(10000); // 10k characters
+    const longPrompt = 'A'.repeat(10000) // 10k characters
 
     const llmCall: LLMCall = {
       model: 'test',
@@ -218,12 +218,12 @@ describe('TrajectoryRecorder - LLM Calls', () => {
       temperature: 0.5,
       maxTokens: 100,
       latencyMs: 0,
-    };
+    }
 
-    expect(llmCall.systemPrompt.length).toBe(10000);
-    expect(llmCall.userPrompt.length).toBe(10000);
-  });
-});
+    expect(llmCall.systemPrompt.length).toBe(10000)
+    expect(llmCall.userPrompt.length).toBe(10000)
+  })
+})
 
 // =============================================================================
 // Action Recording Tests
@@ -243,13 +243,13 @@ describe('TrajectoryRecorder - Actions', () => {
         positionId: 'pos-123',
         executedPrice: 120050,
       },
-    };
+    }
 
-    expect(action.actionType).toBeDefined();
-    expect(action.parameters).toBeDefined();
-    expect(action.success).toBe(true);
-    expect(action.result).toBeDefined();
-  });
+    expect(action.actionType).toBeDefined()
+    expect(action.parameters).toBeDefined()
+    expect(action.success).toBe(true)
+    expect(action.result).toBeDefined()
+  })
 
   test('handles failed actions', () => {
     const action: Action = {
@@ -260,22 +260,22 @@ describe('TrajectoryRecorder - Actions', () => {
       },
       success: false,
       error: 'Insufficient balance',
-    };
+    }
 
-    expect(action.success).toBe(false);
-    expect(action.error).toBeDefined();
-  });
+    expect(action.success).toBe(false)
+    expect(action.error).toBeDefined()
+  })
 
   test('records hold actions', () => {
     const action: Action = {
       actionType: 'hold',
       parameters: {},
       success: true,
-    };
+    }
 
-    expect(action.actionType).toBe('hold');
-    expect(action.success).toBe(true);
-  });
+    expect(action.actionType).toBe('hold')
+    expect(action.success).toBe(true)
+  })
 
   test('records various action types', () => {
     const actionTypes = [
@@ -287,19 +287,19 @@ describe('TrajectoryRecorder - Actions', () => {
       'close_position',
       'buy_yes',
       'buy_no',
-    ];
+    ]
 
     for (const actionType of actionTypes) {
       const action: Action = {
         actionType,
         parameters: {},
         success: true,
-      };
+      }
 
-      expect(action.actionType).toBe(actionType);
+      expect(action.actionType).toBe(actionType)
     }
-  });
-});
+  })
+})
 
 // =============================================================================
 // Step Recording Tests
@@ -325,16 +325,16 @@ describe('TrajectoryRecorder - Steps', () => {
         success: true,
       },
       reward: 0,
-    };
+    }
 
-    expect(step.stepNumber).toBe(0);
-    expect(step.environmentState).toBeDefined();
-    expect(step.action).toBeDefined();
-    expect(step.reward).toBeDefined();
-  });
+    expect(step.stepNumber).toBe(0)
+    expect(step.environmentState).toBeDefined()
+    expect(step.action).toBeDefined()
+    expect(step.reward).toBeDefined()
+  })
 
   test('step numbers increment correctly', () => {
-    const steps: TrajectoryStep[] = [];
+    const steps: TrajectoryStep[] = []
 
     for (let i = 0; i < 5; i++) {
       steps.push({
@@ -355,13 +355,13 @@ describe('TrajectoryRecorder - Steps', () => {
           success: true,
         },
         reward: i * 0.1,
-      });
+      })
     }
 
-    expect(steps).toHaveLength(5);
-    expect(steps[0]!.stepNumber).toBe(0);
-    expect(steps[4]!.stepNumber).toBe(4);
-  });
+    expect(steps).toHaveLength(5)
+    expect(steps[0]?.stepNumber).toBe(0)
+    expect(steps[4]?.stepNumber).toBe(4)
+  })
 
   test('handles steps with multiple LLM calls', () => {
     const step: TrajectoryStep = {
@@ -405,13 +405,13 @@ describe('TrajectoryRecorder - Steps', () => {
         success: true,
       },
       reward: 1.0,
-    };
+    }
 
-    expect(step.llmCalls).toHaveLength(2);
-    expect(step.llmCalls[0]!.purpose).toBe('reasoning');
-    expect(step.llmCalls[1]!.purpose).toBe('action');
-  });
-});
+    expect(step.llmCalls).toHaveLength(2)
+    expect(step.llmCalls[0]?.purpose).toBe('reasoning')
+    expect(step.llmCalls[1]?.purpose).toBe('action')
+  })
+})
 
 // =============================================================================
 // Simulation Mode Output Tests
@@ -419,15 +419,13 @@ describe('TrajectoryRecorder - Steps', () => {
 
 describe('TrajectoryRecorder - Simulation Mode', () => {
   test('constructs correct file path in simulation mode', () => {
-    const outputDir = './training-data-output/trajectories';
-    const trajectoryId = '1234567890';
+    const outputDir = './training-data-output/trajectories'
+    const trajectoryId = '1234567890'
 
-    const filePath = `${outputDir}/${trajectoryId}.json`;
+    const filePath = `${outputDir}/${trajectoryId}.json`
 
-    expect(filePath).toBe(
-      './training-data-output/trajectories/1234567890.json'
-    );
-  });
+    expect(filePath).toBe('./training-data-output/trajectories/1234567890.json')
+  })
 
   test('trajectory JSON structure is valid', () => {
     const trajectoryData = {
@@ -443,26 +441,26 @@ describe('TrajectoryRecorder - Simulation Mode', () => {
         totalReward: 5.5,
       },
       llmCalls: [],
-    };
+    }
 
-    expect(trajectoryData.trajectory.id).toBeDefined();
-    expect(trajectoryData.trajectory.agentId).toBeDefined();
-    expect(trajectoryData.trajectory.durationMs).toBeGreaterThan(0);
-  });
+    expect(trajectoryData.trajectory.id).toBeDefined()
+    expect(trajectoryData.trajectory.agentId).toBeDefined()
+    expect(trajectoryData.trajectory.durationMs).toBeGreaterThan(0)
+  })
 
   test('handles window ID generation', () => {
     const generateWindowId = (): string => {
-      const now = new Date();
-      const dateStr = now.toISOString().split('T')[0];
-      const hour = now.getHours().toString().padStart(2, '0');
-      return `${dateStr}T${hour}:00`;
-    };
+      const now = new Date()
+      const dateStr = now.toISOString().split('T')[0]
+      const hour = now.getHours().toString().padStart(2, '0')
+      return `${dateStr}T${hour}:00`
+    }
 
-    const windowId = generateWindowId();
+    const windowId = generateWindowId()
 
-    expect(windowId).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:00$/);
-  });
-});
+    expect(windowId).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:00$/)
+  })
+})
 
 // =============================================================================
 // Reward Calculation Tests
@@ -472,42 +470,42 @@ describe('TrajectoryRecorder - Rewards', () => {
   test('step rewards can be positive', () => {
     const step: Partial<TrajectoryStep> = {
       reward: 1.5,
-    };
+    }
 
-    expect(step.reward).toBeGreaterThan(0);
-  });
+    expect(step.reward).toBeGreaterThan(0)
+  })
 
   test('step rewards can be negative', () => {
     const step: Partial<TrajectoryStep> = {
       reward: -0.5,
-    };
+    }
 
-    expect(step.reward).toBeLessThan(0);
-  });
+    expect(step.reward).toBeLessThan(0)
+  })
 
   test('step rewards can be zero', () => {
     const step: Partial<TrajectoryStep> = {
       reward: 0,
-    };
+    }
 
-    expect(step.reward).toBe(0);
-  });
+    expect(step.reward).toBe(0)
+  })
 
   test('calculates total reward across steps', () => {
-    const rewards = [1.0, -0.5, 2.0, 0, -1.0];
-    const totalReward = rewards.reduce((sum, r) => sum + r, 0);
+    const rewards = [1.0, -0.5, 2.0, 0, -1.0]
+    const totalReward = rewards.reduce((sum, r) => sum + r, 0)
 
-    expect(totalReward).toBe(1.5);
-  });
+    expect(totalReward).toBe(1.5)
+  })
 
   test('handles floating point precision in rewards', () => {
-    const rewards = [0.1, 0.2, 0.3];
-    const totalReward = rewards.reduce((sum, r) => sum + r, 0);
+    const rewards = [0.1, 0.2, 0.3]
+    const totalReward = rewards.reduce((sum, r) => sum + r, 0)
 
     // Use toBeCloseTo for floating point comparison
-    expect(totalReward).toBeCloseTo(0.6, 10);
-  });
-});
+    expect(totalReward).toBeCloseTo(0.6, 10)
+  })
+})
 
 // =============================================================================
 // Error Handling Tests
@@ -515,26 +513,26 @@ describe('TrajectoryRecorder - Rewards', () => {
 
 describe('TrajectoryRecorder - Error Handling', () => {
   test('handles missing trajectory gracefully', () => {
-    const activeTrajectories = new Map<string, { steps: TrajectoryStep[] }>();
-    const nonExistentId = 'does-not-exist';
+    const activeTrajectories = new Map<string, { steps: TrajectoryStep[] }>()
+    const nonExistentId = 'does-not-exist'
 
-    const trajectory = activeTrajectories.get(nonExistentId);
+    const trajectory = activeTrajectories.get(nonExistentId)
 
-    expect(trajectory).toBeUndefined();
-  });
+    expect(trajectory).toBeUndefined()
+  })
 
   test('handles duplicate trajectory start', () => {
-    const activeTrajectories = new Map<string, { id: string }>();
-    const trajectoryId = 'traj-123';
+    const activeTrajectories = new Map<string, { id: string }>()
+    const trajectoryId = 'traj-123'
 
     // First start
-    activeTrajectories.set(trajectoryId, { id: trajectoryId });
+    activeTrajectories.set(trajectoryId, { id: trajectoryId })
 
     // Check if already exists before creating
-    const alreadyExists = activeTrajectories.has(trajectoryId);
+    const alreadyExists = activeTrajectories.has(trajectoryId)
 
-    expect(alreadyExists).toBe(true);
-  });
+    expect(alreadyExists).toBe(true)
+  })
 
   test('validates step has action before completion', () => {
     const step: Partial<TrajectoryStep> = {
@@ -548,13 +546,13 @@ describe('TrajectoryRecorder - Error Handling', () => {
         timestamp: Date.now(),
       },
       // No action set
-    };
+    }
 
-    const isComplete = step.action !== undefined;
+    const isComplete = step.action !== undefined
 
-    expect(isComplete).toBe(false);
-  });
-});
+    expect(isComplete).toBe(false)
+  })
+})
 
 // =============================================================================
 // Metadata Tests
@@ -563,24 +561,24 @@ describe('TrajectoryRecorder - Error Handling', () => {
 describe('TrajectoryRecorder - Metadata', () => {
   test('records archetype information', () => {
     interface StartOptions {
-      agentId: string;
-      archetype?: string;
+      agentId: string
+      archetype?: string
     }
 
     const options: StartOptions = {
       agentId: 'agent-123',
       archetype: 'conservative-trader',
-    };
+    }
 
-    expect(options.archetype).toBe('conservative-trader');
-  });
+    expect(options.archetype).toBe('conservative-trader')
+  })
 
   test('handles game knowledge metadata', () => {
     interface EndOptions {
       gameKnowledge?: {
-        trueProbabilities?: Record<string, number>;
-        actualOutcomes?: Record<string, unknown>;
-      };
+        trueProbabilities?: Record<string, number>
+        actualOutcomes?: Record<string, unknown>
+      }
     }
 
     const options: EndOptions = {
@@ -594,24 +592,24 @@ describe('TrajectoryRecorder - Metadata', () => {
           'question-2': false,
         },
       },
-    };
+    }
 
-    expect(options.gameKnowledge?.trueProbabilities?.['question-1']).toBe(0.75);
-    expect(options.gameKnowledge?.actualOutcomes?.['question-1']).toBe(true);
-  });
+    expect(options.gameKnowledge?.trueProbabilities?.['question-1']).toBe(0.75)
+    expect(options.gameKnowledge?.actualOutcomes?.['question-1']).toBe(true)
+  })
 
   test('records final balance and PnL on end', () => {
     interface EndOptions {
-      finalBalance?: number;
-      finalPnL?: number;
+      finalBalance?: number
+      finalPnL?: number
     }
 
     const options: EndOptions = {
       finalBalance: 12500,
       finalPnL: 2500,
-    };
+    }
 
-    expect(options.finalBalance).toBe(12500);
-    expect(options.finalPnL).toBe(2500);
-  });
-});
+    expect(options.finalBalance).toBe(12500)
+    expect(options.finalPnL).toBe(2500)
+  })
+})

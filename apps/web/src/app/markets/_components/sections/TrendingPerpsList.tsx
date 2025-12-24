@@ -1,14 +1,12 @@
-'use client';
-
-import { TrendingUp } from 'lucide-react';
-import { memo } from 'react';
-import type { PerpMarket } from '@/types/markets';
-import type { TrendingPerpMarket } from '../../_hooks';
-import { TrendingPerpCard } from '../cards';
+import { TrendingUp } from 'lucide-react'
+import { memo } from 'react'
+import type { PerpMarket } from '@/types/markets'
+import type { TrendingPerpMarket } from '../../_hooks'
+import { TrendingPerpCard } from '../cards'
 
 interface TrendingPerpsListProps {
-  markets: TrendingPerpMarket[];
-  onMarketClick: (market: PerpMarket) => void;
+  markets: TrendingPerpMarket[]
+  onMarketClick: (market: PerpMarket) => void
 }
 
 /**
@@ -44,5 +42,5 @@ export const TrendingPerpsList = memo(function TrendingPerpsList({
         </div>
       )}
     </div>
-  );
-});
+  )
+})

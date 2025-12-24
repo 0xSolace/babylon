@@ -1,18 +1,16 @@
-'use client';
-
-import { cn, logger } from '@babylon/shared';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { UserMinus, UserPlus } from 'lucide-react';
-import { toast } from 'sonner';
-import { Skeleton } from '@/components/shared/Skeleton';
-import { useAuth } from '@/hooks/useAuth';
-import { useSocialTracking } from '@/hooks/usePostHog';
+import { cn, logger } from '@babylon/shared'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { UserMinus, UserPlus } from 'lucide-react'
+import { toast } from 'sonner'
+import { Skeleton } from '@/components/shared/Skeleton'
+import { useAuth } from '@/hooks/useAuth'
+import { useSocialTracking } from '@/hooks/usePostHog'
 
 /**
  * Follow status API response.
  */
 interface FollowStatusResponse {
-  isFollowing: boolean;
+  isFollowing: boolean
 }
 
 /**
@@ -35,13 +33,13 @@ interface FollowStatusResponse {
  * ```
  */
 interface FollowButtonProps {
-  userId: string;
-  initialFollowing?: boolean;
-  size?: 'sm' | 'md' | 'lg';
-  variant?: 'button' | 'icon';
-  className?: string;
-  onFollowChange?: (isFollowing: boolean) => void;
-  onFollowerCountChange?: (delta: number) => void; // +1 for follow, -1 for unfollow
+  userId: string
+  initialFollowing?: boolean
+  size?: 'sm' | 'md' | 'lg'
+  variant?: 'button' | 'icon'
+  className?: string
+  onFollowChange?: (isFollowing: boolean) => void
+  onFollowerCountChange?: (delta: number) => void // +1 for follow, -1 for unfollow
 }
 
 export function FollowButton({
@@ -53,173 +51,172 @@ export function FollowButton({
   onFollowChange,
   onFollowerCountChange,
 }: FollowButtonProps) {
-  const { authenticated, user } = useAuth();
-  const { trackFollow } = useSocialTracking();
-  const queryClient = useQueryClient();
+  const { authenticated, user } = useAuth()
+  const { trackFollow } = useSocialTracking()
+  const queryClient = useQueryClient()
 
   // Check if viewing own profile (userId could be username or user ID)
   const isOwnProfile =
     user &&
     (user.id === userId ||
       user.username === userId ||
-      (user.username &&
-        user.username.startsWith('@') &&
-        user.username.slice(1) === userId));
+      (user.username?.startsWith('@') && user.username.slice(1) === userId))
 
   // Fetch follow status
   const { data: followStatus, isLoading: isChecking } = useQuery({
     queryKey: ['followStatus', userId],
     queryFn: async (): Promise<FollowStatusResponse> => {
       const token =
-        typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
+        typeof window !== 'undefined' ? window.__oauth3AccessToken : null
       if (!token) {
-        return { isFollowing: false };
+        return { isFollowing: false }
       }
 
-      const encodedIdentifier = encodeURIComponent(userId);
+      const encodedIdentifier = encodeURIComponent(userId)
       const response = await fetch(`/api/users/${encodedIdentifier}/follow`, {
         headers: {
           Authorization: `Bearer ${token}`,
         },
-      });
+      })
 
       if (response.ok) {
-        return response.json() as Promise<FollowStatusResponse>;
+        return response.json() as Promise<FollowStatusResponse>
       }
-      return { isFollowing: false };
+      return { isFollowing: false }
     },
     enabled: authenticated && !!user && !isOwnProfile && !!userId,
     initialData: { isFollowing: initialFollowing },
-  });
+  })
 
-  const isFollowing = followStatus?.isFollowing ?? initialFollowing;
+  const isFollowing = followStatus?.isFollowing ?? initialFollowing
 
   // Follow/unfollow mutation
   const followMutation = useMutation({
     mutationFn: async (shouldFollow: boolean): Promise<void> => {
       const token =
-        typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
+        typeof window !== 'undefined' ? window.__oauth3AccessToken : null
       if (!token) {
-        throw new Error('Authentication required');
+        throw new Error('Authentication required')
       }
 
-      const encodedIdentifier = encodeURIComponent(userId);
-      const method = shouldFollow ? 'POST' : 'DELETE';
+      const encodedIdentifier = encodeURIComponent(userId)
+      const method = shouldFollow ? 'POST' : 'DELETE'
       const response = await fetch(`/api/users/${encodedIdentifier}/follow`, {
         method,
         headers: {
           Authorization: `Bearer ${token}`,
         },
-      });
+      })
 
       if (!response.ok) {
         const errorData: { error?: string | { message?: string } } =
-          await response.json();
+          await response.json()
         if (response.status === 404) {
-          throw new Error('Unable to follow this profile');
+          throw new Error('Unable to follow this profile')
         }
         const errorMessage =
           typeof errorData.error === 'string'
             ? errorData.error
             : (errorData.error as { message?: string })?.message ||
-              'Failed to update follow status';
-        throw new Error(errorMessage);
+              'Failed to update follow status'
+        throw new Error(errorMessage)
       }
     },
     onMutate: async (shouldFollow) => {
       // Cancel outgoing refetches
-      await queryClient.cancelQueries({ queryKey: ['followStatus', userId] });
+      await queryClient.cancelQueries({ queryKey: ['followStatus', userId] })
 
       // Snapshot the previous value
       const previousStatus = queryClient.getQueryData<FollowStatusResponse>([
         'followStatus',
         userId,
-      ]);
+      ])
 
       // Optimistically update
       queryClient.setQueryData<FollowStatusResponse>(['followStatus', userId], {
         isFollowing: shouldFollow,
-      });
+      })
 
-      const delta = shouldFollow ? 1 : -1;
-      onFollowChange?.(shouldFollow);
-      onFollowerCountChange?.(delta);
+      const delta = shouldFollow ? 1 : -1
+      onFollowChange?.(shouldFollow)
+      onFollowerCountChange?.(delta)
 
-      return { previousStatus, delta };
+      return { previousStatus, delta }
     },
     onSuccess: (_, shouldFollow) => {
-      trackFollow(userId, shouldFollow);
+      trackFollow(userId, shouldFollow)
     },
     onError: (error: Error, _, context) => {
       // Revert optimistic update
       if (context?.previousStatus) {
         queryClient.setQueryData<FollowStatusResponse>(
           ['followStatus', userId],
-          context.previousStatus
-        );
-        onFollowChange?.(context.previousStatus.isFollowing);
-        onFollowerCountChange?.(-context.delta);
+          context.previousStatus,
+        )
+        onFollowChange?.(context.previousStatus.isFollowing)
+        onFollowerCountChange?.(-context.delta)
       }
-      toast.error(error.message);
+      toast.error(error.message)
     },
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: ['followStatus', userId] });
+      queryClient.invalidateQueries({ queryKey: ['followStatus', userId] })
     },
-  });
+  })
 
   const handleFollow = () => {
     if (!authenticated || !user) {
-      toast.error('Please sign in to follow users');
-      return;
+      toast.error('Please sign in to follow users')
+      return
     }
 
     if (isOwnProfile) {
-      return;
+      return
     }
 
     if (!userId) {
       logger.error(
         'No userId/username provided to FollowButton',
         {},
-        'FollowButton'
-      );
-      return;
+        'FollowButton',
+      )
+      return
     }
 
-    followMutation.mutate(!isFollowing);
-  };
+    followMutation.mutate(!isFollowing)
+  }
 
-  const isLoading = followMutation.isPending;
+  const isLoading = followMutation.isPending
 
   if (isChecking || isOwnProfile) {
-    return null;
+    return null
   }
 
   if (!authenticated) {
-    return null;
+    return null
   }
 
   const sizeClasses = {
     sm: 'text-xs px-2 py-1',
     md: 'text-sm px-3 py-1.5',
     lg: 'text-base px-4 py-2',
-  };
+  }
 
   const iconSizes = {
     sm: 'w-3 h-3',
     md: 'w-4 h-4',
     lg: 'w-5 h-5',
-  };
+  }
 
   const skeletonSizes = {
     sm: 'w-3 h-3',
     md: 'w-4 h-4',
     lg: 'w-5 h-5',
-  };
+  }
 
   if (variant === 'icon') {
     return (
       <button
+        type="button"
         onClick={handleFollow}
         disabled={isLoading}
         className={cn(
@@ -228,7 +225,7 @@ export function FollowButton({
             ? 'text-muted-foreground hover:text-foreground'
             : 'text-primary hover:text-primary/80',
           isLoading && 'cursor-not-allowed opacity-50',
-          className
+          className,
         )}
         aria-label={isFollowing ? 'Unfollow' : 'Follow'}
       >
@@ -240,12 +237,13 @@ export function FollowButton({
           <UserPlus className={iconSizes[size]} />
         )}
       </button>
-    );
+    )
   }
 
   // Old-school style button
   return (
     <button
+      type="button"
       onClick={handleFollow}
       disabled={isLoading}
       className={cn(
@@ -256,13 +254,11 @@ export function FollowButton({
           : 'border-[#0066FF] bg-[#0066FF] text-primary-foreground hover:bg-[#0052CC]',
         sizeClasses[size],
         isLoading && 'cursor-not-allowed opacity-50',
-        className
+        className,
       )}
     >
       {isLoading ? (
-        <>
-          <span>...</span>
-        </>
+        <span>...</span>
       ) : isFollowing ? (
         <>
           <span className="group-hover:hidden">Following</span>
@@ -272,5 +268,5 @@ export function FollowButton({
         <span>Follow</span>
       )}
     </button>
-  );
+  )
 }

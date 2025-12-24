@@ -69,7 +69,7 @@ Look for evidence of using multiple sources:
 - Just one source or no sources → Poor research
 
 If they only check prices without reading news or doing analysis, score lower.
-`;
+`
 
 export const RESEARCHER_PRIORITY_METRICS = [
   'information.researchActions',
@@ -78,4 +78,4 @@ export const RESEARCHER_PRIORITY_METRICS = [
   'information.newsConsumed',
   'trading.winRate',
   'trading.totalPnL',
-];
+]

@@ -6,8 +6,8 @@
  * points for trades.
  */
 
-import { db } from '@babylon/db';
-import { generateSnowflakeId, logger } from '@babylon/shared';
+import { db } from '@babylon/db'
+import { generateSnowflakeId, logger } from '@babylon/shared'
 
 /**
  * Earned Points Service Class
@@ -15,6 +15,7 @@ import { generateSnowflakeId, logger } from '@babylon/shared';
  * @description Static service class for managing earned points from trading P&L.
  * Provides methods for converting P&L to points and syncing earned points.
  */
+// biome-ignore lint/complexity/noStaticOnlyClass: Service pattern uses static methods for stateless operations
 export class EarnedPointsService {
   /**
    * Convert P&L to earned points
@@ -36,9 +37,9 @@ export class EarnedPointsService {
    * ```
    */
   static pnlToPoints(pnl: number): number {
-    const points = Math.floor(pnl / 10);
+    const points = Math.floor(pnl / 10)
     // Cap negative points at -100 to avoid extreme penalties
-    return Math.max(points, -100);
+    return Math.max(points, -100)
   }
 
   /**
@@ -55,29 +56,29 @@ export class EarnedPointsService {
   static async syncEarnedPointsFromPnL(userId: string): Promise<void> {
     const user = await db.user.findUnique({
       where: { id: userId },
-    });
+    })
 
     if (!user) {
-      throw new Error(`User not found: ${userId}`);
+      throw new Error(`User not found: ${userId}`)
     }
 
-    const lifetimePnL = Number(user.lifetimePnL);
-    const currentEarnedPoints = Number(user.earnedPoints);
-    const newEarnedPoints = EarnedPointsService.pnlToPoints(lifetimePnL);
+    const lifetimePnL = Number(user.lifetimePnL)
+    const currentEarnedPoints = Number(user.earnedPoints)
+    const newEarnedPoints = EarnedPointsService.pnlToPoints(lifetimePnL)
 
     // Only update if earned points have changed
     if (newEarnedPoints === currentEarnedPoints) {
-      return;
+      return
     }
 
     // Calculate new total reputation points
     // Total = Invite Points + Earned Points + Bonus Points + Base (100)
-    const basePoints = 100;
+    const basePoints = 100
     const newReputationPoints =
       basePoints +
       Number(user.invitePoints) +
       newEarnedPoints +
-      Number(user.bonusPoints);
+      Number(user.bonusPoints)
 
     await db.user.update({
       where: { id: userId },
@@ -85,7 +86,7 @@ export class EarnedPointsService {
         earnedPoints: newEarnedPoints,
         reputationPoints: newReputationPoints,
       },
-    });
+    })
 
     logger.info(
       'Updated earned points from P&L',
@@ -95,8 +96,8 @@ export class EarnedPointsService {
         earnedPoints: newEarnedPoints,
         totalPoints: newReputationPoints,
       },
-      'EarnedPointsService'
-    );
+      'EarnedPointsService',
+    )
   }
 
   /**
@@ -119,32 +120,31 @@ export class EarnedPointsService {
     userId: string,
     newLifetimePnL: number,
     tradeType: string,
-    relatedId?: string
+    relatedId?: string,
   ): Promise<number> {
-    const computedEarnedPoints =
-      EarnedPointsService.pnlToPoints(newLifetimePnL);
+    const computedEarnedPoints = EarnedPointsService.pnlToPoints(newLifetimePnL)
 
     const user = await db.user.findUnique({
       where: { id: userId },
-    });
+    })
 
     if (!user) {
-      throw new Error(`User not found: ${userId}`);
+      throw new Error(`User not found: ${userId}`)
     }
 
-    const currentEarnedPoints = Number(user.earnedPoints);
-    const storedLifetimePnL = Number(user.lifetimePnL);
+    const currentEarnedPoints = Number(user.earnedPoints)
+    const storedLifetimePnL = Number(user.lifetimePnL)
 
     // Compute what earnedPoints should be based on the NEW lifetimePnL
     // The newLifetimePnL was already written to the DB in the same transaction
     // so storedLifetimePnL should equal newLifetimePnL
-    const earnedPointsDelta = computedEarnedPoints - currentEarnedPoints;
+    const earnedPointsDelta = computedEarnedPoints - currentEarnedPoints
 
     // Log if there was a pre-existing mismatch (for monitoring purposes)
     // Points may be out of sync due to concurrent updates or race conditions
     const expectedPointsFromPreviousPnL = EarnedPointsService.pnlToPoints(
-      storedLifetimePnL - (newLifetimePnL - storedLifetimePnL)
-    );
+      storedLifetimePnL - (newLifetimePnL - storedLifetimePnL),
+    )
     if (
       expectedPointsFromPreviousPnL !== currentEarnedPoints &&
       storedLifetimePnL !== newLifetimePnL
@@ -160,21 +160,21 @@ export class EarnedPointsService {
           currentEarnedPoints,
           computedNewPoints: computedEarnedPoints,
         },
-        'EarnedPointsService'
-      );
+        'EarnedPointsService',
+      )
     }
 
     if (earnedPointsDelta === 0) {
-      return 0;
+      return 0
     }
 
-    const newEarnedPoints = computedEarnedPoints;
-    const basePoints = 100;
+    const newEarnedPoints = computedEarnedPoints
+    const basePoints = 100
     const newReputationPoints =
       basePoints +
       Number(user.invitePoints) +
       newEarnedPoints +
-      Number(user.bonusPoints);
+      Number(user.bonusPoints)
 
     // Update user and create transaction
     await db.user.update({
@@ -183,15 +183,14 @@ export class EarnedPointsService {
         earnedPoints: newEarnedPoints,
         reputationPoints: newReputationPoints,
       },
-    });
+    })
 
     await db.pointsTransaction.create({
       data: {
         id: await generateSnowflakeId(),
         userId,
+        type: 'earned',
         amount: earnedPointsDelta,
-        pointsBefore: Number(user.reputationPoints),
-        pointsAfter: newReputationPoints,
         reason: 'trading_pnl',
         metadata: JSON.stringify({
           tradeType,
@@ -201,9 +200,11 @@ export class EarnedPointsService {
           previousEarnedPoints: currentEarnedPoints,
           newEarnedPoints,
           earnedPointsDelta,
+          pointsBefore: Number(user.reputationPoints),
+          pointsAfter: newReputationPoints,
         }),
       },
-    });
+    })
 
     logger.info(
       'Awarded earned points for P&L',
@@ -215,10 +216,10 @@ export class EarnedPointsService {
         totalEarnedPoints: newEarnedPoints,
         totalReputationPoints: newReputationPoints,
       },
-      'EarnedPointsService'
-    );
+      'EarnedPointsService',
+    )
 
-    return earnedPointsDelta;
+    return earnedPointsDelta
   }
 
   /**
@@ -227,25 +228,25 @@ export class EarnedPointsService {
    * Note: Individual user errors are caught to allow continuation
    */
   static async bulkSyncAllUsers(): Promise<{
-    success: number;
-    errors: number;
+    success: number
+    errors: number
   }> {
     const usersList = await db.user.findMany({
       where: { isActor: false },
-    });
+    })
 
     logger.info(
       `Syncing earned points for ${usersList.length} users`,
       {},
-      'EarnedPointsService'
-    );
+      'EarnedPointsService',
+    )
 
-    let successCount = 0;
-    const errorCount = 0;
+    let successCount = 0
+    const errorCount = 0
 
     for (const userRecord of usersList) {
-      await EarnedPointsService.syncEarnedPointsFromPnL(String(userRecord.id));
-      successCount++;
+      await EarnedPointsService.syncEarnedPointsFromPnL(String(userRecord.id))
+      successCount++
     }
 
     logger.info(
@@ -255,9 +256,9 @@ export class EarnedPointsService {
         success: successCount,
         errors: errorCount,
       },
-      'EarnedPointsService'
-    );
+      'EarnedPointsService',
+    )
 
-    return { success: successCount, errors: errorCount };
+    return { success: successCount, errors: errorCount }
   }
 }

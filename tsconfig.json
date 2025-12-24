@@ -56,26 +56,38 @@
       "@babylon/core/*": ["./packages/core/markets/*"],
       "@babylon/shared": ["./packages/shared/src/index.ts"],
       "@babylon/shared/*": ["./packages/shared/src/*"],
-      "@babylon/contracts": ["./packages/contracts/src/index.ts"],
-      "@babylon/contracts/*": ["./packages/contracts/src/*"],
       "@babylon/auth": ["./packages/auth/src/index.ts"],
       "@babylon/auth/*": ["./packages/auth/src/*"],
       "@babylon/training": ["./packages/training/src/index.ts"],
       "@babylon/training/*": ["./packages/training/src/*"],
       "@babylon/testing": ["./packages/testing/src/index.ts"],
       "@babylon/testing/*": ["./packages/testing/*"],
-      "@jeju/db": ["../../packages/db/src/index.ts"],
-      "@jeju/db/*": ["../../packages/db/src/*"],
-      "@jeju/db/adapters": ["../../packages/db/src/adapters/index.ts"],
-      "@/shared/constants": ["./apps/web/src/shared/constants.ts"],
-      "@/shared/types": ["./apps/web/src/shared/types.ts"],
-      "@/shared/utils": ["./apps/web/src/shared/utils.ts"],
-      "@/components/*": ["./apps/web/src/components/*"],
-      "@/lib/*": ["./apps/web/src/lib/*"],
-      "@/hooks/*": ["./apps/web/src/hooks/*"],
-      "@/stores/*": ["./apps/web/src/stores/*"],
-      "@/app/*": ["./apps/web/src/app/*"],
-      "@/*": ["./apps/web/src/*"]
+      "@jejunetwork/db": ["../../packages/db/src/index.ts"],
+      "@jejunetwork/db/*": ["../../packages/db/src/*"],
+      "@jejunetwork/db/adapters": ["../../packages/db/src/adapters/index.ts"],
+      "@/shared/constants": [
+        "./src/shared/constants.ts",
+        "./apps/web/src/shared/constants.ts"
+      ],
+      "@/shared/types": [
+        "./src/shared/types.ts",
+        "./apps/web/src/shared/types.ts"
+      ],
+      "@/shared/utils": [
+        "./src/shared/utils.ts",
+        "./apps/web/src/shared/utils.ts"
+      ],
+      "@/components/*": ["./src/components/*", "./apps/web/src/components/*"],
+      "@/lib/*": ["./src/lib/*", "./apps/web/src/lib/*"],
+      "@/hooks/*": ["./src/hooks/*", "./apps/web/src/hooks/*"],
+      "@/stores/*": ["./src/stores/*", "./apps/web/src/stores/*"],
+      "@/app/*": ["./src/app/*", "./apps/web/src/app/*"],
+      "@/agents/*": ["./src/agents/*"],
+      "@/types/*": ["./src/types/*", "./apps/web/src/types/*"],
+      "@/a2a/*": ["./src/a2a/*"],
+      "@/eliza/*": ["./src/eliza/*"],
+      "@/utils/*": ["./src/utils/*", "./apps/web/src/utils/*"],
+      "@/*": ["./src/*", "./apps/web/src/*"]
     },
     "allowJs": true
   },
@@ -87,9 +99,8 @@
     "packages/core/**/*",
     "packages/testing/**/*",
     "packages/shared/**/*",
-    "apps/web/.next/types/**/*.ts",
-    "apps/web/.next/dev/types/**/*.ts",
-    "apps/web/types/**/*.d.ts"
+    "apps/web/types/**/*.d.ts",
+    "src/**/*"
   ],
   "exclude": [
     "node_modules",

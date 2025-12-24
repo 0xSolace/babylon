@@ -4,22 +4,6 @@
  * Provides API middleware and utilities for authentication, authorization,
  * and common API patterns.
  */
-
-// Re-export auth types from shared
-export type { AuthenticatedUser } from '@babylon/shared';
-// Re-export common validation schemas for API consumers
-// Logger
-export {
-  extractErrorMessage,
-  type LogData,
-  Logger,
-  type LogLevel,
-  logger,
-  PaginationSchema,
-  SnowflakeIdSchema,
-  UserIdSchema,
-  WalletAddressSchema,
-} from '@babylon/shared';
 // Admin Audit Logging
 export {
   type AdminAuditContext,
@@ -27,9 +11,9 @@ export {
   logAdminDelete,
   logAdminModify,
   logAdminView,
-} from './admin-audit';
+} from './admin-audit'
 // Admin Middleware
-export { isUserAdmin, requireAdmin } from './admin-middleware';
+export { isUserAdmin, requireAdmin } from './admin-middleware'
 // Agent Authentication
 export {
   type AgentSession,
@@ -40,7 +24,7 @@ export {
   setSessionStore,
   verifyAgentCredentials,
   verifyAgentSession,
-} from './agent-auth';
+} from './agent-auth'
 // Auth Middleware
 export {
   authErrorResponse,
@@ -50,8 +34,8 @@ export {
   getAuthClient,
   optionalAuth,
   optionalAuthFromHeaders,
-} from './auth-middleware';
-// Cache (Decentralized - NO Redis fallback)
+} from './auth-middleware'
+// Cache (NO Redis fallback)
 export {
   CACHE_KEYS,
   CacheClient,
@@ -75,7 +59,7 @@ export {
   setCache,
   tryInitializeCache,
   warmCache,
-} from './cache';
+} from './cache'
 // Configuration (environment detection)
 export {
   type BabylonEnvironment,
@@ -84,18 +68,16 @@ export {
   getEnvironment,
   logEnvironment,
   resetEnvironment,
-} from './config';
+} from './config'
 // Contracts (Treasury Adapter - works in dev mode without Jeju)
-export * from './contracts';
 // Cron Authentication
 export {
   type CronAuthOptions,
   cronUnauthorizedResponse,
   requireCronAuth,
   verifyCronAuth,
-} from './cron-auth';
+} from './cron-auth'
 // Deployment - IPFS/IPNS/JNS
-export * from './deployment';
 // Development credentials (for local testing)
 export {
   type DevCredentials,
@@ -105,7 +87,7 @@ export {
   isValidCronSecret,
   isValidDevAdminToken,
   logDevCredentials,
-} from './dev-credentials';
+} from './dev-credentials'
 // Error Handler (Next.js specific)
 export {
   asyncHandler,
@@ -115,68 +97,43 @@ export {
   type RouteContext,
   successResponse,
   withErrorHandling,
-} from './error-handler';
-// Errors - re-exported from @babylon/shared via ./errors
+} from './error-handler'
+// API-specific Errors (for base errors import from @babylon/shared)
 export {
   ApiError,
-  AuthenticationError,
-  AuthenticationError as AuthError,
-  AuthorizationError,
-  BabylonError,
-  BadRequestError,
-  BusinessLogicError,
-  ConflictError,
-  DatabaseError,
-  ExternalServiceError,
+  createErrorResponse,
+  ErrorCodes,
+  type ErrorResponse,
   ForbiddenError,
-  InternalServerError,
-  isAuthenticationError,
-  isAuthenticationError as isAuthError,
-  isAuthorizationError,
-  isBabylonError,
-  isDatabaseError,
-  isLLMError,
-  isNetworkError,
-  isOperationalError,
-  isValidationError,
-  NotFoundError,
-  RateLimitError,
-  ServiceUnavailableError,
   UnauthorizedError,
-  ValidationError,
-} from './errors';
+} from './errors'
 // Fetch utilities
-export { type ApiFetchOptions, apiFetch, getOAuth3AccessToken } from './fetch';
+export { type ApiFetchOptions, apiFetch, getOAuth3AccessToken } from './fetch'
 // Health checks
-export * from './health';
-// LLM (Decentralized Inference via Jeju Compute)
-export * from './llm';
-// Decentralized Messaging
+// LLM (Inference via Jeju Compute)
+// Messaging
 export {
-  type DecentralizedMessageResult,
-  getDecentralizedConversations,
-  getOrCreateDecentralizedDM,
-  getPendingDecentralizedMessages,
-  isDecentralizedMessagingEnabled,
-  markDecentralizedMessageDelivered,
-  markDecentralizedMessageRead,
-  sendDecentralizedMessage,
-} from './messaging/decentralized-messaging';
+  getConversations,
+  getOrCreateDM,
+  getPendingMessages,
+  isMessagingEnabled,
+  type MessageResult,
+  markMessageDelivered,
+  markMessageRead,
+  sendMessage,
+} from './messaging/messaging'
 // Moderation - BanManager and ModerationMarketplace
-export * from './moderation';
 // Cron Metrics
 export {
   type CronExecutionMetrics,
   type CronJobStats,
   cronMetrics,
   recordCronExecution,
-} from './monitoring/cron-metrics';
-export * from './monitoring/monitored-cache';
-export * from './monitoring/monitored-storage';
+} from './monitoring/cron-metrics'
 // Performance monitoring (moved from @babylon/shared)
-export { performanceMonitor } from './monitoring/performance-monitor';
+export { performanceMonitor } from './monitoring/performance-monitor'
 // Payments - ERC-4337 Paymaster
-export * from './payments';
+export { PaymasterClient, type UserOperation } from './payments'
 // Profile utilities
 export {
   type BackendSignedUpdateParams,
@@ -188,7 +145,7 @@ export {
   type ProfileMetadata,
   updateProfileBackendSigned,
   verifyBackendSignedUpdate,
-} from './profile';
+} from './profile'
 // Rate Limiting
 export {
   addRateLimitHeaders,
@@ -209,7 +166,7 @@ export {
   RATE_LIMIT_CONFIGS,
   rateLimitError,
   resetRateLimit,
-} from './rate-limiting';
+} from './rate-limiting'
 // Realtime
 export {
   generateConnectionId,
@@ -221,42 +178,126 @@ export {
   signRealtimeToken,
   toStreamKey,
   verifyRealtimeToken,
-} from './realtime';
-export { connections } from './realtime/connection-registry';
-export { drainOutboxBatch, enqueueOutbox } from './realtime/outbox';
-// Redis (Decentralized - NO ioredis fallback)
+} from './realtime'
+export { connections } from './realtime/connection-registry'
+export { drainOutboxBatch, enqueueOutbox } from './realtime/outbox'
+// Redis (NO ioredis fallback)
 export {
   closeRedis,
-  DecentralizedRedis,
-  getDecentralizedRedis,
   getRedis,
   getRedisClient,
   isRedisAvailable,
-  type RedisInstance,
   redis,
-  resetDecentralizedRedis,
-  type StreamMessage,
+  resetRedis,
   streamAdd,
   streamRead,
-} from './redis';
+} from './redis'
 // Services
-export * from './services';
+export { getOrCreateReferralCode } from './services'
+// Airdrop Bonus Service
+export {
+  AirdropBonusService,
+  getAirdropBonusService,
+  resetAirdropBonusService,
+} from './services/airdrop-bonus-service'
+// Distributed Lock Service
+export {
+  acquireLock,
+  checkLock,
+  type LockOptions,
+  releaseLock,
+} from './services/distributed-lock-service'
+// Eliza Holder Airdrop Service
+export {
+  ElizaHolderAirdropService,
+  getElizaHolderAirdropService,
+  resetElizaHolderAirdropService,
+} from './services/eliza-holder-airdrop-service'
+// ICO Automation Service
+export {
+  type ContributorInfo,
+  getICOAutomationService,
+  ICOAutomationService,
+  type ICOConfig,
+  type ICOPhase,
+  type PresaleStats,
+  resetICOAutomationService,
+  type TGEResult,
+} from './services/ico-automation-service'
+// ICO Triggers Service
+export {
+  getICOTriggersService,
+  type ICOPhaseType,
+  type ICOTimeline,
+  type ICOTriggerConfig,
+  type ICOTriggerStatus,
+  ICOTriggersService,
+  initializeICOTriggers,
+  type PhaseTransitionResult,
+  resetICOTriggersService,
+} from './services/ico-triggers'
+// Liquidity Pool Service
+export {
+  type FeeDistribution,
+  getLiquidityPoolService,
+  type LiquidityConfig,
+  LiquidityPoolService,
+  type LockedLPInfo,
+  type LPPosition,
+  type PoolInfo,
+  resetLiquidityPoolService,
+} from './services/liquidity-pool-service'
+// Notification Service
+export {
+  notifyFollow,
+  notifyGroupChatInvite,
+} from './services/notification-service'
+// Points Service
+export {
+  awardPoints,
+  awardReferralSignup,
+  checkAndQualifyReferral,
+  getLeaderboard,
+  getUserPoints,
+  getUserRank,
+} from './services/points-service'
+// Token Service
+export {
+  calculateAirdropAllocation,
+  formatTokens,
+  generateAirdropMerkleData,
+  parseTokens,
+  pointsToDisplayTokens,
+} from './services/token-service'
+// Waitlist Service
+export {
+  awardWalletBonus,
+  generateInviteCode,
+  getTopWaitlistUsers,
+  getTotalWaitlistCount,
+  getWaitlistPosition,
+  graduateFromWaitlist,
+  markAsWaitlisted,
+  type WaitlistMarkResult,
+  type WaitlistPosition,
+} from './services/waitlist-service'
 // SSE Event Broadcasting
 export {
   broadcastChatMessage,
   broadcastToChannel,
-} from './sse/event-broadcaster';
-// Storage (Decentralized - NO S3/MinIO fallback)
+} from './sse/event-broadcaster'
+// Storage (NO S3/MinIO fallback)
 export {
   downloadFile,
   downloadJson,
+  type FileMetadata,
   getStorage,
   initializeStorage,
   resetStorage,
   StorageClient,
   uploadFile,
   uploadJson,
-} from './storage';
+} from './storage'
 // Legacy Jeju Storage exports
 export {
   getJejuStorageClient,
@@ -268,19 +309,17 @@ export {
   type JejuUploadResult,
   type ModelStorageOptions,
   type StoredModel,
-} from './storage/jeju-storage';
+} from './storage/jeju-storage'
 // Legacy S3 client (to be removed)
 export {
   getStorageClient,
   type UploadOptions,
   type UploadResult,
-} from './storage/s3-client';
+} from './storage/s3-client'
 // Swagger
-export * from './swagger';
 // TEE (Trusted Execution Environment) - Unruggable Game Infrastructure
-export * from './tee';
 // Types
-export type { ErrorLike, JsonValue, StringRecord } from './types';
+export type { ErrorLike, JsonValue, StringRecord } from './types'
 // User management utilities
 export {
   type CanonicalUser,
@@ -290,7 +329,7 @@ export {
   findUserByIdentifierWithSelect,
   getCanonicalUserId,
   requireUserByIdentifier,
-} from './users';
+} from './users'
 // Server-side utilities (require Node.js crypto)
 export {
   budgetTokens,
@@ -309,10 +348,10 @@ export {
   truncateToTokenLimit,
   truncateToTokenLimitSync,
   verifyApiKey,
-} from './utils';
+} from './utils'
 
 // =============================================================================
-// DECENTRALIZED INFRASTRUCTURE - KMS (Secrets)
+// INFRASTRUCTURE - KMS (Secrets)
 // =============================================================================
 
 export {
@@ -327,7 +366,7 @@ export {
   resetKMSClient,
   type SecretPolicy,
   setSecretValue,
-} from './secrets/kms-client';
+} from './secrets/kms-client'
 
 // =============================================================================
 // KEEPALIVE - Auto-restart and health monitoring
@@ -344,4 +383,30 @@ export {
   type ResourceConfig,
   ResourceType,
   resetBabylonKeepalive,
-} from './keepalive';
+} from './keepalive'
+
+// =============================================================================
+// WALLET AUTH - Permissionless wallet-signed sessions
+// =============================================================================
+
+export {
+  createSessionMessage,
+  createWalletAuthMiddleware,
+  extractTokenFromCookie,
+  extractTokenFromHeader,
+  isWalletAuthenticated,
+  optionalWalletAuth,
+  requireWalletAuth,
+  type SessionClaims,
+  SessionManager,
+  type SessionToken,
+  toAuthClaims,
+  type VerifyOptions,
+  type VerifyResult,
+  verifyFromRequest,
+  verifyToken,
+  type WalletAuthClaims,
+  type WalletAuthenticatedRequest,
+  type WalletAuthMiddlewareConfig,
+  type WalletDID,
+} from './auth'

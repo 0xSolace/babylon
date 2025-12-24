@@ -1,10 +1,5 @@
-'use client';
-
-import { cn } from '@babylon/shared';
-import type { MarketTab } from '@/types/markets';
-
-// Re-export for backwards compatibility
-export type { MarketTab } from '@/types/markets';
+import { cn } from '@babylon/shared'
+import type { MarketTab } from '@/types/markets'
 
 /**
  * Markets toggle component for switching between market views.
@@ -24,20 +19,21 @@ export type { MarketTab } from '@/types/markets';
  * ```
  */
 interface MarketsToggleProps {
-  activeTab: MarketTab;
-  onTabChange: (tab: MarketTab) => void;
+  activeTab: MarketTab
+  onTabChange: (tab: MarketTab) => void
 }
 
 export function MarketsToggle({ activeTab, onTabChange }: MarketsToggleProps) {
   return (
     <div className="flex w-full items-center border-border border-b">
       <button
+        type="button"
         onClick={() => onTabChange('dashboard')}
         className={cn(
           'relative flex-1 py-3.5 font-semibold transition-all hover:bg-muted/20',
           activeTab === 'dashboard'
             ? 'text-foreground'
-            : 'text-muted-foreground'
+            : 'text-muted-foreground',
         )}
       >
         Dashboard
@@ -46,10 +42,11 @@ export function MarketsToggle({ activeTab, onTabChange }: MarketsToggleProps) {
         )}
       </button>
       <button
+        type="button"
         onClick={() => onTabChange('perps')}
         className={cn(
           'relative flex-1 py-3.5 font-semibold transition-all hover:bg-muted/20',
-          activeTab === 'perps' ? 'text-foreground' : 'text-muted-foreground'
+          activeTab === 'perps' ? 'text-foreground' : 'text-muted-foreground',
         )}
       >
         Perps
@@ -58,12 +55,13 @@ export function MarketsToggle({ activeTab, onTabChange }: MarketsToggleProps) {
         )}
       </button>
       <button
+        type="button"
         onClick={() => onTabChange('predictions')}
         className={cn(
           'relative flex-1 py-3.5 font-semibold transition-all hover:bg-muted/20',
           activeTab === 'predictions'
             ? 'text-foreground'
-            : 'text-muted-foreground'
+            : 'text-muted-foreground',
         )}
       >
         Predictions
@@ -72,5 +70,5 @@ export function MarketsToggle({ activeTab, onTabChange }: MarketsToggleProps) {
         )}
       </button>
     </div>
-  );
+  )
 }

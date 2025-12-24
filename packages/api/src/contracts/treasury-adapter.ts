@@ -14,76 +14,79 @@
  *    - Fast iteration for development
  */
 
-import type { Address, Hex } from 'viem';
+import { jejuMainnet, logger } from '@babylon/shared'
+import type { Address, Hex } from 'viem'
+import { createPublicClient, createWalletClient, http } from 'viem'
+import { privateKeyToAccount } from 'viem/accounts'
 
 // ============================================================================
 // Types
 // ============================================================================
 
 export interface TreasuryState {
-  currentStateCID: string;
-  currentStateHash: Hex;
-  stateVersion: bigint;
-  keyVersion: bigint;
-  lastHeartbeat: bigint;
-  operator: Address;
-  operatorActive: boolean;
-  balance: bigint;
-  dailyWithdrawalLimit: bigint;
-  withdrawnToday: bigint;
-  trainingEpoch: bigint;
-  lastModelHash: Hex;
+  currentStateCID: string
+  currentStateHash: Hex
+  stateVersion: bigint
+  keyVersion: bigint
+  lastHeartbeat: bigint
+  operator: Address
+  operatorActive: boolean
+  balance: bigint
+  dailyWithdrawalLimit: bigint
+  withdrawnToday: bigint
+  trainingEpoch: bigint
+  lastModelHash: Hex
 }
 
 export interface OperatorInfo {
-  address: Address;
-  attestation: Hex;
-  registeredAt: bigint;
-  active: boolean;
+  address: Address
+  attestation: Hex
+  registeredAt: bigint
+  active: boolean
 }
 
 export interface WithdrawalInfo {
-  limit: bigint;
-  usedToday: bigint;
-  remaining: bigint;
+  limit: bigint
+  usedToday: bigint
+  remaining: bigint
 }
 
 export interface TreasuryConfig {
-  mode: 'production' | 'dev';
+  mode: 'production' | 'dev'
   // Production mode settings
-  contractAddress?: Address;
-  rpcUrl?: string;
-  privateKey?: Hex;
+  contractAddress?: Address
+  rpcUrl?: string
+  privateKey?: Hex
   // Dev mode settings
-  initialBalance?: bigint;
-  dailyLimit?: bigint;
+  initialBalance?: bigint
+  dailyLimit?: bigint
 }
 
 export interface TreasuryAdapter {
   // State
-  getState(): Promise<TreasuryState>;
-  getOperatorInfo(): Promise<OperatorInfo>;
-  getWithdrawalInfo(): Promise<WithdrawalInfo>;
-  getBalance(): Promise<bigint>;
+  getState(): Promise<TreasuryState>
+  getOperatorInfo(): Promise<OperatorInfo>
+  getWithdrawalInfo(): Promise<WithdrawalInfo>
+  getBalance(): Promise<bigint>
 
   // Operator Management
-  registerOperator(operator: Address, attestation: Hex): Promise<void>;
-  takeoverAsOperator(attestation: Hex): Promise<void>;
-  isOperatorActive(): Promise<boolean>;
-  isTakeoverAvailable(): Promise<boolean>;
+  registerOperator(operator: Address, attestation: Hex): Promise<void>
+  takeoverAsOperator(attestation: Hex): Promise<void>
+  isOperatorActive(): Promise<boolean>
+  isTakeoverAvailable(): Promise<boolean>
 
   // State Management
-  updateState(cid: string, hash: Hex): Promise<void>;
-  heartbeat(): Promise<void>;
-  recordTraining(datasetCID: string, modelHash: Hex): Promise<void>;
+  updateState(cid: string, hash: Hex): Promise<void>
+  heartbeat(): Promise<void>
+  recordTraining(datasetCID: string, modelHash: Hex): Promise<void>
 
   // Withdrawals
-  withdraw(amount: bigint): Promise<void>;
-  deposit(amount: bigint): Promise<void>;
+  withdraw(amount: bigint): Promise<void>
+  deposit(amount: bigint): Promise<void>
 
   // Key Rotation
-  requestKeyRotation(): Promise<bigint>;
-  approveKeyRotation(requestId: bigint): Promise<void>;
+  requestKeyRotation(): Promise<bigint>
+  approveKeyRotation(requestId: bigint): Promise<void>
 }
 
 // ============================================================================
@@ -91,17 +94,17 @@ export interface TreasuryAdapter {
 // ============================================================================
 
 class DevModeTreasury implements TreasuryAdapter {
-  private state: TreasuryState;
+  private state: TreasuryState
   private keyRotationRequests: Map<
     bigint,
     { approvals: number; executed: boolean }
-  > = new Map();
-  private nextRotationId = 0n;
+  > = new Map()
+  private nextRotationId = 0n
 
   constructor(config: TreasuryConfig) {
-    const zeroAddress = '0x0000000000000000000000000000000000000000' as Address;
+    const zeroAddress = '0x0000000000000000000000000000000000000000' as Address
     const zeroHash =
-      '0x0000000000000000000000000000000000000000000000000000000000000000' as Hex;
+      '0x0000000000000000000000000000000000000000000000000000000000000000' as Hex
 
     this.state = {
       currentStateCID: '',
@@ -116,11 +119,11 @@ class DevModeTreasury implements TreasuryAdapter {
       withdrawnToday: 0n,
       trainingEpoch: 0n,
       lastModelHash: zeroHash,
-    };
+    }
   }
 
   async getState(): Promise<TreasuryState> {
-    return { ...this.state, operatorActive: await this.isOperatorActive() };
+    return { ...this.state, operatorActive: await this.isOperatorActive() }
   }
 
   async getOperatorInfo(): Promise<OperatorInfo> {
@@ -129,23 +132,23 @@ class DevModeTreasury implements TreasuryAdapter {
       attestation: '0x' as Hex, // Mock attestation
       registeredAt: this.state.lastHeartbeat,
       active: await this.isOperatorActive(),
-    };
+    }
   }
 
   async getWithdrawalInfo(): Promise<WithdrawalInfo> {
     const remaining =
       this.state.dailyWithdrawalLimit > this.state.withdrawnToday
         ? this.state.dailyWithdrawalLimit - this.state.withdrawnToday
-        : 0n;
+        : 0n
     return {
       limit: this.state.dailyWithdrawalLimit,
       usedToday: this.state.withdrawnToday,
       remaining,
-    };
+    }
   }
 
   async getBalance(): Promise<bigint> {
-    return this.state.balance;
+    return this.state.balance
   }
 
   async registerOperator(operator: Address, _attestation: Hex): Promise<void> {
@@ -153,117 +156,119 @@ class DevModeTreasury implements TreasuryAdapter {
       this.state.operator !== '0x0000000000000000000000000000000000000000' &&
       (await this.isOperatorActive())
     ) {
-      throw new Error('Active operator exists');
+      throw new Error('Active operator exists')
     }
 
-    this.state.operator = operator;
-    this.state.lastHeartbeat = BigInt(Math.floor(Date.now() / 1000));
-    this.state.operatorActive = true;
+    this.state.operator = operator
+    this.state.lastHeartbeat = BigInt(Math.floor(Date.now() / 1000))
+    this.state.operatorActive = true
   }
 
   async takeoverAsOperator(attestation: Hex): Promise<void> {
     if (!(await this.isTakeoverAvailable())) {
-      throw new Error('Takeover not available');
+      throw new Error('Takeover not available')
     }
 
     if (attestation.length === 0) {
-      throw new Error('Attestation required');
+      throw new Error('Attestation required')
     }
 
     // In dev mode, just use a mock address
     this.state.operator =
-      '0x1234567890123456789012345678901234567890' as Address;
-    this.state.lastHeartbeat = BigInt(Math.floor(Date.now() / 1000));
-    this.state.operatorActive = true;
+      '0x1234567890123456789012345678901234567890' as Address
+    this.state.lastHeartbeat = BigInt(Math.floor(Date.now() / 1000))
+    this.state.operatorActive = true
   }
 
   async isOperatorActive(): Promise<boolean> {
     if (this.state.operator === '0x0000000000000000000000000000000000000000') {
-      return false;
+      return false
     }
-    const now = BigInt(Math.floor(Date.now() / 1000));
-    const timeout = 3600n; // 1 hour
-    return now - this.state.lastHeartbeat <= timeout;
+    const now = BigInt(Math.floor(Date.now() / 1000))
+    const timeout = 3600n // 1 hour
+    return now - this.state.lastHeartbeat <= timeout
   }
 
   async isTakeoverAvailable(): Promise<boolean> {
     if (this.state.operator === '0x0000000000000000000000000000000000000000') {
-      return true;
+      return true
     }
     if (await this.isOperatorActive()) {
-      return false;
+      return false
     }
-    const now = BigInt(Math.floor(Date.now() / 1000));
-    const timeoutPlusCooldown = 3600n + 7200n; // 1 hour + 2 hours
-    return now >= this.state.lastHeartbeat + timeoutPlusCooldown;
+    const now = BigInt(Math.floor(Date.now() / 1000))
+    const timeoutPlusCooldown = 3600n + 7200n // 1 hour + 2 hours
+    return now >= this.state.lastHeartbeat + timeoutPlusCooldown
   }
 
   async updateState(cid: string, hash: Hex): Promise<void> {
-    this.state.currentStateCID = cid;
-    this.state.currentStateHash = hash;
-    this.state.stateVersion++;
-    this.state.lastHeartbeat = BigInt(Math.floor(Date.now() / 1000));
+    this.state.currentStateCID = cid
+    this.state.currentStateHash = hash
+    this.state.stateVersion++
+    this.state.lastHeartbeat = BigInt(Math.floor(Date.now() / 1000))
   }
 
   async heartbeat(): Promise<void> {
-    this.state.lastHeartbeat = BigInt(Math.floor(Date.now() / 1000));
+    this.state.lastHeartbeat = BigInt(Math.floor(Date.now() / 1000))
   }
 
   async recordTraining(datasetCID: string, modelHash: Hex): Promise<void> {
-    this.state.trainingEpoch++;
-    this.state.lastModelHash = modelHash;
-    // In dev mode, just log it
-    console.log(
-      `[DevTreasury] Training recorded: epoch=${this.state.trainingEpoch}, cid=${datasetCID}`
-    );
+    this.state.trainingEpoch++
+    this.state.lastModelHash = modelHash
+    logger.info(
+      'Training recorded',
+      { epoch: this.state.trainingEpoch, cid: datasetCID },
+      'DevTreasury',
+    )
   }
 
   async withdraw(amount: bigint): Promise<void> {
     if (amount <= 0n) {
-      throw new Error('Amount must be positive');
+      throw new Error('Amount must be positive')
     }
     if (this.state.balance < amount) {
-      throw new Error('Insufficient balance');
+      throw new Error('Insufficient balance')
     }
     if (this.state.withdrawnToday + amount > this.state.dailyWithdrawalLimit) {
-      throw new Error('Exceeds daily limit');
+      throw new Error('Exceeds daily limit')
     }
 
-    this.state.withdrawnToday += amount;
-    this.state.balance -= amount;
+    this.state.withdrawnToday += amount
+    this.state.balance -= amount
   }
 
   async deposit(amount: bigint): Promise<void> {
     if (amount <= 0n) {
-      throw new Error('Amount must be positive');
+      throw new Error('Amount must be positive')
     }
-    this.state.balance += amount;
+    this.state.balance += amount
   }
 
   async requestKeyRotation(): Promise<bigint> {
-    const requestId = this.nextRotationId++;
-    this.keyRotationRequests.set(requestId, { approvals: 1, executed: false });
+    const requestId = this.nextRotationId++
+    const request = { approvals: 1, executed: false }
+    this.keyRotationRequests.set(requestId, request)
 
     // In dev mode, auto-execute with 1 approval
-    this.state.keyVersion++;
-    this.keyRotationRequests.get(requestId)!.executed = true;
+    this.state.keyVersion++
+    request.executed = true
 
-    return requestId;
+    return requestId
   }
 
   async approveKeyRotation(requestId: bigint): Promise<void> {
-    const request = this.keyRotationRequests.get(requestId);
+    const request = this.keyRotationRequests.get(requestId)
     if (!request) {
-      throw new Error('Request not found');
+      throw new Error('Request not found')
     }
     if (request.executed) {
-      throw new Error('Already executed');
+      throw new Error('Already executed')
     }
 
-    request.approvals++;
+    request.approvals++
     if (request.approvals >= 2) {
-      this.state.keyVersion++;
-      request.executed = true;
+      this.state.keyVersion++
+      request.executed = true
     }
   }
 }
@@ -292,65 +297,72 @@ const TREASURY_ABI = [
   'function deposit() payable',
   'function requestKeyRotation() returns (uint256)',
   'function approveKeyRotation(uint256 requestId)',
-] as const;
+] as const
 
 class ProductionTreasury implements TreasuryAdapter {
-  private rpcUrl: string;
-  private contractAddress: Address;
-  private privateKey: Hex | undefined;
+  private rpcUrl: string
+  private contractAddress: Address
+  private privateKey: Hex | undefined
 
   constructor(config: TreasuryConfig) {
     if (!config.contractAddress) {
-      throw new Error('Contract address required for production mode');
+      throw new Error('Contract address required for production mode')
     }
     if (!config.rpcUrl) {
-      throw new Error('RPC URL required for production mode');
+      throw new Error('RPC URL required for production mode')
     }
-    this.contractAddress = config.contractAddress;
-    this.rpcUrl = config.rpcUrl;
-    this.privateKey = config.privateKey;
+    this.contractAddress = config.contractAddress
+    this.rpcUrl = config.rpcUrl
+    this.privateKey = config.privateKey
   }
 
   private async readContract<T>(
     functionName: string,
-    args: unknown[] = []
+    args: unknown[] = [],
   ): Promise<T> {
-    const { createPublicClient, http } = await import('viem');
-    const client = createPublicClient({ transport: http(this.rpcUrl) });
-    return client.readContract({
+    const client = createPublicClient({ transport: http(this.rpcUrl) })
+    const contractParams = {
       address: this.contractAddress,
       abi: TREASURY_ABI,
       functionName,
       args,
-    }) as Promise<T>;
+    } satisfies Omit<
+      Parameters<typeof client.readContract>[0],
+      'functionName' | 'args'
+    > & {
+      functionName: string
+      args: unknown[]
+    }
+    return client.readContract(
+      contractParams as Parameters<typeof client.readContract>[0],
+    ) as Promise<T>
   }
 
   private async writeContract(
     functionName: string,
     args: unknown[] = [],
-    value?: bigint
+    value?: bigint,
   ): Promise<Hex> {
     if (!this.privateKey) {
-      throw new Error('Private key required for write operations');
+      throw new Error('Private key required for write operations')
     }
-    const { createWalletClient, http } = await import('viem');
-    const { privateKeyToAccount } = await import('viem/accounts');
-    const { jejuMainnet } = await import('@babylon/shared');
 
-    const account = privateKeyToAccount(this.privateKey);
+    const account = privateKeyToAccount(this.privateKey)
     const client = createWalletClient({
       account,
       chain: jejuMainnet,
       transport: http(this.rpcUrl),
-    });
+    })
 
     return client.writeContract({
       address: this.contractAddress,
       abi: TREASURY_ABI,
-      functionName,
+      functionName: functionName as 'registerOperator',
       args,
       value,
-    });
+      account,
+      chain: jejuMainnet,
+    })
   }
 
   async getState(): Promise<TreasuryState> {
@@ -359,13 +371,13 @@ class ProductionTreasury implements TreasuryAdapter {
       this.readContract<Address>('currentOperator'),
       this.readContract<bigint>('lastHeartbeat'),
       this.getBalance(),
-    ]);
+    ])
 
     const [limit, epoch, modelHash] = await Promise.all([
       this.readContract<bigint>('dailyWithdrawalLimit'),
       this.readContract<bigint>('trainingEpoch'),
       this.readContract<Hex>('lastModelHash'),
-    ]);
+    ])
 
     return {
       currentStateCID: gameState[1],
@@ -380,37 +392,36 @@ class ProductionTreasury implements TreasuryAdapter {
       withdrawnToday: 0n, // Would need to track on-chain
       trainingEpoch: epoch,
       lastModelHash: modelHash,
-    };
+    }
   }
 
   async getOperatorInfo(): Promise<OperatorInfo> {
-    const operator = await this.readContract<Address>('currentOperator');
-    const lastHb = await this.readContract<bigint>('lastHeartbeat');
+    const operator = await this.readContract<Address>('currentOperator')
+    const lastHb = await this.readContract<bigint>('lastHeartbeat')
     return {
       address: operator,
       attestation: '0x' as Hex,
       registeredAt: lastHb,
       active: await this.isOperatorActive(),
-    };
+    }
   }
 
   async getWithdrawalInfo(): Promise<WithdrawalInfo> {
-    const limit = await this.readContract<bigint>('dailyWithdrawalLimit');
-    return { limit, usedToday: 0n, remaining: limit };
+    const limit = await this.readContract<bigint>('dailyWithdrawalLimit')
+    return { limit, usedToday: 0n, remaining: limit }
   }
 
   async getBalance(): Promise<bigint> {
-    const { createPublicClient, http } = await import('viem');
-    const client = createPublicClient({ transport: http(this.rpcUrl) });
-    return client.getBalance({ address: this.contractAddress });
+    const client = createPublicClient({ transport: http(this.rpcUrl) })
+    return client.getBalance({ address: this.contractAddress })
   }
 
   async registerOperator(operator: Address, attestation: Hex): Promise<void> {
-    await this.writeContract('registerOperator', [operator, attestation]);
+    await this.writeContract('registerOperator', [operator, attestation])
   }
 
   async takeoverAsOperator(attestation: Hex): Promise<void> {
-    await this.writeContract('takeoverAsOperator', [attestation]);
+    await this.writeContract('takeoverAsOperator', [attestation])
   }
 
   async isOperatorActive(): Promise<boolean> {
@@ -418,45 +429,44 @@ class ProductionTreasury implements TreasuryAdapter {
       this.readContract<Address>('currentOperator'),
       this.readContract<bigint>('lastHeartbeat'),
       this.readContract<bigint>('heartbeatTimeout'),
-    ]);
-    if (operator === '0x0000000000000000000000000000000000000000') return false;
-    const now = BigInt(Math.floor(Date.now() / 1000));
-    return now - lastHb <= timeout;
+    ])
+    if (operator === '0x0000000000000000000000000000000000000000') return false
+    const now = BigInt(Math.floor(Date.now() / 1000))
+    return now - lastHb <= timeout
   }
 
   async isTakeoverAvailable(): Promise<boolean> {
-    return this.readContract<boolean>('isTakeoverAvailable');
+    return this.readContract<boolean>('isTakeoverAvailable')
   }
 
   async updateState(cid: string, hash: Hex): Promise<void> {
-    await this.writeContract('updateState', [cid, hash]);
+    await this.writeContract('updateState', [cid, hash])
   }
 
   async heartbeat(): Promise<void> {
-    await this.writeContract('heartbeat');
+    await this.writeContract('heartbeat')
   }
 
   async recordTraining(datasetCID: string, modelHash: Hex): Promise<void> {
-    await this.writeContract('recordTraining', [datasetCID, modelHash]);
+    await this.writeContract('recordTraining', [datasetCID, modelHash])
   }
 
   async withdraw(amount: bigint): Promise<void> {
-    await this.writeContract('withdraw', [amount]);
+    await this.writeContract('withdraw', [amount])
   }
 
   async deposit(amount: bigint): Promise<void> {
-    await this.writeContract('deposit', [], amount);
+    await this.writeContract('deposit', [], amount)
   }
 
   async requestKeyRotation(): Promise<bigint> {
-    const hash = await this.writeContract('requestKeyRotation');
-    // Would need to parse event logs to get the request ID
-    console.log('Key rotation requested, tx:', hash);
-    return 0n;
+    const hash = await this.writeContract('requestKeyRotation')
+    logger.info('Key rotation requested', { tx: hash }, 'Treasury')
+    return 0n
   }
 
   async approveKeyRotation(requestId: bigint): Promise<void> {
-    await this.writeContract('approveKeyRotation', [requestId]);
+    await this.writeContract('approveKeyRotation', [requestId])
   }
 }
 
@@ -465,11 +475,11 @@ class ProductionTreasury implements TreasuryAdapter {
 // ============================================================================
 
 export function createTreasuryAdapter(
-  config?: Partial<TreasuryConfig>
+  config?: Partial<TreasuryConfig>,
 ): TreasuryAdapter {
   const mode =
     config?.mode ??
-    (process.env.NODE_ENV === 'production' ? 'production' : 'dev');
+    (process.env.NODE_ENV === 'production' ? 'production' : 'dev')
 
   const fullConfig: TreasuryConfig = {
     mode,
@@ -480,13 +490,13 @@ export function createTreasuryAdapter(
     initialBalance: config?.initialBalance,
     dailyLimit: config?.dailyLimit,
     ...config,
-  };
-
-  if (mode === 'production') {
-    return new ProductionTreasury(fullConfig);
   }
 
-  return new DevModeTreasury(fullConfig);
+  if (mode === 'production') {
+    return new ProductionTreasury(fullConfig)
+  }
+
+  return new DevModeTreasury(fullConfig)
 }
 
 /**
@@ -496,12 +506,12 @@ export function isDevMode(): boolean {
   return (
     process.env.NODE_ENV !== 'production' &&
     !process.env.BABYLON_TREASURY_ADDRESS
-  );
+  )
 }
 
 /**
  * Get the appropriate treasury for the current environment
  */
 export function getTreasury(): TreasuryAdapter {
-  return createTreasuryAdapter();
+  return createTreasuryAdapter()
 }

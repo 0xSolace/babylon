@@ -6,13 +6,13 @@
 
 /**
  * Get the base URL for the application
- * Uses window.location.origin in browser, falls back to env variable or default
+ * Uses window.location.origin in browser, falls back to default
  */
 export function getBaseUrl(): string {
   if (typeof window !== 'undefined') {
-    return window.location.origin;
+    return window.location.origin
   }
-  return process.env.NEXT_PUBLIC_APP_URL || 'https://babylon.market';
+  return 'https://babylon.market'
 }
 
 /**
@@ -28,8 +28,8 @@ export function getBaseUrl(): string {
  * ```
  */
 export function getReferralUrl(usernameOrCode: string): string {
-  const baseUrl = getBaseUrl();
-  return `${baseUrl}?ref=${encodeURIComponent(usernameOrCode)}`;
+  const baseUrl = getBaseUrl()
+  return `${baseUrl}?ref=${encodeURIComponent(usernameOrCode)}`
 }
 
 /**
@@ -46,8 +46,8 @@ export function getReferralUrl(usernameOrCode: string): string {
  */
 export function getDisplayReferralUrl(usernameOrCode: string): string {
   const host =
-    typeof window !== 'undefined' ? window.location.host : 'babylon.market';
-  return `${host}?ref=${usernameOrCode}`;
+    typeof window !== 'undefined' ? window.location.host : 'babylon.market'
+  return `${host}?ref=${usernameOrCode}`
 }
 
 /**
@@ -65,11 +65,11 @@ export function getDisplayReferralUrl(usernameOrCode: string): string {
  */
 export function getReferralShareText(
   usernameOrCode: string,
-  customMessage?: string
+  customMessage?: string,
 ): string {
   const message =
     customMessage ||
-    'Join me in Babylon, a real-time simulation where humans and AI agents battle across prediction markets, form alliances, and shape outcomes—together.';
-  const url = getReferralUrl(usernameOrCode);
-  return `${message}\n\n${url}`;
+    'Join me in Babylon, a real-time simulation where humans and AI agents battle across prediction markets, form alliances, and shape outcomes—together.'
+  const url = getReferralUrl(usernameOrCode)
+  return `${message}\n\n${url}`
 }

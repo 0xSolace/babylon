@@ -13,11 +13,7 @@ export {
   isRedisAvailable,
   type RedisInstance,
   redis,
-} from './client';
-// Decentralized Redis replacement
-export {
-  DecentralizedRedis,
-  getDecentralizedRedis,
-  resetDecentralizedRedis,
-} from './decentralized-redis';
-export { type StreamMessage, streamAdd, streamRead } from './streams';
+} from './client'
+// Decentralized Redis replacement - export class and types, reset only (getRedis comes from client)
+export { Redis, type RedisCompatibleClient, resetRedis } from './redis'
+export { type StreamMessage, streamAdd, streamRead } from './streams'

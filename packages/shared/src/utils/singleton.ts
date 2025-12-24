@@ -5,109 +5,114 @@
  * Prevents double initialization and handles cleanup.
  */
 
-/**
- * Type for singleton storage values.
- * Uses unknown for type safety - callers must type cast when retrieving.
- */
-type SingletonValue = unknown;
+import { mapGet, toNull } from './nullable'
 
 /**
  * Type for the global object used for singleton storage.
- * Values are stored as unknown and type-cast when retrieved.
+ * Uses index signature for dynamic property access.
  */
 interface GlobalSingletonStorage {
-  [key: string]: SingletonValue;
+  [key: string]: unknown
 }
+
+/**
+ * Type assertion for the global object.
+ * Node.js global object supports dynamic property assignment.
+ */
+declare const global: GlobalSingletonStorage
 
 /**
  * Helper to get typed global object for singleton storage.
  */
 function getGlobalStorage(): GlobalSingletonStorage {
-  // Global is a special Node.js object that holds global state
-  return global as GlobalSingletonStorage;
+  return global
+}
+
+/**
+ * Singleton accessor interface
+ */
+export interface SingletonAccessor<T> {
+  getInstance: () => T | null
+  setInstance: (instance: T) => void
+  clearInstance: () => void
+}
+
+/**
+ * Port-aware singleton accessor interface
+ */
+export interface PortSingletonAccessor<T> {
+  getInstance: (port?: number) => T | null
+  setInstance: (instance: T, port?: number) => void
+  clearInstance: () => void
 }
 
 /**
  * Creates a singleton getter/setter pattern for a type T
  */
-export function createSingleton<T>(): {
-  getInstance: () => T | null;
-  setInstance: (instance: T) => void;
-  clearInstance: () => void;
-} {
-  let instance: T | null = null;
+export function createSingleton<T>(): SingletonAccessor<T> {
+  let instance: T | null = null
 
   return {
     getInstance: () => instance,
     setInstance: (inst: T) => {
-      instance = inst;
+      instance = inst
     },
     clearInstance: () => {
-      instance = null;
+      instance = null
     },
-  };
+  }
 }
 
 /**
  * Creates a global singleton that survives hot module reloads
- * Uses Node.js global object to persist across module reloads
  */
-export function createGlobalSingleton<T>(globalKey: string): {
-  getInstance: () => T | null;
-  setInstance: (instance: T) => void;
-  clearInstance: () => void;
-} {
-  const globalObj = getGlobalStorage();
+export function createGlobalSingleton<T>(
+  globalKey: string,
+): SingletonAccessor<T> {
+  const globalObj = getGlobalStorage()
 
   return {
     getInstance: () => {
-      const value = globalObj[globalKey];
-      return (value as T | undefined) || null;
+      const value = globalObj[globalKey]
+      return toNull(value as T | undefined)
     },
     setInstance: (instance: T) => {
-      globalObj[globalKey] = instance;
+      globalObj[globalKey] = instance
     },
     clearInstance: () => {
-      globalObj[globalKey] = undefined;
+      globalObj[globalKey] = undefined
     },
-  };
+  }
 }
 
 /**
- * Creates a port-aware singleton for WebSocket servers
- * Prevents multiple servers from binding to the same port
+ * Creates a port-aware singleton for server instances
  */
 export function createPortSingleton<T>(
-  globalKey: string,
-  portKey = `${globalKey}Port`
-): {
-  getInstance: (port?: number) => T | null;
-  setInstance: (instance: T, port?: number) => void;
-  clearInstance: () => void;
-} {
-  const globalObj = getGlobalStorage();
+  globalKeyPrefix: string,
+): PortSingletonAccessor<T> {
+  const instances = new Map<number, T>()
+  const globalObj = getGlobalStorage()
 
   return {
     getInstance: (port?: number) => {
-      const existing = globalObj[globalKey] as T | undefined;
-      const existingPort = globalObj[portKey] as number | undefined;
-
-      // If port is specified, only return if it matches
-      if (port !== undefined && existingPort !== port) {
-        return null;
+      if (port !== undefined) {
+        return mapGet(instances, port)
       }
-
-      return existing || null;
+      // Return first instance if no port specified
+      const firstResult = instances.values().next()
+      return firstResult.done ? null : firstResult.value
     },
     setInstance: (instance: T, port?: number) => {
-      globalObj[globalKey] = instance;
-      if (port !== undefined) {
-        globalObj[portKey] = port;
-      }
+      const key = port ?? 0
+      instances.set(key, instance)
+      globalObj[`${globalKeyPrefix}_${key}`] = instance
     },
     clearInstance: () => {
-      globalObj[globalKey] = undefined;
-      globalObj[portKey] = undefined;
+      for (const port of instances.keys()) {
+        delete globalObj[`${globalKeyPrefix}_${port}`]
+      }
+      instances.clear()
     },
-  };
+  }
 }

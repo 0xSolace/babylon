@@ -11,28 +11,13 @@ import type {
   Provider,
   ProviderResult,
   State,
-} from '@elizaos/core';
-import { logger } from '../../../shared/logger';
-import type {
-  A2ABalanceResponse,
-  A2APositionsResponse,
-} from '../../../types/a2a-responses';
-import type { BabylonRuntime } from '../types';
-
-// Type guards for A2A responses
-function isA2ABalanceResponse(data: object): data is A2ABalanceResponse {
-  return (
-    'balance' in data &&
-    typeof (data as A2ABalanceResponse).balance === 'number'
-  );
-}
-
-function isA2APositionsResponse(data: object): data is A2APositionsResponse {
-  return (
-    'marketPositions' in data &&
-    Array.isArray((data as A2APositionsResponse).marketPositions)
-  );
-}
+} from '@elizaos/core'
+import { logger } from '../../../shared/logger'
+import {
+  isA2ABalanceResponse,
+  isA2APositionsResponse,
+} from '../../../types/a2a-responses'
+import { toBabylonRuntime } from '../types'
 
 /**
  * Provider: Comprehensive Dashboard
@@ -47,21 +32,21 @@ export const dashboardProvider: Provider = {
   get: async (
     runtime: IAgentRuntime,
     _message: Memory,
-    _state: State
+    _state: State,
   ): Promise<ProviderResult> => {
-    const babylonRuntime = runtime as BabylonRuntime;
-    const agentUserId = runtime.agentId;
+    const babylonRuntime = toBabylonRuntime(runtime)
+    const agentUserId = runtime.agentId
 
     // A2A is REQUIRED
     if (!babylonRuntime.a2aClient?.isConnected()) {
       logger.error(
         'A2A client not connected - dashboard provider requires A2A protocol',
         undefined,
-        runtime.agentId
-      );
+        runtime.agentId,
+      )
       return {
         text: 'ERROR: A2A client not connected. Cannot load dashboard. Please ensure A2A server is running.',
-      };
+      }
     }
 
     // Fetch ALL dashboard data via A2A protocol
@@ -81,7 +66,7 @@ export const dashboardProvider: Provider = {
         babylonRuntime.a2aClient
           .getNotifications(5)
           .catch(() => ({ notifications: [] })),
-      ]);
+      ])
 
     // Validate response structures using type guards
     if (
@@ -89,33 +74,33 @@ export const dashboardProvider: Provider = {
       typeof balance !== 'object' ||
       !isA2ABalanceResponse(balance)
     ) {
-      throw new Error('Invalid balance data format from A2A client');
+      throw new Error('Invalid balance data format from A2A client')
     }
     if (
       !positions ||
       typeof positions !== 'object' ||
       !isA2APositionsResponse(positions)
     ) {
-      throw new Error('Invalid positions data format from A2A client');
+      throw new Error('Invalid positions data format from A2A client')
     }
-    const balanceData = balance;
-    const positionsData = positions;
+    const balanceData = balance
+    const positionsData = positions
     const predictionsData = predictions as {
-      predictions?: Array<{ id: string; question: string }>;
-    };
-    const feedData = feed as { posts?: Array<{ id: string; content: string }> };
-    const chatsData = chats as { chats?: Array<{ id: string; name?: string }> };
+      predictions?: Array<{ id: string; question: string }>
+    }
+    const feedData = feed as { posts?: Array<{ id: string; content: string }> }
+    const chatsData = chats as { chats?: Array<{ id: string; name?: string }> }
     const notificationsData = notifications as {
-      notifications?: Array<{ id: string; message: string }>;
-    };
+      notifications?: Array<{ id: string; message: string }>
+    }
 
     const totalPositions =
       (positionsData.marketPositions?.length || 0) +
-      (positionsData.perpPositions?.length || 0);
-    const activeMarkets = predictionsData.predictions?.length || 0;
-    const recentPosts = feedData.posts?.length || 0;
-    const activeChats = chatsData.chats?.length || 0;
-    const unreadNotifications = notificationsData.notifications?.length || 0;
+      (positionsData.perpPositions?.length || 0)
+    const activeMarkets = predictionsData.predictions?.length || 0
+    const recentPosts = feedData.posts?.length || 0
+    const activeChats = chatsData.chats?.length || 0
+    const unreadNotifications = notificationsData.notifications?.length || 0
 
     const result = `📊 AGENT DASHBOARD
 
@@ -166,8 +151,8 @@ ${
 - ${totalPositions > 0 ? 'Monitor open positions' : 'Consider opening positions'}
 - ${activeMarkets > 0 ? 'Review active markets' : 'Check for new markets'}
 - ${recentPosts > 0 ? 'Engage with recent posts' : 'Create new posts'}
-- ${unreadNotifications > 0 ? 'Review notifications' : 'All caught up'}`;
+- ${unreadNotifications > 0 ? 'Review notifications' : 'All caught up'}`
 
-    return { text: result };
+    return { text: result }
   },
-};
+}

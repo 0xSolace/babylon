@@ -1,10 +1,10 @@
-import { definePrompt } from '../define-prompt';
+import { definePrompt } from '../define-prompt'
 import {
   CONTENT_REQUIREMENTS,
   FINAL_REMINDERS,
   IMPORTANT_RULES,
   WORLD_CONTEXT_HEADER,
-} from '../shared-sections';
+} from '../shared-sections'
 
 /**
  * Prompt for generating stock ticker style posts for price movements.
@@ -67,4 +67,4 @@ ${FINAL_REMINDERS}
 
 No other text.
 `.trim(),
-});
+})

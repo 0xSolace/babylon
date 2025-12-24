@@ -9,58 +9,60 @@
  * - This implementation uses simple encryption for demonstration
  */
 
-import { asc, db, eq, oracleCommitments } from '@babylon/db';
-import { logger } from '@babylon/shared';
-import { createCipheriv, createDecipheriv, randomBytes } from 'crypto';
-import type { StoredCommitment } from './oracle/types';
+import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto'
+import { asc, db, eq, oracleCommitments } from '@babylon/db'
+import { logger, toDate } from '@babylon/shared'
+import type { StoredCommitment } from './oracle/types'
 
 const ENCRYPTION_KEY =
-  process.env.ORACLE_ENCRYPTION_KEY || 'default-key-change-in-production-32';
-const ALGORITHM = 'aes-256-cbc';
+  process.env.ORACLE_ENCRYPTION_KEY || 'default-key-change-in-production-32'
+const ALGORITHM = 'aes-256-cbc'
 
+// biome-ignore lint/complexity/noStaticOnlyClass: Service pattern uses static methods for stateless operations
 export class CommitmentStore {
   /**
    * Generate a cryptographically secure random salt
    */
   static generateSalt(): string {
-    return '0x' + randomBytes(32).toString('hex');
+    return `0x${randomBytes(32).toString('hex')}`
   }
 
   /**
    * Encrypt salt for storage
    */
   private static encryptSalt(salt: string): string {
-    const iv = randomBytes(16);
+    const iv = randomBytes(16)
     const cipher = createCipheriv(
       ALGORITHM,
       Buffer.from(ENCRYPTION_KEY.padEnd(32).slice(0, 32)),
-      iv
-    );
+      iv,
+    )
 
-    let encrypted = cipher.update(salt, 'utf8', 'hex');
-    encrypted += cipher.final('hex');
+    let encrypted = cipher.update(salt, 'utf8', 'hex')
+    encrypted += cipher.final('hex')
 
-    return iv.toString('hex') + ':' + encrypted;
+    return `${iv.toString('hex')}:${encrypted}`
   }
 
   /**
    * Decrypt salt from storage
    */
   private static decryptSalt(encryptedSalt: string): string {
-    const parts = encryptedSalt.split(':');
-    const iv = Buffer.from(parts[0]!, 'hex');
-    const encrypted = parts[1]!;
+    const parts = encryptedSalt.split(':')
+    const ivHex = parts[0] ?? ''
+    const encrypted = parts[1] ?? ''
+    const iv = Buffer.from(ivHex, 'hex')
 
     const decipher = createDecipheriv(
       ALGORITHM,
       Buffer.from(ENCRYPTION_KEY.padEnd(32).slice(0, 32)),
-      iv
-    );
+      iv,
+    )
 
-    let decrypted = decipher.update(encrypted, 'hex', 'utf8');
-    decrypted += decipher.final('utf8');
+    let decrypted: string = decipher.update(encrypted, 'hex', 'utf8')
+    decrypted += decipher.final('utf8')
 
-    return decrypted;
+    return decrypted
   }
 
   /**
@@ -68,18 +70,18 @@ export class CommitmentStore {
    * Returns the stored commitment record
    */
   static async store(
-    commitment: StoredCommitment
+    commitment: StoredCommitment,
   ): Promise<{ id: string; questionId: string }> {
-    const encryptedSalt = CommitmentStore.encryptSalt(commitment.salt);
+    const encryptedSalt = CommitmentStore.encryptSalt(commitment.salt)
 
     // Check if exists
     const existing = await db
       .select({ id: oracleCommitments.id })
       .from(oracleCommitments)
       .where(eq(oracleCommitments.questionId, commitment.questionId))
-      .limit(1);
+      .limit(1)
 
-    let result: { id: string; questionId: string };
+    let result: { id: string; questionId: string }
 
     if (existing.length > 0) {
       // Update existing
@@ -91,9 +93,13 @@ export class CommitmentStore {
           commitment: commitment.commitment,
         })
         .where(eq(oracleCommitments.questionId, commitment.questionId))
-        .returning();
+        .returning()
 
-      result = updated[0]!;
+      const first = updated[0]
+      result = {
+        id: String(first?.id ?? ''),
+        questionId: String(first?.questionId ?? ''),
+      }
     } else {
       // Create new
       const created = await db
@@ -106,9 +112,13 @@ export class CommitmentStore {
           commitment: commitment.commitment,
           createdAt: commitment.createdAt,
         })
-        .returning();
+        .returning()
 
-      result = created[0]!;
+      const first = created[0]
+      result = {
+        id: String(first?.id ?? ''),
+        questionId: String(first?.questionId ?? ''),
+      }
     }
 
     logger.info(
@@ -119,10 +129,10 @@ export class CommitmentStore {
         wasCreated: existing.length === 0,
         operation: 'upsert',
       },
-      'CommitmentStore'
-    );
+      'CommitmentStore',
+    )
 
-    return result;
+    return result
   }
 
   /**
@@ -132,46 +142,57 @@ export class CommitmentStore {
     logger.info(
       `Retrieving commitment for question ${questionId}`,
       undefined,
-      'CommitmentStore'
-    );
+      'CommitmentStore',
+    )
 
     const result = await db
       .select()
       .from(oracleCommitments)
       .where(eq(oracleCommitments.questionId, questionId))
-      .limit(1);
+      .limit(1)
 
-    const stored = result[0];
+    const row = result[0]
 
-    if (!stored) {
+    if (!row) {
       logger.warn(
         `No commitment found for question ${questionId}`,
         undefined,
-        'CommitmentStore'
-      );
-      return null;
+        'CommitmentStore',
+      )
+      return null
     }
+
+    // Access row properties with proper coercion
+    const rowId = String(row.id ?? '')
+    const rowSessionId = String(row.sessionId ?? '')
+    const rowCommitment = String(row.commitment ?? '')
+    const rowSaltEncrypted = String(row.saltEncrypted ?? '')
+    const rowCreatedAt = row.createdAt
 
     logger.info(
       `Found commitment for question ${questionId}`,
       {
-        recordId: stored.id,
-        sessionId: stored.sessionId,
-        hasCommitment: !!stored.commitment,
-        hasSalt: !!stored.saltEncrypted,
+        recordId: rowId,
+        sessionId: rowSessionId,
+        hasCommitment: !!rowCommitment,
+        hasSalt: !!rowSaltEncrypted,
       },
-      'CommitmentStore'
-    );
+      'CommitmentStore',
+    )
 
-    const salt = CommitmentStore.decryptSalt(stored.saltEncrypted);
+    const salt = CommitmentStore.decryptSalt(rowSaltEncrypted)
 
     return {
-      questionId: stored.questionId,
-      sessionId: stored.sessionId,
+      questionId: String(row.questionId ?? ''),
+      sessionId: rowSessionId,
       salt,
-      commitment: stored.commitment,
-      createdAt: stored.createdAt,
-    };
+      commitment: rowCommitment,
+      createdAt: toDate(
+        rowCreatedAt instanceof Date
+          ? rowCreatedAt
+          : String(rowCreatedAt ?? ''),
+      ),
+    }
   }
 
   /**
@@ -182,20 +203,20 @@ export class CommitmentStore {
     const result = await db
       .delete(oracleCommitments)
       .where(eq(oracleCommitments.questionId, questionId))
-      .returning();
+      .returning()
 
     if (result.length > 0) {
       logger.info(
         `Deleted commitment for question ${questionId}`,
         undefined,
-        'CommitmentStore'
-      );
+        'CommitmentStore',
+      )
     } else {
       logger.info(
         `Commitment already deleted for question ${questionId}`,
         undefined,
-        'CommitmentStore'
-      );
+        'CommitmentStore',
+      )
     }
   }
 
@@ -203,17 +224,26 @@ export class CommitmentStore {
    * List all pending commitments for recovery and monitoring
    */
   static async listPending(): Promise<StoredCommitment[]> {
-    const stored = await db
+    const rows = await db
       .select()
       .from(oracleCommitments)
-      .orderBy(asc(oracleCommitments.createdAt));
+      .orderBy(asc(oracleCommitments.createdAt))
 
-    return stored.map((s) => ({
-      questionId: s.questionId,
-      sessionId: s.sessionId,
-      salt: CommitmentStore.decryptSalt(s.saltEncrypted),
-      commitment: s.commitment,
-      createdAt: s.createdAt,
-    }));
+    return rows
+      .filter((row): row is NonNullable<typeof row> => row != null)
+      .map((row) => {
+        const rowCreatedAt = row.createdAt
+        return {
+          questionId: String(row.questionId ?? ''),
+          sessionId: String(row.sessionId ?? ''),
+          salt: CommitmentStore.decryptSalt(String(row.saltEncrypted ?? '')),
+          commitment: String(row.commitment ?? ''),
+          createdAt: toDate(
+            rowCreatedAt instanceof Date
+              ? rowCreatedAt
+              : String(rowCreatedAt ?? ''),
+          ),
+        }
+      })
   }
 }

@@ -5,30 +5,27 @@
  * Unit tests should not require a real database connection.
  */
 
-import { beforeAll, mock } from 'bun:test';
-import type {
-  MockDatabaseClient,
-  MockTransactionFn,
-} from '../types/test-types';
+import { beforeAll, mock } from 'bun:test'
+import type { MockDatabaseClient, MockTransactionFn } from '../types/test-types'
 
 // Mock database client for all unit tests
 beforeAll(() => {
   // Set test environment variables for decentralized services
-  process.env.NODE_ENV = 'test';
-  process.env.CQL_BLOCK_PRODUCER_ENDPOINT = 'http://localhost:4661';
-  process.env.CQL_DATABASE_ID = 'babylon_test';
-  process.env.JEJU_CACHE_SERVICE_URL = 'http://localhost:4662';
-  process.env.JEJU_STORAGE_SERVICE_URL = 'http://localhost:4663';
-  process.env.JEJU_OAUTH3_SERVICE_URL = 'http://localhost:4664';
+  ;(process.env as Record<string, string>).NODE_ENV = 'test'
+  process.env.CQL_BLOCK_PRODUCER_ENDPOINT = 'http://localhost:4661'
+  process.env.CQL_DATABASE_ID = 'babylon_test'
+  process.env.JEJU_CACHE_SERVICE_URL = 'http://localhost:4662'
+  process.env.JEJU_STORAGE_SERVICE_URL = 'http://localhost:4663'
+  process.env.JEJU_OAUTH3_SERVICE_URL = 'http://localhost:4664'
 
   // Mock the database module entirely
   mock.module('@babylon/db', () => {
-    const mockDatabase = createMockDatabase();
+    const mockDatabase = createMockDatabase()
     return {
       db: mockDatabase,
       dbBase: mockDatabase,
-    };
-  });
+    }
+  })
 
   // Mock decentralized cache
   mock.module('@babylon/api/cache', () => {
@@ -44,31 +41,30 @@ beforeAll(() => {
       healthCheck: mock(() => Promise.resolve(true)),
       incr: mock(() => Promise.resolve(1)),
       decr: mock(() => Promise.resolve(0)),
-    };
+    }
     return {
       getCache: mock(() => mockCache),
       initializeCache: mock(() => Promise.resolve(mockCache)),
       isCacheServiceReachable: mock(() => Promise.resolve(true)),
       CacheClient: class MockCacheClient {
-        constructor() {}
         async initialize() {}
         async get() {
-          return null;
+          return null
         }
         async set() {}
         async delete() {
-          return true;
+          return true
         }
         async exists() {
-          return false;
+          return false
         }
         async healthCheck() {
-          return true;
+          return true
         }
       },
-    };
-  });
-});
+    }
+  })
+})
 
 /**
  * Create a mock database client with all necessary models
@@ -136,7 +132,7 @@ function createMockDatabase() {
     'trainedModel',
     'llmCallLog',
     'rewardJudgment',
-  ];
+  ]
 
   // Initialize base mock client - model methods are added dynamically below
   const mockClient = {
@@ -146,9 +142,9 @@ function createMockDatabase() {
     $executeRaw: mock(() => Promise.resolve(0)),
     $transaction: mock(async (fn: MockTransactionFn) => {
       // Execute the transaction function with the mock client
-      return await fn(mockClient as MockDatabaseClient);
+      return await fn(mockClient as MockDatabaseClient)
     }),
-  } as MockDatabaseClient;
+  } as MockDatabaseClient
 
   // Add mock methods for each database model
   for (const modelName of mockModels) {
@@ -171,13 +167,13 @@ function createMockDatabase() {
           _avg: null,
           _min: null,
           _max: null,
-        })
+        }),
       ),
       groupBy: mock(() => Promise.resolve([])),
-    };
+    }
   }
 
-  return mockClient;
+  return mockClient
 }
 
-export { createMockDatabase };
+export { createMockDatabase }

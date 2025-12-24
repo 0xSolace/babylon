@@ -1,8 +1,6 @@
-'use client';
-
-import { MarketOverviewPanel } from './MarketOverviewPanel';
-import { PredictionTrendingPanel } from './PredictionTrendingPanel';
-import { TopMoversPanel } from './TopMoversPanel';
+import { MarketOverviewPanel } from './MarketOverviewPanel'
+import { PredictionTrendingPanel } from './PredictionTrendingPanel'
+import { TopMoversPanel } from './TopMoversPanel'
 
 /**
  * Markets widget sidebar component for displaying market panels.
@@ -28,25 +26,25 @@ import { TopMoversPanel } from './TopMoversPanel';
  */
 interface MarketsWidgetSidebarProps {
   onMarketClick?: (market: {
-    ticker: string;
-    name: string;
-    currentPrice: number;
-    change24h: number;
-    changePercent24h: number;
-    organizationId?: string;
-    high24h?: number;
-    low24h?: number;
-    volume24h?: number;
-    openInterest?: number;
+    ticker: string
+    name: string
+    currentPrice: number
+    change24h: number
+    changePercent24h: number
+    organizationId?: string
+    high24h?: number
+    low24h?: number
+    volume24h?: number
+    openInterest?: number
     fundingRate?: {
-      rate: number;
-      nextFundingTime: string;
-      predictedRate: number;
-    };
-    maxLeverage?: number;
-    minOrderSize?: number;
-  }) => void;
-  onPredictionClick?: (marketId: string) => void;
+      rate: number
+      nextFundingTime: string
+      predictedRate: number
+    }
+    maxLeverage?: number
+    minOrderSize?: number
+  }) => void
+  onPredictionClick?: (marketId: string) => void
 }
 
 export function MarketsWidgetSidebar({
@@ -70,5 +68,5 @@ export function MarketsWidgetSidebar({
         <PredictionTrendingPanel onMarketClick={onPredictionClick} />
       </div>
     </div>
-  );
+  )
 }

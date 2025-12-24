@@ -56,7 +56,7 @@ You are evaluating an agent whose primary goal is trading performance through te
 A trader with $100 profit and 60% win rate should score significantly higher than one with $0 profit regardless of social metrics. Social activity should be penalized if it comes at the expense of trading performance.
 
 If two trajectories have similar P&L, the one with better risk metrics (lower drawdown, higher Sharpe) should score higher.
-`;
+`
 
 export const TRADER_PRIORITY_METRICS = [
   'trading.totalPnL',
@@ -64,4 +64,4 @@ export const TRADER_PRIORITY_METRICS = [
   'trading.winRate',
   'trading.marketsTraded',
   'behavior.socialToTradeRatio',
-];
+]

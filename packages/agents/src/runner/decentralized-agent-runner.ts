@@ -14,60 +14,60 @@
  * @packageDocumentation
  */
 
-import type { AgentRuntime } from '@elizaos/core';
-import type { Address, Hex } from 'viem';
-import { autonomousCoordinator } from '../autonomous';
-import { agentRuntimeManager } from '../runtime/AgentRuntimeManager';
-import { logger } from '../shared/logger';
-import { generateSnowflakeId } from '../shared/snowflake';
+import { db } from '@babylon/db'
+import { generateSnowflakeId } from '@babylon/shared'
+import type { AgentRuntime } from '@elizaos/core'
+import type { Address, Hex } from 'viem'
+import { autonomousCoordinator } from '../autonomous'
+import { agentRuntimeManager } from '../runtime/AgentRuntimeManager'
+import { logger } from '../shared/logger'
 
-// Re-export types
 export interface AgentRunnerConfig {
   /** Node's wallet address for registration and billing */
-  nodeAddress: Address;
+  nodeAddress: Address
   /** Jeju network: localnet | testnet | mainnet */
-  network: 'localnet' | 'testnet' | 'mainnet';
+  network: 'localnet' | 'testnet' | 'mainnet'
   /** Maximum concurrent agents to run */
-  maxConcurrentAgents: number;
+  maxConcurrentAgents: number
   /** Tick interval in milliseconds */
-  tickIntervalMs: number;
+  tickIntervalMs: number
   /** Gateway URL for Jeju services */
-  gatewayUrl?: string;
+  gatewayUrl?: string
   /** Enable trajectory recording for RL training */
-  recordTrajectories?: boolean;
+  recordTrajectories?: boolean
 }
 
 export interface AgentExecution {
-  agentId: string;
-  nodeAddress: Address;
-  startTime: number;
-  endTime: number;
+  agentId: string
+  nodeAddress: Address
+  startTime: number
+  endTime: number
   actionsExecuted: {
-    trades: number;
-    posts: number;
-    comments: number;
-    messages: number;
-    groupMessages: number;
-    engagements: number;
-  };
-  success: boolean;
-  error?: string;
-  trajectoryId?: string;
+    trades: number
+    posts: number
+    comments: number
+    messages: number
+    groupMessages: number
+    engagements: number
+  }
+  success: boolean
+  error?: string
+  trajectoryId?: string
 }
 
 export interface ExecutionReport {
-  executionId: string;
-  nodeAddress: Address;
-  agents: AgentExecution[];
-  totalCompute: bigint;
-  signature?: Hex;
+  executionId: string
+  nodeAddress: Address
+  agents: AgentExecution[]
+  totalCompute: bigint
+  signature?: Hex
 }
 
 const GATEWAY_URLS = {
   localnet: 'http://localhost:4200',
   testnet: 'https://gateway.testnet.jeju.network',
   mainnet: 'https://gateway.jeju.network',
-} as const;
+} as const
 
 /**
  * Decentralized Agent Runner
@@ -76,15 +76,15 @@ const GATEWAY_URLS = {
  * Pulls configs from CQL, executes via ElizaOS, reports on-chain.
  */
 export class DecentralizedAgentRunner {
-  private config: AgentRunnerConfig;
-  private gatewayUrl: string;
-  private running = false;
-  private activeAgents = new Map<string, AgentRuntime>();
-  private tickInterval: ReturnType<typeof setInterval> | null = null;
+  private config: AgentRunnerConfig
+  private gatewayUrl: string
+  private running = false
+  private activeAgents = new Map<string, AgentRuntime>()
+  private tickInterval: ReturnType<typeof setInterval> | null = null
 
   constructor(config: AgentRunnerConfig) {
-    this.config = config;
-    this.gatewayUrl = config.gatewayUrl ?? GATEWAY_URLS[config.network];
+    this.config = config
+    this.gatewayUrl = config.gatewayUrl ?? GATEWAY_URLS[config.network]
   }
 
   /**
@@ -92,8 +92,8 @@ export class DecentralizedAgentRunner {
    */
   async start(): Promise<void> {
     if (this.running) {
-      logger.warn('Agent runner already running', undefined, 'AgentRunner');
-      return;
+      logger.warn('Agent runner already running', undefined, 'AgentRunner')
+      return
     }
 
     logger.info(
@@ -104,85 +104,81 @@ export class DecentralizedAgentRunner {
         maxConcurrentAgents: this.config.maxConcurrentAgents,
         tickIntervalMs: this.config.tickIntervalMs,
       },
-      'AgentRunner'
-    );
+      'AgentRunner',
+    )
 
     // Register node with Jeju network
-    await this.registerNode();
+    await this.registerNode()
 
     // Start the tick loop
-    this.running = true;
+    this.running = true
     this.tickInterval = setInterval(
       () => this.runTickCycle(),
-      this.config.tickIntervalMs
-    );
+      this.config.tickIntervalMs,
+    )
 
     // Run first tick immediately
-    await this.runTickCycle();
+    await this.runTickCycle()
   }
 
   /**
    * Stop the agent runner daemon
    */
   async stop(): Promise<void> {
-    if (!this.running) return;
+    if (!this.running) return
 
-    logger.info('Stopping agent runner', undefined, 'AgentRunner');
+    logger.info('Stopping agent runner', undefined, 'AgentRunner')
 
-    this.running = false;
+    this.running = false
     if (this.tickInterval) {
-      clearInterval(this.tickInterval);
-      this.tickInterval = null;
+      clearInterval(this.tickInterval)
+      this.tickInterval = null
     }
 
     // Clear all runtimes
-    agentRuntimeManager.clearAllRuntimes();
-    this.activeAgents.clear();
+    agentRuntimeManager.clearAllRuntimes()
+    this.activeAgents.clear()
 
     // Deregister node
-    await this.deregisterNode();
+    await this.deregisterNode()
   }
 
   /**
    * Run a single tick cycle for all assigned agents
    */
   private async runTickCycle(): Promise<void> {
-    const cycleStart = Date.now();
-    const executionId = await generateSnowflakeId();
+    const cycleStart = Date.now()
+    const executionId = await generateSnowflakeId()
 
-    logger.debug(
-      `Starting tick cycle ${executionId}`,
-      undefined,
-      'AgentRunner'
-    );
+    logger.debug(`Starting tick cycle ${executionId}`, undefined, 'AgentRunner')
 
     // Fetch agents assigned to this node
-    const agents = await this.fetchAssignedAgents();
+    const agents = await this.fetchAssignedAgents()
 
     if (agents.length === 0) {
-      logger.debug('No agents assigned to this node', undefined, 'AgentRunner');
-      return;
+      logger.debug('No agents assigned to this node', undefined, 'AgentRunner')
+      return
     }
 
-    const executions: AgentExecution[] = [];
+    const executions: AgentExecution[] = []
 
     // Process agents in batches
-    const batchSize = this.config.maxConcurrentAgents;
+    const batchSize = this.config.maxConcurrentAgents
     for (let i = 0; i < agents.length; i += batchSize) {
-      const batch = agents.slice(i, i + batchSize);
+      const batch = agents.slice(i, i + batchSize)
       const batchResults = await Promise.allSettled(
-        batch.map((agentId) => this.executeAgentTick(agentId))
-      );
+        batch.map((agentId) => this.executeAgentTick(agentId)),
+      )
 
       for (let j = 0; j < batchResults.length; j++) {
-        const result = batchResults[j];
-        const agentId = batch[j];
-        if (!agentId || !result) continue;
+        const result = batchResults[j]
+        const agentId = batch[j]
+        if (!agentId || !result) continue
 
         if (result.status === 'fulfilled') {
-          executions.push(result.value);
+          executions.push(result.value)
         } else {
-          const errorReason = result.reason;
+          const errorReason = result.reason
           executions.push({
             agentId,
             nodeAddress: this.config.nodeAddress,
@@ -201,7 +197,7 @@ export class DecentralizedAgentRunner {
               errorReason instanceof Error
                 ? errorReason.message
                 : 'Unknown error',
-          });
+          })
         }
       }
     }
@@ -212,38 +208,38 @@ export class DecentralizedAgentRunner {
       nodeAddress: this.config.nodeAddress,
       agents: executions,
       totalCompute: this.calculateComputeUsage(executions),
-    };
+    }
 
-    await this.reportExecution(report);
+    await this.reportExecution(report)
 
-    const cycleDuration = Date.now() - cycleStart;
-    const successCount = executions.filter((e) => e.success).length;
+    const cycleDuration = Date.now() - cycleStart
+    const successCount = executions.filter((e) => e.success).length
 
     logger.info(
       `Tick cycle completed: ${successCount}/${agents.length} agents, ${cycleDuration}ms`,
       { executionId, successCount, totalAgents: agents.length },
-      'AgentRunner'
-    );
+      'AgentRunner',
+    )
   }
 
   /**
    * Execute autonomous tick for a single agent
    */
   private async executeAgentTick(agentId: string): Promise<AgentExecution> {
-    const startTime = Date.now();
+    const startTime = Date.now()
 
     // Get or create runtime
-    const runtime = await agentRuntimeManager.getRuntime(agentId);
-    this.activeAgents.set(agentId, runtime);
+    const runtime = await agentRuntimeManager.getRuntime(agentId)
+    this.activeAgents.set(agentId, runtime)
 
     // Execute autonomous tick
     const result = await autonomousCoordinator.executeAutonomousTick(
       agentId,
       runtime,
-      this.config.recordTrajectories ?? false
-    );
+      this.config.recordTrajectories ?? false,
+    )
 
-    const endTime = Date.now();
+    const endTime = Date.now()
 
     return {
       agentId,
@@ -253,7 +249,7 @@ export class DecentralizedAgentRunner {
       actionsExecuted: result.actionsExecuted,
       success: result.success,
       trajectoryId: result.trajectoryId,
-    };
+    }
   }
 
   /**
@@ -271,24 +267,21 @@ export class DecentralizedAgentRunner {
       headers: {
         'x-jeju-address': this.config.nodeAddress,
       },
-    }).catch(() => null);
+    }).catch(() => null)
 
     if (!response?.ok) {
       // Fallback to local query if gateway unavailable
-      return this.fetchAgentsFromCQL();
+      return this.fetchAgentsFromCQL()
     }
 
-    const data = (await response.json()) as { agents: string[] };
-    return data.agents;
+    const data = (await response.json()) as { agents: string[] }
+    return data.agents
   }
 
   /**
    * Fetch agents directly from CQL database
    */
   private async fetchAgentsFromCQL(): Promise<string[]> {
-    // Import CQL client dynamically to avoid circular deps
-    const { db } = await import('@babylon/db');
-
     // Query for active autonomous agents using raw SQL
     // Join users with userAgentConfigs to find agents with any autonomous feature enabled
     const results = await db.query<{ id: string }>(
@@ -304,10 +297,10 @@ export class DecentralizedAgentRunner {
            OR uac."autonomousGroupChats" = true
          )
        LIMIT $1`,
-      [this.config.maxConcurrentAgents]
-    );
+      [this.config.maxConcurrentAgents],
+    )
 
-    return results.map((r) => r.id);
+    return results.map((r) => r.id)
   }
 
   /**
@@ -329,16 +322,16 @@ export class DecentralizedAgentRunner {
           'trajectory-recording',
         ],
       }),
-    }).catch(() => null);
+    }).catch(() => null)
 
     if (!response?.ok) {
       logger.warn(
         'Failed to register with Jeju gateway, running in standalone mode',
         undefined,
-        'AgentRunner'
-      );
+        'AgentRunner',
+      )
     } else {
-      logger.info('Registered with Jeju network', undefined, 'AgentRunner');
+      logger.info('Registered with Jeju network', undefined, 'AgentRunner')
     }
   }
 
@@ -351,7 +344,7 @@ export class DecentralizedAgentRunner {
       headers: {
         'x-jeju-address': this.config.nodeAddress,
       },
-    }).catch(() => null);
+    }).catch(() => null)
   }
 
   /**
@@ -365,14 +358,14 @@ export class DecentralizedAgentRunner {
         'x-jeju-address': this.config.nodeAddress,
       },
       body: JSON.stringify(report),
-    }).catch(() => null);
+    }).catch(() => null)
 
     if (!response?.ok) {
       logger.warn(
         'Failed to report execution to gateway',
         { executionId: report.executionId },
-        'AgentRunner'
-      );
+        'AgentRunner',
+      )
     }
   }
 
@@ -384,40 +377,40 @@ export class DecentralizedAgentRunner {
     // 1. Duration
     // 2. Actions executed
     // 3. LLM tokens used
-    let totalUnits = 0n;
+    let totalUnits = 0n
 
     for (const exec of executions) {
-      const duration = BigInt(exec.endTime - exec.startTime);
+      const duration = BigInt(exec.endTime - exec.startTime)
       const actions = Object.values(exec.actionsExecuted).reduce(
         (a, b) => a + b,
-        0
-      );
+        0,
+      )
 
       // Base unit: 1 per second of compute
-      totalUnits += duration / 1000n;
+      totalUnits += duration / 1000n
 
       // Additional units per action
-      totalUnits += BigInt(actions) * 10n;
+      totalUnits += BigInt(actions) * 10n
     }
 
-    return totalUnits;
+    return totalUnits
   }
 
   /**
    * Get runner status
    */
   getStatus(): {
-    running: boolean;
-    activeAgents: number;
-    nodeAddress: Address;
-    network: string;
+    running: boolean
+    activeAgents: number
+    nodeAddress: Address
+    network: string
   } {
     return {
       running: this.running,
       activeAgents: this.activeAgents.size,
       nodeAddress: this.config.nodeAddress,
       network: this.config.network,
-    };
+    }
   }
 }
 
@@ -425,7 +418,7 @@ export class DecentralizedAgentRunner {
  * Create and start a decentralized agent runner
  */
 export function createAgentRunner(
-  config: Partial<AgentRunnerConfig> & { nodeAddress: Address }
+  config: Partial<AgentRunnerConfig> & { nodeAddress: Address },
 ): DecentralizedAgentRunner {
   const fullConfig: AgentRunnerConfig = {
     network:
@@ -435,18 +428,18 @@ export function createAgentRunner(
     tickIntervalMs: 60_000, // 1 minute default
     recordTrajectories: process.env.RECORD_TRAJECTORIES === 'true',
     ...config,
-  };
+  }
 
-  return new DecentralizedAgentRunner(fullConfig);
+  return new DecentralizedAgentRunner(fullConfig)
 }
 
 /**
  * Main entry point for running as a standalone daemon
  */
 export async function runAgentDaemon(): Promise<void> {
-  const nodeAddress = process.env.JEJU_WALLET_ADDRESS as Address;
+  const nodeAddress = process.env.JEJU_WALLET_ADDRESS as Address
   if (!nodeAddress) {
-    throw new Error('JEJU_WALLET_ADDRESS is required to run agent daemon');
+    throw new Error('JEJU_WALLET_ADDRESS is required to run agent daemon')
   }
 
   const runner = createAgentRunner({
@@ -454,23 +447,23 @@ export async function runAgentDaemon(): Promise<void> {
     maxConcurrentAgents: Number(process.env.MAX_CONCURRENT_AGENTS ?? 10),
     tickIntervalMs: Number(process.env.TICK_INTERVAL_MS ?? 60_000),
     recordTrajectories: process.env.RECORD_TRAJECTORIES === 'true',
-  });
+  })
 
   // Handle shutdown gracefully
   const shutdown = async () => {
-    logger.info('Shutting down agent daemon...', undefined, 'AgentRunner');
-    await runner.stop();
-    process.exit(0);
-  };
+    logger.info('Shutting down agent daemon...', undefined, 'AgentRunner')
+    await runner.stop()
+    process.exit(0)
+  }
 
-  process.on('SIGINT', shutdown);
-  process.on('SIGTERM', shutdown);
+  process.on('SIGINT', shutdown)
+  process.on('SIGTERM', shutdown)
 
-  await runner.start();
+  await runner.start()
 
   logger.info(
     'Agent daemon running. Press Ctrl+C to stop.',
     undefined,
-    'AgentRunner'
-  );
+    'AgentRunner',
+  )
 }

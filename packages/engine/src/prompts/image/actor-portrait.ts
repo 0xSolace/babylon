@@ -1,4 +1,4 @@
-import { definePrompt } from '../define-prompt';
+import { definePrompt } from '../define-prompt'
 
 /**
  * Prompt for generating actor profile pictures based on physical description.
@@ -31,7 +31,7 @@ SATIRICAL CONTEXT: {{descriptionParts}}
 
 STYLE: Editorial cartoon meets cyborg portrait. Exaggerated features. Bold, recognizable. Make them a cyborg/AI-augmented version. No text on image.
 `.trim(),
-});
+})
 
 /**
  * Prompt for generating actor profile banners.
@@ -59,4 +59,4 @@ IMPORTANT:
 - No text on the image
 - Focus on visual storytelling and satire
 `.trim(),
-});
+})

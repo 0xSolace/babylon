@@ -6,7 +6,6 @@
  * LLM reasoning - these just execute the decided actions.
  */
 
-import { PerpDbAdapter, PerpMarketService } from '@babylon/core/markets/perps';
 import {
   actorState,
   and,
@@ -23,76 +22,78 @@ import {
   positions,
   posts,
   sql,
-} from '@babylon/db';
+} from '@babylon/db'
 import {
   type GeneratedTag,
   generateTagsFromPost,
+  PerpDbAdapter,
+  PerpMarketService,
   PredictionPricing,
   StaticDataRegistry,
   storeTagsForPost,
   WalletService,
-} from '@babylon/engine';
-import { agentPnLService } from '../services/AgentPnLService';
-import { logger } from '../shared/logger';
-import { generateSnowflakeId } from '../shared/snowflake';
-import { topicDiversityService } from './TopicDiversityService';
+} from '@babylon/engine'
+import { generateSnowflakeId, toNull } from '@babylon/shared'
+import { agentPnLService } from '../services/AgentPnLService'
+import { logger } from '../shared/logger'
+import { topicDiversityService } from './TopicDiversityService'
 
 // =============================================================================
 // Types
 // =============================================================================
 
 export interface DirectTradeParams {
-  agentUserId: string;
-  marketType: 'prediction' | 'perp';
-  marketId: string; // Market ID for prediction, ticker for perp
-  side: 'buy_yes' | 'buy_no' | 'open_long' | 'open_short';
-  amount: number;
-  reasoning?: string;
+  agentUserId: string
+  marketType: 'prediction' | 'perp'
+  marketId: string // Market ID for prediction, ticker for perp
+  side: 'buy_yes' | 'buy_no' | 'open_long' | 'open_short'
+  amount: number
+  reasoning?: string
 }
 
 export interface DirectTradeResult {
-  success: boolean;
-  marketId?: string;
-  ticker?: string;
-  side?: string;
-  shares?: number;
-  error?: string;
+  success: boolean
+  marketId?: string
+  ticker?: string
+  side?: string
+  shares?: number
+  error?: string
 }
 
 export interface DirectPostParams {
-  agentUserId: string;
-  content: string;
+  agentUserId: string
+  content: string
 }
 
 export interface DirectPostResult {
-  success: boolean;
-  postId?: string;
-  error?: string;
+  success: boolean
+  postId?: string
+  error?: string
 }
 
 export interface DirectCommentParams {
-  agentUserId: string;
-  postId: string;
-  content: string;
-  parentCommentId?: string;
+  agentUserId: string
+  postId: string
+  content: string
+  parentCommentId?: string
 }
 
 export interface DirectCommentResult {
-  success: boolean;
-  commentId?: string;
-  error?: string;
+  success: boolean
+  commentId?: string
+  error?: string
 }
 
 export interface DirectMessageParams {
-  agentUserId: string;
-  chatId: string;
-  content: string;
+  agentUserId: string
+  chatId: string
+  content: string
 }
 
 export interface DirectMessageResult {
-  success: boolean;
-  messageId?: string;
-  error?: string;
+  success: boolean
+  messageId?: string
+  error?: string
 }
 
 // =============================================================================
@@ -104,27 +105,27 @@ export interface DirectMessageResult {
  * Validates balance - cannot trade more than you have.
  */
 export async function executeDirectTrade(
-  params: DirectTradeParams
+  params: DirectTradeParams,
 ): Promise<DirectTradeResult> {
-  const { agentUserId, marketType, marketId, side, reasoning } = params;
-  let { amount } = params;
+  const { agentUserId, marketType, marketId, side, reasoning } = params
+  let { amount } = params
 
   // Check if this is an NPC
-  const npcActor = StaticDataRegistry.getActor(agentUserId);
-  const isNpc = !!npcActor;
+  const npcActor = StaticDataRegistry.getActor(agentUserId)
+  const isNpc = !!npcActor
 
   // Get current balance
-  let balance = 0;
+  let balance = 0
   if (isNpc) {
     const [actor] = await db
       .select({ tradingBalance: actorState.tradingBalance })
       .from(actorState)
       .where(eq(actorState.id, agentUserId))
-      .limit(1);
-    balance = Number(actor?.tradingBalance ?? 0);
+      .limit(1)
+    balance = Number(actor?.tradingBalance ?? 0)
   } else {
-    const walletBalance = await WalletService.getBalance(agentUserId);
-    balance = walletBalance.balance;
+    const walletBalance = await WalletService.getBalance(agentUserId)
+    balance = walletBalance.balance
   }
 
   // Cannot trade more than balance
@@ -132,9 +133,9 @@ export async function executeDirectTrade(
     logger.warn(
       `[DirectExecutor] Trade capped to balance: $${amount} -> $${balance}`,
       { agentUserId, isNpc },
-      'DirectExecutors'
-    );
-    amount = balance;
+      'DirectExecutors',
+    )
+    amount = balance
   }
 
   // Reject if insufficient funds
@@ -142,17 +143,17 @@ export async function executeDirectTrade(
     return {
       success: false,
       error: `Insufficient balance: $${balance.toFixed(2)}`,
-    };
+    }
   }
 
   // Get agent's managed by for recording (for USER_CONTROLLED agents)
-  const agentManagedBy = agentUserId;
+  const agentManagedBy = agentUserId
 
   logger.info(
     `[DirectExecutor] Executing ${marketType} trade: ${side} $${amount} on ${marketId}`,
     { agentUserId, isNpc, balance },
-    'DirectExecutors'
-  );
+    'DirectExecutors',
+  )
 
   if (marketType === 'prediction') {
     return executePredictionTrade({
@@ -163,7 +164,7 @@ export async function executeDirectTrade(
       reasoning,
       isNpc,
       agentManagedBy,
-    });
+    })
   }
   return executePerpTrade({
     agentUserId,
@@ -173,17 +174,17 @@ export async function executeDirectTrade(
     reasoning,
     isNpc,
     agentManagedBy,
-  });
+  })
 }
 
 async function executePredictionTrade(params: {
-  agentUserId: string;
-  marketId: string;
-  side: 'buy_yes' | 'buy_no';
-  amount: number;
-  reasoning?: string;
-  isNpc: boolean;
-  agentManagedBy: string;
+  agentUserId: string
+  marketId: string
+  side: 'buy_yes' | 'buy_no'
+  amount: number
+  reasoning?: string
+  isNpc: boolean
+  agentManagedBy: string
 }): Promise<DirectTradeResult> {
   const {
     agentUserId,
@@ -193,33 +194,44 @@ async function executePredictionTrade(params: {
     reasoning,
     isNpc,
     agentManagedBy,
-  } = params;
+  } = params
 
   // Find the market
-  const [market] = await db
+  const marketResult = await db
     .select()
     .from(markets)
     .where(eq(markets.id, marketId))
-    .limit(1);
+    .limit(1)
+
+  const market = marketResult[0] as
+    | {
+        id: string
+        question: string | null
+        title?: string
+        yesShares: string | null
+        noShares: string | null
+      }
+    | undefined
 
   if (!market) {
-    return { success: false, error: `Market not found: ${marketId}` };
+    return { success: false, error: `Market not found: ${marketId}` }
   }
 
-  const isBuyYes = side === 'buy_yes';
+  const marketQuestion = market.question ?? market.title ?? 'Unknown market'
+  const isBuyYes = side === 'buy_yes'
 
   const tradeOperation = async (
-    txDb: Parameters<Parameters<typeof asUser>[1]>[0]
+    txDb: Parameters<Parameters<typeof asUser>[1]>[0],
   ) => {
     // Calculate shares and pricing (0.1% fee rate)
-    const TRADING_FEE_RATE = 0.001;
+    const TRADING_FEE_RATE = 0.001
     const calculation = PredictionPricing.calculateBuyWithFees(
       Number(market.yesShares),
       Number(market.noShares),
       isBuyYes ? 'yes' : 'no',
       amount,
-      TRADING_FEE_RATE
-    );
+      TRADING_FEE_RATE,
+    )
 
     // Debit amount from balance (atomic check to prevent negative balance)
     if (isNpc) {
@@ -232,24 +244,24 @@ async function executePredictionTrade(params: {
         .where(
           and(
             eq(actorState.id, agentUserId),
-            gte(actorState.tradingBalance, String(amount))
-          )
+            gte(actorState.tradingBalance, String(amount)),
+          ),
         )
-        .returning();
+        .returning()
 
       // Check if debit succeeded (empty array means insufficient funds or actor not found)
       if (debitResult.length === 0) {
-        throw new Error(`Insufficient NPC balance for trade: $${amount}`);
+        throw new Error(`Insufficient NPC balance for trade: $${amount}`)
       }
     } else {
-      const sharesRounded = Math.round(calculation.sharesBought * 100) / 100;
+      const sharesRounded = Math.round(calculation.sharesBought * 100) / 100
       await WalletService.debit(
         agentUserId,
         amount,
         'pred_buy',
-        `Bought ${sharesRounded} ${isBuyYes ? 'YES' : 'NO'} shares: ${market.question}`,
-        market.id
-      );
+        `Bought ${sharesRounded} ${isBuyYes ? 'YES' : 'NO'} shares: ${marketQuestion}`,
+        market.id,
+      )
     }
 
     // Update market shares
@@ -263,7 +275,7 @@ async function executePredictionTrade(params: {
           ? String(calculation.newNoShares)
           : sql`${markets.noShares} + ${calculation.sharesBought}`,
       })
-      .where(eq(markets.id, market.id));
+      .where(eq(markets.id, market.id))
 
     // Create or update position
     const existingPositionResult = await txDb
@@ -272,11 +284,13 @@ async function executePredictionTrade(params: {
       .where(
         and(
           eq(positions.userId, agentUserId),
-          eq(positions.marketId, market.id)
-        )
+          eq(positions.marketId, market.id),
+        ),
       )
-      .limit(1);
-    const existingPosition = existingPositionResult[0];
+      .limit(1)
+    const existingPosition = existingPositionResult[0] as
+      | { id: string }
+      | undefined
 
     if (existingPosition) {
       await txDb
@@ -286,7 +300,7 @@ async function executePredictionTrade(params: {
           amount: sql`${positions.amount} + ${amount}`,
           updatedAt: new Date(),
         })
-        .where(eq(positions.id, existingPosition.id));
+        .where(eq(positions.id, existingPosition.id))
     } else {
       await txDb.insert(positions).values({
         id: await generateSnowflakeId(),
@@ -299,16 +313,16 @@ async function executePredictionTrade(params: {
         status: 'active',
         createdAt: new Date(),
         updatedAt: new Date(),
-      });
+      })
     }
 
-    return { calculation };
-  };
+    return { calculation }
+  }
 
   // Execute with appropriate context
   const result = isNpc
     ? await asSystem(tradeOperation, 'npc_prediction_trade')
-    : await asUser({ userId: agentUserId }, tradeOperation);
+    : await asUser({ userId: agentUserId }, tradeOperation)
 
   // Record in AgentTrade
   await agentPnLService.recordTrade({
@@ -321,32 +335,32 @@ async function executePredictionTrade(params: {
     amount,
     price: result.calculation.avgPrice,
     reasoning,
-  });
+  })
 
-  const sharesRounded = Math.round(result.calculation.sharesBought * 100) / 100;
+  const sharesRounded = Math.round(result.calculation.sharesBought * 100) / 100
 
   logger.info(
-    `[DirectExecutor] Prediction trade executed: ${isBuyYes ? 'YES' : 'NO'} on ${market.question.substring(0, 50)}`,
+    `[DirectExecutor] Prediction trade executed: ${isBuyYes ? 'YES' : 'NO'} on ${marketQuestion.substring(0, 50)}`,
     { shares: sharesRounded },
-    'DirectExecutors'
-  );
+    'DirectExecutors',
+  )
 
   return {
     success: true,
     marketId: market.id,
     side: isBuyYes ? 'YES' : 'NO',
     shares: sharesRounded,
-  };
+  }
 }
 
 async function executePerpTrade(params: {
-  agentUserId: string;
-  ticker: string;
-  side: 'open_long' | 'open_short';
-  amount: number;
-  reasoning?: string;
-  isNpc: boolean;
-  agentManagedBy: string;
+  agentUserId: string
+  ticker: string
+  side: 'open_long' | 'open_short'
+  amount: number
+  reasoning?: string
+  isNpc: boolean
+  agentManagedBy: string
 }): Promise<DirectTradeResult> {
   const {
     agentUserId,
@@ -356,14 +370,14 @@ async function executePerpTrade(params: {
     reasoning,
     isNpc,
     agentManagedBy,
-  } = params;
+  } = params
 
-  const perpSide = side === 'open_long' ? 'long' : 'short';
+  const perpSide = side === 'open_long' ? 'long' : 'short'
 
   // Get org for price (search through all orgs by ticker)
-  const allOrgs = StaticDataRegistry.getAllOrganizations();
-  const org = allOrgs.find((o) => o.ticker === ticker);
-  const currentPrice = org?.initialPrice ?? 100;
+  const allOrgs = StaticDataRegistry.getAllOrganizations()
+  const org = allOrgs.find((o) => o.ticker === ticker)
+  const currentPrice = org?.initialPrice ?? 100
 
   const perpTradeOperation = async () => {
     // Create wallet adapter
@@ -373,11 +387,11 @@ async function executePerpTrade(params: {
             userId: uid,
             amount: amt,
           }: {
-            userId: string;
-            amount: number;
-            reason: string;
-            description?: string;
-            relatedId?: string;
+            userId: string
+            amount: number
+            reason: string
+            description?: string
+            relatedId?: string
           }) => {
             // Atomic debit with balance check to prevent negative balance
             const result = await db
@@ -389,26 +403,26 @@ async function executePerpTrade(params: {
               .where(
                 and(
                   eq(actorState.id, uid),
-                  gte(actorState.tradingBalance, String(amt))
-                )
+                  gte(actorState.tradingBalance, String(amt)),
+                ),
               )
-              .returning();
+              .returning()
 
             if (result.length === 0) {
               throw new Error(
-                `Insufficient NPC balance for perp trade: $${amt}`
-              );
+                `Insufficient NPC balance for perp trade: $${amt}`,
+              )
             }
           },
           credit: async ({
             userId: uid,
             amount: amt,
           }: {
-            userId: string;
-            amount: number;
-            reason: string;
-            description?: string;
-            relatedId?: string;
+            userId: string
+            amount: number
+            reason: string
+            description?: string
+            relatedId?: string
           }) => {
             await db
               .update(actorState)
@@ -416,13 +430,13 @@ async function executePerpTrade(params: {
                 tradingBalance: sql`${actorState.tradingBalance} + ${amt}`,
                 updatedAt: new Date(),
               })
-              .where(eq(actorState.id, uid));
+              .where(eq(actorState.id, uid))
           },
           recordPnL: async (_args: {
-            userId: string;
-            pnl: number;
-            reason: string;
-            relatedId?: string;
+            userId: string
+            pnl: number
+            reason: string
+            relatedId?: string
           }) => {
             // NPCs don't track PnL
           },
@@ -431,13 +445,13 @@ async function executePerpTrade(params: {
               .select({ tradingBalance: actorState.tradingBalance })
               .from(actorState)
               .where(eq(actorState.id, uid))
-              .limit(1);
+              .limit(1)
             return {
               balance: Number(actor?.tradingBalance ?? 10000),
               totalDeposited: 0,
               totalWithdrawn: 0,
               lifetimePnL: 0,
-            };
+            }
           },
         }
       : {
@@ -448,11 +462,11 @@ async function executePerpTrade(params: {
             description,
             relatedId,
           }: {
-            userId: string;
-            amount: number;
-            reason: string;
-            description?: string;
-            relatedId?: string;
+            userId: string
+            amount: number
+            reason: string
+            description?: string
+            relatedId?: string
           }) =>
             WalletService.debit(uid, amt, reason, description ?? '', relatedId),
           credit: ({
@@ -462,18 +476,18 @@ async function executePerpTrade(params: {
             description,
             relatedId,
           }: {
-            userId: string;
-            amount: number;
-            reason: string;
-            description?: string;
-            relatedId?: string;
+            userId: string
+            amount: number
+            reason: string
+            description?: string
+            relatedId?: string
           }) =>
             WalletService.credit(
               uid,
               amt,
               reason,
               description ?? '',
-              relatedId
+              relatedId,
             ),
           recordPnL: async ({
             userId: uid,
@@ -481,15 +495,15 @@ async function executePerpTrade(params: {
             reason,
             relatedId,
           }: {
-            userId: string;
-            pnl: number;
-            reason: string;
-            relatedId?: string;
+            userId: string
+            pnl: number
+            reason: string
+            relatedId?: string
           }) => {
-            await WalletService.recordPnL(uid, pnl, reason, relatedId);
+            await WalletService.recordPnL(uid, pnl, reason, relatedId)
           },
           getBalance: (uid: string) => WalletService.getBalance(uid),
-        };
+        }
 
     const service = new PerpMarketService({
       db: new PerpDbAdapter(),
@@ -500,7 +514,7 @@ async function executePerpTrade(params: {
         referrerShare: 0.5,
         minFeeAmount: 0.01,
       },
-    });
+    })
 
     await service.openPosition({
       userId: agentUserId,
@@ -508,14 +522,14 @@ async function executePerpTrade(params: {
       side: perpSide,
       size: amount,
       leverage: 1,
-    });
-  };
+    })
+  }
 
   // Execute with appropriate context
   if (isNpc) {
-    await asSystem(perpTradeOperation, 'npc_perp_trade');
+    await asSystem(perpTradeOperation, 'npc_perp_trade')
   } else {
-    await asUser({ userId: agentUserId }, perpTradeOperation);
+    await asUser({ userId: agentUserId }, perpTradeOperation)
   }
 
   // Record trade
@@ -529,19 +543,19 @@ async function executePerpTrade(params: {
     amount,
     price: currentPrice,
     reasoning,
-  });
+  })
 
   logger.info(
     `[DirectExecutor] Perp trade executed: ${perpSide} $${amount} on ${ticker}`,
     undefined,
-    'DirectExecutors'
-  );
+    'DirectExecutors',
+  )
 
   return {
     success: true,
     ticker,
     side: perpSide,
-  };
+  }
 }
 
 // =============================================================================
@@ -553,21 +567,21 @@ async function executePerpTrade(params: {
  * Validates content for diversity before creating.
  */
 export async function executeDirectPost(
-  params: DirectPostParams
+  params: DirectPostParams,
 ): Promise<DirectPostResult> {
-  const { agentUserId, content } = params;
+  const { agentUserId, content } = params
 
   if (!content || content.trim().length < 5) {
-    return { success: false, error: 'Content too short' };
+    return { success: false, error: 'Content too short' }
   }
 
-  const cleanContent = content.trim();
+  const cleanContent = content.trim()
 
   // DIVERSITY CHECK: Validate content before creating post
   const diversityIssues = topicDiversityService.validateContent(
     agentUserId,
-    cleanContent
-  );
+    cleanContent,
+  )
 
   if (diversityIssues.length > 0) {
     logger.warn(
@@ -577,28 +591,28 @@ export async function executeDirectPost(
         issues: diversityIssues,
         contentPreview: cleanContent.substring(0, 100),
       },
-      'DirectExecutors'
-    );
+      'DirectExecutors',
+    )
 
     return {
       success: false,
       error: `Content rejected: ${diversityIssues[0]}`,
-    };
+    }
   }
 
   // Check if this is an NPC
-  const npcActor = StaticDataRegistry.getActor(agentUserId);
-  const isNpc = !!npcActor;
+  const npcActor = StaticDataRegistry.getActor(agentUserId)
+  const isNpc = !!npcActor
 
   logger.info(
     `[DirectExecutor] Creating post for ${isNpc ? 'NPC' : 'user'} ${agentUserId}`,
     { contentPreview: cleanContent.substring(0, 50) },
-    'DirectExecutors'
-  );
+    'DirectExecutors',
+  )
 
   // Create the post
-  const postId = await generateSnowflakeId();
-  const now = new Date();
+  const postId = await generateSnowflakeId()
+  const now = new Date()
 
   await db.insert(posts).values({
     id: postId,
@@ -606,27 +620,27 @@ export async function executeDirectPost(
     authorId: agentUserId,
     timestamp: now,
     createdAt: now,
-  });
+  })
 
   // Record topic coverage for future diversity checks
-  topicDiversityService.recordTopicCoverage(agentUserId, cleanContent);
+  topicDiversityService.recordTopicCoverage(agentUserId, cleanContent)
 
   // Generate and store tags
-  const tags: GeneratedTag[] = await generateTagsFromPost(cleanContent);
+  const tags: GeneratedTag[] = await generateTagsFromPost(cleanContent)
   if (tags.length > 0) {
-    await storeTagsForPost(postId, tags);
+    await storeTagsForPost(postId, tags)
   }
 
   logger.info(
     `[DirectExecutor] Post created: ${postId}`,
     { tags: tags.length },
-    'DirectExecutors'
-  );
+    'DirectExecutors',
+  )
 
   return {
     success: true,
     postId,
-  };
+  }
 }
 
 // =============================================================================
@@ -640,25 +654,25 @@ export async function executeDirectPost(
  * - Making multiple replies to the same parent comment
  */
 export async function executeDirectComment(
-  params: DirectCommentParams
+  params: DirectCommentParams,
 ): Promise<DirectCommentResult> {
-  const { agentUserId, postId, content, parentCommentId } = params;
+  const { agentUserId, postId, content, parentCommentId } = params
 
   if (!content || content.trim().length < 3) {
-    return { success: false, error: 'Content too short' };
+    return { success: false, error: 'Content too short' }
   }
 
-  const cleanContent = content.trim();
+  const cleanContent = content.trim()
 
   // Verify post exists
   const [post] = await db
     .select({ id: posts.id })
     .from(posts)
     .where(eq(posts.id, postId))
-    .limit(1);
+    .limit(1)
 
   if (!post) {
-    return { success: false, error: `Post not found: ${postId}` };
+    return { success: false, error: `Post not found: ${postId}` }
   }
 
   // DEDUPLICATION CHECK: Prevent duplicate comments
@@ -671,21 +685,21 @@ export async function executeDirectComment(
         and(
           eq(comments.postId, postId),
           eq(comments.authorId, agentUserId),
-          eq(comments.parentCommentId, parentCommentId)
-        )
+          eq(comments.parentCommentId, parentCommentId),
+        ),
       )
-      .limit(1);
+      .limit(1)
 
     if (existingReply) {
       logger.info(
         `[DirectExecutor] Agent already replied to comment ${parentCommentId} - skipping duplicate`,
         { agentUserId, postId, existingReplyId: existingReply.id },
-        'DirectExecutors'
-      );
+        'DirectExecutors',
+      )
       return {
         success: false,
         error: `Already replied to this comment`,
-      };
+      }
     }
 
     // Verify parent comment exists
@@ -693,13 +707,13 @@ export async function executeDirectComment(
       .select({ id: comments.id })
       .from(comments)
       .where(eq(comments.id, parentCommentId))
-      .limit(1);
+      .limit(1)
 
     if (!parentComment) {
       return {
         success: false,
         error: `Parent comment not found: ${parentCommentId}`,
-      };
+      }
     }
   } else {
     // Top-level comment - check if agent already commented on this post
@@ -710,53 +724,53 @@ export async function executeDirectComment(
         and(
           eq(comments.postId, postId),
           eq(comments.authorId, agentUserId),
-          isNull(comments.parentCommentId)
-        )
+          isNull(comments.parentCommentId),
+        ),
       )
-      .limit(1);
+      .limit(1)
 
     if (existingComment) {
       logger.info(
         `[DirectExecutor] Agent already made top-level comment on post ${postId} - skipping duplicate`,
         { agentUserId, existingCommentId: existingComment.id },
-        'DirectExecutors'
-      );
+        'DirectExecutors',
+      )
       return {
         success: false,
         error: `Already commented on this post`,
-      };
+      }
     }
   }
 
   logger.info(
     `[DirectExecutor] Creating comment on post ${postId}`,
     { parentCommentId, contentPreview: cleanContent.substring(0, 50) },
-    'DirectExecutors'
-  );
+    'DirectExecutors',
+  )
 
-  const commentId = await generateSnowflakeId();
-  const now = new Date();
+  const commentId = await generateSnowflakeId()
+  const now = new Date()
 
   await db.insert(comments).values({
     id: commentId,
     content: cleanContent,
     postId,
     authorId: agentUserId,
-    parentCommentId: parentCommentId ?? null,
+    parentCommentId: toNull(parentCommentId),
     createdAt: now,
     updatedAt: now,
-  });
+  })
 
   logger.info(
     `[DirectExecutor] Comment created: ${commentId}`,
     undefined,
-    'DirectExecutors'
-  );
+    'DirectExecutors',
+  )
 
   return {
     success: true,
     commentId,
-  };
+  }
 }
 
 // =============================================================================
@@ -768,35 +782,35 @@ export async function executeDirectComment(
  * Just creates the message with the given content.
  */
 export async function executeDirectMessage(
-  params: DirectMessageParams
+  params: DirectMessageParams,
 ): Promise<DirectMessageResult> {
-  const { agentUserId, chatId, content } = params;
+  const { agentUserId, chatId, content } = params
 
   if (!content || content.trim().length < 3) {
-    return { success: false, error: 'Content too short' };
+    return { success: false, error: 'Content too short' }
   }
 
-  const cleanContent = content.trim();
+  const cleanContent = content.trim()
 
   // Verify chat exists
   const [chat] = await db
     .select({ id: chats.id })
     .from(chats)
     .where(eq(chats.id, chatId))
-    .limit(1);
+    .limit(1)
 
   if (!chat) {
-    return { success: false, error: `Chat not found: ${chatId}` };
+    return { success: false, error: `Chat not found: ${chatId}` }
   }
 
   logger.info(
     `[DirectExecutor] Creating message in chat ${chatId}`,
     { contentPreview: cleanContent.substring(0, 50) },
-    'DirectExecutors'
-  );
+    'DirectExecutors',
+  )
 
-  const messageId = await generateSnowflakeId();
-  const now = new Date();
+  const messageId = await generateSnowflakeId()
+  const now = new Date()
 
   await db.insert(messages).values({
     id: messageId,
@@ -804,16 +818,16 @@ export async function executeDirectMessage(
     senderId: agentUserId,
     content: cleanContent,
     createdAt: now,
-  });
+  })
 
   logger.info(
     `[DirectExecutor] Message created: ${messageId}`,
     undefined,
-    'DirectExecutors'
-  );
+    'DirectExecutors',
+  )
 
   return {
     success: true,
     messageId,
-  };
+  }
 }

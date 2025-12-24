@@ -32,36 +32,39 @@ import {
   expect,
   setDefaultTimeout,
   test,
-} from 'bun:test';
-import { asSystem, db, initializeDB } from '@babylon/db';
-import { generateSnowflakeId } from '@babylon/shared';
-import { existsSync, readFileSync } from 'fs';
+} from 'bun:test'
+import { existsSync, readFileSync } from 'node:fs'
+import { asSystem, db, initializeDB } from '@babylon/db'
+import { generateSnowflakeId } from '@babylon/shared'
+import { InMemoryStateStore } from '../../adapters/InMemoryStateStore'
+import { GameClock } from '../../GameClock'
+import { executeGameTick } from '../../game-tick'
 
 // Set timeout to 10 minutes for real LLM calls
-setDefaultTimeout(600000);
+setDefaultTimeout(600000)
 
 // Load environment variables
 const loadEnvFile = (filePath: string) => {
-  if (!existsSync(filePath)) return;
-  const envContent = readFileSync(filePath, 'utf-8');
+  if (!existsSync(filePath)) return
+  const envContent = readFileSync(filePath, 'utf-8')
   for (const line of envContent.split('\n')) {
-    const trimmed = line.trim();
+    const trimmed = line.trim()
     if (trimmed && !trimmed.startsWith('#')) {
-      const [key, ...valueParts] = trimmed.split('=');
+      const [key, ...valueParts] = trimmed.split('=')
       if (key && valueParts.length > 0) {
-        const value = valueParts.join('=').replace(/^["']|["']$/g, '');
+        const value = valueParts.join('=').replace(/^["']|["']$/g, '')
         if (!process.env[key]) {
-          process.env[key] = value;
+          process.env[key] = value
         }
       }
     }
   }
-};
+}
 
 // Load environment from root .env
-loadEnvFile('.env');
-loadEnvFile('.env.test');
-loadEnvFile('.env.local');
+loadEnvFile('.env')
+loadEnvFile('.env.test')
+loadEnvFile('.env.local')
 
 // Check if Jeju Compute is available for inference AND LLM API keys are configured
 const hasJejuCompute = !!(
@@ -70,50 +73,50 @@ const hasJejuCompute = !!(
   (process.env.OPENAI_API_KEY ||
     process.env.ANTHROPIC_API_KEY ||
     process.env.GROQ_API_KEY)
-);
+)
 
 /**
  * Track all test results for final validation
  */
 interface TestResults {
-  tickExecuted: boolean;
-  articlesGenerated: number;
-  postsGenerated: number;
-  eventsGenerated: number;
-  questionsCreated: number;
-  questionsResolved: number;
-  marketsUpdated: number;
-  npcDecisionsMade: boolean;
-  trendingCalculated: boolean;
+  tickExecuted: boolean
+  articlesGenerated: number
+  postsGenerated: number
+  eventsGenerated: number
+  questionsCreated: number
+  questionsResolved: number
+  marketsUpdated: number
+  npcDecisionsMade: boolean
+  trendingCalculated: boolean
 }
 
 // Skip tests if Jeju compute with API keys is not available
 describe.skipIf(!hasJejuCompute)('Engine Integration Tests (No Mocks)', () => {
-  let results: TestResults;
-  let testStartTime: Date;
-  let initialQuestionCount: number;
-  let initialMarketCount: number;
-  let initialPostCount: number;
-  let initialEventCount: number;
+  let results: TestResults
+  let testStartTime: Date
+  let initialQuestionCount: number
+  let initialMarketCount: number
+  let initialPostCount: number
+  let initialEventCount: number
 
   beforeAll(async () => {
-    console.log('\n🔥 ENGINE INTEGRATION TEST STARTING');
-    console.log('========================================');
-    console.log('This test uses LLM calls - no mocks');
-    console.log('');
+    console.log('\n🔥 ENGINE INTEGRATION TEST STARTING')
+    console.log('========================================')
+    console.log('This test uses LLM calls - no mocks')
+    console.log('')
 
     // Initialize CQL database
-    await initializeDB();
+    await initializeDB()
 
     // Detect which LLM provider is available
     const provider = process.env.GROQ_API_KEY
       ? 'Groq'
       : process.env.ANTHROPIC_API_KEY
         ? 'Anthropic'
-        : 'OpenAI';
-    console.log(`📡 Using LLM Provider: ${provider}`);
+        : 'OpenAI'
+    console.log(`📡 Using LLM Provider: ${provider}`)
 
-    testStartTime = new Date();
+    testStartTime = new Date()
     results = {
       tickExecuted: false,
       articlesGenerated: 0,
@@ -124,52 +127,52 @@ describe.skipIf(!hasJejuCompute)('Engine Integration Tests (No Mocks)', () => {
       marketsUpdated: 0,
       npcDecisionsMade: false,
       trendingCalculated: false,
-    };
+    }
 
     // Verify database tables exist before running tests using CQL
     const tableCheck = await db.query<{ count: number }>(
-      'SELECT COUNT(*) as count FROM questions LIMIT 1'
-    );
+      'SELECT COUNT(*) as count FROM questions LIMIT 1',
+    )
     if (!tableCheck || tableCheck.length === 0) {
       throw new Error(
         `DATABASE NOT READY: The 'questions' table does not exist. ` +
-          `Run 'bun run db:push' or 'bun run db:migrate' to set up the schema before running integration tests.`
-      );
+          `Run 'bun run db:push' or 'bun run db:migrate' to set up the schema before running integration tests.`,
+      )
     }
 
     // Get baseline counts using CQL raw query
     const questionCountResult = await db.query<{ count: number }>(
-      `SELECT COUNT(*) as count FROM questions WHERE status = 'active'`
-    );
-    initialQuestionCount = Number(questionCountResult[0]?.count ?? 0);
+      `SELECT COUNT(*) as count FROM questions WHERE status = 'active'`,
+    )
+    initialQuestionCount = Number(questionCountResult[0]?.count ?? 0)
 
     const marketCountResult = await db.query<{ count: number }>(
-      `SELECT COUNT(*) as count FROM markets WHERE resolved = false`
-    );
-    initialMarketCount = Number(marketCountResult[0]?.count ?? 0);
+      `SELECT COUNT(*) as count FROM markets WHERE resolved = false`,
+    )
+    initialMarketCount = Number(marketCountResult[0]?.count ?? 0)
 
     const postCountResult = await db.query<{ count: number }>(
-      `SELECT COUNT(*) as count FROM posts`
-    );
-    initialPostCount = Number(postCountResult[0]?.count ?? 0);
+      `SELECT COUNT(*) as count FROM posts`,
+    )
+    initialPostCount = Number(postCountResult[0]?.count ?? 0)
 
     const eventCountResult = await db.query<{ count: number }>(
-      `SELECT COUNT(*) as count FROM world_events`
-    );
-    initialEventCount = Number(eventCountResult[0]?.count ?? 0);
+      `SELECT COUNT(*) as count FROM world_events`,
+    )
+    initialEventCount = Number(eventCountResult[0]?.count ?? 0)
 
-    console.log(`📊 Initial State:`);
-    console.log(`   - Active Questions: ${initialQuestionCount}`);
-    console.log(`   - Active Markets: ${initialMarketCount}`);
-    console.log(`   - Total Posts: ${initialPostCount}`);
-    console.log(`   - Total Events: ${initialEventCount}`);
-    console.log('');
+    console.log(`📊 Initial State:`)
+    console.log(`   - Active Questions: ${initialQuestionCount}`)
+    console.log(`   - Active Markets: ${initialMarketCount}`)
+    console.log(`   - Total Posts: ${initialPostCount}`)
+    console.log(`   - Total Events: ${initialEventCount}`)
+    console.log('')
 
     const gameState = await asSystem(async (database) => {
       return await database.game.findFirst({
         where: { isContinuous: true },
-      });
-    }, 'real-engine-test-get-game');
+      })
+    }, 'real-engine-test-get-game')
 
     if (!gameState?.isRunning) {
       await asSystem(async (database) => {
@@ -182,98 +185,93 @@ describe.skipIf(!hasJejuCompute)('Engine Integration Tests (No Mocks)', () => {
               createdAt: new Date(),
               updatedAt: new Date(),
             },
-          });
+          })
         } else {
           await database.game.updateMany({
             where: { isContinuous: true },
             data: { isRunning: true },
-          });
+          })
         }
-      }, 'real-engine-test-ensure-game-running');
+      }, 'real-engine-test-ensure-game-running')
     }
 
-    console.log('✅ Game state verified - running');
-  });
+    console.log('✅ Game state verified - running')
+  })
 
   afterAll(async () => {
     // requireJejuCompute already ran in beforeAll, so we know Jeju is available
-    console.log('\n========================================');
-    console.log('📊 FINAL TEST RESULTS SUMMARY');
-    console.log('========================================');
-    console.log(`Tick Executed: ${results.tickExecuted ? '✅' : '❌'}`);
-    console.log(`Articles Generated: ${results.articlesGenerated}`);
-    console.log(`Posts Generated: ${results.postsGenerated}`);
-    console.log(`Events Generated: ${results.eventsGenerated}`);
-    console.log(`Questions Created: ${results.questionsCreated}`);
-    console.log(`Questions Resolved: ${results.questionsResolved}`);
-    console.log(`Markets Updated: ${results.marketsUpdated}`);
+    console.log('\n========================================')
+    console.log('📊 FINAL TEST RESULTS SUMMARY')
+    console.log('========================================')
+    console.log(`Tick Executed: ${results.tickExecuted ? '✅' : '❌'}`)
+    console.log(`Articles Generated: ${results.articlesGenerated}`)
+    console.log(`Posts Generated: ${results.postsGenerated}`)
+    console.log(`Events Generated: ${results.eventsGenerated}`)
+    console.log(`Questions Created: ${results.questionsCreated}`)
+    console.log(`Questions Resolved: ${results.questionsResolved}`)
+    console.log(`Markets Updated: ${results.marketsUpdated}`)
+    console.log(`NPC Decisions Made: ${results.npcDecisionsMade ? '✅' : '❌'}`)
     console.log(
-      `NPC Decisions Made: ${results.npcDecisionsMade ? '✅' : '❌'}`
-    );
-    console.log(
-      `Trending Calculated: ${results.trendingCalculated ? '✅' : '❌'}`
-    );
-    console.log('========================================\n');
+      `Trending Calculated: ${results.trendingCalculated ? '✅' : '❌'}`,
+    )
+    console.log('========================================\n')
 
     if (results.tickExecuted) {
       const totalGenerated =
         results.articlesGenerated +
         results.postsGenerated +
         results.eventsGenerated +
-        results.questionsCreated;
+        results.questionsCreated
 
       if (totalGenerated === 0 && results.marketsUpdated === 0) {
-        console.warn('⚠️  WARNING: Tick executed but no content was generated!');
+        console.warn('⚠️  WARNING: Tick executed but no content was generated!')
         console.warn(
-          '   This may indicate a problem with the engine generation.'
-        );
+          '   This may indicate a problem with the engine generation.',
+        )
       }
     }
-  });
+  })
 
   test('should execute game tick with LLM calls', async () => {
-    console.log('\n🚀 Executing game tick (with content generation)...');
-    const startTime = Date.now();
-
-    // Import the real executeGameTick - no mocks
-    const { executeGameTick } = await import('../../game-tick');
+    console.log('\n🚀 Executing game tick (with content generation)...')
+    const startTime = Date.now()
 
     // Execute with content generation enabled (false = DO generate content)
-    const result = await executeGameTick(false);
+    const result = await executeGameTick(false)
 
-    const duration = Date.now() - startTime;
-    console.log(`⏱️  Tick completed in ${duration}ms`);
+    const duration = Date.now() - startTime
+    console.log(`⏱️  Tick completed in ${duration}ms`)
 
-    expect(result).toBeDefined();
-    expect(typeof result.postsCreated).toBe('number');
-    expect(typeof result.articlesCreated).toBe('number');
-    expect(typeof result.eventsCreated).toBe('number');
-    expect(typeof result.marketsUpdated).toBe('number');
-    expect(typeof result.questionsResolved).toBe('number');
-    expect(typeof result.questionsCreated).toBe('number');
-    expect(typeof result.trendingCalculated).toBe('boolean');
+    expect(result).toBeDefined()
+    expect(typeof result.postsCreated).toBe('number')
+    expect(typeof result.articlesCreated).toBe('number')
+    expect(typeof result.eventsCreated).toBe('number')
+    expect(typeof result.marketsUpdated).toBe('number')
+    expect(typeof result.questionsResolved).toBe('number')
+    expect(typeof result.questionsCreated).toBe('number')
+    expect(typeof result.trendingCalculated).toBe('boolean')
 
     // Store results
-    results.tickExecuted = true;
-    results.postsGenerated = result.postsCreated;
-    results.articlesGenerated = result.articlesCreated;
-    results.eventsGenerated = result.eventsCreated;
-    results.marketsUpdated = result.marketsUpdated;
-    results.questionsCreated = result.questionsCreated;
-    results.questionsResolved = result.questionsResolved;
-    results.trendingCalculated = result.trendingCalculated;
-    results.npcDecisionsMade = result.marketsUpdated > 0;
+    results.tickExecuted = true
+    results.postsGenerated = result.postsCreated
+    results.articlesGenerated = result.articlesCreated
+    results.eventsGenerated = result.eventsCreated
+    results.marketsUpdated = result.marketsUpdated
+    results.questionsCreated = result.questionsCreated
+    results.questionsResolved = result.questionsResolved
+    results.trendingCalculated = result.trendingCalculated
+    results.npcDecisionsMade = result.marketsUpdated > 0
 
-    console.log(`📝 Posts created: ${result.postsCreated}`);
-    console.log(`📰 Articles created: ${result.articlesCreated}`);
-    console.log(`🎭 Events created: ${result.eventsCreated}`);
-    console.log(`💹 Markets updated: ${result.marketsUpdated}`);
-    console.log(`❓ Questions created: ${result.questionsCreated}`);
-    console.log(`✅ Questions resolved: ${result.questionsResolved}`);
-  }, 600000); // 10 minute timeout for real LLM calls (tick + trade execution takes ~5 mins)
+    console.log(`📝 Posts created: ${result.postsCreated}`)
+    console.log(`📰 Articles created: ${result.articlesCreated}`)
+    console.log(`🎭 Events created: ${result.eventsCreated}`)
+    console.log(`💹 Markets updated: ${result.marketsUpdated}`)
+    console.log(`❓ Questions created: ${result.questionsCreated}`)
+    console.log(`✅ Questions resolved: ${result.questionsResolved}`)
+  }, 600000) // 10 minute timeout for real LLM calls (tick + trade execution takes ~5 mins)
 
   test('should have generated news articles (not mocked)', async () => {
-    expect(results.tickExecuted).toBe(true);
+    expect(results.tickExecuted).toBe(true)
 
     // Get articles created after test start using CQL repository
     const newArticles = await db.post.findMany({
@@ -283,73 +281,73 @@ describe.skipIf(!hasJejuCompute)('Engine Integration Tests (No Mocks)', () => {
       },
       orderBy: { timestamp: 'desc' },
       take: 10,
-    });
+    })
 
-    console.log(`\n📰 Found ${newArticles.length} new articles`);
+    console.log(`\n📰 Found ${newArticles.length} new articles`)
 
     for (const article of newArticles) {
       const isMocked =
         article.content?.includes('Mock') ||
         article.content?.includes('mock') ||
-        article.articleTitle?.includes('Mock');
+        article.articleTitle?.includes('Mock')
 
       if (isMocked) {
         console.warn(
-          `⚠️  WARNING: Article appears to be mocked: ${article.articleTitle}`
-        );
+          `⚠️  WARNING: Article appears to be mocked: ${article.articleTitle}`,
+        )
       }
 
-      expect(article.content?.length || 0).toBeGreaterThan(50);
-      expect(article.articleTitle?.length || 0).toBeGreaterThan(10);
+      expect(article.content?.length || 0).toBeGreaterThan(50)
+      expect(article.articleTitle?.length || 0).toBeGreaterThan(10)
 
       console.log(
-        `   📄 "${article.articleTitle?.substring(0, 60)}..." (${article.content?.length || 0} chars)`
-      );
+        `   📄 "${article.articleTitle?.substring(0, 60)}..." (${article.content?.length || 0} chars)`,
+      )
     }
 
     if (results.articlesGenerated > 0) {
-      expect(newArticles.length).toBeGreaterThan(0);
+      expect(newArticles.length).toBeGreaterThan(0)
     }
-  });
+  })
 
   test('should have executed NPC trading decisions (not mocked)', async () => {
-    expect(results.tickExecuted).toBe(true);
+    expect(results.tickExecuted).toBe(true)
 
     const newPositions = await db.poolPosition.findMany({
       where: {
-        createdAt: { gte: testStartTime },
+        openedAt: { gte: testStartTime },
         closedAt: null, // Open positions
       },
       take: 20,
-    });
+    })
 
-    console.log(`\n💹 Found ${newPositions.length} new NPC positions`);
+    console.log(`\n💹 Found ${newPositions.length} new NPC positions`)
 
     for (const pos of newPositions.slice(0, 5)) {
       console.log(
-        `   📈 Pool ${pos.poolId}: ${pos.side} ${pos.size} @ ${pos.entryPrice}`
-      );
+        `   📈 Pool ${pos.poolId}: ${pos.side} ${pos.size} @ ${pos.entryPrice}`,
+      )
     }
 
     const recentPriceUpdates = await db.predictionPriceHistory.findMany({
       where: {
-        timestamp: { gte: testStartTime },
+        createdAt: { gte: testStartTime },
       },
       take: 10,
-    });
+    })
 
-    console.log(`   📊 ${recentPriceUpdates.length} price updates recorded`);
+    console.log(`   📊 ${recentPriceUpdates.length} price updates recorded`)
 
     if (results.marketsUpdated > 0) {
       // Positions or price updates should exist
       const hasEvidence =
-        newPositions.length > 0 || recentPriceUpdates.length > 0;
-      expect(hasEvidence).toBe(true);
+        newPositions.length > 0 || recentPriceUpdates.length > 0
+      expect(hasEvidence).toBe(true)
     }
-  });
+  })
 
   test('should have created prediction market questions (not mocked)', async () => {
-    expect(results.tickExecuted).toBe(true);
+    expect(results.tickExecuted).toBe(true)
 
     // Get questions created after test start using CQL repository
     const newQuestions = await db.question.findMany({
@@ -359,48 +357,48 @@ describe.skipIf(!hasJejuCompute)('Engine Integration Tests (No Mocks)', () => {
       },
       orderBy: { createdAt: 'desc' },
       take: 10,
-    });
+    })
 
-    console.log(`\n❓ Found ${newQuestions.length} new questions`);
+    console.log(`\n❓ Found ${newQuestions.length} new questions`)
 
     for (const question of newQuestions) {
       const isMocked =
         question.text?.includes('Mock') ||
         question.text?.includes('mock') ||
-        question.text?.includes('test');
+        question.text?.includes('test')
 
       if (isMocked) {
         console.warn(
-          `⚠️  WARNING: Question appears to be mocked: ${question.text}`
-        );
+          `⚠️  WARNING: Question appears to be mocked: ${question.text}`,
+        )
       }
 
-      expect(question.text?.length || 0).toBeGreaterThan(20);
+      expect(question.text?.length || 0).toBeGreaterThan(20)
 
       console.log(
-        `   📋 Q${question.questionNumber}: "${question.text?.substring(0, 60)}..."`
-      );
+        `   📋 Q${question.questionNumber}: "${question.text?.substring(0, 60)}..."`,
+      )
 
       const market = await db.market.findUnique({
         where: { id: question.id },
-      });
+      })
 
       if (!market) {
         console.warn(
-          `⚠️  WARNING: Question ${question.id} has no associated market!`
-        );
+          `⚠️  WARNING: Question ${question.id} has no associated market!`,
+        )
       } else {
-        expect(market.resolved).toBe(false);
+        expect(market.resolved).toBe(false)
       }
     }
 
     if (results.questionsCreated > 0) {
-      expect(newQuestions.length).toBeGreaterThan(0);
+      expect(newQuestions.length).toBeGreaterThan(0)
     }
-  });
+  })
 
   test('should have generated world events (not mocked)', async () => {
-    expect(results.tickExecuted).toBe(true);
+    expect(results.tickExecuted).toBe(true)
 
     // Get events created after test start using CQL repository
     const newEvents = await db.worldEvent.findMany({
@@ -409,35 +407,35 @@ describe.skipIf(!hasJejuCompute)('Engine Integration Tests (No Mocks)', () => {
       },
       orderBy: { timestamp: 'desc' },
       take: 10,
-    });
+    })
 
-    console.log(`\n🎭 Found ${newEvents.length} new world events`);
+    console.log(`\n🎭 Found ${newEvents.length} new world events`)
 
     for (const event of newEvents) {
       const isMocked =
         event.description?.includes('Mock') ||
-        event.description?.includes('mock');
+        event.description?.includes('mock')
 
       if (isMocked) {
         console.warn(
-          `⚠️  WARNING: Event appears to be mocked: ${event.description?.substring(0, 50)}`
-        );
+          `⚠️  WARNING: Event appears to be mocked: ${event.description?.substring(0, 50)}`,
+        )
       }
 
-      expect(event.description?.length || 0).toBeGreaterThan(20);
+      expect(event.description?.length || 0).toBeGreaterThan(20)
 
       console.log(
-        `   🎬 [${event.eventType}] "${event.description?.substring(0, 60)}..."`
-      );
+        `   🎬 [${event.eventType}] "${event.description?.substring(0, 60)}..."`,
+      )
     }
 
     if (results.eventsGenerated > 0) {
-      expect(newEvents.length).toBeGreaterThan(0);
+      expect(newEvents.length).toBeGreaterThan(0)
     }
-  });
+  })
 
   test('market prices should be reasonable (0-100% for predictions)', async () => {
-    expect(results.tickExecuted).toBe(true);
+    expect(results.tickExecuted).toBe(true)
 
     const activeMarkets = await db.market.findMany({
       where: {
@@ -445,107 +443,101 @@ describe.skipIf(!hasJejuCompute)('Engine Integration Tests (No Mocks)', () => {
         endDate: { gte: new Date() },
       },
       take: 20,
-    });
+    })
 
-    console.log(`\n💹 Validating ${activeMarkets.length} active markets`);
+    console.log(`\n💹 Validating ${activeMarkets.length} active markets`)
 
-    let validMarkets = 0;
-    let invalidMarkets = 0;
+    let validMarkets = 0
+    let invalidMarkets = 0
 
     for (const market of activeMarkets) {
-      const yesShares = Number(market.yesShares);
-      const noShares = Number(market.noShares);
-      const totalShares = yesShares + noShares;
+      const yesShares = Number(market.yesShares)
+      const noShares = Number(market.noShares)
+      const totalShares = yesShares + noShares
 
       if (totalShares > 0) {
-        const yesOdds = (yesShares / totalShares) * 100;
-        const noOdds = (noShares / totalShares) * 100;
+        const yesOdds = (yesShares / totalShares) * 100
+        const noOdds = (noShares / totalShares) * 100
 
         const isValid =
           yesOdds >= 0 &&
           yesOdds <= 100 &&
           noOdds >= 0 &&
           noOdds <= 100 &&
-          Math.abs(yesOdds + noOdds - 100) < 0.1;
+          Math.abs(yesOdds + noOdds - 100) < 0.1
 
         if (isValid) {
-          validMarkets++;
+          validMarkets++
         } else {
-          invalidMarkets++;
+          invalidMarkets++
           console.warn(
-            `⚠️  Invalid market ${market.id}: YES=${yesOdds.toFixed(2)}%, NO=${noOdds.toFixed(2)}%`
-          );
+            `⚠️  Invalid market ${market.id}: YES=${yesOdds.toFixed(2)}%, NO=${noOdds.toFixed(2)}%`,
+          )
         }
       }
     }
 
-    console.log(`   ✅ Valid markets: ${validMarkets}`);
-    console.log(`   ❌ Invalid markets: ${invalidMarkets}`);
+    console.log(`   ✅ Valid markets: ${validMarkets}`)
+    console.log(`   ❌ Invalid markets: ${invalidMarkets}`)
 
     // All markets should have valid odds
-    expect(invalidMarkets).toBe(0);
-  });
+    expect(invalidMarkets).toBe(0)
+  })
 
   test('should validate GameClock works in all modes', async () => {
-    const { GameClock } = await import('../../GameClock');
-
-    console.log('\n⏰ Testing GameClock modes...');
+    console.log('\n⏰ Testing GameClock modes...')
 
     // Test realtime mode
-    const realtimeClock = GameClock.realtime();
-    const realtimeNow = realtimeClock.now();
-    expect(realtimeNow.tick).toBe(0);
-    expect(realtimeNow.day).toBeGreaterThan(0);
-    expect(realtimeNow.hour).toBeGreaterThanOrEqual(0);
-    expect(realtimeNow.hour).toBeLessThan(24);
+    const realtimeClock = GameClock.realtime()
+    const realtimeNow = realtimeClock.now()
+    expect(realtimeNow.tick).toBe(0)
+    expect(realtimeNow.day).toBeGreaterThan(0)
+    expect(realtimeNow.hour).toBeGreaterThanOrEqual(0)
+    expect(realtimeNow.hour).toBeLessThan(24)
     console.log(
-      `   ✅ Realtime mode: Day ${realtimeNow.day}, Hour ${realtimeNow.hour}`
-    );
+      `   ✅ Realtime mode: Day ${realtimeNow.day}, Hour ${realtimeNow.hour}`,
+    )
 
     // Test simulated mode
-    const startTime = new Date('2025-01-01T00:00:00Z');
-    const simulatedClock = GameClock.simulated(startTime, startTime);
-    const simulatedNow = simulatedClock.now();
-    expect(simulatedNow.tick).toBe(0);
-    expect(simulatedNow.day).toBe(1);
-    expect(simulatedNow.hour).toBe(0);
+    const startTime = new Date('2025-01-01T00:00:00Z')
+    const simulatedClock = GameClock.simulated(startTime, startTime)
+    const simulatedNow = simulatedClock.now()
+    expect(simulatedNow.tick).toBe(0)
+    expect(simulatedNow.day).toBe(1)
+    expect(simulatedNow.hour).toBe(0)
     console.log(
-      `   ✅ Simulated mode: Day ${simulatedNow.day}, Hour ${simulatedNow.hour}`
-    );
+      `   ✅ Simulated mode: Day ${simulatedNow.day}, Hour ${simulatedNow.hour}`,
+    )
 
     // Test tick advancement
-    const afterTick = simulatedClock.tick();
-    expect(afterTick.tick).toBe(1);
-    expect(afterTick.hour).toBe(1); // 1 hour per tick
+    const afterTick = simulatedClock.tick()
+    expect(afterTick.tick).toBe(1)
+    expect(afterTick.hour).toBe(1) // 1 hour per tick
     console.log(
-      `   ✅ After tick: Day ${afterTick.day}, Hour ${afterTick.hour}, Tick ${afterTick.tick}`
-    );
+      `   ✅ After tick: Day ${afterTick.day}, Hour ${afterTick.hour}, Tick ${afterTick.tick}`,
+    )
 
     // Test fast-forward
-    const after24Hours = simulatedClock.advanceHours(23);
-    expect(after24Hours.day).toBe(2);
-    expect(after24Hours.hour).toBe(0);
-    expect(after24Hours.tick).toBe(24);
+    const after24Hours = simulatedClock.advanceHours(23)
+    expect(after24Hours.day).toBe(2)
+    expect(after24Hours.hour).toBe(0)
+    expect(after24Hours.tick).toBe(24)
     console.log(
-      `   ✅ After 24 hours: Day ${after24Hours.day}, Hour ${after24Hours.hour}, Tick ${after24Hours.tick}`
-    );
+      `   ✅ After 24 hours: Day ${after24Hours.day}, Hour ${after24Hours.hour}, Tick ${after24Hours.tick}`,
+    )
 
     // Test fed-in time (setting specific time)
-    simulatedClock.setTime(new Date('2025-01-15T12:00:00Z'));
-    const fedInTime = simulatedClock.now();
-    expect(fedInTime.day).toBe(15);
-    expect(fedInTime.hour).toBe(12);
+    simulatedClock.setTime(new Date('2025-01-15T12:00:00Z'))
+    const fedInTime = simulatedClock.now()
+    expect(fedInTime.day).toBe(15)
+    expect(fedInTime.hour).toBe(12)
     console.log(
-      `   ✅ Fed-in time: Day ${fedInTime.day}, Hour ${fedInTime.hour}`
-    );
-  });
+      `   ✅ Fed-in time: Day ${fedInTime.day}, Hour ${fedInTime.hour}`,
+    )
+  })
 
   test('should validate InMemoryStateStore for offline simulation', async () => {
-    const { InMemoryStateStore } = await import(
-      '../../adapters/InMemoryStateStore'
-    );
-
-    console.log('\n🧠 Testing InMemoryStateStore for offline mode...');
+    console.log('\n🧠 Testing InMemoryStateStore for offline mode...')
 
     const store = new InMemoryStateStore({
       numPredictionMarkets: 5,
@@ -553,107 +545,107 @@ describe.skipIf(!hasJejuCompute)('Engine Integration Tests (No Mocks)', () => {
       numAgents: 10,
       durationDays: 30,
       seed: 12345, // Deterministic for testing
-    });
+    })
 
     // Get initial state
-    const state = store.getState();
-    expect(state.predictionMarkets.length).toBe(5);
-    expect(state.perpMarkets.length).toBe(3);
-    expect(state.agents.length).toBe(10);
+    const state = store.getState()
+    expect(state.predictionMarkets.length).toBe(5)
+    expect(state.perpMarkets.length).toBe(3)
+    expect(state.agents.length).toBe(10)
     console.log(
-      `   ✅ Initialized: ${state.predictionMarkets.length} prediction markets`
-    );
-    console.log(`   ✅ Initialized: ${state.perpMarkets.length} perp markets`);
-    console.log(`   ✅ Initialized: ${state.agents.length} agents`);
+      `   ✅ Initialized: ${state.predictionMarkets.length} prediction markets`,
+    )
+    console.log(`   ✅ Initialized: ${state.perpMarkets.length} perp markets`)
+    console.log(`   ✅ Initialized: ${state.agents.length} agents`)
 
     // Test trading
-    const agent = state.agents[0];
+    const agent = state.agents[0]
     if (agent) {
-      const market = state.predictionMarkets[0];
+      const market = state.predictionMarkets[0]
       if (market) {
         const tradeResult = store.buyPredictionShares(
           agent.id,
           market.id,
           'YES',
-          100
-        );
-        expect(tradeResult.success).toBe(true);
-        expect(tradeResult.shares).toBeGreaterThan(0);
+          100,
+        )
+        expect(tradeResult.success).toBe(true)
+        expect(tradeResult.shares).toBeGreaterThan(0)
         console.log(
-          `   ✅ Trade executed: ${tradeResult.shares?.toFixed(2)} shares`
-        );
+          `   ✅ Trade executed: ${tradeResult.shares?.toFixed(2)} shares`,
+        )
       }
     }
 
     // Test tick advancement
-    store.advanceTick();
-    const progress = store.getProgress();
-    expect(progress.tick).toBe(1);
-    console.log(`   ✅ Tick advanced: ${progress.tick}`);
+    store.advanceTick()
+    const progress = store.getProgress()
+    expect(progress.tick).toBe(1)
+    console.log(`   ✅ Tick advanced: ${progress.tick}`)
 
     // Test completion detection
-    expect(store.isComplete()).toBe(false);
-    console.log(`   ✅ Simulation not complete (day ${progress.day} of 30)`);
-  });
+    expect(store.isComplete()).toBe(false)
+    console.log(`   ✅ Simulation not complete (day ${progress.day} of 30)`)
+  })
 
   test('should verify engine produces valid outputs for training', async () => {
-    expect(results.tickExecuted).toBe(true);
+    expect(results.tickExecuted).toBe(true)
 
-    console.log('\n🎓 Validating outputs for training readiness...');
+    console.log('\n🎓 Validating outputs for training readiness...')
 
     // Use CQL raw query for groupBy aggregation
     const postsByType = await db.query<{ type: string; count: number }>(
       `SELECT type, COUNT(*) as count FROM posts WHERE timestamp >= $1 GROUP BY type`,
-      [testStartTime.toISOString()]
-    );
+      [testStartTime.toISOString()],
+    )
 
-    console.log('   Content types generated:');
+    console.log('   Content types generated:')
     for (const group of postsByType) {
-      console.log(`   - ${group.type}: ${group.count}`);
+      console.log(`   - ${group.type}: ${group.count}`)
     }
 
     // Use raw CQL for complex queries
     const eventsWithActorsResult = await db.query<{ count: number }>(
       `SELECT COUNT(*) as count FROM world_events WHERE timestamp >= $1 AND actors IS NOT NULL`,
-      [testStartTime.toISOString()]
-    );
-    const eventsWithActors = Number(eventsWithActorsResult[0]?.count ?? 0);
+      [testStartTime.toISOString()],
+    )
+    const eventsWithActors = Number(eventsWithActorsResult[0]?.count ?? 0)
 
     const totalEventsResult = await db.query<{ count: number }>(
       `SELECT COUNT(*) as count FROM world_events WHERE timestamp >= $1`,
-      [testStartTime.toISOString()]
-    );
-    const totalEvents = Number(totalEventsResult[0]?.count ?? 0);
+      [testStartTime.toISOString()],
+    )
+    const totalEvents = Number(totalEventsResult[0]?.count ?? 0)
 
-    console.log(`   Events with actors: ${eventsWithActors}/${totalEvents}`);
+    console.log(`   Events with actors: ${eventsWithActors}/${totalEvents}`)
 
     const questionsWithDatesResult = await db.query<{ count: number }>(
       `SELECT COUNT(*) as count FROM questions WHERE created_at >= $1 AND resolution_date IS NOT NULL`,
-      [testStartTime.toISOString()]
-    );
-    const questionsWithDates = Number(questionsWithDatesResult[0]?.count ?? 0);
+      [testStartTime.toISOString()],
+    )
+    const questionsWithDates = Number(questionsWithDatesResult[0]?.count ?? 0)
 
     const totalQuestionsResult = await db.query<{ count: number }>(
       `SELECT COUNT(*) as count FROM questions WHERE created_at >= $1`,
-      [testStartTime.toISOString()]
-    );
-    const totalQuestions = Number(totalQuestionsResult[0]?.count ?? 0);
+      [testStartTime.toISOString()],
+    )
+    const totalQuestions = Number(totalQuestionsResult[0]?.count ?? 0)
 
     console.log(
-      `   Questions with resolution dates: ${questionsWithDates}/${totalQuestions}`
-    );
+      `   Questions with resolution dates: ${questionsWithDates}/${totalQuestions}`,
+    )
 
     // Validation: if we generated content, it should be properly structured
     if (totalEvents > 0) {
-      const actorPercentage = (eventsWithActors / totalEvents) * 100;
-      expect(actorPercentage).toBeGreaterThan(50); // Most events should have actors
+      const actorPercentage = (eventsWithActors / totalEvents) * 100
+      expect(actorPercentage).toBeGreaterThan(50) // Most events should have actors
     }
 
     if (totalQuestions > 0) {
-      const datesPercentage = (questionsWithDates / totalQuestions) * 100;
-      expect(datesPercentage).toBe(100); // All questions must have resolution dates
+      const datesPercentage = (questionsWithDates / totalQuestions) * 100
+      expect(datesPercentage).toBe(100) // All questions must have resolution dates
     }
 
-    console.log('   ✅ Outputs validated for training readiness');
-  });
-});
+    console.log('   ✅ Outputs validated for training readiness')
+  })
+})

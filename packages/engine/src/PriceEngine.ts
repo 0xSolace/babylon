@@ -33,48 +33,49 @@ import type {
   PriceUpdate,
   StockPrice,
   WorldEvent,
-} from './types/shared';
+} from './types/shared'
 
 /**
  * Seeded PRNG using Mulberry32 algorithm
  * Provides deterministic random numbers for price generation
  */
 class SeededRandom {
-  private state: number;
+  private state: number
 
   constructor(seed: number) {
-    this.state = seed;
+    this.state = seed
   }
 
   /**
    * Generate next random number between 0 and 1
    */
   next(): number {
-    let t = (this.state += 0x6d2b79f5);
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    this.state += 0x6d2b79f5
+    let t = this.state
+    t = Math.imul(t ^ (t >>> 15), t | 1)
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61)
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
   }
 
   /**
    * Generate random number in range [min, max)
    */
   range(min: number, max: number): number {
-    return min + this.next() * (max - min);
+    return min + this.next() * (max - min)
   }
 
   /**
    * Generate random integer in range [min, max]
    */
   int(min: number, max: number): number {
-    return Math.floor(this.range(min, max + 1));
+    return Math.floor(this.range(min, max + 1))
   }
 
   /**
    * Generate random boolean with given probability
    */
   boolean(probability = 0.5): boolean {
-    return this.next() < probability;
+    return this.next() < probability
   }
 }
 
@@ -82,12 +83,12 @@ class SeededRandom {
  * Price Engine - Manages stock prices for all companies
  */
 export class PriceEngine {
-  private rng: SeededRandom;
-  private companies: Map<string, Organization> = new Map();
-  private markovStates: Map<string, MarkovChainState> = new Map();
+  private rng: SeededRandom
+  private companies: Map<string, Organization> = new Map()
+  private markovStates: Map<string, MarkovChainState> = new Map()
 
   constructor(seed: number = Date.now()) {
-    this.rng = new SeededRandom(seed);
+    this.rng = new SeededRandom(seed)
   }
 
   /**
@@ -101,9 +102,9 @@ export class PriceEngine {
           currentPrice: org.initialPrice,
           priceHistory: [],
           markovState: this.initializeMarkovState(),
-        });
+        })
 
-        this.markovStates.set(org.id, this.initializeMarkovState());
+        this.markovStates.set(org.id, this.initializeMarkovState())
       }
     }
   }
@@ -116,12 +117,13 @@ export class PriceEngine {
       'bullish',
       'bearish',
       'neutral',
-    ];
+    ]
+    const trendIndex = this.rng.int(0, 2)
     return {
-      trend: trends[this.rng.int(0, 2)]!,
+      trend: trends[trendIndex] ?? 'neutral',
       volatility: this.rng.range(0.1, 0.4), // 10-40% volatility
       momentum: this.rng.range(-0.5, 0.5), // -50% to +50% momentum
-    };
+    }
   }
 
   /**
@@ -133,40 +135,37 @@ export class PriceEngine {
       bullish: { bullish: 0.7, neutral: 0.2, bearish: 0.1 },
       bearish: { bullish: 0.1, neutral: 0.2, bearish: 0.7 },
       neutral: { bullish: 0.3, neutral: 0.4, bearish: 0.3 },
-    };
+    }
 
-    const probs = transitionProbs[state.trend];
-    const rand = this.rng.next();
+    const probs = transitionProbs[state.trend]
+    const rand = this.rng.next()
 
-    let newTrend: 'bullish' | 'bearish' | 'neutral';
+    let newTrend: 'bullish' | 'bearish' | 'neutral'
     if (rand < probs.bullish) {
-      newTrend = 'bullish';
+      newTrend = 'bullish'
     } else if (rand < probs.bullish + probs.neutral) {
-      newTrend = 'neutral';
+      newTrend = 'neutral'
     } else {
-      newTrend = 'bearish';
+      newTrend = 'bearish'
     }
 
     // Volatility mean-reverts slowly
-    const volatilityDelta = this.rng.range(-0.05, 0.05);
+    const volatilityDelta = this.rng.range(-0.05, 0.05)
     const newVolatility = Math.max(
       0.05,
-      Math.min(0.5, state.volatility + volatilityDelta)
-    );
+      Math.min(0.5, state.volatility + volatilityDelta),
+    )
 
     // Momentum decays and gets random shocks
-    const momentumDecay = state.momentum * 0.9;
-    const momentumShock = this.rng.range(-0.2, 0.2);
-    const newMomentum = Math.max(
-      -1,
-      Math.min(1, momentumDecay + momentumShock)
-    );
+    const momentumDecay = state.momentum * 0.9
+    const momentumShock = this.rng.range(-0.2, 0.2)
+    const newMomentum = Math.max(-1, Math.min(1, momentumDecay + momentumShock))
 
     return {
       trend: newTrend,
       volatility: newVolatility,
       momentum: newMomentum,
-    };
+    }
   }
 
   /**
@@ -176,23 +175,23 @@ export class PriceEngine {
   generateMinutePrices(
     organizationId: string,
     startTime: Date,
-    endTime: Date
+    endTime: Date,
   ): StockPrice[] {
-    const company = this.companies.get(organizationId);
+    const company = this.companies.get(organizationId)
     if (!company || !company.currentPrice) {
-      return [];
+      return []
     }
 
-    const prices: StockPrice[] = [];
+    const prices: StockPrice[] = []
     const state =
-      this.markovStates.get(organizationId) || this.initializeMarkovState();
-    let currentPrice = company.currentPrice;
-    let previousPrice = currentPrice;
+      this.markovStates.get(organizationId) || this.initializeMarkovState()
+    let currentPrice = company.currentPrice
+    let previousPrice = currentPrice
 
     // Generate a price for each minute
-    const startMinute = startTime.getTime();
-    const endMinute = endTime.getTime();
-    const minuteMs = 60 * 1000;
+    const startMinute = startTime.getTime()
+    const endMinute = endTime.getTime()
+    const minuteMs = 60 * 1000
 
     for (let time = startMinute; time <= endMinute; time += minuteMs) {
       // Apply Markov state to generate price movement
@@ -201,42 +200,42 @@ export class PriceEngine {
           ? 1.0002
           : state.trend === 'bearish'
             ? 0.9998
-            : 1;
-      const momentumEffect = state.momentum * 0.0001;
+            : 1
+      const momentumEffect = state.momentum * 0.0001
       const volatilityEffect =
-        this.rng.range(-state.volatility, state.volatility) * 0.001;
+        this.rng.range(-state.volatility, state.volatility) * 0.001
 
       const priceChange =
-        trendMultiplier * (1 + momentumEffect + volatilityEffect);
-      currentPrice = currentPrice * priceChange;
+        trendMultiplier * (1 + momentumEffect + volatilityEffect)
+      currentPrice = currentPrice * priceChange
 
-      const change = currentPrice - previousPrice;
-      const changePercent = (change / previousPrice) * 100;
+      const change = currentPrice - previousPrice
+      const changePercent = (change / previousPrice) * 100
 
       prices.push({
         price: Number(currentPrice.toFixed(2)),
         timestamp: new Date(time).toISOString(),
         change: Number(change.toFixed(2)),
         changePercent: Number(changePercent.toFixed(2)),
-      });
+      })
 
-      previousPrice = currentPrice;
+      previousPrice = currentPrice
 
       // Update Markov state occasionally (every ~30 minutes)
       if (this.rng.boolean(0.03)) {
-        const newState = this.updateMarkovState(state);
-        this.markovStates.set(organizationId, newState);
-        state.trend = newState.trend;
-        state.volatility = newState.volatility;
-        state.momentum = newState.momentum;
+        const newState = this.updateMarkovState(state)
+        this.markovStates.set(organizationId, newState)
+        state.trend = newState.trend
+        state.volatility = newState.volatility
+        state.momentum = newState.momentum
       }
     }
 
     // Update company's current price
-    company.currentPrice = currentPrice;
-    this.companies.set(organizationId, company);
+    company.currentPrice = currentPrice
+    this.companies.set(organizationId, company)
 
-    return prices;
+    return prices
   }
 
   /**
@@ -247,50 +246,50 @@ export class PriceEngine {
     organizationId: string,
     event: WorldEvent,
     direction: 'positive' | 'negative' | 'neutral',
-    magnitude: 'major' | 'moderate' | 'minor'
+    magnitude: 'major' | 'moderate' | 'minor',
   ): PriceUpdate | null {
-    const company = this.companies.get(organizationId);
+    const company = this.companies.get(organizationId)
     if (!company || !company.currentPrice) {
-      return null;
+      return null
     }
 
     // Calculate impact multiplier based on direction and magnitude
     const directionMultiplier =
-      direction === 'positive' ? 1 : direction === 'negative' ? -1 : 0;
+      direction === 'positive' ? 1 : direction === 'negative' ? -1 : 0
     const magnitudeAmount =
-      magnitude === 'major' ? 0.05 : magnitude === 'moderate' ? 0.02 : 0.005;
+      magnitude === 'major' ? 0.05 : magnitude === 'moderate' ? 0.02 : 0.005
 
     // Add some randomness
-    const randomFactor = this.rng.range(0.8, 1.2);
-    const impactPercent = directionMultiplier * magnitudeAmount * randomFactor;
+    const randomFactor = this.rng.range(0.8, 1.2)
+    const impactPercent = directionMultiplier * magnitudeAmount * randomFactor
 
-    const oldPrice = company.currentPrice;
-    const newPrice = oldPrice * (1 + impactPercent);
-    const change = newPrice - oldPrice;
-    const changePercent = (change / oldPrice) * 100;
+    const oldPrice = company.currentPrice
+    const newPrice = oldPrice * (1 + impactPercent)
+    const change = newPrice - oldPrice
+    const changePercent = (change / oldPrice) * 100
 
     // Update company price
-    company.currentPrice = newPrice;
-    this.companies.set(organizationId, company);
+    company.currentPrice = newPrice
+    this.companies.set(organizationId, company)
 
     // Update Markov state based on event
-    const state = this.markovStates.get(organizationId);
+    const state = this.markovStates.get(organizationId)
     if (state) {
       // Events can change trend
       if (direction === 'positive' && magnitude === 'major') {
-        state.trend = 'bullish';
-        state.momentum = Math.min(1, state.momentum + 0.3);
+        state.trend = 'bullish'
+        state.momentum = Math.min(1, state.momentum + 0.3)
       } else if (direction === 'negative' && magnitude === 'major') {
-        state.trend = 'bearish';
-        state.momentum = Math.max(-1, state.momentum - 0.3);
+        state.trend = 'bearish'
+        state.momentum = Math.max(-1, state.momentum - 0.3)
       }
 
       // Events can increase volatility
       if (magnitude === 'major') {
-        state.volatility = Math.min(0.5, state.volatility * 1.5);
+        state.volatility = Math.min(0.5, state.volatility * 1.5)
       }
 
-      this.markovStates.set(organizationId, state);
+      this.markovStates.set(organizationId, state)
     }
 
     return {
@@ -302,28 +301,28 @@ export class PriceEngine {
       changePercent: Number(changePercent.toFixed(2)),
       reason: event.description,
       impact: magnitude,
-    };
+    }
   }
 
   /**
    * Get current price for a company
    */
   getCurrentPrice(organizationId: string): number | null {
-    const company = this.companies.get(organizationId);
-    return company?.currentPrice || null;
+    const company = this.companies.get(organizationId)
+    return company?.currentPrice || null
   }
 
   /**
    * Get all companies with their current prices
    */
   getAllCompanies(): Organization[] {
-    return Array.from(this.companies.values());
+    return Array.from(this.companies.values())
   }
 
   /**
    * Get Markov state for a company (for debugging/visualization)
    */
   getMarkovState(organizationId: string): MarkovChainState | null {
-    return this.markovStates.get(organizationId) || null;
+    return this.markovStates.get(organizationId) || null
   }
 }

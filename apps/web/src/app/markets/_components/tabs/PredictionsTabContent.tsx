@@ -1,46 +1,44 @@
-'use client';
-
-import type { UserPredictionPosition } from '@babylon/shared';
-import { CategoryPnLCard } from '@/components/markets/CategoryPnLCard';
-import { PredictionPositionsList } from '@/components/markets/PredictionPositionsList';
+import type { UserPredictionPosition } from '@babylon/shared'
+import { CategoryPnLCard } from '@/components/markets/CategoryPnLCard'
+import { PredictionPositionsList } from '@/components/markets/PredictionPositionsList'
 import type {
   PredictionMarketWithPosition,
   PredictionSort,
-} from '@/types/markets';
-import type { CategoryPnLData } from '../../_hooks';
-import { PredictionMarketCard, ResolvedPredictionCard } from '../cards';
-import { PredictionSortControls } from '../sections';
+} from '@/types/markets'
+import type { CategoryPnLData } from '../../_hooks'
+import { PredictionMarketCard, ResolvedPredictionCard } from '../cards'
+import { PredictionSortControls } from '../sections'
 
 interface PredictionsTabContentProps {
   // Auth state
-  authenticated: boolean;
+  authenticated: boolean
 
   // P&L data
-  predictionPnLData: CategoryPnLData | null;
-  portfolioLoading: boolean;
-  portfolioError: string | null;
-  portfolioUpdatedAt: number | null;
-  onShowCategoryPnLShare: () => void;
-  onRefreshPortfolio: () => Promise<void>;
+  predictionPnLData: CategoryPnLData | null
+  portfolioLoading: boolean
+  portfolioError: string | null
+  portfolioUpdatedAt: number | null
+  onShowCategoryPnLShare: () => void
+  onRefreshPortfolio: () => Promise<void>
 
   // Positions
-  predictionPositions: UserPredictionPosition[];
-  onPositionSold: () => Promise<void>;
+  predictionPositions: UserPredictionPosition[]
+  onPositionSold: () => Promise<void>
 
   // Sort
-  predictionSort: PredictionSort;
-  onSortChange: (sort: PredictionSort) => void;
+  predictionSort: PredictionSort
+  onSortChange: (sort: PredictionSort) => void
 
   // Markets
-  activePredictions: PredictionMarketWithPosition[];
-  resolvedPredictions: PredictionMarketWithPosition[];
-  onPredictionClick: (prediction: PredictionMarketWithPosition) => void;
+  activePredictions: PredictionMarketWithPosition[]
+  resolvedPredictions: PredictionMarketWithPosition[]
+  onPredictionClick: (prediction: PredictionMarketWithPosition) => void
 
   /** Error message when predictions fail to load */
-  predictionsError?: string | null;
+  predictionsError?: string | null
 
   /** Use compact (scrollable) sort controls for mobile */
-  compact?: boolean;
+  compact?: boolean
 }
 
 /**
@@ -153,5 +151,5 @@ export function PredictionsTabContent({
         </>
       )}
     </div>
-  );
+  )
 }

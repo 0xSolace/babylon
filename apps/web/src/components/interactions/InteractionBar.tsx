@@ -1,16 +1,14 @@
-'use client';
-
-import type { InteractionBarProps } from '@babylon/shared';
-import { cn } from '@babylon/shared';
-import { MessageCircle } from 'lucide-react';
-import { useEffect, useState } from 'react';
-import { FeedCommentSection } from '@/components/feed/FeedCommentSection';
-import { useAuth } from '@/hooks/useAuth';
-import { useLoginModal } from '@/hooks/useLoginModal';
-import { useInteractionStore } from '@/stores/interactionStore';
-import { DeleteButton } from './DeleteButton';
-import { LikeButton } from './LikeButton';
-import { RepostButton } from './RepostButton';
+import type { InteractionBarProps } from '@babylon/shared'
+import { cn } from '@babylon/shared'
+import { MessageCircle } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { FeedCommentSection } from '@/components/feed/FeedCommentSection'
+import { useAuth } from '@/hooks/useAuth'
+import { useLoginModal } from '@/hooks/useLoginModal'
+import { useInteractionStore } from '@/stores/interactionStore'
+import { DeleteButton } from './DeleteButton'
+import { LikeButton } from './LikeButton'
+import { RepostButton } from './RepostButton'
 
 /**
  * Interaction bar component for post interactions.
@@ -48,16 +46,16 @@ export function InteractionBar({
   className,
   postData,
 }: InteractionBarProps) {
-  const [showComments, setShowComments] = useState(false);
-  const { postInteractions } = useInteractionStore();
-  const { authenticated } = useAuth();
-  const { showLoginModal } = useLoginModal();
+  const [showComments, setShowComments] = useState(false)
+  const { postInteractions } = useInteractionStore()
+  const { authenticated } = useAuth()
+  const { showLoginModal } = useLoginModal()
 
   // Determine if this is a simple repost (no quote commentary)
   // Simple repost: has originalPostId but no quote commentary
   // Quote post: has originalPostId AND has quote commentary (isQuote or quoteComment)
   const isSimpleRepost =
-    postData?.originalPostId && !postData?.isQuote && !postData?.quoteComment;
+    postData?.originalPostId && !postData?.isQuote && !postData?.quoteComment
 
   // For SIMPLE reposts only, use the original post ID for tracking interactions
   // This ensures interactions on a simple repost affect the original post
@@ -65,39 +63,38 @@ export function InteractionBar({
   const interactionPostId =
     isSimpleRepost && postData?.originalPostId
       ? postData.originalPostId
-      : postId;
+      : postId
 
   // Get interaction data from store (synced via polling) or fall back to initial values
-  const storeData = postInteractions.get(interactionPostId);
-  const likeCount = storeData?.likeCount ?? initialInteractions?.likeCount ?? 0;
+  const storeData = postInteractions.get(interactionPostId)
+  const likeCount = storeData?.likeCount ?? initialInteractions?.likeCount ?? 0
   const commentCount =
-    storeData?.commentCount ?? initialInteractions?.commentCount ?? 0;
+    storeData?.commentCount ?? initialInteractions?.commentCount ?? 0
   const shareCount =
-    storeData?.shareCount ?? initialInteractions?.shareCount ?? 0;
-  const isLiked = storeData?.isLiked ?? initialInteractions?.isLiked ?? false;
-  const isShared =
-    storeData?.isShared ?? initialInteractions?.isShared ?? false;
+    storeData?.shareCount ?? initialInteractions?.shareCount ?? 0
+  const isLiked = storeData?.isLiked ?? initialInteractions?.isLiked ?? false
+  const isShared = storeData?.isShared ?? initialInteractions?.isShared ?? false
 
   // Update store with latest counts from API, but preserve isLiked/isShared from store
   useEffect(() => {
     if (initialInteractions) {
-      const store = useInteractionStore.getState();
-      const currentStoreData = store.postInteractions.get(interactionPostId);
+      const store = useInteractionStore.getState()
+      const currentStoreData = store.postInteractions.get(interactionPostId)
 
       // Check if values have actually changed to prevent unnecessary updates
-      const newLikeCount = initialInteractions.likeCount ?? 0;
-      const newCommentCount = initialInteractions.commentCount ?? 0;
-      const newShareCount = initialInteractions.shareCount ?? 0;
+      const newLikeCount = initialInteractions.likeCount ?? 0
+      const newCommentCount = initialInteractions.commentCount ?? 0
+      const newShareCount = initialInteractions.shareCount ?? 0
 
       const hasChanged =
         !currentStoreData ||
         currentStoreData.likeCount !== newLikeCount ||
         currentStoreData.commentCount !== newCommentCount ||
-        currentStoreData.shareCount !== newShareCount;
+        currentStoreData.shareCount !== newShareCount
 
       // Only update if values have changed
       if (hasChanged) {
-        const updatedInteractions = new Map(store.postInteractions);
+        const updatedInteractions = new Map(store.postInteractions)
 
         updatedInteractions.set(interactionPostId, {
           postId: interactionPostId,
@@ -110,8 +107,8 @@ export function InteractionBar({
             currentStoreData?.isLiked ?? initialInteractions.isLiked ?? false,
           isShared:
             currentStoreData?.isShared ?? initialInteractions.isShared ?? false,
-        });
-        useInteractionStore.setState({ postInteractions: updatedInteractions });
+        })
+        useInteractionStore.setState({ postInteractions: updatedInteractions })
       }
     }
   }, [
@@ -124,43 +121,43 @@ export function InteractionBar({
     initialInteractions?.shareCount,
     initialInteractions?.isLiked,
     initialInteractions?.isShared,
-  ]);
+  ])
 
   const handleCommentClick = () => {
     if (!authenticated) {
       showLoginModal({
         title: 'Login to Comment',
         message: 'Log in to reply to posts and engage with NPCs.',
-      });
-      return;
+      })
+      return
     }
     // If custom onCommentClick is provided, use that instead of opening our own modal
     if (onCommentClick) {
-      onCommentClick();
+      onCommentClick()
     } else {
-      setShowComments(true);
+      setShowComments(true)
     }
-  };
+  }
 
   return (
     <>
       <div
         className={cn(
           className,
-          'mt-3 flex w-full items-center justify-between gap-6 text-muted-foreground'
+          'mt-3 flex w-full items-center justify-between gap-6 text-muted-foreground',
         )}
       >
         {/* Comment button */}
         <button
           type="button"
           onClick={(e) => {
-            e.stopPropagation(); // Prevent triggering post onClick
-            handleCommentClick();
+            e.stopPropagation() // Prevent triggering post onClick
+            handleCommentClick()
           }}
           className={cn(
             'flex h-8 items-center gap-1 px-2',
             'bg-transparent transition-all duration-200 hover:opacity-70',
-            'cursor-pointer text-muted-foreground text-xs'
+            'cursor-pointer text-muted-foreground text-xs',
           )}
         >
           <MessageCircle size={18} />
@@ -170,7 +167,12 @@ export function InteractionBar({
         </button>
 
         {/* Share button */}
-        <div onClick={(e) => e.stopPropagation()}>
+        <fieldset
+          onClick={(e) => e.stopPropagation()}
+          onKeyDown={(e) => e.stopPropagation()}
+          className="border-0 p-0"
+          aria-label="Share post"
+        >
           <RepostButton
             postId={interactionPostId}
             shareCount={shareCount}
@@ -191,10 +193,15 @@ export function InteractionBar({
                 : undefined
             }
           />
-        </div>
+        </fieldset>
 
         {/* Like button with reaction picker */}
-        <div onClick={(e) => e.stopPropagation()}>
+        <fieldset
+          onClick={(e) => e.stopPropagation()}
+          onKeyDown={(e) => e.stopPropagation()}
+          className="border-0 p-0"
+          aria-label="Like post"
+        >
           <LikeButton
             targetId={interactionPostId}
             targetType="post"
@@ -203,17 +210,22 @@ export function InteractionBar({
             size="sm"
             showCount
           />
-        </div>
+        </fieldset>
 
         {/* Delete button (only visible to post author) */}
         {postData?.authorId && (
-          <div onClick={(e) => e.stopPropagation()}>
+          <fieldset
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => e.stopPropagation()}
+            className="border-0 p-0"
+            aria-label="Delete post"
+          >
             <DeleteButton
               postId={postId}
               postAuthorId={postData.authorId}
               size="sm"
             />
-          </div>
+          </fieldset>
         )}
       </div>
 
@@ -239,5 +251,5 @@ export function InteractionBar({
         />
       )}
     </>
-  );
+  )
 }

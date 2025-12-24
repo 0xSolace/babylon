@@ -6,8 +6,8 @@
  * was moved to the main game engine. Re-enable these tests when the benchmark
  * infrastructure is updated to use the new game engine API.
  */
-import { describe, it } from 'bun:test';
-import type { SimulationResult } from '../SimulationEngine';
+import { describe, it } from 'bun:test'
+import type { SimulationResult } from '../SimulationEngine'
 
 describe('Head-to-Head Benchmark Infrastructure', () => {
   // @deprecated SimulationEngine was removed during architecture migration.
@@ -17,8 +17,8 @@ describe('Head-to-Head Benchmark Infrastructure', () => {
       // Test disabled: SimulationEngine is deprecated.
       // Would create a mock snapshot, initialize engine, run simulation,
       // and verify pnlHistory is returned correctly.
-    });
-  });
+    })
+  })
 
   // @deprecated MetricsVisualizer was removed during architecture migration.
   // These tests would verify the comparison logic for benchmark results.
@@ -27,7 +27,7 @@ describe('Head-to-Head Benchmark Infrastructure', () => {
     const _createMockResult = (
       id: string,
       pnl: number,
-      history: number[]
+      history: number[],
     ): SimulationResult => ({
       id,
       agentId: id,
@@ -63,22 +63,22 @@ describe('Head-to-Head Benchmark Infrastructure', () => {
       },
       trajectory: { states: [], actions: [], rewards: [], windowId: '' },
       pnlHistory: history.map((val, idx) => ({ tick: idx, pnl: val })),
-    });
+    })
 
     it.skip('should correctly merge PnL histories of equal length', () => {
       // Test disabled: MetricsVisualizer is deprecated.
       // Would verify mergePnlHistory() correctly combines two equal-length histories.
-    });
+    })
 
     it.skip('should handle unequal history lengths (fill with final value)', () => {
       // Test disabled: MetricsVisualizer is deprecated.
       // Would verify mergePnlHistory() handles different-length histories by
       // carrying forward the final value from the shorter history.
-    });
+    })
 
     it.skip('should generate ASCII chart string', () => {
       // Test disabled: MetricsVisualizer is deprecated.
       // Would verify generateAsciiComparison() produces correct output format.
-    });
-  });
-});
+    })
+  })
+})

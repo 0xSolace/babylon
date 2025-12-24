@@ -10,4 +10,4 @@ export {
   ArchetypeConfigService,
   type ArchetypeTraits,
   archetypeConfigService,
-} from './ArchetypeConfigService';
+} from './ArchetypeConfigService'

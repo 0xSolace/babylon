@@ -1,78 +1,76 @@
-'use client';
-
-import { cn, logger } from '@babylon/shared';
-import { useMutation } from '@tanstack/react-query';
-import { ArrowLeft, Key, Palette, Save, Shield, User } from 'lucide-react';
-import { useRouter, useSearchParams } from 'next/navigation';
-import { useTheme } from 'next-themes';
-import { useEffect, useState } from 'react';
-import { LoginButton } from '@/components/auth/LoginButton';
-import { ApiKeysTab } from '@/components/settings/ApiKeysTab';
-import { PrivacyTab } from '@/components/settings/PrivacyTab';
-import { SecurityTab } from '@/components/settings/SecurityTab';
-import { PageContainer } from '@/components/shared/PageContainer';
-import { Skeleton } from '@/components/shared/Skeleton';
-import { useAuth } from '@/hooks/useAuth';
-import { useAuthStore } from '@/stores/authStore';
+import { cn, logger } from '@babylon/shared'
+import { useMutation } from '@tanstack/react-query'
+import { ArrowLeft, Key, Palette, Save, Shield, User } from 'lucide-react'
+import { useTheme } from 'next-themes'
+import { useEffect, useState } from 'react'
+import { LoginButton } from '@/components/auth/LoginButton'
+import { ApiKeysTab } from '@/components/settings/ApiKeysTab'
+import { PrivacyTab } from '@/components/settings/PrivacyTab'
+import { SecurityTab } from '@/components/settings/SecurityTab'
+import { PageContainer } from '@/components/shared/PageContainer'
+import { Skeleton } from '@/components/shared/Skeleton'
+import { useAuth } from '@/hooks/useAuth'
+import { useRouter, useSearchParams } from '@/lib/navigation'
+import { useAuthStore } from '@/stores/authStore'
 
 interface ProfileUpdatePayload {
-  displayName: string;
-  username: string;
-  bio: string;
+  displayName: string
+  username: string
+  bio: string
 }
 
 interface ProfileUpdateResponse {
   user: {
-    username: string;
-    displayName: string;
-    bio: string;
-    usernameChangedAt: string | null;
-    referralCode: string | null;
-    onChainRegistered: boolean | null;
-  };
+    username: string
+    displayName: string
+    bio: string
+    usernameChangedAt: string | null
+    referralCode: string | null
+    onChainRegistered: boolean | null
+  }
 }
 
 export default function SettingsPage() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const { ready, authenticated, refresh, getAccessToken } = useAuth();
-  const { user, setUser } = useAuthStore();
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const { ready, authenticated, refresh, getAccessToken } = useAuth()
+  const { user, setUser } = useAuthStore()
   const [activeTab, setActiveTab] = useState(() => {
     // Check for tab parameter in URL
-    const tab = searchParams?.get('tab');
-    return tab || 'profile';
-  });
+    const tab = searchParams?.get('tab')
+    return tab || 'profile'
+  })
 
   // Sync tab changes with URL
   const handleTabChange = (tabId: string) => {
-    setActiveTab(tabId);
-    router.replace(`/settings?tab=${tabId}`, { scroll: false });
-  };
+    setActiveTab(tabId)
+    router.replace(`/settings?tab=${tabId}`)
+  }
 
   // Sync tab when URL changes (e.g., browser back/forward)
   useEffect(() => {
-    const tab = searchParams.get('tab');
+    const tab = searchParams.get('tab')
     if (tab && tab !== activeTab) {
-      setActiveTab(tab);
+      setActiveTab(tab)
     }
-  }, [searchParams, activeTab]);
+  }, [searchParams, activeTab])
 
   // Profile settings state
-  const [displayName, setDisplayName] = useState(user?.displayName || '');
-  const [username, setUsername] = useState(user?.username || '');
-  const [bio, setBio] = useState(user?.bio || '');
+  const [displayName, setDisplayName] = useState(user?.displayName || '')
+  const [username, setUsername] = useState(user?.username || '')
+  const [bio, setBio] = useState(user?.bio || '')
 
   // Profile update mutation
   const updateProfileMutation = useMutation({
     mutationFn: async (
-      payload: ProfileUpdatePayload
+      payload: ProfileUpdatePayload,
     ): Promise<ProfileUpdateResponse> => {
-      const token = await getAccessToken();
+      const token = await getAccessToken()
       const headers: HeadersInit = {
         'Content-Type': 'application/json',
-      };
+      }
       if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
+        headers.Authorization = `Bearer ${token}`
       }
 
       const response = await fetch(
@@ -81,16 +79,16 @@ export default function SettingsPage() {
           method: 'POST',
           headers,
           body: JSON.stringify(payload),
-        }
-      );
+        },
+      )
 
-      const data = await response.json();
+      const data = await response.json()
       if (!response.ok) {
-        const message = data?.error || 'Unable to save your changes.';
-        throw new Error(message);
+        const message = data?.error || 'Unable to save your changes.'
+        throw new Error(message)
       }
 
-      return data as ProfileUpdateResponse;
+      return data as ProfileUpdateResponse
     },
     onSuccess: (data) => {
       if (data.user && user) {
@@ -98,69 +96,69 @@ export default function SettingsPage() {
           ...user,
           username: data.user.username,
           displayName: data.user.displayName,
-          bio: data.user.bio ?? undefined,
+          bio: data.user.bio,
           usernameChangedAt: data.user.usernameChangedAt,
-          referralCode: data.user.referralCode ?? undefined,
+          referralCode: data.user.referralCode,
           onChainRegistered:
             data.user.onChainRegistered ?? user.onChainRegistered,
-        });
+        })
       }
-      refresh().catch(() => undefined);
+      refresh().catch(() => undefined)
     },
     onError: (error: Error) => {
       logger.error(
         'Failed to save profile settings',
         { error: error.message },
-        'SettingsPage'
-      );
+        'SettingsPage',
+      )
     },
-  });
+  })
 
   // Theme settings - connected to next-themes
-  const { theme, setTheme } = useTheme();
-  const [mounted, setMounted] = useState(false);
+  const { theme, setTheme } = useTheme()
+  const [mounted, setMounted] = useState(false)
 
   // Wait for hydration to avoid SSR mismatch
   useEffect(() => {
-    setMounted(true);
-  }, []);
+    setMounted(true)
+  }, [])
 
   // Calculate time remaining until username can be changed again
   const getUsernameChangeTimeRemaining = (): {
-    canChange: boolean;
-    hours: number;
-    minutes: number;
+    canChange: boolean
+    hours: number
+    minutes: number
   } | null => {
     if (!user?.usernameChangedAt)
-      return { canChange: true, hours: 0, minutes: 0 };
+      return { canChange: true, hours: 0, minutes: 0 }
 
-    const lastChangeTime = new Date(user.usernameChangedAt).getTime();
-    const now = Date.now();
-    const hoursSinceChange = (now - lastChangeTime) / (1000 * 60 * 60);
-    const hoursRemaining = 24 - hoursSinceChange;
+    const lastChangeTime = new Date(user.usernameChangedAt).getTime()
+    const now = Date.now()
+    const hoursSinceChange = (now - lastChangeTime) / (1000 * 60 * 60)
+    const hoursRemaining = 24 - hoursSinceChange
 
     if (hoursRemaining <= 0) {
-      return { canChange: true, hours: 0, minutes: 0 };
+      return { canChange: true, hours: 0, minutes: 0 }
     }
 
     return {
       canChange: false,
       hours: Math.floor(hoursRemaining),
       minutes: Math.floor((hoursRemaining - Math.floor(hoursRemaining)) * 60),
-    };
-  };
+    }
+  }
 
-  const usernameChangeLimit = getUsernameChangeTimeRemaining();
+  const usernameChangeLimit = getUsernameChangeTimeRemaining()
 
   // Sync profile fields when user data changes
   useEffect(() => {
-    setDisplayName(user?.displayName ?? '');
-    setUsername(user?.username ?? '');
-    setBio(user?.bio ?? '');
-  }, [user?.displayName, user?.username, user?.bio]);
+    setDisplayName(user?.displayName ?? '')
+    setUsername(user?.username ?? '')
+    setBio(user?.bio ?? '')
+  }, [user?.displayName, user?.username, user?.bio])
 
   const handleSave = () => {
-    if (!user?.id) return;
+    if (!user?.id) return
 
     // Backend now handles ALL signing automatically - no user popups!
     // This includes username changes, bio updates, display name changes.
@@ -170,8 +168,8 @@ export default function SettingsPage() {
       displayName: displayName.trim(),
       username: username.trim(),
       bio: bio.trim(),
-    });
-  };
+    })
+  }
 
   if (!ready) {
     return (
@@ -181,15 +179,15 @@ export default function SettingsPage() {
             <Skeleton className="h-8 w-32 max-w-full" />
             <Skeleton className="h-4 w-64 max-w-full" />
           </div>
-          {Array.from({ length: 3 }).map((_, i) => (
+          {['skeleton-1', 'skeleton-2', 'skeleton-3'].map((id, _i) => (
             <div
-              key={i}
+              key={id}
               className="space-y-4 rounded-lg border border-border bg-card/50 px-4 py-3 backdrop-blur sm:px-6 sm:py-4"
             >
               <Skeleton className="mb-4 h-6 w-40 max-w-full" />
-              {Array.from({ length: 2 }).map((_, j) => (
+              {['item-1', 'item-2'].map((itemId) => (
                 <div
-                  key={j}
+                  key={`${id}-${itemId}`}
                   className="flex items-center justify-between gap-3 border-border/5 border-b py-3 last:border-0"
                 >
                   <div className="min-w-0 flex-1 space-y-2">
@@ -203,7 +201,7 @@ export default function SettingsPage() {
           ))}
         </div>
       </PageContainer>
-    );
+    )
   }
 
   if (!authenticated) {
@@ -217,7 +215,7 @@ export default function SettingsPage() {
           <LoginButton />
         </div>
       </PageContainer>
-    );
+    )
   }
 
   const tabs = [
@@ -226,7 +224,7 @@ export default function SettingsPage() {
     { id: 'security', label: 'Security', icon: Shield },
     { id: 'privacy', label: 'Privacy', icon: Shield },
     { id: 'api', label: 'API Keys', icon: Key },
-  ];
+  ]
 
   return (
     <PageContainer>
@@ -234,6 +232,7 @@ export default function SettingsPage() {
         {/* Header */}
         <div className="mb-8">
           <button
+            type="button"
             onClick={() => router.back()}
             className="mb-4 flex items-center gap-3 text-muted-foreground transition-colors hover:text-foreground"
           >
@@ -246,22 +245,23 @@ export default function SettingsPage() {
         {/* Tab Navigation */}
         <div className="mb-8 flex gap-1 overflow-x-auto border-border border-b">
           {tabs.map((tab) => {
-            const Icon = tab.icon;
+            const Icon = tab.icon
             return (
               <button
+                type="button"
                 key={tab.id}
                 onClick={() => handleTabChange(tab.id)}
                 className={cn(
                   'flex items-center gap-2 whitespace-nowrap border-b-2 px-4 py-3 transition-all',
                   activeTab === tab.id
                     ? 'border-[#0066FF] text-[#0066FF]'
-                    : 'border-transparent text-muted-foreground hover:text-foreground'
+                    : 'border-transparent text-muted-foreground hover:text-foreground',
                 )}
               >
                 <Icon className="h-4 w-4" />
                 <span className="font-medium">{tab.label}</span>
               </button>
-            );
+            )
           })}
         </div>
 
@@ -299,7 +299,7 @@ export default function SettingsPage() {
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                   disabled={Boolean(
-                    usernameChangeLimit && !usernameChangeLimit.canChange
+                    usernameChangeLimit && !usernameChangeLimit.canChange,
                   )}
                   className="w-full rounded-lg border border-border bg-muted px-3 py-2 focus:outline-none focus:ring-2 focus:ring-[#0066FF] disabled:cursor-not-allowed disabled:opacity-50"
                   placeholder="Enter your username"
@@ -403,6 +403,7 @@ export default function SettingsPage() {
                   </p>
                 )}
               <button
+                type="button"
                 onClick={handleSave}
                 disabled={
                   updateProfileMutation.isPending ||
@@ -411,7 +412,7 @@ export default function SettingsPage() {
                 className={cn(
                   'flex items-center gap-2 rounded-lg px-6 py-3 font-medium transition-all',
                   'bg-[#0066FF] text-primary-foreground hover:bg-[#2952d9]',
-                  'disabled:cursor-not-allowed disabled:opacity-50'
+                  'disabled:cursor-not-allowed disabled:opacity-50',
                 )}
               >
                 <Save className="h-4 w-4" />
@@ -437,5 +438,5 @@ export default function SettingsPage() {
         </div>
       </div>
     </PageContainer>
-  );
+  )
 }

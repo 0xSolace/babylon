@@ -6,10 +6,8 @@
  * triggered globally (e.g., pull-to-refresh gesture).
  */
 
-'use client';
-
-import type { ReactNode } from 'react';
-import { createContext, useContext, useRef } from 'react';
+import type { ReactNode } from 'react'
+import { createContext, useContext, useRef } from 'react'
 
 /**
  * Widget refresh context interface.
@@ -17,16 +15,16 @@ import { createContext, useContext, useRef } from 'react';
  */
 interface WidgetRefreshContextType {
   /** Register a refresh function for a widget by name */
-  registerRefresh: (name: string, refreshFn: () => void) => void;
+  registerRefresh: (name: string, refreshFn: () => void) => void
   /** Unregister a widget's refresh function */
-  unregisterRefresh: (name: string) => void;
+  unregisterRefresh: (name: string) => void
   /** Execute all registered refresh functions */
-  refreshAll: () => void;
+  refreshAll: () => void
 }
 
 const WidgetRefreshContext = createContext<WidgetRefreshContextType | null>(
-  null
-);
+  null,
+)
 
 /**
  * Widget refresh context provider component.
@@ -35,21 +33,21 @@ const WidgetRefreshContext = createContext<WidgetRefreshContextType | null>(
  * @param children - React children to wrap with widget refresh context
  */
 export function WidgetRefreshProvider({ children }: { children: ReactNode }) {
-  const refreshFunctions = useRef<Map<string, () => void>>(new Map());
+  const refreshFunctions = useRef<Map<string, () => void>>(new Map())
 
   const registerRefresh = (name: string, refreshFn: () => void) => {
-    refreshFunctions.current.set(name, refreshFn);
-  };
+    refreshFunctions.current.set(name, refreshFn)
+  }
 
   const unregisterRefresh = (name: string) => {
-    refreshFunctions.current.delete(name);
-  };
+    refreshFunctions.current.delete(name)
+  }
 
   const refreshAll = () => {
     refreshFunctions.current.forEach((refreshFn) => {
-      refreshFn();
-    });
-  };
+      refreshFn()
+    })
+  }
 
   return (
     <WidgetRefreshContext.Provider
@@ -57,7 +55,7 @@ export function WidgetRefreshProvider({ children }: { children: ReactNode }) {
     >
       {children}
     </WidgetRefreshContext.Provider>
-  );
+  )
 }
 
 /**
@@ -75,11 +73,11 @@ export function WidgetRefreshProvider({ children }: { children: ReactNode }) {
  * ```
  */
 export function useWidgetRefresh() {
-  const context = useContext(WidgetRefreshContext);
+  const context = useContext(WidgetRefreshContext)
   if (!context) {
     throw new Error(
-      'useWidgetRefresh must be used within WidgetRefreshProvider'
-    );
+      'useWidgetRefresh must be used within WidgetRefreshProvider',
+    )
   }
-  return context;
+  return context
 }

@@ -1,0 +1,59 @@
+# Babylon Docs Worker Configuration
+# For deployment on DWS (Decentralized Web Services) via workerd
+
+name = "babylon-docs"
+main = "dist/worker/worker.js"
+compatibility_date = "2024-01-01"
+
+# Environment variables
+[vars]
+DIST_DIR = "./dist"
+NODE_ENV = "production"
+
+# Static assets configuration
+[site]
+bucket = "./dist"
+
+# Build configuration
+[build]
+command = "bun run build"
+
+# Production environment
+[env.production]
+vars = { NODE_ENV = "production" }
+
+# Staging environment
+[env.staging]
+vars = { NODE_ENV = "staging" }
+
+# Development environment
+[env.development]
+vars = { NODE_ENV = "development" }
+
+# DWS specific configuration
+[dws]
+enabled = true
+ipfs = true
+arweave = true
+jns_name = "docs.babylon.jeju"
+
+# Cache rules
+[[dws.cache_rules]]
+pattern = "/assets/**"
+ttl = 31536000
+immutable = true
+
+[[dws.cache_rules]]
+pattern = "/**/*.html"
+ttl = 60
+stale_while_revalidate = 3600
+
+[[dws.cache_rules]]
+pattern = "/**"
+ttl = 3600
+
+# Health check
+[dws.health]
+endpoint = "/health"
+interval = 30
+timeout = 10

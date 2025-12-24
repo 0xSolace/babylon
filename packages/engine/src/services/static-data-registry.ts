@@ -19,7 +19,7 @@
  * ```typescript
  * import { StaticDataRegistry } from '@babylon/engine';
  *
- * // Get static actor data (no DB call!)
+ * // Get static actor data (no DB call)
  * const actor = StaticDataRegistry.getActor('elon-usk');
  * console.log(actor.name, actor.tier, actor.personality);
  *
@@ -31,11 +31,39 @@
  * ```
  */
 
-import type { ActorTier } from '@babylon/shared';
-import { existsSync } from 'fs';
-import { join } from 'path';
-import { actors as actorsData } from '../data/actors';
-import { organizations as organizationsData } from '../data/organizations';
+import type { ActorTier } from '@babylon/shared'
+import { actors as actorsData } from '../data/actors'
+import { organizations as organizationsData } from '../data/organizations'
+
+/** Raw actor data type from imported data files */
+interface RawActorData {
+  id: string
+  name: string
+  realName?: string
+  description?: string
+  domain?: string[]
+  personality?: string
+  tier?: string
+  affiliations?: string[]
+  postStyle?: string
+  postExample?: string[]
+  role?: string
+  initialLuck?: string
+  initialMood?: number
+}
+
+/** Raw organization data type from imported data files */
+interface RawOrgData {
+  id: string
+  name: string
+  ticker?: string
+  description?: string
+  type?: string
+  canBeInvolved?: boolean
+  initialPrice?: number
+  originalName?: string
+  originalHandle?: string
+}
 
 // =============================================================================
 // TYPES
@@ -45,21 +73,21 @@ import { organizations as organizationsData } from '../data/organizations';
  * Static actor data - immutable properties that don't change during gameplay
  */
 export interface StaticActor {
-  id: string;
-  name: string;
-  realName?: string;
-  description?: string;
-  domain: string[];
-  personality?: string;
-  tier: ActorTier | null;
-  affiliations: string[];
-  postStyle?: string;
-  postExample: string[];
-  role?: string;
-  initialLuck: string;
-  initialMood: number;
-  profileImageUrl?: string;
-  isTest: boolean;
+  id: string
+  name: string
+  realName?: string
+  description?: string
+  domain: string[]
+  personality?: string
+  tier: ActorTier | null
+  affiliations: string[]
+  postStyle?: string
+  postExample: string[]
+  role?: string
+  initialLuck: string
+  initialMood: number
+  profileImageUrl?: string
+  isTest: boolean
 }
 
 /** Organization type enum matching @babylon/shared */
@@ -69,195 +97,175 @@ export type OrgType =
   | 'government'
   | 'vc'
   | 'organization'
-  | 'financial';
+  | 'financial'
 
 /**
  * Static organization data - immutable properties
  */
 export interface StaticOrganization {
-  id: string;
-  name: string;
-  ticker?: string;
-  description: string;
-  type: OrgType;
-  canBeInvolved: boolean;
-  initialPrice: number | null;
-  imageUrl?: string;
-  originalName?: string;
-  originalHandle?: string;
+  id: string
+  name: string
+  ticker?: string
+  description: string
+  type: OrgType
+  canBeInvolved: boolean
+  initialPrice: number | null
+  imageUrl?: string
+  originalName?: string
+  originalHandle?: string
 }
 
 /**
  * Character mapping - real name to parody name
  */
 export interface CharacterMapping {
-  realName: string;
-  parodyName: string;
-  category: string;
-  aliases: string[];
-  priority: number;
+  realName: string
+  parodyName: string
+  category: string
+  aliases: string[]
+  priority: number
 }
 
 /**
  * Organization mapping - real org to parody org
  */
 export interface OrganizationMapping {
-  realName: string;
-  parodyName: string;
-  category: string;
-  aliases: string[];
-  priority: number;
+  realName: string
+  parodyName: string
+  category: string
+  aliases: string[]
+  priority: number
 }
 
 // =============================================================================
 // STATIC DATA REGISTRY
 // =============================================================================
 
+// biome-ignore lint/complexity/noStaticOnlyClass: Service pattern uses static methods for stateless operations
 export class StaticDataRegistry {
   // In-memory caches
-  private static actorMap: Map<string, StaticActor> | null = null;
-  private static actorList: StaticActor[] | null = null;
-  private static orgMap: Map<string, StaticOrganization> | null = null;
-  private static orgList: StaticOrganization[] | null = null;
-  private static charMappings: Map<string, CharacterMapping> | null = null;
-  private static orgMappings: Map<string, OrganizationMapping> | null = null;
+  private static actorMap: Map<string, StaticActor> | null = null
+  private static actorList: StaticActor[] | null = null
+  private static orgMap: Map<string, StaticOrganization> | null = null
+  private static orgList: StaticOrganization[] | null = null
+  private static charMappings: Map<string, CharacterMapping> | null = null
+  private static orgMappings: Map<string, OrganizationMapping> | null = null
   private static actorsByTier: Map<ActorTier | 'NONE', StaticActor[]> | null =
-    null;
-  private static actorsByDomain: Map<string, StaticActor[]> | null = null;
+    null
+  private static actorsByDomain: Map<string, StaticActor[]> | null = null
 
   // ==========================================================================
   // INITIALIZATION
   // ==========================================================================
 
   private static initialize(): void {
-    if (this.actorMap !== null) return;
+    if (StaticDataRegistry.actorMap !== null) return
 
-    this.actorMap = new Map();
-    this.actorList = [];
-    this.actorsByTier = new Map([
+    StaticDataRegistry.actorMap = new Map()
+    StaticDataRegistry.actorList = []
+    StaticDataRegistry.actorsByTier = new Map([
       ['S_TIER', []],
       ['A_TIER', []],
       ['B_TIER', []],
       ['C_TIER', []],
       ['NONE', []],
-    ]);
-    this.actorsByDomain = new Map();
+    ])
+    StaticDataRegistry.actorsByDomain = new Map()
 
-    // Load actors from TypeScript data
-    for (const actor of actorsData) {
-      // Use type assertion to access optional properties safely
-      const actorAny = actor as {
-        id: string;
-        name: string;
-        realName?: string;
-        description?: string;
-        domain?: string[];
-        personality?: string;
-        tier?: string;
-        affiliations?: string[];
-        postStyle?: string;
-        postExample?: string[];
-        role?: string;
-        initialLuck?: string;
-        initialMood?: number;
-      };
-
+    // Load actors from TypeScript data (readonly array from static JSON)
+    for (const actorRaw of actorsData as readonly RawActorData[]) {
       const staticActor: StaticActor = {
-        id: actorAny.id,
-        name: actorAny.name,
-        realName: actorAny.realName,
-        description: actorAny.description,
-        domain: actorAny.domain ?? [],
-        personality: actorAny.personality,
-        tier: (actorAny.tier as ActorTier) ?? null,
-        affiliations: actorAny.affiliations ?? [],
-        postStyle: actorAny.postStyle,
-        postExample: actorAny.postExample ?? [],
-        role: actorAny.role,
-        initialLuck: actorAny.initialLuck ?? 'medium',
-        initialMood: actorAny.initialMood ?? 0,
-        profileImageUrl: this.getActorImageUrl(actorAny.id),
-        isTest: actorAny.id.startsWith('test-'),
-      };
+        id: actorRaw.id,
+        name: actorRaw.name,
+        realName: actorRaw.realName,
+        description: actorRaw.description,
+        domain: actorRaw.domain ?? [],
+        personality: actorRaw.personality,
+        tier: (actorRaw.tier as ActorTier) ?? null,
+        affiliations: actorRaw.affiliations ?? [],
+        postStyle: actorRaw.postStyle,
+        postExample: actorRaw.postExample ?? [],
+        role: actorRaw.role,
+        initialLuck: actorRaw.initialLuck ?? 'medium',
+        initialMood: actorRaw.initialMood ?? 0,
+        profileImageUrl: StaticDataRegistry.getActorImageUrl(actorRaw.id),
+        isTest: actorRaw.id.startsWith('test-'),
+      }
 
-      this.actorMap.set(actor.id, staticActor);
-      this.actorList.push(staticActor);
+      StaticDataRegistry.actorMap.set(actorRaw.id, staticActor)
+      StaticDataRegistry.actorList.push(staticActor)
 
       // Index by tier
-      const tierKey = (staticActor.tier ?? 'NONE') as ActorTier | 'NONE';
-      this.actorsByTier.get(tierKey)?.push(staticActor);
+      const tierKey = (staticActor.tier ?? 'NONE') as ActorTier | 'NONE'
+      StaticDataRegistry.actorsByTier.get(tierKey)?.push(staticActor)
 
       // Index by domain
       for (const domain of staticActor.domain) {
-        if (!this.actorsByDomain.has(domain)) {
-          this.actorsByDomain.set(domain, []);
+        if (!StaticDataRegistry.actorsByDomain.has(domain)) {
+          StaticDataRegistry.actorsByDomain.set(domain, [])
         }
-        this.actorsByDomain.get(domain)?.push(staticActor);
+        StaticDataRegistry.actorsByDomain.get(domain)?.push(staticActor)
       }
     }
 
-    this.orgMap = new Map();
-    this.orgList = [];
+    StaticDataRegistry.orgMap = new Map()
+    StaticDataRegistry.orgList = []
 
     // Load organizations from TypeScript data
-    for (const org of organizationsData) {
-      // Use type assertion to access optional properties safely
-      const orgAny = org as {
-        id: string;
-        name: string;
-        ticker?: string;
-        description?: string;
-        type?: string;
-        canBeInvolved?: boolean;
-        initialPrice?: number;
-        originalName?: string;
-        originalHandle?: string;
-      };
-
+    for (const orgRaw of organizationsData as readonly RawOrgData[]) {
       const staticOrg: StaticOrganization = {
-        id: orgAny.id,
-        name: orgAny.name,
-        ticker: orgAny.ticker,
-        description: orgAny.description ?? '',
-        type: (orgAny.type as OrgType) ?? 'company',
-        canBeInvolved: orgAny.canBeInvolved !== false,
-        initialPrice: orgAny.initialPrice ?? null,
-        imageUrl: this.getOrgImageUrl(orgAny.id),
-        originalName: orgAny.originalName,
-        originalHandle: orgAny.originalHandle,
-      };
+        id: orgRaw.id,
+        name: orgRaw.name,
+        ticker: orgRaw.ticker,
+        description: orgRaw.description ?? '',
+        type: (orgRaw.type as OrgType) ?? 'company',
+        canBeInvolved: orgRaw.canBeInvolved !== false,
+        initialPrice: orgRaw.initialPrice ?? null,
+        imageUrl: StaticDataRegistry.getOrgImageUrl(orgRaw.id),
+        originalName: orgRaw.originalName,
+        originalHandle: orgRaw.originalHandle,
+      }
 
-      this.orgMap.set(orgAny.id, staticOrg);
-      this.orgList.push(staticOrg);
+      StaticDataRegistry.orgMap.set(orgRaw.id, staticOrg)
+      StaticDataRegistry.orgList.push(staticOrg)
     }
 
     // Build character mappings
-    this.charMappings = new Map();
-    for (const actor of this.actorList) {
+    StaticDataRegistry.charMappings = new Map()
+    for (const actor of StaticDataRegistry.actorList) {
       if (actor.realName) {
         const mapping: CharacterMapping = {
           realName: actor.realName,
           parodyName: actor.name,
-          category: this.mapDomainToCategory(actor.domain),
-          aliases: this.generateActorAliases(actor),
-          priority: this.mapTierToPriority(actor.tier),
-        };
-        this.charMappings.set(actor.realName.toLowerCase(), mapping);
+          category: StaticDataRegistry.mapDomainToCategory(actor.domain),
+          aliases: StaticDataRegistry.generateActorAliases(actor),
+          priority: StaticDataRegistry.mapTierToPriority(actor.tier),
+        }
+        StaticDataRegistry.charMappings.set(
+          actor.realName.toLowerCase(),
+          mapping,
+        )
       }
     }
 
     // Build organization mappings
-    this.orgMappings = new Map();
-    for (const org of this.orgList) {
+    StaticDataRegistry.orgMappings = new Map()
+    for (const org of StaticDataRegistry.orgList) {
       if (org.originalName) {
         const mapping: OrganizationMapping = {
           realName: org.originalName,
           parodyName: org.name,
-          category: this.mapOrgTypeToCategory(org.type),
+          category: StaticDataRegistry.mapOrgTypeToCategory(org.type),
           aliases: org.originalHandle ? [org.originalHandle] : [],
-          priority: this.getOrganizationPriority(org.originalName, org.type),
-        };
-        this.orgMappings.set(org.originalName.toLowerCase(), mapping);
+          priority: StaticDataRegistry.getOrganizationPriority(
+            org.originalName,
+            org.type,
+          ),
+        }
+        StaticDataRegistry.orgMappings.set(
+          org.originalName.toLowerCase(),
+          mapping,
+        )
       }
     }
   }
@@ -270,92 +278,92 @@ export class StaticDataRegistry {
    * Get a static actor by ID - NO DATABASE CALL
    */
   static getActor(id: string): StaticActor | null {
-    this.initialize();
-    return this.actorMap?.get(id) ?? null;
+    StaticDataRegistry.initialize()
+    return StaticDataRegistry.actorMap?.get(id) ?? null
   }
 
   /**
    * Get all static actors - NO DATABASE CALL
    */
   static getAllActors(): StaticActor[] {
-    this.initialize();
-    return [...(this.actorList ?? [])];
+    StaticDataRegistry.initialize()
+    return [...(StaticDataRegistry.actorList ?? [])]
   }
 
   /**
    * Get actors by tier - NO DATABASE CALL
    */
   static getActorsByTier(tier: ActorTier): StaticActor[] {
-    this.initialize();
-    return [...(this.actorsByTier?.get(tier) ?? [])];
+    StaticDataRegistry.initialize()
+    return [...(StaticDataRegistry.actorsByTier?.get(tier) ?? [])]
   }
 
   /**
    * Get actors by domain - NO DATABASE CALL
    */
   static getActorsByDomain(domain: string): StaticActor[] {
-    this.initialize();
-    return [...(this.actorsByDomain?.get(domain) ?? [])];
+    StaticDataRegistry.initialize()
+    return [...(StaticDataRegistry.actorsByDomain?.get(domain) ?? [])]
   }
 
   /**
    * Get all actor IDs - NO DATABASE CALL
    */
   static getActorIds(): string[] {
-    this.initialize();
-    return this.actorList?.map((a) => a.id) ?? [];
+    StaticDataRegistry.initialize()
+    return StaticDataRegistry.actorList?.map((a) => a.id) ?? []
   }
 
   /**
    * Get actor count - NO DATABASE CALL
    */
   static getActorCount(): number {
-    this.initialize();
-    return this.actorList?.length ?? 0;
+    StaticDataRegistry.initialize()
+    return StaticDataRegistry.actorList?.length ?? 0
   }
 
   /**
    * Check if actor exists - NO DATABASE CALL
    */
   static hasActor(id: string): boolean {
-    this.initialize();
-    return this.actorMap?.has(id) ?? false;
+    StaticDataRegistry.initialize()
+    return StaticDataRegistry.actorMap?.has(id) ?? false
   }
 
   /**
    * Get random actors - NO DATABASE CALL
    */
   static getRandomActors(count: number): StaticActor[] {
-    this.initialize();
-    const actors = [...(this.actorList ?? [])];
-    const shuffled = actors.sort(() => Math.random() - 0.5);
-    return shuffled.slice(0, count);
+    StaticDataRegistry.initialize()
+    const actors = [...(StaticDataRegistry.actorList ?? [])]
+    const shuffled = actors.sort(() => Math.random() - 0.5)
+    return shuffled.slice(0, count)
   }
 
   /**
    * Get top actors by tier (S_TIER first) - NO DATABASE CALL
    */
   static getTopActors(count: number): StaticActor[] {
-    this.initialize();
-    const result: StaticActor[] = [];
+    StaticDataRegistry.initialize()
+    const result: StaticActor[] = []
     const tiers: (ActorTier | 'NONE')[] = [
       'S_TIER',
       'A_TIER',
       'B_TIER',
       'C_TIER',
       'NONE',
-    ];
+    ]
 
     for (const tier of tiers) {
-      const tierActors = this.actorsByTier?.get(tier) ?? [];
+      const tierActors = StaticDataRegistry.actorsByTier?.get(tier) ?? []
       for (const actor of tierActors) {
-        if (result.length >= count) break;
-        result.push(actor);
+        if (result.length >= count) break
+        result.push(actor)
       }
-      if (result.length >= count) break;
+      if (result.length >= count) break
     }
 
-    return result;
+    return result
   }
 
   // ==========================================================================
@@ -366,48 +374,48 @@ export class StaticDataRegistry {
    * Get a static organization by ID - NO DATABASE CALL
    */
   static getOrganization(id: string): StaticOrganization | null {
-    this.initialize();
-    return this.orgMap?.get(id) ?? null;
+    StaticDataRegistry.initialize()
+    return StaticDataRegistry.orgMap?.get(id) ?? null
   }
 
   /**
    * Get all static organizations - NO DATABASE CALL
    */
   static getAllOrganizations(): StaticOrganization[] {
-    this.initialize();
-    return [...(this.orgList ?? [])];
+    StaticDataRegistry.initialize()
+    return [...(StaticDataRegistry.orgList ?? [])]
   }
 
   /**
    * Get all organization IDs - NO DATABASE CALL
    */
   static getOrganizationIds(): string[] {
-    this.initialize();
-    return this.orgList?.map((o) => o.id) ?? [];
+    StaticDataRegistry.initialize()
+    return StaticDataRegistry.orgList?.map((o) => o.id) ?? []
   }
 
   /**
    * Get organization count - NO DATABASE CALL
    */
   static getOrganizationCount(): number {
-    this.initialize();
-    return this.orgList?.length ?? 0;
+    StaticDataRegistry.initialize()
+    return StaticDataRegistry.orgList?.length ?? 0
   }
 
   /**
    * Check if organization exists - NO DATABASE CALL
    */
   static hasOrganization(id: string): boolean {
-    this.initialize();
-    return this.orgMap?.has(id) ?? false;
+    StaticDataRegistry.initialize()
+    return StaticDataRegistry.orgMap?.has(id) ?? false
   }
 
   /**
    * Get organizations by type - NO DATABASE CALL
    */
   static getOrganizationsByType(type: string): StaticOrganization[] {
-    this.initialize();
-    return this.orgList?.filter((o) => o.type === type) ?? [];
+    StaticDataRegistry.initialize()
+    return StaticDataRegistry.orgList?.filter((o) => o.type === type) ?? []
   }
 
   // ==========================================================================
@@ -418,24 +426,27 @@ export class StaticDataRegistry {
    * Get parody name for a real person - NO DATABASE CALL
    */
   static getParodyName(realName: string): string | null {
-    this.initialize();
-    return this.charMappings?.get(realName.toLowerCase())?.parodyName ?? null;
+    StaticDataRegistry.initialize()
+    return (
+      StaticDataRegistry.charMappings?.get(realName.toLowerCase())
+        ?.parodyName ?? null
+    )
   }
 
   /**
    * Get full character mapping - NO DATABASE CALL
    */
   static getCharacterMapping(realName: string): CharacterMapping | null {
-    this.initialize();
-    return this.charMappings?.get(realName.toLowerCase()) ?? null;
+    StaticDataRegistry.initialize()
+    return StaticDataRegistry.charMappings?.get(realName.toLowerCase()) ?? null
   }
 
   /**
    * Get all character mappings - NO DATABASE CALL
    */
   static getAllCharacterMappings(): CharacterMapping[] {
-    this.initialize();
-    return [...(this.charMappings?.values() ?? [])];
+    StaticDataRegistry.initialize()
+    return [...(StaticDataRegistry.charMappings?.values() ?? [])]
   }
 
   // ==========================================================================
@@ -446,24 +457,27 @@ export class StaticDataRegistry {
    * Get parody name for a real organization - NO DATABASE CALL
    */
   static getParodyOrgName(realName: string): string | null {
-    this.initialize();
-    return this.orgMappings?.get(realName.toLowerCase())?.parodyName ?? null;
+    StaticDataRegistry.initialize()
+    return (
+      StaticDataRegistry.orgMappings?.get(realName.toLowerCase())?.parodyName ??
+      null
+    )
   }
 
   /**
    * Get full organization mapping - NO DATABASE CALL
    */
   static getOrganizationMapping(realName: string): OrganizationMapping | null {
-    this.initialize();
-    return this.orgMappings?.get(realName.toLowerCase()) ?? null;
+    StaticDataRegistry.initialize()
+    return StaticDataRegistry.orgMappings?.get(realName.toLowerCase()) ?? null
   }
 
   /**
    * Get all organization mappings - NO DATABASE CALL
    */
   static getAllOrganizationMappings(): OrganizationMapping[] {
-    this.initialize();
-    return [...(this.orgMappings?.values() ?? [])];
+    StaticDataRegistry.initialize()
+    return [...(StaticDataRegistry.orgMappings?.values() ?? [])]
   }
 
   // ==========================================================================
@@ -474,48 +488,52 @@ export class StaticDataRegistry {
    * Clear all caches (useful for testing)
    */
   static clearCache(): void {
-    this.actorMap = null;
-    this.actorList = null;
-    this.orgMap = null;
-    this.orgList = null;
-    this.charMappings = null;
-    this.orgMappings = null;
-    this.actorsByTier = null;
-    this.actorsByDomain = null;
+    StaticDataRegistry.actorMap = null
+    StaticDataRegistry.actorList = null
+    StaticDataRegistry.orgMap = null
+    StaticDataRegistry.orgList = null
+    StaticDataRegistry.charMappings = null
+    StaticDataRegistry.orgMappings = null
+    StaticDataRegistry.actorsByTier = null
+    StaticDataRegistry.actorsByDomain = null
   }
 
   /**
    * Get statistics about loaded data
    */
   static getStats(): {
-    actors: number;
-    organizations: number;
-    characterMappings: number;
-    organizationMappings: number;
-    actorsByTier: Record<string, number>;
-    topDomains: Array<{ domain: string; count: number }>;
+    actors: number
+    organizations: number
+    characterMappings: number
+    organizationMappings: number
+    actorsByTier: Record<string, number>
+    topDomains: Array<{ domain: string; count: number }>
   } {
-    this.initialize();
+    StaticDataRegistry.initialize()
 
-    const tierCounts: Record<string, number> = {};
-    for (const [tier, actors] of this.actorsByTier?.entries() ?? []) {
-      tierCounts[tier] = actors.length;
+    const tierCounts: Record<string, number> = {}
+    for (const [tier, actors] of StaticDataRegistry.actorsByTier?.entries() ??
+      []) {
+      tierCounts[tier] = actors.length
     }
 
-    const domainCounts: Array<{ domain: string; count: number }> = [];
-    for (const [domain, actors] of this.actorsByDomain?.entries() ?? []) {
-      domainCounts.push({ domain, count: actors.length });
+    const domainCounts: Array<{ domain: string; count: number }> = []
+    for (const [
+      domain,
+      actors,
+    ] of StaticDataRegistry.actorsByDomain?.entries() ?? []) {
+      domainCounts.push({ domain, count: actors.length })
     }
-    domainCounts.sort((a, b) => b.count - a.count);
+    domainCounts.sort((a, b) => b.count - a.count)
 
     return {
-      actors: this.actorList?.length ?? 0,
-      organizations: this.orgList?.length ?? 0,
-      characterMappings: this.charMappings?.size ?? 0,
-      organizationMappings: this.orgMappings?.size ?? 0,
+      actors: StaticDataRegistry.actorList?.length ?? 0,
+      organizations: StaticDataRegistry.orgList?.length ?? 0,
+      characterMappings: StaticDataRegistry.charMappings?.size ?? 0,
+      organizationMappings: StaticDataRegistry.orgMappings?.size ?? 0,
       actorsByTier: tierCounts,
       topDomains: domainCounts.slice(0, 10),
-    };
+    }
   }
 
   // ==========================================================================
@@ -523,74 +541,60 @@ export class StaticDataRegistry {
   // ==========================================================================
 
   private static getActorImageUrl(actorId: string): string | undefined {
-    const imagePath = join(
-      process.cwd(),
-      'public',
-      'images',
-      'actors',
-      `${actorId}.jpg`
-    );
-    return existsSync(imagePath) ? `/images/actors/${actorId}.jpg` : undefined;
+    // Always return URL - browser/CSS will handle missing images with fallbacks
+    return `/images/actors/${actorId}.jpg`
   }
 
   private static getOrgImageUrl(orgId: string): string | undefined {
-    const imagePath = join(
-      process.cwd(),
-      'public',
-      'images',
-      'organizations',
-      `${orgId}.jpg`
-    );
-    return existsSync(imagePath)
-      ? `/images/organizations/${orgId}.jpg`
-      : undefined;
+    // Always return URL - browser/CSS will handle missing images with fallbacks
+    return `/images/organizations/${orgId}.jpg`
   }
 
   private static mapDomainToCategory(domains: string[]): string {
-    if (domains.length === 0) return 'general';
-    if (domains.includes('crypto')) return 'crypto';
+    if (domains.length === 0) return 'general'
+    if (domains.includes('crypto')) return 'crypto'
     if (domains.includes('politics') || domains.includes('government'))
-      return 'politics';
+      return 'politics'
     if (
       domains.includes('tech') ||
       domains.includes('ai') ||
       domains.includes('technology')
     )
-      return 'tech';
-    return domains[0] ?? 'general';
+      return 'tech'
+    return domains[0] ?? 'general'
   }
 
   private static mapTierToPriority(tier: ActorTier | null): number {
     switch (tier) {
       case 'S_TIER':
-        return 100;
+        return 100
       case 'A_TIER':
-        return 90;
+        return 90
       case 'B_TIER':
-        return 80;
+        return 80
       case 'C_TIER':
-        return 70;
+        return 70
       default:
-        return 50;
+        return 50
     }
   }
 
   private static mapOrgTypeToCategory(orgType: string): string {
     switch (orgType) {
       case 'company':
-        return 'tech';
+        return 'tech'
       case 'media':
-        return 'media';
+        return 'media'
       case 'government':
-        return 'government';
+        return 'government'
       default:
-        return 'general';
+        return 'general'
     }
   }
 
   private static getOrganizationPriority(
     orgName: string,
-    orgType: string
+    orgType: string,
   ): number {
     const majorTechOrgs = [
       'OpenAI',
@@ -603,49 +607,49 @@ export class StaticDataRegistry {
       'Twitter',
       'Anthropic',
       'NVIDIA',
-    ];
+    ]
     if (
       majorTechOrgs.some((n) => orgName.toLowerCase().includes(n.toLowerCase()))
     )
-      return 100;
+      return 100
 
-    const majorCryptoOrgs = ['Binance', 'Coinbase', 'Ethereum'];
+    const majorCryptoOrgs = ['Binance', 'Coinbase', 'Ethereum']
     if (
       majorCryptoOrgs.some((n) =>
-        orgName.toLowerCase().includes(n.toLowerCase())
+        orgName.toLowerCase().includes(n.toLowerCase()),
       )
     )
-      return 90;
+      return 90
 
-    const majorMedia = ['New York Times', 'Washington Post', 'CNN', 'Fox News'];
+    const majorMedia = ['New York Times', 'Washington Post', 'CNN', 'Fox News']
     if (majorMedia.some((n) => orgName.toLowerCase().includes(n.toLowerCase())))
-      return 85;
+      return 85
 
-    if (orgType === 'government') return 80;
-    return 70;
+    if (orgType === 'government') return 80
+    return 70
   }
 
   private static generateActorAliases(actor: StaticActor): string[] {
-    const aliases: string[] = [];
+    const aliases: string[] = []
     // Extract last name from parody name if it has spaces
-    const nameParts = actor.name.split(' ');
+    const nameParts = actor.name.split(' ')
     if (nameParts.length > 1) {
-      const lastName = nameParts[nameParts.length - 1];
-      if (lastName) aliases.push(lastName);
+      const lastName = nameParts[nameParts.length - 1]
+      if (lastName) aliases.push(lastName)
     }
-    return aliases;
+    return aliases
   }
 }
 
 // Export convenience functions for common operations
-export const getActor = StaticDataRegistry.getActor.bind(StaticDataRegistry);
+export const getActor = StaticDataRegistry.getActor.bind(StaticDataRegistry)
 export const getAllActors =
-  StaticDataRegistry.getAllActors.bind(StaticDataRegistry);
+  StaticDataRegistry.getAllActors.bind(StaticDataRegistry)
 export const getOrganization =
-  StaticDataRegistry.getOrganization.bind(StaticDataRegistry);
+  StaticDataRegistry.getOrganization.bind(StaticDataRegistry)
 export const getAllOrganizations =
-  StaticDataRegistry.getAllOrganizations.bind(StaticDataRegistry);
+  StaticDataRegistry.getAllOrganizations.bind(StaticDataRegistry)
 export const getParodyName =
-  StaticDataRegistry.getParodyName.bind(StaticDataRegistry);
+  StaticDataRegistry.getParodyName.bind(StaticDataRegistry)
 export const getParodyOrgName =
-  StaticDataRegistry.getParodyOrgName.bind(StaticDataRegistry);
+  StaticDataRegistry.getParodyOrgName.bind(StaticDataRegistry)

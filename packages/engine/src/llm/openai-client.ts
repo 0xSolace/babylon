@@ -5,96 +5,102 @@
  * NO FALLBACKS - Jeju Compute is required.
  */
 
-import 'dotenv/config';
-import { getJejuConfig, logger } from '@babylon/shared';
-import type { LLMCallTokenUsage } from '../types/token-stats';
-import { isPromptLoggingEnabled, logPrompt } from '../utils/prompt-logger';
+import 'dotenv/config'
+import { getJejuConfig, logger } from '@babylon/shared'
+import type { LLMCallTokenUsage } from '../types/token-stats'
+import { isPromptLoggingEnabled, logPrompt } from '../utils/prompt-logger'
 import {
   cleanMarkdownCodeBlocks,
   extractJsonFromText,
-} from './json-continuation-parser';
-import { parseXML, type XMLParseResult } from './xml-parser';
+} from './json-continuation-parser'
+import { parseXML, type XMLParseResult } from './xml-parser'
 
 /** Token usage callback type */
 export type TokenUsageCallback = (
-  usage: Omit<LLMCallTokenUsage, 'callId' | 'timestamp'>
-) => void;
+  usage: Omit<LLMCallTokenUsage, 'callId' | 'timestamp'>,
+) => void
 
-let globalTokenUsageCallback: TokenUsageCallback | null = null;
+let globalTokenUsageCallback: TokenUsageCallback | null = null
 
 export function setTokenUsageCallback(
-  callback: TokenUsageCallback | null
+  callback: TokenUsageCallback | null,
 ): void {
-  globalTokenUsageCallback = callback;
+  globalTokenUsageCallback = callback
 }
 
 export function getTokenUsageCallback(): TokenUsageCallback | null {
-  return globalTokenUsageCallback;
+  return globalTokenUsageCallback
 }
 
 interface JSONSchema {
-  required?: string[];
-  properties?: Record<string, JsonSchemaProperty>;
+  required?: string[]
+  properties?: Record<string, JsonSchemaProperty>
 }
 
 interface JsonSchemaProperty {
-  type?: 'string' | 'number' | 'boolean' | 'object' | 'array';
-  description?: string;
-  items?: JsonSchemaProperty;
-  properties?: Record<string, JsonSchemaProperty>;
+  type?: 'string' | 'number' | 'boolean' | 'object' | 'array'
+  description?: string
+  items?: JsonSchemaProperty
+  properties?: Record<string, JsonSchemaProperty>
+}
+
+/** Jeju compute API response format */
+interface JejuComputeResponse {
+  choices?: Array<{ message?: { content: string } }>
+  usage?: { prompt_tokens: number; completion_tokens: number }
 }
 
 export class BabylonLLMClient {
-  private jejuConfig: ReturnType<typeof getJejuConfig>;
+  private jejuConfig: ReturnType<typeof getJejuConfig>
 
   static forJeju(): BabylonLLMClient {
-    return new BabylonLLMClient();
+    return new BabylonLLMClient()
   }
 
   /** Legacy factory methods - all route to Jeju */
   static forGroq(): BabylonLLMClient {
-    return new BabylonLLMClient();
+    return new BabylonLLMClient()
   }
 
   static forClaude(): BabylonLLMClient {
-    return new BabylonLLMClient();
+    return new BabylonLLMClient()
   }
 
   static forOpenAI(_apiKey?: string): BabylonLLMClient {
-    return new BabylonLLMClient();
+    return new BabylonLLMClient()
   }
 
   static forGameTick(): BabylonLLMClient {
-    return new BabylonLLMClient();
+    return new BabylonLLMClient()
   }
 
   constructor(_apiKey?: string, _forceProvider?: string) {
-    this.jejuConfig = getJejuConfig();
+    this.jejuConfig = getJejuConfig()
 
     const jejuNetwork =
-      process.env.JEJU_NETWORK || process.env.NEXT_PUBLIC_JEJU_NETWORK;
+      process.env.JEJU_NETWORK || process.env.PUBLIC_JEJU_NETWORK
 
     if (!jejuNetwork) {
       throw new Error(
         '[BabylonLLMClient] JEJU_NETWORK not set. ' +
           'Decentralized compute is required. ' +
-          'Set JEJU_NETWORK=mainnet, testnet, or localnet.'
-      );
+          'Set JEJU_NETWORK=mainnet, testnet, or localnet.',
+      )
     }
 
     logger.info(
       `Using Jeju decentralized compute (${jejuNetwork})`,
       undefined,
-      'BabylonLLMClient'
-    );
+      'BabylonLLMClient',
+    )
   }
 
   getProvider(): string {
-    return 'jeju';
+    return 'jeju'
   }
 
   getDefaultModel(): string {
-    return 'llama3-70b';
+    return 'llama3-70b'
   }
 
   getStats(): { provider: string; model: string; configured: boolean } {
@@ -102,20 +108,20 @@ export class BabylonLLMClient {
       provider: 'jeju',
       model: this.getDefaultModel(),
       configured: true,
-    };
+    }
   }
 
   async generateJSON<T>(
     prompt: string,
     _schema?: JSONSchema,
     options: {
-      model?: string;
-      temperature?: number;
-      maxTokens?: number;
-      format?: 'xml' | 'json';
-      promptType?: string;
-      promptTemplate?: string;
-    } = {}
+      model?: string
+      temperature?: number
+      maxTokens?: number
+      format?: 'xml' | 'json'
+      promptType?: string
+      promptTemplate?: string
+    } = {},
   ): Promise<T> {
     const {
       model = this.getDefaultModel(),
@@ -124,7 +130,7 @@ export class BabylonLLMClient {
       format = 'xml',
       promptType = 'unknown',
       promptTemplate,
-    } = options;
+    } = options
 
     // Babylon world context
     const babylonContext = `You are generating content for Babylon, a satirical prediction market game.
@@ -135,7 +141,7 @@ WORLD RULES:
 - NO emojis in any content
 - Each character has a UNIQUE voice - match their writing style exactly
 
-`;
+`
 
     const systemContent =
       format === 'xml'
@@ -147,25 +153,25 @@ WORLD RULES:
           '4. Do NOT write any thinking process\n' +
           '5. Just output the pure XML structure directly\n'
         : babylonContext +
-          'You are a JSON-only assistant. Respond ONLY with valid JSON.';
+          'You are a JSON-only assistant. Respond ONLY with valid JSON.'
 
-    let retryCount = 0;
-    const maxRetries = 3;
-    const initialDelayMs = 2000;
+    let retryCount = 0
+    const maxRetries = 3
+    const initialDelayMs = 2000
 
     while (retryCount <= maxRetries) {
       try {
-        const startTime = Date.now();
+        const startTime = Date.now()
 
         const response = await this.callJejuCompute(
           systemContent,
           prompt,
           model,
           temperature,
-          maxTokens
-        );
+          maxTokens,
+        )
 
-        const latencyMs = Date.now() - startTime;
+        const latencyMs = Date.now() - startTime
 
         // Log prompt if enabled
         if (isPromptLoggingEnabled()) {
@@ -178,16 +184,16 @@ WORLD RULES:
               model,
               provider: 'jeju',
             },
-          });
+          })
         }
 
         // Report token usage
         if (globalTokenUsageCallback) {
           const inputTokens =
-            response.usage?.promptTokens ?? this.estimateTokens(prompt);
+            response.usage?.promptTokens ?? this.estimateTokens(prompt)
           const outputTokens =
             response.usage?.completionTokens ??
-            this.estimateTokens(response.content);
+            this.estimateTokens(response.content)
           globalTokenUsageCallback({
             provider: 'jeju',
             model,
@@ -197,34 +203,34 @@ WORLD RULES:
             totalTokens: inputTokens + outputTokens,
             durationMs: latencyMs,
             success: true,
-          });
+          })
         }
 
         // Parse response
-        const cleanedContent = cleanMarkdownCodeBlocks(response.content);
+        const cleanedContent = cleanMarkdownCodeBlocks(response.content)
 
         if (format === 'xml') {
-          const result: XMLParseResult<T> = parseXML<T>(cleanedContent);
+          const result: XMLParseResult<T> = parseXML<T>(cleanedContent)
           if (!result.success) {
-            throw new Error(`XML parse failed: ${result.error}`);
+            throw new Error(`XML parse failed: ${result.error}`)
           }
           if (!result.data) {
-            throw new Error('XML parse returned no data');
+            throw new Error('XML parse returned no data')
           }
-          return result.data;
+          return result.data
         }
 
-        const parsed = JSON.parse(extractJsonFromText(cleanedContent));
-        return parsed as T;
+        const parsed = JSON.parse(extractJsonFromText(cleanedContent))
+        return parsed as T
       } catch (error) {
-        retryCount++;
-        const err = error as Error;
+        retryCount++
+        const err = error as Error
 
         logger.warn(
           `LLM call failed (attempt ${retryCount}/${maxRetries + 1}): ${err.message}`,
           { promptType, model },
-          'BabylonLLMClient'
-        );
+          'BabylonLLMClient',
+        )
 
         if (globalTokenUsageCallback) {
           globalTokenUsageCallback({
@@ -237,58 +243,58 @@ WORLD RULES:
             durationMs: 0,
             success: false,
             error: err.message,
-          });
+          })
         }
 
         if (retryCount > maxRetries) {
           throw new Error(
-            `LLM call failed after ${maxRetries + 1} attempts: ${err.message}`
-          );
+            `LLM call failed after ${maxRetries + 1} attempts: ${err.message}`,
+          )
         }
 
         // Exponential backoff
-        const delayMs = initialDelayMs * Math.pow(2, retryCount - 1);
-        await new Promise((resolve) => setTimeout(resolve, delayMs));
+        const delayMs = initialDelayMs * 2 ** (retryCount - 1)
+        await new Promise((resolve) => setTimeout(resolve, delayMs))
       }
     }
 
-    throw new Error('LLM call failed: exhausted all retries');
+    throw new Error('LLM call failed: exhausted all retries')
   }
 
   async generate(
     prompt: string,
     options: {
-      model?: string;
-      temperature?: number;
-      maxTokens?: number;
-      promptType?: string;
-    } = {}
+      model?: string
+      temperature?: number
+      maxTokens?: number
+      promptType?: string
+    } = {},
   ): Promise<string> {
     const {
       model = this.getDefaultModel(),
       temperature = 0.7,
       maxTokens = 4000,
       promptType = 'unknown',
-    } = options;
+    } = options
 
-    const startTime = Date.now();
+    const startTime = Date.now()
 
     const response = await this.callJejuCompute(
       'You are a helpful assistant.',
       prompt,
       model,
       temperature,
-      maxTokens
-    );
+      maxTokens,
+    )
 
-    const latencyMs = Date.now() - startTime;
+    const latencyMs = Date.now() - startTime
 
     if (globalTokenUsageCallback) {
       const inputTokens =
-        response.usage?.promptTokens ?? this.estimateTokens(prompt);
+        response.usage?.promptTokens ?? this.estimateTokens(prompt)
       const outputTokens =
         response.usage?.completionTokens ??
-        this.estimateTokens(response.content);
+        this.estimateTokens(response.content)
       globalTokenUsageCallback({
         provider: 'jeju',
         model,
@@ -298,65 +304,65 @@ WORLD RULES:
         totalTokens: inputTokens + outputTokens,
         durationMs: latencyMs,
         success: true,
-      });
+      })
     }
 
-    return response.content;
+    return response.content
   }
 
   async generateWithContinuation<T>(
     prompt: string,
     options: {
-      model?: string;
-      temperature?: number;
-      maxTokensPerChunk?: number;
-      maxChunks?: number;
-      promptType?: string;
-    } = {}
+      model?: string
+      temperature?: number
+      maxTokensPerChunk?: number
+      maxChunks?: number
+      promptType?: string
+    } = {},
   ): Promise<T> {
     const {
       model = this.getDefaultModel(),
       temperature = 0.7,
       maxTokensPerChunk = 16000,
       maxChunks = 3,
-    } = options;
+    } = options
 
-    let fullContent = '';
-    let chunk = 0;
+    let fullContent = ''
+    let chunk = 0
 
     while (chunk < maxChunks) {
-      const isFirstChunk = chunk === 0;
+      const isFirstChunk = chunk === 0
       const currentPrompt = isFirstChunk
         ? prompt
-        : `Continue generating from where you left off. The previous output ended with:\n...\n${fullContent.slice(-500)}\n\nContinue:`;
+        : `Continue generating from where you left off. The previous output ended with:\n...\n${fullContent.slice(-500)}\n\nContinue:`
 
       const response = await this.callJejuCompute(
         'You are an XML-only assistant generating content for Babylon.',
         currentPrompt,
         model,
         temperature,
-        maxTokensPerChunk
-      );
+        maxTokensPerChunk,
+      )
 
-      fullContent += response.content;
-      chunk++;
+      fullContent += response.content
+      chunk++
 
       // Check if response seems complete (ends with closing tag)
-      const cleanedSoFar = cleanMarkdownCodeBlocks(fullContent);
+      const cleanedSoFar = cleanMarkdownCodeBlocks(fullContent)
       if (cleanedSoFar.match(/<\/\w+>\s*$/)) {
-        break;
+        break
       }
     }
 
-    const cleanedContent = cleanMarkdownCodeBlocks(fullContent);
-    const result: XMLParseResult<T> = parseXML<T>(cleanedContent);
+    const cleanedContent = cleanMarkdownCodeBlocks(fullContent)
+    const result: XMLParseResult<T> = parseXML<T>(cleanedContent)
     if (!result.success) {
-      throw new Error(`XML parse failed: ${result.error}`);
+      throw new Error(`XML parse failed: ${result.error}`)
     }
     if (!result.data) {
-      throw new Error('XML parse returned no data');
+      throw new Error('XML parse returned no data')
     }
-    return result.data;
+    return result.data
   }
 
   private async callJejuCompute(
@@ -364,17 +370,17 @@ WORLD RULES:
     userPrompt: string,
     model: string,
     temperature: number,
-    maxTokens: number
+    maxTokens: number,
   ): Promise<{
-    content: string;
-    usage?: { promptTokens: number; completionTokens: number };
+    content: string
+    usage?: { promptTokens: number; completionTokens: number }
   }> {
-    const computeApiUrl = this.getComputeApiUrl();
+    const computeApiUrl = this.getComputeApiUrl()
 
     const messages = [
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userPrompt },
-    ];
+    ]
 
     const response = await fetch(`${computeApiUrl}/v1/chat/completions`, {
       method: 'POST',
@@ -392,17 +398,14 @@ WORLD RULES:
         stream: false,
       }),
       signal: AbortSignal.timeout(300000), // 5 minutes
-    });
+    })
 
     if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Jeju compute error: ${response.status} - ${errorText}`);
+      const errorText = await response.text()
+      throw new Error(`Jeju compute error: ${response.status} - ${errorText}`)
     }
 
-    const data = (await response.json()) as {
-      choices?: Array<{ message?: { content: string } }>;
-      usage?: { prompt_tokens: number; completion_tokens: number };
-    };
+    const data: JejuComputeResponse = await response.json()
 
     return {
       content: data.choices?.[0]?.message?.content || '',
@@ -412,31 +415,33 @@ WORLD RULES:
             completionTokens: data.usage.completion_tokens,
           }
         : undefined,
-    };
+    }
   }
 
   private getComputeApiUrl(): string {
     if (process.env.JEJU_COMPUTE_API_URL) {
-      return process.env.JEJU_COMPUTE_API_URL;
+      return process.env.JEJU_COMPUTE_API_URL
     }
 
-    const network =
-      process.env.JEJU_NETWORK || process.env.NEXT_PUBLIC_JEJU_NETWORK;
+    const network = process.env.JEJU_NETWORK || process.env.PUBLIC_JEJU_NETWORK
+
+    // Port configuration via env var
+    const computePort = process.env.JEJU_COMPUTE_PORT ?? '5010'
 
     const urls: Record<string, string> = {
-      localnet: 'http://127.0.0.1:5010',
+      localnet: `http://127.0.0.1:${computePort}`,
       testnet: 'https://compute.jeju.network',
       mainnet: 'https://compute.jeju.network',
-    };
+    }
 
-    return urls[network ?? 'localnet'] ?? 'http://127.0.0.1:5010';
+    return urls[network ?? 'localnet'] ?? `http://127.0.0.1:${computePort}`
   }
 
   private estimateTokens(text: string): number {
     // Rough estimate: 4 chars per token
-    return Math.ceil(text.length / 4);
+    return Math.ceil(text.length / 4)
   }
 }
 
 // Legacy exports
-export { cleanMarkdownCodeBlocks, extractJsonFromText };
+export { cleanMarkdownCodeBlocks, extractJsonFromText }

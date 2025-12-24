@@ -5,22 +5,22 @@
  * Handles gradual rollout and rollback if needed.
  */
 
-import { db } from '@babylon/db';
-import { logger } from '@babylon/shared';
-import { getAgentRuntimeManager } from '../dependencies';
+import { db } from '@babylon/db'
+import { logger } from '@babylon/shared'
+import { getAgentRuntimeManager } from '../dependencies'
 
 export interface DeploymentOptions {
-  modelVersion: string;
-  strategy: 'immediate' | 'gradual' | 'test';
-  rolloutPercentage?: number; // For gradual deployment (default: 10%)
-  testAgentIds?: string[]; // For test deployment
+  modelVersion: string
+  strategy: 'immediate' | 'gradual' | 'test'
+  rolloutPercentage?: number // For gradual deployment (default: 10%)
+  testAgentIds?: string[] // For test deployment
 }
 
 export interface DeploymentResult {
-  success: boolean;
-  agentsUpdated: number;
-  deploymentId: string;
-  error?: string;
+  success: boolean
+  agentsUpdated: number
+  deploymentId: string
+  error?: string
 }
 
 export class ModelDeployer {
@@ -31,23 +31,23 @@ export class ModelDeployer {
     logger.info('Starting model deployment', {
       version: options.modelVersion,
       strategy: options.strategy,
-    });
+    })
 
     // Get model
     const model = await db.trainedModel.findFirst({
       where: { version: options.modelVersion },
-    });
+    })
 
     if (!model) {
-      throw new Error(`Model ${options.modelVersion} not found`);
+      throw new Error(`Model ${options.modelVersion} not found`)
     }
 
     // Get target agents
-    const targetAgents = await this.getTargetAgents(options);
+    const targetAgents = await this.getTargetAgents(options)
 
-    logger.info(`Deploying to ${targetAgents.length} agents`);
+    logger.info(`Deploying to ${targetAgents.length} agents`)
 
-    const deploymentId = `deploy-${Date.now()}`;
+    const deploymentId = `deploy-${Date.now()}`
 
     // Update model status
     await db.trainedModel.update({
@@ -58,11 +58,11 @@ export class ModelDeployer {
         agentsUsing: targetAgents.length,
         updatedAt: new Date(),
       },
-    });
+    })
 
     // Clear agent runtimes so they pick up the new model
     for (const agent of targetAgents) {
-      getAgentRuntimeManager().resetRuntime(agent.id);
+      getAgentRuntimeManager().resetRuntime(agent.id)
     }
 
     logger.info('Model deployed successfully', {
@@ -70,13 +70,13 @@ export class ModelDeployer {
       agentsUpdated: targetAgents.length,
       deploymentId,
       runtimesCleared: targetAgents.length,
-    });
+    })
 
     return {
       success: true,
       agentsUpdated: targetAgents.length,
       deploymentId,
-    };
+    }
   }
 
   /**
@@ -85,25 +85,26 @@ export class ModelDeployer {
   private async getTargetAgents(options: DeploymentOptions) {
     const agents = await db.user.findMany({
       where: { isAgent: true },
-    });
+    })
 
     switch (options.strategy) {
       case 'immediate':
-        return agents;
+        return agents
 
-      case 'gradual':
-        const percentage = options.rolloutPercentage || 10;
-        const count = Math.ceil(agents.length * (percentage / 100));
-        return agents.slice(0, count);
+      case 'gradual': {
+        const percentage = options.rolloutPercentage || 10
+        const count = Math.ceil(agents.length * (percentage / 100))
+        return agents.slice(0, count)
+      }
 
       case 'test':
         if (options.testAgentIds) {
-          return agents.filter((a) => options.testAgentIds!.includes(a.id));
+          return agents.filter((a) => options.testAgentIds?.includes(a.id))
         }
-        return agents.slice(0, 1); // Just first agent
+        return agents.slice(0, 1) // Just first agent
 
       default:
-        return agents;
+        return agents
     }
   }
 
@@ -112,33 +113,33 @@ export class ModelDeployer {
    */
   async rollback(
     currentVersion: string,
-    targetVersion: string
+    targetVersion: string,
   ): Promise<DeploymentResult> {
     logger.info('Rolling back model', {
       from: currentVersion,
       to: targetVersion,
-    });
+    })
 
     // Simply deploy the target version
     return await this.deploy({
       modelVersion: targetVersion,
       strategy: 'immediate',
-    });
+    })
   }
 
   /**
    * Get deployment status
    */
   async getDeploymentStatus(deploymentId: string): Promise<{
-    status: string;
-    agentsUpdated: number;
-    agentsFailed: number;
-    performance: Record<string, number>;
+    status: string
+    agentsUpdated: number
+    agentsFailed: number
+    performance: Record<string, number>
   } | null> {
     // Since we don't have modelDeployment table, return basic status
-    const timestampPart = deploymentId.split('-')[1];
+    const timestampPart = deploymentId.split('-')[1]
     if (!timestampPart) {
-      return null;
+      return null
     }
 
     // Return deployment status (tracking via external monitoring)
@@ -147,9 +148,9 @@ export class ModelDeployer {
       agentsUpdated: 0,
       agentsFailed: 0,
       performance: {},
-    };
+    }
   }
 }
 
 // Singleton
-export const modelDeployer = new ModelDeployer();
+export const modelDeployer = new ModelDeployer()

@@ -155,7 +155,7 @@
       "enabled": true,
       "regions": ["global"],
       "cacheRules": [
-        { "pattern": "/_next/static/**", "ttl": 31536000, "immutable": true },
+        { "pattern": "/assets/**", "ttl": 31536000, "immutable": true },
         { "pattern": "/api/**", "ttl": 0 },
         { "pattern": "/**/*.html", "ttl": 60, "staleWhileRevalidate": 3600 }
       ],
@@ -170,7 +170,7 @@
       "ipfs": true,
       "arweave": true,
       "jnsName": "babylon.jeju",
-      "buildDir": "apps/web/out",
+      "buildDir": "apps/web/dist",
       "spa": true,
       "fallbackOrigins": ["https://babylon.game"],
       "pinning": {
@@ -269,7 +269,7 @@
     "recoveryTarget": "1h"
   },
   "defaultEnv": {
-    "CQL_BLOCK_PRODUCER_ENDPOINT": "http://localhost:4300",
+    "CQL_BLOCK_PRODUCER_ENDPOINT": "http://localhost:4661",
     "CQL_DATABASE_ID": "babylon",
     "JEJU_CACHE_SERVICE_URL": "http://localhost:4015",
     "JEJU_STORAGE_SERVICE_URL": "http://localhost:5001",
@@ -279,9 +279,9 @@
     "CACHE_NAMESPACE": "babylon",
     "STORAGE_NAMESPACE": "babylon",
     "KMS_NAMESPACE": "babylon",
-    "NEXT_PUBLIC_DOMAIN": "babylon.game",
-    "NEXT_PUBLIC_API_BASE_URL": "https://api.babylon.game",
-    "NEXT_PUBLIC_IPFS_GATEWAY": "https://ipfs.babylon.game",
+    "VITE_DOMAIN": "babylon.game",
+    "VITE_API_BASE_URL": "https://api.babylon.game",
+    "VITE_IPFS_GATEWAY": "https://ipfs.babylon.game",
     "AI_CEO_AGENT_ID": "1",
     "AI_CEO_DECISION_THRESHOLD": "0.7",
     "AI_CEO_MIN_VAULT_BALANCE": "100000000000000000",

@@ -1,4 +1,4 @@
-import { definePrompt } from '../define-prompt';
+import { definePrompt } from '../define-prompt'
 
 /**
  * Prompt providing phase-specific narrative instructions for content generation.
@@ -56,4 +56,4 @@ This file defines narrative instructions for each game phase:
 - Epilogue content
 - Narrative closure
 `.trim(),
-});
+})

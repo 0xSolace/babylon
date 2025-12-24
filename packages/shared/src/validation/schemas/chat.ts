@@ -2,25 +2,25 @@
  * Chat-related validation schemas
  */
 
-import { z } from 'zod';
+import { z } from 'zod'
 import {
   createTrimmedStringSchema,
   PaginationSchema,
   SnowflakeIdSchema,
   UserIdSchema,
-} from './common';
+} from './common'
 
 /**
  * Chat message content schema
  */
-export const ChatMessageContentSchema = createTrimmedStringSchema(1, 5000);
+export const ChatMessageContentSchema = createTrimmedStringSchema(1, 5000)
 
 /**
  * Chat message submission schema
  */
 export const ChatMessageCreateSchema = z.object({
   content: ChatMessageContentSchema,
-});
+})
 
 /**
  * Chat creation schema
@@ -34,21 +34,21 @@ export const ChatCreateSchema = z
   .refine((data) => !data.isGroup || data.name !== undefined, {
     message: 'Group name is required for group chats',
     path: ['name'],
-  });
+  })
 
 /**
  * DM chat creation schema
  */
 export const DMChatCreateSchema = z.object({
   userId: UserIdSchema,
-});
+})
 
 /**
  * Chat ID parameter schema
  */
 export const ChatIdParamSchema = z.object({
   id: z.string().min(1),
-});
+})
 
 /**
  * Chat query parameters schema
@@ -56,14 +56,14 @@ export const ChatIdParamSchema = z.object({
 export const ChatQuerySchema = z.object({
   all: z.enum(['true', 'false']).optional(),
   debug: z.enum(['true', 'false']).optional(),
-});
+})
 
 /**
  * Chat message query schema
  */
 export const ChatMessageQuerySchema = PaginationSchema.extend({
   chatId: z.string().min(1).optional(),
-});
+})
 
 /**
  * Chat message response schema (for type safety)
@@ -74,7 +74,7 @@ export const ChatMessageSchema = z.object({
   senderId: SnowflakeIdSchema,
   chatId: z.string(),
   createdAt: z.date(),
-});
+})
 
 /**
  * Chat participant schema
@@ -84,7 +84,7 @@ export const ChatParticipantSchema = z.object({
   displayName: z.string(),
   username: z.string().optional(),
   profileImageUrl: z.string().optional(),
-});
+})
 
 /**
  * Chat response schema
@@ -97,16 +97,16 @@ export const ChatSchema = z.object({
   updatedAt: z.date(),
   participants: z.array(ChatParticipantSchema).optional(),
   lastMessage: ChatMessageSchema.optional(),
-});
+})
 
 // Type exports
-export type ChatMessageContent = z.infer<typeof ChatMessageContentSchema>;
-export type ChatMessageCreate = z.infer<typeof ChatMessageCreateSchema>;
-export type ChatCreate = z.infer<typeof ChatCreateSchema>;
-export type DMChatCreate = z.infer<typeof DMChatCreateSchema>;
-export type ChatIdParam = z.infer<typeof ChatIdParamSchema>;
-export type ChatQuery = z.infer<typeof ChatQuerySchema>;
-export type ChatMessageQuery = z.infer<typeof ChatMessageQuerySchema>;
-export type ChatMessage = z.infer<typeof ChatMessageSchema>;
-export type ChatParticipant = z.infer<typeof ChatParticipantSchema>;
-export type Chat = z.infer<typeof ChatSchema>;
+export type ChatMessageContent = z.infer<typeof ChatMessageContentSchema>
+export type ChatMessageCreate = z.infer<typeof ChatMessageCreateSchema>
+export type ChatCreate = z.infer<typeof ChatCreateSchema>
+export type DMChatCreate = z.infer<typeof DMChatCreateSchema>
+export type ChatIdParam = z.infer<typeof ChatIdParamSchema>
+export type ChatQuery = z.infer<typeof ChatQuerySchema>
+export type ChatMessageQuery = z.infer<typeof ChatMessageQuerySchema>
+export type ChatMessage = z.infer<typeof ChatMessageSchema>
+export type ChatParticipant = z.infer<typeof ChatParticipantSchema>
+export type Chat = z.infer<typeof ChatSchema>

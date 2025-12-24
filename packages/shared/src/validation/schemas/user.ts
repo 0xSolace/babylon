@@ -2,7 +2,7 @@
  * User-related validation schemas
  */
 
-import { z } from 'zod';
+import { z } from 'zod'
 import {
   createTrimmedStringSchema,
   EmailSchema,
@@ -11,7 +11,7 @@ import {
   URLSchema,
   UsernameSchema,
   WalletAddressSchema,
-} from './common';
+} from './common'
 
 /**
  * Create user schema for registration
@@ -28,7 +28,7 @@ export const CreateUserSchema = z
   })
   .refine((data) => data.walletAddress || data.email, {
     message: 'Either wallet address or email is required',
-  });
+  })
 
 /**
  * Update user profile schema
@@ -46,10 +46,10 @@ export const UpdateUserSchema = z.object({
     .string()
     .regex(
       /^0x[0-9a-fA-F]{64}$/,
-      'onchainTxHash must be a valid 32-byte hex string'
+      'onchainTxHash must be a valid 32-byte hex string',
     )
     .optional(),
-});
+})
 
 /**
  * Social connection schemas
@@ -58,7 +58,7 @@ export const ConnectSocialSchema = z.object({
   platform: z.enum(['twitter', 'farcaster']),
   username: z.string().min(1).max(50),
   verificationToken: z.string().optional(), // For verification purposes
-});
+})
 
 /**
  * Referral schema
@@ -69,7 +69,7 @@ export const ReferralSchema = z.object({
     .min(6)
     .max(20)
     .regex(/^[A-Z0-9]+$/, 'Referral code must be alphanumeric uppercase'),
-});
+})
 
 /**
  * User authentication schema
@@ -78,7 +78,7 @@ export const UserAuthSchema = z.object({
   walletAddress: WalletAddressSchema,
   signature: z.string(),
   nonce: z.string(),
-});
+})
 
 /**
  * User balance transaction schema
@@ -95,7 +95,7 @@ export const UserBalanceTransactionSchema = z.object({
   ]),
   description: z.string().optional(),
   transactionHash: z.string().optional(),
-});
+})
 
 /**
  * User points transaction schema
@@ -113,7 +113,7 @@ export const UserPointsTransactionSchema = z.object({
     'achievement',
   ]),
   description: z.string(),
-});
+})
 
 /**
  * User query filters
@@ -125,21 +125,21 @@ export const UserQuerySchema = z.object({
   maxReputation: z.number().optional(),
   onChainRegistered: z.boolean().optional(),
   search: z.string().optional(),
-});
+})
 
 /**
  * Follow/unfollow schema
  */
 export const FollowUserSchema = z.object({
   targetUserId: SnowflakeIdSchema,
-});
+})
 
 /**
  * Favorite user schema
  */
 export const FavoriteUserSchema = z.object({
   targetUserId: SnowflakeIdSchema,
-});
+})
 
 /**
  * User onboarding completion schema
@@ -150,7 +150,7 @@ export const CompleteOnboardingSchema = z.object({
   bio: createTrimmedStringSchema(undefined, 500).optional(),
   profileImageUrl: URLSchema.optional(),
   referralCode: z.string().optional(),
-});
+})
 
 /**
  * On-chain registration schema
@@ -170,7 +170,7 @@ export const OnChainRegistrationSchema = z.object({
         val.startsWith('http://') ||
         val.startsWith('https://') ||
         val.startsWith('/uploads/'),
-      { message: 'Must be a valid URL or asset path' }
+      { message: 'Must be a valid URL or asset path' },
     )
     .optional(),
   coverImageUrl: z
@@ -182,12 +182,12 @@ export const OnChainRegistrationSchema = z.object({
         val.startsWith('http://') ||
         val.startsWith('https://') ||
         val.startsWith('/uploads/'),
-      { message: 'Must be a valid URL or asset path' }
+      { message: 'Must be a valid URL or asset path' },
     )
     .optional(),
   endpoint: URLSchema.optional(),
   referralCode: z.string().optional(),
-});
+})
 
 /**
  * Agent0 registration schema
@@ -196,7 +196,7 @@ export const Agent0RegistrationSchema = z.object({
   metadataCID: z.string(), // IPFS CID
   mcpEndpoint: URLSchema.optional(),
   a2aEndpoint: URLSchema.optional(),
-});
+})
 
 /**
  * User wallet update schema
@@ -205,7 +205,7 @@ export const UpdateWalletSchema = z.object({
   walletAddress: WalletAddressSchema,
   signature: z.string(),
   nonce: z.string(),
-});
+})
 
 /**
  * User response schema (for API responses)
@@ -232,7 +232,7 @@ export const UserResponseSchema = z.object({
   agent0TrustScore: z.number(),
   createdAt: z.string(), // DateTime as string
   updatedAt: z.string(), // DateTime as string
-});
+})
 
 /**
  * User list response schema
@@ -242,7 +242,7 @@ export const UserListResponseSchema = z.object({
   total: z.number(),
   page: z.number(),
   limit: z.number(),
-});
+})
 
 /**
  * User posts query schema
@@ -251,33 +251,33 @@ export const UserPostsQuerySchema = z.object({
   type: z.enum(['posts', 'replies']).default('posts'),
   page: z.coerce.number().min(1).default(1),
   limit: z.coerce.number().min(1).max(100).default(100),
-});
+})
 
 /**
  * User followers/following query schema
  */
 export const UserFollowersQuerySchema = PaginationSchema.extend({
   includeMutual: z.coerce.boolean().default(false),
-});
+})
 
 // Type exports
-export type CreateUser = z.infer<typeof CreateUserSchema>;
-export type UpdateUser = z.infer<typeof UpdateUserSchema>;
-export type ConnectSocial = z.infer<typeof ConnectSocialSchema>;
-export type Referral = z.infer<typeof ReferralSchema>;
-export type UserAuth = z.infer<typeof UserAuthSchema>;
+export type CreateUser = z.infer<typeof CreateUserSchema>
+export type UpdateUser = z.infer<typeof UpdateUserSchema>
+export type ConnectSocial = z.infer<typeof ConnectSocialSchema>
+export type Referral = z.infer<typeof ReferralSchema>
+export type UserAuth = z.infer<typeof UserAuthSchema>
 export type UserBalanceTransaction = z.infer<
   typeof UserBalanceTransactionSchema
->;
-export type UserPointsTransaction = z.infer<typeof UserPointsTransactionSchema>;
-export type UserQuery = z.infer<typeof UserQuerySchema>;
-export type FollowUser = z.infer<typeof FollowUserSchema>;
-export type FavoriteUser = z.infer<typeof FavoriteUserSchema>;
-export type CompleteOnboarding = z.infer<typeof CompleteOnboardingSchema>;
-export type OnChainRegistration = z.infer<typeof OnChainRegistrationSchema>;
-export type Agent0Registration = z.infer<typeof Agent0RegistrationSchema>;
-export type UpdateWallet = z.infer<typeof UpdateWalletSchema>;
-export type UserResponse = z.infer<typeof UserResponseSchema>;
-export type UserListResponse = z.infer<typeof UserListResponseSchema>;
-export type UserPostsQuery = z.infer<typeof UserPostsQuerySchema>;
-export type UserFollowersQuery = z.infer<typeof UserFollowersQuerySchema>;
+>
+export type UserPointsTransaction = z.infer<typeof UserPointsTransactionSchema>
+export type UserQuery = z.infer<typeof UserQuerySchema>
+export type FollowUser = z.infer<typeof FollowUserSchema>
+export type FavoriteUser = z.infer<typeof FavoriteUserSchema>
+export type CompleteOnboarding = z.infer<typeof CompleteOnboardingSchema>
+export type OnChainRegistration = z.infer<typeof OnChainRegistrationSchema>
+export type Agent0Registration = z.infer<typeof Agent0RegistrationSchema>
+export type UpdateWallet = z.infer<typeof UpdateWalletSchema>
+export type UserResponse = z.infer<typeof UserResponseSchema>
+export type UserListResponse = z.infer<typeof UserListResponseSchema>
+export type UserPostsQuery = z.infer<typeof UserPostsQuerySchema>
+export type UserFollowersQuery = z.infer<typeof UserFollowersQuerySchema>

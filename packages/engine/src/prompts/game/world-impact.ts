@@ -1,4 +1,4 @@
-import { definePrompt } from '../define-prompt';
+import { definePrompt } from '../define-prompt'
 
 /**
  * Prompt for assessing if a resolved question/event changes the world state.
@@ -80,4 +80,4 @@ Output JSON format:
   "relatedExistingFacts": ["list of existing facts this relates to"]
 }
 `,
-});
+})

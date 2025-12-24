@@ -1,7 +1,5 @@
-'use client';
-
-import { cn, getProfileUrl } from '@babylon/shared';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { cn, getProfileUrl } from '@babylon/shared'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   AlertCircle,
   ArrowLeft,
@@ -13,54 +11,54 @@ import {
   Search,
   User,
   X as XIcon,
-} from 'lucide-react';
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { ArticleCard } from '@/components/articles/ArticleCard';
-import { LoginButton } from '@/components/auth/LoginButton';
-import { PostCard } from '@/components/posts/PostCard';
-import { LinkSocialAccountsModal } from '@/components/profile/LinkSocialAccountsModal';
-import { OnChainBadge } from '@/components/profile/OnChainBadge';
-import { ProfileWidget } from '@/components/profile/ProfileWidget';
-import { TradingProfile } from '@/components/profile/TradingProfile';
-import { Avatar } from '@/components/shared/Avatar';
-import { PageContainer } from '@/components/shared/PageContainer';
+} from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
+import { ArticleCard } from '@/components/articles/ArticleCard'
+import { LoginButton } from '@/components/auth/LoginButton'
+import { PostCard } from '@/components/posts/PostCard'
+import { LinkSocialAccountsModal } from '@/components/profile/LinkSocialAccountsModal'
+import { OnChainBadge } from '@/components/profile/OnChainBadge'
+import { ProfileWidget } from '@/components/profile/ProfileWidget'
+import { TradingProfile } from '@/components/profile/TradingProfile'
+import { Avatar } from '@/components/shared/Avatar'
+import { PageContainer } from '@/components/shared/PageContainer'
 import {
   FeedSkeleton,
   ProfileHeaderSkeleton,
-} from '@/components/shared/Skeleton';
-import { TaggedText } from '@/components/shared/TaggedText';
-import { useAuth } from '@/hooks/useAuth';
-import { useAuthStore } from '@/stores/authStore';
+} from '@/components/shared/Skeleton'
+import { TaggedText } from '@/components/shared/TaggedText'
+import { useAuth } from '@/hooks/useAuth'
+import { useRouter } from '@/lib/navigation'
+import { useAuthStore } from '@/stores/authStore'
 
 interface ProfileFormData {
-  username: string;
-  displayName: string;
-  bio: string;
-  profileImageUrl: string;
-  coverImageUrl: string;
+  username: string
+  displayName: string
+  bio: string
+  profileImageUrl: string
+  coverImageUrl: string
 }
 
 interface SocialVisibility {
-  twitter: boolean;
-  farcaster: boolean;
-  wallet: boolean;
+  twitter: boolean
+  farcaster: boolean
+  wallet: boolean
 }
 
 interface EditModalState {
-  isOpen: boolean;
-  formData: ProfileFormData;
-  profileImage: { file: File | null; preview: string | null };
-  coverImage: { file: File | null; preview: string | null };
-  isSaving: boolean;
-  error: string | null;
+  isOpen: boolean
+  formData: ProfileFormData
+  profileImage: { file: File | null; preview: string | null }
+  coverImage: { file: File | null; preview: string | null }
+  isSaving: boolean
+  error: string | null
 }
 
 export default function ProfilePage() {
-  const { ready, authenticated, getAccessToken } = useAuth();
-  const { user, setUser } = useAuthStore();
-  const router = useRouter();
+  const { ready, authenticated, getAccessToken } = useAuth()
+  const { user, setUser } = useAuthStore()
+  const router = useRouter()
 
   const [formData, setFormData] = useState<ProfileFormData>({
     username: '',
@@ -68,14 +66,14 @@ export default function ProfilePage() {
     bio: '',
     profileImageUrl: '',
     coverImageUrl: '',
-  });
+  })
 
-  const [saveSuccess, setSaveSuccess] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [saveSuccess, setSaveSuccess] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [searchQuery, setSearchQuery] = useState('')
   const [optimisticFollowingCount, setOptimisticFollowingCount] = useState<
     number | null
-  >(null);
+  >(null)
   const [editModal, setEditModal] = useState<EditModalState>({
     isOpen: false,
     formData: {
@@ -89,191 +87,191 @@ export default function ProfilePage() {
     coverImage: { file: null, preview: null },
     isSaving: false,
     error: null,
-  });
-  const [tab, setTab] = useState<'posts' | 'replies' | 'trades'>('posts');
-  const [showLinkAccountsModal, setShowLinkAccountsModal] = useState(false);
+  })
+  const [tab, setTab] = useState<'posts' | 'replies' | 'trades'>('posts')
+  const [showLinkAccountsModal, setShowLinkAccountsModal] = useState(false)
 
   // Types for posts and replies
   type PostItem = {
-    id: string;
-    type?: string;
-    content: string;
-    fullContent?: string | null;
-    articleTitle?: string | null;
-    byline?: string | null;
-    biasScore?: number | null;
-    category?: string | null;
-    timestamp: string;
-    likeCount: number;
-    commentCount: number;
-    shareCount: number;
-    authorId?: string;
+    id: string
+    type?: string
+    content: string
+    fullContent?: string | null
+    articleTitle?: string | null
+    byline?: string | null
+    biasScore?: number | null
+    category?: string | null
+    timestamp: string
+    likeCount: number
+    commentCount: number
+    shareCount: number
+    authorId?: string
     author?: {
-      id?: string;
-      displayName?: string | null;
-      username?: string | null;
-      profileImageUrl?: string | null;
-    } | null;
-    authorProfileImageUrl?: string | null;
-    isLiked?: boolean;
-    isShared?: boolean;
-    isRepost?: boolean;
-    isQuote?: boolean;
-    quoteComment?: string | null;
-    originalPostId?: string | null;
+      id?: string
+      displayName?: string | null
+      username?: string | null
+      profileImageUrl?: string | null
+    } | null
+    authorProfileImageUrl?: string | null
+    isLiked?: boolean
+    isShared?: boolean
+    isRepost?: boolean
+    isQuote?: boolean
+    quoteComment?: string | null
+    originalPostId?: string | null
     originalPost?: {
-      id: string;
-      content: string;
-      authorId: string;
-      authorName: string;
-      authorUsername: string | null;
-      authorProfileImageUrl: string | null;
-      timestamp: string;
-    } | null;
-  };
+      id: string
+      content: string
+      authorId: string
+      authorName: string
+      authorUsername: string | null
+      authorProfileImageUrl: string | null
+      timestamp: string
+    } | null
+  }
 
   type ReplyItem = {
-    id: string;
-    content: string;
-    createdAt: string;
-    likeCount: number;
-    replyCount: number;
-    postId: string;
+    id: string
+    content: string
+    createdAt: string
+    likeCount: number
+    replyCount: number
+    postId: string
     post: {
       author?: {
-        displayName?: string | null;
-        username?: string | null;
-      } | null;
-      content: string;
-    };
-  };
+        displayName?: string | null
+        username?: string | null
+      } | null
+      content: string
+    }
+  }
 
   interface UserContentResponse {
     data?: {
-      items?: PostItem[] | ReplyItem[];
-    };
-    items?: PostItem[] | ReplyItem[];
+      items?: PostItem[] | ReplyItem[]
+    }
+    items?: PostItem[] | ReplyItem[]
   }
 
   interface UploadImageResponse {
-    url: string;
+    url: string
   }
 
   interface UpdateProfileResponse {
     user: {
-      username: string;
-      displayName: string;
-      bio: string;
-      profileImageUrl: string;
-      coverImageUrl: string | null;
-      profileComplete: boolean;
-      usernameChangedAt: string | null;
-      referralCode: string | null;
-      reputationPoints: number;
-      referralCount: number;
-    };
+      username: string
+      displayName: string
+      bio: string
+      profileImageUrl: string
+      coverImageUrl: string | null
+      profileComplete: boolean
+      usernameChangedAt: string | null
+      referralCode: string | null
+      reputationPoints: number
+      referralCount: number
+    }
   }
 
   interface UpdateVisibilityResponse {
     visibility?: {
-      twitter: boolean;
-      farcaster: boolean;
-      wallet: boolean;
-    };
+      twitter: boolean
+      farcaster: boolean
+      wallet: boolean
+    }
   }
 
   // Fetch posts using react-query
   const { data: postsData, isLoading: loadingPosts } = useQuery({
     queryKey: ['profile', 'posts', user?.id, tab],
     queryFn: async (): Promise<PostItem[] | ReplyItem[]> => {
-      const token = await getAccessToken();
-      const headers: HeadersInit = { 'Content-Type': 'application/json' };
+      const token = await getAccessToken()
+      const headers: HeadersInit = { 'Content-Type': 'application/json' }
       if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
+        headers.Authorization = `Bearer ${token}`
       }
 
       const response = await fetch(
-        `/api/users/${encodeURIComponent(user!.id)}/posts?type=${tab}`,
-        { headers }
-      );
+        `/api/users/${encodeURIComponent(user?.id)}/posts?type=${tab}`,
+        { headers },
+      )
       if (!response.ok) {
-        throw new Error('Failed to load content');
+        throw new Error('Failed to load content')
       }
-      const data = (await response.json()) as UserContentResponse;
-      return data?.data?.items ?? data?.items ?? [];
+      const data = (await response.json()) as UserContentResponse
+      return data?.data?.items ?? data?.items ?? []
     },
     enabled: !!user?.id && tab !== 'trades',
-  });
+  })
 
-  const posts = tab === 'posts' ? (postsData as PostItem[]) || [] : [];
-  const replies = tab === 'replies' ? (postsData as ReplyItem[]) || [] : [];
+  const posts = tab === 'posts' ? (postsData as PostItem[]) || [] : []
+  const replies = tab === 'replies' ? (postsData as ReplyItem[]) || [] : []
 
-  const queryClient = useQueryClient();
+  const queryClient = useQueryClient()
 
   // Profile update mutation
   const profileMutation = useMutation({
     mutationFn: async (data: {
-      formData: ProfileFormData;
-      profileImageFile: File | null;
-      coverImageFile: File | null;
+      formData: ProfileFormData
+      profileImageFile: File | null
+      coverImageFile: File | null
     }): Promise<UpdateProfileResponse> => {
-      const token = await getAccessToken();
+      const token = await getAccessToken()
       const headers: HeadersInit = token
         ? { Authorization: `Bearer ${token}` }
-        : {};
+        : {}
 
-      const updatedData = { ...data.formData };
+      const updatedData = { ...data.formData }
 
       // Upload profile image if changed
       if (data.profileImageFile) {
-        const formDataObj = new FormData();
-        formDataObj.append('file', data.profileImageFile);
-        formDataObj.append('type', 'profile');
+        const formDataObj = new FormData()
+        formDataObj.append('file', data.profileImageFile)
+        formDataObj.append('type', 'profile')
 
         const uploadResponse = await fetch('/api/upload/image', {
           method: 'POST',
           headers,
           body: formDataObj,
-        });
+        })
 
         if (!uploadResponse.ok) {
-          throw new Error('Failed to upload profile image');
+          throw new Error('Failed to upload profile image')
         }
-        const uploadData = (await uploadResponse.json()) as UploadImageResponse;
-        updatedData.profileImageUrl = uploadData.url;
+        const uploadData = (await uploadResponse.json()) as UploadImageResponse
+        updatedData.profileImageUrl = uploadData.url
       }
 
       // Upload cover image if changed
       if (data.coverImageFile) {
-        const formDataObj = new FormData();
-        formDataObj.append('file', data.coverImageFile);
-        formDataObj.append('type', 'cover');
+        const formDataObj = new FormData()
+        formDataObj.append('file', data.coverImageFile)
+        formDataObj.append('type', 'cover')
 
         const uploadResponse = await fetch('/api/upload/image', {
           method: 'POST',
           headers,
           body: formDataObj,
-        });
+        })
 
         if (!uploadResponse.ok) {
-          throw new Error('Failed to upload cover image');
+          throw new Error('Failed to upload cover image')
         }
-        const uploadData = (await uploadResponse.json()) as UploadImageResponse;
-        updatedData.coverImageUrl = uploadData.url;
+        const uploadData = (await uploadResponse.json()) as UploadImageResponse
+        updatedData.coverImageUrl = uploadData.url
       }
 
       // Remove empty strings from updatedData
-      const cleanedData: Partial<ProfileFormData> = {};
-      (Object.keys(updatedData) as Array<keyof ProfileFormData>).forEach(
+      const cleanedData: Partial<ProfileFormData> = {}
+      ;(Object.keys(updatedData) as Array<keyof ProfileFormData>).forEach(
         (key) => {
           if (updatedData[key] !== '') {
-            cleanedData[key] = updatedData[key];
+            cleanedData[key] = updatedData[key]
           }
-        }
-      );
+        },
+      )
 
       const updateResponse = await fetch(
-        `/api/users/${encodeURIComponent(user!.id)}/update-profile`,
+        `/api/users/${encodeURIComponent(user?.id)}/update-profile`,
         {
           method: 'POST',
           headers: {
@@ -281,19 +279,17 @@ export default function ProfilePage() {
             ...(token ? { Authorization: `Bearer ${token}` } : {}),
           },
           body: JSON.stringify(cleanedData),
-        }
-      );
+        },
+      )
 
       if (!updateResponse.ok) {
         const errorData = (await updateResponse.json().catch(() => ({}))) as {
-          error?: { message?: string };
-        };
-        throw new Error(
-          errorData?.error?.message || 'Failed to update profile'
-        );
+          error?: { message?: string }
+        }
+        throw new Error(errorData?.error?.message || 'Failed to update profile')
       }
 
-      return updateResponse.json() as Promise<UpdateProfileResponse>;
+      return updateResponse.json() as Promise<UpdateProfileResponse>
     },
     onSuccess: (data) => {
       setFormData({
@@ -302,69 +298,69 @@ export default function ProfilePage() {
         bio: data.user.bio,
         profileImageUrl: data.user.profileImageUrl,
         coverImageUrl: data.user.coverImageUrl || '',
-      });
+      })
 
-      const oldUsername = user ? user.username : null;
-      const newUsername = data.user.username;
-      const usernameChanged = oldUsername !== newUsername && newUsername;
+      const oldUsername = user ? user.username : null
+      const newUsername = data.user.username
+      const usernameChanged = oldUsername !== newUsername && newUsername
 
       if (user) {
         setUser({
           ...user,
           username: data.user.username,
           displayName: data.user.displayName,
-          bio: data.user.bio ?? undefined,
+          bio: data.user.bio,
           profileImageUrl: data.user.profileImageUrl,
-          coverImageUrl: data.user.coverImageUrl ?? undefined,
+          coverImageUrl: data.user.coverImageUrl,
           profileComplete: data.user.profileComplete,
           usernameChangedAt: data.user.usernameChangedAt,
-          referralCode: data.user.referralCode ?? undefined,
+          referralCode: data.user.referralCode,
           reputationPoints: data.user.reputationPoints,
           referralCount: data.user.referralCount,
-        });
+        })
       }
 
       if (usernameChanged && newUsername) {
         const cleanUsername = newUsername.startsWith('@')
           ? newUsername.slice(1)
-          : newUsername;
-        router.replace(`/profile/${cleanUsername}`);
+          : newUsername
+        router.replace(`/profile/${cleanUsername}`)
       }
 
-      setSaveSuccess(true);
-      setTimeout(() => setSaveSuccess(false), 3000);
-      closeEditModal();
+      setSaveSuccess(true)
+      setTimeout(() => setSaveSuccess(false), 3000)
+      closeEditModal()
 
       // Invalidate posts query to refresh content
       void queryClient.invalidateQueries({
         queryKey: ['profile', 'posts', user?.id],
-      });
+      })
     },
     onError: (error: Error) => {
       setEditModal((prev) => ({
         ...prev,
         error: error.message,
         isSaving: false,
-      }));
+      }))
     },
-  });
+  })
 
   // Social visibility toggle mutation
   const visibilityMutation = useMutation({
     mutationFn: async (data: {
-      platform: keyof SocialVisibility;
-      visible: boolean;
+      platform: keyof SocialVisibility
+      visible: boolean
     }): Promise<UpdateVisibilityResponse> => {
-      const token = await getAccessToken();
+      const token = await getAccessToken()
       const headers: HeadersInit = {
         'Content-Type': 'application/json',
-      };
+      }
       if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
+        headers.Authorization = `Bearer ${token}`
       }
 
       const response = await fetch(
-        `/api/users/${encodeURIComponent(user!.id)}/update-visibility`,
+        `/api/users/${encodeURIComponent(user?.id)}/update-visibility`,
         {
           method: 'POST',
           headers,
@@ -372,10 +368,10 @@ export default function ProfilePage() {
             platform: data.platform,
             visible: data.visible,
           }),
-        }
-      );
+        },
+      )
 
-      return response.json() as Promise<UpdateVisibilityResponse>;
+      return response.json() as Promise<UpdateVisibilityResponse>
     },
     onSuccess: (data) => {
       if (data.visibility && user) {
@@ -384,47 +380,47 @@ export default function ProfilePage() {
           showTwitterPublic: data.visibility.twitter,
           showFarcasterPublic: data.visibility.farcaster,
           showWalletPublic: data.visibility.wallet,
-        });
+        })
       }
     },
-  });
+  })
 
   // Social visibility toggles
   const [socialVisibility, setSocialVisibility] = useState<SocialVisibility>({
     twitter: true,
     farcaster: true,
     wallet: true,
-  });
+  })
 
-  const profileImageInputRef = useRef<HTMLInputElement>(null);
-  const coverImageInputRef = useRef<HTMLInputElement>(null);
+  const profileImageInputRef = useRef<HTMLInputElement>(null)
+  const coverImageInputRef = useRef<HTMLInputElement>(null)
 
   // Calculate time remaining until username can be changed again
   const getUsernameChangeTimeRemaining = (): {
-    canChange: boolean;
-    hours: number;
-    minutes: number;
+    canChange: boolean
+    hours: number
+    minutes: number
   } | null => {
     if (!user?.usernameChangedAt)
-      return { canChange: true, hours: 0, minutes: 0 };
+      return { canChange: true, hours: 0, minutes: 0 }
 
-    const lastChangeTime = new Date(user.usernameChangedAt).getTime();
-    const now = Date.now();
-    const hoursSinceChange = (now - lastChangeTime) / (1000 * 60 * 60);
-    const hoursRemaining = 24 - hoursSinceChange;
+    const lastChangeTime = new Date(user.usernameChangedAt).getTime()
+    const now = Date.now()
+    const hoursSinceChange = (now - lastChangeTime) / (1000 * 60 * 60)
+    const hoursRemaining = 24 - hoursSinceChange
 
     if (hoursRemaining <= 0) {
-      return { canChange: true, hours: 0, minutes: 0 };
+      return { canChange: true, hours: 0, minutes: 0 }
     }
 
     return {
       canChange: false,
       hours: Math.floor(hoursRemaining),
       minutes: Math.floor((hoursRemaining - Math.floor(hoursRemaining)) * 60),
-    };
-  };
+    }
+  }
 
-  const usernameChangeLimit = getUsernameChangeTimeRemaining();
+  const usernameChangeLimit = getUsernameChangeTimeRemaining()
 
   useEffect(() => {
     if (user) {
@@ -434,69 +430,67 @@ export default function ProfilePage() {
         bio: user.bio || '',
         profileImageUrl: user.profileImageUrl || '',
         coverImageUrl: user.coverImageUrl || '',
-      });
+      })
 
       // Load visibility preferences from user
       setSocialVisibility({
         twitter: user.showTwitterPublic ?? true,
         farcaster: user.showFarcasterPublic ?? true,
         wallet: user.showWalletPublic ?? true,
-      });
+      })
 
-      setLoading(false);
+      setLoading(false)
     } else if (ready) {
-      setLoading(false);
+      setLoading(false)
     }
-  }, [user, ready]);
+  }, [user, ready])
 
   // Listen for profile updates (when user follows/unfollows someone)
   useEffect(() => {
     const handleProfileUpdate = (event: Event) => {
-      const customEvent = event as CustomEvent;
-      const { type } = customEvent.detail || {};
+      const customEvent = event as CustomEvent
+      const { type } = customEvent.detail || {}
 
       if (type === 'follow' || type === 'unfollow') {
-        const delta = type === 'follow' ? 1 : -1;
+        const delta = type === 'follow' ? 1 : -1
         setOptimisticFollowingCount((prev) => {
           const currentCount =
             prev !== null
               ? prev
-              : user && user.stats
+              : user?.stats
                 ? (user.stats?.following ?? 0)
-                : 0;
-          return Math.max(0, currentCount + delta);
-        });
+                : 0
+          return Math.max(0, currentCount + delta)
+        })
 
         setTimeout(() => {
-          setOptimisticFollowingCount(null);
+          setOptimisticFollowingCount(null)
           if (typeof window !== 'undefined') {
-            window.location.reload();
+            window.location.reload()
           }
-        }, 2000);
+        }, 2000)
       }
-    };
+    }
 
-    window.addEventListener('profile-updated', handleProfileUpdate);
+    window.addEventListener('profile-updated', handleProfileUpdate)
     return () =>
-      window.removeEventListener('profile-updated', handleProfileUpdate);
-  }, [user]);
+      window.removeEventListener('profile-updated', handleProfileUpdate)
+  }, [user])
 
   // Filter posts by search query
   const filteredPosts = useMemo(() => {
-    if (!searchQuery.trim()) return posts;
-    const query = searchQuery.toLowerCase();
-    return posts.filter(
-      (post) => post.content && post.content.toLowerCase().includes(query)
-    );
-  }, [posts, searchQuery]);
+    if (!searchQuery.trim()) return posts
+    const query = searchQuery.toLowerCase()
+    return posts.filter((post) => post.content?.toLowerCase().includes(query))
+  }, [posts, searchQuery])
 
   const filteredReplies = useMemo(() => {
-    if (!searchQuery.trim()) return replies;
-    const query = searchQuery.toLowerCase();
-    return replies.filter(
-      (reply) => reply.content && reply.content.toLowerCase().includes(query)
-    );
-  }, [replies, searchQuery]);
+    if (!searchQuery.trim()) return replies
+    const query = searchQuery.toLowerCase()
+    return replies.filter((reply) =>
+      reply.content?.toLowerCase().includes(query),
+    )
+  }, [replies, searchQuery])
 
   const openEditModal = () => {
     setEditModal({
@@ -506,8 +500,8 @@ export default function ProfilePage() {
       coverImage: { file: null, preview: null },
       isSaving: false,
       error: null,
-    });
-  };
+    })
+  }
 
   const closeEditModal = () => {
     setEditModal({
@@ -523,14 +517,14 @@ export default function ProfilePage() {
       coverImage: { file: null, preview: null },
       isSaving: false,
       error: null,
-    });
-    if (profileImageInputRef.current) profileImageInputRef.current.value = '';
-    if (coverImageInputRef.current) coverImageInputRef.current.value = '';
-  };
+    })
+    if (profileImageInputRef.current) profileImageInputRef.current.value = ''
+    if (coverImageInputRef.current) coverImageInputRef.current.value = ''
+  }
 
   const handleProfileImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const file = e.target.files?.[0]
+    if (!file) return
 
     const allowedTypes = [
       'image/jpeg',
@@ -538,39 +532,39 @@ export default function ProfilePage() {
       'image/png',
       'image/webp',
       'image/gif',
-    ];
+    ]
     if (!allowedTypes.includes(file.type)) {
       setEditModal((prev) => ({
         ...prev,
         error: 'Please select a valid image file',
-      }));
-      return;
+      }))
+      return
     }
 
     if (file.size > 10 * 1024 * 1024) {
       setEditModal((prev) => ({
         ...prev,
         error: 'File size must be less than 10MB',
-      }));
-      return;
+      }))
+      return
     }
 
-    const reader = new FileReader();
+    const reader = new FileReader()
     reader.onloadend = () => {
       setEditModal((prev) => ({
         ...prev,
         profileImage: { file, preview: reader.result as string },
         error: null,
-      }));
-    };
-    reader.readAsDataURL(file);
-  };
+      }))
+    }
+    reader.readAsDataURL(file)
+  }
 
   const handleCoverImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
-    const file = files[0];
-    if (!file) return;
+    const files = e.target.files
+    if (!files || files.length === 0) return
+    const file = files[0]
+    if (!file) return
 
     const allowedTypes = [
       'image/jpeg',
@@ -578,62 +572,62 @@ export default function ProfilePage() {
       'image/png',
       'image/webp',
       'image/gif',
-    ];
+    ]
     if (!allowedTypes.includes(file.type)) {
       setEditModal((prev) => ({
         ...prev,
         error: 'Please select a valid image file',
-      }));
-      return;
+      }))
+      return
     }
 
     if (file.size > 10 * 1024 * 1024) {
       setEditModal((prev) => ({
         ...prev,
         error: 'File size must be less than 10MB',
-      }));
-      return;
+      }))
+      return
     }
 
-    const reader = new FileReader();
+    const reader = new FileReader()
     reader.onloadend = () => {
       setEditModal((prev) => ({
         ...prev,
         coverImage: { file: file ?? null, preview: reader.result as string },
         error: null,
-      }));
-    };
-    reader.readAsDataURL(file);
-  };
+      }))
+    }
+    reader.readAsDataURL(file)
+  }
 
   const saveProfile = () => {
-    if (!user?.id) return;
+    if (!user?.id) return
 
-    setEditModal((prev) => ({ ...prev, isSaving: true, error: null }));
+    setEditModal((prev) => ({ ...prev, isSaving: true, error: null }))
 
     profileMutation.mutate({
       formData: editModal.formData,
       profileImageFile: editModal.profileImage.file,
       coverImageFile: editModal.coverImage.file,
-    });
-  };
+    })
+  }
 
   const toggleSocialVisibility = (platform: keyof SocialVisibility) => {
-    if (!user || !user.id) return;
+    if (!user || !user.id) return
 
-    const newValue = !socialVisibility[platform];
+    const newValue = !socialVisibility[platform]
 
     // Optimistic update
     setSocialVisibility((prev) => ({
       ...prev,
       [platform]: newValue,
-    }));
+    }))
 
     visibilityMutation.mutate({
       platform,
       visible: newValue,
-    });
-  };
+    })
+  }
 
   // Render the profile header content (shared between desktop and mobile)
   const renderProfileHeader = () => (
@@ -672,6 +666,7 @@ export default function ProfilePage() {
           {/* Edit Profile Button */}
           <div className="flex items-center gap-2 pt-3">
             <button
+              type="button"
               onClick={openEditModal}
               className="rounded-full border border-border bg-white px-4 py-2 font-bold text-black transition-colors hover:bg-gray-100 dark:bg-white dark:text-black dark:hover:bg-gray-200"
             >
@@ -723,7 +718,7 @@ export default function ProfilePage() {
         {/* Social Links Section */}
         <div className="mb-3 space-y-2">
           {/* Twitter/X */}
-          {user && user.hasTwitter && user.twitterUsername && (
+          {user?.hasTwitter && user.twitterUsername && (
             <div className="group flex items-center justify-between">
               <a
                 href={`https://x.com/${user.twitterUsername}`}
@@ -735,6 +730,8 @@ export default function ProfilePage() {
                   className="h-4 w-4"
                   viewBox="0 0 24 24"
                   fill="currentColor"
+                  role="img"
+                  aria-label="Twitter"
                 >
                   <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
                 </svg>
@@ -744,6 +741,7 @@ export default function ProfilePage() {
                 )}
               </a>
               <button
+                type="button"
                 onClick={() => toggleSocialVisibility('twitter')}
                 className="rounded p-1.5 opacity-0 transition-opacity hover:bg-muted group-hover:opacity-100"
                 title={socialVisibility.twitter ? 'Public' : 'Private'}
@@ -770,6 +768,8 @@ export default function ProfilePage() {
                   className="h-4 w-4"
                   viewBox="0 0 1000 1000"
                   fill="currentColor"
+                  role="img"
+                  aria-label="Farcaster"
                 >
                   <path d="M257.778 155.556H742.222V844.444H671.111V528.889H670.414C662.554 441.677 589.258 373.333 500 373.333C410.742 373.333 337.446 441.677 329.586 528.889H328.889V844.444H257.778V155.556Z" />
                   <path d="M128.889 253.333L157.778 351.111H182.222V844.444H128.889V253.333Z" />
@@ -781,6 +781,7 @@ export default function ProfilePage() {
                 )}
               </a>
               <button
+                type="button"
                 onClick={() => toggleSocialVisibility('farcaster')}
                 className="rounded p-1.5 opacity-0 transition-opacity hover:bg-muted group-hover:opacity-100"
                 title={socialVisibility.farcaster ? 'Public' : 'Private'}
@@ -797,17 +798,17 @@ export default function ProfilePage() {
 
         {/* Stats */}
         <div className="flex gap-4 text-[15px]">
-          <Link href="#" className="hover:underline">
+          <Link to="#" className="hover:underline">
             <span className="font-bold text-foreground">
               {optimisticFollowingCount !== null
                 ? optimisticFollowingCount
-                : user && user.stats
+                : user?.stats
                   ? user.stats.following
                   : 0}
             </span>
             <span className="ml-1 text-muted-foreground">Following</span>
           </Link>
-          <Link href="#" className="hover:underline">
+          <Link to="#" className="hover:underline">
             <span className="font-bold text-foreground">
               {user?.stats?.followers || 0}
             </span>
@@ -816,7 +817,7 @@ export default function ProfilePage() {
         </div>
       </div>
     </div>
-  );
+  )
 
   // Render tabs with search bar
   const renderTabs = () => (
@@ -825,34 +826,37 @@ export default function ProfilePage() {
         {/* Tab Buttons */}
         <div className="flex flex-1 items-center">
           <button
+            type="button"
             onClick={() => setTab('posts')}
             className={cn(
               'relative h-full px-4 font-semibold transition-all duration-300 hover:bg-muted/30',
               tab === 'posts'
                 ? 'text-foreground opacity-100'
-                : 'text-foreground opacity-50'
+                : 'text-foreground opacity-50',
             )}
           >
             Posts
           </button>
           <button
+            type="button"
             onClick={() => setTab('replies')}
             className={cn(
               'relative h-full px-4 font-semibold transition-all duration-300 hover:bg-muted/30',
               tab === 'replies'
                 ? 'text-foreground opacity-100'
-                : 'text-foreground opacity-50'
+                : 'text-foreground opacity-50',
             )}
           >
             Replies
           </button>
           <button
+            type="button"
             onClick={() => setTab('trades')}
             className={cn(
               'relative h-full px-4 font-semibold transition-all duration-300 hover:bg-muted/30',
               tab === 'trades'
                 ? 'text-foreground opacity-100'
-                : 'text-foreground opacity-50'
+                : 'text-foreground opacity-50',
             )}
           >
             Trades
@@ -874,13 +878,13 @@ export default function ProfilePage() {
         )}
       </div>
     </div>
-  );
+  )
 
   // Render posts content
   const renderContent = () => {
     if (tab === 'trades') {
-      if (!user) return null;
-      return <TradingProfile userId={user.id} isOwner={true} />;
+      if (!user) return null
+      return <TradingProfile userId={user.id} isOwner={true} />
     }
 
     if (loadingPosts) {
@@ -888,7 +892,7 @@ export default function ProfilePage() {
         <div className="w-full">
           <FeedSkeleton count={5} />
         </div>
-      );
+      )
     }
 
     if (tab === 'posts') {
@@ -902,7 +906,7 @@ export default function ProfilePage() {
                 : 'Your posts will appear here'}
             </p>
           </div>
-        );
+        )
       }
 
       return (
@@ -912,22 +916,22 @@ export default function ProfilePage() {
               item.authorId ||
               (item.author ? item.author.id : undefined) ||
               (user ? user.id : undefined) ||
-              '';
+              ''
             const authorName =
               (item.author ? item.author.displayName : undefined) ||
               (item.author ? item.author.username : undefined) ||
               (user ? user.displayName : undefined) ||
               (user ? user.username : undefined) ||
-              'You';
+              'You'
             const authorUsername =
               (item.author ? item.author.username : undefined) ||
               (user ? user.username : undefined) ||
-              undefined;
+              undefined
             const authorImage =
               item.authorProfileImageUrl ||
               (item.author ? item.author.profileImageUrl : undefined) ||
               (user ? user.profileImageUrl : undefined) ||
-              undefined;
+              undefined
 
             const postData = {
               id: item.id,
@@ -953,16 +957,16 @@ export default function ProfilePage() {
               quoteComment: item.quoteComment || null,
               originalPostId: item.originalPostId || null,
               originalPost: item.originalPost || null,
-            };
+            }
 
             return postData.type === 'article' ? (
               <ArticleCard key={item.id} post={postData} />
             ) : (
               <PostCard key={item.id} post={postData} showInteractions />
-            );
+            )
           })}
         </div>
-      );
+      )
     }
 
     // Replies tab
@@ -976,7 +980,7 @@ export default function ProfilePage() {
               : 'Your replies will appear here'}
           </p>
         </div>
-      );
+      )
     }
 
     return (
@@ -989,14 +993,12 @@ export default function ProfilePage() {
                 onTagClick={(tag) => {
                   if (tag.startsWith('@')) {
                     // Handle @mentions - route to profile
-                    const username = tag.slice(1);
-                    router.push(getProfileUrl('', username));
+                    const username = tag.slice(1)
+                    router.push(getProfileUrl('', username))
                   } else if (tag.startsWith('$')) {
                     // Handle $cashtags - route to markets
-                    const symbol = tag.slice(1);
-                    router.push(
-                      `/markets?search=${encodeURIComponent(symbol)}`
-                    );
+                    const symbol = tag.slice(1)
+                    router.push(`/markets?search=${encodeURIComponent(symbol)}`)
                   }
                 }}
               />
@@ -1018,18 +1020,16 @@ export default function ProfilePage() {
             </div>
             <div className="mb-2 truncate text-muted-foreground text-xs">
               <TaggedText
-                text={reply.post.content.substring(0, 100) + '...'}
+                text={`${reply.post.content.substring(0, 100)}...`}
                 onTagClick={(tag) => {
                   if (tag.startsWith('@')) {
                     // Handle @mentions - route to profile
-                    const username = tag.slice(1);
-                    router.push(getProfileUrl('', username));
+                    const username = tag.slice(1)
+                    router.push(getProfileUrl('', username))
                   } else if (tag.startsWith('$')) {
                     // Handle $cashtags - route to markets
-                    const symbol = tag.slice(1);
-                    router.push(
-                      `/markets?search=${encodeURIComponent(symbol)}`
-                    );
+                    const symbol = tag.slice(1)
+                    router.push(`/markets?search=${encodeURIComponent(symbol)}`)
                   }
                 }}
               />
@@ -1042,8 +1042,8 @@ export default function ProfilePage() {
           </div>
         ))}
       </div>
-    );
-  };
+    )
+  }
 
   // Loading state
   if (loading) {
@@ -1056,7 +1056,7 @@ export default function ProfilePage() {
           </div>
         </div>
       </PageContainer>
-    );
+    )
   }
 
   // Not authenticated
@@ -1074,7 +1074,7 @@ export default function ProfilePage() {
           </div>
         </div>
       </PageContainer>
-    );
+    )
   }
 
   return (
@@ -1087,7 +1087,7 @@ export default function ProfilePage() {
           <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm">
             <div className="flex items-center gap-4 px-4 py-3">
               <Link
-                href="/feed"
+                to="/feed"
                 className="rounded-full p-2 transition-colors hover:bg-muted/50"
               >
                 <ArrowLeft className="h-5 w-5" />
@@ -1123,7 +1123,7 @@ export default function ProfilePage() {
         <div className="sticky top-0 z-10 bg-background/95 backdrop-blur-sm">
           <div className="flex items-center gap-4 px-4 py-3">
             <Link
-              href="/feed"
+              to="/feed"
               className="rounded-full p-2 transition-colors hover:bg-muted/50"
             >
               <ArrowLeft className="h-5 w-5" />
@@ -1161,6 +1161,7 @@ export default function ProfilePage() {
             <div className="sticky top-0 z-10 flex items-center justify-between border-border border-b bg-background px-4 py-3">
               <div className="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
                 <button
+                  type="button"
                   onClick={closeEditModal}
                   disabled={editModal.isSaving}
                   className="shrink-0 rounded-full p-2 transition-colors hover:bg-muted active:bg-muted disabled:opacity-50"
@@ -1173,6 +1174,7 @@ export default function ProfilePage() {
                 </h2>
               </div>
               <button
+                type="button"
                 onClick={saveProfile}
                 disabled={editModal.isSaving}
                 className="min-h-[44px] shrink-0 rounded-full bg-primary px-4 py-2 font-semibold text-primary-foreground text-sm hover:bg-primary/90 active:bg-primary/90 disabled:opacity-50 sm:px-6"
@@ -1208,6 +1210,7 @@ export default function ProfilePage() {
                     disabled={editModal.isSaving}
                   />
                   <button
+                    type="button"
                     onClick={() => coverImageInputRef.current?.click()}
                     disabled={editModal.isSaving}
                     className="flex min-h-[44px] items-center gap-2 rounded-full bg-black/60 px-3 py-2 text-primary-foreground transition-colors hover:bg-black/80 active:bg-black/80 disabled:opacity-50 sm:px-4"
@@ -1254,9 +1257,10 @@ export default function ProfilePage() {
                     disabled={editModal.isSaving}
                   />
                   <button
+                    type="button"
                     onClick={() => {
                       if (profileImageInputRef.current) {
-                        profileImageInputRef.current.click();
+                        profileImageInputRef.current.click()
                       }
                     }}
                     disabled={editModal.isSaving}
@@ -1266,9 +1270,10 @@ export default function ProfilePage() {
                     <Camera className="h-4 w-4" />
                   </button>
                   <button
+                    type="button"
                     onClick={() => {
                       if (profileImageInputRef.current) {
-                        profileImageInputRef.current.click();
+                        profileImageInputRef.current.click()
                       }
                     }}
                     disabled={editModal.isSaving}
@@ -1359,7 +1364,7 @@ export default function ProfilePage() {
                       disabled={
                         editModal.isSaving ||
                         Boolean(
-                          usernameChangeLimit && !usernameChangeLimit.canChange
+                          usernameChangeLimit && !usernameChangeLimit.canChange,
                         )
                       }
                     />
@@ -1404,5 +1409,5 @@ export default function ProfilePage() {
         </div>
       )}
     </PageContainer>
-  );
+  )
 }

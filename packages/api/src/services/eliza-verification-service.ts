@@ -11,18 +11,17 @@
  * @packageDocumentation
  */
 
-import { db, elizaHolders, eq, users } from '@babylon/db';
-import { logger } from '@babylon/shared';
+import { db, elizaHolders, eq, users } from '@babylon/db'
+import { logger } from '@babylon/shared'
 import {
   type Address,
   createPublicClient,
   formatUnits,
   http,
-  type PublicClient,
   parseUnits,
   zeroAddress,
-} from 'viem';
-import { base, bsc, mainnet } from 'viem/chains';
+} from 'viem'
+import { base, bsc, mainnet } from 'viem/chains'
 
 // =============================================================================
 // CONFIGURATION
@@ -36,17 +35,17 @@ export const ELIZA_TOKEN_ADDRESSES = {
   mainnet: '0xea17df5cf6d172224892b5477a16acb111182478' as Address,
   base: '0xea17df5cf6d172224892b5477a16acb111182478' as Address,
   bsc: '0xea17df5cf6d172224892b5477a16acb111182478' as Address,
-} as const;
+} as const
 
 /**
  * Minimum ELIZA balance required for bonus (1000 ELIZA)
  */
-export const ELIZA_MIN_BALANCE = parseUnits('1000', 18);
+export const ELIZA_MIN_BALANCE = parseUnits('1000', 18)
 
 /**
  * Bonus multiplier for ELIZA holders (5000 bps = 50%)
  */
-export const ELIZA_BONUS_BPS = 5000;
+export const ELIZA_BONUS_BPS = 5000
 
 /**
  * Chain configurations for verification
@@ -67,42 +66,42 @@ const CHAIN_CONFIGS = {
     rpcUrl: process.env.BSC_RPC_URL ?? 'https://bsc-dataseed.binance.org',
     tokenAddress: ELIZA_TOKEN_ADDRESSES.bsc,
   },
-} as const;
+} as const
 
-type SupportedChain = keyof typeof CHAIN_CONFIGS;
+type SupportedChain = keyof typeof CHAIN_CONFIGS
 
 // =============================================================================
 // TYPES
 // =============================================================================
 
 export interface ElizaHolderStatus {
-  address: Address;
-  isHolder: boolean;
-  totalBalance: bigint;
+  address: Address
+  isHolder: boolean
+  totalBalance: bigint
   balanceByChain: {
-    mainnet: bigint;
-    base: bigint;
-    bsc: bigint;
-  };
-  qualifiesForBonus: boolean;
-  bonusMultiplierBps: number;
-  verifiedAt: Date;
+    mainnet: bigint
+    base: bigint
+    bsc: bigint
+  }
+  qualifiesForBonus: boolean
+  bonusMultiplierBps: number
+  verifiedAt: Date
 }
 
 export interface ElizaVerificationResult {
-  userId: string;
-  walletAddress: Address;
-  status: ElizaHolderStatus;
-  bonusAmount: bigint;
-  baseAllocation: bigint;
-  totalAllocation: bigint;
+  userId: string
+  walletAddress: Address
+  status: ElizaHolderStatus
+  bonusAmount: bigint
+  baseAllocation: bigint
+  totalAllocation: bigint
 }
 
 export interface BatchVerificationResult {
-  processed: number;
-  qualified: number;
-  totalBonusAllocated: bigint;
-  errors: Array<{ userId: string; error: string }>;
+  processed: number
+  qualified: number
+  totalBonusAllocated: bigint
+  errors: Array<{ userId: string; error: string }>
 }
 
 // =============================================================================
@@ -117,49 +116,49 @@ const ERC20_BALANCE_OF_ABI = [
     inputs: [{ name: 'account', type: 'address' }],
     outputs: [{ type: 'uint256' }],
   },
-] as const;
+] as const
 
 // =============================================================================
 // SERVICE
 // =============================================================================
 
 export class ElizaVerificationService {
-  private mainnetClient: PublicClient;
-  private baseClient: PublicClient;
-  private bscClient: PublicClient;
-  private minBalance: bigint;
-  private bonusBps: number;
-  private cacheTimeout = 3600_000; // 1 hour cache
+  private mainnetClient
+  private baseClient
+  private bscClient
+  private minBalance: bigint
+  private bonusBps: number
+  private cacheTimeout = 3600_000 // 1 hour cache
   private balanceCache: Map<string, { balance: bigint; timestamp: number }> =
-    new Map();
+    new Map()
 
   constructor(config: { minBalance?: bigint; bonusBps?: number } = {}) {
-    this.minBalance = config.minBalance ?? ELIZA_MIN_BALANCE;
-    this.bonusBps = config.bonusBps ?? ELIZA_BONUS_BPS;
+    this.minBalance = config.minBalance ?? ELIZA_MIN_BALANCE
+    this.bonusBps = config.bonusBps ?? ELIZA_BONUS_BPS
 
     // Initialize clients for each chain
     this.mainnetClient = createPublicClient({
       chain: mainnet,
       transport: http(CHAIN_CONFIGS.mainnet.rpcUrl),
-    }) as PublicClient;
+    })
     this.baseClient = createPublicClient({
       chain: base,
       transport: http(CHAIN_CONFIGS.base.rpcUrl),
-    }) as PublicClient;
+    })
     this.bscClient = createPublicClient({
       chain: bsc,
       transport: http(CHAIN_CONFIGS.bsc.rpcUrl),
-    }) as PublicClient;
+    })
   }
 
   private getClient(chain: SupportedChain) {
     switch (chain) {
       case 'mainnet':
-        return this.mainnetClient;
+        return this.mainnetClient
       case 'base':
-        return this.baseClient;
+        return this.baseClient
       case 'bsc':
-        return this.bscClient;
+        return this.bscClient
     }
   }
 
@@ -172,45 +171,45 @@ export class ElizaVerificationService {
    */
   async getBalanceOnChain(
     address: Address,
-    chain: SupportedChain
+    chain: SupportedChain,
   ): Promise<bigint> {
-    const cacheKey = `${address.toLowerCase()}-${chain}`;
-    const cached = this.balanceCache.get(cacheKey);
+    const cacheKey = `${address.toLowerCase()}-${chain}`
+    const cached = this.balanceCache.get(cacheKey)
 
     if (cached && Date.now() - cached.timestamp < this.cacheTimeout) {
-      return cached.balance;
+      return cached.balance
     }
 
-    const client = this.getClient(chain);
-    const tokenAddress = CHAIN_CONFIGS[chain].tokenAddress;
+    const client = this.getClient(chain)
+    const tokenAddress = CHAIN_CONFIGS[chain].tokenAddress
 
     const balance = await client.readContract({
       address: tokenAddress,
       abi: ERC20_BALANCE_OF_ABI,
       functionName: 'balanceOf',
       args: [address],
-    });
+    })
 
     this.balanceCache.set(cacheKey, {
       balance,
       timestamp: Date.now(),
-    });
+    })
 
-    return balance;
+    return balance
   }
 
   /**
    * Get total ELIZA balance across all supported chains
    */
   async getTotalBalance(address: Address): Promise<{
-    total: bigint;
-    byChain: { mainnet: bigint; base: bigint; bsc: bigint };
+    total: bigint
+    byChain: { mainnet: bigint; base: bigint; bsc: bigint }
   }> {
     const [mainnetBalance, baseBalance, bscBalance] = await Promise.all([
       this.getBalanceOnChain(address, 'mainnet'),
       this.getBalanceOnChain(address, 'base'),
       this.getBalanceOnChain(address, 'bsc'),
-    ]);
+    ])
 
     return {
       total: mainnetBalance + baseBalance + bscBalance,
@@ -219,7 +218,7 @@ export class ElizaVerificationService {
         base: baseBalance,
         bsc: bscBalance,
       },
-    };
+    }
   }
 
   // ===========================================================================
@@ -230,8 +229,8 @@ export class ElizaVerificationService {
    * Check if an address qualifies as an ELIZA holder
    */
   async checkHolderStatus(address: Address): Promise<ElizaHolderStatus> {
-    const { total, byChain } = await this.getTotalBalance(address);
-    const qualifiesForBonus = total >= this.minBalance;
+    const { total, byChain } = await this.getTotalBalance(address)
+    const qualifiesForBonus = total >= this.minBalance
 
     return {
       address,
@@ -241,7 +240,7 @@ export class ElizaVerificationService {
       qualifiesForBonus,
       bonusMultiplierBps: qualifiesForBonus ? this.bonusBps : 0,
       verifiedAt: new Date(),
-    };
+    }
   }
 
   /**
@@ -250,15 +249,15 @@ export class ElizaVerificationService {
   async verifyAndCalculateBonus(
     userId: string,
     walletAddress: Address,
-    baseAllocation: bigint
+    baseAllocation: bigint,
   ): Promise<ElizaVerificationResult> {
-    const status = await this.checkHolderStatus(walletAddress);
+    const status = await this.checkHolderStatus(walletAddress)
 
     const bonusAmount = status.qualifiesForBonus
       ? (baseAllocation * BigInt(this.bonusBps)) / BigInt(10000)
-      : BigInt(0);
+      : BigInt(0)
 
-    const totalAllocation = baseAllocation + bonusAmount;
+    const totalAllocation = baseAllocation + bonusAmount
 
     logger.info(
       'Verified ELIZA holdings',
@@ -270,8 +269,8 @@ export class ElizaVerificationService {
         baseAllocation: formatUnits(baseAllocation, 18),
         bonusAmount: formatUnits(bonusAmount, 18),
       },
-      'ElizaVerification'
-    );
+      'ElizaVerification',
+    )
 
     return {
       userId,
@@ -280,7 +279,7 @@ export class ElizaVerificationService {
       bonusAmount,
       baseAllocation,
       totalAllocation,
-    };
+    }
   }
 
   // ===========================================================================
@@ -293,7 +292,7 @@ export class ElizaVerificationService {
   async storeHolderStatus(
     userId: string,
     walletAddress: Address,
-    status: ElizaHolderStatus
+    status: ElizaHolderStatus,
   ): Promise<void> {
     // Check if elizaHolders table exists in schema
     // Using upsert pattern
@@ -321,25 +320,34 @@ export class ElizaVerificationService {
           verifiedAt: status.verifiedAt,
           updatedAt: new Date(),
         },
-      });
+      })
   }
 
   /**
    * Get stored ELIZA holder status from database
    */
   async getStoredHolderStatus(
-    userId: string
+    userId: string,
   ): Promise<ElizaHolderStatus | null> {
-    const [record] = await db
+    const result = (await db
       .select()
       .from(elizaHolders)
       .where(eq(elizaHolders.userId, userId))
-      .limit(1);
+      .limit(1)) as Array<{
+      walletAddress: string
+      totalBalance: string | null
+      mainnetBalance: string | null
+      baseBalance: string | null
+      bscBalance: string | null
+      qualifiesForBonus: boolean
+      verifiedAt: Date | null
+    }>
 
-    if (!record) return null;
+    const record = result[0]
+    if (!record) return null
 
-    const totalBalance = BigInt(String(record.totalBalance ?? '0'));
-    const qualifies = Boolean(record.qualifiesForBonus);
+    const totalBalance = BigInt(String(record.totalBalance ?? '0'))
+    const qualifies = Boolean(record.qualifiesForBonus)
 
     return {
       address: record.walletAddress as Address,
@@ -356,7 +364,7 @@ export class ElizaVerificationService {
         record.verifiedAt instanceof Date
           ? record.verifiedAt
           : new Date(String(record.verifiedAt ?? Date.now())),
-    };
+    }
   }
 
   // ===========================================================================
@@ -367,14 +375,14 @@ export class ElizaVerificationService {
    * Verify all users who haven't been verified recently
    */
   async batchVerifyUsers(
-    _maxAge: number = 24 * 60 * 60 * 1000 // 24 hours - reserved for future filtering
+    _maxAge: number = 24 * 60 * 60 * 1000, // 24 hours - reserved for future filtering
   ): Promise<BatchVerificationResult> {
     const result: BatchVerificationResult = {
       processed: 0,
       qualified: 0,
       totalBonusAllocated: BigInt(0),
       errors: [],
-    };
+    }
 
     // Get all users with wallet addresses
     const usersToVerify = await db
@@ -383,28 +391,23 @@ export class ElizaVerificationService {
         walletAddress: users.walletAddress,
       })
       .from(users)
-      .where(eq(users.walletAddress, zeroAddress));
+      .where(eq(users.walletAddress, zeroAddress))
 
     // Filter users without valid wallet addresses
     const validUsers = usersToVerify.filter(
-      (u) => u.walletAddress && u.walletAddress !== zeroAddress
-    );
+      (u) => u.walletAddress && String(u.walletAddress) !== zeroAddress,
+    )
 
     for (const user of validUsers) {
-      result.processed++;
+      result.processed++
 
-      const status = await this.checkHolderStatus(
-        user.walletAddress as Address
-      );
+      const walletAddr = String(user.walletAddress) as Address
+      const status = await this.checkHolderStatus(walletAddr)
 
-      await this.storeHolderStatus(
-        user.id,
-        user.walletAddress as Address,
-        status
-      );
+      await this.storeHolderStatus(String(user.id), walletAddr, status)
 
       if (status.qualifiesForBonus) {
-        result.qualified++;
+        result.qualified++
       }
     }
 
@@ -415,10 +418,10 @@ export class ElizaVerificationService {
         qualified: result.qualified,
         errors: result.errors.length,
       },
-      'ElizaVerification'
-    );
+      'ElizaVerification',
+    )
 
-    return result;
+    return result
   }
 
   /**
@@ -434,13 +437,13 @@ export class ElizaVerificationService {
         totalBalance: elizaHolders.totalBalance,
       })
       .from(elizaHolders)
-      .where(eq(elizaHolders.qualifiesForBonus, true));
+      .where(eq(elizaHolders.qualifiesForBonus, true))
 
     return holders.map((h) => ({
-      userId: h.userId,
-      walletAddress: h.walletAddress as Address,
-      balance: BigInt(h.totalBalance),
-    }));
+      userId: String(h.userId),
+      walletAddress: String(h.walletAddress) as Address,
+      balance: BigInt(String(h.totalBalance)),
+    }))
   }
 
   // ===========================================================================
@@ -451,22 +454,22 @@ export class ElizaVerificationService {
    * Clear balance cache
    */
   clearCache(): void {
-    this.balanceCache.clear();
+    this.balanceCache.clear()
   }
 
   /**
    * Get service configuration
    */
   getConfig(): {
-    minBalance: bigint;
-    bonusBps: number;
-    tokenAddresses: typeof ELIZA_TOKEN_ADDRESSES;
+    minBalance: bigint
+    bonusBps: number
+    tokenAddresses: typeof ELIZA_TOKEN_ADDRESSES
   } {
     return {
       minBalance: this.minBalance,
       bonusBps: this.bonusBps,
       tokenAddresses: ELIZA_TOKEN_ADDRESSES,
-    };
+    }
   }
 }
 
@@ -474,15 +477,15 @@ export class ElizaVerificationService {
 // SINGLETON
 // =============================================================================
 
-let elizaVerificationService: ElizaVerificationService | null = null;
+let elizaVerificationService: ElizaVerificationService | null = null
 
 export function getElizaVerificationService(): ElizaVerificationService {
   if (!elizaVerificationService) {
-    elizaVerificationService = new ElizaVerificationService();
+    elizaVerificationService = new ElizaVerificationService()
   }
-  return elizaVerificationService;
+  return elizaVerificationService
 }
 
 export function resetElizaVerificationService(): void {
-  elizaVerificationService = null;
+  elizaVerificationService = null
 }

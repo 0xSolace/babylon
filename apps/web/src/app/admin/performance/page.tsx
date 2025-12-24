@@ -4,49 +4,47 @@
  * Displays network statistics, database performance, and allows running load tests
  */
 
-'use client';
-
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useState } from 'react'
 
 // Simple replacement components
 const Card = ({
   children,
   className = '',
 }: {
-  children: React.ReactNode;
-  className?: string;
-}) => <div className={`rounded-lg border p-4 ${className}`}>{children}</div>;
+  children: React.ReactNode
+  className?: string
+}) => <div className={`rounded-lg border p-4 ${className}`}>{children}</div>
 const CardHeader = ({
   children,
   className = '',
 }: {
-  children: React.ReactNode;
-  className?: string;
-}) => <div className={`mb-4 ${className}`}>{children}</div>;
+  children: React.ReactNode
+  className?: string
+}) => <div className={`mb-4 ${className}`}>{children}</div>
 const CardTitle = ({
   children,
   className = '',
 }: {
-  children: React.ReactNode;
-  className?: string;
-}) => <h3 className={`font-semibold text-lg ${className}`}>{children}</h3>;
+  children: React.ReactNode
+  className?: string
+}) => <h3 className={`font-semibold text-lg ${className}`}>{children}</h3>
 const CardDescription = ({ children }: { children: React.ReactNode }) => (
   <p className="text-muted-foreground text-sm">{children}</p>
-);
+)
 const CardContent = ({
   children,
   className = '',
 }: {
-  children: React.ReactNode;
-  className?: string;
-}) => <div className={className}>{children}</div>;
+  children: React.ReactNode
+  className?: string
+}) => <div className={className}>{children}</div>
 const Badge = ({
   children,
   variant = 'default',
 }: {
-  children: React.ReactNode;
-  variant?: string;
+  children: React.ReactNode
+  variant?: string
 }) => (
   <span
     className={`inline-flex items-center rounded-full px-2.5 py-0.5 font-medium text-xs ${
@@ -57,87 +55,88 @@ const Badge = ({
   >
     {children}
   </span>
-);
+)
 const Button = ({
   children,
   onClick,
   disabled,
   className = '',
 }: {
-  children: React.ReactNode;
-  onClick?: () => void | Promise<void>;
-  disabled?: boolean;
-  className?: string;
-  variant?: string;
-  size?: string;
+  children: React.ReactNode
+  onClick?: () => void | Promise<void>
+  disabled?: boolean
+  className?: string
+  variant?: string
+  size?: string
 }) => (
   <button
+    type="button"
     onClick={onClick}
     disabled={disabled}
     className={`rounded-md bg-primary px-4 py-2 text-primary-foreground disabled:opacity-50 ${className}`}
   >
     {children}
   </button>
-);
+)
 
 interface NetworkStats {
-  timestamp: string;
+  timestamp: string
   database: {
     queries: {
-      total: number;
-      slow: number;
-      slowRate: number;
-      avgDuration: number;
-      p95Duration: number;
-      p99Duration: number;
-    };
+      total: number
+      slow: number
+      slowRate: number
+      avgDuration: number
+      p95Duration: number
+      p99Duration: number
+    }
     topSlowQueries: Array<{
-      query: string;
-      count: number;
-      avgDuration: number;
-      maxDuration: number;
-    }>;
+      query: string
+      count: number
+      avgDuration: number
+      maxDuration: number
+    }>
     recentQueries: Array<{
-      query: string;
-      duration: number;
-      timestamp: string;
-      model?: string;
-      operation?: string;
-    }>;
-  };
+      query: string
+      duration: number
+      timestamp: string
+      model?: string
+      operation?: string
+    }>
+  }
   server: {
     uptime: {
-      seconds: number;
-      formatted: string;
-    };
+      seconds: number
+      formatted: string
+    }
     memory: {
-      heapUsed: number;
-      heapTotal: number;
-      external: number;
-      rss: number;
-    };
-    env: string;
-    pid: number;
-  };
+      heapUsed: number
+      heapTotal: number
+      external: number
+      rss: number
+    }
+    env: string
+    pid: number
+  }
   health: {
-    database: 'healthy' | 'warning' | 'critical';
-    memory: 'healthy' | 'warning' | 'critical';
-    overall: 'healthy' | 'warning' | 'critical';
-  };
+    database: 'healthy' | 'warning' | 'critical'
+    memory: 'healthy' | 'warning' | 'critical'
+    overall: 'healthy' | 'warning' | 'critical'
+  }
 }
 
 interface LoadTestStatus {
-  status: 'idle' | 'running';
-  scenario?: string;
-  startTime?: string;
-  runningTimeMs?: number;
-  runningTimeSeconds?: number;
+  status: 'idle' | 'running'
+  scenario?: string
+  startTime?: string
+  runningTimeMs?: number
+  runningTimeSeconds?: number
   lastResult?: {
-    endTime: string;
-    totalRequests: number;
-    successRate: number;
-    avgResponseTime: number;
-  };
+    endTime: string
+    totalRequests: number
+    successRate: number
+    avgResponseTime: number
+  }
 }
 
 const SCENARIOS = [
@@ -161,12 +160,12 @@ const SCENARIOS = [
     label: 'Stress (2000+ users, 5 min)',
     description: 'Extreme load test',
   },
-];
+]
 
 export default function AdminPerformancePage() {
-  const queryClient = useQueryClient();
-  const [selectedScenario, setSelectedScenario] = useState<string>('NORMAL');
-  const [autoRefresh, setAutoRefresh] = useState(true);
+  const queryClient = useQueryClient()
+  const [selectedScenario, setSelectedScenario] = useState<string>('NORMAL')
+  const [autoRefresh, setAutoRefresh] = useState(true)
 
   // Fetch network stats
   const {
@@ -176,27 +175,27 @@ export default function AdminPerformancePage() {
   } = useQuery({
     queryKey: ['admin', 'network-stats'],
     queryFn: async (): Promise<NetworkStats> => {
-      const response = await fetch('/api/admin/network-stats');
+      const response = await fetch('/api/admin/network-stats')
       if (!response.ok) {
-        throw new Error('Failed to fetch stats');
+        throw new Error('Failed to fetch stats')
       }
-      return (await response.json()) as NetworkStats;
+      return (await response.json()) as NetworkStats
     },
     refetchInterval: autoRefresh ? 5000 : false,
-  });
+  })
 
   // Fetch load test status
   const { data: loadTestStatus } = useQuery({
     queryKey: ['admin', 'load-test', 'status'],
     queryFn: async (): Promise<LoadTestStatus> => {
-      const response = await fetch('/api/admin/load-test/status');
+      const response = await fetch('/api/admin/load-test/status')
       if (!response.ok) {
-        throw new Error('Failed to fetch load test status');
+        throw new Error('Failed to fetch load test status')
       }
-      return (await response.json()) as LoadTestStatus;
+      return (await response.json()) as LoadTestStatus
     },
     refetchInterval: autoRefresh ? 5000 : false,
-  });
+  })
 
   // Start load test mutation
   const loadTestMutation = useMutation({
@@ -205,56 +204,56 @@ export default function AdminPerformancePage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ scenario }),
-      });
+      })
 
       if (!response.ok) {
         const data = (await response.json().catch(() => ({}))) as {
-          error?: string;
-        };
-        throw new Error(data.error || 'Failed to start load test');
+          error?: string
+        }
+        throw new Error(data.error || 'Failed to start load test')
       }
 
-      return response.json();
+      return response.json()
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({
         queryKey: ['admin', 'load-test', 'status'],
-      });
+      })
     },
-  });
+  })
 
   const startLoadTest = () => {
-    loadTestMutation.mutate(selectedScenario);
-  };
+    loadTestMutation.mutate(selectedScenario)
+  }
 
-  const isLoading = loadTestMutation.isPending;
+  const isLoading = loadTestMutation.isPending
   const error = statsError
     ? (statsError as Error).message
     : loadTestMutation.error
       ? (loadTestMutation.error as Error).message
-      : null;
+      : null
 
   const fetchStats = () => {
     void queryClient.invalidateQueries({
       queryKey: ['admin', 'network-stats'],
-    });
+    })
     void queryClient.invalidateQueries({
       queryKey: ['admin', 'load-test', 'status'],
-    });
-  };
+    })
+  }
 
   const getHealthBadgeVariant = (
-    health: 'healthy' | 'warning' | 'critical'
+    health: 'healthy' | 'warning' | 'critical',
   ): 'default' | 'secondary' | 'destructive' => {
     switch (health) {
       case 'healthy':
-        return 'default';
+        return 'default'
       case 'warning':
-        return 'secondary';
+        return 'secondary'
       case 'critical':
-        return 'destructive';
+        return 'destructive'
     }
-  };
+  }
 
   return (
     <div className="container mx-auto space-y-6 py-8">
@@ -401,7 +400,7 @@ export default function AdminPerformancePage() {
                 <div className="space-y-2">
                   {stats.database.topSlowQueries.map((query, idx) => (
                     <div
-                      key={idx}
+                      key={`slow-query-${idx}-${query.query.slice(0, 30)}`}
                       className="flex items-center justify-between border-b pb-2 text-sm"
                     >
                       <div className="flex-1">
@@ -445,10 +444,14 @@ export default function AdminPerformancePage() {
           ) : (
             <>
               <div>
-                <label className="mb-2 block font-medium text-sm">
+                <label
+                  htmlFor="scenario-select"
+                  className="mb-2 block font-medium text-sm"
+                >
                   Select Scenario
                 </label>
                 <select
+                  id="scenario-select"
                   value={selectedScenario}
                   onChange={(e) => setSelectedScenario(e.target.value)}
                   className="w-full rounded border px-3 py-2"
@@ -499,7 +502,7 @@ export default function AdminPerformancePage() {
                 <div>
                   <div className="font-bold text-lg">
                     {new Date(
-                      loadTestStatus.lastResult.endTime
+                      loadTestStatus.lastResult.endTime,
                     ).toLocaleTimeString()}
                   </div>
                   <div className="text-muted-foreground text-xs">
@@ -541,5 +544,5 @@ export default function AdminPerformancePage() {
         </Card>
       )}
     </div>
-  );
+  )
 }

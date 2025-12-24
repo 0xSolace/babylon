@@ -1,41 +1,42 @@
-'use client';
-
-import type { PortfolioPnLSnapshot } from '@babylon/engine/client';
-import type { PerpPosition, UserPredictionPosition } from '@babylon/shared';
-import { memo } from 'react';
-import { PortfolioPnLCard } from '@/components/markets/PortfolioPnLCard';
-import type { PerpMarket, PredictionMarket } from '@/types/markets';
-import type { TopPrediction, TrendingPerpMarket } from '../../_hooks';
+import type {
+  PerpPosition,
+  PortfolioPnLSnapshot,
+  UserPredictionPosition,
+} from '@babylon/shared'
+import { memo } from 'react'
+import { PortfolioPnLCard } from '@/components/markets/PortfolioPnLCard'
+import type { PerpMarket, PredictionMarket } from '@/types/markets'
+import type { TopPrediction, TrendingPerpMarket } from '../../_hooks'
 import {
   HotPredictionsList,
   MarketsCTA,
   PositionsOverview,
   TrendingPerpsList,
-} from '../sections';
+} from '../sections'
 
 interface DashboardTabContentProps {
   // Auth state
-  authenticated: boolean;
-  onLogin: () => void;
+  authenticated: boolean
+  onLogin: () => void
 
   // Portfolio
-  portfolioPnL: PortfolioPnLSnapshot | null;
-  portfolioLoading: boolean;
-  portfolioError: string | null;
-  onShowPnLShare: () => void;
-  onShowBuyPoints: () => void;
+  portfolioPnL: PortfolioPnLSnapshot | null
+  portfolioLoading: boolean
+  portfolioError: string | null
+  onShowPnLShare: () => void
+  onShowBuyPoints: () => void
 
   // Positions
-  perpPositions: PerpPosition[];
-  predictionPositions: UserPredictionPosition[];
-  onPositionClosed: () => Promise<void>;
-  onPositionSold: () => Promise<void>;
+  perpPositions: PerpPosition[]
+  predictionPositions: UserPredictionPosition[]
+  onPositionClosed: () => Promise<void>
+  onPositionSold: () => Promise<void>
 
   // Markets data
-  trendingMarkets: TrendingPerpMarket[];
-  topPredictions: TopPrediction[];
-  onMarketClick: (market: PerpMarket) => void;
-  onPredictionClick: (prediction: PredictionMarket) => void;
+  trendingMarkets: TrendingPerpMarket[]
+  topPredictions: TopPrediction[]
+  onMarketClick: (market: PerpMarket) => void
+  onPredictionClick: (prediction: PredictionMarket) => void
 }
 
 /**
@@ -99,5 +100,5 @@ export const DashboardTabContent = memo(function DashboardTabContent({
 
       {!authenticated && <MarketsCTA onLogin={onLogin} />}
     </div>
-  );
-});
+  )
+})

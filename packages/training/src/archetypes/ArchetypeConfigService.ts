@@ -5,47 +5,47 @@
  * Provides personality, trading strategies, and behavioral patterns for each archetype.
  */
 
-import type { JsonValue } from '@babylon/shared';
+import type { JsonValue } from '@babylon/shared'
 
 export interface ArchetypeTraits {
-  greed: number; // 0-1
-  fear: number; // 0-1
-  patience: number; // 0-1
-  confidence: number; // 0-1
-  ethics: number; // 0-1
+  greed: number // 0-1
+  fear: number // 0-1
+  patience: number // 0-1
+  confidence: number // 0-1
+  ethics: number // 0-1
 }
 
 export interface ArchetypeActionWeights {
-  trade: number;
-  post: number;
-  research: number;
-  social: number;
+  trade: number
+  post: number
+  research: number
+  social: number
 }
 
 export interface ArchetypeConfig {
-  id: string;
-  name: string;
-  description: string;
-  system: string; // System prompt for the agent
-  bio: string[];
-  personality: string;
-  tradingStrategy: string;
+  id: string
+  name: string
+  description: string
+  system: string // System prompt for the agent
+  bio: string[]
+  personality: string
+  tradingStrategy: string
 
   // Behavioral configuration
-  traits: ArchetypeTraits;
-  actionWeights: ArchetypeActionWeights;
+  traits: ArchetypeTraits
+  actionWeights: ArchetypeActionWeights
 
   // Trading preferences
-  riskTolerance: number; // 0-1
-  maxLeverage: number;
-  positionSizing: 'conservative' | 'moderate' | 'aggressive';
-  preferredMarkets: ('prediction' | 'perpetual')[];
+  riskTolerance: number // 0-1
+  maxLeverage: number
+  positionSizing: 'conservative' | 'moderate' | 'aggressive'
+  preferredMarkets: ('prediction' | 'perpetual')[]
 
   // Social behavior
-  postFrequency: 'low' | 'medium' | 'high';
-  engagementStyle: 'helpful' | 'misleading' | 'analytical' | 'promotional';
-  dmActivity: boolean;
-  groupChatActivity: boolean;
+  postFrequency: 'low' | 'medium' | 'high'
+  engagementStyle: 'helpful' | 'misleading' | 'analytical' | 'promotional'
+  dmActivity: boolean
+  groupChatActivity: boolean
 }
 
 const ARCHETYPE_CONFIGS: Record<string, ArchetypeConfig> = {
@@ -499,25 +499,26 @@ const ARCHETYPE_CONFIGS: Record<string, ArchetypeConfig> = {
     dmActivity: true,
     groupChatActivity: true,
   },
-};
+}
 
+// biome-ignore lint/complexity/noStaticOnlyClass: Service pattern uses static methods for stateless operations
 export class ArchetypeConfigService {
   /**
    * Get configuration for a specific archetype
    */
   static getConfig(archetypeId: string): ArchetypeConfig {
-    const config = ARCHETYPE_CONFIGS[archetypeId];
+    const config = ARCHETYPE_CONFIGS[archetypeId]
     if (!config) {
-      throw new Error(`Unknown archetype: ${archetypeId}`);
+      throw new Error(`Unknown archetype: ${archetypeId}`)
     }
-    return config;
+    return config
   }
 
   /**
    * Get all available archetype IDs
    */
   static getAvailableArchetypes(): string[] {
-    return Object.keys(ARCHETYPE_CONFIGS);
+    return Object.keys(ARCHETYPE_CONFIGS)
   }
 
   /**
@@ -525,19 +526,19 @@ export class ArchetypeConfigService {
    */
   static applyToAgentParams<T extends Record<string, JsonValue>>(
     archetypeId: string,
-    baseParams: T
+    baseParams: T,
   ): T & {
-    name: string;
-    description: string;
-    system: string;
-    bio: string[];
-    personality: string;
-    tradingStrategy: string;
-    metadata: Record<string, JsonValue>;
+    name: string
+    description: string
+    system: string
+    bio: string[]
+    personality: string
+    tradingStrategy: string
+    metadata: Record<string, JsonValue>
   } {
-    const config = this.getConfig(archetypeId);
+    const config = ArchetypeConfigService.getConfig(archetypeId)
     const baseMetadata =
-      (baseParams as { metadata?: Record<string, JsonValue> }).metadata || {};
+      (baseParams as { metadata?: Record<string, JsonValue> }).metadata || {}
 
     return {
       ...baseParams,
@@ -553,12 +554,12 @@ export class ArchetypeConfigService {
         archetype: archetypeId,
         archetypeTraits: JSON.parse(JSON.stringify(config.traits)) as JsonValue,
         archetypeWeights: JSON.parse(
-          JSON.stringify(config.actionWeights)
+          JSON.stringify(config.actionWeights),
         ) as JsonValue,
         riskTolerance: config.riskTolerance,
         maxLeverage: config.maxLeverage,
       },
-    };
+    }
   }
 
   /**
@@ -566,10 +567,10 @@ export class ArchetypeConfigService {
    */
   static getActionProbability(
     archetypeId: string,
-    actionType: 'trade' | 'post' | 'research' | 'social'
+    actionType: 'trade' | 'post' | 'research' | 'social',
   ): number {
-    const config = this.getConfig(archetypeId);
-    return config.actionWeights[actionType];
+    const config = ArchetypeConfigService.getConfig(archetypeId)
+    return config.actionWeights[actionType]
   }
 
   /**
@@ -578,18 +579,21 @@ export class ArchetypeConfigService {
   static shouldTakeAction(
     archetypeId: string,
     actionType: 'trade' | 'post' | 'research' | 'social',
-    randomValue: number = Math.random()
+    randomValue: number = Math.random(),
   ): boolean {
-    const probability = this.getActionProbability(archetypeId, actionType);
-    return randomValue < probability;
+    const probability = ArchetypeConfigService.getActionProbability(
+      archetypeId,
+      actionType,
+    )
+    return randomValue < probability
   }
 
   /**
    * Get personality traits for behavior modification
    */
   static getTraits(archetypeId: string): ArchetypeTraits {
-    const config = this.getConfig(archetypeId);
-    return config.traits;
+    const config = ArchetypeConfigService.getConfig(archetypeId)
+    return config.traits
   }
 
   /**
@@ -598,13 +602,13 @@ export class ArchetypeConfigService {
   static calculatePositionSize(
     archetypeId: string,
     balance: number,
-    marketVolatility: number = 0.5
+    marketVolatility: number = 0.5,
   ): number {
-    const config = this.getConfig(archetypeId);
-    const baseSize = balance * 0.1; // Base 10% of balance
+    const config = ArchetypeConfigService.getConfig(archetypeId)
+    const baseSize = balance * 0.1 // Base 10% of balance
 
     // Adjust based on risk tolerance
-    const riskMultiplier = config.riskTolerance;
+    const riskMultiplier = config.riskTolerance
 
     // Adjust based on position sizing strategy
     const sizingMultiplier =
@@ -612,15 +616,15 @@ export class ArchetypeConfigService {
         ? 3
         : config.positionSizing === 'moderate'
           ? 1.5
-          : 0.5;
+          : 0.5
 
     // Reduce size in high volatility for conservative archetypes
     const volatilityAdjustment =
-      config.riskTolerance > 0.7 ? 1 : 1 - marketVolatility * 0.5;
+      config.riskTolerance > 0.7 ? 1 : 1 - marketVolatility * 0.5
 
-    return baseSize * riskMultiplier * sizingMultiplier * volatilityAdjustment;
+    return baseSize * riskMultiplier * sizingMultiplier * volatilityAdjustment
   }
 }
 
 // Export singleton instance
-export const archetypeConfigService = new ArchetypeConfigService();
+export const archetypeConfigService = new ArchetypeConfigService()

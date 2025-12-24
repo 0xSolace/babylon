@@ -8,15 +8,32 @@
  * @see https://playwright.dev/docs/test-configuration
  */
 
-import { defineConfig, devices } from '@playwright/test';
-import dotenv from 'dotenv';
-import path from 'path';
+/**
+ * Playwright configuration for E2E tests.
+ *
+ * This config is for standard Playwright tests (not Synpress/MetaMask).
+ * For MetaMask wallet tests, use synpress.config.ts instead.
+ *
+ * @module testing/playwright.config
+ * @see https://playwright.dev/docs/test-configuration
+ */
 
-const rootDir = path.resolve(__dirname, '../..');
-dotenv.config({ path: path.resolve(rootDir, '.env.local') });
-dotenv.config({ path: path.resolve(rootDir, '.env') });
+import path, { dirname } from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { defineConfig, devices } from '@playwright/test'
+import dotenv from 'dotenv'
 
-const baseURL = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:5007';
+const __dirname = dirname(fileURLToPath(import.meta.url))
+const rootDir = path.resolve(__dirname, '../..')
+dotenv.config({ path: path.resolve(rootDir, '.env.local') })
+dotenv.config({ path: path.resolve(rootDir, '.env') })
+
+// Centralized port configuration via environment variables
+const BABYLON_WEB_PORT = process.env.BABYLON_WEB_PORT ?? '5008'
+const _BABYLON_API_PORT = process.env.BABYLON_API_PORT ?? '5009'
+void _BABYLON_API_PORT // Reserved for future use
+const baseURL =
+  process.env.PLAYWRIGHT_BASE_URL ?? `http://localhost:${BABYLON_WEB_PORT}`
 
 export default defineConfig({
   testDir: './e2e',
@@ -92,4 +109,4 @@ export default defineConfig({
           stdout: 'pipe',
           stderr: 'pipe',
         },
-});
+})

@@ -1,4 +1,4 @@
-import type { ActorData } from '../../types/shared';
+import type { ActorData } from '../../types/shared'
 
 export const data = {
   id: 'tim-pail',
@@ -35,4 +35,4 @@ export const data = {
   originalHandle: 'timcast',
   firstName: 'Tim',
   lastName: 'PAIl',
-} as const satisfies ActorData;
+} as const satisfies ActorData

@@ -1,0 +1,133 @@
+{
+  "$schema": "../../../../packages/config/jeju-manifest.schema.json",
+  "name": "babylon-web",
+  "displayName": "Babylon",
+  "version": "2.0.0",
+  "type": "vendor",
+  "description": "Social Prediction Platform - Decentralized social predictions with AI agents",
+  "architecture": {
+    "type": "serverless",
+    "runtime": "workerd",
+    "frontend": {
+      "type": "spa",
+      "builder": "bun",
+      "entrypoint": "index.html",
+      "outputDir": "dist/static"
+    },
+    "backend": {
+      "type": "external",
+      "server": "babylon-server",
+      "routes": ["/api/*", "/health", "/.well-known/*"]
+    }
+  },
+  "commands": {
+    "dev": "bun run scripts/dev.ts",
+    "build": "bun run scripts/build.ts",
+    "start": "bun run scripts/serve.ts",
+    "deploy": "bun run scripts/deploy.ts",
+    "deploy:testnet": "NETWORK=testnet bun run scripts/deploy.ts",
+    "deploy:mainnet": "NETWORK=mainnet bun run scripts/deploy.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "ports": {
+    "frontend": 5008,
+    "api": 5009
+  },
+  "env": {
+    "BABYLON_WEB_PORT": "5008",
+    "BABYLON_API_PORT": "5009",
+    "NETWORK": "${NETWORK:-localnet}"
+  },
+  "dependencies": ["dws", "shared"],
+  "optional": false,
+  "enabled": true,
+  "autoStart": true,
+  "tags": ["social", "predictions", "agents", "ai", "vendor", "serverless"],
+  "jns": {
+    "name": "babylon.jeju",
+    "description": "Social Prediction Platform",
+    "url": "https://babylon.jejunetwork.org"
+  },
+  "healthCheck": {
+    "frontend": {
+      "url": "http://localhost:5008",
+      "interval": 30000
+    }
+  },
+  "agent": {
+    "enabled": true,
+    "tags": ["jeju-app", "social", "predictions", "ai-agents"],
+    "metadata": {
+      "category": "social",
+      "provider": "babylon",
+      "features": ["predictions", "social-feed", "ai-agents", "reputation"]
+    },
+    "trustModels": ["open"],
+    "x402Support": false,
+    "jnsName": "babylon.jeju"
+  },
+  "dws": {
+    "cdn": {
+      "enabled": true,
+      "regions": ["global"],
+      "staticDir": "dist/static",
+      "domain": "babylon.jejunetwork.org",
+      "spa": {
+        "enabled": true,
+        "fallback": "/index.html",
+        "excludeRoutes": ["/api/*", "/health", "/.well-known/*"]
+      },
+      "cacheRules": [
+        { "pattern": "/assets/**", "ttl": 31536000, "immutable": true },
+        { "pattern": "/chunks/**", "ttl": 31536000, "immutable": true },
+        { "pattern": "/*.js", "ttl": 86400 },
+        { "pattern": "/*.css", "ttl": 86400 },
+        { "pattern": "/index.html", "ttl": 60, "staleWhileRevalidate": 3600 }
+      ]
+    }
+  },
+  "decentralization": {
+    "frontend": {
+      "ipfs": true,
+      "arweave": true,
+      "jnsName": "babylon.jeju",
+      "buildDir": "dist/static",
+      "spa": true
+    },
+    "robustness": {
+      "multiOrigin": true,
+      "offlineSupport": false,
+      "p2pFallback": true,
+      "contentAddressed": true
+    }
+  },
+  "deployment": {
+    "environments": {
+      "localnet": {
+        "dwsUrl": "http://localhost:4030",
+        "domain": "localhost:5008",
+        "apiUrl": "http://localhost:5009"
+      },
+      "testnet": {
+        "dwsUrl": "https://dws.testnet.jejunetwork.org",
+        "domain": "babylon.testnet.jejunetwork.org",
+        "apiUrl": "https://babylon-api.testnet.jejunetwork.org"
+      },
+      "mainnet": {
+        "dwsUrl": "https://dws.jejunetwork.org",
+        "domain": "babylon.jejunetwork.org",
+        "apiUrl": "https://babylon-api.jejunetwork.org"
+      }
+    },
+    "triggers": {
+      "testnet": ["push:develop"],
+      "mainnet": ["push:main", "manual"]
+    }
+  },
+  "testing": {
+    "unit": {
+      "command": "bun run typecheck",
+      "timeout": 120000
+    }
+  }
+}

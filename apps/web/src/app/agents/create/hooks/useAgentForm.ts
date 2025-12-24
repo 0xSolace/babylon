@@ -1,15 +1,15 @@
-import type { AgentTemplate } from '@babylon/agents/client';
 import {
+  type AgentTemplate,
   AgentTemplateApiResponseSchema,
   AgentTemplateIndexApiResponseSchema,
   GenerateFieldApiResponseSchema,
-} from '@babylon/shared';
-import { useMutation, useQuery } from '@tanstack/react-query';
-import { useCallback, useEffect, useState } from 'react';
-import { toast } from 'sonner';
-import { useAuth } from '@/hooks/useAuth';
+} from '@babylon/shared'
+import { useMutation, useQuery } from '@tanstack/react-query'
+import { useCallback, useEffect, useState } from 'react'
+import { toast } from 'sonner'
+import { useAuth } from '@/hooks/useAuth'
 
-const STORAGE_KEY = 'babylon_agent_draft';
+const STORAGE_KEY = 'babylon_agent_draft'
 
 /**
  * Name component pools for generating unique agent names
@@ -97,7 +97,7 @@ const NAME_PREFIXES = [
   'Quark',
   'Volt',
   'Arc',
-];
+]
 
 const NAME_SUFFIXES = [
   // Role-based
@@ -141,96 +141,91 @@ const NAME_SUFFIXES = [
   'Stream',
   'Grid',
   'Mesh',
-];
+]
 
 const generateAgentName = (): string => {
-  const prefix =
-    NAME_PREFIXES[Math.floor(Math.random() * NAME_PREFIXES.length)]!;
-  const suffix =
-    NAME_SUFFIXES[Math.floor(Math.random() * NAME_SUFFIXES.length)]!;
-  const number = Math.floor(Math.random() * 9000) + 1000;
-  return `${prefix}${suffix}-${number}`;
-};
+  const prefix = NAME_PREFIXES[Math.floor(Math.random() * NAME_PREFIXES.length)]
+  const suffix = NAME_SUFFIXES[Math.floor(Math.random() * NAME_SUFFIXES.length)]
+  const number = Math.floor(Math.random() * 9000) + 1000
+  return `${prefix}${suffix}-${number}`
+}
 
 export interface ProfileFormData {
-  username: string;
-  displayName: string;
-  bio: string;
-  profileImageUrl: string;
-  coverImageUrl: string;
+  username: string
+  displayName: string
+  bio: string
+  profileImageUrl: string
+  coverImageUrl: string
 }
 
 export interface AgentFormData {
-  system: string;
-  personality: string;
-  tradingStrategy: string;
-  initialDeposit: number;
+  system: string
+  personality: string
+  tradingStrategy: string
+  initialDeposit: number
 }
 
 interface UseAgentFormResult {
-  profileData: ProfileFormData;
-  agentData: AgentFormData;
-  isInitialized: boolean;
-  generatingField: string | null;
-  updateProfileField: (field: keyof ProfileFormData, value: string) => void;
-  updateAgentField: (
-    field: keyof AgentFormData,
-    value: string | number
-  ) => void;
-  setProfileData: React.Dispatch<React.SetStateAction<ProfileFormData>>;
-  regenerateField: (field: string) => Promise<void>;
-  clearDraft: () => void;
+  profileData: ProfileFormData
+  agentData: AgentFormData
+  isInitialized: boolean
+  generatingField: string | null
+  updateProfileField: (field: keyof ProfileFormData, value: string) => void
+  updateAgentField: (field: keyof AgentFormData, value: string | number) => void
+  setProfileData: React.Dispatch<React.SetStateAction<ProfileFormData>>
+  regenerateField: (field: string) => Promise<void>
+  clearDraft: () => void
 }
 
-const TOTAL_PROFILE_PICTURES = 100;
+const TOTAL_PROFILE_PICTURES = 100
 
 /** Request payload for POST /api/agents/generate-field */
 interface GenerateFieldRequest {
-  fieldName: string;
-  currentValue: string | number;
+  fieldName: string
+  currentValue: string | number
   context: {
-    name: string;
-    description: string;
-    system: string;
-    personality: string;
-    tradingStrategy: string;
-  };
+    name: string
+    description: string
+    system: string
+    personality: string
+    tradingStrategy: string
+  }
 }
 
 /**
  * Check if saved draft exists in localStorage
  */
 function getSavedDraft(): {
-  profileData?: ProfileFormData;
-  agentData?: AgentFormData;
+  profileData?: ProfileFormData
+  agentData?: AgentFormData
 } | null {
-  if (typeof window === 'undefined') return null;
-  const savedData = localStorage.getItem(STORAGE_KEY);
-  if (!savedData) return null;
+  if (typeof window === 'undefined') return null
+  const savedData = localStorage.getItem(STORAGE_KEY)
+  if (!savedData) return null
   return JSON.parse(savedData) as {
-    profileData?: ProfileFormData;
-    agentData?: AgentFormData;
-  };
+    profileData?: ProfileFormData
+    agentData?: AgentFormData
+  }
 }
 
 /**
  * Check if the saved draft has valid profile data
  */
 function hasValidSavedDraft(): boolean {
-  const draft = getSavedDraft();
+  const draft = getSavedDraft()
   return Boolean(
-    draft?.profileData?.displayName && draft?.profileData?.username
-  );
+    draft?.profileData?.displayName && draft?.profileData?.username,
+  )
 }
 
 /**
  * Process a template with a generated agent name
  */
 function processTemplateData(template: AgentTemplate): {
-  profileData: ProfileFormData;
-  agentData: AgentFormData;
+  profileData: ProfileFormData
+  agentData: AgentFormData
 } {
-  const agentName = generateAgentName();
+  const agentName = generateAgentName()
 
   // Process template with agent name
   const processedTemplate = {
@@ -240,13 +235,13 @@ function processTemplateData(template: AgentTemplate): {
     personality: template.personality.replace(/{{agentName}}/g, agentName),
     tradingStrategy: template.tradingStrategy.replace(
       /{{agentName}}/g,
-      agentName
+      agentName,
     ),
-  };
+  }
 
   // Random images
-  const randomPfp = Math.floor(Math.random() * TOTAL_PROFILE_PICTURES) + 1;
-  const randomBanner = Math.floor(Math.random() * TOTAL_PROFILE_PICTURES) + 1;
+  const randomPfp = Math.floor(Math.random() * TOTAL_PROFILE_PICTURES) + 1
+  const randomBanner = Math.floor(Math.random() * TOTAL_PROFILE_PICTURES) + 1
 
   return {
     profileData: {
@@ -262,42 +257,42 @@ function processTemplateData(template: AgentTemplate): {
       tradingStrategy: processedTemplate.tradingStrategy,
       initialDeposit: 100,
     },
-  };
+  }
 }
 
 /**
  * Fetch random template and process it
  */
 async function fetchRandomTemplate(): Promise<{
-  profileData: ProfileFormData;
-  agentData: AgentFormData;
+  profileData: ProfileFormData
+  agentData: AgentFormData
 }> {
-  const indexResponse = await fetch('/api/agent-templates');
+  const indexResponse = await fetch('/api/agent-templates')
   if (!indexResponse.ok) {
-    throw new Error('Failed to load template index');
+    throw new Error('Failed to load template index')
   }
 
-  const indexJson: unknown = await indexResponse.json();
-  const index = AgentTemplateIndexApiResponseSchema.parse(indexJson);
+  const indexJson = await indexResponse.json()
+  const index = AgentTemplateIndexApiResponseSchema.parse(indexJson)
   if (!index.templates || index.templates.length === 0) {
-    throw new Error('No templates available');
+    throw new Error('No templates available')
   }
 
   const randomTemplateId =
-    index.templates[Math.floor(Math.random() * index.templates.length)]!;
+    index.templates[Math.floor(Math.random() * index.templates.length)]
   const templateResponse = await fetch(
-    `/api/agent-templates/${randomTemplateId}`
-  );
+    `/api/agent-templates/${randomTemplateId}`,
+  )
 
   if (!templateResponse.ok) {
-    throw new Error('Failed to load template');
+    throw new Error('Failed to load template')
   }
 
-  const templateJson: unknown = await templateResponse.json();
+  const templateJson = await templateResponse.json()
   const template = AgentTemplateApiResponseSchema.parse(
-    templateJson
-  ) as AgentTemplate;
-  return processTemplateData(template);
+    templateJson,
+  ) as AgentTemplate
+  return processTemplateData(template)
 }
 
 /**
@@ -310,7 +305,7 @@ async function fetchRandomTemplate(): Promise<{
  * - Profile and agent config state management
  */
 export function useAgentForm(): UseAgentFormResult {
-  const { getAccessToken } = useAuth();
+  const { getAccessToken } = useAuth()
 
   const [profileData, setProfileData] = useState<ProfileFormData>({
     username: '',
@@ -318,28 +313,28 @@ export function useAgentForm(): UseAgentFormResult {
     bio: '',
     profileImageUrl: '',
     coverImageUrl: '',
-  });
+  })
 
   const [agentData, setAgentData] = useState<AgentFormData>({
     system: '',
     personality: '',
     tradingStrategy: '',
     initialDeposit: 100,
-  });
+  })
 
-  const [isInitialized, setIsInitialized] = useState(false);
+  const [isInitialized, setIsInitialized] = useState(false)
 
   // Check for saved draft and load it if valid
   useEffect(() => {
-    const draft = getSavedDraft();
+    const draft = getSavedDraft()
     if (draft?.profileData?.displayName && draft?.profileData?.username) {
-      setProfileData(draft.profileData);
+      setProfileData(draft.profileData)
       if (draft.agentData?.system) {
-        setAgentData(draft.agentData);
+        setAgentData(draft.agentData)
       }
-      setIsInitialized(true);
+      setIsInitialized(true)
     }
-  }, []);
+  }, [])
 
   // Query for loading random template (only when no valid saved draft)
   const templateQuery = useQuery({
@@ -348,47 +343,47 @@ export function useAgentForm(): UseAgentFormResult {
     enabled: !hasValidSavedDraft(),
     staleTime: Infinity, // Don't refetch once loaded
     retry: false,
-  });
+  })
 
   // Apply template data when query succeeds
   useEffect(() => {
     if (templateQuery.data && !isInitialized) {
-      setProfileData(templateQuery.data.profileData);
-      setAgentData(templateQuery.data.agentData);
-      setIsInitialized(true);
+      setProfileData(templateQuery.data.profileData)
+      setAgentData(templateQuery.data.agentData)
+      setIsInitialized(true)
     }
-  }, [templateQuery.data, isInitialized]);
+  }, [templateQuery.data, isInitialized])
 
   // Handle query error - still mark as initialized so form is usable
   useEffect(() => {
     if (templateQuery.isError && !isInitialized) {
-      console.error('Failed to load template:', templateQuery.error);
-      setIsInitialized(true);
+      console.error('Failed to load template:', templateQuery.error)
+      setIsInitialized(true)
     }
-  }, [templateQuery.isError, templateQuery.error, isInitialized]);
+  }, [templateQuery.isError, templateQuery.error, isInitialized])
 
   // Auto-save to localStorage
   useEffect(() => {
-    if (!isInitialized) return;
+    if (!isInitialized) return
     localStorage.setItem(
       STORAGE_KEY,
-      JSON.stringify({ profileData, agentData })
-    );
-  }, [profileData, agentData, isInitialized]);
+      JSON.stringify({ profileData, agentData }),
+    )
+  }, [profileData, agentData, isInitialized])
 
   const updateProfileField = useCallback(
     (field: keyof ProfileFormData, value: string) => {
-      setProfileData((prev) => ({ ...prev, [field]: value }));
+      setProfileData((prev) => ({ ...prev, [field]: value }))
     },
-    []
-  );
+    [],
+  )
 
   const updateAgentField = useCallback(
     (field: keyof AgentFormData, value: string | number) => {
-      setAgentData((prev) => ({ ...prev, [field]: value }));
+      setAgentData((prev) => ({ ...prev, [field]: value }))
     },
-    []
-  );
+    [],
+  )
 
   // Mutation for regenerating fields via AI
   const regenerateFieldMutation = useMutation({
@@ -397,9 +392,9 @@ export function useAgentForm(): UseAgentFormResult {
       token,
       request,
     }: {
-      fieldName: string;
-      token: string;
-      request: GenerateFieldRequest;
+      fieldName: string
+      token: string
+      request: GenerateFieldRequest
     }): Promise<{ fieldName: string; value: string }> => {
       const response = await fetch('/api/agents/generate-field', {
         method: 'POST',
@@ -408,50 +403,50 @@ export function useAgentForm(): UseAgentFormResult {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(request),
-      });
+      })
 
       if (!response.ok) {
         const errorData: { error?: string } = await response
           .json()
-          .catch(() => ({}));
-        throw new Error(errorData.error ?? 'Failed to generate field');
+          .catch(() => ({}))
+        throw new Error(errorData.error ?? 'Failed to generate field')
       }
 
-      const resultJson: unknown = await response.json();
-      const result = GenerateFieldApiResponseSchema.parse(resultJson);
+      const resultJson = await response.json()
+      const result = GenerateFieldApiResponseSchema.parse(resultJson)
       const strippedValue = result.value
         .replace(/<think>[\s\S]*?<\/think>/gi, '')
-        .trim();
+        .trim()
 
-      return { fieldName, value: strippedValue };
+      return { fieldName, value: strippedValue }
     },
     onSuccess: ({ fieldName, value }) => {
       if (fieldName === 'personality') {
         const personalityLines = value
           .split('|')
           .map((s: string) => s.trim())
-          .filter((s: string) => s);
-        updateAgentField('personality', personalityLines.join('\n'));
+          .filter((s: string) => s)
+        updateAgentField('personality', personalityLines.join('\n'))
       } else {
         updateAgentField(
           fieldName as keyof AgentFormData,
-          value.replace(/\n\n+/g, '\n')
-        );
+          value.replace(/\n\n+/g, '\n'),
+        )
       }
-      toast.success(`Regenerated ${fieldName}!`);
+      toast.success(`Regenerated ${fieldName}!`)
     },
     onError: (error: Error) => {
-      toast.error(error.message);
+      toast.error(error.message)
     },
-  });
+  })
 
   // Wrapper function to maintain the same interface
   const regenerateField = useCallback(
     async (field: string) => {
-      const token = await getAccessToken();
+      const token = await getAccessToken()
       if (!token) {
-        toast.error('Authentication required');
-        return;
+        toast.error('Authentication required')
+        return
       }
 
       regenerateFieldMutation.mutate({
@@ -468,19 +463,19 @@ export function useAgentForm(): UseAgentFormResult {
             tradingStrategy: agentData.tradingStrategy,
           },
         },
-      });
+      })
     },
-    [agentData, profileData, getAccessToken, regenerateFieldMutation]
-  );
+    [agentData, profileData, getAccessToken, regenerateFieldMutation],
+  )
 
   const clearDraft = useCallback(() => {
-    localStorage.removeItem(STORAGE_KEY);
-  }, []);
+    localStorage.removeItem(STORAGE_KEY)
+  }, [])
 
   // Compute generatingField from mutation state
   const generatingField = regenerateFieldMutation.isPending
     ? (regenerateFieldMutation.variables?.fieldName ?? null)
-    : null;
+    : null
 
   return {
     profileData,
@@ -492,5 +487,5 @@ export function useAgentForm(): UseAgentFormResult {
     setProfileData,
     regenerateField,
     clearDraft,
-  };
+  }
 }

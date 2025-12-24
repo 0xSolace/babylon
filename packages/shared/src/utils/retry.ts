@@ -1,7 +1,7 @@
 /**
  * Retry Utility for Async Operations
  *
- * @description Provides retry logic for async operations with exponential backoff.
+ * Provides retry logic for async operations with exponential backoff.
  * Automatically retries on network errors, 5xx server errors, and rate limit (429) responses.
  */
 
@@ -10,15 +10,15 @@
  */
 export interface RetryOptions {
   /** Maximum number of retry attempts (default: 3) */
-  maxAttempts?: number;
+  maxAttempts?: number
   /** Initial delay in milliseconds before first retry (default: 100) */
-  initialDelayMs?: number;
+  initialDelayMs?: number
   /** Maximum delay in milliseconds between retries (default: 2000) */
-  maxDelayMs?: number;
+  maxDelayMs?: number
   /** Multiplier for exponential backoff (default: 2) */
-  backoffMultiplier?: number;
+  backoffMultiplier?: number
   /** Optional callback for logging retry attempts */
-  onRetry?: (attempt: number, error: Error, delayMs: number) => void;
+  onRetry?: (attempt: number, error: Error, delayMs: number) => void
 }
 
 const DEFAULT_OPTIONS: Required<Omit<RetryOptions, 'onRetry'>> = {
@@ -26,158 +26,122 @@ const DEFAULT_OPTIONS: Required<Omit<RetryOptions, 'onRetry'>> = {
   initialDelayMs: 100,
   maxDelayMs: 2000,
   backoffMultiplier: 2,
-};
+}
+
+/**
+ * Type guard to check if error has a status property
+ */
+function hasStatus(error: unknown): error is { status: number } {
+  if (error === null || typeof error !== 'object') return false
+  // After 'in' check, TypeScript knows error has 'status' property
+  return 'status' in error && typeof error.status === 'number'
+}
 
 /**
  * Check if error is retryable (network errors, 5xx, rate limits)
- *
- * @description Determines if an error should trigger a retry based on error type
- * and HTTP status code. Retries on network errors, 5xx server errors, and 429
- * rate limit responses.
- *
- * @param {unknown} error - The error to check
- * @returns {boolean} True if the error is retryable
  */
 export function isRetryableError(error: unknown): boolean {
   if (error instanceof TypeError && error.message.includes('fetch')) {
-    return true; // Network errors
+    return true // Network errors
   }
 
-  if (error && typeof error === 'object' && 'status' in error) {
-    const status = (error as { status: number }).status;
+  if (hasStatus(error)) {
     // Retry on 5xx errors and 429 (rate limit)
-    return status >= 500 || status === 429;
+    return error.status >= 500 || error.status === 429
   }
 
-  return false;
+  return false
 }
 
 /**
  * Sleep for specified milliseconds
- *
- * @description Creates a promise that resolves after the specified delay.
- * Used for exponential backoff delays between retry attempts.
- *
- * @param {number} ms - Milliseconds to sleep
- * @returns {Promise<void>} Promise that resolves after the delay
  */
 export function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+/**
+ * Convert unknown error to Error instance
+ */
+function toError(error: unknown): Error {
+  if (error instanceof Error) {
+    return error
+  }
+  if (typeof error === 'string') {
+    return new Error(error)
+  }
+  return new Error(String(error))
 }
 
 /**
  * Retry an async operation if it fails with a retryable error
- *
- * @description Executes an async operation and automatically retries on retryable
- * errors (network errors, 5xx, 429) with exponential backoff. Throws immediately
- * on non-retryable errors.
- *
- * @template T - Return type of the operation
- * @param {() => Promise<T>} operation - Async operation to retry
- * @param {RetryOptions} options - Retry configuration options
- * @returns {Promise<T>} Result of the operation
- *
- * @example
- * ```typescript
- * const data = await retryIfRetryable(
- *   () => fetch('/api/data').then(r => r.json()),
- *   { maxAttempts: 5, initialDelayMs: 200 }
- * );
- * ```
  */
 export async function retryIfRetryable<T>(
   operation: () => Promise<T>,
-  options: RetryOptions = {}
+  options: RetryOptions = {},
 ): Promise<T> {
-  const opts = { ...DEFAULT_OPTIONS, ...options };
-  let lastError: Error | undefined;
+  const opts = { ...DEFAULT_OPTIONS, ...options }
+  let lastError: Error | undefined
 
   for (let attempt = 0; attempt < opts.maxAttempts; attempt++) {
     try {
-      return await operation();
+      return await operation()
     } catch (error) {
-      lastError = error as Error;
+      lastError = toError(error)
 
-      // Check if we should retry
-      if (!isRetryableError(error)) {
-        throw error; // Not retryable, throw immediately
+      if (!isRetryableError(error) || attempt === opts.maxAttempts - 1) {
+        throw error
       }
 
-      // Don't retry if we've exhausted attempts
-      if (attempt === opts.maxAttempts - 1) {
-        throw error;
-      }
-
-      // Calculate delay with exponential backoff
       const delay = Math.min(
         opts.initialDelayMs * opts.backoffMultiplier ** attempt,
-        opts.maxDelayMs
-      );
+        opts.maxDelayMs,
+      )
 
-      // Call optional retry callback
-      options.onRetry?.(attempt + 1, lastError, delay);
+      if (opts.onRetry) {
+        opts.onRetry(attempt + 1, lastError, delay)
+      }
 
-      await sleep(delay);
+      await sleep(delay)
     }
   }
 
-  throw lastError || new Error('Operation failed with unknown error');
+  throw lastError
 }
 
 /**
- * Retry with custom retry condition
- *
- * @description Executes an async operation and retries based on a custom condition
- * function. Allows fine-grained control over which errors trigger retries.
- *
- * @template T - Return type of the operation
- * @param {() => Promise<T>} operation - Async operation to retry
- * @param {(error: unknown) => boolean} shouldRetry - Function that determines if error should retry
- * @param {RetryOptions} options - Retry configuration options
- * @returns {Promise<T>} Result of the operation
- *
- * @example
- * ```typescript
- * const result = await retryWithCondition(
- *   () => processData(),
- *   (error) => error instanceof CustomError && error.isRetryable,
- *   { maxAttempts: 3 }
- * );
- * ```
+ * Retry with custom condition
  */
 export async function retryWithCondition<T>(
   operation: () => Promise<T>,
-  shouldRetry: (error: unknown) => boolean,
-  options: RetryOptions = {}
+  shouldRetry: (error: Error) => boolean,
+  options: RetryOptions = {},
 ): Promise<T> {
-  const opts = { ...DEFAULT_OPTIONS, ...options };
-  let lastError: Error | undefined;
+  const opts = { ...DEFAULT_OPTIONS, ...options }
+  let lastError: Error | undefined
 
   for (let attempt = 0; attempt < opts.maxAttempts; attempt++) {
     try {
-      return await operation();
+      return await operation()
     } catch (error) {
-      lastError = error as Error;
+      lastError = toError(error)
 
-      if (!shouldRetry(error)) {
-        throw error;
-      }
-
-      if (attempt === opts.maxAttempts - 1) {
-        throw error;
+      if (!shouldRetry(lastError) || attempt === opts.maxAttempts - 1) {
+        throw error
       }
 
       const delay = Math.min(
         opts.initialDelayMs * opts.backoffMultiplier ** attempt,
-        opts.maxDelayMs
-      );
+        opts.maxDelayMs,
+      )
 
-      // Call optional retry callback
-      options.onRetry?.(attempt + 1, lastError, delay);
+      if (opts.onRetry) {
+        opts.onRetry(attempt + 1, lastError, delay)
+      }
 
-      await sleep(delay);
+      await sleep(delay)
     }
   }
 
-  throw lastError || new Error('Operation failed with unknown error');
+  throw lastError
 }

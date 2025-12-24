@@ -1,14 +1,12 @@
-'use client';
-
-import { TrendingUp } from 'lucide-react';
-import { memo } from 'react';
-import type { PredictionMarket } from '@/types/markets';
-import type { TopPrediction } from '../../_hooks';
-import { HotPredictionCard } from '../cards';
+import { TrendingUp } from 'lucide-react'
+import { memo } from 'react'
+import type { PredictionMarket } from '@/types/markets'
+import type { TopPrediction } from '../../_hooks'
+import { HotPredictionCard } from '../cards'
 
 interface HotPredictionsListProps {
-  predictions: TopPrediction[];
-  onPredictionClick: (prediction: PredictionMarket) => void;
+  predictions: TopPrediction[]
+  onPredictionClick: (prediction: PredictionMarket) => void
 }
 
 /**
@@ -44,5 +42,5 @@ export const HotPredictionsList = memo(function HotPredictionsList({
         </div>
       )}
     </div>
-  );
-});
+  )
+})

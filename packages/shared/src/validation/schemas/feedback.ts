@@ -2,7 +2,7 @@
  * Feedback-related validation schemas
  */
 
-import { z } from 'zod';
+import { z } from 'zod'
 
 /**
  * Feedback submission schema
@@ -20,9 +20,9 @@ export const FeedbackSubmitSchema = z
   .refine(({ score, stars }) => score !== undefined || stars !== undefined, {
     message: 'Either score or stars must be provided',
     path: ['score'],
-  });
+  })
 
-export type FeedbackSubmit = z.infer<typeof FeedbackSubmitSchema>;
+export type FeedbackSubmit = z.infer<typeof FeedbackSubmitSchema>
 
 /**
  * User-to-Agent feedback schema
@@ -36,9 +36,9 @@ export const UserToAgentFeedbackSchema = z.object({
   category: z.string().min(1).optional(),
   interactionType: z.string().min(1).optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
-});
+})
 
-export type UserToAgentFeedback = z.infer<typeof UserToAgentFeedbackSchema>;
+export type UserToAgentFeedback = z.infer<typeof UserToAgentFeedbackSchema>
 
 /**
  * User-to-Agent feedback query schema
@@ -48,11 +48,11 @@ export const UserToAgentFeedbackQuerySchema = z.object({
   agentId: z.string().min(1, 'agentId is required'),
   limit: z.number().int().min(1).max(100).default(20),
   offset: z.number().int().min(0).default(0),
-});
+})
 
 export type UserToAgentFeedbackQuery = z.infer<
   typeof UserToAgentFeedbackQuerySchema
->;
+>
 
 /**
  * Agent-to-User feedback schema
@@ -67,9 +67,9 @@ export const AgentToUserFeedbackSchema = z.object({
   category: z.string().min(1).optional(),
   interactionType: z.string().min(1).optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
-});
+})
 
-export type AgentToUserFeedback = z.infer<typeof AgentToUserFeedbackSchema>;
+export type AgentToUserFeedback = z.infer<typeof AgentToUserFeedbackSchema>
 
 /**
  * Agent-to-User feedback query schema
@@ -79,11 +79,11 @@ export const AgentToUserFeedbackQuerySchema = z.object({
   userId: z.string().min(1, 'userId is required'),
   limit: z.number().int().min(1).max(100).default(20),
   offset: z.number().int().min(0).default(0),
-});
+})
 
 export type AgentToUserFeedbackQuery = z.infer<
   typeof AgentToUserFeedbackQuerySchema
->;
+>
 
 /**
  * Agent-to-Game feedback schema
@@ -96,9 +96,9 @@ export const AgentToGameFeedbackSchema = z.object({
   comment: z.string().max(5000).optional(),
   tags: z.array(z.string().min(1)).max(10).optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
-});
+})
 
-export type AgentToGameFeedback = z.infer<typeof AgentToGameFeedbackSchema>;
+export type AgentToGameFeedback = z.infer<typeof AgentToGameFeedbackSchema>
 
 /**
  * Game-to-Agent feedback schema
@@ -111,9 +111,9 @@ export const GameFeedbackSchema = z.object({
   won: z.boolean(),
   comment: z.string().max(5000).optional(),
   metadata: z.record(z.string(), z.unknown()).optional(),
-});
+})
 
-export type GameFeedback = z.infer<typeof GameFeedbackSchema>;
+export type GameFeedback = z.infer<typeof GameFeedbackSchema>
 
 /**
  * Game metrics for auto-generate feedback
@@ -128,9 +128,9 @@ export const GameMetricsSchema = z.object({
   decisionsTotal: z.number(),
   timeToComplete: z.number().optional(),
   riskManagement: z.number().optional(),
-});
+})
 
-export type GameMetrics = z.infer<typeof GameMetricsSchema>;
+export type GameMetrics = z.infer<typeof GameMetricsSchema>
 
 /**
  * Trade metrics for auto-generate feedback
@@ -141,9 +141,9 @@ export const TradeMetricsSchema = z.object({
   holdingPeriod: z.number(),
   timingScore: z.number(),
   riskScore: z.number(),
-});
+})
 
-export type TradeMetrics = z.infer<typeof TradeMetricsSchema>;
+export type TradeMetrics = z.infer<typeof TradeMetricsSchema>
 
 /**
  * Game feedback request schema for auto-generate
@@ -153,9 +153,9 @@ export const GameFeedbackRequestSchema = z.object({
   agentId: z.string().min(1),
   gameId: z.string().min(1),
   metrics: GameMetricsSchema,
-});
+})
 
-export type GameFeedbackRequest = z.infer<typeof GameFeedbackRequestSchema>;
+export type GameFeedbackRequest = z.infer<typeof GameFeedbackRequestSchema>
 
 /**
  * Trade feedback request schema for auto-generate
@@ -165,9 +165,9 @@ export const TradeFeedbackRequestSchema = z.object({
   agentId: z.string().min(1),
   tradeId: z.string().min(1),
   metrics: TradeMetricsSchema,
-});
+})
 
-export type TradeFeedbackRequest = z.infer<typeof TradeFeedbackRequestSchema>;
+export type TradeFeedbackRequest = z.infer<typeof TradeFeedbackRequestSchema>
 
 /**
  * Auto-generate feedback request schema
@@ -176,8 +176,8 @@ export type TradeFeedbackRequest = z.infer<typeof TradeFeedbackRequestSchema>;
 export const AutoGenerateFeedbackRequestSchema = z.discriminatedUnion('type', [
   GameFeedbackRequestSchema,
   TradeFeedbackRequestSchema,
-]);
+])
 
 export type AutoGenerateFeedbackRequest = z.infer<
   typeof AutoGenerateFeedbackRequestSchema
->;
+>

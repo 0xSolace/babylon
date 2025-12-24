@@ -1,5 +1,5 @@
-import { definePrompt } from '../define-prompt';
-import { PARODY_NAME_RULES } from '../shared-sections';
+import { definePrompt } from '../define-prompt'
+import { PARODY_NAME_RULES } from '../shared-sections'
 
 /**
  * Prompt for generating day transition summary events.
@@ -88,4 +88,4 @@ Respond with ONLY this XML:
 
 No other text.
 `.trim(),
-});
+})

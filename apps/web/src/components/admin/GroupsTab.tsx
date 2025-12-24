@@ -1,8 +1,6 @@
-'use client';
-
-import { useQuery } from '@tanstack/react-query';
-import { Users } from 'lucide-react';
-import { Skeleton } from '@/components/shared/Skeleton';
+import { useQuery } from '@tanstack/react-query'
+import { Users } from 'lucide-react'
+import { Skeleton } from '@/components/shared/Skeleton'
 
 /**
  * Groups tab component for managing user groups.
@@ -17,11 +15,11 @@ export function GroupsTab() {
   } = useQuery({
     queryKey: ['admin', 'groups'],
     queryFn: async () => {
-      const res = await fetch('/api/admin/groups');
-      if (!res.ok) throw new Error('Failed to fetch groups');
-      return res.json();
+      const res = await fetch('/api/admin/groups')
+      if (!res.ok) throw new Error('Failed to fetch groups')
+      return res.json()
     },
-  });
+  })
 
   if (isLoading) {
     return (
@@ -33,7 +31,7 @@ export function GroupsTab() {
           ))}
         </div>
       </div>
-    );
+    )
   }
 
   if (error) {
@@ -41,7 +39,7 @@ export function GroupsTab() {
       <div className="text-red-500">
         Failed to load groups data: {error.message}
       </div>
-    );
+    )
   }
 
   return (
@@ -58,5 +56,5 @@ export function GroupsTab() {
         </p>
       </div>
     </div>
-  );
+  )
 }

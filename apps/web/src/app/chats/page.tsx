@@ -1,19 +1,17 @@
-'use client';
-
-import { cn } from '@babylon/shared';
-import { Loader2, MessageCircle } from 'lucide-react';
-import { LoginButton } from '@/components/auth/LoginButton';
+import { cn } from '@babylon/shared'
+import { Loader2, MessageCircle } from 'lucide-react'
+import { LoginButton } from '@/components/auth/LoginButton'
 import {
   ChatHeader,
   ChatList,
   ChatSearchBar,
   ChatView,
   useChatPage,
-} from '@/components/chats';
-import { CreateGroupModal } from '@/components/groups/CreateGroupModal';
-import { GroupManagementModal } from '@/components/groups/GroupManagementModal';
-import { PageContainer } from '@/components/shared/PageContainer';
-import { Separator } from '@/components/shared/Separator';
+} from '@/components/chats'
+import { CreateGroupModal } from '@/components/groups/CreateGroupModal'
+import { GroupManagementModal } from '@/components/groups/GroupManagementModal'
+import { PageContainer } from '@/components/shared/PageContainer'
+import { Separator } from '@/components/shared/Separator'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -23,20 +21,20 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
-import { buttonVariants } from '@/components/ui/button';
-import { useA2A } from '@/hooks/useA2A';
-import { useChatParam } from '@/hooks/useChatParam';
-import { useSSE } from '@/hooks/useSSE';
+} from '@/components/ui/alert-dialog'
+import { buttonVariants } from '@/components/ui/button'
+import { useA2A } from '@/hooks/useA2A'
+import { useChatParam } from '@/hooks/useChatParam'
+import { useSSE } from '@/hooks/useSSE'
 
 export default function ChatsPage() {
-  useA2A();
-  useChatParam();
+  useA2A()
+  useChatParam()
 
   // Get global SSE connection status
   const { isConnected: globalSSEConnected } = useSSE({
     channels: ['feed'],
-  });
+  })
 
   const {
     // Auth
@@ -100,7 +98,7 @@ export default function ChatsPage() {
 
     // Actions
     sendMessage,
-  } = useChatPage();
+  } = useChatPage()
 
   // Auth required state
   if (ready && !authenticated) {
@@ -117,10 +115,10 @@ export default function ChatsPage() {
           </div>
         </div>
       </PageContainer>
-    );
+    )
   }
 
-  const handleTagClick = (tag: string) => setSearchQuery(tag);
+  const handleTagClick = (tag: string) => setSearchQuery(tag)
 
   return (
     <>
@@ -194,7 +192,7 @@ export default function ChatsPage() {
               <div
                 className={cn(
                   'h-full w-full flex-col bg-background',
-                  selectedChatId ? 'hidden lg:flex lg:w-96' : 'flex'
+                  selectedChatId ? 'hidden lg:flex lg:w-96' : 'flex',
                 )}
               >
                 <ChatHeader
@@ -232,7 +230,7 @@ export default function ChatsPage() {
                 <div
                   className={cn(
                     'h-full flex-1 bg-background',
-                    !selectedChatId ? 'hidden lg:block' : 'block'
+                    !selectedChatId ? 'hidden lg:block' : 'block',
                   )}
                 >
                   <ChatView
@@ -284,8 +282,8 @@ export default function ChatsPage() {
           <AlertDialogFooter>
             <AlertDialogCancel
               onClick={() => {
-                setLeaveConfirmOpen(false);
-                setLeaveChatError(null);
+                setLeaveConfirmOpen(false)
+                setLeaveChatError(null)
               }}
             >
               Cancel
@@ -314,12 +312,12 @@ export default function ChatsPage() {
       <GroupManagementModal
         isOpen={isGroupManagementModalOpen}
         onClose={() => {
-          setIsGroupManagementModalOpen(false);
-          setSelectedGroupId(null);
+          setIsGroupManagementModalOpen(false)
+          setSelectedGroupId(null)
         }}
         groupId={selectedGroupId}
         onGroupUpdated={handleGroupUpdated}
       />
     </>
-  );
+  )
 }

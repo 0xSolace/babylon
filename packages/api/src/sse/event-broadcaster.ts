@@ -6,25 +6,25 @@
  * Provides high-level functions for broadcasting to channels and chat rooms.
  */
 
-import { logger } from '@babylon/shared';
-import { publishEvent, type RealtimeChannel } from '../realtime';
-import type { JsonValue } from '../types';
+import { logger } from '@babylon/shared'
+import { publishEvent, type RealtimeChannel } from '../realtime'
+import type { JsonValue } from '../types'
 
-export type Channel = RealtimeChannel;
+export type Channel = RealtimeChannel
 
 export interface SSEClient {
-  id: string;
-  userId: string;
-  channels: Set<Channel>;
-  controller: ReadableStreamDefaultController;
-  lastPing: number;
+  id: string
+  userId: string
+  channels: Set<Channel>
+  controller: ReadableStreamDefaultController
+  lastPing: number
 }
 
 export interface BroadcastMessage {
-  channel: Channel;
-  type: string;
-  data: Record<string, JsonValue>;
-  timestamp: number;
+  channel: Channel
+  type: string
+  data: Record<string, JsonValue>
+  timestamp: number
 }
 
 class NoopBroadcaster {
@@ -33,20 +33,20 @@ class NoopBroadcaster {
       totalClients: 0,
       clientsByChannel: {},
       redisEnabled: true,
-    };
+    }
   }
   cleanup() {
     // no-op
   }
 }
 
-let broadcasterInstance: NoopBroadcaster | null = null;
+let broadcasterInstance: NoopBroadcaster | null = null
 
 export function getEventBroadcaster(): NoopBroadcaster {
   if (!broadcasterInstance) {
-    broadcasterInstance = new NoopBroadcaster();
+    broadcasterInstance = new NoopBroadcaster()
   }
-  return broadcasterInstance;
+  return broadcasterInstance
 }
 
 /**
@@ -54,21 +54,21 @@ export function getEventBroadcaster(): NoopBroadcaster {
  */
 export async function broadcastToChannel(
   channel: Channel,
-  data: Record<string, JsonValue>
+  data: Record<string, JsonValue>,
 ): Promise<void> {
   const message: BroadcastMessage = {
     channel,
     type: (data.type as string) || 'update',
     data,
     timestamp: Date.now(),
-  };
+  }
 
   await publishEvent({
     channel,
     type: message.type,
     data,
     timestamp: message.timestamp,
-  });
+  })
 }
 
 /**
@@ -77,22 +77,22 @@ export async function broadcastToChannel(
 export async function broadcastChatMessage(
   chatId: string,
   message: {
-    id: string;
-    content: string;
-    chatId: string;
-    senderId: string;
-    createdAt: string;
-    isGameChat?: boolean;
-    isDMChat?: boolean;
-  }
+    id: string
+    content: string
+    chatId: string
+    senderId: string
+    createdAt: string
+    isGameChat?: boolean
+    isDMChat?: boolean
+  },
 ): Promise<void> {
   logger.info(
     'Broadcasting chat message',
     { chatId, messageId: message.id },
-    'Realtime'
-  );
+    'Realtime',
+  )
   await broadcastToChannel(`chat:${chatId}`, {
     type: 'new_message',
     message,
-  });
+  })
 }

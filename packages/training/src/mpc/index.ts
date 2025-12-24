@@ -22,4 +22,4 @@ export {
   // Configurations
   PRODUCTION_MPC_CONFIG,
   TESTNET_MPC_CONFIG,
-} from './ProductionMPCConfig';
+} from './ProductionMPCConfig'

@@ -3,14 +3,14 @@
  * Provides recent news headlines from RSS feeds
  */
 
-import { db } from '@babylon/db';
+import { db } from '@babylon/db'
 import type {
   IAgentRuntime,
   Memory,
   Provider,
   ProviderResult,
   State,
-} from '@elizaos/core';
+} from '@elizaos/core'
 
 /**
  * Provider: Recent Headlines
@@ -23,10 +23,10 @@ export const headlinesProvider: Provider = {
   get: async (
     _runtime: IAgentRuntime,
     _message: Memory,
-    _state: State
+    _state: State,
   ): Promise<ProviderResult> => {
     // Get recent headlines (last 24 hours)
-    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000)
 
     const headlines = await db.rssHeadline.findMany({
       where: {
@@ -38,20 +38,20 @@ export const headlinesProvider: Provider = {
         publishedAt: 'desc',
       },
       take: 15,
-    });
+    })
 
     if (headlines.length === 0) {
-      return { text: 'No recent headlines available.' };
+      return { text: 'No recent headlines available.' }
     }
 
     const headlinesText = headlines
       .map((h, i) => {
-        const timeAgo = getTimeAgo(h.publishedAt);
+        const timeAgo = getTimeAgo(h.publishedAt)
         return `${i + 1}. ${h.title}
    Source: ${h.sourceId}
-   ${timeAgo}${h.summary ? `\n   ${h.summary.substring(0, 100)}...` : ''}`;
+   ${timeAgo}${h.summary ? `\n   ${h.summary.substring(0, 100)}...` : ''}`
       })
-      .join('\n\n');
+      .join('\n\n')
 
     return {
       text: `Recent Headlines (Last 24h):
@@ -64,25 +64,25 @@ ${headlinesText}`,
           source: h.sourceId,
           category: null,
           publishedAt: h.publishedAt,
-          link: h.link,
+          link: h.url, // Use url field (link is an alias)
           summary: h.summary,
         })),
       },
-    };
+    }
   },
-};
+}
 
 function getTimeAgo(date: Date): string {
-  const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
+  const seconds = Math.floor((Date.now() - date.getTime()) / 1000)
 
-  if (seconds < 60) return 'just now';
+  if (seconds < 60) return 'just now'
 
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
+  const minutes = Math.floor(seconds / 60)
+  if (minutes < 60) return `${minutes}m ago`
 
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours}h ago`
 
-  const days = Math.floor(hours / 24);
-  return `${days}d ago`;
+  const days = Math.floor(hours / 24)
+  return `${days}d ago`
 }

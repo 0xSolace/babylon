@@ -1,11 +1,9 @@
-'use client';
-
-import { cn, logger } from '@babylon/shared';
-import { useMutation } from '@tanstack/react-query';
-import { Send, X } from 'lucide-react';
-import { useEffect, useState } from 'react';
-import { toast } from 'sonner';
-import { useAuth } from '@/hooks/useAuth';
+import { cn, logger } from '@babylon/shared'
+import { useMutation } from '@tanstack/react-query'
+import { Send, X } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { toast } from 'sonner'
+import { useAuth } from '@/hooks/useAuth'
 
 /**
  * Create post modal component for composing new posts.
@@ -37,28 +35,28 @@ import { useAuth } from '@/hooks/useAuth';
  * Created post structure returned from the API.
  */
 interface CreatedPost {
-  id: string;
-  content: string;
-  authorId: string;
-  authorName: string;
-  authorUsername?: string | null;
-  authorDisplayName?: string | null;
-  authorProfileImageUrl?: string | null;
-  timestamp: string;
+  id: string
+  content: string
+  authorId: string
+  authorName: string
+  authorUsername?: string | null
+  authorDisplayName?: string | null
+  authorProfileImageUrl?: string | null
+  timestamp: string
 }
 
 /**
  * Create post API response structure.
  */
 interface CreatePostResponse {
-  post?: CreatedPost;
-  error?: string;
+  post?: CreatedPost
+  error?: string
 }
 
 interface CreatePostModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  onPostCreated?: (post: CreatedPost) => void;
+  isOpen: boolean
+  onClose: () => void
+  onPostCreated?: (post: CreatedPost) => void
 }
 
 export function CreatePostModal({
@@ -66,15 +64,15 @@ export function CreatePostModal({
   onClose,
   onPostCreated,
 }: CreatePostModalProps) {
-  const [content, setContent] = useState('');
-  const { authenticated, user, getAccessToken } = useAuth();
+  const [content, setContent] = useState('')
+  const { authenticated, user, getAccessToken } = useAuth()
 
   const createPostMutation = useMutation({
     mutationFn: async (postContent: string): Promise<CreatePostResponse> => {
-      const token = await getAccessToken();
+      const token = await getAccessToken()
 
       if (!token) {
-        throw new Error('Please wait for authentication to complete.');
+        throw new Error('Please wait for authentication to complete.')
       }
 
       const response = await fetch('/api/posts', {
@@ -84,76 +82,83 @@ export function CreatePostModal({
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({ content: postContent }),
-      });
+      })
 
-      const data: CreatePostResponse = await response.json();
+      const data: CreatePostResponse = await response.json()
 
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to create post');
+        throw new Error(data.error || 'Failed to create post')
       }
 
-      return data;
+      return data
     },
     onSuccess: (data) => {
-      setContent('');
+      setContent('')
       if (data.post) {
-        onPostCreated?.(data.post);
+        onPostCreated?.(data.post)
       }
-      onClose();
+      onClose()
     },
     onError: (error: Error) => {
-      logger.error('Failed to create post:', error.message, 'CreatePostModal');
-      toast.error(error.message || 'Failed to create post. Please try again.');
+      logger.error('Failed to create post:', error.message, 'CreatePostModal')
+      toast.error(error.message || 'Failed to create post. Please try again.')
     },
-  });
+  })
 
-  const isSubmitting = createPostMutation.isPending;
+  const isSubmitting = createPostMutation.isPending
 
   // Handle escape key and body scroll lock
   useEffect(() => {
     if (!isOpen) {
-      document.body.style.overflow = '';
-      return;
+      document.body.style.overflow = ''
+      return
     }
 
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && !isSubmitting) {
-        onClose();
+        onClose()
       }
-    };
+    }
 
-    document.addEventListener('keydown', handleEscape);
-    document.body.style.overflow = 'hidden';
+    document.addEventListener('keydown', handleEscape)
+    document.body.style.overflow = 'hidden'
 
     return () => {
-      document.removeEventListener('keydown', handleEscape);
-      document.body.style.overflow = '';
-    };
-  }, [isOpen, onClose, isSubmitting]);
+      document.removeEventListener('keydown', handleEscape)
+      document.body.style.overflow = ''
+    }
+  }, [isOpen, onClose, isSubmitting])
 
   // Cleanup on unmount (for HMR)
   useEffect(() => {
     return () => {
-      document.body.style.overflow = '';
-    };
-  }, []);
+      document.body.style.overflow = ''
+    }
+  }, [])
 
-  if (!isOpen) return null;
+  if (!isOpen) return null
 
   const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+    e.preventDefault()
 
-    if (!authenticated || !user || !content.trim()) return;
+    if (!authenticated || !user || !content.trim()) return
 
-    createPostMutation.mutate(content.trim());
-  };
+    createPostMutation.mutate(content.trim())
+  }
 
   return (
     <>
       {/* Backdrop */}
-      <div
+      <button
+        type="button"
         className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm"
         onClick={onClose}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault()
+            onClose()
+          }
+        }}
       />
 
       {/* Modal - Mobile */}
@@ -169,6 +174,7 @@ export function CreatePostModal({
             </p>
           </div>
           <button
+            type="button"
             onClick={onClose}
             className="rounded-lg p-2 text-muted-foreground transition hover:bg-muted hover:text-foreground"
             aria-label="Close create post modal"
@@ -191,7 +197,7 @@ export function CreatePostModal({
               'border border-border bg-background',
               'text-foreground placeholder:text-muted-foreground',
               'resize-none focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring',
-              'transition-colors'
+              'transition-colors',
             )}
             rows={5}
             maxLength={280}
@@ -202,7 +208,7 @@ export function CreatePostModal({
             <span
               className={cn(
                 'text-sm',
-                content.length > 260 ? 'text-red-400' : 'text-muted-foreground'
+                content.length > 260 ? 'text-red-400' : 'text-muted-foreground',
               )}
             >
               {content.length}/280
@@ -219,7 +225,7 @@ export function CreatePostModal({
               'hover:bg-primary/90',
               'disabled:cursor-not-allowed disabled:opacity-50',
               'transition-all duration-200',
-              'flex items-center justify-center gap-3'
+              'flex items-center justify-center gap-3',
             )}
           >
             {isSubmitting ? (
@@ -251,6 +257,7 @@ export function CreatePostModal({
               </p>
             </div>
             <button
+              type="button"
               onClick={onClose}
               className="rounded-lg p-2 text-muted-foreground transition hover:bg-muted hover:text-foreground"
               aria-label="Close create post modal"
@@ -273,7 +280,7 @@ export function CreatePostModal({
                 'border border-border bg-background',
                 'text-foreground placeholder:text-muted-foreground',
                 'resize-none focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring',
-                'transition-colors'
+                'transition-colors',
               )}
               rows={5}
               maxLength={280}
@@ -286,7 +293,7 @@ export function CreatePostModal({
                   'text-sm',
                   content.length > 260
                     ? 'text-red-400'
-                    : 'text-muted-foreground'
+                    : 'text-muted-foreground',
                 )}
               >
                 {content.length}/280
@@ -303,7 +310,7 @@ export function CreatePostModal({
                 'hover:bg-primary/90',
                 'disabled:cursor-not-allowed disabled:opacity-50',
                 'transition-all duration-200',
-                'flex items-center justify-center gap-3'
+                'flex items-center justify-center gap-3',
               )}
             >
               {isSubmitting ? (
@@ -322,5 +329,5 @@ export function CreatePostModal({
         </div>
       </div>
     </>
-  );
+  )
 }

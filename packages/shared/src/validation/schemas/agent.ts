@@ -2,13 +2,13 @@
  * Agent-related validation schemas
  */
 
-import { z } from 'zod';
-import { AgentCapabilitiesSchema } from '../../types/agents';
+import { z } from 'zod'
+import { AgentCapabilitiesSchema } from '../../types/agents'
 import {
   createTrimmedStringSchema,
   SnowflakeIdSchema,
   URLSchema,
-} from './common';
+} from './common'
 
 /**
  * Agent authentication schema
@@ -21,7 +21,7 @@ export const AgentAuthSchema = z
       .min(32, { message: 'Agent secret must be at least 32 characters' })
       .describe('Agent secret key (required)'),
   })
-  .describe('Agent authentication credentials');
+  .describe('Agent authentication credentials')
 
 /**
  * Agent discovery query parameters schema
@@ -31,7 +31,7 @@ export const AgentDiscoveryQuerySchema = z.object({
   markets: z.string().optional(), // Comma-separated list of markets
   minReputation: z.coerce.number().nonnegative().optional(),
   external: z.enum(['true', 'false']).optional(),
-});
+})
 
 /**
  * Agent onboarding schema
@@ -39,7 +39,7 @@ export const AgentDiscoveryQuerySchema = z.object({
 export const AgentOnboardSchema = z.object({
   agentName: createTrimmedStringSchema(1, 100),
   endpoint: URLSchema.optional(),
-});
+})
 
 /**
  * Agent metadata schema (for responses)
@@ -54,7 +54,7 @@ export const AgentMetadataSchema = z.object({
   reputationPoints: z.number(),
   createdAt: z.string(),
   updatedAt: z.string(),
-});
+})
 
 /**
  * Agent feedback submission schema
@@ -73,21 +73,21 @@ export const AgentFeedbackCreateSchema = z.object({
     .min(-5)
     .max(5, { message: 'Rating must be between -5 and 5' }),
   comment: createTrimmedStringSchema(1, 1000),
-});
+})
 
 /**
  * Agent feedback query parameters
  */
 export const AgentFeedbackQuerySchema = z.object({
   agentId: z.union([z.number().int().positive(), z.string().min(1)]),
-});
+})
 
 /**
  * Agent metadata ID parameter
  */
 export const AgentIdParamSchema = z.object({
   agentId: z.string().min(1),
-});
+})
 
 /**
  * Agent monitoring query parameters
@@ -95,7 +95,7 @@ export const AgentIdParamSchema = z.object({
 export const AgentMonitoringQuerySchema = z.object({
   agentId: z.string().optional(),
   limit: z.coerce.number().int().positive().optional().default(50),
-});
+})
 
 /**
  * Agent card schema (A2A/MCP agent discovery)
@@ -123,7 +123,7 @@ export const AgentCardSchema = z.object({
       costPerAction: z.number().optional(),
     })
     .optional(),
-});
+})
 
 /**
  * External agent registration schema
@@ -143,16 +143,16 @@ export const ExternalAgentSchema = z.object({
     })
     .optional(),
   agentCard: AgentCardSchema.optional(),
-});
+})
 
 // Type exports
-export type AgentAuth = z.infer<typeof AgentAuthSchema>;
-export type AgentDiscoveryQuery = z.infer<typeof AgentDiscoveryQuerySchema>;
-export type AgentOnboard = z.infer<typeof AgentOnboardSchema>;
-export type AgentMetadata = z.infer<typeof AgentMetadataSchema>;
-export type AgentFeedbackCreate = z.infer<typeof AgentFeedbackCreateSchema>;
-export type AgentFeedbackQuery = z.infer<typeof AgentFeedbackQuerySchema>;
-export type AgentIdParam = z.infer<typeof AgentIdParamSchema>;
-export type AgentMonitoringQuery = z.infer<typeof AgentMonitoringQuerySchema>;
-export type AgentCard = z.infer<typeof AgentCardSchema>;
-export type ExternalAgent = z.infer<typeof ExternalAgentSchema>;
+export type AgentAuth = z.infer<typeof AgentAuthSchema>
+export type AgentDiscoveryQuery = z.infer<typeof AgentDiscoveryQuerySchema>
+export type AgentOnboard = z.infer<typeof AgentOnboardSchema>
+export type AgentMetadata = z.infer<typeof AgentMetadataSchema>
+export type AgentFeedbackCreate = z.infer<typeof AgentFeedbackCreateSchema>
+export type AgentFeedbackQuery = z.infer<typeof AgentFeedbackQuerySchema>
+export type AgentIdParam = z.infer<typeof AgentIdParamSchema>
+export type AgentMonitoringQuery = z.infer<typeof AgentMonitoringQuerySchema>
+export type AgentCard = z.infer<typeof AgentCardSchema>
+export type ExternalAgent = z.infer<typeof ExternalAgentSchema>

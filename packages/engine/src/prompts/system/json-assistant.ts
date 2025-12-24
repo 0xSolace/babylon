@@ -1,4 +1,4 @@
-import { definePrompt } from '../define-prompt';
+import { definePrompt } from '../define-prompt'
 
 /**
  * System prompt for enforcing XML-only LLM responses.
@@ -23,4 +23,4 @@ export const xmlAssistant = definePrompt({
   template: `
 You are an XML-only assistant. You must respond ONLY with valid XML. No explanations, no markdown, no other text.
 `.trim(),
-});
+})

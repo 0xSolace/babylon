@@ -4,14 +4,15 @@
  * Tests the JSON storage mode to ensure it mirrors the PostgreSQL interface.
  */
 
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import {
   db,
   getStorageMode,
   initializeJsonMode,
   isSimulationMode,
-  resetToPostgresMode,
-} from '../index';
+  resetToCQLMode,
+} from '../index'
+import { getJsonState, saveJsonSnapshot } from '../json-storage'
 
 describe('JSON Storage Backend', () => {
   beforeEach(async () => {
@@ -20,18 +21,18 @@ describe('JSON Storage Backend', () => {
       '/tmp/babylon-test-' +
         Date.now() +
         '-' +
-        Math.random().toString(36).slice(2)
-    );
-  });
+        Math.random().toString(36).slice(2),
+    )
+  })
 
   afterEach(() => {
-    resetToPostgresMode();
-  });
+    resetToCQLMode()
+  })
 
   test('initializes in JSON mode', () => {
-    expect(getStorageMode()).toBe('json');
-    expect(isSimulationMode()).toBe(true);
-  });
+    expect(getStorageMode()).toBe('json')
+    expect(isSimulationMode()).toBe(true)
+  })
 
   test('creates and finds records', async () => {
     const user = await db.user.create({
@@ -45,19 +46,20 @@ describe('JSON Storage Backend', () => {
         lifetimePnL: '0',
         isAgent: false,
         role: 'user',
+        updatedAt: new Date(),
       },
-    });
+    })
 
-    expect(user.id).toBe('test-user-1');
-    expect(user.username).toBe('testuser');
+    expect(user.id).toBe('test-user-1')
+    expect(user.username).toBe('testuser')
 
     const found = await db.user.findUnique({
       where: { id: 'test-user-1' },
-    });
+    })
 
-    expect(found).not.toBeNull();
-    expect(found!.username).toBe('testuser');
-  });
+    expect(found).not.toBeNull()
+    expect(found?.username).toBe('testuser')
+  })
 
   test('findMany with where clause', async () => {
     await db.user.create({
@@ -71,8 +73,9 @@ describe('JSON Storage Backend', () => {
         lifetimePnL: '0',
         isAgent: false,
         role: 'user',
+        updatedAt: new Date(),
       },
-    });
+    })
 
     await db.user.create({
       data: {
@@ -85,16 +88,17 @@ describe('JSON Storage Backend', () => {
         lifetimePnL: '0',
         isAgent: true,
         role: 'agent',
+        updatedAt: new Date(),
       },
-    });
+    })
 
     const agents = await db.user.findMany({
       where: { isAgent: true },
-    });
+    })
 
-    expect(agents.length).toBe(1);
-    expect(agents[0]!.id).toBe('user-2');
-  });
+    expect(agents.length).toBe(1)
+    expect(agents[0]?.id).toBe('user-2')
+  })
 
   test('updates records', async () => {
     await db.user.create({
@@ -108,17 +112,18 @@ describe('JSON Storage Backend', () => {
         lifetimePnL: '0',
         isAgent: false,
         role: 'user',
+        updatedAt: new Date(),
       },
-    });
+    })
 
     const updated = await db.user.update({
       where: { id: 'user-to-update' },
       data: { displayName: 'Updated Name' },
-    });
+    })
 
-    expect(updated.displayName).toBe('Updated Name');
-    expect(updated.username).toBe('original');
-  });
+    expect(updated.displayName).toBe('Updated Name')
+    expect(updated.username).toBe('original')
+  })
 
   test('deletes records', async () => {
     await db.user.create({
@@ -132,19 +137,20 @@ describe('JSON Storage Backend', () => {
         lifetimePnL: '0',
         isAgent: false,
         role: 'user',
+        updatedAt: new Date(),
       },
-    });
+    })
 
     await db.user.delete({
       where: { id: 'user-to-delete' },
-    });
+    })
 
     const found = await db.user.findUnique({
       where: { id: 'user-to-delete' },
-    });
+    })
 
-    expect(found).toBeNull();
-  });
+    expect(found).toBeNull()
+  })
 
   test('counts records', async () => {
     await db.user.create({
@@ -158,8 +164,9 @@ describe('JSON Storage Backend', () => {
         lifetimePnL: '0',
         isAgent: false,
         role: 'user',
+        updatedAt: new Date(),
       },
-    });
+    })
 
     await db.user.create({
       data: {
@@ -172,12 +179,13 @@ describe('JSON Storage Backend', () => {
         lifetimePnL: '0',
         isAgent: false,
         role: 'user',
+        updatedAt: new Date(),
       },
-    });
+    })
 
-    const count = await db.user.count();
-    expect(count).toBe(2);
-  });
+    const count = await db.user.count()
+    expect(count).toBe(2)
+  })
 
   test('upserts records', async () => {
     // First upsert creates
@@ -193,11 +201,12 @@ describe('JSON Storage Backend', () => {
         lifetimePnL: '0',
         isAgent: false,
         role: 'user',
+        updatedAt: new Date(),
       },
       update: { displayName: 'Updated' },
-    });
+    })
 
-    expect(created.displayName).toBe('Created');
+    expect(created.displayName).toBe('Created')
 
     // Second upsert updates
     const updated = await db.user.upsert({
@@ -212,12 +221,13 @@ describe('JSON Storage Backend', () => {
         lifetimePnL: '0',
         isAgent: false,
         role: 'user',
+        updatedAt: new Date(),
       },
       update: { displayName: 'Updated' },
-    });
+    })
 
-    expect(updated.displayName).toBe('Updated');
-  });
+    expect(updated.displayName).toBe('Updated')
+  })
 
   test('sorts results', async () => {
     await db.user.create({
@@ -231,8 +241,9 @@ describe('JSON Storage Backend', () => {
         lifetimePnL: '0',
         isAgent: false,
         role: 'user',
+        updatedAt: new Date(),
       },
-    });
+    })
 
     await db.user.create({
       data: {
@@ -245,8 +256,9 @@ describe('JSON Storage Backend', () => {
         lifetimePnL: '0',
         isAgent: false,
         role: 'user',
+        updatedAt: new Date(),
       },
-    });
+    })
 
     await db.user.create({
       data: {
@@ -259,17 +271,18 @@ describe('JSON Storage Backend', () => {
         lifetimePnL: '0',
         isAgent: false,
         role: 'user',
+        updatedAt: new Date(),
       },
-    });
+    })
 
     const sorted = await db.user.findMany({
       orderBy: { reputationPoints: 'desc' },
-    });
+    })
 
-    expect(sorted[0]!.reputationPoints).toBe(30);
-    expect(sorted[1]!.reputationPoints).toBe(20);
-    expect(sorted[2]!.reputationPoints).toBe(10);
-  });
+    expect(sorted[0]?.reputationPoints).toBe(30)
+    expect(sorted[1]?.reputationPoints).toBe(20)
+    expect(sorted[2]?.reputationPoints).toBe(10)
+  })
 
   test('handles take and skip', async () => {
     for (let i = 0; i < 5; i++) {
@@ -284,30 +297,31 @@ describe('JSON Storage Backend', () => {
           lifetimePnL: '0',
           isAgent: false,
           role: 'user',
+          updatedAt: new Date(),
         },
-      });
+      })
     }
 
     const page = await db.user.findMany({
       take: 2,
       skip: 1,
       orderBy: { reputationPoints: 'asc' },
-    });
+    })
 
-    expect(page.length).toBe(2);
-    expect(page[0]!.reputationPoints).toBe(1);
-    expect(page[1]!.reputationPoints).toBe(2);
-  });
-});
+    expect(page.length).toBe(2)
+    expect(page[0]?.reputationPoints).toBe(1)
+    expect(page[1]?.reputationPoints).toBe(2)
+  })
+})
 
 describe('Question Arc Plans in JSON Mode', () => {
   beforeEach(async () => {
-    await initializeJsonMode('/tmp/babylon-arc-test-' + Date.now());
-  });
+    await initializeJsonMode(`/tmp/babylon-arc-test-${Date.now()}`)
+  })
 
   afterEach(() => {
-    resetToPostgresMode();
-  });
+    resetToCQLMode()
+  })
 
   test('creates and retrieves arc plans', async () => {
     // First create a question
@@ -321,8 +335,9 @@ describe('Question Arc Plans in JSON Mode', () => {
         rank: 1,
         resolutionDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
         status: 'active',
+        updatedAt: new Date(),
       },
-    });
+    })
 
     // Create arc plan
     const arcPlan = await db.questionArcPlan.create({
@@ -336,20 +351,20 @@ describe('Question Arc Plans in JSON Mode', () => {
         deceiverActorIds: ['actor-3'],
         phaseRatios: { early: 0.4, middle: 0.6, late: 0.75, climax: 1.0 },
       },
-    });
+    })
 
-    expect(arcPlan.uncertaintyPeakDay).toBe(10);
-    expect(arcPlan.insiderActorIds).toEqual(['actor-1', 'actor-2']);
+    expect(arcPlan.uncertaintyPeakDay).toBe(10)
+    expect(arcPlan.insiderActorIds).toEqual(['actor-1', 'actor-2'])
 
     // Retrieve
     const found = await db.questionArcPlan.findFirst({
       where: { questionId: 'test-question-1' },
-    });
+    })
 
-    expect(found).not.toBeNull();
-    expect(found!.clarityOnsetDay).toBe(20);
-  });
-});
+    expect(found).not.toBeNull()
+    expect(found?.clarityOnsetDay).toBe(20)
+  })
+})
 
 describe('Complex Queries in JSON Mode', () => {
   beforeEach(async () => {
@@ -358,13 +373,13 @@ describe('Complex Queries in JSON Mode', () => {
       '/tmp/babylon-complex-test-' +
         Date.now() +
         '-' +
-        Math.random().toString(36).slice(2)
-    );
-  });
+        Math.random().toString(36).slice(2),
+    )
+  })
 
   afterEach(() => {
-    resetToPostgresMode();
-  });
+    resetToCQLMode()
+  })
 
   test('handles multiple tables (posts and users)', async () => {
     // Create user
@@ -379,8 +394,9 @@ describe('Complex Queries in JSON Mode', () => {
         lifetimePnL: '0',
         isAgent: false,
         role: 'user',
+        updatedAt: new Date(),
       },
-    });
+    })
 
     // Create posts
     await db.post.create({
@@ -388,30 +404,26 @@ describe('Complex Queries in JSON Mode', () => {
         id: 'post-1',
         content: 'First post',
         authorId: user.id,
-        authorType: 'user',
-        postType: 'status',
-        visibility: 'public',
+        type: 'post',
       },
-    });
+    })
 
     await db.post.create({
       data: {
         id: 'post-2',
         content: 'Second post',
         authorId: user.id,
-        authorType: 'user',
-        postType: 'status',
-        visibility: 'public',
+        type: 'post',
       },
-    });
+    })
 
     // Query posts by author
     const posts = await db.post.findMany({
       where: { authorId: 'author-1' },
-    });
+    })
 
-    expect(posts.length).toBe(2);
-  });
+    expect(posts.length).toBe(2)
+  })
 
   test('handles increment operations', async () => {
     await db.user.create({
@@ -425,16 +437,17 @@ describe('Complex Queries in JSON Mode', () => {
         lifetimePnL: '0',
         isAgent: false,
         role: 'user',
+        updatedAt: new Date(),
       },
-    });
+    })
 
     const updated = await db.user.update({
       where: { id: 'increment-user' },
       data: { reputationPoints: { increment: 25 } },
-    });
+    })
 
-    expect(updated.reputationPoints).toBe(75);
-  });
+    expect(updated.reputationPoints).toBe(75)
+  })
 
   test('handles decrement operations', async () => {
     await db.user.create({
@@ -448,16 +461,17 @@ describe('Complex Queries in JSON Mode', () => {
         lifetimePnL: '0',
         isAgent: false,
         role: 'user',
+        updatedAt: new Date(),
       },
-    });
+    })
 
     const updated = await db.user.update({
       where: { id: 'decrement-user' },
       data: { reputationPoints: { decrement: 10 } },
-    });
+    })
 
-    expect(updated.reputationPoints).toBe(40);
-  });
+    expect(updated.reputationPoints).toBe(40)
+  })
 
   test('handles updateMany', async () => {
     await db.user.create({
@@ -471,8 +485,9 @@ describe('Complex Queries in JSON Mode', () => {
         lifetimePnL: '0',
         isAgent: true,
         role: 'agent',
+        updatedAt: new Date(),
       },
-    });
+    })
 
     await db.user.create({
       data: {
@@ -485,19 +500,20 @@ describe('Complex Queries in JSON Mode', () => {
         lifetimePnL: '0',
         isAgent: true,
         role: 'agent',
+        updatedAt: new Date(),
       },
-    });
+    })
 
     const result = await db.user.updateMany({
       where: { isAgent: true },
       data: { reputationPoints: 100 },
-    });
+    })
 
-    expect(result.count).toBe(2);
+    expect(result.count).toBe(2)
 
-    const agents = await db.user.findMany({ where: { isAgent: true } });
-    expect(agents.every((a) => a.reputationPoints === 100)).toBe(true);
-  });
+    const agents = await db.user.findMany({ where: { isAgent: true } })
+    expect(agents.every((a) => a.reputationPoints === 100)).toBe(true)
+  })
 
   test('handles deleteMany', async () => {
     await db.user.create({
@@ -511,8 +527,9 @@ describe('Complex Queries in JSON Mode', () => {
         lifetimePnL: '0',
         isAgent: true,
         role: 'agent',
+        updatedAt: new Date(),
       },
-    });
+    })
 
     await db.user.create({
       data: {
@@ -525,19 +542,20 @@ describe('Complex Queries in JSON Mode', () => {
         lifetimePnL: '0',
         isAgent: false,
         role: 'user',
+        updatedAt: new Date(),
       },
-    });
+    })
 
     const result = await db.user.deleteMany({
       where: { isAgent: true },
-    });
+    })
 
-    expect(result.count).toBe(1);
+    expect(result.count).toBe(1)
 
-    const remaining = await db.user.findMany();
-    expect(remaining.length).toBe(1);
-    expect(remaining[0]!.isAgent).toBe(false);
-  });
+    const remaining = await db.user.findMany()
+    expect(remaining.length).toBe(1)
+    expect(remaining[0]?.isAgent).toBe(false)
+  })
 
   test('handles createMany', async () => {
     const result = await db.user.createMany({
@@ -552,6 +570,7 @@ describe('Complex Queries in JSON Mode', () => {
           lifetimePnL: '0',
           isAgent: false,
           role: 'user',
+          updatedAt: new Date(),
         },
         {
           id: 'create-many-2',
@@ -563,36 +582,35 @@ describe('Complex Queries in JSON Mode', () => {
           lifetimePnL: '0',
           isAgent: false,
           role: 'user',
+          updatedAt: new Date(),
         },
       ],
-    });
+    })
 
-    expect(result.count).toBe(2);
+    expect(result.count).toBe(2)
 
-    const all = await db.user.findMany();
-    expect(all.length).toBe(2);
-  });
-});
+    const all = await db.user.findMany()
+    expect(all.length).toBe(2)
+  })
+})
 
 describe('Snapshot Operations', () => {
-  let testDir: string;
+  let testDir: string
 
   beforeEach(async () => {
     testDir =
       '/tmp/babylon-snapshot-test-' +
       Date.now() +
       '-' +
-      Math.random().toString(36).slice(2);
-    await initializeJsonMode(testDir);
-  });
+      Math.random().toString(36).slice(2)
+    await initializeJsonMode(testDir)
+  })
 
   afterEach(() => {
-    resetToPostgresMode();
-  });
+    resetToCQLMode()
+  })
 
   test('saves and loads snapshots', async () => {
-    const { saveJsonSnapshot, getJsonState } = await import('../json-storage');
-
     // Create some data
     await db.user.create({
       data: {
@@ -605,27 +623,28 @@ describe('Snapshot Operations', () => {
         lifetimePnL: '0',
         isAgent: false,
         role: 'user',
+        updatedAt: new Date(),
       },
-    });
+    })
 
     // Save snapshot
-    await saveJsonSnapshot();
+    await saveJsonSnapshot()
 
     // Verify state exists
-    const state = getJsonState();
-    expect(state).not.toBeNull();
-    expect(state!.tables.users).toBeDefined();
+    const state = getJsonState()
+    expect(state).not.toBeNull()
+    expect(state?.tables.users).toBeDefined()
 
     // Reset and reload
-    resetToPostgresMode();
-    await initializeJsonMode(testDir);
+    resetToCQLMode()
+    await initializeJsonMode(testDir)
 
     // Verify data is restored
     const user = await db.user.findUnique({
       where: { id: 'snapshot-user' },
-    });
+    })
 
-    expect(user).not.toBeNull();
-    expect(user!.username).toBe('snapshotuser');
-  });
-});
+    expect(user).not.toBeNull()
+    expect(user?.username).toBe('snapshotuser')
+  })
+})

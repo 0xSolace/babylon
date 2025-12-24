@@ -1,37 +1,36 @@
-'use client';
-
-import { cn } from '@babylon/shared';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Trash2 } from 'lucide-react';
-import { useState } from 'react';
-import { toast } from 'sonner';
-import { useAuth } from '@/hooks/useAuth';
+import { cn } from '@babylon/shared'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { Trash2 } from 'lucide-react'
+import { useState } from 'react'
+import { toast } from 'sonner'
+import { useAuth } from '@/hooks/useAuth'
+import { api, extractData } from '@/lib/eden-client'
 
 /**
  * Delete button component props.
  */
 interface DeleteButtonProps {
   /** ID of the post to delete */
-  postId: string;
+  postId: string
   /** Author ID of the post (for permission check) */
-  postAuthorId: string;
+  postAuthorId: string
   /** Button size variant */
-  size?: 'sm' | 'md' | 'lg';
+  size?: 'sm' | 'md' | 'lg'
   /** Additional CSS classes */
-  className?: string;
+  className?: string
 }
 
 const sizeClasses = {
   sm: 'h-8 px-2 text-xs gap-1',
   md: 'h-10 px-3 text-sm gap-1.5',
   lg: 'h-12 px-4 text-base gap-2',
-};
+}
 
 const iconSizes = {
   sm: 18,
   md: 20,
   lg: 22,
-};
+}
 
 /**
  * Delete button component for posts.
@@ -63,44 +62,36 @@ export function DeleteButton({
   size = 'md',
   className,
 }: DeleteButtonProps) {
-  const { user } = useAuth();
-  const queryClient = useQueryClient();
-  const [showConfirm, setShowConfirm] = useState(false);
-
-  // Only show delete button to post author
-  if (!user || user.id !== postAuthorId) {
-    return null;
-  }
+  const { user } = useAuth()
+  const queryClient = useQueryClient()
+  const [showConfirm, setShowConfirm] = useState(false)
 
   const deleteMutation = useMutation({
     mutationFn: async () => {
-      const response = await fetch(`/api/posts/${postId}`, {
-        method: 'DELETE',
-      });
-
-      if (!response.ok) {
-        const data: { error?: string } = await response.json();
-        throw new Error(data.error ?? 'Failed to delete post');
-      }
-
-      return response.json();
+      const response = await api.posts.byId(postId).delete()
+      return extractData(response)
     },
     onSuccess: () => {
-      toast.success('Post deleted');
-      void queryClient.invalidateQueries({ queryKey: ['posts'] });
-      void queryClient.invalidateQueries({ queryKey: ['feed'] });
+      toast.success('Post deleted')
+      void queryClient.invalidateQueries({ queryKey: ['posts'] })
+      void queryClient.invalidateQueries({ queryKey: ['feed'] })
     },
     onError: (error: Error) => {
-      toast.error(error.message);
+      toast.error(error.message)
     },
-  });
+  })
 
   const handleDelete = () => {
-    setShowConfirm(false);
-    deleteMutation.mutate();
-  };
+    setShowConfirm(false)
+    deleteMutation.mutate()
+  }
 
-  const sizeKey: 'sm' | 'md' | 'lg' = size;
+  // Only show delete button to post author
+  if (!user || user.id !== postAuthorId) {
+    return null
+  }
+
+  const sizeKey: 'sm' | 'md' | 'lg' = size
 
   return (
     <div className="relative">
@@ -113,7 +104,7 @@ export function DeleteButton({
           'bg-transparent text-muted-foreground hover:text-red-500 hover:opacity-70',
           sizeClasses[sizeKey],
           deleteMutation.isPending && 'cursor-wait opacity-50',
-          className
+          className,
         )}
         title="Delete post"
       >
@@ -124,9 +115,16 @@ export function DeleteButton({
       {showConfirm && (
         <>
           {/* Backdrop */}
-          <div
+          <button
+            type="button"
             className="fixed inset-0 z-40 bg-background/80 backdrop-blur-sm"
             onClick={() => setShowConfirm(false)}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') {
+                setShowConfirm(false)
+              }
+            }}
+            aria-label="Close dialog"
           />
 
           {/* Dialog */}
@@ -160,5 +158,5 @@ export function DeleteButton({
         </>
       )}
     </div>
-  );
+  )
 }

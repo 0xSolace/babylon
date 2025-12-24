@@ -1,10 +1,8 @@
-'use client';
-
-import { cn, logger } from '@babylon/shared';
-import { useMutation, useQuery } from '@tanstack/react-query';
-import { Bell, MessageCircle, Send, User, UserPlus, Users } from 'lucide-react';
-import { useCallback, useState } from 'react';
-import { toast } from 'sonner';
+import { cn, logger } from '@babylon/shared'
+import { useMutation, useQuery } from '@tanstack/react-query'
+import { Bell, MessageCircle, Send, User, UserPlus, Users } from 'lucide-react'
+import { useCallback, useState } from 'react'
+import { toast } from 'sonner'
 
 /**
  * Notification type for admin notifications tab.
@@ -16,12 +14,26 @@ type NotificationType =
   | 'follow'
   | 'mention'
   | 'reply'
-  | 'share';
+  | 'share'
+
+const NOTIFICATION_TYPES: NotificationType[] = [
+  'system',
+  'comment',
+  'reaction',
+  'follow',
+  'mention',
+  'reply',
+  'share',
+]
+
+function isNotificationType(value: string): value is NotificationType {
+  return NOTIFICATION_TYPES.includes(value as NotificationType)
+}
 
 /**
  * Recipient type for admin notifications tab.
  */
-type RecipientType = 'specific' | 'all';
+type RecipientType = 'specific' | 'all'
 
 /**
  * Notifications tab component for sending admin notifications and testing DMs.
@@ -42,49 +54,49 @@ type RecipientType = 'specific' | 'all';
  * @returns Notifications tab element
  */
 export function NotificationsTab() {
-  const [message, setMessage] = useState('');
-  const [userId, setUserId] = useState('');
-  const [type, setType] = useState<NotificationType>('system');
-  const [recipientType, setRecipientType] = useState<RecipientType>('specific');
+  const [message, setMessage] = useState('')
+  const [userId, setUserId] = useState('')
+  const [type, setType] = useState<NotificationType>('system')
+  const [recipientType, setRecipientType] = useState<RecipientType>('specific')
 
   // DM Testing state
-  const [dmSenderId, setDmSenderId] = useState('demo-user-babylon-support');
-  const [dmRecipientId, setDmRecipientId] = useState('');
+  const [dmSenderId, setDmSenderId] = useState('demo-user-babylon-support')
+  const [dmRecipientId, setDmRecipientId] = useState('')
   const [debugInfo, setDebugInfo] = useState<Record<string, unknown> | null>(
-    null
-  );
+    null,
+  )
 
   // Fetch current user ID
   const { data: currentUser } = useQuery<{ id: string } | null>({
     queryKey: ['users', 'me'],
     queryFn: async () => {
       const token =
-        typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
-      if (!token) return null;
+        typeof window !== 'undefined' ? window.__oauth3AccessToken : null
+      if (!token) return null
 
       const response = await fetch('/api/users/me', {
         headers: {
           Authorization: `Bearer ${token}`,
         },
-      });
+      })
 
       if (response.ok) {
-        const data = await response.json();
-        return data.user || null;
+        const data = await response.json()
+        return data.user || null
       }
-      return null;
+      return null
     },
-  });
+  })
 
-  const currentUserId = currentUser ? currentUser.id : null;
+  const currentUserId = currentUser ? currentUser.id : null
 
   const sendNotificationMutation = useMutation({
     mutationFn: async () => {
       const token =
-        typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
+        typeof window !== 'undefined' ? window.__oauth3AccessToken : null
 
       if (!token) {
-        throw new Error('Not authenticated');
+        throw new Error('Not authenticated')
       }
 
       const response = await fetch('/api/admin/notifications', {
@@ -100,36 +112,36 @@ export function NotificationsTab() {
             ? { userId: userId.trim() }
             : { sendToAll: true }),
         }),
-      });
+      })
 
-      const data = await response.json();
+      const data = await response.json()
 
       if (!response.ok || !data.success) {
-        throw new Error(data.message || 'Failed to send notification');
+        throw new Error(data.message || 'Failed to send notification')
       }
 
-      return data;
+      return data
     },
     onSuccess: (data) => {
-      toast.success(data.message || 'Notification sent successfully');
+      toast.success(data.message || 'Notification sent successfully')
       // Reset form
-      setMessage('');
-      setUserId('');
+      setMessage('')
+      setUserId('')
     },
     onError: (error) => {
       toast.error(
-        error instanceof Error ? error.message : 'Failed to send notification'
-      );
+        error instanceof Error ? error.message : 'Failed to send notification',
+      )
     },
-  });
+  })
 
   const debugDMsMutation = useMutation({
     mutationFn: async (recipientId: string) => {
       const token =
-        typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
+        typeof window !== 'undefined' ? window.__oauth3AccessToken : null
 
       if (!token) {
-        throw new Error('Not authenticated');
+        throw new Error('Not authenticated')
       }
 
       const response = await fetch(
@@ -138,51 +150,51 @@ export function NotificationsTab() {
           headers: {
             Authorization: `Bearer ${token}`,
           },
-        }
-      );
+        },
+      )
 
-      const data = await response.json();
-      logger.debug('Debug DM response', { data }, 'NotificationsTab');
-      return data;
+      const data = await response.json()
+      logger.debug('Debug DM response', { data }, 'NotificationsTab')
+      return data
     },
     onSuccess: (data) => {
-      setDebugInfo(data);
+      setDebugInfo(data)
       const participantCount = data.participantRecords
         ? data.participantRecords.length
-        : 0;
-      const chatCount = data.chats ? data.chats.length : 0;
+        : 0
+      const chatCount = data.chats ? data.chats.length : 0
 
       if (participantCount === 0) {
-        toast.error(`No DM chats found for user ${dmRecipientId}`);
+        toast.error(`No DM chats found for user ${dmRecipientId}`)
       } else {
         toast.success(
-          `Found ${participantCount} DM participant records and ${chatCount} chats`
-        );
+          `Found ${participantCount} DM participant records and ${chatCount} chats`,
+        )
       }
     },
     onError: (error) => {
       toast.error(
-        error instanceof Error ? error.message : 'Failed to debug DMs'
-      );
+        error instanceof Error ? error.message : 'Failed to debug DMs',
+      )
     },
-  });
+  })
 
   const sendTestDMsMutation = useMutation({
     mutationFn: async ({
       senderId,
       recipientId,
     }: {
-      senderId: string;
-      recipientId: string;
+      senderId: string
+      recipientId: string
     }) => {
       const token =
-        typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
+        typeof window !== 'undefined' ? window.__oauth3AccessToken : null
 
       if (!token) {
-        throw new Error('Not authenticated');
+        throw new Error('Not authenticated')
       }
 
-      toast.info('Sending 100 test DM messages... This may take a moment.');
+      toast.info('Sending 100 test DM messages... This may take a moment.')
 
       const response = await fetch('/api/admin/test-dm-messages', {
         method: 'POST',
@@ -195,88 +207,90 @@ export function NotificationsTab() {
           recipientId: recipientId.trim(),
           messageCount: 100,
         }),
-      });
+      })
 
-      const data = await response.json();
+      const data = await response.json()
 
       if (!response.ok || !data.success) {
         logger.error(
           'Failed to send test DM messages',
           { data },
-          'NotificationsTab'
-        );
-        throw new Error(data.message || 'Failed to send test DM messages');
+          'NotificationsTab',
+        )
+        throw new Error(data.message || 'Failed to send test DM messages')
       }
 
-      return data;
+      return data
     },
     onSuccess: (data) => {
       logger.debug(
         'Test DM messages sent',
         { chatId: data.chatId, data },
-        'NotificationsTab'
-      );
+        'NotificationsTab',
+      )
       toast.success(data.message || 'Test DM messages sent successfully', {
         duration: 10000,
         action: {
           label: 'Go to Chats',
-          onClick: () => (window.location.href = '/chats'),
+          onClick: () => {
+            window.location.href = '/chats'
+          },
         },
-      });
+      })
     },
     onError: (error) => {
       toast.error(
         error instanceof Error
           ? error.message
-          : 'Failed to send test DM messages'
-      );
+          : 'Failed to send test DM messages',
+      )
     },
-  });
+  })
 
   const handleSend = useCallback(() => {
     if (!message.trim()) {
-      toast.error('Please enter a message');
-      return;
+      toast.error('Please enter a message')
+      return
     }
 
     if (recipientType === 'specific' && !userId.trim()) {
-      toast.error('Please enter a user ID');
-      return;
+      toast.error('Please enter a user ID')
+      return
     }
 
-    sendNotificationMutation.mutate();
-  }, [message, userId, recipientType, sendNotificationMutation]);
+    sendNotificationMutation.mutate()
+  }, [message, userId, recipientType, sendNotificationMutation])
 
   const handleDebugDMs = useCallback(() => {
     if (!dmRecipientId.trim()) {
-      toast.error('Please enter a recipient user ID to debug');
-      return;
+      toast.error('Please enter a recipient user ID to debug')
+      return
     }
 
-    debugDMsMutation.mutate(dmRecipientId);
-  }, [dmRecipientId, debugDMsMutation]);
+    debugDMsMutation.mutate(dmRecipientId)
+  }, [dmRecipientId, debugDMsMutation])
 
   const handleSendTestDMs = useCallback(() => {
     if (!dmSenderId.trim()) {
-      toast.error('Please enter a sender user ID');
-      return;
+      toast.error('Please enter a sender user ID')
+      return
     }
 
     if (!dmRecipientId.trim()) {
-      toast.error('Please enter a recipient user ID');
-      return;
+      toast.error('Please enter a recipient user ID')
+      return
     }
 
     if (dmSenderId === dmRecipientId) {
-      toast.error('Sender and recipient must be different users');
-      return;
+      toast.error('Sender and recipient must be different users')
+      return
     }
 
     sendTestDMsMutation.mutate({
       senderId: dmSenderId,
       recipientId: dmRecipientId,
-    });
-  }, [dmSenderId, dmRecipientId, sendTestDMsMutation]);
+    })
+  }, [dmSenderId, dmRecipientId, sendTestDMsMutation])
 
   return (
     <div className="space-y-6">
@@ -290,27 +304,29 @@ export function NotificationsTab() {
       <div className="space-y-4 rounded-lg border border-border bg-card p-6">
         {/* Recipient Type */}
         <div>
-          <label className="mb-2 block font-medium text-sm">Recipient</label>
+          <div className="mb-2 block font-medium text-sm">Recipient</div>
           <div className="flex gap-2">
             <button
+              type="button"
               onClick={() => setRecipientType('specific')}
               className={cn(
                 'flex flex-1 items-center justify-center gap-2 rounded-lg border px-4 py-3 transition-colors',
                 recipientType === 'specific'
                   ? 'border-primary bg-primary text-primary-foreground'
-                  : 'border-border bg-background hover:bg-muted'
+                  : 'border-border bg-background hover:bg-muted',
               )}
             >
               <User className="h-4 w-4" />
               <span>Specific User</span>
             </button>
             <button
+              type="button"
               onClick={() => setRecipientType('all')}
               className={cn(
                 'flex flex-1 items-center justify-center gap-2 rounded-lg border px-4 py-3 transition-colors',
                 recipientType === 'all'
                   ? 'border-primary bg-primary text-primary-foreground'
-                  : 'border-border bg-background hover:bg-muted'
+                  : 'border-border bg-background hover:bg-muted',
               )}
             >
               <Users className="h-4 w-4" />
@@ -335,7 +351,7 @@ export function NotificationsTab() {
                 'w-full rounded-lg border border-border px-4 py-2',
                 'bg-background text-foreground',
                 'focus:border-border focus:outline-none',
-                'disabled:cursor-not-allowed disabled:opacity-50'
+                'disabled:cursor-not-allowed disabled:opacity-50',
               )}
               disabled={sendNotificationMutation.isPending}
             />
@@ -353,12 +369,17 @@ export function NotificationsTab() {
           <select
             id="type"
             value={type}
-            onChange={(e) => setType(e.target.value as NotificationType)}
+            onChange={(e) => {
+              const value = e.target.value
+              if (isNotificationType(value)) {
+                setType(value)
+              }
+            }}
             className={cn(
               'w-full rounded-lg border border-border px-4 py-2',
               'bg-background text-foreground',
               'focus:border-border focus:outline-none',
-              'disabled:cursor-not-allowed disabled:opacity-50'
+              'disabled:cursor-not-allowed disabled:opacity-50',
             )}
             disabled={sendNotificationMutation.isPending}
           >
@@ -389,7 +410,7 @@ export function NotificationsTab() {
               'bg-background text-foreground',
               'focus:border-border focus:outline-none',
               'disabled:cursor-not-allowed disabled:opacity-50',
-              'resize-none'
+              'resize-none',
             )}
             disabled={sendNotificationMutation.isPending}
           />
@@ -400,6 +421,7 @@ export function NotificationsTab() {
 
         {/* Send Button */}
         <button
+          type="button"
           onClick={handleSend}
           disabled={
             sendNotificationMutation.isPending ||
@@ -410,7 +432,7 @@ export function NotificationsTab() {
             'flex w-full items-center justify-center gap-2 rounded-lg px-6 py-3',
             'bg-primary font-semibold text-primary-foreground',
             'transition-colors hover:bg-primary/90',
-            'disabled:cursor-not-allowed disabled:opacity-50'
+            'disabled:cursor-not-allowed disabled:opacity-50',
           )}
         >
           <Send className="h-4 w-4" />
@@ -488,7 +510,7 @@ export function NotificationsTab() {
                 'w-full rounded-lg border border-border px-4 py-2',
                 'bg-background text-foreground',
                 'focus:border-border focus:outline-none',
-                'disabled:cursor-not-allowed disabled:opacity-50'
+                'disabled:cursor-not-allowed disabled:opacity-50',
               )}
               disabled={sendTestDMsMutation.isPending}
             />
@@ -516,7 +538,7 @@ export function NotificationsTab() {
                   'flex-1 rounded-lg border border-border px-4 py-2',
                   'bg-background text-foreground',
                   'focus:border-border focus:outline-none',
-                  'disabled:cursor-not-allowed disabled:opacity-50'
+                  'disabled:cursor-not-allowed disabled:opacity-50',
                 )}
                 disabled={sendTestDMsMutation.isPending}
               />
@@ -524,10 +546,10 @@ export function NotificationsTab() {
                 type="button"
                 onClick={() => {
                   if (currentUserId) {
-                    setDmRecipientId(currentUserId);
-                    toast.success('Using your user ID as recipient');
+                    setDmRecipientId(currentUserId)
+                    toast.success('Using your user ID as recipient')
                   } else {
-                    toast.error('Could not fetch your user ID');
+                    toast.error('Could not fetch your user ID')
                   }
                 }}
                 disabled={sendTestDMsMutation.isPending || !currentUserId}
@@ -535,7 +557,7 @@ export function NotificationsTab() {
                   'rounded-lg border border-border px-3 py-2',
                   'bg-primary text-primary-foreground transition-colors hover:bg-primary/90',
                   'whitespace-nowrap font-semibold text-xs',
-                  'disabled:cursor-not-allowed disabled:opacity-50'
+                  'disabled:cursor-not-allowed disabled:opacity-50',
                 )}
                 title="Use your logged-in user ID as recipient"
               >
@@ -549,7 +571,7 @@ export function NotificationsTab() {
                   'rounded-lg border border-border px-3 py-2',
                   'bg-background transition-colors hover:bg-muted',
                   'whitespace-nowrap text-xs',
-                  'disabled:cursor-not-allowed disabled:opacity-50'
+                  'disabled:cursor-not-allowed disabled:opacity-50',
                 )}
                 title="Use Welcome Bot as recipient"
               >
@@ -565,13 +587,14 @@ export function NotificationsTab() {
           {/* Action Buttons */}
           <div className="flex gap-2">
             <button
+              type="button"
               onClick={handleDebugDMs}
               disabled={!dmRecipientId.trim() || debugDMsMutation.isPending}
               className={cn(
                 'flex flex-1 items-center justify-center gap-2 rounded-lg px-4 py-3',
                 'bg-secondary font-medium text-secondary-foreground',
                 'border border-border transition-colors hover:bg-secondary/90',
-                'disabled:cursor-not-allowed disabled:opacity-50'
+                'disabled:cursor-not-allowed disabled:opacity-50',
               )}
               title="Check what DM chats exist for this user"
             >
@@ -579,6 +602,7 @@ export function NotificationsTab() {
             </button>
 
             <button
+              type="button"
               onClick={handleSendTestDMs}
               disabled={
                 sendTestDMsMutation.isPending ||
@@ -589,7 +613,7 @@ export function NotificationsTab() {
                 'flex flex-[2] items-center justify-center gap-2 rounded-lg px-6 py-3',
                 'bg-primary font-semibold text-primary-foreground',
                 'transition-colors hover:bg-primary/90',
-                'disabled:cursor-not-allowed disabled:opacity-50'
+                'disabled:cursor-not-allowed disabled:opacity-50',
               )}
             >
               <MessageCircle className="h-4 w-4" />
@@ -670,23 +694,23 @@ export function NotificationsTab() {
         </div>
       </div>
     </div>
-  );
+  )
 }
 
 // Group Invite Section Component
 function GroupInviteSection() {
-  const [npcId, setNpcId] = useState('');
-  const [userId, setUserId] = useState('');
-  const [chatId, setChatId] = useState('');
-  const [chatName, setChatName] = useState('');
+  const [npcId, setNpcId] = useState('')
+  const [userId, setUserId] = useState('')
+  const [chatId, setChatId] = useState('')
+  const [chatName, setChatName] = useState('')
 
   const sendInviteMutation = useMutation({
     mutationFn: async () => {
       const token =
-        typeof window !== 'undefined' ? window.__oauth3AccessToken : null;
+        typeof window !== 'undefined' ? window.__oauth3AccessToken : null
 
       if (!token) {
-        throw new Error('Not authenticated');
+        throw new Error('Not authenticated')
       }
 
       const response = await fetch('/api/admin/group-invite', {
@@ -701,45 +725,45 @@ function GroupInviteSection() {
           chatId: chatId.trim() || undefined,
           chatName: chatName.trim() || undefined,
         }),
-      });
+      })
 
-      const data = await response.json();
+      const data = await response.json()
 
       if (!response.ok || !data.success) {
         throw new Error(
-          data.error || data.message || 'Failed to send group invite'
-        );
+          data.error || data.message || 'Failed to send group invite',
+        )
       }
 
-      return data;
+      return data
     },
     onSuccess: (data) => {
-      toast.success(data.message || 'Group invite sent successfully');
+      toast.success(data.message || 'Group invite sent successfully')
       // Reset form
-      setUserId('');
-      setChatId('');
-      setChatName('');
+      setUserId('')
+      setChatId('')
+      setChatName('')
     },
     onError: (error) => {
       toast.error(
-        error instanceof Error ? error.message : 'Failed to send group invite'
-      );
+        error instanceof Error ? error.message : 'Failed to send group invite',
+      )
     },
-  });
+  })
 
   const handleSendInvite = useCallback(() => {
     if (!npcId.trim()) {
-      toast.error('Please enter an NPC ID');
-      return;
+      toast.error('Please enter an NPC ID')
+      return
     }
 
     if (!userId.trim()) {
-      toast.error('Please enter a user ID');
-      return;
+      toast.error('Please enter a user ID')
+      return
     }
 
-    sendInviteMutation.mutate();
-  }, [npcId, userId, sendInviteMutation]);
+    sendInviteMutation.mutate()
+  }, [npcId, userId, sendInviteMutation])
 
   return (
     <div className="space-y-4">
@@ -771,7 +795,7 @@ function GroupInviteSection() {
               'w-full rounded-lg border border-border px-4 py-2',
               'bg-background text-foreground',
               'focus:border-primary focus:outline-none',
-              'disabled:cursor-not-allowed disabled:opacity-50'
+              'disabled:cursor-not-allowed disabled:opacity-50',
             )}
             disabled={sendInviteMutation.isPending}
           />
@@ -799,7 +823,7 @@ function GroupInviteSection() {
               'w-full rounded-lg border border-border px-4 py-2',
               'bg-background text-foreground',
               'focus:border-primary focus:outline-none',
-              'disabled:cursor-not-allowed disabled:opacity-50'
+              'disabled:cursor-not-allowed disabled:opacity-50',
             )}
             disabled={sendInviteMutation.isPending}
           />
@@ -824,7 +848,7 @@ function GroupInviteSection() {
               'w-full rounded-lg border border-border px-4 py-2',
               'bg-background text-foreground',
               'focus:border-primary focus:outline-none',
-              'disabled:cursor-not-allowed disabled:opacity-50'
+              'disabled:cursor-not-allowed disabled:opacity-50',
             )}
             disabled={sendInviteMutation.isPending}
           />
@@ -848,7 +872,7 @@ function GroupInviteSection() {
               'w-full rounded-lg border border-border px-4 py-2',
               'bg-background text-foreground',
               'focus:border-primary focus:outline-none',
-              'disabled:cursor-not-allowed disabled:opacity-50'
+              'disabled:cursor-not-allowed disabled:opacity-50',
             )}
             disabled={sendInviteMutation.isPending}
           />
@@ -859,6 +883,7 @@ function GroupInviteSection() {
 
         {/* Send Button */}
         <button
+          type="button"
           onClick={handleSendInvite}
           disabled={
             sendInviteMutation.isPending || !npcId.trim() || !userId.trim()
@@ -867,7 +892,7 @@ function GroupInviteSection() {
             'flex w-full items-center justify-center gap-2 rounded-lg px-6 py-3',
             'bg-primary font-semibold text-primary-foreground',
             'transition-colors hover:bg-primary/90',
-            'disabled:cursor-not-allowed disabled:opacity-50'
+            'disabled:cursor-not-allowed disabled:opacity-50',
           )}
         >
           <UserPlus className="h-4 w-4" />
@@ -894,5 +919,5 @@ function GroupInviteSection() {
         </ul>
       </div>
     </div>
-  );
+  )
 }

@@ -1,25 +1,22 @@
-'use client';
-
 /**
  * BBLN Token Launch Page
  *
  * CCA Auction for BBLN token sale
- * Integrates with canonical Presale.sol from @jeju/contracts
  */
 
-import { BBLN_ADDRESSES, BBLN_PRESALE_ABI, cn } from '@babylon/shared';
-import { ChevronDown, Gift, Rocket } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
-import { toast } from 'sonner';
-import { formatEther, parseEther } from 'viem';
+import { BBLN_ADDRESSES, BBLN_PRESALE_ABI, cn } from '@babylon/shared'
+import { ChevronDown, Gift, Rocket } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { toast } from 'sonner'
+import { formatEther, parseEther } from 'viem'
 import {
   useAccount,
   useReadContract,
   useWaitForTransactionReceipt,
   useWriteContract,
-} from 'wagmi';
-import { PageContainer } from '@/components/shared/PageContainer';
-import { useAuth } from '@/hooks/useAuth';
+} from 'wagmi'
+import { PageContainer } from '@/components/shared/PageContainer'
+import { useAuth } from '@/hooks/useAuth'
 
 type PresalePhase =
   | 'NOT_STARTED'
@@ -28,7 +25,7 @@ type PresalePhase =
   | 'ENDED'
   | 'CLEARING'
   | 'DISTRIBUTION'
-  | 'FAILED';
+  | 'FAILED'
 const PHASES: PresalePhase[] = [
   'NOT_STARTED',
   'WHITELIST',
@@ -37,34 +34,34 @@ const PHASES: PresalePhase[] = [
   'CLEARING',
   'DISTRIBUTION',
   'FAILED',
-];
+]
 
 export default function LaunchPage() {
-  const { authenticated, login } = useAuth();
-  const { address, chain } = useAccount();
-  const [amount, setAmount] = useState('');
-  const [maxPrice, setMaxPrice] = useState('');
+  const { authenticated, login } = useAuth()
+  const { address, chain } = useAccount()
+  const [amount, setAmount] = useState('')
+  const [maxPrice, setMaxPrice] = useState('')
   const [countdown, setCountdown] = useState({
     days: 0,
     hours: 0,
     mins: 0,
     secs: 0,
-  });
-  const [showFaq, setShowFaq] = useState<number | null>(null);
+  })
+  const [showFaq, setShowFaq] = useState<number | null>(null)
 
-  const isMainnet = chain?.id === 1;
-  const isSepolia = chain?.id === 11155111;
+  const isMainnet = chain?.id === 1
+  const isSepolia = chain?.id === 11155111
   const presaleAddress = isMainnet
     ? BBLN_ADDRESSES.mainnet.presale
-    : BBLN_ADDRESSES.sepolia.presale;
+    : BBLN_ADDRESSES.sepolia.presale
   const isDeployed =
-    presaleAddress !== '0x0000000000000000000000000000000000000000';
+    presaleAddress !== '0x0000000000000000000000000000000000000000'
 
   const explorerUrl = isMainnet
     ? 'https://etherscan.io'
     : isSepolia
       ? 'https://sepolia.etherscan.io'
-      : null;
+      : null
 
   // Read presale stats
   const { data: statsData, refetch: refetchStats } = useReadContract({
@@ -75,7 +72,7 @@ export default function LaunchPage() {
       enabled: isDeployed,
       refetchInterval: 10000,
     },
-  });
+  })
 
   const stats = useMemo(() => {
     if (statsData) {
@@ -87,7 +84,7 @@ export default function LaunchPage() {
         hardCap: statsData[4] as bigint,
         currentPrice: statsData[5] as bigint,
         phase: PHASES[Number(statsData[6])] ?? 'NOT_STARTED',
-      };
+      }
     }
     return {
       raised: 0n,
@@ -97,8 +94,8 @@ export default function LaunchPage() {
       hardCap: 0n,
       currentPrice: 0n,
       phase: 'NOT_STARTED' as PresalePhase,
-    };
-  }, [statsData]);
+    }
+  }, [statsData])
 
   // Read user contribution
   const { data: contributionData } = useReadContract({
@@ -110,7 +107,7 @@ export default function LaunchPage() {
       enabled: isDeployed && !!address,
       refetchInterval: 10000,
     },
-  });
+  })
 
   const contribution = useMemo(() => {
     if (contributionData) {
@@ -120,10 +117,10 @@ export default function LaunchPage() {
         bonusTokens: contributionData[2] as bigint,
         claimable: contributionData[4] as bigint,
         claimed: contributionData[6] as boolean,
-      };
+      }
     }
-    return null;
-  }, [contributionData]);
+    return null
+  }, [contributionData])
 
   // Preview allocation
   const { data: previewData } = useReadContract({
@@ -134,13 +131,13 @@ export default function LaunchPage() {
     query: {
       enabled: isDeployed && !!amount && parseFloat(amount) > 0,
     },
-  });
+  })
 
   // Write contract
-  const { writeContract, data: txHash, isPending } = useWriteContract();
+  const { writeContract, data: txHash, isPending } = useWriteContract()
   const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({
     hash: txHash,
-  });
+  })
 
   useEffect(() => {
     if (isSuccess) {
@@ -154,12 +151,12 @@ export default function LaunchPage() {
                   window.open(`${explorerUrl}/tx/${txHash}`, '_blank'),
               }
             : undefined,
-      });
-      setAmount('');
-      setMaxPrice('');
-      refetchStats();
+      })
+      setAmount('')
+      setMaxPrice('')
+      refetchStats()
     }
-  }, [isSuccess, txHash, explorerUrl, refetchStats]);
+  }, [isSuccess, txHash, explorerUrl, refetchStats])
 
   // Read presale config for timeline
   const { data: configData } = useReadContract({
@@ -190,32 +187,32 @@ export default function LaunchPage() {
     ] as const,
     functionName: 'config',
     query: { enabled: isDeployed },
-  });
+  })
 
-  const presaleEnd = configData ? Number(configData[12]) * 1000 : 0;
+  const presaleEnd = configData ? Number(configData[12]) * 1000 : 0
 
   // Countdown timer - uses contract data
   useEffect(() => {
     if (!presaleEnd) {
-      setCountdown({ days: 0, hours: 0, mins: 0, secs: 0 });
-      return;
+      setCountdown({ days: 0, hours: 0, mins: 0, secs: 0 })
+      return
     }
     const timer = setInterval(() => {
-      const diff = Math.max(0, presaleEnd - Date.now());
+      const diff = Math.max(0, presaleEnd - Date.now())
       setCountdown({
         days: Math.floor(diff / (1000 * 60 * 60 * 24)),
         hours: Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)),
         mins: Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60)),
         secs: Math.floor((diff % (1000 * 60)) / 1000),
-      });
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [presaleEnd]);
+      })
+    }, 1000)
+    return () => clearInterval(timer)
+  }, [presaleEnd])
 
   const handleContribute = () => {
     if (!amount || parseFloat(amount) <= 0) {
-      toast.error('Please enter a valid amount');
-      return;
+      toast.error('Please enter a valid amount')
+      return
     }
 
     if (maxPrice && parseFloat(maxPrice) > 0) {
@@ -225,34 +222,34 @@ export default function LaunchPage() {
         functionName: 'contributeWithMaxPrice',
         args: [parseEther(maxPrice)],
         value: parseEther(amount),
-      });
+      })
     } else {
       writeContract({
         address: presaleAddress as `0x${string}`,
         abi: BBLN_PRESALE_ABI,
         functionName: 'contribute',
         value: parseEther(amount),
-      });
+      })
     }
-  };
+  }
 
   const handleClaim = () => {
     writeContract({
       address: presaleAddress as `0x${string}`,
       abi: BBLN_PRESALE_ABI,
       functionName: 'claim',
-    });
-  };
+    })
+  }
 
   const formatTokens = (wei: bigint) => {
-    const tokens = Number(wei) / 1e18;
-    if (tokens >= 1_000_000) return `${(tokens / 1_000_000).toFixed(2)}M`;
-    if (tokens >= 1_000) return `${(tokens / 1_000).toFixed(2)}K`;
-    return tokens.toFixed(2);
-  };
+    const tokens = Number(wei) / 1e18
+    if (tokens >= 1_000_000) return `${(tokens / 1_000_000).toFixed(2)}M`
+    if (tokens >= 1_000) return `${(tokens / 1_000).toFixed(2)}K`
+    return tokens.toFixed(2)
+  }
 
   const progressPercent =
-    stats.hardCap > 0n ? Number((stats.raised * 100n) / stats.hardCap) : 0;
+    stats.hardCap > 0n ? Number((stats.raised * 100n) / stats.hardCap) : 0
 
   const faqs = [
     {
@@ -271,7 +268,7 @@ export default function LaunchPage() {
       q: 'What if my max price is below the clearing price?',
       a: 'If you set a max price and the clearing price ends up higher, your ETH will be fully refunded.',
     },
-  ];
+  ]
 
   if (!authenticated) {
     return (
@@ -290,6 +287,7 @@ export default function LaunchPage() {
             </p>
           </div>
           <button
+            type="button"
             onClick={login}
             className="rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 px-8 py-4 font-bold text-lg text-white transition-all hover:from-amber-600 hover:to-orange-600"
           >
@@ -297,7 +295,7 @@ export default function LaunchPage() {
           </button>
         </div>
       </PageContainer>
-    );
+    )
   }
 
   return (
@@ -343,7 +341,7 @@ export default function LaunchPage() {
                       ? 'bg-green-500/20 text-green-400'
                       : stats.phase === 'WHITELIST'
                         ? 'bg-amber-500/20 text-amber-400'
-                        : 'bg-muted text-muted-foreground'
+                        : 'bg-muted text-muted-foreground',
                   )}
                 >
                   {stats.phase === 'PUBLIC'
@@ -446,6 +444,7 @@ export default function LaunchPage() {
                     !contribution.claimed &&
                     contribution.claimable > 0n && (
                       <button
+                        type="button"
                         onClick={handleClaim}
                         disabled={isPending || isConfirming}
                         className="mt-4 w-full rounded-lg bg-gradient-to-r from-amber-500 to-orange-500 py-2 font-medium text-white hover:from-amber-600 hover:to-orange-600 disabled:opacity-50"
@@ -462,10 +461,14 @@ export default function LaunchPage() {
               {(stats.phase === 'WHITELIST' || stats.phase === 'PUBLIC') && (
                 <div className="space-y-4">
                   <div>
-                    <label className="mb-2 block text-muted-foreground text-sm">
+                    <label
+                      htmlFor="bid-amount"
+                      className="mb-2 block text-muted-foreground text-sm"
+                    >
                       Bid Amount (ETH)
                     </label>
                     <input
+                      id="bid-amount"
                       type="number"
                       step="0.01"
                       min="0.1"
@@ -476,10 +479,14 @@ export default function LaunchPage() {
                     />
                   </div>
                   <div>
-                    <label className="mb-2 block text-muted-foreground text-sm">
+                    <label
+                      htmlFor="max-price"
+                      className="mb-2 block text-muted-foreground text-sm"
+                    >
                       Max Price (optional)
                     </label>
                     <input
+                      id="max-price"
                       type="number"
                       step="0.0001"
                       value={maxPrice}
@@ -507,6 +514,7 @@ export default function LaunchPage() {
                     </div>
                   ) : (
                     <button
+                      type="button"
                       onClick={handleContribute}
                       disabled={isPending || isConfirming || !amount}
                       className="w-full rounded-lg bg-gradient-to-r from-amber-500 to-orange-500 py-3 font-bold text-white hover:from-amber-600 hover:to-orange-600 disabled:opacity-50"
@@ -535,7 +543,7 @@ export default function LaunchPage() {
                     'All successful bidders pay the same clearing price',
                     'Tokens distributed immediately - 100% liquid at TGE',
                   ].map((step, i) => (
-                    <li key={i} className="flex gap-3">
+                    <li key={step} className="flex gap-3">
                       <span className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-amber-500/20 font-bold text-amber-400 text-xs">
                         {i + 1}
                       </span>
@@ -621,10 +629,11 @@ export default function LaunchPage() {
             <div className="space-y-2">
               {faqs.map((faq, i) => (
                 <div
-                  key={i}
+                  key={faq.q}
                   className="overflow-hidden rounded-xl border border-border bg-card/50"
                 >
                   <button
+                    type="button"
                     onClick={() => setShowFaq(showFaq === i ? null : i)}
                     className="flex w-full items-center justify-between p-4 text-left transition-colors hover:bg-muted/50"
                   >
@@ -632,7 +641,7 @@ export default function LaunchPage() {
                     <ChevronDown
                       className={cn(
                         'h-5 w-5 text-muted-foreground transition-transform',
-                        showFaq === i && 'rotate-180'
+                        showFaq === i && 'rotate-180',
                       )}
                     />
                   </button>
@@ -648,5 +657,5 @@ export default function LaunchPage() {
         </div>
       </div>
     </PageContainer>
-  );
+  )
 }

@@ -1,26 +1,26 @@
-import { useJejuWallet } from '@babylon/auth/client';
-import { logger, WALLET_ERROR_MESSAGES } from '@babylon/shared';
-import { useCallback, useEffect, useMemo, useRef } from 'react';
-import type { Address, Hex } from 'viem';
+import { useJejuWallet } from '@babylon/auth'
+import { type JsonValue, logger, WALLET_ERROR_MESSAGES } from '@babylon/shared'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
+import type { Address, Hex } from 'viem'
 
 interface SmartWalletTxInput {
-  to: Address;
-  value?: bigint;
-  data?: Hex;
-  chain?: { id: number };
+  to: Address
+  value?: bigint
+  data?: Hex
+  chain?: { id: number }
 }
 
 interface SmartWalletTxOptions {
-  gasLimit?: bigint;
+  gasLimit?: bigint
 }
 
 /** Minimal client interface for backward compatibility */
 interface SmartWalletClient {
-  account?: { address: Address };
+  account?: { address: Address }
   sendTransaction: (
     input: SmartWalletTxInput,
-    options?: SmartWalletTxOptions
-  ) => Promise<Hex>;
+    options?: SmartWalletTxOptions,
+  ) => Promise<Hex>
 }
 
 /**
@@ -28,20 +28,20 @@ interface SmartWalletClient {
  */
 interface UseSmartWalletResult {
   /** The smart wallet client (for backward compatibility) */
-  client?: SmartWalletClient;
+  client?: SmartWalletClient
   /** The smart wallet address (if available) */
-  smartWalletAddress: Address | undefined;
+  smartWalletAddress: Address | null
   /** Whether the smart wallet is ready for transactions */
-  smartWalletReady: boolean;
+  smartWalletReady: boolean
   /** Function to send a transaction via the smart wallet */
   sendSmartWalletTransaction: (
     input: SmartWalletTxInput,
-    options?: SmartWalletTxOptions
-  ) => Promise<Hex>;
+    options?: SmartWalletTxOptions,
+  ) => Promise<Hex>
   /** Function to sign a message */
-  signMessage: (message: string) => Promise<Hex>;
+  signMessage: (message: string) => Promise<Hex>
   /** Function to sign typed data (EIP-712) */
-  signTypedData: (typedData: unknown) => Promise<Hex>;
+  signTypedData: (typedData: Record<string, JsonValue>) => Promise<Hex>
 }
 
 /**
@@ -77,95 +77,95 @@ export function useSmartWallet(): UseSmartWalletResult {
     signMessage: jejuSignMessage,
     signTypedData: jejuSignTypedData,
     sendTransaction,
-  } = useJejuWallet();
+  } = useJejuWallet()
 
-  const lastLoggedState = useRef<boolean | null>(null);
-  const hasLoggedWarning = useRef(false);
+  const lastLoggedState = useRef<boolean | null>(null)
+  const hasLoggedWarning = useRef(false)
 
   // Only log when the state changes, not on every render
   useEffect(() => {
     if (lastLoggedState.current !== ready) {
-      lastLoggedState.current = ready;
+      lastLoggedState.current = ready
       logger.debug('Smart wallet state changed', {
         ready,
         hasAddress: !!address,
         address,
-      });
+      })
     }
 
     // Log a warning if wallet is not available after a delay (but only once)
-    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null
     if (!ready && !hasLoggedWarning.current) {
       timeoutId = setTimeout(() => {
         if (!ready) {
-          hasLoggedWarning.current = true;
+          hasLoggedWarning.current = true
           logger.warn(
             'Smart wallet not initialized. Please login first.',
             { hasAddress: !!address },
-            'useSmartWallet'
-          );
+            'useSmartWallet',
+          )
         }
-      }, 5000); // Wait 5 seconds before warning
+      }, 5000) // Wait 5 seconds before warning
     }
 
     return () => {
       if (timeoutId) {
-        clearTimeout(timeoutId);
+        clearTimeout(timeoutId)
       }
-    };
-  }, [ready, address]);
+    }
+  }, [ready, address])
 
-  const smartWalletAddress = address ?? undefined;
+  const smartWalletAddress = address
   const smartWalletReady = useMemo(
     () => Boolean(ready && smartWalletAddress),
-    [ready, smartWalletAddress]
-  );
+    [ready, smartWalletAddress],
+  )
 
   const sendSmartWalletTransaction = useCallback(
     async (
       input: SmartWalletTxInput,
-      _options?: SmartWalletTxOptions
+      _options?: SmartWalletTxOptions,
     ): Promise<Hex> => {
       if (!ready || !smartWalletAddress) {
-        throw new Error(WALLET_ERROR_MESSAGES.NO_EMBEDDED_WALLET);
+        throw new Error(WALLET_ERROR_MESSAGES.NO_EMBEDDED_WALLET)
       }
 
       return await sendTransaction({
         to: input.to,
         value: input.value,
         data: input.data,
-      });
+      })
     },
-    [ready, smartWalletAddress, sendTransaction]
-  );
+    [ready, smartWalletAddress, sendTransaction],
+  )
 
   const signMessage = useCallback(
     async (message: string): Promise<Hex> => {
       if (!ready) {
-        throw new Error(WALLET_ERROR_MESSAGES.NO_EMBEDDED_WALLET);
+        throw new Error(WALLET_ERROR_MESSAGES.NO_EMBEDDED_WALLET)
       }
-      return await jejuSignMessage(message);
+      return await jejuSignMessage(message)
     },
-    [ready, jejuSignMessage]
-  );
+    [ready, jejuSignMessage],
+  )
 
   const signTypedData = useCallback(
-    async (typedData: unknown): Promise<Hex> => {
+    async (typedData: Record<string, JsonValue>): Promise<Hex> => {
       if (!ready) {
-        throw new Error(WALLET_ERROR_MESSAGES.NO_EMBEDDED_WALLET);
+        throw new Error(WALLET_ERROR_MESSAGES.NO_EMBEDDED_WALLET)
       }
-      return await jejuSignTypedData(typedData);
+      return await jejuSignTypedData(typedData)
     },
-    [ready, jejuSignTypedData]
-  );
+    [ready, jejuSignTypedData],
+  )
 
   // Create a backward-compatible client object
   const client: SmartWalletClient | undefined = smartWalletReady
     ? {
-        account: { address: smartWalletAddress! },
+        account: { address: smartWalletAddress },
         sendTransaction: sendSmartWalletTransaction,
       }
-    : undefined;
+    : undefined
 
   return {
     client,
@@ -174,5 +174,5 @@ export function useSmartWallet(): UseSmartWalletResult {
     sendSmartWalletTransaction,
     signMessage,
     signTypedData,
-  };
+  }
 }

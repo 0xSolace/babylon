@@ -1,21 +1,19 @@
-'use client';
-
-import type { UserPredictionPosition } from '@babylon/shared';
-import { cn } from '@babylon/shared';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { CheckCircle, XCircle } from 'lucide-react';
-import { useState } from 'react';
-import { toast } from 'sonner';
+import type { UserPredictionPosition } from '@babylon/shared'
+import { cn } from '@babylon/shared'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { CheckCircle, XCircle } from 'lucide-react'
+import { useState } from 'react'
+import { toast } from 'sonner'
 
 import {
   type SellPredictionDetails,
   TradeConfirmationDialog,
-} from './TradeConfirmationDialog';
+} from './TradeConfirmationDialog'
 
 /**
  * Alias for UserPredictionPosition for local usage.
  */
-type PredictionPosition = UserPredictionPosition;
+type PredictionPosition = UserPredictionPosition
 
 /**
  * Prediction positions list component for displaying and managing prediction positions.
@@ -44,52 +42,52 @@ type PredictionPosition = UserPredictionPosition;
  * ```
  */
 interface PredictionPositionsListProps {
-  positions: PredictionPosition[];
-  onPositionSold?: () => void;
+  positions: PredictionPosition[]
+  onPositionSold?: () => void
 }
 
 /**
  * Payload for selling prediction shares.
  */
 interface SellPredictionPayload {
-  marketId: string;
-  shares: number;
-  positionId: string;
+  marketId: string
+  shares: number
+  positionId: string
 }
 
 /**
  * Response from selling prediction shares.
  */
 interface SellPredictionResponse {
-  success: boolean;
-  pnl: number;
+  success: boolean
+  pnl: number
 }
 
 /**
  * Error response structure from API.
  */
 interface ApiErrorResponse {
-  error?: string | { message?: string };
-  message?: string;
+  error?: string | { message?: string }
+  message?: string
 }
 
 export function PredictionPositionsList({
   positions,
   onPositionSold,
 }: PredictionPositionsListProps) {
-  const [confirmDialogOpen, setConfirmDialogOpen] = useState(false);
+  const [confirmDialogOpen, setConfirmDialogOpen] = useState(false)
   const [pendingSell, setPendingSell] = useState<{
-    position: PredictionPosition;
-    expectedValue: number;
-    unrealizedPnL: number;
-    unrealizedPnLPercent: number;
-  } | null>(null);
-  const queryClient = useQueryClient();
+    position: PredictionPosition
+    expectedValue: number
+    unrealizedPnL: number
+    unrealizedPnLPercent: number
+  } | null>(null)
+  const queryClient = useQueryClient()
 
   // Mutation for selling prediction shares
   const sellMutation = useMutation({
     mutationFn: async (
-      payload: SellPredictionPayload
+      payload: SellPredictionPayload,
     ): Promise<SellPredictionResponse> => {
       const response = await fetch(
         `/api/markets/predictions/${payload.marketId}/sell`,
@@ -103,68 +101,69 @@ export function PredictionPositionsList({
             shares: payload.shares,
             positionId: payload.positionId,
           }),
-        }
-      );
+        },
+      )
 
-      const data = (await response.json()) as SellPredictionResponse &
-        ApiErrorResponse;
+      const data: unknown = await response.json()
 
       if (!response.ok) {
+        // Handle error response
+        const errorData = data as ApiErrorResponse
         const errorMessage =
-          typeof data.error === 'object'
-            ? data.error.message || 'Failed to sell shares'
-            : data.error || data.message || 'Failed to sell shares';
-        throw new Error(errorMessage);
+          typeof errorData.error === 'object'
+            ? errorData.error.message || 'Failed to sell shares'
+            : errorData.error || errorData.message || 'Failed to sell shares'
+        throw new Error(errorMessage)
       }
 
-      return data;
+      return data as SellPredictionResponse
     },
     onSuccess: (data) => {
-      if (!pendingSell) return;
+      if (!pendingSell) return
       toast.success('Shares sold!', {
         description: `Sold ${pendingSell.position.shares.toFixed(2)} ${pendingSell.position.side} shares for ${data.pnl >= 0 ? '+' : ''}$${data.pnl.toFixed(2)} PnL`,
-      });
+      })
       void queryClient.invalidateQueries({
         queryKey: ['markets', 'predictions'],
-      });
-      void queryClient.invalidateQueries({ queryKey: ['positions'] });
-      void queryClient.invalidateQueries({ queryKey: ['walletBalance'] });
-      onPositionSold?.();
-      setPendingSell(null);
+      })
+      void queryClient.invalidateQueries({ queryKey: ['positions'] })
+      void queryClient.invalidateQueries({ queryKey: ['walletBalance'] })
+      onPositionSold?.()
+      setPendingSell(null)
     },
     onError: (error: Error) => {
-      toast.error(error.message);
-      setPendingSell(null);
+      toast.error(error.message)
+      setPendingSell(null)
     },
-  });
+  })
 
   const handleSellClick = (
     position: PredictionPosition,
     expectedValue: number,
     unrealizedPnL: number,
-    unrealizedPnLPercent: number
+    unrealizedPnLPercent: number,
   ) => {
     setPendingSell({
       position,
       expectedValue,
       unrealizedPnL,
       unrealizedPnLPercent,
-    });
-    setConfirmDialogOpen(true);
-  };
+    })
+    setConfirmDialogOpen(true)
+  }
 
   const handleConfirmSell = () => {
-    if (!pendingSell) return;
+    if (!pendingSell) return
 
-    setConfirmDialogOpen(false);
+    setConfirmDialogOpen(false)
     sellMutation.mutate({
       marketId: pendingSell.position.marketId,
       shares: pendingSell.position.shares,
       positionId: pendingSell.position.id,
-    });
-  };
+    })
+  }
 
-  const formatPrice = (price: number) => `$${price.toFixed(3)}`;
+  const formatPrice = (price: number) => `$${price.toFixed(3)}`
 
   if (positions.length === 0) {
     return (
@@ -172,18 +171,18 @@ export function PredictionPositionsList({
         <p>No prediction positions</p>
         <p className="mt-1 text-sm">Buy YES or NO shares to start betting</p>
       </div>
-    );
+    )
   }
 
   return (
     <div className="space-y-3">
       {positions.map((position) => {
-        const { currentValue, costBasis, unrealizedPnL } = position;
+        const { currentValue, costBasis, unrealizedPnL } = position
         const pnlPercent =
-          costBasis !== 0 ? (unrealizedPnL / costBasis) * 100 : 0;
+          costBasis !== 0 ? (unrealizedPnL / costBasis) * 100 : 0
         const isSelling =
           sellMutation.isPending &&
-          sellMutation.variables?.positionId === position.id;
+          sellMutation.variables?.positionId === position.id
 
         return (
           <div key={position.id} className="rounded bg-muted/40 p-4">
@@ -193,7 +192,7 @@ export function PredictionPositionsList({
                   'flex items-center gap-1 rounded px-2 py-1 font-bold text-xs',
                   position.side === 'YES'
                     ? 'bg-green-600/20 text-green-600'
-                    : 'bg-red-600/20 text-red-600'
+                    : 'bg-red-600/20 text-red-600',
                 )}
               >
                 {position.side === 'YES' ? (
@@ -208,7 +207,7 @@ export function PredictionPositionsList({
                 <div
                   className={cn(
                     'font-bold text-lg',
-                    unrealizedPnL >= 0 ? 'text-green-600' : 'text-red-600'
+                    unrealizedPnL >= 0 ? 'text-green-600' : 'text-red-600',
                   )}
                 >
                   {unrealizedPnL >= 0 ? '+' : ''}
@@ -217,7 +216,7 @@ export function PredictionPositionsList({
                 <div
                   className={cn(
                     'text-xs',
-                    unrealizedPnL >= 0 ? 'text-green-600' : 'text-red-600'
+                    unrealizedPnL >= 0 ? 'text-green-600' : 'text-red-600',
                   )}
                 >
                   {unrealizedPnL >= 0 ? '+' : ''}
@@ -259,12 +258,13 @@ export function PredictionPositionsList({
 
             {!position.resolved ? (
               <button
+                type="button"
                 onClick={() =>
                   handleSellClick(
                     position,
                     currentValue,
                     unrealizedPnL,
-                    pnlPercent
+                    pnlPercent,
                   )
                 }
                 disabled={isSelling || position.shares < 0.01}
@@ -289,7 +289,7 @@ export function PredictionPositionsList({
               </div>
             )}
           </div>
-        );
+        )
       })}
 
       {/* Confirmation Dialog */}
@@ -315,5 +315,5 @@ export function PredictionPositionsList({
         }
       />
     </div>
-  );
+  )
 }

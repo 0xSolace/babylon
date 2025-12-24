@@ -1,8 +1,8 @@
-import { definePrompt } from '../define-prompt';
+import { definePrompt } from '../define-prompt'
 import {
   NARRATIVE_CONTINUITY_RULES,
   PARODY_NAME_RULES,
-} from '../shared-sections';
+} from '../shared-sections'
 
 /**
  * Prompt for generating 3 satirical scenarios for game setup.
@@ -117,4 +117,4 @@ Return XML:
 CRITICAL: Do NOT output questions. Only generate the 3 scenarios.
 No other text.
 `.trim(),
-});
+})

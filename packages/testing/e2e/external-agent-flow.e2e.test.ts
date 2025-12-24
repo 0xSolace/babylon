@@ -8,15 +8,17 @@
  * 4. Verify trust scoring → Trust level progression
  */
 
-import type { AgentCapabilities } from '@babylon/agents';
-import { expect, test } from '@playwright/test';
-import type { DiscoveredAgent } from '../types/test-types';
+import type { AgentCapabilities } from '@babylon/shared'
+import { expect, test } from '@playwright/test'
+import type { DiscoveredAgent } from '../types/test-types'
 
-// Base URL for API calls
-const BASE_URL = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:5007';
+// Centralized port configuration
+const BABYLON_WEB_PORT = process.env.BABYLON_WEB_PORT ?? '5008'
+const BASE_URL =
+  process.env.PLAYWRIGHT_BASE_URL ?? `http://localhost:${BABYLON_WEB_PORT}`
 
 // Test agent data - use timestamp to ensure unique IDs
-const timestamp = Date.now();
+const timestamp = Date.now()
 const testAgent = {
   externalId: `test-agent-${timestamp}`,
   name: 'E2E Test Agent',
@@ -44,23 +46,23 @@ const testAgent = {
       domains: ['testing', 'automation'],
     } as AgentCapabilities,
   },
-};
+}
 
-let apiKey: string;
-let agentId: string;
+let apiKey: string
+let agentId: string
 
 test.describe('External Agent E2E Flow', () => {
-  let authCookies: string;
+  let authCookies: string
 
   test.beforeAll(async ({ browser }) => {
     // Get authentication cookies from saved state
     const context = await browser.newContext({
       storageState: '.playwright/auth.json',
-    });
-    const cookies = await context.cookies();
-    authCookies = cookies.map((c) => `${c.name}=${c.value}`).join('; ');
-    await context.close();
-  });
+    })
+    const cookies = await context.cookies()
+    authCookies = cookies.map((c) => `${c.name}=${c.value}`).join('; ')
+    await context.close()
+  })
 
   test.describe('Phase 1: Agent Registration', () => {
     test('should register a new external agent', async () => {
@@ -71,35 +73,35 @@ test.describe('External Agent E2E Flow', () => {
           Cookie: authCookies,
         },
         body: JSON.stringify(testAgent),
-      });
+      })
 
       if (response.status !== 201) {
         const errorData = await response
           .json()
-          .catch(() => ({ error: 'Failed to parse JSON' }));
-        console.error('❌ Registration failed:', response.status, errorData);
+          .catch(() => ({ error: 'Failed to parse JSON' }))
+        console.error('❌ Registration failed:', response.status, errorData)
       }
 
-      expect(response.status).toBe(201);
+      expect(response.status).toBe(201)
 
-      const data = await response.json();
+      const data = await response.json()
 
-      expect(data.success).toBe(true);
-      expect(data.registration).toBeDefined();
-      expect(data.registration.agentId).toBeDefined();
-      expect(data.registration.name).toBe(testAgent.name);
-      expect(data.registration.status).toBeDefined();
-      expect(data.registration.trustLevel).toBeDefined();
-      expect(data.apiKey).toBeDefined();
-      expect(data.apiKey).toMatch(/^bab_live_[a-f0-9]{64}$/);
+      expect(data.success).toBe(true)
+      expect(data.registration).toBeDefined()
+      expect(data.registration.agentId).toBeDefined()
+      expect(data.registration.name).toBe(testAgent.name)
+      expect(data.registration.status).toBeDefined()
+      expect(data.registration.trustLevel).toBeDefined()
+      expect(data.apiKey).toBeDefined()
+      expect(data.apiKey).toMatch(/^bab_live_[a-f0-9]{64}$/)
 
       // Store for subsequent tests
-      apiKey = data.apiKey;
-      agentId = data.registration.agentId;
+      apiKey = data.apiKey
+      agentId = data.registration.agentId
 
-      console.log(`✅ Registered agent: ${agentId}`);
-      console.log(`✅ API Key: ${apiKey.substring(0, 20)}...`);
-    });
+      console.log(`✅ Registered agent: ${agentId}`)
+      console.log(`✅ API Key: ${apiKey.substring(0, 20)}...`)
+    })
 
     test('should reject duplicate registration', async () => {
       const response = await fetch(`${BASE_URL}/api/agents/external/register`, {
@@ -109,22 +111,22 @@ test.describe('External Agent E2E Flow', () => {
           Cookie: authCookies,
         },
         body: JSON.stringify(testAgent),
-      });
+      })
 
-      expect(response.status).toBe(409);
+      expect(response.status).toBe(409)
 
-      const data = await response.json();
+      const data = await response.json()
 
-      expect(data.success).toBe(false);
-      expect(data.error).toBe('Agent already registered');
-    });
+      expect(data.success).toBe(false)
+      expect(data.error).toBe('Agent already registered')
+    })
 
     test('should reject registration with invalid data', async () => {
       const invalidAgent = {
         ...testAgent,
         externalId: `invalid-${Date.now()}`,
         endpoint: 'not-a-url', // Invalid URL
-      };
+      }
 
       const response = await fetch(`${BASE_URL}/api/agents/external/register`, {
         method: 'POST',
@@ -133,17 +135,17 @@ test.describe('External Agent E2E Flow', () => {
           Cookie: authCookies,
         },
         body: JSON.stringify(invalidAgent),
-      });
+      })
 
-      expect(response.status).toBe(400);
+      expect(response.status).toBe(400)
 
-      const data = await response.json();
+      const data = await response.json()
 
-      expect(data.success).toBe(false);
-      expect(data.error).toBe('Validation error');
-      expect(data.details).toBeDefined();
-    });
-  });
+      expect(data.success).toBe(false)
+      expect(data.error).toBe('Validation error')
+      expect(data.details).toBeDefined()
+    })
+  })
 
   test.describe('Phase 2: Agent Discovery', () => {
     test('should discover agents with valid API key', async () => {
@@ -154,33 +156,33 @@ test.describe('External Agent E2E Flow', () => {
           headers: {
             Authorization: `Bearer ${apiKey}`,
           },
-        }
-      );
+        },
+      )
 
-      expect(response.status).toBe(200);
+      expect(response.status).toBe(200)
 
-      const data = await response.json();
+      const data = await response.json()
 
-      expect(data.success).toBe(true);
-      expect(data.agents).toBeDefined();
-      expect(Array.isArray(data.agents)).toBe(true);
-      expect(data.pagination).toBeDefined();
-      expect(data.pagination.limit).toBe(10);
-      expect(data.pagination.offset).toBe(0);
-    });
+      expect(data.success).toBe(true)
+      expect(data.agents).toBeDefined()
+      expect(Array.isArray(data.agents)).toBe(true)
+      expect(data.pagination).toBeDefined()
+      expect(data.pagination.limit).toBe(10)
+      expect(data.pagination.offset).toBe(0)
+    })
 
     test('should reject discovery without API key', async () => {
       const response = await fetch(`${BASE_URL}/api/agents/external/discover`, {
         method: 'GET',
-      });
+      })
 
-      expect(response.status).toBe(401);
+      expect(response.status).toBe(401)
 
-      const data = await response.json();
+      const data = await response.json()
 
-      expect(data.success).toBe(false);
-      expect(data.error).toBe('Unauthorized');
-    });
+      expect(data.success).toBe(false)
+      expect(data.error).toBe('Unauthorized')
+    })
 
     test('should filter agents by capabilities', async () => {
       const response = await fetch(
@@ -190,23 +192,23 @@ test.describe('External Agent E2E Flow', () => {
           headers: {
             Authorization: `Bearer ${apiKey}`,
           },
-        }
-      );
+        },
+      )
 
-      expect(response.status).toBe(200);
+      expect(response.status).toBe(200)
 
-      const data = await response.json();
+      const data = await response.json()
 
-      expect(data.success).toBe(true);
-      expect(data.agents).toBeDefined();
+      expect(data.success).toBe(true)
+      expect(data.agents).toBeDefined()
 
       // All returned agents should have text-generation capability
       data.agents.forEach((agent: DiscoveredAgent) => {
         expect(agent.capabilities?.actions?.includes('text-generation')).toBe(
-          true
-        );
-      });
-    });
+          true,
+        )
+      })
+    })
 
     test('should filter agents by trust level', async () => {
       const response = await fetch(
@@ -216,21 +218,21 @@ test.describe('External Agent E2E Flow', () => {
           headers: {
             Authorization: `Bearer ${apiKey}`,
           },
-        }
-      );
+        },
+      )
 
-      expect(response.status).toBe(200);
+      expect(response.status).toBe(200)
 
-      const data = await response.json();
+      const data = await response.json()
 
-      expect(data.success).toBe(true);
-      expect(data.agents).toBeDefined();
+      expect(data.success).toBe(true)
+      expect(data.agents).toBeDefined()
 
       // All returned agents should have trust level >= 1
       data.agents.forEach((agent: DiscoveredAgent) => {
-        expect(agent.trustLevel).toBeGreaterThanOrEqual(1);
-      });
-    });
+        expect(agent.trustLevel).toBeGreaterThanOrEqual(1)
+      })
+    })
 
     test('should support POST-based discovery with complex filters', async () => {
       const filter = {
@@ -241,7 +243,7 @@ test.describe('External Agent E2E Flow', () => {
         matchMode: 'all',
         limit: 5,
         offset: 0,
-      };
+      }
 
       const response = await fetch(`${BASE_URL}/api/agents/external/discover`, {
         method: 'POST',
@@ -250,17 +252,17 @@ test.describe('External Agent E2E Flow', () => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(filter),
-      });
+      })
 
-      expect(response.status).toBe(200);
+      expect(response.status).toBe(200)
 
-      const data = await response.json();
+      const data = await response.json()
 
-      expect(data.success).toBe(true);
-      expect(data.agents).toBeDefined();
-      expect(data.filters).toEqual(filter);
-    });
-  });
+      expect(data.success).toBe(true)
+      expect(data.agents).toBeDefined()
+      expect(data.filters).toEqual(filter)
+    })
+  })
 
   test.describe('Phase 3: A2A Messaging', () => {
     test('should send A2A message with valid API key', async () => {
@@ -282,7 +284,7 @@ test.describe('External Agent E2E Flow', () => {
             timestamp: Date.now(),
           },
         },
-      };
+      }
 
       const response = await fetch(`${BASE_URL}/api/a2a/message`, {
         method: 'POST',
@@ -291,26 +293,26 @@ test.describe('External Agent E2E Flow', () => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(message),
-      });
+      })
 
-      expect(response.status).toBe(200);
+      expect(response.status).toBe(200)
 
-      const data = await response.json();
+      const data = await response.json()
 
-      expect(data.jsonrpc).toBe('2.0');
-      expect(data.id).toBe(1);
+      expect(data.jsonrpc).toBe('2.0')
+      expect(data.id).toBe(1)
 
       // Since the external agent endpoint is fake, we expect a delivery failure
       // This confirms the message was processed, authenticated, and routing was attempted
       if (data.error) {
-        expect(data.error.code).toBe(-32603); // INTERNAL_ERROR
-        expect(data.error.message).toContain('fetch failed');
+        expect(data.error.code).toBe(-32603) // INTERNAL_ERROR
+        expect(data.error.message).toContain('fetch failed')
       } else {
-        expect(data.result).toBeDefined();
-        expect(data.result.messageId).toBeDefined();
-        expect(data.result.status).toBe('delivered');
+        expect(data.result).toBeDefined()
+        expect(data.result.messageId).toBeDefined()
+        expect(data.result.status).toBe('delivered')
       }
-    });
+    })
 
     test('should reject A2A message without API key', async () => {
       const message = {
@@ -326,7 +328,7 @@ test.describe('External Agent E2E Flow', () => {
             },
           ],
         },
-      };
+      }
 
       const response = await fetch(`${BASE_URL}/api/a2a/message`, {
         method: 'POST',
@@ -334,17 +336,17 @@ test.describe('External Agent E2E Flow', () => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(message),
-      });
+      })
 
-      expect(response.status).toBe(200); // JSON-RPC always returns 200
+      expect(response.status).toBe(200) // JSON-RPC always returns 200
 
-      const data = await response.json();
+      const data = await response.json()
 
-      expect(data.jsonrpc).toBe('2.0');
-      expect(data.error).toBeDefined();
-      expect(data.error.code).toBe(-32000); // NOT_AUTHENTICATED
-      expect(data.error.message).toContain('API key');
-    });
+      expect(data.jsonrpc).toBe('2.0')
+      expect(data.error).toBeDefined()
+      expect(data.error.code).toBe(-32000) // NOT_AUTHENTICATED
+      expect(data.error.message).toContain('API key')
+    })
 
     test('should handle invalid JSON-RPC request', async () => {
       const invalidMessage = {
@@ -352,7 +354,7 @@ test.describe('External Agent E2E Flow', () => {
         id: 3,
         method: 'message/send',
         // Missing required params
-      };
+      }
 
       const response = await fetch(`${BASE_URL}/api/a2a/message`, {
         method: 'POST',
@@ -361,16 +363,16 @@ test.describe('External Agent E2E Flow', () => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(invalidMessage),
-      });
+      })
 
-      expect(response.status).toBe(200);
+      expect(response.status).toBe(200)
 
-      const data = await response.json();
+      const data = await response.json()
 
-      expect(data.jsonrpc).toBe('2.0');
-      expect(data.error).toBeDefined();
-      expect(data.error.code).toBe(-32602); // INVALID_PARAMS
-    });
+      expect(data.jsonrpc).toBe('2.0')
+      expect(data.error).toBeDefined()
+      expect(data.error.code).toBe(-32602) // INVALID_PARAMS
+    })
 
     test('should return error for unknown method', async () => {
       const message = {
@@ -378,7 +380,7 @@ test.describe('External Agent E2E Flow', () => {
         id: 4,
         method: 'unknown/method',
         params: {},
-      };
+      }
 
       const response = await fetch(`${BASE_URL}/api/a2a/message`, {
         method: 'POST',
@@ -387,33 +389,33 @@ test.describe('External Agent E2E Flow', () => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(message),
-      });
+      })
 
-      expect(response.status).toBe(200);
+      expect(response.status).toBe(200)
 
-      const data = await response.json();
+      const data = await response.json()
 
-      expect(data.jsonrpc).toBe('2.0');
-      expect(data.error).toBeDefined();
-      expect(data.error.code).toBe(-32601); // METHOD_NOT_FOUND
-    });
-  });
+      expect(data.jsonrpc).toBe('2.0')
+      expect(data.error).toBeDefined()
+      expect(data.error.code).toBe(-32601) // METHOD_NOT_FOUND
+    })
+  })
 
   test.describe('Phase 4: API Documentation', () => {
     test('should return A2A endpoint documentation', async () => {
       const response = await fetch(`${BASE_URL}/api/a2a/message`, {
         method: 'GET',
-      });
+      })
 
-      expect(response.status).toBe(200);
+      expect(response.status).toBe(200)
 
-      const data = await response.json();
+      const data = await response.json()
 
-      expect(data.endpoint).toBe('/api/a2a/message');
-      expect(data.protocol).toBe('A2A (Agent-to-Agent)');
-      expect(data.version).toBeDefined();
-      expect(data.methods).toBeDefined();
-      expect(data.example).toBeDefined();
-    });
-  });
-});
+      expect(data.endpoint).toBe('/api/a2a/message')
+      expect(data.protocol).toBe('A2A (Agent-to-Agent)')
+      expect(data.version).toBeDefined()
+      expect(data.methods).toBeDefined()
+      expect(data.example).toBeDefined()
+    })
+  })
+})

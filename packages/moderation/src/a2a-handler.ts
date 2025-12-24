@@ -6,10 +6,62 @@
  * the Jeju moderation marketplace.
  */
 
-import type { JsonRpcRequest, JsonRpcResponse } from '@babylon/a2a';
-import type { JsonRpcResult } from '@babylon/shared';
-import { zeroHash } from 'viem';
-import { ModerationClient } from './client';
+import type { JsonRpcRequest, JsonRpcResponse } from '@babylon/a2a'
+import type { JsonRpcResult } from '@babylon/shared'
+import { isHex, zeroHash } from 'viem'
+import { ModerationClient } from './client'
+
+/**
+ * Convert evidence string to a proper bytes32 hex string
+ */
+function evidenceToBytes32(evidence: string): `0x${string}` {
+  const hex = Buffer.from(evidence).toString('hex').padEnd(64, '0').slice(0, 64)
+  const result = `0x${hex}`
+  if (!isHex(result)) {
+    throw new Error('Failed to convert evidence to bytes32')
+  }
+  return result
+}
+
+/**
+ * Type guard for Record<string, unknown>
+ */
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+/**
+ * Safely extract params record from JsonRpcRequest params
+ */
+function extractParamsRecord(
+  params: JsonRpcRequest['params'],
+): Record<string, unknown> {
+  if (!params) return {}
+  if (isPlainObject(params)) return params
+  return {}
+}
+
+/**
+ * Type-safe result wrapper - converts handler results to JsonRpcResult
+ */
+function wrapResult(result: unknown): JsonRpcResult {
+  // JsonRpcResult accepts JsonValue types - objects, arrays, primitives
+  if (result === null || result === undefined) return null
+  // All our handlers return serializable objects/primitives
+  // This is a safe cast as we control all handler return types
+  if (isPlainObject(result) || Array.isArray(result)) {
+    return result as JsonRpcResult
+  }
+  if (
+    typeof result === 'string' ||
+    typeof result === 'number' ||
+    typeof result === 'boolean'
+  ) {
+    return result
+  }
+  return null
+}
+
 import {
   CanReportParamsSchema,
   ChallengeBanParamsSchema,
@@ -24,163 +76,154 @@ import {
   StakeParamsSchema,
   UnstakeParamsSchema,
   VoteParamsSchema,
-} from './schemas';
-import type { BanCase, JejuModerationConfig, VotePosition } from './types';
-import { BanStatus, VotePosition as VP } from './types';
+} from './schemas'
+import type { BanCase, JejuModerationConfig } from './types'
+import { BanStatus, VotePosition } from './types'
 
 type ModerationHandler = (
   client: ModerationClient,
-  params: Record<string, unknown>
-) => Promise<unknown>;
+  params: Record<string, unknown>,
+) => Promise<unknown>
 
 const handlers: Record<string, ModerationHandler> = {
   'moderation.getBanStatus': async (client, params) => {
-    const { address, appId } = GetBanStatusParamsSchema.parse(params);
+    const { address, appId } = GetBanStatusParamsSchema.parse(params)
 
-    const isBanned = await client.isBanned(address, appId);
-    const activeCase = await client.getActiveCase(address);
+    const isBanned = await client.isBanned(address, appId)
+    const activeCase = await client.getActiveCase(address)
 
-    let banCase: BanCase | null = null;
+    let banCase: BanCase | null = null
     if (activeCase) {
-      banCase = await client.getCase(activeCase);
+      banCase = await client.getCase(activeCase)
     }
 
     return {
       status: banCase?.status ?? (isBanned ? BanStatus.BANNED : BanStatus.NONE),
       reason: banCase?.reason,
       caseId: activeCase,
-    };
+    }
   },
 
   'moderation.proposeBan': async (client, params) => {
     const { targetAddress, reason, evidence } =
-      ProposeBanParamsSchema.parse(params);
+      ProposeBanParamsSchema.parse(params)
 
-    // Convert evidence to bytes32 hash if provided
-    const evidenceHash = evidence
-      ? (`0x${Buffer.from(evidence).toString('hex').padEnd(64, '0').slice(0, 64)}` as `0x${string}`)
-      : zeroHash;
+    const evidenceHash = evidence ? evidenceToBytes32(evidence) : zeroHash
 
-    // Return transaction request for the caller to submit
     const txRequest = client.buildOpenCaseRequest(
       targetAddress,
       reason,
-      evidenceHash
-    );
+      evidenceHash,
+    )
 
     return {
       type: 'transaction_request',
       txRequest,
       message: 'Submit this transaction to open a ban case',
-    };
+    }
   },
 
   'moderation.challengeBan': async (client, params) => {
-    const { caseId, stakeAmount } = ChallengeBanParamsSchema.parse(params);
+    const { caseId, stakeAmount } = ChallengeBanParamsSchema.parse(params)
 
     const txRequest = client.buildChallengeCaseRequest(
       caseId,
-      BigInt(stakeAmount)
-    );
+      BigInt(stakeAmount),
+    )
 
     return {
       type: 'transaction_request',
       txRequest,
       message: 'Submit this transaction to challenge the ban case',
-    };
+    }
   },
 
   'moderation.vote': async (client, params) => {
-    const { caseId, position } = VoteParamsSchema.parse(params);
-    const positionNum = position === 'yes' ? VP.YES : VP.NO;
+    const { caseId, position } = VoteParamsSchema.parse(params)
+    const positionNum = position === 'yes' ? VotePosition.YES : VotePosition.NO
 
-    const txRequest = client.buildVoteRequest(
-      caseId,
-      positionNum as VotePosition
-    );
+    const txRequest = client.buildVoteRequest(caseId, positionNum)
 
     return {
       type: 'transaction_request',
       txRequest,
       message: 'Submit this transaction to vote on the case',
-    };
+    }
   },
 
   'moderation.getActiveCases': async (client, params) => {
-    const { limit = 10, offset = 0 } = GetActiveCasesParamsSchema.parse(params);
+    const { limit = 10, offset = 0 } = GetActiveCasesParamsSchema.parse(params)
 
-    const allCaseIds = await client.getAllCaseIds();
-    const paginatedIds = allCaseIds.slice(offset, offset + limit);
+    const allCaseIds = await client.getAllCaseIds()
+    const paginatedIds = allCaseIds.slice(offset, offset + limit)
 
     const cases = await Promise.all(
-      paginatedIds.map((id) => client.getCase(id))
-    );
+      paginatedIds.map((id) => client.getCase(id)),
+    )
 
-    // Filter to only active (unresolved) cases
-    const activeCases = cases.filter((c) => !c.resolved);
+    const activeCases = cases.filter((c) => !c.resolved)
 
     return {
       cases: activeCases,
       total: allCaseIds.length,
-    };
+    }
   },
 
   'moderation.getCase': async (client, params) => {
-    const { caseId } = GetCaseParamsSchema.parse(params);
-    return client.getCase(caseId);
+    const { caseId } = GetCaseParamsSchema.parse(params)
+    return client.getCase(caseId)
   },
 
   'moderation.getStake': async (client, params) => {
-    const { address } = GetStakeParamsSchema.parse(params);
-    return client.getStake(address);
+    const { address } = GetStakeParamsSchema.parse(params)
+    return client.getStake(address)
   },
 
   'moderation.canReport': async (client, params) => {
-    const { address } = CanReportParamsSchema.parse(params);
-    return { canReport: await client.canReport(address) };
+    const { address } = CanReportParamsSchema.parse(params)
+    return { canReport: await client.canReport(address) }
   },
 
   'moderation.stake': async (client, params) => {
-    const { amount } = StakeParamsSchema.parse(params);
-    const txRequest = client.buildStakeRequest(BigInt(amount));
-    return { type: 'transaction_request', txRequest };
+    const { amount } = StakeParamsSchema.parse(params)
+    const txRequest = client.buildStakeRequest(BigInt(amount))
+    return { type: 'transaction_request', txRequest }
   },
 
   'moderation.unstake': async (client, params) => {
-    const { amount } = UnstakeParamsSchema.parse(params);
-    const txRequest = client.buildUnstakeRequest(BigInt(amount));
-    return { type: 'transaction_request', txRequest };
+    const { amount } = UnstakeParamsSchema.parse(params)
+    const txRequest = client.buildUnstakeRequest(BigInt(amount))
+    return { type: 'transaction_request', txRequest }
   },
 
   'moderation.resolveCase': async (client, params) => {
-    const { caseId } = ResolveCaseParamsSchema.parse(params);
-    const txRequest = client.buildResolveCaseRequest(caseId);
-    return { type: 'transaction_request', txRequest };
+    const { caseId } = ResolveCaseParamsSchema.parse(params)
+    const txRequest = client.buildResolveCaseRequest(caseId)
+    return { type: 'transaction_request', txRequest }
   },
 
   'moderation.requestReReview': async (client, params) => {
-    const { caseId, stakeAmount } = ReReviewParamsSchema.parse(params);
-    const txRequest = client.buildReReviewRequest(caseId, BigInt(stakeAmount));
-    return { type: 'transaction_request', txRequest };
+    const { caseId, stakeAmount } = ReReviewParamsSchema.parse(params)
+    const txRequest = client.buildReReviewRequest(caseId, BigInt(stakeAmount))
+    return { type: 'transaction_request', txRequest }
   },
 
   'moderation.claimRewards': async (client, params) => {
-    const { caseId } = ClaimRewardsParamsSchema.parse(params);
-    const txRequest = client.buildClaimRewardsRequest(caseId);
-    return { type: 'transaction_request', txRequest };
+    const { caseId } = ClaimRewardsParamsSchema.parse(params)
+    const txRequest = client.buildClaimRewardsRequest(caseId)
+    return { type: 'transaction_request', txRequest }
   },
-};
+}
 
 /**
  * Create an A2A handler for moderation methods
  */
 export function createModerationA2AHandler(config: JejuModerationConfig) {
-  const client = new ModerationClient(config);
+  const client = new ModerationClient(config)
 
   return async (request: JsonRpcRequest): Promise<JsonRpcResponse> => {
-    const { method, params = {}, id } = request;
+    const { method, params = {}, id } = request
 
-    // Check if this is a moderation method
     if (!method.startsWith('moderation.')) {
       return {
         jsonrpc: '2.0',
@@ -189,10 +232,10 @@ export function createModerationA2AHandler(config: JejuModerationConfig) {
           message: `Method not found: ${method}`,
         },
         id,
-      };
+      }
     }
 
-    const handler = handlers[method];
+    const handler = handlers[method]
     if (!handler) {
       return {
         jsonrpc: '2.0',
@@ -201,25 +244,22 @@ export function createModerationA2AHandler(config: JejuModerationConfig) {
           message: `Unknown moderation method: ${method}`,
         },
         id,
-      };
+      }
     }
 
-    // Ensure params is a record (not an array)
-    const paramsRecord = Array.isArray(params)
-      ? {}
-      : (params as Record<string, unknown>);
-    const result = await handler(client, paramsRecord);
+    const paramsRecord = extractParamsRecord(params)
+    const result = await handler(client, paramsRecord)
     return {
       jsonrpc: '2.0',
-      result: result as JsonRpcResult,
+      result: wrapResult(result),
       id,
-    };
-  };
+    }
+  }
 }
 
 /**
  * Get the list of supported moderation methods
  */
 export function getSupportedModerationMethods(): string[] {
-  return Object.keys(handlers);
+  return Object.keys(handlers)
 }

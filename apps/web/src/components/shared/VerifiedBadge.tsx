@@ -1,23 +1,23 @@
-import { cn } from '@babylon/shared';
+import { cn } from '@babylon/shared'
 
 /**
  * Props for the VerifiedBadge component.
  */
 interface VerifiedBadgeProps {
   /** Additional CSS classes */
-  className?: string;
+  className?: string
   /** Size variant: 'sm', 'md', or 'lg' */
-  size?: 'sm' | 'md' | 'lg';
+  size?: 'sm' | 'md' | 'lg'
 }
 
 const sizeMap = {
   sm: 'w-4 h-4',
   md: 'w-5 h-5',
   lg: 'w-6 h-6',
-};
+}
 
 const UUID_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 /**
  * Checks if an identifier represents an NPC (non-player character).
@@ -30,18 +30,18 @@ const UUID_PATTERN =
  * @returns True if the identifier represents an NPC, false otherwise
  */
 export function isNpcIdentifier(identifier?: string | null): boolean {
-  if (!identifier) return false;
+  if (!identifier) return false
 
-  const normalized = identifier.trim().toLowerCase();
-  if (!normalized) return false;
+  const normalized = identifier.trim().toLowerCase()
+  if (!normalized) return false
 
   // Exclude DIDs (decentralized identifiers)
-  if (normalized.startsWith('did:')) return false;
+  if (normalized.startsWith('did:')) return false
   // Exclude OAuth3/Jeju identifiers
-  if (normalized.includes('jeju')) return false;
-  if (UUID_PATTERN.test(normalized)) return false;
+  if (normalized.includes('jeju')) return false
+  if (UUID_PATTERN.test(normalized)) return false
 
-  return true;
+  return true
 }
 
 /**
@@ -65,6 +65,8 @@ export function VerifiedBadge({ className, size = 'md' }: VerifiedBadgeProps) {
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
       className={cn(sizeMap[size], 'flex-shrink-0', className)}
+      aria-label="Verified"
+      role="img"
     >
       <path
         strokeWidth="1.5"
@@ -80,5 +82,5 @@ export function VerifiedBadge({ className, size = 'md' }: VerifiedBadgeProps) {
         d="M 5.48206 8.829732 C 5.546341 8.757008 6.096026 8.328334 6.590207 8.831891 C 6.990357 9.239633 7.80531 10.013605 7.80531 10.013605 C 7.80531 10.013605 10.326332 7.31631 11.011629 6.559397 C 11.320887 6.21782 11.875775 6.239667 12.135474 6.515033 C 12.411443 6.807649 12.489538 7.230008 12.164574 7.601331 C 10.947777 8.991708 9.508716 10.452277 8.3795 11.706156 C 8.11062 12.004721 7.595459 12.008714 7.302509 11.735093 C 7.061394 11.509888 6.005327 10.437536 5.502547 9.931531 C 5.003333 9.429114 5.404643 8.887831 5.48206 8.829732 Z"
       />
     </svg>
-  );
+  )
 }

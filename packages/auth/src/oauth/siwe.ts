@@ -5,57 +5,59 @@
  * https://eips.ethereum.org/EIPS/eip-4361
  */
 
-import { type Address, type Hex, verifyMessage } from 'viem';
+import { isHexAddress } from '@babylon/shared'
+import { type Address, type Hex, verifyMessage } from 'viem'
+import { EMPTY_ADDRESS } from '../types/guards'
 
 export interface SIWEConfig {
   /** Domain making the request (e.g., "babylon.game") */
-  domain: string;
+  domain: string
   /** URI of the requesting service */
-  uri?: string;
+  uri?: string
   /** Statement explaining what the user is signing for */
-  statement?: string;
+  statement?: string
   /** Expiration time in seconds (default: 300 = 5 minutes) */
-  expiresIn?: number;
+  expiresIn?: number
   /** Chain ID (default: 1 for Ethereum mainnet) */
-  chainId?: number;
+  chainId?: number
 }
 
 export interface SIWEMessage {
   /** The formatted message to sign */
-  message: string;
+  message: string
   /** Domain making the request */
-  domain: string;
+  domain: string
   /** Address of the signer */
-  address: Address;
+  address: Address
   /** Statement explaining the request */
-  statement: string;
+  statement: string
   /** URI of the requesting service */
-  uri: string;
+  uri: string
   /** EIP-155 Chain ID */
-  chainId: number;
+  chainId: number
   /** Unique nonce */
-  nonce: string;
+  nonce: string
   /** When the message was issued (ISO 8601) */
-  issuedAt: string;
+  issuedAt: string
   /** When the message expires (ISO 8601) */
-  expirationTime: string;
+  expirationTime: string
   /** Version of the SIWE message */
-  version: string;
+  version: string
   /** Optional request ID */
-  requestId?: string;
+  requestId?: string
   /** Optional resources the user is requesting access to */
-  resources?: string[];
+  resources?: string[]
 }
 
 export interface SIWEVerificationResult {
   /** Whether the signature is valid */
-  valid: boolean;
+  valid: boolean
   /** The address that signed (recovered from signature) */
-  address: Address;
+  address: Address
   /** The parsed message fields */
-  message: SIWEMessage;
+  message: SIWEMessage
   /** Reason for failure (if not valid) */
-  error?: string;
+  error?: string
 }
 
 /**
@@ -64,7 +66,7 @@ export interface SIWEVerificationResult {
  * Implements EIP-4361 for wallet-based authentication.
  */
 export class SIWE {
-  private config: Required<SIWEConfig>;
+  private config: Required<SIWEConfig>
 
   constructor(config: SIWEConfig) {
     this.config = {
@@ -73,17 +75,17 @@ export class SIWE {
       statement: config.statement ?? 'Sign in with Ethereum to the app.',
       expiresIn: config.expiresIn ?? 300,
       chainId: config.chainId ?? 1,
-    };
+    }
   }
 
   /**
    * Generate a unique nonce for the SIWE message
    */
   generateNonce(): string {
-    const randomBytes = crypto.getRandomValues(new Uint8Array(16));
+    const randomBytes = crypto.getRandomValues(new Uint8Array(16))
     return Array.from(randomBytes)
       .map((b) => b.toString(16).padStart(2, '0'))
-      .join('');
+      .join('')
   }
 
   /**
@@ -93,19 +95,19 @@ export class SIWE {
   createMessage(
     address: Address,
     options?: {
-      nonce?: string;
-      statement?: string;
-      chainId?: number;
-      expiresIn?: number;
-      resources?: string[];
-      requestId?: string;
-    }
+      nonce?: string
+      statement?: string
+      chainId?: number
+      expiresIn?: number
+      resources?: string[]
+      requestId?: string
+    },
   ): SIWEMessage {
-    const now = new Date();
-    const nonce = options?.nonce ?? this.generateNonce();
-    const expiresIn = options?.expiresIn ?? this.config.expiresIn;
-    const expirationTime = new Date(now.getTime() + expiresIn * 1000);
-    const chainId = options?.chainId ?? this.config.chainId;
+    const now = new Date()
+    const nonce = options?.nonce ?? this.generateNonce()
+    const expiresIn = options?.expiresIn ?? this.config.expiresIn
+    const expirationTime = new Date(now.getTime() + expiresIn * 1000)
+    const chainId = options?.chainId ?? this.config.chainId
 
     const siweMessage: SIWEMessage = {
       domain: this.config.domain,
@@ -120,12 +122,12 @@ export class SIWE {
       message: '', // Will be set below
       requestId: options?.requestId,
       resources: options?.resources,
-    };
+    }
 
     // Build the EIP-4361 formatted message
-    siweMessage.message = this.formatMessage(siweMessage);
+    siweMessage.message = this.formatMessage(siweMessage)
 
-    return siweMessage;
+    return siweMessage
   }
 
   /**
@@ -144,72 +146,73 @@ export class SIWE {
       `Nonce: ${msg.nonce}`,
       `Issued At: ${msg.issuedAt}`,
       `Expiration Time: ${msg.expirationTime}`,
-    ];
+    ]
 
     if (msg.requestId) {
-      lines.push(`Request ID: ${msg.requestId}`);
+      lines.push(`Request ID: ${msg.requestId}`)
     }
 
     if (msg.resources && msg.resources.length > 0) {
-      lines.push('Resources:');
+      lines.push('Resources:')
       for (const resource of msg.resources) {
-        lines.push(`- ${resource}`);
+        lines.push(`- ${resource}`)
       }
     }
 
-    return lines.join('\n');
+    return lines.join('\n')
   }
 
   /**
    * Parse a SIWE message string back into structured form
    */
   parseMessage(message: string): SIWEMessage {
-    const lines = message.split('\n');
+    const lines = message.split('\n')
 
     // Parse domain from first line
     const domainMatch = lines[0]?.match(
-      /^(.+) wants you to sign in with your Ethereum account:$/
-    );
+      /^(.+) wants you to sign in with your Ethereum account:$/,
+    )
     if (!domainMatch?.[1]) {
-      throw new Error('Invalid SIWE message: missing domain');
+      throw new Error('Invalid SIWE message: missing domain')
     }
-    const domain = domainMatch[1];
+    const domain = domainMatch[1]
 
     // Address is on second line
-    const address = lines[1] as Address;
-    if (!address?.startsWith('0x')) {
-      throw new Error('Invalid SIWE message: missing address');
+    const addressStr = lines[1]
+    if (!addressStr || !isHexAddress(addressStr)) {
+      throw new Error('Invalid SIWE message: missing or invalid address')
     }
+    const address: Address = addressStr
 
     // Statement is between blank lines
-    const blankIndex1 = lines.indexOf('', 2);
-    const blankIndex2 = lines.indexOf('', blankIndex1 + 1);
-    const statement = lines.slice(blankIndex1 + 1, blankIndex2).join('\n');
+    const blankIndex1 = lines.indexOf('', 2)
+    const blankIndex2 = lines.indexOf('', blankIndex1 + 1)
+    const statement = lines.slice(blankIndex1 + 1, blankIndex2).join('\n')
 
     // Parse the key-value fields
-    const fields: Record<string, string> = {};
-    const resources: string[] = [];
-    let inResources = false;
+    const fields: Record<string, string> = {}
+    const resources: string[] = []
+    let inResources = false
 
     for (let i = blankIndex2 + 1; i < lines.length; i++) {
-      const line = lines[i];
-      if (!line) continue;
+      const line = lines[i]
+      if (!line) continue
 
       if (line === 'Resources:') {
-        inResources = true;
-        continue;
+        inResources = true
+        continue
       }
 
       if (inResources && line.startsWith('- ')) {
-        resources.push(line.slice(2));
-        continue;
+        resources.push(line.slice(2))
+        continue
       }
 
-      const colonIndex = line.indexOf(': ');
+      const colonIndex = line.indexOf(': ')
       if (colonIndex > 0) {
-        const key = line.slice(0, colonIndex);
-        const value = line.slice(colonIndex + 2);
-        fields[key] = value;
+        const key = line.slice(0, colonIndex)
+        const value = line.slice(colonIndex + 2)
+        fields[key] = value
       }
     }
 
@@ -218,15 +221,15 @@ export class SIWE {
       domain,
       address,
       statement,
-      uri: fields['URI'] ?? '',
-      version: fields['Version'] ?? '1',
+      uri: fields.URI ?? '',
+      version: fields.Version ?? '1',
       chainId: parseInt(fields['Chain ID'] ?? '1', 10),
-      nonce: fields['Nonce'] ?? '',
+      nonce: fields.Nonce ?? '',
       issuedAt: fields['Issued At'] ?? '',
       expirationTime: fields['Expiration Time'] ?? '',
       requestId: fields['Request ID'],
       resources: resources.length > 0 ? resources : undefined,
-    };
+    }
   }
 
   /**
@@ -234,34 +237,47 @@ export class SIWE {
    */
   async verify(
     message: string,
-    signature: Hex
+    signature: Hex,
   ): Promise<SIWEVerificationResult> {
     // Parse the message
-    let parsed: SIWEMessage;
+    let parsed: SIWEMessage
     try {
-      parsed = this.parseMessage(message);
+      parsed = this.parseMessage(message)
     } catch (err) {
+      // Create a minimal SIWEMessage for error response
+      const errorMessage: SIWEMessage = {
+        message,
+        domain: '',
+        address: EMPTY_ADDRESS,
+        statement: '',
+        uri: '',
+        version: '1',
+        chainId: 1,
+        nonce: '',
+        issuedAt: '',
+        expirationTime: '',
+      }
       return {
         valid: false,
-        address: '0x0' as Address,
-        message: { message } as SIWEMessage,
+        address: EMPTY_ADDRESS,
+        message: errorMessage,
         error: err instanceof Error ? err.message : 'Failed to parse message',
-      };
+      }
     }
 
     // Check expiration
-    const expirationTime = new Date(parsed.expirationTime).getTime();
+    const expirationTime = new Date(parsed.expirationTime).getTime()
     if (Date.now() > expirationTime) {
       return {
         valid: false,
         address: parsed.address,
         message: parsed,
         error: 'Message has expired',
-      };
+      }
     }
 
     // Check that issued time is not in the future
-    const issuedAt = new Date(parsed.issuedAt).getTime();
+    const issuedAt = new Date(parsed.issuedAt).getTime()
     if (issuedAt > Date.now() + 60000) {
       // Allow 1 minute clock drift
       return {
@@ -269,7 +285,7 @@ export class SIWE {
         address: parsed.address,
         message: parsed,
         error: 'Message issued in the future',
-      };
+      }
     }
 
     // Verify the domain matches
@@ -279,7 +295,7 @@ export class SIWE {
         address: parsed.address,
         message: parsed,
         error: `Domain mismatch: expected ${this.config.domain}, got ${parsed.domain}`,
-      };
+      }
     }
 
     // Verify signature using viem
@@ -287,7 +303,7 @@ export class SIWE {
       address: parsed.address,
       message,
       signature,
-    });
+    })
 
     if (!isValid) {
       return {
@@ -295,14 +311,14 @@ export class SIWE {
         address: parsed.address,
         message: parsed,
         error: 'Invalid signature',
-      };
+      }
     }
 
     return {
       valid: true,
       address: parsed.address,
       message: parsed,
-    };
+    }
   }
 
   /**
@@ -312,9 +328,9 @@ export class SIWE {
   async verifyForAddress(
     message: string,
     signature: Hex,
-    expectedAddress: Address
+    expectedAddress: Address,
   ): Promise<SIWEVerificationResult> {
-    const result = await this.verify(message, signature);
+    const result = await this.verify(message, signature)
 
     if (
       result.valid &&
@@ -324,10 +340,10 @@ export class SIWE {
         ...result,
         valid: false,
         error: `Address mismatch: expected ${expectedAddress}, got ${result.address}`,
-      };
+      }
     }
 
-    return result;
+    return result
   }
 }
 
@@ -339,15 +355,15 @@ export function createSIWEMessage(
   domain: string,
   address: Address,
   options?: {
-    statement?: string;
-    chainId?: number;
-    nonce?: string;
-    expiresIn?: number;
-  }
+    statement?: string
+    chainId?: number
+    nonce?: string
+    expiresIn?: number
+  },
 ): string {
-  const siwe = new SIWE({ domain, chainId: options?.chainId });
-  const msg = siwe.createMessage(address, options);
-  return msg.message;
+  const siwe = new SIWE({ domain, chainId: options?.chainId })
+  const msg = siwe.createMessage(address, options)
+  return msg.message
 }
 
 /**
@@ -356,8 +372,8 @@ export function createSIWEMessage(
 export async function verifySIWE(
   domain: string,
   message: string,
-  signature: Hex
+  signature: Hex,
 ): Promise<SIWEVerificationResult> {
-  const siwe = new SIWE({ domain });
-  return siwe.verify(message, signature);
+  const siwe = new SIWE({ domain })
+  return siwe.verify(message, signature)
 }

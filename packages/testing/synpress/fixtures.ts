@@ -6,8 +6,8 @@
  * @see https://docs.synpress.io/docs/playwright/metamask/fixtures
  */
 
-import { metaMaskFixtures } from '@synthetixio/synpress-metamask/playwright';
-import basicSetup from './wallet.setup';
+import { metaMaskFixtures } from '@synthetixio/synpress-metamask/playwright'
+import basicSetup from './wallet.setup'
 
 /**
  * Extended test with MetaMask fixtures
@@ -17,9 +17,6 @@ import basicSetup from './wallet.setup';
  * - context: Playwright browser context with extension
  * - extensionId: MetaMask extension ID
  */
-export const test = metaMaskFixtures(basicSetup, 0);
+export const test = metaMaskFixtures(basicSetup, 0)
 
-/**
- * Re-export expect from the base test
- */
-export { expect } from '@playwright/test';
+export { expect } from '@playwright/test'

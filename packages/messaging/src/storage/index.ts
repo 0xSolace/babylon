@@ -7,11 +7,11 @@
 export {
   type ConsistencyLevel,
   type CQLConfig,
-  createDecentralizedStorage,
-  DecentralizedMessageStorage,
-  getDecentralizedStorage,
-  resetDecentralizedStorage,
+  createStorage,
+  getStorage,
+  MessageStorage,
+  resetStorage,
   type StoredConversation,
   type StoredKeyBundle,
   type StoredMessage,
-} from './decentralized-storage';
+} from './message-storage'

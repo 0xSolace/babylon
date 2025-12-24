@@ -1,6 +1,4 @@
-'use client';
-
-import { useQuery } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query'
 import {
   Calendar,
   FileText,
@@ -12,42 +10,42 @@ import {
   Users,
   Wallet,
   X,
-} from 'lucide-react';
-import Image from 'next/image';
-import { Dialog, DialogContent } from '@/components/ui/dialog';
+} from 'lucide-react'
+import Image from '@/components/shared/Image'
+import { Dialog, DialogContent } from '@/components/ui/dialog'
 
 interface UserProfile {
-  id: string;
-  username: string | null;
-  displayName: string | null;
-  bio: string | null;
-  profileImageUrl: string | null;
-  coverImageUrl: string | null;
-  walletAddress: string | null;
-  virtualBalance: number;
-  lifetimePnL: number;
-  reputationPoints: number;
-  referralCount: number;
-  invitePoints: number;
-  createdAt: string;
+  id: string
+  username: string | null
+  displayName: string | null
+  bio: string | null
+  profileImageUrl: string | null
+  coverImageUrl: string | null
+  walletAddress: string | null
+  virtualBalance: number
+  lifetimePnL: number
+  reputationPoints: number
+  referralCount: number
+  invitePoints: number
+  createdAt: string
   stats: {
-    positions: number;
-    comments: number;
-    reactions: number;
-    followers: number;
-    following: number;
-    posts: number;
-  };
+    positions: number
+    comments: number
+    reactions: number
+    followers: number
+    following: number
+    posts: number
+  }
 }
 
 interface UserProfileResponse {
-  user: UserProfile | null;
+  user: UserProfile | null
 }
 
 interface PlayerStatsModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  userId: string | null;
+  isOpen: boolean
+  onClose: () => void
+  userId: string | null
 }
 
 export function PlayerStatsModal({
@@ -62,20 +60,20 @@ export function PlayerStatsModal({
   } = useQuery({
     queryKey: ['playerStats', 'profile', userId],
     queryFn: async (): Promise<UserProfile> => {
-      const response = await fetch(`/api/users/${userId}/profile`);
+      const response = await fetch(`/api/users/${userId}/profile`)
       if (!response.ok) {
-        throw new Error('Failed to fetch profile');
+        throw new Error('Failed to fetch profile')
       }
-      const data: UserProfileResponse = await response.json();
+      const data: UserProfileResponse = await response.json()
       if (!data.user) {
-        throw new Error('User not found');
+        throw new Error('User not found')
       }
-      return data.user;
+      return data.user
     },
     enabled: isOpen && !!userId,
-  });
+  })
 
-  if (!isOpen) return null;
+  if (!isOpen) return null
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -85,6 +83,7 @@ export function PlayerStatsModal({
           <div className="mb-4 flex items-center justify-between">
             <h2 className="font-bold text-lg sm:text-xl">Player Stats</h2>
             <button
+              type="button"
               onClick={onClose}
               className="flex min-h-[36px] min-w-[36px] touch-manipulation items-center justify-center rounded-lg p-1.5 transition-colors hover:bg-background/50"
               aria-label="Close modal"
@@ -105,6 +104,7 @@ export function PlayerStatsModal({
                 {error instanceof Error ? error.message : 'An error occurred'}
               </p>
               <button
+                type="button"
                 onClick={onClose}
                 className="min-h-[44px] touch-manipulation rounded-lg bg-primary px-4 py-2 font-semibold text-primary-foreground text-sm transition-colors hover:bg-primary/90"
               >
@@ -332,5 +332,5 @@ export function PlayerStatsModal({
         </div>
       </DialogContent>
     </Dialog>
-  );
+  )
 }

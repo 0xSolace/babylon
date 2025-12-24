@@ -23,40 +23,40 @@ import {
   npcTrades,
   questions,
   users,
-} from '@babylon/db';
-import { loadActorsData } from '../actors-loader';
-import { StaticDataRegistry } from '../services/static-data-registry';
-import { isSimulationMode } from '../storage-bridge';
-import type { ActorData } from '../types/shared';
-import { shuffleArray } from '../utils/randomization';
-import { worldFactsService } from '../world-facts-service';
+} from '@babylon/db'
+import type { ActorData } from '@babylon/shared'
+import { loadActorsData } from '../actors-loader'
+import { StaticDataRegistry } from '../services/static-data-registry'
+import { isSimulationMode } from '../storage-bridge'
+import { shuffleArray } from '../utils/randomization'
+import { worldFactsService } from '../world-facts-service'
 import {
   getCurrentDateContext,
   getFullRealityGrounding,
   getMinimalRealityGrounding,
   getRealityGrounding,
-} from './reality-grounding';
+} from './reality-grounding'
 
 /**
  * Options for configuring world context generation.
  */
 export interface WorldContextOptions {
   /** Whether to include actor names (default: true) */
-  includeActors?: boolean;
+  includeActors?: boolean
   /** Whether to include current markets (default: true) */
-  includeMarkets?: boolean;
+  includeMarkets?: boolean
   /** Whether to include active predictions (default: true) */
-  includePredictions?: boolean;
+  includePredictions?: boolean
   /** Whether to include recent trades (default: true) */
-  includeTrades?: boolean;
+  includeTrades?: boolean
   /** Whether to include reality grounding (default: true) */
-  includeRealityGrounding?: boolean;
+  includeRealityGrounding?: boolean
   /** Whether to include dynamic world facts (default: true) */
-  includeWorldFacts?: boolean;
+  includeWorldFacts?: boolean
   /** Maximum number of actors to include (default: 50) */
-  maxActors?: number;
+  maxActors?: number
   /** Level of reality grounding detail: 'full', 'concise', 'minimal', or 'none' (default: 'concise') */
-  realityGroundingLevel?: 'full' | 'concise' | 'minimal' | 'none';
+  realityGroundingLevel?: 'full' | 'concise' | 'minimal' | 'none'
 }
 
 /**
@@ -65,29 +65,29 @@ export interface WorldContextOptions {
  */
 export interface WorldContext {
   // Actor context
-  worldActors: string;
+  worldActors: string
 
   // Market context
-  currentMarkets: string;
-  activePredictions: string;
-  recentTrades: string;
+  currentMarkets: string
+  activePredictions: string
+  recentTrades: string
 
   // Date/time context
-  currentDateTime: string;
-  currentDate: string;
-  currentTime: string;
-  currentYear: string;
-  currentMonth: string;
-  currentDay: string;
+  currentDateTime: string
+  currentDate: string
+  currentTime: string
+  currentYear: string
+  currentMonth: string
+  currentDay: string
 
   // Reality grounding
-  realityGrounding: string;
+  realityGrounding: string
 
   // Dynamic world facts
-  worldFacts: string;
+  worldFacts: string
 
   // Rich game context (optional, used in causal simulation)
-  richGameContext?: string;
+  richGameContext?: string
 }
 
 /**
@@ -105,20 +105,20 @@ export function generateWorldActors(maxActors?: number): string {
   const actorsData = loadActorsData({
     includeActors: true,
     includeOrganizations: false,
-  });
-  const actors = actorsData.actors as ActorData[];
+  })
+  const actors = actorsData.actors as ActorData[]
 
   // Shuffle actors to add randomness/entropy to prompts
-  const shuffledActors = shuffleArray(actors);
+  const shuffledActors = shuffleArray(actors)
   const actorsToShow = maxActors
     ? shuffledActors.slice(0, maxActors)
-    : shuffledActors;
+    : shuffledActors
 
   const actorsList = actorsToShow
     .map((actor) => `${actor.name} (@${actor.username})`)
-    .join(', ');
+    .join(', ')
 
-  return `World Actors (USE THESE NAMES ONLY): ${actorsList}`;
+  return `World Actors (USE THESE NAMES ONLY): ${actorsList}`
 }
 
 /**
@@ -132,7 +132,7 @@ export function generateWorldActors(maxActors?: number): string {
 export async function generateCurrentMarkets(): Promise<string> {
   // Simulation Mode Bypass
   if (isSimulationMode()) {
-    return 'Active Markets: BitcAIn $120,000 (+5%), EtherAIum $4,000 (+2%), TeslAI $245 (-1%), OpenAGI (Prediction) 65% YES';
+    return 'Active Markets: BitcAIn $120,000 (+5%), EtherAIum $4,000 (+2%), TeslAI $245 (-1%), OpenAGI (Prediction) 65% YES'
   }
 
   // Get active prediction markets
@@ -141,64 +141,63 @@ export async function generateCurrentMarkets(): Promise<string> {
     .from(markets)
     .where(eq(markets.resolved, false))
     .orderBy(desc(markets.yesShares))
-    .limit(5);
+    .limit(5)
 
   // Get top perpetual markets (companies with recent activity)
-  const orgStates = await getDbInstance().getOrganizationsByPrice();
+  const orgStates = await getDbInstance().getOrganizationsByPrice()
   const companies = orgStates
     .slice(0, 5)
     .map((state) => {
-      const staticOrg = StaticDataRegistry.getOrganization(state.id);
+      const staticOrg = StaticDataRegistry.getOrganization(state.id)
       return staticOrg
         ? {
             ...staticOrg,
             currentPrice: state.currentPrice ?? staticOrg.initialPrice,
           }
-        : null;
+        : null
     })
     .filter(
-      (c): c is NonNullable<typeof c> => c !== null && c.type === 'company'
-    );
+      (c): c is NonNullable<typeof c> => c !== null && c.type === 'company',
+    )
 
-  const parts: string[] = [];
+  const parts: string[] = []
 
   // Add prediction markets (shuffled for variety)
   if (predictionMarkets.length > 0) {
-    const shuffledPredictions = shuffleArray(predictionMarkets);
-    const predList = shuffledPredictions.map(
-      (market: (typeof predictionMarkets)[number]) => {
-        const yesShares = Number.parseFloat(
-          market.yesShares?.toString() || '0'
-        );
-        const noShares = Number.parseFloat(market.noShares?.toString() || '0');
-        const totalShares = yesShares + noShares;
-        const yesPrice =
-          totalShares > 0 ? Math.round((yesShares / totalShares) * 100) : 50;
+    const shuffledPredictions = shuffleArray(predictionMarkets)
+    const validPredictions = shuffledPredictions.filter(
+      (m): m is NonNullable<typeof m> => m != null,
+    )
+    const predList = validPredictions.map((market) => {
+      const yesShares = Number.parseFloat(market.yesShares?.toString() || '0')
+      const noShares = Number.parseFloat(market.noShares?.toString() || '0')
+      const totalShares = yesShares + noShares
+      const yesPrice =
+        totalShares > 0 ? Math.round((yesShares / totalShares) * 100) : 50
 
-        return `${market.question} (${yesPrice}% Yes)`;
-      }
-    );
-    parts.push(`Predictions: ${predList.join(' | ')}`);
+      return `${market.question} (${yesPrice}% Yes)`
+    })
+    parts.push(`Predictions: ${predList.join(' | ')}`)
   }
 
   // Add perp markets (shuffled for variety)
   if (companies.length > 0) {
-    const shuffledCompanies = shuffleArray(companies);
+    const shuffledCompanies = shuffleArray(companies)
     const perpList = shuffledCompanies.map(
       (company: (typeof companies)[number]) => {
         const price =
-          Number(company.currentPrice) || Number(company.initialPrice) || 100;
-        return `${company.name} $${price.toFixed(2)}`;
-      }
-    );
-    parts.push(`Stocks: ${perpList.join(' | ')}`);
+          Number(company.currentPrice) || Number(company.initialPrice) || 100
+        return `${company.name} $${price.toFixed(2)}`
+      },
+    )
+    parts.push(`Stocks: ${perpList.join(' | ')}`)
   }
 
   if (parts.length === 0) {
-    return 'Active Markets: None currently active';
+    return 'Active Markets: None currently active'
   }
 
-  return `Active Markets: ${parts.join(' / ')}`;
+  return `Active Markets: ${parts.join(' / ')}`
 }
 
 /**
@@ -212,7 +211,7 @@ export async function generateCurrentMarkets(): Promise<string> {
 export async function generateActivePredictions(): Promise<string> {
   // Simulation Mode Bypass
   if (isSimulationMode()) {
-    return 'Active Questions: Will BitcAIn hit $150k? (resolves in 2d) | Will TeslAI release Model 2? (resolves in 5d) | Will Fed cut rates? (resolves in 1d)';
+    return 'Active Questions: Will BitcAIn hit $150k? (resolves in 2d) | Will TeslAI release Model 2? (resolves in 5d) | Will Fed cut rates? (resolves in 1d)'
   }
 
   // Get active questions from the Question table
@@ -221,30 +220,31 @@ export async function generateActivePredictions(): Promise<string> {
     .from(questions)
     .where(eq(questions.status, 'active'))
     .orderBy(desc(questions.createdAt))
-    .limit(10);
+    .limit(10)
 
   if (activeQuestions.length === 0) {
-    return 'Active Questions: None currently active';
+    return 'Active Questions: None currently active'
   }
 
   // Shuffle questions to add variety
-  const shuffledQuestions = shuffleArray(activeQuestions);
-  const questionsList = shuffledQuestions.map(
-    (q: (typeof activeQuestions)[number]) => {
-      const resolutionDate =
-        q.resolutionDate instanceof Date
-          ? q.resolutionDate
-          : q.resolutionDate
-            ? new Date(Number(q.resolutionDate))
-            : new Date();
-      const daysUntil = Math.ceil(
-        (resolutionDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24)
-      );
-      return `${q.text} (resolves in ${daysUntil}d)`;
-    }
-  );
+  const shuffledQuestions = shuffleArray(activeQuestions)
+  const validQuestions = shuffledQuestions.filter(
+    (q): q is NonNullable<typeof q> => q != null,
+  )
+  const questionsList = validQuestions.map((q) => {
+    const resolutionDate =
+      q.resolutionDate instanceof Date
+        ? q.resolutionDate
+        : q.resolutionDate
+          ? new Date(Number(q.resolutionDate))
+          : new Date()
+    const daysUntil = Math.ceil(
+      (resolutionDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24),
+    )
+    return `${q.text} (resolves in ${daysUntil}d)`
+  })
 
-  return `Active Questions: ${questionsList.join(' | ')}`;
+  return `Active Questions: ${questionsList.join(' | ')}`
 }
 
 /**
@@ -257,10 +257,11 @@ export async function generateActivePredictions(): Promise<string> {
  */
 export async function generateRecentTrades(): Promise<string> {
   if (isSimulationMode()) {
-    return 'Recent Trades: AIlon Musk bought YES on BitcAIn $150k | Sam AIltman sold NO on Fed rates | Nancy PelosAI bought LONG on NVIDAI';
+    return 'Recent Trades: AIlon Musk bought YES on BitcAIn $150k | Sam AIltman sold NO on Fed rates | Nancy PelosAI bought LONG on NVIDAI'
   }
 
   // Get recent NPC trades with actor names from static registry
+  // Query builder infers types from selected fields via MapFieldsToTypes
   const rawNpcTrades = await db
     .select({
       action: npcTrades.action,
@@ -274,27 +275,16 @@ export async function generateRecentTrades(): Promise<string> {
     })
     .from(npcTrades)
     .orderBy(desc(npcTrades.executedAt))
-    .limit(15);
+    .limit(15)
 
   // Map actor IDs to names from static registry
   const npcTradeResults = rawNpcTrades.map((trade) => ({
     ...trade,
     actorName: StaticDataRegistry.getActor(trade.npcActorId)?.name ?? 'Unknown',
-  }));
+  }))
 
   // Get recent agent trades with user names
-  type AgentTradeWithUser = {
-    action: string;
-    side: string | null;
-    amount: number;
-    price: number;
-    marketType: string;
-    ticker: string | null;
-    executedAt: Date;
-    displayName: string | null;
-    username: string | null;
-  };
-  const agentTradeResults = (await db
+  const rawAgentTrades = await db
     .select({
       action: agentTrades.action,
       side: agentTrades.side,
@@ -307,47 +297,48 @@ export async function generateRecentTrades(): Promise<string> {
       username: users.username,
     })
     .from(agentTrades)
-    .leftJoin(users, eq(agentTrades.agentUserId, users.id))
+    // biome-ignore lint/style/noNonNullAssertion: Schema guarantees these columns are defined
+    .leftJoin(users, eq(agentTrades.agentUserId!, users.id!))
     .orderBy(desc(agentTrades.executedAt))
-    .limit(15)) as unknown as AgentTradeWithUser[];
+    .limit(15)
 
   // Combine and sort by time
   const allTrades = [
     ...npcTradeResults.map((t) => ({
       name: t.actorName || 'NPC',
-      action: t.action,
-      side: t.side,
-      amount: t.amount,
-      price: t.price,
-      marketType: t.marketType,
-      ticker: t.ticker,
+      action: String(t.action ?? ''),
+      side: String(t.side ?? ''),
+      amount: Number(t.amount),
+      price: Number(t.price),
+      marketType: String(t.marketType ?? ''),
+      ticker: t.ticker ? String(t.ticker) : null,
       time: t.executedAt,
     })),
-    ...agentTradeResults.map((t: AgentTradeWithUser) => ({
-      name: t.displayName || t.username || 'Agent',
-      action: t.action,
-      side: t.side,
-      amount: t.amount,
-      price: t.price,
-      marketType: t.marketType,
-      ticker: t.ticker,
+    ...rawAgentTrades.map((t) => ({
+      name: String(t.displayName || t.username || 'Agent'),
+      action: String(t.action ?? ''),
+      side: String(t.side ?? ''),
+      amount: Number(t.amount),
+      price: Number(t.price),
+      marketType: String(t.marketType ?? ''),
+      ticker: t.ticker ? String(t.ticker) : null,
       time: t.executedAt,
     })),
   ]
     .sort((a, b) => (b.time?.getTime() || 0) - (a.time?.getTime() || 0))
-    .slice(0, 20); // Top 20 most recent
+    .slice(0, 20) // Top 20 most recent
 
   if (allTrades.length === 0) {
-    return 'Recent Trades: No recent activity';
+    return 'Recent Trades: No recent activity'
   }
 
   const tradesList = allTrades.map((t) => {
-    const actionStr = t.side ? `${t.action} ${t.side}` : t.action;
-    const marketStr = t.ticker || t.marketType;
-    return `${t.name} ${actionStr} ${marketStr}`;
-  });
+    const actionStr = t.side ? `${t.action} ${t.side}` : t.action
+    const marketStr = t.ticker || t.marketType
+    return `${t.name} ${actionStr} ${marketStr}`
+  })
 
-  return `Recent Trades: ${tradesList.join(' | ')}`;
+  return `Recent Trades: ${tradesList.join(' | ')}`
 }
 
 /**
@@ -374,7 +365,7 @@ export async function generateRecentTrades(): Promise<string> {
  * ```
  */
 export async function generateWorldContext(
-  options: WorldContextOptions = {}
+  options: WorldContextOptions = {},
 ): Promise<WorldContext> {
   const {
     includeActors = true,
@@ -385,9 +376,9 @@ export async function generateWorldContext(
     includeWorldFacts = true,
     maxActors = 50, // Limit to top 50 actors to avoid token limits
     realityGroundingLevel = 'concise', // Default to concise for most prompts
-  } = options;
+  } = options
 
-  const dateContext = getCurrentDateContext();
+  const dateContext = getCurrentDateContext()
 
   // Fetch data in parallel for performance
   const [markets, predictions, trades, worldFactsData] = await Promise.all([
@@ -397,24 +388,24 @@ export async function generateWorldContext(
     includeWorldFacts
       ? worldFactsService.generateWorldContext(false)
       : Promise.resolve({ general: '' }),
-  ]);
+  ])
 
   // Determine reality grounding level
-  let realityGrounding = '';
+  let realityGrounding = ''
   if (includeRealityGrounding) {
     switch (realityGroundingLevel) {
       case 'full':
-        realityGrounding = await getFullRealityGrounding();
-        break;
+        realityGrounding = await getFullRealityGrounding()
+        break
       case 'concise':
-        realityGrounding = await getRealityGrounding();
-        break;
+        realityGrounding = await getRealityGrounding()
+        break
       case 'minimal':
-        realityGrounding = await getMinimalRealityGrounding();
-        break;
+        realityGrounding = await getMinimalRealityGrounding()
+        break
       case 'none':
-        realityGrounding = '';
-        break;
+        realityGrounding = ''
+        break
     }
   }
 
@@ -440,7 +431,7 @@ export async function generateWorldContext(
 
     // Dynamic world facts
     worldFacts: worldFactsData.general,
-  };
+  }
 }
 
 /**
@@ -455,9 +446,9 @@ export function getParodyActorNames(): string[] {
   const actorsData = loadActorsData({
     includeActors: true,
     includeOrganizations: false,
-  });
-  const actors = actorsData.actors as ActorData[];
-  return actors.map((actor) => actor.name);
+  })
+  const actors = actorsData.actors as ActorData[]
+  return actors.map((actor) => actor.name)
 }
 
 /**
@@ -473,9 +464,9 @@ export function getForbiddenRealNames(): string[] {
   const actorsData = loadActorsData({
     includeActors: true,
     includeOrganizations: false,
-  });
-  const actors = actorsData.actors as ActorData[];
-  return actors.map((actor) => actor.realName);
+  })
+  const actors = actorsData.actors as ActorData[]
+  return actors.map((actor) => actor.realName)
 }
 
 /**
@@ -488,19 +479,19 @@ export function getForbiddenRealNames(): string[] {
  * @returns Array of validation error messages (empty if valid)
  */
 export function validateNoRealNames(text: string): string[] {
-  const forbiddenNames = getForbiddenRealNames();
-  const violations: string[] = [];
+  const forbiddenNames = getForbiddenRealNames()
+  const violations: string[] = []
 
   // Check if text contains any forbidden real names
   forbiddenNames.forEach((realName) => {
     if (text.includes(realName)) {
       violations.push(
-        `FORBIDDEN: Found real name "${realName}" - must use parody names only`
-      );
+        `FORBIDDEN: Found real name "${realName}" - must use parody names only`,
+      )
     }
-  });
+  })
 
-  return violations;
+  return violations
 }
 
 /**
@@ -524,27 +515,24 @@ export function validateNoRealNames(text: string): string[] {
  * ```
  */
 export function validateGeneratedContent(text: string): {
-  errors: string[];
-  isValid: boolean;
+  errors: string[]
+  isValid: boolean
 } {
-  const errors = validateNoRealNames(text);
+  const errors = validateNoRealNames(text)
 
   return {
     errors,
     isValid: errors.length === 0,
-  };
+  }
 }
 
-/**
- * Re-export reality grounding utilities
- */
 export {
   checkRealityGrounding,
   getCurrentDateContext,
   getFullRealityGrounding,
   getMinimalRealityGrounding,
   getRealityGrounding,
-} from './reality-grounding';
+} from './reality-grounding'
 
 /**
  * Example usage:

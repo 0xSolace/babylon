@@ -11,13 +11,13 @@
  * - State recovery from storage
  */
 
-import { logger } from '@babylon/shared';
-import type { Hex } from 'viem';
+import { last, logger } from '@babylon/shared'
+import type { Hex } from 'viem'
 import {
   JejuStorageClient,
   type JejuStorageConfig,
-} from '../storage/jeju-storage';
-import type { BabylonEnclave, SealedState } from '../tee/babylon-enclave';
+} from '../storage/jeju-storage'
+import type { BabylonEnclave, SealedState } from '../tee/babylon-enclave'
 
 // ============================================================================
 // Types
@@ -25,39 +25,39 @@ import type { BabylonEnclave, SealedState } from '../tee/babylon-enclave';
 
 export interface StateCheckpoint {
   /** IPFS/Arweave CID */
-  cid: string;
+  cid: string
   /** Hash of encrypted state */
-  hash: Hex;
+  hash: Hex
   /** State version number */
-  version: number;
+  version: number
   /** Encryption key version */
-  keyVersion: number;
+  keyVersion: number
   /** Timestamp of checkpoint */
-  timestamp: number;
+  timestamp: number
   /** Size in bytes */
-  size: number;
+  size: number
 }
 
 export interface TrainingDataset {
   /** IPFS/Arweave CID */
-  cid: string;
+  cid: string
   /** Training epoch number */
-  epoch: number;
+  epoch: number
   /** Number of samples */
-  sampleCount: number;
+  sampleCount: number
   /** Timestamp */
-  timestamp: number;
+  timestamp: number
   /** Model hash before training */
-  modelHashBefore: Hex;
+  modelHashBefore: Hex
   /** Model hash after training */
-  modelHashAfter: Hex;
+  modelHashAfter: Hex
 }
 
 export interface EncryptedStateServiceConfig {
   /** Storage options */
-  storage: JejuStorageConfig;
+  storage: JejuStorageConfig
   /** Enable verbose logging */
-  verbose?: boolean;
+  verbose?: boolean
 }
 
 // ============================================================================
@@ -65,24 +65,24 @@ export interface EncryptedStateServiceConfig {
 // ============================================================================
 
 export class EncryptedStateService {
-  private enclave: BabylonEnclave;
-  private storage: JejuStorageClient;
-  private checkpoints: StateCheckpoint[] = [];
-  private trainingDatasets: TrainingDataset[] = [];
-  private currentEpoch = 0;
-  private verbose: boolean;
+  private enclave: BabylonEnclave
+  private storage: JejuStorageClient
+  private checkpoints: StateCheckpoint[] = []
+  private trainingDatasets: TrainingDataset[] = []
+  private currentEpoch = 0
+  private verbose: boolean
 
   constructor(
     enclave: BabylonEnclave,
     storage: JejuStorageClient,
-    config?: Partial<EncryptedStateServiceConfig>
+    config?: Partial<EncryptedStateServiceConfig>,
   ) {
-    this.enclave = enclave;
-    this.storage = storage;
-    this.verbose = config?.verbose ?? false;
+    this.enclave = enclave
+    this.storage = storage
+    this.verbose = config?.verbose ?? false
 
     if (this.verbose) {
-      logger.info('[EncryptedStateService] Initialized');
+      logger.info('[EncryptedStateService] Initialized')
     }
   }
 
@@ -91,11 +91,11 @@ export class EncryptedStateService {
    */
   async saveState<T extends object>(state: T): Promise<StateCheckpoint> {
     // Encrypt state inside TEE
-    const sealed = await this.enclave.sealState(state);
+    const sealed = await this.enclave.sealState(state)
 
     // Upload to decentralized storage
-    const sealedJson = JSON.stringify(sealed);
-    const filename = `state-${Date.now()}.json`;
+    const sealedJson = JSON.stringify(sealed)
+    const filename = `state-${Date.now()}.json`
     const result = await this.storage.uploadImage({
       file: Buffer.from(sealedJson),
       filename,
@@ -106,11 +106,11 @@ export class EncryptedStateService {
         keyVersion: String(sealed.keyVersion),
         timestamp: String(sealed.sealedAt),
       },
-    });
+    })
 
     const hash = `0x${Buffer.from(sealedJson.slice(0, 32))
       .toString('hex')
-      .padEnd(64, '0')}` as Hex;
+      .padEnd(64, '0')}` as Hex
 
     const checkpoint: StateCheckpoint = {
       cid: result.cid,
@@ -119,18 +119,18 @@ export class EncryptedStateService {
       keyVersion: sealed.keyVersion,
       timestamp: Date.now(),
       size: sealedJson.length,
-    };
+    }
 
-    this.checkpoints.push(checkpoint);
+    this.checkpoints.push(checkpoint)
 
     if (this.verbose) {
       logger.info('[EncryptedStateService] State saved', {
         cid: checkpoint.cid,
         version: checkpoint.version,
-      });
+      })
     }
 
-    return checkpoint;
+    return checkpoint
   }
 
   /**
@@ -138,19 +138,19 @@ export class EncryptedStateService {
    */
   async loadState<T extends object>(cid: string): Promise<T> {
     // Retrieve from storage
-    const data = await this.storage.download(cid);
+    const data = await this.storage.download(cid)
 
     // Parse sealed data
-    const sealed: SealedState = JSON.parse(data.toString());
+    const sealed: SealedState = JSON.parse(data.toString())
 
     // Decrypt inside TEE
-    const state = await this.enclave.unsealState<T>(sealed);
+    const state = await this.enclave.unsealState<T>(sealed)
 
     if (this.verbose) {
-      logger.info('[EncryptedStateService] State loaded', { cid });
+      logger.info('[EncryptedStateService] State loaded', { cid })
     }
 
-    return state;
+    return state
   }
 
   /**
@@ -158,23 +158,23 @@ export class EncryptedStateService {
    */
   async rotateKey<T extends object>(currentState: T): Promise<StateCheckpoint> {
     if (this.verbose) {
-      logger.info('[EncryptedStateService] Initiating key rotation...');
+      logger.info('[EncryptedStateService] Initiating key rotation...')
     }
 
     // Rotate key in enclave
-    const { newVersion } = await this.enclave.rotateKey();
+    const { newVersion } = await this.enclave.rotateKey()
 
     // Re-encrypt with new key
-    const checkpoint = await this.saveState(currentState);
+    const checkpoint = await this.saveState(currentState)
 
     if (this.verbose) {
       logger.info('[EncryptedStateService] Key rotation complete', {
         newVersion,
         cid: checkpoint.cid,
-      });
+      })
     }
 
-    return checkpoint;
+    return checkpoint
   }
 
   /**
@@ -183,9 +183,9 @@ export class EncryptedStateService {
   async saveTrainingData(
     samples: object[],
     modelHashBefore: Hex,
-    modelHashAfter: Hex
+    modelHashAfter: Hex,
   ): Promise<TrainingDataset> {
-    this.currentEpoch++;
+    this.currentEpoch++
 
     const dataJson = JSON.stringify({
       epoch: this.currentEpoch,
@@ -193,10 +193,10 @@ export class EncryptedStateService {
       samples,
       modelHashBefore,
       modelHashAfter,
-    });
+    })
 
     // Upload publicly (not encrypted)
-    const filename = `training-epoch-${this.currentEpoch}.json`;
+    const filename = `training-epoch-${this.currentEpoch}.json`
     const result = await this.storage.uploadImage({
       file: Buffer.from(dataJson),
       filename,
@@ -208,7 +208,7 @@ export class EncryptedStateService {
         sampleCount: String(samples.length),
         public: 'true',
       },
-    });
+    })
 
     const dataset: TrainingDataset = {
       cid: result.cid,
@@ -217,77 +217,77 @@ export class EncryptedStateService {
       timestamp: Date.now(),
       modelHashBefore,
       modelHashAfter,
-    };
+    }
 
-    this.trainingDatasets.push(dataset);
+    this.trainingDatasets.push(dataset)
 
     if (this.verbose) {
       logger.info('[EncryptedStateService] Training data saved', {
         cid: dataset.cid,
         epoch: dataset.epoch,
         samples: samples.length,
-      });
+      })
     }
 
-    return dataset;
+    return dataset
   }
 
   /**
    * Load public training dataset
    */
   async loadTrainingData(cid: string): Promise<{
-    epoch: number;
-    timestamp: number;
-    samples: object[];
-    modelHashBefore: Hex;
-    modelHashAfter: Hex;
+    epoch: number
+    timestamp: number
+    samples: object[]
+    modelHashBefore: Hex
+    modelHashAfter: Hex
   }> {
-    const data = await this.storage.download(cid);
-    return JSON.parse(data.toString());
+    const data = await this.storage.download(cid)
+    return JSON.parse(data.toString())
   }
 
   /**
    * Get all checkpoints
    */
   getCheckpoints(): StateCheckpoint[] {
-    return [...this.checkpoints];
+    return [...this.checkpoints]
   }
 
   /**
    * Get latest checkpoint
    */
   getLatestCheckpoint(): StateCheckpoint | null {
-    return this.checkpoints[this.checkpoints.length - 1] ?? null;
+    return last(this.checkpoints)
   }
 
   /**
    * Get all training datasets
    */
   getTrainingDatasets(): TrainingDataset[] {
-    return [...this.trainingDatasets];
+    return [...this.trainingDatasets]
   }
 
   /**
    * Get current epoch
    */
   getCurrentEpoch(): number {
-    return this.currentEpoch;
+    return this.currentEpoch
   }
 
   /**
    * Get stats
    */
   getStats(): {
-    checkpoints: number;
-    trainingDatasets: number;
-    totalStorageBytes: number;
+    checkpoints: number
+    trainingDatasets: number
+    totalStorageBytes: number
   } {
-    const totalBytes = this.checkpoints.reduce((sum, cp) => sum + cp.size, 0);
+    const totalBytes = this.checkpoints.reduce((sum, cp) => sum + cp.size, 0)
     return {
       checkpoints: this.checkpoints.length,
       trainingDatasets: this.trainingDatasets.length,
       totalStorageBytes: totalBytes,
-    };
+    }
   }
 }
 
@@ -297,16 +297,19 @@ export class EncryptedStateService {
 
 export async function createEncryptedStateService(
   enclave: BabylonEnclave,
-  config?: Partial<EncryptedStateServiceConfig>
+  config?: Partial<EncryptedStateServiceConfig>,
 ): Promise<EncryptedStateService> {
+  // IPFS API port from centralized config (default 5001)
+  const ipfsPort = process.env.IPFS_API_PORT ?? '5001'
   const storageConfig: JejuStorageConfig = {
-    endpoint: process.env.JEJU_STORAGE_ENDPOINT ?? 'http://localhost:5001',
+    endpoint:
+      process.env.JEJU_STORAGE_ENDPOINT ?? `http://localhost:${ipfsPort}`,
     defaultProvider: 'ipfs',
     replicationFactor: 3,
     ...config?.storage,
-  };
+  }
 
-  const storage = new JejuStorageClient(storageConfig);
+  const storage = new JejuStorageClient(storageConfig)
 
-  return new EncryptedStateService(enclave, storage, config);
+  return new EncryptedStateService(enclave, storage, config)
 }

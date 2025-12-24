@@ -11,34 +11,34 @@ import {
   perpPositions,
   positions,
   users,
-} from '@babylon/db';
+} from '@babylon/db'
 
 export interface PortfolioPnLSnapshot {
-  lifetimePnL: number;
-  netContributions: number;
-  totalDeposited: number;
-  totalWithdrawn: number;
-  availableBalance: number;
-  unrealizedPerpPnL: number;
-  unrealizedPredictionPnL: number;
-  totalUnrealizedPnL: number;
-  totalPnL: number;
-  accountEquity: number;
+  lifetimePnL: number
+  netContributions: number
+  totalDeposited: number
+  totalWithdrawn: number
+  availableBalance: number
+  unrealizedPerpPnL: number
+  unrealizedPredictionPnL: number
+  totalUnrealizedPnL: number
+  totalPnL: number
+  accountEquity: number
 }
 
 function toNumber(value: unknown, fallback = 0): number {
   if (typeof value === 'number') {
-    return Number.isFinite(value) ? value : fallback;
+    return Number.isFinite(value) ? value : fallback
   }
   if (typeof value === 'string') {
-    const parsed = Number.parseFloat(value);
-    return Number.isFinite(parsed) ? parsed : fallback;
+    const parsed = Number.parseFloat(value)
+    return Number.isFinite(parsed) ? parsed : fallback
   }
-  return fallback;
+  return fallback
 }
 
 export async function calculatePortfolioPnL(
-  userId: string
+  userId: string,
 ): Promise<PortfolioPnLSnapshot | null> {
   const userResult = await db
     .select({
@@ -49,10 +49,10 @@ export async function calculatePortfolioPnL(
     })
     .from(users)
     .where(eq(users.id, userId))
-    .limit(1);
+    .limit(1)
 
-  const user = userResult[0];
-  if (!user) return null;
+  const user = userResult[0]
+  if (!user) return null
 
   const perpPositionResults = await db
     .select({
@@ -60,17 +60,17 @@ export async function calculatePortfolioPnL(
     })
     .from(perpPositions)
     .where(
-      and(eq(perpPositions.userId, userId), isNull(perpPositions.closedAt))
-    );
+      and(eq(perpPositions.userId, userId), isNull(perpPositions.closedAt)),
+    )
 
   // For prediction positions, we need to join with markets
   type PredictionPositionWithMarket = {
-    shares: string;
-    avgPrice: string;
-    side: boolean;
-    marketYesShares: string | null;
-    marketNoShares: string | null;
-  };
+    shares: string
+    avgPrice: string
+    side: boolean
+    marketYesShares: string | null
+    marketNoShares: string | null
+  }
   const predictionPositionResults = (await db
     .select({
       shares: positions.shares,
@@ -80,47 +80,48 @@ export async function calculatePortfolioPnL(
       marketNoShares: markets.noShares,
     })
     .from(positions)
-    .innerJoin(markets, eq(positions.marketId, markets.id))
+    // biome-ignore lint/style/noNonNullAssertion: Schema guarantees id is defined
+    .innerJoin(markets, eq(positions.marketId, markets.id!))
     .where(
-      and(eq(positions.userId, userId), eq(markets.resolved, false))
-    )) as unknown as PredictionPositionWithMarket[];
+      and(eq(positions.userId, userId), eq(markets.resolved, false)),
+    )) as PredictionPositionWithMarket[]
 
-  const totalDeposited = toNumber(user.totalDeposited);
-  const totalWithdrawn = toNumber(user.totalWithdrawn);
-  const lifetimePnL = toNumber(user.lifetimePnL);
-  const availableBalance = toNumber(user.virtualBalance);
+  const totalDeposited = toNumber(user.totalDeposited)
+  const totalWithdrawn = toNumber(user.totalWithdrawn)
+  const lifetimePnL = toNumber(user.lifetimePnL)
+  const availableBalance = toNumber(user.virtualBalance)
 
   const perpUnrealized = perpPositionResults.reduce(
     (sum, position) => sum + toNumber(position.unrealizedPnL),
-    0
-  );
+    0,
+  )
 
   const predictionUnrealized = predictionPositionResults.reduce(
     (sum, position) => {
-      const shares = toNumber(position.shares);
-      const avgPrice = toNumber(position.avgPrice);
+      const shares = toNumber(position.shares)
+      const avgPrice = toNumber(position.avgPrice)
 
       // Calculate current price from shares (CPMM pricing)
-      const yesShares = toNumber(position.marketYesShares);
-      const noShares = toNumber(position.marketNoShares);
-      const totalShares = yesShares + noShares;
+      const yesShares = toNumber(position.marketYesShares)
+      const noShares = toNumber(position.marketNoShares)
+      const totalShares = yesShares + noShares
 
       const currentPrice =
         totalShares > 0
           ? position.side === true
             ? noShares / totalShares // Yes price = noShares / total
             : yesShares / totalShares // No price = yesShares / total
-          : avgPrice;
+          : avgPrice
 
-      return sum + shares * (currentPrice - avgPrice);
+      return sum + shares * (currentPrice - avgPrice)
     },
-    0
-  );
+    0,
+  )
 
-  const totalUnrealizedPnL = perpUnrealized + predictionUnrealized;
-  const totalPnL = lifetimePnL + totalUnrealizedPnL;
-  const netContributions = totalDeposited - totalWithdrawn;
-  const accountEquity = netContributions + totalPnL;
+  const totalUnrealizedPnL = perpUnrealized + predictionUnrealized
+  const totalPnL = lifetimePnL + totalUnrealizedPnL
+  const netContributions = totalDeposited - totalWithdrawn
+  const accountEquity = netContributions + totalPnL
 
   return {
     lifetimePnL,
@@ -133,5 +134,5 @@ export async function calculatePortfolioPnL(
     totalUnrealizedPnL,
     totalPnL,
     accountEquity,
-  };
+  }
 }

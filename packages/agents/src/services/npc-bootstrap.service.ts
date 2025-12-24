@@ -15,13 +15,13 @@
  * @packageDocumentation
  */
 
-import { agentRuntimeManager } from '@babylon/agents';
+import { agentRuntimeManager } from '@babylon/agents'
 import {
   loadActorById,
   type StaticActor,
   StaticDataRegistry,
-} from '@babylon/engine';
-import type { ActorData, AgentCapabilities } from '@babylon/shared';
+} from '@babylon/engine'
+import type { ActorData, AgentCapabilities } from '@babylon/shared'
 import {
   getCurrentChainId,
   IDENTITY_REGISTRY_BASE_SEPOLIA,
@@ -29,19 +29,19 @@ import {
   mapActorToOASFDomains,
   mapActorToOASFSkills,
   REPUTATION_SYSTEM_BASE_SEPOLIA,
-} from '@babylon/shared';
-import { AgentStatus, AgentType } from '../types/agent-registry';
-import { agentRegistry } from './agent-registry.service';
+} from '@babylon/shared'
+import { AgentStatus, AgentType } from '../types/agent-registry'
+import { agentRegistry } from './agent-registry.service'
 
 /**
  * Result of NPC bootstrap operation
  */
 export interface NPCBootstrapResult {
-  totalNpcs: number;
-  registered: number;
-  initialized: number;
-  failed: number;
-  errors: Array<{ actorId: string; error: string }>;
+  totalNpcs: number
+  registered: number
+  initialized: number
+  failed: number
+  errors: Array<{ actorId: string; error: string }>
 }
 
 /**
@@ -50,14 +50,14 @@ export interface NPCBootstrapResult {
  * Singleton service for managing NPC agent initialization, registration, and lifecycle.
  */
 export class NPCBootstrapService {
-  private static instance: NPCBootstrapService;
+  private static instance: NPCBootstrapService
 
   private constructor() {
     logger.info(
       'NPCBootstrapService initialized',
       undefined,
-      'NPCBootstrapService'
-    );
+      'NPCBootstrapService',
+    )
   }
 
   /**
@@ -67,9 +67,9 @@ export class NPCBootstrapService {
    */
   public static getInstance(): NPCBootstrapService {
     if (!NPCBootstrapService.instance) {
-      NPCBootstrapService.instance = new NPCBootstrapService();
+      NPCBootstrapService.instance = new NPCBootstrapService()
     }
-    return NPCBootstrapService.instance;
+    return NPCBootstrapService.instance
   }
 
   /**
@@ -82,7 +82,7 @@ export class NPCBootstrapService {
    * @returns {Promise<NPCBootstrapResult>} Bootstrap result summary
    */
   public async bootstrapAllNpcs(): Promise<NPCBootstrapResult> {
-    logger.info('Starting NPC bootstrap', undefined, 'NPCBootstrapService');
+    logger.info('Starting NPC bootstrap', undefined, 'NPCBootstrapService')
 
     const result: NPCBootstrapResult = {
       totalNpcs: 0,
@@ -90,38 +90,38 @@ export class NPCBootstrapService {
       initialized: 0,
       failed: 0,
       errors: [],
-    };
+    }
 
     // Load all Actor records from static registry
     const actorsList = StaticDataRegistry.getAllActors()
       .slice()
-      .sort((a, b) => (a.name as string).localeCompare(b.name as string));
+      .sort((a, b) => a.name.localeCompare(b.name))
 
-    result.totalNpcs = actorsList.length;
+    result.totalNpcs = actorsList.length
     logger.info(
       `Found ${actorsList.length} NPCs to bootstrap`,
       undefined,
-      'NPCBootstrapService'
-    );
+      'NPCBootstrapService',
+    )
 
     // Bootstrap each actor in sequence (to avoid overwhelming database)
     for (const actor of actorsList) {
-      const bootstrapResult = await this.bootstrapSingleNpc(actor);
+      const bootstrapResult = await this.bootstrapSingleNpc(actor)
       if (bootstrapResult.registered) {
-        result.registered++;
+        result.registered++
       }
       if (bootstrapResult.initialized) {
-        result.initialized++;
+        result.initialized++
       }
     }
 
     logger.info(
       `NPC bootstrap complete: ${result.initialized}/${result.totalNpcs} initialized, ${result.failed} failed`,
       { result },
-      'NPCBootstrapService'
-    );
+      'NPCBootstrapService',
+    )
 
-    return result;
+    return result
   }
 
   /**
@@ -136,64 +136,64 @@ export class NPCBootstrapService {
    * @private
    */
   private async bootstrapSingleNpc(
-    actor: StaticActor
+    actor: StaticActor,
   ): Promise<{ registered: boolean; initialized: boolean }> {
     logger.info(
       `Bootstrapping NPC: ${actor.name} (${actor.id})`,
       undefined,
-      'NPCBootstrapService'
-    );
+      'NPCBootstrapService',
+    )
 
-    let registered = false;
-    let initialized = false;
+    let registered = false
+    let initialized = false
 
     // Check if already registered
-    const existing = await agentRegistry.getAgentById(actor.id);
+    const existing = await agentRegistry.getAgentById(actor.id)
     if (existing) {
       logger.info(
         `NPC ${actor.id} already registered, initializing runtime only`,
         undefined,
-        'NPCBootstrapService'
-      );
+        'NPCBootstrapService',
+      )
       // Skip registration but still initialize runtime
     } else {
       // Load ActorData from JSON files for rich configuration
-      const actorData: ActorData | null = loadActorById(actor.id);
+      const actorData: ActorData | null = loadActorById(actor.id)
       if (!actorData) {
-        throw new Error(`ActorData not found for actor ${actor.id}`);
+        throw new Error(`ActorData not found for actor ${actor.id}`)
       }
 
       // Build NPC system prompt from ActorData
-      const systemPrompt = this.buildNpcSystemPrompt(actorData);
+      const systemPrompt = this.buildNpcSystemPrompt(actorData)
 
       // Build NPC capabilities from ActorData
-      const capabilities = this.buildNpcCapabilities(actorData);
+      const capabilities = this.buildNpcCapabilities(actorData)
 
       // Register NPC in AgentRegistry
       await agentRegistry.registerNpcAgent({
         actorId: actor.id,
         systemPrompt,
         capabilities,
-      });
+      })
 
-      registered = true;
+      registered = true
       logger.info(
         `NPC ${actor.id} registered successfully`,
         undefined,
-        'NPCBootstrapService'
-      );
+        'NPCBootstrapService',
+      )
     }
 
     // Create runtime instance (this will cache it)
-    const runtime = await agentRuntimeManager.getRuntime(actor.id);
-    initialized = true;
+    const runtime = await agentRuntimeManager.getRuntime(actor.id)
+    initialized = true
     logger.info(
       `NPC ${actor.id} runtime created (agentId: ${runtime.agentId})`,
       undefined,
-      'NPCBootstrapService'
-    );
+      'NPCBootstrapService',
+    )
 
-    return { registered, initialized };
+    return { registered, initialized }
   }
 
   /**
@@ -208,36 +208,36 @@ export class NPCBootstrapService {
    * @private
    */
   private buildNpcSystemPrompt(actorData: ActorData): string {
-    const parts: string[] = [];
+    const parts: string[] = []
 
     // Base personality from description
     if (actorData.description) {
-      parts.push(actorData.description);
+      parts.push(actorData.description)
     } else {
       parts.push(
-        `You are ${actorData.name}, a character in the Babylon prediction market game.`
-      );
+        `You are ${actorData.name}, a character in the Babylon prediction market game.`,
+      )
     }
 
     // Physical description adds immersion
     if (actorData.pfpDescription) {
-      parts.push(`Physical appearance: ${actorData.pfpDescription}`);
+      parts.push(`Physical appearance: ${actorData.pfpDescription}`)
     }
 
     // Role provides context
     if (actorData.role) {
-      parts.push(`Role: ${actorData.role}`);
+      parts.push(`Role: ${actorData.role}`)
     }
 
     // Add game context
     parts.push(
-      'You participate in prediction markets, social interactions, and autonomous trading.'
-    );
+      'You participate in prediction markets, social interactions, and autonomous trading.',
+    )
     parts.push(
-      'You maintain your personality while engaging with users and other agents.'
-    );
+      'You maintain your personality while engaging with users and other agents.',
+    )
 
-    return parts.join('\n\n');
+    return parts.join('\n\n')
   }
 
   /**
@@ -253,8 +253,8 @@ export class NPCBootstrapService {
    */
   private buildNpcCapabilities(actorData: ActorData): AgentCapabilities {
     // Map ActorData to OASF skills and domains using the skill mapper
-    const oasfSkills = mapActorToOASFSkills(actorData);
-    const oasfDomains = mapActorToOASFDomains(actorData);
+    const oasfSkills = mapActorToOASFSkills(actorData)
+    const oasfDomains = mapActorToOASFDomains(actorData)
 
     return {
       // Standard NPC strategies
@@ -302,7 +302,7 @@ export class NPCBootstrapService {
       // Set when A2A endpoints are implemented
       a2aEndpoint: undefined,
       mcpEndpoint: undefined,
-    };
+    }
   }
 
   /**
@@ -317,13 +317,13 @@ export class NPCBootstrapService {
    */
   public async bootstrapNpc(actorId: string): Promise<void> {
     // Get actor from static registry
-    const actor = StaticDataRegistry.getActor(actorId);
+    const actor = StaticDataRegistry.getActor(actorId)
 
     if (!actor) {
-      throw new Error(`Actor ${actorId} not found`);
+      throw new Error(`Actor ${actorId} not found`)
     }
 
-    await this.bootstrapSingleNpc(actor);
+    await this.bootstrapSingleNpc(actor)
   }
 
   /**
@@ -337,10 +337,10 @@ export class NPCBootstrapService {
    * @returns {Promise<void>}
    */
   public async removeNpc(actorId: string): Promise<void> {
-    logger.info(`Removing NPC ${actorId}`, undefined, 'NPCBootstrapService');
+    logger.info(`Removing NPC ${actorId}`, undefined, 'NPCBootstrapService')
 
     // Clear runtime from cache
-    await agentRuntimeManager.clearRuntime(actorId);
+    await agentRuntimeManager.clearRuntime(actorId)
 
     // AgentRegistry entry is preserved for history
     // Status will be set to TERMINATED by clearRuntimeInstance
@@ -348,8 +348,8 @@ export class NPCBootstrapService {
     logger.info(
       `NPC ${actorId} removed successfully`,
       undefined,
-      'NPCBootstrapService'
-    );
+      'NPCBootstrapService',
+    )
   }
 
   /**
@@ -362,19 +362,19 @@ export class NPCBootstrapService {
    * @returns {Promise<void>}
    */
   public async refreshNpc(actorId: string): Promise<void> {
-    logger.info(`Refreshing NPC ${actorId}`, undefined, 'NPCBootstrapService');
+    logger.info(`Refreshing NPC ${actorId}`, undefined, 'NPCBootstrapService')
 
     // Clear existing runtime
-    await agentRuntimeManager.clearRuntime(actorId);
+    await agentRuntimeManager.clearRuntime(actorId)
 
     // Bootstrap again (will use latest ActorData)
-    await this.bootstrapNpc(actorId);
+    await this.bootstrapNpc(actorId)
 
     logger.info(
       `NPC ${actorId} refreshed successfully`,
       undefined,
-      'NPCBootstrapService'
-    );
+      'NPCBootstrapService',
+    )
   }
 
   /**
@@ -386,35 +386,35 @@ export class NPCBootstrapService {
    * @returns {Promise<object>} Bootstrap status summary
    */
   public async getBootstrapStatus(): Promise<{
-    totalNpcs: number;
-    registered: number;
-    initialized: number;
-    active: number;
+    totalNpcs: number
+    registered: number
+    initialized: number
+    active: number
   }> {
-    const actorsList = StaticDataRegistry.getAllActors();
-    const totalNpcs = actorsList.length;
+    const actorsList = StaticDataRegistry.getAllActors()
+    const totalNpcs = actorsList.length
 
     const registrations = await agentRegistry.discoverAgents({
       types: [AgentType.NPC],
-    });
+    })
 
-    const registered = registrations.length;
+    const registered = registrations.length
     const initialized = registrations.filter(
       (r) =>
-        r.status === AgentStatus.INITIALIZED || r.status === AgentStatus.ACTIVE
-    ).length;
+        r.status === AgentStatus.INITIALIZED || r.status === AgentStatus.ACTIVE,
+    ).length
     const active = registrations.filter(
-      (r) => r.status === AgentStatus.ACTIVE
-    ).length;
+      (r) => r.status === AgentStatus.ACTIVE,
+    ).length
 
     return {
       totalNpcs,
       registered,
       initialized,
       active,
-    };
+    }
   }
 }
 
 // Export singleton instance
-export const npcBootstrapService = NPCBootstrapService.getInstance();
+export const npcBootstrapService = NPCBootstrapService.getInstance()

@@ -7,31 +7,31 @@
  * in prediction markets.
  */
 
-import { logger } from '@babylon/shared';
+import { logger } from '@babylon/shared'
 
 export interface BiasConfig {
-  entityId: string; // Organization ID or keyword
-  entityName: string; // Human-readable name
-  direction: 'up' | 'down'; // Bias direction
-  strength: number; // 0.0 to 1.0 (multiplier for price impact)
-  createdAt: Date;
-  expiresAt: Date | null; // null = permanent, Date = temporary
-  decayRate: number; // How fast bias decays (0 = no decay, 1 = fast decay)
+  entityId: string // Organization ID or keyword
+  entityName: string // Human-readable name
+  direction: 'up' | 'down' // Bias direction
+  strength: number // 0.0 to 1.0 (multiplier for price impact)
+  createdAt: Date
+  expiresAt: Date | null // null = permanent, Date = temporary
+  decayRate: number // How fast bias decays (0 = no decay, 1 = fast decay)
 }
 
 export interface BiasAdjustment {
-  priceImpact: number; // Percentage adjustment (-0.5 to 0.5)
-  sentimentShift: number; // Sentiment modifier (-1.0 to 1.0)
-  confidence: number; // How confident the bias is (0-1)
+  priceImpact: number // Percentage adjustment (-0.5 to 0.5)
+  sentimentShift: number // Sentiment modifier (-1.0 to 1.0)
+  confidence: number // How confident the bias is (0-1)
 }
 
 export class BiasEngine {
-  private static instance: BiasEngine | null = null;
-  private biases: Map<string, BiasConfig> = new Map();
-  private cleanupInterval: ReturnType<typeof setInterval> | null = null;
+  private static instance: BiasEngine | null = null
+  private biases: Map<string, BiasConfig> = new Map()
+  private cleanupInterval: ReturnType<typeof setInterval> | null = null
 
   private constructor() {
-    this.startCleanupInterval();
+    this.startCleanupInterval()
   }
 
   /**
@@ -39,9 +39,9 @@ export class BiasEngine {
    */
   static getInstance(): BiasEngine {
     if (!BiasEngine.instance) {
-      BiasEngine.instance = new BiasEngine();
+      BiasEngine.instance = new BiasEngine()
     }
-    return BiasEngine.instance;
+    return BiasEngine.instance
   }
 
   /**
@@ -57,17 +57,17 @@ export class BiasEngine {
     direction: 'up' | 'down',
     strength = 0.5,
     options?: {
-      durationHours?: number; // null = permanent
-      decayRate?: number; // 0-1, default 0.1
-    }
+      durationHours?: number // null = permanent
+      decayRate?: number // 0-1, default 0.1
+    },
   ): void {
     // Normalize strength to 0-1
-    const normalizedStrength = Math.max(0, Math.min(1, strength));
+    const normalizedStrength = Math.max(0, Math.min(1, strength))
 
     // Calculate expiration
     const expiresAt = options?.durationHours
       ? new Date(Date.now() + options.durationHours * 60 * 60 * 1000)
-      : null;
+      : null
 
     const bias: BiasConfig = {
       entityId,
@@ -77,30 +77,30 @@ export class BiasEngine {
       createdAt: new Date(),
       expiresAt,
       decayRate: options?.decayRate ?? 0.1,
-    };
+    }
 
-    this.biases.set(entityId, bias);
+    this.biases.set(entityId, bias)
 
     logger.info(
       `Bias set: ${direction} ${entityName} (strength: ${normalizedStrength.toFixed(2)}, ${expiresAt ? `expires: ${expiresAt.toISOString()}` : 'permanent'})`,
       undefined,
-      'BiasEngine'
-    );
+      'BiasEngine',
+    )
   }
 
   /**
    * Remove a bias
    */
   removeBias(entityId: string): boolean {
-    const removed = this.biases.delete(entityId);
+    const removed = this.biases.delete(entityId)
     if (removed) {
       logger.info(
         `Bias removed for entity: ${entityId}`,
         undefined,
-        'BiasEngine'
-      );
+        'BiasEngine',
+      )
     }
-    return removed;
+    return removed
   }
 
   /**
@@ -114,40 +114,40 @@ export class BiasEngine {
   tuneBiasStrength(
     entityId: string,
     strength: number,
-    decayRate?: number
+    decayRate?: number,
   ): boolean {
-    const bias = this.biases.get(entityId);
+    const bias = this.biases.get(entityId)
 
     if (!bias) {
-      return false;
+      return false
     }
 
     // Normalize strength to 0-1
-    const normalizedStrength = Math.max(0, Math.min(1, strength));
+    const normalizedStrength = Math.max(0, Math.min(1, strength))
 
     // Update bias with new strength
     const updatedBias: BiasConfig = {
       ...bias,
       strength: normalizedStrength,
       decayRate: decayRate !== undefined ? decayRate : bias.decayRate,
-    };
+    }
 
-    this.biases.set(entityId, updatedBias);
+    this.biases.set(entityId, updatedBias)
 
     logger.info(
       `Bias tuned for ${bias.entityName}: strength ${normalizedStrength.toFixed(2)}, decay ${updatedBias.decayRate.toFixed(2)}`,
       undefined,
-      'BiasEngine'
-    );
+      'BiasEngine',
+    )
 
-    return true;
+    return true
   }
 
   /**
    * Get all active biases
    */
   getActiveBiases(): BiasConfig[] {
-    return Array.from(this.biases.values());
+    return Array.from(this.biases.values())
   }
 
   /**
@@ -160,58 +160,58 @@ export class BiasEngine {
    * @returns BiasAdjustment with price and sentiment modifiers
    */
   getBiasAdjustment(entityId: string): BiasAdjustment {
-    const bias = this.biases.get(entityId);
+    const bias = this.biases.get(entityId)
 
     if (!bias) {
       return {
         priceImpact: 0,
         sentimentShift: 0,
         confidence: 0,
-      };
+      }
     }
 
     // Check if bias has expired
     if (bias.expiresAt && new Date() > bias.expiresAt) {
-      this.biases.delete(entityId);
+      this.biases.delete(entityId)
       logger.debug(
         `Bias expired for ${bias.entityName}`,
         undefined,
-        'BiasEngine'
-      );
+        'BiasEngine',
+      )
       return {
         priceImpact: 0,
         sentimentShift: 0,
         confidence: 0,
-      };
+      }
     }
 
     // Calculate decay factor based on time elapsed
     const ageInHours =
-      (Date.now() - bias.createdAt.getTime()) / (1000 * 60 * 60);
-    const decayFactor = Math.exp(-bias.decayRate * ageInHours);
+      (Date.now() - bias.createdAt.getTime()) / (1000 * 60 * 60)
+    const decayFactor = Math.exp(-bias.decayRate * ageInHours)
 
     // Calculate effective strength after decay
-    const effectiveStrength = bias.strength * decayFactor;
+    const effectiveStrength = bias.strength * decayFactor
 
     // Determine direction multiplier
-    const directionMultiplier = bias.direction === 'up' ? 1 : -1;
+    const directionMultiplier = bias.direction === 'up' ? 1 : -1
 
     // Calculate price impact (percentage)
     // Max impact: ±50% (0.5), scaled by strength
-    const priceImpact = directionMultiplier * effectiveStrength * 0.5;
+    const priceImpact = directionMultiplier * effectiveStrength * 0.5
 
     // Calculate sentiment shift
     // Range: -1.0 to 1.0, scaled by strength
-    const sentimentShift = directionMultiplier * effectiveStrength;
+    const sentimentShift = directionMultiplier * effectiveStrength
 
     // Confidence decreases with decay
-    const confidence = decayFactor;
+    const confidence = decayFactor
 
     return {
       priceImpact,
       sentimentShift,
       confidence,
-    };
+    }
   }
 
   /**
@@ -223,34 +223,34 @@ export class BiasEngine {
    * @returns Combined bias adjustment
    */
   getCombinedBiasAdjustment(entityIds: string[]): BiasAdjustment {
-    let totalPriceImpact = 0;
-    let totalSentimentShift = 0;
-    let maxConfidence = 0;
+    let totalPriceImpact = 0
+    let totalSentimentShift = 0
+    let maxConfidence = 0
 
     for (const entityId of entityIds) {
-      const adjustment = this.getBiasAdjustment(entityId);
+      const adjustment = this.getBiasAdjustment(entityId)
 
       if (adjustment.confidence > 0) {
-        totalPriceImpact += adjustment.priceImpact;
-        totalSentimentShift += adjustment.sentimentShift;
-        maxConfidence = Math.max(maxConfidence, adjustment.confidence);
+        totalPriceImpact += adjustment.priceImpact
+        totalSentimentShift += adjustment.sentimentShift
+        maxConfidence = Math.max(maxConfidence, adjustment.confidence)
       }
     }
 
     // Clamp price impact to ±50%
-    const clampedPriceImpact = Math.max(-0.5, Math.min(0.5, totalPriceImpact));
+    const clampedPriceImpact = Math.max(-0.5, Math.min(0.5, totalPriceImpact))
 
     // Clamp sentiment shift to ±1.0
     const clampedSentimentShift = Math.max(
       -1.0,
-      Math.min(1.0, totalSentimentShift)
-    );
+      Math.min(1.0, totalSentimentShift),
+    )
 
     return {
       priceImpact: clampedPriceImpact,
       sentimentShift: clampedSentimentShift,
       confidence: maxConfidence,
-    };
+    }
   }
 
   /**
@@ -262,23 +262,23 @@ export class BiasEngine {
    * @returns Map of entity IDs to bias adjustments
    */
   findBiasesInText(text: string): Map<string, BiasAdjustment> {
-    const matches = new Map<string, BiasAdjustment>();
-    const textLower = text.toLowerCase();
+    const matches = new Map<string, BiasAdjustment>()
+    const textLower = text.toLowerCase()
 
     for (const [entityId, bias] of this.biases) {
       // Check if entity ID or name is mentioned in text
-      const entityIdLower = entityId.toLowerCase();
-      const entityNameLower = bias.entityName.toLowerCase();
+      const entityIdLower = entityId.toLowerCase()
+      const entityNameLower = bias.entityName.toLowerCase()
 
       if (
         textLower.includes(entityIdLower) ||
         textLower.includes(entityNameLower)
       ) {
-        matches.set(entityId, this.getBiasAdjustment(entityId));
+        matches.set(entityId, this.getBiasAdjustment(entityId))
       }
     }
 
-    return matches;
+    return matches
   }
 
   /**
@@ -292,13 +292,13 @@ export class BiasEngine {
    */
   setBulkBiases(
     biases: Array<{
-      entityId: string;
-      entityName: string;
-      direction: 'up' | 'down';
-      strength?: number;
-      durationHours?: number;
-      decayRate?: number;
-    }>
+      entityId: string
+      entityName: string
+      direction: 'up' | 'down'
+      strength?: number
+      durationHours?: number
+      decayRate?: number
+    }>,
   ): void {
     for (const bias of biases) {
       this.setBias(
@@ -309,8 +309,8 @@ export class BiasEngine {
         {
           durationHours: bias.durationHours,
           decayRate: bias.decayRate,
-        }
-      );
+        },
+      )
     }
   }
 
@@ -321,23 +321,23 @@ export class BiasEngine {
     // Clean up every 10 minutes
     this.cleanupInterval = setInterval(
       () => {
-        this.cleanupExpiredBiases();
+        this.cleanupExpiredBiases()
       },
-      10 * 60 * 1000
-    );
+      10 * 60 * 1000,
+    )
   }
 
   /**
    * Clean up expired biases
    */
   private cleanupExpiredBiases(): void {
-    const now = new Date();
-    let removedCount = 0;
+    const now = new Date()
+    let removedCount = 0
 
     for (const [entityId, bias] of this.biases) {
       if (bias.expiresAt && now > bias.expiresAt) {
-        this.biases.delete(entityId);
-        removedCount++;
+        this.biases.delete(entityId)
+        removedCount++
       }
     }
 
@@ -345,8 +345,8 @@ export class BiasEngine {
       logger.debug(
         `Cleaned up ${removedCount} expired biases`,
         undefined,
-        'BiasEngine'
-      );
+        'BiasEngine',
+      )
     }
   }
 
@@ -355,9 +355,9 @@ export class BiasEngine {
    */
   stop(): void {
     if (this.cleanupInterval) {
-      clearInterval(this.cleanupInterval);
-      this.cleanupInterval = null;
-      logger.info('BiasEngine stopped', undefined, 'BiasEngine');
+      clearInterval(this.cleanupInterval)
+      this.cleanupInterval = null
+      logger.info('BiasEngine stopped', undefined, 'BiasEngine')
     }
   }
 
@@ -365,14 +365,14 @@ export class BiasEngine {
    * Export current biases for persistence
    */
   exportBiases(): BiasConfig[] {
-    return Array.from(this.biases.values());
+    return Array.from(this.biases.values())
   }
 
   /**
    * Import biases from persistence
    */
   importBiases(biases: BiasConfig[]): void {
-    this.biases.clear();
+    this.biases.clear()
 
     for (const bias of biases) {
       // Reconstruct dates
@@ -380,16 +380,16 @@ export class BiasEngine {
         ...bias,
         createdAt: new Date(bias.createdAt),
         expiresAt: bias.expiresAt ? new Date(bias.expiresAt) : null,
-      };
+      }
 
-      this.biases.set(config.entityId, config);
+      this.biases.set(config.entityId, config)
     }
 
-    logger.info(`Imported ${biases.length} biases`, undefined, 'BiasEngine');
+    logger.info(`Imported ${biases.length} biases`, undefined, 'BiasEngine')
   }
 }
 
 /**
  * Export singleton instance
  */
-export const biasEngine = BiasEngine.getInstance();
+export const biasEngine = BiasEngine.getInstance()

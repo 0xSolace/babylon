@@ -5,14 +5,14 @@
  * Note: TransferPointsSchema is defined in './transfer.ts'
  */
 
-import { z } from 'zod';
+import { z } from 'zod'
 import {
   NumericStringSchema,
   SnowflakeIdSchema,
   TransactionHashSchema,
   UserIdSchema,
   WalletAddressSchema,
-} from './common';
+} from './common'
 
 // ============================================================================
 // Point Transfer Request Schema
@@ -33,9 +33,9 @@ export const TransferPointsSchema = z.object({
     .max(280, 'Message must be 280 characters or less')
     .optional()
     .describe('Optional message to include with the transfer'),
-});
+})
 
-export type TransferPointsInput = z.infer<typeof TransferPointsSchema>;
+export type TransferPointsInput = z.infer<typeof TransferPointsSchema>
 
 // ============================================================================
 // Point Transfer Response Schemas
@@ -60,11 +60,11 @@ export const TransferPointsResponseSchema = z.object({
     }),
     message: z.string().optional(),
   }),
-});
+})
 
 export type TransferPointsResponse = z.infer<
   typeof TransferPointsResponseSchema
->;
+>
 
 // ============================================================================
 // Points Purchase Schemas
@@ -79,11 +79,9 @@ export const CreatePointsPaymentSchema = z.object({
     .positive('Amount must be positive')
     .describe('Amount in USD'),
   fromAddress: WalletAddressSchema.describe("User's wallet address"),
-});
+})
 
-export type CreatePointsPaymentInput = z.infer<
-  typeof CreatePointsPaymentSchema
->;
+export type CreatePointsPaymentInput = z.infer<typeof CreatePointsPaymentSchema>
 
 /**
  * Response schema for creating a points payment request
@@ -99,11 +97,11 @@ export const CreatePointsPaymentResponseSchema = z.object({
     pointsAmount: z.number().int().positive(),
     amountUSD: z.number().positive(),
   }),
-});
+})
 
 export type CreatePointsPaymentResponse = z.infer<
   typeof CreatePointsPaymentResponseSchema
->;
+>
 
 /**
  * Schema for verifying a points purchase payment
@@ -114,11 +112,9 @@ export const VerifyPointsPaymentSchema = z.object({
   fromAddress: WalletAddressSchema,
   toAddress: WalletAddressSchema,
   amount: NumericStringSchema.describe('Payment amount in wei'),
-});
+})
 
-export type VerifyPointsPaymentInput = z.infer<
-  typeof VerifyPointsPaymentSchema
->;
+export type VerifyPointsPaymentInput = z.infer<typeof VerifyPointsPaymentSchema>
 
 /**
  * Response schema for verifying points payment
@@ -128,11 +124,11 @@ export const VerifyPointsPaymentResponseSchema = z.object({
   pointsAwarded: z.number().int().positive(),
   newTotal: z.number().int().nonnegative(),
   txHash: TransactionHashSchema,
-});
+})
 
 export type VerifyPointsPaymentResponse = z.infer<
   typeof VerifyPointsPaymentResponseSchema
->;
+>
 
 // ============================================================================
 // Points Transaction Schemas
@@ -157,11 +153,11 @@ export const PointsTransactionReasonSchema = z.enum([
   'achievement',
   'penalty',
   'adjustment',
-]);
+])
 
 export type PointsTransactionReason = z.infer<
   typeof PointsTransactionReasonSchema
->;
+>
 
 /**
  * Schema for a points transaction record
@@ -175,9 +171,9 @@ export const PointsTransactionSchema = z.object({
   reason: PointsTransactionReasonSchema,
   metadata: z.string().optional(), // JSON string with additional context
   createdAt: z.date(),
-});
+})
 
-export type PointsTransaction = z.infer<typeof PointsTransactionSchema>;
+export type PointsTransaction = z.infer<typeof PointsTransactionSchema>
 
 /**
  * Query schema for fetching points transaction history
@@ -186,6 +182,6 @@ export const PointsHistoryQuerySchema = z.object({
   page: z.coerce.number().int().positive().default(1),
   limit: z.coerce.number().int().positive().max(100).default(20),
   reason: PointsTransactionReasonSchema.optional(),
-});
+})
 
-export type PointsHistoryQuery = z.infer<typeof PointsHistoryQuerySchema>;
+export type PointsHistoryQuery = z.infer<typeof PointsHistoryQuerySchema>

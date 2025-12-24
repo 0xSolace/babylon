@@ -16,60 +16,60 @@
  * - PRODUCTION MODE: Full Jeju integration with real contracts
  */
 
-import { logger } from '@babylon/shared';
-import type { Address, Hex } from 'viem';
-import { getEnvironment, logEnvironment } from '../config/environment';
+import { logger, toNull } from '@babylon/shared'
+import type { Address, Hex } from 'viem'
+import { getEnvironment, logEnvironment } from '../config/environment'
 import {
   createTreasuryAdapter,
   type TreasuryAdapter,
-} from '../contracts/treasury-adapter';
+} from '../contracts/treasury-adapter'
 import {
   type AttestationQuote,
   BabylonEnclave,
   type BabylonEnclaveConfig,
   type SealedState,
-} from './babylon-enclave';
+} from './babylon-enclave'
 
 // ============================================================================
 // Types
 // ============================================================================
 
 export interface UnruggableOrchestratorConfig {
-  enclave: BabylonEnclaveConfig;
+  enclave: BabylonEnclaveConfig
   treasury: {
-    address: Address;
-    rpcUrl: string;
-  };
+    address: Address
+    rpcUrl: string
+  }
   storage: {
-    endpoint: string;
-    provider: 'ipfs' | 'arweave';
-  };
+    endpoint: string
+    provider: 'ipfs' | 'arweave'
+  }
   heartbeat: {
-    intervalMs: number;
-    onChainIntervalMs: number;
-  };
+    intervalMs: number
+    onChainIntervalMs: number
+  }
   training: {
-    intervalMs: number;
-    enabled: boolean;
-  };
+    intervalMs: number
+    enabled: boolean
+  }
 }
 
 export interface GameState {
   /** Current game version */
-  version: number;
+  version: number
   /** Game tick number */
-  tick: number;
+  tick: number
   /** Market states */
-  markets: Record<string, unknown>;
+  markets: Record<string, unknown>
   /** Agent states */
-  agents: Record<string, unknown>;
+  agents: Record<string, unknown>
   /** Training stats */
   training: {
-    epoch: number;
-    lastModelHash: Hex;
-  };
+    epoch: number
+    lastModelHash: Hex
+  }
   /** Timestamp */
-  timestamp: number;
+  timestamp: number
 }
 
 export type OrchestratorPhase =
@@ -81,34 +81,34 @@ export type OrchestratorPhase =
   | 'training'
   | 'rotating_keys'
   | 'failover'
-  | 'shutdown';
+  | 'shutdown'
 
 export interface OrchestratorStatus {
-  phase: OrchestratorPhase;
+  phase: OrchestratorPhase
   enclave: {
-    running: boolean;
-    address: Address | null;
-    attestationValid: boolean;
-  };
+    running: boolean
+    address: Address | null
+    attestationValid: boolean
+  }
   treasury: {
-    balance: bigint;
-    operatorRegistered: boolean;
-    lastHeartbeat: number;
-  };
+    balance: bigint
+    operatorRegistered: boolean
+    lastHeartbeat: number
+  }
   game: {
-    version: number;
-    tick: number;
-    marketCount: number;
-  };
+    version: number
+    tick: number
+    marketCount: number
+  }
   training: {
-    epoch: number;
-    enabled: boolean;
-    lastTrainingAt: number;
-  };
+    epoch: number
+    enabled: boolean
+    lastTrainingAt: number
+  }
   storage: {
-    stateCount: number;
-    lastStateCID: string | null;
-  };
+    stateCount: number
+    lastStateCID: string | null
+  }
 }
 
 // ============================================================================
@@ -116,95 +116,93 @@ export interface OrchestratorStatus {
 // ============================================================================
 
 export class UnruggableOrchestrator {
-  private config: UnruggableOrchestratorConfig;
-  private phase: OrchestratorPhase = 'uninitialized';
-  private enclave: BabylonEnclave | null = null;
-  private gameState: GameState | null = null;
-  private treasury: TreasuryAdapter;
+  private config: UnruggableOrchestratorConfig
+  private phase: OrchestratorPhase = 'uninitialized'
+  private enclave: BabylonEnclave | null = null
+  private gameState: GameState | null = null
+  private treasury: TreasuryAdapter
 
   // Intervals
-  private heartbeatInterval?: NodeJS.Timer;
-  private onChainHeartbeatInterval?: NodeJS.Timer;
-  private trainingInterval?: NodeJS.Timer;
+  private heartbeatInterval?: NodeJS.Timer
+  private onChainHeartbeatInterval?: NodeJS.Timer
+  private trainingInterval?: NodeJS.Timer
 
   // State tracking
   private stateCheckpoints: Array<{ cid: string; hash: Hex; version: number }> =
-    [];
-  private lastStateCID: string | null = null;
-  private lastHeartbeat = 0;
-  private lastTrainingAt = 0;
+    []
+  private lastStateCID: string | null = null
+  private lastHeartbeat = 0
+  private lastTrainingAt = 0
 
   constructor(config: UnruggableOrchestratorConfig) {
-    this.config = config;
+    this.config = config
 
     // Create treasury adapter based on environment
-    const env = getEnvironment();
+    const env = getEnvironment()
     this.treasury = createTreasuryAdapter({
       mode: env.mode,
       contractAddress: env.treasuryAddress as Address,
       rpcUrl: env.rpcUrl,
-    });
+    })
   }
 
   /**
    * Initialize and start the complete system
    */
   async initialize(): Promise<{
-    operatorAddress: Address;
-    attestation: AttestationQuote;
+    operatorAddress: Address
+    attestation: AttestationQuote
   }> {
-    logger.info(
-      '[Orchestrator] Initializing unruggable game infrastructure...'
-    );
+    logger.info('[Orchestrator] Initializing unruggable game infrastructure...')
 
     // Log environment
-    logEnvironment();
+    logEnvironment()
 
-    const env = getEnvironment();
-    logger.info(`[Orchestrator] Running in ${env.mode.toUpperCase()} mode`);
+    const env = getEnvironment()
+    logger.info(`[Orchestrator] Running in ${env.mode.toUpperCase()} mode`)
 
     // Phase 1: Boot TEE enclave
-    this.phase = 'booting';
-    logger.info('[Orchestrator] Phase 1: Booting TEE enclave...');
+    this.phase = 'booting'
+    logger.info('[Orchestrator] Phase 1: Booting TEE enclave...')
 
-    this.enclave = await BabylonEnclave.create(this.config.enclave);
-    const attestation = this.enclave.getAttestation();
-    const operatorAddress = this.enclave.getOperatorAddress();
+    this.enclave = await BabylonEnclave.create(this.config.enclave)
+    const attestation = this.enclave.getAttestation()
+    const operatorAddress = this.enclave.getOperatorAddress()
 
     logger.info('[Orchestrator] Enclave booted', {
       operatorAddress,
       platform: attestation.platform,
-    });
+    })
 
     // Phase 2: Register operator on-chain (or mock in dev mode)
-    this.phase = 'registering';
-    logger.info('[Orchestrator] Phase 2: Registering operator...');
+    this.phase = 'registering'
+    logger.info('[Orchestrator] Phase 2: Registering operator...')
 
-    await this.registerOperator(operatorAddress, attestation);
+    await this.registerOperator(operatorAddress, attestation)
 
     // Phase 3: Load or create initial state
-    this.phase = 'loading_state';
-    logger.info('[Orchestrator] Phase 3: Loading game state...');
+    this.phase = 'loading_state'
+    logger.info('[Orchestrator] Phase 3: Loading game state...')
 
-    await this.loadOrCreateState();
+    await this.loadOrCreateState()
 
     // Phase 4: Start game loop
-    this.phase = 'running';
-    logger.info('[Orchestrator] Phase 4: Starting game loop...');
+    this.phase = 'running'
+    logger.info('[Orchestrator] Phase 4: Starting game loop...')
 
-    this.startHeartbeat();
-    this.startOnChainHeartbeat();
+    this.startHeartbeat()
+    this.startOnChainHeartbeat()
 
     if (this.config.training.enabled) {
-      this.startTrainingLoop();
+      this.startTrainingLoop()
     }
 
-    logger.info('[Orchestrator] Initialization complete - game is LIVE');
+    logger.info('[Orchestrator] Initialization complete - game is LIVE')
     logger.info(
-      `[Orchestrator] Jeju integration: ${env.hasJeju ? 'ENABLED' : 'DISABLED (dev mode)'}`
-    );
+      `[Orchestrator] Jeju integration: ${env.hasJeju ? 'ENABLED' : 'DISABLED (dev mode)'}`,
+    )
 
-    return { operatorAddress, attestation };
+    return { operatorAddress, attestation }
   }
 
   /**
@@ -212,20 +210,20 @@ export class UnruggableOrchestrator {
    */
   async executeTick(): Promise<void> {
     if (this.phase !== 'running') {
-      throw new Error(`Cannot execute tick in phase: ${this.phase}`);
+      throw new Error(`Cannot execute tick in phase: ${this.phase}`)
     }
 
     if (!this.gameState || !this.enclave) {
-      throw new Error('Game state or enclave not initialized');
+      throw new Error('Game state or enclave not initialized')
     }
 
     // Increment tick
-    this.gameState.tick++;
-    this.gameState.timestamp = Date.now();
+    this.gameState.tick++
+    this.gameState.timestamp = Date.now()
 
     // Save state periodically (every 10 ticks)
     if (this.gameState.tick % 10 === 0) {
-      await this.saveState();
+      await this.saveState()
     }
   }
 
@@ -233,47 +231,47 @@ export class UnruggableOrchestrator {
    * Run training cycle
    */
   async runTrainingCycle(): Promise<{
-    epoch: number;
-    datasetCID: string;
-    modelHash: Hex;
+    epoch: number
+    datasetCID: string
+    modelHash: Hex
   }> {
     if (this.phase !== 'running') {
-      throw new Error(`Cannot train in phase: ${this.phase}`);
+      throw new Error(`Cannot train in phase: ${this.phase}`)
     }
 
-    this.phase = 'training';
-    logger.info('[Orchestrator] Starting training cycle...');
+    this.phase = 'training'
+    logger.info('[Orchestrator] Starting training cycle...')
 
-    const epoch = (this.gameState?.training.epoch ?? 0) + 1;
+    const epoch = (this.gameState?.training.epoch ?? 0) + 1
 
     // Simulate training - in production, calls actual GRPO trainer
     const modelHash =
-      `0x${Buffer.from(`model-epoch-${epoch}`).toString('hex').padEnd(64, '0')}` as Hex;
+      `0x${Buffer.from(`model-epoch-${epoch}`).toString('hex').padEnd(64, '0')}` as Hex
 
     // Save training data to public storage
-    const datasetCID = await this.saveTrainingData(epoch, modelHash);
+    const datasetCID = await this.saveTrainingData(epoch, modelHash)
 
     // Update game state
     if (this.gameState) {
-      this.gameState.training.epoch = epoch;
-      this.gameState.training.lastModelHash = modelHash;
+      this.gameState.training.epoch = epoch
+      this.gameState.training.lastModelHash = modelHash
     }
 
     // Record on-chain
-    await this.recordTraining(datasetCID, modelHash);
+    await this.recordTraining(datasetCID, modelHash)
 
     // Save updated state
-    await this.saveState();
+    await this.saveState()
 
-    this.phase = 'running';
-    this.lastTrainingAt = Date.now();
+    this.phase = 'running'
+    this.lastTrainingAt = Date.now()
 
     logger.info('[Orchestrator] Training cycle complete', {
       epoch,
       datasetCID,
-    });
+    })
 
-    return { epoch, datasetCID, modelHash };
+    return { epoch, datasetCID, modelHash }
   }
 
   /**
@@ -281,46 +279,46 @@ export class UnruggableOrchestrator {
    */
   async rotateKeys(): Promise<{ newKeyVersion: number; newStateCID: string }> {
     if (!this.enclave || !this.gameState) {
-      throw new Error('Enclave or state not initialized');
+      throw new Error('Enclave or state not initialized')
     }
 
-    this.phase = 'rotating_keys';
-    logger.info('[Orchestrator] Rotating encryption keys...');
+    this.phase = 'rotating_keys'
+    logger.info('[Orchestrator] Rotating encryption keys...')
 
     // Rotate key in enclave
-    const { newVersion } = await this.enclave.rotateKey();
+    const { newVersion } = await this.enclave.rotateKey()
 
     // Re-encrypt state with new key
-    const sealed = await this.enclave.reencryptState(this.gameState);
-    const newStateCID = await this.uploadState(sealed);
+    const sealed = await this.enclave.reencryptState(this.gameState)
+    const newStateCID = await this.uploadState(sealed)
 
     // Update on-chain
-    await this.updateOnChainState(newStateCID, sealed);
+    await this.updateOnChainState(newStateCID, sealed)
 
-    this.phase = 'running';
+    this.phase = 'running'
 
     logger.info('[Orchestrator] Key rotation complete', {
       newKeyVersion: newVersion,
       newStateCID,
-    });
+    })
 
-    return { newKeyVersion: newVersion, newStateCID };
+    return { newKeyVersion: newVersion, newStateCID }
   }
 
   /**
    * Get orchestrator status
    */
   async getStatus(): Promise<OrchestratorStatus> {
-    const enclaveStatus = this.enclave?.getStatus();
+    const enclaveStatus = this.enclave?.getStatus()
 
     // Fetch treasury balance (returns 0n if not connected)
-    const balance = await this.treasury.getBalance();
+    const balance = await this.treasury.getBalance()
 
     return {
       phase: this.phase,
       enclave: {
         running: enclaveStatus?.running ?? false,
-        address: enclaveStatus?.address ?? null,
+        address: toNull(enclaveStatus?.address),
         attestationValid: enclaveStatus?.attestationValid ?? false,
       },
       treasury: {
@@ -342,7 +340,7 @@ export class UnruggableOrchestrator {
         stateCount: this.stateCheckpoints.length,
         lastStateCID: this.lastStateCID,
       },
-    };
+    }
   }
 
   /**
@@ -351,28 +349,28 @@ export class UnruggableOrchestrator {
   async shutdown(): Promise<void> {
     // Skip if already shut down
     if (this.phase === 'shutdown') {
-      return;
+      return
     }
 
-    logger.info('[Orchestrator] Shutting down...');
+    logger.info('[Orchestrator] Shutting down...')
 
-    if (this.heartbeatInterval) clearInterval(this.heartbeatInterval);
+    if (this.heartbeatInterval) clearInterval(this.heartbeatInterval)
     if (this.onChainHeartbeatInterval)
-      clearInterval(this.onChainHeartbeatInterval);
-    if (this.trainingInterval) clearInterval(this.trainingInterval);
+      clearInterval(this.onChainHeartbeatInterval)
+    if (this.trainingInterval) clearInterval(this.trainingInterval)
 
     // Save final state if enclave is still running
     if (this.gameState && this.enclave && this.enclave.getStatus().running) {
-      await this.saveState();
+      await this.saveState()
     }
 
     if (this.enclave) {
-      await this.enclave.shutdown();
+      await this.enclave.shutdown()
     }
 
-    this.phase = 'shutdown';
+    this.phase = 'shutdown'
 
-    logger.info('[Orchestrator] Shutdown complete');
+    logger.info('[Orchestrator] Shutdown complete')
   }
 
   // ============================================================================
@@ -381,21 +379,21 @@ export class UnruggableOrchestrator {
 
   private async registerOperator(
     address: Address,
-    attestation: AttestationQuote
+    attestation: AttestationQuote,
   ): Promise<void> {
     const attestationHex =
-      `0x${Buffer.from(JSON.stringify(attestation)).toString('hex')}` as Hex;
+      `0x${Buffer.from(JSON.stringify(attestation)).toString('hex')}` as Hex
 
     // Check if takeover is needed (existing operator is inactive)
     if (await this.treasury.isTakeoverAvailable()) {
-      logger.info('[Orchestrator] Performing permissionless takeover...');
-      await this.treasury.takeoverAsOperator(attestationHex);
+      logger.info('[Orchestrator] Performing permissionless takeover...')
+      await this.treasury.takeoverAsOperator(attestationHex)
     } else {
       // Normal registration
-      await this.treasury.registerOperator(address, attestationHex);
+      await this.treasury.registerOperator(address, attestationHex)
     }
 
-    logger.info('[Orchestrator] Operator registered', { address });
+    logger.info('[Orchestrator] Operator registered', { address })
   }
 
   private async loadOrCreateState(): Promise<void> {
@@ -409,95 +407,95 @@ export class UnruggableOrchestrator {
       agents: {},
       training: {
         epoch: 0,
-        lastModelHash: ('0x' + '0'.repeat(64)) as Hex,
+        lastModelHash: `0x${'0'.repeat(64)}` as Hex,
       },
       timestamp: Date.now(),
-    };
+    }
 
     // Seal and save initial state
-    await this.saveState();
+    await this.saveState()
 
-    logger.info('[Orchestrator] Initial state created');
+    logger.info('[Orchestrator] Initial state created')
   }
 
   private async saveState(): Promise<void> {
-    if (!this.enclave || !this.gameState) return;
+    if (!this.enclave || !this.gameState) return
 
-    const sealed = await this.enclave.sealState(this.gameState);
-    const cid = await this.uploadState(sealed);
+    const sealed = await this.enclave.sealState(this.gameState)
+    const cid = await this.uploadState(sealed)
 
-    await this.updateOnChainState(cid, sealed);
+    await this.updateOnChainState(cid, sealed)
 
-    this.lastStateCID = cid;
+    this.lastStateCID = cid
     this.stateCheckpoints.push({
       cid,
       hash: `0x${Buffer.from(sealed.ciphertext.slice(0, 32)).toString('hex')}` as Hex,
       version: this.gameState.version,
-    });
+    })
 
-    this.gameState.version++;
+    this.gameState.version++
   }
 
   private async uploadState(sealed: SealedState): Promise<string> {
     // Upload to IPFS/Arweave
     // Returns CID
-    const content = JSON.stringify(sealed);
-    const hash = Buffer.from(content).toString('hex').slice(0, 46);
-    return `Qm${hash}`;
+    const content = JSON.stringify(sealed)
+    const hash = Buffer.from(content).toString('hex').slice(0, 46)
+    return `Qm${hash}`
   }
 
   private async updateOnChainState(
     cid: string,
-    sealed: SealedState
+    sealed: SealedState,
   ): Promise<void> {
     const hash =
-      `0x${Buffer.from(sealed.ciphertext.slice(0, 32)).toString('hex')}` as Hex;
-    await this.treasury.updateState(cid, hash);
-    logger.debug('[Orchestrator] State updated', { cid });
+      `0x${Buffer.from(sealed.ciphertext.slice(0, 32)).toString('hex')}` as Hex
+    await this.treasury.updateState(cid, hash)
+    logger.debug('[Orchestrator] State updated', { cid })
   }
 
   private async saveTrainingData(
     epoch: number,
-    modelHash: Hex
+    modelHash: Hex,
   ): Promise<string> {
     // Save public training data to IPFS
-    const data = { epoch, modelHash, timestamp: Date.now() };
-    const hash = Buffer.from(JSON.stringify(data)).toString('hex').slice(0, 46);
-    return `Qm${hash}`;
+    const data = { epoch, modelHash, timestamp: Date.now() }
+    const hash = Buffer.from(JSON.stringify(data)).toString('hex').slice(0, 46)
+    return `Qm${hash}`
   }
 
   private async recordTraining(
     datasetCID: string,
-    modelHash: Hex
+    modelHash: Hex,
   ): Promise<void> {
-    await this.treasury.recordTraining(datasetCID, modelHash);
-    logger.debug('[Orchestrator] Training recorded', { datasetCID });
+    await this.treasury.recordTraining(datasetCID, modelHash)
+    logger.debug('[Orchestrator] Training recorded', { datasetCID })
   }
 
   private startHeartbeat(): void {
     this.heartbeatInterval = setInterval(() => {
       if (this.phase === 'running' && this.enclave) {
-        const heartbeat = this.enclave.generateHeartbeat();
-        this.lastHeartbeat = heartbeat.timestamp;
+        const heartbeat = this.enclave.generateHeartbeat()
+        this.lastHeartbeat = heartbeat.timestamp
       }
-    }, this.config.heartbeat.intervalMs);
+    }, this.config.heartbeat.intervalMs)
   }
 
   private startOnChainHeartbeat(): void {
     this.onChainHeartbeatInterval = setInterval(async () => {
       if (this.phase === 'running') {
-        await this.treasury.heartbeat();
-        logger.debug('[Orchestrator] Heartbeat sent');
+        await this.treasury.heartbeat()
+        logger.debug('[Orchestrator] Heartbeat sent')
       }
-    }, this.config.heartbeat.onChainIntervalMs);
+    }, this.config.heartbeat.onChainIntervalMs)
   }
 
   private startTrainingLoop(): void {
     this.trainingInterval = setInterval(async () => {
       if (this.phase === 'running') {
-        await this.runTrainingCycle();
+        await this.runTrainingCycle()
       }
-    }, this.config.training.intervalMs);
+    }, this.config.training.intervalMs)
   }
 }
 
@@ -506,24 +504,27 @@ export class UnruggableOrchestrator {
 // ============================================================================
 
 export function createUnruggableOrchestrator(
-  config?: Partial<UnruggableOrchestratorConfig>
+  config?: Partial<UnruggableOrchestratorConfig>,
 ): UnruggableOrchestrator {
   const defaultConfig: UnruggableOrchestratorConfig = {
     enclave: {
-      codeHash: (process.env.BABYLON_CODE_HASH ?? '0x' + '0'.repeat(64)) as Hex,
+      codeHash: (process.env.BABYLON_CODE_HASH ?? `0x${'0'.repeat(64)}`) as Hex,
       instanceId: process.env.BABYLON_INSTANCE_ID ?? `instance-${Date.now()}`,
       treasuryAddress: (process.env.BABYLON_TREASURY_ADDRESS ??
         '0x0000000000000000000000000000000000000000') as `0x${string}`,
-      rpcUrl: process.env.JEJU_RPC_URL ?? 'http://localhost:9545',
+      rpcUrl: process.env.JEJU_RPC_URL ?? 'http://localhost:6546',
       verbose: process.env.BABYLON_VERBOSE === 'true',
     },
     treasury: {
       address: (process.env.BABYLON_TREASURY_ADDRESS ??
         '0x0000000000000000000000000000000000000000') as `0x${string}`,
-      rpcUrl: process.env.JEJU_RPC_URL ?? 'http://localhost:9545',
+      rpcUrl: process.env.JEJU_RPC_URL ?? 'http://localhost:6546',
     },
     storage: {
-      endpoint: process.env.JEJU_STORAGE_ENDPOINT ?? 'http://localhost:5001',
+      // IPFS API port from centralized config (default 5001)
+      endpoint:
+        process.env.JEJU_STORAGE_ENDPOINT ??
+        `http://localhost:${process.env.IPFS_API_PORT ?? '5001'}`,
       provider: 'ipfs',
     },
     heartbeat: {
@@ -535,21 +536,21 @@ export function createUnruggableOrchestrator(
       enabled: process.env.BABYLON_TRAINING_ENABLED === 'true',
     },
     ...config,
-  };
+  }
 
-  return new UnruggableOrchestrator(defaultConfig);
+  return new UnruggableOrchestrator(defaultConfig)
 }
 
-let globalOrchestrator: UnruggableOrchestrator | null = null;
+let globalOrchestrator: UnruggableOrchestrator | null = null
 
 export async function startUnruggableOrchestrator(): Promise<UnruggableOrchestrator> {
   if (!globalOrchestrator) {
-    globalOrchestrator = createUnruggableOrchestrator();
-    await globalOrchestrator.initialize();
+    globalOrchestrator = createUnruggableOrchestrator()
+    await globalOrchestrator.initialize()
   }
-  return globalOrchestrator;
+  return globalOrchestrator
 }
 
 export function getUnruggableOrchestrator(): UnruggableOrchestrator | null {
-  return globalOrchestrator;
+  return globalOrchestrator
 }

@@ -1,5 +1,5 @@
-import { cn } from '@babylon/shared';
-import type React from 'react';
+import { cn } from '@babylon/shared'
+import type React from 'react'
 
 /**
  * Input component for text input fields.
@@ -15,8 +15,8 @@ import type React from 'react';
  * <Input type="text" placeholder="Enter text..." />
  * ```
  */
-export type InputProps = React.ComponentPropsWithoutRef<'input'>;
+export type InputProps = React.ComponentPropsWithoutRef<'input'>
 
 export const Input = ({ className, ...props }: InputProps) => {
-  return <input className={cn(className)} {...props} />;
-};
+  return <input className={cn(className)} {...props} />
+}

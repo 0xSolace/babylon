@@ -2,10 +2,9 @@
  * Training Package Utilities
  */
 
-// Re-export logger from shared for convenience
-export { type LogData, Logger, type LogLevel, logger } from '@babylon/shared';
+export { type LogData, Logger, type LogLevel, logger } from '@babylon/shared'
 
-export { assertHasLLMCalls, validateLLMCalls } from './synthetic-detector';
+export { assertHasLLMCalls, validateLLMCalls } from './synthetic-detector'
 
 /**
  * Split an array into batches of a specified size
@@ -15,22 +14,22 @@ export { assertHasLLMCalls, validateLLMCalls } from './synthetic-detector';
  * @returns Array of batches
  */
 export function splitIntoBatches<T>(items: T[], batchSize: number): T[][] {
-  const batches: T[][] = [];
+  const batches: T[][] = []
   for (let i = 0; i < items.length; i += batchSize) {
-    batches.push(items.slice(i, i + batchSize));
+    batches.push(items.slice(i, i + batchSize))
   }
-  return batches;
+  return batches
 }
 
 /**
  * Statistics result for numeric arrays
  */
 export interface ArrayStats {
-  mean: number;
-  median: number;
-  std: number;
-  min: number;
-  max: number;
+  mean: number
+  median: number
+  std: number
+  min: number
+  max: number
 }
 
 /**
@@ -41,19 +40,19 @@ export interface ArrayStats {
  */
 export function calculateArrayStats(values: number[]): ArrayStats {
   if (values.length === 0) {
-    return { mean: 0, median: 0, std: 0, min: 0, max: 0 };
+    return { mean: 0, median: 0, std: 0, min: 0, max: 0 }
   }
 
-  const sorted = [...values].sort((a, b) => a - b);
-  const mean = values.reduce((a, b) => a + b, 0) / values.length;
-  const median = sorted[Math.floor(values.length / 2)] ?? 0;
+  const sorted = [...values].sort((a, b) => a - b)
+  const mean = values.reduce((a, b) => a + b, 0) / values.length
+  const median = sorted[Math.floor(values.length / 2)] ?? 0
   const variance =
-    values.reduce((sum, val) => sum + (val - mean) ** 2, 0) / values.length;
-  const std = Math.sqrt(variance);
-  const min = sorted[0] ?? 0;
-  const max = sorted[sorted.length - 1] ?? 0;
+    values.reduce((sum, val) => sum + (val - mean) ** 2, 0) / values.length
+  const std = Math.sqrt(variance)
+  const min = sorted[0] ?? 0
+  const max = sorted[sorted.length - 1] ?? 0
 
-  return { mean, median, std, min, max };
+  return { mean, median, std, min, max }
 }
 
 /**
@@ -64,7 +63,7 @@ export function calculateArrayStats(values: number[]): ArrayStats {
  * @returns Formatted percentage string (e.g., "75.0%")
  */
 export function formatPercent(value: number, decimals = 1): string {
-  return `${(value * 100).toFixed(decimals)}%`;
+  return `${(value * 100).toFixed(decimals)}%`
 }
 
 /**
@@ -78,10 +77,10 @@ export function formatPercent(value: number, decimals = 1): string {
 export function formatCurrency(
   value: number,
   decimals = 2,
-  prefix = '$'
+  prefix = '$',
 ): string {
-  const sign = value >= 0 ? '' : '-';
-  return `${sign}${prefix}${Math.abs(value).toFixed(decimals)}`;
+  const sign = value >= 0 ? '' : '-'
+  return `${sign}${prefix}${Math.abs(value).toFixed(decimals)}`
 }
 
 /**
@@ -95,8 +94,8 @@ export function formatCurrency(
 export function formatCurrencyWithSign(
   value: number,
   decimals = 2,
-  prefix = '$'
+  prefix = '$',
 ): string {
-  const sign = value >= 0 ? '+' : '-';
-  return `${sign}${prefix}${Math.abs(value).toFixed(decimals)}`;
+  const sign = value >= 0 ? '+' : '-'
+  return `${sign}${prefix}${Math.abs(value).toFixed(decimals)}`
 }

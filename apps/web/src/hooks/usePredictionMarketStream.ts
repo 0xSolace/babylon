@@ -1,72 +1,80 @@
-import { useSSEChannel } from '@/hooks/useSSE';
+import { useSSEChannel } from '@/hooks/useSSE'
 
 /**
  * SSE event for prediction market trades.
  */
 export interface PredictionTradeSSE {
-  type: 'prediction_trade';
-  marketId: string;
-  yesPrice: number;
-  noPrice: number;
-  yesShares: number;
-  noShares: number;
-  liquidity?: number;
+  type: 'prediction_trade'
+  marketId: string
+  yesPrice: number
+  noPrice: number
+  yesShares: number
+  noShares: number
+  liquidity?: number
   trade: {
-    actorType: 'user' | 'npc' | 'system';
-    actorId?: string;
-    action: 'buy' | 'sell' | 'close';
-    side: 'yes' | 'no';
-    shares: number;
-    amount: number;
-    price: number;
-    source: 'user_trade' | 'npc_trade' | 'system';
-    timestamp: string;
-  };
+    actorType: 'user' | 'npc' | 'system'
+    actorId?: string
+    action: 'buy' | 'sell' | 'close'
+    side: 'yes' | 'no'
+    shares: number
+    amount: number
+    price: number
+    source: 'user_trade' | 'npc_trade' | 'system'
+    timestamp: string
+  }
 }
 
 /**
  * SSE event for prediction market resolution.
  */
 export interface PredictionResolutionSSE {
-  type: 'prediction_resolution';
-  marketId: string;
-  winningSide: 'yes' | 'no';
-  yesPrice: number;
-  noPrice: number;
-  yesShares: number;
-  noShares: number;
-  liquidity?: number;
-  totalPayout: number;
-  timestamp: string;
-  resolutionProofUrl?: string;
-  resolutionDescription?: string;
+  type: 'prediction_resolution'
+  marketId: string
+  winningSide: 'yes' | 'no'
+  yesPrice: number
+  noPrice: number
+  yesShares: number
+  noShares: number
+  liquidity?: number
+  totalPayout: number
+  timestamp: string
+  resolutionProofUrl?: string
+  resolutionDescription?: string
 }
 
 /**
- * Union type for all prediction market SSE payloads.
+ * Type guard to check if data is a prediction trade SSE payload.
  */
-type SSEPayload = PredictionTradeSSE | PredictionResolutionSSE;
+const isPredictionTrade = (data: unknown): data is PredictionTradeSSE => {
+  if (!data || typeof data !== 'object' || data === null) return false
+  const dataObj = data as Record<string, unknown>
+  return (
+    dataObj.type === 'prediction_trade' && typeof dataObj.marketId === 'string'
+  )
+}
 
 /**
- * Type guard to check if data is a valid prediction market SSE payload.
+ * Type guard to check if data is a prediction resolution SSE payload.
  */
-const isPredictionPayload = (data: unknown): data is SSEPayload => {
-  if (!data || typeof data !== 'object' || data === null) return false;
-  const type = (data as { type?: string }).type;
-  if (type !== 'prediction_trade' && type !== 'prediction_resolution') {
-    return false;
-  }
-  return typeof (data as { marketId?: string }).marketId === 'string';
-};
+const isPredictionResolution = (
+  data: unknown,
+): data is PredictionResolutionSSE => {
+  if (!data || typeof data !== 'object' || data === null) return false
+  const dataObj = data as Record<string, unknown>
+  return (
+    dataObj.type === 'prediction_resolution' &&
+    typeof dataObj.marketId === 'string'
+  )
+}
 
 /**
  * Options for configuring prediction market stream subscriptions.
  */
 interface UsePredictionMarketStreamOptions {
   /** Callback invoked when a trade event is received */
-  onTrade?: (event: PredictionTradeSSE) => void;
+  onTrade?: (event: PredictionTradeSSE) => void
   /** Callback invoked when a resolution event is received */
-  onResolution?: (event: PredictionResolutionSSE) => void;
+  onResolution?: (event: PredictionResolutionSSE) => void
 }
 
 /**
@@ -93,21 +101,22 @@ interface UsePredictionMarketStreamOptions {
  */
 export function usePredictionMarketStream(
   marketId: string | null,
-  { onTrade, onResolution }: UsePredictionMarketStreamOptions = {}
+  { onTrade, onResolution }: UsePredictionMarketStreamOptions = {},
 ) {
-  const normalizedMarketId = marketId;
+  const normalizedMarketId = marketId
 
   useSSEChannel(normalizedMarketId ? 'markets' : null, (data) => {
-    if (!normalizedMarketId) return;
-    if (!isPredictionPayload(data)) return;
-    if (data.marketId !== normalizedMarketId) return;
+    if (!normalizedMarketId) return
 
-    if (data.type === 'prediction_trade') {
-      onTrade?.(data as PredictionTradeSSE);
-    } else if (data.type === 'prediction_resolution') {
-      onResolution?.(data as PredictionResolutionSSE);
+    if (isPredictionTrade(data) && data.marketId === normalizedMarketId) {
+      onTrade?.(data)
+    } else if (
+      isPredictionResolution(data) &&
+      data.marketId === normalizedMarketId
+    ) {
+      onResolution?.(data)
     }
-  });
+  })
 }
 
 /**
@@ -133,12 +142,10 @@ export function usePredictionMarketsSubscription({
   onResolution,
 }: UsePredictionMarketStreamOptions = {}) {
   useSSEChannel('markets', (data) => {
-    if (!isPredictionPayload(data)) return;
-
-    if (data.type === 'prediction_trade') {
-      onTrade?.(data as PredictionTradeSSE);
-    } else if (data.type === 'prediction_resolution') {
-      onResolution?.(data as PredictionResolutionSSE);
+    if (isPredictionTrade(data)) {
+      onTrade?.(data)
+    } else if (isPredictionResolution(data)) {
+      onResolution?.(data)
     }
-  });
+  })
 }

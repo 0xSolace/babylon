@@ -1,15 +1,13 @@
-'use client';
-
-import { cn } from '@babylon/shared';
-import { Loader2, Plus } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import type { ChatFilter } from './types';
+import { cn } from '@babylon/shared'
+import { Loader2, Plus } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import type { ChatFilter } from './types'
 
 interface ChatHeaderProps {
-  isConnected: boolean;
-  activeFilter: ChatFilter;
-  onFilterChange: (filter: ChatFilter) => void;
-  onCreateGroup: () => void;
+  isConnected: boolean
+  activeFilter: ChatFilter
+  onFilterChange: (filter: ChatFilter) => void
+  onCreateGroup: () => void
 }
 
 export function ChatHeader({
@@ -54,11 +52,14 @@ export function ChatHeader({
       {/* Filter Tabs */}
       <div className="mb-4 flex items-center border-border border-b">
         <button
+          type="button"
           onClick={() => onFilterChange('all')}
           aria-label="Show all conversations"
           className={cn(
             'relative min-h-[44px] flex-1 font-semibold transition-all hover:bg-muted/20',
-            activeFilter === 'all' ? 'text-foreground' : 'text-muted-foreground'
+            activeFilter === 'all'
+              ? 'text-foreground'
+              : 'text-muted-foreground',
           )}
         >
           All
@@ -67,11 +68,14 @@ export function ChatHeader({
           )}
         </button>
         <button
+          type="button"
           onClick={() => onFilterChange('dms')}
           aria-label="Show direct messages"
           className={cn(
             'relative min-h-[44px] flex-1 font-semibold transition-all hover:bg-muted/20',
-            activeFilter === 'dms' ? 'text-foreground' : 'text-muted-foreground'
+            activeFilter === 'dms'
+              ? 'text-foreground'
+              : 'text-muted-foreground',
           )}
         >
           DMs
@@ -80,13 +84,14 @@ export function ChatHeader({
           )}
         </button>
         <button
+          type="button"
           onClick={() => onFilterChange('groups')}
           aria-label="Show group chats"
           className={cn(
             'relative min-h-[44px] flex-1 font-semibold transition-all hover:bg-muted/20',
             activeFilter === 'groups'
               ? 'text-foreground'
-              : 'text-muted-foreground'
+              : 'text-muted-foreground',
           )}
         >
           Groups
@@ -96,5 +101,5 @@ export function ChatHeader({
         </button>
       </div>
     </div>
-  );
+  )
 }

@@ -6,36 +6,35 @@
  * @packageDocumentation
  */
 
-import { db } from '@babylon/db';
-import { generateRandomWallet } from '@babylon/shared';
-import { agentRegistry } from '../services/agent-registry.service';
-import { getAgentConfig } from '../shared/agent-config';
-import { logger } from '../shared/logger';
-import { generateSnowflakeId } from '../shared/snowflake';
+import { db } from '@babylon/db'
+import { generateRandomWallet, generateSnowflakeId } from '@babylon/shared'
+import { agentRegistry } from '../services/agent-registry.service'
+import { getAgentConfig } from '../shared/agent-config'
+import { logger } from '../shared/logger'
 
 export interface TestAgentConfig {
-  username?: string;
-  displayName?: string;
-  virtualBalance?: number;
-  pointsBalance?: number;
-  autonomousTrading?: boolean;
-  autonomousPosting?: boolean;
-  autonomousCommenting?: boolean;
-  autonomousDMs?: boolean;
-  autonomousGroupChats?: boolean;
-  systemPrompt?: string;
-  modelTier?: 'lite' | 'standard' | 'pro';
+  username?: string
+  displayName?: string
+  virtualBalance?: number
+  pointsBalance?: number
+  autonomousTrading?: boolean
+  autonomousPosting?: boolean
+  autonomousCommenting?: boolean
+  autonomousDMs?: boolean
+  autonomousGroupChats?: boolean
+  systemPrompt?: string
+  modelTier?: 'lite' | 'standard' | 'pro'
 }
 
 export interface CreateTestAgentResult {
-  agentId: string;
-  created: boolean;
+  agentId: string
+  created: boolean
   agent: {
-    id: string;
-    username: string;
-    displayName: string | null;
-    isAgent: boolean;
-  };
+    id: string
+    username: string
+    displayName: string | null
+    isAgent: boolean
+  }
 }
 
 /**
@@ -47,7 +46,7 @@ export interface CreateTestAgentResult {
  */
 export async function createTestAgent(
   prefix = 'test-agent',
-  config: TestAgentConfig = {}
+  config: TestAgentConfig = {},
 ): Promise<CreateTestAgentResult> {
   const {
     username,
@@ -61,26 +60,26 @@ export async function createTestAgent(
     autonomousGroupChats = false,
     systemPrompt = 'You are an autonomous trading agent on Babylon prediction markets. Make smart trading decisions based on market analysis.',
     modelTier = 'lite',
-  } = config;
+  } = config
 
   // Try to find existing agent with same prefix
-  let agent;
+  let agent: Awaited<ReturnType<typeof db.user.findFirst>> | undefined
   if (username) {
     agent = await db.user.findFirst({
       where: { username },
-    });
+    })
   } else {
     agent = await db.user.findFirst({
       where: { username: { startsWith: prefix } },
-    });
+    })
   }
 
-  let created = false;
+  let created = false
 
   if (!agent) {
     // Create new agent
-    const agentId = await generateSnowflakeId();
-    const finalUsername = username || `${prefix}-${agentId.slice(-6)}`;
+    const agentId = await generateSnowflakeId()
+    const finalUsername = username || `${prefix}-${agentId.slice(-6)}`
 
     // Insert user record
     agent = await db.user.create({
@@ -96,10 +95,10 @@ export async function createTestAgent(
         isTest: true,
         updatedAt: new Date(),
       },
-    });
+    })
 
     // Insert agent config record
-    const configId = await generateSnowflakeId();
+    const configId = await generateSnowflakeId()
     await db.userAgentConfig.create({
       data: {
         id: configId,
@@ -114,37 +113,37 @@ export async function createTestAgent(
         pointsBalance,
         updatedAt: new Date(),
       },
-    });
+    })
 
-    created = true;
+    created = true
 
     logger.info('Created test agent', {
       agentId: String(agent.id),
       username: String(agent.username),
       displayName: agent.displayName ? String(agent.displayName) : null,
-    });
+    })
   } else {
     logger.info('Using existing test agent', {
       agentId: String(agent.id),
       username: String(agent.username),
-    });
+    })
   }
 
   // Register in Agent Registry if not already registered
-  const agentIdStr = String(agent.id);
-  const usernameStr = String(agent.username);
-  const displayNameStr = agent.displayName ? String(agent.displayName) : null;
-  const isAgentBool = Boolean(agent.isAgent);
+  const agentIdStr = String(agent.id)
+  const usernameStr = String(agent.username)
+  const displayNameStr = agent.displayName ? String(agent.displayName) : null
+  const isAgentBool = Boolean(agent.isAgent)
 
   if (isAgentBool) {
     // Check if already registered before attempting registration
-    const existingReg = await agentRegistry.getAgentById(agentIdStr);
+    const existingReg = await agentRegistry.getAgentById(agentIdStr)
 
     if (!existingReg) {
-      logger.info('Registering user agent...', { userId: agentIdStr });
+      logger.info('Registering user agent...', { userId: agentIdStr })
 
       // Get agent config for system prompt
-      const agentConfig = await getAgentConfig(agentIdStr);
+      const agentConfig = await getAgentConfig(agentIdStr)
 
       await agentRegistry.registerUserAgent({
         userId: agentIdStr,
@@ -175,10 +174,10 @@ export async function createTestAgent(
           skills: [],
           domains: [],
         },
-      });
+      })
       logger.info('Registered test agent in registry', {
         agentId: agentIdStr,
-      });
+      })
     }
   }
 
@@ -191,7 +190,7 @@ export async function createTestAgent(
       displayName: displayNameStr,
       isAgent: isAgentBool,
     },
-  };
+  }
 }
 
 /**
@@ -205,16 +204,16 @@ export async function createTestAgent(
 export async function createTestAgents(
   count: number,
   prefix = 'test-agent',
-  baseConfig: TestAgentConfig = {}
+  baseConfig: TestAgentConfig = {},
 ): Promise<CreateTestAgentResult[]> {
-  const results: CreateTestAgentResult[] = [];
+  const results: CreateTestAgentResult[] = []
 
   for (let i = 0; i < count; i++) {
-    const result = await createTestAgent(`${prefix}-${i}`, baseConfig);
-    results.push(result);
+    const result = await createTestAgent(`${prefix}-${i}`, baseConfig)
+    results.push(result)
   }
 
-  return results;
+  return results
 }
 
 /**
@@ -224,29 +223,29 @@ export async function createTestAgents(
  * @returns Number of agents deleted
  */
 export async function cleanupTestAgents(
-  prefix = 'test-agent'
+  prefix = 'test-agent',
 ): Promise<number> {
   // Get test agents
   const testAgents = await db.user.findMany({
     where: { username: { startsWith: prefix } },
-  });
+  })
 
   if (testAgents.length === 0) {
-    return 0;
+    return 0
   }
 
   // Delete agent configs first
   for (const agent of testAgents) {
     await db.userAgentConfig.deleteMany({
       where: { userId: String(agent.id) },
-    });
+    })
   }
 
   // Delete the agents
   const result = await db.user.deleteMany({
     where: { username: { startsWith: prefix } },
-  });
+  })
 
-  logger.info(`Cleaned up ${result.count} test agents`);
-  return result.count;
+  logger.info(`Cleaned up ${result.count} test agents`)
+  return result.count
 }

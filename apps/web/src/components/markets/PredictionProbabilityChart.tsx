@@ -6,15 +6,13 @@
  * tracking is added to the prediction market service.
  */
 
-'use client';
-
-import type { PredictionHistoryPoint } from '@/hooks/usePredictionHistory';
+import type { PredictionHistoryPoint } from '@/hooks/usePredictionHistory'
 
 export interface PredictionProbabilityChartProps {
-  marketId: string | number;
-  data?: PredictionHistoryPoint[];
-  showBrush?: boolean;
-  height?: number;
+  marketId: string | number
+  data?: PredictionHistoryPoint[]
+  showBrush?: boolean
+  height?: number
 }
 
 export function PredictionProbabilityChart({
@@ -24,9 +22,9 @@ export function PredictionProbabilityChart({
   height = 200,
 }: PredictionProbabilityChartProps) {
   // Placeholder - implement chart
-  void marketId;
-  void data;
-  void showBrush;
+  void marketId
+  void data
+  void showBrush
 
   return (
     <div
@@ -37,5 +35,5 @@ export function PredictionProbabilityChart({
         Probability chart coming soon
       </span>
     </div>
-  );
+  )
 }

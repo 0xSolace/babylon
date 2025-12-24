@@ -1,22 +1,20 @@
-'use client';
-
-import { cn } from '@babylon/shared';
-import { Search, X } from 'lucide-react';
+import { cn } from '@babylon/shared'
+import { Search, X } from 'lucide-react'
 
 /**
  * Props for the SearchBar component.
  */
 interface SearchBarProps {
   /** Current search input value */
-  value: string;
+  value: string
   /** Callback when search value changes */
-  onChange: (value: string) => void;
+  onChange: (value: string) => void
   /** Placeholder text */
-  placeholder?: string;
+  placeholder?: string
   /** Additional CSS classes */
-  className?: string;
+  className?: string
   /** Whether to use compact styling */
-  compact?: boolean;
+  compact?: boolean
 }
 
 /**
@@ -49,7 +47,7 @@ export function SearchBar({
       <div
         className={cn(
           'pointer-events-none absolute top-1/2 -translate-y-1/2',
-          compact ? 'left-3' : 'left-4'
+          compact ? 'left-3' : 'left-4',
         )}
       >
         <Search
@@ -68,21 +66,23 @@ export function SearchBar({
           'transition-all duration-200',
           'text-foreground',
           compact ? 'py-1.5 pr-9 pl-9 text-sm' : 'py-2.5 pr-10 pl-11',
-          'rounded-full'
+          'rounded-full',
         )}
       />
       {value && (
         <button
+          type="button"
           onClick={() => onChange('')}
           className={cn(
             'absolute top-1/2 -translate-y-1/2 p-1 transition-colors hover:bg-muted/50',
-            compact ? 'right-2' : 'right-3'
+            compact ? 'right-2' : 'right-3',
           )}
+          aria-label="Clear search"
         >
           <X
             className={cn(
               compact ? 'h-3.5 w-3.5' : 'h-4 w-4',
-              'text-muted-foreground'
+              'text-muted-foreground',
             )}
           />
         </button>
@@ -94,5 +94,5 @@ export function SearchBar({
         }
       `}</style>
     </div>
-  );
+  )
 }

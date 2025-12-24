@@ -12,89 +12,93 @@
  * - Server must be running
  */
 
-import { test as setup } from '@playwright/test';
-import { existsSync, writeFileSync } from 'fs';
-import path from 'path';
+import { existsSync, writeFileSync } from 'node:fs'
+import path from 'node:path'
+import { test as setup } from '@playwright/test'
 
-const authFile = path.join(__dirname, '../../.playwright/auth.json');
-const tokenFile = path.join(__dirname, '../../.playwright/test-tokens.json');
-const baseURL = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:5007';
+// Centralized port configuration
+const API_PORT = process.env.BABYLON_API_PORT ?? '5009'
+
+const authFile = path.join(__dirname, '../../.playwright/auth.json')
+const tokenFile = path.join(__dirname, '../../.playwright/test-tokens.json')
+const baseURL =
+  process.env.PLAYWRIGHT_BASE_URL ?? `http://localhost:${API_PORT}`
 
 setup('extract auth tokens for integration tests', async ({ page }) => {
   // Check if auth state exists (from E2E setup)
   if (!existsSync(authFile)) {
     throw new Error(
       `Authentication state file not found: ${authFile}\n` +
-        'Please run E2E auth setup first: bunx playwright test --project=setup'
-    );
+        'Please run E2E auth setup first: bunx playwright test --project=setup',
+    )
   }
 
   // Load authenticated state
-  await page.goto(baseURL);
+  await page.goto(baseURL)
 
   // Wait for OAuth3 client to be ready
-  console.log('⏳ Waiting for OAuth3 client to initialize...');
+  console.log('⏳ Waiting for OAuth3 client to initialize...')
   await page.waitForFunction(
     () => {
-      if (typeof window === 'undefined') return false;
+      if (typeof window === 'undefined') return false
       const oauth3 = (
         window as {
           oauth3?: {
-            ready?: boolean;
-            getAccessToken?: () => Promise<string | null>;
-          };
+            ready?: boolean
+            getAccessToken?: () => Promise<string | null>
+          }
         }
-      ).oauth3;
+      ).oauth3
       return (
         oauth3?.ready === true && typeof oauth3.getAccessToken === 'function'
-      );
+      )
     },
-    { timeout: 30000 }
-  );
+    { timeout: 30000 },
+  )
 
-  console.log('✅ OAuth3 client is ready');
+  console.log('✅ OAuth3 client is ready')
 
   // Extract access token and user ID from browser
-  console.log('🔑 Extracting authentication tokens...');
+  console.log('🔑 Extracting authentication tokens...')
   const { accessToken, userId } = await page.evaluate(async (apiUrl) => {
     const oauth3 = (
       window as { oauth3?: { getAccessToken?: () => Promise<string | null> } }
-    ).oauth3;
+    ).oauth3
     if (!oauth3?.getAccessToken) {
-      throw new Error('OAuth3 client getAccessToken not available');
+      throw new Error('OAuth3 client getAccessToken not available')
     }
 
-    const token = await oauth3.getAccessToken();
+    const token = await oauth3.getAccessToken()
     if (!token) {
       throw new Error(
-        'Could not get access token - user may not be authenticated'
-      );
+        'Could not get access token - user may not be authenticated',
+      )
     }
 
     // Get user ID from API
     const response = await fetch(`${apiUrl}/api/users/me`, {
       headers: { Authorization: `Bearer ${token}` },
-    });
+    })
 
     if (!response.ok) {
       throw new Error(
-        `API request failed: ${response.status} ${response.statusText}`
-      );
+        `API request failed: ${response.status} ${response.statusText}`,
+      )
     }
 
-    const userData = await response.json();
+    const userData = await response.json()
     return {
       accessToken: token,
       userId: userData.user?.id || null,
-    };
-  }, baseURL);
+    }
+  }, baseURL)
 
   if (!accessToken) {
-    throw new Error('Failed to extract access token');
+    throw new Error('Failed to extract access token')
   }
 
   if (!userId) {
-    throw new Error('Failed to extract user ID');
+    throw new Error('Failed to extract user ID')
   }
 
   // Save tokens for integration tests
@@ -103,12 +107,12 @@ setup('extract auth tokens for integration tests', async ({ page }) => {
     TEST_ACCESS_TOKEN: accessToken,
     updatedAt: new Date().toISOString(),
     baseURL: baseURL,
-  };
+  }
 
-  writeFileSync(tokenFile, JSON.stringify(tokenData, null, 2));
+  writeFileSync(tokenFile, JSON.stringify(tokenData, null, 2))
 
-  console.log(`✅ Auth tokens extracted and saved to ${tokenFile}`);
-  console.log(`   User ID: ${userId}`);
-  console.log(`   Token: ${accessToken.substring(0, 20)}...`);
-  console.log(`   Updated: ${tokenData.updatedAt}`);
-});
+  console.log(`✅ Auth tokens extracted and saved to ${tokenFile}`)
+  console.log(`   User ID: ${userId}`)
+  console.log(`   Token: ${accessToken.substring(0, 20)}...`)
+  console.log(`   Updated: ${tokenData.updatedAt}`)
+})

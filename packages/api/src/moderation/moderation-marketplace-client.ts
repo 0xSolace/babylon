@@ -14,150 +14,17 @@
  * @see https://github.com/elizaos/jeju/packages/contracts/src/moderation/ModerationMarketplace.sol
  */
 
-import { logger } from '@babylon/shared';
+import { logger, MODERATION_MARKETPLACE_ABI } from '@babylon/shared'
+
 import {
   type Address,
   createPublicClient,
   createWalletClient,
   type Hex,
   http,
-} from 'viem';
-import { privateKeyToAccount } from 'viem/accounts';
-import { base, baseSepolia, hardhat } from 'viem/chains';
-
-// ModerationMarketplace ABI (minimal)
-const MODERATION_MARKETPLACE_ABI = [
-  // View functions
-  {
-    name: 'getCase',
-    type: 'function',
-    stateMutability: 'view',
-    inputs: [{ name: 'caseId', type: 'bytes32' }],
-    outputs: [
-      {
-        name: 'banCase',
-        type: 'tuple',
-        components: [
-          { name: 'caseId', type: 'bytes32' },
-          { name: 'reporter', type: 'address' },
-          { name: 'target', type: 'address' },
-          { name: 'reporterStake', type: 'uint256' },
-          { name: 'targetStake', type: 'uint256' },
-          { name: 'status', type: 'uint8' },
-          { name: 'outcome', type: 'uint8' },
-          { name: 'yesVotes', type: 'uint256' },
-          { name: 'noVotes', type: 'uint256' },
-          { name: 'reason', type: 'string' },
-          { name: 'evidence', type: 'string' },
-          { name: 'createdAt', type: 'uint256' },
-          { name: 'votingEndsAt', type: 'uint256' },
-          { name: 'resolvedAt', type: 'uint256' },
-        ],
-      },
-    ],
-  },
-  {
-    name: 'getStake',
-    type: 'function',
-    stateMutability: 'view',
-    inputs: [{ name: 'user', type: 'address' }],
-    outputs: [
-      {
-        name: 'info',
-        type: 'tuple',
-        components: [
-          { name: 'amount', type: 'uint256' },
-          { name: 'stakedAt', type: 'uint256' },
-          { name: 'stakedBlock', type: 'uint256' },
-          { name: 'lastActivityBlock', type: 'uint256' },
-          { name: 'isStaked', type: 'bool' },
-        ],
-      },
-    ],
-  },
-  {
-    name: 'getVotingPower',
-    type: 'function',
-    stateMutability: 'view',
-    inputs: [{ name: 'user', type: 'address' }],
-    outputs: [{ name: 'power', type: 'uint256' }],
-  },
-  {
-    name: 'isStaked',
-    type: 'function',
-    stateMutability: 'view',
-    inputs: [{ name: 'user', type: 'address' }],
-    outputs: [{ type: 'bool' }],
-  },
-  {
-    name: 'minStake',
-    type: 'function',
-    stateMutability: 'view',
-    inputs: [],
-    outputs: [{ type: 'uint256' }],
-  },
-  {
-    name: 'stakingToken',
-    type: 'function',
-    stateMutability: 'view',
-    inputs: [],
-    outputs: [{ type: 'address' }],
-  },
-  // Write functions
-  {
-    name: 'stake',
-    type: 'function',
-    stateMutability: 'nonpayable',
-    inputs: [{ name: 'amount', type: 'uint256' }],
-    outputs: [],
-  },
-  {
-    name: 'reportUser',
-    type: 'function',
-    stateMutability: 'nonpayable',
-    inputs: [
-      { name: 'target', type: 'address' },
-      { name: 'reason', type: 'string' },
-      { name: 'evidence', type: 'string' },
-    ],
-    outputs: [{ name: 'caseId', type: 'bytes32' }],
-  },
-  {
-    name: 'challengeBan',
-    type: 'function',
-    stateMutability: 'nonpayable',
-    inputs: [{ name: 'caseId', type: 'bytes32' }],
-    outputs: [],
-  },
-  {
-    name: 'vote',
-    type: 'function',
-    stateMutability: 'nonpayable',
-    inputs: [
-      { name: 'caseId', type: 'bytes32' },
-      { name: 'position', type: 'uint8' },
-      { name: 'amount', type: 'uint256' },
-    ],
-    outputs: [],
-  },
-  {
-    name: 'resolveCase',
-    type: 'function',
-    stateMutability: 'nonpayable',
-    inputs: [{ name: 'caseId', type: 'bytes32' }],
-    outputs: [],
-  },
-  {
-    name: 'requestReReview',
-    type: 'function',
-    stateMutability: 'nonpayable',
-    inputs: [
-      { name: 'caseId', type: 'bytes32' },
-      { name: 'newEvidence', type: 'string' },
-    ],
-    outputs: [{ name: 'appealCaseId', type: 'bytes32' }],
-  },
-] as const;
+} from 'viem'
+import { privateKeyToAccount } from 'viem/accounts'
+import { base, baseSepolia, hardhat } from 'viem/chains'
 
 export enum BanStatus {
   NONE = 0,
@@ -175,144 +42,109 @@ export enum MarketOutcome {
 }
 
 export enum VotePosition {
-  YES = 0, // Support ban
-  NO = 1, // Oppose ban
+  YES = 0,
+  NO = 1,
 }
 
 export interface BanCase {
-  caseId: Hex;
-  reporter: Address;
-  target: Address;
-  reporterStake: bigint;
-  targetStake: bigint;
-  status: BanStatus;
-  outcome: MarketOutcome;
-  yesVotes: bigint;
-  noVotes: bigint;
-  reason: string;
-  evidence: string;
-  createdAt: Date;
-  votingEndsAt: Date;
-  resolvedAt: Date | null;
+  caseId: Hex
+  reporter: Address
+  target: Address
+  reporterStake: bigint
+  targetStake: bigint
+  status: BanStatus
+  outcome: MarketOutcome
+  yesVotes: bigint
+  noVotes: bigint
+  reason: string
+  evidenceHash: Hex
+  createdAt: Date
+  marketOpenUntil: Date
+  resolved: boolean
+  totalPot: bigint
+  appealCount: bigint
 }
 
 export interface StakeInfo {
-  amount: bigint;
-  stakedAt: Date;
-  stakedBlock: bigint;
-  lastActivityBlock: bigint;
-  isStaked: boolean;
+  amount: bigint
+  stakedAt: Date
+  stakedBlock: bigint
+  lastActivityBlock: bigint
+  isStaked: boolean
 }
 
 export interface ReportParams {
-  target: Address;
-  reason: string;
-  evidence: string;
+  target: Address
+  reason: string
+  evidenceHash: Hex
 }
 
 export class ModerationMarketplaceClient {
-  private publicClient;
-  private walletClient;
-  private contractAddress: Address;
-  private account;
+  private publicClient
+  private walletClient
+  private contractAddress: Address
+  private account
 
   constructor(privateKey?: Hex) {
-    const network =
-      process.env.JEJU_NETWORK ||
-      process.env.NEXT_PUBLIC_JEJU_NETWORK ||
-      'localnet';
-    const rpcUrl = process.env.JEJU_RPC_URL || this.getDefaultRpcUrl(network);
+    const network = process.env.PUBLIC_JEJU_NETWORK || 'localnet'
+    const rpcUrl = process.env.JEJU_RPC_URL || this.getDefaultRpcUrl(network)
     const contractAddr = process.env.MODERATION_MARKETPLACE_ADDRESS as
       | Address
-      | undefined;
+      | undefined
 
     if (!contractAddr) {
       throw new Error(
-        '[ModerationMarketplace] MODERATION_MARKETPLACE_ADDRESS not configured'
-      );
+        '[ModerationMarketplace] MODERATION_MARKETPLACE_ADDRESS not configured',
+      )
     }
 
-    this.contractAddress = contractAddr;
-    const chain = this.getChain(network);
+    this.contractAddress = contractAddr
+    const chain = this.getChain(network)
 
     this.publicClient = createPublicClient({
       chain,
       transport: http(rpcUrl),
-    });
+    })
 
-    // Only create wallet client if private key provided
     if (privateKey) {
-      this.account = privateKeyToAccount(privateKey);
+      this.account = privateKeyToAccount(privateKey)
       this.walletClient = createWalletClient({
         account: this.account,
         chain,
         transport: http(rpcUrl),
-      });
+      })
     }
   }
 
   private getDefaultRpcUrl(network: string): string {
     switch (network) {
       case 'mainnet':
-        return 'https://rpc.jeju.network';
+        return 'https://rpc.jeju.network'
       case 'testnet':
-        return 'https://testnet-rpc.jeju.network';
+        return 'https://testnet-rpc.jeju.network'
       default:
-        return 'http://127.0.0.1:9545';
+        return 'http://127.0.0.1:6546'
     }
   }
 
   private getChain(network: string) {
     switch (network) {
       case 'mainnet':
-        return base;
+        return base
       case 'testnet':
-        return baseSepolia;
+        return baseSepolia
       default:
-        return hardhat;
+        return hardhat
     }
   }
 
-  private requireWallet(): void {
+  private requireWallet(): NonNullable<typeof this.walletClient> {
     if (!this.walletClient || !this.account) {
       throw new Error(
-        '[ModerationMarketplace] Wallet required for this operation'
-      );
+        '[ModerationMarketplace] Wallet required for this operation',
+      )
     }
-  }
-
-  /**
-   * Get minimum stake required
-   */
-  async getMinStake(): Promise<bigint> {
-    return this.publicClient.readContract({
-      address: this.contractAddress,
-      abi: MODERATION_MARKETPLACE_ABI,
-      functionName: 'minStake',
-    });
-  }
-
-  /**
-   * Get staking token address
-   */
-  async getStakingToken(): Promise<Address> {
-    return this.publicClient.readContract({
-      address: this.contractAddress,
-      abi: MODERATION_MARKETPLACE_ABI,
-      functionName: 'stakingToken',
-    });
-  }
-
-  /**
-   * Check if user is staked
-   */
-  async isStaked(user: Address): Promise<boolean> {
-    return this.publicClient.readContract({
-      address: this.contractAddress,
-      abi: MODERATION_MARKETPLACE_ABI,
-      functionName: 'isStaked',
-      args: [user],
-    });
+    return this.walletClient
   }
 
   /**
@@ -324,7 +156,7 @@ export class ModerationMarketplaceClient {
       abi: MODERATION_MARKETPLACE_ABI,
       functionName: 'getStake',
       args: [user],
-    });
+    })
 
     return {
       amount: info.amount,
@@ -332,19 +164,27 @@ export class ModerationMarketplaceClient {
       stakedBlock: info.stakedBlock,
       lastActivityBlock: info.lastActivityBlock,
       isStaked: info.isStaked,
-    };
+    }
   }
 
   /**
-   * Get user's voting power
+   * Check if user is staked
    */
-  async getVotingPower(user: Address): Promise<bigint> {
+  async isStaked(user: Address): Promise<boolean> {
+    const stakeInfo = await this.getStake(user)
+    return stakeInfo.isStaked
+  }
+
+  /**
+   * Check if user is banned
+   */
+  async isBanned(user: Address): Promise<boolean> {
     return this.publicClient.readContract({
       address: this.contractAddress,
       abi: MODERATION_MARKETPLACE_ABI,
-      functionName: 'getVotingPower',
+      functionName: 'isBanned',
       args: [user],
-    });
+    })
   }
 
   /**
@@ -356,7 +196,7 @@ export class ModerationMarketplaceClient {
       abi: MODERATION_MARKETPLACE_ABI,
       functionName: 'getCase',
       args: [caseId],
-    });
+    })
 
     return {
       caseId: banCase.caseId,
@@ -369,165 +209,195 @@ export class ModerationMarketplaceClient {
       yesVotes: banCase.yesVotes,
       noVotes: banCase.noVotes,
       reason: banCase.reason,
-      evidence: banCase.evidence,
+      evidenceHash: banCase.evidenceHash,
       createdAt: new Date(Number(banCase.createdAt) * 1000),
-      votingEndsAt: new Date(Number(banCase.votingEndsAt) * 1000),
-      resolvedAt:
-        banCase.resolvedAt > 0n
-          ? new Date(Number(banCase.resolvedAt) * 1000)
-          : null,
-    };
+      marketOpenUntil: new Date(Number(banCase.marketOpenUntil) * 1000),
+      resolved: banCase.resolved,
+      totalPot: banCase.totalPot,
+      appealCount: banCase.appealCount,
+    }
   }
 
   /**
    * Stake tokens to participate in moderation
+   * Note: stake() is payable - send ETH as value
    */
-  async stake(amount: bigint): Promise<Hex> {
-    this.requireWallet();
+  async stake(): Promise<Hex> {
+    const wallet = this.requireWallet()
 
-    const hash = await this.walletClient!.writeContract({
+    const hash = await wallet.writeContract({
       address: this.contractAddress,
       abi: MODERATION_MARKETPLACE_ABI,
       functionName: 'stake',
+      args: [],
+    })
+
+    logger.info('Staked for moderation', { hash }, 'ModerationMarketplace')
+    return hash
+  }
+
+  /**
+   * Unstake tokens
+   */
+  async unstake(amount: bigint): Promise<Hex> {
+    const wallet = this.requireWallet()
+
+    const hash = await wallet.writeContract({
+      address: this.contractAddress,
+      abi: MODERATION_MARKETPLACE_ABI,
+      functionName: 'unstake',
       args: [amount],
-    });
+    })
 
     logger.info(
-      'Staked for moderation',
+      'Unstaked from moderation',
       { amount: amount.toString(), hash },
-      'ModerationMarketplace'
-    );
-    return hash;
+      'ModerationMarketplace',
+    )
+    return hash
   }
 
   /**
-   * Report a user for moderation
-   * Must be staked to report
+   * Open a moderation case against a user
+   * Must be staked to open cases
    */
-  async reportUser(params: ReportParams): Promise<Hex> {
-    this.requireWallet();
+  async openCase(params: ReportParams): Promise<Hex> {
+    const wallet = this.requireWallet()
 
-    const hash = await this.walletClient!.writeContract({
+    const hash = await wallet.writeContract({
       address: this.contractAddress,
       abi: MODERATION_MARKETPLACE_ABI,
-      functionName: 'reportUser',
-      args: [params.target, params.reason, params.evidence],
-    });
+      functionName: 'openCase',
+      args: [params.target, params.reason, params.evidenceHash],
+    })
 
     logger.info(
-      'Reported user',
+      'Opened moderation case',
       { target: params.target, reason: params.reason, hash },
-      'ModerationMarketplace'
-    );
-    return hash;
+      'ModerationMarketplace',
+    )
+    return hash
   }
 
   /**
-   * Challenge an ON_NOTICE ban by staking
+   * Challenge a case by staking
+   * Note: challengeCase is payable
    */
-  async challengeBan(caseId: Hex): Promise<Hex> {
-    this.requireWallet();
+  async challengeCase(caseId: Hex): Promise<Hex> {
+    const wallet = this.requireWallet()
 
-    const hash = await this.walletClient!.writeContract({
+    const hash = await wallet.writeContract({
       address: this.contractAddress,
       abi: MODERATION_MARKETPLACE_ABI,
-      functionName: 'challengeBan',
+      functionName: 'challengeCase',
       args: [caseId],
-    });
+    })
 
-    logger.info('Challenged ban', { caseId, hash }, 'ModerationMarketplace');
-    return hash;
+    logger.info('Challenged case', { caseId, hash }, 'ModerationMarketplace')
+    return hash
   }
 
   /**
    * Vote on a moderation case
    */
-  async vote(
-    caseId: Hex,
-    position: VotePosition,
-    amount: bigint
-  ): Promise<Hex> {
-    this.requireWallet();
+  async vote(caseId: Hex, position: VotePosition): Promise<Hex> {
+    const wallet = this.requireWallet()
 
-    const hash = await this.walletClient!.writeContract({
+    const hash = await wallet.writeContract({
       address: this.contractAddress,
       abi: MODERATION_MARKETPLACE_ABI,
       functionName: 'vote',
-      args: [caseId, position, amount],
-    });
+      args: [caseId, position],
+    })
 
     logger.info(
       'Voted on case',
       {
         caseId,
         position: VotePosition[position],
-        amount: amount.toString(),
         hash,
       },
-      'ModerationMarketplace'
-    );
-    return hash;
+      'ModerationMarketplace',
+    )
+    return hash
   }
 
   /**
    * Resolve a case after voting period ends
    */
   async resolveCase(caseId: Hex): Promise<Hex> {
-    this.requireWallet();
+    const wallet = this.requireWallet()
 
-    const hash = await this.walletClient!.writeContract({
+    const hash = await wallet.writeContract({
       address: this.contractAddress,
       abi: MODERATION_MARKETPLACE_ABI,
       functionName: 'resolveCase',
       args: [caseId],
-    });
+    })
 
-    logger.info('Resolved case', { caseId, hash }, 'ModerationMarketplace');
-    return hash;
+    logger.info('Resolved case', { caseId, hash }, 'ModerationMarketplace')
+    return hash
   }
 
   /**
-   * Request re-review of a ban (appeal)
-   * Requires 10x the original stake
+   * Request re-review of a case (appeal)
+   * Note: requestReReview is payable
    */
-  async requestReReview(caseId: Hex, newEvidence: string): Promise<Hex> {
-    this.requireWallet();
+  async requestReReview(caseId: Hex): Promise<Hex> {
+    const wallet = this.requireWallet()
 
-    const hash = await this.walletClient!.writeContract({
+    const hash = await wallet.writeContract({
       address: this.contractAddress,
       abi: MODERATION_MARKETPLACE_ABI,
       functionName: 'requestReReview',
-      args: [caseId, newEvidence],
-    });
+      args: [caseId],
+    })
 
     logger.info(
       'Requested re-review',
       { caseId, hash },
-      'ModerationMarketplace'
-    );
-    return hash;
+      'ModerationMarketplace',
+    )
+    return hash
+  }
+
+  /**
+   * Claim rewards from a resolved case
+   */
+  async claimRewards(caseId: Hex): Promise<Hex> {
+    const wallet = this.requireWallet()
+
+    const hash = await wallet.writeContract({
+      address: this.contractAddress,
+      abi: MODERATION_MARKETPLACE_ABI,
+      functionName: 'claimRewards',
+      args: [caseId],
+    })
+
+    logger.info('Claimed rewards', { caseId, hash }, 'ModerationMarketplace')
+    return hash
   }
 }
 
 // Read-only singleton
-let publicModerationClient: ModerationMarketplaceClient | null = null;
+let publicModerationClient: ModerationMarketplaceClient | null = null
 
 export function getModerationMarketplaceClient(): ModerationMarketplaceClient {
   if (!publicModerationClient) {
-    publicModerationClient = new ModerationMarketplaceClient();
+    publicModerationClient = new ModerationMarketplaceClient()
   }
-  return publicModerationClient;
+  return publicModerationClient
 }
 
 export function resetModerationMarketplaceClient(): void {
-  publicModerationClient = null;
+  publicModerationClient = null
 }
 
 /**
  * Create a client with write capabilities
  */
 export function createModerationClient(
-  privateKey: Hex
+  privateKey: Hex,
 ): ModerationMarketplaceClient {
-  return new ModerationMarketplaceClient(privateKey);
+  return new ModerationMarketplaceClient(privateKey)
 }

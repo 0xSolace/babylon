@@ -1,27 +1,20 @@
 /**
  * Babylon Engine Package
  * Core game simulation, generation, and decision engines
+ *
+ * NOTE: This package should have NO server dependencies (fs, child_process, etc.)
+ * Server-side utilities like token counting live in @babylon/api
  */
 
-export {
-  budgetTokens,
-  countTokens,
-  countTokensSync,
-  getModelTokenLimit,
-  getSafeContextLimit,
-  MODEL_TOKEN_LIMITS,
-  truncateToTokenLimit,
-  truncateToTokenLimitSync,
-} from '@babylon/api';
 // Prediction Pricing
 export {
   calculateExpectedPayout,
   PredictionPricing,
   type ShareCalculation,
   type ShareCalculationWithFees,
-} from '@babylon/core/markets/prediction';
+} from '@babylon/shared'
 // Article Generator
-export { type Article, ArticleGenerator } from './ArticleGenerator';
+export { type Article, ArticleGenerator } from './ArticleGenerator'
 // Actors Data Loader
 export {
   clearDataCache,
@@ -31,9 +24,9 @@ export {
   loadActorById,
   loadActorsData,
   loadOrganizationById,
-} from './actors-loader';
+} from './actors-loader'
 // State Store Adapters
-export { DbStateStore, InMemoryStateStore } from './adapters';
+export { DbStateStore, InMemoryStateStore } from './adapters'
 // Configuration
 export {
   getDeployerPrivateKey,
@@ -44,19 +37,19 @@ export {
   hasDeployerKey,
   hasOracleKey,
   isDevMode,
-} from './config/dev-keys';
+} from './config/dev-keys'
 export {
   FEE_CONFIG,
   type FeeTransactionType,
   type FeeType,
-} from './config/fees';
+} from './config/fees'
 export {
   GroupChatServiceConfig,
   GroupInviteConfig,
   getGroupChatConfigSummary,
   NPCGroupDynamicsConfig,
   validateGroupChatConfig,
-} from './config/group-chat-config';
+} from './config/group-chat-config'
 export {
   DEFAULT_SIMULATION_CONFIG,
   PREDICTION_TEMPLATES,
@@ -66,13 +59,13 @@ export {
   SIMULATION_QUESTIONS,
   SIMULATION_STRATEGIES,
   type SimulationStrategy,
-} from './config/simulation';
+} from './config/simulation'
 // Data Exports
 export {
   getQuestionExamples,
   questionExamples,
-} from './data/question-examples';
-export { realityGroundingContent } from './data/reality-grounding';
+} from './data/question-examples'
+export { realityGroundingContent } from './data/reality-grounding'
 // Emotion System
 export {
   type EmotionalState,
@@ -80,18 +73,24 @@ export {
   getRelationshipModifier,
   luckToDescription,
   moodToEmotion,
-} from './EmotionSystem';
+} from './EmotionSystem'
+// Engine Events - subscribe to these from other packages
+export {
+  type EngineEventMap,
+  type EngineEventName,
+  engineEvents,
+} from './events'
 // Feed Generator
-export { FeedGenerator } from './FeedGenerator';
+export { FeedGenerator } from './FeedGenerator'
 // Bias Engine
 export {
   type BiasAdjustment,
   type BiasConfig,
   BiasEngine,
   biasEngine,
-} from './feedback/bias-engine';
+} from './feedback/bias-engine'
 // Game Clock (injectable time abstraction)
-export { GameClock, type GameClockConfig, type GameTime } from './GameClock';
+export { GameClock, type GameClockConfig, type GameTime } from './GameClock'
 // Game Generator
 export {
   createQuestionPrompt,
@@ -99,9 +98,9 @@ export {
   GameGenerator,
   OrganizationBehavior,
   type OrganizationType,
-} from './GameGenerator';
+} from './GameGenerator'
 // Game Loop (tick-based simulation orchestrator)
-export { GameLoop } from './GameLoop';
+export { GameLoop } from './GameLoop'
 // Game Simulator (standalone simulation engine)
 export {
   type GameConfig,
@@ -111,7 +110,7 @@ export {
   type MarketState as SimulatedMarketState,
   type ReputationChange,
   type SimulatedAgent,
-} from './GameSimulator';
+} from './GameSimulator'
 // Game Tick (canonical tick executor)
 export {
   type ActiveMarket,
@@ -123,7 +122,7 @@ export {
   type TickConfig,
   type TickResult,
   type TickServices,
-} from './GameTick';
+} from './GameTick'
 // Game World
 export {
   type CausalEventContext,
@@ -137,15 +136,15 @@ export {
   type ScheduledCausalEvent,
   type WorldConfig,
   type WorldState,
-} from './GameWorld';
+} from './GameWorld'
 // Game Service
-export { type ActiveMarketSummary, gameService } from './game-service';
+export { type ActiveMarketSummary, gameService } from './game-service'
 // Game Tick (realtime/cron execution)
 export {
   executeGameTick,
   type GameTickResult as ExecuteGameTickResult,
   resolveQuestionPayouts,
-} from './game-tick';
+} from './game-tick'
 export {
   cleanAndParseJSON,
   cleanMarkdownCodeBlocks,
@@ -153,45 +152,45 @@ export {
   extractJsonFromText,
   parseContinuationContent,
   parseIncompleteJSON,
-} from './llm/json-continuation-parser';
-// LLM Exports (re-exported for convenience)
+} from './llm/json-continuation-parser'
+// LLM Exports
 export {
   BabylonLLMClient,
   getTokenUsageCallback,
   setTokenUsageCallback,
   type TokenUsageCallback,
-} from './llm/openai-client';
+} from './llm/openai-client'
 export {
   parseXML,
   parseXMLAsync,
   safeParseXML,
   stripThinkingBlocks,
   type XMLParseResult,
-} from './llm/xml-parser';
+} from './llm/xml-parser'
 // Market Decision Engine
-export { MarketDecisionEngine } from './MarketDecisionEngine';
+export { MarketDecisionEngine, type TokenUtils } from './MarketDecisionEngine'
 // News Article Pacing Engine
 export {
   type ArticleStage,
   NewsArticlePacingEngine,
-} from './NewsArticlePacingEngine';
+} from './NewsArticlePacingEngine'
 // NPC Investment Manager
 export {
   NPCInvestmentManager,
   type PortfolioMetrics,
   type PortfolioPosition,
   type RebalanceAction,
-} from './npc/npc-investment-manager';
+} from './npc/npc-investment-manager'
 // NPC Portfolio Strategy
 export {
   NPCPortfolioStrategy,
   type StrategyConfig,
-} from './npc/npc-portfolio-strategy';
+} from './npc/npc-portfolio-strategy'
 export {
   type ParsedPostMetadata,
   type ParseResult,
   parsePostId,
-} from './post-id-parser';
+} from './post-id-parser'
 // Concentrated Liquidity
 export {
   type AddPositionParams,
@@ -204,44 +203,27 @@ export {
   type PoolConfig,
   type PoolState,
   type RemovePositionResult,
-} from './prediction-concentrated-liquidity';
+} from './prediction-concentrated-liquidity'
 // Prompts
-export * from './prompts';
+export * from './prompts'
 // Question Manager
 export {
   type QuestionCreationParams,
   QuestionManager,
-} from './QuestionManager';
+} from './QuestionManager'
 // Relationship Evolution Engine
 export {
   type Interaction,
   type RelationshipChange,
   RelationshipEvolutionEngine,
-} from './RelationshipEvolutionEngine';
-// Rate Limiting
-export {
-  checkDuplicate,
-  checkRateLimit,
-  cleanupDuplicates,
-  cleanupRateLimits,
-  clearAllDuplicates,
-  clearAllRateLimits,
-  clearDuplicates,
-  DUPLICATE_DETECTION_CONFIGS,
-  getDuplicateStats,
-  getRateLimitStatus,
-  RATE_LIMIT_CONFIGS,
-  resetRateLimit,
-} from './rate-limiting';
+} from './RelationshipEvolutionEngine'
 // Reputation Module
 export {
   calculateAverageROI,
   calculateConfidenceScore,
-  // Trade Feedback Calculator
   calculateEntryTimingScore,
   calculateExitTimingScore,
   calculateGameScore,
-  // Reputation Calculation Service
   calculateReputationScore,
   calculateRiskScore,
   calculateSharpeRatio,
@@ -257,7 +239,6 @@ export {
   getReputationLeaderboard,
   getTradeFeedbackSummary,
   getTrustLevel,
-  // PNL Normalization utilities
   normalizePnL,
   type ReputationScoreBreakdown,
   recalculateReputation,
@@ -265,10 +246,10 @@ export {
   updateFeedbackMetrics,
   updateGameMetrics,
   updateTradingMetrics,
-} from './reputation';
-// Services (all exported from services/index.ts)
-export * from './services';
-// Storage Bridge (database-agnostic storage abstraction)
+} from './reputation'
+// Services
+export * from './services'
+// Storage Bridge
 export {
   db,
   exportState,
@@ -282,12 +263,12 @@ export {
   loadSnapshot,
   type StorageMode,
   saveSnapshot,
-} from './storage-bridge';
+} from './storage-bridge'
 // Trending Topics Engine
 export {
   type TrendingTopic,
   TrendingTopicsEngine,
-} from './TrendingTopicsEngine';
+} from './TrendingTopicsEngine'
 // Common Types
 export type {
   ApiResponse,
@@ -305,7 +286,7 @@ export type {
   SortParams,
   StringRecord,
   WebSocketData,
-} from './types/common';
+} from './types/common'
 // Market Context Types
 export type {
   EventContext,
@@ -318,7 +299,7 @@ export type {
   PerpMarketSnapshot,
   PredictionMarketSnapshot,
   RelationshipContext,
-} from './types/market-context';
+} from './types/market-context'
 // Market Decision Types
 export type {
   ExecutedTrade,
@@ -327,12 +308,13 @@ export type {
   TradeImpact,
   TradingDecision,
   TradingExecutionResult,
-} from './types/market-decisions';
+} from './types/market-decisions'
 // Shared Game Types
 export type {
   Actor,
   ActorConnection,
   ActorData,
+  ActorFollow,
   ActorRelationship,
   ActorState,
   ActorsDatabase,
@@ -361,7 +343,7 @@ export type {
   SelectedActor,
   StockPrice,
   WorldEvent,
-} from './types/shared';
+} from './types/shared'
 export {
   ACTOR_TIERS,
   DAY_RANGES,
@@ -369,7 +351,7 @@ export {
   ORG_TYPES,
   POST_TYPES,
   RELATIONSHIP_TYPES,
-} from './types/shared';
+} from './types/shared'
 // Token Stats Types
 export type {
   LLMCallTokenUsage,
@@ -378,12 +360,12 @@ export type {
   TickTokenStats,
   TokenStatsSummary,
   TokenUsageCollector,
-} from './types/token-stats';
+} from './types/token-stats'
 export {
   calculateEstimatedCost,
   TOKEN_COST_PER_MILLION,
-} from './types/token-stats';
-// Utils - Entropy (secure random, weighted picks, cooldowns)
+} from './types/token-stats'
+// Utils - Entropy
 export {
   biasedRandomCount,
   type EventCooldownState,
@@ -396,13 +378,7 @@ export {
   shouldFireEvent,
   urgencyWeight,
   weightedPick,
-} from './utils/entropy';
-// Utils - Prompt Logging
-export {
-  isPromptLoggingEnabled,
-  logPrompt,
-  type PromptLogEntry,
-} from './utils/prompt-logger';
+} from './utils/entropy'
 // Utils - Randomization
 export {
   pickRandom,
@@ -410,10 +386,10 @@ export {
   randomInt,
   sampleRandom,
   shuffleArray,
-} from './utils/randomization';
+} from './utils/randomization'
 // World Facts Service
 export {
   type WorldFactsContext,
   WorldFactsService,
   worldFactsService,
-} from './world-facts-service';
+} from './world-facts-service'

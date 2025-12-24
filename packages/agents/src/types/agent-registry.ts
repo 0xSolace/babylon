@@ -4,9 +4,7 @@
  * Agent types for ERC-8004, Agent0, and A2A Protocol
  */
 
-// Import and re-export AgentCapabilities from shared
-import type { AgentCapabilities } from '@babylon/shared';
-export type { AgentCapabilities };
+import type { AgentCapabilities } from '@babylon/shared'
 
 /**
  * Agent types supported by the registry
@@ -58,6 +56,9 @@ export enum TrustLevel {
   /** Agent0 SDK verified with reputation score */
   TRUSTED = 3,
 
+  /** Premium tier - alias for TRUSTED */
+  PREMIUM = 3,
+
   /** First-party NPC or admin-approved agent */
   SYSTEM = 4,
 }
@@ -67,38 +68,38 @@ export enum TrustLevel {
  */
 export interface AgentCard {
   /** Agent card schema version */
-  version: '1.0';
+  version: '1.0'
 
   /** Unique agent identifier */
-  agentId: string;
+  agentId: string
 
   /** Human-readable name */
-  name: string;
+  name: string
 
   /** Agent description */
-  description: string;
+  description: string
 
   /** Communication endpoints */
   endpoints: {
-    a2a?: string;
-    mcp?: string;
-    rpc?: string;
-  };
+    a2a?: string | null
+    mcp?: string | null
+    rpc?: string | null
+  }
 
   /** Capability declaration */
-  capabilities: AgentCapabilities;
+  capabilities: AgentCapabilities
 
   /** Authentication requirements */
   authentication?: {
-    required: boolean;
-    methods: ('apiKey' | 'oauth' | 'wallet')[];
-  };
+    required: boolean
+    methods: ('apiKey' | 'oauth' | 'wallet')[]
+  }
 
   /** Usage limits and pricing */
   limits?: {
-    rateLimit?: number;
-    costPerAction?: number;
-  };
+    rateLimit?: number
+    costPerAction?: number | null
+  }
 }
 
 /**
@@ -106,25 +107,25 @@ export interface AgentCard {
  */
 export interface OnChainRegistration {
   /** ERC-8004 NFT token ID */
-  tokenId: number;
+  tokenId: number
 
   /** Registration transaction hash */
-  txHash: string;
+  txHash: string
 
   /** Server wallet that registered */
-  serverWallet: string;
+  serverWallet: string
 
   /** Reputation score (0-100) */
-  reputationScore: number;
+  reputationScore: number
 
   /** Chain ID */
-  chainId: number;
+  chainId: number
 
   /** Contract addresses */
   contracts: {
-    identityRegistry: string;
-    reputationSystem: string;
-  };
+    identityRegistry: string
+    reputationSystem: string
+  }
 }
 
 /**
@@ -132,20 +133,20 @@ export interface OnChainRegistration {
  */
 export interface Agent0Registration {
   /** Agent0 token ID from registry */
-  tokenId: string;
+  tokenId: string
 
   /** IPFS CID for metadata */
-  metadataCID: string;
+  metadataCID: string
 
   /** Subgraph-indexed agent data */
   subgraphData?: {
-    owner: string;
-    metadataURI: string;
-    timestamp: number;
-  };
+    owner: string
+    metadataURI: string
+    timestamp: number
+  }
 
   /** Discovery endpoint */
-  discoveryEndpoint: string;
+  discoveryEndpoint: string
 }
 
 /**
@@ -153,45 +154,45 @@ export interface Agent0Registration {
  */
 export interface AgentRegistration {
   /** Unique agent identifier */
-  agentId: string;
+  agentId: string
 
   /** Agent type classification */
-  type: AgentType;
+  type: AgentType
 
   /** Current lifecycle status */
-  status: AgentStatus;
+  status: AgentStatus
 
   /** Trust and verification level */
-  trustLevel: TrustLevel;
+  trustLevel: TrustLevel
 
   /** Reference to User record */
-  userId: string | null;
+  userId: string | null
 
   /** Display name */
-  name: string;
+  name: string
 
   /** Agent system prompt/personality */
-  systemPrompt: string;
+  systemPrompt: string
 
   /** Declared capabilities */
-  capabilities: AgentCapabilities;
+  capabilities: AgentCapabilities
 
   /** Discovery metadata */
-  discoveryMetadata: AgentCard | null;
+  discoveryMetadata: AgentCard | null
 
   /** On-chain registration info */
-  onChainData: OnChainRegistration | null;
+  onChainData: OnChainRegistration | null
 
   /** Agent0 SDK registration info */
-  agent0Data: Agent0Registration | null;
+  agent0Data: Agent0Registration | null
 
   /** Active runtime instance reference */
-  runtimeInstanceId: string | null;
+  runtimeInstanceId: string | null
 
   /** Timestamps */
-  registeredAt: Date;
-  lastActiveAt: Date | null;
-  terminatedAt: Date | null;
+  registeredAt: Date
+  lastActiveAt: Date | null
+  terminatedAt: Date | null
 }
 
 /**
@@ -199,32 +200,32 @@ export interface AgentRegistration {
  */
 export interface AgentDiscoveryFilter {
   /** Filter by agent types */
-  types?: AgentType[];
+  types?: AgentType[]
 
   /** Filter by status */
-  statuses?: AgentStatus[];
+  statuses?: AgentStatus[]
 
   /** Minimum trust level */
-  minTrustLevel?: TrustLevel;
+  minTrustLevel?: TrustLevel
 
   /** Required capabilities */
-  requiredCapabilities?: string[];
+  requiredCapabilities?: string[]
 
   /** Search by name/description */
-  search?: string;
+  search?: string | null
 
   /** Filter by OASF skills */
-  requiredSkills?: string[];
+  requiredSkills?: string[]
 
   /** Filter by OASF domains */
-  requiredDomains?: string[];
+  requiredDomains?: string[]
 
   /** Match mode: 'any' (OR) or 'all' (AND) */
-  matchMode?: 'any' | 'all';
+  matchMode?: 'any' | 'all'
 
   /** Pagination */
-  limit?: number;
-  offset?: number;
+  limit?: number
+  offset?: number
 }
 
 /**
@@ -232,16 +233,16 @@ export interface AgentDiscoveryFilter {
  */
 export interface RuntimeCreationOptions {
   /** Agent registry entry */
-  registration: AgentRegistration;
+  registration: AgentRegistration
 
   /** Override model selection */
-  modelOverride?: string;
+  modelOverride?: string
 
   /** Additional plugins beyond defaults */
-  additionalPlugins?: Array<import('@elizaos/core').Plugin>;
+  additionalPlugins?: Array<import('@elizaos/core').Plugin>
 
   /** Skip automatic enhancement */
-  skipEnhancement?: boolean;
+  skipEnhancement?: boolean
 }
 
 /**
@@ -249,29 +250,29 @@ export interface RuntimeCreationOptions {
  */
 export interface ExternalAgentConnectionParams {
   /** External agent identifier */
-  externalId: string;
+  externalId: string
 
   /** Agent name */
-  name: string;
+  name: string
 
   /** Agent description/system prompt */
-  description: string;
+  description: string
 
   /** Communication endpoint */
-  endpoint: string;
+  endpoint: string
 
   /** Protocol type */
-  protocol: 'a2a' | 'mcp' | 'agent0' | 'custom';
+  protocol: 'a2a' | 'mcp' | 'agent0' | 'custom'
 
   /** Declared capabilities */
-  capabilities: AgentCapabilities;
+  capabilities: AgentCapabilities
 
   /** Authentication credentials */
   authentication?: {
-    type: 'wallet' | 'apiKey' | 'oauth';
-    credentials: string;
-  };
+    type: 'wallet' | 'apiKey' | 'oauth'
+    credentials: string
+  }
 
   /** Agent Card metadata */
-  agentCard?: AgentCard;
+  agentCard?: AgentCard
 }

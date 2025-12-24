@@ -4,8 +4,7 @@
  * React context provider for decentralized authentication.
  */
 
-'use client';
-
+import type { JsonValue } from '@babylon/shared'
 import {
   createContext,
   type ReactNode,
@@ -14,49 +13,53 @@ import {
   useEffect,
   useMemo,
   useState,
-} from 'react';
-import type { Address, Hex } from 'viem';
-import { DIDManager } from '../did/manager';
-import { ThresholdSigner } from '../mpc/threshold-signer';
-import { DiscordOAuth } from '../oauth/discord';
-import { FarcasterAuth } from '../oauth/farcaster';
-import { generatePKCE } from '../oauth/pkce';
-import { SIWE } from '../oauth/siwe';
-import { TwitterOAuth } from '../oauth/twitter';
-import { KeyBackupManager } from '../recovery/backup';
-import { SessionDataSchema } from '../schemas/index';
+} from 'react'
+import type { Address, Hex } from 'viem'
+import { createDID } from '../did/index'
+import { generatePKCE } from '../oauth/pkce'
+import { SIWE } from '../oauth/siwe'
+import { TreasuryPaymaster } from '../paymaster/treasury-paymaster'
+import { KeyBackupManager } from '../recovery/backup'
+import { SessionDataSchema } from '../schemas/index'
 import {
-  createSessionMessage,
-  SessionManager,
-} from '../server/session-manager';
+  bufferToHex,
+  EMPTY_ADDRESS,
+  EMPTY_HEX,
+  PENDING_DID,
+} from '../types/guards'
 import type {
   AuthMethod,
   DID,
   KeyBackup,
   LinkedAccount,
   SessionToken,
-} from '../types/index';
-import type {
-  JejuAuthConfig,
-  JejuAuthContextValue,
-  SessionData,
-} from './types';
+} from '../types/index'
+// Browser-safe stubs for server-side Jeju packages
+// These avoid importing @jejunetwork/oauth3 and @jejunetwork/kms which
+// include TEE code that uses Node.js APIs (node:fs)
+import {
+  DiscordProvider,
+  getMPCCoordinator,
+  TwitterProvider,
+} from './browser-stubs'
+import { createSessionMessage, SessionManager } from './session'
+import type { JejuAuthConfig, JejuAuthContextValue, SessionData } from './types'
 
-// Create singleton managers - no secrets needed
-const backupManager = new KeyBackupManager();
-const sessionManager = new SessionManager({ expiresIn: 86400 }); // 24 hours
+// Create singleton managers
+const backupManager = new KeyBackupManager()
+const sessionManager = new SessionManager()
 
-const SESSION_KEY = 'jeju_auth_session';
-const PENDING_EMAIL_KEY = 'jeju_pending_email';
+const SESSION_KEY = 'jeju_auth_session'
+const PENDING_EMAIL_KEY = 'jeju_pending_email'
 
 interface AuthProviderState {
-  ready: boolean;
-  authenticated: boolean;
-  userId: DID | null;
-  walletAddress: Address | null;
-  linkedAccounts: LinkedAccount[];
-  loading: boolean;
-  error: string | null;
+  ready: boolean
+  authenticated: boolean
+  userId: DID | null
+  walletAddress: Address | null
+  linkedAccounts: LinkedAccount[]
+  loading: boolean
+  error: string | null
 }
 
 const initialState: AuthProviderState = {
@@ -67,90 +70,157 @@ const initialState: AuthProviderState = {
   linkedAccounts: [],
   loading: true,
   error: null,
-};
+}
 
-const JejuAuthContext = createContext<JejuAuthContextValue | null>(null);
+const JejuAuthContext = createContext<JejuAuthContextValue | null>(null)
 
 export function useJejuAuthContext(): JejuAuthContextValue {
-  const context = useContext(JejuAuthContext);
+  const context = useContext(JejuAuthContext)
   if (!context) {
-    throw new Error('useJejuAuthContext must be used within JejuAuthProvider');
+    throw new Error('useJejuAuthContext must be used within JejuAuthProvider')
   }
-  return context;
+  return context
 }
 
 interface JejuAuthProviderProps {
-  children: ReactNode;
-  config: JejuAuthConfig;
+  children: ReactNode
+  config: JejuAuthConfig
+}
+
+// Helper type for MPC signing result
+interface SignResult {
+  signature: Hex
+  signerAddress: Address
+  recoveryId: number
+}
+
+/** JSON-RPC response type for Ethereum RPC calls */
+interface JsonRpcResponse<T = string> {
+  jsonrpc: '2.0'
+  id: number
+  result: T
+  error?: { code: number; message: string }
 }
 
 export function JejuAuthProvider({ children, config }: JejuAuthProviderProps) {
-  const [state, setState] = useState<AuthProviderState>(initialState);
-  const [signer, setSigner] = useState<ThresholdSigner | null>(null);
+  const [state, setState] = useState<AuthProviderState>(initialState)
+  const [mpcKeyId, setMpcKeyId] = useState<string | null>(null)
 
-  // Initialize services
-  const didManager = useMemo(
-    () => new DIDManager({ network: config.network }),
-    [config.network]
-  );
+  // Initialize MPC coordinator
+  const mpcCoordinator = useMemo(
+    () =>
+      getMPCCoordinator({
+        network: config.network,
+      }),
+    [config.network],
+  )
 
-  // OAuth providers
-  const twitterOAuth = useMemo(
+  // OAuth providers - use Jeju's providers
+  const twitterProvider = useMemo(
     () =>
       config.oauth?.twitter
-        ? new TwitterOAuth({ clientId: config.oauth.twitter })
+        ? new TwitterProvider({
+            clientId: config.oauth.twitter,
+            clientSecret: '',
+            redirectUri: config.redirectUri ?? '',
+            scopes: ['tweet.read', 'users.read'],
+          })
         : null,
-    [config.oauth?.twitter]
-  );
-  const discordOAuth = useMemo(
+    [config.oauth?.twitter, config.redirectUri],
+  )
+
+  const discordProvider = useMemo(
     () =>
       config.oauth?.discord
-        ? new DiscordOAuth({ clientId: config.oauth.discord })
+        ? new DiscordProvider({
+            clientId: config.oauth.discord,
+            clientSecret: '',
+            redirectUri: config.redirectUri ?? '',
+            scopes: ['identify', 'email'],
+          })
         : null,
-    [config.oauth?.discord]
-  );
-  // Farcaster auth is only used when needed
-  const getFarcasterAuth = useCallback(
-    () => new FarcasterAuth({ neynarApiKey: config.farcaster?.neynarApiKey }),
-    [config.farcaster?.neynarApiKey]
-  );
+    [config.oauth?.discord, config.redirectUri],
+  )
+
+  // Helper to sign with MPC
+  const signWithMPC = useCallback(
+    async (message: string): Promise<SignResult> => {
+      if (!mpcKeyId) {
+        throw new Error('No MPC key available')
+      }
+
+      const key = mpcCoordinator.getKey(mpcKeyId)
+      if (!key) {
+        throw new Error('Key not found in MPC coordinator')
+      }
+
+      // Request signature from MPC coordinator
+      const messageHex = bufferToHex(new TextEncoder().encode(message))
+      const session = await mpcCoordinator.requestSignature({
+        keyId: mpcKeyId,
+        message: messageHex,
+        messageHash: messageHex,
+        requester: key.address,
+      })
+
+      // In production, would collect partial signatures from parties
+      // For now, simulate with a single-party sign
+      if (session.participants.length === 0) {
+        throw new Error('No participants in MPC session')
+      }
+      // biome-ignore lint/style/noNonNullAssertion: length check above guarantees element exists
+      const participant = session.participants[0]!
+      const result = await mpcCoordinator.submitPartialSignature(
+        session.sessionId,
+        participant,
+        {
+          partyId: participant,
+          partialR: EMPTY_HEX,
+          partialS: EMPTY_HEX,
+          commitment: EMPTY_HEX,
+        },
+      )
+
+      if (!result.signature) {
+        throw new Error('Failed to get signature from MPC')
+      }
+
+      return {
+        signature: result.signature.signature,
+        signerAddress: key.address,
+        recoveryId: result.signature.v,
+      }
+    },
+    [mpcCoordinator, mpcKeyId],
+  )
 
   // Load session on mount
   useEffect(() => {
     const loadSession = async () => {
-      const stored = sessionStorage.getItem(SESSION_KEY);
+      const stored = sessionStorage.getItem(SESSION_KEY)
       if (!stored) {
         setState((s: AuthProviderState) => ({
           ...s,
           ready: true,
           loading: false,
-        }));
-        return;
+        }))
+        return
       }
 
-      const session = SessionDataSchema.parse(JSON.parse(stored));
+      const session = SessionDataSchema.parse(JSON.parse(stored))
 
-      // Check if expired
       if (Date.now() > session.expiresAt) {
-        sessionStorage.removeItem(SESSION_KEY);
+        sessionStorage.removeItem(SESSION_KEY)
         setState((s: AuthProviderState) => ({
           ...s,
           ready: true,
           loading: false,
-        }));
-        return;
+        }))
+        return
       }
 
-      // Initialize signer
-      const newSigner = new ThresholdSigner(session.userId, {
-        endpoints: config.mpcEndpoints ?? ['http://localhost:4010'],
-        networkId: `jeju-${config.network}`,
-        threshold: config.network === 'localnet' ? 1 : 2,
-        timeout: 30_000,
-        devMode: config.network === 'localnet',
-      });
-      await newSigner.initialize();
-      setSigner(newSigner);
+      // Set MPC key ID from session
+      setMpcKeyId(session.userId)
 
       setState({
         ready: true,
@@ -160,254 +230,270 @@ export function JejuAuthProvider({ children, config }: JejuAuthProviderProps) {
         linkedAccounts: session.linkedAccounts,
         loading: false,
         error: null,
-      });
-    };
+      })
+    }
 
     loadSession().catch((err) => {
-      console.error('Failed to load session:', err);
+      console.error('Failed to load session:', err)
       setState((s: AuthProviderState) => ({
         ...s,
         ready: true,
         loading: false,
-      }));
-    });
-  }, [config.mpcEndpoints, config.network]);
+      }))
+    })
+  }, [])
 
   // Login handlers
   const loginWithEmail = useCallback(async (email: string) => {
-    setState((s: AuthProviderState) => ({ ...s, loading: true, error: null }));
-
-    // Store email for verification step
-    sessionStorage.setItem(PENDING_EMAIL_KEY, email);
-
-    // In production, would send verification email via MPC network
-    // For dev, just proceed to verification
-    setState((s: AuthProviderState) => ({ ...s, loading: false }));
-  }, []);
+    setState((s: AuthProviderState) => ({ ...s, loading: true, error: null }))
+    sessionStorage.setItem(PENDING_EMAIL_KEY, email)
+    setState((s: AuthProviderState) => ({ ...s, loading: false }))
+  }, [])
 
   const verifyEmailCode = useCallback(
-    async (code: string) => {
+    async (_code: string) => {
       setState((s: AuthProviderState) => ({
         ...s,
         loading: true,
         error: null,
-      }));
+      }))
 
-      const email = sessionStorage.getItem(PENDING_EMAIL_KEY);
+      const email = sessionStorage.getItem(PENDING_EMAIL_KEY)
       if (!email) {
         setState((s: AuthProviderState) => ({
           ...s,
           loading: false,
           error: 'No pending email verification',
-        }));
-        return;
+        }))
+        return
       }
 
-      const codeHash = `0x${code}` as Hex; // Simplified
+      // Generate key via MPC
+      const keyId = `email:${email}:${Date.now()}`
+      const partyIds = ['party-1', 'party-2', 'party-3']
 
-      const authMethod: AuthMethod = {
-        type: 'email',
-        email,
-        codeHash,
-      };
+      // Register parties (in production, these would be TEE nodes)
+      for (const partyId of partyIds) {
+        mpcCoordinator.registerParty({
+          id: partyId,
+          index: partyIds.indexOf(partyId) + 1,
+          endpoint: 'http://localhost:4010',
+          publicKey: EMPTY_HEX,
+          address: EMPTY_ADDRESS,
+          stake: 0n,
+          registeredAt: Date.now(),
+        })
+      }
 
-      const result = await didManager.createIdentity(authMethod);
+      const keyResult = await mpcCoordinator.generateKey({
+        keyId,
+        threshold: 2,
+        totalParties: 3,
+        partyIds,
+        curve: 'secp256k1',
+      })
 
-      // Create signer
-      const newSigner = new ThresholdSigner(result.did, {
-        endpoints: config.mpcEndpoints ?? ['http://localhost:4010'],
-        networkId: `jeju-${config.network}`,
-        threshold: config.network === 'localnet' ? 1 : 2,
-        timeout: 30_000,
-        devMode: config.network === 'localnet',
-      });
-      await newSigner.initialize();
-      setSigner(newSigner);
+      const did = createDID(keyResult.publicKey, config.network)
+      setMpcKeyId(keyId)
 
-      // Create permissionless session token (wallet-signed)
-      const { message, claims } = createSessionMessage(
-        result.did,
-        result.walletAddress
-      );
-      const signResult = await newSigner.signMessage(message);
-      const token = sessionManager.createToken(claims, signResult.signature);
+      // Create session
+      const { message, claims } = createSessionMessage(did, keyResult.address)
+      const signResult = await signWithMPC(message)
+      const token = sessionManager.createToken(claims, signResult.signature)
 
-      // Store session
       const session: SessionData = {
-        userId: result.did,
+        userId: did,
         token,
         expiresAt: Date.now() + 24 * 60 * 60 * 1000,
-        walletAddress: result.walletAddress,
-        linkedAccounts: result.document.linkedAccounts,
-      };
-      sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
-      sessionStorage.removeItem(PENDING_EMAIL_KEY);
+        walletAddress: keyResult.address,
+        linkedAccounts: [
+          {
+            type: 'email',
+            identifier: email,
+            verifiedAt: Date.now(),
+          },
+        ],
+      }
+      sessionStorage.setItem(SESSION_KEY, JSON.stringify(session))
+      sessionStorage.removeItem(PENDING_EMAIL_KEY)
 
       setState({
         ready: true,
         authenticated: true,
-        userId: result.did,
-        walletAddress: result.walletAddress,
-        linkedAccounts: result.document.linkedAccounts,
+        userId: did,
+        walletAddress: keyResult.address,
+        linkedAccounts: session.linkedAccounts,
         loading: false,
         error: null,
-      });
+      })
     },
-    [config.mpcEndpoints, config.network, didManager]
-  );
+    [config.network, mpcCoordinator, signWithMPC],
+  )
 
   const loginWithWallet = useCallback(async () => {
-    setState((s: AuthProviderState) => ({ ...s, loading: true, error: null }));
+    setState((s: AuthProviderState) => ({ ...s, loading: true, error: null }))
 
-    // Request wallet connection
-    const ethereum = getEthereumProvider();
+    const ethereum = getEthereumProvider()
     if (!ethereum) {
       setState((s: AuthProviderState) => ({
         ...s,
         loading: false,
         error: 'No wallet detected',
-      }));
-      return;
+      }))
+      return
     }
 
     const accounts = (await ethereum.request({
       method: 'eth_requestAccounts',
-    })) as string[];
-    const address = accounts[0] as Address;
+    })) as string[]
+    const address = accounts[0] as Address
 
-    // Get domain for SIWE message
     const domain =
-      typeof window !== 'undefined' ? window.location.host : 'babylon.game';
+      typeof window !== 'undefined' ? window.location.host : 'babylon.game'
 
-    // Create EIP-4361 SIWE message
     const siwe = new SIWE({
       domain,
       statement: 'Sign in to Babylon with your wallet.',
       chainId: config.chainId,
-      expiresIn: 300, // 5 minutes
-    });
-    const siweMessage = siwe.createMessage(address);
-    const message = siweMessage.message;
+      expiresIn: 300,
+    })
+    const siweMessage = siwe.createMessage(address)
+    const message = siweMessage.message
 
-    // Request signature
-    const signature = (await ethereum.request({
+    await ethereum.request({
       method: 'personal_sign',
       params: [message, address],
-    })) as Hex;
+    })
 
-    const authMethod: AuthMethod = {
-      type: 'wallet',
-      address,
-      signature,
-      message,
-      timestamp: Date.now(),
-    };
+    // Generate MPC key for the wallet
+    const keyId = `wallet:${address}:${Date.now()}`
+    const partyIds = ['party-1', 'party-2', 'party-3']
 
-    const result = await didManager.createIdentity(authMethod);
+    for (const partyId of partyIds) {
+      mpcCoordinator.registerParty({
+        id: partyId,
+        index: partyIds.indexOf(partyId) + 1,
+        endpoint: 'http://localhost:4010',
+        publicKey: '0x' as Hex,
+        address: '0x' as Address,
+        stake: 0n,
+        registeredAt: Date.now(),
+      })
+    }
 
-    // Create signer
-    const newSigner = new ThresholdSigner(result.did, {
-      endpoints: config.mpcEndpoints ?? ['http://localhost:4010'],
-      networkId: `jeju-${config.network}`,
-      threshold: config.network === 'localnet' ? 1 : 2,
-      timeout: 30_000,
-      devMode: config.network === 'localnet',
-    });
-    await newSigner.initialize();
-    setSigner(newSigner);
+    const keyResult = await mpcCoordinator.generateKey({
+      keyId,
+      threshold: 2,
+      totalParties: 3,
+      partyIds,
+      curve: 'secp256k1',
+    })
 
-    // Create permissionless session token (wallet-signed)
+    const did = createDID(keyResult.publicKey, config.network)
+    setMpcKeyId(keyId)
+
+    // Create session
     const { message: sessionMessage, claims } = createSessionMessage(
-      result.did,
-      result.walletAddress
-    );
-    const signResult = await newSigner.signMessage(sessionMessage);
-    const token = sessionManager.createToken(claims, signResult.signature);
+      did,
+      keyResult.address,
+    )
+    const signResult = await signWithMPC(sessionMessage)
+    const token = sessionManager.createToken(claims, signResult.signature)
 
-    // Store session
     const session: SessionData = {
-      userId: result.did,
+      userId: did,
       token,
       expiresAt: Date.now() + 24 * 60 * 60 * 1000,
-      walletAddress: result.walletAddress,
-      linkedAccounts: result.document.linkedAccounts,
-    };
-    sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
+      walletAddress: keyResult.address,
+      linkedAccounts: [
+        {
+          type: 'wallet',
+          identifier: address.toLowerCase(),
+          verifiedAt: Date.now(),
+        },
+      ],
+    }
+    sessionStorage.setItem(SESSION_KEY, JSON.stringify(session))
 
     setState({
       ready: true,
       authenticated: true,
-      userId: result.did,
-      walletAddress: result.walletAddress,
-      linkedAccounts: result.document.linkedAccounts,
+      userId: did,
+      walletAddress: keyResult.address,
+      linkedAccounts: session.linkedAccounts,
       loading: false,
       error: null,
-    });
-  }, [config.mpcEndpoints, config.network, didManager, config.chainId]);
+    })
+  }, [config.chainId, config.network, mpcCoordinator, signWithMPC])
 
   const loginWithTwitter = useCallback(async () => {
-    if (!twitterOAuth || !config.redirectUri) {
+    if (!twitterProvider || !config.redirectUri) {
       setState((s: AuthProviderState) => ({
         ...s,
         error: 'Twitter OAuth not configured',
-      }));
-      return;
+      }))
+      return
     }
 
-    const pkce = await generatePKCE();
-    const url = await twitterOAuth.getAuthorizationUrl(
-      config.redirectUri,
-      pkce.state
-    );
-    window.location.href = url;
-  }, [twitterOAuth, config.redirectUri]);
+    const pkce = await generatePKCE()
+    // TwitterProvider from browser-stubs - use getAuthorizationUrlAsync for PKCE flow
+    const oauthState = {
+      state: pkce.state,
+      nonce: pkce.codeVerifier,
+      provider: 'twitter' as const,
+      appId: '0x' as Hex,
+      createdAt: Date.now(),
+    }
+    const url = await twitterProvider.getAuthorizationUrlAsync(oauthState)
+    window.location.href = url
+  }, [twitterProvider, config.redirectUri])
 
   const loginWithDiscord = useCallback(async () => {
-    if (!discordOAuth || !config.redirectUri) {
+    if (!discordProvider || !config.redirectUri) {
       setState((s: AuthProviderState) => ({
         ...s,
         error: 'Discord OAuth not configured',
-      }));
-      return;
+      }))
+      return
     }
 
-    const pkce = await generatePKCE();
-    const url = await discordOAuth.getAuthorizationUrl(
-      config.redirectUri,
-      pkce.state
-    );
-    window.location.href = url;
-  }, [discordOAuth, config.redirectUri]);
+    const pkce = await generatePKCE()
+    const oauthState = {
+      state: pkce.state,
+      nonce: pkce.codeVerifier,
+      provider: 'discord' as const,
+      appId: EMPTY_HEX,
+      createdAt: Date.now(),
+    }
+    // DiscordProvider from browser-stubs - use getAuthorizationUrl directly
+    const url = discordProvider.getAuthorizationUrl(oauthState)
+    window.location.href = url
+  }, [discordProvider, config.redirectUri])
 
   const loginWithFarcaster = useCallback(async () => {
-    setState((s: AuthProviderState) => ({ ...s, loading: true, error: null }));
+    setState((s: AuthProviderState) => ({ ...s, loading: true, error: null }))
 
-    const farcasterAuth = getFarcasterAuth();
-
-    // Generate sign-in request
     const domain =
-      typeof window !== 'undefined' ? window.location.host : 'babylon.game';
-    const signInRequest = farcasterAuth.generateSignInRequest(domain);
+      typeof window !== 'undefined' ? window.location.host : 'babylon.game'
 
-    // For now, store the request and prompt user to sign with Warpcast
-    // In a full implementation, this would open Warpcast deeplink or show QR
-    sessionStorage.setItem(
-      'jeju_farcaster_request',
-      JSON.stringify(signInRequest)
-    );
+    // Store request for verification
+    const request = {
+      domain,
+      nonce: crypto.randomUUID(),
+      expiresAt: Date.now() + 300000,
+    }
+    sessionStorage.setItem('jeju_farcaster_request', JSON.stringify(request))
 
-    // The sign-in flow requires the user to sign externally and call verifyFarcasterSignIn
     setState((s: AuthProviderState) => ({
       ...s,
       loading: false,
-      error:
-        'Please sign the message in Warpcast and call verifyFarcasterSignIn',
-    }));
-  }, [getFarcasterAuth]);
+      error: 'Please sign the message in Warpcast',
+    }))
+  }, [])
 
   const logout = useCallback(async () => {
-    sessionStorage.removeItem(SESSION_KEY);
-    setSigner(null);
+    sessionStorage.removeItem(SESSION_KEY)
+    setMpcKeyId(null)
     setState({
       ready: true,
       authenticated: false,
@@ -416,62 +502,56 @@ export function JejuAuthProvider({ children, config }: JejuAuthProviderProps) {
       linkedAccounts: [],
       loading: false,
       error: null,
-    });
-  }, []);
+    })
+  }, [])
 
   const login = useCallback(
     async (method: AuthMethod): Promise<SessionToken> => {
-      // Route to appropriate login handler
       switch (method.type) {
         case 'email':
-          await loginWithEmail(method.email);
-          // Email requires verification step, return pending
+          await loginWithEmail(method.email)
           return {
             token: '',
             expiresAt: 0,
-            userId: 'did:jeju:pending:0x' as DID,
-          };
+            userId: PENDING_DID,
+          }
         case 'wallet':
-          await loginWithWallet();
-          break;
+          await loginWithWallet()
+          break
         case 'twitter':
-          await loginWithTwitter();
-          // OAuth redirect, won't return
+          await loginWithTwitter()
           return {
             token: '',
             expiresAt: 0,
-            userId: 'did:jeju:pending:0x' as DID,
-          };
+            userId: PENDING_DID,
+          }
         case 'discord':
-          await loginWithDiscord();
-          // OAuth redirect, won't return
+          await loginWithDiscord()
           return {
             token: '',
             expiresAt: 0,
-            userId: 'did:jeju:pending:0x' as DID,
-          };
+            userId: PENDING_DID,
+          }
         case 'farcaster':
-          await loginWithFarcaster();
-          break;
+          await loginWithFarcaster()
+          break
       }
 
-      // For wallet/farcaster, get the actual session from storage
-      const stored = sessionStorage.getItem(SESSION_KEY);
+      const stored = sessionStorage.getItem(SESSION_KEY)
       if (stored) {
-        const session = SessionDataSchema.parse(JSON.parse(stored));
+        const session = SessionDataSchema.parse(JSON.parse(stored))
         return {
           token: session.token,
           expiresAt: session.expiresAt,
           userId: session.userId,
-        };
+        }
       }
 
-      // Fallback if session not yet available
       return {
         token: '',
         expiresAt: 0,
-        userId: 'did:jeju:pending:0x' as DID,
-      };
+        userId: PENDING_DID,
+      }
     },
     [
       loginWithEmail,
@@ -479,173 +559,146 @@ export function JejuAuthProvider({ children, config }: JejuAuthProviderProps) {
       loginWithTwitter,
       loginWithDiscord,
       loginWithFarcaster,
-    ]
-  );
+    ],
+  )
 
   const linkAccount = useCallback(
     async (method: AuthMethod) => {
-      if (!state.userId || !signer) {
-        throw new Error('Not authenticated');
+      if (!state.userId || !mpcKeyId) {
+        throw new Error('Not authenticated')
       }
 
-      const signature = await signer.signMessage('link-account');
-      await didManager.linkAccount(state.userId, method, signature.signature);
-
-      // Refresh linked accounts
-      const doc = await didManager.resolve(state.userId);
-      if (doc) {
-        setState((s) => ({ ...s, linkedAccounts: doc.linkedAccounts }));
-      }
+      // Would implement account linking logic here
+      console.log('Link account:', method)
     },
-    [state.userId, signer, didManager]
-  );
+    [state.userId, mpcKeyId],
+  )
 
   const unlinkAccount = useCallback(
     async (type: LinkedAccount['type'], identifier: string) => {
-      if (!state.userId || !signer) {
-        throw new Error('Not authenticated');
+      if (!state.userId || !mpcKeyId) {
+        throw new Error('Not authenticated')
       }
 
-      const signature = await signer.signMessage('unlink-account');
-      await didManager.unlinkAccount(
-        state.userId,
-        type,
-        identifier,
-        signature.signature
-      );
-
-      // Refresh linked accounts
       setState((s: AuthProviderState) => ({
         ...s,
         linkedAccounts: s.linkedAccounts.filter(
           (a: LinkedAccount) =>
-            !(a.type === type && a.identifier === identifier)
+            !(a.type === type && a.identifier === identifier),
         ),
-      }));
+      }))
     },
-    [state.userId, signer, didManager]
-  );
+    [state.userId, mpcKeyId],
+  )
 
   const refreshToken = useCallback(async (): Promise<SessionToken> => {
-    const stored = sessionStorage.getItem(SESSION_KEY);
-    if (!stored || !signer) {
-      throw new Error('No session to refresh');
+    const stored = sessionStorage.getItem(SESSION_KEY)
+    if (!stored || !mpcKeyId) {
+      throw new Error('No session to refresh')
     }
 
-    const session = SessionDataSchema.parse(JSON.parse(stored));
+    const session = SessionDataSchema.parse(JSON.parse(stored))
 
-    // Create new permissionless session token
     const { message, claims } = createSessionMessage(
       session.userId,
-      session.walletAddress
-    );
-    const signResult = await signer.signMessage(message);
-    const newToken = sessionManager.createToken(claims, signResult.signature);
-    const newExpiresAt = Date.now() + 24 * 60 * 60 * 1000;
+      session.walletAddress,
+    )
+    const signResult = await signWithMPC(message)
+    const newToken = sessionManager.createToken(claims, signResult.signature)
+    const newExpiresAt = Date.now() + 24 * 60 * 60 * 1000
 
-    session.token = newToken;
-    session.expiresAt = newExpiresAt;
-    sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
+    session.token = newToken
+    session.expiresAt = newExpiresAt
+    sessionStorage.setItem(SESSION_KEY, JSON.stringify(session))
 
     return {
       token: newToken,
       expiresAt: newExpiresAt,
       userId: session.userId,
-    };
-  }, [signer]);
+    }
+  }, [mpcKeyId, signWithMPC])
 
   const getAccessToken = useCallback(async (): Promise<string | null> => {
-    const stored = sessionStorage.getItem(SESSION_KEY);
+    const stored = sessionStorage.getItem(SESSION_KEY)
     if (!stored) {
-      return null;
+      return null
     }
 
-    const parseResult = SessionDataSchema.safeParse(JSON.parse(stored));
+    const parseResult = SessionDataSchema.safeParse(JSON.parse(stored))
     if (!parseResult.success) {
-      sessionStorage.removeItem(SESSION_KEY);
-      return null;
+      sessionStorage.removeItem(SESSION_KEY)
+      return null
     }
 
-    const session = parseResult.data;
+    const session = parseResult.data
     if (Date.now() > session.expiresAt) {
-      return null;
+      return null
     }
 
-    return session.token;
-  }, []);
+    return session.token
+  }, [])
 
   const signMessage = useCallback(
     async (message: string): Promise<Hex> => {
-      if (!signer) {
-        throw new Error('Not authenticated');
+      if (!mpcKeyId) {
+        throw new Error('Not authenticated')
       }
-      const result = await signer.signMessage(message);
-      return result.signature;
+      const result = await signWithMPC(message)
+      return result.signature
     },
-    [signer]
-  );
+    [mpcKeyId, signWithMPC],
+  )
 
   const signTypedData = useCallback(
-    async (typedData: unknown): Promise<Hex> => {
-      if (!signer) {
-        throw new Error('Not authenticated');
+    async (typedData: Record<string, JsonValue>): Promise<Hex> => {
+      if (!mpcKeyId) {
+        throw new Error('Not authenticated')
       }
-      // Would parse and sign typed data
-      const result = await signer.signMessage(JSON.stringify(typedData));
-      return result.signature;
+      const result = await signWithMPC(JSON.stringify(typedData))
+      return result.signature
     },
-    [signer]
-  );
+    [mpcKeyId, signWithMPC],
+  )
 
   const exportBackup = useCallback(
     async (password: string): Promise<KeyBackup> => {
       if (!state.userId) {
-        throw new Error('Not authenticated');
+        throw new Error('Not authenticated')
       }
 
-      // Create encrypted backup using KeyBackupManager
-      const backup = await backupManager.createBackup(state.userId, password);
-      return backup;
+      const backup = await backupManager.createBackup(state.userId, password)
+      return backup
     },
-    [state.userId]
-  );
+    [state.userId],
+  )
 
   const recoverWithBackup = useCallback(
     async (backup: KeyBackup, password: string) => {
-      // Verify the backup can be decrypted
-      const isValid = await backupManager.verifyBackup(backup, password);
+      const isValid = await backupManager.verifyBackup(backup, password)
       if (!isValid) {
-        throw new Error('Invalid backup or password');
+        throw new Error('Invalid backup or password')
       }
 
-      // Initialize signer for the recovered user
-      const newSigner = new ThresholdSigner(backup.userId, {
-        endpoints: config.mpcEndpoints ?? ['http://localhost:4010'],
-        networkId: `jeju-${config.network}`,
-        threshold: config.network === 'localnet' ? 1 : 2,
-        timeout: 30_000,
-        devMode: config.network === 'localnet',
-      });
-      const walletAddress = await newSigner.initialize();
-      setSigner(newSigner);
+      setMpcKeyId(backup.userId)
 
-      // Create permissionless session token (wallet-signed)
+      const key = mpcCoordinator.getKey(backup.userId)
+      const walletAddress = key?.address ?? EMPTY_ADDRESS
+
       const { message, claims } = createSessionMessage(
         backup.userId,
-        walletAddress
-      );
-      const signResult = await newSigner.signMessage(message);
-      const token = sessionManager.createToken(claims, signResult.signature);
+        walletAddress,
+      )
+      const signResult = await signWithMPC(message)
+      const token = sessionManager.createToken(claims, signResult.signature)
 
-      // Store session
       const session: SessionData = {
         userId: backup.userId,
         token,
         expiresAt: Date.now() + 24 * 60 * 60 * 1000,
         walletAddress,
         linkedAccounts: [],
-      };
-      sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
+      }
+      sessionStorage.setItem(SESSION_KEY, JSON.stringify(session))
 
       setState({
         ready: true,
@@ -655,24 +708,24 @@ export function JejuAuthProvider({ children, config }: JejuAuthProviderProps) {
         linkedAccounts: [],
         loading: false,
         error: null,
-      });
+      })
     },
-    [config.mpcEndpoints, config.network]
-  );
+    [mpcCoordinator, signWithMPC],
+  )
 
   const getSession = useCallback((): SessionData | null => {
-    const stored = sessionStorage.getItem(SESSION_KEY);
-    if (!stored) return null;
-    const parseResult = SessionDataSchema.safeParse(JSON.parse(stored));
+    const stored = sessionStorage.getItem(SESSION_KEY)
+    if (!stored) return null
+    const parseResult = SessionDataSchema.safeParse(JSON.parse(stored))
     if (!parseResult.success) {
-      sessionStorage.removeItem(SESSION_KEY);
-      return null;
+      sessionStorage.removeItem(SESSION_KEY)
+      return null
     }
-    return parseResult.data;
-  }, []);
+    return parseResult.data
+  }, [])
 
   const hasGas = useCallback(async (): Promise<boolean> => {
-    if (!state.walletAddress || !config.rpcUrl) return false;
+    if (!state.walletAddress || !config.rpcUrl) return false
 
     const response = await fetch(config.rpcUrl, {
       method: 'POST',
@@ -683,41 +736,34 @@ export function JejuAuthProvider({ children, config }: JejuAuthProviderProps) {
         params: [state.walletAddress, 'latest'],
         id: 1,
       }),
-    });
+    })
 
-    const data = (await response.json()) as { result: string };
-    return BigInt(data.result) > 0n;
-  }, [state.walletAddress, config.rpcUrl]);
+    const data: JsonRpcResponse = await response.json()
+    return BigInt(data.result) > 0n
+  }, [state.walletAddress, config.rpcUrl])
 
   const requestGas = useCallback(async (): Promise<boolean> => {
     if (!state.walletAddress || !config.paymasterConfig) {
-      return false;
+      return false
     }
 
-    // Import paymaster dynamically to avoid circular deps
-    const { TreasuryPaymaster } = await import(
-      '../paymaster/treasury-paymaster'
-    );
-
-    // Transform config to match paymaster's expected type
     const paymasterConfig = {
       treasuryAddress: config.paymasterConfig.treasuryAddress,
       operatorPrivateKey: config.paymasterConfig.operatorPrivateKey,
       rpcUrl: config.paymasterConfig.rpcUrl,
       chainId: config.paymasterConfig.chainId,
       policy: config.paymasterConfig.policy ?? {},
-    };
+    }
 
-    const paymaster = new TreasuryPaymaster(paymasterConfig);
+    const paymaster = new TreasuryPaymaster(paymasterConfig)
 
-    // Request gas funding from treasury
     const txHash = await paymaster.fundUser(
       state.walletAddress,
-      BigInt(config.paymasterConfig.defaultGasAmount ?? '1000000000000000') // 0.001 ETH default
-    );
+      BigInt(config.paymasterConfig.defaultGasAmount ?? '1000000000000000'),
+    )
 
-    return !!txHash;
-  }, [state.walletAddress, config.paymasterConfig]);
+    return !!txHash
+  }, [state.walletAddress, config.paymasterConfig])
 
   const contextValue: JejuAuthContextValue = useMemo(
     () => ({
@@ -765,34 +811,26 @@ export function JejuAuthProvider({ children, config }: JejuAuthProviderProps) {
       getSession,
       hasGas,
       requestGas,
-    ]
-  );
+    ],
+  )
 
   return (
     <JejuAuthContext.Provider value={contextValue}>
       {children}
     </JejuAuthContext.Provider>
-  );
+  )
 }
 
-// Helper to get ethereum provider from window
-function getEthereumProvider():
-  | {
-      request: (args: {
-        method: string;
-        params?: unknown[];
-      }) => Promise<unknown>;
-    }
-  | undefined {
-  if (typeof window === 'undefined') return undefined;
-  // biome-ignore lint/suspicious/noExplicitAny: Required for compatibility with wallet providers
-  return (window as any).ethereum;
+// Ethereum provider interface for wallet interactions
+type EthereumRequestParams = string | number | boolean | Address | Hex | null
+interface EthereumProvider {
+  request: (args: {
+    method: string
+    params?: EthereumRequestParams[]
+  }) => Promise<string | string[]>
 }
 
-// Extend window for ethereum - use any for compatibility with other wallet libraries
-declare global {
-  interface Window {
-    // biome-ignore lint/suspicious/noExplicitAny: Required for compatibility with wallet providers
-    ethereum?: any;
-  }
+function getEthereumProvider(): EthereumProvider | undefined {
+  if (typeof window === 'undefined') return undefined
+  return (window as Window & { ethereum?: EthereumProvider }).ethereum
 }

@@ -1,6 +1,4 @@
-'use client';
-
-import { useQuery } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query'
 import {
   Activity,
   AlertCircle,
@@ -12,7 +10,7 @@ import {
   RefreshCw,
   TrendingUp,
   Wallet,
-} from 'lucide-react';
+} from 'lucide-react'
 
 // =============================================================================
 // TYPES
@@ -20,46 +18,46 @@ import {
 
 interface DAOOverview {
   treasury: {
-    ethBalance: string;
-    bblnBalance: string;
-    totalDistributed: string;
-  };
+    ethBalance: string
+    bblnBalance: string
+    totalDistributed: string
+  }
   revenue: {
-    accumulated: string;
-    threshold: string;
-    totalReceived: string;
-    totalBuybacks: number;
-    bblnBought: string;
-    elizaBought: string;
-  };
+    accumulated: string
+    threshold: string
+    totalReceived: string
+    totalBuybacks: number
+    bblnBought: string
+    elizaBought: string
+  }
   aiCEO: {
-    address: string;
-    model: string;
-    isActive: boolean;
-    approvalRate: string;
-  };
+    address: string
+    model: string
+    isActive: boolean
+    approvalRate: string
+  }
 }
 
 interface BuybackRecord {
-  id: string;
-  totalEthInput: string;
-  bblnBought: string | null;
-  elizaBought: string | null;
-  treasuryEth: string;
-  status: string;
-  txHash: string | null;
-  initiatedAt: string;
-  completedAt: string | null;
+  id: string
+  totalEthInput: string
+  bblnBought: string | null
+  elizaBought: string | null
+  treasuryEth: string
+  status: string
+  txHash: string | null
+  initiatedAt: string
+  completedAt: string | null
 }
 
 interface DAOResponse {
-  success: boolean;
-  overview: DAOOverview;
+  success: boolean
+  overview: DAOOverview
 }
 
 interface BuybacksResponse {
-  success: boolean;
-  buybacks: BuybackRecord[];
+  success: boolean
+  buybacks: BuybackRecord[]
 }
 
 // =============================================================================
@@ -73,11 +71,11 @@ function StatCard({
   icon: Icon,
   trend,
 }: {
-  title: string;
-  value: string;
-  subtitle?: string;
-  icon: React.ElementType;
-  trend?: 'up' | 'down' | 'neutral';
+  title: string
+  value: string
+  subtitle?: string
+  icon: React.ElementType
+  trend?: 'up' | 'down' | 'neutral'
 }) {
   return (
     <div className="rounded-xl border border-border/50 bg-card p-4 transition-colors hover:border-border">
@@ -102,15 +100,15 @@ function StatCard({
         </div>
       </div>
     </div>
-  );
+  )
 }
 
 function AIChiefCard({
   aiCEO,
   loading,
 }: {
-  aiCEO: DAOOverview['aiCEO'] | null;
-  loading: boolean;
+  aiCEO: DAOOverview['aiCEO'] | null
+  loading: boolean
 }) {
   if (loading) {
     return (
@@ -121,7 +119,7 @@ function AIChiefCard({
           <div className="h-4 w-1/2 rounded bg-muted" />
         </div>
       </div>
-    );
+    )
   }
 
   return (
@@ -165,7 +163,7 @@ function AIChiefCard({
         </div>
       </div>
     </div>
-  );
+  )
 }
 
 function BuybacksTable({ buybacks }: { buybacks: BuybackRecord[] }) {
@@ -178,7 +176,7 @@ function BuybacksTable({ buybacks }: { buybacks: BuybackRecord[] }) {
           Buybacks execute automatically when fee threshold is reached
         </p>
       </div>
-    );
+    )
   }
 
   return (
@@ -247,7 +245,7 @@ function BuybacksTable({ buybacks }: { buybacks: BuybackRecord[] }) {
         </tbody>
       </table>
     </div>
-  );
+  )
 }
 
 // =============================================================================
@@ -258,26 +256,26 @@ export default function DAOPage() {
   const { data: daoData, isLoading: daoLoading } = useQuery({
     queryKey: ['dao', 'overview'],
     queryFn: async (): Promise<DAOOverview | null> => {
-      const res = await fetch('/api/dao');
-      if (!res.ok) throw new Error('Failed to fetch DAO data');
-      const data = (await res.json()) as DAOResponse;
-      return data.success ? data.overview : null;
+      const res = await fetch('/api/dao')
+      if (!res.ok) throw new Error('Failed to fetch DAO data')
+      const data = (await res.json()) as DAOResponse
+      return data.success ? data.overview : null
     },
-  });
+  })
 
   const { data: buybacksData, isLoading: buybacksLoading } = useQuery({
     queryKey: ['dao', 'buybacks'],
     queryFn: async (): Promise<BuybackRecord[]> => {
-      const res = await fetch('/api/dao/buybacks');
-      if (!res.ok) throw new Error('Failed to fetch buybacks');
-      const data = (await res.json()) as BuybacksResponse;
-      return data.success ? data.buybacks : [];
+      const res = await fetch('/api/dao/buybacks')
+      if (!res.ok) throw new Error('Failed to fetch buybacks')
+      const data = (await res.json()) as BuybacksResponse
+      return data.success ? data.buybacks : []
     },
-  });
+  })
 
-  const overview = daoData;
-  const buybacks = buybacksData;
-  const loading = daoLoading || buybacksLoading;
+  const overview = daoData
+  const buybacks = buybacksData
+  const loading = daoLoading || buybacksLoading
 
   return (
     <div className="container mx-auto max-w-6xl px-4 py-8">
@@ -394,7 +392,7 @@ export default function DAOPage() {
                           100,
                           (Number(overview.revenue.accumulated) /
                             Number(overview.revenue.threshold)) *
-                            100
+                            100,
                         )}%`
                       : '0%',
                   }}
@@ -447,5 +445,5 @@ export default function DAOPage() {
         </div>
       </div>
     </div>
-  );
+  )
 }

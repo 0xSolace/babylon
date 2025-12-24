@@ -1,5 +1,5 @@
-import { z } from 'zod';
-import { UsernameSchema } from './common';
+import { z } from 'zod'
+import { UsernameSchema } from './common'
 
 export const OnboardingProfileSchema = z.object({
   username: UsernameSchema,
@@ -42,7 +42,7 @@ export const OnboardingProfileSchema = z.object({
   // Legal acceptance (required for GDPR compliance)
   tosAccepted: z.boolean().optional(),
   privacyPolicyAccepted: z.boolean().optional(),
-});
+})
 
 // Type exports
-export type OnboardingProfile = z.infer<typeof OnboardingProfileSchema>;
+export type OnboardingProfile = z.infer<typeof OnboardingProfileSchema>

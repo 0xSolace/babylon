@@ -4,51 +4,51 @@
  * Converts trajectories to OpenPipe ART format for RLAIF training.
  */
 
-import type { JsonValue } from '@babylon/shared';
-import type { Trajectory } from './types';
+import type { JsonValue } from '@babylon/shared'
+import type { Trajectory } from './types'
 
 /**
  * ART-compatible trajectory format
  */
 export interface ARTTrajectory {
-  id: string;
-  agent_id: string;
-  scenario_id?: string;
-  group_index?: number;
-  start_time: number;
-  end_time: number;
-  duration_ms: number;
-  total_reward: number;
-  steps: ARTStep[];
-  metadata?: Record<string, JsonValue>;
+  id: string
+  agent_id: string
+  scenario_id?: string
+  group_index?: number
+  start_time: number
+  end_time: number
+  duration_ms: number
+  total_reward: number
+  steps: ARTStep[]
+  metadata?: Record<string, JsonValue>
 }
 
 /**
  * ART-compatible step format
  */
 export interface ARTStep {
-  step_id: string;
-  sequence_num: number;
-  timestamp: number;
-  action_type?: string;
-  action_name?: string;
-  parameters?: Record<string, JsonValue>;
-  success: boolean;
-  reward: number;
-  llm_calls?: ARTLLMCall[];
+  step_id: string
+  sequence_num: number
+  timestamp: number
+  action_type?: string
+  action_name?: string
+  parameters?: Record<string, JsonValue>
+  success: boolean
+  reward: number
+  llm_calls?: ARTLLMCall[]
 }
 
 /**
  * ART-compatible LLM call format
  */
 export interface ARTLLMCall {
-  model: string;
-  system_prompt: string;
-  user_prompt: string;
-  response: string;
-  temperature: number;
-  latency_ms: number;
-  purpose: string;
+  model: string
+  system_prompt: string
+  user_prompt: string
+  response: string
+  temperature: number
+  latency_ms: number
+  purpose: string
 }
 
 /**
@@ -84,23 +84,23 @@ export function toARTTrajectory(trajectory: Trajectory): ARTTrajectory {
       })),
     })),
     metadata: trajectory.metadata,
-  };
+  }
 }
 
 /**
  * Group trajectories by scenario for GRPO training
  */
 export function groupTrajectories(
-  trajectories: Trajectory[]
+  trajectories: Trajectory[],
 ): Map<string, Trajectory[]> {
-  const groups = new Map<string, Trajectory[]>();
+  const groups = new Map<string, Trajectory[]>()
 
   for (const trajectory of trajectories) {
-    const scenarioId = trajectory.scenarioId ?? 'default';
-    const existing = groups.get(scenarioId) ?? [];
-    existing.push(trajectory);
-    groups.set(scenarioId, existing);
+    const scenarioId = trajectory.scenarioId ?? 'default'
+    const existing = groups.get(scenarioId) ?? []
+    existing.push(trajectory)
+    groups.set(scenarioId, existing)
   }
 
-  return groups;
+  return groups
 }
