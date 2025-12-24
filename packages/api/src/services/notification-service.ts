@@ -638,3 +638,87 @@ export async function notifyGroupChatMessage(
 
   await Promise.all(notificationPromises);
 }
+
+/**
+ * Create notification for tier promotion
+ */
+export async function notifyTierPromotion(
+  userId: string,
+  npcId: string,
+  chatId: string,
+  _chatName: string,
+  fromTier: number,
+  toTier: number
+): Promise<void> {
+  const result = await db
+    .select({
+      displayName: users.displayName,
+      username: users.username,
+    })
+    .from(users)
+    .where(eq(users.id, npcId))
+    .limit(1);
+
+  const npc = result[0];
+  const npcName = npc?.displayName || npc?.username || 'An NPC';
+
+  const tierNames: Record<number, string> = {
+    1: 'Inner Circle',
+    2: 'Community',
+    3: 'Followers',
+  };
+
+  const message = `Congratulations! You've been promoted from ${tierNames[fromTier] ?? `Tier ${fromTier}`} to ${tierNames[toTier] ?? `Tier ${toTier}`} in ${npcName}'s groups!`;
+
+  await createNotification({
+    userId,
+    type: 'system',
+    actorId: npcId,
+    chatId,
+    title: 'Tier Promotion',
+    message,
+  });
+}
+
+/**
+ * Create notification for tier demotion
+ */
+export async function notifyTierDemotion(
+  userId: string,
+  npcId: string,
+  chatId: string | null,
+  fromTier: number,
+  toTier: number | null,
+  reason: string
+): Promise<void> {
+  const result = await db
+    .select({
+      displayName: users.displayName,
+      username: users.username,
+    })
+    .from(users)
+    .where(eq(users.id, npcId))
+    .limit(1);
+
+  const npc = result[0];
+  const npcName = npc?.displayName || npc?.username || 'An NPC';
+
+  const tierNames: Record<number, string> = {
+    1: 'Inner Circle',
+    2: 'Community',
+    3: 'Followers',
+  };
+
+  const message = toTier
+    ? `You've been moved from ${tierNames[fromTier] ?? `Tier ${fromTier}`} to ${tierNames[toTier] ?? `Tier ${toTier}`} in ${npcName}'s groups. Reason: ${reason}`
+    : `You've been removed from ${npcName}'s ${tierNames[fromTier] ?? `Tier ${fromTier}`}. Reason: ${reason}`;
+
+  await createNotification({
+    userId,
+    type: 'system',
+    actorId: npcId,
+    chatId: chatId ?? undefined,
+    title: toTier ? 'Tier Change' : 'Group Removal',
+    message,
+  });
+}

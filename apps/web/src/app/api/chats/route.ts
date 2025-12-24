@@ -409,7 +409,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       messagesByChatId.set(chatId, messages);
     });
 
-    // Format group chats
+    // Format group chats with tier information
     const groupChatsList = memberships
       .map((membership) => {
         const chat = chatDetailsMap.get(membership.chatId);
@@ -425,6 +425,11 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
           qualityScore: membership.qualityScore,
           lastMessageAt: membership.lastMessageAt,
           updatedAt: chat.updatedAt,
+          // Tier information
+          tier: chat.tier,
+          tierName: chat.tierName,
+          maxMembers: chat.maxMembers,
+          npcAdminId: chat.npcAdminId,
         };
       })
       .filter((c) => c !== null);

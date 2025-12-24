@@ -352,6 +352,11 @@ export const GET = withErrorHandling(
         createdAt: chat.createdAt,
         updatedAt: chat.updatedAt,
         otherUser: otherUser,
+        // Tier information for group chats
+        tier: chat.tier,
+        tierName: chat.tierName,
+        maxMembers: chat.maxMembers,
+        npcAdminId: chat.npcAdminId,
       },
       messages: messagesInOrder.map((msg) => ({
         id: msg.id,

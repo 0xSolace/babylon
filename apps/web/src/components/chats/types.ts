@@ -19,6 +19,11 @@ export interface Chat {
     username: string | null;
     profileImageUrl: string | null;
   };
+  // Tier information for group chats
+  tier?: number | null;
+  tierName?: string | null;
+  maxMembers?: number | null;
+  npcAdminId?: string | null;
 }
 
 export interface Message {
@@ -48,6 +53,11 @@ export interface ChatDetails {
       username: string | null;
       profileImageUrl: string | null;
     } | null;
+    // Tier information for group chats
+    tier?: number | null;
+    tierName?: string | null;
+    maxMembers?: number | null;
+    npcAdminId?: string | null;
   };
   messages: Message[];
   participants: ChatParticipant[];

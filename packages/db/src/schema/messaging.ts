@@ -26,6 +26,11 @@ export const chats = pgTable(
     createdAt: timestamp('createdAt', { mode: 'date' }).notNull().defaultNow(),
     updatedAt: timestamp('updatedAt', { mode: 'date' }).notNull(),
     groupId: text('groupId'),
+    // Tiered group system fields
+    tier: integer('tier'), // 1 = Inner Circle, 2 = Community, 3 = Followers (null for user groups)
+    tierName: text('tierName'), // Human-readable tier name
+    maxMembers: integer('maxMembers'), // Tier-specific member limit
+    parentGroupId: text('parentGroupId'), // Links tiers to same NPC's group family
   },
   (table) => [
     index('Chat_gameId_dayNumber_idx').on(table.gameId, table.dayNumber),
@@ -34,6 +39,9 @@ export const chats = pgTable(
     index('Chat_createdBy_idx').on(table.createdBy),
     index('Chat_npcAdminId_idx').on(table.npcAdminId),
     index('Chat_relatedQuestion_idx').on(table.relatedQuestion),
+    index('Chat_tier_idx').on(table.tier),
+    index('Chat_npcAdminId_tier_idx').on(table.npcAdminId, table.tier),
+    index('Chat_parentGroupId_idx').on(table.parentGroupId),
   ]
 );
 
@@ -167,6 +175,11 @@ export const groupChatMemberships = pgTable(
     isActive: boolean('isActive').notNull().default(true),
     sweepReason: text('sweepReason'),
     removedAt: timestamp('removedAt', { mode: 'date' }),
+    // Tiered group system fields
+    tier: integer('tier'), // 1, 2, or 3 (mirrors Chat.tier for query efficiency)
+    promotedAt: timestamp('promotedAt', { mode: 'date' }), // When user was last promoted
+    demotedAt: timestamp('demotedAt', { mode: 'date' }), // When user was last demoted
+    previousTier: integer('previousTier'), // Previous tier before promotion/demotion
   },
   (table) => [
     unique('GroupChatMembership_userId_chatId_key').on(
@@ -181,6 +194,12 @@ export const groupChatMemberships = pgTable(
     index('GroupChatMembership_userId_isActive_idx').on(
       table.userId,
       table.isActive
+    ),
+    index('GroupChatMembership_tier_idx').on(table.tier),
+    index('GroupChatMembership_userId_npcAdminId_tier_idx').on(
+      table.userId,
+      table.npcAdminId,
+      table.tier
     ),
   ]
 );
