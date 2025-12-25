@@ -7,8 +7,8 @@
  */
 
 import type { JsonRpcRequest, JsonRpcResponse } from '@babylon/a2a'
-import { isObject, isPlainObject } from '@jejunetwork/shared'
 import type { JsonRpcResult } from '@babylon/shared'
+import { isObject, isPlainObject } from '@jejunetwork/shared'
 import { type Address, isHex, zeroHash } from 'viem'
 import { ModerationClient } from './client'
 

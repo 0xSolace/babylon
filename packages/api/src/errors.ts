@@ -14,7 +14,12 @@ import {
 } from '@jejunetwork/shared'
 import { safeToJsonRecord } from './utils/type-guards'
 
-export { AuthenticationError, AuthorizationError, BabylonError, isAuthenticationError }
+export {
+  AuthenticationError,
+  AuthorizationError,
+  BabylonError,
+  isAuthenticationError,
+}
 
 // =============================================================================
 // API-specific error classes

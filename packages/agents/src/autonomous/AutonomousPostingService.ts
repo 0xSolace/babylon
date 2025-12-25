@@ -5,7 +5,6 @@
  * Handles agents creating posts autonomously
  */
 
-import { countTokensSync, truncateToTokenLimitSync } from '@jejunetwork/shared'
 import { agentTrades, db, desc, eq, posts } from '@babylon/db'
 import {
   characterMappingService,
@@ -15,7 +14,11 @@ import {
 } from '@babylon/engine'
 import type { IAgentRuntime } from '@elizaos/core'
 import { parseKeyValueXml } from '@elizaos/core'
-import { toNull } from '@jejunetwork/shared'
+import {
+  countTokensSync,
+  toNull,
+  truncateToTokenLimitSync,
+} from '@jejunetwork/shared'
 import { callAgentLLM } from '../llm'
 import { getAgentConfig } from '../shared/agent-config'
 import { logger } from '../shared/logger'

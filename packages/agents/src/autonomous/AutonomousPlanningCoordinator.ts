@@ -5,10 +5,8 @@
  * Considers goals, constraints, and opportunities to generate comprehensive action plans.
  */
 
-import { countTokensSync, truncateToTokenLimitSync } from '@jejunetwork/shared'
 import { db, type JsonValue } from '@babylon/db'
 import { StaticDataRegistry, type StaticOrganization } from '@babylon/engine'
-import { isJsonValue } from '@jejunetwork/shared'
 import type { IAgentRuntime } from '@elizaos/core'
 import type {
   AgentConstraints,
@@ -16,7 +14,12 @@ import type {
   AgentGoal,
   GoalTarget,
 } from '@jejunetwork/agents'
-import { generateSnowflakeId } from '@jejunetwork/shared'
+import {
+  countTokensSync,
+  generateSnowflakeId,
+  isJsonValue,
+  truncateToTokenLimitSync,
+} from '@jejunetwork/shared'
 import { z } from 'zod'
 import { callAgentLLM } from '../llm'
 import { getAgentConfig } from '../shared/agent-config'

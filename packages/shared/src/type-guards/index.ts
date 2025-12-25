@@ -2,7 +2,7 @@
  * Type Guards Module
  *
  * Centralized type guards for the Babylon application.
- * 
+ *
  * For base type guards (isObject, isString, assertDefined, etc.),
  * import directly from @jejunetwork/shared
  *

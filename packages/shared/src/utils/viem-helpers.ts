@@ -67,7 +67,7 @@ export function privateKeyToAddress(privateKey: Hex): Address {
  * Generate random bytes as hex string
  * Replaces ethers.hexlify(ethers.randomBytes(n))
  */
-import { randomHex, randomHex as _randomHex } from '@jejunetwork/shared'
+import { randomHex as _randomHex, randomHex } from '@jejunetwork/shared'
 
 // Alias for backward compatibility
 export { randomHex, randomHex as randomBytesHex }

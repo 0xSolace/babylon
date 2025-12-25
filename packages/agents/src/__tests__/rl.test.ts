@@ -12,8 +12,11 @@
 import { describe, expect, it } from 'bun:test'
 import fs from 'node:fs/promises'
 import path from 'node:path'
-import { getModelTokenLimit, truncateToTokenLimitSync } from '@jejunetwork/shared'
 import { getRLModelConfig } from '@babylon/training'
+import {
+  getModelTokenLimit,
+  truncateToTokenLimitSync,
+} from '@jejunetwork/shared'
 import { AutonomousTradingService } from '../autonomous/AutonomousTradingService'
 import { TrajectoryLoggerService } from '../plugins/plugin-trajectory-logger/src/TrajectoryLoggerService'
 import { AgentRuntimeManager } from '../runtime/AgentRuntimeManager'

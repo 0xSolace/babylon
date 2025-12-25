@@ -48,7 +48,11 @@ export type {
   JsonRpcResponse,
 } from './types/a2a'
 
-import type { ApiKeyAuthConfig, AuthRequest, AuthResult } from '@jejunetwork/a2a'
+import type {
+  ApiKeyAuthConfig,
+  AuthRequest,
+  AuthResult,
+} from '@jejunetwork/a2a'
 import { validateApiKey as validateApiKeyBase } from '@jejunetwork/a2a'
 
 // Babylon-specific API key header constant

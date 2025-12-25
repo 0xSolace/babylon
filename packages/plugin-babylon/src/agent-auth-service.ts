@@ -5,8 +5,8 @@
  * Agents authenticate once and receive a session token valid for 24 hours.
  */
 
-import { isObject } from '@jejunetwork/shared'
 import { logger } from '@elizaos/core'
+import { isObject } from '@jejunetwork/shared'
 import {
   getApiErrorMessage,
   isAgentAuthResponse,

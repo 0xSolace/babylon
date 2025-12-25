@@ -68,10 +68,10 @@ export * from './perps-types'
 
 // Assets utilities (URL helpers)
 export * from './utils/assets'
-// Formatting utilities
-export * from './utils/format'
 // Content analysis (pure functions, no external deps)
 export * from './utils/content-analysis'
+// Formatting utilities
+export * from './utils/format'
 // Content safety - import directly from @jejunetwork/shared
 // Formatting utilities - import directly from @jejunetwork/shared
 // JSON parser - import directly from @jejunetwork/shared
@@ -92,6 +92,7 @@ export * from './utils/viem-helpers'
 // Type Guards
 // =============================================================================
 
+export type { JsonValue } from '@jejunetwork/shared'
 // Core type guards - re-exported from @jejunetwork/shared
 export {
   assertDefined,
@@ -128,7 +129,6 @@ export {
   toJsonValueOrNull,
   toStringArray,
 } from '@jejunetwork/shared'
-export type { JsonValue } from '@jejunetwork/shared'
 // Babylon-specific type guards (blockchain, entities, game)
 export * from './type-guards'
 

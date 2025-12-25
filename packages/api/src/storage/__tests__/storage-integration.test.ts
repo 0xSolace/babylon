@@ -21,7 +21,10 @@
 
 import { beforeAll, describe, expect, it } from 'bun:test'
 import crypto from 'node:crypto'
-import { getJejuStorageClient, isJejuStorageAvailable } from '@jejunetwork/shared'
+import {
+  getJejuStorageClient,
+  isJejuStorageAvailable,
+} from '@jejunetwork/shared'
 // Static imports for storage clients - used when not testing provider selection logic
 import { getStorageClient } from '../s3-client'
 

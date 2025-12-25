@@ -13,9 +13,9 @@
 
 import { promises as fs } from 'node:fs'
 import * as path from 'node:path'
-import { isObject } from '@jejunetwork/shared'
 import { logger } from '@babylon/shared'
 import type { IAgentRuntime } from '@elizaos/core'
+import { isObject } from '@jejunetwork/shared'
 import { TrajectoryRecorder } from '../training/TrajectoryRecorder'
 import { isBenchmarkGameSnapshot } from '../type-guards'
 import {

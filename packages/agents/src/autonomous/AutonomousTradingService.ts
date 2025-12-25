@@ -5,7 +5,6 @@
  * Uses DirectExecutors for actual trade execution (DRY principle).
  */
 
-import { countTokensSync, truncateToTokenLimitSync } from '@jejunetwork/shared'
 import { db } from '@babylon/db'
 import {
   formatRandomContext,
@@ -15,6 +14,7 @@ import {
   WalletService,
 } from '@babylon/engine'
 import type { IAgentRuntime } from '@elizaos/core'
+import { countTokensSync, truncateToTokenLimitSync } from '@jejunetwork/shared'
 import { callAgentLLM } from '../llm'
 import { getAgentConfig } from '../shared/agent-config'
 import { logger } from '../shared/logger'
