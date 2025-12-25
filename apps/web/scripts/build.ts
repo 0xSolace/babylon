@@ -65,7 +65,6 @@ const BROWSER_EXTERNALS = [
   '@babylon/testing',
   // Jeju packages with server-side code (server-only)
   '@jejunetwork/a2a',
-  '@jejunetwork/config',
   '@jejunetwork/db',
   '@jejunetwork/messaging',
   '@jejunetwork/mcp',
@@ -75,8 +74,8 @@ const BROWSER_EXTERNALS = [
   'swagger-ui-react',
   'swagger-jsdoc',
   '@swagger-api/apidom-reference',
-  // Note: @jejunetwork/auth and @jejunetwork/kms are BUNDLED (not external)
-  // They have browser-safe React components used by @babylon/auth
+  // Note: @jejunetwork/auth, @jejunetwork/kms, @jejunetwork/config, @jejunetwork/shared
+  // are BUNDLED (not external) - they have browser-safe code used by @babylon/auth
 ]
 
 async function buildCSS(): Promise<void> {
