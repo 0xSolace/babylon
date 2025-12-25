@@ -11,7 +11,8 @@ import { logger } from '@babylon/shared'
 import { getRedis as getRedisFromImpl, type Redis } from './redis'
 
 // Type for compatibility with existing code
-export type RedisInstance = Redis
+// biome-ignore lint/correctness/noUnusedVariables: Type alias for compatibility
+type RedisInstance = Redis
 
 // Redis client state
 let redisClient: Redis | null = null

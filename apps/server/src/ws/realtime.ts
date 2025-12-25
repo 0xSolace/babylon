@@ -23,7 +23,7 @@ const channels = new Map<string, Set<string>>()
 /**
  * Broadcast message to a channel
  */
-export function broadcast(channel: string, message: JsonValue): void {
+function _broadcast(channel: string, message: JsonValue): void {
   const subscribers = channels.get(channel)
   if (!subscribers) return
 
@@ -155,7 +155,7 @@ export const realtimeWS = new Elysia({ prefix: '/ws' }).ws('/realtime', {
 /**
  * Channel types for subscription
  */
-export const CHANNELS = {
+const _CHANNELS = {
   // User-specific channels
   USER_NOTIFICATIONS: (userId: string) => `user:${userId}:notifications`,
   USER_MESSAGES: (userId: string) => `user:${userId}:messages`,

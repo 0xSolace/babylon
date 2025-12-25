@@ -28,7 +28,7 @@ type NotificationService = {
 
 let notificationServiceInstance: NotificationService | null = null
 
-export function setNotificationService(service: NotificationService): void {
+function _setNotificationService(service: NotificationService): void {
   notificationServiceInstance = service
 }
 
@@ -106,7 +106,7 @@ interface ReportContext {
 /**
  * Evaluate a report by collecting context and using AI
  */
-export async function evaluateReport(
+async function _evaluateReport(
   reportId: string,
 ): Promise<ReportEvaluationResult> {
   logger.info('Evaluating report', { reportId }, 'ReportEvaluation')
@@ -479,7 +479,7 @@ Respond with a JSON object:
 /**
  * Store evaluation result in database
  */
-export async function storeEvaluationResult(
+async function _storeEvaluationResult(
   reportId: string,
   evaluation: ReportEvaluationResult,
 ): Promise<void> {

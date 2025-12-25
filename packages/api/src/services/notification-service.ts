@@ -163,7 +163,7 @@ export async function createNotification(
 /**
  * Create notification for comment on user's post
  */
-export async function notifyCommentOnPost(
+async function _notifyCommentOnPost(
   postAuthorId: string,
   commentAuthorId: string,
   postId: string,
@@ -203,7 +203,7 @@ export async function notifyCommentOnPost(
 /**
  * Create notification for reaction on user's post
  */
-export async function notifyReactionOnPost(
+async function _notifyReactionOnPost(
   postAuthorId: string,
   reactionUserId: string,
   postId: string,
@@ -276,7 +276,7 @@ export async function notifyFollow(
 /**
  * Create notification for reply to comment
  */
-export async function notifyReplyToComment(
+async function _notifyReplyToComment(
   commentAuthorId: string,
   replyAuthorId: string,
   postId: string,
@@ -324,7 +324,7 @@ export async function notifyReplyToComment(
 /**
  * Create notification for share/repost
  */
-export async function notifyShare(
+async function _notifyShare(
   postAuthorId: string,
   sharerId: string,
   postId: string,
@@ -360,7 +360,7 @@ export async function notifyShare(
 /**
  * Create notification for mention (@username)
  */
-export async function notifyMention(
+async function _notifyMention(
   mentionedUserId: string,
   mentionerUserId: string,
   postId?: string,
@@ -401,7 +401,7 @@ export async function notifyMention(
 /**
  * Create system notification for new account creation
  */
-export async function notifyNewAccount(userId: string): Promise<void> {
+async function _notifyNewAccount(userId: string): Promise<void> {
   const message =
     '🎉 Welcome to Babylon! Edit your profile details to earn free points and unlock rewards.'
 
@@ -416,7 +416,7 @@ export async function notifyNewAccount(userId: string): Promise<void> {
 /**
  * Create system notification for profile completion
  */
-export async function notifyProfileComplete(
+async function _notifyProfileComplete(
   userId: string,
   pointsAwarded: number,
 ): Promise<void> {
@@ -433,7 +433,7 @@ export async function notifyProfileComplete(
 /**
  * Create notification for reaction on user's comment
  */
-export async function notifyReactionOnComment(
+async function _notifyReactionOnComment(
   commentAuthorId: string,
   reactionUserId: string,
   commentId: string,
@@ -510,7 +510,7 @@ export async function notifyGroupChatInvite(
 /**
  * Create notification for user group invite
  */
-export async function notifyUserGroupInvite(
+async function _notifyUserGroupInvite(
   userId: string,
   inviterId: string,
   groupId: string,
@@ -551,7 +551,7 @@ export async function notifyUserGroupInvite(
 /**
  * Create notification for new DM message
  */
-export async function notifyDMMessage(
+async function _notifyDMMessage(
   recipientUserId: string,
   senderUserId: string,
   chatId: string,
@@ -595,7 +595,7 @@ export async function notifyDMMessage(
 /**
  * Create notification for new group chat message
  */
-export async function notifyGroupChatMessage(
+async function _notifyGroupChatMessage(
   recipientUserIds: string[],
   senderUserId: string,
   chatId: string,

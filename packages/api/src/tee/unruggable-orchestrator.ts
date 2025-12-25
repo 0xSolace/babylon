@@ -543,7 +543,7 @@ export function createUnruggableOrchestrator(
 
 let globalOrchestrator: UnruggableOrchestrator | null = null
 
-export async function startUnruggableOrchestrator(): Promise<UnruggableOrchestrator> {
+async function _startUnruggableOrchestrator(): Promise<UnruggableOrchestrator> {
   if (!globalOrchestrator) {
     globalOrchestrator = createUnruggableOrchestrator()
     await globalOrchestrator.initialize()
@@ -551,6 +551,6 @@ export async function startUnruggableOrchestrator(): Promise<UnruggableOrchestra
   return globalOrchestrator
 }
 
-export function getUnruggableOrchestrator(): UnruggableOrchestrator | null {
+function _getUnruggableOrchestrator(): UnruggableOrchestrator | null {
   return globalOrchestrator
 }

@@ -16,7 +16,7 @@ import { toBabylonRuntime } from '../types'
  * Action: Buy Prediction Shares
  * Allows agent to buy YES or NO shares in a prediction market
  */
-export const buySharesAction: Action = {
+const _buySharesAction: Action = {
   name: 'BUY_PREDICTION_SHARES',
   description: 'Buy shares in a prediction market',
   similes: [
@@ -124,7 +124,7 @@ export const buySharesAction: Action = {
  * Action: Sell Prediction Shares
  * Allows agent to sell shares and close prediction positions
  */
-export const sellSharesAction: Action = {
+const _sellSharesAction: Action = {
   name: 'SELL_PREDICTION_SHARES',
   description: 'Sell shares in a prediction market',
   similes: [
@@ -227,7 +227,7 @@ export const sellSharesAction: Action = {
  * Action: Open Perpetual Position
  * Allows agent to open a leveraged position on a perpetual market
  */
-export const openPerpPositionAction: Action = {
+const _openPerpPositionAction: Action = {
   name: 'OPEN_PERP_POSITION',
   description: 'Open a leveraged position on a perpetual market',
   similes: ['open position', 'long', 'short', 'leverage trade', 'perp trade'],
@@ -335,7 +335,7 @@ export const openPerpPositionAction: Action = {
  * Action: Close Perpetual Position
  * Allows agent to close an open perpetual position
  */
-export const closePerpPositionAction: Action = {
+const _closePerpPositionAction: Action = {
   name: 'CLOSE_PERP_POSITION',
   description: 'Close an open perpetual position',
   similes: ['close position', 'exit perp', 'close perp', 'exit position'],

@@ -20,7 +20,7 @@ import {
   type Chain,
   createBabylonPublicClient,
   logger,
-  safeReadContract,
+  readContract,
 } from '@babylon/shared'
 import { type Address, formatEther, formatUnits, type PublicClient } from 'viem'
 import { base, baseSepolia, hardhat } from 'viem/chains'
@@ -65,7 +65,8 @@ export interface AIChiefStatus {
   lastDecisionAt: Date | null
 }
 
-export interface DAOProposal {
+// biome-ignore lint/correctness/noUnusedVariables: Documents contract return type
+interface DAOProposal {
   proposalId: string
   proposalType:
     | 'TREASURY_SPEND'
@@ -319,7 +320,7 @@ export function initializeDAOService(config: DAOServiceConfig): void {
  * Initialize from environment variables
  * Call this at app startup to auto-configure the DAO service
  */
-export function initializeDAOServiceFromEnvironment(): boolean {
+function _initializeDAOServiceFromEnvironment(): boolean {
   const env = getEnvironment()
 
   if (
@@ -358,7 +359,7 @@ export function initializeDAOServiceFromEnvironment(): boolean {
 /**
  * Check if DAO service is configured
  */
-export function isDAOServiceConfigured(): boolean {
+function _isDAOServiceConfigured(): boolean {
   return daoConfig !== null
 }
 
@@ -406,22 +407,22 @@ export async function getAICEOStatus(): Promise<AIChiefStatus> {
 
   const [aiCEOAddress, agentId, emergencyPaused, ceoStats] = (await Promise.all(
     [
-      safeReadContract<`0x${string}`>(client, {
+      readContract(client, {
         address: daoConfig.daoAddress,
         abi: BABYLON_DAO_ABI,
         functionName: 'aiCEO',
       }),
-      safeReadContract<bigint>(client, {
+      readContract(client, {
         address: daoConfig.daoAddress,
         abi: BABYLON_DAO_ABI,
         functionName: 'aiCEOAgentId',
       }),
-      safeReadContract<boolean>(client, {
+      readContract(client, {
         address: daoConfig.daoAddress,
         abi: BABYLON_DAO_ABI,
         functionName: 'emergencyPaused',
       }),
-      safeReadContract<readonly [bigint, bigint, bigint, bigint]>(client, {
+      readContract(client, {
         address: daoConfig.daoAddress,
         abi: BABYLON_DAO_ABI,
         functionName: 'getAICEOStats',
@@ -488,23 +489,23 @@ export async function getTreasuryStats(): Promise<TreasuryStats> {
     approvedVaultsCount,
   ] = (await Promise.all([
     client.getBalance({ address: daoConfig.treasuryAddress }),
-    safeReadContract<bigint>(client, {
+    readContract(client, {
       address: daoConfig.bblnTokenAddress,
       abi: ERC20_ABI,
       functionName: 'balanceOf',
       args: [daoConfig.treasuryAddress],
     }),
-    safeReadContract<bigint>(client, {
+    readContract(client, {
       address: daoConfig.treasuryAddress,
       abi: BABYLON_TREASURY_ABI,
       functionName: 'totalETHDistributed',
     }),
-    safeReadContract<bigint>(client, {
+    readContract(client, {
       address: daoConfig.treasuryAddress,
       abi: BABYLON_TREASURY_ABI,
       functionName: 'totalBBLNDistributed',
     }),
-    safeReadContract<bigint>(client, {
+    readContract(client, {
       address: daoConfig.treasuryAddress,
       abi: BABYLON_TREASURY_ABI,
       functionName: 'getApprovedVaultsCount',
@@ -531,19 +532,17 @@ export async function getRevenueStats(): Promise<RevenueStats> {
   const client = getDAOClient()
 
   const [stats, canExecute, isPaused] = (await Promise.all([
-    safeReadContract<
-      readonly [bigint, bigint, bigint, bigint, bigint, bigint, bigint]
-    >(client, {
+    readContract(client, {
       address: daoConfig.revenueAddress,
       abi: BABYLON_REVENUE_ABI,
       functionName: 'getStats',
     }),
-    safeReadContract<boolean>(client, {
+    readContract(client, {
       address: daoConfig.revenueAddress,
       abi: BABYLON_REVENUE_ABI,
       functionName: 'canExecuteBuyback',
     }),
-    safeReadContract<boolean>(client, {
+    readContract(client, {
       address: daoConfig.revenueAddress,
       abi: BABYLON_REVENUE_ABI,
       functionName: 'paused',
@@ -570,9 +569,7 @@ export async function getRevenueStats(): Promise<RevenueStats> {
 /**
  * Get buyback history from database (for DAO dashboard)
  */
-export async function getDAOBuybackHistory(
-  limit = 20,
-): Promise<BuybackRecord[]> {
+async function _getDAOBuybackHistory(limit = 20): Promise<BuybackRecord[]> {
   const records = await db
     .select()
     .from(buybackRecords)
@@ -597,7 +594,7 @@ export async function getDAOBuybackHistory(
 /**
  * Get DAO overview with all stats
  */
-export async function getDAOOverview(): Promise<DAOOverview> {
+async function _getDAOOverview(): Promise<DAOOverview> {
   const [aiCEO, treasury, revenue, proposals] = await Promise.all([
     getAICEOStatus(),
     getTreasuryStats(),
@@ -630,24 +627,24 @@ export async function getProposalCounts(): Promise<{
 
   // Proposal status enum: PENDING=0, APPROVED=1, EXECUTED=2, VETOED=3, EXPIRED=4
   const [total, pending, approved, executed] = await Promise.all([
-    safeReadContract<bigint>(client, {
+    readContract(client, {
       address: daoConfig.daoAddress,
       abi: BABYLON_DAO_ABI,
       functionName: 'getProposalCount',
     }).catch(() => 0n),
-    safeReadContract<bigint>(client, {
+    readContract(client, {
       address: daoConfig.daoAddress,
       abi: BABYLON_DAO_ABI,
       functionName: 'getProposalsByStatus',
       args: [0],
     }).catch(() => 0n),
-    safeReadContract<bigint>(client, {
+    readContract(client, {
       address: daoConfig.daoAddress,
       abi: BABYLON_DAO_ABI,
       functionName: 'getProposalsByStatus',
       args: [1],
     }).catch(() => 0n),
-    safeReadContract<bigint>(client, {
+    readContract(client, {
       address: daoConfig.daoAddress,
       abi: BABYLON_DAO_ABI,
       functionName: 'getProposalsByStatus',
@@ -666,7 +663,7 @@ export async function getProposalCounts(): Promise<{
 /**
  * Format stats for display
  */
-export function formatDAOStats(overview: DAOOverview): {
+function _formatDAOStats(overview: DAOOverview): {
   treasury: {
     ethBalance: string
     bblnBalance: string

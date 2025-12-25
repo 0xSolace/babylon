@@ -16,7 +16,7 @@ import type {
  * Provider: Recent Headlines
  * Gets recent news headlines from RSS feeds
  */
-export const headlinesProvider: Provider = {
+const _headlinesProvider: Provider = {
   name: 'BABYLON_HEADLINES',
   description: 'Get recent news headlines from RSS feeds',
 

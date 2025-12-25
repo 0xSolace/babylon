@@ -136,7 +136,7 @@ export function MarketCardSkeleton() {
  * @param props - Object with count of skeleton items to show
  * @returns Markets list skeleton element
  */
-export function MarketsListSkeleton({ count = 6 }: { count?: number }) {
+export function _MarketsListSkeleton({ count = 6 }: { count?: number }) {
   return (
     <div className="space-y-2">
       {Array.from({ length: count }, (_, i) => `markets-skeleton-${i}`).map(
@@ -242,7 +242,7 @@ export function ChatMessageSkeleton({
  * @param props - Object with count of skeleton messages to show
  * @returns Chat messages skeleton element
  */
-export function ChatMessagesSkeleton({ count = 5 }: { count?: number }) {
+export function _ChatMessagesSkeleton({ count = 5 }: { count?: number }) {
   return (
     <div className="space-y-4 p-4">
       {Array.from({ length: count }, (_, i) => ({
@@ -388,7 +388,7 @@ export function WidgetPanelSkeleton() {
  *
  * @returns Prediction card skeleton element
  */
-export function PredictionCardSkeleton() {
+export function _PredictionCardSkeleton() {
   return (
     <div className="space-y-3 rounded bg-muted/30 p-3">
       <Skeleton className="h-4 w-full" />
@@ -415,7 +415,7 @@ export function PredictionCardSkeleton() {
  *
  * @returns Pool card skeleton element
  */
-export function PoolCardSkeleton() {
+export function _PoolCardSkeleton() {
   return (
     <div className="space-y-3 rounded-lg bg-muted/30 p-4">
       <div className="flex items-start justify-between gap-3">
@@ -441,7 +441,7 @@ export function PoolCardSkeleton() {
  *
  * @returns Stats card skeleton element
  */
-export function StatsCardSkeleton() {
+export function _StatsCardSkeleton() {
   return (
     <div className="rounded-2xl border border-border bg-card/50 p-4 backdrop-blur sm:p-6">
       <Skeleton className="mb-2 h-4 w-24 max-w-full" />
@@ -460,7 +460,7 @@ export function StatsCardSkeleton() {
  * @param props - Object with number of columns to show
  * @returns Table row skeleton element
  */
-export function TableRowSkeleton({ columns = 4 }: { columns?: number }) {
+export function _TableRowSkeleton({ columns = 4 }: { columns?: number }) {
   return (
     <div className="flex items-center gap-2 border-border/5 border-b p-2 sm:gap-4 sm:p-3">
       {Array.from({ length: columns }, (_, i) => `table-row-skeleton-${i}`).map(
@@ -482,7 +482,7 @@ export function TableRowSkeleton({ columns = 4 }: { columns?: number }) {
  *
  * @returns Notification item skeleton element
  */
-export function NotificationItemSkeleton() {
+export function _NotificationItemSkeleton() {
   return (
     <div className="border-border/5 border-b p-4">
       <div className="flex gap-3">
@@ -505,7 +505,7 @@ export function NotificationItemSkeleton() {
  *
  * @returns Page header skeleton element
  */
-export function PageHeaderSkeleton() {
+export function _PageHeaderSkeleton() {
   return (
     <div className="space-y-3 p-4 sm:space-y-4 sm:p-6">
       <Skeleton className="h-7 w-40 max-w-full sm:h-8 sm:w-48" />

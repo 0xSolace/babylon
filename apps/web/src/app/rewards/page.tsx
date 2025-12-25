@@ -136,7 +136,7 @@ export default function RewardsPage() {
       }
 
       const response = await fetch(
-        `/api/users/${encodeURIComponent(user?.id)}/referrals`,
+        `/api/users/${encodeURIComponent(user?.id ?? '')}/referrals`,
         {
           headers: {
             Authorization: `Bearer ${token}`,

@@ -17,7 +17,7 @@ import {
   createBabylonPublicClient,
   generateSnowflakeId,
   logger,
-  safeReadContract,
+  readContract,
   toNull,
 } from '@babylon/shared'
 import {
@@ -136,7 +136,8 @@ export interface ElizaHolderSnapshot {
   snapshotTime: Date
 }
 
-export interface ElizaHolderAllocation {
+// biome-ignore lint/correctness/noUnusedVariables: Documents allocation type
+interface ElizaHolderAllocation {
   walletAddress: Address
   totalElizaBalance: bigint // Sum across all chains
   shareOfPool: number // Percentage of ELIZA pool
@@ -285,7 +286,7 @@ export class ElizaHolderAirdropService {
           transport: http(config.rpcUrl),
         })
 
-        const balance = await safeReadContract<bigint>(client, {
+        const balance = await readContract(client, {
           address: config.elizaToken,
           abi: ERC20_ABI,
           functionName: 'balanceOf',
@@ -619,7 +620,7 @@ export class ElizaHolderAirdropService {
         rpcUrl: config.rpcUrl,
       })
 
-      const supply = await safeReadContract<bigint>(client, {
+      const supply = await readContract(client, {
         address: config.elizaToken,
         abi: ERC20_ABI,
         functionName: 'totalSupply',

@@ -43,7 +43,10 @@ export default function ShareReferralClient() {
 
   const { data, isSuccess, isError } = useQuery({
     queryKey: ['referralCode', userId],
-    queryFn: () => fetchReferralCode(userId),
+    queryFn: () => {
+      if (!userId) throw new Error('userId is required')
+      return fetchReferralCode(userId)
+    },
     enabled: !!userId,
     retry: false,
     staleTime: 0,

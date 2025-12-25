@@ -248,7 +248,7 @@ export function useAuth(): UseAuthReturn {
             displayName:
               me.user.displayName && me.user.displayName.trim() !== ''
                 ? me.user.displayName
-                : wallet?.address,
+                : (wallet?.address ?? 'User'),
             email: me.user.email,
             username: me.user.username,
             bio: me.user.bio,

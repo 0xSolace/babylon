@@ -317,11 +317,11 @@ export async function initializeDecentralizedCache(): Promise<DecentralizedCache
   return client
 }
 
-export function resetDecentralizedCacheClient(): void {
+function _resetDecentralizedCacheClient(): void {
   cacheClient = null
 }
 
-export function isDecentralizedCacheAvailable(): boolean {
+function _isDecentralizedCacheAvailable(): boolean {
   return !!process.env.JEJU_CACHE_SERVICE_URL
 }
 

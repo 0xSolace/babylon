@@ -16,7 +16,7 @@ import {
   type ActorTier,
   createBabylonPublicClient,
   logger,
-  safeWriteContract,
+  writeContract,
 } from '@babylon/shared'
 import {
   type Address,
@@ -602,7 +602,7 @@ export class NPCFundingService {
       }
     })
 
-    const txHash = await safeWriteContract(walletClient, {
+    const txHash = await writeContract(walletClient, {
       address: MULTICALL3_ADDRESS,
       abi: MULTICALL3_ABI,
       functionName: 'aggregate3',

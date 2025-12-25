@@ -47,7 +47,7 @@ export function ChatListItem({
             }
             type="user"
             size="md"
-            imageUrl={chat.otherUser?.profileImageUrl}
+            imageUrl={chat.otherUser?.profileImageUrl ?? undefined}
           />
         )}
         <div className="min-w-0 flex-1">

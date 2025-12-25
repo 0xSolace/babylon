@@ -10,7 +10,7 @@
 import {
   type BabylonPublicClient,
   type BabylonWalletClient,
-  safeReadContract,
+  readContract,
 } from '@babylon/shared'
 import type { Address, Hex } from 'viem'
 import { logger } from '../shared/logger'
@@ -226,9 +226,7 @@ export class ExecutionRegistryClient {
    * Get node information
    */
   async getNode(address: Address): Promise<ExecutionNode> {
-    const result = await safeReadContract<
-      [Address, bigint, bigint, bigint, bigint, boolean, bigint]
-    >(this.publicClient, {
+    const result = await readContract(this.publicClient, {
       address: this.contractAddress,
       abi: EXECUTION_REGISTRY_ABI,
       functionName: 'nodes',
@@ -260,9 +258,7 @@ export class ExecutionRegistryClient {
    * Get agent statistics
    */
   async getAgentStats(agentId: Hex): Promise<AgentStats> {
-    const result = await safeReadContract<
-      [bigint, bigint, bigint, bigint, bigint]
-    >(this.publicClient, {
+    const result = await readContract(this.publicClient, {
       address: this.contractAddress,
       abi: EXECUTION_REGISTRY_ABI,
       functionName: 'agentStats',
@@ -290,7 +286,7 @@ export class ExecutionRegistryClient {
    * Get node success rate (0-1 scale)
    */
   async getNodeSuccessRate(address: Address): Promise<number> {
-    const result = await safeReadContract<bigint>(this.publicClient, {
+    const result = await readContract(this.publicClient, {
       address: this.contractAddress,
       abi: EXECUTION_REGISTRY_ABI,
       functionName: 'getNodeSuccessRate',
@@ -305,7 +301,7 @@ export class ExecutionRegistryClient {
    * Check if node is available
    */
   async isNodeAvailable(address: Address): Promise<boolean> {
-    const result = await safeReadContract<boolean>(this.publicClient, {
+    const result = await readContract(this.publicClient, {
       address: this.contractAddress,
       abi: EXECUTION_REGISTRY_ABI,
       functionName: 'isNodeAvailable',

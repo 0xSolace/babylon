@@ -223,9 +223,7 @@ export async function getOrCreateEngagement(
 /**
  * Get user's current engagement status.
  */
-export async function getEngagementStatus(
-  userId: string,
-): Promise<EngagementStatus> {
+async function _getEngagementStatus(userId: string): Promise<EngagementStatus> {
   const engagement = await getOrCreateEngagement(userId)
   const now = new Date()
 
@@ -256,7 +254,7 @@ export async function getEngagementStatus(
 /**
  * Record a like action.
  */
-export async function recordLike(
+async function _recordLike(
   userId: string,
   postId: string,
 ): Promise<{ recorded: boolean; qualified: boolean }> {
@@ -306,7 +304,7 @@ export async function recordLike(
 /**
  * Record a comment action.
  */
-export async function recordComment(
+async function _recordComment(
   userId: string,
   postId: string,
   commentId: string,
@@ -360,7 +358,7 @@ export async function recordComment(
  * Record a post action.
  * Validates post content against spam rules.
  */
-export async function recordPost(
+async function _recordPost(
   userId: string,
   postId: string,
   content: string,
@@ -425,7 +423,7 @@ export async function recordPost(
 /**
  * Record a trade action.
  */
-export async function recordTrade(
+async function _recordTrade(
   userId: string,
   tradeId: string,
   tradeType: 'prediction' | 'perp',
@@ -471,7 +469,7 @@ export async function recordTrade(
 /**
  * Check if user qualifies for drip claim.
  */
-export async function canClaimDrip(userId: string): Promise<{
+async function _canClaimDrip(userId: string): Promise<{
   canClaim: boolean
   reason: string
   engagement: DailyEngagement | null
@@ -505,7 +503,7 @@ export async function canClaimDrip(userId: string): Promise<{
 /**
  * Mark drip as claimed.
  */
-export async function markDripClaimed(
+async function _markDripClaimed(
   userId: string,
   dripAmount: bigint,
 ): Promise<void> {
@@ -536,7 +534,7 @@ export async function markDripClaimed(
 /**
  * Get engagement history for a user.
  */
-export async function getEngagementHistory(
+async function _getEngagementHistory(
   userId: string,
   limit = 30,
 ): Promise<DailyEngagement[]> {
@@ -550,7 +548,7 @@ export async function getEngagementHistory(
 /**
  * Get stats for today's engagement across all users.
  */
-export async function getTodayEngagementStats(): Promise<{
+async function _getTodayEngagementStats(): Promise<{
   dateKey: string
   totalUsers: number
   qualified: number

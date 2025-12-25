@@ -30,14 +30,16 @@ export enum BanType {
   PERMANENT = 3,
 }
 
-export interface BanRecord {
+// biome-ignore lint/correctness/noUnusedVariables: Documents contract return type
+interface BanRecord {
   isBanned: boolean
   bannedAt: bigint
   reason: string
   proposalId: Hex
 }
 
-export interface ExtendedBanRecord {
+// biome-ignore lint/correctness/noUnusedVariables: Documents contract return type
+interface ExtendedBanRecord {
   isBanned: boolean
   banType: BanType
   bannedAt: bigint
@@ -221,7 +223,7 @@ export function getBanManagerClient(): BanManagerClient {
   return banManagerClient
 }
 
-export function resetBanManagerClient(): void {
+function _resetBanManagerClient(): void {
   banManagerClient = null
 }
 
@@ -266,7 +268,7 @@ export async function checkBabylonAccess(
  * Middleware helper to check ban status
  * Returns null if allowed, or an error response if banned
  */
-export async function enforceBan(
+async function _enforceBan(
   walletAddress?: Address,
   agentId?: bigint,
 ): Promise<{

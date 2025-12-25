@@ -4,9 +4,9 @@
 
 import {
   createBabylonPublicClient,
-  safeReadContract,
+  readContract,
   safeSendTransaction,
-  safeWriteContract,
+  writeContract,
 } from '@babylon/shared'
 import {
   type Address,
@@ -177,7 +177,7 @@ export class TreasuryPaymaster {
       chain: getChain(this.config.chainId),
       rpcUrl: this.config.rpcUrl,
     })
-    return safeReadContract<bigint>(client, {
+    return readContract(client, {
       address: this.config.treasuryAddress,
       abi: TREASURY_ABI,
       functionName: 'getBalance',
@@ -229,7 +229,7 @@ export class TreasuryPaymaster {
       transport: http(this.config.rpcUrl),
     })
 
-    await safeWriteContract(client, {
+    await writeContract(client, {
       address: this.config.treasuryAddress,
       abi: TREASURY_ABI,
       functionName: 'withdraw',

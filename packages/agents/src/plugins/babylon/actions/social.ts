@@ -15,7 +15,7 @@ import type {
 /**
  * Create a new post action
  */
-export const createPostAction: Action = {
+const _createPostAction: Action = {
   name: 'CREATE_POST',
   description: 'Create a new post on the platform',
   similes: ['post', 'share', 'publish', 'write post'],
@@ -45,7 +45,7 @@ export const createPostAction: Action = {
 /**
  * Comment on a post action
  */
-export const commentAction: Action = {
+const _commentAction: Action = {
   name: 'COMMENT',
   description: 'Comment on a post',
   similes: ['comment', 'reply', 'respond to post'],
@@ -75,7 +75,7 @@ export const commentAction: Action = {
 /**
  * Like a post action
  */
-export const likePostAction: Action = {
+const _likePostAction: Action = {
   name: 'LIKE_POST',
   description: 'Like a post',
   similes: ['like', 'heart', 'upvote'],

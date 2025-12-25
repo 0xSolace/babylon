@@ -11,13 +11,15 @@ import { promisify } from 'node:util'
 import { logger } from '@babylon/shared'
 import * as hubModule from '@huggingface/hub'
 
-export interface UploadFileOptions {
+// biome-ignore lint/correctness/noUnusedVariables: Documents HuggingFace API options
+interface UploadFileOptions {
   repo: { type: 'model' | 'dataset'; name: string }
   file: { path: string; content: Blob }
   credentials: { accessToken: string }
 }
 
-export interface CreateRepoOptions {
+// biome-ignore lint/correctness/noUnusedVariables: Documents HuggingFace API options
+interface CreateRepoOptions {
   repo: { type: 'model' | 'dataset'; name: string }
   credentials: { accessToken: string }
   private?: boolean

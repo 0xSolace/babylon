@@ -213,9 +213,9 @@ export function OnboardingProvider({
         setSubmittedProfile({
           username: user.username ?? `user_${user.id.slice(0, 8)}`,
           displayName: user.displayName ?? user.username ?? 'New User',
-          bio: user.bio,
-          profileImageUrl: user.profileImageUrl,
-          coverImageUrl: user.coverImageUrl,
+          bio: user.bio ?? undefined,
+          profileImageUrl: user.profileImageUrl ?? undefined,
+          coverImageUrl: user.coverImageUrl ?? undefined,
         })
       }
       setStage((prev) => (prev === 'COMPLETED' ? prev : 'ONCHAIN'))
@@ -703,7 +703,7 @@ export function OnboardingProvider({
           onSkipOnchain={handleSkipOnchain}
           onClose={handleClose}
           onLogout={logout}
-          user={user}
+          user={user ?? {}}
           importedData={importedProfileData}
           initialEmail={user?.email || null}
         />

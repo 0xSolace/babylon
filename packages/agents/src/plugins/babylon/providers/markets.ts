@@ -19,7 +19,7 @@ import { toBabylonRuntime } from '../types'
  * Provider: Current Markets
  * Fetches available prediction markets and perp markets via A2A protocol
  */
-export const marketsProvider: Provider = {
+const _marketsProvider: Provider = {
   name: 'BABYLON_MARKETS',
   description:
     'Get current available markets for trading (prediction markets and perpetual futures) via A2A protocol',

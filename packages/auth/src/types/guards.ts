@@ -9,6 +9,9 @@ import {
   isObject,
   isValidAddress,
   isValidHex,
+  isAddress as sharedIsAddress,
+  isHex as sharedIsHex,
+  toHexString,
 } from '@babylon/shared'
 import type { Address, Hex } from 'viem'
 import type {
@@ -18,6 +21,9 @@ import type {
   RecoveryProof,
   SocialRecoveryProof,
 } from './index'
+
+// Re-export type guards from shared for consumers that expect them here
+export { isValidAddress, isValidHex }
 
 // ============================================================================
 // HTTP Error with Status
@@ -101,19 +107,17 @@ export function makeDID(
 
 /**
  * Check if a string is a valid hex string.
+ * @deprecated Use isHex from @babylon/shared directly
  */
 export function isHex(value: string): value is Hex {
-  return isValidHex(value)
+  return sharedIsHex(value)
 }
 
 /**
  * Convert a string to Hex type with validation.
  */
 export function toHexStrict(value: string): Hex {
-  if (!isHex(value)) {
-    throw new Error(`Invalid hex string: ${value}`)
-  }
-  return value
+  return toHexString(value)
 }
 
 /**
@@ -132,9 +136,10 @@ export function bufferToHex(buffer: Uint8Array | Buffer): Hex {
 
 /**
  * Check if a string is a valid Ethereum address.
+ * @deprecated Use isAddress from @babylon/shared directly
  */
 export function isAddress(value: string): value is Address {
-  return isValidAddress(value)
+  return sharedIsAddress(value)
 }
 
 /**

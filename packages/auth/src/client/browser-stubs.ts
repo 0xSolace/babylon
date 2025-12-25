@@ -65,7 +65,7 @@ function _isSignatureOnlyResponse(
 }
 
 // Export unused guards to prevent warnings (for future use)
-export const __browser_guards_reserved = {
+export const _browser_guards_reserved = {
   _isKeyGenApiResponse,
   _isSignApiResponse,
   _isSignatureOnlyResponse,

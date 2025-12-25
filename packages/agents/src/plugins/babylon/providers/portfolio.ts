@@ -21,7 +21,7 @@ import { toBabylonRuntime } from '../types'
  * Provider: Portfolio State
  * Gets agent's current positions and balance via A2A
  */
-export const portfolioProvider: Provider = {
+const _portfolioProvider: Provider = {
   name: 'BABYLON_PORTFOLIO',
   description:
     'Get agent portfolio state, positions, and balance via A2A protocol',

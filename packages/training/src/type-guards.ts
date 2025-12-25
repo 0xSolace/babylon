@@ -355,7 +355,7 @@ export interface SimulationPredictionMarket {
   resolved: boolean
 }
 
-export function isSimulationPredictionMarket(
+function _isSimulationPredictionMarket(
   value: unknown,
 ): value is SimulationPredictionMarket {
   return (
@@ -379,7 +379,7 @@ export interface SimulationPerpetualMarket {
   nextFundingTime?: number
 }
 
-export function isSimulationPerpetualMarket(
+function _isSimulationPerpetualMarket(
   value: unknown,
 ): value is SimulationPerpetualMarket {
   return (
@@ -401,9 +401,7 @@ export interface SimulationFeedPost {
   marketId?: string
 }
 
-export function isSimulationFeedPost(
-  value: unknown,
-): value is SimulationFeedPost {
+function _isSimulationFeedPost(value: unknown): value is SimulationFeedPost {
   return (
     isObject(value) &&
     isString(value.id) &&
@@ -431,9 +429,7 @@ export interface SimulationGroupChat {
   }>
 }
 
-export function isSimulationGroupChat(
-  value: unknown,
-): value is SimulationGroupChat {
+function _isSimulationGroupChat(value: unknown): value is SimulationGroupChat {
   return (
     isObject(value) &&
     isString(value.id) &&
@@ -450,7 +446,7 @@ export interface SimulationAgent {
   totalPnl?: number
 }
 
-export function isSimulationAgent(value: unknown): value is SimulationAgent {
+function _isSimulationAgent(value: unknown): value is SimulationAgent {
   return isObject(value) && isString(value.id)
 }
 
@@ -467,7 +463,7 @@ export interface SimulationState {
   agents: SimulationAgent[]
 }
 
-export function isSimulationState(value: unknown): value is SimulationState {
+function _isSimulationState(value: unknown): value is SimulationState {
   return (
     isObject(value) &&
     typeof value.tick === 'number' &&
@@ -491,7 +487,7 @@ export interface IPFSUploadResult {
   name?: string
 }
 
-export function isIPFSUploadResult(value: unknown): value is IPFSUploadResult {
+function _isIPFSUploadResult(value: unknown): value is IPFSUploadResult {
   return isObject(value) && isString(value.cid)
 }
 

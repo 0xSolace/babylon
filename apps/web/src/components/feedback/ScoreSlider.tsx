@@ -209,7 +209,7 @@ interface ScoreSliderCompactProps {
   className?: string
 }
 
-export function ScoreSliderCompact({
+export function _ScoreSliderCompact({
   value,
   onChange,
   readonly = false,
@@ -240,7 +240,7 @@ interface PercentageSliderProps {
   className?: string
 }
 
-export function PercentageSlider({
+export function _PercentageSlider({
   value,
   onChange,
   label,

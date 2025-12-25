@@ -28,14 +28,12 @@
   },
   "dependencies": {
     "@babylon/agents": "workspace:*",
+    "@babylon/shared": "workspace:*",
     "@elizaos/core": "^1.6.3",
     "zod": "4.2.1"
   },
   "devDependencies": {
-    "@elizaos/cli": "workspace:*",
     "@types/node": "^24.9.1",
-    "dotenv": "16.4.5",
-    "prettier": "3.5.3",
     "typescript": "5.9.3"
   },
   "publishConfig": {

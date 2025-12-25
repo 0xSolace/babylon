@@ -294,7 +294,7 @@ export async function requireCronAuth(
 /**
  * Require cron authorization from Elysia context (throws on failure)
  */
-export async function requireCronAuthFromContext(
+async function _requireCronAuthFromContext(
   ctx: ElysiaContext,
   options: CronAuthOptions = {},
 ): Promise<void> {
@@ -323,7 +323,7 @@ export function cronUnauthorizedResponse(): Response {
 /**
  * Sync wrapper for backwards compatibility (dev only)
  */
-export function verifyCronAuthSync(
+function _verifyCronAuthSync(
   request: Request,
   options: CronAuthOptions = {},
 ): boolean {

@@ -243,6 +243,7 @@ export {
   actorFollows,
   actorRelationships,
   actorState,
+  adminAuditLogs,
   agentCapabilities,
   agentGoalActions,
   agentGoals,

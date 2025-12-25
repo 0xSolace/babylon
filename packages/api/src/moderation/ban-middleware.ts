@@ -61,7 +61,7 @@ export function clearBanCache(walletAddress?: Address, agentId?: bigint): void {
 /**
  * Clear entire ban cache
  */
-export function clearAllBanCache(): void {
+function _clearAllBanCache(): void {
   banStatusCache.clear()
 }
 
@@ -120,9 +120,9 @@ export function isBanManagerConfigured(): boolean {
  * );
  * ```
  */
-export function requireNotBanned<
-  T extends (...args: unknown[]) => Promise<Response>,
->(handler: T): T {
+function _requireNotBanned<T extends (...args: unknown[]) => Promise<Response>>(
+  handler: T,
+): T {
   return (async (...args: unknown[]) => {
     // If ban manager is not configured, skip ban check (dev mode)
     if (!isBanManagerConfigured()) {
@@ -177,7 +177,7 @@ function extractWalletFromRequest(request: {
 /**
  * Middleware for checking agent bans specifically
  */
-export async function checkAgentBan(agentId: bigint): Promise<BanCheckResult> {
+async function _checkAgentBan(agentId: bigint): Promise<BanCheckResult> {
   return checkBanStatus(undefined, agentId)
 }
 
@@ -185,7 +185,7 @@ export async function checkAgentBan(agentId: bigint): Promise<BanCheckResult> {
  * Check if a user can perform moderation actions (report, vote)
  * Users on notice or banned cannot participate in moderation
  */
-export async function canParticipateInModeration(
+async function _canParticipateInModeration(
   walletAddress: Address,
 ): Promise<boolean> {
   const result = await checkBanStatus(walletAddress)

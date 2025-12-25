@@ -1,4 +1,3 @@
-import type { CommentCardProps, CommentData } from '@babylon/shared'
 import { cn, getProfileUrl } from '@babylon/shared'
 import { formatDistanceToNow } from 'date-fns'
 import { Edit2, MessageCircle, MoreVertical, Trash2 } from 'lucide-react'
@@ -11,6 +10,7 @@ import {
 } from '@/components/shared/VerifiedBadge'
 import { MAX_REPLY_COUNT } from '@/lib/constants'
 import { useRouter } from '@/lib/navigation'
+import type { CommentCardProps, CommentData } from '@/types/interactions'
 import { CommentInput } from './CommentInput'
 import { LikeButton } from './LikeButton'
 
@@ -71,7 +71,7 @@ export function CommentCard({
   const [editContent, setEditContent] = useState(comment.content)
 
   const hasReplies = comment.replies && comment.replies.length > 0
-  const replyCount = hasReplies ? countAllReplies(comment.replies) : 0
+  const replyCount = hasReplies ? countAllReplies(comment.replies ?? []) : 0
 
   const showVerifiedBadge = isNpcIdentifier(comment.userId)
 
@@ -117,7 +117,7 @@ export function CommentCard({
       <div className="shrink-0">
         <Avatar
           id={comment.userId}
-          name={comment.userName}
+          name={comment.userName ?? undefined}
           size="sm"
           src={comment.userAvatar || undefined}
           imageUrl={comment.userAvatar || undefined}
@@ -299,8 +299,8 @@ export function CommentCard({
             <CommentInput
               postId={postId}
               parentCommentId={comment.id}
-              placeholder={`Reply to ${comment.userName}...`}
-              replyingToName={comment.userName}
+              placeholder={`Reply to ${comment.userName ?? 'Unknown'}...`}
+              replyingToName={comment.userName ?? undefined}
               autoFocus
               onSubmit={async (replyComment: CommentData) => {
                 setIsReplying(false)

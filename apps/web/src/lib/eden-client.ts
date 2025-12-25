@@ -194,27 +194,6 @@ export interface UserProfileStats {
   positions: number
 }
 
-export interface UserProfile {
-  id: string
-  username: string | null
-  displayName: string | null
-  bio: string | null
-  profileImageUrl: string | null
-  coverImageUrl: string | null
-  isActor: boolean
-  isAdmin: boolean
-  virtualBalance: number
-  reputationPoints: number
-  lifetimePnL: number
-  twitterUsername: string | null
-  farcasterUsername: string | null
-  walletAddress: string | null
-  onChainRegistered: boolean
-  nftTokenId: string | null
-  createdAt: string
-  stats: UserProfileStats
-}
-
 // ============================================================================
 // Notification Types
 // ============================================================================
@@ -800,6 +779,6 @@ export const api = {
 /**
  * Get the API client instance (for compatibility with existing code)
  */
-export function getApiClient() {
+export function _getApiClient() {
   return api
 }

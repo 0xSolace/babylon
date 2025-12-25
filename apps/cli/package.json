@@ -23,6 +23,7 @@
     "@babylon/training": "workspace:*",
     "@jejunetwork/config": "workspace:*",
     "@jejunetwork/sdk": "workspace:*",
+    "commander": "^13.1.0",
     "uuid": "^13.0.0",
     "zod": "4.2.1"
   },

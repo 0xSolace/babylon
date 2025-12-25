@@ -40,7 +40,7 @@ export function WidgetSidebar() {
     let ticking = false
 
     const updateSidebar = () => {
-      const scrollTop = document.scrollingElement?.scrollTop
+      const scrollTop = document.scrollingElement?.scrollTop ?? 0
       const viewportHeight = window.innerHeight
       const sidebarHeight = inner.offsetHeight
 

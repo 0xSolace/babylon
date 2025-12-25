@@ -437,7 +437,7 @@ export function getCheckpointService(
   return checkpointService
 }
 
-export async function initializeCheckpointService(
+async function _initializeCheckpointService(
   callbacks: {
     getState: () => Promise<object>
     setState: (state: object) => Promise<void>

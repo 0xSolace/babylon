@@ -21,7 +21,7 @@ import { toBabylonRuntime } from '../types'
  * Provider: Agent's Own Wallet & Investments
  * Comprehensive view of the agent's portfolio, positions, and assets via A2A protocol
  */
-export const agentWalletProvider: Provider = {
+const _agentWalletProvider: Provider = {
   name: 'BABYLON_AGENT_WALLET',
   description:
     "Get the agent's own complete wallet state including balance, reputation points, all investments, and positions via A2A protocol",

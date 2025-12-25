@@ -16,7 +16,7 @@ import { toBabylonRuntime } from '../types'
  * Action: Send Message
  * Allows agent to send a message in a chat
  */
-export const sendMessageAction: Action = {
+const _sendMessageAction: Action = {
   name: 'SEND_MESSAGE',
   description: 'Send a message in a chat',
   similes: ['send message', 'message', 'dm', 'send dm', 'chat'],
@@ -105,7 +105,7 @@ export const sendMessageAction: Action = {
  * Action: Create Group Chat
  * Allows agent to create a new group chat
  */
-export const createGroupAction: Action = {
+const _createGroupAction: Action = {
   name: 'CREATE_GROUP',
   description: 'Create a new group chat',
   similes: ['create group', 'new group', 'start group chat'],

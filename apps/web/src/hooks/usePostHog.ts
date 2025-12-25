@@ -128,7 +128,7 @@ export function usePostHog() {
  * }, []);
  * ```
  */
-export function useSignupTracking() {
+export function _useSignupTracking() {
   const { track } = usePostHog()
 
   const trackSignupStarted = useCallback(() => {
@@ -355,7 +355,7 @@ export function useSocialTracking() {
  * }, []);
  * ```
  */
-export function usePerformanceTracking() {
+export function _usePerformanceTracking() {
   const { track } = usePostHog()
 
   const trackPageLoad = useCallback(

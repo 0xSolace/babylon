@@ -46,28 +46,6 @@ export function rewriteApiUrl(url: string): string {
   return `${baseUrl}${url}`
 }
 
-export async function apiFetch(
-  input: RequestInfo | URL,
-  init?: RequestInit,
-): Promise<Response> {
-  const originalUrl = getUrlString(input)
-  const url = rewriteApiUrl(originalUrl)
-
-  const finalInit: RequestInit = {
-    ...init,
-    credentials: isCrossOrigin(url)
-      ? 'include'
-      : init?.credentials || 'same-origin',
-  }
-
-  if (typeof input === 'string' || input instanceof URL) {
-    return fetch(url, finalInit)
-  }
-
-  // Clone Request with new URL
-  return fetch(new Request(url, input), finalInit)
-}
-
 let patched = false
 
 export function setupGlobalFetch(): void {

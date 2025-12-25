@@ -12,14 +12,14 @@ export function isProductionMode(): boolean {
 }
 
 /** Throws if simulated code runs in production */
-export function requireRealImplementation(feature: string): void {
+function _requireRealImplementation(feature: string): void {
   if (isProductionMode()) {
     throw new Error(`${feature} requires real implementation in production`)
   }
 }
 
 /** Warns about simulation in production without throwing */
-export function warnSimulationInProduction(feature: string): void {
+function _warnSimulationInProduction(feature: string): void {
   if (isProductionMode()) {
     logger.warn(`⚠️ ${feature} using simulated implementation in production`)
   }

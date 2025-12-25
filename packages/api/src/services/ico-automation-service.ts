@@ -1023,7 +1023,7 @@ export function getICOAutomationService(
   return icoAutomationService
 }
 
-export async function initializeICOAutomation(
+async function _initializeICOAutomation(
   config?: Partial<ICOConfig>,
 ): Promise<ICOAutomationService> {
   const service = getICOAutomationService(config)

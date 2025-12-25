@@ -19,7 +19,7 @@ import { getAgentConfig } from '../../../shared/agent-config'
  * Injects the agent's core goals, personality, trading strategy, and operational constraints
  * This is the FIRST provider to run, ensuring the agent never forgets its purpose
  */
-export const goalsProvider: Provider = {
+const _goalsProvider: Provider = {
   name: 'BABYLON_GOALS',
   description:
     "Get the agent's core goals, personality, trading strategy, and operational constraints",

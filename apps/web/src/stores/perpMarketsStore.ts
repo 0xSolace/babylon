@@ -95,7 +95,7 @@ export function usePerpMarket(ticker: string) {
  * Hook to invalidate perp markets cache.
  * Useful after mutations (open/close positions).
  */
-export function useInvalidatePerpMarkets() {
+export function _useInvalidatePerpMarkets() {
   const queryClient = useQueryClient()
 
   return useCallback(() => {

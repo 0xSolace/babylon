@@ -382,22 +382,20 @@ export class ModerationMarketplaceClient {
 // Read-only singleton
 let publicModerationClient: ModerationMarketplaceClient | null = null
 
-export function getModerationMarketplaceClient(): ModerationMarketplaceClient {
+function _getModerationMarketplaceClient(): ModerationMarketplaceClient {
   if (!publicModerationClient) {
     publicModerationClient = new ModerationMarketplaceClient()
   }
   return publicModerationClient
 }
 
-export function resetModerationMarketplaceClient(): void {
+function _resetModerationMarketplaceClient(): void {
   publicModerationClient = null
 }
 
 /**
  * Create a client with write capabilities
  */
-export function createModerationClient(
-  privateKey: Hex,
-): ModerationMarketplaceClient {
+function _createModerationClient(privateKey: Hex): ModerationMarketplaceClient {
   return new ModerationMarketplaceClient(privateKey)
 }

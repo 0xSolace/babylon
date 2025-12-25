@@ -12,7 +12,8 @@ import type { JsonValue } from '../types'
 
 export type Channel = RealtimeChannel
 
-export interface SSEClient {
+// biome-ignore lint/correctness/noUnusedVariables: Documents SSE client structure
+interface SSEClient {
   id: string
   userId: string
   channels: Set<Channel>
@@ -42,7 +43,7 @@ class NoopBroadcaster {
 
 let broadcasterInstance: NoopBroadcaster | null = null
 
-export function getEventBroadcaster(): NoopBroadcaster {
+function _getEventBroadcaster(): NoopBroadcaster {
   if (!broadcasterInstance) {
     broadcasterInstance = new NoopBroadcaster()
   }

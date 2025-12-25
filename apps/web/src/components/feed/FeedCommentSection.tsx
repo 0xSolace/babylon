@@ -1,4 +1,3 @@
-import type { CommentData, CommentWithReplies } from '@babylon/shared'
 import { cn } from '@babylon/shared'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { MessageCircle, X } from 'lucide-react'
@@ -11,6 +10,7 @@ import { Skeleton } from '@/components/shared/Skeleton'
 import { useAuth } from '@/hooks/useAuth'
 import { useRouter } from '@/lib/navigation'
 import { useInteractionStore } from '@/stores/interactionStore'
+import type { CommentData, CommentWithReplies } from '@/types/interactions'
 
 /**
  * Feed comment section component for displaying post comments.
@@ -151,7 +151,7 @@ export function FeedCommentSection({
       .filter((comment) => comment.id !== commentId)
       .map((comment) => ({
         ...comment,
-        replies: removeCommentById(comment.replies, commentId),
+        replies: removeCommentById(comment.replies ?? [], commentId),
       }))
   }
 
@@ -164,10 +164,10 @@ export function FeedCommentSection({
       if (comment.id === parentCommentId) {
         return {
           ...comment,
-          replies: [newReply, ...comment.replies],
+          replies: [newReply, ...(comment.replies ?? [])],
         }
       }
-      if (comment.replies.length > 0) {
+      if (comment.replies && comment.replies.length > 0) {
         return {
           ...comment,
           replies: addReplyToComment(
@@ -187,9 +187,9 @@ export function FeedCommentSection({
   ): string | undefined => {
     for (const comment of commentList) {
       if (comment.id === parentCommentId) {
-        return comment.userName
+        return comment.userName ?? undefined
       }
-      if (comment.replies.length > 0) {
+      if (comment.replies && comment.replies.length > 0) {
         const found = findParentAuthorName(comment.replies, parentCommentId)
         if (found) return found
       }
@@ -218,6 +218,8 @@ export function FeedCommentSection({
 
     const optimisticReply: CommentWithReplies = {
       id: replyComment.id,
+      postId: postId,
+      authorId: replyComment.authorId,
       content: replyComment.content,
       createdAt:
         replyComment.createdAt instanceof Date
@@ -226,17 +228,18 @@ export function FeedCommentSection({
       updatedAt:
         replyComment.updatedAt instanceof Date
           ? replyComment.updatedAt
-          : new Date(replyComment.updatedAt),
+          : new Date(replyComment.updatedAt ?? Date.now()),
       userId: replyComment.authorId,
       userName:
         replyComment.author?.displayName ||
         replyComment.author?.username ||
         'Unknown',
       userUsername: replyComment.author?.username || null,
-      userAvatar: replyComment.author?.profileImageUrl || undefined,
+      userAvatar: replyComment.author?.profileImageUrl ?? undefined,
       parentCommentId: replyComment.parentCommentId,
       parentCommentAuthorName: parentAuthorName,
       likeCount: replyComment.likeCount ?? 0,
+      replyCount: 0,
       isLiked: false,
       replies: [],
     }
@@ -253,6 +256,8 @@ export function FeedCommentSection({
 
     const optimisticComment: CommentWithReplies = {
       id: commentData.id,
+      postId: postId,
+      authorId: commentData.authorId,
       content: commentData.content,
       createdAt:
         commentData.createdAt instanceof Date
@@ -261,17 +266,18 @@ export function FeedCommentSection({
       updatedAt:
         commentData.updatedAt instanceof Date
           ? commentData.updatedAt
-          : new Date(commentData.updatedAt),
+          : new Date(commentData.updatedAt ?? Date.now()),
       userId: commentData.authorId,
       userName:
         commentData.author?.displayName ||
         commentData.author?.username ||
         'Unknown',
       userUsername: commentData.author?.username || null,
-      userAvatar: commentData.author?.profileImageUrl || undefined,
+      userAvatar: commentData.author?.profileImageUrl ?? undefined,
       parentCommentId: undefined,
       parentCommentAuthorName: undefined,
       likeCount: commentData.likeCount ?? 0,
+      replyCount: 0,
       isLiked: false,
       replies: [],
     }

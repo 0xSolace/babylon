@@ -359,7 +359,7 @@ export async function authenticateWithDbUser(
 /**
  * Authenticate and require that the user has a database record (Elysia context)
  */
-export async function authenticateWithDbUserFromContext(
+async function _authenticateWithDbUserFromContext(
   ctx: ElysiaContext,
 ): Promise<AuthenticatedUser & { dbUserId: string }> {
   const authUser = await authenticateFromContext(ctx)
@@ -385,7 +385,7 @@ export async function optionalAuth(
 /**
  * Optional authentication from Elysia context
  */
-export async function optionalAuthFromContext(
+async function _optionalAuthFromContext(
   ctx: ElysiaContext,
 ): Promise<AuthenticatedUser | null> {
   const tokenInfo = extractTokenFromContext(ctx)

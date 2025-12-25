@@ -406,10 +406,10 @@ export function useChatPage() {
         messages: [],
         participants: [
           {
-            id: user?.id,
+            id: user?.id ?? '',
             displayName: user?.displayName || user?.username || 'You',
-            username: user?.username,
-            profileImageUrl: user?.profileImageUrl,
+            username: user?.username ?? undefined,
+            profileImageUrl: user?.profileImageUrl ?? undefined,
           },
           {
             id: targetUser.id,

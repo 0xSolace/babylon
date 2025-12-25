@@ -475,11 +475,11 @@ export class Orchestrator {
 
 let orchestrator: Orchestrator | null = null
 
-export function createOrchestrator(config: OrchestratorConfig): Orchestrator {
+function _createOrchestrator(config: OrchestratorConfig): Orchestrator {
   orchestrator = new Orchestrator(config)
   return orchestrator
 }
 
-export function getOrchestrator(): Orchestrator | null {
+function _getOrchestrator(): Orchestrator | null {
   return orchestrator
 }

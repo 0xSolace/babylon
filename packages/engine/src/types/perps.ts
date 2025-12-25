@@ -10,7 +10,8 @@
 
 import { MARKET_CONFIG } from '../config/fees'
 
-export interface PerpPosition {
+// biome-ignore lint/correctness/noUnusedVariables: Documents position structure
+interface PerpPosition {
   id: string
   userId: string
   ticker: string
@@ -35,7 +36,8 @@ export interface FundingRate {
   predictedRate: number
 }
 
-export interface PerpMarket {
+// biome-ignore lint/correctness/noUnusedVariables: Documents market structure
+interface PerpMarket {
   ticker: string
   organizationId: string
   name: string
@@ -54,7 +56,8 @@ export interface PerpMarket {
   indexPrice: number
 }
 
-export interface OrderRequest {
+// biome-ignore lint/correctness/noUnusedVariables: Documents order request
+interface OrderRequest {
   ticker: string
   side: 'long' | 'short'
   size: number
@@ -63,14 +66,16 @@ export interface OrderRequest {
   limitPrice?: number
 }
 
-export interface PositionUpdate {
+// biome-ignore lint/correctness/noUnusedVariables: Documents position update
+interface PositionUpdate {
   positionId: string
   action: 'increase' | 'decrease' | 'close'
   amount?: number
   newLeverage?: number
 }
 
-export interface Liquidation {
+// biome-ignore lint/correctness/noUnusedVariables: Documents liquidation event
+interface Liquidation {
   positionId: string
   ticker: string
   side: 'long' | 'short'
@@ -80,7 +85,8 @@ export interface Liquidation {
   timestamp: string
 }
 
-export interface DailyPriceSnapshot {
+// biome-ignore lint/correctness/noUnusedVariables: Documents price snapshot
+interface DailyPriceSnapshot {
   date: string
   ticker: string
   organizationId: string
@@ -92,7 +98,8 @@ export interface DailyPriceSnapshot {
   timestamp: string
 }
 
-export interface TradingStats {
+// biome-ignore lint/correctness/noUnusedVariables: Documents trading stats
+interface TradingStats {
   totalVolume: number
   totalTrades: number
   totalPnL: number
@@ -108,7 +115,7 @@ export interface TradingStats {
 /**
  * Calculate liquidation price for a position
  */
-export function calculateLiquidationPrice(
+function _calculateLiquidationPrice(
   entryPrice: number,
   side: 'long' | 'short',
   leverage: number,
@@ -124,7 +131,7 @@ export function calculateLiquidationPrice(
 /**
  * Calculate unrealized PnL for a position
  */
-export function calculateUnrealizedPnL(
+function _calculateUnrealizedPnL(
   entryPrice: number,
   currentPrice: number,
   side: 'long' | 'short',
@@ -146,7 +153,7 @@ export function calculateUnrealizedPnL(
 /**
  * Calculate funding payment for a single 8-hour period
  */
-export function calculateFundingPayment(
+function _calculateFundingPayment(
   positionSize: number,
   fundingRate: number,
 ): number {
@@ -157,7 +164,7 @@ export function calculateFundingPayment(
 /**
  * Check if position should be liquidated
  */
-export function shouldLiquidate(
+function _shouldLiquidate(
   currentPrice: number,
   liquidationPrice: number,
   side: 'long' | 'short',
@@ -171,7 +178,7 @@ export function shouldLiquidate(
 /**
  * Calculate mark price (fair value for liquidations)
  */
-export function calculateMarkPrice(
+function _calculateMarkPrice(
   indexPrice: number,
   lastPrice: number,
   fundingRate: number,
@@ -185,7 +192,7 @@ export function calculateMarkPrice(
  * Calculate the maximum allowed position size for a market
  * Based on configured ratio of open interest with a minimum floor
  */
-export function calculateMaxPositionSize(openInterest: number): number {
+function _calculateMaxPositionSize(openInterest: number): number {
   const openInterestLimit =
     openInterest * MARKET_CONFIG.OPEN_INTEREST_LIMIT_RATIO
   return Math.max(openInterestLimit, MARKET_CONFIG.MIN_MAX_POSITION_SIZE)

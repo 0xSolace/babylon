@@ -60,7 +60,7 @@ export async function buildGameStateFromDB(
  *
  * @param _trajectoryIds - Array of trajectory IDs to recompute rewards for
  */
-export async function recomputeTrajectoryRewards(
+async function _recomputeTrajectoryRewards(
   _trajectoryIds: string[],
 ): Promise<void> {
   // Implementation pending: Reward recomputation logic

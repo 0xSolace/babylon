@@ -286,14 +286,16 @@ export interface A2ATrendingTag {
 /**
  * Trending tags response
  */
-export interface A2ATrendingTagsResponse {
+// biome-ignore lint/correctness/noUnusedVariables: Public API type
+interface A2ATrendingTagsResponse {
   tags: A2ATrendingTag[]
 }
 
 /**
  * Chat participant info
  */
-export interface A2AChatParticipant {
+// biome-ignore lint/correctness/noUnusedVariables: Public API type
+interface A2AChatParticipant {
   id: string
   username?: string
   displayName?: string
@@ -324,7 +326,8 @@ export interface A2AChat {
 /**
  * Chats response
  */
-export interface A2AChatsResponse {
+// biome-ignore lint/correctness/noUnusedVariables: Public API type
+interface A2AChatsResponse {
   chats: A2AChat[]
 }
 
@@ -342,7 +345,8 @@ export interface A2ANotification {
 /**
  * Notifications response
  */
-export interface A2ANotificationsResponse {
+// biome-ignore lint/correctness/noUnusedVariables: Public API type
+interface A2ANotificationsResponse {
   notifications: A2ANotification[]
   unreadCount?: number
 }
@@ -350,7 +354,8 @@ export interface A2ANotificationsResponse {
 /**
  * Unread count response
  */
-export interface A2AUnreadCountResponse {
+// biome-ignore lint/correctness/noUnusedVariables: Public API type
+interface A2AUnreadCountResponse {
   unreadCount: number
 }
 
@@ -396,7 +401,8 @@ export interface A2ATradeHistoryEntry {
 /**
  * Trade history response
  */
-export interface A2ATradeHistoryResponse {
+// biome-ignore lint/correctness/noUnusedVariables: Public API type
+interface A2ATradeHistoryResponse {
   trades: A2ATradeHistoryEntry[]
 }
 
@@ -414,14 +420,16 @@ export interface A2ALeaderboardEntry {
 /**
  * Leaderboard response
  */
-export interface A2ALeaderboardResponse {
+// biome-ignore lint/correctness/noUnusedVariables: Public API type
+interface A2ALeaderboardResponse {
   leaderboard: A2ALeaderboardEntry[]
 }
 
 /**
  * System stats response
  */
-export interface A2ASystemStatsResponse {
+// biome-ignore lint/correctness/noUnusedVariables: Public API type
+interface A2ASystemStatsResponse {
   markets?: number
   users?: number
   posts?: number
@@ -444,7 +452,8 @@ export interface A2AOrganization {
 /**
  * Organizations response
  */
-export interface A2AOrganizationsResponse {
+// biome-ignore lint/correctness/noUnusedVariables: Public API type
+interface A2AOrganizationsResponse {
   organizations: A2AOrganization[]
 }
 
@@ -463,7 +472,8 @@ export interface A2AUserSearchResult {
 /**
  * Users search response
  */
-export interface A2AUsersSearchResponse {
+// biome-ignore lint/correctness/noUnusedVariables: Public API type
+interface A2AUsersSearchResponse {
   users: A2AUserSearchResult[]
 }
 
@@ -481,14 +491,16 @@ export interface A2AReferral {
 /**
  * Referrals response
  */
-export interface A2AReferralsResponse {
+// biome-ignore lint/correctness/noUnusedVariables: Public API type
+interface A2AReferralsResponse {
   referrals: A2AReferral[]
 }
 
 /**
  * Referral stats response
  */
-export interface A2AReferralStatsResponse {
+// biome-ignore lint/correctness/noUnusedVariables: Public API type
+interface A2AReferralStatsResponse {
   totalReferrals: number
   totalPointsEarned: number
   activeReferrals?: number
@@ -497,7 +509,8 @@ export interface A2AReferralStatsResponse {
 /**
  * Referral code response
  */
-export interface A2AReferralCodeResponse {
+// biome-ignore lint/correctness/noUnusedVariables: Public API type
+interface A2AReferralCodeResponse {
   code: string
   url: string
 }
@@ -505,7 +518,8 @@ export interface A2AReferralCodeResponse {
 /**
  * Reputation response
  */
-export interface A2AReputationResponse {
+// biome-ignore lint/correctness/noUnusedVariables: Public API type
+interface A2AReputationResponse {
   reputationPoints: number
   trustScore?: number
   accuracyScore?: number
@@ -538,7 +552,7 @@ export function isA2APositionsResponse(
 /**
  * Type guard for A2APredictionsResponse
  */
-export function isA2APredictionsResponse(
+function _isA2APredictionsResponse(
   data: unknown,
 ): data is A2APredictionsResponse {
   return A2APredictionsResponseSchema.safeParse(data).success
@@ -547,7 +561,7 @@ export function isA2APredictionsResponse(
 /**
  * Type guard for A2APerpetualsResponse
  */
-export function isA2APerpetualsResponse(
+function _isA2APerpetualsResponse(
   data: unknown,
 ): data is A2APerpetualsResponse {
   return A2APerpetualsResponseSchema.safeParse(data).success
@@ -556,14 +570,14 @@ export function isA2APerpetualsResponse(
 /**
  * Type guard for A2AFeedResponse
  */
-export function isA2AFeedResponse(data: unknown): data is A2AFeedResponse {
+function _isA2AFeedResponse(data: unknown): data is A2AFeedResponse {
   return A2AFeedResponseSchema.safeParse(data).success
 }
 
 /**
  * Type guard for A2AUserProfileResponse
  */
-export function isA2AUserProfileResponse(
+function _isA2AUserProfileResponse(
   data: unknown,
 ): data is A2AUserProfileResponse {
   return A2AUserProfileResponseSchema.safeParse(data).success

@@ -49,7 +49,7 @@ export interface ExportResult {
 /**
  * Export trajectories to Hugging Face Dataset
  */
-export async function exportToHuggingFace(
+async function _exportToHuggingFace(
   options: ExportOptions,
 ): Promise<ExportResult> {
   // Build CQL where conditions
@@ -412,7 +412,7 @@ async function uploadToHuggingFaceHub(
 /**
  * Export trajectories grouped by scenario (for GRPO training)
  */
-export async function exportGroupedByScenario(
+async function _exportGroupedByScenario(
   options: Omit<ExportOptions, 'format'>,
 ): Promise<ExportResult> {
   // Check if we're in a Node.js environment with file system access

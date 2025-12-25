@@ -13,7 +13,7 @@ import { base, baseSepolia, mainnet, sepolia } from 'viem/chains'
 // ============================================================================
 
 export const jejuLocalnet = defineChain({
-  id: 1337,
+  id: 31337,
   name: 'Jeju Localnet',
   nativeCurrency: {
     name: 'Ether',
@@ -87,7 +87,6 @@ export const hardhat = defineChain({
  * All supported chains indexed by ID
  */
 export const CHAINS_BY_ID: Record<number, Chain> = {
-  [hardhat.id]: hardhat,
   [jejuLocalnet.id]: jejuLocalnet,
   [jejuTestnet.id]: jejuTestnet,
   [jejuMainnet.id]: jejuMainnet,
@@ -108,12 +107,13 @@ export function getChainById(chainId: number): Chain | undefined {
  * All supported chains
  */
 export const ALL_CHAINS: Chain[] = [
-  hardhat,
   jejuLocalnet,
   jejuTestnet,
   jejuMainnet,
   base,
   baseSepolia,
+  mainnet,
+  sepolia,
 ]
 
 /**

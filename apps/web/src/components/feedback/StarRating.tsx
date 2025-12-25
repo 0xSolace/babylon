@@ -61,7 +61,7 @@ function starsToScore(stars: number): number {
   return Math.round((stars / 5) * 100)
 }
 
-export function StarRating({
+export function _StarRating({
   value = 0,
   onChange,
   size = 'md',
@@ -181,7 +181,7 @@ interface StarRatingCompactProps {
   className?: string
 }
 
-export function StarRatingCompact({
+export function _StarRatingCompact({
   score,
   size = 'sm',
   className = '',

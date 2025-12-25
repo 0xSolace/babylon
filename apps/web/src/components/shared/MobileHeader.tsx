@@ -232,8 +232,8 @@ function MobileHeaderContent() {
                   name={user.displayName ?? user.email ?? 'User'}
                   type="user"
                   size="sm"
-                  src={user.profileImageUrl}
-                  imageUrl={user.profileImageUrl}
+                  src={user.profileImageUrl ?? undefined}
+                  imageUrl={user.profileImageUrl ?? undefined}
                 />
               </button>
             ) : (
@@ -287,8 +287,8 @@ function MobileHeaderContent() {
                   name={user.displayName ?? user.email ?? 'User'}
                   type="user"
                   size="md"
-                  src={user.profileImageUrl}
-                  imageUrl={user.profileImageUrl}
+                  src={user.profileImageUrl ?? undefined}
+                  imageUrl={user.profileImageUrl ?? undefined}
                   className="shrink-0"
                 />
                 <div className="min-w-0 flex-1">

@@ -295,7 +295,7 @@ export class EncryptedStateService {
 // Factory
 // ============================================================================
 
-export async function createEncryptedStateService(
+async function _createEncryptedStateService(
   enclave: BabylonEnclave,
   config?: Partial<EncryptedStateServiceConfig>,
 ): Promise<EncryptedStateService> {

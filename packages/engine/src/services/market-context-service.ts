@@ -54,52 +54,7 @@ import type {
 import { SignalExtractionService } from './signal-extraction-service'
 import { StaticDataRegistry } from './static-data-registry'
 
-/** DB row type for actor_state table */
-interface ActorStateRow {
-  id: string
-  tradingBalance: number | string | null
-  reputationPoints: number | string | null
-  hasPool: boolean | null
-}
-
-// Note: ChatRow type is defined inline where needed to avoid unused declaration warnings
-
-/** DB row type for messages table */
-interface MessageRow {
-  id: string
-  chatId: string | null
-  content: string | null
-  createdAt: Date | string | null
-  senderId: string | null
-}
-
-// Note: PostRow type is defined inline where needed to avoid unused declaration warnings
-
-/** DB row type for world_events table */
-interface WorldEventRow {
-  id: string
-  eventType: string | null
-  description: string | null
-  timestamp: Date | string | null
-  dayNumber: number | null
-  actors: string | string[] | null
-  relatedQuestion: string | null
-  pointsToward: string | null
-}
-
-// Note: MarketRow, StockPriceRow, PoolPositionRow types are defined inline
-// where needed to avoid unused declaration warnings
-
-/** DB row type for actor_relationships table */
-interface ActorRelationshipRow {
-  actor1Id: string | null
-  actor2Id: string | null
-  strength: number | string | null
-  lastInteraction: Date | string | null
-  relationshipType: string | null
-  sentiment: number | null
-  history: unknown | null
-}
+// Note: Row types are accessed via direct property coercion to avoid cast requirements
 
 export class MarketContextService {
   /**
@@ -234,9 +189,19 @@ export class MarketContextService {
     // Fetch all NPCs from static registry and state table
     // Filter out test actors (Group Test Alice, Bob, Charlie)
     const staticActors = StaticDataRegistry.getAllActors()
-    const actorStatesRaw = await db.select().from(actorState)
-    const actorStates = actorStatesRaw as unknown as ActorStateRow[]
-    const stateMap = new Map(actorStates.map((s) => [s.id, s]))
+    const actorStatesRows = await db.select().from(actorState)
+    const stateMap = new Map(
+      actorStatesRows
+        .filter((s): s is NonNullable<typeof s> => s != null)
+        .map((s) => [
+          String(s.id ?? ''),
+          {
+            tradingBalance: s.tradingBalance,
+            reputationPoints: s.reputationPoints,
+            hasPool: s.hasPool,
+          },
+        ]),
+    )
 
     // Combine static and dynamic data, filter test actors
     const npcs = staticActors
@@ -273,45 +238,66 @@ export class MarketContextService {
     )
 
     // Get group chats with messages
-    const groupChatsRaw = await db
+    const groupChatsRows = await db
       .select({
         id: chats.id,
         name: chats.name,
       })
       .from(chats)
       .where(eq(chats.isGroup, true))
-    const groupChats = groupChatsRaw as unknown as Array<{
-      id: string
-      name: string | null
-    }>
+
+    const groupChats = groupChatsRows
+      .filter((c): c is NonNullable<typeof c> => c != null)
+      .map((c) => ({
+        id: String(c.id ?? ''),
+        name: c.name != null ? String(c.name) : null,
+      }))
 
     // Get messages for each group chat
-    // DB select returns the expected shape directly
-    const typedGroupChats = groupChats
-    const chatIds = typedGroupChats.map((c) => c.id)
-    const messagesDataRaw = await db
+    const chatIds = groupChats.map((c) => c.id)
+    const messagesRows = await db
       .select()
       .from(messages)
       .where(inArray(messages.chatId, chatIds))
       .orderBy(desc(messages.createdAt))
       .limit(500) // Limit total messages
-    const messagesData = messagesDataRaw as unknown as MessageRow[]
-    const groupChatMessages = new Map<string, MessageRow[]>()
 
-    // Group messages by chat
-    for (const msg of messagesData) {
-      const msgChatId = String(msg.chatId)
-      const existing = groupChatMessages.get(msgChatId) || []
+    type MappedMessage = {
+      id: string
+      chatId: string | null
+      content: string | null
+      createdAt: Date | null
+      senderId: string | null
+    }
+    const groupChatMessages = new Map<string, MappedMessage[]>()
+
+    // Group messages by chat with proper type coercion
+    for (const msg of messagesRows) {
+      if (!msg) continue
+      const msgChatId = String(msg.chatId ?? '')
+      const existing = groupChatMessages.get(msgChatId) ?? []
       if (existing.length < 50) {
         // Max 50 per chat
-        existing.push(msg)
+        const rawCreatedAt = msg.createdAt
+        existing.push({
+          id: String(msg.id ?? ''),
+          chatId: msg.chatId != null ? String(msg.chatId) : null,
+          content: msg.content != null ? String(msg.content) : null,
+          createdAt:
+            rawCreatedAt instanceof Date
+              ? rawCreatedAt
+              : rawCreatedAt
+                ? new Date(String(rawCreatedAt))
+                : null,
+          senderId: msg.senderId != null ? String(msg.senderId) : null,
+        })
         groupChatMessages.set(msgChatId, existing)
       }
     }
 
     // Fetch all relationships for all NPCs in one query
     const npcIds = npcs.map((npc) => npc.id)
-    const allRelationshipsRaw =
+    const allRelationshipsRows =
       npcIds.length > 0
         ? await db
             .select()
@@ -323,12 +309,32 @@ export class MarketContextService {
               ),
             )
         : []
-    const allRelationships =
-      allRelationshipsRaw as unknown as ActorRelationshipRow[]
+
+    // Map relationships with proper type coercion
+    const allRelationships = allRelationshipsRows
+      .filter((r): r is NonNullable<typeof r> => r != null)
+      .map((r) => {
+        const rawLastInteraction = r.lastInteraction
+        return {
+          actor1Id: r.actor1Id != null ? String(r.actor1Id) : null,
+          actor2Id: r.actor2Id != null ? String(r.actor2Id) : null,
+          strength: r.strength != null ? Number(r.strength) : null,
+          lastInteraction:
+            rawLastInteraction instanceof Date
+              ? rawLastInteraction
+              : rawLastInteraction
+                ? new Date(String(rawLastInteraction))
+                : null,
+          relationshipType:
+            r.relationshipType != null ? String(r.relationshipType) : null,
+          sentiment: r.sentiment != null ? Number(r.sentiment) : null,
+          history: r.history != null ? String(r.history) : null,
+        }
+      })
 
     // Fetch all NPC positions in one query (poolId = actorId for backward compatibility)
     // DB select returns the shape matching select clause
-    const allPositionsRaw =
+    const allPositionsRows =
       npcIds.length > 0
         ? await db
             .select({
@@ -353,20 +359,33 @@ export class MarketContextService {
               ),
             )
         : []
-    const allPositions = allPositionsRaw as unknown as Array<{
-      id: string
-      poolId: string | null
-      marketType: string | null
-      ticker: string | null
-      marketId: string | null
-      side: string | null
-      entryPrice: number | string | null
-      currentPrice: number | string | null
-      size: number | string | null
-      shares: number | string | null
-      unrealizedPnL: number | string | null
-      openedAt: Date | string | null
-    }>
+
+    // Map positions with proper type coercion
+    const allPositions = allPositionsRows
+      .filter((p): p is NonNullable<typeof p> => p != null)
+      .map((p) => {
+        const rawOpenedAt = p.openedAt
+        return {
+          id: String(p.id ?? ''),
+          poolId: p.poolId != null ? String(p.poolId) : null,
+          marketType: p.marketType != null ? String(p.marketType) : null,
+          ticker: p.ticker != null ? String(p.ticker) : null,
+          marketId: p.marketId != null ? String(p.marketId) : null,
+          side: p.side != null ? String(p.side) : null,
+          entryPrice: p.entryPrice != null ? Number(p.entryPrice) : null,
+          currentPrice: p.currentPrice != null ? Number(p.currentPrice) : null,
+          size: p.size != null ? Number(p.size) : null,
+          shares: p.shares != null ? Number(p.shares) : null,
+          unrealizedPnL:
+            p.unrealizedPnL != null ? Number(p.unrealizedPnL) : null,
+          openedAt:
+            rawOpenedAt instanceof Date
+              ? rawOpenedAt
+              : rawOpenedAt
+                ? new Date(String(rawOpenedAt))
+                : null,
+        }
+      })
 
     type PositionRow = (typeof allPositions)[number]
 
@@ -621,7 +640,7 @@ export class MarketContextService {
   private async getRelationshipsForNPC(
     npcId: string,
   ): Promise<RelationshipContext[]> {
-    const relationshipsListRaw = await db
+    const relationshipsRows = await db
       .select()
       .from(actorRelationships)
       .where(
@@ -630,32 +649,26 @@ export class MarketContextService {
           eq(actorRelationships.actor2Id, npcId),
         ),
       )
-    const relationshipsList = relationshipsListRaw as unknown as Array<{
-      actor1Id: string | null
-      actor2Id: string | null
-      relationshipType: string | null
-      sentiment: number | string | null
-      strength: number | string | null
-      history: string | null
-    }>
 
-    return relationshipsList.map((rel) => {
-      const relActor1Id = String(rel.actor1Id)
-      const relActor2Id = String(rel.actor2Id)
-      const isActor1 = relActor1Id === npcId
-      const otherActorId = isActor1 ? relActor2Id : relActor1Id
+    return relationshipsRows
+      .filter((r): r is NonNullable<typeof r> => r != null)
+      .map((rel) => {
+        const relActor1Id = String(rel.actor1Id ?? '')
+        const relActor2Id = String(rel.actor2Id ?? '')
+        const isActor1 = relActor1Id === npcId
+        const otherActorId = isActor1 ? relActor2Id : relActor1Id
 
-      return {
-        actorId: otherActorId,
-        actorName: otherActorId,
-        relationshipType: rel.relationshipType
-          ? String(rel.relationshipType)
-          : 'acquaintance',
-        sentiment: Number(rel.sentiment ?? 0),
-        strength: Number(rel.strength ?? 0.5),
-        history: rel.history ? String(rel.history) : undefined,
-      }
-    })
+        return {
+          actorId: otherActorId,
+          actorName: otherActorId,
+          relationshipType: rel.relationshipType
+            ? String(rel.relationshipType)
+            : 'acquaintance',
+          sentiment: Number(rel.sentiment ?? 0),
+          strength: Number(rel.strength ?? 0.5),
+          history: rel.history ? String(rel.history) : undefined,
+        }
+      })
   }
 
   /**
@@ -674,46 +687,52 @@ export class MarketContextService {
    */
   private async getInsiderInfo(npcId: string): Promise<GroupChatContext[]> {
     // Get chats where NPC is a participant
-    const participantRecordsRaw = await db
+    const participantRows = await db
       .select({ chatId: chatParticipants.chatId })
       .from(chatParticipants)
       .where(eq(chatParticipants.userId, npcId))
-    const participantRecords = participantRecordsRaw as unknown as Array<{
-      chatId: string | null
-    }>
 
-    const participantChatIds = participantRecords.map((p) => String(p.chatId))
+    const participantChatIds = participantRows
+      .filter((p): p is NonNullable<typeof p> => p != null)
+      .map((p) => String(p.chatId ?? ''))
+      .filter((id) => id.length > 0)
 
     if (participantChatIds.length === 0) {
       return []
     }
 
-    const groupChatsRaw = await db
+    const groupChatsRows = await db
       .select()
       .from(chats)
       .where(
         and(eq(chats.isGroup, true), inArray(chats.id, participantChatIds)),
       )
-    const groupChats = groupChatsRaw as unknown as Array<{
-      id: string
-      name: string | null
-    }>
+
+    const groupChats = groupChatsRows
+      .filter((c): c is NonNullable<typeof c> => c != null)
+      .map((c) => ({
+        id: String(c.id ?? ''),
+        name: c.name != null ? String(c.name) : null,
+      }))
 
     const result: GroupChatContext[] = []
 
     for (const chat of groupChats) {
-      const insiderChatId = String(chat.id)
-      const insiderChatName = chat.name ? String(chat.name) : 'Group Chat'
+      const insiderChatId = chat.id
+      const insiderChatName = chat.name ?? 'Group Chat'
 
-      const chatMessagesRaw = await db
+      const chatMessagesRows = await db
         .select()
         .from(messages)
         .where(eq(messages.chatId, insiderChatId))
         .orderBy(desc(messages.createdAt))
         .limit(20)
-      const chatMessages = chatMessagesRaw as unknown as MessageRow[]
 
-      for (const msg of chatMessages.slice(0, 15)) {
+      const validMessages = chatMessagesRows
+        .filter((m): m is NonNullable<typeof m> => m != null)
+        .slice(0, 15)
+
+      for (const msg of validMessages) {
         // Truncate long messages
         const maxMsgLength = 120
         const msgContent = String(msg.content ?? '')
@@ -722,15 +741,19 @@ export class MarketContextService {
             ? `${msgContent.slice(0, maxMsgLength)}...`
             : msgContent
 
-        const msgCreatedAt = msg.createdAt
-          ? new Date(String(msg.createdAt))
-          : new Date()
+        const rawCreatedAt = msg.createdAt
+        const msgCreatedAt =
+          rawCreatedAt instanceof Date
+            ? rawCreatedAt
+            : rawCreatedAt
+              ? new Date(String(rawCreatedAt))
+              : new Date()
 
         result.push({
           chatId: insiderChatId,
           chatName: insiderChatName,
-          from: String(msg.senderId),
-          fromName: String(msg.senderId),
+          from: String(msg.senderId ?? ''),
+          fromName: String(msg.senderId ?? ''),
           message,
           timestamp: msgCreatedAt.toISOString(),
         })
@@ -755,53 +778,49 @@ export class MarketContextService {
    */
   private async getRecentFeed(): Promise<FeedPostContext[]> {
     const now = new Date()
-    const postListRaw = await db
+    const postRows = await db
       .select()
       .from(posts)
       .where(and(isNull(posts.deletedAt), lte(posts.timestamp, now)))
       .orderBy(desc(posts.timestamp))
       .limit(50)
-    const postList = postListRaw as unknown as Array<{
-      id: string
-      content: string | null
-      authorId: string | null
-      timestamp: Date | string | null
-      articleTitle: string | null
-      type: string | null
-      sentiment: number | string | null
-      relatedEvent: string | null
-    }>
 
-    return postList.map((post) => {
-      // Truncate long posts to save tokens
-      const maxContentLength = 200
-      const postContent = String(post.content ?? '')
-      const content =
-        postContent.length > maxContentLength
-          ? `${postContent.slice(0, maxContentLength)}...`
-          : postContent
+    return postRows
+      .filter((p): p is NonNullable<typeof p> => p != null)
+      .map((post) => {
+        // Truncate long posts to save tokens
+        const maxContentLength = 200
+        const postContent = String(post.content ?? '')
+        const content =
+          postContent.length > maxContentLength
+            ? `${postContent.slice(0, maxContentLength)}...`
+            : postContent
 
-      const maxTitleLength = 80
-      const postArticleTitle = post.articleTitle
-        ? String(post.articleTitle)
-        : ''
-      const articleTitle =
-        postArticleTitle.length > maxTitleLength
-          ? `${postArticleTitle.slice(0, maxTitleLength)}...`
-          : postArticleTitle
+        const maxTitleLength = 80
+        const postArticleTitle = post.articleTitle
+          ? String(post.articleTitle)
+          : ''
+        const articleTitle =
+          postArticleTitle.length > maxTitleLength
+            ? `${postArticleTitle.slice(0, maxTitleLength)}...`
+            : postArticleTitle
 
-      const postCreatedAt = post.timestamp
-        ? new Date(String(post.timestamp))
-        : new Date()
+        const rawTimestamp = post.timestamp
+        const postCreatedAt =
+          rawTimestamp instanceof Date
+            ? rawTimestamp
+            : rawTimestamp
+              ? new Date(String(rawTimestamp))
+              : new Date()
 
-      return {
-        author: String(post.authorId),
-        authorName: String(post.authorId),
-        content,
-        timestamp: postCreatedAt.toISOString(),
-        articleTitle: articleTitle || undefined,
-      }
-    })
+        return {
+          author: String(post.authorId ?? ''),
+          authorName: String(post.authorId ?? ''),
+          content,
+          timestamp: postCreatedAt.toISOString(),
+          articleTitle: articleTitle || undefined,
+        }
+      })
   }
 
   /**
@@ -819,40 +838,45 @@ export class MarketContextService {
    */
   private async getRecentEvents(): Promise<EventContext[]> {
     const now = new Date()
-    const eventListRaw = await db
+    const eventRows = await db
       .select()
       .from(worldEvents)
       .where(lte(worldEvents.timestamp, now))
       .orderBy(desc(worldEvents.timestamp))
       .limit(30)
-    const eventList = eventListRaw as unknown as WorldEventRow[]
 
-    return eventList.map((event) => {
-      // Truncate long descriptions
-      const maxDescLength = 150
-      const eventDescription = String(event.description ?? '')
-      const description =
-        eventDescription.length > maxDescLength
-          ? `${eventDescription.slice(0, maxDescLength)}...`
-          : eventDescription
+    return eventRows
+      .filter((e): e is NonNullable<typeof e> => e != null)
+      .map((event) => {
+        // Truncate long descriptions
+        const maxDescLength = 150
+        const eventDescription = String(event.description ?? '')
+        const description =
+          eventDescription.length > maxDescLength
+            ? `${eventDescription.slice(0, maxDescLength)}...`
+            : eventDescription
 
-      const eventTimestamp = event.timestamp
-        ? new Date(String(event.timestamp))
-        : new Date()
+        const rawTimestamp = event.timestamp
+        const eventTimestamp =
+          rawTimestamp instanceof Date
+            ? rawTimestamp
+            : rawTimestamp
+              ? new Date(String(rawTimestamp))
+              : new Date()
 
-      return {
-        type: String(event.eventType),
-        description,
-        actors: toStringArrayOrUndefined(event.actors),
-        timestamp: eventTimestamp.toISOString(),
-        relatedQuestion: event.relatedQuestion
-          ? Number(event.relatedQuestion)
-          : undefined,
-        pointsToward: event.pointsToward
-          ? String(event.pointsToward)
-          : undefined,
-      }
-    })
+        return {
+          type: String(event.eventType ?? ''),
+          description,
+          actors: toStringArrayOrUndefined(event.actors),
+          timestamp: eventTimestamp.toISOString(),
+          relatedQuestion: event.relatedQuestion
+            ? Number(event.relatedQuestion)
+            : undefined,
+          pointsToward: event.pointsToward
+            ? String(event.pointsToward)
+            : undefined,
+        }
+      })
   }
 
   /**
@@ -873,7 +897,7 @@ export class MarketContextService {
     const threeDaysAgo = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000)
 
     // Get all recent events and filter by NPC involvement
-    const eventListRaw = await db
+    const eventRows = await db
       .select()
       .from(worldEvents)
       .where(
@@ -884,7 +908,20 @@ export class MarketContextService {
       )
       .orderBy(desc(worldEvents.timestamp))
       .limit(100)
-    const eventList = eventListRaw as unknown as WorldEventRow[]
+
+    // Map events with proper type coercion
+    const eventList = eventRows
+      .filter((e): e is NonNullable<typeof e> => e != null)
+      .map((e) => ({
+        id: String(e.id ?? ''),
+        eventType: e.eventType != null ? String(e.eventType) : null,
+        description: e.description != null ? String(e.description) : null,
+        timestamp: e.timestamp,
+        dayNumber: e.dayNumber != null ? Number(e.dayNumber) : null,
+        actors: e.actors,
+        relatedQuestion: e.relatedQuestion,
+        pointsToward: e.pointsToward,
+      }))
 
     // Filter events where NPC is in the actors array or mentioned in description
     const npcEvents = eventList.filter((event) => {
@@ -944,7 +981,7 @@ export class MarketContextService {
     const now = new Date()
     const threeDaysAgo = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000)
 
-    const npcPostsRaw = await db
+    const postRows = await db
       .select()
       .from(posts)
       .where(
@@ -957,37 +994,35 @@ export class MarketContextService {
       )
       .orderBy(desc(posts.timestamp))
       .limit(10)
-    const npcPosts = npcPostsRaw as unknown as Array<{
-      id: string
-      content: string | null
-      authorId: string | null
-      createdAt: Date | string | null
-      articleTitle: string | null
-      type: string | null
-      sentiment: number | string | null
-      relatedEvent: string | null
-    }>
 
-    return npcPosts.map((post) => {
-      const maxContentLength = 200
-      const postContent = String(post.content ?? '')
-      const content =
-        postContent.length > maxContentLength
-          ? `${postContent.slice(0, maxContentLength)}...`
-          : postContent
+    return postRows
+      .filter((p): p is NonNullable<typeof p> => p != null)
+      .map((post) => {
+        const maxContentLength = 200
+        const postContent = String(post.content ?? '')
+        const content =
+          postContent.length > maxContentLength
+            ? `${postContent.slice(0, maxContentLength)}...`
+            : postContent
 
-      const postCreatedAt = post.createdAt
-        ? new Date(String(post.createdAt))
-        : new Date()
+        const rawCreatedAt = post.createdAt
+        const postCreatedAt =
+          rawCreatedAt instanceof Date
+            ? rawCreatedAt
+            : rawCreatedAt
+              ? new Date(String(rawCreatedAt))
+              : new Date()
 
-      return {
-        author: String(post.authorId),
-        authorName: String(post.authorId),
-        content,
-        timestamp: postCreatedAt.toISOString(),
-        articleTitle: post.articleTitle ? String(post.articleTitle) : undefined,
-      }
-    })
+        return {
+          author: String(post.authorId ?? ''),
+          authorName: String(post.authorId ?? ''),
+          content,
+          timestamp: postCreatedAt.toISOString(),
+          articleTitle: post.articleTitle
+            ? String(post.articleTitle)
+            : undefined,
+        }
+      })
   }
 
   /**
@@ -1055,7 +1090,7 @@ export class MarketContextService {
 
         // Get 24h price history
         const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000)
-        const priceHistoryRaw = await db
+        const priceHistoryRows = await db
           .select()
           .from(stockPrices)
           .where(
@@ -1065,10 +1100,10 @@ export class MarketContextService {
             ),
           )
           .orderBy(asc(stockPrices.timestamp))
-        const priceHistory = priceHistoryRaw as unknown as Array<{
-          price: number | string
-          timestamp: Date | string | null
-        }>
+
+        const priceHistory = priceHistoryRows
+          .filter((p): p is NonNullable<typeof p> => p != null)
+          .map((p) => ({ price: Number(p.price ?? 0) }))
 
         let change24h = 0
         let changePercent24h = 0
@@ -1076,18 +1111,18 @@ export class MarketContextService {
         let low24h = currentPrice
 
         if (priceHistory.length > 0) {
-          const oldestPrice = Number(priceHistory[0]?.price ?? 0)
+          const oldestPrice = priceHistory[0]?.price ?? 0
           change24h = currentPrice - oldestPrice
           changePercent24h =
             oldestPrice > 0 ? (change24h / oldestPrice) * 100 : 0
 
-          const prices = priceHistory.map((p) => Number(p.price))
+          const prices = priceHistory.map((p) => p.price)
           high24h = Math.max(...prices, currentPrice)
           low24h = Math.min(...prices, currentPrice)
         }
 
         // Get open interest from pool positions
-        const positionsRaw = await db
+        const positionsRows = await db
           .select({ size: poolPositions.size })
           .from(poolPositions)
           .where(
@@ -1096,18 +1131,13 @@ export class MarketContextService {
               isNull(poolPositions.closedAt),
             ),
           )
-        const positions = positionsRaw as unknown as Array<{
-          size: number | string | null
-        }>
 
-        const openInterest = positions.reduce(
-          (sum, pos) => sum + Number(pos.size),
-          0,
-        )
-        const volume24h = positions.reduce(
-          (sum, pos) => sum + Number(pos.size),
-          0,
-        )
+        const positions = positionsRows
+          .filter((p): p is NonNullable<typeof p> => p != null)
+          .map((p) => ({ size: Number(p.size ?? 0) }))
+
+        const openInterest = positions.reduce((sum, pos) => sum + pos.size, 0)
+        const volume24h = positions.reduce((sum, pos) => sum + pos.size, 0)
 
         // Use ticker field if available, fallback to transformed org ID
         const ticker =
@@ -1145,66 +1175,63 @@ export class MarketContextService {
   private async getPredictionMarketSnapshots(): Promise<
     PredictionMarketSnapshot[]
   > {
-    const marketListRaw = await db
+    const marketRows = await db
       .select()
       .from(markets)
       .where(and(eq(markets.resolved, false), gte(markets.endDate, new Date())))
       .orderBy(desc(markets.yesShares))
       .limit(15)
-    const marketList = marketListRaw as unknown as Array<{
-      id: string
-      yesShares: number | string | null
-      noShares: number | string | null
-      endDate: Date | string | null
-      question: string | null
-    }>
 
-    return marketList.map((market) => {
-      // DB returns typed columns - cast to expected types
-      const marketId = String(market.id)
-      const marketYesShares = String(market.yesShares ?? '0')
-      const marketNoShares = String(market.noShares ?? '0')
-      const marketEndDate = market.endDate
-      const marketQuestion = String(market.question ?? '')
+    return marketRows
+      .filter((m): m is NonNullable<typeof m> => m != null)
+      .map((market) => {
+        // DB returns typed columns - cast to expected types
+        const marketId = String(market.id ?? '')
+        const marketYesShares = String(market.yesShares ?? '0')
+        const marketNoShares = String(market.noShares ?? '0')
+        const rawEndDate = market.endDate
+        const marketQuestion = String(market.question ?? '')
 
-      const yesShares = Number.parseFloat(marketYesShares)
-      const noShares = Number.parseFloat(marketNoShares)
-      const totalShares = yesShares + noShares
+        const yesShares = Number.parseFloat(marketYesShares)
+        const noShares = Number.parseFloat(marketNoShares)
+        const totalShares = yesShares + noShares
 
-      const yesPrice = totalShares > 0 ? (yesShares / totalShares) * 100 : 50
-      const noPrice = totalShares > 0 ? (noShares / totalShares) * 100 : 50
-      const totalVolume = totalShares * 0.5
+        const yesPrice = totalShares > 0 ? (yesShares / totalShares) * 100 : 50
+        const noPrice = totalShares > 0 ? (noShares / totalShares) * 100 : 50
+        const totalVolume = totalShares * 0.5
 
-      const now = new Date()
-      const endDate =
-        marketEndDate instanceof Date
-          ? marketEndDate
-          : marketEndDate
-            ? new Date(marketEndDate)
-            : now
-      const resolutionDate = endDate.toISOString()
-      const daysUntilResolution = Math.max(
-        0,
-        Math.ceil((endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)),
-      )
+        const now = new Date()
+        const endDate =
+          rawEndDate instanceof Date
+            ? rawEndDate
+            : rawEndDate
+              ? new Date(String(rawEndDate))
+              : now
+        const resolutionDate = endDate.toISOString()
+        const daysUntilResolution = Math.max(
+          0,
+          Math.ceil(
+            (endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24),
+          ),
+        )
 
-      // Truncate long question text
-      const maxQuestionLength = 120
-      const text =
-        marketQuestion.length > maxQuestionLength
-          ? `${marketQuestion.slice(0, maxQuestionLength)}...`
-          : marketQuestion
+        // Truncate long question text
+        const maxQuestionLength = 120
+        const text =
+          marketQuestion.length > maxQuestionLength
+            ? `${marketQuestion.slice(0, maxQuestionLength)}...`
+            : marketQuestion
 
-      return {
-        id: marketId,
-        text,
-        yesPrice,
-        noPrice,
-        totalVolume,
-        resolutionDate,
-        daysUntilResolution,
-      }
-    })
+        return {
+          id: marketId,
+          text,
+          yesPrice,
+          noPrice,
+          totalVolume,
+          resolutionDate,
+          daysUntilResolution,
+        }
+      })
   }
 
   /**

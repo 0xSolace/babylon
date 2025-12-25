@@ -49,7 +49,6 @@ export function TaggedText({ text, onTagClick, className }: TaggedTextProps) {
     tagType?: '@' | '#' | '$'
   }> = []
   let lastIndex = 0
-  const _match: RegExpExecArray | null = null
 
   // Reset regex lastIndex to start from beginning
   tagRegex.lastIndex = 0

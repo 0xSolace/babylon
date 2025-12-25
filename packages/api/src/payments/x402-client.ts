@@ -97,7 +97,7 @@ export function getBabylonPaymentRequirement(
 /**
  * Check if x402 payments are enabled for Babylon
  */
-export function isBabylonX402Enabled(): boolean {
+function _isBabylonX402Enabled(): boolean {
   return process.env.BABYLON_X402_ENABLED === 'true'
 }
 
@@ -151,7 +151,7 @@ export async function verifyX402Signature(
 /**
  * Verify x402 payment for Babylon feature
  */
-export function verifyBabylonPayment(
+function _verifyBabylonPayment(
   paymentHeader: string,
   paymentType: BabylonPaymentType,
   userAddress: Address,
@@ -187,7 +187,7 @@ export function verifyBabylonPayment(
 /**
  * Generate x402 402 response for payment required
  */
-export function generate402Response(
+function _generate402Response(
   paymentType: BabylonPaymentType,
   resource: string,
 ): Response {

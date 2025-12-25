@@ -1,9 +1,3 @@
-import type {
-  PerpPositionFromAPI,
-  PredictionPosition,
-  UserBalanceData,
-  UserProfileStats,
-} from '@babylon/shared'
 import { cn } from '@babylon/shared'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { HelpCircle, TrendingDown, TrendingUp } from 'lucide-react'
@@ -13,6 +7,12 @@ import { useAuth } from '@/hooks/useAuth'
 import { api, extractDataOrNull } from '@/lib/eden-client'
 import { useRouter } from '@/lib/navigation'
 import { useWidgetCacheStore } from '@/stores/widgetCacheStore'
+import type {
+  PerpPositionFromAPI,
+  PredictionPosition,
+  UserBalanceData,
+  UserProfileStats,
+} from '@/types/widgets'
 import { PositionDetailModal } from './PositionDetailModal'
 
 /**
@@ -89,6 +89,11 @@ export function ProfileWidget({ userId }: ProfileWidgetProps) {
       if (balanceJson) {
         balanceData = {
           balance: Number(balanceJson.balance || 0),
+          virtualBalance: Number(
+            balanceJson.virtualBalance || balanceJson.balance || 0,
+          ),
+          tradingBalance: Number(balanceJson.tradingBalance || 0),
+          lockedBalance: Number(balanceJson.lockedBalance || 0),
           totalDeposited: Number(balanceJson.totalDeposited || 0),
           totalWithdrawn: Number(balanceJson.totalWithdrawn || 0),
           lifetimePnL: Number(balanceJson.lifetimePnL || 0),
@@ -119,6 +124,11 @@ export function ProfileWidget({ userId }: ProfileWidgetProps) {
 
         const userStats = profileJson.user?.stats
         statsData = {
+          followersCount: userStats?.followers ?? 0,
+          followingCount: userStats?.following ?? 0,
+          postsCount: userStats?.posts ?? 0,
+          likesReceived: userStats?.reactions ?? 0,
+          reputationPoints: 0,
           following: userStats?.following ?? 0,
           followers: userStats?.followers ?? 0,
           totalActivity:
@@ -331,7 +341,7 @@ export function ProfileWidget({ userId }: ProfileWidgetProps) {
                     <span className="font-medium text-foreground">
                       {perp.ticker}
                     </span>
-                    {perp.unrealizedPnLPercent >= 0 ? (
+                    {(perp.unrealizedPnLPercent ?? 0) >= 0 ? (
                       <TrendingUp className="h-3 w-3 text-green-600" />
                     ) : (
                       <TrendingDown className="h-3 w-3 text-red-600" />
@@ -348,8 +358,8 @@ export function ProfileWidget({ userId }: ProfileWidgetProps) {
                         : 'text-red-600',
                     )}
                   >
-                    {formatPoints(perp.unrealizedPnL)} pts (
-                    {formatPercent(perp.unrealizedPnLPercent)})
+                    {formatPoints(perp.unrealizedPnL ?? 0)} pts (
+                    {formatPercent(perp.unrealizedPnLPercent ?? 0)})
                   </div>
                 </button>
               ))}

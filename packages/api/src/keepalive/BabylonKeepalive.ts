@@ -22,8 +22,8 @@
 import {
   type BabylonPublicClient,
   type BabylonWalletClient,
-  safeReadContract,
-  safeWriteContract,
+  readContract,
+  writeContract,
 } from '@babylon/shared'
 import type { Address, Hex } from 'viem'
 import { keccak256, parseEther, toBytes } from 'viem'
@@ -269,7 +269,7 @@ export class BabylonKeepalive {
 
     logger.info('[Keepalive] Registering Babylon keepalive')
 
-    const hash = await safeWriteContract(this.walletClient, {
+    const hash = await writeContract(this.walletClient, {
       address: this.registryAddress,
       abi: KEEPALIVE_REGISTRY_ABI,
       functionName: 'registerKeepalive',
@@ -319,7 +319,7 @@ export class BabylonKeepalive {
     for (const resource of this.config.resources) {
       if (!resource.identifier) continue
 
-      const hash = await safeWriteContract(this.walletClient, {
+      const hash = await writeContract(this.walletClient, {
         address: this.registryAddress,
         abi: KEEPALIVE_REGISTRY_ABI,
         functionName: 'addResource',
@@ -510,7 +510,7 @@ export class BabylonKeepalive {
   private async reportHealthCheck(result: HealthCheckResult): Promise<void> {
     if (!this.walletClient || !this.keepaliveId) return
 
-    const hash = await safeWriteContract(this.walletClient, {
+    const hash = await writeContract(this.walletClient, {
       address: this.registryAddress,
       abi: KEEPALIVE_REGISTRY_ABI,
       functionName: 'recordHealthCheck',
@@ -549,14 +549,15 @@ export class BabylonKeepalive {
   } | null> {
     if (!this.keepaliveId) return null
 
-    const [funded, status, lastCheck, balance] = await safeReadContract<
-      [boolean, number, bigint, bigint]
-    >(this.publicClient, {
-      address: this.registryAddress,
-      abi: KEEPALIVE_REGISTRY_ABI,
-      functionName: 'getStatus',
-      args: [this.keepaliveId],
-    })
+    const [funded, status, lastCheck, balance] = await readContract(
+      this.publicClient,
+      {
+        address: this.registryAddress,
+        abi: KEEPALIVE_REGISTRY_ABI,
+        functionName: 'getStatus',
+        args: [this.keepaliveId],
+      },
+    )
 
     return {
       funded,

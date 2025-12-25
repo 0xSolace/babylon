@@ -98,7 +98,7 @@ export class KeyBackupManager {
   ): Promise<CryptoKey> {
     const passwordKey = await crypto.subtle.importKey(
       'raw',
-      new TextEncoder().encode(password),
+      this.toArrayBuffer(new TextEncoder().encode(password)),
       'PBKDF2',
       false,
       ['deriveBits', 'deriveKey'],

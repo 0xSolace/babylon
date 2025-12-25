@@ -1,4 +1,4 @@
-import type { PortfolioPnLSnapshot } from '@/hooks/usePortfolioPnL'
+import type { PortfolioPnLSnapshot } from '@babylon/shared'
 import type { User } from '@/stores/authStore'
 import { PnLShareModal } from './PnLShareModal'
 

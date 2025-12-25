@@ -22,9 +22,9 @@ import {
   createBabylonPublicClient,
   generateSnowflakeId,
   logger,
-  safeReadContract,
-  safeWriteContract,
+  readContract,
   toNull,
+  writeContract,
 } from '@babylon/shared'
 import {
   type Address,
@@ -132,7 +132,7 @@ let buybackConfig: BuybackConfig | null = null
 /**
  * Initialize the buyback service with configuration
  */
-export function initializeBuybackService(config: BuybackConfig): void {
+function _initializeBuybackService(config: BuybackConfig): void {
   buybackConfig = config
   logger.info(
     'BuybackService initialized',
@@ -147,7 +147,7 @@ export function initializeBuybackService(config: BuybackConfig): void {
 /**
  * Record a fee contribution from a trade
  */
-export async function recordFeeContribution(
+async function _recordFeeContribution(
   tradingFeeId: string,
   userId: string,
   feeAmount: bigint,
@@ -275,7 +275,7 @@ export async function getAccumulatorStatus(): Promise<AccumulatorStatus> {
 /**
  * Update buyback threshold
  */
-export async function setBuybackThreshold(newThreshold: bigint): Promise<void> {
+async function _setBuybackThreshold(newThreshold: bigint): Promise<void> {
   const accumulators = await db.query<FeeAccumulatorRow>(
     'SELECT * FROM "FeeAccumulator" WHERE id = $1 LIMIT 1',
     ['singleton'],
@@ -317,7 +317,7 @@ export async function setBuybackThreshold(newThreshold: bigint): Promise<void> {
 /**
  * Trigger buyback execution (on-chain)
  */
-export async function triggerBuyback(): Promise<BuybackResult> {
+async function _triggerBuyback(): Promise<BuybackResult> {
   const config = buybackConfig
   if (!config) {
     return {
@@ -418,7 +418,7 @@ export async function triggerBuyback(): Promise<BuybackResult> {
   ] as const
 
   // Check if on-chain contract can execute
-  const canExecute = await safeReadContract<boolean>(publicClient, {
+  const canExecute = await readContract(publicClient, {
     address: config.revenueContractAddress,
     abi: REVENUE_ABI,
     functionName: 'canExecuteBuyback',
@@ -440,7 +440,7 @@ export async function triggerBuyback(): Promise<BuybackResult> {
   }
 
   // Execute buyback transaction
-  const txHash = await safeWriteContract(walletClient, {
+  const txHash = await writeContract(walletClient, {
     address: config.revenueContractAddress,
     abi: REVENUE_ABI,
     functionName: 'executeBuyback',
@@ -551,9 +551,7 @@ export async function triggerBuyback(): Promise<BuybackResult> {
 /**
  * Get buyback history
  */
-export async function getBuybackHistory(
-  limit = 20,
-): Promise<BuybackRecordRow[]> {
+async function _getBuybackHistory(limit = 20): Promise<BuybackRecordRow[]> {
   const records = await db.query<BuybackRecordRow>(
     `SELECT * FROM "BuybackRecord" ORDER BY "initiatedAt" DESC LIMIT $1`,
     [limit],
@@ -564,7 +562,7 @@ export async function getBuybackHistory(
 /**
  * Get total stats
  */
-export async function getBuybackStats(): Promise<{
+async function _getBuybackStats(): Promise<{
   totalFeesReceived: bigint
   totalBuybacks: number
   currentAccumulated: bigint

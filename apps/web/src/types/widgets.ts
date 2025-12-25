@@ -24,10 +24,13 @@ export interface PerpPositionFromAPI {
   size: number
   leverage: number
   unrealizedPnL: number
+  unrealizedPnLPercent?: number
   margin: number
   liquidationPrice: number
+  fundingPaid?: number
   createdAt: string
   lastUpdated: string
+  openedAt?: string
 }
 
 /** Prediction position */
@@ -44,10 +47,15 @@ export interface PredictionPosition {
   unrealizedPnL: number
   resolved: boolean
   resolution: boolean | null
+  Market?: {
+    question: string
+    [key: string]: unknown
+  }
 }
 
 /** User balance data */
 export interface UserBalanceData {
+  balance?: number
   virtualBalance: number
   tradingBalance: number
   lockedBalance: number
@@ -66,6 +74,10 @@ export interface UserProfileStats {
   predictionAccuracy?: number
   totalTrades?: number
   winRate?: number
+  // Additional stats used in UI
+  following?: number
+  followers?: number
+  totalActivity?: number
 }
 
 /** User prediction position - used for positions fetched from API */

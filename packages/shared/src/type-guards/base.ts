@@ -56,7 +56,8 @@ export function isArrayOf<T>(
 // =============================================================================
 
 /**
- * Type guard to check if a value is a non-null object
+ * Type guard to check if a value is a non-null object (excludes arrays)
+ * This is the simple, permissive version - use for basic object checks.
  *
  * @example
  * ```ts
@@ -68,6 +69,36 @@ export function isArrayOf<T>(
  */
 export function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+/**
+ * Type guard to check if a value is a plain object (excludes special object types)
+ * More restrictive than isObject - excludes Date, RegExp, Map, Set, Error, Promise, etc.
+ * Use this when you need to ensure the value is a plain key-value object.
+ *
+ * @example
+ * ```ts
+ * if (isPlainObject(value)) {
+ *   // value is a plain object, not a Date, Map, etc.
+ *   Object.entries(value).forEach(([key, val]) => {...})
+ * }
+ * ```
+ */
+export function isPlainObject(
+  value: unknown,
+): value is Record<string, unknown> {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return false
+  }
+  if (value instanceof Date) return false
+  if (value instanceof RegExp) return false
+  if (value instanceof Map) return false
+  if (value instanceof Set) return false
+  if (value instanceof WeakMap) return false
+  if (value instanceof WeakSet) return false
+  if (value instanceof Error) return false
+  if (value instanceof Promise) return false
+  return true
 }
 
 /**

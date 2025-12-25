@@ -268,7 +268,7 @@ export async function setupTestInfrastructure(
   }
 }
 
-export async function teardownTestInfrastructure(): Promise<void> {
+async function _teardownTestInfrastructure(): Promise<void> {
   console.log('\n[Teardown] Test infrastructure cleanup complete\n')
   // Don't stop Jeju services - they should keep running for other tests
 }

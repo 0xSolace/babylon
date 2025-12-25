@@ -84,7 +84,7 @@ export function usePerpMarkets(options: UsePerpMarketsOptions = {}) {
  *
  * @param intervalMs - Polling interval in milliseconds (default: 30000)
  */
-export function usePerpMarketsPolling(
+export function _usePerpMarketsPolling(
   intervalMs = MARKETS_CONFIG.DEFAULT_POLLING_INTERVAL_MS,
 ) {
   // Just return the hook with polling enabled - react-query handles the rest
@@ -97,7 +97,7 @@ export function usePerpMarketsPolling(
  * @param ticker - The market ticker to find
  * @param options - Configuration options including pollingInterval
  */
-export function usePerpMarket(
+export function _usePerpMarket(
   ticker: string,
   options: UsePerpMarketsOptions = {},
 ) {
@@ -140,7 +140,7 @@ export function usePerpTopMovers(
  * Prefetch perp markets data.
  * Useful for prefetching before navigation or in SSR.
  */
-export function usePrefetchPerpMarkets() {
+export function _usePrefetchPerpMarkets() {
   const queryClient = useQueryClient()
 
   return useCallback(() => {
@@ -156,7 +156,7 @@ export function usePrefetchPerpMarkets() {
  * Get cached perp markets data synchronously.
  * Useful when you need to access cached data outside of a component render.
  */
-export function useGetCachedPerpMarkets() {
+export function _useGetCachedPerpMarkets() {
   const queryClient = useQueryClient()
 
   return useCallback(() => {

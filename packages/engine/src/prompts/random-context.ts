@@ -279,6 +279,6 @@ export function formatRandomContext(context: RandomMarketContext): string {
 /**
  * Shuffle actors array for use in prompts
  */
-export function shuffleActors<T>(actors: T[]): T[] {
+function _shuffleActors<T>(actors: T[]): T[] {
   return shuffleArray(actors)
 }

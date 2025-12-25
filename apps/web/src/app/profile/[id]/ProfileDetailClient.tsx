@@ -1,4 +1,3 @@
-import type { ProfileInfo } from '@babylon/shared'
 import {
   cn,
   extractUsername,
@@ -8,6 +7,25 @@ import {
   POST_TYPES,
 } from '@babylon/shared'
 import { useQuery } from '@tanstack/react-query'
+import type { UserProfileStats } from '@/types/widgets'
+
+// Local ProfileInfo type for this component
+interface ProfileInfo {
+  id: string
+  name: string
+  description: string
+  role: string
+  type: 'actor' | 'user' | 'organization'
+  isUser: boolean
+  username?: string | null
+  profileImageUrl?: string | null
+  coverImageUrl?: string | null
+  stats?: UserProfileStats | Record<string, number>
+  onChainRegistered?: boolean
+  nftTokenId?: number | null
+  profileDescription?: string | null
+}
+
 import { ArrowLeft, Coins, MessageCircle, Search } from 'lucide-react'
 import { useEffect, useLayoutEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
@@ -250,7 +268,7 @@ export default function ProfileDetailClient() {
         return {
           id: actor.id,
           name: actor.name,
-          description: actor.description,
+          description: actor.description ?? '',
           profileDescription: actor.profileDescription,
           tier: actor.tier,
           domain: actor.domain ? [actor.domain] : undefined,
@@ -286,7 +304,7 @@ export default function ProfileDetailClient() {
         return {
           id: org.id,
           name: org.name,
-          description: org.description,
+          description: org.description ?? '',
           profileDescription: org.profileDescription,
           type: 'organization' as const,
           role: 'Organization',
@@ -530,7 +548,11 @@ export default function ProfileDetailClient() {
               <div className="flex-1">
                 <h1 className="font-bold text-xl">{actorInfo.name}</h1>
                 <p className="text-muted-foreground text-sm">
-                  {actorInfo.stats?.posts || actorPosts.length} posts
+                  {('postsCount' in (actorInfo.stats ?? {})
+                    ? (actorInfo.stats as UserProfileStats)?.postsCount
+                    : (actorInfo.stats as Record<string, number>)?.posts) ||
+                    actorPosts.length}{' '}
+                  posts
                 </p>
               </div>
             </div>
@@ -853,7 +875,11 @@ export default function ProfileDetailClient() {
             <div className="flex-1">
               <h1 className="font-bold text-xl">{actorInfo.name}</h1>
               <p className="text-muted-foreground text-sm">
-                {actorInfo.stats?.posts || actorPosts.length} posts
+                {('postsCount' in (actorInfo.stats ?? {})
+                  ? (actorInfo.stats as UserProfileStats)?.postsCount
+                  : (actorInfo.stats as Record<string, number>)?.posts) ||
+                  actorPosts.length}{' '}
+                posts
               </p>
             </div>
           </div>

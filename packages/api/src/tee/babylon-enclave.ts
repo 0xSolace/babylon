@@ -125,6 +125,12 @@ export class BabylonEnclave {
     return this.attestationQuote!
   }
 
+  private toArrayBuffer(arr: Uint8Array): ArrayBuffer {
+    const buffer = new ArrayBuffer(arr.length)
+    new Uint8Array(buffer).set(arr)
+    return buffer
+  }
+
   /**
    * Encrypt and seal game state
    */
@@ -137,22 +143,24 @@ export class BabylonEnclave {
     const ivBytes = new Uint8Array(12)
     crypto.getRandomValues(ivBytes)
 
-    // Create a copy of the key buffer to avoid type issues
-    // biome-ignore lint/style/noNonNullAssertion: ensureRunning() verifies encryptionKey is set
-    const keyBuffer = new Uint8Array(this.encryptionKey!).buffer
+    if (!this.encryptionKey) {
+      throw new Error('Encryption key not initialized')
+    }
+
     const key = await crypto.subtle.importKey(
       'raw',
-      keyBuffer,
+      this.toArrayBuffer(new Uint8Array(this.encryptionKey)),
       { name: 'AES-GCM' },
       false,
       ['encrypt'],
     )
 
-    const ivBuffer = new Uint8Array(ivBytes).buffer
+    const ivBuffer = this.toArrayBuffer(ivBytes)
+    const encoded = new TextEncoder().encode(plaintext)
     const ciphertext = await crypto.subtle.encrypt(
       { name: 'AES-GCM', iv: ivBuffer },
       key,
-      new TextEncoder().encode(plaintext),
+      this.toArrayBuffer(encoded),
     )
 
     this.stateVersion++
@@ -190,28 +198,25 @@ export class BabylonEnclave {
       )
     }
 
-    // Create a copy of the key buffer to avoid type issues
-    // biome-ignore lint/style/noNonNullAssertion: ensureRunning() verifies encryptionKey is set
-    const keyBuffer = new Uint8Array(this.encryptionKey!).buffer
+    if (!this.encryptionKey) {
+      throw new Error('Encryption key not initialized')
+    }
+
     const key = await crypto.subtle.importKey(
       'raw',
-      keyBuffer,
+      this.toArrayBuffer(new Uint8Array(this.encryptionKey)),
       { name: 'AES-GCM' },
       false,
       ['decrypt'],
     )
 
-    const ciphertext = this.base64ToBuffer(sealed.ciphertext)
-    const iv = this.base64ToBuffer(sealed.iv)
-
-    // Create proper ArrayBuffer copies for crypto operations
-    const ciphertextBuffer = new Uint8Array(ciphertext).buffer
-    const ivBuffer = new Uint8Array(iv).buffer
+    const ciphertext = new Uint8Array(this.base64ToBuffer(sealed.ciphertext))
+    const iv = new Uint8Array(this.base64ToBuffer(sealed.iv))
 
     const plaintext = await crypto.subtle.decrypt(
-      { name: 'AES-GCM', iv: ivBuffer },
+      { name: 'AES-GCM', iv: this.toArrayBuffer(iv) },
       key,
-      ciphertextBuffer,
+      this.toArrayBuffer(ciphertext),
     )
 
     const state = JSON.parse(new TextDecoder().decode(plaintext)) as T
@@ -422,7 +427,7 @@ export async function getBabylonEnclave(
   return babylonEnclave
 }
 
-export async function shutdownBabylonEnclave(): Promise<void> {
+async function _shutdownBabylonEnclave(): Promise<void> {
   if (babylonEnclave) {
     await babylonEnclave.shutdown()
     babylonEnclave = null

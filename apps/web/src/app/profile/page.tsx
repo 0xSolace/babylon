@@ -191,7 +191,7 @@ export default function ProfilePage() {
       }
 
       const response = await fetch(
-        `/api/users/${encodeURIComponent(user?.id)}/posts?type=${tab}`,
+        `/api/users/${encodeURIComponent(user?.id ?? '')}/posts?type=${tab}`,
         { headers },
       )
       if (!response.ok) {
@@ -271,7 +271,7 @@ export default function ProfilePage() {
       )
 
       const updateResponse = await fetch(
-        `/api/users/${encodeURIComponent(user?.id)}/update-profile`,
+        `/api/users/${encodeURIComponent(user?.id ?? '')}/update-profile`,
         {
           method: 'POST',
           headers: {
@@ -360,7 +360,7 @@ export default function ProfilePage() {
       }
 
       const response = await fetch(
-        `/api/users/${encodeURIComponent(user?.id)}/update-visibility`,
+        `/api/users/${encodeURIComponent(user?.id ?? '')}/update-visibility`,
         {
           method: 'POST',
           headers,

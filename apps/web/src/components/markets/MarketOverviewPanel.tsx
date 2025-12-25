@@ -8,11 +8,12 @@ import {
 } from 'lucide-react'
 import { useMemo } from 'react'
 import { Skeleton } from '@/components/shared/Skeleton'
-import { type PerpMarket, usePerpMarkets } from '@/hooks/usePerpMarkets'
+import { usePerpMarkets } from '@/hooks/usePerpMarkets'
 import {
   usePredictionMarkets,
   usePredictionMarketsPolling,
 } from '@/stores/predictionMarketsStore'
+import type { PerpMarket } from '@/types/markets'
 import { MARKETS_CONFIG } from '@/types/markets'
 
 /**

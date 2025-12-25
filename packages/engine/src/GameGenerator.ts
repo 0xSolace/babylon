@@ -123,12 +123,14 @@ interface EventItem {
   pointsToward?: 'YES' | 'NO' | null
 }
 
-export interface NestedEventsData {
+// biome-ignore lint/correctness/noUnusedVariables: LLM response type
+interface NestedEventsData {
   event: EventItem | EventItem[]
 }
 
 // LLM response types for group chat generation
-export interface GroupChatData {
+// biome-ignore lint/correctness/noUnusedVariables: LLM response type
+interface GroupChatData {
   groupName: string | string[]
   members: string[]
   messages?: MessageData[]

@@ -40,7 +40,7 @@ export const NETWORKS = {
   jejuLocalnet: {
     name: 'Jeju Localnet',
     rpcUrl: `http://127.0.0.1:${JEJU_RPC_PORT}`,
-    chainId: 1337,
+    chainId: 31337,
     symbol: 'ETH',
   },
   // Jeju Testnet
@@ -77,7 +77,7 @@ function getTargetNetwork() {
   const chainId = Number(
     process.env.CHAIN_ID || process.env.PUBLIC_CHAIN_ID || 0,
   )
-  if (chainId === 1337) return NETWORKS.jejuLocalnet
+  if (chainId === 31337) return NETWORKS.jejuLocalnet
   if (chainId === 420690) return NETWORKS.jejuTestnet
   if (chainId === 420691) return NETWORKS.jejuMainnet
 

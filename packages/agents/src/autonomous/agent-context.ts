@@ -78,6 +78,6 @@ export async function getAgentContext(
  * @param userId - User ID to check
  * @returns True if the user is an NPC in StaticDataRegistry
  */
-export function isNpcUser(userId: string): boolean {
+function _isNpcUser(userId: string): boolean {
   return !!StaticDataRegistry.getActor(userId)
 }

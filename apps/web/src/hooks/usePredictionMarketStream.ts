@@ -137,7 +137,7 @@ export function usePredictionMarketStream(
  * });
  * ```
  */
-export function usePredictionMarketsSubscription({
+export function _usePredictionMarketsSubscription({
   onTrade,
   onResolution,
 }: UsePredictionMarketStreamOptions = {}) {

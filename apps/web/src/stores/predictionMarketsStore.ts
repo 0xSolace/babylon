@@ -112,7 +112,7 @@ export function usePredictionMarketsPolling(
 /**
  * Get a specific market by ID (memoized)
  */
-export function usePredictionMarket(marketId: string | number) {
+export function _usePredictionMarket(marketId: string | number) {
   const { markets, loading, error, refetch } = usePredictionMarkets()
 
   const market = useMemo(
@@ -126,7 +126,7 @@ export function usePredictionMarket(marketId: string | number) {
 /**
  * Get active markets only (memoized)
  */
-export function useActivePredictionMarkets() {
+export function _useActivePredictionMarkets() {
   const { markets, loading, error, refetch } = usePredictionMarkets()
 
   const activeMarkets = useMemo(
@@ -140,7 +140,7 @@ export function useActivePredictionMarkets() {
 /**
  * Get market statistics (memoized)
  */
-export function usePredictionMarketsStats() {
+export function _usePredictionMarketsStats() {
   const { markets, loading } = usePredictionMarkets()
 
   const stats = useMemo(
@@ -163,7 +163,7 @@ export function usePredictionMarketsStats() {
  * Hook to invalidate prediction markets cache.
  * Useful after mutations (buy/sell shares).
  */
-export function useInvalidatePredictionMarkets() {
+export function _useInvalidatePredictionMarkets() {
   const queryClient = useQueryClient()
 
   return useCallback(() => {

@@ -12,7 +12,7 @@ import { type Logger, logger } from '@babylon/shared'
  * Get the logger instance (for compatibility with existing code).
  * @returns The shared logger singleton
  */
-export function getLogger(): Logger {
+export function _getLogger(): Logger {
   return logger
 }
 

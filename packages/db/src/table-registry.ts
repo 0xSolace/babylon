@@ -326,6 +326,9 @@ export const TABLE_NAMES = {
   feeAccumulator: 'FeeAccumulator',
   buybackRecords: 'BuybackRecord',
   feeContributions: 'FeeContribution',
+
+  // Admin
+  adminAuditLogs: 'AdminAuditLog',
 } as const
 
 export type TableName = (typeof TABLE_NAMES)[keyof typeof TABLE_NAMES]
@@ -706,4 +709,9 @@ export const buybackRecords = createTableRef<SchemaTypes.BuybackRecord>(
 )
 export const feeContributions = createTableRef<SchemaTypes.FeeContribution>(
   TABLE_NAMES.feeContributions,
+)
+
+// Admin tables
+export const adminAuditLogs = createTableRef<SchemaTypes.AdminAuditLog>(
+  TABLE_NAMES.adminAuditLogs,
 )

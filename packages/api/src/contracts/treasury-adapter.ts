@@ -512,6 +512,6 @@ export function isDevMode(): boolean {
 /**
  * Get the appropriate treasury for the current environment
  */
-export function getTreasury(): TreasuryAdapter {
+function _getTreasury(): TreasuryAdapter {
   return createTreasuryAdapter()
 }

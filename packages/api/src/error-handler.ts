@@ -420,7 +420,7 @@ export function errorHandler(
 /**
  * Error handler for Elysia context
  */
-export function errorHandlerFromContext(
+function _errorHandlerFromContext(
   error: Error | unknown,
   ctx: ElysiaContext,
   options?: ErrorHandlerOptions,

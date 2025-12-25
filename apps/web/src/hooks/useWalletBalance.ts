@@ -71,7 +71,7 @@ export function useWalletBalance(
     queryKey: ['walletBalance', userId],
     queryFn: async (): Promise<WalletBalanceState> => {
       const response = await fetch(
-        `/api/users/${encodeURIComponent(userId)}/balance`,
+        `/api/users/${encodeURIComponent(userId ?? '')}/balance`,
       )
 
       if (!response.ok) {

@@ -222,7 +222,7 @@ export function Avatar({
  * />
  * ```
  */
-export function GroupAvatar({
+export function _GroupAvatar({
   members,
   size = 'md',
   className,

@@ -428,6 +428,12 @@ export class SqliteEncryptedStore {
     )
   }
 
+  private toArrayBuffer(arr: Uint8Array): ArrayBuffer {
+    const buffer = new ArrayBuffer(arr.length)
+    new Uint8Array(buffer).set(arr)
+    return buffer
+  }
+
   private async encrypt(data: string): Promise<string> {
     if (!this.encryptionKey) {
       return data
@@ -437,20 +443,19 @@ export class SqliteEncryptedStore {
     const ivBytes = new Uint8Array(12)
     crypto.getRandomValues(ivBytes)
 
-    const keyBuffer = new Uint8Array(this.encryptionKey).buffer
     const key = await crypto.subtle.importKey(
       'raw',
-      keyBuffer,
+      this.toArrayBuffer(new Uint8Array(this.encryptionKey)),
       { name: 'AES-GCM' },
       false,
       ['encrypt'],
     )
 
-    const ivBuffer = new Uint8Array(ivBytes).buffer
+    const encoded = new TextEncoder().encode(data)
     const ciphertext = await crypto.subtle.encrypt(
-      { name: 'AES-GCM', iv: ivBuffer },
+      { name: 'AES-GCM', iv: this.toArrayBuffer(ivBytes) },
       key,
-      new TextEncoder().encode(data),
+      this.toArrayBuffer(encoded),
     )
 
     // Combine IV and ciphertext
@@ -467,22 +472,21 @@ export class SqliteEncryptedStore {
     }
 
     const combined = Buffer.from(encryptedData, 'base64')
-    const iv = combined.subarray(0, 12)
-    const ciphertext = combined.subarray(12)
+    const iv = new Uint8Array(combined.subarray(0, 12))
+    const ciphertext = new Uint8Array(combined.subarray(12))
 
-    const keyBuffer = new Uint8Array(this.encryptionKey).buffer
     const key = await crypto.subtle.importKey(
       'raw',
-      keyBuffer,
+      this.toArrayBuffer(new Uint8Array(this.encryptionKey)),
       { name: 'AES-GCM' },
       false,
       ['decrypt'],
     )
 
     const plaintext = await crypto.subtle.decrypt(
-      { name: 'AES-GCM', iv: new Uint8Array(iv).buffer },
+      { name: 'AES-GCM', iv: this.toArrayBuffer(iv) },
       key,
-      new Uint8Array(ciphertext).buffer,
+      this.toArrayBuffer(ciphertext),
     )
 
     return new TextDecoder().decode(plaintext)
@@ -510,7 +514,7 @@ export function getSqliteStore(
   return sqliteStore
 }
 
-export async function initializeSqliteStore(
+async function _initializeSqliteStore(
   config?: Partial<SqliteStoreConfig>,
 ): Promise<SqliteEncryptedStore> {
   const store = getSqliteStore(config)

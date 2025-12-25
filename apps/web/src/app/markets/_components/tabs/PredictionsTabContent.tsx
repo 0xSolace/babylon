@@ -1,10 +1,10 @@
-import type { UserPredictionPosition } from '@babylon/shared'
 import { CategoryPnLCard } from '@/components/markets/CategoryPnLCard'
 import { PredictionPositionsList } from '@/components/markets/PredictionPositionsList'
 import type {
   PredictionMarketWithPosition,
   PredictionSort,
 } from '@/types/markets'
+import type { UserPredictionPosition } from '@/types/widgets'
 import type { CategoryPnLData } from '../../_hooks'
 import { PredictionMarketCard, ResolvedPredictionCard } from '../cards'
 import { PredictionSortControls } from '../sections'

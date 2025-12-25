@@ -22,32 +22,7 @@ import {
   normalizePnL,
 } from './pnl-normalizer'
 
-// Note: UserRow type is defined inline where needed to avoid unused declaration warnings
-
-/** DB row type for agent_performance_metrics table */
-interface AgentMetricsRow {
-  id: string
-  userId: string | null
-  gamesPlayed: number | string | null
-  gamesWon: number | string | null
-  averageGameScore: number | string | null
-  lastGameScore: number | string | null
-  lastGamePlayedAt: Date | string | null
-  lastActivityAt: Date | string | null
-  firstActivityAt: Date | string | null
-  tradesCount: number | string | null
-  profitableTrades: number | string | null
-  totalTradingVolume: number | string | null
-  totalTradingPnL: number | string | null
-  averageTradeSize: number | string | null
-  largestWin: number | string | null
-  largestLoss: number | string | null
-  feedbackCount: number | string | null
-  averageFeedbackScore: number | string | null
-  reputationScore: number | string | null
-}
-
-// Note: FeedbackRow type is defined inline where needed to avoid unused declaration warnings
+// Note: Row types are accessed via direct property coercion to avoid cast requirements
 
 export interface ReputationScoreBreakdown {
   reputationScore: number
@@ -162,14 +137,15 @@ export async function updateGameMetrics(
   )
 
   // Get or create metrics
-  let metricsRaw = await db
+  let metricsRows = await db
     .select()
     .from(agentPerformanceMetrics)
     .where(eq(agentPerformanceMetrics.userId, userId))
     .limit(1)
-  let [metrics] = metricsRaw as unknown as AgentMetricsRow[]
 
-  if (!metrics) {
+  let metricsRow = metricsRows[0]
+
+  if (!metricsRow) {
     await db.insert(agentPerformanceMetrics).values({
       id: await generateSnowflakeId(),
       userId,
@@ -179,24 +155,33 @@ export async function updateGameMetrics(
       updatedAt: new Date(),
     })
 
-    metricsRaw = await db
+    metricsRows = await db
       .select()
       .from(agentPerformanceMetrics)
       .where(eq(agentPerformanceMetrics.userId, userId))
       .limit(1)
-    ;[metrics] = metricsRaw as unknown as AgentMetricsRow[]
+    metricsRow = metricsRows[0]
   }
 
-  if (!metrics) {
+  if (!metricsRow) {
     throw new Error(`Failed to create metrics for user ${userId}`)
   }
 
-  // Calculate new average game score
-  const gamesPlayed = Number(metrics.gamesPlayed ?? 0)
-  const gamesWon = Number(metrics.gamesWon ?? 0)
-  const avgScore = Number(metrics.averageGameScore ?? 0)
+  // Calculate new average game score with proper coercion
+  const gamesPlayed = Number(metricsRow.gamesPlayed ?? 0)
+  const gamesWon = Number(metricsRow.gamesWon ?? 0)
+  const avgScore = Number(metricsRow.averageGameScore ?? 0)
   const totalGames = gamesPlayed + 1
   const newAverageScore = (avgScore * gamesPlayed + gameScore) / totalGames
+
+  // Coerce firstActivityAt to proper type
+  const firstActivity = metricsRow.firstActivityAt
+  const firstActivityAt =
+    firstActivity instanceof Date
+      ? firstActivity
+      : firstActivity
+        ? new Date(String(firstActivity))
+        : new Date()
 
   // Update metrics
   await db
@@ -208,7 +193,7 @@ export async function updateGameMetrics(
       lastGameScore: gameScore,
       lastGamePlayedAt: new Date(),
       lastActivityAt: new Date(),
-      firstActivityAt: metrics.firstActivityAt || new Date(),
+      firstActivityAt,
     })
     .where(eq(agentPerformanceMetrics.userId, userId))
 

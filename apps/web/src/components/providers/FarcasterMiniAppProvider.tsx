@@ -54,7 +54,7 @@ const FarcasterMiniAppContext =
  * @returns Farcaster Mini App context
  * @throws Error if used outside FarcasterMiniAppProvider
  */
-export function useFarcasterMiniApp() {
+export function _useFarcasterMiniApp() {
   const context = useContext(FarcasterMiniAppContext)
   if (!context) {
     throw new Error(

@@ -181,7 +181,7 @@ Remember: You are ${npcActor.name}. Post in YOUR voice, not as a reporter.
  *
  * This wraps getNpcGameContext() for use with ElizaOS Provider interface.
  */
-export const npcGameContextProvider: Provider = {
+const _npcGameContextProvider: Provider = {
   name: 'NPC_GAME_CONTEXT',
   description:
     'Provides game awareness to NPCs (arc plans, phases, intuitions)',

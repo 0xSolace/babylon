@@ -514,7 +514,7 @@ export function getKMSIntegration(
   return kmsIntegration
 }
 
-export async function initializeKMSIntegration(
+async function _initializeKMSIntegration(
   config?: Partial<KMSIntegrationConfig>,
 ): Promise<KMSIntegrationService> {
   const service = getKMSIntegration(config)

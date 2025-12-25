@@ -15,7 +15,7 @@ import {
   hardhat,
   keccak256,
   logger,
-  safeReadContract,
+  readContract,
   toAddress,
   toAddressArray,
   toHexString,
@@ -649,7 +649,7 @@ export class OracleService {
    * Get game info from oracle
    */
   async getGameInfo(sessionId: string) {
-    const info = await safeReadContract(this.publicClient, {
+    const info = await readContract(this.publicClient, {
       address: this.contractAddress,
       abi: GameOracleABI,
       functionName: 'getCompleteGameInfo',
@@ -662,14 +662,11 @@ export class OracleService {
    * Get oracle statistics
    */
   async getStatistics() {
-    const stats = await safeReadContract<[bigint, bigint, bigint]>(
-      this.publicClient,
-      {
-        address: this.contractAddress,
-        abi: GameOracleABI,
-        functionName: 'getStatistics',
-      },
-    )
+    const stats = await readContract(this.publicClient, {
+      address: this.contractAddress,
+      abi: GameOracleABI,
+      functionName: 'getStatistics',
+    })
     const [committed, revealed, pending] = stats
     return {
       committed: committed.toString(),
@@ -705,7 +702,7 @@ export class OracleService {
     }
 
     // Try to read from contract
-    await safeReadContract(this.publicClient, {
+    await readContract(this.publicClient, {
       address: this.contractAddress,
       abi: GameOracleABI,
       functionName: 'version',

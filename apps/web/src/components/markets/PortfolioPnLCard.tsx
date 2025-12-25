@@ -1,5 +1,5 @@
+import type { PortfolioPnLSnapshot } from '@babylon/shared'
 import { Share2, Sparkles } from 'lucide-react'
-import type { PortfolioPnLSnapshot } from '@/hooks/usePortfolioPnL'
 
 /**
  * Portfolio PnL card component for displaying overall portfolio summary.

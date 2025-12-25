@@ -24,7 +24,7 @@ import { toBabylonRuntime } from '../types'
  * Provides complete agent context including portfolio, markets, social, and pending items
  * ALL DATA FETCHED VIA A2A PROTOCOL
  */
-export const dashboardProvider: Provider = {
+const _dashboardProvider: Provider = {
   name: 'BABYLON_DASHBOARD',
   description:
     'Get comprehensive agent dashboard with portfolio, markets, social feed, and pending interactions via A2A protocol',

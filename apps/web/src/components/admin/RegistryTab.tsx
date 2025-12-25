@@ -314,7 +314,7 @@ export function RegistryTab() {
                 type="button"
                 onClick={(e) => {
                   e.preventDefault()
-                  navigator.clipboard.writeText(entity.walletAddress)
+                  navigator.clipboard.writeText(entity.walletAddress ?? '')
                 }}
                 className="text-blue-500 text-xs transition-colors hover:text-blue-400"
               >

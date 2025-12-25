@@ -17,7 +17,7 @@ import { toBabylonRuntime } from '../types'
  * Provider: Recent Feed
  * Gets recent posts from the Babylon social feed via A2A
  */
-export const feedProvider: Provider = {
+const _feedProvider: Provider = {
   name: 'BABYLON_FEED',
   description: 'Get recent posts from the Babylon social feed via A2A protocol',
 
@@ -76,7 +76,7 @@ export const feedProvider: Provider = {
  * Provider: Trending Topics
  * Gets trending tags and topics via A2A
  */
-export const trendingProvider: Provider = {
+const _trendingProvider: Provider = {
   name: 'BABYLON_TRENDING',
   description: 'Get trending topics and tags on Babylon via A2A protocol',
 

@@ -31,7 +31,7 @@ export interface TableMeta<TSelect, TInsert = Partial<TSelect>> {
   readonly $inferInsert: TInsert
 }
 
-export function defineTable<TSelect, TInsert = Partial<TSelect>>(
+export function _defineTable<TSelect, TInsert = Partial<TSelect>>(
   tableName: string,
   primaryKey: keyof TSelect,
 ): TableMeta<TSelect, TInsert> {
@@ -2276,10 +2276,23 @@ export interface FeeContribution {
 }
 
 // ============================================================================
-// Type Helpers
+// Admin Types
 // ============================================================================
 
-export type InferSelect<T extends TableMeta<unknown, unknown>> =
-  T['$inferSelect']
-export type InferInsert<T extends TableMeta<unknown, unknown>> =
-  T['$inferInsert']
+export interface AdminAuditLog {
+  id: string
+  adminId: string
+  action: string
+  resourceType: string
+  resourceId: string | null
+  previousValue: JsonValue | null
+  newValue: JsonValue | null
+  metadata: JsonValue | null
+  ipAddress: string | null
+  userAgent: string | null
+  createdAt: Date
+}
+
+// ============================================================================
+// Type Helpers
+// =======================================================================export type InferSelect<T extends TableMeta<unknown, unknown>> = T['$inferSeexport type InferInsert<T extends TableMeta<unknown, unknown>> = T['$inferInsert']

@@ -10,6 +10,13 @@ import { BAN_MANAGER_ABI, logger } from '@babylon/shared'
 // Alias for compatibility
 const BanManagerAbi = BAN_MANAGER_ABI
 
+/**
+ * Type guard for contract read results that should return boolean
+ */
+function isBooleanResult(result: unknown): result is boolean {
+  return typeof result === 'boolean'
+}
+
 import {
   type Address,
   createPublicClient,

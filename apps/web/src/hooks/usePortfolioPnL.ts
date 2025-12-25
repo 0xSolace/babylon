@@ -24,7 +24,10 @@ interface UsePortfolioPnLResult {
   lastUpdated: number | null
 }
 
-function toNumber(value: JsonValue, fallback = 0): number {
+function toNumber(
+  value: JsonValue | string | number | undefined,
+  fallback = 0,
+): number {
   if (typeof value === 'number' && Number.isFinite(value)) {
     return value
   }
@@ -79,9 +82,12 @@ export function usePortfolioPnL(): UsePortfolioPnLResult {
   const { data, isLoading, error } = useQuery({
     queryKey: ['portfolioPnL', user?.id],
     queryFn: async (): Promise<PortfolioQueryData> => {
+      if (!user?.id) {
+        throw new Error('User ID is required')
+      }
       const [balanceRes, positionsRes] = await Promise.all([
-        fetch(`/api/users/${encodeURIComponent(user?.id)}/balance`),
-        fetch(`/api/markets/positions/${encodeURIComponent(user?.id)}`),
+        fetch(`/api/users/${encodeURIComponent(user.id)}/balance`),
+        fetch(`/api/markets/positions/${encodeURIComponent(user.id)}`),
       ])
 
       const balanceRaw = await balanceRes.json()

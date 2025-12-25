@@ -1091,7 +1091,7 @@ export class BabylonA2AClient {
  * - Uses singleton A2A client (agent card fetched once)
  * - Returns null if A2A is not available (for graceful fallback)
  */
-export async function initializeAgentA2AClient(
+async function _initializeAgentA2AClient(
   agentUserId: string,
 ): Promise<BabylonA2AClient | null> {
   const result = await initializeA2ASdkClient(agentUserId)
@@ -1172,9 +1172,7 @@ export async function enhanceRuntimeWithBabylon(
 /**
  * Disconnect A2A client for an agent
  */
-export async function disconnectAgentA2AClient(
-  runtime: AgentRuntime,
-): Promise<void> {
+async function _disconnectAgentA2AClient(runtime: AgentRuntime): Promise<void> {
   const babylonRuntime = toBabylonRuntime(runtime)
 
   if (!babylonRuntime.a2aClient?.isConnected()) {
@@ -1198,7 +1196,7 @@ export async function disconnectAgentA2AClient(
 /**
  * Check if agent runtime has active A2A connection
  */
-export function hasActiveA2AConnection(runtime: AgentRuntime): boolean {
+function _hasActiveA2AConnection(runtime: AgentRuntime): boolean {
   const babylonRuntime = toBabylonRuntime(runtime)
   return !!babylonRuntime.a2aClient?.isConnected()
 }

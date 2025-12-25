@@ -26,7 +26,7 @@ import { type BabylonRuntime, toBabylonRuntime } from '../types'
  * Provider: Entity Mentions
  * Detects mentions of stocks, companies, and users in messages and provides their context
  */
-export const entityMentionsProvider: Provider = {
+const _entityMentionsProvider: Provider = {
   name: 'BABYLON_ENTITY_MENTIONS',
   description:
     'Detects and provides context for mentioned users, companies, and stocks in messages',

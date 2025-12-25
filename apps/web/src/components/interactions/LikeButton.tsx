@@ -1,10 +1,10 @@
-import type { LikeButtonProps } from '@babylon/shared'
 import { cn } from '@babylon/shared'
 import { Frown, Heart, Laugh } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Skeleton } from '@/components/shared/Skeleton'
 import { useSocialTracking } from '@/hooks/usePostHog'
 import { useInteractionStore } from '@/stores/interactionStore'
+import type { LikeButtonProps } from '@/types/interactions'
 
 /**
  * Reaction configuration type for like button reactions.
@@ -317,6 +317,7 @@ export function LikeButton({
           >
             {(Object.keys(REACTION_TYPES) as ReactionType[]).map((type) => {
               const reactionOption = REACTION_TYPES[type]
+              if (!reactionOption) return null
               const OptionIcon = reactionOption.icon
               const isSelected = isLiked && currentReaction === type
 

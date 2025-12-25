@@ -9,7 +9,8 @@ import { promises as fs } from 'node:fs'
 import * as path from 'node:path'
 import type { SimulationMetrics } from './SimulationEngine'
 
-export interface ChartData {
+// biome-ignore lint/correctness/noUnusedVariables: Documents chart data structure
+interface ChartData {
   labels: string[]
   datasets: ChartDataset[]
 }

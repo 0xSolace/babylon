@@ -1,6 +1,7 @@
-import type { PerpPosition, UserPredictionPosition } from '@babylon/shared'
+import type { PerpPosition } from '@babylon/shared'
 import { PerpPositionsList } from '@/components/markets/PerpPositionsList'
 import { PredictionPositionsList } from '@/components/markets/PredictionPositionsList'
+import type { UserPredictionPosition } from '@/types/widgets'
 
 interface PositionsOverviewProps {
   perpPositions: PerpPosition[]

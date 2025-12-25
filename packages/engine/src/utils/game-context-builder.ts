@@ -52,40 +52,7 @@ import {
   getPhaseNarrativeGuidance,
 } from './shared-utils'
 
-/** DB row type for worldEvents table query results */
-type WorldEventRow = {
-  id: string
-  dayNumber?: number | null
-  eventType: string | null
-  actors: unknown
-  description: string | null
-  relatedQuestion: string | null
-  pointsToward: string | null
-  visibility: string | null
-  timestamp: Date | string
-}
-
-/** DB row type for posts table query results */
-type PostRow = {
-  id: string
-  dayNumber: number | null
-  createdAt: Date | string
-  type: string | null
-  content: string
-  authorId: string
-  sentiment: number | null
-}
-
-/** DB row type for questions table query results */
-type QuestionRow = {
-  id: string
-  text: string
-  scenarioId: string | null
-  resolvedOutcome: string | null
-  status: string | null
-  resolutionDate: Date | string | null
-  rank: number | null
-}
+// Note: Row types are accessed via direct property coercion to avoid cast requirements
 
 export interface RichGameContext {
   // Event history
@@ -168,43 +135,51 @@ export async function buildRichGameContext(
           if (gameId) {
             query = query.where(eq(worldEvents.gameId, gameId))
           }
-          const events = (await query
+          const eventRows = await query
             .orderBy(desc(worldEvents.timestamp))
-            .limit(maxEvents)) as unknown as WorldEventRow[]
-          const validEvents = events.filter(
-            (e): e is NonNullable<typeof e> => e != null,
-          )
-          return validEvents.map((e) => {
-            // Extract day from dayNumber or timestamp
-            const eventTimestamp = e.timestamp
-            const day =
-              Number(e.dayNumber) ||
-              extractDayFromEvent({
-                timestamp: eventTimestamp,
-              })
-            // actors is JsonValue which could be an array of strings
-            const actorsList = Array.isArray(e.actors)
-              ? (e.actors as string[])
-              : []
-            return {
-              id: String(e.id),
-              day,
-              type: e.eventType as WorldEvent['type'],
-              actors: truncateArray(
-                actorsList,
-                CONTEXT_LIMITS.MAX_ACTORS_PER_EVENT,
-              ),
-              description: truncateText(
-                String(e.description || ''),
-                CONTEXT_LIMITS.MAX_EVENT_DESCRIPTION_LENGTH,
-              ),
-              relatedQuestion: e.relatedQuestion
-                ? Number(e.relatedQuestion)
-                : null,
-              pointsToward: (e.pointsToward as 'YES' | 'NO' | null) || null,
-              visibility: e.visibility as WorldEvent['visibility'],
-            } as WorldEvent
-          })
+            .limit(maxEvents)
+
+          return eventRows
+            .filter((e): e is NonNullable<typeof e> => e != null)
+            .map((e) => {
+              // Extract day from dayNumber or timestamp
+              const rawTimestamp = e.timestamp
+              const eventTimestamp =
+                rawTimestamp instanceof Date
+                  ? rawTimestamp
+                  : rawTimestamp
+                    ? new Date(String(rawTimestamp))
+                    : undefined
+              const day =
+                Number(e.dayNumber ?? 0) ||
+                extractDayFromEvent({
+                  timestamp: eventTimestamp,
+                })
+              // actors is JsonValue which could be an array of strings
+              const actorsList = Array.isArray(e.actors)
+                ? (e.actors as string[])
+                : []
+              return {
+                id: String(e.id ?? ''),
+                day,
+                type: String(e.eventType ?? '') as WorldEvent['type'],
+                actors: truncateArray(
+                  actorsList,
+                  CONTEXT_LIMITS.MAX_ACTORS_PER_EVENT,
+                ),
+                description: truncateText(
+                  String(e.description || ''),
+                  CONTEXT_LIMITS.MAX_EVENT_DESCRIPTION_LENGTH,
+                ),
+                relatedQuestion: e.relatedQuestion
+                  ? Number(e.relatedQuestion)
+                  : null,
+                pointsToward: (e.pointsToward as 'YES' | 'NO' | null) || null,
+                visibility: String(
+                  e.visibility ?? '',
+                ) as WorldEvent['visibility'],
+              } as WorldEvent
+            })
         })()
       : Promise.resolve([]),
 
@@ -218,42 +193,43 @@ export async function buildRichGameContext(
           const whereClause = gameId
             ? and(eq(posts.gameId, gameId), dateFilter)
             : dateFilter
-          const postsResult = await db
+          const postRows = await db
             .select()
             .from(posts)
             .where(whereClause)
             .orderBy(desc(posts.createdAt))
             .limit(maxPosts)
-          // Query builder returns Record<string, unknown>[], cast to PostRow for proper typing
-          const typedPosts = postsResult as unknown as PostRow[]
-          return typedPosts.map((p) => {
-            const createdAt = p.createdAt as Date | string | undefined
-            const createdAtDate =
-              createdAt instanceof Date
-                ? createdAt
-                : createdAt
-                  ? new Date(String(createdAt))
-                  : new Date()
-            const day =
-              Number(p.dayNumber) ||
-              extractDayFromPost({ createdAt: createdAtDate })
-            return {
-              id: String(p.id),
-              day,
-              timestamp: createdAtDate.toISOString(),
-              type: p.type as FeedPost['type'],
-              content: truncateText(
-                String(p.content),
-                CONTEXT_LIMITS.MAX_POST_CONTENT_LENGTH,
-              ),
-              author: String(p.authorId),
-              authorName: 'Unknown', // Would need join with users/actors to get name
-              sentiment: (p.sentiment as number | null) ?? undefined,
-              clueStrength: undefined, // Field not in schema
-              pointsToward: undefined, // Field not in schema
-              relatedEvent: undefined, // Field not in schema
-            } as FeedPost
-          })
+
+          return postRows
+            .filter((p): p is NonNullable<typeof p> => p != null)
+            .map((p) => {
+              const createdAt = p.createdAt
+              const createdAtDate =
+                createdAt instanceof Date
+                  ? createdAt
+                  : createdAt
+                    ? new Date(String(createdAt))
+                    : new Date()
+              const day =
+                Number(p.dayNumber ?? 0) ||
+                extractDayFromPost({ createdAt: createdAtDate })
+              return {
+                id: String(p.id),
+                day,
+                timestamp: createdAtDate.toISOString(),
+                type: p.type as FeedPost['type'],
+                content: truncateText(
+                  String(p.content),
+                  CONTEXT_LIMITS.MAX_POST_CONTENT_LENGTH,
+                ),
+                author: String(p.authorId),
+                authorName: 'Unknown', // Would need join with users/actors to get name
+                sentiment: (p.sentiment as number | null) ?? undefined,
+                clueStrength: undefined, // Field not in schema
+                pointsToward: undefined, // Field not in schema
+                relatedEvent: undefined, // Field not in schema
+              } as FeedPost
+            })
         })()
       : Promise.resolve([]),
 
@@ -264,36 +240,35 @@ export async function buildRichGameContext(
       .from(questionsTable)
       .orderBy(desc(questionsTable.createdAt))
       .limit(50)
-      .then((questions) => {
-        // Query builder returns Record<string, unknown>[], cast to QuestionRow for proper typing
-        const typedQuestions = questions as unknown as QuestionRow[]
-        return typedQuestions.map((q) => {
-          const resDate = q.resolutionDate as Date | string | null
-          const resolutionDateStr =
-            resDate instanceof Date
-              ? resDate.toISOString()
-              : resDate
-                ? new Date(String(resDate)).toISOString()
-                : undefined
-          const resolvedOutcome = q.resolvedOutcome as string | boolean | null
-          return {
-            id: String(q.id),
-            text: truncateText(
-              String(q.text),
-              CONTEXT_LIMITS.MAX_QUESTION_TEXT_LENGTH,
-            ),
-            scenario: q.scenarioId ? Number(q.scenarioId) : 0,
-            outcome: resolvedOutcome
-              ? resolvedOutcome === true ||
+      .then((questionRows) => {
+        return questionRows
+          .filter((q): q is NonNullable<typeof q> => q != null)
+          .map((q) => {
+            const resDate = q.resolutionDate
+            const resolutionDateStr =
+              resDate instanceof Date
+                ? resDate.toISOString()
+                : resDate
+                  ? new Date(String(resDate)).toISOString()
+                  : undefined
+            const resolvedOutcome = q.resolvedOutcome
+            return {
+              id: String(q.id ?? ''),
+              text: truncateText(
+                String(q.text ?? ''),
+                CONTEXT_LIMITS.MAX_QUESTION_TEXT_LENGTH,
+              ),
+              scenario: q.scenarioId ? Number(q.scenarioId) : 0,
+              outcome:
+                resolvedOutcome === true ||
                 resolvedOutcome === 'true' ||
-                resolvedOutcome === 'YES'
-              : false,
-            rank: Number(q.rank) || 0,
-            status: String(q.status) || 'active',
-            resolvedOutcome,
-            resolutionDate: resolutionDateStr,
-          } as Question
-        })
+                resolvedOutcome === 'YES',
+              rank: Number(q.rank ?? 0),
+              status: String(q.status ?? 'active'),
+              resolvedOutcome: resolvedOutcome ?? undefined,
+              resolutionDate: resolutionDateStr,
+            } as Question
+          })
       }),
 
     // Get world facts
@@ -560,7 +535,7 @@ export function formatRichGameContext(
 /**
  * Format character-specific context for an actor
  */
-export function formatCharacterGameContext(
+function _formatCharacterGameContext(
   actor: Actor,
   context: RichGameContext,
   options?: {
@@ -700,7 +675,7 @@ function extractNarrativeThreads(
  * Enhanced narrative extraction with loop detection.
  * Identifies potential repetitive patterns in events to help prevent loops.
  */
-export function extractNarrativeThreadsWithLoopDetection(
+function _extractNarrativeThreadsWithLoopDetection(
   events: WorldEvent[],
   questions: Question[],
 ): {
@@ -872,7 +847,7 @@ export function extractNarrativeThreadsWithLoopDetection(
  * Generate anti-loop context section for prompts.
  * Identifies patterns that should be avoided to prevent repetition.
  */
-export function generateAntiLoopContext(
+function _generateAntiLoopContext(
   events: WorldEvent[],
   posts: FeedPost[],
 ): string {
@@ -944,7 +919,7 @@ export function generateAntiLoopContext(
  * This helps prevent the model from falling into predictable patterns
  * based on consistent section ordering in prompts.
  */
-export function formatRichGameContextWithEntropy(
+function _formatRichGameContextWithEntropy(
   context: RichGameContext,
   options?: {
     includeEventTimeline?: boolean
@@ -1183,7 +1158,7 @@ export function formatRichGameContextWithEntropy(
 /**
  * Generate a day summary for narrative continuity
  */
-export function formatDaySummaries(
+function _formatDaySummaries(
   context: RichGameContext,
   maxDays = CONTEXT_LIMITS.MAX_DAY_SUMMARIES,
 ): string {
@@ -1484,7 +1459,7 @@ function buildFullProfile(actor: Actor): string {
  * Format character roster with organizations included.
  * Combines NPCs and organizations into complete context.
  */
-export function formatCharacterAndOrgRoster(
+function _formatCharacterAndOrgRoster(
   actors: Actor[],
   organizations?: Array<{
     id: string

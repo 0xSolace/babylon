@@ -1,8 +1,8 @@
-import type { CommentInputProps } from '@babylon/shared'
 import { cn } from '@babylon/shared'
 import { Send, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useInteractionStore } from '@/stores/interactionStore'
+import type { CommentInputProps } from '@/types/interactions'
 
 /**
  * Maximum allowed length for comment content.
@@ -86,7 +86,11 @@ export function CommentInput({
     setContent('')
     setIsFocused(false)
 
-    const comment = await addComment(postId, trimmedContent, parentCommentId)
+    const comment = await addComment(
+      postId,
+      trimmedContent,
+      parentCommentId ?? undefined,
+    )
 
     if (comment) {
       // Clear optimistic state on success

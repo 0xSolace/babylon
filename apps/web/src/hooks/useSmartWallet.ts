@@ -16,7 +16,7 @@ interface SmartWalletTxOptions {
 
 /** Minimal client interface for backward compatibility */
 interface SmartWalletClient {
-  account?: { address: Address }
+  account: { address: Address | null }
   sendTransaction: (
     input: SmartWalletTxInput,
     options?: SmartWalletTxOptions,

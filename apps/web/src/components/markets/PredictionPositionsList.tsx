@@ -1,9 +1,9 @@
-import type { UserPredictionPosition } from '@babylon/shared'
 import { cn } from '@babylon/shared'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { CheckCircle, XCircle } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
+import type { UserPredictionPosition } from '@/types/widgets'
 
 import {
   type SellPredictionDetails,

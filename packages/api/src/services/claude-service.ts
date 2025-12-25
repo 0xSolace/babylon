@@ -92,7 +92,7 @@ export async function callClaudeDirect(params: ClaudeParams): Promise<string> {
 /**
  * Check if Jeju Compute is available
  */
-export async function isJejuComputeHealthy(): Promise<boolean> {
+async function _isJejuComputeHealthy(): Promise<boolean> {
   try {
     const response = await fetch(`${JEJU_COMPUTE_ENDPOINT}/health`, {
       signal: AbortSignal.timeout(3000),
@@ -106,7 +106,7 @@ export async function isJejuComputeHealthy(): Promise<boolean> {
 /**
  * List available models from Jeju Compute
  */
-export async function listAvailableModels(): Promise<
+async function _listAvailableModels(): Promise<
   Array<{
     model: string
     provider: string

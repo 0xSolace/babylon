@@ -288,7 +288,7 @@ export async function generateAirdropMerkleData(): Promise<
  * - Make a trade
  * - Interact with agents
  */
-export async function recordDripAction(
+async function _recordDripAction(
   userId: string,
   action: 'visit' | 'post' | 'trade' | 'agent_interaction',
 ): Promise<{
@@ -413,7 +413,7 @@ export async function recordDripAction(
  *
  * Vesting: 10% initial + 2% daily for 45 days = 100%
  */
-export async function getAirdropStatus(userId: string): Promise<{
+async function _getAirdropStatus(userId: string): Promise<{
   registered: boolean
   totalAllocation: bigint
   dripsUnlocked: number
@@ -575,7 +575,7 @@ export function calculateLeaderboardBonus(position: number): {
 /**
  * Calculate total bonus allocation for a user
  */
-export async function calculateBonusAllocation(userId: string): Promise<{
+async function _calculateBonusAllocation(userId: string): Promise<{
   baseAllocation: bigint
   profitMultiplier: number
   profitTier: string
@@ -670,7 +670,7 @@ export async function getTokenBalance(userId: string): Promise<bigint> {
 /**
  * Record a token transaction (off-chain tracking)
  */
-export async function recordTokenTransaction(
+async function _recordTokenTransaction(
   userId: string,
   amount: bigint,
   type: TokenTransactionType,

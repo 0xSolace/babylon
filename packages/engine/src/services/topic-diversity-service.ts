@@ -677,6 +677,6 @@ export function getTopicDiversityService(): TopicDiversityService {
 /**
  * Reset the singleton (for testing)
  */
-export function resetTopicDiversityService(): void {
+function _resetTopicDiversityService(): void {
   diversityServiceInstance = null
 }

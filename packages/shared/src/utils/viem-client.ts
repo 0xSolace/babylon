@@ -85,7 +85,7 @@ export function createBabylonWalletClient<TChain extends Chain>(options: {
 }
 
 /**
- * Parameters for safeReadContract - uses simple types to avoid viem's
+ * Parameters for readContract - uses simple types to avoid viem's
  * strict EIP-7702 type checking.
  */
 export interface SafeReadContractParams {
@@ -96,7 +96,7 @@ export interface SafeReadContractParams {
 }
 
 /**
- * Parameters for safeWriteContract - uses simple types to avoid viem's
+ * Parameters for writeContract - uses simple types to avoid viem's
  * strict EIP-7702 type checking.
  */
 export interface SafeWriteContractParams {
@@ -141,7 +141,7 @@ type AnySendClient = {
  *
  * Usage:
  * ```ts
- * const result = await safeReadContract<bigint>(client, {
+ * const result = await readContract(client, {
  *   address: contractAddress,
  *   abi: CONTRACT_ABI,
  *   functionName: 'balanceOf',
@@ -153,7 +153,7 @@ type AnySendClient = {
  * @param params - Contract read parameters
  * @returns The contract read result (cast to your expected type)
  */
-export async function safeReadContract<TReturn = unknown>(
+export async function readContract<TReturn = unknown>(
   client: AnyReadClient,
   params: SafeReadContractParams,
 ): Promise<TReturn> {
@@ -173,7 +173,7 @@ export async function safeReadContract<TReturn = unknown>(
  *
  * Usage:
  * ```ts
- * const hash = await safeWriteContract(client, {
+ * const hash = await writeContract(client, {
  *   address: contractAddress,
  *   abi: CONTRACT_ABI,
  *   functionName: 'transfer',
@@ -185,7 +185,7 @@ export async function safeReadContract<TReturn = unknown>(
  * @param params - Contract write parameters
  * @returns The transaction hash
  */
-export async function safeWriteContract(
+export async function writeContract(
   client: AnyWriteClient,
   params: SafeWriteContractParams,
 ): Promise<`0x${string}`> {

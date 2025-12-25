@@ -325,8 +325,8 @@ function SidebarContent() {
                   name={user.displayName || user.email || 'User'}
                   type="user"
                   size="md"
-                  src={user.profileImageUrl}
-                  imageUrl={user.profileImageUrl}
+                  src={user.profileImageUrl ?? undefined}
+                  imageUrl={user.profileImageUrl ?? undefined}
                 />
               </button>
             </div>

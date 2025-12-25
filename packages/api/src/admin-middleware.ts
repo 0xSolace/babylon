@@ -254,7 +254,7 @@ export async function requireAdmin(
 /**
  * Authenticate request and verify admin privileges (Elysia context)
  */
-export async function requireAdminFromContext(
+async function _requireAdminFromContext(
   ctx: ElysiaContext,
 ): Promise<AuthenticatedUser> {
   // Check for dev admin token first

@@ -13,7 +13,7 @@ import {
   logger,
   REPUTATION_SYSTEM_ABI,
   REPUTATION_SYSTEM_BASE_SEPOLIA,
-  safeReadContract,
+  readContract,
 } from '@babylon/shared'
 import { type Address, createWalletClient, http, parseEther } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
@@ -274,9 +274,7 @@ export async function getOnChainReputation(
     rpcUrl: getCurrentRpcUrl(),
   })
 
-  const reputation = await safeReadContract<
-    readonly [bigint, bigint, bigint, bigint, bigint, bigint, boolean]
-  >(publicClient, {
+  const reputation = await readContract(publicClient, {
     address: REPUTATION_SYSTEM,
     abi: REPUTATION_SYSTEM_ABI,
     functionName: 'getReputation',

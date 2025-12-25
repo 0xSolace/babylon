@@ -343,8 +343,8 @@ export function AgentChat({ agent, onBalanceUpdate }: AgentChatProps) {
                     name={user.displayName || user.email || 'You'}
                     type="user"
                     size="sm"
-                    src={user.profileImageUrl}
-                    imageUrl={user.profileImageUrl}
+                    src={user.profileImageUrl ?? undefined}
+                    imageUrl={user.profileImageUrl ?? undefined}
                   />
                 )}
               </div>

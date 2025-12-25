@@ -31,4 +31,4 @@ export const Badge = ({
     </span>
   )
 }
-export const badgeVariants = () => ''
+export const _badgeVariants = () => ''

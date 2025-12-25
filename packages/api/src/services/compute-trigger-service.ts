@@ -7,8 +7,8 @@ import {
   type Chain,
   createBabylonPublicClient,
   logger,
-  safeReadContract,
-  safeWriteContract,
+  readContract,
+  writeContract,
 } from '@babylon/shared'
 import {
   type Address,
@@ -473,16 +473,7 @@ export class ComputeTriggerService {
       'function getTriggersByOwner(address owner) view returns ((bytes32 id, uint8 triggerType, string cronExpression, string webhookPath, bytes actionData, bool active)[])',
     ])
 
-    const triggers = await safeReadContract<
-      {
-        id: Hex
-        triggerType: number
-        cronExpression: string
-        webhookPath: string
-        actionData: Hex
-        active: boolean
-      }[]
-    >(publicClient, {
+    const triggers = await readContract(publicClient, {
       address: this.config.triggerRegistryAddress as Address,
       abi,
       functionName: 'getTriggersByOwner',
@@ -567,7 +558,7 @@ export class ComputeTriggerService {
     })
 
     const account = privateKeyToAccount(this.config.privateKey as Hex)
-    const hash = await safeWriteContract(walletClient, {
+    const hash = await writeContract(walletClient, {
       address: this.config.triggerRegistryAddress as Address,
       abi,
       functionName: 'registerTrigger',
@@ -616,7 +607,7 @@ export class ComputeTriggerService {
     })
 
     const account = privateKeyToAccount(this.config.privateKey as Hex)
-    const hash = await safeWriteContract(walletClient, {
+    const hash = await writeContract(walletClient, {
       address: this.config.triggerRegistryAddress as Address,
       abi,
       functionName: 'updateTrigger',
@@ -661,7 +652,7 @@ export class ComputeTriggerService {
     })
 
     const account = privateKeyToAccount(this.config.privateKey as Hex)
-    const hash = await safeWriteContract(walletClient, {
+    const hash = await writeContract(walletClient, {
       address: this.config.triggerRegistryAddress as Address,
       abi,
       functionName: 'deleteTrigger',
@@ -805,7 +796,7 @@ export function getComputeTriggerService(): ComputeTriggerService {
   return triggerService
 }
 
-export async function initializeComputeTriggers(): Promise<void> {
+async function _initializeComputeTriggers(): Promise<void> {
   const service = getComputeTriggerService()
   await service.initialize()
   await service.registerBabylonTriggers()

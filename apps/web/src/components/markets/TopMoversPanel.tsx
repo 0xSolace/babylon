@@ -1,7 +1,8 @@
 import { cn } from '@babylon/shared'
 import { TrendingDown, TrendingUp } from 'lucide-react'
 import { Skeleton } from '@/components/shared/Skeleton'
-import { type PerpMarket, usePerpTopMovers } from '@/hooks/usePerpMarkets'
+import { usePerpTopMovers } from '@/hooks/usePerpMarkets'
+import type { PerpMarket } from '@/types/markets'
 import { MARKETS_CONFIG } from '@/types/markets'
 
 /**

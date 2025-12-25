@@ -40,7 +40,7 @@ type PointsService = {
 // Service instance injected from the web application layer
 let pointsServiceInstance: PointsService | null = null
 
-export function setPointsService(service: PointsService): void {
+function _setPointsService(service: PointsService): void {
   pointsServiceInstance = service
 }
 
@@ -59,7 +59,7 @@ function getPointsService(): PointsService {
  * When a user is confirmed as CSAM/scammer, distribute their points
  * proportionally to all users who successfully reported them.
  */
-export async function distributePointsToReporters(
+async function _distributePointsToReporters(
   reportedUserId: string,
   reason: 'scammer' | 'csam',
 ): Promise<void> {
@@ -322,7 +322,7 @@ async function forfeitUserPoints(
 /**
  * Check if a user should have points distributed (CSAM/scammer confirmed)
  */
-export async function shouldDistributePoints(userId: string): Promise<boolean> {
+async function _shouldDistributePoints(userId: string): Promise<boolean> {
   const userResult = await db
     .select({
       isBanned: users.isBanned,

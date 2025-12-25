@@ -112,7 +112,7 @@ contract DeployAll is Script {
         if (block.chainid == 84532) return "base-sepolia";
         if (block.chainid == 420690) return "jeju-testnet";
         if (block.chainid == 420691) return "jeju-mainnet";
-        if (block.chainid == 1337) return "localnet";
+        if (block.chainid == 31337) return "localnet";
         if (block.chainid == 31337) return "anvil";
         return "unknown";
     }

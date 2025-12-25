@@ -15,7 +15,10 @@ function getErrorMessage(error: unknown): string | null {
 /**
  * Helper to safely convert API values to numbers.
  */
-function toNumber(value: JsonValue, fallback = 0): number {
+function toNumber(
+  value: JsonValue | string | number | undefined,
+  fallback = 0,
+): number {
   if (typeof value === 'number' && Number.isFinite(value)) {
     return value
   }
@@ -104,7 +107,7 @@ export function useUserPositions(
     queryKey: ['userPositions', userId],
     queryFn: async (): Promise<PositionsState> => {
       const response = await fetch(
-        `/api/markets/positions/${encodeURIComponent(userId)}`,
+        `/api/markets/positions/${encodeURIComponent(userId ?? '')}`,
       )
 
       const json: unknown = await response.json()
@@ -116,10 +119,15 @@ export function useUserPositions(
       const normalizedPerps: PerpPosition[] = (perpetuals.positions ?? []).map(
         (pos) => ({
           id: pos.id,
-          userId: pos.userId,
+          userId: pos.userId ?? userId ?? '',
           ticker: pos.ticker,
-          organizationId: pos.organizationId,
-          side: pos.side,
+          organizationId: pos.organizationId ?? '',
+          side:
+            pos.side === 'LONG'
+              ? 'long'
+              : pos.side === 'SHORT'
+                ? 'short'
+                : pos.side,
           entryPrice: toNumber(pos.entryPrice),
           currentPrice: toNumber(pos.currentPrice),
           size: toNumber(pos.size),
@@ -128,8 +136,9 @@ export function useUserPositions(
           unrealizedPnL: toNumber(pos.unrealizedPnL),
           unrealizedPnLPercent: toNumber(pos.unrealizedPnLPercent),
           fundingPaid: toNumber(pos.fundingPaid),
-          openedAt: pos.openedAt,
-          lastUpdated: pos.lastUpdated ?? pos.openedAt,
+          openedAt: pos.openedAt ?? new Date().toISOString(),
+          lastUpdated:
+            pos.lastUpdated ?? pos.openedAt ?? new Date().toISOString(),
         }),
       )
 

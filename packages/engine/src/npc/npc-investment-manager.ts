@@ -43,32 +43,7 @@ export interface PortfolioPosition {
   leverage?: number
 }
 
-/** DB row type for pool_positions table */
-interface PoolPositionRow {
-  id: string
-  poolId: string
-  marketType: string | null
-  ticker: string | null
-  marketId: string | null
-  side: string | null
-  size: number | string | null
-  entryPrice: number | string | null
-  currentPrice: number | string | null
-  unrealizedPnL: number | string | null
-  leverage: number | string | null
-  closedAt: Date | string | null
-}
-
-/** DB row type for pools table */
-interface PoolRow {
-  id: string
-  actorId: string | null
-  availableBalance: number | string | null
-  totalValue: number | string | null
-}
-
-// Note: Additional row types (OrgStateRow, ActorRelationshipRow, NpcTradeRow)
-// are defined inline where needed to avoid unused declaration warnings
+// Note: Row types are accessed via direct property coercion to avoid cast requirements
 
 export interface PortfolioMetrics {
   totalValue: number
@@ -97,29 +72,26 @@ export class NPCInvestmentManager {
    * Get portfolio metrics for an NPC pool
    */
   static async getPortfolioMetrics(poolId: string): Promise<PortfolioMetrics> {
-    const poolResultRaw = await db
+    const poolRows = await db
       .select()
       .from(pools)
       .where(eq(pools.id, poolId))
       .limit(1)
-    const poolResult = poolResultRaw as unknown as PoolRow[]
 
-    const pool = poolResult[0]
-    if (!pool) {
+    const poolRow = poolRows[0]
+    if (!poolRow) {
       throw new Error(`Pool not found: ${poolId}`)
     }
 
     // Get open positions (closedAt is null)
-    const positionResultsRaw = await db
+    const positionRows = await db
       .select()
       .from(poolPositions)
       .where(eq(poolPositions.poolId, poolId))
-    const positionResults = positionResultsRaw as unknown as PoolPositionRow[]
 
-    const validPositions = positionResults.filter(
-      (p): p is NonNullable<typeof p> => p != null,
-    )
-    const openPositions = validPositions.filter((p) => p.closedAt === null)
+    const openPositions = positionRows
+      .filter((p): p is NonNullable<typeof p> => p != null)
+      .filter((p) => p.closedAt === null)
     // Map database PoolPosition to PortfolioPosition interface
     const positions: PortfolioPosition[] = openPositions.map((p) => {
       const marketType = String(p.marketType)
@@ -140,9 +112,8 @@ export class NPCInvestmentManager {
         leverage: p.leverage ? Number(p.leverage) : undefined,
       }
     })
-    const poolData = pool as { availableBalance?: string | number | null }
     const availableBalance = Number.parseFloat(
-      poolData.availableBalance?.toString() ?? '0',
+      poolRow.availableBalance?.toString() ?? '0',
     )
 
     // Calculate total invested capital (sum of all open position entry values)
@@ -339,24 +310,21 @@ export class NPCInvestmentManager {
    */
   private static async buildBaselineDecisions(): Promise<TradingDecision[]> {
     // Get active pools
-    const activePoolsResultRaw = await db
+    const activePoolsRows = await db
       .select()
       .from(pools)
       .where(eq(pools.isActive, true))
-    const activePoolsResult = activePoolsResultRaw as unknown as Array<
-      PoolRow & { npcActorId: string | null; isActive: boolean }
-    >
 
-    if (activePoolsResult.length === 0) {
+    if (activePoolsRows.length === 0) {
       return []
     }
 
     // Get open positions for these pools
-    const validPools = activePoolsResult.filter(
+    const validPools = activePoolsRows.filter(
       (p): p is NonNullable<typeof p> => p != null,
     )
     const poolIds = validPools.map((p) => String(p.id))
-    const allPositionsRaw = await db
+    const allPositionsRows = await db
       .select({
         id: poolPositions.id,
         poolId: poolPositions.poolId,
@@ -364,28 +332,23 @@ export class NPCInvestmentManager {
       })
       .from(poolPositions)
       .where(inArray(poolPositions.poolId, poolIds))
-    const allPositions = allPositionsRaw as unknown as Array<{
-      id: string
-      poolId: string | null
-      closedAt: Date | string | null
-    }>
 
     const openPositionsByPool = new Map<string, { id: string }[]>()
-    allPositions.forEach((pos) => {
+    for (const pos of allPositionsRows) {
       if (pos?.closedAt === null) {
-        const poolId = String(pos.poolId)
+        const poolId = String(pos.poolId ?? '')
         const existing = openPositionsByPool.get(poolId) ?? []
-        existing.push({ id: String(pos.id) })
+        existing.push({ id: String(pos.id ?? '') })
         openPositionsByPool.set(poolId, existing)
       }
-    })
+    }
 
     // Add position info to pools - preserve pool properties with explicit typing
     const activePools = validPools.map((pool) => ({
-      id: String(pool.id),
-      npcActorId: String(pool.npcActorId),
+      id: String(pool.id ?? ''),
+      npcActorId: String(pool.npcActorId ?? ''),
       availableBalance: String(pool.availableBalance ?? '0'),
-      PoolPosition: openPositionsByPool.get(String(pool.id)) ?? [],
+      PoolPosition: openPositionsByPool.get(String(pool.id ?? '')) ?? [],
     }))
 
     const actorIds = Array.from(
@@ -394,7 +357,7 @@ export class NPCInvestmentManager {
 
     // Get organizations from static registry with dynamic prices
     const staticOrgs = StaticDataRegistry.getOrganizationsByType('company')
-    const orgStateResultsRaw = await db
+    const orgStateRows = await db
       .select()
       .from(organizationState)
       .where(
@@ -403,11 +366,8 @@ export class NPCInvestmentManager {
           staticOrgs.map((o) => o.id),
         ),
       )
-    const orgStateResults = orgStateResultsRaw as unknown as Array<{
-      id: string
-      currentPrice: number | string | null
-    }>
-    const validOrgStates = orgStateResults.filter(
+
+    const validOrgStates = orgStateRows.filter(
       (s): s is NonNullable<typeof s> => s != null,
     )
     const priceMap = new Map(
@@ -608,21 +568,17 @@ export class NPCInvestmentManager {
     const positionsToClose = isHighRisk ? (hasLosses ? 5 : 3) : 2
 
     // Get all leveraged positions (open positions only with leverage > 1)
-    const positionsResultRaw = await db
+    const positionsRows = await db
       .select()
       .from(poolPositions)
       .where(eq(poolPositions.poolId, poolId))
       .orderBy(desc(poolPositions.leverage))
       .limit(positionsToClose)
-    const positionsResult = positionsResultRaw as unknown as PoolPositionRow[]
 
     // Filter for valid, open positions with leverage > 1
-    const validResults = positionsResult.filter(
-      (p): p is NonNullable<typeof p> => p != null,
-    )
-    const leveragedPositions = validResults.filter(
-      (p) => p.closedAt === null && Number(p.leverage ?? 0) > 1,
-    )
+    const leveragedPositions = positionsRows
+      .filter((p): p is NonNullable<typeof p> => p != null)
+      .filter((p) => p.closedAt === null && Number(p.leverage ?? 0) > 1)
 
     for (const position of leveragedPositions) {
       const marketType = String(position.marketType)
@@ -648,19 +604,15 @@ export class NPCInvestmentManager {
     poolId: string,
     threshold: number, // e.g., 0.2 = 20% loss
   ): Promise<PortfolioPosition[]> {
-    const positionsResultRaw = await db
+    const positionsRows = await db
       .select()
       .from(poolPositions)
       .where(eq(poolPositions.poolId, poolId))
-    const positionsResult = positionsResultRaw as unknown as PoolPositionRow[]
 
     // Filter for valid, open positions only
-    const validPositionsResult = positionsResult.filter(
-      (p): p is NonNullable<typeof p> => p != null,
-    )
-    const openPositions = validPositionsResult.filter(
-      (p) => p.closedAt === null,
-    )
+    const openPositions = positionsRows
+      .filter((p): p is NonNullable<typeof p> => p != null)
+      .filter((p) => p.closedAt === null)
 
     const lossyPositions: PortfolioPosition[] = []
 
@@ -743,23 +695,23 @@ export class NPCInvestmentManager {
    */
   static async monitorAllNPCPortfolios(): Promise<void> {
     // Get active pools using CQL
-    const activePoolsResultRaw = await db
+    const activePoolsRows = await db
       .select()
       .from(pools)
       .where(eq(pools.isActive, true))
-    const activePoolsResult = activePoolsResultRaw as unknown as Array<
-      PoolRow & { npcActorId: string | null; isActive: boolean }
-    >
 
-    const activePools = activePoolsResult.filter(
-      (p): p is NonNullable<typeof p> => p != null,
-    )
+    const activePools = activePoolsRows
+      .filter((p): p is NonNullable<typeof p> => p != null)
+      .map((p) => ({
+        id: String(p.id ?? ''),
+        npcActorId: String(p.npcActorId ?? ''),
+      }))
 
     // Get actors for pools - use Array.from for Set to avoid downlevelIteration issues
     const actorIdSet = new Set<string>()
-    activePools.forEach((p) => {
-      actorIdSet.add(String(p.npcActorId))
-    })
+    for (const p of activePools) {
+      actorIdSet.add(p.npcActorId)
+    }
     const actorIds = Array.from(actorIdSet)
     const actorsList =
       actorIds.length > 0

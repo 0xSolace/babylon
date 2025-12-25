@@ -45,7 +45,7 @@ export function isDecentralizedMessagingEnabled(): boolean {
 /**
  * Send a message through both centralized and decentralized channels
  */
-export async function sendMessage(options: {
+async function _sendMessage(options: {
   chatId: string
   senderId: string
   senderAddress?: Address
@@ -111,7 +111,7 @@ export async function sendMessage(options: {
 /**
  * Get or create a DM conversation
  */
-export async function getOrCreateDM(
+async function _getOrCreateDM(
   user1Address: Address,
   user2Address: Address,
 ): Promise<{ conversationId: string; isNew: boolean } | null> {
@@ -135,7 +135,7 @@ export async function getOrCreateDM(
 /**
  * Get pending messages for a user from decentralized storage
  */
-export async function getPendingMessages(
+async function _getPendingMessages(
   address: Address,
   limit = 100,
 ): Promise<
@@ -166,7 +166,7 @@ export async function getPendingMessages(
 /**
  * Mark a message as delivered
  */
-export async function markMessageDelivered(messageId: string): Promise<void> {
+async function _markMessageDelivered(messageId: string): Promise<void> {
   if (!isDecentralizedMessagingEnabled()) {
     return
   }
@@ -185,7 +185,7 @@ export async function markMessageDelivered(messageId: string): Promise<void> {
 /**
  * Mark a message as read
  */
-export async function markMessageRead(messageId: string): Promise<void> {
+async function _markMessageRead(messageId: string): Promise<void> {
   if (!isDecentralizedMessagingEnabled()) {
     return
   }
@@ -204,7 +204,7 @@ export async function markMessageRead(messageId: string): Promise<void> {
 /**
  * Get user's decentralized conversations
  */
-export async function getConversations(
+async function _getConversations(
   address: Address,
   limit = 50,
 ): Promise<

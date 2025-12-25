@@ -1,11 +1,8 @@
-import type {
-  PerpPosition,
-  PortfolioPnLSnapshot,
-  UserPredictionPosition,
-} from '@babylon/shared'
+import type { PerpPosition, PortfolioPnLSnapshot } from '@babylon/shared'
 import { memo } from 'react'
 import { PortfolioPnLCard } from '@/components/markets/PortfolioPnLCard'
 import type { PerpMarket, PredictionMarket } from '@/types/markets'
+import type { UserPredictionPosition } from '@/types/widgets'
 import type { TopPrediction, TrendingPerpMarket } from '../../_hooks'
 import {
   HotPredictionsList,

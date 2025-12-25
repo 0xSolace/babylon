@@ -61,7 +61,7 @@ export function useFollowingPosts(
     refetch,
   } = useQuery({
     queryKey: ['feed', 'following', userId],
-    queryFn: () => fetchFollowingPosts(userId, getAccessToken),
+    queryFn: () => fetchFollowingPosts(userId ?? '', getAccessToken),
     enabled: enabled && authenticated && !!userId,
   })
 

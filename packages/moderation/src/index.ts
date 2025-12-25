@@ -20,7 +20,7 @@
  *   moderationMarketplace: '0x...',
  *   banManager: '0x...',
  *   identityRegistry: '0x...',
- *   chainId: 1337,
+ *   chainId: 31337,
  *   rpcUrl: 'http://localhost:6545',
  * });
  *

@@ -38,7 +38,7 @@ export function isColumnLike(value: unknown): value is ColumnLike {
 /**
  * Check if a value is a ColumnRef with _type marker.
  */
-export function isTypedColumnRef(
+export function _isTypedColumnRef(
   value: unknown,
 ): value is ColumnLike & { _type: 'column' } {
   if (!isColumnLike(value)) return false
@@ -86,7 +86,7 @@ export function isSQLPrimitive(
 /**
  * Check if a value is a valid SQLValue.
  */
-export function isSQLValue(value: unknown): value is SQLValue {
+export function _isSQLValue(value: unknown): value is SQLValue {
   if (isSQLPrimitive(value)) return true
   if (isDate(value)) return true
   if (isUint8Array(value)) return true
@@ -136,7 +136,7 @@ export function toQueryParam(value: unknown): QueryParam {
  * Convert a record's values to QueryParam array.
  * Values are coerced to SQLValue - objects/arrays are JSON stringified.
  */
-export function recordToParams(record: Record<string, unknown>): QueryParam[] {
+export function _recordToParams(record: Record<string, unknown>): QueryParam[] {
   return Object.values(record).map((v) => {
     // Handle SQLValue types directly
     if (v === undefined || v === null) return null
@@ -177,7 +177,7 @@ export function isDecrementOp(value: unknown): value is { decrement: number } {
 /**
  * Check if a value is a where condition operator object.
  */
-export function isWhereOperator(
+export function _isWhereOperator(
   value: unknown,
 ): value is Record<string, unknown> {
   if (!isPlainObject(value)) return false
@@ -215,7 +215,7 @@ export interface SQLExpressionMarker {
 /**
  * Check if a value is an SQL expression.
  */
-export function isSQLExpressionMarker(
+export function _isSQLExpressionMarker(
   value: unknown,
 ): value is SQLExpressionMarker {
   return (
@@ -238,7 +238,7 @@ export interface SQLConditionMarker {
 /**
  * Check if a value is an SQL condition.
  */
-export function isSQLConditionMarker(
+export function _isSQLConditionMarker(
   value: unknown,
 ): value is SQLConditionMarker {
   return (
@@ -264,7 +264,7 @@ export interface TableRefLike {
 /**
  * Check if a value is a table reference.
  */
-export function isTableRef(value: unknown): value is TableRefLike {
+export function _isTableRef(value: unknown): value is TableRefLike {
   return (
     isPlainObject(value) &&
     '_' in value &&
@@ -282,7 +282,9 @@ export function isTableRef(value: unknown): value is TableRefLike {
  * Assert that a record has specific keys and return typed version.
  * This is a compile-time helper for working with generic records.
  */
-export function asRecord<T extends Record<string, unknown>>(value: unknown): T {
+export function _asRecord<T extends Record<string, unknown>>(
+  value: unknown,
+): T {
   if (!isPlainObject(value)) {
     throw new Error('Value is not a plain object')
   }

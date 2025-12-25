@@ -9,68 +9,20 @@ import type { AuthenticatedUser, JsonValue } from '@babylon/shared'
 import {
   first,
   getErrorMessage,
+  isAddress,
+  isHex,
   isJsonValue,
   isObject,
   isStringArray,
   parseJsonAs,
   toError,
+  toHexString,
   toJsonValueOrNull,
 } from '@babylon/shared'
 import type { Address, Hex } from 'viem'
 
-// Re-export error helpers for consumers
-export { getErrorMessage, toError, toJsonValueOrNull }
-
-// =============================================================================
-// Viem Type Guards (Address, Hex)
-// =============================================================================
-
-/**
- * Check if string is a valid Ethereum address
- */
-export function isAddress(value: unknown): value is Address {
-  return typeof value === 'string' && /^0x[a-fA-F0-9]{40}$/.test(value)
-}
-
-/**
- * Check if string is a valid hex string
- */
-export function isHex(value: unknown): value is Hex {
-  return typeof value === 'string' && /^0x[a-fA-F0-9]*$/.test(value)
-}
-
-/**
- * Check if string is a valid hex signature (65 bytes = 130 hex chars)
- */
-export function isHexSignature(value: unknown): value is `0x${string}` {
-  return typeof value === 'string' && /^0x[a-fA-F0-9]{130}$/.test(value)
-}
-
-/**
- * Parse string as Address, returns null if invalid
- */
-export function parseAddress(value: unknown): Address | null {
-  return isAddress(value) ? value : null
-}
-
-/**
- * Parse string as Hex, returns null if invalid
- */
-export function parseHex(value: unknown): Hex | null {
-  return isHex(value) ? value : null
-}
-
-/**
- * Require value to be a valid Address, throws if invalid
- */
-export function requireAddress(value: unknown, fieldName = 'address'): Address {
-  if (!isAddress(value)) {
-    throw new Error(
-      `Invalid ${fieldName}: expected Ethereum address, got ${typeof value}`,
-    )
-  }
-  return value
-}
+// Re-export error helpers and type guards for consumers
+export { getErrorMessage, isAddress, isHex, toError, toJsonValueOrNull }
 
 /**
  * Require value to be a valid Hex string, throws if invalid
@@ -81,7 +33,7 @@ export function requireHex(value: unknown, fieldName = 'hex'): Hex {
       `Invalid ${fieldName}: expected hex string, got ${typeof value}`,
     )
   }
-  return value
+  return value as Hex
 }
 
 // =============================================================================
@@ -100,7 +52,7 @@ export function hasDbUserId(
 /**
  * Check if AuthenticatedUser has a wallet address
  */
-export function hasWalletAddress(
+function _hasWalletAddress(
   user: AuthenticatedUser,
 ): user is AuthenticatedUser & { walletAddress: string } {
   return typeof user.walletAddress === 'string' && user.walletAddress.length > 0
@@ -155,7 +107,7 @@ export interface ComputeProofData {
 /**
  * Check if value is a valid ComputeProof
  */
-export function isComputeProof(value: unknown): value is ComputeProofData {
+function _isComputeProof(value: unknown): value is ComputeProofData {
   if (!isObject(value)) return false
   return (
     isAddress(value.nodeAddress) &&
@@ -199,7 +151,7 @@ export function parseComputeProof(
 /**
  * Safely cast to JsonValue with validation
  */
-export function toJsonValue(value: unknown): JsonValue {
+function _toJsonValue(value: unknown): JsonValue {
   if (!isJsonValue(value)) {
     throw new Error('Value is not a valid JsonValue')
   }
@@ -209,7 +161,7 @@ export function toJsonValue(value: unknown): JsonValue {
 /**
  * Safely cast record to JsonValue record
  */
-export function toJsonRecord(value: unknown): Record<string, JsonValue> {
+function _toJsonRecord(value: unknown): Record<string, JsonValue> {
   if (!isObject(value)) {
     throw new Error('Value is not an object')
   }
@@ -246,7 +198,7 @@ export function safeToJsonRecord(
 /**
  * Parse JSON with type guard validation (legacy name for parseJsonAs)
  */
-export function parseJson<T>(
+function _parseJson<T>(
   json: string,
   guard: (value: unknown) => value is T,
   errorMessage = 'Invalid JSON structure',

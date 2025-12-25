@@ -122,7 +122,7 @@ export function useChatMessages(chatId: string | null) {
 
       const formattedMessages: ChatMessage[] = (
         responseData.messages ?? []
-      ).map((msg) => formatMessage(msg as ApiMessage, chatId))
+      ).map((msg) => formatMessage(msg as ApiMessage, chatId ?? ''))
 
       logger.debug(
         `Loaded ${formattedMessages.length} messages for chat ${chatId}`,

@@ -399,7 +399,7 @@ function formatAvailableActions(enabledFeatures: string[]): string {
 // Summary Prompt (unused but kept for reference)
 // =============================================================================
 
-export function buildMultiStepSummaryPrompt(params: {
+function _buildMultiStepSummaryPrompt(params: {
   agentName: string
   traceActionResults: ActionTraceResult[]
   context: AgentTickContext

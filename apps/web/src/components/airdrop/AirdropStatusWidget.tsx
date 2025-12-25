@@ -116,7 +116,9 @@ export function AirdropStatusWidget() {
     }
 
     const updateCountdown = () => {
-      const nextTime = new Date(status.drip?.nextDripTime).getTime()
+      const nextTime = new Date(
+        status.drip?.nextDripTime ?? Date.now(),
+      ).getTime()
       const now = Date.now()
       const diff = Math.max(0, nextTime - now)
 

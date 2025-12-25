@@ -1,4 +1,3 @@
-import type { PostInteraction } from '@babylon/shared'
 import { cn, getProfileUrl } from '@babylon/shared'
 import { Repeat2 } from 'lucide-react'
 import {
@@ -20,6 +19,7 @@ import {
 import { useFontSize } from '@/contexts/FontSizeContext'
 import { useAuth } from '@/hooks/useAuth'
 import { useRouter } from '@/lib/navigation'
+import type { PostInteraction } from '@/types/interactions'
 
 /**
  * Post card component for displaying feed posts.
@@ -195,7 +195,7 @@ export const PostCard = memo(function PostCard({
     }
   }
 
-  const handleQuotedPostClick = (event: MouseEvent<HTMLDivElement>) => {
+  const handleQuotedPostClick = (event: MouseEvent<HTMLButtonElement>) => {
     // Always stop propagation to prevent parent card click
     event.preventDefault()
     event.stopPropagation()
@@ -206,7 +206,7 @@ export const PostCard = memo(function PostCard({
     }
   }
 
-  const handleQuotedPostKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+  const handleQuotedPostKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
     if (event.key !== 'Enter' && event.key !== ' ') {
       return
     }

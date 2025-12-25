@@ -31,22 +31,7 @@ import type { BabylonLLMClient } from './llm/openai-client'
 import { StaticDataRegistry } from './services/static-data-registry'
 import type { Actor, ActorRelationship, Organization } from './types/shared'
 
-/** DB row type for actor_relationships table */
-interface ActorRelationshipRow {
-  id: string
-  actor1Id: string | null
-  actor2Id: string | null
-  relationshipType: string | null
-  strength: number | string | null
-  sentiment: number | string | null
-  history: string | null
-  isPublic: boolean | null
-  updatedAt: Date | string | null
-  interactionCount: number | string | null
-  evolutionCount: number | string | null
-}
-
-// Note: NpcInteractionRow type is defined inline where needed to avoid unused declaration warnings
+// Note: Row types are accessed via direct property coercion to avoid cast requirements
 
 export interface RelationshipChange {
   actor1Id: string
@@ -130,7 +115,7 @@ export class RelationshipEvolutionEngine {
             const context = `both affiliated with ${org?.name || 'same organization'}`
 
             // Check if relationship already exists
-            const existingRaw = await db
+            const existingRows = await db
               .select()
               .from(actorRelationships)
               .where(
@@ -146,7 +131,10 @@ export class RelationshipEvolutionEngine {
                 ),
               )
               .limit(1)
-            const [existing] = existingRaw as unknown as ActorRelationshipRow[]
+            const existingRow = existingRows[0]
+            const existingHistory = existingRow?.history
+              ? String(existingRow.history)
+              : undefined
 
             const llmResult = await this.generateInitialRelationshipDescription(
               actor1.name,
@@ -154,7 +142,7 @@ export class RelationshipEvolutionEngine {
               context,
               actor1.personality || '',
               actor2.personality || '',
-              existing?.history ? String(existing.history) : undefined,
+              existingHistory,
             )
 
             history = llmResult.description
@@ -179,7 +167,7 @@ export class RelationshipEvolutionEngine {
 
           // Create relationship (use insert with conflict handling to avoid duplicates)
           // Check if relationship already exists first
-          const existingRelRaw = await db
+          const existingRelRows = await db
             .select({ id: actorRelationships.id })
             .from(actorRelationships)
             .where(
@@ -195,11 +183,9 @@ export class RelationshipEvolutionEngine {
               ),
             )
             .limit(1)
-          const [existingRel] = existingRelRaw as unknown as Array<{
-            id: string
-          }>
+          const existingRelId = existingRelRows[0]?.id
 
-          if (!existingRel) {
+          if (!existingRelId) {
             await db.insert(actorRelationships).values({
               id: await generateSnowflakeId(),
               actor1Id: actor1.id,
@@ -336,15 +322,25 @@ Return JSON: { "description": "...", "type": "...", "sentiment": 0.0 }`
       .where(gte(npcInteractions.timestamp, sevenDaysAgo))
       .orderBy(desc(npcInteractions.timestamp))
       .limit(100) // Limit to prevent token overflow
-    const recentInteractions = recentInteractionsRaw as unknown as Array<{
-      id: string
-      actor1Id: string | null
-      actor2Id: string | null
-      interactionType: string | null
-      sentiment: number | string | null
-      context: string | null
-      timestamp: Date | string | null
-    }>
+
+    // Map interactions with proper type coercion
+    const recentInteractions = recentInteractionsRaw
+      .filter((row): row is NonNullable<typeof row> => row != null)
+      .map((row) => ({
+        id: String(row.id ?? ''),
+        actor1Id: row.actor1Id != null ? String(row.actor1Id) : null,
+        actor2Id: row.actor2Id != null ? String(row.actor2Id) : null,
+        interactionType:
+          row.interactionType != null ? String(row.interactionType) : null,
+        sentiment: row.sentiment != null ? Number(row.sentiment) : null,
+        context: row.context != null ? String(row.context) : null,
+        timestamp:
+          row.timestamp instanceof Date
+            ? row.timestamp
+            : row.timestamp
+              ? new Date(String(row.timestamp))
+              : null,
+      }))
 
     if (recentInteractions.length === 0) {
       logger.info(
@@ -388,7 +384,7 @@ Return JSON: { "description": "...", "type": "...", "sentiment": 0.0 }`
       if (!actor1Id || !actor2Id) continue
 
       // Get existing relationship
-      const existingRaw = await db
+      const existingRows = await db
         .select()
         .from(actorRelationships)
         .where(
@@ -398,7 +394,10 @@ Return JSON: { "description": "...", "type": "...", "sentiment": 0.0 }`
           ),
         )
         .limit(1)
-      const [existing] = existingRaw as unknown as ActorRelationshipRow[]
+      const existingRow = existingRows[0]
+      const existingHistory = existingRow?.history
+        ? String(existingRow.history)
+        : null
 
       // Get actor names from static registry
       const actor1 = StaticDataRegistry.getActor(actor1Id)
@@ -429,7 +428,7 @@ NPC 2: ${actor2.name}
 Recent interactions (last 7 days):
 ${interactionSummary}
 
-${existing ? `Current relationship: "${existing.history}"` : 'No existing relationship'}
+${existingHistory ? `Current relationship: "${existingHistory}"` : 'No existing relationship'}
 
 Based on these interactions, write a natural, casual description of how their relationship has evolved.
 
@@ -511,7 +510,7 @@ Return JSON: { "description": "...", "type": "...", "sentiment": 0.0 }`
       }
 
       // Update or create relationship
-      if (existing) {
+      if (existingRow) {
         // Update existing
         await db
           .update(actorRelationships)
@@ -521,15 +520,15 @@ Return JSON: { "description": "...", "type": "...", "sentiment": 0.0 }`
             sentiment: newSentiment,
             strength: Math.min(
               1.0,
-              Number(existing.strength ?? 0.5) + interactions.length * 0.05,
+              Number(existingRow.strength ?? 0.5) + interactions.length * 0.05,
             ),
             lastInteraction: new Date(),
             interactionCount:
-              Number(existing.interactionCount ?? 0) + interactions.length,
-            evolutionCount: Number(existing.evolutionCount ?? 0) + 1,
+              Number(existingRow.interactionCount ?? 0) + interactions.length,
+            evolutionCount: Number(existingRow.evolutionCount ?? 0) + 1,
             updatedAt: new Date(),
           })
-          .where(eq(actorRelationships.id, String(existing.id)))
+          .where(eq(actorRelationships.id, String(existingRow.id)))
       } else {
         // Create new
         await db.insert(actorRelationships).values({
@@ -587,7 +586,15 @@ Return JSON: { "description": "...", "type": "...", "sentiment": 0.0 }`
       )
       .orderBy(desc(actorRelationships.strength))
       .limit(5) // Top 5 strongest only (keep it short)
-    const relationships = relationshipsRaw as unknown as ActorRelationshipRow[]
+
+    // Map relationships with proper type coercion
+    const relationships = relationshipsRaw
+      .filter((row): row is NonNullable<typeof row> => row != null)
+      .map((row) => ({
+        actor1Id: row.actor1Id != null ? String(row.actor1Id) : null,
+        actor2Id: row.actor2Id != null ? String(row.actor2Id) : null,
+        history: row.history != null ? String(row.history) : null,
+      }))
 
     if (relationships.length === 0) {
       return ''
@@ -638,29 +645,47 @@ Return JSON: { "description": "...", "type": "...", "sentiment": 0.0 }`
           eq(actorRelationships.actor2Id, actorId),
         ),
       )
-    const relationships = relationshipsRaw as unknown as Array<
-      ActorRelationshipRow & {
-        affects: Record<string, number> | null
-        createdAt: Date | string | null
-      }
-    >
 
-    return relationships.map(
-      (rel): ActorRelationship => ({
-        id: String(rel.id),
-        actor1Id: String(rel.actor1Id),
-        actor2Id: String(rel.actor2Id),
-        relationshipType:
-          rel.relationshipType as ActorRelationship['relationshipType'],
-        strength: Number(rel.strength ?? 0),
-        sentiment: Number(rel.sentiment ?? 0),
-        isPublic: Boolean(rel.isPublic),
-        history: rel.history ? String(rel.history) : undefined,
-        affects: rel.affects ?? undefined,
-        createdAt: toDate(rel.createdAt as Date | string | number),
-        updatedAt: toDate(rel.updatedAt as Date | string | number),
-      }),
-    )
+    return relationshipsRaw
+      .filter((row): row is NonNullable<typeof row> => row != null)
+      .map((row): ActorRelationship => {
+        // Coerce affects field - check if it's a valid object
+        const rawAffects = row.affects
+        const affects =
+          rawAffects &&
+          typeof rawAffects === 'object' &&
+          !Array.isArray(rawAffects)
+            ? (rawAffects as Record<string, number>)
+            : undefined
+
+        // Coerce date fields
+        const rawCreatedAt = row.createdAt
+        const rawUpdatedAt = row.updatedAt
+
+        return {
+          id: String(row.id ?? ''),
+          actor1Id: String(row.actor1Id ?? ''),
+          actor2Id: String(row.actor2Id ?? ''),
+          relationshipType: String(
+            row.relationshipType ?? 'acquaintances',
+          ) as ActorRelationship['relationshipType'],
+          strength: Number(row.strength ?? 0),
+          sentiment: Number(row.sentiment ?? 0),
+          isPublic: Boolean(row.isPublic),
+          history: row.history ? String(row.history) : undefined,
+          affects,
+          createdAt: toDate(
+            rawCreatedAt instanceof Date
+              ? rawCreatedAt
+              : String(rawCreatedAt ?? ''),
+          ),
+          updatedAt: toDate(
+            rawUpdatedAt instanceof Date
+              ? rawUpdatedAt
+              : String(rawUpdatedAt ?? ''),
+          ),
+        }
+      })
   }
 
   /**
@@ -686,28 +711,43 @@ Return JSON: { "description": "...", "type": "...", "sentiment": 0.0 }`
         ),
       )
       .limit(1)
-    const [relationship] = relationshipRaw as unknown as Array<
-      ActorRelationshipRow & {
-        affects: Record<string, number> | null
-        createdAt: Date | string | null
-      }
-    >
 
-    if (!relationship) return null
+    const row = relationshipRaw[0]
+    if (!row) return null
+
+    // Coerce affects field - check if it's a valid object
+    const rawAffects = row.affects
+    const affects =
+      rawAffects && typeof rawAffects === 'object' && !Array.isArray(rawAffects)
+        ? (rawAffects as Record<string, number>)
+        : undefined
+
+    // Coerce date fields
+    const rawCreatedAt = row.createdAt
+    const rawUpdatedAt = row.updatedAt
 
     return {
-      id: String(relationship.id),
-      actor1Id: String(relationship.actor1Id),
-      actor2Id: String(relationship.actor2Id),
-      relationshipType:
-        relationship.relationshipType as ActorRelationship['relationshipType'],
-      strength: Number(relationship.strength ?? 0),
-      sentiment: Number(relationship.sentiment ?? 0),
-      isPublic: Boolean(relationship.isPublic),
-      history: relationship.history ? String(relationship.history) : undefined,
-      affects: relationship.affects ?? undefined,
-      createdAt: toDate(relationship.createdAt as Date | string | number),
-      updatedAt: toDate(relationship.updatedAt as Date | string | number),
+      id: String(row.id ?? ''),
+      actor1Id: String(row.actor1Id ?? ''),
+      actor2Id: String(row.actor2Id ?? ''),
+      relationshipType: String(
+        row.relationshipType ?? 'acquaintances',
+      ) as ActorRelationship['relationshipType'],
+      strength: Number(row.strength ?? 0),
+      sentiment: Number(row.sentiment ?? 0),
+      isPublic: Boolean(row.isPublic),
+      history: row.history ? String(row.history) : undefined,
+      affects,
+      createdAt: toDate(
+        rawCreatedAt instanceof Date
+          ? rawCreatedAt
+          : String(rawCreatedAt ?? ''),
+      ),
+      updatedAt: toDate(
+        rawUpdatedAt instanceof Date
+          ? rawUpdatedAt
+          : String(rawUpdatedAt ?? ''),
+      ),
     }
   }
 }

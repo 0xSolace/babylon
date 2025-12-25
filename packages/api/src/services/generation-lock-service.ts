@@ -33,9 +33,7 @@ import { acquireLock, checkLock, releaseLock } from './distributed-lock-service'
 const LOCK_ID = 'game-tick-lock'
 const LOCK_DURATION_MS = 15 * 60 * 1000 // 15 minutes
 
-export async function acquireGenerationLock(
-  processId?: string,
-): Promise<boolean> {
+async function _acquireGenerationLock(processId?: string): Promise<boolean> {
   /**
    * If processId is not provided, we generate one here.
    *
@@ -53,10 +51,10 @@ export async function acquireGenerationLock(
   })
 }
 
-export async function releaseGenerationLock(processId?: string): Promise<void> {
+async function _releaseGenerationLock(processId?: string): Promise<void> {
   return releaseLock(LOCK_ID, processId)
 }
 
-export async function checkGenerationLock() {
+async function _checkGenerationLock() {
   return checkLock(LOCK_ID)
 }

@@ -20,7 +20,7 @@ import { toBabylonRuntime } from '../types'
  *
  * Usage in prompts: "Show me user X's profile" or "What is user Y's reputation?"
  */
-export const userProfileProvider: Provider = {
+const _userProfileProvider: Provider = {
   name: 'BABYLON_USER_PROFILE',
   description:
     "View any user's profile including username, display name, bio, reputation points, and other public information via A2A protocol. Useful for understanding other users and their activity.",

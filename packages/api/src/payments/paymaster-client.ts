@@ -351,16 +351,16 @@ export function getPaymasterClient(): PaymasterClient {
   return paymasterClient
 }
 
-export async function initializePaymaster(): Promise<PaymasterClient> {
+async function _initializePaymaster(): Promise<PaymasterClient> {
   const client = getPaymasterClient()
   await client.initialize()
   return client
 }
 
-export function resetPaymasterClient(): void {
+function _resetPaymasterClient(): void {
   paymasterClient = null
 }
 
-export function isPaymasterAvailable(): boolean {
+function _isPaymasterAvailable(): boolean {
   return !!process.env.PUBLIC_JEJU_NETWORK
 }

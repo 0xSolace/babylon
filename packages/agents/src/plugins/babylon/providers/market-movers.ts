@@ -17,7 +17,7 @@ import { toBabylonRuntime } from '../types'
  * Provider: Market Movers (Gainers & Losers)
  * Gets top gaining and losing stocks/companies via A2A protocol
  */
-export const marketMoversProvider: Provider = {
+const _marketMoversProvider: Provider = {
   name: 'BABYLON_MARKET_MOVERS',
   description:
     'Get top market gainers and losers (stocks with biggest price changes) via A2A protocol',

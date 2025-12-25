@@ -1,4 +1,8 @@
-import { getReferralUrl, trackExternalShare } from '@babylon/shared'
+import {
+  getReferralUrl,
+  type PortfolioPnLSnapshot,
+  trackExternalShare,
+} from '@babylon/shared'
 import { useMutation } from '@tanstack/react-query'
 
 import { Download, LogOut, Twitter, X } from 'lucide-react'
@@ -6,7 +10,6 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { CategoryPnLShareCard } from '@/components/markets/CategoryPnLShareCard'
 import { PortfolioPnLShareCard } from '@/components/markets/PortfolioPnLShareCard'
-import type { PortfolioPnLSnapshot } from '@/hooks/usePortfolioPnL'
 import { useTwitterAuth } from '@/hooks/useTwitterAuth'
 import type { User } from '@/stores/authStore'
 import type { MarketCategory } from '@/types/markets'
@@ -247,6 +250,7 @@ export function PnLShareModal({
     }
 
     const generatePreview = async () => {
+      if (!offscreenCardRef.current) return
       setIsGeneratingImage(true)
       const htmlToImage = await import('html-to-image')
       const dataUrl = await htmlToImage.toPng(offscreenCardRef.current, {
@@ -319,22 +323,7 @@ export function PnLShareModal({
     }
   }
 
-  const _handleTwitterConfirm = async () => {
-    if (!tweetText || !user) return
-
-    await tweetMutation.mutateAsync({
-      text: tweetText,
-      imageUrl: previewImageUrl || undefined,
-    })
-
-    setShowTwitterConfirm(false)
-    setTweetText('')
-  }
-
-  const _handleTwitterCancel = () => {
-    setShowTwitterConfirm(false)
-    setTweetText('')
-  }
+  // Removed unused Twitter confirmation handlers - using direct post flow instead
 
   const handleTwitterPost = () => {
     if (!user || !authStatus?.connected || !shareableLink) return
@@ -365,10 +354,10 @@ export function PnLShareModal({
       {/* Off-screen card for rendering to image */}
       <div style={{ position: 'absolute', left: '-9999px', top: '-9999px' }}>
         <div ref={offscreenCardRef}>
-          {canShare && type === 'portfolio' && portfolioData && (
+          {canShare && type === 'portfolio' && portfolioData && user && (
             <PortfolioPnLShareCard data={portfolioData} user={user} />
           )}
-          {canShare && type === 'category' && categoryData && (
+          {canShare && type === 'category' && categoryData && user && (
             <CategoryPnLShareCard
               category={category}
               data={categoryData}

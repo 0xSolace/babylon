@@ -689,7 +689,7 @@ export function getOrchestrator(): SelfHealingOrchestrator {
   return orchestrator
 }
 
-export async function startOrchestrator(): Promise<void> {
+async function _startOrchestrator(): Promise<void> {
   const orch = getOrchestrator()
   await orch.start()
 }

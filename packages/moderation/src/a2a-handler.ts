@@ -8,8 +8,23 @@
 
 import type { JsonRpcRequest, JsonRpcResponse } from '@babylon/a2a'
 import type { JsonRpcResult } from '@babylon/shared'
-import { isHex, zeroHash } from 'viem'
+import { type Address, isHex, zeroHash } from 'viem'
 import { ModerationClient } from './client'
+
+/**
+ * Type helper to cast validated address strings to Address type
+ * Used because zod's .refine() type predicate doesn't always propagate in TypeScript
+ */
+function toAddress(addr: string): Address {
+  return addr as Address
+}
+
+/**
+ * Type helper to cast validated bytes32 strings to 0x-prefixed type
+ */
+function toBytes32(bytes: string): `0x${string}` {
+  return bytes as `0x${string}`
+}
 
 /**
  * Convert evidence string to a proper bytes32 hex string
@@ -89,8 +104,11 @@ const handlers: Record<string, ModerationHandler> = {
   'moderation.getBanStatus': async (client, params) => {
     const { address, appId } = GetBanStatusParamsSchema.parse(params)
 
-    const isBanned = await client.isBanned(address, appId)
-    const activeCase = await client.getActiveCase(address)
+    const isBanned = await client.isBanned(
+      toAddress(address),
+      appId ? toBytes32(appId) : undefined,
+    )
+    const activeCase = await client.getActiveCase(toAddress(address))
 
     let banCase: BanCase | null = null
     if (activeCase) {
@@ -111,7 +129,7 @@ const handlers: Record<string, ModerationHandler> = {
     const evidenceHash = evidence ? evidenceToBytes32(evidence) : zeroHash
 
     const txRequest = client.buildOpenCaseRequest(
-      targetAddress,
+      toAddress(targetAddress),
       reason,
       evidenceHash,
     )
@@ -127,7 +145,7 @@ const handlers: Record<string, ModerationHandler> = {
     const { caseId, stakeAmount } = ChallengeBanParamsSchema.parse(params)
 
     const txRequest = client.buildChallengeCaseRequest(
-      caseId,
+      toBytes32(caseId),
       BigInt(stakeAmount),
     )
 
@@ -142,7 +160,7 @@ const handlers: Record<string, ModerationHandler> = {
     const { caseId, position } = VoteParamsSchema.parse(params)
     const positionNum = position === 'yes' ? VotePosition.YES : VotePosition.NO
 
-    const txRequest = client.buildVoteRequest(caseId, positionNum)
+    const txRequest = client.buildVoteRequest(toBytes32(caseId), positionNum)
 
     return {
       type: 'transaction_request',
@@ -171,17 +189,17 @@ const handlers: Record<string, ModerationHandler> = {
 
   'moderation.getCase': async (client, params) => {
     const { caseId } = GetCaseParamsSchema.parse(params)
-    return client.getCase(caseId)
+    return client.getCase(toBytes32(caseId))
   },
 
   'moderation.getStake': async (client, params) => {
     const { address } = GetStakeParamsSchema.parse(params)
-    return client.getStake(address)
+    return client.getStake(toAddress(address))
   },
 
   'moderation.canReport': async (client, params) => {
     const { address } = CanReportParamsSchema.parse(params)
-    return { canReport: await client.canReport(address) }
+    return { canReport: await client.canReport(toAddress(address)) }
   },
 
   'moderation.stake': async (client, params) => {
@@ -198,19 +216,22 @@ const handlers: Record<string, ModerationHandler> = {
 
   'moderation.resolveCase': async (client, params) => {
     const { caseId } = ResolveCaseParamsSchema.parse(params)
-    const txRequest = client.buildResolveCaseRequest(caseId)
+    const txRequest = client.buildResolveCaseRequest(toBytes32(caseId))
     return { type: 'transaction_request', txRequest }
   },
 
   'moderation.requestReReview': async (client, params) => {
     const { caseId, stakeAmount } = ReReviewParamsSchema.parse(params)
-    const txRequest = client.buildReReviewRequest(caseId, BigInt(stakeAmount))
+    const txRequest = client.buildReReviewRequest(
+      toBytes32(caseId),
+      BigInt(stakeAmount),
+    )
     return { type: 'transaction_request', txRequest }
   },
 
   'moderation.claimRewards': async (client, params) => {
     const { caseId } = ClaimRewardsParamsSchema.parse(params)
-    const txRequest = client.buildClaimRewardsRequest(caseId)
+    const txRequest = client.buildClaimRewardsRequest(toBytes32(caseId))
     return { type: 'transaction_request', txRequest }
   },
 }
@@ -260,6 +281,6 @@ export function createModerationA2AHandler(config: JejuModerationConfig) {
 /**
  * Get the list of supported moderation methods
  */
-export function getSupportedModerationMethods(): string[] {
+export function _getSupportedModerationMethods(): string[] {
   return Object.keys(handlers)
 }

@@ -19,7 +19,7 @@ import { toBabylonRuntime } from '../types'
  * Provider: Unread Messages
  * Gets agent's unread DMs and group chats via A2A
  */
-export const messagesProvider: Provider = {
+const _messagesProvider: Provider = {
   name: 'BABYLON_MESSAGES',
   description: 'Get unread messages and recent chats via A2A protocol',
 
@@ -88,7 +88,7 @@ export const messagesProvider: Provider = {
  * Provider: Notifications
  * Gets agent's recent notifications via A2A
  */
-export const notificationsProvider: Provider = {
+const _notificationsProvider: Provider = {
   name: 'BABYLON_NOTIFICATIONS',
   description: 'Get recent notifications via A2A protocol',
 

@@ -22,6 +22,7 @@ export interface ModelSelectionResult {
   }
 }
 
+/** Training bundle structure for documentation purposes */
 export interface TrainingBundle {
   id: string
   trajectoryCount: number

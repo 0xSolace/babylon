@@ -1,10 +1,27 @@
-import type { PerpPositionFromAPI, PredictionPosition } from '@babylon/shared'
 import {
   calculateExpectedPayout,
   cn,
   type JsonValue,
   PredictionPricing,
 } from '@babylon/shared'
+import { useMutation, useQuery } from '@tanstack/react-query'
+import {
+  AlertTriangle,
+  BarChart3,
+  CheckCircle,
+  Clock,
+  TrendingDown,
+  TrendingUp,
+  X,
+  XCircle,
+  Zap,
+} from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { toast } from 'sonner'
+import { FollowButton } from '@/components/interactions'
+import { useAuth } from '@/hooks/useAuth'
+import { useFetchPerpMarkets } from '@/hooks/usePerpMarkets'
+import type { PerpPositionFromAPI, PredictionPosition } from '@/types/widgets'
 
 /** Extract error message from API response */
 function getApiErrorMessage(data: unknown, fallback: string): string {
@@ -33,27 +50,6 @@ function isPerpPosition(
 ): data is PerpPositionFromAPI {
   return data !== null && 'ticker' in data && 'size' in data
 }
-
-import { useMutation, useQuery } from '@tanstack/react-query'
-
-import {
-  AlertTriangle,
-  BarChart3,
-  CheckCircle,
-  Clock,
-  TrendingDown,
-  TrendingUp,
-  X,
-  XCircle,
-  Zap,
-} from 'lucide-react'
-
-import { useEffect, useState } from 'react'
-
-import { toast } from 'sonner'
-import { FollowButton } from '@/components/interactions'
-import { useAuth } from '@/hooks/useAuth'
-import { useFetchPerpMarkets } from '@/hooks/usePerpMarkets'
 
 /** Format error message from API response payload */
 const formatErrorMessage = (payload: JsonValue, fallback: string): string => {
@@ -518,7 +514,7 @@ export function PositionDetailModal({
                         Avg Entry Price
                       </div>
                       <div className="font-bold text-foreground text-lg">
-                        {formatPrice(predictionData?.avgPrice)}
+                        {formatPrice(predictionData?.avgPrice ?? 0)}
                       </div>
                     </div>
                     <div className="rounded-lg bg-muted/30 p-3">
@@ -526,7 +522,7 @@ export function PositionDetailModal({
                         Current Price
                       </div>
                       <div className="font-bold text-foreground text-lg">
-                        {formatPrice(predictionData?.currentPrice)}
+                        {formatPrice(predictionData?.currentPrice ?? 0)}
                       </div>
                     </div>
                     <div className="rounded-lg bg-muted/30 p-3">
@@ -536,17 +532,17 @@ export function PositionDetailModal({
                       <div
                         className={cn(
                           'font-bold text-lg',
-                          predictionData?.currentPrice -
-                            predictionData?.avgPrice >=
+                          (predictionData?.currentPrice ?? 0) -
+                            (predictionData?.avgPrice ?? 0) >=
                             0
                             ? 'text-green-600'
                             : 'text-red-600',
                         )}
                       >
                         {formatPercent(
-                          ((predictionData?.currentPrice -
-                            predictionData?.avgPrice) /
-                            predictionData?.avgPrice) *
+                          (((predictionData?.currentPrice ?? 0) -
+                            (predictionData?.avgPrice ?? 0)) /
+                            (predictionData?.avgPrice ?? 1)) *
                             100,
                         )}
                       </div>
@@ -561,7 +557,7 @@ export function PositionDetailModal({
                   <div>
                     <h3 className="mb-2 flex items-center gap-2 font-semibold text-foreground text-lg">
                       {perpData?.ticker}
-                      {perpData?.unrealizedPnLPercent >= 0 ? (
+                      {(perpData?.unrealizedPnLPercent ?? 0) >= 0 ? (
                         <TrendingUp className="h-5 w-5 text-green-600" />
                       ) : (
                         <TrendingDown className="h-5 w-5 text-red-600" />
@@ -592,7 +588,7 @@ export function PositionDetailModal({
                         Position Size
                       </div>
                       <div className="font-bold text-foreground text-lg">
-                        {formatPoints(perpData?.size)} pts
+                        {formatPoints(perpData?.size ?? 0)} pts
                       </div>
                     </div>
                     <div className="rounded-lg bg-muted/30 p-3">
@@ -600,7 +596,7 @@ export function PositionDetailModal({
                         Entry Price
                       </div>
                       <div className="font-bold text-foreground text-lg">
-                        {formatPrice(perpData?.entryPrice)}
+                        {formatPrice(perpData?.entryPrice ?? 0)}
                       </div>
                     </div>
                     <div className="rounded-lg bg-muted/30 p-3">
@@ -608,7 +604,7 @@ export function PositionDetailModal({
                         Current Price
                       </div>
                       <div className="font-bold text-foreground text-lg">
-                        {formatPrice(perpData?.currentPrice)}
+                        {formatPrice(perpData?.currentPrice ?? 0)}
                       </div>
                     </div>
                     <div className="rounded-lg bg-muted/30 p-3">
@@ -618,12 +614,12 @@ export function PositionDetailModal({
                       <div
                         className={cn(
                           'font-bold text-lg',
-                          perpData?.unrealizedPnL >= 0
+                          (perpData?.unrealizedPnL ?? 0) >= 0
                             ? 'text-green-600'
                             : 'text-red-600',
                         )}
                       >
-                        {formatPoints(perpData?.unrealizedPnL)} pts
+                        {formatPoints(perpData?.unrealizedPnL ?? 0)} pts
                       </div>
                     </div>
                     {perpData?.liquidationPrice && (

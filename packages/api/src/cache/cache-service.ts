@@ -179,7 +179,7 @@ export async function cacheExists(
   return client.exists(fullKey)
 }
 
-export async function cacheTTL(
+async function _cacheTTL(
   key: string,
   options: CacheOptions = {},
 ): Promise<number> {
@@ -188,7 +188,7 @@ export async function cacheTTL(
   return client.ttl(fullKey)
 }
 
-export async function cacheIncr(
+async function _cacheIncr(
   key: string,
   by = 1,
   options: CacheOptions = {},
@@ -198,7 +198,7 @@ export async function cacheIncr(
   return client.incr(fullKey, by)
 }
 
-export async function cacheDecr(
+async function _cacheDecr(
   key: string,
   by = 1,
   options: CacheOptions = {},
@@ -215,7 +215,7 @@ export async function initializeCacheService(): Promise<void> {
 }
 
 /** Shutdown the cache service */
-export function shutdownCacheService(): void {
+function _shutdownCacheService(): void {
   cacheClient = null
   initialized = false
   logger.info('Cache service shutdown', undefined, 'CacheService')

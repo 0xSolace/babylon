@@ -2,7 +2,7 @@
  * ERC-8004 on-chain service registration for decentralized discovery via JNS/ENS.
  */
 
-import { logger, safeReadContract, safeWriteContract } from '@babylon/shared'
+import { logger, readContract, writeContract } from '@babylon/shared'
 import {
   type Address,
   type Chain,
@@ -120,7 +120,7 @@ export interface AgentCard {
   capabilities?: string[]
 }
 
-export function generateBabylonAgentCard(baseUrl: string): AgentCard {
+function _generateBabylonAgentCard(baseUrl: string): AgentCard {
   return {
     name: 'Babylon Game Engine',
     description:
@@ -432,7 +432,7 @@ export class ERC8004RegistrationService {
     })
 
     // Execute registration
-    const hash = await safeWriteContract(walletClient, {
+    const hash = await writeContract(walletClient, {
       address: this.config.identityRegistryAddress,
       abi,
       functionName: 'registerService',
@@ -484,7 +484,7 @@ export class ERC8004RegistrationService {
       serviceId: service.serviceId,
     })
 
-    const hash = await safeWriteContract(walletClient, {
+    const hash = await writeContract(walletClient, {
       address: this.config.identityRegistryAddress,
       abi,
       functionName: 'updateService',
@@ -510,7 +510,7 @@ export class ERC8004RegistrationService {
     ])
 
     // Check availability
-    const available = await safeReadContract<boolean>(publicClient, {
+    const available = await readContract(publicClient, {
       address: this.config.jnsRegistryAddress,
       abi,
       functionName: 'available',
@@ -527,7 +527,7 @@ export class ERC8004RegistrationService {
     logger.info('[ERC8004] Registering JNS name', { name, endpoint })
 
     // Register name
-    const registerHash = await safeWriteContract(walletClient, {
+    const registerHash = await writeContract(walletClient, {
       address: this.config.jnsRegistryAddress,
       abi,
       functionName: 'register',
@@ -542,7 +542,7 @@ export class ERC8004RegistrationService {
     const node = `0x${Buffer.from(name).toString('hex').padEnd(64, '0')}` as Hex
 
     // Set endpoint as text record
-    const setTextHash = await safeWriteContract(walletClient, {
+    const setTextHash = await writeContract(walletClient, {
       address: this.config.jnsRegistryAddress,
       abi,
       functionName: 'setText',
@@ -571,7 +571,7 @@ export class ERC8004RegistrationService {
     const node = `0x${Buffer.from(name).toString('hex').padEnd(64, '0')}` as Hex
 
     // Check if name is registered
-    const owner = await safeReadContract<Address>(publicClient, {
+    const owner = await readContract(publicClient, {
       address: this.config.jnsRegistryAddress,
       abi,
       functionName: 'owner',
@@ -583,7 +583,7 @@ export class ERC8004RegistrationService {
     }
 
     // Get endpoint URL
-    const endpoint = await safeReadContract<string>(publicClient, {
+    const endpoint = await readContract(publicClient, {
       address: this.config.jnsRegistryAddress,
       abi,
       functionName: 'getText',
@@ -614,7 +614,7 @@ export function getERC8004RegistrationService(): ERC8004RegistrationService {
   return registrationService
 }
 
-export async function initializeERC8004Registration(): Promise<void> {
+async function _initializeERC8004Registration(): Promise<void> {
   const service = getERC8004RegistrationService()
   const baseUrl = process.env.PUBLIC_APP_URL ?? 'http://localhost:3000'
   await service.registerBabylonServices(baseUrl)

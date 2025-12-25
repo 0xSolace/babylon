@@ -1,9 +1,13 @@
 import {
-  type AgentTemplate,
+  type AgentTemplateApiResponse,
   AgentTemplateApiResponseSchema,
   AgentTemplateIndexApiResponseSchema,
   GenerateFieldApiResponseSchema,
 } from '@babylon/shared'
+
+// Local alias for the template type
+type AgentTemplate = AgentTemplateApiResponse
+
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
@@ -253,7 +257,7 @@ function processTemplateData(template: AgentTemplate): {
     },
     agentData: {
       system: processedTemplate.system,
-      personality: processedTemplate.bio,
+      personality: processedTemplate.bio ?? '',
       tradingStrategy: processedTemplate.tradingStrategy,
       initialDeposit: 100,
     },

@@ -44,7 +44,7 @@ interface PredictionPosition {
   costBasis: number
   unrealizedPnL: number
   resolved: boolean
-  resolution?: boolean | null
+  resolution: boolean | null
 }
 
 interface PredictionMarket {

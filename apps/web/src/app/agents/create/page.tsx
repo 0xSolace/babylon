@@ -149,7 +149,7 @@ export default function CreateAgentPage() {
       let currentIndex = 1
       if (current?.includes(basePath)) {
         const match = current.match(/-(\d+)\.jpg/)
-        if (match) {
+        if (match?.[1]) {
           currentIndex = parseInt(match[1], 10)
         }
       }

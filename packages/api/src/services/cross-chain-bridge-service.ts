@@ -13,7 +13,7 @@
  * @packageDocumentation
  */
 
-import { logger, safeReadContract, safeWriteContract } from '@babylon/shared'
+import { logger, readContract, writeContract } from '@babylon/shared'
 import {
   type Address,
   type Chain,
@@ -353,7 +353,7 @@ export class CrossChainBridgeService {
 
     const destDomain = HYPERLANE_DOMAINS[destChain]
 
-    const fee = await safeReadContract<bigint>(client, {
+    const fee = await readContract(client, {
       address: warpRoute,
       abi: HYPERLANE_WARP_ROUTE_ABI,
       functionName: 'quoteGasPayment',
@@ -416,7 +416,7 @@ export class CrossChainBridgeService {
 
     // Get gas quote
     const destDomain = HYPERLANE_DOMAINS[destChain]
-    const fee = await safeReadContract<bigint>(client, {
+    const fee = await readContract(client, {
       address: warpRoute,
       abi: HYPERLANE_WARP_ROUTE_ABI,
       functionName: 'quoteGasPayment',
@@ -424,7 +424,7 @@ export class CrossChainBridgeService {
     })
 
     // Approve warp route to spend tokens
-    const currentAllowance = await safeReadContract<bigint>(client, {
+    const currentAllowance = await readContract(client, {
       address: this.tokenAddress,
       abi: ERC20_ABI,
       functionName: 'allowance',
@@ -437,7 +437,7 @@ export class CrossChainBridgeService {
     }
 
     if (currentAllowance < amount) {
-      const approveTx = await safeWriteContract(walletClient, {
+      const approveTx = await writeContract(walletClient, {
         address: this.tokenAddress,
         abi: ERC20_ABI,
         functionName: 'approve',
@@ -453,7 +453,7 @@ export class CrossChainBridgeService {
       `0x000000000000000000000000${recipient.slice(2)}` as `0x${string}`
 
     // Execute bridge transfer
-    const txHash = await safeWriteContract(walletClient, {
+    const txHash = await writeContract(walletClient, {
       address: warpRoute,
       abi: HYPERLANE_WARP_ROUTE_ABI,
       functionName: 'transferRemote',
@@ -540,7 +540,7 @@ export class CrossChainBridgeService {
     const destMailbox = SUPPORTED_CHAINS[bridge.destChain]
 
     if (destClient && 'hyperlaneMailbox' in destMailbox && bridge.messageId) {
-      const delivered = await safeReadContract<boolean>(destClient, {
+      const delivered = await readContract(destClient, {
         address: destMailbox.hyperlaneMailbox as Address,
         abi: HYPERLANE_MAILBOX_ABI,
         functionName: 'delivered',
@@ -583,7 +583,7 @@ export class CrossChainBridgeService {
     let tokenBalance = 0n
 
     if (warpRoute && warpRoute !== zeroAddress) {
-      tokenBalance = await safeReadContract<bigint>(client, {
+      tokenBalance = await readContract(client, {
         address: warpRoute,
         abi: HYPERLANE_WARP_ROUTE_ABI,
         functionName: 'balanceOf',
@@ -712,7 +712,7 @@ export function getCrossChainBridgeService(
   return crossChainBridgeService
 }
 
-export async function initializeCrossChainBridge(
+async function _initializeCrossChainBridge(
   config?: Partial<BridgeConfig>,
 ): Promise<CrossChainBridgeService> {
   const service = getCrossChainBridgeService(config)

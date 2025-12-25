@@ -130,6 +130,6 @@ export async function callGroqDirect(
 /**
  * Reset the Jeju client (for testing)
  */
-export function resetJejuClient(): void {
+function _resetJejuClient(): void {
   jejuClient = null
 }

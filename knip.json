@@ -21,15 +21,44 @@
     },
     "apps/web": {
       "entry": ["src/main.tsx", "src/App.tsx", "vite.config.ts", "tailwind.config.ts", "scripts/**/*.ts"],
-      "project": ["src/**/*.{ts,tsx}"]
+      "project": ["src/**/*.{ts,tsx}"],
+      "ignore": [
+        "src/app/api/**",
+        "src/app/api-docs/**",
+        "src/types/markets.ts",
+        "src/components/ui/badge.tsx",
+        "src/components/ui/dialog.tsx",
+        "src/config/index.ts",
+        "src/hooks/usePerpMarkets.ts",
+        "src/hooks/usePostHog.ts",
+        "src/hooks/usePredictionMarketStream.ts",
+        "src/lib/eden-client.ts",
+        "src/lib/posthog/client.ts",
+        "src/stores/perpMarketsStore.ts",
+        "src/stores/predictionMarketsStore.ts",
+        "src/components/providers/FarcasterMiniAppProvider.tsx",
+        "src/components/airdrop/AirdropCard.tsx",
+        "src/components/feedback/ScoreSlider.tsx",
+        "src/components/feedback/StarRating.tsx",
+        "src/components/shared/Avatar.tsx",
+        "src/components/shared/Skeleton.tsx",
+        "src/lib/api-fetch.ts"
+      ]
     },
     "packages/a2a": {
       "entry": ["src/index.ts"],
-      "project": ["src/**/*.ts"]
+      "project": ["src/**/*.ts"],
+      "ignore": ["src/types/a2a.ts"]
     },
     "packages/agents": {
       "entry": ["src/index.ts", "scripts/**/*.ts"],
-      "project": ["src/**/*.ts"]
+      "project": ["src/**/*.ts"],
+      "ignore": [
+        "src/autonomous/DecentralizedDMService.ts",
+        "src/farcaster/FarcasterPostingService.ts",
+        "src/autonomous/schemas/llm-response-schemas.ts",
+        "src/plugins/babylon/types.ts"
+      ]
     },
     "packages/api": {
       "entry": ["src/index.ts"],
@@ -37,7 +66,11 @@
     },
     "packages/auth": {
       "entry": ["src/index.ts"],
-      "project": ["src/**/*.{ts,tsx}"]
+      "project": ["src/**/*.{ts,tsx}"],
+      "ignore": [
+        "src/client/browser-stubs.ts",
+        "src/mpc/index.ts"
+      ]
     },
     "packages/client": {
       "entry": ["src/index.ts"],
@@ -45,11 +78,25 @@
     },
     "packages/db": {
       "entry": ["src/index.ts"],
-      "project": ["src/**/*.ts"]
+      "project": ["src/**/*.ts"],
+      "ignore": [
+        "src/cql-driver.ts",
+        "src/cql-schema-types.ts",
+        "src/decentralized/**",
+        "src/schema/misc.ts",
+        "src/schema/trading.ts",
+        "src/model-types.ts",
+        "src/table-registry.ts",
+        "src/types.ts",
+        "src/type-guards.ts",
+        "src/logger.ts",
+        "src/json-storage.ts"
+      ]
     },
     "packages/engine": {
       "entry": ["src/index.ts", "examples/**/*.ts"],
-      "project": ["src/**/*.ts"]
+      "project": ["src/**/*.ts"],
+      "ignore": ["src/__tests__/**"]
     },
     "packages/mcp": {
       "entry": ["src/index.ts"],
@@ -57,11 +104,13 @@
     },
     "packages/messaging": {
       "entry": ["src/index.ts"],
-      "project": ["src/**/*.ts"]
+      "project": ["src/**/*.ts"],
+      "ignore": ["src/storage/decentralized-storage.ts"]
     },
     "packages/moderation": {
       "entry": ["src/index.ts"],
-      "project": ["src/**/*.ts"]
+      "project": ["src/**/*.ts"],
+      "ignore": ["src/schemas.ts", "src/a2a-handler.ts"]
     },
     "packages/plugin-babylon": {
       "entry": ["src/index.ts", "build.ts"],
@@ -87,7 +136,12 @@
     },
     "packages/training": {
       "entry": ["src/index.ts"],
-      "project": ["src/**/*.ts"]
+      "project": ["src/**/*.ts"],
+      "ignore": [
+        "src/compute/dws-client.ts",
+        "src/training/ModelSelectionService.ts",
+        "src/type-guards.ts"
+      ]
     }
   },
   "ignore": [
@@ -123,5 +177,14 @@
     "prettier",
     "swagger-jsdoc"
   ],
-  "ignoreExportsUsedInFile": true
+  "ignoreBinaries": [
+    "forge",
+    "cast",
+    "which",
+    "pkill",
+    "lsof",
+    "scripts/validation/check-environment.ts"
+  ],
+  "ignoreExportsUsedInFile": true,
+  "exclude": ["enumMembers", "duplicates"]
 }

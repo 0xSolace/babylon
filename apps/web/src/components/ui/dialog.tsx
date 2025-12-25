@@ -17,7 +17,8 @@ import type React from 'react'
  * </Dialog>
  * ```
  */
-export interface DialogProps extends React.ComponentPropsWithoutRef<'div'> {
+export interface DialogProps
+  extends React.ComponentPropsWithoutRef<'fieldset'> {
   open?: boolean
   onOpenChange?: (open: boolean) => void
 }
@@ -112,7 +113,7 @@ export const DialogContent = ({
  */
 export type DialogHeaderProps = React.ComponentPropsWithoutRef<'div'>
 
-export const DialogHeader = ({
+export const _DialogHeader = ({
   children,
   className,
   ...props
@@ -140,7 +141,7 @@ export const DialogHeader = ({
  */
 export type DialogTitleProps = React.ComponentPropsWithoutRef<'h2'>
 
-export const DialogTitle = ({
+export const _DialogTitle = ({
   children,
   className,
   ...props
@@ -168,7 +169,7 @@ export const DialogTitle = ({
  */
 export type DialogDescriptionProps = React.ComponentPropsWithoutRef<'p'>
 
-export const DialogDescription = ({
+export const _DialogDescription = ({
   children,
   className,
   ...props
@@ -191,7 +192,7 @@ export const DialogDescription = ({
  */
 export type DialogFooterProps = React.ComponentPropsWithoutRef<'div'>
 
-export const DialogFooter = ({
+export const _DialogFooter = ({
   children,
   className,
   ...props

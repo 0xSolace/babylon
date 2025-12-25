@@ -21,7 +21,7 @@ import { toBabylonRuntime } from '../types'
  *
  * Usage in prompts: "Check user X's wallet" or "What positions does user Y have?"
  */
-export const userWalletProvider: Provider = {
+const _userWalletProvider: Provider = {
   name: 'BABYLON_USER_WALLET',
   description:
     "Query any user's wallet balance, points, and open positions via A2A protocol. Useful for analyzing other traders and following successful strategies.",

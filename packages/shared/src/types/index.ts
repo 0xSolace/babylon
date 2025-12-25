@@ -13,6 +13,7 @@ export {
   type ApiError,
   type ApiResponse,
   type ErrorLike,
+  type FilterParams,
   type JsonRpcError,
   type JsonRpcNotification,
   type JsonRpcParams,
@@ -21,6 +22,15 @@ export {
   type JsonRpcResult,
   type JsonValue,
   JsonValueSchema,
+  type PaginatedResponse,
+  type PaginationParams,
+  type PostHogClient,
+  type PostHogClientConstructor,
+  type PostHogServerClient,
+  type PostHogServerConstructor,
+  type QueryParams,
+  type SortOrder,
+  type SortParams,
   type StringRecord,
 } from './common'
 export {

@@ -45,7 +45,7 @@ export interface ParticipationStats {
  * @param {string} userId - User ID to get stats for
  * @returns {Promise<ParticipationStats | null>} Participation stats or null if user not found
  */
-export async function getParticipationStats(
+async function _getParticipationStats(
   userId: string,
 ): Promise<ParticipationStats | null> {
   // Get all counts in parallel

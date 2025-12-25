@@ -292,7 +292,7 @@ export class OnChainPredictionMarketService {
  */
 let instance: OnChainPredictionMarketService | null = null
 
-export function getOnChainPredictionMarketService(): OnChainPredictionMarketService {
+function _getOnChainPredictionMarketService(): OnChainPredictionMarketService {
   if (!instance) {
     instance = new OnChainPredictionMarketService()
   }

@@ -24,10 +24,8 @@ import { useOnChainBetting } from '@/hooks/useOnChainBetting'
 import { usePerpMarkets } from '@/hooks/usePerpMarkets'
 import { useSmartWallet } from '@/hooks/useSmartWallet'
 import { useRouter } from '@/lib/navigation'
-import {
-  type PredictionMarket,
-  usePredictionMarkets,
-} from '@/stores/predictionMarketsStore'
+import { usePredictionMarkets } from '@/stores/predictionMarketsStore'
+import type { PredictionMarket } from '@/types/markets'
 
 /**
  * Payload for verifying an on-chain bet with the backend.

@@ -218,9 +218,12 @@ export const TrainingTriggerOptionsSchema = z.object({
 // ============================================================================
 
 export type TrainingConfig = z.infer<typeof TrainingConfigSchema>
-export type BenchmarkConfig = z.infer<typeof BenchmarkConfigSchema>
-export type AgentConfig = z.infer<typeof AgentConfigSchema>
-export type PipelineConfig = z.infer<typeof PipelineConfigSchema>
+// biome-ignore lint/correctness/noUnusedVariables: Public API type
+type BenchmarkConfig = z.infer<typeof BenchmarkConfigSchema>
+// biome-ignore lint/correctness/noUnusedVariables: Public API type
+type AgentConfig = z.infer<typeof AgentConfigSchema>
+// biome-ignore lint/correctness/noUnusedVariables: Public API type
+type PipelineConfig = z.infer<typeof PipelineConfigSchema>
 
 export type LLMCall = z.infer<typeof LLMCallSchema>
 export type ProviderAccess = z.infer<typeof ProviderAccessSchema>

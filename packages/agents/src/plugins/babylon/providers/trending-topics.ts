@@ -17,7 +17,7 @@ import { toBabylonRuntime } from '../types'
  * Provider: Trending Topics
  * Gets current trending tags and topics via A2A protocol
  */
-export const trendingTopicsProvider: Provider = {
+const _trendingTopicsProvider: Provider = {
   name: 'BABYLON_TRENDING_TOPICS',
   description:
     'Get currently trending topics and tags on Babylon via A2A protocol',

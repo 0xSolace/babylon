@@ -1,5 +1,4 @@
-import type { FeedPost, RepostButtonProps } from '@babylon/shared'
-import { cn } from '@babylon/shared'
+import { cn, type FeedPost } from '@babylon/shared'
 import { Repeat2, X } from 'lucide-react'
 import { useState } from 'react'
 import { Avatar } from '@/components/shared/Avatar'
@@ -8,6 +7,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { useLoginModal } from '@/hooks/useLoginModal'
 import { useFeedStore } from '@/stores/feedStore'
 import { useInteractionStore } from '@/stores/interactionStore'
+import type { RepostButtonProps } from '@/types/interactions'
 
 /**
  * Repost/share button component for sharing posts.
@@ -195,7 +195,7 @@ export function RepostButton({
             )}
           />
         )}
-        {showCount && count > 0 && (
+        {showCount && (count ?? 0) > 0 && (
           <span className="font-medium tabular-nums">{count}</span>
         )}
       </button>
@@ -311,7 +311,7 @@ export function RepostButton({
                       id={postData.authorId}
                       name={postData.authorName}
                       type="user"
-                      src={postData.authorProfileImageUrl || undefined}
+                      src={postData.authorProfileImageUrl ?? undefined}
                       size="sm"
                       className="shrink-0"
                     />
@@ -321,7 +321,7 @@ export function RepostButton({
                           {postData.authorName}
                         </span>
                         <span className="text-muted-foreground text-xs">
-                          {formatTime(postData.timestamp)}
+                          {formatTime(postData.timestamp ?? '')}
                         </span>
                       </div>
                       <span className="text-muted-foreground text-xs">
@@ -439,7 +439,7 @@ export function RepostButton({
                         id={postData.authorId}
                         name={postData.authorName}
                         type="user"
-                        src={postData.authorProfileImageUrl || undefined}
+                        src={postData.authorProfileImageUrl ?? undefined}
                         size="md"
                         className="shrink-0"
                       />
@@ -449,7 +449,7 @@ export function RepostButton({
                             {postData.authorName}
                           </span>
                           <span className="text-muted-foreground text-sm">
-                            {formatTime(postData.timestamp)}
+                            {formatTime(postData.timestamp ?? '')}
                           </span>
                         </div>
                         <span className="text-muted-foreground text-sm">

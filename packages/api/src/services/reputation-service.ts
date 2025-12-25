@@ -12,7 +12,7 @@ import {
   logger,
   REPUTATION_SYSTEM_ABI,
   REPUTATION_SYSTEM_BASE_SEPOLIA,
-  safeReadContract,
+  readContract,
 } from '@babylon/shared'
 import { type Address, createWalletClient, http, parseEther } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
@@ -218,9 +218,7 @@ export async function getOnChainReputation(
     rpcUrl: getCurrentRpcUrl(),
   })
 
-  const reputation = await safeReadContract<
-    readonly [bigint, bigint, bigint, bigint, bigint, bigint, boolean]
-  >(publicClient, {
+  const reputation = await readContract(publicClient, {
     address: REPUTATION_SYSTEM,
     abi: REPUTATION_SYSTEM_ABI,
     functionName: 'getReputation',
@@ -236,9 +234,7 @@ export async function getOnChainReputation(
 /**
  * Sync database reputation with on-chain reputation
  */
-export async function syncUserReputation(
-  userId: string,
-): Promise<number | null> {
+async function _syncUserReputation(userId: string): Promise<number | null> {
   const onChainReputation = await getOnChainReputation(userId)
 
   if (onChainReputation === null) {
@@ -251,7 +247,7 @@ export async function syncUserReputation(
 /**
  * Batch update reputation for multiple market resolutions
  */
-export async function batchUpdateReputation(
+async function _batchUpdateReputation(
   resolutions: MarketResolution[],
 ): Promise<Record<string, ReputationUpdate[]>> {
   const allResults: Record<string, ReputationUpdate[]> = {}

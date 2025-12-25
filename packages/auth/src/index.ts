@@ -41,7 +41,7 @@
 
 export { LoginButton } from './client/login-button'
 export { JejuAuthProvider, useJejuAuthContext } from './client/provider'
-export type { JejuAuthConfig } from './client/types'
+export type { JejuAuthConfig, LoginState } from './client/types'
 export { useJejuAuth } from './client/use-jeju-auth'
 export { useJejuWallet } from './client/use-jeju-wallet'
 
@@ -108,6 +108,8 @@ export {
 export type {
   KeyGenRequest,
   KeyGenResponse,
+  MPCClientConfig,
+  NetworkStatus,
   SigningRequest,
   SigningResponse,
 } from './mpc/types'

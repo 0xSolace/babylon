@@ -127,7 +127,7 @@ type OnboardingServices = {
 
 let onboardingServicesInstance: OnboardingServices | null = null
 
-export function setOnboardingServices(services: OnboardingServices): void {
+function _setOnboardingServices(services: OnboardingServices): void {
   onboardingServicesInstance = services
 }
 
@@ -185,7 +185,7 @@ export interface OnchainRegistrationResult {
   userId: string
 }
 
-export async function processOnchainRegistration({
+async function _processOnchainRegistration({
   user,
   walletAddress,
   username,
@@ -1051,7 +1051,7 @@ export interface ConfirmOnchainProfileUpdateResult {
   metadata: StringRecord<JsonValue> | null
 }
 
-export async function confirmOnchainProfileUpdate({
+async function _confirmOnchainProfileUpdate({
   userId,
   walletAddress,
   txHash,
@@ -1213,7 +1213,7 @@ export async function confirmOnchainProfileUpdate({
   }
 }
 
-export async function getOnchainRegistrationStatus(
+async function _getOnchainRegistrationStatus(
   user: AuthenticatedUser,
 ): Promise<OnchainRegistrationStatus> {
   type UserRegistrationRecord = {

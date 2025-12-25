@@ -355,7 +355,7 @@ interface WorldPayloadOverrides {
   source?: string
 }
 
-export const testFixtures = {
+const _testFixtures = {
   messagePayload: (overrides: MessagePayloadOverrides = {}) => ({
     content: {
       text: 'Test message',
@@ -398,7 +398,7 @@ export function isMockFunction(
 /**
  * Helper to assert spy was called with specific arguments
  */
-export function assertSpyCalledWith(spy: unknown, ...args: unknown[]): void {
+function _assertSpyCalledWith(spy: unknown, ...args: unknown[]): void {
   if (!isMockFunction(spy)) {
     throw new Error('Not a mock function')
   }
@@ -423,7 +423,7 @@ export function assertSpyCalledWith(spy: unknown, ...args: unknown[]): void {
 /**
  * Setup logger spies for testing
  */
-export function setupLoggerSpies() {
+function _setupLoggerSpies() {
   spyOn(logger, 'info').mockImplementation(() => {})
   spyOn(logger, 'warn').mockImplementation(() => {})
   spyOn(logger, 'error').mockImplementation(() => {})

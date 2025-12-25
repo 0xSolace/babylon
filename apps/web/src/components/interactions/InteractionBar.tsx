@@ -1,4 +1,3 @@
-import type { InteractionBarProps } from '@babylon/shared'
 import { cn } from '@babylon/shared'
 import { MessageCircle } from 'lucide-react'
 import { useEffect, useState } from 'react'
@@ -6,6 +5,7 @@ import { FeedCommentSection } from '@/components/feed/FeedCommentSection'
 import { useAuth } from '@/hooks/useAuth'
 import { useLoginModal } from '@/hooks/useLoginModal'
 import { useInteractionStore } from '@/stores/interactionStore'
+import type { InteractionBarProps } from '@/types/interactions'
 import { DeleteButton } from './DeleteButton'
 import { LikeButton } from './LikeButton'
 import { RepostButton } from './RepostButton'
@@ -230,26 +230,31 @@ export function InteractionBar({
       </div>
 
       {/* Comment modal - only if custom onCommentClick is not provided */}
-      {!onCommentClick && showComments && postData && (
-        <FeedCommentSection
-          postId={postId}
-          postData={{
-            id: postData.id,
-            content: postData.content,
-            authorId: postData.authorId,
-            authorName: postData.authorName,
-            authorUsername: postData.authorUsername ?? null,
-            authorProfileImageUrl: postData.authorProfileImageUrl ?? null,
-            timestamp: postData.timestamp,
-            likeCount: postData.likeCount ?? 0,
-            commentCount: postData.commentCount ?? 0,
-            shareCount: postData.shareCount ?? 0,
-            isLiked: postData.isLiked ?? false,
-            isShared: postData.isShared ?? false,
-          }}
-          onClose={() => setShowComments(false)}
-        />
-      )}
+      {!onCommentClick &&
+        showComments &&
+        postData?.id &&
+        postData?.content &&
+        postData?.authorId &&
+        postData?.timestamp && (
+          <FeedCommentSection
+            postId={postId}
+            postData={{
+              id: postData.id,
+              content: postData.content,
+              authorId: postData.authorId,
+              authorName: postData.authorName ?? '',
+              authorUsername: postData.authorUsername ?? null,
+              authorProfileImageUrl: postData.authorProfileImageUrl ?? null,
+              timestamp: postData.timestamp,
+              likeCount: postData.likeCount ?? 0,
+              commentCount: postData.commentCount ?? 0,
+              shareCount: postData.shareCount ?? 0,
+              isLiked: postData.isLiked ?? false,
+              isShared: postData.isShared ?? false,
+            }}
+            onClose={() => setShowComments(false)}
+          />
+        )}
     </>
   )
 }

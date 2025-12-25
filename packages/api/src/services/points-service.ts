@@ -225,7 +225,7 @@ export async function awardPoints(
 /**
  * Award points for profile completion (username + image + bio)
  */
-export async function awardProfileCompletion(
+async function _awardProfileCompletion(
   userId: string,
 ): Promise<AwardPointsResult> {
   return awardPoints(userId, POINTS.PROFILE_COMPLETION, 'profile_completion')
@@ -234,7 +234,7 @@ export async function awardProfileCompletion(
 /**
  * Award points for Farcaster link
  */
-export async function awardFarcasterLink(
+async function _awardFarcasterLink(
   userId: string,
   farcasterUsername?: string,
 ): Promise<AwardPointsResult> {
@@ -249,7 +249,7 @@ export async function awardFarcasterLink(
 /**
  * Award points for Farcaster follow
  */
-export async function awardFarcasterFollow(
+async function _awardFarcasterFollow(
   userId: string,
 ): Promise<AwardPointsResult> {
   return awardPoints(userId, POINTS.FARCASTER_FOLLOW, 'farcaster_follow', {
@@ -260,15 +260,13 @@ export async function awardFarcasterFollow(
 /**
  * Award points for Twitter follow
  */
-export async function awardTwitterFollow(
-  userId: string,
-): Promise<AwardPointsResult> {
+async function _awardTwitterFollow(userId: string): Promise<AwardPointsResult> {
   return awardPoints(userId, POINTS.TWITTER_FOLLOW, 'twitter_follow', {
     action: 'follow_playbabylon',
   })
 }
 
-export async function awardDiscordLink(
+async function _awardDiscordLink(
   userId: string,
   discordUsername?: string,
 ): Promise<AwardPointsResult> {
@@ -280,7 +278,7 @@ export async function awardDiscordLink(
   )
 }
 
-export async function awardDiscordJoin(
+async function _awardDiscordJoin(
   userId: string,
   discordUsername?: string,
 ): Promise<AwardPointsResult> {
@@ -295,7 +293,7 @@ export async function awardDiscordJoin(
 /**
  * Award points for Twitter link
  */
-export async function awardTwitterLink(
+async function _awardTwitterLink(
   userId: string,
   twitterUsername?: string,
 ): Promise<AwardPointsResult> {
@@ -310,7 +308,7 @@ export async function awardTwitterLink(
 /**
  * Award points for wallet connection
  */
-export async function awardWalletConnect(
+async function _awardWalletConnect(
   userId: string,
   walletAddress?: string,
 ): Promise<AwardPointsResult> {
@@ -325,7 +323,7 @@ export async function awardWalletConnect(
 /**
  * Award points for share action
  */
-export async function awardShareAction(
+async function _awardShareAction(
   userId: string,
   platform: string,
   contentType: string,
@@ -345,7 +343,7 @@ export async function awardShareAction(
 /**
  * Award points for creating a private group
  */
-export async function awardPrivateGroupCreate(
+async function _awardPrivateGroupCreate(
   userId: string,
   groupId?: string,
 ): Promise<AwardPointsResult> {
@@ -360,7 +358,7 @@ export async function awardPrivateGroupCreate(
 /**
  * Award points for creating a private channel
  */
-export async function awardPrivateChannelCreate(
+async function _awardPrivateChannelCreate(
   userId: string,
   channelId?: string,
 ): Promise<AwardPointsResult> {
@@ -827,7 +825,7 @@ export async function checkAndQualifyReferral(
 /**
  * Purchase points via x402 payment (100 points = $1)
  */
-export async function purchasePoints(
+async function _purchasePoints(
   userId: string,
   amountUSD: number,
   paymentRequestId: string,

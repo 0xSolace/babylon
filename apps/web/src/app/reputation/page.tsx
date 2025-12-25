@@ -46,7 +46,7 @@ export default function ReputationPage() {
     queryKey: ['reputation', user?.id],
     queryFn: async (): Promise<ReputationStats> => {
       const response = await fetch(
-        `/api/reputation/${encodeURIComponent(user?.id)}`,
+        `/api/reputation/${encodeURIComponent(user?.id ?? '')}`,
       )
       if (!response.ok) {
         return emptyStats

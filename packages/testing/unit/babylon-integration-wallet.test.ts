@@ -20,10 +20,10 @@ const createWalletMock = mock(async () => ({
   kmsKeyId: 'kms-key-123',
 }))
 
-const sdkFromCardMock = mock(async () => new MockA2AClient())
+const sdkFromCardMock = mock(async () => MockA2AClient)
 
-class MockA2AClient {
-  static fromCardUrl = sdkFromCardMock
+const MockA2AClient = {
+  fromCardUrl: sdkFromCardMock,
 }
 
 // Mock fetch to return a valid agent card

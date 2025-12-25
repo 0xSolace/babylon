@@ -134,14 +134,14 @@ export function getApiBaseUrl(): string {
 /**
  * Get the IPFS gateway URL.
  */
-export function getIpfsGatewayUrl(): string {
+export function _getIpfsGatewayUrl(): string {
   return getIpfsGateway()
 }
 
 /**
  * Get the WebSocket base URL.
  */
-export function getWsBaseUrl(): string {
+export function _getWsBaseUrl(): string {
   const apiUrl = getApiBaseUrl()
   return apiUrl.replace(/^http/, 'ws')
 }
@@ -149,7 +149,7 @@ export function getWsBaseUrl(): string {
 /**
  * Get the storage API URL.
  */
-export function getStorageApiUrl(): string {
+export function _getStorageApiUrl(): string {
   const endpoints = getCurrentEndpoints()
   // Use IPFS gateway as storage API for now
   return endpoints.ipfsGateway
@@ -225,7 +225,7 @@ export function isDevelopment(): boolean {
 /**
  * Check if we're running on localhost.
  */
-export function isLocalhost(): boolean {
+export function _isLocalhost(): boolean {
   if (!isBrowser()) return false
   const hostname = window.location.hostname
   return hostname === 'localhost' || hostname === '127.0.0.1'

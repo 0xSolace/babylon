@@ -573,6 +573,6 @@ export function getStorySeedService(llm: BabylonLLMClient): StorySeedService {
 /**
  * Reset the singleton (for testing)
  */
-export function resetStorySeedService(): void {
+function _resetStorySeedService(): void {
   storySeedServiceInstance = null
 }

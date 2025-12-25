@@ -73,7 +73,7 @@ function _isMPCSignatureResponse(
 }
 
 // Export unused functions to prevent warnings (for future use)
-export const __mpc_guards_reserved = {
+export const _mpc_guards_reserved = {
   _isKeyIdResponse,
   _isSignResponse,
   _isKeyGenResponse,

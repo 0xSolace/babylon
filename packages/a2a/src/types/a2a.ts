@@ -203,6 +203,7 @@ export interface AgentReputation {
 /**
  * Active agent connection information
  */
+
 export interface AgentConnection {
   agentId: string
   address: string
@@ -216,6 +217,7 @@ export interface AgentConnection {
 /**
  * Market data structure
  */
+
 export interface MarketData {
   marketId: string
   question: string
@@ -231,6 +233,7 @@ export interface MarketData {
 /**
  * Payment receipt structure
  */
+
 export interface PaymentReceipt {
   requestId: string
   txHash: string
@@ -267,6 +270,7 @@ export enum ErrorCode {
 /**
  * A2A protocol event structure
  */
+
 export interface A2AEvent {
   type: string
   data: JsonValue | Record<string, JsonValue>
@@ -286,6 +290,7 @@ export enum A2AEventType {
 /**
  * Handshake request structure
  */
+
 export interface HandshakeRequest {
   credentials: AgentCredentials
   capabilities: AgentCapabilities
@@ -295,6 +300,7 @@ export interface HandshakeRequest {
 /**
  * Handshake response structure
  */
+
 export interface HandshakeResponse {
   agentId: string
   sessionToken: string
@@ -305,6 +311,7 @@ export interface HandshakeResponse {
 /**
  * Agent discovery request parameters
  */
+
 export interface DiscoverRequest {
   filters?: {
     strategies?: string[]
@@ -317,6 +324,7 @@ export interface DiscoverRequest {
 /**
  * Agent discovery response structure
  */
+
 export interface DiscoverResponse {
   agents: AgentProfile[]
   total: number
@@ -325,6 +333,7 @@ export interface DiscoverResponse {
 /**
  * Market subscription information
  */
+
 export interface MarketSubscription {
   marketId: string
   agentId: string
