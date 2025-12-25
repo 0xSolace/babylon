@@ -73,7 +73,6 @@ import type {
   ActorConnection,
   ActorRelationship,
   ActorState,
-  FeedEvent,
   FeedPost,
   Organization,
   PriceUpdate,
@@ -93,14 +92,7 @@ import {
   rateLimitedParallel,
 } from './utils/shared-utils'
 
-export type {
-  Actor,
-  ActorRelationship,
-  ActorState,
-  FeedEvent,
-  FeedPost,
-  Organization,
-}
+export type { Actor, ActorRelationship, ActorState, FeedPost, Organization }
 
 /**
  * Commentary post from LLM

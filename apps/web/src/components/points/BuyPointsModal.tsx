@@ -1,5 +1,6 @@
 import { useJejuAuth } from '@babylon/auth'
-import { cn, logger, WALLET_ERROR_MESSAGES } from '@babylon/shared'
+import { logger, WALLET_ERROR_MESSAGES } from '@babylon/shared'
+import { cn } from '@jejunetwork/shared'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   AlertCircle,

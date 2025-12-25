@@ -8,7 +8,20 @@
  * - Storage: import { getStorageClient } from '@babylon/api'
  * - Monitoring: import { performanceMonitor } from '@babylon/api'
  * - Token counting: import { countTokens, countTokensSync } from '@babylon/api'
+ *
+ * For common utilities, import directly from @jejunetwork/shared:
+ * - Nullable: toNull, toUndefined, isNullish, isNotNullish, first, last, mapGet, toDate, toDateOrNull
+ * - Retry: sleep, retryWithCondition, retryIfRetryable, isRetryableError, RetryOptions
+ * - Singleton: createSingleton, createGlobalSingleton, createPortSingleton
+ * - Snowflake: generateSnowflakeId, isValidSnowflakeId, parseSnowflakeId, SnowflakeGenerator
+ * - UI: cn, classNames
  */
+
+// =============================================================================
+// Re-export common utilities from @jejunetwork/shared
+// =============================================================================
+
+export { generateSnowflakeId } from '@jejunetwork/shared'
 
 // =============================================================================
 // Constants (all client-safe)
@@ -73,20 +86,10 @@ export * from './utils/json-parser'
 export * from './utils/logger'
 // Name replacement utilities (pure functions)
 export * from './utils/name-replacement'
-// Nullable utilities (undefined/null conversion)
-export * from './utils/nullable'
 // OASF skill mapper (pure functions)
 export * from './utils/oasf-skill-mapper'
 // Profile utilities (pure functions)
 export * from './utils/profile'
-// Retry utilities (pure functions)
-export * from './utils/retry'
-// Singleton utility (pure function)
-export * from './utils/singleton'
-// Snowflake ID generator (pure functions)
-export * from './utils/snowflake'
-// UI utilities (cn function for Tailwind)
-export * from './utils/ui'
 // Viem client utilities (safe contract calls)
 export * from './utils/viem-client'
 // Viem helpers (wallet generation, crypto utilities)

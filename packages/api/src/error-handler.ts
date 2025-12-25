@@ -9,13 +9,9 @@
 
 import { DatabaseError } from '@babylon/db'
 import type { JsonValue } from '@babylon/shared'
-import {
-  BabylonError,
-  isAuthenticationError,
-  logger,
-  toNull,
-} from '@babylon/shared'
-import { ZodError } from 'zod'
+import { isAuthenticationError, isBabylonError, logger } from '@babylon/shared'
+import { toNull } from '@jejunetwork/shared'
+import type { ZodError } from 'zod'
 import type { ElysiaContext } from './auth-middleware'
 import { safeToJsonRecord, toJsonValueOrNull } from './utils/type-guards'
 
@@ -61,6 +57,22 @@ export interface ErrorRequestContext {
   method: string
   headers: Record<string, string>
   userId?: string | null
+}
+
+/**
+ * Type guard to check if an error is a ZodError
+ */
+function isZodError(error: Error): error is ZodError {
+  return error.constructor.name === 'ZodError' || 'issues' in error
+}
+
+/**
+ * Type guard to check if an error is a DatabaseError
+ */
+function isDbError(error: Error): error is DatabaseError {
+  return (
+    error instanceof DatabaseError || error.constructor.name === 'DatabaseError'
+  )
 }
 
 /**
@@ -114,7 +126,7 @@ export function processError(
   }
 
   // Handle validation errors early
-  if (error instanceof ZodError) {
+  if (isZodError(error)) {
     if (!isTestToken) {
       logger.warn('Validation error', {
         error: error.message,
@@ -145,7 +157,7 @@ export function processError(
 
   // Handle client errors (4xx)
   if (
-    error instanceof BabylonError &&
+    isBabylonError(error) &&
     error.statusCode >= 400 &&
     error.statusCode < 500
   ) {
@@ -194,14 +206,12 @@ export function processError(
   // Track error with analytics
   const userId = toNull(context.userId)
   const isClientError =
-    error instanceof BabylonError &&
-    error.statusCode >= 400 &&
-    error.statusCode < 500
+    isBabylonError(error) && error.statusCode >= 400 && error.statusCode < 500
 
   if (
     options?.trackError &&
     !isAuthenticationError(error) &&
-    !(error instanceof ZodError) &&
+    !isZodError(error) &&
     !isClientError
   ) {
     void options.trackError(userId, error, {
@@ -213,13 +223,8 @@ export function processError(
   // Capture error in error tracking
   const shouldCaptureInErrorTracking =
     options?.captureError &&
-    error instanceof Error &&
-    !(error instanceof ZodError) &&
-    !(
-      error instanceof BabylonError &&
-      error.isOperational &&
-      error.statusCode < 500
-    ) &&
+    !isZodError(error) &&
+    !(isBabylonError(error) && error.isOperational && error.statusCode < 500) &&
     !isAuthenticationError(error) &&
     error.name !== 'ValidationError'
 
@@ -234,7 +239,7 @@ export function processError(
     if (userId) {
       captureContext.user = { id: userId }
     }
-    if (error instanceof BabylonError && error.context) {
+    if (isBabylonError(error) && error.context) {
       captureContext.error = {
         context: safeToJsonRecord(error.context),
         code: error.code,
@@ -244,7 +249,7 @@ export function processError(
   }
 
   // Handle Babylon errors (our custom errors)
-  if (error instanceof BabylonError) {
+  if (isBabylonError(error)) {
     const errorData: Record<string, JsonValue> = { error: error.message }
     const babylonErrorDetails = toJsonValueOrNull(error.context?.details)
     if (babylonErrorDetails !== null) {
@@ -270,59 +275,49 @@ export function processError(
   }
 
   // Handle database errors
-  if (error instanceof DatabaseError) {
+  if (isDbError(error)) {
     return processDatabaseError(error)
   }
 
   // Handle native JavaScript errors
-  if (error instanceof Error) {
-    if (error.name === 'SyntaxError') {
-      return {
-        statusCode: 400,
-        body: { error: 'Invalid JSON in request body' },
-        shouldLog: false,
-        logLevel: 'warn',
-      }
+  if (error.name === 'SyntaxError') {
+    return {
+      statusCode: 400,
+      body: { error: 'Invalid JSON in request body' },
+      shouldLog: false,
+      logLevel: 'warn',
     }
+  }
 
-    if (error.name === 'TypeError') {
-      return {
-        statusCode: 500,
-        body: {
-          error:
-            process.env.NODE_ENV === 'production'
-              ? 'An unexpected error occurred'
-              : error.message,
-        },
-        shouldLog: true,
-        logLevel: 'error',
-      }
-    }
-
-    // Default Error handling
-    const errorData: Record<string, JsonValue> = {
-      error:
-        process.env.NODE_ENV === 'production'
-          ? 'An unexpected error occurred'
-          : error.message,
-    }
-
-    if (process.env.NODE_ENV === 'development' && error.stack) {
-      errorData.stack = error.stack
-    }
-
+  if (error.name === 'TypeError') {
     return {
       statusCode: 500,
-      body: errorData,
+      body: {
+        error:
+          process.env.NODE_ENV === 'production'
+            ? 'An unexpected error occurred'
+            : error.message,
+      },
       shouldLog: true,
       logLevel: 'error',
     }
   }
 
-  // Handle any other unknown type
+  // Default Error handling
+  const errorData: Record<string, JsonValue> = {
+    error:
+      process.env.NODE_ENV === 'production'
+        ? 'An unexpected error occurred'
+        : error.message,
+  }
+
+  if (process.env.NODE_ENV === 'development' && error.stack) {
+    errorData.stack = error.stack
+  }
+
   return {
     statusCode: 500,
-    body: { error: 'An unexpected error occurred' },
+    body: errorData,
     shouldLog: true,
     logLevel: 'error',
   }
@@ -420,7 +415,7 @@ export function errorHandler(
 /**
  * Error handler for Elysia context
  */
-function _errorHandlerFromContext(
+export function errorHandlerFromContext(
   error: Error | unknown,
   ctx: ElysiaContext,
   options?: ErrorHandlerOptions,

@@ -4,8 +4,8 @@
  * Uses the proper Sign In with Farcaster (SIWF) protocol via relay.farcaster.xyz
  */
 
+import { toNull } from '@jejunetwork/shared'
 import { logger } from '../utils/logger'
-import { toNull } from '../utils/nullable'
 import { signInWithFarcaster } from './farcaster-auth-client'
 
 export interface FarcasterOnboardingProfile {

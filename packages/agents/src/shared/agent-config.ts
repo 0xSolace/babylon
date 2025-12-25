@@ -7,7 +7,7 @@
 
 import type { User, UserAgentConfig } from '@babylon/db'
 import { db } from '@babylon/db'
-import { first, toNull } from '@babylon/shared'
+import { first, toNull } from '@jejunetwork/shared'
 
 /** User with agent configuration attached */
 export type UserWithAgentConfig = User & {
@@ -45,7 +45,7 @@ export async function getUserWithAgentConfig(
 /**
  * Get multiple users with their agent configs
  */
-async function _getUsersWithAgentConfigs(
+export async function getUsersWithAgentConfigs(
   userIds: string[],
 ): Promise<UserWithAgentConfig[]> {
   if (userIds.length === 0) return []
@@ -60,7 +60,7 @@ async function _getUsersWithAgentConfigs(
 /**
  * Create or update agent config
  */
-async function _upsertAgentConfig(
+export async function upsertAgentConfig(
   userId: string,
   config: Partial<Omit<UserAgentConfig, 'id' | 'userId' | 'createdAt'>>,
 ): Promise<UserAgentConfig> {
@@ -95,7 +95,7 @@ async function _upsertAgentConfig(
  * Helper to get system prompt from agent config or user personality.
  * Returns the systemPrompt from config if available, otherwise falls back to user personality.
  */
-function _getSystemPrompt(
+export function getSystemPrompt(
   user: User,
   config: UserAgentConfig | null,
 ): string | null {
@@ -110,7 +110,7 @@ function _getSystemPrompt(
 /**
  * Get style from config
  */
-function _getStyle(config: UserAgentConfig | null): string[] {
+export function getStyle(config: UserAgentConfig | null): string[] {
   if (!config?.style) return []
   const style = config.style as { all?: string[] }
   return style?.all ?? []
@@ -119,7 +119,7 @@ function _getStyle(config: UserAgentConfig | null): string[] {
 /**
  * Get message examples from config
  */
-function _getMessageExamples(
+export function getMessageExamples(
   config: UserAgentConfig | null,
 ): Array<Array<{ user: string; content: { text: string } }>> {
   if (!config?.messageExamples) return []
@@ -132,7 +132,9 @@ function _getMessageExamples(
  * Get trading strategy from config.
  * Returns null if config is null or tradingStrategy is not set.
  */
-function _getTradingStrategy(config: UserAgentConfig | null): string | null {
+export function getTradingStrategy(
+  config: UserAgentConfig | null,
+): string | null {
   if (!config) {
     return null
   }
@@ -142,7 +144,7 @@ function _getTradingStrategy(config: UserAgentConfig | null): string | null {
 /**
  * Get directives from config
  */
-function _getDirectives(config: UserAgentConfig | null): string[] {
+export function getDirectives(config: UserAgentConfig | null): string[] {
   if (!config?.directives) return []
   return config.directives as string[]
 }
@@ -150,7 +152,7 @@ function _getDirectives(config: UserAgentConfig | null): string[] {
 /**
  * Get constraints from config
  */
-function _getConstraints(config: UserAgentConfig | null): string[] {
+export function getConstraints(config: UserAgentConfig | null): string[] {
   if (!config?.constraints) return []
   return config.constraints as string[]
 }
@@ -158,42 +160,46 @@ function _getConstraints(config: UserAgentConfig | null): string[] {
 /**
  * Get max actions per tick from config
  */
-function _getMaxActionsPerTick(config: UserAgentConfig | null): number {
+export function getMaxActionsPerTick(config: UserAgentConfig | null): number {
   return config?.maxActionsPerTick ?? 3
 }
 
 /**
  * Get risk tolerance from config
  */
-function _getRiskTolerance(config: UserAgentConfig | null): string {
+export function getRiskTolerance(config: UserAgentConfig | null): string {
   return config?.riskTolerance ?? 'medium'
 }
 
 /**
  * Get planning horizon from config
  */
-function _getPlanningHorizon(config: UserAgentConfig | null): string {
+export function getPlanningHorizon(config: UserAgentConfig | null): string {
   return config?.planningHorizon ?? 'single'
 }
 
 /**
  * Helper to check if autonomous trading is enabled
  */
-function _isAutonomousTradingEnabled(config: UserAgentConfig | null): boolean {
+export function isAutonomousTradingEnabled(
+  config: UserAgentConfig | null,
+): boolean {
   return config?.autonomousTrading ?? false
 }
 
 /**
  * Helper to check if autonomous posting is enabled
  */
-function _isAutonomousPostingEnabled(config: UserAgentConfig | null): boolean {
+export function isAutonomousPostingEnabled(
+  config: UserAgentConfig | null,
+): boolean {
   return config?.autonomousPosting ?? false
 }
 
 /**
  * Helper to check if autonomous commenting is enabled
  */
-function _isAutonomousCommentingEnabled(
+export function isAutonomousCommentingEnabled(
   config: UserAgentConfig | null,
 ): boolean {
   return config?.autonomousCommenting ?? false
@@ -202,14 +208,16 @@ function _isAutonomousCommentingEnabled(
 /**
  * Helper to check if autonomous DMs are enabled
  */
-function _isAutonomousDMsEnabled(config: UserAgentConfig | null): boolean {
+export function isAutonomousDMsEnabled(
+  config: UserAgentConfig | null,
+): boolean {
   return config?.autonomousDMs ?? false
 }
 
 /**
  * Helper to check if autonomous group chats are enabled
  */
-function _isAutonomousGroupChatsEnabled(
+export function isAutonomousGroupChatsEnabled(
   config: UserAgentConfig | null,
 ): boolean {
   return config?.autonomousGroupChats ?? false
@@ -218,13 +226,13 @@ function _isAutonomousGroupChatsEnabled(
 /**
  * Helper to get points balance from config
  */
-function _getPointsBalance(config: UserAgentConfig | null): number {
+export function getPointsBalance(config: UserAgentConfig | null): number {
   return config?.pointsBalance ?? 0
 }
 
 /**
  * Helper to get model tier from config
  */
-function _getModelTier(config: UserAgentConfig | null): string {
+export function getModelTier(config: UserAgentConfig | null): string {
   return config?.modelTier ?? 'free'
 }

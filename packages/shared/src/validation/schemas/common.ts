@@ -2,9 +2,9 @@
  * Common reusable Zod schemas for validation across the application
  */
 
+import { isValidSnowflakeId } from '@jejunetwork/shared'
 import { z } from 'zod'
 import { JsonValueSchema } from '../../types/common'
-import { isValidSnowflakeId } from '../../utils/snowflake'
 
 /**
  * Snowflake ID validation schema

@@ -1,4 +1,5 @@
-import { cn, getDisplayReferralUrl, getReferralUrl } from '@babylon/shared'
+import { getDisplayReferralUrl, getReferralUrl } from '@babylon/shared'
+import { cn } from '@jejunetwork/shared'
 import { useQuery } from '@tanstack/react-query'
 import {
   Bell,

@@ -1,4 +1,4 @@
-import { cn } from '@babylon/shared'
+import { cn } from '@jejunetwork/shared'
 import { type ComponentProps, memo } from 'react'
 import { Streamdown } from 'streamdown'
 

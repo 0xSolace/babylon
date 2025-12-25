@@ -16,7 +16,7 @@ import {
   pointsToDisplayTokens,
 } from '@babylon/api'
 import { db, eq, users } from '@babylon/db'
-import { generateSnowflakeId } from '@babylon/shared'
+import { generateSnowflakeId } from '@jejunetwork/shared'
 
 // Token constants - duplicated until experimental-token package is linked
 const AIRDROP_DAILY_DRIP_PERCENT = 5

@@ -17,11 +17,8 @@
 import { promises as fs } from 'node:fs'
 import * as path from 'node:path'
 import { db } from '@babylon/db'
-import {
-  generateRandomWallet,
-  generateSnowflakeId,
-  logger,
-} from '@babylon/shared'
+import { generateRandomWallet, logger } from '@babylon/shared'
+import { generateSnowflakeId } from '@jejunetwork/shared'
 import { getAgentRuntimeManager } from '../dependencies'
 import { BenchmarkRunner } from './BenchmarkRunner'
 import {

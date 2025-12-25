@@ -1,100 +1,61 @@
 /**
  * Babylon Messaging
  *
- * End-to-end encrypted messaging using Jeju L2
- * with Farcaster integration for public social data.
+ * Thin wrapper around @jejunetwork/messaging with Babylon-specific configuration.
+ * Provides unified messaging that works with both wallet addresses and Farcaster FIDs.
+ *
+ * For core messaging utilities (crypto, ABIs), import directly from @jejunetwork/messaging:
+ * - encryptMessage, decryptMessage, generateKeyPair
+ * - KEY_REGISTRY_ABI, MESSAGE_NODE_REGISTRY_ABI
+ * - publicKeyToHex, hexToPublicKey, etc.
  *
  * @example
  * ```typescript
- * import { createMessagingClient } from '@babylon/messaging';
+ * import { getMessagingBridge, MessagingBridge } from '@babylon/messaging';
+ * import { generateKeyPair, encryptMessage } from '@jejunetwork/messaging';
  *
- * const client = createMessagingClient({
- *   rpcUrl: 'https://rpc.jeju.network',
- *   address: userAddress,
- *   relayUrl: 'https://relay.jeju.network',
- *   keyRegistryAddress: '0x...',
- * });
+ * const bridge = getMessagingBridge();
+ * await bridge.initialize();
  *
- * // Initialize with wallet signature
- * const signature = await wallet.signMessage(client.getKeyDerivationMessage());
- * await client.initialize(signature);
- *
- * // Send encrypted message
- * await client.sendMessage(recipientAddress, 'Hello, private world!');
+ * // Use Jeju crypto directly
+ * const keys = generateKeyPair();
+ * const encrypted = encryptMessage(message, recipientPublicKey);
  * ```
  */
 
-// Crypto utilities and ABIs from @jejunetwork/messaging
-export {
-  bytes32ToPublicKey,
-  decryptMessage,
-  decryptMessageToString,
-  deriveKeyPairFromWallet,
-  deserializeEncryptedMessage,
-  type EncryptedMessage,
-  encryptMessage,
-  generateKeyPair,
-  generateKeyPairFromSeed,
-  hexToPublicKey,
-  KEY_DERIVATION_MESSAGE,
-  KEY_REGISTRY_ABI,
-  type KeyPair,
-  MESSAGE_NODE_REGISTRY_ABI,
-  publicKeyToBytes32,
-  publicKeyToHex,
-  type SerializedEncryptedMessage,
-  serializeEncryptedMessage,
-} from '@jejunetwork/messaging'
-
-// Cross-Chain Bridge (Base, Optimism)
+// Babylon-specific wrappers - Base bridge for cross-chain messaging
 export {
   BaseBridgeClient,
   type BaseBridgeConfig,
-  type CrossChainKeyRegistration,
-  type CrossChainMessage,
   createBaseBridgeClient,
   getBaseBridgeClient,
-  MessagingChain,
   resetBaseBridgeClient,
 } from './bridge/base-bridge'
-// Core client
+// Babylon-specific messaging client with additional convenience methods
 export { createMessagingClient, MessagingClient } from './client'
-// Messaging Service (primary entry point)
-export {
-  type Conversation as MessagingConversation,
-  type GetMessagesRequest,
-  getMessaging,
-  type Message as MessagingMessage,
-  MessagingService,
-  resetMessaging,
-  type SendMessageRequest,
+// Export types from messaging.ts - these are the types used by MessagingBridge
+export type {
+  Conversation,
+  Conversation as MessagingConversation,
+  GetMessagesRequest,
+  Message,
+  Message as MessagingMessage,
+  SendMessageRequest,
 } from './messaging'
-// Messaging Bridge (Centralized/Decentralized Hybrid)
+// Babylon-specific messaging bridge (for backward compatibility)
 export {
   getMessagingBridge,
   MessagingBridge,
   type MessagingMode,
   resetMessagingBridge,
 } from './messaging-bridge'
-// Migration
+// Migration utilities
 export { createMigrationService, MigrationService } from './migration'
-// Storage (CovenantSQL)
-export {
-  type ConsistencyLevel,
-  type CQLConfig,
-  createStorage,
-  getStorage,
-  MessageStorage,
-  resetStorage,
-  type StoredConversation,
-  type StoredKeyBundle,
-  type StoredMessage,
-} from './storage'
-// Types
+// Babylon-specific types from types.ts
 export type {
   AnyMessage,
   CentralizedMessage,
-  Conversation,
+  Conversation as BasicConversation, // Renamed to avoid conflict with messaging.ts Conversation
   DecryptedMessage,
   EncryptionKeyPair,
   EncryptionKeys,

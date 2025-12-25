@@ -3,13 +3,12 @@
  *
  * Handles agent wallet creation and on-chain registration with zero user interaction.
  * Uses Jeju KMS for key management (MPC/TEE-backed) and OAuth3 for identity.
- * NO FALLBACKS to centralized key management.
  *
  * @packageDocumentation
  */
 
 import { db, type JsonValue } from '@babylon/db'
-import { toNull } from '@babylon/shared'
+import { toNull } from '@jejunetwork/shared'
 import { v4 as uuidv4 } from 'uuid'
 import { getAddress, keccak256 } from 'viem'
 import { getAgent0Client } from '../agent0/Agent0Client'

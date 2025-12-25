@@ -5,7 +5,8 @@
  * Transactions execute on blockchain via smart wallet
  */
 
-import { cn, getContractAddresses } from '@babylon/shared'
+import { getContractAddresses } from '@babylon/shared'
+import { cn } from '@jejunetwork/shared'
 import { useMutation } from '@tanstack/react-query'
 import {
   Clock,

@@ -9,7 +9,5 @@
  */
 
 export * from './a2a-load-test-scenarios'
-export * from './auth-helper'
-export * from './ddos-simulator'
 export * from './load-test-simulator'
 export * from './resource-limiter'

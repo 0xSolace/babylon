@@ -34,7 +34,7 @@ import {
   NPCGroupDynamicsService,
   NPCInteractionTracker,
 } from '@babylon/engine'
-import { generateSnowflakeId } from '@babylon/shared'
+import { generateSnowflakeId } from '@jejunetwork/shared'
 
 // Set timeout to 60 seconds for integration tests
 setDefaultTimeout(60000)

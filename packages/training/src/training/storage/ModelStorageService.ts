@@ -2,7 +2,6 @@
  * Model Storage Service
  *
  * Handles model versioning and storage using Jeju's decentralized storage.
- * NO FALLBACKS - Jeju Storage is required.
  *
  * Stores trained models with metadata for easy deployment.
  * Uses permanent (Arweave) storage for production models.

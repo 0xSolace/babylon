@@ -1,4 +1,4 @@
-import { cn } from '@babylon/shared'
+import { cn } from '@jejunetwork/shared'
 import { Send } from 'lucide-react'
 import type React from 'react'
 import { LoginButton } from '@/components/auth/LoginButton'

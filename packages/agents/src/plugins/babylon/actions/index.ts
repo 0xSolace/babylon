@@ -1,13 +1,9 @@
 /**
  * Babylon Plugin Actions
- * Export all actions
+ *
+ * Actions have been moved to autonomous services.
+ * This file is kept for backwards compatibility but is effectively empty.
  */
 
-export { createGroupAction, sendMessageAction } from './messaging'
-export { commentAction, createPostAction, likePostAction } from './social'
-export {
-  buySharesAction,
-  closePerpPositionAction,
-  openPerpPositionAction,
-  sellSharesAction,
-} from './trading'
+// Actions were deleted as they were unused.
+// Trading, messaging, and social actions are handled by autonomous services.

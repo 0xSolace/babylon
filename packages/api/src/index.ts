@@ -4,14 +4,7 @@
  * Provides API middleware and utilities for authentication, authorization,
  * and common API patterns.
  */
-// Admin Audit Logging
-export {
-  type AdminAuditContext,
-  logAdminAction,
-  logAdminDelete,
-  logAdminModify,
-  logAdminView,
-} from './admin-audit'
+// Admin Audit Logging (removed - unused)
 // Admin Middleware
 export { isUserAdmin, requireAdmin } from './admin-middleware'
 // Agent Authentication
@@ -70,13 +63,6 @@ export {
   resetEnvironment,
 } from './config'
 // Contracts (Treasury Adapter - works in dev mode without Jeju)
-// Cron Authentication
-export {
-  type CronAuthOptions,
-  cronUnauthorizedResponse,
-  requireCronAuth,
-  verifyCronAuth,
-} from './cron-auth'
 // Deployment - IPFS/IPNS/JNS
 // Development credentials (for local testing)
 export {
@@ -170,14 +156,10 @@ export {
 // Realtime
 export {
   generateConnectionId,
-  issueRealtimeToken,
   publishEvent,
   type RealtimeChannel,
   type RealtimeEventEnvelope,
-  type RealtimeTokenPayload,
-  signRealtimeToken,
   toStreamKey,
-  verifyRealtimeToken,
 } from './realtime'
 export { connections } from './realtime/connection-registry'
 export { drainOutboxBatch, enqueueOutbox } from './realtime/outbox'
@@ -187,7 +169,6 @@ export {
   getRedis,
   getRedisClient,
   isRedisAvailable,
-  redis,
   resetRedis,
   streamAdd,
   streamRead,
@@ -224,18 +205,7 @@ export {
   resetICOAutomationService,
   type TGEResult,
 } from './services/ico-automation-service'
-// ICO Triggers Service
-export {
-  getICOTriggersService,
-  type ICOPhaseType,
-  type ICOTimeline,
-  type ICOTriggerConfig,
-  type ICOTriggerStatus,
-  ICOTriggersService,
-  initializeICOTriggers,
-  type PhaseTransitionResult,
-  resetICOTriggersService,
-} from './services/ico-triggers'
+// ICO Triggers Service (removed - unused)
 // Liquidity Pool Service
 export {
   type FeeDistribution,
@@ -247,45 +217,7 @@ export {
   type PoolInfo,
   resetLiquidityPoolService,
 } from './services/liquidity-pool-service'
-// Notification Service
-export {
-  notifyFollow,
-  notifyGroupChatInvite,
-} from './services/notification-service'
-// Points Service
-export {
-  awardPoints,
-  awardReferralSignup,
-  checkAndQualifyReferral,
-  getLeaderboard,
-  getUserPoints,
-  getUserRank,
-} from './services/points-service'
-// Token Service
-export {
-  calculateAirdropAllocation,
-  formatTokens,
-  generateAirdropMerkleData,
-  parseTokens,
-  pointsToDisplayTokens,
-} from './services/token-service'
-// Waitlist Service
-export {
-  awardWalletBonus,
-  generateInviteCode,
-  getTopWaitlistUsers,
-  getTotalWaitlistCount,
-  getWaitlistPosition,
-  graduateFromWaitlist,
-  markAsWaitlisted,
-  type WaitlistMarkResult,
-  type WaitlistPosition,
-} from './services/waitlist-service'
-// SSE Event Broadcasting
-export {
-  broadcastChatMessage,
-  broadcastToChannel,
-} from './sse/event-broadcaster'
+// Waitlist Service (removed - unused)
 // Storage (NO S3/MinIO fallback)
 export {
   downloadFile,

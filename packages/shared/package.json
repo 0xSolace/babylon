@@ -16,9 +16,7 @@
   "dependencies": {
     "@jejunetwork/shared": "workspace:*",
     "@sinclair/typebox": "^0.34.33",
-    "clsx": "^2.1.1",
     "elysia": "^1.2.25",
-    "tailwind-merge": "^3.4.0",
     "viem": "2.43.3",
     "zod": "4.2.1"
   },

@@ -5,8 +5,8 @@ import {
   type AdminTrade,
   AdminTradeSchema,
   type AdminTradeType,
-  cn,
 } from '@babylon/shared'
+import { cn } from '@jejunetwork/shared'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Activity, Plus, RefreshCw, X } from 'lucide-react'
 import { useEffect, useState } from 'react'

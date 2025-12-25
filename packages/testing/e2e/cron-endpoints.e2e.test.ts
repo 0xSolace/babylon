@@ -14,7 +14,7 @@
 
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { asSystem } from '@babylon/db'
-import { generateSnowflakeId } from '@babylon/shared'
+import { generateSnowflakeId } from '@jejunetwork/shared'
 
 const BASE_URL =
   process.env.TEST_BASE_URL ||

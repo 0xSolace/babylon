@@ -2,7 +2,6 @@
  * Claude Service - Routes through Jeju Compute
  *
  * ALL LLM inference routes through Jeju's decentralized compute marketplace.
- * NO FALLBACKS to direct Anthropic/OpenAI/Groq APIs.
  *
  * Jeju Compute nodes offer various models including Claude, GPT, Llama, etc.
  */
@@ -92,7 +91,7 @@ export async function callClaudeDirect(params: ClaudeParams): Promise<string> {
 /**
  * Check if Jeju Compute is available
  */
-async function _isJejuComputeHealthy(): Promise<boolean> {
+export async function isJejuComputeHealthy(): Promise<boolean> {
   try {
     const response = await fetch(`${JEJU_COMPUTE_ENDPOINT}/health`, {
       signal: AbortSignal.timeout(3000),
@@ -106,7 +105,7 @@ async function _isJejuComputeHealthy(): Promise<boolean> {
 /**
  * List available models from Jeju Compute
  */
-async function _listAvailableModels(): Promise<
+export async function listAvailableModels(): Promise<
   Array<{
     model: string
     provider: string

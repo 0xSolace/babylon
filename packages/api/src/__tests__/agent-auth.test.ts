@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test'
-import { mapGet } from '@babylon/shared'
+import { mapGet } from '@jejunetwork/shared'
 import {
   cleanupExpiredSessions,
   createAgentSession,

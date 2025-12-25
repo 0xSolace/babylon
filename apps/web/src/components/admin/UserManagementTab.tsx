@@ -1,4 +1,5 @@
-import { type AdminUser, AdminUserSchema, cn } from '@babylon/shared'
+import { type AdminUser, AdminUserSchema } from '@babylon/shared'
+import { cn } from '@jejunetwork/shared'
 
 // Extended AdminUser type with moderation metrics
 type AdminUserWithModeration = AdminUser & {

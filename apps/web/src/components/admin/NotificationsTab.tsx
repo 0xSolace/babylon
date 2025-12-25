@@ -1,4 +1,5 @@
-import { cn, logger } from '@babylon/shared'
+import { logger } from '@babylon/shared'
+import { cn } from '@jejunetwork/shared'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { Bell, MessageCircle, Send, User, UserPlus, Users } from 'lucide-react'
 import { useCallback, useState } from 'react'

@@ -67,11 +67,11 @@ const BROWSER_EXTERNALS = [
   '@jejunetwork/a2a',
   '@jejunetwork/config',
   '@jejunetwork/db',
-  '@jejunetwork/farcaster',
+  '@jejunetwork/messaging',
   '@jejunetwork/kms',
   '@jejunetwork/mcp',
   '@jejunetwork/messaging',
-  '@jejunetwork/oauth3',
+  '@jejunetwork/auth',
   '@jejunetwork/sdk',
   '@jejunetwork/training',
   // Server-only

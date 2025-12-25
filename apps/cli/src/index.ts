@@ -6,11 +6,17 @@
  * Provides a comprehensive CLI for managing database, admin users, game state,
  * training pipelines, models, agents, contract deployment, and system status.
  *
+ * Integration with Jeju CLI:
+ * - Common operations (test, deploy) can delegate to jeju CLI
+ * - Run `babylon jeju <command>` to call jeju CLI directly
+ * - Babylon-specific commands remain in this CLI
+ *
  * @module cli/index
  * @packageDocumentation
  */
 
 import { resolve } from 'node:path'
+import { $ } from 'bun'
 // Load environment variables from project root before any other imports
 import { config } from 'dotenv'
 
@@ -35,6 +41,15 @@ import { runTrainCommand } from './commands/train.js'
 const VERSION = '0.2.0'
 
 /**
+ * Run a jeju CLI command, passing through all arguments.
+ * This allows Babylon to delegate to jeju for common operations.
+ */
+async function runJejuCommand(args: string[]): Promise<void> {
+  const result = await $`jeju ${args}`.nothrow()
+  process.exit(result.exitCode)
+}
+
+/**
  * Prints the main CLI help text with all available domains and commands.
  *
  * @internal
@@ -57,10 +72,13 @@ DOMAINS:
   model     Model management (list, upload, collect-data)
   game      Game control (start, pause, status, generate, simulate, validate)
   agent     Agent management (spawn, list, enable, disable)
-  deploy    Contract deployment (local, testnet, mainnet, setup)
+  deploy    Contract/frontend deployment (local, testnet, mainnet, dws, full)
   ico       ICO management (deploy, start, pause, finalize, status, stats)
   test      Load & stress testing (load, a2a)
   token     BBLN token & NPC funding (fund-npcs, balances, airdrop, risk)
+
+JEJU INTEGRATION:
+  jeju      Pass-through to Jeju CLI (babylon jeju <command>)
 
 EXAMPLES:
   babylon dev                      Start full dev environment (chain + app)
@@ -75,6 +93,9 @@ EXAMPLES:
   babylon train list               List available archetypes
   babylon train pipeline -a trader Train trader archetype
   babylon agent spawn --count 5    Spawn 5 test agents
+  babylon deploy dws --env=testnet Deploy backend to DWS
+  babylon deploy full --env=testnet Full decentralized deployment
+  babylon jeju test babylon        Run all Babylon tests via Jeju
 
 OPTIONS:
   -h, --help      Show help for any command
@@ -171,6 +192,11 @@ async function main(): Promise<void> {
 
     case 'token':
       await tokenCommand.parseAsync(['node', 'babylon', ...commandArgs])
+      break
+
+    // Jeju CLI pass-through
+    case 'jeju':
+      await runJejuCommand(commandArgs)
       break
 
     default:

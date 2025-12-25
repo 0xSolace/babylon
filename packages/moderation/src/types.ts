@@ -8,17 +8,76 @@
 import type { Address, Hex } from 'viem'
 
 export { BanStatus, MarketOutcome, VotePosition } from '@babylon/shared'
-export {
-  type BanRecord,
-  BanType,
-  CaseOutcome,
-  CaseStatus,
-  type Evidence,
-  EvidencePosition,
-  EvidenceStatus,
-  type ModerationCase,
-  type ReputationLabel,
-} from '@jejunetwork/sdk'
+
+// Types previously from @jejunetwork/sdk - defined locally to avoid dependency
+export enum BanType {
+  TEMPORARY = 'temporary',
+  PERMANENT = 'permanent',
+}
+
+export enum CaseOutcome {
+  PENDING = 'pending',
+  UPHELD = 'upheld',
+  OVERTURNED = 'overturned',
+  DISMISSED = 'dismissed',
+}
+
+export enum CaseStatus {
+  OPEN = 'open',
+  VOTING = 'voting',
+  RESOLVED = 'resolved',
+  APPEALED = 'appealed',
+}
+
+export enum EvidencePosition {
+  FOR = 'for',
+  AGAINST = 'against',
+}
+
+export enum EvidenceStatus {
+  PENDING = 'pending',
+  ACCEPTED = 'accepted',
+  REJECTED = 'rejected',
+}
+
+export interface BanRecord {
+  id: string
+  userId: string
+  type: BanType
+  reason: string
+  expiresAt?: Date
+  createdAt: Date
+}
+
+export interface Evidence {
+  id: string
+  caseId: string
+  submittedBy: string
+  content: string
+  position: EvidencePosition
+  status: EvidenceStatus
+  createdAt: Date
+}
+
+export interface ModerationCase {
+  id: string
+  reporterId: string
+  targetId: string
+  targetType: 'post' | 'user' | 'comment'
+  category: string
+  description: string
+  status: CaseStatus
+  outcome?: CaseOutcome
+  evidence: Evidence[]
+  createdAt: Date
+  resolvedAt?: Date
+}
+
+export interface ReputationLabel {
+  label: string
+  score: number
+  confidence: number
+}
 
 // ============================================================================
 // Babylon-specific enums

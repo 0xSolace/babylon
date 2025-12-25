@@ -1,4 +1,5 @@
-import { calculateUnrealizedPnL, cn } from '@babylon/shared'
+import { calculateUnrealizedPnL } from '@babylon/shared'
+import { cn } from '@jejunetwork/shared'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, TrendingDown, TrendingUp } from 'lucide-react'
 import { useCallback, useMemo, useState } from 'react'

@@ -28,5 +28,4 @@ export {
   getDMService,
   resetDMService,
 } from './DMService'
-// LLM Response Validation Schemas
-export * from './schemas'
+// Note: schemas/index.ts is currently empty, reserved for future use

@@ -5,8 +5,8 @@
  * and awarding points to users. Makes API calls to record share actions.
  */
 
+import { toNull } from '@jejunetwork/shared'
 import { logger } from '../utils/logger'
-import { toNull } from '../utils/nullable'
 
 export type SharePlatform =
   | 'twitter'

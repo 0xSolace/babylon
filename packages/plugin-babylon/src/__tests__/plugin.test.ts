@@ -24,12 +24,43 @@ import {
   BabylonTradingService,
   predictionMarketsPlugin,
 } from '../plugin'
-import {
-  createMockRuntime,
-  createPartialMock,
-  createTestMemory,
-  createTestState,
-} from './test-utils'
+
+// Test utilities - inline simple helpers
+function createPartialMock<T>(partial: Partial<T>): T {
+  return partial as T
+}
+
+function createTestMemory(text: string) {
+  return {
+    id: 'test-memory',
+    userId: 'test-user',
+    roomId: 'test-room',
+    agentId: 'test-agent',
+    content: { text },
+    createdAt: Date.now(),
+  }
+}
+
+function createTestState(overrides: Record<string, unknown> = {}): State {
+  return {
+    agentId: 'test-agent',
+    ...overrides,
+  } as State
+}
+
+function createMockRuntime(): IAgentRuntime {
+  return {
+    character: {},
+    agentId: 'test-agent',
+    messageManager: {} as never,
+    descriptionManager: {} as never,
+    loreManager: {} as never,
+    documentsManager: {} as never,
+    knowledgeManager: {} as never,
+    databaseAdapter: {} as never,
+    cacheManager: {} as never,
+  } as IAgentRuntime
+}
 
 // Store original fetch for test cleanup
 const _originalFetch = global.fetch

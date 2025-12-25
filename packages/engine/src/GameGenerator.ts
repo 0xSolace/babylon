@@ -32,7 +32,6 @@
 import {
   DayTimelineSchema,
   getErrorMessage,
-  isNotNullish,
   logger,
   QuestionSchema,
   ScenarioSchema,
@@ -40,6 +39,7 @@ import {
   toLuckLevel,
   unwrapLLMResponse,
 } from '@babylon/shared'
+import { isNotNullish } from '@jejunetwork/shared'
 import { z } from 'zod'
 import { generateActorContext } from './EmotionSystem'
 import { FeedGenerator } from './FeedGenerator'
@@ -123,14 +123,12 @@ interface EventItem {
   pointsToward?: 'YES' | 'NO' | null
 }
 
-// biome-ignore lint/correctness/noUnusedVariables: LLM response type
-interface NestedEventsData {
+export interface NestedEventsData {
   event: EventItem | EventItem[]
 }
 
 // LLM response types for group chat generation
-// biome-ignore lint/correctness/noUnusedVariables: LLM response type
-interface GroupChatData {
+export interface GroupChatData {
   groupName: string | string[]
   members: string[]
   messages?: MessageData[]

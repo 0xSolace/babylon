@@ -528,7 +528,7 @@ export class TrainingClient {
 /**
  * Create a decentralized training client
  */
-function _createDecentralizedTrainingClient(
+export function createDecentralizedTrainingClient(
   config: TrainingConfig,
 ): TrainingClient {
   return new TrainingClient(config)
@@ -537,7 +537,7 @@ function _createDecentralizedTrainingClient(
 /**
  * Check if decentralized training is available
  */
-function _isDecentralizedTrainingAvailable(): boolean {
+export function isDecentralizedTrainingAvailable(): boolean {
   return !!(
     process.env.TRAINING_COORDINATOR_ADDRESS &&
     process.env.RPC_URL &&

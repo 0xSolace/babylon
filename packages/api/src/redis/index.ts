@@ -3,7 +3,6 @@
  *
  * ALL caching routes through Jeju's decentralized cache.
  * This module provides Redis-compatible API using the decentralized cache.
- * NO FALLBACKS - Decentralized cache is required.
  */
 
 export {

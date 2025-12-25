@@ -1,11 +1,11 @@
 import {
-  cn,
   extractUsername,
   type FeedPost,
   getBannerImageUrl,
   isUsername,
   POST_TYPES,
 } from '@babylon/shared'
+import { cn } from '@jejunetwork/shared'
 import { useQuery } from '@tanstack/react-query'
 import type { UserProfileStats } from '@/types/widgets'
 
@@ -16,7 +16,7 @@ interface ProfileInfo {
   description: string
   role: string
   type: 'actor' | 'user' | 'organization'
-  isUser: boolean
+  isUser?: boolean
   username?: string | null
   profileImageUrl?: string | null
   coverImageUrl?: string | null
@@ -24,6 +24,11 @@ interface ProfileInfo {
   onChainRegistered?: boolean
   nftTokenId?: number | null
   profileDescription?: string | null
+  tier?: string
+  domain?: string[]
+  personality?: string | null
+  affiliations?: string[] | null
+  game?: { id: string }
 }
 
 import { ArrowLeft, Coins, MessageCircle, Search } from 'lucide-react'
@@ -216,7 +221,10 @@ export default function ProfileDetailClient() {
             username: fetchedUser.username,
             profileImageUrl: fetchedUser.profileImageUrl,
             coverImageUrl: fetchedUser.coverImageUrl,
-            stats: fetchedUser.stats,
+            stats: fetchedUser.stats as
+              | UserProfileStats
+              | Record<string, number>
+              | undefined,
           }
 
           if (!isUsernameParam && fetchedUser.username && !isOwnProfile) {
@@ -270,7 +278,7 @@ export default function ProfileDetailClient() {
           name: actor.name,
           description: actor.description ?? '',
           profileDescription: actor.profileDescription,
-          tier: actor.tier,
+          tier: actor.tier ?? undefined,
           domain: actor.domain ? [actor.domain] : undefined,
           personality: actor.personality,
           affiliations: actor.affiliations,

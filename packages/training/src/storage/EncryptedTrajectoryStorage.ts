@@ -8,7 +8,8 @@ import {
   type PolicyCondition,
   type SecretPolicy,
 } from '@babylon/api'
-import { generateSnowflakeId, logger } from '@babylon/shared'
+import { logger } from '@babylon/shared'
+import { generateSnowflakeId } from '@jejunetwork/shared'
 import type { Address, Hex } from 'viem'
 import type {
   AccessCondition,

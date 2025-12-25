@@ -1,4 +1,5 @@
-import { cn, type Escrow, EscrowSchema, logger } from '@babylon/shared'
+import { type Escrow, EscrowSchema, logger } from '@babylon/shared'
+import { cn } from '@jejunetwork/shared'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   AlertCircle,

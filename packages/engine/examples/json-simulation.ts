@@ -11,7 +11,7 @@
  * Run with: bun packages/engine/examples/json-simulation.ts
  */
 
-import { generateSnowflakeId } from '@babylon/shared'
+import { generateSnowflakeId } from '@jejunetwork/shared'
 import {
   db,
   initializeSimulationMode,

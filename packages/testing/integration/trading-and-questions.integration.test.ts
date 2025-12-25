@@ -13,7 +13,7 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { asSystem, db } from '@babylon/db'
 import { executeGameTick, StaticDataRegistry } from '@babylon/engine'
-import { generateSnowflakeId } from '@babylon/shared'
+import { generateSnowflakeId } from '@jejunetwork/shared'
 
 describe('Trading and Question Generation Integration', () => {
   let initialMarketCount: number

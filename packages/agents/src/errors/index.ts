@@ -31,6 +31,7 @@ export class Agent0Error extends ExternalServiceError {
     | 'search'
     | 'discovery'
   public readonly agent0Code?: string
+  public declare readonly context?: Record<string, unknown>
 
   constructor(
     message: string,
@@ -42,19 +43,17 @@ export class Agent0Error extends ExternalServiceError {
     super('Agent0', message, originalStatusCode)
     this.operation = operation
     this.agent0Code = agent0Code
-
-    Object.assign(this, {
-      context: {
-        ...this.context,
-        operation,
-        agent0Code,
-        originalError: originalError?.message,
-        originalStack:
-          process.env.NODE_ENV === 'development'
-            ? originalError?.stack
-            : undefined,
-      },
-    })
+    this.context = {
+      service: 'Agent0',
+      originalStatusCode,
+      operation,
+      agent0Code,
+      originalError: originalError?.message,
+      originalStack:
+        process.env.NODE_ENV === 'development'
+          ? originalError?.stack
+          : undefined,
+    }
   }
 
   /**
@@ -68,7 +67,8 @@ export class Agent0Error extends ExternalServiceError {
    * Check if error is retryable
    */
   isRetryable(): boolean {
-    if (this.originalStatusCode && this.originalStatusCode >= 500) {
+    const statusCode = (this as ExternalServiceError).originalStatusCode
+    if (statusCode && statusCode >= 500) {
       return true
     }
 
@@ -102,13 +102,6 @@ export class Agent0RegistrationError extends Agent0Error {
   ) {
     super(message, 'register', agent0Code, originalError, originalStatusCode)
     this.agentName = agentName
-
-    Object.assign(this, {
-      context: {
-        ...this.context,
-        agentName,
-      },
-    })
   }
 
   static isInstance(error: unknown): error is Agent0RegistrationError {
@@ -131,13 +124,6 @@ export class Agent0FeedbackError extends Agent0Error {
   ) {
     super(message, 'feedback', agent0Code, originalError, originalStatusCode)
     this.feedbackId = feedbackId
-
-    Object.assign(this, {
-      context: {
-        ...this.context,
-        feedbackId,
-      },
-    })
   }
 
   static isInstance(error: unknown): error is Agent0FeedbackError {
@@ -160,13 +146,6 @@ export class Agent0ReputationError extends Agent0Error {
   ) {
     super(message, 'reputation', agent0Code, originalError, originalStatusCode)
     this.tokenId = tokenId
-
-    Object.assign(this, {
-      context: {
-        ...this.context,
-        tokenId,
-      },
-    })
   }
 
   static isInstance(error: unknown): error is Agent0ReputationError {
@@ -189,13 +168,6 @@ export class Agent0SearchError extends Agent0Error {
   ) {
     super(message, 'search', agent0Code, originalError, originalStatusCode)
     this.filters = filters
-
-    Object.assign(this, {
-      context: {
-        ...this.context,
-        filters,
-      },
-    })
   }
 
   static isInstance(error: unknown): error is Agent0SearchError {
@@ -213,13 +185,6 @@ export class Agent0DuplicateFeedbackError extends Agent0FeedbackError {
       feedbackId,
       'DUPLICATE_FEEDBACK',
     )
-
-    Object.assign(this, {
-      context: {
-        ...this.context,
-        targetAgentId,
-      },
-    })
   }
 
   static isInstance(error: unknown): error is Agent0DuplicateFeedbackError {

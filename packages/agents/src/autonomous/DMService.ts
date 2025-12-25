@@ -4,13 +4,10 @@
 
 import { getKMSClient } from '@babylon/api'
 import { db } from '@babylon/db'
-import {
-  generateSnowflakeId,
-  toAddressOrNull,
-  toHexOrNull,
-} from '@babylon/shared'
+import { toAddressOrNull, toHexOrNull } from '@babylon/shared'
 import type { IAgentRuntime } from '@elizaos/core'
 import { type CQLClient, getCQL } from '@jejunetwork/db'
+import { generateSnowflakeId } from '@jejunetwork/shared'
 import type { Address } from 'viem'
 import { isProductionEnvironment } from '../config/tee'
 import { callAgentLLM } from '../llm'

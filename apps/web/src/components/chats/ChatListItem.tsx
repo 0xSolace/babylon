@@ -1,4 +1,4 @@
-import { cn } from '@babylon/shared'
+import { cn } from '@jejunetwork/shared'
 import { Users } from 'lucide-react'
 import type React from 'react'
 import { Avatar } from '@/components/shared/Avatar'

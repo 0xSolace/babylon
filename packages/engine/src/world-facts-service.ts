@@ -11,7 +11,8 @@
 
 import type { WorldFact } from '@babylon/db'
 import { db } from '@babylon/db'
-import { generateSnowflakeId, logger } from '@babylon/shared'
+import { logger } from '@babylon/shared'
+import { generateSnowflakeId } from '@jejunetwork/shared'
 import { createParodyHeadlineGenerator } from './services/parody-headline-generator'
 import { isSimulationMode } from './storage-bridge'
 

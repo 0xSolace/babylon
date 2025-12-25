@@ -35,7 +35,7 @@
  * ```
  */
 
-// ABIs from @babylon/shared
+// ABIs from @babylon/shared (Babylon-specific contract interfaces)
 export {
   BAN_MANAGER_ABI,
   IDENTITY_REGISTRY_ABI,

@@ -362,7 +362,7 @@ export function getDStack(config?: DStackConfig): DStackIntegration {
   return dstackIntegration
 }
 
-async function _initializeDStack(
+export async function _initializeDStack(
   config?: DStackConfig,
 ): Promise<DStackIntegration> {
   const dstack = getDStack(config)
@@ -370,6 +370,6 @@ async function _initializeDStack(
   return dstack
 }
 
-function _isDStackAvailable(): boolean {
+export function _isDStackAvailable(): boolean {
   return !!process.env.DSTACK_CVM_ID || process.env.TDX_ENABLED === 'true'
 }

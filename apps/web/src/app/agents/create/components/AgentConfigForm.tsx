@@ -1,4 +1,4 @@
-import { cn } from '@babylon/shared'
+import { cn } from '@jejunetwork/shared'
 import { Loader2, Sparkles } from 'lucide-react'
 import { memo } from 'react'
 import type { AgentFormData } from '../hooks/useAgentForm'

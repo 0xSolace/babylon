@@ -16,7 +16,7 @@ import {
   getGroupChatConfigSummary,
   validateGroupChatConfig,
 } from '@babylon/engine'
-import { generateSnowflakeId } from '@babylon/shared'
+import { generateSnowflakeId } from '@jejunetwork/shared'
 
 const testIds = {
   userIds: [] as string[],

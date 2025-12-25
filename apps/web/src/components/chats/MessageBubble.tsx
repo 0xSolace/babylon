@@ -1,4 +1,4 @@
-import { cn } from '@babylon/shared'
+import { cn } from '@jejunetwork/shared'
 import { Link } from 'react-router-dom'
 import { Avatar } from '@/components/shared/Avatar'
 import { TaggedText } from '@/components/shared/TaggedText'

@@ -8,11 +8,8 @@
 
 import { db } from '@babylon/db'
 import type { JsonValue } from '@babylon/shared'
-import {
-  generateSnowflakeId,
-  getA2AEndpoint,
-  getMCPEndpoint,
-} from '@babylon/shared'
+import { getA2AEndpoint, getMCPEndpoint } from '@babylon/shared'
+import { generateSnowflakeId } from '@jejunetwork/shared'
 import { logger } from '../shared/logger'
 import { getAgent0Client } from './index'
 

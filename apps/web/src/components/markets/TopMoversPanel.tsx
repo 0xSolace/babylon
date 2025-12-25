@@ -1,4 +1,4 @@
-import { cn } from '@babylon/shared'
+import { cn } from '@jejunetwork/shared'
 import { TrendingDown, TrendingUp } from 'lucide-react'
 import { Skeleton } from '@/components/shared/Skeleton'
 import { usePerpTopMovers } from '@/hooks/usePerpMarkets'

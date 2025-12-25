@@ -33,7 +33,7 @@ import {
   storeTagsForPost,
   WalletService,
 } from '@babylon/engine'
-import { generateSnowflakeId, toNull } from '@babylon/shared'
+import { generateSnowflakeId, toNull } from '@jejunetwork/shared'
 import { agentPnLService } from '../services/AgentPnLService'
 import { logger } from '../shared/logger'
 import { topicDiversityService } from './TopicDiversityService'

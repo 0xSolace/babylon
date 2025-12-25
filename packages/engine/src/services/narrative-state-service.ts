@@ -6,7 +6,8 @@
  */
 
 import { db } from '@babylon/db'
-import { generateSnowflakeId, logger } from '@babylon/shared'
+import { logger } from '@babylon/shared'
+import { generateSnowflakeId } from '@jejunetwork/shared'
 import type { QuestionArcPlan as ArcPlanType } from './question-arc-planner'
 
 /** Calculate signal ratio from phase targets */

@@ -1,4 +1,5 @@
-import { cn, sanitizeId } from '@babylon/shared'
+import { sanitizeId } from '@babylon/shared'
+import { cn } from '@jejunetwork/shared'
 import { useEffect, useState } from 'react'
 
 /**

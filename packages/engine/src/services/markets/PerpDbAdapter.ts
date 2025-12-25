@@ -1,11 +1,11 @@
 import { type CQLClient, db as defaultDb, type PerpPosition } from '@babylon/db'
-import {
-  generateSnowflakeId,
-  type PerpDbPort,
-  type PerpMarketRecord,
-  type PerpPositionRecord,
-  type PerpSide,
+import type {
+  PerpDbPort,
+  PerpMarketRecord,
+  PerpPositionRecord,
+  PerpSide,
 } from '@babylon/shared'
+import { generateSnowflakeId } from '@jejunetwork/shared'
 
 type NewPerpPosition = Partial<PerpPosition> &
   Pick<

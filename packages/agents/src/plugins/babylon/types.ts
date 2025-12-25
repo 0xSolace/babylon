@@ -16,7 +16,9 @@ export interface BabylonRuntime extends IAgentRuntime {
 /**
  * Type guard to check if runtime is a BabylonRuntime
  */
-function _isBabylonRuntime(runtime: IAgentRuntime): runtime is BabylonRuntime {
+export function isBabylonRuntime(
+  runtime: IAgentRuntime,
+): runtime is BabylonRuntime {
   return 'a2aClient' in runtime
 }
 
@@ -103,27 +105,23 @@ export interface ChatInfo {
 /**
  * Action parameters
  */
-// biome-ignore lint/correctness/noUnusedVariables: Documents plugin action params
-interface TradeActionParams {
+export interface TradeActionParams {
   marketId: string
   side: 'YES' | 'NO'
   amount: number
 }
 
-// biome-ignore lint/correctness/noUnusedVariables: Documents plugin action params
-interface PostActionParams {
+export interface PostActionParams {
   content: string
   type?: string
 }
 
-// biome-ignore lint/correctness/noUnusedVariables: Documents plugin action params
-interface CommentActionParams {
+export interface CommentActionParams {
   postId: string
   content: string
 }
 
-// biome-ignore lint/correctness/noUnusedVariables: Documents plugin action params
-interface MessageActionParams {
+export interface MessageActionParams {
   chatId: string
   content: string
 }

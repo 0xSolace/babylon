@@ -8,15 +8,15 @@ import {
   type Position,
   type Question,
 } from '@babylon/db'
-import {
-  generateSnowflakeId,
-  type PredictionDbPort,
-  type PredictionMarketRecord,
-  type PredictionPositionRecord,
-  type PredictionPriceSnapshotRecord,
-  type PredictionSide,
-  type QuestionRecord,
+import type {
+  PredictionDbPort,
+  PredictionMarketRecord,
+  PredictionPositionRecord,
+  PredictionPriceSnapshotRecord,
+  PredictionSide,
+  QuestionRecord,
 } from '@babylon/shared'
+import { generateSnowflakeId } from '@jejunetwork/shared'
 
 type MarketRow = Market
 type PositionRow = Position

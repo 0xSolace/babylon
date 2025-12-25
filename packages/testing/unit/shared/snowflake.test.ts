@@ -8,7 +8,7 @@ import {
   generateSnowflakeId,
   isValidSnowflakeId,
   parseSnowflakeId,
-} from '@babylon/shared'
+} from '@jejunetwork/shared'
 
 describe('Snowflake ID Generator', () => {
   describe('generateSnowflakeId', () => {

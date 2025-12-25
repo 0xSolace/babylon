@@ -667,7 +667,7 @@ export class OracleService {
       abi: GameOracleABI,
       functionName: 'getStatistics',
     })
-    const [committed, revealed, pending] = stats
+    const [committed, revealed, pending] = stats as [bigint, bigint, bigint]
     return {
       committed: committed.toString(),
       revealed: revealed.toString(),

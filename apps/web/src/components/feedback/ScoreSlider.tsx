@@ -26,7 +26,7 @@
  * />
  * ```
  */
-import { cn } from '@babylon/shared'
+import { cn } from '@jejunetwork/shared'
 import { Minus, TrendingDown, TrendingUp } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 

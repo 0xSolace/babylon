@@ -254,11 +254,6 @@ export interface FeedPost {
 }
 
 /**
- * Alias for backwards compatibility
- */
-export type FeedEvent = FeedPost
-
-/**
  * World event (things that happen in the game world)
  */
 export interface WorldEvent {

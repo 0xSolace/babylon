@@ -138,8 +138,7 @@ export function applyDuplicateDetection(
 /**
  * Rate limit check result
  */
-// biome-ignore lint/correctness/noUnusedVariables: Documents API type
-interface RateLimitCheckResult {
+export interface RateLimitCheckResult {
   passed: boolean
   errorResponse?: Response
   retryAfter?: number
@@ -212,7 +211,7 @@ export function checkRateLimitAndDuplicates(
 /**
  * Check rate limits for Elysia (returns result object instead of Response)
  */
-function _checkRateLimitsForElysia(
+export function checkRateLimitsForElysia(
   userId: string,
   content: string | null,
   rateLimitConfig: (typeof RATE_LIMIT_CONFIGS)[keyof typeof RATE_LIMIT_CONFIGS],

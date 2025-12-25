@@ -1,12 +1,23 @@
 /**
  * Contract ABIs for ERC-8004 and Prediction Market interactions
  *
- * These ABIs match the Jeju Network contract ABIs from @jejunetwork/contracts.
- * For direct contract interactions, these ABIs are provided locally to avoid
- * TypeScript rootDir issues with path mappings.
+ * IMPORTANT: These ABIs are Babylon-specific contract interfaces that differ from
+ * the canonical Jeju Network contracts. They are maintained for backward compatibility
+ * with Babylon's existing contract deployments.
+ *
+ * For NEW code building against Jeju Network contracts, use @jejunetwork/contracts:
+ *   - import { identityRegistryAbi, reputationRegistryAbi } from '@jejunetwork/contracts'
+ *   - import { banManagerAbi, moderationMarketplaceAbi } from '@jejunetwork/contracts'
+ *
+ * Key differences between Babylon and Jeju contract interfaces:
+ *   - Babylon BanManager uses address-based bans, Jeju uses agentId (uint256)
+ *   - Function signatures differ for moderation operations
+ *   - Babylon's identity registry has different capabilities functions
+ *
+ * These ABIs will be deprecated when Babylon migrates to use Jeju Network contracts.
  */
 
-// ERC-8004 Identity Registry ABI (matches Jeju IdentityRegistryAbi)
+// ERC-8004 Identity Registry ABI (Babylon-specific interface)
 export const IDENTITY_REGISTRY_ABI = [
   // ERC-721 standard functions
   {
@@ -156,7 +167,7 @@ export const IDENTITY_REGISTRY_ABI = [
   },
 ] as const
 
-// ERC-8004 Reputation System ABI (matches Jeju ReputationRegistryAbi)
+// ERC-8004 Reputation System ABI (Babylon-specific interface)
 export const REPUTATION_SYSTEM_ABI = [
   // Reputation queries
   {
@@ -294,7 +305,7 @@ export const REPUTATION_SYSTEM_ABI = [
   },
 ] as const
 
-// Ban Manager ABI (matches Jeju BanManagerAbi)
+// Ban Manager ABI (Babylon-specific - uses address-based bans)
 export const BAN_MANAGER_ABI = [
   {
     type: 'function',
@@ -368,7 +379,7 @@ export const BAN_MANAGER_ABI = [
   },
 ] as const
 
-// Moderation Marketplace ABI (matches Jeju ModerationMarketplaceAbi)
+// Moderation Marketplace ABI (Babylon-specific interface)
 export const MODERATION_MARKETPLACE_ABI = [
   {
     type: 'function',
@@ -570,206 +581,22 @@ export const MODERATION_MARKETPLACE_ABI = [
   },
 ] as const
 
-// Prediction Market Facet ABI
-export const PREDICTION_MARKET_ABI = [
-  {
-    type: 'function',
-    name: 'createMarket',
-    inputs: [
-      { name: '_question', type: 'string' },
-      { name: '_outcomeNames', type: 'string[]' },
-      { name: '_resolveAt', type: 'uint256' },
-      { name: '_oracle', type: 'address' },
-    ],
-    outputs: [{ name: '', type: 'bytes32' }],
-    stateMutability: 'nonpayable',
-  },
-  {
-    type: 'function',
-    name: 'resolveMarket',
-    inputs: [
-      { name: '_marketId', type: 'bytes32' },
-      { name: '_winningOutcome', type: 'uint8' },
-    ],
-    outputs: [],
-    stateMutability: 'nonpayable',
-  },
-  {
-    type: 'function',
-    name: 'buyShares',
-    inputs: [
-      { name: '_marketId', type: 'bytes32' },
-      { name: '_outcome', type: 'uint8' },
-      { name: '_numShares', type: 'uint256' },
-    ],
-    outputs: [],
-    stateMutability: 'payable',
-  },
-  {
-    type: 'function',
-    name: 'sellShares',
-    inputs: [
-      { name: '_marketId', type: 'bytes32' },
-      { name: '_outcome', type: 'uint8' },
-      { name: '_numShares', type: 'uint256' },
-    ],
-    outputs: [],
-    stateMutability: 'nonpayable',
-  },
-  {
-    type: 'function',
-    name: 'claimWinnings',
-    inputs: [{ name: '_marketId', type: 'bytes32' }],
-    outputs: [],
-    stateMutability: 'nonpayable',
-  },
-  {
-    type: 'function',
-    name: 'calculateCost',
-    inputs: [
-      { name: '_marketId', type: 'bytes32' },
-      { name: '_outcome', type: 'uint8' },
-      { name: '_numShares', type: 'uint256' },
-    ],
-    outputs: [{ name: '', type: 'uint256' }],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
-    name: 'getMarket',
-    inputs: [{ name: '_marketId', type: 'bytes32' }],
-    outputs: [
-      { name: 'question', type: 'string' },
-      { name: 'numOutcomes', type: 'uint8' },
-      { name: 'liquidity', type: 'uint256' },
-      { name: 'resolved', type: 'bool' },
-      { name: 'winningOutcome', type: 'uint8' },
-    ],
-    stateMutability: 'view',
-  },
-  {
-    type: 'event',
-    name: 'MarketCreated',
-    inputs: [
-      { name: 'marketId', type: 'bytes32', indexed: true },
-      { name: 'question', type: 'string', indexed: false },
-      { name: 'numOutcomes', type: 'uint8', indexed: false },
-      { name: 'liquidity', type: 'uint256', indexed: false },
-    ],
-  },
-  {
-    type: 'event',
-    name: 'SharesPurchased',
-    inputs: [
-      { name: 'marketId', type: 'bytes32', indexed: true },
-      { name: 'buyer', type: 'address', indexed: true },
-      { name: 'outcome', type: 'uint8', indexed: false },
-      { name: 'shares', type: 'uint256', indexed: false },
-      { name: 'cost', type: 'uint256', indexed: false },
-    ],
-  },
-  {
-    type: 'event',
-    name: 'MarketResolved',
-    inputs: [
-      { name: 'marketId', type: 'bytes32', indexed: true },
-      { name: 'winningOutcome', type: 'uint8', indexed: false },
-    ],
-  },
-] as const
+// Typed ABI exports for viem compatibility
+export const identityRegistryAbi = IDENTITY_REGISTRY_ABI
+export const reputationSystemAbi = REPUTATION_SYSTEM_ABI
+export const banManagerAbi = BAN_MANAGER_ABI
+export const moderationMarketplaceAbi = MODERATION_MARKETPLACE_ABI
 
-// Oracle Facet ABI
-export const ORACLE_ABI = [
-  {
-    type: 'function',
-    name: 'requestChainlinkResolution',
-    inputs: [{ name: '_marketId', type: 'bytes32' }],
-    outputs: [],
-    stateMutability: 'payable',
-  },
-  {
-    type: 'function',
-    name: 'oracleCallback',
-    inputs: [
-      { name: '_requestId', type: 'bytes32' },
-      { name: '_marketId', type: 'bytes32' },
-      { name: '_outcome', type: 'uint8' },
-    ],
-    outputs: [],
-    stateMutability: 'nonpayable',
-  },
-  {
-    type: 'function',
-    name: 'manualResolve',
-    inputs: [
-      { name: '_marketId', type: 'bytes32' },
-      { name: '_outcome', type: 'uint8' },
-    ],
-    outputs: [],
-    stateMutability: 'nonpayable',
-  },
-  {
-    type: 'event',
-    name: 'OracleRequested',
-    inputs: [
-      { name: 'marketId', type: 'bytes32', indexed: true },
-      { name: 'requestId', type: 'bytes32', indexed: true },
-      { name: 'oracleType', type: 'string', indexed: false },
-    ],
-  },
-  {
-    type: 'event',
-    name: 'OracleResponseReceived',
-    inputs: [
-      { name: 'marketId', type: 'bytes32', indexed: true },
-      { name: 'requestId', type: 'bytes32', indexed: true },
-      { name: 'outcome', type: 'uint8', indexed: false },
-    ],
-  },
-] as const
+// Prediction Market and Oracle ABIs - import from @jejunetwork/contracts
+export {
+  BabylonDiamondLoupeFacetAbi as DIAMOND_LOUPE_ABI,
+  BabylonOracleFacetAbi as ORACLE_ABI,
+  BabylonOracleFacetAbi as oracleAbi,
+  BabylonPredictionMarketFacetAbi as PREDICTION_MARKET_ABI,
+  BabylonPredictionMarketFacetAbi as predictionMarketAbi,
+} from '@jejunetwork/contracts'
 
-// Diamond Loupe ABI (for facet discovery)
-export const DIAMOND_LOUPE_ABI = [
-  {
-    type: 'function',
-    name: 'facets',
-    inputs: [],
-    outputs: [
-      {
-        name: '',
-        type: 'tuple[]',
-        components: [
-          { name: 'facetAddress', type: 'address' },
-          { name: 'functionSelectors', type: 'bytes4[]' },
-        ],
-      },
-    ],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
-    name: 'facetFunctionSelectors',
-    inputs: [{ name: 'facet', type: 'address' }],
-    outputs: [{ name: '', type: 'bytes4[]' }],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
-    name: 'facetAddresses',
-    inputs: [],
-    outputs: [{ name: '', type: 'address[]' }],
-    stateMutability: 'view',
-  },
-  {
-    type: 'function',
-    name: 'facetAddress',
-    inputs: [{ name: 'functionSelector', type: 'bytes4' }],
-    outputs: [{ name: '', type: 'address' }],
-    stateMutability: 'view',
-  },
-] as const
-
-// Price Storage Facet ABI
+// Price Storage Facet ABI - Babylon-specific
 export const PRICE_STORAGE_FACET_ABI = [
   {
     type: 'function',
@@ -811,11 +638,3 @@ export const PRICE_STORAGE_FACET_ABI = [
     ],
   },
 ] as const
-
-// Typed ABI exports for viem compatibility
-export const identityRegistryAbi = IDENTITY_REGISTRY_ABI
-export const reputationSystemAbi = REPUTATION_SYSTEM_ABI
-export const banManagerAbi = BAN_MANAGER_ABI
-export const moderationMarketplaceAbi = MODERATION_MARKETPLACE_ABI
-export const predictionMarketAbi = PREDICTION_MARKET_ABI
-export const oracleAbi = ORACLE_ABI

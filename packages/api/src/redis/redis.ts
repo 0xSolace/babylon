@@ -3,10 +3,10 @@
  *
  * Drop-in replacement for Redis using Jeju's decentralized cache.
  * Provides the same API as ioredis for compatibility.
- * NO FALLBACKS - Decentralized cache is required.
  */
 
-import { logger, toNull } from '@babylon/shared'
+import { logger } from '@babylon/shared'
+import { toNull } from '@jejunetwork/shared'
 import { type CacheClient, initializeCache } from '../cache'
 
 // ============================================================================

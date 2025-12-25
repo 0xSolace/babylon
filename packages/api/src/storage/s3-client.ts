@@ -2,7 +2,6 @@
  * Decentralized Storage Client
  *
  * Uses Jeju's IPFS/Arweave storage exclusively.
- * NO FALLBACKS - Decentralized storage is required.
  *
  * Features:
  * - Content-addressed storage (IPFS)

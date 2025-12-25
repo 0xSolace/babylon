@@ -7,9 +7,6 @@
 
 import { BAN_MANAGER_ABI, logger } from '@babylon/shared'
 
-// Alias for compatibility
-const BanManagerAbi = BAN_MANAGER_ABI
-
 /**
  * Type guard for contract read results that should return boolean
  */
@@ -143,7 +140,7 @@ export class ModerationBridge {
     logger.debug('Checking Jeju ban status', { address })
     const result = await this.jejuClient.readContract({
       address: this.jejuConfig.banManager,
-      abi: BanManagerAbi,
+      abi: BAN_MANAGER_ABI,
       functionName: 'isNetworkBanned',
       args: [address],
     })

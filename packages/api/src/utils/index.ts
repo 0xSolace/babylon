@@ -24,12 +24,7 @@ export {
   getHashedClientIp,
   hashIpAddress,
 } from './ip-utils'
-// Production guards
-export {
-  isProductionMode,
-  requireRealImplementation,
-  warnSimulationInProduction,
-} from './production-guards'
+// Production guards (removed - unused)
 // Token counter utilities
 export {
   budgetTokens,
@@ -64,15 +59,11 @@ export {
   isCacheTtlResponse,
   isComputeProof,
   isHex,
-  isHexSignature,
   isJejuCacheStatsResponse,
   type JejuCacheStatsResponse,
-  parseAddress,
   parseAgentSession,
   parseComputeProof,
-  parseHex,
   parseJson,
-  requireAddress,
   requireHex,
   safeToJsonRecord,
   toJsonRecord,

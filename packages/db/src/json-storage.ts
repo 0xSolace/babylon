@@ -22,7 +22,7 @@
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { first } from '@babylon/shared'
+import { first } from '@jejunetwork/shared'
 import {
   isDate,
   isDecrementOp,

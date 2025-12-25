@@ -26,7 +26,7 @@
  * />
  * ```
  */
-import { cn } from '@babylon/shared'
+import { cn } from '@jejunetwork/shared'
 import { Star } from 'lucide-react'
 import { useState } from 'react'
 

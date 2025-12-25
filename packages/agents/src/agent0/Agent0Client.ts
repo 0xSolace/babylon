@@ -24,9 +24,9 @@ import {
   toIpfsProvider,
   toJsonRecord,
   toNetworkName,
-  toNull,
   toStringArray,
 } from '@babylon/shared'
+import { toNull } from '@jejunetwork/shared'
 import type {
   AgentSummary,
   Feedback,

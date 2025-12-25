@@ -9,7 +9,6 @@
  * 2. Network-based config from @jejunetwork/config (based on JEJU_NETWORK)
  */
 
-import { first } from '@babylon/shared'
 import { getCQLUrl } from '@jejunetwork/config'
 import {
   type CQLClient,
@@ -17,6 +16,7 @@ import {
   getCQL,
   type QueryParam,
 } from '@jejunetwork/db'
+import { first } from '@jejunetwork/shared'
 import { createQueryTransaction, type QueryTransaction } from '../cql-client'
 import { toQueryParam } from '../type-guards'
 

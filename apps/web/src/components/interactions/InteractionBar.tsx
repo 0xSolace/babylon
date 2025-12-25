@@ -1,4 +1,4 @@
-import { cn } from '@babylon/shared'
+import { cn } from '@jejunetwork/shared'
 import { MessageCircle } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { FeedCommentSection } from '@/components/feed/FeedCommentSection'

@@ -13,7 +13,7 @@
  * ```
  */
 
-import { generateSnowflakeId, toNull } from '@babylon/shared'
+import { generateSnowflakeId, toNull } from '@jejunetwork/shared'
 import type {
   ActorStateRow,
   JsonValue,

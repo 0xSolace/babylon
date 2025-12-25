@@ -1,4 +1,4 @@
-import { cn } from '@babylon/shared'
+import { cn } from '@jejunetwork/shared'
 import { Send, X } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useInteractionStore } from '@/stores/interactionStore'

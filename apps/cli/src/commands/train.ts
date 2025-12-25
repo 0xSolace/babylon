@@ -19,7 +19,6 @@ import { join } from 'node:path'
 import { agentRuntimeManager, autonomousCoordinator } from '@babylon/agents'
 import { closeDatabase, db } from '@babylon/db'
 import { BabylonLLMClient } from '@babylon/engine'
-import { generateSnowflakeId } from '@babylon/shared'
 import {
   archetypeScoringService,
   configureTrainingDependencies,
@@ -29,6 +28,7 @@ import {
   hasCustomRubric,
   trajectoryMetricsExtractor,
 } from '@babylon/training'
+import { generateSnowflakeId } from '@jejunetwork/shared'
 import { z } from 'zod'
 import { getFlag, getOption, parseArgs, wantsHelp } from '../lib/args.js'
 import { logger } from '../lib/logger.js'

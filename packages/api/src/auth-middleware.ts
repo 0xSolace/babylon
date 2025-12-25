@@ -2,7 +2,6 @@
  * API Authentication Middleware
  *
  * ALL authentication routes through OAuth3 (Jeju's decentralized auth).
- * NO FALLBACKS - OAuth3 is required.
  *
  * Supports:
  * - OAuth3 user authentication (via tokens/cookies)
@@ -15,7 +14,7 @@
  * - Core functions use standard web APIs (Request, Response, Headers)
  */
 
-import { getOAuth3Client, type OAuth3Client } from '@babylon/auth'
+import { getOAuth3Client } from '@babylon/auth'
 import { db } from '@babylon/db'
 import type { AuthenticatedUser } from '@babylon/shared'
 import { AuthenticationError } from '@babylon/shared'
@@ -67,9 +66,9 @@ export interface ElysiaContext {
 // =============================================================================
 
 // Lazy initialization of OAuth3 client
-let oauth3Client: OAuth3Client | null = null
+let oauth3Client: ReturnType<typeof getOAuth3Client> | null = null
 
-export function getAuthClient(): OAuth3Client {
+export function getAuthClient(): ReturnType<typeof getOAuth3Client> {
   if (!oauth3Client) {
     oauth3Client = getOAuth3Client()
   }
@@ -359,7 +358,7 @@ export async function authenticateWithDbUser(
 /**
  * Authenticate and require that the user has a database record (Elysia context)
  */
-async function _authenticateWithDbUserFromContext(
+export async function authenticateWithDbUserFromContext(
   ctx: ElysiaContext,
 ): Promise<AuthenticatedUser & { dbUserId: string }> {
   const authUser = await authenticateFromContext(ctx)
@@ -385,7 +384,7 @@ export async function optionalAuth(
 /**
  * Optional authentication from Elysia context
  */
-async function _optionalAuthFromContext(
+export async function optionalAuthFromContext(
   ctx: ElysiaContext,
 ): Promise<AuthenticatedUser | null> {
   const tokenInfo = extractTokenFromContext(ctx)

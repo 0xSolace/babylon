@@ -1,4 +1,5 @@
-import { cn, logger } from '@babylon/shared'
+import { logger } from '@babylon/shared'
+import { cn } from '@jejunetwork/shared'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { UserMinus, UserPlus } from 'lucide-react'
 import { toast } from 'sonner'

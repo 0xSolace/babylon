@@ -9,7 +9,7 @@ import {
   retryIfRetryable,
   retryWithCondition,
   sleep,
-} from '@babylon/shared'
+} from '@jejunetwork/shared'
 
 describe('Retry Utilities', () => {
   describe('sleep', () => {

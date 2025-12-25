@@ -2,7 +2,6 @@
  * Direct LLM calls via Jeju Compute Marketplace
  *
  * ALL LLM calls are routed through Jeju's decentralized compute marketplace.
- * NO FALLBACKS - Jeju Compute is required.
  *
  * IMPORTANT FOR RL TRAINING:
  * - When runtime is provided, trajectory context is automatically extracted
@@ -11,11 +10,11 @@
  */
 
 import type { IAgentRuntime } from '@elizaos/core'
+import { createJejuInference, type JejuInference } from '@jejunetwork/agents'
 import type { Address } from 'viem'
 import { getTrajectoryContext } from '../plugins/plugin-trajectory-logger/src/action-interceptor'
 import type { TrajectoryLoggerService } from '../plugins/plugin-trajectory-logger/src/TrajectoryLoggerService'
 import { isPromptLoggingEnabled, logPrompt } from '../utils/prompt-logger'
-import { createJejuInference, type JejuInference } from './jeju-inference'
 
 export interface DirectGroqParams {
   prompt: string
@@ -52,7 +51,6 @@ function getJejuClient(): JejuInference {
  * Call LLM via Jeju Compute Marketplace
  *
  * This routes ALL inference through Jeju's decentralized compute network.
- * NO FALLBACKS to centralized providers.
  */
 export async function callGroqDirect(
   params: DirectGroqParams,
@@ -130,6 +128,6 @@ export async function callGroqDirect(
 /**
  * Reset the Jeju client (for testing)
  */
-function _resetJejuClient(): void {
+export function resetJejuClient(): void {
   jejuClient = null
 }

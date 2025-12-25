@@ -231,8 +231,7 @@ export interface AgentDiscoveryFilter {
 /**
  * Runtime creation options
  */
-// biome-ignore lint/correctness/noUnusedVariables: Public API type
-interface RuntimeCreationOptions {
+export interface RuntimeCreationOptions {
   /** Agent registry entry */
   registration: AgentRegistration
 

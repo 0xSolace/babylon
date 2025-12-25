@@ -1,4 +1,4 @@
-import { cn } from '@babylon/shared'
+import { cn } from '@jejunetwork/shared'
 import { TrendingDown, TrendingUp } from 'lucide-react'
 import { memo } from 'react'
 import type { PerpMarket } from '@/types/markets'

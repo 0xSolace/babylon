@@ -2,7 +2,6 @@
  * Agent LLM Provider
  *
  * Decentralized LLM interface for autonomous agents using Jeju Compute.
- * NO FALLBACKS - Jeju Compute is required.
  *
  * Supports:
  * - Jeju Compute Marketplace (primary)
@@ -82,14 +81,12 @@ async function logToTrajectory(
  * Main entry point for agent LLM inference calls
  *
  * Uses Jeju Compute Marketplace exclusively.
- * NO FALLBACKS - Throws if Jeju Compute is unavailable.
  */
 export async function callAgentLLM(params: AgentLLMParams): Promise<string> {
   if (!isJejuComputeAvailable()) {
     throw new Error(
       '[AgentLLM] Jeju Compute not configured. ' +
-        'Set JEJU_NETWORK (mainnet/testnet/localnet) or JEJU_COMPUTE_API_URL. ' +
-        'NO FALLBACK - Decentralized compute is required.',
+        'Set JEJU_NETWORK (mainnet/testnet/localnet) or JEJU_COMPUTE_API_URL.',
     )
   }
 

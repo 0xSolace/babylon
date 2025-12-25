@@ -2,7 +2,6 @@
  * LLM Client for Babylon Game Generation
  *
  * Uses Jeju decentralized compute exclusively.
- * NO FALLBACKS - Jeju Compute is required.
  */
 
 import 'dotenv/config'

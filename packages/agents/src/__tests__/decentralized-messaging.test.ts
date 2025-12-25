@@ -9,7 +9,7 @@ import {
   createPoster,
   DEFAULT_HUBS,
   FarcasterPoster,
-} from '@jejunetwork/farcaster'
+} from '@jejunetwork/messaging'
 import { getDMService, resetDMService } from '../autonomous/DMService'
 import {
   getNPCIdentityService,
@@ -158,7 +158,7 @@ describe('NPCIdentityService', () => {
   })
 })
 
-describe('FarcasterPoster (via @jejunetwork/farcaster)', () => {
+describe('FarcasterPoster (via @jejunetwork/messaging)', () => {
   it('should export poster functionality', async () => {
     expect(createPoster).toBeDefined()
     expect(FarcasterPoster).toBeDefined()

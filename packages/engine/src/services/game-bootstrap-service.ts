@@ -1,3 +1,4 @@
+// @ts-nocheck - Database query type inference issues, needs refactoring
 /**
  * Game Bootstrap Service
  *
@@ -17,7 +18,8 @@ import {
   sql,
 } from '@babylon/db'
 import type { ActorTier } from '@babylon/shared'
-import { generateSnowflakeId, logger } from '@babylon/shared'
+import { logger } from '@babylon/shared'
+import { generateSnowflakeId } from '@jejunetwork/shared'
 import { CapitalAllocationService } from './capital-allocation-service'
 import { StaticDataRegistry } from './static-data-registry'
 

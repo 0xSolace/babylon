@@ -196,12 +196,9 @@ export const isScoredTrainingData = isJudgingScoreResponse
 
 /**
  * Generic object guard for unstructured data (e.g., trajectory steps)
+ * @deprecated Use isObject from @babylon/shared instead
  */
-export function isGenericObject(
-  value: unknown,
-): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
+export const isGenericObject = isObject
 
 // ============================================================================
 // JSON Parsing Guards
@@ -355,7 +352,8 @@ export interface SimulationPredictionMarket {
   resolved: boolean
 }
 
-function _isSimulationPredictionMarket(
+/** Type guard for SimulationPredictionMarket */
+export function isSimulationPredictionMarket(
   value: unknown,
 ): value is SimulationPredictionMarket {
   return (
@@ -379,7 +377,8 @@ export interface SimulationPerpetualMarket {
   nextFundingTime?: number
 }
 
-function _isSimulationPerpetualMarket(
+/** Type guard for SimulationPerpetualMarket */
+export function isSimulationPerpetualMarket(
   value: unknown,
 ): value is SimulationPerpetualMarket {
   return (
@@ -401,7 +400,10 @@ export interface SimulationFeedPost {
   marketId?: string
 }
 
-function _isSimulationFeedPost(value: unknown): value is SimulationFeedPost {
+/** Type guard for SimulationFeedPost */
+export function isSimulationFeedPost(
+  value: unknown,
+): value is SimulationFeedPost {
   return (
     isObject(value) &&
     isString(value.id) &&
@@ -429,7 +431,10 @@ export interface SimulationGroupChat {
   }>
 }
 
-function _isSimulationGroupChat(value: unknown): value is SimulationGroupChat {
+/** Type guard for SimulationGroupChat */
+export function isSimulationGroupChat(
+  value: unknown,
+): value is SimulationGroupChat {
   return (
     isObject(value) &&
     isString(value.id) &&
@@ -446,7 +451,8 @@ export interface SimulationAgent {
   totalPnl?: number
 }
 
-function _isSimulationAgent(value: unknown): value is SimulationAgent {
+/** Type guard for SimulationAgent */
+export function isSimulationAgent(value: unknown): value is SimulationAgent {
   return isObject(value) && isString(value.id)
 }
 
@@ -463,7 +469,8 @@ export interface SimulationState {
   agents: SimulationAgent[]
 }
 
-function _isSimulationState(value: unknown): value is SimulationState {
+/** Type guard for SimulationState */
+export function isSimulationState(value: unknown): value is SimulationState {
   return (
     isObject(value) &&
     typeof value.tick === 'number' &&
@@ -487,7 +494,8 @@ export interface IPFSUploadResult {
   name?: string
 }
 
-function _isIPFSUploadResult(value: unknown): value is IPFSUploadResult {
+/** Type guard for IPFSUploadResult */
+export function isIPFSUploadResult(value: unknown): value is IPFSUploadResult {
   return isObject(value) && isString(value.cid)
 }
 

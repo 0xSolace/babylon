@@ -35,7 +35,7 @@ import {
 } from 'bun:test'
 import { existsSync, readFileSync } from 'node:fs'
 import { asSystem, db, initializeDB } from '@babylon/db'
-import { generateSnowflakeId } from '@babylon/shared'
+import { generateSnowflakeId } from '@jejunetwork/shared'
 import { InMemoryStateStore } from '../../adapters/InMemoryStateStore'
 import { GameClock } from '../../GameClock'
 import { executeGameTick } from '../../game-tick'

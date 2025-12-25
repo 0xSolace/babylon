@@ -46,8 +46,7 @@ export interface ServerAuthUser {
 /**
  * Export the auth state type for use in routes
  */
-// biome-ignore lint/correctness/noUnusedVariables: Public API type for route handlers
-type AuthState = {
+export type AuthState = {
   user: ServerAuthUser | null
   isAuthenticated: boolean
 }

@@ -1,4 +1,4 @@
-import { cn } from '@babylon/shared'
+import { cn } from '@jejunetwork/shared'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { HelpCircle, TrendingDown, TrendingUp } from 'lucide-react'
 import { useState } from 'react'
@@ -87,16 +87,18 @@ export function ProfileWidget({ userId }: ProfileWidgetProps) {
       // Process balance
       const balanceJson = extractDataOrNull(balanceRes)
       if (balanceJson) {
+        // Cast to access optional fields that may not be in API response type
+        const balanceAny = balanceJson as Record<string, unknown>
         balanceData = {
-          balance: Number(balanceJson.balance || 0),
+          balance: Number(balanceAny.balance || 0),
           virtualBalance: Number(
-            balanceJson.virtualBalance || balanceJson.balance || 0,
+            balanceAny.virtualBalance || balanceAny.balance || 0,
           ),
-          tradingBalance: Number(balanceJson.tradingBalance || 0),
-          lockedBalance: Number(balanceJson.lockedBalance || 0),
-          totalDeposited: Number(balanceJson.totalDeposited || 0),
-          totalWithdrawn: Number(balanceJson.totalWithdrawn || 0),
-          lifetimePnL: Number(balanceJson.lifetimePnL || 0),
+          tradingBalance: Number(balanceAny.tradingBalance || 0),
+          lockedBalance: Number(balanceAny.lockedBalance || 0),
+          totalDeposited: Number(balanceAny.totalDeposited || 0),
+          totalWithdrawn: Number(balanceAny.totalWithdrawn || 0),
+          lifetimePnL: Number(balanceAny.lifetimePnL || 0),
         }
       }
 
@@ -104,9 +106,9 @@ export function ProfileWidget({ userId }: ProfileWidgetProps) {
       const positionsJson = extractDataOrNull(positionsRes)
       if (positionsJson) {
         predictionsData = (positionsJson.predictions?.positions ??
-          []) as PredictionPosition[]
+          []) as unknown as PredictionPosition[]
         perpsData = (positionsJson.perpetuals?.positions ??
-          []) as PerpPositionFromAPI[]
+          []) as unknown as PerpPositionFromAPI[]
       }
 
       // Process stats

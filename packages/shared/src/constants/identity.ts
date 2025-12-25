@@ -8,7 +8,6 @@
 import type { Address } from 'viem'
 import { zeroAddress } from 'viem'
 import { CHAIN_ID } from '../config'
-import { IDENTITY_REGISTRY_ABI, REPUTATION_SYSTEM_ABI } from '../contracts/abis'
 import { getERC8004ContractAddresses } from '../contracts/addresses'
 
 /**
@@ -17,7 +16,7 @@ import { getERC8004ContractAddresses } from '../contracts/addresses'
 export const CAPABILITIES_HASH =
   '0x0000000000000000000000000000000000000000000000000000000000000001'
 
-export { IDENTITY_REGISTRY_ABI, REPUTATION_SYSTEM_ABI }
+export { IDENTITY_REGISTRY_ABI, REPUTATION_SYSTEM_ABI } from '../contracts/abis'
 
 /**
  * Get the identity registry contract address for the current chain

@@ -1,4 +1,5 @@
-import { cn, logger } from '@babylon/shared'
+import { logger } from '@babylon/shared'
+import { cn } from '@jejunetwork/shared'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { FileText, Filter } from 'lucide-react'
 import { useState } from 'react'

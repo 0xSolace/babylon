@@ -1,4 +1,19 @@
 import { airdropAllocations, db, eq } from '@babylon/db'
+
+/** Airdrop allocation from database */
+interface AirdropAllocationRow {
+  id: string
+  userId: string
+  amount: string
+  totalAllocation: string | null
+  dripsUnlocked: number | null
+  totalClaimed: string | null
+  lastDripTime: Date | null
+  bonusMultiplier: number | null
+  isElizaHolder: boolean | null
+  registeredOnChain: boolean | null
+}
+
 import { logger } from '@babylon/shared'
 import { Elysia, t } from 'elysia'
 import {
@@ -51,12 +66,25 @@ const createAirdropRoutes = () =>
 
         // Get allocation from database
         const allocationResult = await db
-          .select()
+          .select({
+            id: airdropAllocations.id,
+            userId: airdropAllocations.userId,
+            amount: airdropAllocations.amount,
+            totalAllocation: airdropAllocations.totalAllocation,
+            dripsUnlocked: airdropAllocations.dripsUnlocked,
+            totalClaimed: airdropAllocations.totalClaimed,
+            lastDripTime: airdropAllocations.lastDripTime,
+            bonusMultiplier: airdropAllocations.bonusMultiplier,
+            isElizaHolder: airdropAllocations.isElizaHolder,
+            registeredOnChain: airdropAllocations.registeredOnChain,
+          })
           .from(airdropAllocations)
           .where(eq(airdropAllocations.userId, user.userId))
           .limit(1)
 
-        const allocation = allocationResult[0]
+        const allocation = allocationResult[0] as
+          | AirdropAllocationRow
+          | undefined
 
         if (!allocation) {
           return {
@@ -66,9 +94,9 @@ const createAirdropRoutes = () =>
           }
         }
 
-        const totalAllocation = BigInt(allocation.totalAllocation)
-        const totalClaimed = BigInt(allocation.totalClaimed)
-        const dripsUnlocked = allocation.dripsUnlocked
+        const totalAllocation = BigInt(allocation.totalAllocation ?? '0')
+        const totalClaimed = BigInt(allocation.totalClaimed ?? '0')
+        const dripsUnlocked = allocation.dripsUnlocked ?? 0
         const totalDrips = TOTAL_DRIP_DAYS + 1 // 46 claims total
         const isInitialClaimed = dripsUnlocked >= 1
 
@@ -211,20 +239,30 @@ const createAirdropRoutes = () =>
 
         // Get allocation
         const allocationResult = await db
-          .select()
+          .select({
+            id: airdropAllocations.id,
+            userId: airdropAllocations.userId,
+            totalAllocation: airdropAllocations.totalAllocation,
+            dripsUnlocked: airdropAllocations.dripsUnlocked,
+            totalClaimed: airdropAllocations.totalClaimed,
+            lastDripTime: airdropAllocations.lastDripTime,
+          })
           .from(airdropAllocations)
           .where(eq(airdropAllocations.userId, user.userId))
           .limit(1)
 
-        const allocation = allocationResult[0]
+        const allocation = allocationResult[0] as
+          | AirdropAllocationRow
+          | undefined
 
         if (!allocation) {
           set.status = 400
           return { error: 'Not registered for airdrop' }
         }
 
+        const dripsUnlocked = allocation.dripsUnlocked ?? 0
         const totalDrips = TOTAL_DRIP_DAYS + 1
-        if (allocation.dripsUnlocked >= totalDrips) {
+        if (dripsUnlocked >= totalDrips) {
           set.status = 400
           return { error: 'All drips have been claimed' }
         }
@@ -245,20 +283,20 @@ const createAirdropRoutes = () =>
         }
 
         // Calculate drip amount
-        const isInitialClaim = allocation.dripsUnlocked === 0
+        const isInitialClaim = dripsUnlocked === 0
         const dripPercent = isInitialClaim
           ? INITIAL_CLAIM_PERCENT
           : DAILY_DRIP_PERCENT
-        const totalAllocation = BigInt(allocation.totalAllocation)
+        const totalAllocation = BigInt(allocation.totalAllocation ?? '0')
         const dripAmount = (totalAllocation * BigInt(dripPercent)) / 100n
 
         // Update allocation
         await db
           .update(airdropAllocations)
           .set({
-            dripsUnlocked: allocation.dripsUnlocked + 1,
+            dripsUnlocked: dripsUnlocked + 1,
             totalClaimed: (
-              BigInt(allocation.totalClaimed) + dripAmount
+              BigInt(allocation.totalClaimed ?? '0') + dripAmount
             ).toString(),
             lastDripTime: new Date(),
           })
@@ -268,7 +306,7 @@ const createAirdropRoutes = () =>
           'Drip claimed',
           {
             userId: user.userId,
-            dripNumber: allocation.dripsUnlocked + 1,
+            dripNumber: dripsUnlocked + 1,
             dripAmount: dripAmount.toString(),
             isInitialClaim,
           },
@@ -277,13 +315,13 @@ const createAirdropRoutes = () =>
 
         return {
           success: true,
-          dripNumber: allocation.dripsUnlocked + 1,
+          dripNumber: dripsUnlocked + 1,
           dripAmount: dripAmount.toString(),
           dripAmountFormatted: formatTokens(dripAmount),
           isInitialClaim,
           message: isInitialClaim
-            ? 'Initial 10% claimed successfully!'
-            : 'Daily 2% drip claimed successfully!',
+            ? 'Initial 10% claimed successfully.'
+            : 'Daily 2% drip claimed successfully.',
         }
       },
       {

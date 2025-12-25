@@ -703,7 +703,16 @@ export function OnboardingProvider({
           onSkipOnchain={handleSkipOnchain}
           onClose={handleClose}
           onLogout={logout}
-          user={user ?? {}}
+          user={
+            user
+              ? {
+                  id: user.id,
+                  username: user.username ?? undefined,
+                  walletAddress: user.walletAddress ?? undefined,
+                  onChainRegistered: user.onChainRegistered,
+                }
+              : null
+          }
           importedData={importedProfileData}
           initialEmail={user?.email || null}
         />

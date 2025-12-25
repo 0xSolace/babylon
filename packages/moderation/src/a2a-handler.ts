@@ -7,7 +7,7 @@
  */
 
 import type { JsonRpcRequest, JsonRpcResponse } from '@babylon/a2a'
-import type { JsonRpcResult } from '@babylon/shared'
+import { isObject, isPlainObject, type JsonRpcResult } from '@babylon/shared'
 import { type Address, isHex, zeroHash } from 'viem'
 import { ModerationClient } from './client'
 
@@ -39,20 +39,13 @@ function evidenceToBytes32(evidence: string): `0x${string}` {
 }
 
 /**
- * Type guard for Record<string, unknown>
- */
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
-/**
  * Safely extract params record from JsonRpcRequest params
  */
 function extractParamsRecord(
   params: JsonRpcRequest['params'],
 ): Record<string, unknown> {
   if (!params) return {}
-  if (isPlainObject(params)) return params
+  if (isObject(params)) return params
   return {}
 }
 

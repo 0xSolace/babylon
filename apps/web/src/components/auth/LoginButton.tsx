@@ -1,4 +1,4 @@
-import { cn } from '@babylon/shared'
+import { cn } from '@jejunetwork/shared'
 import { Wallet } from 'lucide-react'
 import { useAuth } from '@/hooks/useAuth'
 

@@ -7,7 +7,7 @@
 
 import { afterEach, describe, expect, it } from 'bun:test'
 import { db, eq, games } from '@babylon/db'
-import { generateSnowflakeId } from '@babylon/shared'
+import { generateSnowflakeId } from '@jejunetwork/shared'
 
 // Check if database is available
 const hasDatabase = !!process.env.DATABASE_URL

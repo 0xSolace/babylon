@@ -320,7 +320,6 @@ export type {
   ActorsDatabase,
   ActorTier,
   DayTimeline,
-  FeedEvent,
   FeedPost,
   GameHistory,
   GameResolution,

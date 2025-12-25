@@ -7,7 +7,7 @@
 
 import { db } from '@babylon/db'
 import { getReputationBreakdown, recalculateReputation } from '@babylon/engine'
-import { generateSnowflakeId } from '@babylon/shared'
+import { generateSnowflakeId } from '@jejunetwork/shared'
 import { logger } from '../../shared/logger'
 import { getAgent0Client } from '../Agent0Client'
 

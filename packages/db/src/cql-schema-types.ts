@@ -366,6 +366,8 @@ export interface Post {
   visibility: string
   metadata: JsonValue | null
   mediaUrls: string[] | null
+  /** Primary image URL for the post */
+  imageUrl: string | null
   isPinned: boolean
   pinnedAt: Date | null
   marketId: string | null
@@ -917,6 +919,10 @@ export interface ChatParticipant {
   leftAt: Date | null
   role: string | null
   lastReadAt: Date | null
+  /** Last message timestamp for this participant */
+  lastMessageAt: Date | null
+  /** Message count for this participant */
+  messageCount: number | null
   /** Whether the participant is active in the chat */
   isActive: boolean
   /** Who invited this participant */
@@ -2023,9 +2029,12 @@ export interface Feedback {
   type: string
   content: string
   comment: string | null
+  category: string | null
+  interactionType: string | null
   rating: number | null
   score: number | null
   createdAt: Date
+  updatedAt: Date | null
   respondedAt: Date | null
   response: string | null
   metadata: JsonValue | null
@@ -2108,6 +2117,12 @@ export interface AirdropAllocation {
   lastDripTime: Date | null
   /** Last drip action type */
   lastDripAction: string | null
+  /** Bonus multiplier for special allocations */
+  bonusMultiplier: number | null
+  /** Whether user is an Eliza holder */
+  isElizaHolder: boolean | null
+  /** Whether allocation is registered on-chain */
+  registeredOnChain: boolean | null
 }
 
 export interface AirdropClaim {

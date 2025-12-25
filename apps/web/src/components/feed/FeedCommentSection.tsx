@@ -1,4 +1,4 @@
-import { cn } from '@babylon/shared'
+import { cn } from '@jejunetwork/shared'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { MessageCircle, X } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'

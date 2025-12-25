@@ -2,7 +2,8 @@
  * Checkpoint Service - encrypted state checkpointing to IPFS
  */
 
-import { last, logger, toNull } from '@babylon/shared'
+import { logger } from '@babylon/shared'
+import { last, toNull } from '@jejunetwork/shared'
 import type { Hex } from 'viem'
 import { keccak256, toBytes } from 'viem'
 import {
@@ -437,7 +438,7 @@ export function getCheckpointService(
   return checkpointService
 }
 
-async function _initializeCheckpointService(
+export async function initializeCheckpointService(
   callbacks: {
     getState: () => Promise<object>
     setState: (state: object) => Promise<void>

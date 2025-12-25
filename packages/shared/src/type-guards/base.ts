@@ -477,10 +477,11 @@ export async function fetchJsonAs<T>(
 // =============================================================================
 
 /**
- * Type guard to check if value is a Date object
+ * Type guard to check if value is a valid Date object
+ * Returns false for invalid dates like new Date('invalid')
  */
 export function isDate(value: unknown): value is Date {
-  return value instanceof Date
+  return value instanceof Date && !Number.isNaN(value.getTime())
 }
 
 /**

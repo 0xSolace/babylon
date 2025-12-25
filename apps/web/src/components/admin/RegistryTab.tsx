@@ -2,8 +2,8 @@ import {
   type AdminRegistryData,
   AdminRegistryDataSchema,
   type AdminRegistryEntity,
-  cn,
 } from '@babylon/shared'
+import { cn } from '@jejunetwork/shared'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   AlertCircle,

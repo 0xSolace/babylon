@@ -3,14 +3,20 @@
 /**
  * Deploy Commands
  *
- * Commands:
+ * Contract Commands:
  *   local     - Deploy contracts to local Hardhat
  *   testnet   - Deploy contracts to Jeju testnet
  *   mainnet   - Deploy contracts to Jeju mainnet
  *   setup     - Post-deployment testnet setup
+ *
+ * Frontend Commands:
  *   build     - Build static frontend for deployment
  *   frontend  - Deploy frontend to AWS S3 + CloudFront + IPFS + JNS
  *   ipfs      - Deploy static assets to IPFS only
+ *
+ * Decentralized Deployment:
+ *   dws       - Deploy backend to Jeju DWS (decentralized)
+ *   full      - Full decentralized deployment (frontend to IPFS/JNS, backend to DWS)
  */
 
 import {
@@ -203,10 +209,17 @@ CONTRACT COMMANDS:
   mainnet     Deploy contracts to Jeju mainnet
   setup       Post-deployment testnet setup
 
+DAO COMMANDS:
+  dao         Deploy Babylon DAO via Jeju CLI (uses jeju-manifest.json)
+
 FRONTEND COMMANDS:
   build       Build static frontend for deployment
   frontend    Deploy frontend to AWS S3 + CloudFront + IPFS + JNS
   ipfs        Deploy static assets to IPFS only
+
+DECENTRALIZED COMMANDS:
+  dws         Deploy backend to Jeju DWS (fully decentralized)
+  full        Full decentralized deployment (frontend + backend)
 
 OPTIONS (contracts):
   --skip-verify    Skip contract verification on block explorer
@@ -225,6 +238,10 @@ OPTIONS (frontend):
 OPTIONS (ipfs):
   --no-pin         Don't pin content to IPFS
 
+OPTIONS (dws):
+  --env=ENV        Target environment: testnet, mainnet (default: testnet)
+  --dry-run        Validate only, don't deploy
+
 ENVIRONMENT:
   DEPLOYER_PRIVATE_KEY          Private key for deployment
   JEJU_TESTNET_RPC_URL          RPC URL for Jeju testnet
@@ -242,6 +259,8 @@ EXAMPLES:
   babylon deploy build --env=testnet    Build frontend for testnet
   babylon deploy frontend --env=testnet Deploy frontend to testnet
   babylon deploy ipfs                   Deploy to IPFS only
+  babylon deploy dws --env=testnet      Deploy backend to DWS (testnet)
+  babylon deploy full --env=mainnet     Full decentralized deployment
 `)
 }
 
@@ -1037,6 +1056,172 @@ async function deployToIpfsOnly(shouldPin: boolean): Promise<void> {
 // Contract Deployment Functions
 // ============================================================================
 
+// ============================================================================
+// DWS Decentralized Deployment Functions
+// ============================================================================
+
+interface DWSDeployOptions {
+  env: Exclude<Environment, 'local'>
+  dryRun: boolean
+}
+
+/**
+ * Deploy Babylon backend to Jeju DWS (Decentralized Web Services)
+ *
+ * This deploys the backend as a worker on the decentralized network:
+ * 1. Build the worker bundle
+ * 2. Upload to IPFS
+ * 3. Register worker on-chain
+ * 4. DWS nodes pull and execute
+ */
+async function deployToDWS(options: DWSDeployOptions): Promise<void> {
+  const { env, dryRun } = options
+
+  logger.header('Babylon DWS Deployment')
+  console.log(`Environment:  ${env}`)
+  console.log(`Mode:         ${dryRun ? 'DRY RUN' : 'DEPLOY'}\n`)
+
+  // Build the worker bundle
+  logger.step('Building DWS worker bundle...')
+
+  const workerEntryPoint = join(process.cwd(), 'apps/api/dws-worker.ts')
+  const distDir = join(process.cwd(), 'dist/dws')
+
+  if (!existsSync(workerEntryPoint)) {
+    logger.fail('DWS worker entry point not found: apps/api/dws-worker.ts')
+    process.exit(1)
+  }
+
+  // Build with Bun
+  mkdirSync(distDir, { recursive: true })
+
+  const buildResult =
+    await $`bun build ${workerEntryPoint} --outdir ${distDir} --target bun --minify`.nothrow()
+  if (buildResult.exitCode !== 0) {
+    logger.fail('Worker build failed')
+    console.log(buildResult.stderr.toString())
+    process.exit(1)
+  }
+
+  logger.success('Worker bundle built')
+
+  // Get bundle info
+  const bundlePath = join(distDir, 'dws-worker.js')
+  if (!existsSync(bundlePath)) {
+    logger.fail('Bundle not found after build')
+    process.exit(1)
+  }
+
+  const bundleFile = Bun.file(bundlePath)
+  const bundleSize = bundleFile.size
+  console.log(`  Bundle size: ${(bundleSize / 1024).toFixed(1)} KB`)
+
+  if (dryRun) {
+    logger.success('Dry run complete - worker bundle ready')
+    console.log(`\nBundle: ${bundlePath}`)
+    console.log('\nRun without --dry-run to deploy to DWS')
+    return
+  }
+
+  // Upload to IPFS via jeju CLI
+  logger.step('Uploading to IPFS...')
+
+  const uploadResult = await $`jeju storage upload ${bundlePath}`.text()
+  const cidMatch = uploadResult.match(/CID:\s*(\w+)/)
+  if (!cidMatch) {
+    logger.fail('Failed to parse CID from upload')
+    console.log(uploadResult)
+    process.exit(1)
+  }
+
+  const codeCid = cidMatch[1]
+  logger.success(`Uploaded: ${codeCid}`)
+
+  // Deploy worker via jeju CLI
+  logger.step('Registering worker on DWS...')
+
+  const deployResult =
+    await $`jeju deploy app babylon --target dws --env ${env} --code-cid ${codeCid}`.nothrow()
+  if (deployResult.exitCode !== 0) {
+    logger.fail('Worker registration failed')
+    console.log(deployResult.stderr.toString())
+    process.exit(1)
+  }
+
+  logger.success('Worker deployed to DWS')
+
+  console.log('\n═══════════════════════════════════════')
+  console.log('  DWS Deployment Complete')
+  console.log('═══════════════════════════════════════\n')
+  console.log(`  Code CID:     ${codeCid}`)
+  console.log(`  Environment:  ${env}`)
+  console.log(`  JNS:          api.babylon.jeju`)
+  console.log(`\n  Endpoint: https://api.babylon.game`)
+}
+
+/**
+ * Full decentralized deployment:
+ * - Frontend to IPFS + JNS
+ * - Backend to DWS
+ */
+async function deployFullDecentralized(
+  options: DWSDeployOptions,
+): Promise<void> {
+  const { env, dryRun } = options
+
+  logger.header('Babylon Full Decentralized Deployment')
+  console.log(`Environment:  ${env}`)
+  console.log(`Mode:         ${dryRun ? 'DRY RUN' : 'DEPLOY'}\n`)
+
+  // Step 1: Build frontend
+  logger.step('Building frontend...')
+  await buildStaticFrontend(env)
+
+  // Step 2: Deploy frontend to IPFS
+  logger.step('Deploying frontend to IPFS...')
+  await deployToIpfsOnly(true)
+
+  // Step 3: Update JNS for frontend
+  const frontendConfig = FRONTEND_DEPLOY_CONFIGS[env]
+  const privateKeyEnv = process.env.DEPLOYER_PRIVATE_KEY
+  const privateKey: Hex | undefined =
+    privateKeyEnv && isValidHex(privateKeyEnv) ? privateKeyEnv : undefined
+
+  if (privateKey && frontendConfig.jnsResolverAddress !== ZERO_ADDRESS) {
+    // Get the latest CID from the deployment
+    const deployInfoPath = join(
+      process.cwd(),
+      'apps/web/dist/ipfs-deployment.json',
+    )
+    if (existsSync(deployInfoPath)) {
+      const deployInfo = JSON.parse(readFileSync(deployInfoPath, 'utf-8')) as {
+        static: { cid: string }
+      }
+      if (deployInfo.static?.cid) {
+        await updateJns(deployInfo.static.cid, frontendConfig, privateKey)
+      }
+    }
+  }
+
+  // Step 4: Deploy backend to DWS
+  await deployToDWS({ env, dryRun })
+
+  console.log('\n═══════════════════════════════════════')
+  console.log('  Full Decentralized Deployment Complete')
+  console.log('═══════════════════════════════════════\n')
+  console.log('  Frontend:')
+  console.log('    - Stored on IPFS')
+  console.log('    - Routed via JNS: babylon.jeju')
+  console.log('  Backend:')
+  console.log('    - Running on DWS nodes')
+  console.log('    - Routed via JNS: api.babylon.jeju')
+  console.log(`\n  App URL: https://babylon.game`)
+}
+
+// ============================================================================
+// Contract Deployment Functions
+// ============================================================================
+
 async function runTestnetSetup(): Promise<void> {
   logger.header('Testnet Post-Deployment Setup')
 
@@ -1160,6 +1345,78 @@ export async function runDeployCommand(args: string[]): Promise<void> {
     case 'ipfs': {
       const shouldPin = !getFlag(parsed, 'no-pin')
       await deployToIpfsOnly(shouldPin)
+      break
+    }
+
+    // DAO deployment via Jeju CLI
+    case 'dao': {
+      const daoEnvArg = getOption(parsed, 'env') || 'localnet'
+      const seed = getFlag(parsed, 'seed')
+      const dryRun = getFlag(parsed, 'dry-run')
+
+      // Map local/testnet/mainnet to localnet/testnet/mainnet
+      const network = daoEnvArg === 'local' ? 'localnet' : daoEnvArg
+
+      // Find the Babylon DAO manifest
+      const manifestPath = join(
+        process.cwd(),
+        '..',
+        '..',
+        'dao',
+        'jeju-manifest.json',
+      )
+
+      // Build jeju command
+      const args = ['deploy', 'dao', 'babylon']
+      args.push('--network', network)
+      args.push('--manifest', manifestPath)
+      if (seed) args.push('--seed')
+      if (dryRun) args.push('--dry-run')
+
+      logger.step(`Deploying Babylon DAO via Jeju CLI...`)
+      const result = await $`jeju ${args}`.nothrow()
+      process.exit(result.exitCode)
+      break
+    }
+
+    // Decentralized deployment commands
+    case 'dws': {
+      const dwsEnvArg = getOption(parsed, 'env') || 'testnet'
+      if (dwsEnvArg === 'local') {
+        logger.fail('Cannot deploy to DWS in local environment')
+        console.log('Use testnet or mainnet for DWS deployment')
+        process.exit(1)
+      }
+      if (!isNonLocalEnvironment(dwsEnvArg)) {
+        logger.fail(`Invalid environment: ${dwsEnvArg}`)
+        console.log('Valid environments: testnet, mainnet')
+        process.exit(1)
+      }
+      await deployToDWS({
+        env: dwsEnvArg,
+        dryRun: getFlag(parsed, 'dry-run'),
+      })
+      break
+    }
+
+    case 'full': {
+      const fullEnvArg = getOption(parsed, 'env') || 'testnet'
+      if (fullEnvArg === 'local') {
+        logger.fail(
+          'Cannot do full decentralized deployment in local environment',
+        )
+        console.log('Use testnet or mainnet')
+        process.exit(1)
+      }
+      if (!isNonLocalEnvironment(fullEnvArg)) {
+        logger.fail(`Invalid environment: ${fullEnvArg}`)
+        console.log('Valid environments: testnet, mainnet')
+        process.exit(1)
+      }
+      await deployFullDecentralized({
+        env: fullEnvArg,
+        dryRun: getFlag(parsed, 'dry-run'),
+      })
       break
     }
 

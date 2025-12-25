@@ -226,12 +226,12 @@ export class ExecutionRegistryClient {
    * Get node information
    */
   async getNode(address: Address): Promise<ExecutionNode> {
-    const result = await readContract(this.publicClient, {
+    const result = (await readContract(this.publicClient, {
       address: this.contractAddress,
       abi: EXECUTION_REGISTRY_ABI,
       functionName: 'nodes',
       args: [address],
-    })
+    })) as readonly [Address, bigint, bigint, bigint, bigint, boolean, bigint]
 
     const [
       operator,
@@ -258,12 +258,12 @@ export class ExecutionRegistryClient {
    * Get agent statistics
    */
   async getAgentStats(agentId: Hex): Promise<AgentStats> {
-    const result = await readContract(this.publicClient, {
+    const result = (await readContract(this.publicClient, {
       address: this.contractAddress,
       abi: EXECUTION_REGISTRY_ABI,
       functionName: 'agentStats',
       args: [agentId],
-    })
+    })) as readonly [bigint, bigint, bigint, bigint, bigint]
 
     const [
       totalExecutions,
@@ -301,12 +301,12 @@ export class ExecutionRegistryClient {
    * Check if node is available
    */
   async isNodeAvailable(address: Address): Promise<boolean> {
-    const result = await readContract(this.publicClient, {
+    const result = (await readContract(this.publicClient, {
       address: this.contractAddress,
       abi: EXECUTION_REGISTRY_ABI,
       functionName: 'isNodeAvailable',
       args: [address],
-    })
+    })) as boolean
     return result
   }
 }

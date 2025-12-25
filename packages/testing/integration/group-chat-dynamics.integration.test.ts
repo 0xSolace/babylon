@@ -14,7 +14,7 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { db } from '@babylon/db'
 import { GroupChatService, NPCGroupDynamicsService } from '@babylon/engine'
-import { generateSnowflakeId } from '@babylon/shared'
+import { generateSnowflakeId } from '@jejunetwork/shared'
 
 // Test data cleanup tracking
 const testIds: {

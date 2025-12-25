@@ -7,7 +7,8 @@
  */
 
 import { db } from '@babylon/db'
-import { generateSnowflakeId, logger } from '@babylon/shared'
+import { logger } from '@babylon/shared'
+import { generateSnowflakeId } from '@jejunetwork/shared'
 import { FEE_CONFIG, type FeeType } from '../config/fees'
 
 /**

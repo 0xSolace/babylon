@@ -9,7 +9,8 @@
 
 import { db } from '@babylon/db'
 import type { JsonValue } from '@babylon/shared'
-import { generateSnowflakeId, logger } from '@babylon/shared'
+import { logger } from '@babylon/shared'
+import { generateSnowflakeId } from '@jejunetwork/shared'
 import type {
   Action,
   EnvironmentState,

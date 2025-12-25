@@ -1,4 +1,5 @@
-import { cn, logger } from '@babylon/shared'
+import { logger } from '@babylon/shared'
+import { cn } from '@jejunetwork/shared'
 import { useMutation } from '@tanstack/react-query'
 import { Send, X } from 'lucide-react'
 import { useEffect, useState } from 'react'

@@ -7,7 +7,8 @@
  */
 
 import { db, type User } from '@babylon/db'
-import { type AuthenticatedUser, toNull } from '@babylon/shared'
+import type { AuthenticatedUser } from '@babylon/shared'
+import { toNull } from '@jejunetwork/shared'
 
 /**
  * Options for ensuring user exists

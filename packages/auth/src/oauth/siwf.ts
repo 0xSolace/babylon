@@ -1,11 +1,11 @@
 /**
  * Sign-In with Farcaster (SIWF)
  *
- * Uses @jejunetwork/oauth3's FarcasterProvider for authentication.
+ * Uses @jejunetwork/auth's FarcasterProvider for authentication.
  * Uses Farcaster custody address signatures for authentication.
  */
 
-import { type FarcasterProfile, FarcasterProvider } from '@jejunetwork/oauth3'
+import { type FarcasterProfile, FarcasterProvider } from '@jejunetwork/auth'
 
 export interface SIWFConfig {
   neynarApiKey?: string

@@ -14,7 +14,7 @@ import {
   test,
 } from 'bun:test'
 import { db, userAgentConfigs, users } from '@babylon/db'
-import { generateSnowflakeId } from '@babylon/shared'
+import { generateSnowflakeId } from '@jejunetwork/shared'
 
 // Centralized port configuration
 const BABYLON_API_PORT = process.env.BABYLON_API_PORT ?? '5009'

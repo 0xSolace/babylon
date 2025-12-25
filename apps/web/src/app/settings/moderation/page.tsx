@@ -4,7 +4,7 @@
  * Manage blocked and muted users
  */
 
-import { cn } from '@babylon/shared'
+import { cn } from '@jejunetwork/shared'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Ban, Trash2, UserX, VolumeX } from 'lucide-react'
 import { useState } from 'react'

@@ -17,7 +17,8 @@ import {
   npcTrades,
   sql,
 } from '@babylon/db'
-import { generateSnowflakeId, logger } from '@babylon/shared'
+import { logger } from '@babylon/shared'
+import { generateSnowflakeId } from '@jejunetwork/shared'
 import { loadActorById } from '../actors-loader'
 import { BabylonLLMClient } from '../llm/openai-client'
 import { StaticDataRegistry } from './static-data-registry'

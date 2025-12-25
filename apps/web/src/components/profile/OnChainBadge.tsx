@@ -1,4 +1,4 @@
-import { cn } from '@babylon/shared'
+import { cn } from '@jejunetwork/shared'
 import { Shield, ShieldCheck } from 'lucide-react'
 import { useState } from 'react'
 

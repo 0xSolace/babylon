@@ -1,5 +1,6 @@
 import type { OnboardingProfilePayload } from '@babylon/shared'
-import { cn, logger } from '@babylon/shared'
+import { logger } from '@babylon/shared'
+import { cn } from '@jejunetwork/shared'
 import { useQuery } from '@tanstack/react-query'
 import {
   AlertCircle,

@@ -7,8 +7,8 @@
  * @packageDocumentation
  */
 
-// Re-export nullish guards from utils for convenience
-export { isNotNullish, isNullish } from '../utils/nullable'
+// Re-export nullish guards from Jeju shared
+export { isNotNullish, isNullish } from '@jejunetwork/shared'
 // Base type guards - objects, arrays, primitives
 export {
   // Generic utilities
@@ -36,6 +36,7 @@ export {
   isNumber,
   isNumberArray,
   isObject,
+  isPlainObject,
   isPositiveInteger,
   isString,
   isStringArray,

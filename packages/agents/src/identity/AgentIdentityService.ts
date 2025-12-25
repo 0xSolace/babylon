@@ -12,7 +12,7 @@
 
 import type { User } from '@babylon/db'
 import { db, type JsonValue } from '@babylon/db'
-import { generateSnowflakeId, toNull } from '@babylon/shared'
+import { generateSnowflakeId, toNull } from '@jejunetwork/shared'
 import { getAgent0Client } from '../agent0/Agent0Client'
 import { syncAfterAgent0Registration } from '../agent0/reputation/agent0-reputation-sync'
 import { getAgentConfig } from '../shared/agent-config'

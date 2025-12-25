@@ -9,7 +9,7 @@
 
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { db } from '@babylon/db'
-import { generateSnowflakeId } from '@babylon/shared'
+import { generateSnowflakeId } from '@jejunetwork/shared'
 import {
   getArcPlan,
   getPhaseForDay,

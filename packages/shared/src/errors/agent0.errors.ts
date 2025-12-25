@@ -17,6 +17,7 @@ export class Agent0Error extends ExternalServiceError {
     | 'search'
     | 'discovery'
   public readonly agent0Code?: string
+  public declare readonly context?: Record<string, unknown>
 
   constructor(
     message: string,
@@ -25,24 +26,20 @@ export class Agent0Error extends ExternalServiceError {
     originalError?: Error,
     originalStatusCode?: number,
   ) {
-    // Pass enhanced context to parent
     super('Agent0', message, originalStatusCode)
     this.operation = operation
     this.agent0Code = agent0Code
-
-    // Context is set in parent, but we can access it via toJSON()
-    Object.assign(this, {
-      context: {
-        ...this.context,
-        operation,
-        agent0Code,
-        originalError: originalError?.message,
-        originalStack:
-          process.env.NODE_ENV === 'development'
-            ? originalError?.stack
-            : undefined,
-      },
-    })
+    this.context = {
+      service: 'Agent0',
+      originalStatusCode,
+      operation,
+      agent0Code,
+      originalError: originalError?.message,
+      originalStack:
+        process.env.NODE_ENV === 'development'
+          ? originalError?.stack
+          : undefined,
+    }
   }
 
   /**
@@ -56,12 +53,11 @@ export class Agent0Error extends ExternalServiceError {
    * Check if error is retryable
    */
   isRetryable(): boolean {
-    // Network errors and 5xx errors are retryable
-    if (this.originalStatusCode && this.originalStatusCode >= 500) {
+    const statusCode = (this as ExternalServiceError).originalStatusCode
+    if (statusCode && statusCode >= 500) {
       return true
     }
 
-    // Specific retryable error codes
     const retryableMessages = [
       'ECONNRESET',
       'ETIMEDOUT',
@@ -92,13 +88,6 @@ export class Agent0RegistrationError extends Agent0Error {
   ) {
     super(message, 'register', agent0Code, originalError, originalStatusCode)
     this.agentName = agentName
-
-    Object.assign(this, {
-      context: {
-        ...this.context,
-        agentName,
-      },
-    })
   }
 
   static isInstance(error: unknown): error is Agent0RegistrationError {
@@ -111,27 +100,16 @@ export class Agent0RegistrationError extends Agent0Error {
  */
 export class Agent0FeedbackError extends Agent0Error {
   public readonly feedbackId?: string
-  public readonly targetAgentId?: number
 
   constructor(
     message: string,
     feedbackId?: string,
-    targetAgentId?: number,
     agent0Code?: string,
     originalError?: Error,
     originalStatusCode?: number,
   ) {
     super(message, 'feedback', agent0Code, originalError, originalStatusCode)
     this.feedbackId = feedbackId
-    this.targetAgentId = targetAgentId
-
-    Object.assign(this, {
-      context: {
-        ...this.context,
-        feedbackId,
-        targetAgentId,
-      },
-    })
   }
 
   static isInstance(error: unknown): error is Agent0FeedbackError {
@@ -154,13 +132,6 @@ export class Agent0ReputationError extends Agent0Error {
   ) {
     super(message, 'reputation', agent0Code, originalError, originalStatusCode)
     this.tokenId = tokenId
-
-    Object.assign(this, {
-      context: {
-        ...this.context,
-        tokenId,
-      },
-    })
   }
 
   static isInstance(error: unknown): error is Agent0ReputationError {
@@ -183,13 +154,6 @@ export class Agent0SearchError extends Agent0Error {
   ) {
     super(message, 'search', agent0Code, originalError, originalStatusCode)
     this.filters = filters
-
-    Object.assign(this, {
-      context: {
-        ...this.context,
-        filters,
-      },
-    })
   }
 
   static isInstance(error: unknown): error is Agent0SearchError {
@@ -203,16 +167,14 @@ export class Agent0SearchError extends Agent0Error {
 export class Agent0DuplicateFeedbackError extends Agent0FeedbackError {
   constructor(feedbackId: string, targetAgentId: number) {
     super(
-      `Feedback ${feedbackId} already submitted to Agent0 for agent ${targetAgentId}`,
+      `Duplicate feedback submission for feedback ${feedbackId} targeting agent ${targetAgentId}`,
       feedbackId,
-      targetAgentId,
       'DUPLICATE_FEEDBACK',
     )
-    // Override properties via Object.assign since they're readonly
-    Object.assign(this, {
-      statusCode: 409,
-      code: 'AGENT0_DUPLICATE_FEEDBACK',
-    })
+  }
+
+  static isInstance(error: unknown): error is Agent0DuplicateFeedbackError {
+    return error instanceof Agent0DuplicateFeedbackError
   }
 }
 
@@ -220,7 +182,11 @@ export class Agent0DuplicateFeedbackError extends Agent0FeedbackError {
  * Error for Agent0 rate limiting
  */
 export class Agent0RateLimitError extends RateLimitError {
-  constructor(public readonly retryAfter?: number) {
-    super(10, 60000, retryAfter) // 10 requests per minute default
+  constructor(retryAfterSeconds?: number) {
+    super(10, 60000, retryAfterSeconds)
+  }
+
+  static isInstance(error: unknown): error is Agent0RateLimitError {
+    return error instanceof Agent0RateLimitError
   }
 }

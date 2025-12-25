@@ -1,4 +1,4 @@
-import { cn } from '@babylon/shared'
+import { cn } from '@jejunetwork/shared'
 import { memo } from 'react'
 import { Link } from 'react-router-dom'
 import { z } from 'zod'

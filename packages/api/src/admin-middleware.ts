@@ -21,9 +21,9 @@ import { db, eq, users } from '@babylon/db'
 import {
   type AuthenticatedUser,
   AuthorizationError,
-  first,
   logger,
 } from '@babylon/shared'
+import { first } from '@jejunetwork/shared'
 import type { ElysiaContext, RequestHeaders } from './auth-middleware'
 import {
   authenticate,
@@ -254,7 +254,7 @@ export async function requireAdmin(
 /**
  * Authenticate request and verify admin privileges (Elysia context)
  */
-async function _requireAdminFromContext(
+export async function requireAdminFromContext(
   ctx: ElysiaContext,
 ): Promise<AuthenticatedUser> {
   // Check for dev admin token first

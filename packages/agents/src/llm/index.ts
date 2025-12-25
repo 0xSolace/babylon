@@ -2,7 +2,6 @@
  * LLM Integrations
  *
  * ALL LLM inference routes through Jeju Compute marketplace.
- * NO FALLBACKS to centralized providers.
  *
  * FOR AGENTS (autonomous services):
  * - callAgentLLM() - Routes through Jeju Compute
@@ -21,19 +20,18 @@
  * - Agents use new model
  */
 
-// Agent LLM (routes through Jeju Compute)
-export * from './agent-llm'
-
-// Jeju inference marketplace (decentralized LLM routing)
+// Jeju inference marketplace (decentralized LLM routing) - from @jejunetwork/agents
 export {
-  type ChatMessage as JejuChatMessage,
   createJejuInference,
   type InferenceProvider,
   type InferenceRequest,
   type InferenceResponse,
+  type JejuChatMessage,
   JejuInference,
   type JejuInferenceConfig,
-} from './jeju-inference'
+} from '@jejunetwork/agents'
+// Agent LLM (routes through Jeju Compute)
+export * from './agent-llm'
 
 // Jeju provider (alternative interface)
 export * from './jeju-provider'

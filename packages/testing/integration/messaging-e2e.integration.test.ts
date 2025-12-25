@@ -15,13 +15,13 @@
  */
 
 import { afterAll, beforeAll, describe, expect, it } from 'bun:test'
+import { MessagingClient } from '@babylon/messaging'
 import {
   decryptMessage,
   deriveKeyPairFromWallet,
   encryptMessage,
   generateKeyPair,
-  MessagingClient,
-} from '@babylon/messaging'
+} from '@jejunetwork/messaging'
 
 // Response schema
 const _CidSchema = z.object({ cid: z.string() })

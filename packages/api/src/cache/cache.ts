@@ -2,12 +2,12 @@
  * Decentralized Cache Layer
  *
  * ALL caching routes through Jeju Compute's decentralized cache.
- * NO FALLBACKS - Decentralized cache is required.
  *
  * This replaces Redis as the caching layer.
  */
 
-import { logger, toNull } from '@babylon/shared'
+import { logger } from '@babylon/shared'
+import { toNull } from '@jejunetwork/shared'
 import {
   getErrorMessage,
   isCacheEntriesResponse,

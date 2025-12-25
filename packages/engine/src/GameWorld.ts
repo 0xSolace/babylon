@@ -4,12 +4,9 @@
  */
 
 import { EventEmitter } from 'node:events'
-import {
-  generateSnowflakeId,
-  type PerpMarketRecord,
-  type WorldEvent,
-} from '@babylon/shared'
-import { type FeedEvent, FeedGenerator } from './FeedGenerator'
+import type { PerpMarketRecord, WorldEvent } from '@babylon/shared'
+import { generateSnowflakeId } from '@jejunetwork/shared'
+import { FeedGenerator, type FeedPost } from './FeedGenerator'
 import type { BabylonLLMClient } from './llm/openai-client'
 import {
   daySummary,
@@ -111,7 +108,7 @@ export interface GameWorldEvents {
   'rumor:spread': { description: string }
   'clue:revealed': { npc: string; description: string }
   'development:occurred': { description: string }
-  'feed:post': FeedEvent
+  'feed:post': FeedPost
   'outcome:revealed': { data: { outcome: boolean } }
   event: { type: string; data: JsonValue }
 }
@@ -194,7 +191,7 @@ export interface DayEvent {
   day: number
   summary: string
   events: WorldEvent[]
-  feedPosts?: FeedEvent[] // Feed posts generated for this day
+  feedPosts?: FeedPost[] // Feed posts generated for this day
   groupChats?: Record<string, GroupMessage[]> // Group chat messages for this day
   publicSentiment: number // -1 to 1 (negative = NO, positive = YES)
 }
@@ -1150,7 +1147,7 @@ export class GameWorld extends EventEmitter implements TypedGameWorldEmitter {
     return processed.transformedText
   }
 
-  private calculateFeedSentiment(feedPosts: FeedEvent[]): number {
+  private calculateFeedSentiment(feedPosts: FeedPost[]): number {
     if (feedPosts.length === 0) return 0
 
     const totalSentiment = feedPosts.reduce(

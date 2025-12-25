@@ -15,8 +15,8 @@
  */
 
 import { db } from '@babylon/db'
-import { generateSnowflakeId } from '@babylon/shared'
 import type { AgentRuntime } from '@elizaos/core'
+import { generateSnowflakeId } from '@jejunetwork/shared'
 import type { Address, Hex } from 'viem'
 import { autonomousCoordinator } from '../autonomous'
 import { agentRuntimeManager } from '../runtime/AgentRuntimeManager'

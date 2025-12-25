@@ -379,7 +379,6 @@ export class MultiModelOrchestrator {
 
   /**
    * Call Jeju Compute Marketplace for inference
-   * NO FALLBACKS - Decentralized compute is required
    */
   private async callJejuCompute(
     prompt: string,

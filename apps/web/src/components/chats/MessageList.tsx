@@ -1,4 +1,4 @@
-import { cn } from '@babylon/shared'
+import { cn } from '@jejunetwork/shared'
 import { Loader2, MessageCircle } from 'lucide-react'
 import type React from 'react'
 import { Skeleton } from '@/components/shared/Skeleton'

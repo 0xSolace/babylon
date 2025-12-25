@@ -19,7 +19,7 @@ import {
   DEFAULT_HUBS,
   type FarcasterPoster,
   type PostedCast,
-} from '@jejunetwork/farcaster'
+} from '@jejunetwork/messaging'
 import type { Hex } from 'viem'
 import { isProductionEnvironment } from '../config/tee'
 import {

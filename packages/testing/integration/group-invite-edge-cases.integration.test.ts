@@ -8,7 +8,7 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { db } from '@babylon/db'
 import { GroupInviteConfig, GroupInviteOrchestrator } from '@babylon/engine'
-import { generateSnowflakeId } from '@babylon/shared'
+import { generateSnowflakeId } from '@jejunetwork/shared'
 
 const testIds = {
   userIds: [] as string[],

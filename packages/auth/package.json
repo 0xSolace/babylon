@@ -15,7 +15,7 @@
   "dependencies": {
     "@babylon/shared": "workspace:*",
     "@jejunetwork/kms": "workspace:*",
-    "@jejunetwork/oauth3": "workspace:*",
+    "@jejunetwork/auth": "workspace:*",
     "arctic": "2.3.0",
     "jose": "5.10.0",
     "viem": "2.43.3",

@@ -72,7 +72,7 @@ export interface FarcasterSignInResult {
 }
 
 // Stub types for planned OAuth providers (Twitter, Discord)
-// These will be implemented using @jejunetwork/oauth3 providers
+// These will be implemented using @jejunetwork/auth providers
 
 export interface TwitterOAuthConfig {
   clientId: string
@@ -138,7 +138,7 @@ export const DiscordProvider = DiscordOAuth
 
 /**
  * Farcaster Auth helper class
- * Wraps FarcasterProvider from @jejunetwork/oauth3
+ * Wraps FarcasterProvider from @jejunetwork/auth
  */
 export class FarcasterAuth {
   private config: FarcasterAuthConfig

@@ -1,30 +1,30 @@
 /**
  * @babylon/auth
  *
- * Client-side authentication for Babylon using Jeju's decentralized auth.
+ * Babylon-specific authentication layer built on @jejunetwork/auth.
  *
- * Features:
- * - Web2 login (email, Twitter, Discord, Farcaster)
- * - Web3 login (wallet connect)
- * - MPC threshold signatures (no single point of failure)
- * - DID-based identity
- * - Key backup and recovery
- * - Gas sponsorship via treasury
+ * This package provides:
+ * - Pre-configured defaults for Babylon apps
+ * - Babylon-specific React hooks with sensible defaults
+ * - Re-exports all @jejunetwork/auth functionality
+ *
+ * For most use cases, import directly from @jejunetwork/auth.
+ * Use @babylon/auth when you need Babylon-specific defaults.
  *
  * @example
  * ```tsx
- * import { JejuAuthProvider, useJejuAuth } from '@babylon/auth';
+ * import { BabylonAuthProvider, useBabylonAuth } from '@babylon/auth';
  *
  * function App() {
  *   return (
- *     <JejuAuthProvider config={{ network: 'mainnet' }}>
+ *     <BabylonAuthProvider>
  *       <MyApp />
- *     </JejuAuthProvider>
+ *     </BabylonAuthProvider>
  *   );
  * }
  *
  * function MyApp() {
- *   const { authenticated, loginWithWallet, logout } = useJejuAuth();
+ *   const { authenticated, loginWithWallet, logout } = useBabylonAuth();
  *
  *   if (!authenticated) {
  *     return <button onClick={loginWithWallet}>Connect</button>;
@@ -36,191 +36,351 @@
  */
 
 // =============================================================================
-// React Components and Hooks (Client-side)
+// Re-export all @jejunetwork/auth types and functions
 // =============================================================================
 
-export { LoginButton } from './client/login-button'
-export { JejuAuthProvider, useJejuAuthContext } from './client/provider'
-export type { JejuAuthConfig, LoginState } from './client/types'
-export { useJejuAuth } from './client/use-jeju-auth'
-export { useJejuWallet } from './client/use-jeju-wallet'
-
-// =============================================================================
-// OAuth types from @jejunetwork/oauth3
-// =============================================================================
-
-export type {
-  FarcasterCast,
-  FarcasterFrameContext,
-  FarcasterProfile,
-  FarcasterSigner,
-  OAuthConfig,
-  OAuthProfile,
-  OAuthState,
-  OAuthToken,
-} from '@jejunetwork/oauth3'
-
-// =============================================================================
 // DID utilities
-// =============================================================================
-
+// Paymaster (Gas Sponsorship)
+// MPC/FROST Signing
+// OAuth Providers
+// Farcaster
+// Email/Phone Providers
+// MFA
+// Verifiable Credentials
+// Infrastructure
+// React SDK
+// SDK Client
+// Core types
 export {
+  AppleProvider,
+  type AuthMethod,
+  AuthProvider,
+  addressFromDid,
+  aggregateSignatures,
+  type BackupCode,
+  BackupCodesManager,
+  type BackupCodesSet,
+  ChainId,
+  ConnectedAccount,
+  type ConnectedAccountProps,
+  type CouncilConfig,
+  CouncilType,
+  type CreateIdentityResult,
+  type CredentialIssuanceParams,
+  type CredentialIssuer,
+  type CredentialPresentation,
+  type CredentialProof,
+  type CredentialSubject,
+  CredentialType,
+  type CredentialVerificationResult,
+  type CrossChainIdentity,
+  type CrossChainIntent,
+  createBackupCodesManager,
+  createCredentialHash,
+  createDecentralizedDiscovery,
   createDID,
   createDIDFromAddress,
+  createEmailProvider,
+  createGasEstimator,
+  createOAuth3Client,
+  createOAuth3JNSService,
+  createOAuth3StorageService,
+  createOAuthProvider,
+  createPasskeyManager,
+  createPhoneProvider,
+  createThresholdEncryption,
+  createTOTPManager,
+  createTreasuryPaymaster,
+  createX402PaymentClient,
+  credentialToOnChainAttestation,
+  type DID,
+  type DIDDocument,
   DIDManager,
   type DIDManagerConfig,
+  DIDNetwork,
+  DiscordProvider,
   didEquals,
-  extractAddressFromDid,
+  didFromAddress,
+  type EmailAuthConfig,
+  type EmailAuthResult,
+  EmailProvider,
+  type EmailUser,
+  extractAddressFromDID,
+  type FarcasterCast,
+  type FarcasterFrameContext,
+  type FarcasterIdentity,
+  type FarcasterProfile,
+  FarcasterProvider,
+  type FarcasterSigner,
+  type FarcasterSignerRequest,
+  type FROSTCluster,
+  FROSTCoordinator,
+  type FROSTKeyShare,
+  type FROSTSignature,
+  type FROSTSignatureShare,
+  type FROSTSigningCommitment,
+  farcasterProvider,
+  type GasEstimate,
+  GasEstimator,
+  type GasEstimatorConfig,
+  GitHubProvider,
+  GoogleProvider,
+  generateKeyShares,
   generateRandomDID,
+  generateSignatureShare,
+  generateSigningCommitment,
   getNetwork,
+  type IdentityIntent,
+  IdentityIntentAction,
+  type IdentityMetadata,
+  type IntentSolution,
+  IntentStatus,
   isLocalnet,
   isMainnet,
   isTestnet,
-  parseDID,
-  validateDID,
-} from './did/index'
-
-// =============================================================================
-// MPC network (browser-safe stubs for client)
-// =============================================================================
-
-export {
-  DEFAULT_MPC_CONFIG,
-  getMPCConfig,
-  getMPCCoordinator,
-  type KeyRotationParams,
-  type KeyRotationResult,
-  type KeyVersion,
-  MPCCoordinator,
-  type MPCCoordinatorConfig,
-  type MPCKeyGenParams,
-  type MPCKeyGenResult,
-  type MPCParty,
-  type MPCSignatureResult,
-  type MPCSignRequest,
-  type MPCSignSession,
-  resetMPCCoordinator,
-  type SignResult,
-  ThresholdSigner,
-  type ThresholdSignerConfig,
-} from './mpc/index'
-
-export type {
-  KeyGenRequest,
-  KeyGenResponse,
-  MPCClientConfig,
-  NetworkStatus,
-  SigningRequest,
-  SigningResponse,
-} from './mpc/types'
-
-// =============================================================================
-// OAuth providers
-// =============================================================================
-
-export type {
-  OAuthCallbackResult,
-  OAuthProvider,
-  OAuthTokens,
-  OAuthUserInfo,
-} from './oauth/index'
-
-export {
-  // SIWE (Sign-In with Ethereum - EIP-4361)
-  createSIWEMessage,
-  // SIWF (Sign-In with Farcaster)
-  createSIWFMessage,
-  // OAuth2 providers
-  DiscordOAuth,
-  DiscordProvider,
-  FarcasterAuth,
-  type FarcasterAuthConfig,
-  type FarcasterSignInRequest,
-  type FarcasterSignInResult,
-  farcasterProvider,
-  // PKCE utilities
-  generatePKCE,
-  PKCEUtils,
-  SIWE,
-  type SIWEConfig,
-  type SIWEMessage,
-  type SIWEVerificationResult,
-  SIWF,
-  type SIWFConfig,
-  type SIWFMessage,
-  type SIWFVerificationResult,
-  TwitterOAuth,
-  TwitterProvider,
-  verifySIWE,
-  verifySIWF,
-} from './oauth/index'
-
-// =============================================================================
-// OAuth3 (Jeju Decentralized Auth)
-// =============================================================================
-
-export {
-  AuthProvider,
-  type AuthResult,
-  getOAuth3Client,
-  type IdentityMetadata,
-  initializeOAuth3,
   type LinkedProvider,
+  type LinkOptions,
+  LoginButton,
+  type LoginButtonProps,
+  LoginModal,
+  type LoginModalProps,
+  type LoginOptions,
+  type MagicLinkToken,
+  type MFAChallenge,
+  type MFAChallengeMetadata,
+  MFAMethod,
+  MFASetup,
+  type MFASetupProps,
+  type MFAStatus,
+  type MPCCluster,
+  type MPCNode,
+  type MPCSignatureRequest,
+  type MPCSignatureResult,
+  MPCSignatureStatus,
+  type OAuth3App,
+  type OAuth3AppCredentials,
+  type OAuth3AppMetadata,
   OAuth3Client,
   type OAuth3Config,
+  type OAuth3ContextValue,
+  OAuth3DecentralizedDiscovery,
+  OAuth3Error,
+  OAuth3ErrorCode,
+  type OAuth3ErrorDetails,
+  type OAuth3Event,
+  type OAuth3EventHandler,
+  type OAuth3EventType,
   type OAuth3Identity,
+  type OAuth3InternalSession,
+  OAuth3JNSService,
+  OAuth3Provider,
+  type OAuth3ProviderProps,
   type OAuth3Session,
-  resetOAuth3Client,
-} from './oauth3/index'
+  OAuth3StorageService,
+  type OAuthConfig,
+  type OAuthProfile,
+  type OAuthState,
+  type OAuthToken,
+  type OTPToken,
+  type ParsedDID,
+  type PasskeyAuthenticationOptions,
+  type PasskeyAuthResult,
+  type PasskeyChallenge,
+  type PasskeyCredential,
+  PasskeyManager,
+  type PasskeyRegistrationOptions,
+  type PaymasterConfig,
+  type PaymasterData,
+  type PaymasterDecision,
+  type PhoneAuthConfig,
+  type PhoneAuthResult,
+  type PhoneOTP,
+  PhoneProvider,
+  type PhoneUser,
+  parseDID,
+  publicKeyToAddress,
+  SessionCapability,
+  type SessionKeyInfo,
+  type SessionPermission,
+  type SignMessageOptions,
+  type SmartAccountInfo,
+  type SponsorshipPolicy,
+  type SponsorshipResult,
+  type TEEAttestation,
+  type TEENodeInfo,
+  TEEProvider,
+  ThresholdEncryptionService,
+  TOTPManager,
+  type TOTPSecret,
+  type TOTPSetupResult,
+  type TOTPVerifyResult,
+  type TransactionOptions,
+  TreasuryPaymaster,
+  TwitterProvider,
+  type UseCredentialsReturn,
+  type UseLoginOptions,
+  type UseLoginReturn,
+  type UseMFAOptions,
+  type UseMFAReturn,
+  type UserOperation,
+  type UserSponsorshipState,
+  type UseSessionReturn,
+  useCredentials,
+  useLogin,
+  useMFA,
+  useOAuth3,
+  useOAuth3Client,
+  useSession,
+  type VerifiableCredential,
+  VerifiableCredentialIssuer,
+  VerifiableCredentialVerifier,
+  type VerificationMethod,
+  validateDID,
+  verifySignature,
+  X402PaymentClient,
+} from '@jejunetwork/auth'
+// Threshold Signing (from local module)
+export { ThresholdSigner, type ThresholdSignerConfig } from './mpc'
+// OAuth PKCE utilities (from local module)
+export { generatePKCE, PKCEUtils } from './oauth/pkce'
+export type { PKCEParams } from './oauth/types'
+// Key Backup/Recovery (from local module)
+export { type BackupOptions, KeyBackupManager } from './recovery'
 
 // =============================================================================
-// Paymaster (Gas sponsorship)
+// Babylon-specific Configuration
 // =============================================================================
 
-export { GasEstimator, TreasuryPaymaster } from './paymaster/index'
-export type { SponsorshipPolicy } from './paymaster/types'
+import type { OAuth3Config, SponsorshipPolicy } from '@jejunetwork/auth'
+import type { Address, Hex } from 'viem'
+
+/**
+ * OAuth provider client IDs configuration
+ */
+export interface OAuthProvidersConfig {
+  twitter?: string
+  discord?: string
+  google?: string
+  github?: string
+  apple?: string
+}
+
+/**
+ * Farcaster provider configuration
+ */
+export interface FarcasterProviderConfig {
+  neynarApiKey?: string
+  hubUrl?: string
+}
+
+/**
+ * Babylon auth configuration with sensible defaults
+ */
+export interface BabylonAuthConfig extends Partial<OAuth3Config> {
+  /** Network: mainnet, testnet, or localnet (default: testnet) */
+  network?: 'mainnet' | 'testnet' | 'localnet'
+  /** Babylon-specific app ID override */
+  appId?: string
+  /** Babylon treasury address for gas sponsorship */
+  treasuryAddress?: Address
+  /** Operator key for paymaster (if gas sponsorship enabled) */
+  operatorKey?: Hex
+  /** Custom sponsorship policy */
+  sponsorshipPolicy?: Partial<SponsorshipPolicy>
+  /** MPC endpoints for threshold signing (optional) */
+  mpcEndpoints?: string[]
+  /** OAuth provider client IDs */
+  oauth?: OAuthProvidersConfig
+  /** Farcaster provider configuration */
+  farcaster?: FarcasterProviderConfig
+}
+
+/**
+ * Default Babylon auth configuration
+ */
+export const BABYLON_AUTH_DEFAULTS: BabylonAuthConfig = {
+  network: 'testnet',
+  appId: 'babylon.apps.jeju',
+}
+
+/**
+ * Chain IDs for Babylon deployment
+ */
+export const BABYLON_CHAIN_IDS = {
+  localnet: 420691,
+  testnet: 420690,
+  mainnet: 420692,
+} as const
+
+/**
+ * Get chain ID for Babylon network
+ */
+export function getBabylonChainId(
+  network: 'mainnet' | 'testnet' | 'localnet',
+): number {
+  return BABYLON_CHAIN_IDS[network]
+}
+
+/**
+ * Merge Babylon defaults with user config
+ */
+export function createBabylonAuthConfig(
+  config: BabylonAuthConfig = {},
+): OAuth3Config {
+  const network = config.network ?? 'testnet'
+  const chainId = getBabylonChainId(network)
+
+  return {
+    appId: config.appId ?? BABYLON_AUTH_DEFAULTS.appId ?? 'babylon.apps.jeju',
+    chainId,
+    redirectUri: config.redirectUri ?? '',
+    ...config,
+  }
+}
 
 // =============================================================================
-// Recovery
+// Babylon OAuth3 Client Factory
+// =============================================================================
+
+import { createOAuth3Client as createBaseClient } from '@jejunetwork/auth'
+
+// Singleton OAuth3 client instance
+let oauth3ClientInstance: ReturnType<typeof createBaseClient> | null = null
+
+/**
+ * Get a singleton OAuth3 client configured for Babylon.
+ * Uses lazy initialization - client is created on first call.
+ *
+ * @param config Optional config overrides
+ * @returns Configured OAuth3Client instance
+ */
+export function getOAuth3Client(
+  config: BabylonAuthConfig = {},
+): ReturnType<typeof createBaseClient> {
+  if (!oauth3ClientInstance) {
+    const oauth3Config = createBabylonAuthConfig(config)
+    oauth3ClientInstance = createBaseClient(oauth3Config)
+  }
+  return oauth3ClientInstance
+}
+
+/**
+ * Reset the OAuth3 client singleton (for testing)
+ */
+export function resetOAuth3Client(): void {
+  oauth3ClientInstance = null
+}
+
+// =============================================================================
+// Babylon-specific React Hooks (Convenience Wrappers)
 // =============================================================================
 
 export {
-  KeyBackupManager,
-  RecoveryManager,
-  SocialRecovery,
-} from './recovery/index'
-
-// =============================================================================
-// Validation schemas
-// =============================================================================
-
-export type {
-  DiscordUserResponseInput,
-  KeyBackupInput,
-  OAuthTokenResponseInput,
-  PKCEParamsInput,
-  SessionClaimsInput,
-  SessionDataInput,
-  SessionTokenDataInput,
-  TwitterUserResponseInput,
-} from './schemas/index'
-
-export {
-  AddressSchema,
-  DIDSchema,
-  DiscordUserResponseSchema,
-  HexSchema,
-  KeyBackupSchema,
-  OAuthTokenResponseSchema,
-  PKCEParamsSchema,
-  SessionClaimsSchema,
-  SessionDataSchema,
-  SessionTokenDataSchema,
-  TwitterUserResponseSchema,
-} from './schemas/index'
-
-// =============================================================================
-// Core types
-// =============================================================================
-
-export * from './types/index'
+  BabylonAuthProvider,
+  JejuAuthProvider,
+  type UseWalletReturn,
+  useBabylonAuth,
+  useBabylonWallet,
+  useJejuAuth,
+  useJejuWallet,
+} from './react/babylon-provider'

@@ -8,7 +8,7 @@ import { beforeAll, describe, expect, test } from 'bun:test'
 import { Agent0FeedbackService } from '@babylon/agents'
 import { syncUserReputationToERC8004 } from '@babylon/agents/agent0/reputation/erc8004-reputation-sync'
 import { db } from '@babylon/db'
-import { generateSnowflakeId } from '@babylon/shared'
+import { generateSnowflakeId } from '@jejunetwork/shared'
 
 describe('Reputation Sync with Localnet Default Keys', () => {
   let testAgentUserId: string

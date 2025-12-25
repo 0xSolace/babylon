@@ -13,7 +13,7 @@ import {
   syncUserReputationToERC8004,
 } from '@babylon/agents/agent0/reputation/erc8004-reputation-sync'
 import { db } from '@babylon/db'
-import { generateSnowflakeId } from '@babylon/shared'
+import { generateSnowflakeId } from '@jejunetwork/shared'
 
 // Centralized port configuration
 const API_PORT = process.env.BABYLON_API_PORT ?? '5009'

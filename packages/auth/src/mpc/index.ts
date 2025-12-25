@@ -16,32 +16,32 @@ import { isHex } from '../types/guards'
 // Currently marked with _ prefix to indicate intentional non-use.
 // ============================================================================
 
-interface KeyIdResponse {
+export interface KeyIdResponse {
   keyId: string
 }
 
-function _isKeyIdResponse(value: unknown): value is KeyIdResponse {
+export function isKeyIdResponse(value: unknown): value is KeyIdResponse {
   return isObject(value) && hasStringProperty(value, 'keyId')
 }
 
-interface SignResponse {
+export interface SignResponse {
   signature: Hex
   mode: 'mpc' | 'development'
 }
 
-function _isSignResponse(value: unknown): value is SignResponse {
+export function isSignResponse(value: unknown): value is SignResponse {
   if (!isObject(value)) return false
   if (!hasStringProperty(value, 'signature')) return false
   if (!isHex(value.signature)) return false
   return true
 }
 
-interface KeyGenResponse {
+export interface KeyGenResponse {
   keyId: string
   publicKey: Hex
 }
 
-function _isKeyGenResponse(value: unknown): value is KeyGenResponse {
+export function isKeyGenResponse(value: unknown): value is KeyGenResponse {
   if (!isObject(value)) return false
   if (!hasStringProperty(value, 'keyId')) return false
   if (!hasStringProperty(value, 'publicKey')) return false
@@ -49,36 +49,29 @@ function _isKeyGenResponse(value: unknown): value is KeyGenResponse {
   return true
 }
 
-interface KeyRotationResponse {
+export interface KeyRotationResponse {
   newKeyId: string
 }
 
-function _isKeyRotationResponse(value: unknown): value is KeyRotationResponse {
+export function isKeyRotationResponse(
+  value: unknown,
+): value is KeyRotationResponse {
   return isObject(value) && hasStringProperty(value, 'newKeyId')
 }
 
-interface MPCSignatureResponse {
+export interface MPCSignatureResponse {
   signature: Hex
   recoveryId: number
   participants: string[]
 }
 
-function _isMPCSignatureResponse(
+export function isMPCSignatureResponse(
   value: unknown,
 ): value is MPCSignatureResponse {
   if (!isObject(value)) return false
   if (!hasStringProperty(value, 'signature')) return false
   if (!isHex(value.signature)) return false
   return true
-}
-
-// Export unused functions to prevent warnings (for future use)
-export const _mpc_guards_reserved = {
-  _isKeyIdResponse,
-  _isSignResponse,
-  _isKeyGenResponse,
-  _isKeyRotationResponse,
-  _isMPCSignatureResponse,
 }
 
 // ============================================================================

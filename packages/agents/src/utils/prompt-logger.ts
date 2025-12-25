@@ -142,7 +142,7 @@ export async function logPrompt(entry: PromptLogEntry): Promise<void> {
 /**
  * Clean debug logs older than N days
  */
-async function _cleanOldDebugLogs(maxAgeDays = 7): Promise<number> {
+export async function cleanOldDebugLogs(maxAgeDays = 7): Promise<number> {
   if (!isPromptLoggingEnabled()) {
     return 0
   }

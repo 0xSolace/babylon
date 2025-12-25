@@ -7,7 +7,6 @@
 import { exec } from 'node:child_process'
 import { promisify } from 'node:util'
 import {
-  isJejuNetwork,
   type JejuNetwork,
   jejuMainnet,
   jejuTestnet,
@@ -244,7 +243,6 @@ export function printContractStatus(status: ContractsStatus): void {
 type MessagingNetwork = JejuNetwork
 
 // Re-use shared guards
-const _isMessagingNetwork = isJejuNetwork
 const toMessagingNetwork = (value: string | undefined): MessagingNetwork =>
   toJejuNetwork(value, 'localnet')
 

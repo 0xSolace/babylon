@@ -1,4 +1,5 @@
-import { cn, type FeedPost } from '@babylon/shared'
+import type { FeedPost } from '@babylon/shared'
+import { cn } from '@jejunetwork/shared'
 import { useQuery } from '@tanstack/react-query'
 import { Plus } from 'lucide-react'
 import { lazy, useCallback, useEffect, useMemo, useRef, useState } from 'react'

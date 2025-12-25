@@ -28,7 +28,7 @@
  * />
  * ```
  */
-import { cn } from '@babylon/shared'
+import { cn } from '@jejunetwork/shared'
 import { Loader2, Send } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'

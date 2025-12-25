@@ -16,7 +16,6 @@ export type {
   DayTimeline,
   ElizaCharacter,
   ElizaMessageExample,
-  FeedEvent,
   FeedPost,
   GameHistory,
   GameResolution,

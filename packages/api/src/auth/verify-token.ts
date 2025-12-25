@@ -4,7 +4,7 @@
  * Verifies wallet-signed session tokens. No shared secret needed.
  */
 
-import { toNull } from '@babylon/shared'
+import { toNull } from '@jejunetwork/shared'
 import { type SessionClaims, SessionManager } from './session-manager'
 
 export interface VerifyResult {

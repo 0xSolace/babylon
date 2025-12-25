@@ -1,4 +1,4 @@
-import { cn } from '@babylon/shared'
+import { cn } from '@jejunetwork/shared'
 import { Flame } from 'lucide-react'
 import { useMemo } from 'react'
 import { Skeleton } from '@/components/shared/Skeleton'

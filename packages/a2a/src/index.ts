@@ -47,17 +47,40 @@ export type {
   JsonRpcRequest,
   JsonRpcResponse,
 } from './types/a2a'
-export {
-  A2A_API_KEY_HEADER,
-  type ApiKeyAuthConfig,
-  type AuthRequest,
-  type AuthResult,
-  getRequiredApiKey,
+
+// Re-export utilities from @jejunetwork/a2a
+import type {
+  ApiKeyAuthConfig,
+  AuthRequest,
+  AuthResult,
+} from '@jejunetwork/a2a'
+import {
   isLocalHost,
-  validateApiKey,
-} from './utils/api-key-auth'
-// Rate limiter
-export { RateLimiter } from './utils/rate-limiter'
+  RateLimiter,
+  validateApiKey as validateApiKeyBase,
+} from '@jejunetwork/a2a'
+
+export type { ApiKeyAuthConfig, AuthRequest, AuthResult }
+export { isLocalHost, RateLimiter }
+
+// Babylon-specific API key header constant
+export const A2A_API_KEY_HEADER = 'x-babylon-api-key'
+
+// Babylon-specific API key getter (uses BABYLON_A2A_API_KEY env var)
+export function getRequiredApiKey(): string | undefined {
+  return process.env.BABYLON_A2A_API_KEY
+}
+
+// Babylon-specific validateApiKey wrapper with default header name
+export function validateApiKey(
+  request: AuthRequest,
+  config: ApiKeyAuthConfig = {},
+): AuthResult {
+  return validateApiKeyBase(request, {
+    ...config,
+    headerName: config.headerName ?? A2A_API_KEY_HEADER,
+  })
+}
 // Validation schemas
 export {
   type BuySharesParams,

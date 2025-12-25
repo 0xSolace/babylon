@@ -274,12 +274,12 @@ export async function getOnChainReputation(
     rpcUrl: getCurrentRpcUrl(),
   })
 
-  const reputation = await readContract(publicClient, {
+  const reputation = (await readContract(publicClient, {
     address: REPUTATION_SYSTEM,
     abi: REPUTATION_SYSTEM_ABI,
     functionName: 'getReputation',
     args: [BigInt(Number(user.nftTokenId))],
-  })
+  })) as readonly [bigint, bigint, bigint, bigint, bigint, bigint, boolean]
 
   // Reputation returns tuple: [totalBets, winningBets, totalVolume, profitLoss, accuracyScore, trustScore, isBanned]
   // We want trustScore (index 5) which is 0-10000 scale (divide by 100 to get 0-100)

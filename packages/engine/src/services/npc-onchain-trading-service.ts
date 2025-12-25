@@ -19,7 +19,8 @@ import {
   STOP_LOSS_CONFIG,
 } from '@babylon/agents'
 import { db, npcTrades } from '@babylon/db'
-import { generateSnowflakeId, logger } from '@babylon/shared'
+import { logger } from '@babylon/shared'
+import { generateSnowflakeId } from '@jejunetwork/shared'
 import {
   type Address,
   type Chain,

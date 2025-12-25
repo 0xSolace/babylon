@@ -7,12 +7,8 @@
  */
 
 import { db, gameConfigs, type JsonValue } from '@babylon/db'
-import {
-  generateSnowflakeId,
-  toIpfsProvider,
-  toNetworkName,
-  toNull,
-} from '@babylon/shared'
+import { toIpfsProvider, toNetworkName } from '@babylon/shared'
+import { generateSnowflakeId, toNull } from '@jejunetwork/shared'
 import { SDK } from 'agent0-sdk'
 import { logger } from '../shared/logger'
 import { getAgent0Client } from './Agent0Client'

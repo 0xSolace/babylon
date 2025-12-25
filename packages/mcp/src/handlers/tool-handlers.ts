@@ -21,12 +21,12 @@ import type {
 } from '@babylon/shared'
 import {
   AuthorizationError,
-  generateSnowflakeId,
   getAPIBaseUrl,
   logger,
   NotFoundError,
   ValidationError,
 } from '@babylon/shared'
+import { generateSnowflakeId } from '@jejunetwork/shared'
 
 /**
  * Helper to extract result from JsonRpcResponse, throwing if error or no result

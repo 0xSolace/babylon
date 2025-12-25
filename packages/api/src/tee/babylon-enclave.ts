@@ -427,7 +427,7 @@ export async function getBabylonEnclave(
   return babylonEnclave
 }
 
-async function _shutdownBabylonEnclave(): Promise<void> {
+export async function _shutdownBabylonEnclave(): Promise<void> {
   if (babylonEnclave) {
     await babylonEnclave.shutdown()
     babylonEnclave = null

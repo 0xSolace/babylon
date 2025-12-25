@@ -7,7 +7,7 @@
  */
 
 import { db, type JsonValue } from '@babylon/db'
-import { generateSnowflakeId } from '@babylon/shared'
+import { generateSnowflakeId } from '@jejunetwork/shared'
 import { v4 as uuidv4 } from 'uuid'
 import { logger } from '../shared/logger'
 

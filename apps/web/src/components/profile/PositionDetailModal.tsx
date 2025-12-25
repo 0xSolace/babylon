@@ -1,9 +1,9 @@
 import {
   calculateExpectedPayout,
-  cn,
   type JsonValue,
   PredictionPricing,
 } from '@babylon/shared'
+import { cn } from '@jejunetwork/shared'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import {
   AlertTriangle,

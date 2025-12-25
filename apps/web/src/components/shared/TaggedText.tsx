@@ -1,4 +1,4 @@
-import { cn } from '@babylon/shared'
+import { cn } from '@jejunetwork/shared'
 
 /**
  * Tagged text component for parsing and highlighting social tags.

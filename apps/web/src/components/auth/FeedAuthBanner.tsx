@@ -1,4 +1,4 @@
-import { cn } from '@babylon/shared'
+import { cn } from '@jejunetwork/shared'
 import { Suspense } from 'react'
 import { isWaitlistMode } from '@/config'
 import { useAuth } from '@/hooks/useAuth'

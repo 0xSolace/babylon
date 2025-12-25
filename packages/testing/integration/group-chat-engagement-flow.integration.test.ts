@@ -21,7 +21,7 @@ import {
 } from 'bun:test'
 import { db } from '@babylon/db'
 import { NPCGroupDynamicsService, NPCInteractionTracker } from '@babylon/engine'
-import { generateSnowflakeId } from '@babylon/shared'
+import { generateSnowflakeId } from '@jejunetwork/shared'
 
 // Test data cleanup tracking
 const testIds = {

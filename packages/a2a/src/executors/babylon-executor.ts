@@ -20,12 +20,8 @@ import type {
 } from '@a2a-js/sdk/server'
 import { db } from '@babylon/db'
 import type { JsonValue } from '@babylon/shared'
-import {
-  generateSnowflakeId,
-  isJsonRecord,
-  JsonValueSchema,
-  logger,
-} from '@babylon/shared'
+import { isJsonRecord, JsonValueSchema, logger } from '@babylon/shared'
+import { generateSnowflakeId } from '@jejunetwork/shared'
 import { v4 as uuidv4 } from 'uuid'
 import { z } from 'zod'
 import {

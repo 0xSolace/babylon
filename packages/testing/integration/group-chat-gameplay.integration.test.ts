@@ -19,13 +19,13 @@ import {
   GroupChatService,
   NPCGroupDynamicsService,
 } from '@babylon/engine'
-import { generateSnowflakeId } from '@babylon/shared'
 import { BenchmarkDataGenerator } from '@babylon/training/benchmark/BenchmarkDataGenerator'
 import {
   type A2AResponse,
   SimulationA2AInterface,
 } from '@babylon/training/benchmark/SimulationA2AInterface'
 import { SimulationEngine } from '@babylon/training/benchmark/SimulationEngine'
+import { generateSnowflakeId } from '@jejunetwork/shared'
 
 // Type guard for A2A chat response
 function hasChatsProperty(response: A2AResponse): boolean {

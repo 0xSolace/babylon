@@ -1,4 +1,5 @@
-import { cn, type FeedPost } from '@babylon/shared'
+import type { FeedPost } from '@babylon/shared'
+import { cn } from '@jejunetwork/shared'
 import { Repeat2, X } from 'lucide-react'
 import { useState } from 'react'
 import { Avatar } from '@/components/shared/Avatar'
@@ -309,7 +310,7 @@ export function RepostButton({
                   <div className="mb-3 flex items-start gap-3">
                     <Avatar
                       id={postData.authorId}
-                      name={postData.authorName}
+                      name={postData.authorName ?? undefined}
                       type="user"
                       src={postData.authorProfileImageUrl ?? undefined}
                       size="sm"
@@ -437,7 +438,7 @@ export function RepostButton({
                     <div className="mb-3 flex items-start gap-3">
                       <Avatar
                         id={postData.authorId}
-                        name={postData.authorName}
+                        name={postData.authorName ?? undefined}
                         type="user"
                         src={postData.authorProfileImageUrl ?? undefined}
                         size="md"

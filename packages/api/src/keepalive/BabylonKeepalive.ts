@@ -549,7 +549,7 @@ export class BabylonKeepalive {
   } | null> {
     if (!this.keepaliveId) return null
 
-    const [funded, status, lastCheck, balance] = await readContract(
+    const [funded, status, lastCheck, balance] = (await readContract(
       this.publicClient,
       {
         address: this.registryAddress,
@@ -557,7 +557,7 @@ export class BabylonKeepalive {
         functionName: 'getStatus',
         args: [this.keepaliveId],
       },
-    )
+    )) as readonly [boolean, number, bigint, bigint]
 
     return {
       funded,

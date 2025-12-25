@@ -6,8 +6,8 @@
 
 import { db, llmCallLogs, trajectories } from '@babylon/db'
 import type { JsonValue } from '@babylon/shared'
-import { generateSnowflakeId, toNull } from '@babylon/shared'
 import type { UUID } from '@elizaos/core'
+import { generateSnowflakeId, toNull } from '@jejunetwork/shared'
 import { v4 as uuidv4 } from 'uuid'
 import { logger } from '../../../shared/logger'
 import type {

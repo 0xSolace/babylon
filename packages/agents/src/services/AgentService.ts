@@ -18,12 +18,11 @@ import { db, withTransaction } from '@babylon/db'
 import type { AgentCapabilities, JsonValue } from '@babylon/shared'
 import {
   AuthorizationError,
-  generateSnowflakeId,
   getCurrentChainId,
   IDENTITY_REGISTRY_BASE_SEPOLIA,
   REPUTATION_SYSTEM_BASE_SEPOLIA,
-  toNull,
 } from '@babylon/shared'
+import { generateSnowflakeId, toNull } from '@jejunetwork/shared'
 import { agentIdentityService } from '../identity/AgentIdentityService'
 import { agentRuntimeManager } from '../runtime/AgentRuntimeManager'
 import { logger } from '../shared/logger'

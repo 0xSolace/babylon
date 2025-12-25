@@ -1,5 +1,6 @@
 import { db, type Question, worldEvents } from '@babylon/db'
-import { generateSnowflakeId, logger } from '@babylon/shared'
+import { logger } from '@babylon/shared'
+import { generateSnowflakeId } from '@jejunetwork/shared'
 import { toSafeDayNumber } from '../utils/date-utils'
 import { secureRandom, weightedPick } from '../utils/entropy'
 import {

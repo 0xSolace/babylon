@@ -1,8 +1,5 @@
-import {
-  cn,
-  type FeeStatsResponse,
-  FeeStatsResponseSchema,
-} from '@babylon/shared'
+import { type FeeStatsResponse, FeeStatsResponseSchema } from '@babylon/shared'
+import { cn } from '@jejunetwork/shared'
 import { useQuery } from '@tanstack/react-query'
 import { Award, DollarSign, RefreshCw, TrendingUp, Users } from 'lucide-react'
 import { Avatar } from '@/components/shared/Avatar'

@@ -6,7 +6,8 @@
  */
 
 import { and, asc, db, eq, gte, profileUpdateLogs } from '@babylon/db'
-import { generateSnowflakeId, logger } from '@babylon/shared'
+import { logger } from '@babylon/shared'
+import { generateSnowflakeId } from '@jejunetwork/shared'
 
 interface RateLimitConfig {
   maxUpdatesPerDay: number

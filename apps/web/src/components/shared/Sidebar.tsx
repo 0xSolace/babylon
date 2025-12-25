@@ -1,4 +1,5 @@
-import { cn, getReferralUrl } from '@babylon/shared'
+import { getReferralUrl } from '@babylon/shared'
+import { cn } from '@jejunetwork/shared'
 import {
   Bell,
   Bot,

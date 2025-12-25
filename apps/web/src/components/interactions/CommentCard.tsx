@@ -1,4 +1,5 @@
-import { cn, getProfileUrl } from '@babylon/shared'
+import { getProfileUrl } from '@babylon/shared'
+import { cn } from '@jejunetwork/shared'
 import { formatDistanceToNow } from 'date-fns'
 import { Edit2, MessageCircle, MoreVertical, Trash2 } from 'lucide-react'
 import { useState } from 'react'

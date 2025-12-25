@@ -66,17 +66,18 @@ export function privateKeyToAddress(privateKey: Hex): Address {
 /**
  * Generate random bytes as hex string
  * Replaces ethers.hexlify(ethers.randomBytes(n))
+ * Re-exports from @jejunetwork/shared
  */
-export function randomBytesHex(length: number): Hex {
-  const bytes = crypto.getRandomValues(new Uint8Array(length))
-  return toHex(bytes)
-}
+// Also export the raw randomHex for consumers who want it
+export { randomHex as randomBytesHex, randomHex } from '@jejunetwork/shared'
+
+import { randomHex as _randomHex } from '@jejunetwork/shared'
 
 /**
  * Generate a random 32-byte salt
  */
 export function generateSalt(): Hex {
-  return randomBytesHex(32)
+  return _randomHex(32)
 }
 
 /**
@@ -167,8 +168,8 @@ export { zeroHash }
 
 /**
  * Zero address constant
+ * @deprecated Import from @jejunetwork/types instead
  */
-export const ZERO_ADDRESS =
-  '0x0000000000000000000000000000000000000000' as Address
+export { ZERO_ADDRESS } from '@jejunetwork/types'
 
 export type { Address, Hex, Chain, PublicClient, WalletClient }

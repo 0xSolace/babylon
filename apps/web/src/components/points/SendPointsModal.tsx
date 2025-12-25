@@ -1,4 +1,4 @@
-import { cn } from '@babylon/shared'
+import { cn } from '@jejunetwork/shared'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Check, Loader2, Send, X } from 'lucide-react'
 import { useState } from 'react'

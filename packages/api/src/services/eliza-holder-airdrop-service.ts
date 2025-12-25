@@ -15,11 +15,10 @@
 import { db } from '@babylon/db'
 import {
   createBabylonPublicClient,
-  generateSnowflakeId,
   logger,
   readContract,
-  toNull,
 } from '@babylon/shared'
+import { generateSnowflakeId, toNull } from '@jejunetwork/shared'
 import {
   type Address,
   createPublicClient,
@@ -136,8 +135,7 @@ export interface ElizaHolderSnapshot {
   snapshotTime: Date
 }
 
-// biome-ignore lint/correctness/noUnusedVariables: Documents allocation type
-interface ElizaHolderAllocation {
+export interface ElizaHolderAllocation {
   walletAddress: Address
   totalElizaBalance: bigint // Sum across all chains
   shareOfPool: number // Percentage of ELIZA pool
@@ -286,12 +284,12 @@ export class ElizaHolderAirdropService {
           transport: http(config.rpcUrl),
         })
 
-        const balance = await readContract(client, {
+        const balance = (await readContract(client, {
           address: config.elizaToken,
           abi: ERC20_ABI,
           functionName: 'balanceOf',
           args: [walletAddress],
-        })
+        })) as bigint
 
         return { chainName, balance }
       },
@@ -620,11 +618,11 @@ export class ElizaHolderAirdropService {
         rpcUrl: config.rpcUrl,
       })
 
-      const supply = await readContract(client, {
+      const supply = (await readContract(client, {
         address: config.elizaToken,
         abi: ERC20_ABI,
         functionName: 'totalSupply',
-      })
+      })) as bigint
 
       // For same token on multiple chains, take the max (circulating supply)
       // This avoids double-counting bridged tokens

@@ -16,7 +16,8 @@
  *
  * @returns Human review tab element
  */
-import { cn, type JsonValue } from '@babylon/shared'
+import type { JsonValue } from '@babylon/shared'
+import { cn } from '@jejunetwork/shared'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertCircle, DollarSign } from 'lucide-react'
 import { useState, useTransition } from 'react'

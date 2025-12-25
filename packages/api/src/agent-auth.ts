@@ -12,7 +12,6 @@ import { type AgentSessionData, parseAgentSession } from './utils/type-guards'
 
 /**
  * Agent session information
- * @deprecated Use AgentSessionData from utils/type-guards instead
  */
 export type AgentSession = AgentSessionData
 

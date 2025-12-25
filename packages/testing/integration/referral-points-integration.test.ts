@@ -28,7 +28,8 @@ import {
   type User,
   users,
 } from '@babylon/db'
-import { generateSnowflakeId, POINTS } from '@babylon/shared'
+import { POINTS } from '@babylon/shared'
+import { generateSnowflakeId } from '@jejunetwork/shared'
 
 // Test user IDs that we'll clean up
 const testUserIds: string[] = []

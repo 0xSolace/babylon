@@ -2,7 +2,6 @@
  * Jeju Compute Plugin for ElizaOS
  *
  * Decentralized LLM inference through Jeju's compute marketplace.
- * NO FALLBACKS - Jeju Compute is required for all LLM operations.
  *
  * This replaces groq/anthropic/openai plugins with a single
  * decentralized inference provider.

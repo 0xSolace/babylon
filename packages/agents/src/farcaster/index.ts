@@ -1,7 +1,7 @@
 /**
  * Farcaster Integration for Babylon Agents
  *
- * Posting functionality from @jejunetwork/farcaster.
+ * Posting functionality from @jejunetwork/messaging.
  * NPC posting is handled through the FarcasterPoster class.
  */
 
@@ -13,4 +13,4 @@ export {
   type PostedCast,
   type ReactionTarget,
   type UserDataUpdate,
-} from '@jejunetwork/farcaster'
+} from '@jejunetwork/messaging'

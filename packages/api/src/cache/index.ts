@@ -2,7 +2,6 @@
  * Cache Module Exports
  *
  * Decentralized cache using Jeju's distributed cache service.
- * NO FALLBACKS - Decentralized cache is required.
  */
 
 // Cache (primary cache layer)
@@ -21,7 +20,5 @@ export {
 
 // Legacy aliases removed - use CacheClient, getCache, etc. directly
 
-// Legacy exports (retained for compatibility with existing code)
-export * from './cache-service'
-export * from './cached-database-service'
-export * from './decentralized-cache-client'
+// Legacy exports removed - cache-service, cached-database-service, and decentralized-cache-client
+// were all deleted. Use CacheClient and getCache from ./cache instead.

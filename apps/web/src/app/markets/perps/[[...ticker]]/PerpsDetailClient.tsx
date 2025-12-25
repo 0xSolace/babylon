@@ -1,4 +1,5 @@
-import { cn, FEE_CONFIG } from '@babylon/shared'
+import { FEE_CONFIG } from '@babylon/shared'
+import { cn } from '@jejunetwork/shared'
 import { useMutation } from '@tanstack/react-query'
 import {
   AlertTriangle,

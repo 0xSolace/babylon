@@ -298,23 +298,43 @@
   },
   "testing": {
     "unit": {
-      "command": "bun run test:unit",
-      "timeout": 120000
+      "command": "bun test packages/testing/unit/",
+      "timeout": 120000,
+      "description": "Unit tests for core functionality"
     },
     "integration": {
-      "command": "bun run test:integration",
+      "command": "bun test packages/testing/integration/",
       "timeout": 180000,
       "requiresChain": true,
-      "requiresServices": true
+      "requiresServices": true,
+      "description": "Integration tests with services"
     },
     "e2e": {
-      "command": "bun run test:e2e",
+      "command": "bunx playwright test --config packages/testing/playwright.config.ts",
       "timeout": 300000,
       "requiresChain": true,
-      "requiresWallet": true
+      "requiresWallet": false,
+      "description": "End-to-end Playwright tests"
+    },
+    "wallet": {
+      "command": "bunx playwright test --config packages/testing/synpress/synpress.config.ts",
+      "timeout": 600000,
+      "requiresChain": true,
+      "requiresWallet": true,
+      "description": "Synpress wallet integration tests"
+    },
+    "load": {
+      "command": "babylon test load",
+      "timeout": 180000,
+      "description": "Load testing with configurable scenarios"
+    },
+    "a2a": {
+      "command": "babylon test a2a",
+      "timeout": 180000,
+      "description": "A2A protocol stress tests"
     },
     "recovery": {
-      "command": "bun run test:recovery",
+      "command": "bun run packages/testing/src/recovery/recovery-tests.ts",
       "timeout": 3600000,
       "description": "Test recovery within 1 hour",
       "scenarios": ["backend-crash", "low-funds", "tee-failure"]

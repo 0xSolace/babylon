@@ -22,8 +22,8 @@ import {
   isValidHex,
   keccak256,
   toAddressOrNull,
-  toNull,
 } from '@babylon/shared'
+import { toNull } from '@jejunetwork/shared'
 import type { Address, Hex } from 'viem'
 import { isProductionEnvironment } from '../config/tee'
 import { logger } from '../shared/logger'

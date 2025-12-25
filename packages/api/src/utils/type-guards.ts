@@ -7,7 +7,6 @@
 
 import type { AuthenticatedUser, JsonValue } from '@babylon/shared'
 import {
-  first,
   getErrorMessage,
   isAddress,
   isHex,
@@ -16,9 +15,9 @@ import {
   isStringArray,
   parseJsonAs,
   toError,
-  toHexString,
   toJsonValueOrNull,
 } from '@babylon/shared'
+import { first } from '@jejunetwork/shared'
 import type { Address, Hex } from 'viem'
 
 // Re-export error helpers and type guards for consumers
@@ -52,7 +51,7 @@ export function hasDbUserId(
 /**
  * Check if AuthenticatedUser has a wallet address
  */
-function _hasWalletAddress(
+export function hasWalletAddress(
   user: AuthenticatedUser,
 ): user is AuthenticatedUser & { walletAddress: string } {
   return typeof user.walletAddress === 'string' && user.walletAddress.length > 0
@@ -107,7 +106,7 @@ export interface ComputeProofData {
 /**
  * Check if value is a valid ComputeProof
  */
-function _isComputeProof(value: unknown): value is ComputeProofData {
+export function isComputeProof(value: unknown): value is ComputeProofData {
   if (!isObject(value)) return false
   return (
     isAddress(value.nodeAddress) &&
@@ -151,7 +150,7 @@ export function parseComputeProof(
 /**
  * Safely cast to JsonValue with validation
  */
-function _toJsonValue(value: unknown): JsonValue {
+export function toJsonValue(value: unknown): JsonValue {
   if (!isJsonValue(value)) {
     throw new Error('Value is not a valid JsonValue')
   }
@@ -161,7 +160,7 @@ function _toJsonValue(value: unknown): JsonValue {
 /**
  * Safely cast record to JsonValue record
  */
-function _toJsonRecord(value: unknown): Record<string, JsonValue> {
+export function toJsonRecord(value: unknown): Record<string, JsonValue> {
   if (!isObject(value)) {
     throw new Error('Value is not an object')
   }
@@ -198,7 +197,7 @@ export function safeToJsonRecord(
 /**
  * Parse JSON with type guard validation (legacy name for parseJsonAs)
  */
-function _parseJson<T>(
+export function parseJson<T>(
   json: string,
   guard: (value: unknown) => value is T,
   errorMessage = 'Invalid JSON structure',

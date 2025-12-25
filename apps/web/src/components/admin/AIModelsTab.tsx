@@ -1,4 +1,4 @@
-import { cn } from '@babylon/shared'
+import { cn } from '@jejunetwork/shared'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { AlertCircle, Bot, Check, RefreshCw, Zap } from 'lucide-react'
 import { useState } from 'react'

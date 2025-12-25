@@ -17,11 +17,6 @@ export {
   runQuickMatchupBenchmark,
 } from './ArchetypeMatchupBenchmark'
 export type {
-  BenchmarkHistoryEntry,
-  ModelComparisonData,
-} from './BenchmarkChartGenerator'
-export { BenchmarkChartGenerator } from './BenchmarkChartGenerator'
-export type {
   BenchmarkConfig,
   BenchmarkGameSnapshot,
   CausalEventType,

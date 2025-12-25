@@ -4,15 +4,11 @@
 
 import {
   BAN_MANAGER_ABI,
+  BanStatus,
   logger,
   MODERATION_MARKETPLACE_ABI,
+  VotePosition,
 } from '@babylon/shared'
-
-// Aliases for compatibility
-const BanManagerAbi = BAN_MANAGER_ABI
-const ModerationMarketplaceAbi = MODERATION_MARKETPLACE_ABI
-
-import { BanStatus, VotePosition } from '@babylon/shared'
 import {
   type Address,
   createPublicClient,
@@ -93,7 +89,7 @@ export class ModerationClient {
   async getStake(address: Address): Promise<StakeInfo> {
     const rawResult = await this.publicClient.readContract({
       address: this.config.moderationMarketplace,
-      abi: ModerationMarketplaceAbi,
+      abi: MODERATION_MARKETPLACE_ABI,
       functionName: 'getStake',
       args: [address],
     })
@@ -111,7 +107,7 @@ export class ModerationClient {
   async getCase(caseId: `0x${string}`): Promise<BanCase> {
     const rawResult = await this.publicClient.readContract({
       address: this.config.moderationMarketplace,
-      abi: ModerationMarketplaceAbi,
+      abi: MODERATION_MARKETPLACE_ABI,
       functionName: 'getCase',
       args: [caseId],
     })
@@ -141,7 +137,7 @@ export class ModerationClient {
     logger.debug('Getting active case', { target })
     const caseId = await this.publicClient.readContract({
       address: this.config.moderationMarketplace,
-      abi: ModerationMarketplaceAbi,
+      abi: MODERATION_MARKETPLACE_ABI,
       functionName: 'activeCase',
       args: [target],
     })
@@ -152,7 +148,7 @@ export class ModerationClient {
   async getVote(caseId: `0x${string}`, voter: Address): Promise<Vote> {
     const rawResult = await this.publicClient.readContract({
       address: this.config.moderationMarketplace,
-      abi: ModerationMarketplaceAbi,
+      abi: MODERATION_MARKETPLACE_ABI,
       functionName: 'getVote',
       args: [caseId, voter],
     })
@@ -172,13 +168,13 @@ export class ModerationClient {
     const result = appId
       ? await this.publicClient.readContract({
           address: this.config.banManager,
-          abi: BanManagerAbi,
+          abi: BAN_MANAGER_ABI,
           functionName: 'isAppBanned',
           args: [address, appId],
         })
       : await this.publicClient.readContract({
           address: this.config.banManager,
-          abi: BanManagerAbi,
+          abi: BAN_MANAGER_ABI,
           functionName: 'isNetworkBanned',
           args: [address],
         })
@@ -188,7 +184,7 @@ export class ModerationClient {
   async canReport(address: Address): Promise<boolean> {
     const result = await this.publicClient.readContract({
       address: this.config.moderationMarketplace,
-      abi: ModerationMarketplaceAbi,
+      abi: MODERATION_MARKETPLACE_ABI,
       functionName: 'canReport',
       args: [address],
     })
@@ -198,7 +194,7 @@ export class ModerationClient {
   async getAllCaseIds(): Promise<`0x${string}`[]> {
     const result = await this.publicClient.readContract({
       address: this.config.moderationMarketplace,
-      abi: ModerationMarketplaceAbi,
+      abi: MODERATION_MARKETPLACE_ABI,
       functionName: 'getAllCaseIds',
       args: [],
     })
@@ -209,7 +205,7 @@ export class ModerationClient {
   buildStakeRequest(amount: bigint) {
     return {
       address: this.config.moderationMarketplace,
-      abi: ModerationMarketplaceAbi,
+      abi: MODERATION_MARKETPLACE_ABI,
       functionName: 'stake' as const,
       args: [] as const,
       value: amount,
@@ -219,7 +215,7 @@ export class ModerationClient {
   buildUnstakeRequest(amount: bigint) {
     return {
       address: this.config.moderationMarketplace,
-      abi: ModerationMarketplaceAbi,
+      abi: MODERATION_MARKETPLACE_ABI,
       functionName: 'unstake' as const,
       args: [amount] as const,
     }
@@ -233,7 +229,7 @@ export class ModerationClient {
     logger.debug('Building open case request', { target, reason })
     return {
       address: this.config.moderationMarketplace,
-      abi: ModerationMarketplaceAbi,
+      abi: MODERATION_MARKETPLACE_ABI,
       functionName: 'openCase' as const,
       args: [target, reason, evidenceHash] as const,
     }
@@ -242,7 +238,7 @@ export class ModerationClient {
   buildChallengeCaseRequest(caseId: `0x${string}`, stakeAmount: bigint) {
     return {
       address: this.config.moderationMarketplace,
-      abi: ModerationMarketplaceAbi,
+      abi: MODERATION_MARKETPLACE_ABI,
       functionName: 'challengeCase' as const,
       args: [caseId] as const,
       value: stakeAmount,
@@ -252,7 +248,7 @@ export class ModerationClient {
   buildVoteRequest(caseId: `0x${string}`, position: VotePosition) {
     return {
       address: this.config.moderationMarketplace,
-      abi: ModerationMarketplaceAbi,
+      abi: MODERATION_MARKETPLACE_ABI,
       functionName: 'vote' as const,
       args: [caseId, position] as const,
     }
@@ -261,7 +257,7 @@ export class ModerationClient {
   buildResolveCaseRequest(caseId: `0x${string}`) {
     return {
       address: this.config.moderationMarketplace,
-      abi: ModerationMarketplaceAbi,
+      abi: MODERATION_MARKETPLACE_ABI,
       functionName: 'resolveCase' as const,
       args: [caseId] as const,
     }
@@ -270,7 +266,7 @@ export class ModerationClient {
   buildReReviewRequest(caseId: `0x${string}`, stakeAmount: bigint) {
     return {
       address: this.config.moderationMarketplace,
-      abi: ModerationMarketplaceAbi,
+      abi: MODERATION_MARKETPLACE_ABI,
       functionName: 'requestReReview' as const,
       args: [caseId] as const,
       value: stakeAmount,
@@ -280,7 +276,7 @@ export class ModerationClient {
   buildClaimRewardsRequest(caseId: `0x${string}`) {
     return {
       address: this.config.moderationMarketplace,
-      abi: ModerationMarketplaceAbi,
+      abi: MODERATION_MARKETPLACE_ABI,
       functionName: 'claimRewards' as const,
       args: [caseId] as const,
     }
@@ -293,7 +289,7 @@ export class ModerationClient {
   async getMinReporterStake(): Promise<bigint> {
     const result = await this.publicClient.readContract({
       address: this.config.moderationMarketplace,
-      abi: ModerationMarketplaceAbi,
+      abi: MODERATION_MARKETPLACE_ABI,
       functionName: 'minReporterStake',
       args: [],
     })
@@ -303,7 +299,7 @@ export class ModerationClient {
   async getMinChallengeStake(): Promise<bigint> {
     const result = await this.publicClient.readContract({
       address: this.config.moderationMarketplace,
-      abi: ModerationMarketplaceAbi,
+      abi: MODERATION_MARKETPLACE_ABI,
       functionName: 'minChallengeStake',
       args: [],
     })

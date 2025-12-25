@@ -18,7 +18,7 @@
  *
  * @returns Reports tab element
  */
-import { cn } from '@babylon/shared'
+import { cn } from '@jejunetwork/shared'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertCircle, CheckCircle, Clock, Flag, XCircle } from 'lucide-react'
 import { useState, useTransition } from 'react'

@@ -16,29 +16,7 @@
     "noEmit": true,
     "types": ["bun-types"],
     "noImplicitAny": false,
-    "baseUrl": ".",
-    "paths": {
-      "@babylon/shared": ["../../packages/shared/src/index.ts"],
-      "@babylon/shared/*": ["../../packages/shared/src/*"],
-      "@babylon/db": ["../../packages/db/src/index.ts"],
-      "@babylon/db/*": ["../../packages/db/src/*"],
-      "@babylon/api": ["../../packages/api/src/index.ts"],
-      "@babylon/api/*": ["../../packages/api/src/*"],
-      "@babylon/engine": ["../../packages/engine/src/index.ts"],
-      "@babylon/engine/*": ["../../packages/engine/src/*"],
-      "@babylon/agents": ["../../packages/agents/src/index.ts"],
-      "@babylon/agents/*": ["../../packages/agents/src/*"],
-      "@babylon/training": ["../../packages/training/src/index.ts"],
-      "@babylon/training/*": ["../../packages/training/src/*"],
-      "@babylon/a2a": ["../../packages/a2a/src/index.ts"],
-      "@babylon/a2a/*": ["../../packages/a2a/src/*"],
-      "@babylon/mcp": ["../../packages/mcp/src/index.ts"],
-      "@babylon/mcp/*": ["../../packages/mcp/src/*"],
-      "@babylon/auth": ["../../packages/auth/src/index.ts"],
-      "@babylon/auth/*": ["../../packages/auth/src/*"],
-      "@babylon/core": ["../../packages/core/markets/index.ts"],
-      "@babylon/core/*": ["../../packages/core/*"]
-    }
+    "baseUrl": "."
   },
   "include": ["src/**/*"],
   "exclude": ["node_modules", "dist"]

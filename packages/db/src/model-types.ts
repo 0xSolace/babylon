@@ -171,9 +171,16 @@ export interface Post {
   type: string
   timestamp: Date
   createdAt: Date
+  updatedAt: Date | null
   deletedAt: Date | null
   commentOnPostId: string | null
   parentCommentId: string | null
+  originalPostId: string | null
+  articleTitle: string | null
+  imageUrl: string | null
+  mediaUrls: string[] | null
+  visibility: string | null
+  metadata: JsonValue | null
 }
 
 export interface Comment {
@@ -845,8 +852,20 @@ export interface GenerationLock {
 export interface Feedback {
   id: string
   userId: string
+  toUserId: string | null
+  agent0TokenId: string | null
+  type: string
   content: string
+  comment: string | null
+  category: string | null
+  interactionType: string | null
+  rating: number | null
+  score: number | null
   createdAt: Date
+  updatedAt: Date | null
+  respondedAt: Date | null
+  response: string | null
+  metadata: JsonValue | null
 }
 
 export interface Referral {

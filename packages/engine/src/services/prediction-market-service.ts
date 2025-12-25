@@ -8,7 +8,8 @@
 
 import type { DbClient, PredictionPriceHistory } from '@babylon/db'
 import { db, predictionPriceHistories } from '@babylon/db'
-import { generateSnowflakeId, logger } from '@babylon/shared'
+import { logger } from '@babylon/shared'
+import { generateSnowflakeId } from '@jejunetwork/shared'
 
 // =============================================================================
 // Types

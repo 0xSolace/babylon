@@ -17,7 +17,7 @@
  */
 'use client'
 
-import { cn } from '@babylon/shared'
+import { cn } from '@jejunetwork/shared'
 import {
   ChevronLeft,
   ChevronRight,

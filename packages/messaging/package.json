@@ -16,7 +16,6 @@
   "dependencies": {
     "@babylon/shared": "workspace:*",
     "@jejunetwork/db": "workspace:*",
-    "@jejunetwork/farcaster": "workspace:*",
     "@jejunetwork/messaging": "workspace:*",
     "@tanstack/react-query": "^5.90.8",
     "viem": "2.43.3",

@@ -4,7 +4,8 @@
  * CCA Auction for BBLN token sale
  */
 
-import { BBLN_ADDRESSES, BBLN_PRESALE_ABI, cn } from '@babylon/shared'
+import { BBLN_ADDRESSES, BBLN_PRESALE_ABI } from '@babylon/shared'
+import { cn } from '@jejunetwork/shared'
 import { ChevronDown, Gift, Rocket } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'

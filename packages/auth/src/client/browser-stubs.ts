@@ -1,7 +1,7 @@
 /**
  * Browser-safe stubs for server-side Jeju packages
  *
- * The @jejunetwork/oauth3 and @jejunetwork/kms packages include server-side
+ * The @jejunetwork/auth and @jejunetwork/kms packages include server-side
  * TEE code that uses Node.js APIs like node:fs. These stubs provide
  * browser-compatible implementations that:
  *
@@ -27,7 +27,9 @@ interface KeyGenApiResponse {
   publicKey: Hex
 }
 
-function _isKeyGenApiResponse(value: unknown): value is KeyGenApiResponse {
+export function isKeyGenApiResponse(
+  value: unknown,
+): value is KeyGenApiResponse {
   if (!isObject(value)) return false
   if (!hasStringProperty(value, 'keyId')) return false
   if (!hasStringProperty(value, 'address') || !isAddress(value.address))
@@ -43,7 +45,7 @@ interface SignApiResponse {
   signedAt: number
 }
 
-function _isSignApiResponse(value: unknown): value is SignApiResponse {
+export function isSignApiResponse(value: unknown): value is SignApiResponse {
   if (!isObject(value)) return false
   if (!hasStringProperty(value, 'signature') || !isHex(value.signature))
     return false
@@ -55,20 +57,13 @@ interface SignatureOnlyResponse {
   signature: Hex
 }
 
-function _isSignatureOnlyResponse(
+export function isSignatureOnlyResponse(
   value: unknown,
 ): value is SignatureOnlyResponse {
   if (!isObject(value)) return false
   if (!hasStringProperty(value, 'signature') || !isHex(value.signature))
     return false
   return true
-}
-
-// Export unused guards to prevent warnings (for future use)
-export const _browser_guards_reserved = {
-  _isKeyGenApiResponse,
-  _isSignApiResponse,
-  _isSignatureOnlyResponse,
 }
 
 // =============================================================================

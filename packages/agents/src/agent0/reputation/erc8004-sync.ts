@@ -5,7 +5,7 @@
  */
 
 import { db } from '@babylon/db'
-import { generateSnowflakeId } from '@babylon/shared'
+import { generateSnowflakeId } from '@jejunetwork/shared'
 import { logger } from '../../shared/logger'
 
 interface ReputationSyncData {

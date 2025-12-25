@@ -27,7 +27,7 @@ import {
   posts,
 } from '@babylon/db'
 import type { GameHistory, GroupMessage } from '@babylon/engine'
-import { generateSnowflakeId as dbGenerateSnowflakeId } from '@babylon/shared'
+import { generateSnowflakeId as dbGenerateSnowflakeId } from '@jejunetwork/shared'
 
 /**
  * Convert GameHistory to JsonValue for database storage.

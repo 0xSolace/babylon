@@ -1,4 +1,4 @@
-import { cn } from '@babylon/shared'
+import { cn } from '@jejunetwork/shared'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { TrendingDown, TrendingUp } from 'lucide-react'
 import { useCallback, useEffect, useMemo } from 'react'

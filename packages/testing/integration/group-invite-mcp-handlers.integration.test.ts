@@ -6,7 +6,7 @@ import {
   executeDeclineGroupInvite,
   executeGetGroupInvites,
 } from '@babylon/mcp'
-import { generateSnowflakeId } from '@babylon/shared'
+import { generateSnowflakeId } from '@jejunetwork/shared'
 
 const testIds = {
   userIds: [] as string[],

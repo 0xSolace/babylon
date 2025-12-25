@@ -1,4 +1,4 @@
-import { cn } from '@babylon/shared'
+import { cn } from '@jejunetwork/shared'
 import { useMutation } from '@tanstack/react-query'
 import { ChevronLeft, ChevronRight, Upload, X as XIcon } from 'lucide-react'
 import { useCallback, useMemo, useRef, useState } from 'react'

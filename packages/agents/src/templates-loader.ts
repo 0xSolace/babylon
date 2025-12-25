@@ -19,7 +19,7 @@
  * @packageDocumentation
  */
 
-import { first, mapGet } from '@babylon/shared'
+import { first, mapGet } from '@jejunetwork/shared'
 import { templateIds, templates } from './templates'
 import type { AgentTemplate } from './types/agent-template'
 

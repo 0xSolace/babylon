@@ -7,7 +7,8 @@
  */
 
 import { db } from '@babylon/db'
-import { generateRandomWallet, generateSnowflakeId } from '@babylon/shared'
+import { generateRandomWallet } from '@babylon/shared'
+import { generateSnowflakeId } from '@jejunetwork/shared'
 import { agentRegistry } from '../services/agent-registry.service'
 import { getAgentConfig } from '../shared/agent-config'
 import { logger } from '../shared/logger'

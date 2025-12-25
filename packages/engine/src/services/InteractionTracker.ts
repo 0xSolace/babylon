@@ -8,7 +8,8 @@
 import type { InputJsonValue } from '@babylon/db'
 import { db, npcInteractions } from '@babylon/db'
 import type { Actor } from '@babylon/shared'
-import { generateSnowflakeId, logger } from '@babylon/shared'
+import { logger } from '@babylon/shared'
+import { generateSnowflakeId } from '@jejunetwork/shared'
 
 /**
  * Track a post mentioning another NPC

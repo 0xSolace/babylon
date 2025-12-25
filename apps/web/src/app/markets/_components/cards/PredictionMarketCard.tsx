@@ -1,4 +1,4 @@
-import { cn } from '@babylon/shared'
+import { cn } from '@jejunetwork/shared'
 import { ArrowUpDown, Clock } from 'lucide-react'
 import { memo } from 'react'
 import type { PredictionMarketWithPosition } from '@/types/markets'

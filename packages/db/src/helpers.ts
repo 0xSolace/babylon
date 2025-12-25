@@ -4,7 +4,7 @@
  * Connection management and retry utilities for CQL (CovenantSQL).
  */
 
-import { retryWithCondition } from '@babylon/shared'
+import { retryWithCondition } from '@jejunetwork/shared'
 import { initializeDB, resetDB } from './cql-repository'
 import type { DatabaseErrorType, SQLValue } from './types'
 

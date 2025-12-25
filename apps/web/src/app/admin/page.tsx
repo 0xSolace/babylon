@@ -28,7 +28,7 @@
  * ```
  */
 
-import { cn } from '@babylon/shared'
+import { cn } from '@jejunetwork/shared'
 import { useQuery } from '@tanstack/react-query'
 import {
   Activity,

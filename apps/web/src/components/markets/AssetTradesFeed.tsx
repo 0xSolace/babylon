@@ -1,4 +1,4 @@
-import { cn } from '@babylon/shared'
+import { cn } from '@jejunetwork/shared'
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query'
 
 import {

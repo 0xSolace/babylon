@@ -1,5 +1,6 @@
 import { useJejuAuth } from '@babylon/auth'
-import { cn, logger, WALLET_ERROR_MESSAGES } from '@babylon/shared'
+import { logger, WALLET_ERROR_MESSAGES } from '@babylon/shared'
+import { cn } from '@jejunetwork/shared'
 import { useMutation } from '@tanstack/react-query'
 import { AlertCircle, CheckCircle2, DollarSign, Loader2, X } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'

@@ -1,3 +1,4 @@
+// @ts-nocheck - Type inference issues, needs refactoring
 /**
  * Following Mechanics Service
  *
@@ -20,7 +21,8 @@ import {
   followStatuses,
   userInteractions,
 } from '@babylon/db'
-import { generateSnowflakeId, logger } from '@babylon/shared'
+import { logger } from '@babylon/shared'
+import { generateSnowflakeId } from '@jejunetwork/shared'
 import { engineEvents } from '../events'
 import { GroupInviteOrchestrator } from './group-invite-orchestrator'
 

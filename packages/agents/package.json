@@ -16,8 +16,9 @@
   "dependencies": {
     "@babylon/a2a": "workspace:*",
     "@babylon/api": "workspace:*",
+    "@jejunetwork/agents": "workspace:*",
     "@jejunetwork/db": "workspace:*",
-    "@jejunetwork/farcaster": "workspace:*",
+    "@jejunetwork/messaging": "workspace:*",
     "viem": "2.43.3"
   },
   "peerDependencies": {

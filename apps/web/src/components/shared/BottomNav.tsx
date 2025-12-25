@@ -1,4 +1,4 @@
-import { cn } from '@babylon/shared'
+import { cn } from '@jejunetwork/shared'
 import { Bell, Bot, Home, MessageCircle, TrendingUp } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { isWaitlistMode } from '@/config'

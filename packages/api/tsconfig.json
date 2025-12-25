@@ -4,6 +4,8 @@
     "composite": false,
     "declaration": false,
     "declarationMap": false,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
     "jsx": "react-jsx",
     "baseUrl": ".",
     "paths": {

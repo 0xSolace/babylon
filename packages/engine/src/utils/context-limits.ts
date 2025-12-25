@@ -97,7 +97,7 @@ export function estimateTokens(text: string): number {
 /**
  * Check if context size is within safe limits
  */
-function _isContextSizeSafe(contextText: string): boolean {
+export function _isContextSizeSafe(contextText: string): boolean {
   const estimatedTokens = estimateTokens(contextText)
   return estimatedTokens < CONTEXT_LIMITS.MAX_TOTAL_CONTEXT_LENGTH / 4 // ~80k tokens
 }

@@ -1,30 +1,17 @@
 /**
  * Payments Module
  *
- * - ERC-4337 Paymaster: Prepaid credit system for gas sponsorship
- * - x402: HTTP 402 micropayments for premium features
+ * Use @jejunetwork/auth paymaster or x402 modules instead.
  */
 
-// ERC-4337 Paymaster
-export {
-  type DepositResult,
-  getPaymasterClient,
-  initializePaymaster,
-  isPaymasterAvailable,
-  PaymasterClient,
-  type PaymasterConfig,
-  resetPaymasterClient,
-  type SponsorResult,
-  type UserCredits,
-  type UserOperation,
-} from './paymaster-client'
+export interface UserOperation {
+  sender: string
+  nonce: bigint
+  callData: string
+}
 
-// x402 HTTP 402 Micropayments
-export {
-  BABYLON_PRICING,
-  type BabylonPaymentType,
-  getBabylonPaymentRequirement,
-  getBabylonX402Recipient,
-  isBabylonX402Enabled,
-  verifyBabylonPayment,
-} from './x402-client'
+export class PaymasterClient {
+  async getCredits(_userId: string): Promise<null> {
+    return null
+  }
+}

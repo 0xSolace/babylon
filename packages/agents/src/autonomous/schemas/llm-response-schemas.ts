@@ -36,7 +36,7 @@ export const PerpTradeSchema = z.object({
 /**
  * Combined trade schema
  */
-const _TradeDetailsSchema = z.discriminatedUnion('type', [
+export const TradeDetailsSchema = z.discriminatedUnion('type', [
   PredictionTradeSchema,
   PerpTradeSchema,
 ])
@@ -59,8 +59,7 @@ export const TradeDecisionSchema = z.object({
     .optional(),
 })
 
-// biome-ignore lint/correctness/noUnusedVariables: Type exported for API consumers
-type TradeDecision = z.infer<typeof TradeDecisionSchema>
+export type TradeDecision = z.infer<typeof TradeDecisionSchema>
 
 // =============================================================================
 // A2A Trade Decision Schemas (AutonomousA2AService)
@@ -69,7 +68,7 @@ type TradeDecision = z.infer<typeof TradeDecisionSchema>
 /**
  * A2A trade decision for prediction markets
  */
-const _A2APredictionTradeSchema = z.object({
+export const A2APredictionTradeSchema = z.object({
   type: z.literal('prediction').optional(),
   marketId: z.string(),
   outcome: z.enum(['YES', 'NO']),
@@ -80,7 +79,7 @@ const _A2APredictionTradeSchema = z.object({
 /**
  * A2A trade decision for perp markets
  */
-const _A2APerpTradeSchema = z.object({
+export const A2APerpTradeSchema = z.object({
   type: z.literal('perp'),
   ticker: z.string(),
   side: z.enum(['LONG', 'SHORT']),
@@ -110,8 +109,7 @@ export const A2ATradeDecisionSchema = z.object({
     .optional(),
 })
 
-// biome-ignore lint/correctness/noUnusedVariables: Type exported for API consumers
-type A2ATradeDecision = z.infer<typeof A2ATradeDecisionSchema>
+export type A2ATradeDecision = z.infer<typeof A2ATradeDecisionSchema>
 
 // =============================================================================
 // Multi-Step Decision Schemas (MultiStepExecutor)
@@ -132,8 +130,7 @@ export const MultiStepDecisionSchema = z.object({
   thought: z.string().optional().default(''),
 })
 
-// biome-ignore lint/correctness/noUnusedVariables: Type exported for API consumers
-type MultiStepDecisionParsed = z.infer<typeof MultiStepDecisionSchema>
+export type MultiStepDecisionParsed = z.infer<typeof MultiStepDecisionSchema>
 
 // =============================================================================
 // Planning Response Schemas (AutonomousPlanningCoordinator)

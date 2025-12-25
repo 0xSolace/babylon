@@ -1,8 +1,12 @@
 /**
  * Eden Treaty client factory for typed API clients
  */
-import { type Treaty, treaty } from '@elysiajs/eden'
+import { treaty as edenTreaty, type Treaty } from '@elysiajs/eden'
 import type { Elysia } from 'elysia'
+
+// Re-export Treaty type and treaty function for convenience
+export type { Treaty }
+export { edenTreaty as treaty }
 
 /**
  * Creates a typed Eden Treaty client for any Elysia app.
@@ -22,5 +26,5 @@ import type { Elysia } from 'elysia'
 export function createClient<App extends Elysia>(
   baseUrl: string,
 ): Treaty.Create<App> {
-  return treaty<App>(baseUrl)
+  return edenTreaty<App>(baseUrl)
 }

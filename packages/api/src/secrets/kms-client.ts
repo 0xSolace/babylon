@@ -2,7 +2,7 @@
  * Jeju KMS Client
  *
  * ALL secrets are stored in Jeju KMS (Key Management System).
- * NO FALLBACKS - Environment variables are only for bootstrapping.
+ * Environment variables are only for bootstrapping.
  *
  * Features:
  * - MPC threshold key sharing

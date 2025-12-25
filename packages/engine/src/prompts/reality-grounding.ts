@@ -69,7 +69,7 @@ export function getWorldEventExamples(): string {
  *
  * Returns general facts about the game world.
  */
-function _getWorldFacts(): string {
+export function _getWorldFacts(): string {
   return worldFactsContent
 }
 

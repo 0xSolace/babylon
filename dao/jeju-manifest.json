@@ -174,8 +174,8 @@
     }
   },
   "commands": {
-    "deploy": "bun run scripts/deploy-dao.ts",
-    "seed": "bun run scripts/seed-dao.ts",
-    "status": "bun run scripts/dao-status.ts"
+    "deploy": "jeju deploy dao babylon-dao",
+    "deploy:seed": "jeju deploy dao babylon-dao --seed",
+    "deploy:dry-run": "jeju deploy dao babylon-dao --dry-run"
   }
 }

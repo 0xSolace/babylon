@@ -40,7 +40,7 @@ const bootstrap = getNPCDecentralizedBootstrapService();
 await bootstrap.postAsNPC('ailon-musk', 'Mars by 2026!');
 
 // Or use FarcasterPoster directly for more control
-import { createPoster, DEFAULT_HUBS } from '@jejunetwork/farcaster';
+import { createPoster, DEFAULT_HUBS } from '@jejunetwork/messaging';
 
 const poster = createPoster(fid, signerPrivateKey, DEFAULT_HUBS.mainnet);
 await poster.cast('Hello Farcaster!');
@@ -193,7 +193,7 @@ const identity = await identityService.getNPCIdentity('ailon-musk');
 const signature = await identityService.signAsNPC('ailon-musk', message);
 ```
 
-### FarcasterPoster (via @jejunetwork/farcaster)
+### FarcasterPoster (via @jejunetwork/messaging)
 
 100% Farcaster-native posting using the Jeju Farcaster package.
 

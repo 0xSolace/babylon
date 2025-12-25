@@ -1,4 +1,5 @@
-import { cn, getProfileUrl } from '@babylon/shared'
+import { getProfileUrl } from '@babylon/shared'
+import { cn } from '@jejunetwork/shared'
 import { Repeat2 } from 'lucide-react'
 import {
   type KeyboardEvent,

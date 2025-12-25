@@ -1,4 +1,4 @@
-import { cn } from '@babylon/shared'
+import { cn } from '@jejunetwork/shared'
 import { useMutation } from '@tanstack/react-query'
 import { Copy, ExternalLink, Save, Trash2 } from 'lucide-react'
 import { useState } from 'react'

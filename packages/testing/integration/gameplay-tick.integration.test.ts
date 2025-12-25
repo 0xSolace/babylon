@@ -368,7 +368,7 @@ mock.module('@babylon/engine', async () => {
 
 import { asSystem } from '@babylon/db'
 import { executeGameTick } from '@babylon/engine'
-import { generateSnowflakeId } from '@babylon/shared'
+import { generateSnowflakeId } from '@jejunetwork/shared'
 
 // Centralized port configuration
 const API_PORT = process.env.BABYLON_API_PORT ?? '5009'

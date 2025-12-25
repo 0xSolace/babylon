@@ -3,7 +3,7 @@
  * Handles: likes, comments, shares, and favorites with real-time polling
  */
 
-import { retryIfRetryable } from '@babylon/shared'
+import { retryIfRetryable } from '@jejunetwork/shared'
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import type {

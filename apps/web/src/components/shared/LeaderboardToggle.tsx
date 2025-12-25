@@ -1,4 +1,4 @@
-import { cn } from '@babylon/shared'
+import { cn } from '@jejunetwork/shared'
 
 export type LeaderboardTab = 'all' | 'earned' | 'referral'
 

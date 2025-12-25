@@ -3,7 +3,6 @@
  *
  * Archives training data (exported trajectories, RULER scores) using
  * Jeju's decentralized storage (IPFS/Arweave).
- * NO FALLBACKS - Jeju Storage is required.
  *
  * Training data is stored permanently on Arweave for reproducibility and auditability.
  */

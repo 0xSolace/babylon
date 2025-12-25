@@ -7,8 +7,7 @@
  * This service is the single entry point for ALL messaging in Babylon.
  */
 
-import { logger, ServiceUnavailableError } from '@babylon/shared'
-import { type CQLClient, getCQL } from '@jejunetwork/db'
+import { logger } from '@babylon/shared'
 import {
   encryptMessage,
   hexToPublicKey,
@@ -16,6 +15,7 @@ import {
 } from '@jejunetwork/messaging'
 import type { Address } from 'viem'
 import { z } from 'zod'
+import { type CQLConfig, createStorage, type MessageStorage } from './storage'
 
 /** Browser-friendly random bytes using WebCrypto API */
 function randomHex(bytes: number): string {
@@ -120,91 +120,31 @@ export interface GetMessagesRequest {
 }
 
 export class MessagingService {
-  private cql: CQLClient | null = null
+  private storage: MessageStorage
   private initialized = false
   private kmsEndpoint: string
   private useEncryption: boolean
 
-  constructor(options?: { kmsEndpoint?: string; useEncryption?: boolean }) {
+  constructor(options?: {
+    kmsEndpoint?: string
+    useEncryption?: boolean
+    storageConfig?: CQLConfig
+  }) {
     this.kmsEndpoint =
       options?.kmsEndpoint ??
       process.env.KMS_ENDPOINT ??
       'http://localhost:3300'
     this.useEncryption =
       options?.useEncryption ?? process.env.USE_MESSAGE_ENCRYPTION === 'true'
+    this.storage = createStorage(options?.storageConfig)
   }
 
   async initialize(): Promise<void> {
     if (this.initialized) return
 
-    const privateKey = process.env.CQL_PRIVATE_KEY
-    const validPrivateKey = privateKey?.startsWith('0x')
-      ? (privateKey as `0x${string}`)
-      : undefined
-    this.cql = getCQL({
-      blockProducerEndpoint:
-        process.env.CQL_BLOCK_PRODUCER_ENDPOINT ?? 'http://localhost:4661',
-      databaseId: process.env.CQL_DATABASE_ID ?? 'babylon-messaging',
-      privateKey: validPrivateKey,
-    })
-
-    const healthy = await this.cql.isHealthy()
-    if (!healthy) {
-      throw new ServiceUnavailableError(
-        'CovenantSQL is not healthy - decentralized messaging requires CQL. Run `jeju dev` to start all services.',
-      )
-    }
-
-    await this.createTables()
+    await this.storage.initialize()
     logger.info('Connected to CovenantSQL', undefined, 'Messaging')
     this.initialized = true
-  }
-
-  private async createTables(): Promise<void> {
-    if (!this.cql) throw new Error('CQL not initialized')
-
-    const tables = [
-      `CREATE TABLE IF NOT EXISTS messages (
-        id TEXT PRIMARY KEY,
-        conversation_id TEXT NOT NULL,
-        sender TEXT NOT NULL,
-        recipient TEXT,
-        content TEXT NOT NULL,
-        encrypted_content TEXT,
-        ephemeral_public_key TEXT,
-        nonce TEXT,
-        timestamp INTEGER NOT NULL,
-        message_type TEXT NOT NULL DEFAULT 'dm',
-        delivery_status TEXT NOT NULL DEFAULT 'pending',
-        metadata TEXT
-      )`,
-      `CREATE TABLE IF NOT EXISTS conversations (
-        id TEXT PRIMARY KEY,
-        type TEXT NOT NULL DEFAULT 'dm',
-        name TEXT,
-        participants TEXT NOT NULL,
-        created_at INTEGER NOT NULL,
-        last_message_at INTEGER NOT NULL,
-        last_message_preview TEXT,
-        metadata TEXT
-      )`,
-      `CREATE TABLE IF NOT EXISTS user_keys (
-        address TEXT PRIMARY KEY,
-        encryption_public_key TEXT NOT NULL,
-        signing_public_key TEXT NOT NULL,
-        kms_key_id TEXT NOT NULL,
-        registered_at INTEGER NOT NULL,
-        updated_at INTEGER NOT NULL
-      )`,
-      `CREATE INDEX IF NOT EXISTS idx_messages_conversation ON messages (conversation_id, timestamp DESC)`,
-      `CREATE INDEX IF NOT EXISTS idx_messages_recipient ON messages (recipient, delivery_status)`,
-      `CREATE INDEX IF NOT EXISTS idx_messages_sender ON messages (sender, timestamp DESC)`,
-      `CREATE INDEX IF NOT EXISTS idx_conversations_participant ON conversations (participants)`,
-    ]
-
-    for (const sql of tables) {
-      await this.cql.exec(sql)
-    }
   }
 
   private async ensureInitialized(): Promise<void> {
@@ -245,9 +185,9 @@ export class MessagingService {
       content = '[encrypted]' // Store placeholder for unencrypted view
     }
 
-    if (!this.cql) throw new Error('CQL not initialized')
+    if (!this.storage) throw new Error('CQL not initialized')
 
-    await this.cql.exec(
+    await this.storage.exec(
       `INSERT INTO messages (id, conversation_id, sender, recipient, content, encrypted_content, ephemeral_public_key, nonce, timestamp, message_type, delivery_status, metadata) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
       [
         messageId,
@@ -266,7 +206,7 @@ export class MessagingService {
     )
 
     // Update conversation
-    await this.cql.exec(
+    await this.storage.exec(
       `UPDATE conversations SET last_message_at = $1, last_message_preview = $2 WHERE id = $3`,
       [timestamp, validated.content.slice(0, 50), conversationId],
     )
@@ -290,7 +230,7 @@ export class MessagingService {
    */
   async getMessages(request: GetMessagesRequest): Promise<Message[]> {
     await this.ensureInitialized()
-    if (!this.cql) throw new Error('CQL not initialized')
+    if (!this.storage) throw new Error('CQL not initialized')
 
     const limit = request.limit ?? 50
 
@@ -308,7 +248,10 @@ export class MessagingService {
       params = [request.conversationId, limit]
     }
 
-    const result = await this.cql.query<Record<string, unknown>>(sql, params)
+    const result = await this.storage.query<Record<string, unknown>>(
+      sql,
+      params,
+    )
     return result.rows.map(this.mapMessageRow)
   }
 
@@ -317,9 +260,9 @@ export class MessagingService {
    */
   async getPendingMessages(address: Address, limit = 100): Promise<Message[]> {
     await this.ensureInitialized()
-    if (!this.cql) throw new Error('CQL not initialized')
+    if (!this.storage) throw new Error('CQL not initialized')
 
-    const result = await this.cql.query<Record<string, unknown>>(
+    const result = await this.storage.query<Record<string, unknown>>(
       `SELECT * FROM messages WHERE recipient = $1 AND delivery_status = 'pending' ORDER BY timestamp ASC LIMIT $2`,
       [address, limit],
     )
@@ -334,9 +277,9 @@ export class MessagingService {
     status: 'delivered' | 'read',
   ): Promise<void> {
     await this.ensureInitialized()
-    if (!this.cql) throw new Error('CQL not initialized')
+    if (!this.storage) throw new Error('CQL not initialized')
 
-    await this.cql.exec(
+    await this.storage.exec(
       `UPDATE messages SET delivery_status = $1 WHERE id = $2`,
       [status, messageId],
     )
@@ -350,14 +293,14 @@ export class MessagingService {
     user2: Address,
   ): Promise<Conversation> {
     await this.ensureInitialized()
-    if (!this.cql) throw new Error('CQL not initialized')
+    if (!this.storage) throw new Error('CQL not initialized')
 
     // Deterministic conversation ID
     const sortedAddresses = [user1.toLowerCase(), user2.toLowerCase()].sort()
     const conversationId = `dm-${sortedAddresses[0]}-${sortedAddresses[1]}`
 
     // Check if exists
-    const existing = await this.cql.query<Record<string, unknown>>(
+    const existing = await this.storage.query<Record<string, unknown>>(
       `SELECT * FROM conversations WHERE id = $1`,
       [conversationId],
     )
@@ -369,7 +312,7 @@ export class MessagingService {
 
     // Create new
     const now = Date.now()
-    await this.cql.exec(
+    await this.storage.exec(
       `INSERT INTO conversations (id, type, participants, created_at, last_message_at) VALUES ($1, $2, $3, $4, $5)`,
       [conversationId, 'dm', JSON.stringify(sortedAddresses), now, now],
     )
@@ -393,7 +336,7 @@ export class MessagingService {
     metadata?: Record<string, unknown>,
   ): Promise<Conversation> {
     await this.ensureInitialized()
-    if (!this.cql) throw new Error('CQL not initialized')
+    if (!this.storage) throw new Error('CQL not initialized')
 
     const conversationId = `group-${Date.now()}-${randomHex(4)}`
     const allParticipants = [
@@ -402,7 +345,7 @@ export class MessagingService {
     ]
     const now = Date.now()
 
-    await this.cql.exec(
+    await this.storage.exec(
       `INSERT INTO conversations (id, type, name, participants, created_at, last_message_at, metadata) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
       [
         conversationId,
@@ -434,9 +377,9 @@ export class MessagingService {
     limit = 50,
   ): Promise<Conversation[]> {
     await this.ensureInitialized()
-    if (!this.cql) throw new Error('CQL not initialized')
+    if (!this.storage) throw new Error('CQL not initialized')
 
-    const result = await this.cql.query<Record<string, unknown>>(
+    const result = await this.storage.query<Record<string, unknown>>(
       `SELECT * FROM conversations WHERE participants LIKE $1 ORDER BY last_message_at DESC LIMIT $2`,
       [`%${address.toLowerCase()}%`, limit],
     )
@@ -448,9 +391,9 @@ export class MessagingService {
    */
   async getConversation(conversationId: string): Promise<Conversation | null> {
     await this.ensureInitialized()
-    if (!this.cql) throw new Error('CQL not initialized')
+    if (!this.storage) throw new Error('CQL not initialized')
 
-    const result = await this.cql.query<Record<string, unknown>>(
+    const result = await this.storage.query<Record<string, unknown>>(
       `SELECT * FROM conversations WHERE id = $1`,
       [conversationId],
     )
@@ -502,9 +445,9 @@ export class MessagingService {
   private async getOrCreateUserKeys(
     address: Address,
   ): Promise<{ encryptionPublicKey: string; signingPublicKey: string } | null> {
-    if (!this.cql) return null
+    if (!this.storage) return null
 
-    const result = await this.cql.query<Record<string, unknown>>(
+    const result = await this.storage.query<Record<string, unknown>>(
       `SELECT * FROM user_keys WHERE address = $1`,
       [address],
     )
@@ -542,7 +485,7 @@ export class MessagingService {
     }
     const data = parseResult.data
 
-    await this.cql.exec(
+    await this.storage.exec(
       `INSERT INTO user_keys (address, encryption_public_key, signing_public_key, kms_key_id, registered_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6)`,
       [
         address,
@@ -620,8 +563,4 @@ export function getMessaging(): MessagingService {
     messagingServiceInstance = new MessagingService()
   }
   return messagingServiceInstance
-}
-
-export function resetMessaging(): void {
-  messagingServiceInstance = null
 }

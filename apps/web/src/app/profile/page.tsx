@@ -1,4 +1,5 @@
-import { cn, getProfileUrl } from '@babylon/shared'
+import { getProfileUrl } from '@babylon/shared'
+import { cn } from '@jejunetwork/shared'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   AlertCircle,

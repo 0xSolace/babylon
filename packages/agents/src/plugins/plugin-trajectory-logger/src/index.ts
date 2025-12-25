@@ -20,19 +20,7 @@ export {
 export type { ARTLLMCall, ARTStep, ARTTrajectory } from './art-format'
 // ART format conversion
 export { groupTrajectories, toARTTrajectory } from './art-format'
-// Export utilities
-export {
-  type ExportOptions,
-  type ExportResult,
-  exportForOpenPipeART,
-  exportGroupedForGRPO,
-} from './export'
-// Game rewards
-export {
-  buildGameStateFromDB,
-  computeStepReward,
-  computeTrajectoryReward,
-} from './game-rewards'
+// Export utilities (export.ts and game-rewards.ts removed as unused)
 // Integration helpers
 export {
   endAutonomousTick,

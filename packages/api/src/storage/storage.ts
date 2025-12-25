@@ -2,7 +2,6 @@
  * Decentralized Storage Layer
  *
  * ALL file storage routes through Jeju Storage (IPFS/Arweave).
- * NO FALLBACKS - Decentralized storage is required.
  *
  * This replaces Vercel Blob, MinIO, and S3 as the storage layer.
  */

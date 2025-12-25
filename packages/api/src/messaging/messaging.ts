@@ -13,7 +13,15 @@ import {
 } from '@babylon/messaging'
 import { logger } from '@babylon/shared'
 import type { Address } from 'viem'
-import { isDecentralizedMessagingEnabled } from './decentralized-messaging'
+
+// isDecentralizedMessagingEnabled was removed - stub it locally
+function isDecentralizedMessagingEnabled(): boolean {
+  // Decentralized is the default - only disable if explicitly set to centralized
+  if (process.env.MESSAGING_MODE === 'centralized') {
+    return false
+  }
+  return true
+}
 
 let messagingBridge: MessagingBridge | null = null
 

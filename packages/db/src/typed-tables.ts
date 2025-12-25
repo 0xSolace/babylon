@@ -60,11 +60,11 @@ function createTypedTableRef<TSchema>(
   tableName: string,
 ): TypedTableRef<TSchema> {
   // $inferSelect is a phantom type property used only for TypeScript type inference.
-  // It's never accessed at runtime, so we use undefined.
-  const base: { _: { name: string }; $inferSelect: TSchema | undefined } = {
+  // It's never accessed at runtime, so we cast to satisfy the type.
+  const base = {
     _: { name: tableName },
-    $inferSelect: undefined,
-  }
+    $inferSelect: undefined as TSchema,
+  } as { readonly _: { readonly name: string }; readonly $inferSelect: TSchema }
 
   return new Proxy(base, {
     get(

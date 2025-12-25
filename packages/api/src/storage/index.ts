@@ -7,7 +7,6 @@
 // Jeju storage integration
 export * from './jeju-storage'
 export * from './s3-client'
-export * from './sqlite-encrypted-store'
 // Storage (primary storage layer)
 export {
   downloadFile,

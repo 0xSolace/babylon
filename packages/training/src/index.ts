@@ -2,13 +2,64 @@
  * Babylon Training Package
  *
  * A comprehensive training pipeline for RL agents including:
+ * - Integration with Jeju's core training infrastructure
+ * - Babylon-specific data adapters and scoring
  * - Benchmarking and evaluation
  * - Training automation
  * - HuggingFace integration
  * - Multi-criteria archetype evaluation
  *
+ * @example
+ * ```typescript
+ * import {
+ *   createBabylonTrainingAdapter,
+ *   runBabylonTrainingLoop,
+ * } from '@babylon/training';
+ *
+ * const adapter = createBabylonTrainingAdapter({ archetype: 'trader' });
+ * const result = await runBabylonTrainingLoop(adapter, {
+ *   archetype: 'trader',
+ *   trajectoryThreshold: 10000,
+ *   exportToHuggingFace: true,
+ * });
+ * ```
+ *
  * @packageDocumentation
  */
+
+// =============================================================================
+// JEJU TRAINING ADAPTER (Primary Integration Point)
+// =============================================================================
+
+// Re-export core types from Jeju training
+export type {
+  AppTrainingConfig,
+  AppTrainingRunner,
+  AppTrajectoryContext,
+  AppTrajectoryStep,
+  CollectOptions,
+  HuggingFaceExportConfig,
+  TrainingDataAdapter,
+  TrainingLoopConfig,
+  TrainingLoopResult,
+  TrainingResult,
+  Trajectory,
+  TrajectoryMetadata,
+  TrajectoryStatus,
+} from '@jejunetwork/training'
+export {
+  type BabylonTrainingAdapterConfig,
+  BabylonTrainingDataAdapter,
+  type BabylonTrajectoryContext,
+  type BabylonTrajectoryStep,
+  createBabylonTrainingAdapter,
+  getBabylonArchetypes,
+  runBabylonTrainingLoop,
+} from './jeju-adapter.js'
+
+// =============================================================================
+// BABYLON-SPECIFIC MODULES
+// =============================================================================
 
 // Archetypes
 export * from './archetypes'

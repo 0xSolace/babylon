@@ -25,36 +25,6 @@ export interface RealtimeEventEnvelope<T extends JsonValue = JsonValue> {
   timestamp: number
 }
 
-/** @deprecated Use RealtimeSubscriptionClaims instead */
-export interface RealtimeTokenPayload {
-  userId: string
-  channels: RealtimeChannel[]
-  exp: number // epoch seconds
-  iat: number // epoch seconds
-}
-
-/**
- * @deprecated Use PermissionlessRealtimeManager instead
- * This uses a shared secret - prefer wallet-signed tokens
- */
-export function signRealtimeToken(_payload: RealtimeTokenPayload): string {
-  throw new Error(
-    'signRealtimeToken is deprecated. Use PermissionlessRealtimeManager instead.',
-  )
-}
-
-/**
- * @deprecated Use verifySubscriptionToken instead
- * This uses a shared secret - prefer wallet-signed tokens
- */
-export function verifyRealtimeToken(
-  _token: string,
-): RealtimeTokenPayload | null {
-  throw new Error(
-    'verifyRealtimeToken is deprecated. Use verifySubscriptionToken instead.',
-  )
-}
-
 /**
  * Publish an event to a realtime channel.
  *
@@ -86,27 +56,5 @@ export async function publishEvent(
 }
 
 export const toStreamKey = (channel: RealtimeChannel) => `realtime:${channel}`
-
-/**
- * @deprecated Use createSubscriptionMessage + wallet signature instead
- *
- * For permissionless realtime auth:
- * ```ts
- * import { createSubscriptionMessage, createSubscriptionToken } from '@babylon/api';
- *
- * const { message, claims } = createSubscriptionMessage(address, channels);
- * const signature = await wallet.signMessage(message);
- * const token = createSubscriptionToken(claims, signature);
- * ```
- */
-export function issueRealtimeToken(_params: {
-  userId: string
-  channels: RealtimeChannel[]
-  ttlSeconds?: number
-}): string {
-  throw new Error(
-    'issueRealtimeToken is deprecated. Use createSubscriptionMessage + wallet signature instead.',
-  )
-}
 
 export const generateConnectionId = () => randomBytes(12).toString('hex')
