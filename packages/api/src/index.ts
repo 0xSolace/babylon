@@ -29,29 +29,18 @@ export {
   optionalAuthFromHeaders,
 } from './auth-middleware'
 // Cache (NO Redis fallback)
+// Cache (Jeju Compute-based)
 export {
-  CACHE_KEYS,
   CacheClient,
-  type CacheOptions,
+  type CacheConfig,
+  type CacheStats,
   cacheDel,
-  cachedDb,
   cacheExists,
   cacheGet,
   cacheSet,
-  clearAllCache,
-  DEFAULT_TTLS,
   getCache,
-  getCacheOrFetch,
-  getCacheStats,
   initializeCache,
-  initializeCacheService,
-  invalidateCache,
-  invalidateCachePattern,
-  isCacheServiceReachable,
   resetCache,
-  setCache,
-  tryInitializeCache,
-  warmCache,
 } from './cache'
 // Configuration (environment detection)
 export {
@@ -155,7 +144,10 @@ export {
 } from './rate-limiting'
 // Realtime
 export {
+  broadcastToChannel,
   generateConnectionId,
+  notifyFollow,
+  notifyGroupChatInvite,
   publishEvent,
   type RealtimeChannel,
   type RealtimeEventEnvelope,

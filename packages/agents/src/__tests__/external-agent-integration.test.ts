@@ -6,6 +6,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test'
+import type { AgentCard } from '@jejunetwork/agents'
 import { CommunicationHub } from '../communication/CommunicationHub'
 import { getEventBus } from '../communication/EventBus'
 import {
@@ -13,7 +14,6 @@ import {
   ExternalAgentAdapter,
   TrustLevel,
 } from '../external/ExternalAgentAdapter'
-import type { AgentCard } from '../types/agent-registry'
 
 // Type for mock fetch function
 type MockFetchFn = ((

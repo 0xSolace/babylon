@@ -21,7 +21,38 @@
 // Re-export common utilities from @jejunetwork/shared
 // =============================================================================
 
-export { generateSnowflakeId } from '@jejunetwork/shared'
+// ID Generation
+// Nullable utilities
+// Retry utilities
+// Singleton utilities
+// CSS utilities (for Tailwind)
+// Array utilities
+export {
+  chunk,
+  classNames,
+  cn,
+  createGlobalSingleton,
+  createPortSingleton,
+  createSingleton,
+  delay,
+  first,
+  generateSnowflakeId,
+  isNotNullish,
+  isNullish,
+  isRetryableError,
+  isValidSnowflakeId,
+  last,
+  mapGet,
+  parseSnowflakeId,
+  type RetryOptions,
+  retryIfRetryable,
+  retryWithCondition,
+  sleep,
+  toDate,
+  toDateOrNull,
+  toNull,
+  toUndefined,
+} from '@jejunetwork/shared'
 
 // =============================================================================
 // Constants (all client-safe)

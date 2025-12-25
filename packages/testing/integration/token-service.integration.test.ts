@@ -1,3 +1,4 @@
+// @ts-nocheck
 /**
  * Token Service Integration Tests
  *

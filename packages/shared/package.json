@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@jejunetwork/shared": "workspace:*",
+    "@jejunetwork/types": "workspace:*",
     "@sinclair/typebox": "^0.34.33",
     "elysia": "^1.2.25",
     "viem": "2.43.3",

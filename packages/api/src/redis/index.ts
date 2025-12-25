@@ -11,7 +11,6 @@ export {
   getRedisClient,
   isRedisAvailable,
   type RedisInstance,
-  redis,
 } from './client'
 // Decentralized Redis replacement - export class and types, reset only (getRedis comes from client)
 export { Redis, type RedisCompatibleClient, resetRedis } from './redis'

@@ -30,7 +30,7 @@ import {
   mapActorToOASFSkills,
   REPUTATION_SYSTEM_BASE_SEPOLIA,
 } from '@babylon/shared'
-import { AgentStatus, AgentType } from '../types/agent-registry'
+import { AgentStatus, AgentType } from '@jejunetwork/agents'
 import { agentRegistry } from './agent-registry.service'
 
 /**

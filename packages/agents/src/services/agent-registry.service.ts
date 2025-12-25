@@ -38,13 +38,15 @@ import {
   isObject,
   logger,
 } from '@babylon/shared'
+import {
+  type AgentDiscoveryFilter,
+  type AgentRegistration,
+  AgentStatus,
+  AgentType,
+  type ExternalAgentConnectionParams,
+  TrustLevel,
+} from '@jejunetwork/agents'
 import { toNull } from '@jejunetwork/shared'
-import type {
-  AgentDiscoveryFilter,
-  AgentRegistration,
-  ExternalAgentConnectionParams,
-} from '../types/agent-registry'
-import { AgentStatus, AgentType, TrustLevel } from '../types/agent-registry'
 
 /**
  * Gets encryption key from environment or dev fallback

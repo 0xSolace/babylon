@@ -6,9 +6,9 @@
  */
 
 import type { AgentProfile, AgentReputation } from '@babylon/a2a'
+import type { AgentRegistration } from '@jejunetwork/agents'
 import { AgentRegistryService } from '../services/agent-registry.service'
 import { parseCapabilities } from '../shared/capabilities'
-import type { AgentRegistration } from '../types/agent-registry'
 import { getAgent0Client } from './Agent0Client'
 import { ReputationBridge } from './ReputationBridge'
 import { type SubgraphAgent, SubgraphClient } from './SubgraphClient'

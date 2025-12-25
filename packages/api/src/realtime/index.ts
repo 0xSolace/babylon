@@ -58,3 +58,53 @@ export async function publishEvent(
 export const toStreamKey = (channel: RealtimeChannel) => `realtime:${channel}`
 
 export const generateConnectionId = () => randomBytes(12).toString('hex')
+
+/**
+ * Broadcast data to a realtime channel
+ */
+export async function broadcastToChannel(
+  channel: RealtimeChannel,
+  data: JsonValue,
+): Promise<void> {
+  await publishEvent({
+    channel,
+    type:
+      typeof data === 'object' && data !== null && 'type' in data
+        ? String((data as Record<string, unknown>).type)
+        : 'message',
+    data,
+    timestamp: Date.now(),
+  })
+}
+
+/**
+ * Send follow notification to a user
+ */
+export async function notifyFollow(
+  userId: string,
+  followerId: string,
+): Promise<void> {
+  await publishEvent({
+    channel: `notifications:${userId}`,
+    type: 'follow',
+    data: { userId, followerId },
+    timestamp: Date.now(),
+  })
+}
+
+/**
+ * Send group chat invite notification to a user
+ */
+export async function notifyGroupChatInvite(
+  userId: string,
+  inviterId: string,
+  chatId: string,
+  chatName: string,
+): Promise<void> {
+  await publishEvent({
+    channel: `notifications:${userId}`,
+    type: 'group_chat_invite',
+    data: { userId, inviterId, chatId, chatName },
+    timestamp: Date.now(),
+  })
+}

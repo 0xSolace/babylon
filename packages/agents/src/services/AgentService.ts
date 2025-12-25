@@ -22,11 +22,11 @@ import {
   IDENTITY_REGISTRY_BASE_SEPOLIA,
   REPUTATION_SYSTEM_BASE_SEPOLIA,
 } from '@babylon/shared'
+import type { AgentPerformance, CreateAgentParams } from '@jejunetwork/agents'
 import { generateSnowflakeId, toNull } from '@jejunetwork/shared'
 import { agentIdentityService } from '../identity/AgentIdentityService'
 import { agentRuntimeManager } from '../runtime/AgentRuntimeManager'
 import { logger } from '../shared/logger'
-import type { AgentPerformance, CreateAgentParams } from '../types'
 import { agentRegistry } from './agent-registry.service'
 
 /** User with agent configuration */

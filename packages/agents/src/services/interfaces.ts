@@ -13,7 +13,7 @@ import type {
   AgentRegistration,
   AgentStatus,
   TrustLevel,
-} from '../types/agent-registry'
+} from '@jejunetwork/agents'
 
 /**
  * Agent Registry Service Interface

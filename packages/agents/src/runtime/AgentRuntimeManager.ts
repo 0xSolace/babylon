@@ -27,6 +27,7 @@ import {
   type Plugin,
   type UUID,
 } from '@elizaos/core'
+import { type AgentRegistration, AgentType } from '@jejunetwork/agents'
 import { generateSnowflakeId } from '@jejunetwork/shared'
 import { babylonPlugin } from '../plugins/babylon'
 import { enhanceRuntimeWithBabylon } from '../plugins/babylon/integration'
@@ -41,7 +42,6 @@ import { TrajectoryLoggerService } from '../plugins/plugin-trajectory-logger/src
 import { agentRegistry } from '../services/agent-registry.service'
 import { getAgentConfig } from '../shared/agent-config'
 import { logger } from '../shared/logger'
-import { type AgentRegistration, AgentType } from '../types/agent-registry'
 
 /**
  * Extended AgentRuntime with Babylon-specific properties

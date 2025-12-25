@@ -8,13 +8,13 @@
  */
 
 import type { JsonValue } from '@babylon/shared'
+import { AgentType } from '@jejunetwork/agents'
 import type {
   ExternalAgentMessage as AgentMessage,
   AgentResponse,
 } from '../external/ExternalAgentAdapter'
 import { getExternalAgentAdapter } from '../external/ExternalAgentAdapter'
 import { agentRegistry } from '../services/agent-registry.service'
-import { AgentType } from '../types/agent-registry'
 import type { AgentEvent, EventBus } from './EventBus'
 import { getEventBus } from './EventBus'
 

@@ -20,6 +20,7 @@
     "@babylon/engine": "workspace:*",
     "@babylon/db": "workspace:*",
     "@babylon/agents": "workspace:*",
+    "@jejunetwork/agents": "workspace:*",
     "@babylon/a2a": "workspace:*",
     "@babylon/mcp": "workspace:*",
     "@babylon/training": "workspace:*",

@@ -10,6 +10,16 @@
  * - TEE configuration for production security
  */
 
+// Core types - re-export from @jejunetwork/agents for convenience
+export {
+  type AgentConfig,
+  type AgentDiscoveryFilter,
+  type AgentPerformance,
+  AgentStatus,
+  type AgentTemplate,
+  AgentType,
+  type CreateAgentParams,
+} from '@jejunetwork/agents'
 // Agent0 integration (feedback/reputation)
 export * from './agent0'
 // Autonomous services
@@ -62,16 +72,10 @@ export * from './services'
 export * from './templates-loader'
 // Training utilities (RL model fetching, config)
 export * from './training'
-// Core types
-export * from './types'
-export type { AgentDiscoveryFilter } from './types/agent-registry'
-// Explicitly export AgentStatus, AgentType, and AgentDiscoveryFilter for better TypeScript resolution
-export { AgentStatus, AgentType } from './types/agent-registry'
-export * from './types/agent-template'
-export * from './types/goals'
 // Utils
 export * from './utils/createTestAgent'
-export * from './utils/prompt-builder'
+// Note: For prompt-builder utilities (buildSafePrompt, countTokensSync, etc.)
+// import directly from '@jejunetwork/agents'
 
 // =============================================================================
 // AI CEO - MonkeyKing

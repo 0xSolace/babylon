@@ -35,7 +35,7 @@ import {
 } from 'bun:test'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { AgentStatus, AgentType, agentRegistry } from '@babylon/agents'
+import { agentRegistry } from '@babylon/agents'
 import type { Comment, Message, NPCTrade, Post } from '@babylon/db'
 import {
   chats,
@@ -58,6 +58,7 @@ import {
   TradeExecutionService,
 } from '@babylon/engine'
 import { logger } from '@babylon/shared'
+import { AgentStatus, AgentType } from '@jejunetwork/agents'
 
 // Set timeout to 10 minutes for real LLM calls
 setDefaultTimeout(600000)

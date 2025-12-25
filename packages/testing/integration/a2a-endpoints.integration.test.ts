@@ -4,7 +4,6 @@
  */
 
 import { beforeAll, describe, expect, it } from 'bun:test'
-import { AgentStatus, AgentType } from '@babylon/agents'
 import { agentRegistry } from '@babylon/agents/services/agent-registry.service'
 import { db } from '@babylon/db'
 import {
@@ -12,6 +11,7 @@ import {
   OASFDomainCategories,
   OASFSkillCategories,
 } from '@babylon/shared'
+import { AgentStatus, AgentType } from '@jejunetwork/agents'
 
 // Centralized port configuration
 const BABYLON_API_PORT = process.env.BABYLON_API_PORT ?? '5009'

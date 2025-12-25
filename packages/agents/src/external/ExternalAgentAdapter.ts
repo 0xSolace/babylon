@@ -19,9 +19,8 @@
 import { createDecipheriv } from 'node:crypto'
 import { db } from '@babylon/db'
 import type { JsonValue } from '@babylon/shared'
+import { type AgentCard, TrustLevel } from '@jejunetwork/agents'
 import { logger } from '../shared/logger'
-import type { AgentCard } from '../types/agent-registry'
-import { TrustLevel } from '../types/agent-registry'
 
 /**
  * Gets encryption key from environment

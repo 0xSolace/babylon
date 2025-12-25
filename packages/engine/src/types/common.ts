@@ -6,6 +6,20 @@
 
 export type { JsonValue, LogData } from '@babylon/shared'
 
+// Actor state from DB queries
+export interface DbActorState {
+  id: string
+  name: string
+  description?: string
+  personality?: string
+  bio?: string
+  role?: string
+  organizationId?: string
+  isActive: boolean
+  lastActiveAt?: number
+  createdAt: number
+}
+
 // Common utility types
 export type StringRecord = Record<string, string>
 

@@ -10,17 +10,17 @@ import { db, type JsonValue } from '@babylon/db'
 import { StaticDataRegistry, type StaticOrganization } from '@babylon/engine'
 import { isJsonValue } from '@babylon/shared'
 import type { IAgentRuntime } from '@elizaos/core'
-import { generateSnowflakeId } from '@jejunetwork/shared'
-import { z } from 'zod'
-import { callAgentLLM } from '../llm'
-import { getAgentConfig } from '../shared/agent-config'
-import { logger } from '../shared/logger'
 import type {
   AgentConstraints,
   AgentDirective,
   AgentGoal,
   GoalTarget,
-} from '../types/goals'
+} from '@jejunetwork/agents'
+import { generateSnowflakeId } from '@jejunetwork/shared'
+import { z } from 'zod'
+import { callAgentLLM } from '../llm'
+import { getAgentConfig } from '../shared/agent-config'
+import { logger } from '../shared/logger'
 
 /** Type guard for goal metadata with optional type field */
 function isGoalMetadata(

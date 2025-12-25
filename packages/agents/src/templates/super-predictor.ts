@@ -1,4 +1,4 @@
-import type { AgentTemplate } from '../types/agent-template'
+import type { AgentTemplate } from '@jejunetwork/agents'
 
 export const data = {
   archetype: 'super-predictor',

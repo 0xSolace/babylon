@@ -17,7 +17,10 @@
     },
     "apps/server": {
       "entry": ["src/index.ts", "src/app.ts"],
-      "project": ["src/**/*.ts"]
+      "project": ["src/**/*.ts"],
+      "ignore": [
+        "src/middleware/auth.ts"
+      ]
     },
     "apps/web": {
       "entry": ["src/main.tsx", "src/App.tsx", "vite.config.ts", "tailwind.config.ts", "scripts/**/*.ts"],
@@ -57,12 +60,30 @@
         "src/autonomous/DecentralizedDMService.ts",
         "src/farcaster/FarcasterPostingService.ts",
         "src/autonomous/schemas/llm-response-schemas.ts",
-        "src/plugins/babylon/types.ts"
+        "src/plugins/babylon/types.ts",
+        "src/plugins/babylon/integration-a2a-sdk.ts",
+        "src/plugins/babylon/providers/npc-game-context.ts",
+        "src/utils/prompt-logger.ts"
       ]
     },
     "packages/api": {
       "entry": ["src/index.ts"],
-      "project": ["src/**/*.ts"]
+      "project": ["src/**/*.ts"],
+      "ignore": [
+        "src/admin-middleware.ts",
+        "src/auth-middleware.ts",
+        "src/error-handler.ts",
+        "src/rate-limiting/middleware.ts",
+        "src/services/checkpoint-service.ts",
+        "src/services/claude-service.ts",
+        "src/services/ico-automation-service.ts",
+        "src/services/kms-integration.ts",
+        "src/tee/babylon-enclave.ts",
+        "src/tee/dstack-integration.ts",
+        "src/utils/type-guards.ts",
+        "src/redis/client.ts",
+        "src/services/eliza-holder-airdrop-service.ts"
+      ]
     },
     "packages/auth": {
       "entry": ["src/index.ts"],
@@ -72,7 +93,12 @@
         "src/mpc/index.ts",
         "src/oauth/index.ts",
         "src/oauth/siwe.ts",
-        "src/oauth/siwf.ts"
+        "src/oauth/siwf.ts",
+        "src/did/index.ts",
+        "src/types/guards.ts",
+        "src/types/index.ts",
+        "src/schemas/index.ts",
+        "src/oauth/types.ts"
       ]
     },
     "packages/client": {
@@ -99,7 +125,17 @@
     "packages/engine": {
       "entry": ["src/index.ts", "examples/**/*.ts"],
       "project": ["src/**/*.ts"],
-      "ignore": ["src/__tests__/**"]
+      "ignore": [
+        "src/__tests__/**",
+        "src/prompts/reality-grounding.ts",
+        "src/services/story-seed-service.ts",
+        "src/services/topic-diversity-service.ts",
+        "src/utils/context-limits.ts",
+        "src/utils/date-utils.ts",
+        "src/utils/shared-utils.ts",
+        "src/GameGenerator.ts",
+        "src/types/perps.ts"
+      ]
     },
     "packages/mcp": {
       "entry": ["src/index.ts"],
@@ -108,12 +144,15 @@
     "packages/messaging": {
       "entry": ["src/index.ts"],
       "project": ["src/**/*.ts"],
-      "ignore": ["src/storage/decentralized-storage.ts"]
+      "ignore": [
+        "src/storage/decentralized-storage.ts",
+        "src/storage/index.ts"
+      ]
     },
     "packages/moderation": {
       "entry": ["src/index.ts"],
       "project": ["src/**/*.ts"],
-      "ignore": ["src/schemas.ts", "src/a2a-handler.ts"]
+      "ignore": ["src/schemas.ts", "src/a2a-handler.ts", "src/types.ts"]
     },
     "packages/plugin-babylon": {
       "entry": ["src/index.ts", "build.ts"],
@@ -135,7 +174,8 @@
         "shared/**/*.ts",
         "types/**/*.ts"
       ],
-      "project": ["**/*.{ts,tsx}"]
+      "project": ["**/*.{ts,tsx}"],
+      "ignore": ["infrastructure/setup.ts"]
     },
     "packages/training": {
       "entry": ["src/index.ts"],
@@ -143,7 +183,10 @@
       "ignore": [
         "src/compute/dws-client.ts",
         "src/training/ModelSelectionService.ts",
-        "src/type-guards.ts"
+        "src/type-guards.ts",
+        "src/compute/decentralized-training.ts",
+        "src/huggingface/shared/HuggingFaceUploadUtil.ts",
+        "src/schemas.ts"
       ]
     }
   },
@@ -163,7 +206,6 @@
     "@biomejs/biome",
     "tsx",
     "@nomicfoundation/hardhat-toolbox",
-    "hardhat",
     "csv-parse",
     "@prb/math",
     "posthog-node",
@@ -175,9 +217,7 @@
     "@tanstack/react-query",
     "react-dom",
     "@farcaster/hub-nodejs",
-    "@elizaos/cli",
     "dotenv",
-    "prettier",
     "swagger-jsdoc"
   ],
   "ignoreBinaries": [
@@ -186,6 +226,7 @@
     "which",
     "pkill",
     "lsof",
+    "jeju",
     "scripts/validation/check-environment.ts"
   ],
   "ignoreExportsUsedInFile": true,

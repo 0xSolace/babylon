@@ -19,9 +19,9 @@
  * @packageDocumentation
  */
 
+import type { AgentTemplate } from '@jejunetwork/agents'
 import { first, mapGet } from '@jejunetwork/shared'
 import { templateIds, templates } from './templates'
-import type { AgentTemplate } from './types/agent-template'
 
 /**
  * In-memory cache for loaded templates

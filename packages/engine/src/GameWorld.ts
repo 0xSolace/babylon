@@ -19,7 +19,6 @@ import {
 import { characterMappingService } from './services/character-mapping-service'
 import { TrendingTopicsEngine } from './TrendingTopicsEngine'
 import type { JsonValue } from './types/common'
-import type { FeedPost } from './types/shared'
 import {
   type EventCooldownState,
   generateSentimentSignal,

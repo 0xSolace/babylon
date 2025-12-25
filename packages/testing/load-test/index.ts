@@ -10,4 +10,3 @@
 
 export * from './a2a-load-test-scenarios'
 export * from './load-test-simulator'
-export * from './resource-limiter'

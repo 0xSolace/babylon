@@ -71,13 +71,3 @@ export async function getAgentContext(
     lifetimePnL: Number(agent.lifetimePnL ?? 0),
   }
 }
-
-/**
- * Check if a user ID represents an NPC.
- *
- * @param userId - User ID to check
- * @returns True if the user is an NPC in StaticDataRegistry
- */
-export function isNpcUser(userId: string): boolean {
-  return !!StaticDataRegistry.getActor(userId)
-}
