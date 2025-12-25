@@ -8,7 +8,7 @@
  * due to SimulationEngine being deprecated and types being consolidated.
  */
 
-import { isObject } from '@babylon/shared'
+import { isObject } from '@jejunetwork/shared'
 import type { SimulationMetrics } from './index'
 
 /**

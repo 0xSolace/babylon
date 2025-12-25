@@ -12,7 +12,7 @@
  * server-side code.
  */
 
-import { hasStringProperty, isObject } from '@babylon/shared'
+import { hasStringProperty, isObject } from '@jejunetwork/shared'
 import type { Address, Hex } from 'viem'
 import { isAddress, isHex } from '../types/guards'
 

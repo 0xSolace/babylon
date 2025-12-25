@@ -8,7 +8,6 @@
 import type { JsonValue } from '@babylon/shared'
 import type { Address, Hex } from 'viem'
 
-// Re-export type guards and utilities
 export * from './guards'
 
 // ============================================================================

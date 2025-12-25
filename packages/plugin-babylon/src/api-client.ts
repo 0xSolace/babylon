@@ -5,7 +5,7 @@
  * Supports both manual auth tokens and automatic agent authentication
  */
 
-import { isObject } from '@babylon/shared'
+import { isObject } from '@jejunetwork/shared'
 import { logger } from '@elizaos/core'
 import { AgentAuthService } from './agent-auth-service'
 import type {

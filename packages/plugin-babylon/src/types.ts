@@ -13,7 +13,6 @@ import {
 } from '@babylon/shared'
 import { asUUID, type State, type UUID } from '@elizaos/core'
 
-// Re-export type guards that are used in exported function bodies
 export { isObject }
 
 // =============================================================================

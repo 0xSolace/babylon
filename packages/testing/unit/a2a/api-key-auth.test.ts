@@ -5,7 +5,8 @@
  */
 
 import { describe, expect, it } from 'bun:test'
-import { A2A_API_KEY_HEADER, isLocalHost, validateApiKey } from '@babylon/a2a'
+import { A2A_API_KEY_HEADER, validateApiKey } from '@babylon/a2a'
+import { isLocalHost } from '@jejunetwork/a2a'
 
 describe('A2A API Key Authentication', () => {
   describe('isLocalHost', () => {

@@ -2,7 +2,7 @@
  * Eden client utilities for error handling and data extraction
  */
 
-import { hasStringProperty, isObject } from '@babylon/shared'
+import { hasStringProperty, isObject } from '@jejunetwork/shared'
 
 /**
  * Error response structure from Eden clients

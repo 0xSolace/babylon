@@ -17,7 +17,7 @@
 import { getOAuth3Client } from '@babylon/auth'
 import { db } from '@babylon/db'
 import type { AuthenticatedUser } from '@babylon/shared'
-import { AuthenticationError } from '@babylon/shared'
+import { AuthenticationError } from '@jejunetwork/shared'
 import { verifyAgentSession } from './agent-auth'
 import { hasDbUserId } from './utils/type-guards'
 

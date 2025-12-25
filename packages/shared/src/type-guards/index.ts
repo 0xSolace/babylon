@@ -2,55 +2,13 @@
  * Type Guards Module
  *
  * Centralized type guards for the Babylon application.
- * Import guards from here for consistent type validation across the codebase.
+ * 
+ * For base type guards (isObject, isString, assertDefined, etc.),
+ * import directly from @jejunetwork/shared
  *
  * @packageDocumentation
  */
 
-// Re-export nullish guards from Jeju shared
-export { isNotNullish, isNullish } from '@jejunetwork/shared'
-// Base type guards - objects, arrays, primitives
-export {
-  // Generic utilities
-  assertDefined,
-  assertNotNull,
-  // JSON parsing
-  fetchJsonAs,
-  // Error handling
-  getErrorMessage,
-  // Property checks
-  hasArrayProperty,
-  hasBooleanProperty,
-  hasNumberProperty,
-  hasProperty,
-  hasStringProperty,
-  // Primitive guards
-  isArray,
-  isArrayOf,
-  isBoolean,
-  isDate,
-  isFiniteNumber,
-  isJsonRecord,
-  isJsonValue,
-  isNonEmptyString,
-  isNumber,
-  isNumberArray,
-  isObject,
-  isPlainObject,
-  isPositiveInteger,
-  isString,
-  isStringArray,
-  isStringRecord,
-  isUint8Array,
-  parseJson,
-  parseJsonAs,
-  responseJson,
-  toError,
-  // JSON value converters
-  toJsonRecord,
-  toJsonValueOrNull,
-  toStringArray,
-} from './base'
 // Blockchain type guards - addresses, hex, networks
 export {
   // Agent0 ID guards

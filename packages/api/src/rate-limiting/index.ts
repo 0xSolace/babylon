@@ -4,7 +4,7 @@
  * Centralized exports for rate limiting functionality
  */
 
-// Duplicate detection (uses crypto, moved to api)
+// Duplicate detection - import from @jejunetwork/shared
 export {
   checkDuplicate,
   cleanupDuplicates,
@@ -12,7 +12,7 @@ export {
   clearDuplicates,
   DUPLICATE_DETECTION_CONFIGS,
   getDuplicateStats,
-} from '../utils/duplicate-detector'
+} from '@jejunetwork/shared'
 // Middleware
 export {
   addRateLimitHeaders,

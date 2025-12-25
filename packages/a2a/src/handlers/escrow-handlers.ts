@@ -5,7 +5,8 @@
  */
 
 import { type CQLClient, db, type JsonValue } from '@babylon/db'
-import { isJsonRecord, logger, parseEther } from '@babylon/shared'
+import { logger, parseEther } from '@babylon/shared'
+import { isJsonRecord } from '@jejunetwork/shared'
 import { generateSnowflakeId } from '@jejunetwork/shared'
 import { z } from 'zod'
 import { X402Manager } from '../payments/x402-manager'

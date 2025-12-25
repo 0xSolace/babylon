@@ -106,7 +106,7 @@ export {
   recordCronExecution,
 } from './monitoring/cron-metrics'
 // Performance monitoring (moved from @babylon/shared)
-export { performanceMonitor } from './monitoring/performance-monitor'
+// Performance monitoring - import directly from @jejunetwork/shared
 // Payments - ERC-4337 Paymaster
 export { PaymasterClient, type UserOperation } from './payments'
 // Profile utilities
@@ -222,18 +222,7 @@ export {
   uploadFile,
   uploadJson,
 } from './storage'
-// Legacy Jeju Storage exports
-export {
-  getJejuStorageClient,
-  initializeJejuStorage,
-  isJejuStorageAvailable,
-  JejuStorageClient,
-  type JejuStorageConfig,
-  type JejuUploadOptions,
-  type JejuUploadResult,
-  type ModelStorageOptions,
-  type StoredModel,
-} from './storage/jeju-storage'
+// Jeju Storage - import directly from @jejunetwork/shared
 // Legacy S3 client (to be removed)
 export {
   getStorageClient,
@@ -256,23 +245,15 @@ export {
 } from './users'
 // Server-side utilities (require Node.js crypto)
 export {
-  budgetTokens,
-  // Token counter utilities (moved from @babylon/shared)
-  countTokens,
-  countTokensSync,
   generateApiKey,
   generateTestApiKey,
   getClientIp,
   getHashedClientIp,
-  getModelTokenLimit,
-  getSafeContextLimit,
   hashApiKey,
   hashIpAddress,
-  MODEL_TOKEN_LIMITS,
-  truncateToTokenLimit,
-  truncateToTokenLimitSync,
   verifyApiKey,
 } from './utils'
+// Token counter utilities - import directly from @jejunetwork/shared
 
 // =============================================================================
 // INFRASTRUCTURE - KMS (Secrets)

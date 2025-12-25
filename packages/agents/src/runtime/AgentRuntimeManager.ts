@@ -20,7 +20,7 @@ import {
   StaticDataRegistry,
 } from '@babylon/engine'
 import type { JsonValue } from '@babylon/shared'
-import { isJsonRecord } from '@babylon/shared'
+import { isJsonRecord } from '@jejunetwork/shared'
 import {
   AgentRuntime,
   type Character,

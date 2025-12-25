@@ -48,20 +48,8 @@ export type {
   JsonRpcResponse,
 } from './types/a2a'
 
-// Re-export utilities from @jejunetwork/a2a
-import type {
-  ApiKeyAuthConfig,
-  AuthRequest,
-  AuthResult,
-} from '@jejunetwork/a2a'
-import {
-  isLocalHost,
-  RateLimiter,
-  validateApiKey as validateApiKeyBase,
-} from '@jejunetwork/a2a'
-
-export type { ApiKeyAuthConfig, AuthRequest, AuthResult }
-export { isLocalHost, RateLimiter }
+import type { ApiKeyAuthConfig, AuthRequest, AuthResult } from '@jejunetwork/a2a'
+import { validateApiKey as validateApiKeyBase } from '@jejunetwork/a2a'
 
 // Babylon-specific API key header constant
 export const A2A_API_KEY_HEADER = 'x-babylon-api-key'

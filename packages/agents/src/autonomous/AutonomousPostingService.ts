@@ -5,7 +5,7 @@
  * Handles agents creating posts autonomously
  */
 
-import { countTokensSync, truncateToTokenLimitSync } from '@babylon/api'
+import { countTokensSync, truncateToTokenLimitSync } from '@jejunetwork/shared'
 import { agentTrades, db, desc, eq, posts } from '@babylon/db'
 import {
   characterMappingService,

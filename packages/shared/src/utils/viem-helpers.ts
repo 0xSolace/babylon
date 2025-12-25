@@ -66,12 +66,11 @@ export function privateKeyToAddress(privateKey: Hex): Address {
 /**
  * Generate random bytes as hex string
  * Replaces ethers.hexlify(ethers.randomBytes(n))
- * Re-exports from @jejunetwork/shared
  */
-// Also export the raw randomHex for consumers who want it
-export { randomHex as randomBytesHex, randomHex } from '@jejunetwork/shared'
+import { randomHex, randomHex as _randomHex } from '@jejunetwork/shared'
 
-import { randomHex as _randomHex } from '@jejunetwork/shared'
+// Alias for backward compatibility
+export { randomHex, randomHex as randomBytesHex }
 
 /**
  * Generate a random 32-byte salt
@@ -165,11 +164,5 @@ export { stringToHex }
  * Replaces ethers.ZeroHash
  */
 export { zeroHash }
-
-/**
- * Zero address constant
- * @deprecated Import from @jejunetwork/types instead
- */
-export { ZERO_ADDRESS } from '@jejunetwork/types'
 
 export type { Address, Hex, Chain, PublicClient, WalletClient }

@@ -31,7 +31,7 @@
 
 import {
   DayTimelineSchema,
-  getErrorMessage,
+  extractErrorMessage,
   logger,
   QuestionSchema,
   ScenarioSchema,
@@ -1462,7 +1462,7 @@ REMINDER: Generate SCENARIOS only. Do NOT generate questions.`
     } catch (error) {
       logger.error('Scenario validation failed', { error }, 'GameGenerator')
       throw new Error(
-        `LLM returned invalid scenarios structure: ${getErrorMessage(error)}`,
+        `LLM returned invalid scenarios structure: ${extractErrorMessage(error as Error)}`,
       )
     }
   }
@@ -1582,7 +1582,7 @@ REMINDER: Generate SCENARIOS only. Do NOT generate questions.`
     } catch (error) {
       logger.error('Question validation failed', { error }, 'GameGenerator')
       throw new Error(
-        `Generated questions failed validation: ${getErrorMessage(error)}`,
+        `Generated questions failed validation: ${extractErrorMessage(error as Error)}`,
       )
     }
   }
@@ -2170,7 +2170,7 @@ REMINDER: Generate SCENARIOS only. Do NOT generate questions.`
     } catch (error) {
       logger.error('DayTimeline validation failed', { error }, 'GameGenerator')
       throw new Error(
-        `DayTimeline validation failed: ${getErrorMessage(error)}`,
+        `DayTimeline validation failed: ${extractErrorMessage(error as Error)}`,
       )
     }
 

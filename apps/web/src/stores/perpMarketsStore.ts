@@ -23,7 +23,7 @@ import { MARKETS_CONFIG } from '../types/markets'
 /** Query key for perp markets */
 export const PERP_MARKETS_QUERY_KEY = ['markets', 'perps'] as const
 
-import { hasArrayProperty, isObject } from '@babylon/shared'
+import { hasArrayProperty, isObject } from '@jejunetwork/shared'
 
 /** Response shape from perp markets API */
 interface PerpMarketsResponse {

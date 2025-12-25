@@ -6,7 +6,7 @@
  * For real-time messaging, use Farcaster or the messaging service.
  */
 
-import { isJsonRecord } from '@babylon/shared'
+import { isJsonRecord } from '@jejunetwork/shared'
 import type { JsonValue } from '../types'
 import { getRedisClient } from './client'
 

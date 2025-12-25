@@ -52,7 +52,7 @@ const BROWSER_EXTERNALS = [
   'node:crypto',
   'node:events',
   'node:process',
-  // Packages with Node.js-specific code
+  // Packages with Node.js-specific code (server-only)
   '@babylon/agents',
   '@babylon/api',
   '@babylon/db',
@@ -60,21 +60,20 @@ const BROWSER_EXTERNALS = [
   '@babylon/messaging',
   '@babylon/training',
   '@babylon/testing',
-  // Jeju packages with server-side code
+  // Jeju packages with server-side code (server-only)
   '@jejunetwork/a2a',
   '@jejunetwork/config',
   '@jejunetwork/db',
   '@jejunetwork/messaging',
-  '@jejunetwork/kms',
   '@jejunetwork/mcp',
-  '@jejunetwork/messaging',
-  '@jejunetwork/auth',
   '@jejunetwork/sdk',
   '@jejunetwork/training',
   // Server-only
   'swagger-ui-react',
   'swagger-jsdoc',
   '@swagger-api/apidom-reference',
+  // Note: @jejunetwork/auth and @jejunetwork/kms are BUNDLED (not external)
+  // They have browser-safe React components used by @babylon/auth
 ]
 
 function notifyClients(): void {

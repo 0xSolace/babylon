@@ -21,7 +21,8 @@ import {
   users,
   withTransaction,
 } from '@babylon/db'
-import { InsufficientFundsError, NotFoundError } from '@babylon/shared'
+import { InsufficientFundsError } from '@babylon/shared'
+import { NotFoundError } from '@jejunetwork/shared'
 import { generateSnowflakeId } from '@jejunetwork/shared'
 import { EarnedPointsService } from './earned-points-service'
 

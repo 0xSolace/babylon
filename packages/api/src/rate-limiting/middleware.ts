@@ -6,10 +6,7 @@
  */
 
 import { logger } from '@babylon/shared'
-import {
-  checkDuplicate,
-  type DUPLICATE_DETECTION_CONFIGS,
-} from '../utils/duplicate-detector'
+import { checkDuplicate, DUPLICATE_DETECTION_CONFIGS } from '@jejunetwork/shared'
 import { checkRateLimit, type RATE_LIMIT_CONFIGS } from './user-rate-limiter'
 
 /**

@@ -12,7 +12,7 @@
  * 4. Executes responses for approved interactions
  */
 
-import { countTokensSync, truncateToTokenLimitSync } from '@babylon/api'
+import { countTokensSync, truncateToTokenLimitSync } from '@jejunetwork/shared'
 import { db } from '@babylon/db'
 import type { IAgentRuntime } from '@elizaos/core'
 import { callAgentLLM } from '../llm'

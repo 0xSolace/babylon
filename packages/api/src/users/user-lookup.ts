@@ -5,7 +5,7 @@
  */
 
 import { db, type User } from '@babylon/db'
-import { NotFoundError } from '@babylon/shared'
+import { NotFoundError } from '@jejunetwork/shared'
 
 /**
  * Find user by identifier (ID, oauth3Id, or username)

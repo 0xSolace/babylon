@@ -411,7 +411,6 @@ export {
 import { getDB, initializeDB, resetDB } from './cql-repository'
 import { createCQLTables, generateAllDDL } from './decentralized/cql-schema'
 
-// Re-export schema utilities for CLI usage
 export { generateAllDDL }
 
 let tablesCreated = false

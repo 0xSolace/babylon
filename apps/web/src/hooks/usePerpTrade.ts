@@ -1,4 +1,4 @@
-import { hasNumberProperty, hasStringProperty } from '@babylon/shared'
+import { hasNumberProperty, hasStringProperty } from '@jejunetwork/shared'
 import { useCallback } from 'react'
 
 // Type guard for API response validation

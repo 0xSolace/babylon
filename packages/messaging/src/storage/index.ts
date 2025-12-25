@@ -1,5 +1,5 @@
 /**
- * Re-export storage from @jejunetwork/messaging
+ * Message Storage utilities
  */
 
 import { getCQL } from '@jejunetwork/db'

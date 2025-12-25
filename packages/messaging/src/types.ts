@@ -1,4 +1,4 @@
-import { BabylonError } from '@babylon/shared'
+import { JejuError as BabylonError } from '@jejunetwork/shared'
 import type { Address, Hex } from 'viem'
 
 /**

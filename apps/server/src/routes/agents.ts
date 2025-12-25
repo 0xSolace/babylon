@@ -1,11 +1,10 @@
 // @ts-nocheck - Elysia body type inference issues, needs refactoring
-import type { AgentDiscoveryFilter } from '@babylon/agents'
+import { agentRegistry, getAgentDiscoveryService } from '@babylon/agents'
 import {
+  type AgentDiscoveryFilter,
   AgentStatus,
   AgentType,
-  agentRegistry,
-  getAgentDiscoveryService,
-} from '@babylon/agents'
+} from '@jejunetwork/agents'
 import { agentRegistries, db, desc } from '@babylon/db'
 import { logger } from '@babylon/shared'
 import { generateSnowflakeId } from '@jejunetwork/shared'

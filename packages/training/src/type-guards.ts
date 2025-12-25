@@ -1,19 +1,18 @@
 /**
  * Training Type Guards
  *
- * Training-specific type guards. For base type guards, import from @babylon/shared.
+ * Training-specific type guards.
  */
 
+import { isAddress } from '@babylon/shared'
 import {
-  isAddress,
   isArrayOf,
   isJsonValue,
   isObject,
   isString,
   type JsonValue,
-} from '@babylon/shared'
+} from '@jejunetwork/shared'
 
-// Re-export base guards used by training modules
 export { isAddress, isArrayOf, isObject, isString }
 
 // ============================================================================

@@ -2,25 +2,22 @@
  * API Type Guards
  *
  * API-specific type guards and parsing utilities for runtime type checking.
- * For base type guards, import from @babylon/shared.
  */
 
 import type { AuthenticatedUser, JsonValue } from '@babylon/shared'
+import { isAddress, isHex } from '@babylon/shared'
 import {
+  first,
   getErrorMessage,
-  isAddress,
-  isHex,
   isJsonValue,
   isObject,
   isStringArray,
   parseJsonAs,
   toError,
   toJsonValueOrNull,
-} from '@babylon/shared'
-import { first } from '@jejunetwork/shared'
+} from '@jejunetwork/shared'
 import type { Address, Hex } from 'viem'
 
-// Re-export error helpers and type guards for consumers
 export { getErrorMessage, isAddress, isHex, toError, toJsonValueOrNull }
 
 /**

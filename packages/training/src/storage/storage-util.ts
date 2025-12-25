@@ -11,7 +11,8 @@
 
 import { promises as fs } from 'node:fs'
 import * as path from 'node:path'
-import { isObject, isString, logger } from '@babylon/shared'
+import { isObject, isString } from '@jejunetwork/shared'
+import { logger } from '@babylon/shared'
 
 /**
  * Storage provider configuration

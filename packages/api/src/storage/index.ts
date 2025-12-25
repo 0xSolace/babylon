@@ -4,8 +4,8 @@
  * Decentralized storage using Jeju Storage (IPFS/Arweave).
  */
 
-// Jeju storage integration
-export * from './jeju-storage'
+// Jeju storage - import directly from @jejunetwork/shared
+// Legacy S3 client
 export * from './s3-client'
 // Storage (primary storage layer)
 export {

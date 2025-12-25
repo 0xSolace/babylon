@@ -18,6 +18,7 @@
     "@babylon/db": "workspace:*",
     "@babylon/messaging": "workspace:*",
     "@babylon/shared": "workspace:*",
+    "@jejunetwork/shared": "workspace:*",
     "viem": "2.43.3",
     "zod": "4.2.1"
   },

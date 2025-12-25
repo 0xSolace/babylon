@@ -1,23 +1,20 @@
 /**
  * API Error Classes
  *
- * Re-exports error classes from @babylon/shared for consistency.
  * Defines API-specific errors like ApiError, UnauthorizedError, ForbiddenError.
  */
 
 import type { JsonValue } from '@babylon/shared'
-import { BabylonError, ValidationError } from '@babylon/shared'
-import { safeToJsonRecord } from './utils/type-guards'
-
-// =============================================================================
-// Re-export error classes from @babylon/shared for convenience
-// =============================================================================
-export {
+import { isAuthenticationError } from '@babylon/shared'
+import {
   AuthenticationError,
   AuthorizationError,
-  BabylonError,
-  isAuthenticationError,
-} from '@babylon/shared'
+  JejuError as BabylonError,
+  ValidationError,
+} from '@jejunetwork/shared'
+import { safeToJsonRecord } from './utils/type-guards'
+
+export { AuthenticationError, AuthorizationError, BabylonError, isAuthenticationError }
 
 // =============================================================================
 // API-specific error classes

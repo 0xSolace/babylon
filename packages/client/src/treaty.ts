@@ -4,7 +4,6 @@
 import { treaty as edenTreaty, type Treaty } from '@elysiajs/eden'
 import type { Elysia } from 'elysia'
 
-// Re-export Treaty type and treaty function for convenience
 export type { Treaty }
 export { edenTreaty as treaty }
 

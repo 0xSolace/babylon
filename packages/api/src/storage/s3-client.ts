@@ -15,7 +15,7 @@ import {
   getJejuStorageClient,
   initializeJejuStorage,
   type JejuStorageClient,
-} from './jeju-storage'
+} from '@jejunetwork/shared'
 
 interface UploadOptions {
   file: Buffer

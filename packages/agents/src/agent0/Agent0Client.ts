@@ -22,11 +22,9 @@ import {
   toEndpointType,
   toHexString,
   toIpfsProvider,
-  toJsonRecord,
   toNetworkName,
-  toStringArray,
 } from '@babylon/shared'
-import { toNull } from '@jejunetwork/shared'
+import { toJsonRecord, toNull, toStringArray } from '@jejunetwork/shared'
 import type {
   AgentSummary,
   Feedback,

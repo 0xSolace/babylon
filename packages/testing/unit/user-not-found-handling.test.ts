@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, mock } from 'bun:test'
-import { NotFoundError } from '@babylon/shared'
+import { NotFoundError } from '@jejunetwork/shared'
 import type { MockUserRecord, UserFindUniqueArgs } from '../types/test-types'
 
 // Error with code property for auth errors

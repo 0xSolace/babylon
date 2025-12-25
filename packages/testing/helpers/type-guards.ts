@@ -5,7 +5,7 @@
  * For base type guards, import from @babylon/shared.
  */
 
-import { hasBooleanProperty, hasStringProperty } from '@babylon/shared'
+import { hasBooleanProperty, hasStringProperty } from '@jejunetwork/shared'
 import type { Address } from 'viem'
 import { isAddress } from 'viem'
 import { z } from 'zod'

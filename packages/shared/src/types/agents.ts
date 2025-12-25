@@ -1,10 +1,9 @@
 /**
  * Agent Type Definitions
  *
- * Re-exports from @jejunetwork/types with Babylon-specific extensions
+ * Types from @jejunetwork/types with Babylon-specific extensions
  */
 
-// Re-export types
 export type {
   AgentAuth,
   AgentCapabilities,
@@ -12,7 +11,7 @@ export type {
   AgentDiscoveryQuery,
   GameNetworkInfo,
 } from '@jejunetwork/types'
-// Re-export Zod schemas (values)
+
 export {
   AgentCapabilitiesSchema,
   GameNetworkInfoSchema,

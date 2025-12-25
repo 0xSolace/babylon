@@ -5,7 +5,8 @@
  * and contains all required fields.
  */
 
-import { isObject, logger } from '@babylon/shared'
+import { isObject } from '@jejunetwork/shared'
+import { logger } from '@babylon/shared'
 import type { BenchmarkGameSnapshot } from './BenchmarkDataGenerator'
 
 export interface BenchmarkValidationResult {

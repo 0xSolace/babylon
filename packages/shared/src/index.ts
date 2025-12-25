@@ -9,50 +9,13 @@
  * - Monitoring: import { performanceMonitor } from '@babylon/api'
  * - Token counting: import { countTokens, countTokensSync } from '@babylon/api'
  *
- * For common utilities, import directly from @jejunetwork/shared:
+ * For common utilities, import from @jejunetwork/shared:
  * - Nullable: toNull, toUndefined, isNullish, isNotNullish, first, last, mapGet, toDate, toDateOrNull
  * - Retry: sleep, retryWithCondition, retryIfRetryable, isRetryableError, RetryOptions
  * - Singleton: createSingleton, createGlobalSingleton, createPortSingleton
  * - Snowflake: generateSnowflakeId, isValidSnowflakeId, parseSnowflakeId, SnowflakeGenerator
  * - UI: cn, classNames
  */
-
-// =============================================================================
-// Re-export common utilities from @jejunetwork/shared
-// =============================================================================
-
-// ID Generation
-// Nullable utilities
-// Retry utilities
-// Singleton utilities
-// CSS utilities (for Tailwind)
-// Array utilities
-export {
-  chunk,
-  classNames,
-  cn,
-  createGlobalSingleton,
-  createPortSingleton,
-  createSingleton,
-  delay,
-  first,
-  generateSnowflakeId,
-  isNotNullish,
-  isNullish,
-  isRetryableError,
-  isValidSnowflakeId,
-  last,
-  mapGet,
-  parseSnowflakeId,
-  type RetryOptions,
-  retryIfRetryable,
-  retryWithCondition,
-  sleep,
-  toDate,
-  toDateOrNull,
-  toNull,
-  toUndefined,
-} from '@jejunetwork/shared'
 
 // =============================================================================
 // Constants (all client-safe)
@@ -105,14 +68,13 @@ export * from './perps-types'
 
 // Assets utilities (URL helpers)
 export * from './utils/assets'
+// Formatting utilities
+export * from './utils/format'
 // Content analysis (pure functions, no external deps)
 export * from './utils/content-analysis'
-// Content safety (pure functions, no external deps)
-export * from './utils/content-safety'
-// Formatting utilities (pure functions)
-export * from './utils/format'
-// JSON parser (pure functions)
-export * from './utils/json-parser'
+// Content safety - import directly from @jejunetwork/shared
+// Formatting utilities - import directly from @jejunetwork/shared
+// JSON parser - import directly from @jejunetwork/shared
 // Logger (works in browser)
 export * from './utils/logger'
 // Name replacement utilities (pure functions)
@@ -127,10 +89,64 @@ export * from './utils/viem-client'
 export * from './utils/viem-helpers'
 
 // =============================================================================
-// Type Guards (centralized type validation)
+// Type Guards
 // =============================================================================
 
+// Core type guards - re-exported from @jejunetwork/shared
+export {
+  assertDefined,
+  assertNotNull,
+  fetchJsonAs,
+  getErrorMessage,
+  hasArrayProperty,
+  hasBooleanProperty,
+  hasNumberProperty,
+  hasProperty,
+  hasStringProperty,
+  isArray,
+  isArrayOf,
+  isBoolean,
+  isDate,
+  isFiniteNumber,
+  isJsonRecord,
+  isJsonValue,
+  isNonEmptyString,
+  isNumber,
+  isNumberArray,
+  isObject,
+  isPlainObject,
+  isPositiveInteger,
+  isString,
+  isStringArray,
+  isStringRecord,
+  isUint8Array,
+  parseJson,
+  parseJsonAs,
+  responseJson,
+  toError,
+  toJsonRecord,
+  toJsonValueOrNull,
+  toStringArray,
+} from '@jejunetwork/shared'
+export type { JsonValue } from '@jejunetwork/shared'
+// Babylon-specific type guards (blockchain, entities, game)
 export * from './type-guards'
+
+// =============================================================================
+// Token Utilities - import directly from @jejunetwork/shared
+// =============================================================================
+
+// =============================================================================
+// Performance Monitoring - import directly from @jejunetwork/shared
+// =============================================================================
+
+// =============================================================================
+// Duplicate Detection - import directly from @jejunetwork/shared
+// =============================================================================
+
+// =============================================================================
+// Jeju Storage - import directly from @jejunetwork/shared
+// =============================================================================
 
 // =============================================================================
 // Error Classes (client-safe)

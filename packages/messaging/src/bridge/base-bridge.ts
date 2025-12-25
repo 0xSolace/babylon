@@ -12,7 +12,7 @@
  * @packageDocumentation
  */
 
-import { ExternalServiceError } from '@babylon/shared'
+import { ExternalServiceError } from '@jejunetwork/shared'
 import type { Address, Hex } from 'viem'
 import { z } from 'zod'
 

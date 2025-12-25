@@ -10,7 +10,7 @@
  * 3. Verification recovers address from signature, no shared secret needed
  */
 
-import { AuthenticationError, ValidationError } from '@babylon/shared'
+import { AuthenticationError, ValidationError } from '@jejunetwork/shared'
 import { type Address, type Hex, verifyMessage } from 'viem'
 import { z } from 'zod'
 

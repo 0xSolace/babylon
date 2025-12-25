@@ -16,7 +16,6 @@ import type {
   WorldEventSchema,
 } from '../validation/schemas/game-engine'
 
-// Re-export ActorTier from game-types to avoid duplicate definitions
 export type { ActorTier } from '../game-types'
 
 // =============================================================================

@@ -3,14 +3,15 @@
  */
 
 import { logger } from '@babylon/shared'
-import { last, toNull } from '@jejunetwork/shared'
-import type { Hex } from 'viem'
-import { keccak256, toBytes } from 'viem'
 import {
   getJejuStorageClient,
   isJejuStorageAvailable,
   type JejuStorageClient,
-} from '../storage/jeju-storage'
+  last,
+  toNull,
+} from '@jejunetwork/shared'
+import type { Hex } from 'viem'
+import { keccak256, toBytes } from 'viem'
 import {
   type BabylonEnclave,
   getBabylonEnclave,

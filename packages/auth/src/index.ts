@@ -6,9 +6,9 @@
  * This package provides:
  * - Pre-configured defaults for Babylon apps
  * - Babylon-specific React hooks with sensible defaults
- * - Re-exports all @jejunetwork/auth functionality
+ * - Auth types and functions from @jejunetwork/auth
  *
- * For most use cases, import directly from @jejunetwork/auth.
+ * For core auth functionality, you can also import directly from @jejunetwork/auth.
  * Use @babylon/auth when you need Babylon-specific defaults.
  *
  * @example
@@ -36,27 +36,15 @@
  */
 
 // =============================================================================
-// Re-export all @jejunetwork/auth types and functions
+// Auth types and functions from @jejunetwork/auth
 // =============================================================================
 
-// DID utilities
-// Paymaster (Gas Sponsorship)
-// MPC/FROST Signing
-// OAuth Providers
-// Farcaster
-// Email/Phone Providers
-// MFA
-// Verifiable Credentials
-// Infrastructure
-// React SDK
-// SDK Client
-// Core types
+// Auth types and functions from @jejunetwork/auth
 export {
   AppleProvider,
   type AuthMethod,
   AuthProvider,
   addressFromDid,
-  aggregateSignatures,
   type BackupCode,
   BackupCodesManager,
   type BackupCodesSet,
@@ -113,22 +101,13 @@ export {
   FarcasterProvider,
   type FarcasterSigner,
   type FarcasterSignerRequest,
-  type FROSTCluster,
-  FROSTCoordinator,
-  type FROSTKeyShare,
-  type FROSTSignature,
-  type FROSTSignatureShare,
-  type FROSTSigningCommitment,
   farcasterProvider,
   type GasEstimate,
   GasEstimator,
   type GasEstimatorConfig,
   GitHubProvider,
   GoogleProvider,
-  generateKeyShares,
   generateRandomDID,
-  generateSignatureShare,
-  generateSigningCommitment,
   getNetwork,
   type IdentityIntent,
   IdentityIntentAction,
@@ -198,7 +177,6 @@ export {
   PhoneProvider,
   type PhoneUser,
   parseDID,
-  publicKeyToAddress,
   SessionCapability,
   type SessionKeyInfo,
   type SessionPermission,
@@ -236,9 +214,24 @@ export {
   VerifiableCredentialVerifier,
   type VerificationMethod,
   validateDID,
-  verifySignature,
   X402PaymentClient,
 } from '@jejunetwork/auth'
+
+// FROST/MPC signing utilities from @jejunetwork/kms
+export {
+  aggregateSignatures,
+  type FROSTCluster,
+  FROSTCoordinator,
+  type FROSTKeyShare,
+  type FROSTSignature,
+  type FROSTSignatureShare,
+  type FROSTSigningCommitment,
+  generateKeyShares,
+  generateSignatureShare,
+  generateSigningCommitment,
+  publicKeyToAddress,
+  verifySignature,
+} from '@jejunetwork/kms'
 // Threshold Signing (from local module)
 export { ThresholdSigner, type ThresholdSignerConfig } from './mpc'
 // OAuth PKCE utilities (from local module)

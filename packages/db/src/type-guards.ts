@@ -1,7 +1,7 @@
 /**
  * DB Type Guards
  *
- * Database-specific type guards. For base type guards, import from @babylon/shared.
+ * Database-specific type guards.
  */
 
 import {
@@ -10,9 +10,8 @@ import {
   isObject,
   isPlainObject,
   isUint8Array,
-} from '@babylon/shared'
+} from '@jejunetwork/shared'
 
-// Re-export base type guards for use within @babylon/db
 export { isDate, isJsonValue, isObject, isPlainObject, isUint8Array }
 
 import type { QueryParam } from '@jejunetwork/db'

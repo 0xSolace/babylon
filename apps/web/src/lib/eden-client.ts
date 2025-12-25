@@ -5,7 +5,7 @@
  * This provides a clean interface without complex Eden type constraints.
  */
 
-import { hasStringProperty } from '@babylon/shared'
+import { hasStringProperty } from '@jejunetwork/shared'
 import { getApiBaseUrl } from '@/config'
 
 interface ApiResponse<T> {

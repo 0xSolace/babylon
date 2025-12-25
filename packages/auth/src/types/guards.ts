@@ -1,18 +1,17 @@
 /**
  * Auth Type Guards and Utility Types
  *
- * Auth-specific type guards. For base type guards, import from @babylon/shared.
+ * Auth-specific type guards.
  */
 
 import {
-  hasStringProperty,
-  isObject,
   isValidAddress,
   isValidHex,
   isAddress as sharedIsAddress,
   isHex as sharedIsHex,
   toHexString,
 } from '@babylon/shared'
+import { hasStringProperty, isObject } from '@jejunetwork/shared'
 import type { Address, Hex } from 'viem'
 import type {
   BackupRecoveryProof,
@@ -22,7 +21,6 @@ import type {
   SocialRecoveryProof,
 } from './index'
 
-// Re-export type guards from shared for consumers that expect them here
 export { isValidAddress, isValidHex }
 
 // ============================================================================

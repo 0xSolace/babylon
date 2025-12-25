@@ -5,7 +5,8 @@
  */
 
 import type { JsonValue } from '@babylon/shared'
-import { hasStringProperty, isHexAddress, isObject } from '@babylon/shared'
+import { hasStringProperty, isObject } from '@jejunetwork/shared'
+import { isHexAddress } from '@babylon/shared'
 import type { Hex } from 'viem'
 import { keccak256, toHex } from 'viem'
 import { isHex } from '../types/guards'

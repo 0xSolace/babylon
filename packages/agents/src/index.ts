@@ -10,16 +10,6 @@
  * - TEE configuration for production security
  */
 
-// Core types - re-export from @jejunetwork/agents for convenience
-export {
-  type AgentConfig,
-  type AgentDiscoveryFilter,
-  type AgentPerformance,
-  AgentStatus,
-  type AgentTemplate,
-  AgentType,
-  type CreateAgentParams,
-} from '@jejunetwork/agents'
 // Agent0 integration (feedback/reputation)
 export * from './agent0'
 // Autonomous services

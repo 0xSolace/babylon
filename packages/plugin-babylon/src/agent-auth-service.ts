@@ -5,7 +5,7 @@
  * Agents authenticate once and receive a session token valid for 24 hours.
  */
 
-import { isObject } from '@babylon/shared'
+import { isObject } from '@jejunetwork/shared'
 import { logger } from '@elizaos/core'
 import {
   getApiErrorMessage,

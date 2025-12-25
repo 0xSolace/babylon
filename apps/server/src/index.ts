@@ -3,7 +3,6 @@ import { type App, app } from './app'
 import { setupEngineEvents } from './engine-events'
 import { toNetwork } from './utils'
 
-// Re-export App type for clients
 export type { App }
 
 const PORT =

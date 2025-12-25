@@ -11,31 +11,13 @@ export {
   hashApiKey,
   verifyApiKey,
 } from './api-keys'
-export {
-  checkDuplicate,
-  cleanupDuplicates,
-  clearAllDuplicates,
-  clearDuplicates,
-  DUPLICATE_DETECTION_CONFIGS,
-  getDuplicateStats,
-} from './duplicate-detector'
+// Duplicate detection - import directly from @jejunetwork/shared
 export {
   getClientIp,
   getHashedClientIp,
   hashIpAddress,
 } from './ip-utils'
-// Production guards (removed - unused)
-// Token counter utilities
-export {
-  budgetTokens,
-  countTokens,
-  countTokensSync,
-  getModelTokenLimit,
-  getSafeContextLimit,
-  MODEL_TOKEN_LIMITS,
-  truncateToTokenLimit,
-  truncateToTokenLimitSync,
-} from './token-counter'
+// Token counter utilities - import directly from @jejunetwork/shared
 // API-specific type guards
 export {
   type AgentSessionData,

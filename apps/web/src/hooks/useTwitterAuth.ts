@@ -32,7 +32,7 @@ interface UseTwitterAuthReturn {
   refreshStatus: () => Promise<void>
 }
 
-import { hasBooleanProperty } from '@babylon/shared'
+import { hasBooleanProperty } from '@jejunetwork/shared'
 
 // Type guard for TwitterAuthStatus response
 function isTwitterAuthStatus(data: unknown): data is TwitterAuthStatus {

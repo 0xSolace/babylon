@@ -31,22 +31,6 @@
 // JEJU TRAINING ADAPTER (Primary Integration Point)
 // =============================================================================
 
-// Re-export core types from Jeju training
-export type {
-  AppTrainingConfig,
-  AppTrainingRunner,
-  AppTrajectoryContext,
-  AppTrajectoryStep,
-  CollectOptions,
-  HuggingFaceExportConfig,
-  TrainingDataAdapter,
-  TrainingLoopConfig,
-  TrainingLoopResult,
-  TrainingResult,
-  Trajectory,
-  TrajectoryMetadata,
-  TrajectoryStatus,
-} from '@jejunetwork/training'
 export {
   type BabylonTrainingAdapterConfig,
   BabylonTrainingDataAdapter,

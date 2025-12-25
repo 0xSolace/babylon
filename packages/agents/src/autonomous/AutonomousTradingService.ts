@@ -5,7 +5,7 @@
  * Uses DirectExecutors for actual trade execution (DRY principle).
  */
 
-import { countTokensSync, truncateToTokenLimitSync } from '@babylon/api'
+import { countTokensSync, truncateToTokenLimitSync } from '@jejunetwork/shared'
 import { db } from '@babylon/db'
 import {
   formatRandomContext,
