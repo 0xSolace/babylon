@@ -72,7 +72,8 @@ export interface DecentralizedBootstrapConfig {
 }
 
 const DEFAULT_CONFIG: DecentralizedBootstrapConfig = {
-  enableFarcasterRegistration: false, // Start disabled, enable when ready
+  // Enable Farcaster registration via env var (costs gas, needs signer setup)
+  enableFarcasterRegistration: process.env.FARCASTER_ENABLED === 'true',
   enableEncryptionKeys: true,
   batchSize: 10,
   batchDelay: 1000,

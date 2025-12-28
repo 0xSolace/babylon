@@ -1,4 +1,8 @@
-import { type CQLClient, db as defaultDb, type PerpPosition } from '@babylon/db'
+import {
+  db as defaultDb,
+  type EQLiteClient,
+  type PerpPosition,
+} from '@babylon/db'
 import type {
   PerpDbPort,
   PerpMarketRecord,
@@ -60,7 +64,7 @@ interface PerpMarketSnapshot {
 }
 
 /**
- * CQL adapter for PerpDbPort.
+ * EQLite adapter for PerpDbPort.
  *
  * Notes:
  * - Uses PerpMarketSnapshot as single source for market-level stats.
@@ -68,9 +72,9 @@ interface PerpMarketSnapshot {
  * - Uses raw SQL for PerpMarketSnapshot (has ticker as PK, not id).
  */
 export class PerpDbAdapter implements PerpDbPort {
-  private readonly dbClient: CQLClient
+  private readonly dbClient: EQLiteClient
 
-  constructor(dbClient?: CQLClient, _isTransaction = false) {
+  constructor(dbClient?: EQLiteClient, _isTransaction = false) {
     void _isTransaction // Stored for potential future transaction-aware operations
     this.dbClient = dbClient ?? defaultDb
   }
@@ -400,10 +404,10 @@ export class PerpDbAdapter implements PerpDbPort {
   /**
    * Execute operations within a transaction.
    *
-   * NOTE: CQL handles transactions through the client.
+   * NOTE: EQLite handles transactions through the client.
    */
   async transaction<T>(fn: (tx: PerpDbPort) => Promise<T>): Promise<T> {
-    return this.dbClient.transaction(async (tx: CQLClient) => {
+    return this.dbClient.transaction(async (tx: EQLiteClient) => {
       const txAdapter = new PerpDbAdapter(tx, true)
       return fn(txAdapter)
     })
@@ -412,6 +416,26 @@ export class PerpDbAdapter implements PerpDbPort {
 
 // Helper to map DB record to market record
 function mapMarketSnapshot(s: PerpMarketSnapshot): PerpMarketRecord {
+  // Parse fundingRate if it's stored as a JSON string
+  let fundingRate: PerpMarketRecord['fundingRate']
+  if (typeof s.fundingRate === 'string') {
+    try {
+      fundingRate = JSON.parse(s.fundingRate)
+    } catch {
+      fundingRate = {
+        rate: 0,
+        nextFundingTime: new Date().toISOString(),
+        predictedRate: 0,
+      }
+    }
+  } else {
+    fundingRate = s.fundingRate ?? {
+      rate: 0,
+      nextFundingTime: new Date().toISOString(),
+      predictedRate: 0,
+    }
+  }
+
   return {
     ticker: s.ticker,
     organizationId: s.organizationId,
@@ -424,11 +448,7 @@ function mapMarketSnapshot(s: PerpMarketSnapshot): PerpMarketRecord {
     low24h: Number(s.low24h),
     volume24h: Number(s.volume24h ?? 0),
     openInterest: Number(s.openInterest ?? 0),
-    fundingRate: (s.fundingRate ?? {
-      rate: 0,
-      nextFundingTime: new Date().toISOString(),
-      predictedRate: 0,
-    }) as PerpMarketRecord['fundingRate'],
+    fundingRate,
     maxLeverage: Number(s.maxLeverage ?? 100),
     minOrderSize: Number(s.minOrderSize ?? 10),
     markPrice: s.markPrice ? Number(s.markPrice) : undefined,

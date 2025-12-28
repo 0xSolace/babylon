@@ -8,7 +8,7 @@ import {
   checkAgentOutput,
   checkUserInput,
   sanitizeContent,
-} from '@babylon/shared'
+} from '@jejunetwork/shared'
 
 describe('Content Safety', () => {
   describe('checkUserInput', () => {

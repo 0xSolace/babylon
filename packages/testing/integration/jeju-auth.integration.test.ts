@@ -7,15 +7,15 @@
 
 import { describe, expect, it } from 'bun:test'
 import { createSessionMessage, SessionManager } from '@babylon/api'
-import type { AuthMethod, DID } from '@babylon/auth'
+import type { AuthMethod, DID } from '@jejunetwork/auth'
 import {
   createDID,
   DIDManager,
   generatePKCE,
   KeyBackupManager,
-  ThresholdSigner,
   validateDID,
-} from '@babylon/auth'
+} from '@jejunetwork/auth'
+import { ThresholdSigner } from '@jejunetwork/kms'
 import type { Address } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
 

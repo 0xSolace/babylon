@@ -9,7 +9,7 @@ import { db } from '@babylon/db'
 import { recalculateReputation } from '@babylon/engine'
 import { logger } from '@babylon/shared'
 import { generateSnowflakeId } from '@jejunetwork/shared'
-import { getAgent0Client } from '../Agent0Client'
+import { getAgent0Client } from '..'
 import { getCachedAgent0ReputationScore } from './agent0-reputation-cache'
 
 interface ReputationSyncResult {

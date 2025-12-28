@@ -13,8 +13,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@babylon/auth": "workspace:*",
     "@babylon/shared": "workspace:*",
+    "@jejunetwork/auth": "workspace:*",
     "@farcaster/miniapp-sdk": "^0.2.1",
     "@radix-ui/react-switch": "^1.2.6",
     "@radix-ui/react-tabs": "^1.1.13",

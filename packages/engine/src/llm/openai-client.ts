@@ -99,7 +99,9 @@ export class BabylonLLMClient {
   }
 
   getDefaultModel(): string {
-    return 'llama3-70b'
+    // Use explicit groq prefix to route through Jeju inference service to Groq
+    // llama-3.3-70b-versatile is fast and cost-effective for game content
+    return 'groq/llama-3.3-70b-versatile'
   }
 
   getStats(): { provider: string; model: string; configured: boolean } {

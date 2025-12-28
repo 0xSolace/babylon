@@ -1,0 +1,11 @@
+# Babylon Test Configuration
+
+[test]
+# Load preload script for integration tests
+preload = ["./packages/testing/integration/preload.ts"]
+
+# Increase timeout for integration tests
+timeout = 60000
+
+# Coverage is off by default - enable with --coverage flag
+# When enabled, skip coverage for test files and node_modules

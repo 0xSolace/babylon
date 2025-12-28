@@ -8,8 +8,8 @@
  */
 
 import { DatabaseError } from '@babylon/db'
-import type { JsonValue } from '@babylon/shared'
 import { isAuthenticationError, isBabylonError, logger } from '@babylon/shared'
+import type { JsonValue } from '@jejunetwork/shared'
 import { toNull } from '@jejunetwork/shared'
 import type { ZodError } from 'zod'
 import type { ElysiaContext } from './auth-middleware'

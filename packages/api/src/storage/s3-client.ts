@@ -140,8 +140,8 @@ class StorageClient {
   }
 
   async downloadJSON<T = Record<string, unknown>>(cid: string): Promise<T> {
-    const client = await this.getClient()
-    return client.downloadJSON<T>(cid)
+    const text = await this.downloadText(cid)
+    return JSON.parse(text) as T
   }
 
   async downloadText(cid: string): Promise<string> {

@@ -1,5 +1,5 @@
-import { useJejuAuth, useJejuWallet } from '@babylon/auth'
 import { logger } from '@babylon/shared'
+import { useJejuAuth, useJejuWallet } from '@jejunetwork/auth'
 import {
   AlertCircle,
   CheckCircle2,

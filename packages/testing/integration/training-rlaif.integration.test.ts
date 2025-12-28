@@ -5,7 +5,7 @@
  */
 
 import { beforeAll, describe, expect, test } from 'bun:test'
-import { responseJson } from '@babylon/shared'
+import { responseJson } from '@jejunetwork/shared'
 import { z } from 'zod'
 
 // Response schemas

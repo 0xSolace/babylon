@@ -7,7 +7,7 @@
  * @packageDocumentation
  */
 
-import type { JsonValue } from '@babylon/shared'
+import type { JsonValue } from '@jejunetwork/shared'
 import { logger } from '../shared/logger'
 
 export type EventHandler<T extends JsonValue = JsonValue> = (

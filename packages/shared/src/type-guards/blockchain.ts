@@ -230,27 +230,28 @@ export function parseAgent0Id(agentId: Agent0Id): {
 // =============================================================================
 
 /**
- * Valid network names (Agent0 networks)
+ * Valid Agent0 network names (different from deployment environments)
+ * For deployment environments, use NetworkName from config/deployment
  */
-export type NetworkName = 'sepolia' | 'mainnet' | 'localnet'
+export type Agent0NetworkName = 'sepolia' | 'mainnet' | 'localnet'
 
-const VALID_NETWORKS = ['sepolia', 'mainnet', 'localnet'] as const
+const VALID_AGENT0_NETWORKS = ['sepolia', 'mainnet', 'localnet'] as const
 
 /**
- * Type guard for network names
+ * Type guard for Agent0 network names
  */
-export function isNetworkName(value: string): value is NetworkName {
-  return (VALID_NETWORKS as readonly string[]).includes(value)
+export function isAgent0NetworkName(value: string): value is Agent0NetworkName {
+  return (VALID_AGENT0_NETWORKS as readonly string[]).includes(value)
 }
 
 /**
- * Validates and returns a NetworkName, or returns default
+ * Validates and returns an Agent0NetworkName, or returns default
  */
-export function toNetworkName(
+export function toAgent0NetworkName(
   value: string | undefined | null,
-  defaultNetwork: NetworkName = 'sepolia',
-): NetworkName {
-  if (!value || !isNetworkName(value)) {
+  defaultNetwork: Agent0NetworkName = 'sepolia',
+): Agent0NetworkName {
+  if (!value || !isAgent0NetworkName(value)) {
     return defaultNetwork
   }
   return value

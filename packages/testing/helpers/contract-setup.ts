@@ -9,8 +9,8 @@ import {
   getContractAddresses,
   LOCAL_CONTRACT_ADDRESSES,
   toAddress,
-  ZERO_ADDRESS,
 } from '@babylon/shared'
+import { ZERO_ADDRESS } from '@jejunetwork/types'
 
 function isContractDeployed(
   name: keyof ReturnType<typeof getContractAddresses>,

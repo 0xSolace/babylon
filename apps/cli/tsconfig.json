@@ -42,14 +42,10 @@
       "@babylon/engine/*": ["../../packages/engine/src/*"],
       "@babylon/api": ["../../packages/api/src/index.ts"],
       "@babylon/api/*": ["../../packages/api/src/*"],
-      "@babylon/messaging": ["../../packages/messaging/src/index.ts"],
-      "@babylon/messaging/*": ["../../packages/messaging/src/*"],
       "@babylon/agents": ["../../packages/agents/src/index.ts"],
       "@babylon/agents/*": ["../../packages/agents/src/*"],
       "@babylon/a2a": ["../../packages/a2a/src/index.ts"],
       "@babylon/a2a/*": ["../../packages/a2a/src/*"],
-      "@babylon/auth": ["../../packages/auth/src/index.ts"],
-      "@babylon/auth/*": ["../../packages/auth/src/*"],
       "@babylon/mcp": ["../../packages/mcp/src/index.ts"],
       "@babylon/training": ["../../packages/training/src/index.ts"],
       "@babylon/training/*": ["../../packages/training/src/*"],
@@ -66,6 +62,8 @@
     "**/__tests__/**/*",
     "src/generate-actor-images.ts",
     "src/migrate-images-to-blob.ts",
-    "src/realtime-daemon.ts"
+    "src/realtime-daemon.ts",
+    "src/scripts/json-simulation.ts",
+    "src/scripts/generate-training-data.ts"
   ]
 }

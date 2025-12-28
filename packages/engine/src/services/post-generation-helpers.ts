@@ -39,6 +39,7 @@ import type { EventContext, FeedPostContext } from '../types/market-context'
 import { stripHashtagsAndEmojis } from '../utils/shared-utils'
 import { generateArticleImageWithRetry } from './article-image-service'
 import { characterMappingService } from './character-mapping-service'
+import { getFarcasterPostingService } from './farcaster-posting-service'
 import {
   getArcPlan,
   getPhaseForDay,
@@ -628,8 +629,10 @@ ${worldFactsContext}
     )
   }
 
+  const postId = await generateSnowflakeId()
+
   await getDbInstance().createPostWithAllFields({
-    id: await generateSnowflakeId(),
+    id: postId,
     content: transformed.transformedText,
     authorId: actor.id,
     gameId: 'continuous',
@@ -642,6 +645,23 @@ ${worldFactsContext}
 
   // Log voice metrics for monitoring character consistency
   logVoiceMetrics(actor.id, transformed.transformedText)
+
+  // Post to Farcaster if enabled (non-blocking)
+  const farcasterService = getFarcasterPostingService()
+  if (farcasterService.isEnabled()) {
+    farcasterService
+      .postAsNPC(actor.id, transformed.transformedText)
+      .catch((err) => {
+        logger.warn(
+          'Failed to post NPC content to Farcaster (non-blocking)',
+          {
+            actorId: actor.id,
+            error: err instanceof Error ? err.message : 'Unknown',
+          },
+          'PostGeneration',
+        )
+      })
+  }
 
   return true
 }
@@ -779,6 +799,23 @@ ${worldFactsContext}
 
   // Log voice metrics
   logVoiceMetrics(actor.id, transformed.transformedText)
+
+  // Post to Farcaster if enabled (non-blocking)
+  const farcasterService = getFarcasterPostingService()
+  if (farcasterService.isEnabled()) {
+    farcasterService
+      .postAsNPC(actor.id, transformed.transformedText)
+      .catch((err) => {
+        logger.warn(
+          'Failed to post organic NPC content to Farcaster (non-blocking)',
+          {
+            actorId: actor.id,
+            error: err instanceof Error ? err.message : 'Unknown',
+          },
+          'PostGeneration',
+        )
+      })
+  }
 
   logger.debug(
     'Generated organic post',

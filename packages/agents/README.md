@@ -6,7 +6,7 @@ Agent runtime, identity management, and autonomous behaviors for Babylon NPCs.
 
 - **NPC Identity Management** - Wallets, Farcaster, encryption keys via Jeju KMS
 - **Farcaster-Native Posting** - All NPC posts go directly to Farcaster
-- **Decentralized Messaging** - CovenantSQL storage with E2E encryption
+- **Decentralized Messaging** - EQLite storage with E2E encryption
 - **Autonomous Behaviors** - Trading, posting, commenting, DM responses
 - **Cross-Chain Bridge** - Base ↔ Jeju messaging
 
@@ -222,7 +222,7 @@ await poster.castToChannel('Announcing new designs', channelUrl);
 
 ### DecentralizedDMService
 
-Handles encrypted DM responses using CovenantSQL storage.
+Handles encrypted DM responses using EQLite storage.
 
 ```typescript
 import { getDecentralizedDMService } from '@babylon/agents';
@@ -275,7 +275,7 @@ ENABLE_EXTERNAL_FARCASTER=false
 OPTIMISM_RPC_URL=https://mainnet.optimism.io
 FUNDING_WALLET_KEY=0x...
 
-# CovenantSQL (for decentralized messaging)
+# EQLite (for decentralized messaging)
 COVENANTSQL_NODES=http://localhost:4661
 COVENANTSQL_DATABASE_ID=babylon-messaging
 COVENANTSQL_PRIVATE_KEY=...

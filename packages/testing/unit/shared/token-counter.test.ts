@@ -9,7 +9,7 @@ import {
   getSafeContextLimit,
   MODEL_TOKEN_LIMITS,
   truncateToTokenLimitSync,
-} from '@babylon/api'
+} from '@jejunetwork/shared'
 
 describe('Token Counter Utilities', () => {
   describe('countTokensSync', () => {
@@ -183,7 +183,7 @@ describe('Token Counter Utilities', () => {
 
     it('should have Anthropic models', () => {
       expect(MODEL_TOKEN_LIMITS['claude-sonnet-4-5']).toBeDefined()
-      expect(MODEL_TOKEN_LIMITS['claude-opus-4-1']).toBeDefined()
+      expect(MODEL_TOKEN_LIMITS['claude-opus-4-5']).toBeDefined()
     })
 
     it('should have Groq models', () => {

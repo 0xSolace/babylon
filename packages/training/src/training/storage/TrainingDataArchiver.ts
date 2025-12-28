@@ -14,8 +14,8 @@ import {
   getStorage as getStorageFromApi,
   initializeStorage,
 } from '@babylon/api'
-import type { JsonValue } from '@babylon/shared'
 import { logger } from '@babylon/shared'
+import type { JsonValue } from '@jejunetwork/shared'
 
 // Extended storage interface for training data archiver
 // The base StorageClient doesn't support prefix-based listing, so we add helpers

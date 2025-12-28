@@ -1,11 +1,11 @@
 /**
- * Preload file for unit tests
+ * Preload file for pure unit tests
  *
- * This file is loaded before all unit tests to set up the test environment.
- * It mocks external dependencies like Redis connections.
+ * This file is only loaded when running unit tests that DON'T need database.
+ * Most tests use the integration preload which initializes real EQLite.
  *
- * NOTE: Database (@babylon/db) is NOT mocked here - tests should mock it themselves
- * because the db module has many exports that tests need to control individually.
+ * Usage:
+ *   bun test --preload ./packages/testing/unit/preload.ts packages/testing/unit/some-pure-test.ts
  */
 
 import { mock } from 'bun:test'
@@ -13,10 +13,8 @@ import { mock } from 'bun:test'
 // Set test environment
 ;(process.env as Record<string, string>).NODE_ENV = 'test'
 process.env.BUN_ENV = 'test'
-process.env.DATABASE_URL = 'postgresql://mock:mock@localhost:5432/mock_test'
-process.env.REDIS_URL = 'redis://localhost:6379'
 
-// Mock Redis/ioredis
+// Mock Redis/ioredis - prevents connection attempts in pure unit tests
 mock.module('ioredis', () => {
   return {
     default: class MockRedis {
@@ -129,13 +127,6 @@ mock.module('ioredis', () => {
   }
 })
 
-// Note: Logger is NOT mocked - it's a simple console wrapper with no side effects
-// Keeping real logger helps debug failing tests
-
-// Note: @babylon/db is NOT mocked here - individual tests should mock it as needed
-// This is because:
-// 1. The db module has many named exports (tables, operators) that tests need
-// 2. Tests may need to control mock return values differently
-// 3. Mocking everything globally makes it hard to test specific behaviors
-
-console.log('Unit test environment initialized (Redis mocked, DB not mocked)')
+console.log(
+  '[Unit Test Preload] Pure unit test environment (Redis mocked, no DB)',
+)

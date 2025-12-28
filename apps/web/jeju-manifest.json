@@ -106,7 +106,7 @@
       "localnet": {
         "dwsUrl": "http://localhost:4030",
         "domain": "localhost:5008",
-        "apiUrl": "http://localhost:5009"
+        "apiUrl": ""
       },
       "testnet": {
         "dwsUrl": "https://dws.testnet.jejunetwork.org",

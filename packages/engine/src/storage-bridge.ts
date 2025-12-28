@@ -5,7 +5,7 @@
  * The engine uses @babylon/db for all storage operations.
  *
  * ## Modes
- * - **cql** (default): CQL (CovenantSQL) database for production (decentralized)
+ * - **eqlite** (default): EQLite database for production (decentralized)
  * - **json**: JSON file storage for simulation/training data generation
  * - **memory**: In-memory storage for testing (no persistence)
  *
@@ -40,9 +40,9 @@
  * - `db.table.upsert({ where: ..., create: ..., update: ... })`
  * - `db.table.count({ where: ... })`
  *
- * **Note**: Raw CQL query builder methods (`db.insert(table)`, `db.update(table)`,
+ * **Note**: Raw EQLite query builder methods (`db.insert(table)`, `db.update(table)`,
  * `db.delete(table)`, `db.select()`) are NOT supported in JSON/memory mode.
- * These methods are only available in CQL mode.
+ * These methods are only available in EQLite mode.
  */
 
 import {
@@ -53,7 +53,7 @@ import {
   initializeJsonMode,
   initializeMemoryMode,
   loadJsonSnapshot,
-  resetToCQLMode,
+  resetToEQLiteMode,
   type StorageMode,
   saveJsonSnapshot,
 } from '@babylon/db'
@@ -85,14 +85,14 @@ export async function initializeTestMode(): Promise<void> {
  * This is the default mode and doesn't require explicit initialization.
  */
 export function initializeDatabaseMode(): void {
-  resetToCQLMode()
+  resetToEQLiteMode()
 }
 
 /**
  * Check if we're in database mode (production).
  */
 export function isDatabaseMode(): boolean {
-  return getStorageMode() === 'cql'
+  return getStorageMode() === 'eqlite'
 }
 
 /**

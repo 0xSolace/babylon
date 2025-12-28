@@ -29,11 +29,17 @@ dotenv.config({ path: path.resolve(rootDir, '.env.local') })
 dotenv.config({ path: path.resolve(rootDir, '.env') })
 
 // Centralized port configuration via environment variables
+// Frontend runs on 5008 for dev mode (HMR server), 5007 for production
 const BABYLON_WEB_PORT = process.env.BABYLON_WEB_PORT ?? '5008'
-const _BABYLON_API_PORT = process.env.BABYLON_API_PORT ?? '5009'
-void _BABYLON_API_PORT // Reserved for future use
+const BABYLON_API_PORT = process.env.BABYLON_API_PORT ?? '5009'
 const baseURL =
-  process.env.PLAYWRIGHT_BASE_URL ?? `http://localhost:${BABYLON_WEB_PORT}`
+  process.env.PLAYWRIGHT_BASE_URL ??
+  process.env.TEST_BASE_URL ??
+  process.env.PUBLIC_APP_URL ??
+  `http://localhost:${BABYLON_WEB_PORT}`
+
+// Export for use in test files
+export { BABYLON_WEB_PORT, BABYLON_API_PORT, baseURL }
 
 export default defineConfig({
   testDir: './e2e',

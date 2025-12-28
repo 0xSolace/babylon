@@ -10,9 +10,11 @@
  */
 
 import { beforeAll, describe, expect, test } from 'bun:test'
-import { Agent0FeedbackService } from '@babylon/agents'
-import { getAgent0Client } from '@babylon/agents/agent0/Agent0Client'
-import { SubgraphClient } from '@babylon/agents/agent0/SubgraphClient'
+import {
+  Agent0FeedbackService,
+  getAgent0Client,
+  SubgraphClient,
+} from '@babylon/agents'
 
 describe('Agent0 SDK Complete Integration', () => {
   let agent0Client: ReturnType<typeof getAgent0Client> | undefined

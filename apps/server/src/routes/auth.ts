@@ -4,7 +4,7 @@ import {
   type DID,
   DiscordProvider,
   TwitterProvider,
-} from '@babylon/auth'
+} from '@jejunetwork/auth'
 import { Elysia, t } from 'elysia'
 import { authRateLimiter, jwtMiddleware } from '../middleware'
 

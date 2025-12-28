@@ -7,8 +7,8 @@
  * @packageDocumentation
  */
 
-import type { JsonValue } from '@babylon/shared'
 import { AgentType } from '@jejunetwork/agents'
+import type { JsonValue } from '@jejunetwork/shared'
 import type {
   ExternalAgentMessage as AgentMessage,
   AgentResponse,

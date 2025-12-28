@@ -89,7 +89,7 @@ class AgentAPIClient {
 For web applications using Babylon's OAuth3 configuration (Jeju's decentralized auth):
 
 ```typescript
-import { useOAuth3 } from '@babylon/auth/react';
+import { useOAuth3 } from '@jejunetwork/auth/react';
 
 function APICall() {
   const { getAccessToken } = useOAuth3();
@@ -109,7 +109,7 @@ function APICall() {
 OAuth3 supports wallet-based authentication via MetaMask or other EIP-1193 providers:
 
 ```typescript
-import { useOAuth3 } from '@babylon/auth/react';
+import { useOAuth3 } from '@jejunetwork/auth/react';
 
 function WalletLogin() {
   const { connectWallet, isConnected, address } = useOAuth3();

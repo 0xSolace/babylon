@@ -23,7 +23,7 @@
     "local": {
       "chainId": 31337,
       "name": "Localnet (Hardhat)",
-      "rpcUrl": "http://localhost:6545",
+      "rpcUrl": "http://localhost:6546",
       "contracts": {
         "diamond": "0xDc64a140Aa3E981100a9becA4E685f962f0cF6C9",
         "identityRegistry": "0x0DCd1Bf9A1b36cE34237eEaFef220932846BCD82",
@@ -63,10 +63,10 @@
     "localnet": {
       "network": "local",
       "endpoints": {
-        "apiBaseUrl": "http://localhost:5009",
-        "frontendUrl": "http://localhost:5008",
-        "a2aEndpoint": "http://localhost:5009/a2a",
-        "mcpEndpoint": "http://localhost:5009/mcp",
+        "apiBaseUrl": "",
+        "frontendUrl": "",
+        "a2aEndpoint": "/a2a",
+        "mcpEndpoint": "/mcp",
         "ipfsGateway": "http://localhost:5001"
       }
     },

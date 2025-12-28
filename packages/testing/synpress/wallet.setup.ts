@@ -1,48 +1,35 @@
 /**
  * Wallet setup for Synpress MetaMask tests
  *
- * This file defines how MetaMask should be configured before running tests.
- * Uses the default Anvil test wallet (Account #0) which is admin in localnet.
+ * This file uses the canonical Jeju wallet setup from @jejunetwork/tests.
+ * The Jeju setup provides consistent configuration across all Jeju Network apps.
  *
- * Supports both Jeju networks (when running inside Jeju) and Anvil (standalone).
+ * For Babylon-specific network configurations (testnet/mainnet URLs),
+ * see the BABYLON_NETWORKS export which can be used for overrides.
  *
  * @see https://docs.synpress.io/docs/playwright/metamask/setup
  */
 
+import { JEJU_CHAIN, PASSWORD, SEED_PHRASE } from '@jejunetwork/tests'
 import { defineWalletSetup } from '@synthetixio/synpress-cache'
 import { MetaMask } from '@synthetixio/synpress-metamask/playwright'
 
 /**
- * Default Anvil test wallet configuration
- * Account #0 from 'test test test test test test test test test test test junk'
+ * Babylon-specific network configurations
+ *
+ * These extend the Jeju network configurations with Babylon-specific URLs.
+ * The core network (localnet) uses Jeju's canonical configuration.
  */
-export const ANVIL_WALLET = {
-  seedPhrase: 'test test test test test test test test test test test junk',
-  password: 'Tester@1234',
-} as const
-
-// Centralized port configuration for RPC endpoints
-const ANVIL_RPC_PORT = process.env.ANVIL_RPC_PORT ?? '6545'
-const JEJU_RPC_PORT = process.env.JEJU_RPC_PORT ?? '6546'
-
-/**
- * Network configurations
- */
-export const NETWORKS = {
-  // Standalone mode: Anvil local network
+export const BABYLON_NETWORKS = {
+  // Standalone mode: Anvil local network (for isolated testing)
   anvil: {
     name: 'Anvil Local',
-    rpcUrl: `http://localhost:${ANVIL_RPC_PORT}`,
+    rpcUrl: `http://localhost:${process.env.ANVIL_RPC_PORT ?? '6545'}`,
     chainId: 31337,
     symbol: 'ETH',
   },
-  // Jeju Localnet
-  jejuLocalnet: {
-    name: 'Jeju Localnet',
-    rpcUrl: `http://127.0.0.1:${JEJU_RPC_PORT}`,
-    chainId: 31337,
-    symbol: 'ETH',
-  },
+  // Jeju Localnet - use canonical Jeju configuration
+  jejuLocalnet: JEJU_CHAIN,
   // Jeju Testnet
   jejuTestnet: {
     name: 'Jeju Testnet',
@@ -59,48 +46,55 @@ export const NETWORKS = {
   },
 } as const
 
-// Legacy export for backward compatibility
-export const ANVIL_NETWORK = NETWORKS.anvil
+// Legacy exports for backward compatibility
+export const ANVIL_WALLET = {
+  seedPhrase: SEED_PHRASE,
+  password: PASSWORD,
+} as const
+
+export const NETWORKS = BABYLON_NETWORKS
+export const ANVIL_NETWORK = BABYLON_NETWORKS.anvil
 
 /**
  * Determine which network to use based on environment
  */
-function getTargetNetwork() {
+function getTargetNetwork(): (typeof BABYLON_NETWORKS)[keyof typeof BABYLON_NETWORKS] {
   const jejuNetwork =
     process.env.JEJU_NETWORK || process.env.PUBLIC_JEJU_NETWORK
 
-  if (jejuNetwork === 'localnet') return NETWORKS.jejuLocalnet
-  if (jejuNetwork === 'testnet') return NETWORKS.jejuTestnet
-  if (jejuNetwork === 'mainnet') return NETWORKS.jejuMainnet
+  if (jejuNetwork === 'localnet') return BABYLON_NETWORKS.jejuLocalnet
+  if (jejuNetwork === 'testnet') return BABYLON_NETWORKS.jejuTestnet
+  if (jejuNetwork === 'mainnet') return BABYLON_NETWORKS.jejuMainnet
 
   // Check if chain ID is specified
   const chainId = Number(
     process.env.CHAIN_ID || process.env.PUBLIC_CHAIN_ID || 0,
   )
-  if (chainId === 31337) return NETWORKS.jejuLocalnet
-  if (chainId === 420690) return NETWORKS.jejuTestnet
-  if (chainId === 420691) return NETWORKS.jejuMainnet
+  if (chainId === 31337) return BABYLON_NETWORKS.jejuLocalnet
+  if (chainId === 420690) return BABYLON_NETWORKS.jejuTestnet
+  if (chainId === 420691) return BABYLON_NETWORKS.jejuMainnet
 
-  // Default to Anvil for standalone mode
-  return NETWORKS.anvil
+  // Default to Jeju Localnet (preferred for integrated testing)
+  return BABYLON_NETWORKS.jejuLocalnet
 }
 
 /**
  * Define wallet setup for MetaMask
  *
  * This is run once per worker and cached for reuse.
- * The setup imports the seed phrase and configures the appropriate network.
+ * Uses the canonical Jeju test wallet and network configuration.
  */
-export default defineWalletSetup(
-  ANVIL_WALLET.password,
-  async (context, walletPage) => {
-    const metamask = new MetaMask(context, walletPage, ANVIL_WALLET.password)
+export default defineWalletSetup(PASSWORD, async (context, walletPage) => {
+  const metamask = new MetaMask(context, walletPage, PASSWORD)
 
-    // Import the test seed phrase
-    await metamask.importWallet(ANVIL_WALLET.seedPhrase)
+  // Import the canonical Jeju test seed phrase
+  console.log('[Babylon Wallet Setup] Importing wallet...')
+  await metamask.importWallet(SEED_PHRASE)
 
-    // Add the target network for testing
-    const targetNetwork = getTargetNetwork()
-    await metamask.addNetwork(targetNetwork)
-  },
-)
+  // Add the target network for testing
+  const targetNetwork = getTargetNetwork()
+  console.log(`[Babylon Wallet Setup] Adding network: ${targetNetwork.name}`)
+  await metamask.addNetwork(targetNetwork)
+
+  console.log('[Babylon Wallet Setup] Complete')
+})

@@ -7,16 +7,16 @@ export type {
   ACLRule,
   BlockProducerInfo,
   ColumnMeta,
-  CQLConfig,
-  CQLConnection,
-  CQLConnectionPool,
-  CQLDataType,
-  CQLEvent,
-  CQLTransaction,
   CreateRentalRequest,
   DatabaseConfig,
   DatabaseInfo,
   DatabaseStatus,
+  EQLiteConfig,
+  EQLiteConnection,
+  EQLiteConnectionPool,
+  EQLiteDataType,
+  EQLiteEvent,
+  EQLiteTransaction,
   ExecResult,
   GrantRequest,
   Migration,
@@ -39,14 +39,14 @@ export type SQLValue =
   | SQLPrimitive[]
   | Record<string, SQLPrimitive>
 
-export interface CQLHealthStatus {
+export interface EQLiteHealthStatus {
   healthy: boolean
   blockHeight: number
   nodeCount: number
   latencyMs: number
 }
 
-export interface CQLColumn {
+export interface EQLiteColumn {
   name: string
   type:
     | 'TEXT'
@@ -65,16 +65,16 @@ export interface CQLColumn {
   scale?: number
 }
 
-export interface CQLIndex {
+export interface EQLiteIndex {
   name: string
   columns: string[]
   unique?: boolean
 }
 
-export interface CQLTableSchema {
+export interface EQLiteTableSchema {
   name: string
-  columns: CQLColumn[]
+  columns: EQLiteColumn[]
   primaryKey: string[]
   uniqueConstraints?: Array<{ name: string; columns: string[] }>
-  indexes?: CQLIndex[]
+  indexes?: EQLiteIndex[]
 }

@@ -2,21 +2,24 @@
 
 Environment variables for Babylon.
 
-## Required Variables
+## Network Configuration
+
+Service URLs are automatically loaded from `@jejunetwork/config` based on the `JEJU_NETWORK` setting:
 
 ```env
-# Jeju Decentralized Services
-CQL_BLOCK_PRODUCER_ENDPOINT="http://localhost:15151"
-JEJU_CACHE_SERVICE_URL="http://localhost:8080/cache"
-JEJU_STORAGE_SERVICE_URL="http://localhost:8080/storage"
-JEJU_COMPUTE_API_URL="http://localhost:8080/compute"
+# Network selection (localnet, testnet, mainnet)
+JEJU_NETWORK="localnet"
+```
 
-# Blockchain
-RPC_URL="http://localhost:6545"
-CHAIN_ID="31337"
+All service URLs (cache, storage, compute, RPC) are configured automatically based on the network.
+For local development, `localnet` points to services running on localhost.
 
-# OAuth3 Authentication (Jeju's decentralized auth)
-OAUTH3_ISSUER_URL="http://localhost:8080/oauth3"
+## Local Development (CQL Only)
+
+```env
+# CQL is local-only - set the endpoint explicitly
+CQL_BLOCK_PRODUCER_ENDPOINT="http://localhost:4661"
+CQL_DATABASE_ID="babylon"
 ```
 
 ## OAuth3 Setup

@@ -5,6 +5,7 @@
  *
  * Creates .env.local from template if it doesn't exist.
  * Optionally sets up decentralized environment with Jeju services.
+ * Service URLs come from @jejunetwork/config (network-aware).
  *
  * Usage:
  *   babylon init                  # Create .env.local from template
@@ -14,34 +15,30 @@
 
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
+import {
+  getCurrentNetwork,
+  getDWSCacheUrl,
+  getServicesConfig,
+} from '@jejunetwork/config'
 import { getFlag, parseArgs, wantsHelp } from '../lib/args.js'
 import { logger } from '../lib/logger.js'
 
 const BABYLON_ROOT = process.cwd()
 const CLI_ROOT = dirname(dirname(dirname(import.meta.path)))
-
-// Port configuration for decentralized services
-const IPFS_PORT = process.env.IPFS_API_PORT ?? '5001'
-const CQL_PORT = process.env.CQL_PORT ?? '4661'
-const CACHE_PORT = process.env.JEJU_CACHE_PORT ?? '4115'
-const OAUTH3_PORT = process.env.JEJU_OAUTH3_PORT ?? '5011'
-const KMS_PORT = process.env.JEJU_KMS_PORT ?? '5012'
-const L2_RPC_PORT = process.env.L2_RPC_PORT ?? '6545'
 const API_PORT = process.env.API_PORT ?? '5007'
 
-// Jeju service defaults
-const JEJU_DEFAULTS = {
-  CQL_BLOCK_PRODUCER_ENDPOINT: `http://localhost:${CQL_PORT}`,
-  JEJU_CACHE_SERVICE_URL: `http://localhost:${CACHE_PORT}`,
-  JEJU_STORAGE_SERVICE_URL: `http://localhost:${IPFS_PORT}`,
-  JEJU_OAUTH3_SERVICE_URL: `http://localhost:${OAUTH3_PORT}`,
-  JEJU_KMS_ENDPOINT: `http://localhost:${KMS_PORT}`,
-  CQL_DATABASE_ID: 'babylon-dev',
-  JEJU_NETWORK: 'localnet',
-  JEJU_RPC_URL: `http://localhost:${L2_RPC_PORT}`,
-  L2_RPC_URL: `http://localhost:${L2_RPC_PORT}`,
-  JEJU_KMS_SERVICE_URL: `http://localhost:${KMS_PORT}`,
-} as const
+// Get service URLs from Jeju config (network-aware)
+function getJejuServiceUrls() {
+  const config = getServicesConfig()
+  return {
+    EQLITE_BLOCK_PRODUCER_ENDPOINT: 'http://127.0.0.1:4661', // EQLite is local-only
+    CACHE_URL: getDWSCacheUrl(),
+    STORAGE_URL: config.storage.api,
+    KMS_URL: config.kms.api,
+    RPC_URL: config.rpc.l2,
+    NETWORK: getCurrentNetwork(),
+  }
+}
 
 interface InitOptions {
   force: boolean
@@ -56,6 +53,7 @@ interface ServiceStatus {
 }
 
 function printHelp(): void {
+  const network = getCurrentNetwork()
   console.log(`
 Init Command - Initialize Babylon development environment
 
@@ -72,7 +70,10 @@ DESCRIPTION:
   'babylon dev' if .env.local doesn't exist.
 
   With --decentralized, also configures environment for Jeju
-  decentralized services (CQL, Cache, IPFS, OAuth3).
+  decentralized services (EQLite, Cache, Storage).
+
+  Current network: ${network}
+  Service URLs are loaded from @jejunetwork/config/services.json
 
 EXAMPLES:
   babylon init                  # Create .env.local if it doesn't exist
@@ -148,48 +149,34 @@ async function checkService(
 function updateEnvForJeju(): void {
   const envPath = join(BABYLON_ROOT, '.env')
   let envContent = existsSync(envPath) ? readFileSync(envPath, 'utf-8') : ''
+  const urls = getJejuServiceUrls()
 
-  const updates: Record<string, string> = {}
-
-  const defaults = JEJU_DEFAULTS as Record<string, string>
-  for (const [key, value] of Object.entries(defaults)) {
-    if (!process.env[key] && !envContent.includes(`${key}=`)) {
-      updates[key] = value
-    }
-  }
-
-  if (Object.keys(updates).length > 0) {
-    const newLines = Object.entries(updates)
-      .map(([k, v]) => `${k}="${v}"`)
-      .join('\n')
-
+  // Only set JEJU_NETWORK if not already set (config handles the rest)
+  if (!process.env.JEJU_NETWORK && !envContent.includes('JEJU_NETWORK=')) {
     if (envContent && !envContent.endsWith('\n')) {
       envContent += '\n'
     }
-    envContent += `\n# Jeju Decentralized Services (auto-configured)\n${newLines}\n`
+    envContent += `\n# Jeju Network (service URLs loaded from @jejunetwork/config)\nJEJU_NETWORK="${urls.NETWORK}"\n`
     writeFileSync(envPath, envContent)
-
-    logger.success('Updated .env with Jeju service defaults')
-
-    for (const [k, v] of Object.entries(updates)) {
-      process.env[k] = v
-    }
+    logger.success(`Set JEJU_NETWORK=${urls.NETWORK}`)
+    process.env.JEJU_NETWORK = urls.NETWORK
   }
 }
 
 async function waitForServices(maxWaitMs = 120000): Promise<boolean> {
   logger.step('Waiting for Jeju services...')
+  const urls = getJejuServiceUrls()
 
   const startTime = Date.now()
   const requiredServices = [
     {
-      name: 'CQL Database',
-      url: JEJU_DEFAULTS.CQL_BLOCK_PRODUCER_ENDPOINT,
+      name: 'EQLite Database',
+      url: urls.EQLITE_BLOCK_PRODUCER_ENDPOINT,
       path: '/health',
     },
     {
       name: 'Cache',
-      url: JEJU_DEFAULTS.JEJU_CACHE_SERVICE_URL,
+      url: urls.CACHE_URL,
       path: '/health',
     },
   ]
@@ -218,78 +205,64 @@ async function waitForServices(maxWaitMs = 120000): Promise<boolean> {
   return false
 }
 
-async function initializeCQLSchema(): Promise<void> {
-  logger.step('Initializing CQL database schema...')
+async function initializeEQLiteSchema(): Promise<void> {
+  logger.step('Initializing EQLite database schema...')
+  const urls = getJejuServiceUrls()
 
   const endpoint =
-    process.env.CQL_BLOCK_PRODUCER_ENDPOINT ||
-    JEJU_DEFAULTS.CQL_BLOCK_PRODUCER_ENDPOINT
-  const databaseId =
-    process.env.CQL_DATABASE_ID || JEJU_DEFAULTS.CQL_DATABASE_ID
+    process.env.EQLITE_BLOCK_PRODUCER_ENDPOINT ||
+    urls.EQLITE_BLOCK_PRODUCER_ENDPOINT
+  const databaseId = process.env.EQLITE_DATABASE_ID || 'babylon-dev'
 
-  try {
-    // Import from @babylon/db
-    const { generateAllDDL } = await import('@babylon/db')
-    const ddlStatements = generateAllDDL()
+  const { generateAllDDL } = await import('@babylon/db')
+  const ddlStatements = generateAllDDL()
 
-    let created = 0
-    let skipped = 0
+  let created = 0
+  let skipped = 0
 
-    for (const ddl of ddlStatements) {
-      const response = await fetch(`${endpoint}/api/v1/query`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          database: databaseId,
-          type: 'exec',
-          sql: ddl,
-          params: [],
-          timestamp: Date.now(),
-        }),
-        signal: AbortSignal.timeout(10000),
-      })
+  for (const ddl of ddlStatements) {
+    const response = await fetch(`${endpoint}/api/v1/query`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        database: databaseId,
+        type: 'exec',
+        sql: ddl,
+        params: [],
+        timestamp: Date.now(),
+      }),
+      signal: AbortSignal.timeout(10000),
+    })
 
-      if (response.ok) {
-        created++
-      } else {
-        const text = await response.text()
-        if (text.includes('already exists')) {
-          skipped++
-        }
+    if (response.ok) {
+      created++
+    } else {
+      const text = await response.text()
+      if (text.includes('already exists')) {
+        skipped++
       }
     }
-
-    logger.success(
-      `CQL schema ready (${created} created, ${skipped} already exist)`,
-    )
-  } catch (err) {
-    logger.warn(`Schema initialization skipped: ${(err as Error).message}`)
   }
+
+  logger.success(
+    `EQLite schema ready (${created} created, ${skipped} already exist)`,
+  )
 }
 
 async function checkServiceStatus(): Promise<void> {
   logger.step('Service Status:')
+  const urls = getJejuServiceUrls()
 
   const services = await Promise.all([
     checkService(
-      'CQL Database',
-      JEJU_DEFAULTS.CQL_BLOCK_PRODUCER_ENDPOINT,
+      'EQLite Database',
+      urls.EQLITE_BLOCK_PRODUCER_ENDPOINT,
       '/health',
       true,
     ),
-    checkService(
-      'Cache',
-      JEJU_DEFAULTS.JEJU_CACHE_SERVICE_URL,
-      '/health',
-      true,
-    ),
-    checkService(
-      'Storage (IPFS)',
-      JEJU_DEFAULTS.JEJU_STORAGE_SERVICE_URL,
-      '/api/v0/id',
-      false,
-    ),
-    checkService('L2 RPC', JEJU_DEFAULTS.JEJU_RPC_URL, '', false),
+    checkService('Cache', urls.CACHE_URL, '/health', true),
+    checkService('Storage', urls.STORAGE_URL, '/health', false),
+    checkService('L2 RPC', urls.RPC_URL, '', false),
   ])
 
   for (const service of services) {
@@ -309,9 +282,14 @@ async function checkServiceStatus(): Promise<void> {
 /**
  * Initialize decentralized environment with Jeju services.
  * This is called by `jeju dev` when running Babylon as a vendor app.
+ * Service URLs are loaded from @jejunetwork/config based on JEJU_NETWORK.
  */
 export async function initDecentralized(): Promise<void> {
   logger.header('Babylon Decentralized Setup')
+  const urls = getJejuServiceUrls()
+
+  logger.info(`Network: ${urls.NETWORK}`)
+  logger.info('Service URLs loaded from @jejunetwork/config')
 
   const isJejuDev = !!process.env.JEJU_RPC_URL || !!process.env.L2_RPC_URL
 
@@ -322,23 +300,18 @@ export async function initDecentralized(): Promise<void> {
     logger.info('Start with: cd /path/to/jeju && bun run dev')
   }
 
-  // Update .env with Jeju defaults
+  // Update .env with Jeju network
   updateEnvForJeju()
 
   // Quick check if services are already running
   const quickCheck = await Promise.all([
     checkService(
-      'CQL',
-      JEJU_DEFAULTS.CQL_BLOCK_PRODUCER_ENDPOINT,
+      'EQLite',
+      urls.EQLITE_BLOCK_PRODUCER_ENDPOINT,
       '/health',
       true,
     ),
-    checkService(
-      'Cache',
-      JEJU_DEFAULTS.JEJU_CACHE_SERVICE_URL,
-      '/health',
-      true,
-    ),
+    checkService('Cache', urls.CACHE_URL, '/health', true),
   ])
   const servicesRunning = quickCheck.every((s) => s.healthy)
 
@@ -357,14 +330,14 @@ export async function initDecentralized(): Promise<void> {
   }
 
   await checkServiceStatus()
-  await initializeCQLSchema()
+  await initializeEQLiteSchema()
 
   logger.success('Babylon Decentralized Ready')
   console.log('')
-  console.log('Services:')
-  console.log(`  CQL:     ${JEJU_DEFAULTS.CQL_BLOCK_PRODUCER_ENDPOINT}`)
-  console.log(`  Cache:   ${JEJU_DEFAULTS.JEJU_CACHE_SERVICE_URL}`)
-  console.log(`  Storage: ${JEJU_DEFAULTS.JEJU_STORAGE_SERVICE_URL}`)
+  console.log('Services (from config):')
+  console.log(`  EQLite:     ${urls.EQLITE_BLOCK_PRODUCER_ENDPOINT}`)
+  console.log(`  Cache:   ${urls.CACHE_URL}`)
+  console.log(`  Storage: ${urls.STORAGE_URL}`)
   console.log('')
   console.log('App:')
   console.log(`  Web:     http://localhost:${API_PORT}`)

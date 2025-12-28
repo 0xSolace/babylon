@@ -4,7 +4,7 @@
  * Advanced manual control for trajectory logging
  */
 
-import type { JsonValue } from '@babylon/shared'
+import type { JsonValue } from '@jejunetwork/shared'
 import { logger } from '../../../shared/logger'
 import type { TrajectoryLoggerService } from './TrajectoryLoggerService'
 import type { EnvironmentState } from './types'

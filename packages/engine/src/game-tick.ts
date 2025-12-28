@@ -1084,7 +1084,7 @@ async function bootstrapTrending(): Promise<void> {
   logger.info('Bootstrapping trending tags...', undefined, 'GameTick')
 
   // Check if we have enough posts and tags
-  // Note: CQL's select builder types don't support field projection, so we cast the result
+  // Note: EQLite's select builder types don't support field projection, so we cast the result
   const [postCountResult, taggedPostCountResult] = await Promise.all([
     db.select({ count: count() }).from(posts),
     db
@@ -3211,7 +3211,10 @@ async function updateWidgetCaches(): Promise<number> {
       .where(eq(widgetCaches.widget, 'markets'))
   } else {
     await db.insert(widgetCaches).values({
+      id: generateSnowflakeId(),
+      widgetType: 'markets',
       widget: 'markets',
+      key: 'markets',
       data: cacheData as JsonValue,
       updatedAt: new Date(),
     })

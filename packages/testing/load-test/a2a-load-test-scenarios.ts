@@ -3,10 +3,12 @@
  *
  * Test scenarios for Agent-to-Agent (A2A) protocol endpoints
  * to stress test rate limiting and performance under load.
+ *
+ * @module @babylon/testing/load-test/a2a-load-test-scenarios
  */
 
 import type { JsonRpcParams } from '@babylon/a2a'
-import type { LoadTestConfig } from './load-test-simulator'
+import type { LoadTestConfig } from './index'
 
 /**
  * Generate A2A request body for a given method

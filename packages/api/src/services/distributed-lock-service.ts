@@ -1,7 +1,7 @@
 /**
  * Distributed Lock Service
  *
- * @description Generic distributed lock implementation using CQL.
+ * @description Generic distributed lock implementation using EQLite.
  * Prevents race conditions across multiple servers/processes.
  * Supports automatic stale lock recovery.
  */
@@ -10,7 +10,7 @@ import { randomBytes } from 'node:crypto'
 import { db } from '@babylon/db'
 import { logger } from '@babylon/shared'
 
-/** Safely convert a CQL date field to a Date object */
+/** Safely convert a EQLite date field to a Date object */
 function toDate(value: string | number | Date | null | undefined): Date | null {
   if (value === null || value === undefined) return null
   if (value instanceof Date) return value

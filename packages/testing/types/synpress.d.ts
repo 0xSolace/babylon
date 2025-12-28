@@ -35,14 +35,44 @@ declare module '@synthetixio/synpress/playwright' {
 
   // MetaMask class for wallet interactions
   export class MetaMask {
-    constructor(context: BrowserContext, walletPage: Page, password: string)
+    constructor(
+      context: BrowserContext,
+      walletPage: Page,
+      password: string,
+      extensionId?: string,
+    )
     importWallet(seedPhrase: string): Promise<void>
+    addNewAccount(accountName: string): Promise<void>
+    importWalletFromPrivateKey(privateKey: string): Promise<void>
+    switchAccount(accountName: string): Promise<void>
     addNetwork(network: NetworkConfig): Promise<void>
-    switchNetwork(networkName: string): Promise<void>
-    connectToDapp(): Promise<void>
-    confirmTransaction(): Promise<void>
+    getAccountAddress(): Promise<string>
+    switchNetwork(networkName: string, isTestnet?: boolean): Promise<void>
+    connectToDapp(accounts?: string[]): Promise<void>
+    lock(): Promise<void>
+    unlock(): Promise<void>
+    confirmSignature(): Promise<void>
+    confirmSignatureWithRisk(): Promise<void>
+    rejectSignature(): Promise<void>
+    approveNewNetwork(): Promise<void>
+    rejectNewNetwork(): Promise<void>
+    approveSwitchNetwork(): Promise<void>
+    rejectSwitchNetwork(): Promise<void>
+    confirmTransaction(options?: { gasSetting?: unknown }): Promise<void>
     rejectTransaction(): Promise<void>
-    signMessage(): Promise<void>
+    approveTokenPermission(options?: {
+      spendLimit?: 'max' | number
+      gasSetting?: unknown
+    }): Promise<void>
+    rejectTokenPermission(): Promise<void>
+    goBackToHomePage(): Promise<void>
+    resetAccount(): Promise<void>
+    addNewToken(): Promise<void>
+    providePublicEncryptionKey(): Promise<void>
+    decrypt(): Promise<void>
+    confirmTransactionAndWaitForMining(options?: {
+      gasSetting?: unknown
+    }): Promise<void>
   }
 }
 
@@ -67,13 +97,43 @@ declare module '@synthetixio/synpress-metamask/playwright' {
   }
 
   export class MetaMask {
-    constructor(context: BrowserContext, walletPage: Page, password: string)
+    constructor(
+      context: BrowserContext,
+      walletPage: Page,
+      password: string,
+      extensionId?: string,
+    )
     importWallet(seedPhrase: string): Promise<void>
+    addNewAccount(accountName: string): Promise<void>
+    importWalletFromPrivateKey(privateKey: string): Promise<void>
+    switchAccount(accountName: string): Promise<void>
     addNetwork(network: NetworkConfig): Promise<void>
-    switchNetwork(networkName: string): Promise<void>
-    connectToDapp(): Promise<void>
-    confirmTransaction(): Promise<void>
+    getAccountAddress(): Promise<string>
+    switchNetwork(networkName: string, isTestnet?: boolean): Promise<void>
+    connectToDapp(accounts?: string[]): Promise<void>
+    lock(): Promise<void>
+    unlock(): Promise<void>
+    confirmSignature(): Promise<void>
+    confirmSignatureWithRisk(): Promise<void>
+    rejectSignature(): Promise<void>
+    approveNewNetwork(): Promise<void>
+    rejectNewNetwork(): Promise<void>
+    approveSwitchNetwork(): Promise<void>
+    rejectSwitchNetwork(): Promise<void>
+    confirmTransaction(options?: { gasSetting?: unknown }): Promise<void>
     rejectTransaction(): Promise<void>
-    signMessage(): Promise<void>
+    approveTokenPermission(options?: {
+      spendLimit?: 'max' | number
+      gasSetting?: unknown
+    }): Promise<void>
+    rejectTokenPermission(): Promise<void>
+    goBackToHomePage(): Promise<void>
+    resetAccount(): Promise<void>
+    addNewToken(): Promise<void>
+    providePublicEncryptionKey(): Promise<void>
+    decrypt(): Promise<void>
+    confirmTransactionAndWaitForMining(options?: {
+      gasSetting?: unknown
+    }): Promise<void>
   }
 }

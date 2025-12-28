@@ -5,7 +5,8 @@
     "declaration": false,
     "declarationMap": false,
     "noEmit": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "jsx": "react-jsx"
   },
   "include": ["src/**/*"],
   "exclude": [
@@ -13,6 +14,5 @@
     "dist",
     "src/__tests__/**/*",
     "src/schema/**/*",
-    "src/cql-driver.ts"
   ]
 }

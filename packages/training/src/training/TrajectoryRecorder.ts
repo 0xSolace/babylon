@@ -4,13 +4,31 @@
  * Records agent decisions with full context for GRPO training.
  * Captures environment state, LLM calls, actions, and rewards.
  *
+ * Supports two storage modes:
+ * 1. Database (legacy) - Writes directly to Prisma/PostgreSQL
+ * 2. Static (new) - Writes to DWS/IPFS via StaticTrajectoryStorage
+ *
+ * Static storage is preferred for production training as it:
+ * - Supports efficient batching (JSONL + gzip)
+ * - Uses decentralized storage (IPFS/Arweave)
+ * - Enables offline RULER scoring before permanent storage
+ *
  * @packageDocumentation
  */
 
 import { db } from '@babylon/db'
-import type { JsonValue } from '@babylon/shared'
 import { logger } from '@babylon/shared'
+import type { JsonValue } from '@jejunetwork/shared'
 import { generateSnowflakeId } from '@jejunetwork/shared'
+import type {
+  LLMCallLogRecord,
+  StoredTrajectoryRecord as TrajectoryRecord,
+} from '@jejunetwork/training'
+import {
+  getStaticTrajectoryStorage,
+  type StaticTrajectoryStorage,
+  type TrajectoryBatchReference,
+} from '@jejunetwork/training'
 import type {
   Action,
   EnvironmentState,
@@ -34,11 +52,13 @@ export type {
 interface ActiveTrajectory {
   trajectoryId: string
   agentId: string
-  archetype?: string
-  scenarioId?: string
+  archetype: string | null
+  scenarioId: string
+  windowId: string
   startTime: number
   steps: TrajectoryStep[]
   currentStep?: Partial<TrajectoryStep>
+  metadata: Record<string, JsonValue>
 }
 
 /**
@@ -76,10 +96,71 @@ export interface EndTrajectoryOptions {
 }
 
 /**
+ * Recorder configuration
+ */
+export interface TrajectoryRecorderConfig {
+  /** Storage mode: 'database' | 'static' | 'dual' */
+  storageMode: 'database' | 'static' | 'dual'
+  /** Static storage instance (optional, creates default if not provided) */
+  staticStorage?: StaticTrajectoryStorage
+  /** Callback when a batch is flushed (static mode only) */
+  onBatchFlushed?: (batch: TrajectoryBatchReference) => Promise<void>
+}
+
+/**
+ * LLM call log row for database storage
+ */
+interface LLMLogRow {
+  id: string
+  trajectoryId: string
+  stepId: string
+  callId: string
+  timestamp: Date
+  latencyMs: number | null
+  model: string
+  purpose: string
+  actionType: string | null
+  systemPrompt: string
+  userPrompt: string
+  messagesJson: string | null
+  response: string
+  reasoning: string | null
+  temperature: number
+  maxTokens: number
+  metadata: string | null
+}
+
+/**
  * Records agent trajectories for RL training.
  */
 export class TrajectoryRecorder {
   private activeTrajectories: Map<string, ActiveTrajectory> = new Map()
+  private config: TrajectoryRecorderConfig
+  private staticStorage: StaticTrajectoryStorage | null = null
+  private pendingLLMCalls: Map<string, LLMLogRow[]> = new Map()
+
+  constructor(config: Partial<TrajectoryRecorderConfig> = {}) {
+    this.config = {
+      storageMode: config.storageMode ?? 'dual',
+      staticStorage: config.staticStorage,
+      onBatchFlushed: config.onBatchFlushed,
+    }
+
+    // Initialize static storage if using static or dual mode
+    if (
+      this.config.storageMode === 'static' ||
+      this.config.storageMode === 'dual'
+    ) {
+      this.staticStorage =
+        config.staticStorage ??
+        getStaticTrajectoryStorage('babylon', {
+          maxBufferSize: 100,
+          maxBufferAgeMs: 10 * 60 * 1000, // 10 minutes
+          usePermanentStorage: false, // Raw trajectories go to IPFS
+          onBatchFlushed: config.onBatchFlushed,
+        })
+    }
+  }
 
   /**
    * Start recording a new trajectory.
@@ -88,16 +169,20 @@ export class TrajectoryRecorder {
    */
   async startTrajectory(options: StartTrajectoryOptions): Promise<string> {
     const trajectoryId = await generateSnowflakeId()
-    const windowId = options.windowId || getCurrentWindowId()
+    const windowId = options.windowId ?? getCurrentWindowId()
 
     this.activeTrajectories.set(trajectoryId, {
       trajectoryId,
       agentId: options.agentId,
-      archetype: options.archetype,
-      scenarioId: options.scenarioId || windowId,
+      archetype: options.archetype ?? null,
+      scenarioId: options.scenarioId ?? windowId,
+      windowId,
       startTime: Date.now(),
       steps: [],
+      metadata: options.metadata ?? {},
     })
+
+    this.pendingLLMCalls.set(trajectoryId, [])
 
     logger.info('Started trajectory recording', {
       trajectoryId,
@@ -105,6 +190,7 @@ export class TrajectoryRecorder {
       archetype: options.archetype,
       scenarioId: options.scenarioId,
       windowId,
+      storageMode: this.config.storageMode,
     })
 
     return trajectoryId
@@ -151,7 +237,7 @@ export class TrajectoryRecorder {
       throw new Error(`No current step for trajectory: ${trajectoryId}`)
     }
 
-    traj.currentStep.providerAccesses = traj.currentStep.providerAccesses || []
+    traj.currentStep.providerAccesses = traj.currentStep.providerAccesses ?? []
     // Create full ProviderAccess with required fields
     traj.currentStep.providerAccesses.push({
       providerId: `${trajectoryId}-provider-${Date.now()}`,
@@ -175,7 +261,7 @@ export class TrajectoryRecorder {
       throw new Error(`No current step for trajectory: ${trajectoryId}`)
     }
 
-    traj.currentStep.llmCalls = traj.currentStep.llmCalls || []
+    traj.currentStep.llmCalls = traj.currentStep.llmCalls ?? []
     traj.currentStep.llmCalls.push(llmCall)
   }
 
@@ -201,8 +287,8 @@ export class TrajectoryRecorder {
       stepNumber,
       timestamp,
       environmentState,
-      providerAccesses: traj.currentStep.providerAccesses || [],
-      llmCalls: traj.currentStep.llmCalls || [],
+      providerAccesses: traj.currentStep.providerAccesses ?? [],
+      llmCalls: traj.currentStep.llmCalls ?? [],
       action,
       reward,
     }
@@ -212,7 +298,16 @@ export class TrajectoryRecorder {
   }
 
   /**
-   * End trajectory and save to database.
+   * Cancel an active trajectory without saving
+   */
+  cancelTrajectory(trajectoryId: string): void {
+    this.activeTrajectories.delete(trajectoryId)
+    this.pendingLLMCalls.delete(trajectoryId)
+    logger.debug('Trajectory cancelled', { trajectoryId })
+  }
+
+  /**
+   * End trajectory and save to configured storage.
    * @param trajectoryId - The trajectory ID
    * @param options - End options including final metrics
    * @throws Error if trajectory not found
@@ -232,7 +327,7 @@ export class TrajectoryRecorder {
       (sum, step) => sum + (step.reward ?? 0),
       0,
     )
-    const windowId = options.windowId || getCurrentWindowId()
+    const windowId = options.windowId ?? traj.windowId
 
     // Calculate metrics
     const tradesExecuted = traj.steps.filter(
@@ -251,19 +346,82 @@ export class TrajectoryRecorder {
     ).length
     const finalStatus = errorCount > 0 ? 'completed_with_errors' : 'completed'
 
-    // Save trajectory
+    // Save to database if using database or dual mode
+    if (
+      this.config.storageMode === 'database' ||
+      this.config.storageMode === 'dual'
+    ) {
+      await this.saveToDB(
+        traj,
+        endTime,
+        durationMs,
+        totalReward,
+        windowId,
+        finalStatus,
+        tradesExecuted,
+        postsCreated,
+        options,
+      )
+    }
+
+    // Save to static storage if using static or dual mode
+    if (
+      (this.config.storageMode === 'static' ||
+        this.config.storageMode === 'dual') &&
+      this.staticStorage
+    ) {
+      await this.saveToStaticStorage(
+        traj,
+        endTime,
+        durationMs,
+        totalReward,
+        windowId,
+        finalStatus,
+        tradesExecuted,
+        postsCreated,
+        options,
+      )
+    }
+
+    this.activeTrajectories.delete(trajectoryId)
+    this.pendingLLMCalls.delete(trajectoryId)
+
+    logger.info('Trajectory saved', {
+      trajectoryId,
+      archetype: traj.archetype,
+      steps: traj.steps.length,
+      reward: totalReward,
+      duration: durationMs,
+      storageMode: this.config.storageMode,
+    })
+  }
+
+  /**
+   * Save trajectory to database (legacy mode)
+   */
+  private async saveToDB(
+    traj: ActiveTrajectory,
+    endTime: number,
+    durationMs: number,
+    totalReward: number,
+    windowId: string,
+    finalStatus: string,
+    tradesExecuted: number,
+    postsCreated: number,
+    options: EndTrajectoryOptions,
+  ): Promise<void> {
     await db.trajectory.create({
       data: {
         id: await generateSnowflakeId(),
-        trajectoryId,
+        trajectoryId: traj.trajectoryId,
         agentId: traj.agentId,
-        archetype: traj.archetype ?? null,
+        archetype: traj.archetype,
         startTime: new Date(traj.startTime),
         endTime: new Date(endTime),
         durationMs,
         windowId,
         windowHours: 1,
-        scenarioId: traj.scenarioId ?? windowId,
+        scenarioId: traj.scenarioId,
         episodeId: traj.scenarioId ? `${traj.scenarioId}-${Date.now()}` : null,
         stepsJson: JSON.stringify(traj.steps),
         rewardComponentsJson: JSON.stringify({
@@ -276,7 +434,8 @@ export class TrajectoryRecorder {
           finalPnL: options.finalPnL,
           tradesExecuted,
           postsCreated,
-          errorCount,
+          errorCount: traj.steps.filter((s) => s.action && !s.action.success)
+            .length,
         }),
         metadataJson: JSON.stringify({
           isTrainingData: true,
@@ -297,25 +456,7 @@ export class TrajectoryRecorder {
     })
 
     // Save LLM calls
-    const llmLogRows: Array<{
-      id: string
-      trajectoryId: string
-      stepId: string
-      callId: string
-      timestamp: Date
-      latencyMs: number | null
-      model: string
-      purpose: string
-      actionType: string | null
-      systemPrompt: string
-      userPrompt: string
-      messagesJson: string | null
-      response: string
-      reasoning: string | null
-      temperature: number
-      maxTokens: number
-      metadata: string | null
-    }> = []
+    const llmLogRows: LLMLogRow[] = []
 
     for (const step of traj.steps) {
       const llmCalls = step.llmCalls ?? []
@@ -325,9 +466,9 @@ export class TrajectoryRecorder {
 
         llmLogRows.push({
           id: await generateSnowflakeId(),
-          trajectoryId,
-          stepId: `${trajectoryId}-step-${step.stepNumber}`,
-          callId: `${trajectoryId}-call-${step.stepNumber}-${i}`,
+          trajectoryId: traj.trajectoryId,
+          stepId: `${traj.trajectoryId}-step-${step.stepNumber}`,
+          callId: `${traj.trajectoryId}-call-${step.stepNumber}-${i}`,
           timestamp: new Date(step.timestamp),
           latencyMs: llmCall.latencyMs ?? null,
           model: llmCall.model,
@@ -353,18 +494,109 @@ export class TrajectoryRecorder {
         data: llmLogRows,
       })
     }
+  }
 
-    this.activeTrajectories.delete(trajectoryId)
+  /**
+   * Save trajectory to static storage (new mode)
+   */
+  private async saveToStaticStorage(
+    traj: ActiveTrajectory,
+    endTime: number,
+    durationMs: number,
+    totalReward: number,
+    windowId: string,
+    finalStatus: string,
+    tradesExecuted: number,
+    postsCreated: number,
+    options: EndTrajectoryOptions,
+  ): Promise<void> {
+    if (!this.staticStorage) return
 
-    logger.info('Trajectory saved to database', {
-      trajectoryId,
+    // Convert to TrajectoryRecord format expected by StaticTrajectoryStorage
+    const record: TrajectoryRecord = {
+      id: await generateSnowflakeId(),
+      trajectoryId: traj.trajectoryId,
+      agentId: traj.agentId,
       archetype: traj.archetype,
-      steps: traj.steps.length,
-      reward: totalReward,
-      duration: durationMs,
-    })
+      startTime: new Date(traj.startTime),
+      endTime: new Date(endTime),
+      durationMs,
+      windowId,
+      windowHours: Math.ceil(durationMs / (1000 * 60 * 60)), // Duration in hours, at least 1
+      scenarioId: traj.scenarioId,
+      episodeId: traj.trajectoryId, // Use trajectory ID as episode ID
+      steps: traj.steps.map((step, idx) => ({
+        stepNumber: step.stepNumber,
+        timestamp: step.timestamp,
+        environmentState: step.environmentState ?? {
+          timestamp: step.timestamp,
+        },
+        providerAccesses: step.providerAccesses ?? [],
+        llmCalls: step.llmCalls ?? [],
+        action: step.action ?? null,
+        reward: step.reward ?? 0,
+        stepId: `${traj.trajectoryId}-step-${idx}`,
+      })),
+      rewardComponents: {
+        environmentReward: totalReward,
+      },
+      metrics: {
+        episodeLength: traj.steps.length,
+        finalStatus,
+        finalBalance: options.finalBalance,
+        finalPnL: options.finalPnL,
+        tradesExecuted,
+        postsCreated,
+        errorCount: traj.steps.filter((s) => s.action?.error).length,
+      },
+      metadata: {
+        ...traj.metadata,
+        isTrainingData: true,
+        gameKnowledge: options.gameKnowledge ?? {},
+      },
+      totalReward,
+    }
 
-    this.activeTrajectories.delete(trajectoryId)
+    await this.staticStorage.saveTrajectory(record)
+
+    // Also save LLM calls
+    const llmCallLogs: LLMCallLogRecord[] = []
+    for (const step of traj.steps) {
+      const llmCalls = step.llmCalls ?? []
+      for (let i = 0; i < llmCalls.length; i++) {
+        const llmCall = llmCalls[i]
+        if (!llmCall) continue
+
+        llmCallLogs.push({
+          id: await generateSnowflakeId(),
+          trajectoryId: traj.trajectoryId,
+          stepId: `${traj.trajectoryId}-step-${step.stepNumber}`,
+          callId:
+            llmCall.callId ??
+            `${traj.trajectoryId}-call-${step.stepNumber}-${i}`,
+          timestamp: new Date(step.timestamp),
+          latencyMs: llmCall.latencyMs ?? null,
+          model: llmCall.model,
+          purpose: llmCall.purpose,
+          actionType: llmCall.actionType ?? null,
+          systemPrompt: llmCall.systemPrompt,
+          userPrompt: llmCall.userPrompt,
+          messages: [
+            { role: 'system', content: llmCall.systemPrompt },
+            { role: 'user', content: llmCall.userPrompt },
+          ],
+          response: llmCall.response,
+          reasoning: llmCall.reasoning ?? null,
+          temperature: llmCall.temperature,
+          maxTokens: llmCall.maxTokens,
+          metadata: { modelVersion: llmCall.modelVersion },
+        })
+      }
+    }
+
+    if (llmCallLogs.length > 0) {
+      await this.staticStorage.saveLLMCallLogs(llmCallLogs)
+    }
   }
 
   /**
@@ -392,7 +624,47 @@ export class TrajectoryRecorder {
   getActiveCount(): number {
     return this.activeTrajectories.size
   }
+
+  /**
+   * Get static storage buffer stats (if using static mode)
+   */
+  getStaticStorageStats(): {
+    count: number
+    ageMs: number | null
+    oldestTrajectoryId: string | null
+  } | null {
+    if (!this.staticStorage) return null
+    return this.staticStorage.getBufferStats()
+  }
+
+  /**
+   * Force flush static storage (if using static mode)
+   */
+  async flushStaticStorage(): Promise<TrajectoryBatchReference | null> {
+    if (!this.staticStorage) return null
+    return this.staticStorage.flush()
+  }
+
+  /**
+   * Shutdown and cleanup
+   */
+  async shutdown(): Promise<void> {
+    if (this.staticStorage) {
+      await this.staticStorage.shutdown()
+    }
+    this.activeTrajectories.clear()
+    this.pendingLLMCalls.clear()
+  }
 }
 
-/** Singleton instance */
-export const trajectoryRecorder = new TrajectoryRecorder()
+/** Default singleton instance (dual mode) */
+export const trajectoryRecorder = new TrajectoryRecorder({
+  storageMode: 'dual',
+})
+
+/** Create a recorder with specific storage mode */
+export function createTrajectoryRecorder(
+  config: Partial<TrajectoryRecorderConfig> = {},
+): TrajectoryRecorder {
+  return new TrajectoryRecorder(config)
+}

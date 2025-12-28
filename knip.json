@@ -109,8 +109,8 @@
       "entry": ["src/index.ts"],
       "project": ["src/**/*.ts"],
       "ignore": [
-        "src/cql-driver.ts",
-        "src/cql-schema-types.ts",
+        "src/eqlite-driver.ts",
+        "src/eqlite-schema-types.ts",
         "src/decentralized/**",
         "src/schema/misc.ts",
         "src/schema/trading.ts",
@@ -186,7 +186,8 @@
         "src/type-guards.ts",
         "src/compute/decentralized-training.ts",
         "src/huggingface/shared/HuggingFaceUploadUtil.ts",
-        "src/schemas.ts"
+        "src/schemas.ts",
+        "src/training/TrajectoryRecorder.ts"
       ]
     }
   },
@@ -197,7 +198,8 @@
     "**/coverage/**",
     "**/test-results/**",
     "**/benchmark-output/**",
-    "**/training-data/**"
+    "**/training-data/**",
+    "space-system/**"
   ],
   "ignoreDependencies": [
     "@types/*",

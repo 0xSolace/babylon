@@ -8,6 +8,18 @@
  */
 
 // =============================================================================
+// External Integrations
+// =============================================================================
+
+// Farcaster Posting Service (NPC posts to Farcaster)
+export {
+  type FarcasterPostingConfig,
+  type FarcasterPostResult,
+  getFarcasterPostingService,
+  resetFarcasterPostingService,
+} from './farcaster-posting-service'
+
+// =============================================================================
 // NPC Services
 // =============================================================================
 
@@ -87,6 +99,13 @@ export * from './trending-grouping-service'
 // Core Services
 // =============================================================================
 
+// BBLN Wallet Service - Real tokens only, no simulation mode
+export {
+  type BBLNBalanceInfo,
+  type BBLNTransactionResult,
+  BBLNWalletService,
+  WalletService,
+} from './bbln-wallet-service'
 export * from './character-mapping-service'
 export * from './earned-points-service'
 export * from './fee-service'
@@ -104,7 +123,8 @@ export * from './rss-feed-service'
 export * from './static-data-registry'
 export * from './trade-cache-invalidation'
 export * from './trade-execution-service'
-export * from './wallet-service'
+// User Wallet Adapter - WalletPort for user trades
+export { createUserWalletAdapter } from './user-wallet-adapter'
 
 // =============================================================================
 // Oracle & Portfolio Services

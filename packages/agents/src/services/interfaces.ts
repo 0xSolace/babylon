@@ -7,13 +7,14 @@
  * @packageDocumentation
  */
 
-import type { AgentCapabilities, JsonValue } from '@babylon/shared'
+import type { AgentCapabilities } from '@babylon/shared'
 import type {
   AgentDiscoveryFilter,
   AgentRegistration,
   AgentStatus,
   TrustLevel,
 } from '@jejunetwork/agents'
+import type { JsonValue } from '@jejunetwork/shared'
 
 /**
  * Agent Registry Service Interface

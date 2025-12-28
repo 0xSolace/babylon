@@ -6,6 +6,7 @@ import {
 } from './middleware'
 import {
   a2aRoutes,
+  actorsRoutes,
   adminRoutes,
   agentsRoutes,
   airdropRoutes,
@@ -16,6 +17,7 @@ import {
   groupsRoutes,
   healthRoutes,
   icoRoutes,
+  leaderboardRoutes,
   marketsRoutes,
   mcpRoutes,
   messagingRoutes,
@@ -120,6 +122,8 @@ const createApp = () =>
     .use(healthRoutes)
     .use(authRoutes)
     .use(usersRoutes)
+    .use(leaderboardRoutes)
+    .use(actorsRoutes)
     .use(marketsRoutes)
     .use(agentsRoutes)
     .use(chatsRoutes)

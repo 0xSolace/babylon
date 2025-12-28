@@ -1173,13 +1173,44 @@ XML: <response><questions><question><text>...</text><resolutionCriteria>...</res
         : (response as QuestionsResponse).questions
 
     // Handle nested XML format {questions: {question: [...]}}
-    const questionsData: QuestionData[] = Array.isArray(rawQuestions)
-      ? rawQuestions
-      : rawQuestions &&
-          'question' in rawQuestions &&
-          Array.isArray(rawQuestions.question)
-        ? rawQuestions.question
-        : []
+    let rawQuestionsArray: unknown[] = []
+    if (Array.isArray(rawQuestions)) {
+      rawQuestionsArray = rawQuestions
+    } else if (
+      rawQuestions &&
+      typeof rawQuestions === 'object' &&
+      'question' in rawQuestions
+    ) {
+      const nested = (rawQuestions as { question: unknown }).question
+      rawQuestionsArray = Array.isArray(nested) ? nested : [nested]
+    }
+
+    // Normalize question data from various XML parsing formats
+    const questionsData: QuestionData[] = rawQuestionsArray
+      .map((q) => {
+        if (typeof q === 'string') {
+          // LLM returned just the question text - skip these
+          return null
+        }
+        if (typeof q !== 'object' || q === null) {
+          return null
+        }
+        const qObj = q as Record<string, unknown>
+        // Handle XML2JS arrays (each field may be wrapped in array)
+        const getText = (val: unknown): string =>
+          Array.isArray(val) ? String(val[0] ?? '') : String(val ?? '')
+        const getNum = (val: unknown): number => {
+          const v = Array.isArray(val) ? val[0] : val
+          return typeof v === 'number' ? v : parseInt(String(v), 10) || 3
+        }
+        return {
+          text: getText(qObj.text),
+          resolutionCriteria: getText(qObj.resolutionCriteria),
+          daysUntilResolution: getNum(qObj.daysUntilResolution),
+          expectedOutcome: getText(qObj.expectedOutcome),
+        }
+      })
+      .filter((q): q is QuestionData => q !== null && q.text.length > 0)
 
     if (questionsData.length === 0) {
       logger.warn(
@@ -1290,6 +1321,7 @@ XML: <response><questions><question><text>...</text><resolutionCriteria>...</res
         .values({
           id: await generateSnowflakeId(),
           questionNumber: nextQuestionNumber++,
+          question: questionData.text,
           text: questionData.text,
           scenarioId,
           outcome: expectedOutcome,

@@ -6,14 +6,14 @@
  */
 
 import type { AgentReputation, RegistryClient } from '@babylon/a2a'
+import {
+  type Agent0ReputationSummary,
+  type AggregatedReputation,
+  getAgent0Client,
+  type IReputationBridge,
+} from '@jejunetwork/agents'
 import { logger } from '../shared/logger'
-import { getAgent0Client } from './Agent0Client'
 import { SubgraphClient } from './SubgraphClient'
-import type {
-  Agent0ReputationSummary,
-  AggregatedReputation,
-  IReputationBridge,
-} from './types'
 
 export class ReputationBridge implements IReputationBridge {
   private erc8004Registry?: RegistryClient

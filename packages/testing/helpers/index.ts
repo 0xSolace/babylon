@@ -7,4 +7,5 @@
 export * from './contract-setup'
 export * from './react-query'
 export * from './setup'
+export * from './test-env'
 export * from './type-guards'

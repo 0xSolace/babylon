@@ -116,6 +116,18 @@ test.describe('Core Pages', () => {
     expect(page.url()).toContain('/betting')
   })
 
+  test('dao page loads', async ({ page }) => {
+    await navigateTo(page, ROUTES.DAO)
+    await waitForPageLoad(page)
+    expect(page.url()).toContain('/dao')
+  })
+
+  test('launch page loads', async ({ page }) => {
+    await navigateTo(page, ROUTES.LAUNCH)
+    await waitForPageLoad(page)
+    expect(page.url()).toContain('/launch')
+  })
+
   test('api-docs page loads', async ({ page }) => {
     await navigateTo(page, ROUTES.API_DOCS)
     await waitForPageLoad(page)
@@ -236,6 +248,12 @@ test.describe('Admin Pages', () => {
     await navigateTo(page, ROUTES.ADMIN_GROUPS)
     await waitForPageLoad(page)
     expect(page.url()).toContain('/admin/groups')
+  })
+
+  test('admin ico page loads', async ({ page }) => {
+    await navigateTo(page, ROUTES.ADMIN_ICO)
+    await waitForPageLoad(page)
+    expect(page.url()).toContain('/admin/ico')
   })
 
   test('admin performance page loads', async ({ page }) => {

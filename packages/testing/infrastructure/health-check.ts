@@ -33,7 +33,7 @@ const PORTS = {
   OAUTH3: parseInt(process.env.OAUTH3_PORT ?? '5011', 10),
   KMS: parseInt(process.env.KMS_PORT ?? '5012', 10),
   MESSAGING: parseInt(process.env.MESSAGING_PORT ?? '3200', 10),
-  CQL: parseInt(process.env.CQL_PORT ?? '4661', 10),
+  EQLite: parseInt(process.env.EQLITE_PORT ?? '4661', 10),
 }
 
 // Jeju-managed services
@@ -101,11 +101,11 @@ const JEJU_SERVICES = {
     required: false,
     description: 'Jeju Messaging Relay',
   },
-  cql: {
-    healthEndpoint: `http://localhost:${PORTS.CQL}/v1/health`,
-    port: PORTS.CQL,
+  eqlite: {
+    healthEndpoint: `http://localhost:${PORTS.EQLite}/v1/health`,
+    port: PORTS.EQLite,
     required: false,
-    description: 'Jeju CQL (CovenantSQL)',
+    description: 'Jeju EQLite',
   },
 } as const
 
@@ -196,7 +196,7 @@ export async function checkJejuServices(): Promise<InfrastructureStatus> {
     'oauth3',
     'kms',
     'messaging',
-    'cql',
+    'eqlite',
   ]
   const results = await Promise.all(jejuServices.map(checkService))
 

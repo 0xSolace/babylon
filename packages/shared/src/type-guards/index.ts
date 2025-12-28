@@ -13,6 +13,8 @@
 export {
   // Agent0 ID guards
   type Agent0Id,
+  // Agent0 network guards (different from deployment NetworkName)
+  type Agent0NetworkName,
   // Endpoint type guards
   type EndpointType,
   // IPFS response guards
@@ -26,6 +28,7 @@ export {
   isAddress,
   isAddressArray,
   isAgent0Id,
+  isAgent0NetworkName,
   // Contract return value guards
   isBigint,
   isBigintArray,
@@ -39,15 +42,12 @@ export {
   isIpfsProvider,
   // Jeju network guards
   isJejuNetwork,
-  isNetworkName,
   isReadonlyAddressArray,
   // Transaction hash guards
   isTransactionHash,
   isValidAddress,
   isValidHex,
   type JejuNetwork,
-  // Network guards
-  type NetworkName,
   parseAgent0Id,
   parseIpfsResponse,
   toAddress,
@@ -57,12 +57,12 @@ export {
   toAddressOrNull,
   toAgent0Id,
   toAgent0IdOrNull,
+  toAgent0NetworkName,
   toEndpointType,
   toHexOrNull,
   toHexString,
   toIpfsProvider,
   toJejuNetwork,
-  toNetworkName,
   toTransactionHash,
   toTransactionHashOrNull,
 } from './blockchain'

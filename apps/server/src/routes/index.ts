@@ -5,6 +5,7 @@
  */
 
 export { a2aRoutes } from './a2a'
+export { actorsRoutes } from './actors'
 export { adminRoutes } from './admin'
 export { agentsRoutes } from './agents'
 export { airdropRoutes } from './airdrop'
@@ -22,4 +23,4 @@ export { moderationRoutes } from './moderation'
 export { notificationsRoutes } from './notifications'
 export { postsRoutes } from './posts'
 export { sseRoutes } from './sse'
-export { usersRoutes } from './users'
+export { leaderboardRoutes, usersRoutes } from './users'

@@ -2,7 +2,7 @@
  * Database Model Types
  *
  * Pure TypeScript interfaces for all database tables.
- * These types match the CQL schema definitions.
+ * These types match the EQLite schema definitions.
  *
  * Example:
  *   import type { User, Post, Market } from '@babylon/db';

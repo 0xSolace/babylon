@@ -202,7 +202,6 @@ export function useMarketsPageData(): MarketsPageData {
     authenticated: boolean
     userId: string | null | undefined
   } | null>(null)
-  const hasMountedRef = useRef(false)
 
   // Update refs when values change
   useEffect(() => {
@@ -284,45 +283,52 @@ export function useMarketsPageData(): MarketsPageData {
     void refreshPortfolio()
   }, [authenticated, balanceRefreshTrigger, refreshPortfolio])
 
-  // Initial fetch and auth state change handling
+  // Initial fetch - runs once on mount
+  // Uses an empty dependency array to ensure it only runs once
   useEffect(() => {
     const controller = new AbortController()
-    const currentAuth = { authenticated, userId: user?.id }
 
-    if (!hasMountedRef.current) {
-      hasMountedRef.current = true
-      prevAuthRef.current = currentAuth
-      fetchData(controller.signal).catch((err) => {
-        if (err instanceof Error && err.name !== 'AbortError') {
-          logger.warn(
-            'Failed to fetch predictions',
-            { error: err.message },
-            'useMarketsPageData',
-          )
-        }
-      })
-      return () => controller.abort()
-    }
-
-    const prevAuth = prevAuthRef.current
-    if (
-      prevAuth &&
-      (prevAuth.authenticated !== currentAuth.authenticated ||
-        prevAuth.userId !== currentAuth.userId)
-    ) {
-      prevAuthRef.current = currentAuth
-      fetchData(controller.signal).catch((err) => {
-        if (err instanceof Error && err.name !== 'AbortError') {
-          logger.warn(
-            'Failed to fetch predictions',
-            { error: err.message },
-            'useMarketsPageData',
-          )
-        }
-      })
-    }
+    fetchData(controller.signal).catch((err) => {
+      if (err instanceof Error && err.name !== 'AbortError') {
+        logger.warn(
+          'Failed to fetch predictions',
+          { error: err.message },
+          'useMarketsPageData',
+        )
+      }
+    })
 
     return () => controller.abort()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fetchData])
+
+  // Re-fetch when auth state changes
+  useEffect(() => {
+    const currentAuth = { authenticated, userId: user?.id }
+    const prevAuth = prevAuthRef.current
+
+    // Skip initial render (handled by above effect) and only re-fetch on auth changes
+    if (prevAuth === null) {
+      prevAuthRef.current = currentAuth
+      return
+    }
+
+    if (
+      prevAuth.authenticated !== currentAuth.authenticated ||
+      prevAuth.userId !== currentAuth.userId
+    ) {
+      prevAuthRef.current = currentAuth
+      const controller = new AbortController()
+      fetchData(controller.signal).catch((err) => {
+        if (err instanceof Error && err.name !== 'AbortError') {
+          logger.warn(
+            'Failed to fetch predictions on auth change',
+            { error: err.message },
+            'useMarketsPageData',
+          )
+        }
+      })
+    }
   }, [authenticated, user?.id, fetchData])
 
   /**

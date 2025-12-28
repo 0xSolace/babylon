@@ -1,4 +1,4 @@
-import { useJejuAuth } from '@babylon/auth'
+import { useJejuAuth } from '@jejunetwork/auth'
 import { cn } from '@jejunetwork/shared'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {

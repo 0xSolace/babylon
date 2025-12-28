@@ -19,7 +19,6 @@ import {
   loadActorById,
   StaticDataRegistry,
 } from '@babylon/engine'
-import type { JsonValue } from '@babylon/shared'
 import {
   AgentRuntime,
   type Character,
@@ -27,6 +26,7 @@ import {
   type UUID,
 } from '@elizaos/core'
 import { type AgentRegistration, AgentType } from '@jejunetwork/agents'
+import type { JsonValue } from '@jejunetwork/shared'
 import { generateSnowflakeId, isJsonRecord } from '@jejunetwork/shared'
 import { babylonPlugin } from '../plugins/babylon'
 import { enhanceRuntimeWithBabylon } from '../plugins/babylon/integration'

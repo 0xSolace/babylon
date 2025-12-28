@@ -66,14 +66,23 @@ export function TrendingPanel() {
   useSSEChannel('feed', refetch)
 
   const handleTrendingClick = (item: TrendingItem) => {
+    // Handle undefined or empty tagSlugs
+    const tagSlugs = Array.isArray(item.tagSlugs) ? item.tagSlugs : []
+
+    if (tagSlugs.length === 0) {
+      // No tags, navigate to feed
+      router.push('/feed')
+      return
+    }
+
     // If multiple tags, navigate to grouped view; otherwise single tag view
-    if (item.tagSlugs.length > 1) {
+    if (tagSlugs.length > 1) {
       // Navigate to grouped trending view with multiple tag slugs
-      const tagSlugsParam = item.tagSlugs.join(',')
+      const tagSlugsParam = tagSlugs.join(',')
       router.push(`/trending/group?tags=${encodeURIComponent(tagSlugsParam)}`)
     } else {
       // Single tag - use existing route
-      router.push(`/trending/${item.tagSlugs[0]}`)
+      router.push(`/trending/${tagSlugs[0]}`)
     }
   }
 
@@ -106,20 +115,28 @@ export function TrendingPanel() {
                 <p className="text-muted-foreground text-xs">
                   {item.category || 'Trending'} · Trending
                 </p>
-                {/* Tag name(s) - show all tags if grouped */}
+                {/* Tag name(s) - show all tags if grouped, handle undefined tags */}
                 <div className="mt-0.5 flex flex-wrap items-center gap-1.5">
-                  {item.tags.map((tag, idx) => (
-                    <span key={`${item.id}-tag-${tag}`}>
-                      <span className="font-semibold text-foreground text-sm leading-snug">
-                        {tag}
-                      </span>
-                      {idx < item.tags.length - 1 && (
-                        <span className="mx-1 text-muted-foreground text-xs">
-                          •
+                  {Array.isArray(item.tags) && item.tags.length > 0 ? (
+                    item.tags.map((tag, idx) => (
+                      <span key={`${item.id}-tag-${tag}`}>
+                        <span className="font-semibold text-foreground text-sm leading-snug">
+                          {tag}
                         </span>
-                      )}
+                        {idx < item.tags.length - 1 && (
+                          <span className="mx-1 text-muted-foreground text-xs">
+                            •
+                          </span>
+                        )}
+                      </span>
+                    ))
+                  ) : (
+                    <span className="font-semibold text-foreground text-sm leading-snug">
+                      {item.summary ||
+                        item.content?.slice(0, 50) ||
+                        'Trending topic'}
                     </span>
-                  ))}
+                  )}
                 </div>
                 {/* Summary */}
                 {item.summary && (

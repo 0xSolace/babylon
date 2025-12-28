@@ -2,7 +2,7 @@
  * User utility functions for blocking, muting, etc.
  */
 
-import { db } from './cql-client'
+import { db } from './eqlite-client'
 
 /**
  * Check if a user has blocked another user

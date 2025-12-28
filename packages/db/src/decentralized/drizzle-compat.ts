@@ -381,7 +381,7 @@ function serializeCondition(
 /**
  * Symbol used to carry the row type on table references
  */
-export const TABLE_ROW_TYPE = Symbol.for('cql:RowType')
+export const TABLE_ROW_TYPE = Symbol.for('eqlite:RowType')
 
 /**
  * Typed table reference that carries the row type.

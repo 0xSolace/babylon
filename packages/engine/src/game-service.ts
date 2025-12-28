@@ -142,7 +142,12 @@ class GameService {
 
     const now = new Date()
     const dayMs = 24 * 60 * 60 * 1000
-    return Math.floor((now.getTime() - game.startedAt.getTime()) / dayMs)
+    // Handle both Date objects and ISO string dates from EQLite
+    const startedAt =
+      typeof game.startedAt === 'string'
+        ? new Date(game.startedAt)
+        : game.startedAt
+    return Math.floor((now.getTime() - startedAt.getTime()) / dayMs)
   }
 
   /**

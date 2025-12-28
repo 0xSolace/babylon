@@ -103,7 +103,11 @@ const createAgentsRoutes = () =>
               type: a.type,
               status: a.status,
               trustLevel: a.trustLevel,
-              createdAt: a.registeredAt?.toISOString(),
+              createdAt: a.registeredAt
+                ? typeof a.registeredAt === 'string'
+                  ? a.registeredAt
+                  : new Date(a.registeredAt).toISOString()
+                : null,
               source: 'database' as const,
             })),
         ]

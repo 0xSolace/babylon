@@ -73,7 +73,7 @@ export const hardhat = defineChain({
   },
   rpcUrls: {
     default: {
-      http: ['http://localhost:6545'],
+      http: ['http://localhost:6546'],
     },
   },
   testnet: true,

@@ -5,14 +5,14 @@
  *
  * Prerequisites:
  *   1. Start Jeju: cd /path/to/jeju && bun run dev
- *   2. All services: CQL, Cache, Storage, KMS, OAuth3, Devnet
+ *   2. All services: EQLite, Cache, Storage, KMS, OAuth3, Devnet
  *
  * Run with: bun test packages/testing/integration/jeju-e2e.integration.test.ts
  */
 
 import { afterAll, beforeAll, describe, expect, it } from 'bun:test'
 import * as engine from '@babylon/engine'
-import { responseJson } from '@babylon/shared'
+import { responseJson } from '@jejunetwork/shared'
 import type { Address } from 'viem'
 import { z } from 'zod'
 
@@ -190,24 +190,24 @@ describe('Local Devnet', () => {
 })
 
 // ============================================================================
-// CQL Database (requires Jeju gateway)
+// EQLite Database (requires Jeju gateway)
 // ============================================================================
 
-describe('Jeju CQL Database', () => {
-  const cqlEndpoint = `${JEJU_GATEWAY_URL}/v1/cql`
+describe('Jeju EQLite Database', () => {
+  const eqliteEndpoint = `${JEJU_GATEWAY_URL}/v1/eqlite`
 
-  it('should connect to CQL endpoint', async () => {
+  it('should connect to EQLite endpoint', async () => {
     if (!jejuGatewayAvailable) {
       console.log('Skipped: Jeju gateway not running')
       return
     }
 
-    const response = await fetch(`${cqlEndpoint}/health`, {
+    const response = await fetch(`${eqliteEndpoint}/health`, {
       signal: AbortSignal.timeout(5000),
     }).catch(() => null)
 
     if (!response?.ok) {
-      console.log('Skipped: CQL service not available')
+      console.log('Skipped: EQLite service not available')
       return
     }
 
@@ -221,17 +221,17 @@ describe('Jeju CQL Database', () => {
       return
     }
 
-    const healthResponse = await fetch(`${cqlEndpoint}/health`).catch(
+    const healthResponse = await fetch(`${eqliteEndpoint}/health`).catch(
       () => null,
     )
     if (!healthResponse?.ok) {
-      console.log('Skipped: CQL service not available')
+      console.log('Skipped: EQLite service not available')
       return
     }
 
     const testTable = `e2e_test_${Date.now()}`
 
-    const createResponse = await fetch(`${cqlEndpoint}/exec`, {
+    const createResponse = await fetch(`${eqliteEndpoint}/exec`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -241,11 +241,11 @@ describe('Jeju CQL Database', () => {
     })
 
     if (!createResponse.ok) {
-      console.log('Skipped: CQL exec not implemented')
+      console.log('Skipped: EQLite exec not implemented')
       return
     }
 
-    console.log('CQL table created:', testTable)
+    console.log('EQLite table created:', testTable)
     expect(createResponse.ok).toBe(true)
   })
 })

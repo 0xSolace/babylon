@@ -1,5 +1,5 @@
 /**
- * Typed Table References for CQL
+ * Typed Table References for EQLite
  *
  * This module provides strongly-typed table references that carry their schema type.
  * When used with db.select().from(typedTable), the result will be properly typed
@@ -10,7 +10,7 @@
  *   const questions = await db.select().from(typedTables.questions) // Question[]
  */
 
-import type * as SchemaTypes from './cql-schema-types'
+import type * as SchemaTypes from './eqlite-schema-types'
 import { type ColumnRef, TABLE_NAMES } from './table-registry'
 
 // ============================================================================

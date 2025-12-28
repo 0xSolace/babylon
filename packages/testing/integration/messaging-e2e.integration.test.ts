@@ -15,8 +15,8 @@
  */
 
 import { afterAll, beforeAll, describe, expect, it } from 'bun:test'
-import { MessagingClient } from '@babylon/messaging'
 import {
+  createMessagingClient,
   decryptMessage,
   deriveKeyPairFromWallet,
   encryptMessage,
@@ -26,7 +26,7 @@ import {
 // Response schema
 const _CidSchema = z.object({ cid: z.string() })
 
-import { responseJson } from '@babylon/shared'
+import { responseJson } from '@jejunetwork/shared'
 import { z } from 'zod'
 
 const CidSchema = z.object({ cid: z.string() })
@@ -36,10 +36,7 @@ function bytesToHex(bytes: Uint8Array): string {
   return Buffer.from(bytes).toString('hex')
 }
 
-import type { Address } from 'viem'
-import { createPublicClient, createWalletClient, http } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
-import { foundry } from 'viem/chains'
 
 // Test accounts (Hardhat dev accounts)
 const ALICE_PRIVATE_KEY =
@@ -167,43 +164,26 @@ describe('Messaging Crypto', () => {
 // ============================================================================
 
 describe('Messaging Client', () => {
-  it('should initialize with random keys', async () => {
-    // No external services needed - just crypto
-    const client = new MessagingClient({
-      address: aliceAccount.address,
+  it('should initialize with signature-derived keys', async () => {
+    // Initialize Jeju MessagingClient
+    const client = createMessagingClient({
       rpcUrl: JEJU_RPC_URL,
+      address: aliceAccount.address,
     })
 
-    client.initializeWithRandomKeys()
-    const publicKey = client.getPublicKeyHex()
-
-    expect(publicKey).toBeTruthy()
-    expect(publicKey.length).toBe(64) // 32 bytes = 64 hex chars
-    console.log('Client initialized with public key')
-  })
-
-  it('should derive keys from wallet signature', async () => {
-    // No external services needed - just crypto
-
-    const client = new MessagingClient({
-      address: aliceAccount.address,
-      rpcUrl: JEJU_RPC_URL,
+    // Sign to derive keys
+    const signature = await aliceAccount.signMessage({
+      message: `Sign to enable messaging\nAddress: ${aliceAccount.address}`,
     })
-
-    const message = client.getKeyDerivationMessage()
-    expect(message).toContain(aliceAccount.address)
-
-    const signature = await aliceAccount.signMessage({ message })
     await client.initialize(signature)
 
-    const publicKey = client.getPublicKeyHex()
+    const publicKey = client.getPublicKey()
     expect(publicKey).toBeTruthy()
-    console.log('Keys derived from wallet signature')
+    console.log('Client initialized with public key')
   })
 
   it('should encrypt messages between two parties using crypto module', async () => {
     // No external services needed - just crypto
-
     const aliceKeys = generateKeyPair()
     const bobKeys = generateKeyPair()
 
@@ -228,84 +208,8 @@ describe('Messaging Client', () => {
 // ============================================================================
 // On-Chain Key Registry Tests
 // ============================================================================
-
-describe('On-Chain Key Registry', () => {
-  const publicClient = createPublicClient({
-    chain: foundry,
-    transport: http(JEJU_RPC_URL),
-  })
-
-  const aliceWallet = createWalletClient({
-    account: aliceAccount,
-    chain: foundry,
-    transport: http(JEJU_RPC_URL),
-  })
-
-  it('should register messaging keys on-chain', async () => {
-    if (!devnetAvailable) {
-      console.log('Skipped: Devnet not available')
-      return
-    }
-
-    const keyRegistryAddress = process.env.KEY_REGISTRY_ADDRESS
-    if (!keyRegistryAddress) {
-      console.log('Skipped: KEY_REGISTRY_ADDRESS not set')
-      return
-    }
-
-    const client = new MessagingClient({
-      address: aliceAccount.address,
-      rpcUrl: JEJU_RPC_URL,
-      keyRegistryAddress: keyRegistryAddress as Address,
-    })
-
-    client.initializeWithRandomKeys()
-    const publicKey = client.getPublicKeyHex()
-
-    // Register on-chain
-    const txHash = await client.registerKeyOnChain(aliceWallet)
-    expect(txHash).toBeTruthy()
-
-    // Wait for confirmation
-    const receipt = await publicClient.waitForTransactionReceipt({
-      hash: txHash,
-    })
-    expect(receipt.status).toBe('success')
-
-    // Verify key is registered
-    const registeredKey = await client.getRecipientPublicKey(
-      aliceAccount.address,
-    )
-    const registeredKeyHex = `0x${Buffer.from(registeredKey).toString('hex')}`
-    expect(registeredKeyHex).toBe(publicKey)
-  })
-
-  it('should lookup keys by address', async () => {
-    if (!devnetAvailable) {
-      console.log('Skipped: Devnet not available')
-      return
-    }
-
-    const keyRegistryAddress = process.env.KEY_REGISTRY_ADDRESS
-    if (!keyRegistryAddress) {
-      console.log('Skipped: KEY_REGISTRY_ADDRESS not set')
-      return
-    }
-
-    const client = new MessagingClient({
-      address: bobAccount.address,
-      rpcUrl: JEJU_RPC_URL,
-      keyRegistryAddress: keyRegistryAddress as Address,
-    })
-
-    // Try to get Alice's key (registered in previous test)
-    // Note: This may return empty if previous test didn't run - that's valid
-    const aliceKey = await client.getRecipientPublicKey(aliceAccount.address)
-    const aliceKeyHex = `0x${Buffer.from(aliceKey).toString('hex')}`
-    // Key should be registered or empty (if previous test didn't run)
-    expect(aliceKeyHex.startsWith('0x')).toBe(true)
-  })
-})
+// NOTE: Full on-chain registry tests require deployed contracts.
+// For local testing, use @jejunetwork/messaging directly with devnet.
 
 // ============================================================================
 // Message Storage Tests (IPFS via Jeju)

@@ -1,5 +1,5 @@
-import { JejuAuthProvider } from '@babylon/auth'
 import { CHAIN, getJejuNetwork, isRunningInJeju } from '@babylon/shared'
+import { JejuAuthProvider } from '@jejunetwork/auth'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Suspense, useEffect, useState } from 'react'
 import { PostHogErrorBoundary } from '@/components/analytics/PostHogErrorBoundary'
@@ -65,6 +65,11 @@ export function Providers({ children }: { children: React.ReactNode }) {
     ? getRpcUrl()
     : getRpcUrl() || CHAIN.rpcUrls.default.http[0]
 
+  // Development mode detection via NODE_ENV (set by bundler):
+  // - bun run dev → NODE_ENV='development' → decentralized: false (fast HMR)
+  // - bun run build → NODE_ENV='production' → decentralized: true (full JNS)
+  const isDevMode = process.env.NODE_ENV === 'development'
+
   return (
     <ApiFetchProvider>
       <PostHogErrorBoundary>
@@ -81,11 +86,17 @@ export function Providers({ children }: { children: React.ReactNode }) {
                   <GamePlaybackManager />
                   <JejuAuthProvider
                     config={{
+                      appId: 'babylon.apps.jeju',
                       network: oauth3Network,
                       mpcEndpoints: getMpcEndpoints(),
                       redirectUri: getRedirectUri(),
                       rpcUrl,
                       chainId: CHAIN.id,
+                      // Development mode: skip JNS for fast HMR
+                      // Production mode: use full decentralized JNS discovery
+                      decentralized: !isDevMode,
+                      // For dev mode, provide direct TEE agent URL (if MPC endpoints exist)
+                      teeAgentUrl: isDevMode ? getMpcEndpoints()[0] : undefined,
                       // OAuth providers - optional, wallet auth works without these
                       oauth: {
                         twitter: OAUTH_CONFIG.twitterClientId,

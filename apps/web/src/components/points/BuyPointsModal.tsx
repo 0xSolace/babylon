@@ -1,5 +1,5 @@
-import { useJejuAuth } from '@babylon/auth'
 import { logger, WALLET_ERROR_MESSAGES } from '@babylon/shared'
+import { useJejuAuth } from '@jejunetwork/auth'
 import { cn } from '@jejunetwork/shared'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import {

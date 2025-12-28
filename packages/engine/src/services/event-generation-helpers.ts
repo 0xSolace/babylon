@@ -302,7 +302,9 @@ export async function generateEvents(
 
     await db.insert(worldEvents).values({
       id: await generateSnowflakeId(),
+      type: eventConfig.type,
       eventType: eventConfig.type,
+      title: description.slice(0, 100),
       description,
       actors,
       relatedQuestion: questionNum,

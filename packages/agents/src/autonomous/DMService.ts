@@ -6,7 +6,7 @@ import { getKMSClient } from '@babylon/api'
 import { db } from '@babylon/db'
 import { toAddressOrNull, toHexOrNull } from '@babylon/shared'
 import type { IAgentRuntime } from '@elizaos/core'
-import { type CQLClient, getCQL } from '@jejunetwork/db'
+import { type EQLiteClient, getEQLite } from '@jejunetwork/db'
 import { generateSnowflakeId } from '@jejunetwork/shared'
 import type { Address } from 'viem'
 import { isProductionEnvironment } from '../config/tee'
@@ -24,21 +24,21 @@ interface Message {
 }
 
 export class DMService {
-  private cql: CQLClient | null = null
+  private eqlite: EQLiteClient | null = null
 
-  private async getCQLClient(): Promise<CQLClient> {
-    if (!this.cql) {
-      const privateKey = toHexOrNull(process.env.CQL_PRIVATE_KEY)
-      this.cql = getCQL({
+  private async getEQLiteClient(): Promise<EQLiteClient> {
+    if (!this.eqlite) {
+      const privateKey = toHexOrNull(process.env.EQLITE_PRIVATE_KEY)
+      this.eqlite = getEQLite({
         blockProducerEndpoint:
-          process.env.CQL_BLOCK_PRODUCER_ENDPOINT ?? 'http://localhost:4661',
-        databaseId: process.env.CQL_DATABASE_ID ?? 'babylon-messaging',
+          process.env.EQLITE_BLOCK_PRODUCER_ENDPOINT ?? 'http://localhost:4661',
+        databaseId: process.env.EQLITE_DATABASE_ID ?? 'babylon-messaging',
         privateKey: privateKey ?? undefined,
       })
-      const healthy = await this.cql.isHealthy()
-      if (!healthy) throw new Error('[DM] CQL not healthy')
+      const healthy = await this.eqlite.isHealthy()
+      if (!healthy) throw new Error('[DM] EQLite not healthy')
     }
-    return this.cql
+    return this.eqlite
   }
 
   async respondToDMs(
@@ -117,8 +117,8 @@ export class DMService {
   }
 
   private async fetchPendingMessages(address: Address): Promise<Message[]> {
-    const cql = await this.getCQLClient()
-    const result = await cql.query<{
+    const eqlite = await this.getEQLiteClient()
+    const result = await eqlite.query<{
       id: string
       conversation_id: string
       sender: string
@@ -154,8 +154,8 @@ export class DMService {
     conversationId: string,
     agentAddress: Address,
   ): Promise<Message[]> {
-    const cql = await this.getCQLClient()
-    const result = await cql.query<{
+    const eqlite = await this.getEQLiteClient()
+    const result = await eqlite.query<{
       id: string
       conversation_id: string
       sender: string
@@ -196,11 +196,11 @@ export class DMService {
     recipient: Address,
     content: string,
   ): Promise<void> {
-    const cql = await this.getCQLClient()
+    const eqlite = await this.getEQLiteClient()
     const messageId = await generateSnowflakeId()
     const encrypted = await this.encryptMessage(content, recipient)
 
-    await cql.exec(
+    await eqlite.exec(
       `INSERT INTO messages (id, conversation_id, sender, recipient, encrypted_content, ephemeral_public_key, nonce, timestamp, chain_id, message_type, delivery_status) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
       [
         messageId,
@@ -217,15 +217,15 @@ export class DMService {
       ],
     )
 
-    await cql.exec(
+    await eqlite.exec(
       `UPDATE conversations SET last_message_at = $1, last_message_preview = $2 WHERE id = $3`,
       [Date.now(), content.slice(0, 50), conversationId],
     )
   }
 
   private async markMessageDelivered(messageId: string): Promise<void> {
-    const cql = await this.getCQLClient()
-    await cql.exec(
+    const eqlite = await this.getEQLiteClient()
+    await eqlite.exec(
       `UPDATE messages SET delivery_status = 'delivered' WHERE id = $1`,
       [messageId],
     )

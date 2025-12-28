@@ -7,8 +7,8 @@
  */
 
 import { db } from '@babylon/db'
-import type { JsonValue } from '@babylon/shared'
 import { getA2AEndpoint, getMCPEndpoint } from '@babylon/shared'
+import type { JsonValue } from '@jejunetwork/shared'
 import { generateSnowflakeId } from '@jejunetwork/shared'
 import { logger } from '../shared/logger'
 import { getAgent0Client } from './index'
@@ -193,7 +193,7 @@ export async function registerBabylonGame(): Promise<BabylonRegistrationResult |
         registered: true,
         tokenId: result.tokenId,
         metadataCID,
-        txHash: result.txHash,
+        txHash: result.txHash ?? null,
         registeredAt: new Date().toISOString(),
       },
       updatedAt: new Date(),
@@ -203,7 +203,7 @@ export async function registerBabylonGame(): Promise<BabylonRegistrationResult |
         registered: true,
         tokenId: result.tokenId,
         metadataCID,
-        txHash: result.txHash,
+        txHash: result.txHash ?? null,
         registeredAt: new Date().toISOString(),
       },
     },

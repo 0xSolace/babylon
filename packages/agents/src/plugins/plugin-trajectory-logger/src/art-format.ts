@@ -4,7 +4,7 @@
  * Converts trajectories to OpenPipe ART format for RLAIF training.
  */
 
-import type { JsonValue } from '@babylon/shared'
+import type { JsonValue } from '@jejunetwork/shared'
 import type { Trajectory } from './types'
 
 /**

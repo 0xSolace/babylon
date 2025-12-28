@@ -4,9 +4,11 @@
  * ALL caching routes through Jeju Compute's decentralized cache.
  *
  * This replaces Redis as the caching layer.
+ * Configuration comes from @jejunetwork/config services.json.
  */
 
 import { logger } from '@babylon/shared'
+import { getDWSCacheUrl } from '@jejunetwork/config'
 import { toNull } from '@jejunetwork/shared'
 import {
   getErrorMessage,
@@ -65,20 +67,15 @@ class CacheClient {
   private initialized = false
 
   constructor() {
-    const serviceUrl = process.env.JEJU_CACHE_SERVICE_URL
-    if (!serviceUrl) {
-      throw new Error(
-        '[Cache] JEJU_CACHE_SERVICE_URL is required. ' +
-          'Decentralized cache is mandatory - no Redis fallback.',
-      )
-    }
+    // Get cache URL from Jeju config (network-aware)
+    const serviceUrl = getDWSCacheUrl()
 
     this.config = {
       serviceUrl,
-      namespace: process.env.CACHE_NAMESPACE ?? 'babylon',
-      defaultTTL: parseInt(process.env.CACHE_DEFAULT_TTL ?? '3600', 10),
-      maxRetries: parseInt(process.env.CACHE_MAX_RETRIES ?? '3', 10),
-      retryDelayMs: parseInt(process.env.CACHE_RETRY_DELAY_MS ?? '100', 10),
+      namespace: 'babylon',
+      defaultTTL: 3600,
+      maxRetries: 3,
+      retryDelayMs: 100,
     }
   }
 

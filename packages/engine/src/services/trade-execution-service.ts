@@ -12,8 +12,8 @@
 import {
   actorState,
   and,
-  type CQLClient,
   db,
+  type EQLiteClient,
   eq,
   gte,
   npcTrades,
@@ -27,10 +27,8 @@ import { logger, TradingDecisionSchema } from '@babylon/shared'
 import { generateSnowflakeId } from '@jejunetwork/shared'
 import { z } from 'zod'
 import { FEE_CONFIG } from '../config/fees'
-import { isSimulationMode } from '../storage-bridge'
 import type {
   ExecutedTrade,
-  MarketAction,
   TradingDecision,
   TradingExecutionResult,
 } from '../types/market-decisions'
@@ -100,6 +98,8 @@ const isPredictionBroadcastPayload = (
 export class TradeExecutionService {
   /**
    * Execute a batch of trading decisions
+   *
+   * All trades use real BBLN tokens - no simulation mode.
    */
   async executeDecisionBatch(
     decisions: TradingDecision[],
@@ -108,40 +108,6 @@ export class TradeExecutionService {
     z.array(TradingDecisionSchema).parse(decisions)
 
     const startTime = Date.now()
-
-    // Simulation Mode Bypass
-    if (isSimulationMode()) {
-      const executedTrades: ExecutedTrade[] = decisions
-        .filter((d) => d.action !== 'hold')
-        .map((d) => ({
-          npcId: d.npcId,
-          npcName: d.npcName,
-          poolId: 'sim-pool',
-          marketType: d.marketType || 'perp',
-          ticker: d.ticker,
-          marketId: d.marketId,
-          action: d.action,
-          side: this.deriveSideFromAction(d.action),
-          amount: d.amount,
-          size: d.amount,
-          executionPrice: 100, // dummy price
-          confidence: d.confidence,
-          reasoning: d.reasoning,
-          positionId: `sim-pos-${Date.now()}`,
-          timestamp: new Date().toISOString(),
-        }))
-
-      return {
-        totalDecisions: decisions.length,
-        successfulTrades: executedTrades.length,
-        failedTrades: 0,
-        holdDecisions: decisions.length - executedTrades.length,
-        totalVolumePerp: 0,
-        totalVolumePrediction: 0,
-        errors: [],
-        executedTrades,
-      }
-    }
 
     const result: TradingExecutionResult = {
       totalDecisions: decisions.length,
@@ -286,26 +252,6 @@ export class TradeExecutionService {
     }
 
     throw new Error(`Unknown action: ${decision.action}`)
-  }
-
-  /**
-   * Derive the trade side from the action type
-   */
-  private deriveSideFromAction(action: MarketAction): string {
-    switch (action) {
-      case 'open_long':
-        return 'LONG'
-      case 'open_short':
-        return 'SHORT'
-      case 'buy_yes':
-        return 'YES'
-      case 'buy_no':
-        return 'NO'
-      case 'close_position':
-        return 'CLOSE'
-      default:
-        return 'UNKNOWN'
-    }
   }
 
   private createPredictionBroadcast() {
@@ -514,7 +460,7 @@ export class TradeExecutionService {
 
     // Back-compat: store poolPositions/npcTrades for NPC analytics
     // Use onConflictDoUpdate to handle re-runs where position already exists
-    await db.transaction(async (tx: CQLClient) => {
+    await db.transaction(async (tx: EQLiteClient) => {
       await tx
         .insert(poolPositions)
         .values({
@@ -700,7 +646,7 @@ export class TradeExecutionService {
       })
 
       // Back-compat storage updates
-      await db.transaction(async (tx: CQLClient) => {
+      await db.transaction(async (tx: EQLiteClient) => {
         await tx
           .update(poolPositions)
           .set({
@@ -804,7 +750,7 @@ export class TradeExecutionService {
     const netReturn = Math.max(0, grossReturn - feeCalc.feeAmount)
 
     // Execute in transaction
-    await db.transaction(async (tx: CQLClient) => {
+    await db.transaction(async (tx: EQLiteClient) => {
       // Close position
       await tx
         .update(poolPositions)

@@ -4,11 +4,25 @@
  */
 
 import { describe, expect, it } from 'bun:test'
-import {
-  convertBalanceToStrings,
-  toSafeNumber,
-  toSafeString,
-} from '@babylon/shared'
+import { toSafeNumber, toSafeString } from '@jejunetwork/shared'
+
+// convertBalanceToStrings helper for testing
+function convertBalanceToStrings(
+  balances: Record<string, string | number | bigint | null | undefined>,
+): Record<string, string> {
+  const keys = [
+    'virtualBalance',
+    'totalDeposited',
+    'totalWithdrawn',
+    'lifetimePnL',
+  ] as const
+  const result: Record<string, string> = {}
+  for (const key of keys) {
+    const value = balances[key]
+    result[key] = value !== null && value !== undefined ? String(value) : '0'
+  }
+  return result
+}
 
 describe('Decimal Converter', () => {
   describe('toSafeString', () => {

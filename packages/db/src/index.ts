@@ -1,7 +1,7 @@
 /**
  * Babylon Database Layer
  *
- * CovenantSQL (CQL) database for decentralized data persistence.
+ * EQLite (EQLite) database for decentralized data persistence.
  *
  * API:
  * - Raw SQL: db.query(sql, params), db.exec(sql, params)
@@ -13,28 +13,26 @@
 import type { JsonValue, SQLValue } from './types'
 
 // ============================================================================
-// CQL Client (Decentralized Database)
+// EQLite Client (Decentralized Database)
 // ============================================================================
 
+export type { QueryTransaction } from './decentralized/eqlite-compat'
 export {
-  type CQLClient,
-  createCQLClient,
-  getCQLClient,
-  resetCQLClient,
-} from './cql-client'
-
+  createEQLiteClient,
+  type EQLiteClient,
+  getEQLiteClient,
+  resetEQLiteClient,
+} from './eqlite-client'
 export {
-  CQLTableRepository,
   type DB,
+  EQLiteTableRepository,
   getDB,
   initializeDB,
   resetDB,
-} from './cql-repository'
+} from './eqlite-repository'
 
-export type { QueryTransaction } from './decentralized/cql-compat'
-
-import { type CQLClient, db as cqlDatabase } from './cql-client'
-export { cqlDatabase as cqlDb }
+import { type EQLiteClient, db as eqliteDatabase } from './eqlite-client'
+export { eqliteDatabase as eqliteDb }
 
 // ============================================================================
 // Type Exports
@@ -84,7 +82,7 @@ export type {
   UserInsert,
   WorldEvent,
   WorldFact,
-} from './cql-schema-types'
+} from './eqlite-schema-types'
 
 // Export Decimal class from types
 export { Decimal } from './types'
@@ -122,13 +120,13 @@ export {
 // Types
 // ============================================================================
 
-export type DbClient = CQLClient
-export type Database = CQLClient
+export type DbClient = EQLiteClient
+export type Database = EQLiteClient
 
 // Transaction type matches what db.transaction() provides
-export type Transaction = CQLClient
+export type Transaction = EQLiteClient
 
-export const db: DbClient = cqlDatabase
+export const db: DbClient = eqliteDatabase
 
 // ============================================================================
 // SQL Query Helpers (Native Implementation)
@@ -186,19 +184,19 @@ export type UserIdOrUser = string | { userId: string }
 
 /**
  * Execute as a specific user (with RLS)
- * Note: CQL doesn't support Postgres RLS, so this just runs the operation
+ * Note: EQLite doesn't support Postgres RLS, so this just runs the operation
  */
 export async function asUser<T>(
   userIdOrUser: UserIdOrUser,
   operation: (database: DbClient) => Promise<T>,
 ): Promise<T> {
-  void userIdOrUser // RLS not supported in CQL
+  void userIdOrUser // RLS not supported in EQLite
   return operation(db)
 }
 
 /**
  * Execute as system (bypass RLS)
- * Note: CQL doesn't support Postgres RLS, so this just runs the operation
+ * Note: EQLite doesn't support Postgres RLS, so this just runs the operation
  */
 export async function asSystem<T>(
   operation: (database: DbClient) => Promise<T>,
@@ -258,7 +256,6 @@ export {
   balanceTransactions,
   benchmarkResults,
   buybackRecords,
-  CQL_NAME_SYMBOL,
   chatAdmins,
   chatInvites,
   chatParticipants,
@@ -266,6 +263,7 @@ export {
   comments,
   dailyEngagement,
   dmAcceptances,
+  EQLITE_NAME_SYMBOL,
   elizaHolderAllocations,
   elizaHolders,
   externalAgentConnections,
@@ -351,7 +349,7 @@ export {
   userInteractions,
   userMessagingKeys,
   userMutes,
-  // Table reference exports (for CQL query builder API)
+  // Table reference exports (for EQLite query builder API)
   users,
   vestingSchedules,
   widgetCaches,
@@ -389,7 +387,7 @@ export {
   isJsonMode,
   isSimulationMode,
   loadJsonSnapshot,
-  resetToCQLMode,
+  resetToEQLiteMode,
   type StorageMode,
   saveJsonSnapshot,
 } from './json-storage'
@@ -408,17 +406,20 @@ export {
 // Initialization
 // ============================================================================
 
-import { getDB, initializeDB, resetDB } from './cql-repository'
-import { createCQLTables, generateAllDDL } from './decentralized/cql-schema'
+import {
+  createEQLiteTables,
+  generateAllDDL,
+} from './decentralized/eqlite-schema'
+import { getDB, initializeDB, resetDB } from './eqlite-repository'
 
 export { generateAllDDL }
 
 let tablesCreated = false
 
 export async function initializeDatabase(): Promise<void> {
-  if (!process.env.CQL_BLOCK_PRODUCER_ENDPOINT) {
+  if (!process.env.EQLITE_BLOCK_PRODUCER_ENDPOINT) {
     throw new Error(
-      '[DB] CQL_BLOCK_PRODUCER_ENDPOINT is required. ' +
+      '[DB] EQLITE_BLOCK_PRODUCER_ENDPOINT is required. ' +
         'Start Jeju: cd /path/to/jeju && bun run dev',
     )
   }
@@ -426,14 +427,14 @@ export async function initializeDatabase(): Promise<void> {
 
   // Create tables if they don't exist (first-run schema setup)
   if (!tablesCreated) {
-    await createCQLTables(db)
+    await createEQLiteTables(db)
     tablesCreated = true
   }
 }
 
 export async function checkDatabaseHealth(): Promise<boolean> {
-  const cqlDb = getDB()
-  return cqlDb.isHealthy()
+  const eqliteDb = getDB()
+  return eqliteDb.isHealthy()
 }
 
 export async function closeDatabase(): Promise<void> {

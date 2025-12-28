@@ -308,7 +308,7 @@ export class TopicDiversityService {
       const topics = this.extractTopics(
         `${article.articleTitle || ''} ${article.content || ''}`,
       )
-      // Cast timestamp to Date (CQL returns Date but types as unknown)
+      // Cast timestamp to Date (EQLite returns Date but types as unknown)
       const articleTimestamp = article.timestamp as Date | null
       for (const topic of topics) {
         const existing = this.topicCache.get(topic.toLowerCase())

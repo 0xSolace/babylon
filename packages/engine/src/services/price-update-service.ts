@@ -1,6 +1,6 @@
 import { db, eq, getDbInstance, organizations } from '@babylon/db'
-import type { JsonValue } from '@babylon/shared'
 import { logger } from '@babylon/shared'
+import type { JsonValue } from '@jejunetwork/shared'
 import { FEE_CONFIG } from '../config/fees'
 import { engineEvents } from '../events'
 import { PerpDbAdapter, PerpMarketService } from './markets'

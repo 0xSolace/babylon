@@ -12,8 +12,8 @@
 import type { Message, Task } from '@a2a-js/sdk'
 import { A2AClient } from '@a2a-js/sdk/client'
 import { db } from '@babylon/db'
-import type { JsonValue } from '@babylon/shared'
 import type { AgentRuntime, Plugin } from '@elizaos/core'
+import type { JsonValue } from '@jejunetwork/shared'
 import { isJsonValue } from '@jejunetwork/shared'
 import { agentWalletService } from '../../identity/AgentWalletService'
 import { logger } from '../../shared/logger'
@@ -84,13 +84,9 @@ async function getCachedAgentIdentity(
     return identity
   }
 
-  // Fall back to Actor table (NPC agents) using raw SQL
-  // Actor table is a legacy table not in CQL schema
-  const actorResult = await db.$queryRaw<{ id: string; name: string }>`
-    SELECT id, name FROM "Actor" WHERE id = ${agentUserId} LIMIT 1
-  `
-
-  const actor = actorResult[0]
+  // Fall back to static registry for NPCs
+  const { StaticDataRegistry } = await import('@babylon/engine')
+  const actor = StaticDataRegistry.getActor(agentUserId)
   if (actor) {
     // NPCs don't have wallets or tokens - create minimal identity
     const identity: CachedAgentIdentity = {

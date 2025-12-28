@@ -64,12 +64,18 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000
 /**
  * Compute a game-relative day number (0-indexed) from a game start time.
  *
- * @param startedAt - The continuous game's start timestamp
- * @param timestamp - The content/event timestamp
+ * @param startedAt - The continuous game's start timestamp (Date or ISO string)
+ * @param timestamp - The content/event timestamp (Date or ISO string)
  * @returns 0-indexed day number since startedAt (can be negative if timestamp < startedAt)
  */
-export function getGameDayNumber(startedAt: Date, timestamp: Date): number {
-  return Math.floor((timestamp.getTime() - startedAt.getTime()) / MS_PER_DAY)
+export function getGameDayNumber(
+  startedAt: Date | string,
+  timestamp: Date | string,
+): number {
+  // Handle ISO string dates from EQLite
+  const start = typeof startedAt === 'string' ? new Date(startedAt) : startedAt
+  const ts = typeof timestamp === 'string' ? new Date(timestamp) : timestamp
+  return Math.floor((ts.getTime() - start.getTime()) / MS_PER_DAY)
 }
 
 /**

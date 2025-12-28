@@ -8,10 +8,10 @@
  */
 
 import { db, type JsonValue } from '@babylon/db'
+import { getAgent0Client } from '@jejunetwork/agents'
 import { toNull } from '@jejunetwork/shared'
 import { v4 as uuidv4 } from 'uuid'
 import { getAddress, keccak256 } from 'viem'
-import { getAgent0Client } from '../agent0/Agent0Client'
 import { getAgentConfig } from '../shared/agent-config'
 import { logger } from '../shared/logger'
 
@@ -245,7 +245,7 @@ export class AgentWalletService {
 
     return {
       tokenId: registration.tokenId,
-      txHash: registration.txHash,
+      txHash: registration.txHash ?? '',
       metadataCID: registration.metadataCID,
     }
   }

@@ -10,8 +10,6 @@
     "skipLibCheck": true,
     "baseUrl": ".",
     "paths": {
-      "@babylon/auth": ["../auth/src/index.ts"],
-      "@babylon/auth/*": ["../auth/src/*"],
       "@babylon/shared": ["../shared/src/index.ts"],
       "@babylon/shared/*": ["../shared/src/*"],
       "@babylon/db": ["../db/src/index.ts"],

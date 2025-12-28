@@ -963,8 +963,20 @@ ${prompt}`
 
     // Extract decisions array - handle XML structure: <decisions><decision>...</decision></decisions>
     let response: TradingDecision[]
+
+    // Helper to filter array to only valid decision objects
+    const filterValidDecisions = (arr: unknown[]): TradingDecision[] => {
+      return arr.filter(
+        (item): item is TradingDecision =>
+          item !== null &&
+          typeof item === 'object' &&
+          'npcId' in item &&
+          'action' in item,
+      )
+    }
+
     if (Array.isArray(rawResponse)) {
-      response = rawResponse
+      response = filterValidDecisions(rawResponse)
     } else if (rawResponse && typeof rawResponse === 'object') {
       // Cast to proper type for object access (TypeScript has trouble with union narrowing here)
       type ResponseObject =
@@ -975,8 +987,8 @@ ${prompt}`
       if ('decisions' in objResponse) {
         const decisionsObj = objResponse.decisions
         if (Array.isArray(decisionsObj)) {
-          // Direct array
-          response = decisionsObj
+          // Direct array - filter to only valid objects
+          response = filterValidDecisions(decisionsObj)
         } else if (
           decisionsObj &&
           typeof decisionsObj === 'object' &&
@@ -989,8 +1001,12 @@ ${prompt}`
           const nestedObj = decisionsObj as DecisionsWithNested
           const innerDecisions = nestedObj.decision
           response = Array.isArray(innerDecisions)
-            ? innerDecisions
-            : [innerDecisions]
+            ? filterValidDecisions(innerDecisions)
+            : typeof innerDecisions === 'object' &&
+                innerDecisions !== null &&
+                'npcId' in innerDecisions
+              ? [innerDecisions]
+              : []
         } else {
           logger.error(
             'Invalid decisions structure',
@@ -1010,7 +1026,7 @@ ${prompt}`
         // Handle both array and single decision object
         const decisionData = objResponse.decision
         if (Array.isArray(decisionData)) {
-          response = decisionData
+          response = filterValidDecisions(decisionData)
         } else if (
           decisionData &&
           typeof decisionData === 'object' &&

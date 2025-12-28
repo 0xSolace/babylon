@@ -38,11 +38,8 @@
       "@babylon/mcp": ["../mcp/src/index.ts"],
       "@babylon/training": ["../training/src/index.ts"],
       "@babylon/training/*": ["../training/src/*"],
-      "@babylon/messaging": ["../messaging/src/index.ts"],
-      "@babylon/messaging/*": ["../messaging/src/*"],
       "@babylon/core": ["../core/markets/index.ts"],
       "@babylon/core/*": ["../core/*"],
-      "@babylon/auth": ["../auth/src/index.ts"],
       "@babylon/testing": ["./src/index.ts"],
       "@babylon/testing/*": ["./*"]
     }

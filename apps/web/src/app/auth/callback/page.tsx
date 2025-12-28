@@ -1,4 +1,4 @@
-import { useJejuAuth } from '@babylon/auth'
+import { useJejuAuth } from '@jejunetwork/auth'
 import { useMutation } from '@tanstack/react-query'
 import { Suspense, useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from '@/lib/navigation'

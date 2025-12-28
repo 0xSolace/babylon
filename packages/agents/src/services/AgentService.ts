@@ -15,7 +15,7 @@
 
 import type { User, UserAgentConfig } from '@babylon/db'
 import { db, withTransaction } from '@babylon/db'
-import type { AgentCapabilities, JsonValue } from '@babylon/shared'
+import type { AgentCapabilities } from '@babylon/shared'
 import {
   AuthorizationError,
   getCurrentChainId,
@@ -23,6 +23,7 @@ import {
   REPUTATION_SYSTEM_BASE_SEPOLIA,
 } from '@babylon/shared'
 import type { AgentPerformance, CreateAgentParams } from '@jejunetwork/agents'
+import type { JsonValue } from '@jejunetwork/shared'
 import { generateSnowflakeId, toNull } from '@jejunetwork/shared'
 import { agentIdentityService } from '../identity/AgentIdentityService'
 import { agentRuntimeManager } from '../runtime/AgentRuntimeManager'

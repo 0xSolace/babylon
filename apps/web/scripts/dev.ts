@@ -57,7 +57,6 @@ const BROWSER_EXTERNALS = [
   '@babylon/api',
   '@babylon/db',
   '@babylon/engine',
-  '@babylon/messaging',
   '@babylon/training',
   '@babylon/testing',
   // Jeju packages with server-side code (server-only)
@@ -72,7 +71,7 @@ const BROWSER_EXTERNALS = [
   'swagger-jsdoc',
   '@swagger-api/apidom-reference',
   // Note: @jejunetwork/auth, @jejunetwork/kms, @jejunetwork/config, @jejunetwork/shared
-  // are BUNDLED (not external) - they have browser-safe code used by @babylon/auth
+  // are BUNDLED (not external) - they have browser-safe code
 ]
 
 function notifyClients(): void {
@@ -121,12 +120,23 @@ async function buildJS(): Promise<string> {
     sourcemap: 'inline',
     external: BROWSER_EXTERNALS,
     define: {
+      // Full process polyfill for browser
+      process: JSON.stringify({
+        env: {
+          NODE_ENV: 'development',
+          NETWORK: 'localnet',
+          PUBLIC_API_BASE_URL: API_URL,
+          PUBLIC_WAITLIST_MODE: process.env.PUBLIC_WAITLIST_MODE || 'false',
+        },
+      }),
       'process.env.NODE_ENV': JSON.stringify('development'),
       'process.env.NETWORK': JSON.stringify('localnet'),
       'process.env.PUBLIC_API_BASE_URL': JSON.stringify(API_URL),
       'process.env.PUBLIC_WAITLIST_MODE': JSON.stringify(
         process.env.PUBLIC_WAITLIST_MODE || 'false',
       ),
+      // Global shims for Node.js compatibility
+      global: 'globalThis',
     },
     naming: {
       entry: '[name]-[hash].js',
@@ -255,13 +265,40 @@ function generateHTML(): string {
   <div id="root"></div>
   <script type="module" src="/${currentMainFileName}"></script>
   <script>
-    // Live reload
-    const es = new EventSource('/__live-reload');
-    es.onmessage = () => location.reload();
-    es.onerror = () => {
-      es.close();
-      setTimeout(() => location.reload(), 1000);
-    };
+    // Live reload with reconnection handling
+    (function() {
+      let retries = 0;
+      const maxRetries = 3;
+      let wasConnected = false;
+      
+      function connect() {
+        const es = new EventSource('/__live-reload');
+        
+        es.onopen = () => {
+          retries = 0;
+          wasConnected = true;
+        };
+        
+        es.onmessage = () => location.reload();
+        
+        es.onerror = () => {
+          es.close();
+          // Only auto-reload if we were previously connected (actual file change)
+          // and haven't exceeded retries
+          if (wasConnected && retries < maxRetries) {
+            retries++;
+            console.log('[Live Reload] Reconnecting... (' + retries + '/' + maxRetries + ')');
+            setTimeout(connect, 2000);
+          } else if (!wasConnected) {
+            // Never connected - just retry silently
+            setTimeout(connect, 5000);
+          }
+          // If exceeded retries, stop trying (manual refresh needed)
+        };
+      }
+      
+      connect();
+    })();
   </script>
 </body>
 </html>`

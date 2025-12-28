@@ -45,22 +45,21 @@ bun install
 cp .env.example .env.local
 ```
 
-The default `.env.local` is pre-configured for local Jeju devnet:
+Service URLs are automatically loaded from `@jejunetwork/config` based on the network:
 
 ```env
-# Jeju Decentralized Services (pre-configured for devnet)
-CQL_BLOCK_PRODUCER_ENDPOINT="http://localhost:15151"
-JEJU_CACHE_SERVICE_URL="http://localhost:8080/cache"
-JEJU_STORAGE_SERVICE_URL="http://localhost:8080/storage"
-JEJU_COMPUTE_API_URL="http://localhost:8080/compute"
+# Network selection - determines all service URLs automatically
+JEJU_NETWORK="localnet"
 
-# Blockchain (Anvil/Hardhat)
-RPC_URL="http://localhost:6545"
-CHAIN_ID="31337"
-
-# OAuth3 Authentication
-OAUTH3_ISSUER_URL="http://localhost:8080/oauth3"
+# CQL is local-only
+CQL_BLOCK_PRODUCER_ENDPOINT="http://localhost:4661"
+CQL_DATABASE_ID="babylon"
 ```
+
+With `JEJU_NETWORK=localnet`, services automatically connect to:
+- **Cache**: http://localhost:4030
+- **Storage**: http://localhost:5001
+- **RPC**: http://localhost:6545
 
 ### 4. Setup Database
 

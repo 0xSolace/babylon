@@ -4,8 +4,8 @@
  * Type definitions for trajectory logging, used in RL training pipelines.
  */
 
-import type { JsonValue } from '@babylon/shared'
 import type { UUID } from '@elizaos/core'
+import type { JsonValue } from '@jejunetwork/shared'
 
 /**
  * Environment state snapshot at a point in time

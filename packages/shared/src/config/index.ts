@@ -13,6 +13,12 @@ import { base, getChainById, hardhat, isJejuChain } from '../constants/chains'
 import configData from './public-config.json'
 
 // =============================================================================
+// Re-export deployment configuration
+// =============================================================================
+
+export * from './deployment'
+
+// =============================================================================
 // Types
 // =============================================================================
 
@@ -255,7 +261,7 @@ export function getCurrentChainId(): number {
 /**
  * Get network configuration for current environment
  */
-export function getCurrentNetwork(): NetworkConfig {
+export function getCurrentNetworkConfig(): NetworkConfig {
   const env = getCurrentEnvironment()
   const networkId = ENVIRONMENT_TO_NETWORK_ID[env]
   return PUBLIC_CONFIG.networks[networkId]
@@ -275,7 +281,7 @@ export function getCurrentEndpoints(): EndpointsConfig {
 export function getCurrentContractAddresses():
   | CoreContractAddresses
   | LocalContractAddresses {
-  return getCurrentNetwork().contracts
+  return getCurrentNetworkConfig().contracts
 }
 
 /**
@@ -325,7 +331,7 @@ export const IDENTITY_REGISTRY_BASE_SEPOLIA =
 // =============================================================================
 
 export function getCurrentRpcUrl(): string {
-  return getCurrentNetwork().rpcUrl
+  return getCurrentNetworkConfig().rpcUrl
 }
 
 export function getAPIBaseUrl(): string {

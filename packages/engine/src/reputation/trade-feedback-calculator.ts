@@ -160,7 +160,7 @@ export function calculateRiskScore(
 export async function calculateTradeMetrics(
   positionId: string,
 ): Promise<TradeMetrics | null> {
-  // Fetch position with related data using CQL
+  // Fetch position with related data using EQLite
   type PositionWithQuestion = {
     id: string
     userId: string

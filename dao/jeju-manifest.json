@@ -114,8 +114,8 @@
         "fundingWeight": 2000
       },
       {
-        "name": "@babylon/contracts",
-        "description": "Smart contract suite",
+        "name": "@jejunetwork/contracts",
+        "description": "Jeju Network smart contracts (used by Babylon)",
         "registry": "foundry",
         "fundingWeight": 2500
       },

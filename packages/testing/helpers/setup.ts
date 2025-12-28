@@ -3,9 +3,24 @@
  *
  * Ensures consistent test environment setup across all test suites.
  * Handles database initialization, database readiness checks, and test isolation.
+ *
+ * This module is Babylon-specific as it uses @babylon/db (Prisma).
+ * For general test utilities, use @jejunetwork/tests.
  */
 
 import { db } from '@babylon/db'
+
+/**
+ * Generate a unique test ID with timestamp
+ *
+ * @param prefix - Optional prefix for the ID
+ * @returns Unique ID string
+ */
+export function generateTestId(prefix = 'test'): string {
+  const timestamp = Date.now()
+  const random = Math.random().toString(36).substring(2, 10)
+  return `${prefix}-${timestamp}-${random}`
+}
 
 /**
  * Check if database is available and properly configured
@@ -31,7 +46,7 @@ export async function ensureDatabaseReady(): Promise<boolean> {
  */
 export async function setupTestEnvironment(options?: {
   skipDatabase?: boolean
-}) {
+}): Promise<void> {
   // For unit tests, skip database setup
   if (options?.skipDatabase) {
     return
@@ -40,7 +55,7 @@ export async function setupTestEnvironment(options?: {
   // Ensure DATABASE_URL is available
   if (!process.env.DATABASE_URL) {
     console.warn(
-      '⚠️  DATABASE_URL not set - database-dependent tests will be skipped',
+      '[Babylon Setup] DATABASE_URL not set - database-dependent tests will be skipped',
     )
     return
   }
@@ -50,14 +65,14 @@ export async function setupTestEnvironment(options?: {
 
   // Ensure database client is connected
   await db.$connect()
-  console.log('✅ Test environment ready')
+  console.log('[Babylon Setup] Test environment ready')
 }
 
 /**
  * Cleanup test environment
  * Call this in afterAll() hooks
  */
-export async function cleanupTestEnvironment() {
+export async function cleanupTestEnvironment(): Promise<void> {
   await db.$disconnect()
 }
 
@@ -91,15 +106,6 @@ export async function cleanupStaleLocks(): Promise<number> {
 }
 
 /**
- * Generate a unique test ID to avoid conflicts between parallel tests
- */
-export function generateTestId(prefix = 'test'): string {
-  const timestamp = Date.now()
-  const random = Math.random().toString(36).substring(2, 10)
-  return `${prefix}-${timestamp}-${random}`
-}
-
-/**
  * Create an isolated test context with automatic cleanup
  * Use this for tests that create database records
  *
@@ -118,7 +124,7 @@ export async function createIsolatedTestContext(name: string): Promise<{
 }> {
   const testPrefix = generateTestId(name)
 
-  const cleanup = async () => {
+  const cleanup = async (): Promise<void> => {
     // Clean up any records created with this test prefix
     await db.generationLock.deleteMany({
       where: {

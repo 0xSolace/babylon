@@ -4,7 +4,8 @@
  * Engine-specific types that don't exist in shared are defined here.
  */
 
-export type { JsonValue, LogData } from '@babylon/shared'
+export type { LogData } from '@babylon/shared'
+export type { JsonValue } from '@jejunetwork/shared'
 
 // Actor state from DB queries
 export interface DbActorState {

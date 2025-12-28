@@ -38,27 +38,10 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
 
-    // Jeju network package path mappings
-    "baseUrl": "../..",
-    "paths": {
-      "@jejunetwork/shared": ["packages/shared/src/index.ts"],
-      "@jejunetwork/shared/*": ["packages/shared/src/*"],
-      "@jejunetwork/types": ["packages/types/src/index.ts"],
-      "@jejunetwork/types/*": ["packages/types/src/*"],
-      "@jejunetwork/agents": ["packages/agents/src/index.ts"],
-      "@jejunetwork/agents/*": ["packages/agents/src/*"],
-      "@jejunetwork/training": ["packages/training/src/index.ts"],
-      "@jejunetwork/training/*": ["packages/training/src/*"],
-      "@jejunetwork/config": ["packages/config/src/index.ts"],
-      "@jejunetwork/config/*": ["packages/config/src/*"],
-      "@jejunetwork/contracts": ["packages/contracts/src/index.ts"],
-      "@jejunetwork/contracts/*": ["packages/contracts/src/*"],
-      "@jejunetwork/db": ["packages/db/src/index.ts"],
-      "@jejunetwork/db/*": ["packages/db/src/*"],
-      "@jejunetwork/auth": ["packages/auth/src/index.ts"],
-      "@jejunetwork/auth/*": ["packages/auth/src/*"],
-      "@jejunetwork/messaging": ["packages/messaging/src/index.ts"],
-      "@jejunetwork/messaging/*": ["packages/messaging/src/*"]
-    }
+    // JSX support for React components in dependencies
+    "jsx": "react-jsx",
+
+    // NOTE: @jejunetwork/* packages are resolved via symlinked node_modules
+    // Do NOT use path mappings here as they cause rootDir conflicts with TypeScript
   }
 }

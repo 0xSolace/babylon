@@ -6,35 +6,39 @@
  */
 
 import type { AgentProfile, AgentReputation } from '@babylon/a2a'
-import type { AgentRegistration } from '@jejunetwork/agents'
+import {
+  type Agent0FeedbackSearchParams,
+  type Agent0SearchOptions,
+  type Agent0SearchResponse,
+  type Agent0SearchResult,
+  type AgentRegistration,
+  type DiscoveryFilters,
+  getAgent0Client,
+} from '@jejunetwork/agents'
 import { AgentRegistryService } from '../services/agent-registry.service'
 import { parseCapabilities } from '../shared/capabilities'
-import { getAgent0Client } from './Agent0Client'
 import { ReputationBridge } from './ReputationBridge'
 import { type SubgraphAgent, SubgraphClient } from './SubgraphClient'
-import type {
-  Agent0FeedbackSearchParams,
-  Agent0SearchOptions,
-  Agent0SearchResponse,
-  Agent0SearchResult,
-  DiscoveryFilters,
-  IAgentDiscoveryService,
-  IReputationBridge,
-} from './types'
 
-export class AgentDiscoveryService implements IAgentDiscoveryService {
+/**
+ * Babylon Agent Discovery Service
+ *
+ * Extends Jeju agent discovery with Babylon-specific transformations.
+ * Uses the Babylon AgentProfile type from @babylon/a2a.
+ */
+export class AgentDiscoveryService {
   private localRegistry: AgentRegistryService
   private subgraphClient: SubgraphClient
-  private reputationBridge: IReputationBridge | null
+  private reputationBridge: ReputationBridge | null
 
   constructor(
     localRegistry: AgentRegistryService,
     subgraphClient: SubgraphClient,
-    reputationBridge?: IReputationBridge | null,
+    reputationBridge?: ReputationBridge | null,
   ) {
     this.localRegistry = localRegistry
     this.subgraphClient = subgraphClient
-    this.reputationBridge = reputationBridge || null
+    this.reputationBridge = reputationBridge ?? null
   }
 
   /**
@@ -194,7 +198,7 @@ export class AgentDiscoveryService implements IAgentDiscoveryService {
    */
   private async transformAgent0SearchResult(
     result: Agent0SearchResult,
-    reputationBridge?: IReputationBridge | null,
+    reputationBridge?: ReputationBridge | null,
   ): Promise<AgentProfile> {
     let reputation: AgentReputation
     if (reputationBridge) {
@@ -239,7 +243,7 @@ export class AgentDiscoveryService implements IAgentDiscoveryService {
    */
   private async transformAgent0Profile(
     agent0Data: SubgraphAgent,
-    reputationBridge?: IReputationBridge | null,
+    reputationBridge?: ReputationBridge | null,
   ): Promise<AgentProfile> {
     const capabilitiesStr = agent0Data.capabilities ?? '{}'
     const parsed = JSON.parse(capabilitiesStr)
@@ -397,7 +401,7 @@ export function getAgentDiscoveryService(): AgentDiscoveryService {
 
     let reputationBridge: ReputationBridge | null = null
     if (process.env.AGENT0_ENABLED === 'true') {
-      reputationBridge = new ReputationBridge(undefined)
+      reputationBridge = new ReputationBridge()
     }
 
     agentDiscoveryInstance = new AgentDiscoveryService(

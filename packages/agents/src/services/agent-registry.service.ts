@@ -32,12 +32,7 @@ import {
   users,
 } from '@babylon/db'
 import { type StaticActor, StaticDataRegistry } from '@babylon/engine'
-import {
-  type AgentCapabilities,
-  hasStringProperty,
-  isObject,
-  logger,
-} from '@babylon/shared'
+import { type AgentCapabilities, logger } from '@babylon/shared'
 import {
   type AgentDiscoveryFilter,
   type AgentRegistration,
@@ -46,7 +41,7 @@ import {
   type ExternalAgentConnectionParams,
   TrustLevel,
 } from '@jejunetwork/agents'
-import { toNull } from '@jejunetwork/shared'
+import { hasStringProperty, isObject, toNull } from '@jejunetwork/shared'
 
 /**
  * Gets encryption key from environment or dev fallback
@@ -448,13 +443,13 @@ export class AgentRegistryService {
     }
 
     if (minTrustLevel !== undefined) {
-      whereParts.push(`ar.trust_level >= $${paramIndex++}`)
+      whereParts.push(`ar.trustLevel >= $${paramIndex++}`)
       whereClauseParams.push(minTrustLevel)
     }
 
     if (search) {
       whereParts.push(
-        `(ar.name ILIKE $${paramIndex} OR ar.system_prompt ILIKE $${paramIndex})`,
+        `(ar.name LIKE $${paramIndex} OR ar.systemPrompt LIKE $${paramIndex})`,
       )
       whereClauseParams.push(`%${search}%`)
       paramIndex++
@@ -463,29 +458,29 @@ export class AgentRegistryService {
     const whereClause =
       whereParts.length > 0 ? `WHERE ${whereParts.join(' AND ')}` : ''
 
-    // Type for raw SQL join result (snake_case column names from DB)
+    // Type for raw SQL join result (camelCase column names from EQLite)
     interface RawJoinedRow {
-      // AgentRegistry fields (snake_case)
+      // AgentRegistry fields (actual EQLite schema)
       id: string
-      agent_id: string
-      user_id: string | null
-      actor_id: string | null
+      agentId: string
+      userId: string | null
+      actorId: string | null
       type: string
       name: string
-      system_prompt: string | null
-      model_id: string | null
+      systemPrompt: string
       status: string
-      trust_level: number
-      registered_at: Date
-      last_active_at: Date | null
-      metadata: JsonValue | null
-      capabilities: string[] | null
-      api_key_hash: string | null
-      api_key_iv: string | null
-      erc8004_contract_address: string | null
-      agent0_address: string | null
-      a2a_endpoint: string | null
-      a2a_agent_card: JsonValue | null
+      trustLevel: number
+      registeredAt: Date
+      lastActiveAt: Date | null
+      // Discovery fields
+      discoveryEndpointA2a: string | null
+      discoveryEndpointMcp: string | null
+      // On-chain fields
+      onChainReputationScore: number | null
+      // Agent0 fields
+      agent0TokenId: string | null
+      agent0MetadataCID: string | null
+      agent0DiscoveryEndpoint: string | null
       // AgentCapability fields (prefixed)
       cap_id: string | null
       cap_strategies: string[] | null
@@ -493,35 +488,38 @@ export class AgentRegistryService {
       cap_actions: string[] | null
       cap_skills: string[] | null
       cap_domains: string[] | null
+      cap_a2aEndpoint: string | null
       // User fields (prefixed)
       user_username: string | null
-      user_display_name: string | null
+      user_displayName: string | null
       user_email: string | null
       // ExternalAgentConnection fields (prefixed)
       ext_id: string | null
-      ext_endpoint_url: string | null
+      ext_endpoint: string | null
       ext_protocol: string | null
-      ext_status: string | null
+      ext_isHealthy: number | null
     }
 
     const sql = `
       SELECT
-        ar.id, ar.agent_id, ar.user_id, ar.actor_id, ar.type, ar.name,
-        ar.system_prompt, ar.model_id, ar.status, ar.trust_level,
-        ar.registered_at, ar.last_active_at, ar.metadata, ar.capabilities,
-        ar.api_key_hash, ar.api_key_iv, ar.erc8004_contract_address,
-        ar.agent0_address, ar.a2a_endpoint, ar.a2a_agent_card,
+        ar.id, ar.agentId, ar.userId, ar.actorId, ar.type, ar.name,
+        ar.systemPrompt, ar.status, ar.trustLevel,
+        ar.registeredAt, ar.lastActiveAt,
+        ar.discoveryEndpointA2a, ar.discoveryEndpointMcp,
+        ar.onChainReputationScore,
+        ar.agent0TokenId, ar.agent0MetadataCID, ar.agent0DiscoveryEndpoint,
         ac.id as cap_id, ac.strategies as cap_strategies, ac.markets as cap_markets,
         ac.actions as cap_actions, ac.skills as cap_skills, ac.domains as cap_domains,
-        u.username as user_username, u.display_name as user_display_name, u.email as user_email,
-        eac.id as ext_id, eac.endpoint_url as ext_endpoint_url,
-        eac.protocol as ext_protocol, eac.status as ext_status
-      FROM agent_registries ar
-      LEFT JOIN agent_capabilities ac ON ac.agent_registry_id = ar.id
-      LEFT JOIN users u ON u.id = ar.user_id
-      LEFT JOIN external_agent_connections eac ON eac.agent_registry_id = ar.id
+        ac.a2aEndpoint as cap_a2aEndpoint,
+        u.username as user_username, u.displayName as user_displayName, u.email as user_email,
+        eac.id as ext_id, eac.endpoint as ext_endpoint,
+        eac.protocol as ext_protocol, eac.isHealthy as ext_isHealthy
+      FROM AgentRegistry ar
+      LEFT JOIN AgentCapability ac ON ac.agentRegistryId = ar.id
+      LEFT JOIN User u ON u.id = ar.userId
+      LEFT JOIN ExternalAgentConnection eac ON eac.agentRegistryId = ar.id
       ${whereClause}
-      ORDER BY ar.trust_level DESC, ar.registered_at DESC
+      ORDER BY ar.trustLevel DESC, ar.registeredAt DESC
       LIMIT $${paramIndex++} OFFSET $${paramIndex}
     `
 
@@ -535,25 +533,21 @@ export class AgentRegistryService {
     const typedRows = rawRows.map((row) => ({
       AgentRegistry: {
         id: row.id,
-        agentId: row.agent_id,
-        userId: row.user_id,
-        actorId: row.actor_id,
+        agentId: row.agentId,
+        userId: row.userId,
+        actorId: row.actorId,
         type: row.type,
         name: row.name,
-        systemPrompt: row.system_prompt,
-        model: row.model_id,
+        systemPrompt: row.systemPrompt,
         status: row.status,
-        trustLevel: row.trust_level,
-        registeredAt: row.registered_at,
-        lastActiveAt: row.last_active_at,
-        metadata: row.metadata,
-        capabilities: row.capabilities,
-        apiKeyHash: row.api_key_hash,
-        apiKeyIv: row.api_key_iv,
-        erc8004ContractAddress: row.erc8004_contract_address,
-        agent0Address: row.agent0_address,
-        a2aEndpoint: row.a2a_endpoint,
-        a2aAgentCard: row.a2a_agent_card,
+        trustLevel: row.trustLevel,
+        registeredAt: row.registeredAt,
+        lastActiveAt: row.lastActiveAt,
+        // Map discovery fields to legacy format
+        a2aEndpoint: row.discoveryEndpointA2a ?? row.cap_a2aEndpoint,
+        // Map agent0 fields
+        agent0Address: row.agent0DiscoveryEndpoint,
+        onChainReputationScore: row.onChainReputationScore,
         // Raw SQL to schema mapping requires unknown intermediate due to missing fields
       } as unknown as AgentRegistry,
       AgentCapability: row.cap_id
@@ -565,14 +559,15 @@ export class AgentRegistryService {
             actions: row.cap_actions,
             skills: row.cap_skills,
             domains: row.cap_domains,
+            a2aEndpoint: row.cap_a2aEndpoint,
           } as AgentCapability)
         : null,
       User:
         row.user_username !== null
           ? ({
-              id: row.user_id,
+              id: row.userId,
               username: row.user_username,
-              displayName: row.user_display_name,
+              displayName: row.user_displayName,
               email: row.user_email,
             } as User)
           : null,
@@ -580,9 +575,9 @@ export class AgentRegistryService {
         ? ({
             id: row.ext_id,
             agentRegistryId: row.id,
-            endpointUrl: row.ext_endpoint_url,
+            endpoint: row.ext_endpoint,
             protocol: row.ext_protocol,
-            status: row.ext_status,
+            isHealthy: row.ext_isHealthy === 1,
           } as unknown as ExternalAgentConnection)
         : null,
     }))
@@ -596,10 +591,9 @@ export class AgentRegistryService {
         const staticActor = actorId
           ? StaticDataRegistry.getActor(actorId)
           : null
-        // Spread the full AgentRegistry (omitting capabilities) and add relations
-        const { capabilities: _omitCaps, ...rest } = agentReg
+        // Spread the full AgentRegistry and add relations
         return {
-          ...rest,
+          ...agentReg,
           capabilities: toNull(row.AgentCapability),
           User: toNull(row.User),
           Actor: staticActor,
@@ -894,9 +888,9 @@ export class AgentRegistryService {
   private async getRegistryWithRelations(
     agentId: string,
   ): Promise<RegistryWithRelations | null> {
-    // Type for raw SQL join result (snake_case column names from DB)
+    // Type for raw SQL join result - using actual DB column names
     interface RawJoinedRow {
-      // AgentRegistry fields (snake_case)
+      // AgentRegistry fields (camelCase from DB)
       id: string
       agent_id: string
       user_id: string | null
@@ -935,23 +929,25 @@ export class AgentRegistryService {
       ext_status: string | null
     }
 
+    // Query using actual DB column names (camelCase tables, camelCase columns)
+    // Columns that don't exist in current schema are set to NULL
     const sql = `
       SELECT
-        ar.id, ar.agent_id, ar.user_id, ar.actor_id, ar.type, ar.name,
-        ar.system_prompt, ar.model_id, ar.status, ar.trust_level,
-        ar.registered_at, ar.last_active_at, ar.metadata, ar.capabilities,
-        ar.api_key_hash, ar.api_key_iv, ar.erc8004_contract_address,
-        ar.agent0_address, ar.a2a_endpoint, ar.a2a_agent_card,
+        ar.id, ar.agentId as agent_id, ar.userId as user_id, ar.actorId as actor_id, ar.type, ar.name,
+        ar.systemPrompt as system_prompt, NULL as model_id, ar.status, ar.trustLevel as trust_level,
+        ar.registeredAt as registered_at, ar.lastActiveAt as last_active_at, NULL as metadata, NULL as capabilities,
+        NULL as api_key_hash, NULL as api_key_iv, NULL as erc8004_contract_address,
+        ar.agent0SubgraphOwner as agent0_address, ar.discoveryEndpointA2a as a2a_endpoint, NULL as a2a_agent_card,
         ac.id as cap_id, ac.strategies as cap_strategies, ac.markets as cap_markets,
         ac.actions as cap_actions, ac.skills as cap_skills, ac.domains as cap_domains,
-        u.username as user_username, u.display_name as user_display_name, u.email as user_email,
-        eac.id as ext_id, eac.endpoint_url as ext_endpoint_url,
-        eac.protocol as ext_protocol, eac.status as ext_status
-      FROM agent_registries ar
-      LEFT JOIN agent_capabilities ac ON ac.agent_registry_id = ar.id
-      LEFT JOIN users u ON u.id = ar.user_id
-      LEFT JOIN external_agent_connections eac ON eac.agent_registry_id = ar.id
-      WHERE ar.agent_id = $1
+        u.username as user_username, u.displayName as user_display_name, u.email as user_email,
+        eac.id as ext_id, eac.endpoint as ext_endpoint_url,
+        eac.protocol as ext_protocol, eac.isHealthy as ext_status
+      FROM AgentRegistry ar
+      LEFT JOIN AgentCapability ac ON ac.agentRegistryId = ar.id
+      LEFT JOIN User u ON u.id = ar.userId
+      LEFT JOIN ExternalAgentConnection eac ON eac.agentRegistryId = ar.id
+      WHERE ar.agentId = $1
       LIMIT 1
     `
 
@@ -1023,7 +1019,7 @@ export class AgentRegistryService {
   /**
    * Map database model to AgentRegistration type
    *
-   * @description Maps CQL AgentRegistry model with relations to AgentRegistration
+   * @description Maps EQLite AgentRegistry model with relations to AgentRegistration
    * type. Handles capabilities, discovery metadata, on-chain data, and Agent0 data mapping.
    *
    * @param {RegistryWithRelations} registry - Registry with relations
@@ -1076,7 +1072,7 @@ export class AgentRegistryService {
       // trustLevel is stored as string in DB, convert to TrustLevel enum
       // Default to BASIC if not set
       trustLevel: (() => {
-        const level = registry.trustLevel ?? 'basic'
+        const level = String(registry.trustLevel ?? 'basic')
         // Map string to enum value
         const levelMap: Record<string, TrustLevel> = {
           '0': TrustLevel.UNTRUSTED,

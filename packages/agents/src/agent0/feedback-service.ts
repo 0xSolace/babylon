@@ -7,18 +7,18 @@
  */
 
 import { db, gameConfigs, type JsonValue } from '@babylon/db'
-import { toIpfsProvider, toNetworkName } from '@babylon/shared'
+import { toAgent0NetworkName, toIpfsProvider } from '@babylon/shared'
+import {
+  type Agent0Feedback,
+  type Agent0FeedbackParams,
+  type Agent0FeedbackSearchParams,
+  type Agent0ReputationSummary,
+  getAgent0Client,
+  type IAgent0FeedbackService,
+} from '@jejunetwork/agents'
 import { generateSnowflakeId, toNull } from '@jejunetwork/shared'
 import { SDK } from 'agent0-sdk'
 import { logger } from '../shared/logger'
-import { getAgent0Client } from './Agent0Client'
-import type {
-  Agent0Feedback,
-  Agent0FeedbackParams,
-  Agent0FeedbackSearchParams,
-  Agent0ReputationSummary,
-  IAgent0FeedbackService,
-} from './types'
 
 /**
  * Converts an Agent0 ID string (e.g., "84532:1234") to a token ID number
@@ -86,7 +86,7 @@ export class Agent0FeedbackService implements IAgent0FeedbackService {
 
   constructor() {
     // Determine network and chain ID (must match Agent0Client configuration)
-    const network = toNetworkName(process.env.AGENT0_NETWORK, 'sepolia')
+    const network = toAgent0NetworkName(process.env.AGENT0_NETWORK, 'sepolia')
 
     if (network === 'localnet') {
       this.chainId = 31337 // Hardhat default chain ID

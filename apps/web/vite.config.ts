@@ -31,8 +31,18 @@ export default defineConfig({
       ),
       '@babylon/agents': resolve(__dirname, '../../packages/agents/src'),
       '@babylon/api': resolve(__dirname, '../../packages/api/src'),
-      '@babylon/auth': resolve(__dirname, '../../packages/auth/src'),
-      '@babylon/messaging': resolve(__dirname, '../../packages/messaging/src'),
+      // Jeju network packages
+      '@jejunetwork/auth': resolve(__dirname, '../../../../packages/auth/src'),
+      '@jejunetwork/config': resolve(__dirname, '../../../../packages/config'),
+      '@jejunetwork/kms': resolve(__dirname, '../../../../packages/kms/src'),
+      '@jejunetwork/shared': resolve(
+        __dirname,
+        '../../../../packages/shared/src',
+      ),
+      '@jejunetwork/types': resolve(
+        __dirname,
+        '../../../../packages/types/src',
+      ),
       '@babylon/client': resolve(__dirname, '../../packages/client/src'),
       // Engine client - only the browser-safe exports
       '@babylon/engine/client': resolve(

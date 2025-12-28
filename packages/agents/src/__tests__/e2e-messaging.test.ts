@@ -4,22 +4,22 @@
  * Tests the full flow of:
  * 1. NPC identity initialization (wallet + encryption keys)
  * 2. Sending encrypted messages
- * 3. Storing in CovenantSQL
+ * 3. Storing in EQLite
  * 4. Retrieving and verifying messages
  */
 
 import { afterAll, beforeAll, describe, expect, it, mock } from 'bun:test'
 import type { Address } from 'viem'
 
-// Track all CQL operations for verification
-const cqlOperations: {
+// Track all EQLite operations for verification
+const eqliteOperations: {
   type: 'query' | 'execute'
   sql: string
   params: unknown[]
   response: unknown
 }[] = []
 
-// Mock messages storage (simulates CovenantSQL)
+// Mock messages storage (simulates EQLite)
 const mockMessages: Map<
   string,
   {
@@ -49,7 +49,7 @@ const mockConversations: Map<
   }
 > = new Map()
 
-// Mock fetch for CQL and KMS
+// Mock fetch for EQLite and KMS
 const originalFetch = globalThis.fetch
 beforeAll(() => {
   globalThis.fetch = mock(
@@ -57,7 +57,7 @@ beforeAll(() => {
       const urlStr = typeof url === 'string' ? url : url.toString()
       const body = options?.body ? JSON.parse(options.body as string) : {}
 
-      // Mock CQL queries
+      // Mock EQLite queries
       if (urlStr.includes('/v1/query')) {
         const sql = body.sql?.toLowerCase() ?? ''
         const params = body.params ?? []
@@ -133,7 +133,7 @@ beforeAll(() => {
           response = { rows: [], rowCount: 1 }
         }
 
-        cqlOperations.push({
+        eqliteOperations.push({
           type: sql.includes('select') ? 'query' : 'execute',
           sql: body.sql,
           params,
@@ -182,7 +182,7 @@ afterAll(() => {
   globalThis.fetch = originalFetch
   mockMessages.clear()
   mockConversations.clear()
-  cqlOperations.length = 0
+  eqliteOperations.length = 0
 })
 
 // Mock the database
@@ -226,7 +226,7 @@ describe('End-to-End Messaging Flow', () => {
   beforeAll(() => {
     // Clear state
     mockMessages.clear()
-    cqlOperations.length = 0
+    eqliteOperations.length = 0
 
     // Pre-populate a test message from user to NPC
     mockMessages.set('msg-1', {
@@ -246,7 +246,7 @@ describe('End-to-End Messaging Flow', () => {
     })
   })
 
-  it('should send encrypted message and store in CovenantSQL', async () => {
+  it('should send encrypted message and store in EQLite', async () => {
     // For this test, we verify the storage operations work
     const testMessageId = `test-msg-${Date.now()}`
 
@@ -292,14 +292,14 @@ describe('End-to-End Messaging Flow', () => {
     ).toString()
     expect(decryptedContent).toBe('Hello! I am doing great, thanks for asking!')
 
-    console.log('✅ Message stored in CovenantSQL')
+    console.log('✅ Message stored in EQLite')
     console.log(`   Message ID: ${testMessageId}`)
     console.log(`   Conversation: ${conversationId}`)
     console.log(`   From: ${npcAddress}`)
     console.log(`   To: ${userAddress}`)
   })
 
-  it('should query and retrieve messages from CovenantSQL', async () => {
+  it('should query and retrieve messages from EQLite', async () => {
     // Add a test message to query
     mockMessages.set('query-test-msg', {
       id: 'query-test-msg',
@@ -334,7 +334,7 @@ describe('End-to-End Messaging Flow', () => {
     }
     expect(data.rows.length).toBeGreaterThan(0)
 
-    console.log('✅ Messages retrieved from CovenantSQL')
+    console.log('✅ Messages retrieved from EQLite')
     console.log(`   Found ${data.rows.length} pending message(s)`)
   })
 
@@ -362,32 +362,32 @@ describe('End-to-End Messaging Flow', () => {
     console.log(`   Message ID: ${messageId}`)
   })
 
-  it('should track all CQL operations', () => {
+  it('should track all EQLite operations', () => {
     // Verify we have tracked operations
-    expect(cqlOperations.length).toBeGreaterThan(0)
+    expect(eqliteOperations.length).toBeGreaterThan(0)
 
-    console.log('\n📊 CQL Operations Summary:')
-    console.log(`   Total operations: ${cqlOperations.length}`)
+    console.log('\n📊 EQLite Operations Summary:')
+    console.log(`   Total operations: ${eqliteOperations.length}`)
     console.log(
-      `   Queries: ${cqlOperations.filter((o) => o.type === 'query').length}`,
+      `   Queries: ${eqliteOperations.filter((o) => o.type === 'query').length}`,
     )
     console.log(
-      `   Executes: ${cqlOperations.filter((o) => o.type === 'execute').length}`,
+      `   Executes: ${eqliteOperations.filter((o) => o.type === 'execute').length}`,
     )
 
     // Log each operation
     console.log('\n📝 Operation Details:')
-    cqlOperations.forEach((op, i) => {
+    eqliteOperations.forEach((op, i) => {
       const sqlPreview = op.sql.slice(0, 60).replace(/\s+/g, ' ')
       console.log(`   ${i + 1}. [${op.type.toUpperCase()}] ${sqlPreview}...`)
     })
   })
 
-  it('should store messages on-chain (visible in CovenantSQL)', () => {
+  it('should store messages on-chain (visible in EQLite)', () => {
     // This test verifies that messages are persisted and can be retrieved
     console.log('\n🔗 On-Chain Message Verification:')
     console.log(
-      '   Messages are stored in CovenantSQL, which replicates across nodes.',
+      '   Messages are stored in EQLite, which replicates across nodes.',
     )
     console.log(
       '   Each message is cryptographically signed and can be verified.',
@@ -411,7 +411,7 @@ describe('End-to-End Messaging Flow', () => {
       expect(msg.timestamp).toBeGreaterThan(0)
     }
 
-    console.log('\n✅ All messages verified and visible on-chain (CovenantSQL)')
+    console.log('\n✅ All messages verified and visible on-chain (EQLite)')
   })
 })
 
@@ -507,7 +507,7 @@ describe('Full NPC Messaging Flow', () => {
       }),
     })
     console.log(`   Message ID: ${userMsgId}`)
-    console.log('   ✓ Stored in CovenantSQL\n')
+    console.log('   ✓ Stored in EQLite\n')
 
     console.log('Step 3: NPC Processes & Responds')
     const npcResponse =
@@ -525,11 +525,11 @@ describe('Full NPC Messaging Flow', () => {
       }),
     })
     console.log(`   Message ID: ${npcMsgId}`)
-    console.log('   ✓ Response stored in CovenantSQL\n')
+    console.log('   ✓ Response stored in EQLite\n')
 
     console.log('Step 4: Verify On-Chain Storage')
     console.log(`   Total messages: ${mockMessages.size + 2}`)
-    console.log('   CovenantSQL ensures:')
+    console.log('   EQLite ensures:')
     console.log('   - Messages replicated across 3+ nodes')
     console.log('   - Byzantine fault tolerant consensus')
     console.log('   - Immutable audit trail')

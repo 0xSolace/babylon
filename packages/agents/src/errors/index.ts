@@ -6,12 +6,12 @@
  * @packageDocumentation
  */
 
-import type { JsonValue } from '@babylon/shared'
 import {
   AuthorizationError,
   ExternalServiceError,
   RateLimitError,
 } from '@babylon/shared'
+import type { JsonValue } from '@jejunetwork/shared'
 
 // Export AuthorizationError for use in agents
 export { AuthorizationError }

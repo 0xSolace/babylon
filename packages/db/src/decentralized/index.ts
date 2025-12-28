@@ -8,11 +8,10 @@
 export {
   buildOrderByClause,
   buildWhereClause,
-  CovenantSQLClient,
-  CQLClient,
-  getCQL,
+  EQLiteClient,
+  getEQLite,
   type OrderByInput,
-  resetCQL,
+  resetEQLite,
   toQueryParam,
   type WhereClauseResult,
   type WhereInput,
@@ -25,15 +24,7 @@ export {
   QueryTransaction,
   SelectBuilder,
   UpdateBuilder,
-} from '../cql-client'
-// Schema definitions
-export {
-  BABYLON_SCHEMAS,
-  CQL_SCHEMA,
-  createCQLTables,
-  generateAllDDL,
-  getSchemaByName,
-} from './cql-schema'
+} from '../eqlite-client'
 // Decentralized Database (primary data layer)
 export {
   DB,
@@ -48,31 +39,38 @@ export {
   type UpdateOptions,
   type WhereCondition,
 } from './db'
-
 // Typed table references (from drizzle-compat)
 export {
   type InferTableRow,
   TABLE_ROW_TYPE,
   type TypedTableRef,
 } from './drizzle-compat'
+// Schema definitions
+export {
+  BABYLON_SCHEMAS,
+  createEQLiteTables,
+  EQLITE_SCHEMA,
+  generateAllDDL,
+  getSchemaByName,
+} from './eqlite-schema'
 
 // Types
 export type {
   ACLPermission,
   ACLRule,
   BlockProducerInfo,
-  CQLColumn,
-  CQLConfig,
-  CQLConnection,
-  CQLConnectionPool,
-  CQLHealthStatus,
-  CQLIndex,
-  CQLTableSchema,
-  CQLTransaction,
   CreateRentalRequest,
   DatabaseConfig,
   DatabaseInfo,
   DatabaseStatus,
+  EQLiteColumn,
+  EQLiteConfig,
+  EQLiteConnection,
+  EQLiteConnectionPool,
+  EQLiteHealthStatus,
+  EQLiteIndex,
+  EQLiteTableSchema,
+  EQLiteTransaction,
   ExecResult,
   GrantRequest,
   Migration,

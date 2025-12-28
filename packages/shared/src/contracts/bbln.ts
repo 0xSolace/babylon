@@ -340,9 +340,12 @@ export function getBBLNAddresses(
 }
 
 /**
- * Check if BBLN is deployed on a network
+ * Check if BBLN address is configured for a network (static address lookup)
+ * For deployment-based checks, use isBBLNDeployed from config/deployment
  */
-export function isBBLNDeployed(network: keyof typeof BBLN_ADDRESSES): boolean {
+export function isBBLNAddressConfigured(
+  network: keyof typeof BBLN_ADDRESSES,
+): boolean {
   const addresses = BBLN_ADDRESSES[network]
   return addresses.token !== '0x0000000000000000000000000000000000'
 }

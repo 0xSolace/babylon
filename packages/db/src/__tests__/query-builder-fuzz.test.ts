@@ -1,7 +1,7 @@
 /**
- * CQL Query Builder Fuzz Tests
+ * EQLite Query Builder Fuzz Tests
  *
- * Comprehensive fuzzing and edge case testing for Babylon CQL query builders.
+ * Comprehensive fuzzing and edge case testing for Babylon EQLite query builders.
  * Tests SQL helpers and builder classes with extreme inputs.
  */
 

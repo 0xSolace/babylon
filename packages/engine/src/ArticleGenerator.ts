@@ -57,7 +57,8 @@
  * ```
  */
 
-import { ArticleSchema, type JsonValue, logger } from '@babylon/shared'
+import { ArticleSchema, logger } from '@babylon/shared'
+import type { JsonValue } from '@jejunetwork/shared'
 import { generateSnowflakeId } from '@jejunetwork/shared'
 import type { BabylonLLMClient } from './llm/openai-client'
 import { biasedArticle, renderPrompt, validateArticle } from './prompts'

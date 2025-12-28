@@ -22,8 +22,8 @@
  */
 
 import type { User } from '@babylon/db'
-import type { JsonValue } from '@babylon/shared'
 import type { IAgentRuntime } from '@elizaos/core'
+import type { JsonValue } from '@jejunetwork/shared'
 
 /**
  * Parameters for creating an agent

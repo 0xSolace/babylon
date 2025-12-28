@@ -1,11 +1,11 @@
 /**
  * Database Helper Functions
  *
- * Connection management and retry utilities for CQL (CovenantSQL).
+ * Connection management and retry utilities for EQLite.
  */
 
 import { retryWithCondition } from '@jejunetwork/shared'
-import { initializeDB, resetDB } from './cql-repository'
+import { initializeDB, resetDB } from './eqlite-repository'
 import type { DatabaseErrorType, SQLValue } from './types'
 
 /**
@@ -63,14 +63,14 @@ export async function withRetry<T>(
 }
 
 /**
- * Connect to database (initialize CQL connection).
+ * Connect to database (initialize EQLite connection).
  */
 export async function $connect(): Promise<void> {
   await initializeDB()
 }
 
 /**
- * Disconnect from database (reset CQL connection).
+ * Disconnect from database (reset EQLite connection).
  */
 export async function $disconnect(): Promise<void> {
   resetDB()

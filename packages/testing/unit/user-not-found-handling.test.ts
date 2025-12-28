@@ -24,7 +24,7 @@ function createTestRequest(
 // Mock result storage - will be set by tests
 let mockDbResult: MockUserRecord | null = null
 
-// Create a chainable mock that mimics CQL query builder
+// Create a chainable mock that mimics EQLite query builder
 const createChainableMock = () => {
   const chain = {
     from: (_table?: unknown) => chain,
@@ -194,18 +194,18 @@ mock.module('@babylon/api', () => {
   }
 })
 
-// Mock CQL database client (auth-middleware uses CQL query builder)
+// Mock EQLite database client (auth-middleware uses EQLite query builder)
 // Include all exports that may be needed by dependencies
 mock.module('@babylon/db', () => ({
   db: {
     select: mockSelect,
-    // CQL raw query methods
+    // EQLite raw query methods
     query: mock(async () => []),
     queryOne: mock(async () => null),
     exec: mock(async () => ({ rowsAffected: 0 })),
     $queryRaw: mock(async () => []),
     $executeRaw: mock(async () => 0),
-    // CQL table repositories
+    // EQLite table repositories
     user: {
       findUnique: mockFindUnique,
       findMany: mock(async () => []),
@@ -214,7 +214,7 @@ mock.module('@babylon/db', () => ({
       delete: mock(async () => ({})),
     },
   },
-  // CQL initialization functions
+  // EQLite initialization functions
   initializeDB: mock(async () => {}),
   resetDB: mock(() => {}),
   getDB: mock(() => ({})),

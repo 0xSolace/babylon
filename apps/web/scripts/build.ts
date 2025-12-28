@@ -60,7 +60,6 @@ const BROWSER_EXTERNALS = [
   '@babylon/api',
   '@babylon/db',
   '@babylon/engine',
-  '@babylon/messaging',
   '@babylon/training',
   '@babylon/testing',
   // Jeju packages with server-side code (server-only)
@@ -75,7 +74,7 @@ const BROWSER_EXTERNALS = [
   'swagger-jsdoc',
   '@swagger-api/apidom-reference',
   // Note: @jejunetwork/auth, @jejunetwork/kms, @jejunetwork/config, @jejunetwork/shared
-  // are BUNDLED (not external) - they have browser-safe code used by @babylon/auth
+  // are BUNDLED (not external) - they have browser-safe code
 ]
 
 async function buildCSS(): Promise<void> {
@@ -109,12 +108,23 @@ async function buildJS(): Promise<string> {
     sourcemap: 'external',
     external: BROWSER_EXTERNALS,
     define: {
+      // Full process polyfill for browser
+      process: JSON.stringify({
+        env: {
+          NODE_ENV: 'production',
+          NETWORK: NETWORK,
+          PUBLIC_API_BASE_URL: envConfig.apiUrl,
+          PUBLIC_WAITLIST_MODE: process.env.PUBLIC_WAITLIST_MODE || 'false',
+        },
+      }),
       'process.env.NODE_ENV': JSON.stringify('production'),
       'process.env.NETWORK': JSON.stringify(NETWORK),
       'process.env.PUBLIC_API_BASE_URL': JSON.stringify(envConfig.apiUrl),
       'process.env.PUBLIC_WAITLIST_MODE': JSON.stringify(
         process.env.PUBLIC_WAITLIST_MODE || 'false',
       ),
+      // Global shims for Node.js compatibility
+      global: 'globalThis',
     },
     naming: {
       entry: '[name]-[hash].js',

@@ -1,0 +1,191 @@
+{
+  "$schema": "./deployment-config.schema.json",
+  "version": "1.0.0",
+  "description": "Babylon deployment configuration - stores all deployed contract addresses and public config by network",
+  
+  "localnet": {
+    "chainId": 31337,
+    "name": "Localnet (Jeju Dev)",
+    "rpcUrl": "http://localhost:6546",
+    "initialized": false,
+    "deployedAt": null,
+    
+    "contracts": {
+      "bbln": {
+        "token": null,
+        "presale": null,
+        "xlpRewardPool": null
+      },
+      "dao": {
+        "governor": null,
+        "timelock": null,
+        "treasury": null
+      },
+      "game": {
+        "diamond": null,
+        "identityRegistry": null,
+        "reputationSystem": null,
+        "predictionMarketFacet": null,
+        "oracleFacet": null,
+        "gameOracle": null
+      },
+      "liquidity": {
+        "xlpV2Factory": null,
+        "xlpRouter": null,
+        "lpLocker": null,
+        "feeDistributor": null,
+        "ethBblnPair": null,
+        "jejuBblnPair": null
+      }
+    },
+    
+    "liquidity": {
+      "ethBblnInitialEth": "10000000000000000000",
+      "ethBblnInitialBbln": "1000000000000000000000000",
+      "jejuBblnInitialJeju": "100000000000000000000000",
+      "jejuBblnInitialBbln": "100000000000000000000000",
+      "lpLockDurationDays": 180,
+      "lpLockPercentage": 100
+    },
+    
+    "npcFunding": {
+      "enabled": true,
+      "sTierAllocation": "100000000000000000000000",
+      "aTierAllocation": "50000000000000000000000",
+      "bTierAllocation": "25000000000000000000000",
+      "cTierAllocation": "10000000000000000000000"
+    },
+    
+    "tokenomics": {
+      "initialUserAirdrop": "1000000000000000000000",
+      "signupBonus": "100000000000000000000",
+      "profileCompletionBonus": "20000000000000000000",
+      "referralBonus": "10000000000000000000",
+      "socialLinkBonus": "30000000000000000000"
+    }
+  },
+  
+  "testnet": {
+    "chainId": 84532,
+    "name": "Base Sepolia (Testnet)",
+    "rpcUrl": "https://sepolia.base.org",
+    "initialized": false,
+    "deployedAt": null,
+    
+    "contracts": {
+      "bbln": {
+        "token": null,
+        "presale": null,
+        "xlpRewardPool": null
+      },
+      "dao": {
+        "governor": null,
+        "timelock": null,
+        "treasury": null
+      },
+      "game": {
+        "diamond": null,
+        "identityRegistry": null,
+        "reputationSystem": null,
+        "predictionMarketFacet": null,
+        "oracleFacet": null,
+        "gameOracle": null
+      },
+      "liquidity": {
+        "xlpV2Factory": null,
+        "xlpRouter": null,
+        "lpLocker": null,
+        "feeDistributor": null,
+        "ethBblnPair": null,
+        "jejuBblnPair": null
+      }
+    },
+    
+    "liquidity": {
+      "ethBblnInitialEth": "1000000000000000000",
+      "ethBblnInitialBbln": "100000000000000000000000",
+      "jejuBblnInitialJeju": "10000000000000000000000",
+      "jejuBblnInitialBbln": "10000000000000000000000",
+      "lpLockDurationDays": 180,
+      "lpLockPercentage": 100
+    },
+    
+    "npcFunding": {
+      "enabled": true,
+      "sTierAllocation": "100000000000000000000000",
+      "aTierAllocation": "50000000000000000000000",
+      "bTierAllocation": "25000000000000000000000",
+      "cTierAllocation": "10000000000000000000000"
+    },
+    
+    "tokenomics": {
+      "initialUserAirdrop": "1000000000000000000000",
+      "signupBonus": "100000000000000000000",
+      "profileCompletionBonus": "20000000000000000000",
+      "referralBonus": "10000000000000000000",
+      "socialLinkBonus": "30000000000000000000"
+    }
+  },
+  
+  "mainnet": {
+    "chainId": 8453,
+    "name": "Base Mainnet",
+    "rpcUrl": "https://mainnet.base.org",
+    "initialized": false,
+    "deployedAt": null,
+    
+    "contracts": {
+      "bbln": {
+        "token": null,
+        "presale": null,
+        "xlpRewardPool": null
+      },
+      "dao": {
+        "governor": null,
+        "timelock": null,
+        "treasury": null
+      },
+      "game": {
+        "diamond": null,
+        "identityRegistry": null,
+        "reputationSystem": null,
+        "predictionMarketFacet": null,
+        "oracleFacet": null,
+        "gameOracle": null
+      },
+      "liquidity": {
+        "xlpV2Factory": null,
+        "xlpRouter": null,
+        "lpLocker": null,
+        "feeDistributor": null,
+        "ethBblnPair": null,
+        "jejuBblnPair": null
+      }
+    },
+    
+    "liquidity": {
+      "ethBblnInitialEth": "100000000000000000000",
+      "ethBblnInitialBbln": "10000000000000000000000000",
+      "jejuBblnInitialJeju": "1000000000000000000000000",
+      "jejuBblnInitialBbln": "1000000000000000000000000",
+      "lpLockDurationDays": 365,
+      "lpLockPercentage": 100
+    },
+    
+    "npcFunding": {
+      "enabled": true,
+      "sTierAllocation": "100000000000000000000000",
+      "aTierAllocation": "50000000000000000000000",
+      "bTierAllocation": "25000000000000000000000",
+      "cTierAllocation": "10000000000000000000000"
+    },
+    
+    "tokenomics": {
+      "initialUserAirdrop": "1000000000000000000000",
+      "signupBonus": "100000000000000000000",
+      "profileCompletionBonus": "20000000000000000000",
+      "referralBonus": "10000000000000000000",
+      "socialLinkBonus": "30000000000000000000"
+    }
+  }
+}

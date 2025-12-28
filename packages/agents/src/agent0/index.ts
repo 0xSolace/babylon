@@ -4,71 +4,82 @@
  * Provides integration with Agent0's on-chain reputation system, agent discovery,
  * feedback submission, and ERC-8004 compliance.
  *
+ * Babylon extends the core Jeju Agent0 integration with game-specific functionality.
+ *
  * @packageDocumentation
  */
 
-export {
-  getAgent0Client,
-  resetAgent0Client,
-  setContractAddressesProvider,
-} from './Agent0Client'
-// Agent Discovery
-export {
-  AgentDiscoveryService,
-  getAgentDiscoveryService,
-  resetAgentDiscoveryService,
-} from './AgentDiscovery'
-export {
-  type BabylonRegistrationResult,
-  registerBabylonGame,
-} from './babylon-registry-init'
-export {
-  Agent0FeedbackService,
-  getAgent0FeedbackService,
-  type ReputationSummary,
-  resetAgent0FeedbackService,
-} from './feedback-service'
-// Game Discovery
-export {
-  type DiscoverableGame,
-  GameDiscoveryService,
-  getGameDiscoveryService,
-} from './GameDiscovery'
-// Reputation Bridge
-export { ReputationBridge } from './ReputationBridge'
-// Reputation utilities
-export * from './reputation'
-// Resilience utilities
-export * from './resilience'
-// Subgraph Client
-export { type SubgraphAgent, SubgraphClient } from './SubgraphClient'
-
-// Comprehensive type exports
 export type {
-  // Agent types
   Agent0AgentProfile,
   Agent0AgentUpdateParams,
+  Agent0ClientConfig,
+  Agent0ContractAddresses,
   Agent0Endpoint,
-  // Feedback types
   Agent0Feedback,
   Agent0FeedbackParams,
   Agent0FeedbackSearchParams,
+  Agent0Network,
   Agent0RegistrationParams,
   Agent0RegistrationResult,
   Agent0ReputationSummary,
-  // Search types
   Agent0SearchFilters,
   Agent0SearchOptions,
   Agent0SearchResponse,
   Agent0SearchResult,
   Agent0SearchResultMeta,
   Agent0TransferResult,
-  // Reputation types
   AggregatedReputation,
-  // Interface types
   DiscoveryFilters,
   IAgent0Client,
   IAgent0FeedbackService,
   IAgentDiscoveryService,
   IReputationBridge,
-} from './types'
+  ReputationData,
+} from '@jejunetwork/agents'
+// Re-export core Agent0 types and utilities from Jeju
+export {
+  Agent0Client,
+  createAgent0Client,
+  getAgent0Client,
+  ReputationBridge,
+  reputationBridge,
+  resetAgent0Client,
+  setContractAddressesProvider,
+} from '@jejunetwork/agents'
+
+// Babylon-specific Agent Discovery (extends Jeju with game-specific transforms)
+export {
+  AgentDiscoveryService,
+  getAgentDiscoveryService,
+  resetAgentDiscoveryService,
+} from './AgentDiscovery'
+
+// Babylon-specific registrations
+export {
+  type BabylonRegistrationResult,
+  registerBabylonGame,
+} from './babylon-registry-init'
+
+// Babylon-specific Feedback Service (uses game DB)
+export {
+  Agent0FeedbackService,
+  getAgent0FeedbackService,
+  type ReputationSummary,
+  resetAgent0FeedbackService,
+} from './feedback-service'
+
+// Game Discovery (Babylon-specific)
+export {
+  type DiscoverableGame,
+  GameDiscoveryService,
+  getGameDiscoveryService,
+} from './GameDiscovery'
+
+// Reputation utilities (Babylon-specific sync)
+export * from './reputation'
+
+// Resilience utilities
+export * from './resilience'
+
+// Subgraph Client
+export { type SubgraphAgent, SubgraphClient } from './SubgraphClient'

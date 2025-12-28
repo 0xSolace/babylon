@@ -18,8 +18,8 @@
 
 import { createDecipheriv } from 'node:crypto'
 import { db } from '@babylon/db'
-import type { JsonValue } from '@babylon/shared'
 import { type AgentCard, TrustLevel } from '@jejunetwork/agents'
+import type { JsonValue } from '@jejunetwork/shared'
 import { logger } from '../shared/logger'
 
 /**

@@ -10,7 +10,7 @@
  * - Database-based locking (works across multiple servers)
  * - Automatic stale lock recovery (15 minutes expiry)
  * - Simple acquire/release pattern
- * - No external dependencies (uses CQL)
+ * - No external dependencies (uses EQLite)
  * - Serverless-safe (uses timestamp + random bytes instead of process.pid)
  *
  * @example

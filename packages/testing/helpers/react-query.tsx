@@ -1,46 +1,19 @@
 /**
  * React Query Test Utilities
  *
- * Provides test-specific QueryClient configuration and wrapper components
- * for testing components that use React Query.
+ * Re-exports the canonical React Query test utilities from @jejunetwork/tests.
+ * Use these for testing React components that use TanStack Query.
+ *
+ * @module @babylon/testing/helpers/react-query
  */
 
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import type { ReactElement, ReactNode } from 'react'
-
-/**
- * Creates a QueryClient configured for testing
- */
-export function createTestQueryClient(): QueryClient {
-  return new QueryClient({
-    defaultOptions: {
-      queries: {
-        retry: false,
-        gcTime: 0,
-        staleTime: 0,
-      },
-      mutations: {
-        retry: false,
-      },
-    },
-  })
-}
-
-/**
- * Wrapper component for testing components that use React Query
- */
-export function TestQueryProvider({
-  children,
-  client,
-}: {
-  children: ReactNode
-  client?: QueryClient
-}): ReactElement {
-  const queryClient = client ?? createTestQueryClient()
-  return (
-    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
-  )
-}
-
-// Export for use in tests
-export { QueryClient, QueryClientProvider }
+// Re-export all React Query test utilities from Jeju
+export {
+  createQueryWrapper,
+  createTestQueryClient,
+  invalidateAndWait,
+  QueryClient,
+  QueryClientProvider,
+  TestQueryProvider,
+  waitForQueriesToSettle,
+} from '@jejunetwork/tests'

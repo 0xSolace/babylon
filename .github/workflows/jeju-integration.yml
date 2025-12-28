@@ -15,7 +15,7 @@ on:
 env:
   NODE_ENV: test
   JEJU_NETWORK: localnet
-  CQL_DATABASE_ID: babylon_test
+  EQLITE_DATABASE_ID: babylon_test
 
 jobs:
   jeju-integration:
@@ -100,7 +100,7 @@ jobs:
         env:
           JEJU_GATEWAY_URL: http://localhost:4030
           JEJU_RPC_URL: http://localhost:9545
-          CQL_BLOCK_PRODUCER_ENDPOINT: http://localhost:4661
+          EQLITE_BLOCK_PRODUCER_ENDPOINT: http://localhost:4661
           JEJU_CACHE_SERVICE_URL: http://localhost:4030/v1/cache
           JEJU_STORAGE_SERVICE_URL: http://localhost:4030/v1/storage
           JEJU_KMS_SERVICE_URL: http://localhost:4030/v1/kms
@@ -111,7 +111,7 @@ jobs:
         working-directory: babylon
         env:
           JEJU_GATEWAY_URL: http://localhost:4030
-          CQL_BLOCK_PRODUCER_ENDPOINT: http://localhost:4661
+          EQLITE_BLOCK_PRODUCER_ENDPOINT: http://localhost:4661
         run: |
           bun test packages/testing/integration/decentralized-stack.integration.test.ts
 

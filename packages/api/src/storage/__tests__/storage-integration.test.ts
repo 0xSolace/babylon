@@ -685,10 +685,7 @@ describe('Storage Integration Tests', () => {
       process.env.JEJU_NETWORK = 'testnet'
 
       try {
-        // Dynamic import with cache deletion: Resets module state to test availability check
-        // after environment variables are changed
-        delete require.cache[require.resolve('../jeju-storage')]
-        const { isJejuStorageAvailable } = await import('../jeju-storage')
+        // Uses static import from @jejunetwork/shared - availability depends on env vars
         expect(isJejuStorageAvailable()).toBe(true)
       } finally {
         if (original) {
@@ -706,10 +703,7 @@ describe('Storage Integration Tests', () => {
       process.env.JEJU_STORAGE_ENDPOINT = 'https://storage.example.com'
 
       try {
-        // Dynamic import with cache deletion: Resets module state to test availability check
-        // after environment variables are changed
-        delete require.cache[require.resolve('../jeju-storage')]
-        const { isJejuStorageAvailable } = await import('../jeju-storage')
+        // Uses static import from @jejunetwork/shared - availability depends on env vars
         expect(isJejuStorageAvailable()).toBe(true)
       } finally {
         if (originalNetwork) process.env.JEJU_NETWORK = originalNetwork
@@ -728,10 +722,7 @@ describe('Storage Integration Tests', () => {
       delete process.env.JEJU_STORAGE_ENDPOINT
 
       try {
-        // Dynamic import with cache deletion: Resets module state to test availability check
-        // after environment variables are changed
-        delete require.cache[require.resolve('../jeju-storage')]
-        const { isJejuStorageAvailable } = await import('../jeju-storage')
+        // Uses static import from @jejunetwork/shared - availability depends on env vars
         expect(isJejuStorageAvailable()).toBe(false)
       } finally {
         if (originalNetwork) process.env.JEJU_NETWORK = originalNetwork
@@ -747,10 +738,7 @@ describe('Storage Integration Tests', () => {
       delete process.env.JEJU_STORAGE_ENDPOINT
 
       try {
-        // Dynamic import with cache deletion: Resets module state to test client availability
-        // after environment variables are changed
-        delete require.cache[require.resolve('../jeju-storage')]
-        const { getJejuStorageClient } = await import('../jeju-storage')
+        // Uses static import from @jejunetwork/shared - client availability depends on env vars
         const client = getJejuStorageClient()
         expect(client).toBeNull()
       } finally {

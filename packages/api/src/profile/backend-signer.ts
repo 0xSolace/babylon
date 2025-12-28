@@ -11,7 +11,7 @@
 import {
   CAPABILITIES_HASH,
   getIdentityRegistryAddress,
-  identityRegistryAbi,
+  IDENTITY_REGISTRY_ABI,
   logger,
 } from '@babylon/shared'
 import {
@@ -120,7 +120,7 @@ export async function updateProfileBackendSigned({
   // Sign and submit transaction
   const txHash = await walletClient.writeContract({
     address: registryAddress,
-    abi: identityRegistryAbi,
+    abi: IDENTITY_REGISTRY_ABI,
     functionName: 'updateAgent' as const,
     args: [endpoint, CAPABILITIES_HASH, metadataJson],
     account,

@@ -73,32 +73,35 @@ export function useRegisterAgentTx() {
         transport: http(),
       })
 
-      const isRegistered = await publicClient.readContract({
+      // Check if address already has an agent NFT (ERC-721 balanceOf > 0)
+      const balance = await publicClient.readContract({
         address: registryAddress,
         abi: identityRegistryAbi,
-        functionName: 'isRegistered',
+        functionName: 'balanceOf',
         args: [smartWalletAddress as Address],
       })
 
-      if (isRegistered) {
+      if (balance > 0n) {
         throw new Error(
           'Already registered - wallet is already registered on-chain',
         )
       }
 
-      const agentEndpoint = `https://babylon.market/agent/${smartWalletAddress.toLowerCase()}`
-      const metadataUri = JSON.stringify({
+      // Build token URI with agent metadata
+      const tokenUri = JSON.stringify({
         name: profile.displayName ?? profile.username,
         username: profile.username,
         bio: profile.bio ?? '',
         type: 'user',
+        endpoint: `https://babylon.market/agent/${smartWalletAddress.toLowerCase()}`,
+        capabilities: CAPABILITIES_HASH,
         registered: new Date().toISOString(),
       })
 
       const data = encodeFunctionData({
         abi: identityRegistryAbi,
-        functionName: 'registerAgent',
-        args: [profile.username, agentEndpoint, CAPABILITIES_HASH, metadataUri],
+        functionName: 'register',
+        args: [tokenUri],
       })
 
       return await sendSmartWalletTransaction({

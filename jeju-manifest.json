@@ -9,8 +9,10 @@
     "dev": "bun run dev",
     "build": "bun run build",
     "build:static": "bun run build:static",
+    "build:worker": "bun build apps/api/dws-worker.ts --outdir dist/worker --target bun --minify",
     "test": "bun run test",
     "start": "bun run start",
+    "start:worker": "bun run start",
     "deploy": "bun run deploy:frontend",
     "deploy:testnet": "bun run deploy:testnet:all",
     "deploy:mainnet": "bun run deploy:mainnet:all",
@@ -21,12 +23,27 @@
   },
   "ports": {
     "main": 5007,
-    "api": 5008,
-    "a2a": 5009,
+    "api": 5009,
+    "a2a": 5008,
     "training": 5010
   },
+  "architecture": {
+    "type": "hybrid",
+    "runtime": "workerd",
+    "frontend": {
+      "type": "spa",
+      "builder": "bun",
+      "entrypoint": "apps/web/index.html",
+      "outputDir": "apps/web/dist"
+    },
+    "backend": {
+      "type": "elysia",
+      "entrypoint": "apps/api/dws-worker.ts",
+      "outputDir": "dist/worker"
+    }
+  },
   "dependencies": [
-    "cql",
+    "eqlite",
     "cache-service",
     "storage",
     "kms",
@@ -138,45 +155,183 @@
       "rotationDays": 30
     }
   },
-  "decentralization": {
-    "database": {
-      "type": "covenantql",
-      "databaseId": "babylon",
-      "consistency": "strong",
-      "replication": 3
+  "dws": {
+    "worker": {
+      "name": "babylon-api",
+      "entrypoint": "apps/api/dws-worker.ts",
+      "compatibilityDate": "2025-06-01",
+      "tee": {
+        "required": false,
+        "preferred": true,
+        "platforms": ["dstack", "phala"]
+      },
+      "bindings": {
+        "kv": {
+          "BABYLON_CACHE": "babylon-cache-kv",
+          "BABYLON_SESSION": "babylon-session-kv"
+        },
+        "secrets": ["DATABASE_URL", "PRIVATE_KEY", "OPENAI_API_KEY"]
+      },
+      "routes": [
+        { "pattern": "/api/*", "zone": "babylon-api" },
+        { "pattern": "/health", "zone": "babylon-api" },
+        { "pattern": "/a2a/*", "zone": "babylon-api" },
+        { "pattern": "/mcp/*", "zone": "babylon-api" },
+        { "pattern": "/ws/*", "zone": "babylon-api" }
+      ]
     },
-    "cache": {
-      "enabled": true,
-      "namespace": "babylon",
-      "planId": "standard",
-      "ttl": 3600
+    "database": {
+      "type": "eqlite",
+      "name": "babylon-db",
+      "consistency": "strong",
+      "tables": ["users", "agents", "markets", "predictions", "trajectories", "game_state"]
     },
     "cdn": {
       "enabled": true,
       "regions": ["global"],
+      "staticDir": "apps/web/dist",
       "cacheRules": [
         { "pattern": "/assets/**", "ttl": 31536000, "immutable": true },
-        { "pattern": "/api/**", "ttl": 0 },
+        { "pattern": "/*.js", "ttl": 86400 },
+        { "pattern": "/*.css", "ttl": 86400 },
         { "pattern": "/**/*.html", "ttl": 60, "staleWhileRevalidate": 3600 }
-      ],
-      "serviceWorker": true
+      ]
     },
-    "secrets": {
-      "required": [],
-      "mpcEncrypted": ["INFERENCE_API_KEY", "TRAINING_CONFIG"],
-      "optional": ["SENTRY_DSN", "POSTHOG_KEY"]
+    "cron": [
+      { "name": "game-tick", "schedule": "*/5 * * * *", "endpoint": "/api/cron/game-tick" },
+      { "name": "market-resolution", "schedule": "0 * * * *", "endpoint": "/api/cron/resolve-markets" },
+      { "name": "agent-tick", "schedule": "*/2 * * * *", "endpoint": "/api/cron/agent-tick" },
+      { "name": "training-check", "schedule": "0 */6 * * *", "endpoint": "/api/cron/training-check" },
+      { "name": "health-check", "schedule": "*/5 * * * *", "endpoint": "/api/cron/health-check" }
+    ]
+  },
+  "hardware": {
+    "profiles": {
+      "localnet": {
+        "worker": { "memory": 256, "cpu": 500, "instances": 1 },
+        "database": { "storage": 1024, "iops": 100 },
+        "description": "Minimal resources for local development"
+      },
+      "testnet": {
+        "worker": { "memory": 512, "cpu": 1000, "instances": 2 },
+        "database": { "storage": 10240, "iops": 1000, "replicas": 2 },
+        "tee": { "required": false, "preferred": true },
+        "description": "Standard testnet deployment with redundancy"
+      },
+      "mainnet": {
+        "worker": { "memory": 1024, "cpu": 2000, "instances": 3, "minInstances": 2 },
+        "database": { "storage": 102400, "iops": 5000, "replicas": 3 },
+        "tee": { "required": true, "platform": "dstack" },
+        "gpu": { "type": "none", "count": 0 },
+        "description": "Production deployment with high availability"
+      },
+      "mainnet-premium": {
+        "worker": { "memory": 2048, "cpu": 4000, "instances": 5, "minInstances": 3 },
+        "database": { "storage": 512000, "iops": 10000, "replicas": 5 },
+        "tee": { "required": true, "platform": "intel_tdx" },
+        "gpu": { "type": "h100", "count": 1 },
+        "description": "High-performance deployment with TEE and GPU for AI inference"
+      }
+    },
+    "scaling": {
+      "autoScale": true,
+      "minInstances": 1,
+      "maxInstances": 10,
+      "targetCPU": 70,
+      "targetMemory": 80,
+      "scaleDownDelay": 300
+    }
+  },
+  "backup": {
+    "enabled": true,
+    "targets": ["ipfs", "arweave"],
+    "encryption": true,
+    "schedule": {
+      "database": "0 */6 * * *",
+      "state": "0 * * * *",
+      "full": "0 0 * * 0"
+    },
+    "retention": {
+      "hourly": 24,
+      "daily": 30,
+      "weekly": 52
+    },
+    "recovery": {
+      "rto": "1h",
+      "rpo": "1h",
+      "autoRecover": true,
+      "testSchedule": "0 0 1 * *"
+    },
+    "components": [
+      {
+        "name": "database",
+        "type": "eqlite",
+        "priority": 1,
+        "backupMethod": "snapshot",
+        "targets": ["ipfs", "arweave"]
+      },
+      {
+        "name": "game-state",
+        "type": "kv",
+        "priority": 2,
+        "backupMethod": "export",
+        "targets": ["ipfs"]
+      },
+      {
+        "name": "trajectories",
+        "type": "ipfs",
+        "priority": 3,
+        "backupMethod": "pin",
+        "targets": ["arweave"]
+      },
+      {
+        "name": "frontend",
+        "type": "static",
+        "priority": 4,
+        "backupMethod": "cid",
+        "targets": ["ipfs", "arweave"]
+      }
+    ]
+  },
+  "decentralization": {
+    "worker": {
+      "name": "babylon-api",
+      "entrypoint": "apps/api/dws-worker.ts",
+      "runtime": "workerd",
+      "memory": 512,
+      "timeout": 60000,
+      "compatibilityDate": "2025-06-01",
+      "bindings": {
+        "BABYLON_CACHE": { "type": "kv", "name": "babylon-cache-kv" },
+        "BABYLON_SESSION": { "type": "kv", "name": "babylon-session-kv" }
+      },
+      "secrets": ["DATABASE_URL", "PRIVATE_KEY", "OPENAI_API_KEY", "INFERENCE_API_KEY"],
+      "routes": [
+        { "pattern": "/api/*" },
+        { "pattern": "/health" },
+        { "pattern": "/a2a/*" },
+        { "pattern": "/mcp/*" },
+        { "pattern": "/ws/*" }
+      ],
+      "tee": {
+        "required": false,
+        "preferred": true,
+        "platforms": ["dstack", "phala"]
+      }
     },
     "frontend": {
+      "buildDir": "apps/web/dist",
+      "buildCommand": "cd apps/web && bun run scripts/build.ts",
+      "spa": true,
+      "jnsName": "babylon.jeju",
       "ipfs": true,
       "arweave": true,
-      "jnsName": "babylon.jeju",
-      "buildDir": "apps/web/dist",
-      "spa": true,
-      "fallbackOrigins": ["https://babylon.game"],
-      "pinning": {
-        "provider": "jeju-storage",
-        "replicas": 3
-      }
+      "cacheRules": [
+        { "pattern": "/assets/**", "ttl": 31536000, "immutable": true },
+        { "pattern": "/*.js", "ttl": 86400 },
+        { "pattern": "/*.css", "ttl": 86400 },
+        { "pattern": "/**/*.html", "ttl": 60, "staleWhileRevalidate": 3600 }
+      ]
     },
     "robustness": {
       "multiOrigin": true,
@@ -269,12 +424,9 @@
     "recoveryTarget": "1h"
   },
   "defaultEnv": {
-    "CQL_BLOCK_PRODUCER_ENDPOINT": "http://localhost:4661",
-    "CQL_DATABASE_ID": "babylon",
-    "JEJU_CACHE_SERVICE_URL": "http://localhost:4015",
-    "JEJU_STORAGE_SERVICE_URL": "http://localhost:5001",
-    "JEJU_KMS_SERVICE_URL": "http://localhost:4200",
-    "JEJU_OAUTH3_SERVICE_URL": "http://localhost:4100",
+    "JEJU_NETWORK": "localnet",
+    "EQLITE_BLOCK_PRODUCER_ENDPOINT": "http://localhost:4661",
+    "EQLITE_DATABASE_ID": "babylon",
     "BABYLON_OAUTH3_APP_ID": "babylon",
     "CACHE_NAMESPACE": "babylon",
     "STORAGE_NAMESPACE": "babylon",
@@ -339,6 +491,6 @@
       "description": "Test recovery within 1 hour",
       "scenarios": ["backend-crash", "low-funds", "tee-failure"]
     },
-    "services": ["contracts", "cql", "cache-service", "storage", "kms"]
+    "services": ["contracts", "eqlite", "cache-service", "storage", "kms"]
   }
 }

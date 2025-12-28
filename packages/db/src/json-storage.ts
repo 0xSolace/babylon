@@ -36,10 +36,10 @@ import type { JsonValue } from './types'
 // Types
 // ============================================================================
 
-export type StorageMode = 'cql' | 'postgres' | 'json' | 'memory'
+export type StorageMode = 'eqlite' | 'postgres' | 'json' | 'memory'
 
-// Current storage mode - defaults to cql (decentralized)
-let currentStorageMode: StorageMode = 'cql'
+// Current storage mode - defaults to eqlite (decentralized)
+let currentStorageMode: StorageMode = 'eqlite'
 
 interface JsonStorageState {
   metadata: {
@@ -690,9 +690,9 @@ export async function initializeMemoryMode(): Promise<void> {
   currentStorageMode = 'memory'
 }
 
-/** Reset to CQL mode */
-export function resetToCQLMode(): void {
+/** Reset to EQLite mode */
+export function resetToEQLiteMode(): void {
   storageState = null
   storagePath = null
-  currentStorageMode = 'cql'
+  currentStorageMode = 'eqlite'
 }

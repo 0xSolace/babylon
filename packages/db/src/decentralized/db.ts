@@ -5,19 +5,19 @@
  * configuration and a unified interface.
  *
  * Configuration is resolved in this order:
- * 1. Environment variable override (CQL_BLOCK_PRODUCER_ENDPOINT)
+ * 1. Environment variable override (EQLITE_BLOCK_PRODUCER_ENDPOINT)
  * 2. Network-based config from @jejunetwork/config (based on JEJU_NETWORK)
  */
 
-import { getCQLUrl } from '@jejunetwork/config'
+import { getEQLiteUrl } from '@jejunetwork/config'
 import {
-  type CQLClient,
+  type EQLiteClient,
   type ExecResult,
-  getCQL,
+  getEQLite,
   type QueryParam,
 } from '@jejunetwork/db'
 import { first } from '@jejunetwork/shared'
-import { createQueryTransaction, type QueryTransaction } from '../cql-client'
+import { createQueryTransaction, type QueryTransaction } from '../eqlite-client'
 import { toQueryParam } from '../type-guards'
 
 /** Jeju network type */
@@ -80,13 +80,13 @@ export type { QueryTransaction }
 // ============================================================================
 
 class DB {
-  private client: CQLClient | null = null
+  private client: EQLiteClient | null = null
   private initialized = false
   private databaseId: string
   private _endpoint: string | null = null
 
   constructor() {
-    this.databaseId = process.env.CQL_DATABASE_ID || 'babylon'
+    this.databaseId = process.env.EQLITE_DATABASE_ID || 'babylon'
   }
 
   getEndpoint(): string | null {
@@ -96,41 +96,44 @@ class DB {
   async initialize(): Promise<void> {
     if (this.initialized) return
 
-    let endpoint = process.env.CQL_BLOCK_PRODUCER_ENDPOINT
+    let endpoint = process.env.EQLITE_BLOCK_PRODUCER_ENDPOINT
 
     if (!endpoint) {
       const network = process.env.JEJU_NETWORK
       if (network && isJejuNetwork(network)) {
-        endpoint = getCQLUrl(network)
+        try {
+          endpoint = getEQLiteUrl(network)
+        } catch {
+          // Config not available, use default
+        }
       }
     }
 
+    // Default to localnet endpoint if nothing else is configured
     if (!endpoint) {
-      throw new Error(
-        '[DB] CQL endpoint not configured. Set CQL_BLOCK_PRODUCER_ENDPOINT or JEJU_NETWORK.',
-      )
+      endpoint = 'http://localhost:4661'
     }
 
     this._endpoint = endpoint
 
-    const privateKey = process.env.CQL_PRIVATE_KEY
-    this.client = getCQL({
+    const privateKey = process.env.EQLITE_PRIVATE_KEY
+    this.client = getEQLite({
       blockProducerEndpoint: endpoint,
       databaseId: this.databaseId,
       privateKey: isHexPrivateKey(privateKey) ? privateKey : undefined,
-      timeout: parseInt(process.env.CQL_TIMEOUT ?? '30000', 10),
-      debug: process.env.CQL_DEBUG === 'true',
+      timeout: parseInt(process.env.EQLITE_TIMEOUT ?? '30000', 10),
+      debug: process.env.EQLITE_DEBUG === 'true',
     })
 
     const healthy = await this.client.isHealthy()
     if (!healthy) {
-      throw new Error(`[DB] CQL at ${endpoint} is not healthy.`)
+      throw new Error(`[DB] EQLite at ${endpoint} is not healthy.`)
     }
 
     this.initialized = true
   }
 
-  private requireClient(): CQLClient {
+  private requireClient(): EQLiteClient {
     if (!this.client || !this.initialized) {
       throw new Error('[DB] Database not initialized. Call initialize() first.')
     }

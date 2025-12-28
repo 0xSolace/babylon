@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "type": "module",
   "private": true,
-  "description": "Babylon Database Layer - CovenantQL (CQL)",
+  "description": "Babylon Database Layer",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "exports": {

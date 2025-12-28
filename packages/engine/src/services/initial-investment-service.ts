@@ -518,7 +518,7 @@ Generate investments for ALL ${npcs.length} NPCs. Each NPC must have 2-5 investm
     })
 
     if (!existingPool) {
-      // Create Pool for NPC using CQL schema
+      // Create Pool for NPC using EQLite schema
       await db.pool
         .create({
           data: {
@@ -552,7 +552,7 @@ Generate investments for ALL ${npcs.length} NPCs. Each NPC must have 2-5 investm
         })
     }
 
-    // Create position using CQL schema
+    // Create position using EQLite schema
     const positionId = await generateSnowflakeId()
 
     await db.poolPosition.create({

@@ -4,109 +4,144 @@
  * This file serves as the entry point for Babylon's backend when deployed
  * on Jeju's Decentralized Web Services (DWS).
  *
- * The worker handles:
- * - API endpoints for the Babylon application
- * - Cron jobs for game tick, market resolution, agent actions
- * - WebSocket connections for real-time updates
+ * Supports multiple runtimes:
+ * - Bun runtime: Direct execution with `bun run dws-worker.ts`
+ * - Workerd runtime: Cloudflare Workers compatible with fetch handler
+ * - TEE Simulator: Local development with simulated TEE attestation
  *
  * Deployment:
- * 1. Build: bun build apps/api/dws-worker.ts --outdir dist
+ * 1. Build: bun build apps/api/dws-worker.ts --outdir dist --target bun
  * 2. Upload: jeju storage upload dist/dws-worker.js
  * 3. Deploy: jeju deploy app babylon --target dws
  */
 
-// Import the Babylon API server app
-import { app } from '@babylon/server'
+import { initializeDatabase } from '@babylon/db'
+import { app as elysiaApp } from '../server/src/app'
+import { setupEngineEvents } from '../server/src/engine-events'
+import { toNetwork } from '../server/src/utils'
 
-export default app
+// Export the Elysia app for DWS worker invocation
+export const app = elysiaApp
 
-// Export fetch handler for Cloudflare Workers compatibility
-export const fetch = app.fetch
+// Cloudflare Workers / workerd compatible fetch handler
+export const fetch = elysiaApp.fetch.bind(elysiaApp)
+
+// Default export for module workers
+export default {
+  fetch,
+  async scheduled(
+    event: ScheduledEvent,
+    _env: WorkerEnv,
+    _ctx: ExecutionContext,
+  ) {
+    // Handle cron triggers
+    const cronName = event.cron
+    const endpoint = CRON_MAP[cronName]
+    if (endpoint) {
+      const url = `http://localhost${endpoint}`
+      const response = await fetch(new Request(url, { method: 'POST' }))
+      if (!response.ok) {
+        console.error(`Cron ${cronName} failed:`, await response.text())
+      }
+    }
+  },
+}
+
+// Cron schedule to endpoint mapping
+const CRON_MAP: Record<string, string> = {
+  '*/5 * * * *': '/api/cron/game-tick',
+  '0 * * * *': '/api/cron/resolve-markets',
+  '*/2 * * * *': '/api/cron/agent-tick',
+  '0 */6 * * *': '/api/cron/training-check',
+}
+
+// Types for Cloudflare Workers compatibility
+interface ScheduledEvent {
+  cron: string
+  scheduledTime: number
+}
+
+interface WorkerEnv {
+  [key: string]: string
+}
+
+interface ExecutionContext {
+  waitUntil(promise: Promise<unknown>): void
+  passThroughOnException(): void
+}
 
 /**
- * DWS Worker Manifest
+ * Initialize and start the Babylon API server (for Bun runtime)
  *
- * This configuration is used by `jeju deploy app babylon --target dws`
+ * This function is called when running directly with Bun,
+ * not when running as a Cloudflare Worker.
  */
-export const DWS_MANIFEST = {
-  name: 'babylon-api',
-  version: '2.0.0',
-  description: 'Babylon decentralized prediction markets API',
+export async function startBabylonWorker(options: {
+  port?: number
+  host?: string
+  rpcUrl?: string
+  dwsEndpoint?: string
+}): Promise<void> {
+  const PORT =
+    options.port ??
+    Number(process.env.PORT) ??
+    Number(process.env.BABYLON_API_PORT) ??
+    5009
+  const HOST = options.host ?? process.env.HOST ?? '0.0.0.0'
 
-  // Runtime
-  runtime: 'bun' as const,
-  entrypoint: 'dws-worker.ts',
-  memoryMb: 512,
-  cpuMillis: 2000,
-  timeoutMs: 30000,
+  // Configure DWS endpoint
+  if (options.dwsEndpoint) {
+    process.env.JEJU_DWS_ENDPOINT = options.dwsEndpoint
+  } else if (!process.env.JEJU_DWS_ENDPOINT) {
+    const network = toNetwork(process.env.JEJU_NETWORK || 'localnet')
+    process.env.JEJU_DWS_ENDPOINT =
+      network === 'localnet'
+        ? 'http://localhost:4030'
+        : network === 'testnet'
+          ? 'https://dws.testnet.jejunetwork.org'
+          : 'https://dws.jejunetwork.org'
+  }
 
-  // Scaling
-  scaling: {
-    minInstances: 1,
-    maxInstances: 10,
-    targetConcurrency: 100,
-    scaleToZero: false, // Keep at least one instance for cron jobs
-    cooldownMs: 60000,
-  },
+  // Configure RPC URL
+  if (options.rpcUrl) {
+    process.env.JEJU_RPC_URL = options.rpcUrl
+  } else if (!process.env.JEJU_RPC_URL) {
+    const network = toNetwork(process.env.JEJU_NETWORK || 'localnet')
+    process.env.JEJU_RPC_URL =
+      network === 'localnet'
+        ? 'http://localhost:6546'
+        : network === 'testnet'
+          ? 'https://rpc.testnet.jejunetwork.org'
+          : 'https://rpc.jejunetwork.org'
+  }
 
-  // Requirements
-  requirements: {
-    teeRequired: false, // Use TEE for sensitive operations via KMS
-    gpuRequired: false,
-    minNodeReputation: 70,
-  },
+  console.log(`DWS endpoint: ${process.env.JEJU_DWS_ENDPOINT}`)
+  console.log(`RPC URL: ${process.env.JEJU_RPC_URL}`)
 
-  // Cron triggers (executed by DWS scheduler)
-  cron: [
-    {
-      name: 'game-tick',
-      schedule: '*/5 * * * *',
-      endpoint: '/api/cron/game-tick',
-      timeout: 30000,
-    },
-    {
-      name: 'market-resolution',
-      schedule: '0 * * * *',
-      endpoint: '/api/cron/resolve-markets',
-      timeout: 60000,
-    },
-    {
-      name: 'agent-tick',
-      schedule: '*/2 * * * *',
-      endpoint: '/api/cron/agent-tick',
-      timeout: 45000,
-    },
-    {
-      name: 'training-check',
-      schedule: '0 */6 * * *',
-      endpoint: '/api/cron/training-check',
-      timeout: 60000,
-    },
-    {
-      name: 'health-check',
-      schedule: '*/5 * * * *',
-      endpoint: '/api/cron/health-check',
-      timeout: 30000,
-    },
-  ],
+  // Initialize database
+  console.log('Initializing database...')
+  await initializeDatabase()
+  console.log('Database initialized')
 
-  // Environment variables (non-sensitive)
-  env: {
-    NODE_ENV: 'production',
-    LOG_LEVEL: 'info',
-  },
+  // Set up engine event listeners
+  setupEngineEvents()
 
-  // KMS secrets to inject at runtime
-  secrets: ['INFERENCE_API_KEY', 'TRAINING_CONFIG'],
+  // Start the server
+  elysiaApp.listen({ port: PORT, hostname: HOST })
 
-  // Service dependencies
-  dependencies: [
-    'cql',
-    'cache-service',
-    'storage',
-    'kms',
-    'oauth3',
-    'contracts',
-    'compute',
-  ],
+  console.log(`
+╔════════════════════════════════════════════════════════════╗
+║            BABYLON API - DWS WORKER MODE                   ║
+╠════════════════════════════════════════════════════════════╣
+║  Status: Running                                           ║
+║  Port:   ${String(PORT).padEnd(47)}║
+║  Host:   ${HOST.padEnd(47)}║
+║  Mode:   ${(process.env.TEE_PROVIDER || 'local').padEnd(47)}║
+╚════════════════════════════════════════════════════════════╝
+`)
+}
+
+// Auto-start if running directly with Bun (not imported as module)
+if (import.meta.main) {
+  startBabylonWorker({})
 }

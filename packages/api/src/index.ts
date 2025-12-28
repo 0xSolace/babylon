@@ -86,17 +86,8 @@ export {
 export { type ApiFetchOptions, apiFetch, getOAuth3AccessToken } from './fetch'
 // Health checks
 // LLM (Inference via Jeju Compute)
-// Messaging
-export {
-  getConversations,
-  getOrCreateDM,
-  getPendingMessages,
-  isMessagingEnabled,
-  type MessageResult,
-  markMessageDelivered,
-  markMessageRead,
-  sendMessage,
-} from './messaging/messaging'
+// Messaging - XMTP for private messaging, Farcaster for public via @babylon/engine
+export * from './messaging'
 // Moderation - BanManager and ModerationMarketplace
 // Cron Metrics
 export {
@@ -122,21 +113,17 @@ export {
   verifyBackendSignedUpdate,
 } from './profile'
 // Rate Limiting
+// NOTE: For duplicate detection, import directly from @jejunetwork/shared:
+// checkDuplicate, cleanupDuplicates, clearAllDuplicates, clearDuplicates, DUPLICATE_DETECTION_CONFIGS, getDuplicateStats
 export {
   addRateLimitHeaders,
   applyDuplicateDetection,
   applyRateLimit,
-  checkDuplicate,
   checkRateLimit,
   checkRateLimitAndDuplicates,
-  cleanupDuplicates,
   cleanupRateLimits,
-  clearAllDuplicates,
   clearAllRateLimits,
-  clearDuplicates,
-  DUPLICATE_DETECTION_CONFIGS,
   duplicateContentError,
-  getDuplicateStats,
   getRateLimitStatus,
   RATE_LIMIT_CONFIGS,
   rateLimitError,
@@ -197,7 +184,16 @@ export {
   resetICOAutomationService,
   type TGEResult,
 } from './services/ico-automation-service'
-// ICO Triggers Service (removed - unused)
+// ICO Triggers Service
+export {
+  getICOTriggersService,
+  type ICOTriggerConfig,
+  type ICOTriggerResult,
+  ICOTriggersService,
+  initializeICOTriggers,
+  resetICOTriggersService,
+  type ScheduledTrigger,
+} from './services/ico-triggers-service'
 // Liquidity Pool Service
 export {
   type FeeDistribution,
@@ -209,6 +205,14 @@ export {
   type PoolInfo,
   resetLiquidityPoolService,
 } from './services/liquidity-pool-service'
+// Token Bootstrap Service
+export {
+  type BootstrapOptions,
+  bootstrapTokenEcosystem,
+  isTokenEcosystemReady,
+  type TokenBootstrapResult,
+  TokenBootstrapService,
+} from './services/token-bootstrap-service'
 // Waitlist Service (removed - unused)
 // Storage (NO S3/MinIO fallback)
 export {

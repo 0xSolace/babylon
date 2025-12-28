@@ -123,6 +123,7 @@ export class DbStateStore implements GameStateStore {
     await db.insert(questions).values({
       id,
       questionNumber,
+      question: question.text,
       text: question.text,
       status: 'active',
       outcome: false, // Default outcome until resolved
@@ -199,7 +200,9 @@ export class DbStateStore implements GameStateStore {
 
     await db.insert(worldEvents).values({
       id,
+      type: event.type,
       eventType: event.type,
+      title: event.description?.slice(0, 100) ?? event.type,
       description: event.description,
       dayNumber: event.day,
       actors: event.actors,

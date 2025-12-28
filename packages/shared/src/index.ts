@@ -15,6 +15,9 @@
  * - Singleton: createSingleton, createGlobalSingleton, createPortSingleton
  * - Snowflake: generateSnowflakeId, isValidSnowflakeId, parseSnowflakeId, SnowflakeGenerator
  * - UI: cn, classNames
+ * - Type Guards: assertDefined, assertNotNull, isArray, isBoolean, isString, isNumber, isObject, etc.
+ * - JSON utilities: parseJson, parseJsonAs, fetchJsonAs, responseJson, toJsonRecord, JsonValue
+ * - Error handling: getErrorMessage, toError
  */
 
 // =============================================================================
@@ -92,8 +95,7 @@ export * from './utils/viem-helpers'
 // Type Guards
 // =============================================================================
 
-export type { JsonValue } from '@jejunetwork/shared'
-// Core type guards - re-exported from @jejunetwork/shared
+// Core type guards - re-export from @jejunetwork/shared
 export {
   assertDefined,
   assertNotNull,
@@ -112,6 +114,8 @@ export {
   isJsonRecord,
   isJsonValue,
   isNonEmptyString,
+  isNotNullish,
+  isNullish,
   isNumber,
   isNumberArray,
   isObject,
@@ -121,6 +125,7 @@ export {
   isStringArray,
   isStringRecord,
   isUint8Array,
+  type JsonValue,
   parseJson,
   parseJsonAs,
   responseJson,
@@ -129,6 +134,7 @@ export {
   toJsonValueOrNull,
   toStringArray,
 } from '@jejunetwork/shared'
+
 // Babylon-specific type guards (blockchain, entities, game)
 export * from './type-guards'
 

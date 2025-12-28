@@ -27,8 +27,10 @@
     "@babylon/shared": "workspace:*",
     "@babylon/a2a": "workspace:*",
     "@babylon/mcp": "workspace:*",
-    "@babylon/auth": "workspace:*",
-    "@babylon/engine": "workspace:*"
+    "@babylon/engine": "workspace:*",
+    "@jejunetwork/auth": "workspace:*",
+    "@babylon/training": "workspace:*",
+    "@jejunetwork/training": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^24.10.0",

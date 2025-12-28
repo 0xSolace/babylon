@@ -25,6 +25,8 @@ export * from './eliza-holder-airdrop-service'
 export * from './eliza-verification-service'
 // ICO Automation Service
 export * from './ico-automation-service'
+// ICO Triggers Service
+export * from './ico-triggers-service'
 // Jeju KMS Integration
 export * from './kms-integration'
 // Liquidity Pool Service
@@ -35,6 +37,10 @@ export * from './moderation'
 export * from './npc-funding-service'
 // Referral Service
 export * from './referral-service'
+// Token Bootstrap Service (BBLN deployment, DAO, liquidity)
+export * from './token-bootstrap-service'
 // Unruggable Game Service
 export * from './unruggable-game-service'
+// XLP Liquidity Service (ETH/BBLN, JEJU/BBLN pool seeding)
+export * from './xlp-liquidity-service'
 // Waitlist Service - exported individually from index.ts to avoid class export

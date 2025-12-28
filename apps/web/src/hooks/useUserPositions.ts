@@ -1,5 +1,6 @@
 import type { PerpPosition } from '@babylon/shared'
-import { type JsonValue, UserPositionsApiResponseSchema } from '@babylon/shared'
+import { UserPositionsApiResponseSchema } from '@babylon/shared'
+import type { JsonValue } from '@jejunetwork/shared'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useCallback } from 'react'
 import type { UserPredictionPosition } from '../types/widgets'

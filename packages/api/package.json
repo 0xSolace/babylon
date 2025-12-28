@@ -14,9 +14,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@babylon/auth": "workspace:*",
     "@babylon/db": "workspace:*",
-    "@babylon/messaging": "workspace:*",
+    "@jejunetwork/auth": "workspace:*",
     "@babylon/shared": "workspace:*",
     "@jejunetwork/shared": "workspace:*",
     "viem": "2.43.3",
@@ -28,7 +27,6 @@
   "devDependencies": {
     "@types/node": "^24.10.0",
     "swagger-jsdoc": "^6.2.8",
-    "tiktoken": "^1.0.21",
     "typescript": "5.9.3"
   }
 }

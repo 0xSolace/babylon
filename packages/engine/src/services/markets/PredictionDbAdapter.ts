@@ -1,6 +1,6 @@
 import {
-  type CQLClient,
   db as defaultDb,
+  type EQLiteClient,
   type Market,
   type NewMarket,
   type NewPosition,
@@ -28,7 +28,7 @@ type MarketRowWithOracleFields = MarketRow & {
   oracleRevealTxHash?: string | null
 }
 
-/** CQL query parameter type (matches @jejunetwork/db QueryParam) */
+/** EQLite query parameter type (matches @jejunetwork/db QueryParam) */
 type Param = string | number | boolean | bigint | Uint8Array | null
 type ParamInput =
   | string
@@ -44,7 +44,7 @@ type ParamInput =
 const toSideBool = (side: PredictionSide) => side === 'yes'
 const fromSideBool = (side: boolean): PredictionSide => (side ? 'yes' : 'no')
 
-/** Convert a value to a CQL-compatible query parameter */
+/** Convert a value to a EQLite-compatible query parameter */
 function toParam(value: ParamInput): Param {
   if (value === undefined || value === null) return null
   if (value instanceof Date) return value.toISOString()
@@ -61,6 +61,15 @@ function toParam(value: ParamInput): Param {
 }
 
 const mapMarket = (m: MarketRowWithOracleFields): PredictionMarketRecord => {
+  // Ensure dates are proper Date objects
+  const parseDate = (
+    val: string | Date | null | undefined,
+  ): Date | undefined => {
+    if (!val) return undefined
+    if (val instanceof Date) return val
+    return new Date(val)
+  }
+
   return {
     id: m.id,
     question: m.question ?? '',
@@ -68,7 +77,7 @@ const mapMarket = (m: MarketRowWithOracleFields): PredictionMarketRecord => {
     yesShares: Number(m.yesShares),
     noShares: Number(m.noShares),
     liquidity: Number(m.liquidity),
-    endDate: m.endDate,
+    endDate: parseDate(m.endDate),
     resolved: m.resolved ?? false,
     resolution:
       m.resolution === 'yes' || m.resolution === 'true'
@@ -83,8 +92,8 @@ const mapMarket = (m: MarketRowWithOracleFields): PredictionMarketRecord => {
     oracleRevealTxHash: m.oracleRevealTxHash,
     resolutionProofUrl: m.resolutionProofUrl,
     resolutionDescription: m.resolutionDescription,
-    createdAt: m.createdAt,
-    updatedAt: m.updatedAt,
+    createdAt: parseDate(m.createdAt),
+    updatedAt: parseDate(m.updatedAt),
   }
 }
 
@@ -128,12 +137,12 @@ const mapQuestion = (q: QuestionRow): QuestionRecord => ({
 })
 
 /**
- * CQL adapter for PredictionDbPort.
+ * EQLite adapter for PredictionDbPort.
  *
  * Uses raw SQL queries for all operations to ensure proper condition handling.
  */
 export class PredictionDbAdapter implements PredictionDbPort {
-  constructor(private readonly client: CQLClient = defaultDb) {}
+  constructor(private readonly client: EQLiteClient = defaultDb) {}
 
   async getMarketById(id: string): Promise<PredictionMarketRecord | null> {
     const results = await this.client.query<MarketRow>(

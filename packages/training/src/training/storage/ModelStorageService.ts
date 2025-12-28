@@ -15,8 +15,8 @@ import {
   type StorageClient as JejuStorageClient,
 } from '@babylon/api'
 import { db } from '@babylon/db'
-import type { JsonValue } from '@babylon/shared'
 import { logger } from '@babylon/shared'
+import type { JsonValue } from '@jejunetwork/shared'
 
 // ============================================================================
 // Types

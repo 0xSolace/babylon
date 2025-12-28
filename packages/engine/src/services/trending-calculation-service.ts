@@ -27,11 +27,11 @@ export async function shouldRecalculateTrending(): Promise<boolean> {
     .limit(1)
 
   const lastCalculation = lastCalculationResult[0] as
-    | { calculatedAt: Date }
+    | { calculatedAt: Date | null }
     | undefined
 
-  if (!lastCalculation) {
-    return true // Never calculated before
+  if (!lastCalculation || !lastCalculation.calculatedAt) {
+    return true // Never calculated before or calculatedAt is null
   }
 
   const timeSinceLastCalc = Date.now() - lastCalculation.calculatedAt.getTime()

@@ -1,4 +1,3 @@
-import { useJejuAuth } from '@babylon/auth'
 import type { OnboardingProfilePayload } from '@babylon/shared'
 import {
   CHAIN,
@@ -7,6 +6,7 @@ import {
   POINTS,
   WALLET_ERROR_MESSAGES,
 } from '@babylon/shared'
+import { useJejuAuth } from '@jejunetwork/auth'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   type ImportedProfileData,
@@ -23,7 +23,7 @@ import { apiFetch } from '@/utils/api-fetch'
  */
 const isLocalNetwork = CHAIN.id === 31337
 
-import type { JsonValue } from '@babylon/shared'
+import type { JsonValue } from '@jejunetwork/shared'
 import { type User as StoreUser, useAuthStore } from '@/stores/authStore'
 
 import { clearReferralCode, getReferralCode } from './ReferralCaptureProvider'

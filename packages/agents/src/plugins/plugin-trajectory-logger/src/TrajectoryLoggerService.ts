@@ -5,8 +5,8 @@
  */
 
 import { db, llmCallLogs, trajectories } from '@babylon/db'
-import type { JsonValue } from '@babylon/shared'
 import type { UUID } from '@elizaos/core'
+import type { JsonValue } from '@jejunetwork/shared'
 import { generateSnowflakeId, toNull } from '@jejunetwork/shared'
 import { v4 as uuidv4 } from 'uuid'
 import { logger } from '../../../shared/logger'
@@ -142,7 +142,7 @@ export class TrajectoryLoggerService {
   }
 
   /**
-   * Save LLM call to database using CQL
+   * Save LLM call to database using EQLite
    */
   private async saveLLMCallToDB(
     trajectoryId: string,
@@ -313,7 +313,7 @@ export class TrajectoryLoggerService {
   }
 
   /**
-   * End trajectory and save to database using CQL
+   * End trajectory and save to database using EQLite
    */
   async endTrajectory(
     trajectoryId: string,
@@ -383,7 +383,7 @@ export class TrajectoryLoggerService {
       }
     }
 
-    // Save to database using CQL
+    // Save to database using EQLite
     await db.insert(trajectories).values({
       id: await generateSnowflakeId(),
       trajectoryId,

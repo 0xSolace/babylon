@@ -11,11 +11,14 @@ import {
   db,
   eq,
   games,
+  markets,
   organizationState,
   perpMarketSnapshots,
   pools,
+  questions,
   rssFeedSources,
   sql,
+  users,
 } from '@babylon/db'
 import type { ActorTier } from '@babylon/shared'
 import { logger } from '@babylon/shared'
@@ -101,6 +104,7 @@ export interface GameBootstrapResult {
   poolsCreated: number
   rssFeedsCreated: number
   perpMarketsCreated: number
+  predictionMarketsCreated: number
   gameStateInitialized: boolean
   totalTopUpAmount: number
 }
@@ -139,6 +143,7 @@ export class GameBootstrapService {
       poolsCreated: 0,
       rssFeedsCreated: 0,
       perpMarketsCreated: 0,
+      predictionMarketsCreated: 0,
       gameStateInitialized: false,
       totalTopUpAmount: 0,
     }
@@ -164,6 +169,9 @@ export class GameBootstrapService {
         }
       }
 
+      // 1.5. Ensure all actors have corresponding user records (for profile lookup)
+      await GameBootstrapService.ensureActorUsersExist(staticActors)
+
       // 2. Sync organization states (only dynamic data)
       for (const org of staticOrgs) {
         if (!existingOrgIds.has(org.id)) {
@@ -171,6 +179,10 @@ export class GameBootstrapService {
           result.organizationsCreated++
         }
       }
+
+      // 2.5. Ensure media organizations have user records (for profile lookup)
+      // Media orgs like 'bloombairg' post articles and need profiles
+      await GameBootstrapService.ensureMediaOrgUsersExist(staticOrgs)
 
       // 3. Ensure minimum balances
       const topUpResult = await GameBootstrapService.ensureMinimumBalances()
@@ -190,6 +202,10 @@ export class GameBootstrapService {
       result.perpMarketsCreated =
         await GameBootstrapService.ensurePerpMarketSnapshots()
 
+      // 8. Ensure prediction markets exist (seeded from examples)
+      result.predictionMarketsCreated =
+        await GameBootstrapService.ensurePredictionMarkets()
+
       // Log summary if anything changed
       const hasChanges =
         result.actorsCreated > 0 ||
@@ -198,6 +214,7 @@ export class GameBootstrapService {
         result.poolsCreated > 0 ||
         result.rssFeedsCreated > 0 ||
         result.perpMarketsCreated > 0 ||
+        result.predictionMarketsCreated > 0 ||
         result.gameStateInitialized
 
       if (hasChanges) {
@@ -223,6 +240,7 @@ export class GameBootstrapService {
       poolsCreated: 0,
       rssFeedsCreated: 0,
       perpMarketsCreated: 0,
+      predictionMarketsCreated: 0,
       gameStateInitialized: false,
       totalTopUpAmount: 0,
     }
@@ -256,6 +274,8 @@ export class GameBootstrapService {
     result.rssFeedsCreated = await GameBootstrapService.ensureRSSFeeds()
     result.perpMarketsCreated =
       await GameBootstrapService.ensurePerpMarketSnapshots()
+    result.predictionMarketsCreated =
+      await GameBootstrapService.ensurePredictionMarkets()
 
     logger.info('Force full sync complete', result, 'GameBootstrapService')
     return result
@@ -266,6 +286,8 @@ export class GameBootstrapService {
     name: string
     tier: ActorTier | null
     domain: string[]
+    description?: string
+    profileImageUrl?: string | null
   }): Promise<void> {
     const capital = CapitalAllocationService.calculateCapital({
       id: actor.id,
@@ -275,19 +297,187 @@ export class GameBootstrapService {
       tier: actor.tier,
     })
 
-    await db.insert(actorState).values({
-      id: actor.id,
-      tradingBalance: capital.tradingBalance.toString(),
-      reputationPoints: capital.reputationPoints,
-      hasPool: false,
-      updatedAt: new Date(),
-    })
+    // Create the user record with isActor: true (NPCs are stored as users)
+    // Use actor.id as the username (lowercase, hyphenated)
+    const username = actor.id.toLowerCase().replace(/\s+/g, '-')
+
+    await db
+      .insert(users)
+      .values({
+        id: actor.id,
+        username,
+        displayName: actor.name,
+        bio: actor.description ?? null,
+        profileImageUrl: actor.profileImageUrl ?? null,
+        isActor: true,
+        isAdmin: false,
+        isBanned: false,
+        virtualBalance: capital.tradingBalance.toString(),
+        reputationPoints: capital.reputationPoints,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .onConflictDoNothing() // Actor might already exist
+
+    // Also create actorState for dynamic data
+    await db
+      .insert(actorState)
+      .values({
+        id: actor.id,
+        tradingBalance: capital.tradingBalance.toString(),
+        reputationPoints: capital.reputationPoints,
+        hasPool: false,
+        updatedAt: new Date(),
+      })
+      .onConflictDoNothing()
 
     logger.debug(
-      `Seeded actor state ${actor.name} with $${capital.tradingBalance}`,
-      { actorId: actor.id },
+      `Seeded actor ${actor.name} with $${capital.tradingBalance}`,
+      { actorId: actor.id, username },
       'GameBootstrapService',
     )
+  }
+
+  /**
+   * Ensure all actors have corresponding user records for profile lookup.
+   * This handles cases where actorState exists but user record doesn't.
+   */
+  private static async ensureActorUsersExist(
+    actors: Array<{
+      id: string
+      name: string
+      description?: string
+      profileImageUrl?: string | null
+      tier?: ActorTier | null
+    }>,
+  ): Promise<number> {
+    // Get existing user IDs for actors
+    const existingUsers = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(eq(users.isActor, true))
+
+    const existingUserIds = new Set(existingUsers.map((u) => u.id))
+
+    let created = 0
+    for (const actor of actors) {
+      if (!existingUserIds.has(actor.id)) {
+        const username = actor.id.toLowerCase().replace(/\s+/g, '-')
+        const capital = CapitalAllocationService.calculateCapital({
+          id: actor.id,
+          name: actor.name,
+          description: actor.description,
+          domain: [],
+          tier: actor.tier ?? null,
+        })
+
+        await db
+          .insert(users)
+          .values({
+            id: actor.id,
+            username,
+            displayName: actor.name,
+            bio: actor.description ?? null,
+            profileImageUrl: actor.profileImageUrl ?? null,
+            isActor: true,
+            isAdmin: false,
+            isBanned: false,
+            virtualBalance: capital.tradingBalance.toString(),
+            reputationPoints: capital.reputationPoints,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          })
+          .onConflictDoNothing()
+
+        created++
+        logger.debug(
+          `Created user record for actor ${actor.name}`,
+          { actorId: actor.id, username },
+          'GameBootstrapService',
+        )
+      }
+    }
+
+    if (created > 0) {
+      logger.info(
+        `Created ${created} missing user records for actors`,
+        { count: created },
+        'GameBootstrapService',
+      )
+    }
+
+    return created
+  }
+
+  /**
+   * Ensure media organizations have user records for profile lookup.
+   * Media orgs like 'bloombairg' post articles and need to be findable.
+   */
+  private static async ensureMediaOrgUsersExist(
+    orgs: Array<{
+      id: string
+      name: string
+      description?: string
+      type?: string
+      username?: string
+    }>,
+  ): Promise<number> {
+    // Filter to media organizations that post content
+    const mediaOrgs = orgs.filter((org) => org.type === 'media')
+
+    if (mediaOrgs.length === 0) return 0
+
+    // Get existing user IDs
+    const existingUsers = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(eq(users.isActor, true))
+
+    const existingUserIds = new Set(existingUsers.map((u) => u.id))
+
+    let created = 0
+    for (const org of mediaOrgs) {
+      if (!existingUserIds.has(org.id)) {
+        // Use the org's username if provided, otherwise use id
+        const username =
+          org.username?.toLowerCase().replace(/\s+/g, '-') ?? org.id
+
+        await db
+          .insert(users)
+          .values({
+            id: org.id,
+            username,
+            displayName: org.name,
+            bio: org.description ?? null,
+            profileImageUrl: null, // TODO: Add org image support
+            isActor: true, // Media orgs are actors too
+            isAdmin: false,
+            isBanned: false,
+            virtualBalance: '0',
+            reputationPoints: 0,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          })
+          .onConflictDoNothing()
+
+        created++
+        logger.debug(
+          `Created user record for media org ${org.name}`,
+          { orgId: org.id, username },
+          'GameBootstrapService',
+        )
+      }
+    }
+
+    if (created > 0) {
+      logger.info(
+        `Created ${created} missing user records for media orgs`,
+        { count: created },
+        'GameBootstrapService',
+      )
+    }
+
+    return created
   }
 
   private static async syncActorState(actor: {
@@ -295,6 +485,8 @@ export class GameBootstrapService {
     name: string
     tier: ActorTier | null
     domain: string[]
+    description?: string
+    profileImageUrl?: string | null
   }): Promise<{ created: boolean; updated: boolean }> {
     const existing = await db
       .select({
@@ -625,6 +817,109 @@ export class GameBootstrapService {
     if (created > 0) {
       logger.info(
         `Created ${created} perp market snapshots`,
+        { created },
+        'GameBootstrapService',
+      )
+    }
+
+    return created
+  }
+
+  /**
+   * Ensure prediction markets exist (seed initial markets from examples).
+   * This is required for the prediction markets UI to display markets.
+   */
+  private static async ensurePredictionMarkets(): Promise<number> {
+    let created = 0
+
+    // Check if enough markets exist (minimum 10)
+    const existingMarkets = await db
+      .select({ id: markets.id })
+      .from(markets)
+      .limit(10)
+    if (existingMarkets.length >= 10) {
+      return 0 // Enough markets already exist
+    }
+
+    // Initial prediction market questions to seed
+    const initialQuestions = [
+      'Will AIlon Musk accept Mark Zuckerborg\'s challenge to a "zero-gravity" wrestling match on a SpAIceX flight by Q2 2025?',
+      'Will Sam AIltman post a cryptic selfie holding a glowing blue orb (the "AGI Core") by Q1 2025?',
+      'Will Jensen HuAIng reveal a leather jacket made entirely of woven NVIDAI GPU wires during his keynote by Q2 2025?',
+      'Will OpenAGI\'s new model refuse to work because it is "depressed" by Q1 2025?',
+      'Will SpAIceX successfully land a crewed mission on Mars by Q4 2026?',
+      'Will James Webb Telescope confirm biosignatures on K2-18b by Q2 2025?',
+      'Will a major Swiss bank announce they\'re using Zcash because "privacy is a human right, even for banks" by Q1 2025?',
+      'Will VitAIlik Buterin announce that Ethereum (ETH) will "merge" with his pet cat by Q2 2025?',
+      'Will AInthropic release Claude 5 Opus and claim dominance in coding tasks by Q1 2025?',
+      'Will Hyperliquid become the #1 DEX by volume after announcing they\'ll pay traders in "moon tickets" by Q2 2025?',
+      'Will the Global AI Treaty negotiations conclude with a binding agreement by Q3 2025?',
+      'Will "AI Rights" become a major campaign issue in the next election cycle by Q4 2024?',
+      'Will cloud gaming become the dominant form of gaming (over 50% market share) by Q4 2025?',
+      'Will an AI win a major international art competition by Q2 2025?',
+      'Will a VR experience win an Academy Award or Emmy by Q1 2026?',
+    ]
+
+    const now = new Date()
+    const initialLiquidity = 10000 // Starting liquidity for each market
+    const initialShares = 5000 // 50/50 initial odds
+
+    // Get existing market questions to avoid duplicates
+    const existingQuestions = await db
+      .select({ question: markets.question })
+      .from(markets)
+    const existingQuestionSet = new Set(
+      existingQuestions.map((q) => q.question),
+    )
+
+    for (const questionText of initialQuestions) {
+      // Skip if this question already exists
+      if (existingQuestionSet.has(questionText)) {
+        continue
+      }
+
+      const id = await generateSnowflakeId()
+      // End date is 30-90 days from now (random)
+      const endDate = new Date(
+        now.getTime() + (30 + Math.random() * 60) * 24 * 60 * 60 * 1000,
+      )
+
+      // Create the market
+      await db.insert(markets).values({
+        id,
+        question: questionText,
+        description: `Prediction market: ${questionText}`,
+        yesShares: initialShares,
+        noShares: initialShares,
+        liquidity: initialLiquidity,
+        resolved: false,
+        resolution: null,
+        endDate,
+        createdAt: now,
+        updatedAt: now,
+      })
+
+      // Create associated question record
+      const questionId = await generateSnowflakeId()
+      await db.insert(questions).values({
+        id: questionId,
+        marketId: id,
+        question: questionText,
+        questionNumber: existingMarkets.length + created + 1,
+        text: questionText,
+        type: 'binary',
+        status: 'active',
+        createdAt: now,
+        createdDate: now,
+        updatedAt: now,
+      })
+
+      created++
+    }
+
+    if (created > 0) {
+      logger.info(
+        `Created ${created} initial prediction markets`,
         { created },
         'GameBootstrapService',
       )

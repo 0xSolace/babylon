@@ -23,8 +23,6 @@
       "@babylon/api/*": ["vendor/babylon/packages/api/src/*"],
       "@babylon/a2a": ["vendor/babylon/packages/a2a/src/index.ts"],
       "@babylon/a2a/*": ["vendor/babylon/packages/a2a/src/*"],
-      "@babylon/auth": ["vendor/babylon/packages/auth/src/index.ts"],
-      "@babylon/auth/*": ["vendor/babylon/packages/auth/src/*"],
       "@babylon/training": ["vendor/babylon/packages/training/src/index.ts"],
       "@babylon/training/*": ["vendor/babylon/packages/training/src/*"],
       "@babylon/agents": ["vendor/babylon/packages/agents/src/index.ts"],

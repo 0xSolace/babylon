@@ -9,8 +9,8 @@
  * 2. Causal Simulation Mode: Hidden facts → Events → Price movements (learnable signal)
  */
 
-import type { JsonValue } from '@babylon/shared'
 import { logger } from '@babylon/shared'
+import type { JsonValue } from '@jejunetwork/shared'
 
 /**
  * Volatility bucket for price movements

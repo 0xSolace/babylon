@@ -15,7 +15,8 @@
 
 import type { RSSHeadline } from '@babylon/db'
 import { db, eq, lt, rssFeedSources, rssHeadlines } from '@babylon/db'
-import { type JsonValue, logger } from '@babylon/shared'
+import { logger } from '@babylon/shared'
+import type { JsonValue } from '@jejunetwork/shared'
 import { generateSnowflakeId } from '@jejunetwork/shared'
 import { parseStringPromise } from 'xml2js'
 

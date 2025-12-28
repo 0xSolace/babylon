@@ -12,11 +12,16 @@
  * 1. Unit tests: No infrastructure needed (mocks)
  * 2. Integration tests: Postgres + Redis + Hardhat (via Jeju)
  * 3. E2E tests: Full stack including web server
- * 4. Decentralized tests: Full Jeju stack (CQL, KMS, OAuth3, etc.)
+ * 4. Decentralized tests: Full Jeju stack (EQLite, KMS, OAuth3, etc.)
+ *
+ * Usage:
+ *   bun run packages/testing/infrastructure/setup.ts --mode=integration --deploy
+ *   bun run packages/testing/infrastructure/setup.ts --mode=e2e --network=localnet
  */
 
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { $ } from 'bun'
 import { checkMessagingContracts, ensureContractsDeployed } from './contracts'
 import {
   checkAllServices,
@@ -60,6 +65,124 @@ function parseNetworkMode(value: string | undefined): NetworkMode {
     return value
   }
   return 'localnet'
+}
+
+// Jeju root is two directories up from vendor/babylon
+const JEJU_ROOT = join(process.cwd(), '..', '..')
+
+/**
+ * Start Jeju services if not already running
+ */
+async function ensureJejuRunning(maxWaitSeconds = 120): Promise<boolean> {
+  const running = await isJejuRunning()
+  if (running) {
+    console.log('[Setup] Jeju services already running')
+    return true
+  }
+
+  console.log('[Setup] Starting Jeju services...')
+  console.log(`[Setup] Jeju root: ${JEJU_ROOT}`)
+
+  // Start jeju dev in background
+  const jejuCliPath = join(JEJU_ROOT, 'packages/cli/src/index.ts')
+  if (!existsSync(jejuCliPath)) {
+    console.error(`[Setup] Jeju CLI not found at ${jejuCliPath}`)
+    return false
+  }
+
+  // Start the services
+  Bun.spawn(['bun', 'run', jejuCliPath, 'dev'], {
+    cwd: JEJU_ROOT,
+    stdout: 'inherit',
+    stderr: 'inherit',
+  })
+
+  // Wait for services to be ready
+  console.log(`[Setup] Waiting up to ${maxWaitSeconds}s for services...`)
+  for (let i = 0; i < maxWaitSeconds; i += 5) {
+    await new Promise((r) => setTimeout(r, 5000))
+    const ready = await isJejuRunning()
+    if (ready) {
+      console.log(`[Setup] Services ready after ${i + 5}s`)
+      return true
+    }
+    if (i % 15 === 0) {
+      console.log(`[Setup] Still waiting... (${i}s elapsed)`)
+    }
+  }
+
+  console.error('[Setup] Timeout waiting for Jeju services')
+  return false
+}
+
+/**
+ * Wait for EQLite database to be ready and initialized
+ */
+async function waitForEQLite(maxAttempts = 30): Promise<boolean> {
+  const eqliteEndpoint =
+    process.env.EQLITE_BLOCK_PRODUCER_ENDPOINT ?? 'http://localhost:4661'
+  console.log(`[Setup] Waiting for EQLite at ${eqliteEndpoint}...`)
+
+  for (let i = 0; i < maxAttempts; i++) {
+    const response = await fetch(`${eqliteEndpoint}/v1/health`, {
+      signal: AbortSignal.timeout(3000),
+    }).catch(() => null)
+
+    if (response?.ok) {
+      console.log('[Setup] EQLite is ready')
+      return true
+    }
+
+    await new Promise((r) => setTimeout(r, 2000))
+  }
+
+  console.warn('[Setup] EQLite did not become ready in time')
+  return false
+}
+
+/**
+ * Initialize database with required tables and seed data
+ */
+async function initializeDatabase(): Promise<boolean> {
+  try {
+    const { initializeDatabase: initDb } = await import('@babylon/db')
+    await initDb()
+    console.log('[Setup] Database initialized')
+    return true
+  } catch (error) {
+    console.error('[Setup] Database initialization failed:', error)
+    return false
+  }
+}
+
+/**
+ * Seed database with test data
+ */
+async function seedDatabase(): Promise<boolean> {
+  try {
+    const seedScript = join(process.cwd(), 'apps/cli/src/commands/db.ts')
+    if (existsSync(seedScript)) {
+      const result = await $`bun run ${seedScript} seed --quiet`
+        .quiet()
+        .nothrow()
+      if (result.exitCode === 0) {
+        console.log('[Setup] Database seeded')
+        return true
+      }
+    }
+    // Alternative: use GameBootstrapService directly
+    const { GameBootstrapService } = await import('@babylon/engine')
+    const bootstrap = new GameBootstrapService()
+    await bootstrap.bootstrapAll()
+    console.log('[Setup] Database seeded via GameBootstrapService')
+    return true
+  } catch (error) {
+    console.warn(
+      '[Setup] Database seeding failed (may already be seeded):',
+      error,
+    )
+    return false
+  }
 }
 
 interface SetupOptions {
@@ -136,6 +259,8 @@ export async function setupTestInfrastructure(
   healthy: boolean
   services: InfrastructureStatus
   contractsDeployed: boolean
+  dbInitialized: boolean
+  dbSeeded: boolean
 }> {
   const opts = { ...DEFAULT_OPTIONS, ...options }
 
@@ -150,9 +275,21 @@ export async function setupTestInfrastructure(
       process.env[key] = value
     }
   }
+
   // Set test environment
-  ;(process.env as Record<string, string>).NODE_ENV = 'test'
+  process.env.NODE_ENV = 'test'
   process.env.BUN_ENV = 'test'
+
+  // Set required environment variables if not present
+  if (!process.env.EQLITE_BLOCK_PRODUCER_ENDPOINT) {
+    process.env.EQLITE_BLOCK_PRODUCER_ENDPOINT = 'http://localhost:4661'
+  }
+  if (!process.env.JEJU_DWS_ENDPOINT) {
+    process.env.JEJU_DWS_ENDPOINT = 'http://localhost:4030'
+  }
+  if (!process.env.JEJU_NETWORK) {
+    process.env.JEJU_NETWORK = opts.network
+  }
 
   // For unit tests, no infrastructure needed
   if (opts.testMode === 'unit') {
@@ -166,24 +303,32 @@ export async function setupTestInfrastructure(
         timestamp: Date.now(),
       },
       contractsDeployed: false,
+      dbInitialized: false,
+      dbSeeded: false,
     }
   }
 
-  // Check if Jeju is running
-  const jejuRunning = await isJejuRunning()
+  // Check if Jeju is running, start if not
+  let jejuRunning = await isJejuRunning()
   if (!jejuRunning) {
-    console.error('[Setup] ❌ Jeju CLI is not running')
-    console.error('')
-    console.error('To start Jeju services:')
-    console.error('  cd /path/to/jeju && bun run dev')
-    console.error('')
+    console.log('[Setup] Jeju CLI is not running, attempting to start...')
 
     if (!opts.skipHealthCheck) {
-      throw new Error(
-        'Jeju CLI is not running. Start it with: cd /path/to/jeju && bun run dev',
-      )
+      // Try to start Jeju services
+      jejuRunning = await ensureJejuRunning(opts.timeout / 1000)
+
+      if (!jejuRunning) {
+        console.error('[Setup] ❌ Failed to start Jeju services')
+        console.error('')
+        console.error('To start Jeju services manually:')
+        console.error(`  cd ${JEJU_ROOT} && bun run dev`)
+        console.error('')
+        throw new Error('Failed to start Jeju services')
+      }
     }
-  } else {
+  }
+
+  if (jejuRunning) {
     console.log('[Setup] ✅ Jeju CLI detected')
   }
 
@@ -196,9 +341,6 @@ export async function setupTestInfrastructure(
     console.error(
       `\n[Setup] ❌ Core services not healthy: ${coreStatus.missingServices.join(', ')}`,
     )
-    console.error(
-      '[Setup] Make sure Jeju CLI is running: cd /path/to/jeju && bun run dev',
-    )
     throw new Error(
       `Core services not healthy: ${coreStatus.missingServices.join(', ')}`,
     )
@@ -206,23 +348,41 @@ export async function setupTestInfrastructure(
 
   console.log('[Setup] ✅ Core services ready')
 
-  // For decentralized mode, check all Jeju services
   let contractsDeployed = false
+  let dbInitialized = false
+  let dbSeeded = false
 
-  if (opts.testMode === 'decentralized' || opts.testMode === 'e2e') {
+  // For integration, decentralized or e2e mode, check all Jeju services
+  if (
+    opts.testMode === 'integration' ||
+    opts.testMode === 'decentralized' ||
+    opts.testMode === 'e2e' ||
+    opts.testMode === 'all'
+  ) {
     console.log('[Setup] Checking Jeju services...')
     const jejuStatus = await checkJejuServices()
 
     if (!jejuStatus.healthy && !opts.skipHealthCheck) {
       printStatus(jejuStatus)
       console.error('[Setup] ❌ Required Jeju services not healthy')
-      console.error('[Setup] Run: cd /path/to/jeju && bun run dev')
       throw new Error(
         `Jeju services not healthy. Missing: ${jejuStatus.missingServices.join(', ')}`,
       )
     }
 
     console.log('[Setup] ✅ Jeju services ready')
+
+    // Wait for EQLite to be ready
+    const eqliteReady = await waitForEQLite()
+    if (eqliteReady) {
+      // Initialize database
+      dbInitialized = await initializeDatabase()
+
+      // Seed database with test data
+      if (dbInitialized) {
+        dbSeeded = await seedDatabase()
+      }
+    }
 
     // Check and deploy contracts if needed
     if (opts.deployContracts) {
@@ -259,12 +419,18 @@ export async function setupTestInfrastructure(
 
   console.log('═'.repeat(60))
   console.log('SETUP COMPLETE')
+  console.log(`  - Services healthy: ${finalStatus.healthy}`)
+  console.log(`  - Contracts deployed: ${contractsDeployed}`)
+  console.log(`  - Database initialized: ${dbInitialized}`)
+  console.log(`  - Database seeded: ${dbSeeded}`)
   console.log(`${'═'.repeat(60)}\n`)
 
   return {
     healthy: coreStatus.healthy,
     services: finalStatus,
     contractsDeployed,
+    dbInitialized,
+    dbSeeded,
   }
 }
 

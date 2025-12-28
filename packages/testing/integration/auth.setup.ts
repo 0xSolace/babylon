@@ -13,8 +13,11 @@
  */
 
 import { existsSync, writeFileSync } from 'node:fs'
-import path from 'node:path'
+import path, { dirname } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { test as setup } from '@playwright/test'
+
+const __dirname = dirname(fileURLToPath(import.meta.url))
 
 // Centralized port configuration
 const API_PORT = process.env.BABYLON_API_PORT ?? '5009'

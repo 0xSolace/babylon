@@ -159,11 +159,11 @@ export const BalanceResponseSchema = z.object({
 })
 export type BalanceResponse = z.infer<typeof BalanceResponseSchema>
 
-// CQL query response
-export const CQLQueryResponseSchema = z.object({
+// EQLite query response
+export const EQLiteQueryResponseSchema = z.object({
   rows: z.array(z.unknown()).optional(),
 })
-export type CQLQueryResponse = z.infer<typeof CQLQueryResponseSchema>
+export type EQLiteQueryResponse = z.infer<typeof EQLiteQueryResponseSchema>
 
 // KMS sign response
 export const SignResponseSchema = z.object({

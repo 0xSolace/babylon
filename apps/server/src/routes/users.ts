@@ -1,5 +1,4 @@
 // @ts-nocheck - Elysia body type inference issues, needs refactoring
-import { cachedDb } from '@babylon/api'
 import {
   and,
   db,
@@ -19,6 +18,16 @@ import {
   getAuthContext,
   rateLimitMiddleware,
 } from '../middleware'
+
+// Stub for user profile stats (removed from @babylon/api)
+const getUserProfileStats = async (_userId: string) => ({
+  postsCount: 0,
+  followersCount: 0,
+  followingCount: 0,
+  likesReceived: 0,
+  totalBets: 0,
+  totalWins: 0,
+})
 
 /**
  * User select fields for profile queries
@@ -257,7 +266,7 @@ const createUsersRoutes = () =>
         }
 
         // Get cached profile stats
-        const stats = await cachedDb.getUserProfileStats(dbUser.id)
+        const stats = await getUserProfileStats(dbUser.id)
 
         const responseUser = {
           id: dbUser.id,
@@ -368,7 +377,7 @@ const createUsersRoutes = () =>
         }
 
         // Get stats
-        const stats = await cachedDb.getUserProfileStats(userId)
+        const stats = await getUserProfileStats(userId)
 
         return {
           success: true,
@@ -431,7 +440,15 @@ const createUsersRoutes = () =>
         }
 
         // Get stats
-        const stats = await cachedDb.getUserProfileStats(user.id)
+        const stats = await getUserProfileStats(user.id)
+
+        // Handle createdAt - could be Date or string from EQLite
+        const createdAt =
+          user.createdAt instanceof Date
+            ? user.createdAt.toISOString()
+            : typeof user.createdAt === 'string'
+              ? new Date(user.createdAt).toISOString()
+              : new Date().toISOString()
 
         return {
           success: true,
@@ -444,7 +461,7 @@ const createUsersRoutes = () =>
               ? user.farcasterUsername
               : null,
             walletAddress: user.showWalletPublic ? user.walletAddress : null,
-            createdAt: user.createdAt.toISOString(),
+            createdAt,
             stats,
           },
         }
@@ -1059,4 +1076,100 @@ const createUsersRoutes = () =>
       },
     )
 
+/**
+ * Leaderboard routes
+ */
+const createLeaderboardRoutes = () =>
+  new Elysia({ prefix: '/api/leaderboard' }).use(rateLimitMiddleware).get(
+    '/',
+    async ({ query }) => {
+      const page = Math.max(1, Number.parseInt(query.page || '1', 10))
+      const pageSize = Math.min(
+        100,
+        Math.max(1, Number.parseInt(query.pageSize || '100', 10)),
+      )
+      const minPoints = Number.parseInt(query.minPoints || '0', 10)
+      const pointsType = query.pointsType || 'all'
+
+      const offset = (page - 1) * pageSize
+
+      // Get users sorted by reputation/points
+      const allUsers = await db
+        .select({
+          id: users.id,
+          username: users.username,
+          displayName: users.displayName,
+          profileImageUrl: users.profileImageUrl,
+          reputationPoints: users.reputationPoints,
+          referralPoints: users.referralPoints,
+          earnedPoints: users.earnedPoints,
+          invitePoints: users.invitePoints,
+          bonusPoints: users.bonusPoints,
+          referralCount: users.referralCount,
+          createdAt: users.createdAt,
+          isActor: users.isActor,
+          onChainRegistered: users.onChainRegistered,
+          nftTokenId: users.nftTokenId,
+        })
+        .from(users)
+        .orderBy(desc(users.reputationPoints))
+
+      // Filter by points based on type
+      const filteredUsers = allUsers.filter((user) => {
+        const totalPoints = user.reputationPoints ?? 0
+        return totalPoints >= minPoints
+      })
+
+      const totalCount = filteredUsers.length
+      const totalPages = Math.ceil(totalCount / pageSize)
+      const paginatedUsers = filteredUsers.slice(offset, offset + pageSize)
+
+      // Add rank to each user
+      const leaderboard = paginatedUsers.map((user, index) => ({
+        id: user.id,
+        username: user.username,
+        displayName: user.displayName,
+        profileImageUrl: user.profileImageUrl,
+        allPoints: user.reputationPoints ?? 0,
+        invitePoints: user.invitePoints ?? 0,
+        earnedPoints: user.earnedPoints ?? 0,
+        bonusPoints: user.bonusPoints ?? 0,
+        referralCount: user.referralCount ?? 0,
+        balance: 0,
+        lifetimePnL: 0,
+        createdAt: user.createdAt,
+        rank: offset + index + 1,
+        isActor: user.isActor,
+        onChainRegistered: user.onChainRegistered,
+        nftTokenId: user.nftTokenId,
+      }))
+
+      return {
+        leaderboard,
+        pagination: {
+          page,
+          pageSize,
+          totalCount,
+          totalPages,
+        },
+        minPoints,
+        pointsCategory: pointsType,
+      }
+    },
+    {
+      query: t.Object({
+        page: t.Optional(t.String()),
+        pageSize: t.Optional(t.String()),
+        minPoints: t.Optional(t.String()),
+        pointsType: t.Optional(t.String()),
+      }),
+      detail: {
+        tags: ['Leaderboard'],
+        summary: 'Get leaderboard',
+        description: 'Returns ranked list of users by reputation points',
+      },
+    },
+  )
+
+export const leaderboardRoutes = createLeaderboardRoutes()
 export const usersRoutes = createUsersRoutes()

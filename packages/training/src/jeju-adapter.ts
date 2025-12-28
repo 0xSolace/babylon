@@ -1,5 +1,5 @@
 // @ts-nocheck - This adapter is documented as NOT PRODUCTION READY
-// Type errors are suppressed until the CQL schema is aligned with expected interfaces
+// Type errors are suppressed until the EQLite schema is aligned with expected interfaces
 
 /**
  * Babylon Training Adapter for Jeju
@@ -12,18 +12,18 @@
  * This adapter has the following issues that need to be addressed:
  *
  * 1. **Schema Mismatch**: The adapter expects a Prisma-like schema with
- *    relations (trajectory.steps, trajectory.agent) but Babylon uses CQL
+ *    relations (trajectory.steps, trajectory.agent) but Babylon uses EQLite
  *    with a flat schema structure.
  *
- * 2. **Missing Properties**: The CQL Trajectory table has different fields
+ * 2. **Missing Properties**: The EQLite Trajectory table has different fields
  *    than what this adapter expects (no startBalance, endBalance, initialState).
  *
  * 3. **API Differences**: The db.trajectory API has different method signatures
  *    for includes and relations.
  *
  * To make this adapter work:
- * - Update queries to use Babylon's actual CQL schema
- * - Map CQL fields to the Jeju TrajectoryStep/TrajectoryContext interfaces
+ * - Update queries to use Babylon's actual EQLite schema
+ * - Map EQLite fields to the Jeju TrajectoryStep/TrajectoryContext interfaces
  * - Add missing tables or compute derived fields from existing data
  *
  * @example
@@ -147,7 +147,7 @@ export interface BabylonTrainingAdapterConfig {
  * Babylon Training Data Adapter
  *
  * Implements Jeju's TrainingDataAdapter interface with Babylon-specific
- * data collection from CovenantQL database.
+ * data collection from EQLite database.
  */
 export class BabylonTrainingDataAdapter
   implements

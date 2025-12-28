@@ -303,9 +303,11 @@ export class AutonomousCoordinator {
     let errors = 0
 
     for (const activeAgent of activeAgentResults) {
+      // Enable trajectory recording for training data collection
       const tickResult = await this.executeAutonomousTick(
         activeAgent.id,
         runtime,
+        true, // recordTrajectories = true for training data collection
       )
 
       if (tickResult.success) {

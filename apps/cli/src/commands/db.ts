@@ -1,9 +1,9 @@
 #!/usr/bin/env bun
 
 /**
- * @fileoverview Database management commands for CQL (CovenantSQL)
+ * @fileoverview Database management commands for EQLite
  *
- * Provides commands for managing the CQL database connection, running seeds,
+ * Provides commands for managing the EQLite database connection, running seeds,
  * and checking database status. Integrates with Jeju DWS for automatic
  * configuration and database provisioning.
  *
@@ -19,20 +19,20 @@ import {
 } from '@babylon/db'
 import { GameBootstrapService } from '@babylon/engine'
 import { isJejuNetwork, type JejuNetwork } from '@babylon/shared'
-import { getCQLUrl, getDWSUrl } from '@jejunetwork/config'
+import { getDWSUrl, getEQLiteUrl } from '@jejunetwork/config'
 import { getFlag, parseArgs, wantsHelp } from '../lib/args.js'
 import { logger } from '../lib/logger.js'
 
 function printHelp(): void {
   console.log(`
-Database Management (CQL via Jeju DWS)
+Database Management (EQLite via Jeju DWS)
 
 USAGE:
   babylon db <command>
 
 COMMANDS:
-  status    Show CQL database status and health
-  connect   Test CQL connection and show info
+  status    Show EQLite database status and health
+  connect   Test EQLite connection and show info
   seed      Seed database with initial data
   reset     Reset database (clear all data)
   stats     Show database statistics
@@ -48,15 +48,15 @@ EXAMPLES:
 
 ENVIRONMENT:
   JEJU_NETWORK                 Network: localnet, testnet, mainnet (recommended)
-  CQL_BLOCK_PRODUCER_ENDPOINT  Override: Jeju block producer endpoint
-  CQL_DATABASE_ID              Database identifier (default: babylon)
-  CQL_PRIVATE_KEY              Optional private key for signed transactions
-  CQL_TIMEOUT                  Query timeout in ms (default: 30000)
-  CQL_DEBUG                    Enable debug logging (true/false)
+  EQLITE_BLOCK_PRODUCER_ENDPOINT  Override: Jeju block producer endpoint
+  EQLITE_DATABASE_ID              Database identifier (default: babylon)
+  EQLITE_PRIVATE_KEY              Optional private key for signed transactions
+  EQLITE_TIMEOUT                  Query timeout in ms (default: 30000)
+  EQLITE_DEBUG                    Enable debug logging (true/false)
 
 CONFIGURATION:
-  The CQL endpoint is resolved in this order:
-  1. CQL_BLOCK_PRODUCER_ENDPOINT env var (explicit override)
+  The EQLite endpoint is resolved in this order:
+  1. EQLITE_BLOCK_PRODUCER_ENDPOINT env var (explicit override)
   2. JEJU_NETWORK env var (auto-resolves via @jejunetwork/config)
 
   For local development, set JEJU_NETWORK=localnet and run:
@@ -65,21 +65,21 @@ CONFIGURATION:
 }
 
 /**
- * Verifies CQL environment is configured.
+ * Verifies EQLite environment is configured.
  * Supports both explicit endpoint and network-aware configuration.
  *
- * @throws Exits process with code 1 if CQL is not configured
+ * @throws Exits process with code 1 if EQLite is not configured
  * @internal
  */
-function checkCQLConfig(): void {
-  const endpoint = process.env.CQL_BLOCK_PRODUCER_ENDPOINT
+function checkEQLiteConfig(): void {
+  const endpoint = process.env.EQLITE_BLOCK_PRODUCER_ENDPOINT
   const network = process.env.JEJU_NETWORK
 
   if (!endpoint && !network) {
-    logger.fail('CQL not configured')
+    logger.fail('EQLite not configured')
     console.log('\nConfigure using one of these methods:')
     console.log('  1. Set JEJU_NETWORK=localnet (recommended for development)')
-    console.log('  2. Set CQL_BLOCK_PRODUCER_ENDPOINT explicitly')
+    console.log('  2. Set EQLITE_BLOCK_PRODUCER_ENDPOINT explicitly')
     console.log('\nFor local development, start Jeju first:')
     console.log('  cd /path/to/jeju && jeju dev')
     process.exit(1)
@@ -87,30 +87,30 @@ function checkCQLConfig(): void {
 }
 
 /**
- * Tests the CQL connection and displays connection info.
+ * Tests the EQLite connection and displays connection info.
  *
  * @internal
  */
 async function testConnection(): Promise<void> {
-  logger.header('Testing CQL Connection')
+  logger.header('Testing EQLite Connection')
 
-  checkCQLConfig()
+  checkEQLiteConfig()
 
-  logger.step('Initializing CQL client...')
+  logger.step('Initializing EQLite client...')
   await initializeDB()
 
   logger.step('Checking health...')
-  const cqlDb = getDB()
-  const healthy = await cqlDb.isHealthy()
+  const eqliteDb = getDB()
+  const healthy = await eqliteDb.isHealthy()
 
   if (!healthy) {
-    logger.fail('CQL is not healthy')
+    logger.fail('EQLite is not healthy')
     console.log('\nEnsure Jeju is running:')
     console.log('  cd /path/to/jeju && jeju dev')
     process.exit(1)
   }
 
-  logger.success('CQL connection established')
+  logger.success('EQLite connection established')
   await showConnectionInfo()
 }
 
@@ -122,11 +122,11 @@ async function testConnection(): Promise<void> {
  * @internal
  */
 async function showStatus(): Promise<void> {
-  logger.header('Database Status (CQL via Jeju DWS)')
+  logger.header('Database Status (EQLite via Jeju DWS)')
 
-  const endpoint = process.env.CQL_BLOCK_PRODUCER_ENDPOINT
+  const endpoint = process.env.EQLITE_BLOCK_PRODUCER_ENDPOINT
   const network = process.env.JEJU_NETWORK
-  const databaseId = process.env.CQL_DATABASE_ID || 'babylon'
+  const databaseId = process.env.EQLITE_DATABASE_ID || 'babylon'
 
   console.log('Configuration:')
   if (network) {
@@ -139,21 +139,23 @@ async function showStatus(): Promise<void> {
 
   if (!endpoint && !network) {
     console.log('\nStatus: ❌ Not configured')
-    console.log('\nSet JEJU_NETWORK=localnet or CQL_BLOCK_PRODUCER_ENDPOINT.')
+    console.log(
+      '\nSet JEJU_NETWORK=localnet or EQLITE_BLOCK_PRODUCER_ENDPOINT.',
+    )
     console.log('Start Jeju: cd /path/to/jeju && jeju dev')
     return
   }
 
-  logger.step('Checking CQL health...')
+  logger.step('Checking EQLite health...')
 
   await initializeDB()
-  const cqlDb = getDB()
-  const healthy = await cqlDb.isHealthy()
+  const eqliteDb = getDB()
+  const healthy = await eqliteDb.isHealthy()
 
   if (healthy) {
     console.log('Status: ✅ Connected')
 
-    const blockHeight = await cqlDb.getBlockHeight()
+    const blockHeight = await eqliteDb.getBlockHeight()
     console.log(`Block Height: ${blockHeight}`)
   } else {
     console.log('Status: ❌ Unhealthy')
@@ -168,10 +170,10 @@ async function showStatus(): Promise<void> {
  * @internal
  */
 async function showConnectionInfo(): Promise<void> {
-  const endpoint = process.env.CQL_BLOCK_PRODUCER_ENDPOINT || 'not set'
-  const databaseId = process.env.CQL_DATABASE_ID || 'babylon'
-  const timeout = process.env.CQL_TIMEOUT || '30000'
-  const debug = process.env.CQL_DEBUG || 'false'
+  const endpoint = process.env.EQLITE_BLOCK_PRODUCER_ENDPOINT || 'not set'
+  const databaseId = process.env.EQLITE_DATABASE_ID || 'babylon'
+  const timeout = process.env.EQLITE_TIMEOUT || '30000'
+  const debug = process.env.EQLITE_DEBUG || 'false'
 
   console.log('\nConnection Info:')
   console.log(`  Endpoint:    ${endpoint}`)
@@ -179,9 +181,9 @@ async function showConnectionInfo(): Promise<void> {
   console.log(`  Timeout:     ${timeout}ms`)
   console.log(`  Debug:       ${debug}`)
 
-  const cqlDb = getDB()
-  if (cqlDb.isInitialized()) {
-    const blockHeight = await cqlDb.getBlockHeight()
+  const eqliteDb = getDB()
+  if (eqliteDb.isInitialized()) {
+    const blockHeight = await eqliteDb.getBlockHeight()
     console.log(`  Block Height: ${blockHeight}`)
   }
 }
@@ -190,7 +192,7 @@ async function showConnectionInfo(): Promise<void> {
  * Seeds the database with initial data.
  *
  * Uses GameBootstrapService to populate the database with actors, organizations,
- * and other initial data. Requires CQL connection.
+ * and other initial data. Requires EQLite connection.
  *
  * @param args - Parsed command-line arguments
  * @internal
@@ -198,15 +200,15 @@ async function showConnectionInfo(): Promise<void> {
 async function seedDatabase(args: ReturnType<typeof parseArgs>): Promise<void> {
   logger.header('Seeding Database')
 
-  checkCQLConfig()
+  checkEQLiteConfig()
 
-  logger.step('Initializing CQL and creating tables...')
+  logger.step('Initializing EQLite and creating tables...')
   await initializeDatabase()
 
-  const cqlDb = getDB()
-  const healthy = await cqlDb.isHealthy()
+  const eqliteDb = getDB()
+  const healthy = await eqliteDb.isHealthy()
   if (!healthy) {
-    logger.fail('CQL is not healthy')
+    logger.fail('EQLite is not healthy')
     console.log('Start Jeju first: cd /path/to/jeju && jeju dev')
     process.exit(1)
   }
@@ -270,15 +272,15 @@ async function seedDatabase(args: ReturnType<typeof parseArgs>): Promise<void> {
 async function showStats(): Promise<void> {
   logger.header('Database Statistics')
 
-  checkCQLConfig()
+  checkEQLiteConfig()
 
-  logger.step('Initializing CQL...')
+  logger.step('Initializing EQLite...')
   await initializeDB()
 
-  const cqlDb = getDB()
-  const healthy = await cqlDb.isHealthy()
+  const eqliteDb = getDB()
+  const healthy = await eqliteDb.isHealthy()
   if (!healthy) {
-    logger.fail('CQL is not healthy')
+    logger.fail('EQLite is not healthy')
     process.exit(1)
   }
 
@@ -307,24 +309,24 @@ async function resetDatabase(): Promise<void> {
 
   logger.warn('This will delete all data!')
 
-  checkCQLConfig()
+  checkEQLiteConfig()
 
-  logger.step('Initializing CQL...')
+  logger.step('Initializing EQLite...')
   await initializeDB()
 
-  const cqlDb = getDB()
-  const healthy = await cqlDb.isHealthy()
+  const eqliteDb = getDB()
+  const healthy = await eqliteDb.isHealthy()
   if (!healthy) {
-    logger.fail('CQL is not healthy')
+    logger.fail('EQLite is not healthy')
     process.exit(1)
   }
 
   logger.step('Clearing database...')
 
   // Get list of all tables and truncate them
-  // Note: CQL/SQLite uses sqlite_master, not information_schema
+  // Note: EQLite/SQLite uses sqlite_master, not information_schema
   const tables = await db.query<{ name: string }>(
-    `SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_cql_%'`,
+    `SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_eqlite_%'`,
   )
 
   for (const table of tables) {
@@ -395,18 +397,18 @@ async function provisionDatabase(args: string[]): Promise<void> {
     process.exit(1)
   }
 
-  // Get CQL URL from Jeju config
-  let cqlUrl: string
+  // Get EQLite URL from Jeju config
+  let eqliteUrl: string
   try {
-    cqlUrl = getCQLUrl(network)
+    eqliteUrl = getEQLiteUrl(network)
   } catch {
     // Fallback for local development
-    cqlUrl =
+    eqliteUrl =
       network === 'localnet'
         ? 'http://localhost:4661'
         : network === 'testnet'
-          ? 'https://cql-testnet.jejunetwork.org'
-          : 'https://cql.jejunetwork.org'
+          ? 'https://eqlite-testnet.jejunetwork.org'
+          : 'https://eqlite.jejunetwork.org'
   }
 
   logger.success('Database provisioned')
@@ -415,13 +417,13 @@ async function provisionDatabase(args: string[]): Promise<void> {
   console.log('Add to your .env file:')
   console.log('```')
   console.log(`JEJU_NETWORK=${network}`)
-  console.log(`CQL_DATABASE_ID=${databaseId}`)
+  console.log(`EQLITE_DATABASE_ID=${databaseId}`)
   console.log('```')
   console.log('')
   console.log('Or use explicit endpoint:')
   console.log('```')
-  console.log(`CQL_BLOCK_PRODUCER_ENDPOINT=${cqlUrl}`)
-  console.log(`CQL_DATABASE_ID=${databaseId}`)
+  console.log(`EQLITE_BLOCK_PRODUCER_ENDPOINT=${eqliteUrl}`)
+  console.log(`EQLITE_DATABASE_ID=${databaseId}`)
   console.log('```')
 }
 
@@ -431,8 +433,8 @@ async function provisionDatabase(args: string[]): Promise<void> {
  * Routes to appropriate sub-command handlers based on parsed arguments.
  *
  * **Supported Commands:**
- * - `status` - Show CQL database status
- * - `connect` - Test CQL connection
+ * - `status` - Show EQLite database status
+ * - `connect` - Test EQLite connection
  * - `seed` - Seed database with initial data
  * - `stats` - Show database statistics
  * - `reset` - Reset database (clear all data)
@@ -477,14 +479,14 @@ export async function runDbCommand(args: string[]): Promise<void> {
     case 'start':
     case 'stop':
     case 'restart':
-      logger.warn(`The '${parsed.command}' command is not needed with CQL.`)
-      console.log('\nCQL connects to a Jeju block producer instance.')
+      logger.warn(`The '${parsed.command}' command is not needed with EQLite.`)
+      console.log('\nEQLite connects to a Jeju block producer instance.')
       console.log('Start Jeju instead: cd /path/to/jeju && jeju dev')
       break
 
     case 'migrate':
-      logger.warn("The 'migrate' command is not needed with CQL.")
-      console.log('\nCQL handles schema management automatically.')
+      logger.warn("The 'migrate' command is not needed with EQLite.")
+      console.log('\nEQLite handles schema management automatically.')
       console.log('Use "babylon db status" to check connection health.')
       break
 

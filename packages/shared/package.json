@@ -14,6 +14,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@jejunetwork/sdk": "workspace:*",
     "@jejunetwork/shared": "workspace:*",
     "@jejunetwork/types": "workspace:*",
     "@sinclair/typebox": "^0.34.33",

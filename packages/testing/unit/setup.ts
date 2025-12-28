@@ -11,12 +11,11 @@ import type { MockDatabaseClient, MockTransactionFn } from '../types/test-types'
 // Mock database client for all unit tests
 beforeAll(() => {
   // Set test environment variables for decentralized services
+  // Service URLs are loaded from @jejunetwork/config based on JEJU_NETWORK
   ;(process.env as Record<string, string>).NODE_ENV = 'test'
-  process.env.CQL_BLOCK_PRODUCER_ENDPOINT = 'http://localhost:4661'
-  process.env.CQL_DATABASE_ID = 'babylon_test'
-  process.env.JEJU_CACHE_SERVICE_URL = 'http://localhost:4662'
-  process.env.JEJU_STORAGE_SERVICE_URL = 'http://localhost:4663'
-  process.env.JEJU_OAUTH3_SERVICE_URL = 'http://localhost:4664'
+  process.env.JEJU_NETWORK = 'localnet'
+  process.env.EQLITE_BLOCK_PRODUCER_ENDPOINT = 'http://localhost:4661'
+  process.env.EQLITE_DATABASE_ID = 'babylon_test'
 
   // Mock the database module entirely
   mock.module('@babylon/db', () => {

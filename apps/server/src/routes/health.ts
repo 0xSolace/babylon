@@ -68,13 +68,11 @@ async function checkRedis(): Promise<HealthCheck> {
     latencyMs: 0,
   }
 
-  const redisUrl = process.env.REDIS_URL ?? process.env.CACHE_URL
-  if (!redisUrl) {
-    check.message = 'Not configured'
-    return check
-  }
+  // Use DWS cache endpoint (same as what CacheClient uses)
+  const dwsEndpoint = process.env.JEJU_DWS_ENDPOINT ?? 'http://localhost:4030'
+  const cacheUrl = `${dwsEndpoint}/cache`
 
-  const response = await fetch(`${redisUrl.replace(/^redis/, 'http')}/health`, {
+  const response = await fetch(`${cacheUrl}/health`, {
     signal: AbortSignal.timeout(3000),
   }).catch(() => null)
 

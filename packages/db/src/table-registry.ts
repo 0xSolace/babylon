@@ -1,18 +1,18 @@
 /**
  * Table Registry
  *
- * Provides table metadata for CQL operations.
+ * Provides table metadata for EQLite operations.
  * Maps table objects to their database names.
  */
 
-import type * as SchemaTypes from './cql-schema-types'
+import type * as SchemaTypes from './eqlite-schema-types'
 
 // ============================================================================
 // Table Metadata
 // ============================================================================
 
 /**
- * Table metadata for CQL operations.
+ * Table metadata for EQLite operations.
  */
 export interface TableMeta {
   /** Database table name */
@@ -24,12 +24,12 @@ export interface TableMeta {
 }
 
 /**
- * Symbol used for CQL table names.
+ * Symbol used for EQLite table names.
  */
-export const CQL_NAME_SYMBOL = Symbol.for('cql:Name')
+export const EQLITE_NAME_SYMBOL = Symbol.for('eqlite:Name')
 
 /**
- * Column reference for CQL queries.
+ * Column reference for EQLite queries.
  * Returned when accessing table.columnName (e.g., users.id)
  */
 export interface ColumnRef {
@@ -141,7 +141,7 @@ export function getTableMeta(table: object | string): TableMeta | undefined {
  *
  * Supports:
  * - Tables with _: { name }
- * - Tables with Symbol.for('cql:Name')
+ * - Tables with Symbol.for('eqlite:Name')
  * - Registered tables in the registry
  */
 export function getTableName(table: object | string): string {
@@ -163,11 +163,11 @@ export function getTableName(table: object | string): string {
   }
 
   // Try Symbol-based name
-  const cqlNameSymbol = Symbol.for('cql:Name')
-  if (cqlNameSymbol in table) {
+  const eqliteNameSymbol = Symbol.for('eqlite:Name')
+  if (eqliteNameSymbol in table) {
     // Symbol is in object, access via computed property
     const tableWithSymbol = table as { [key: symbol]: unknown }
-    const symbolName = tableWithSymbol[cqlNameSymbol]
+    const symbolName = tableWithSymbol[eqliteNameSymbol]
     if (typeof symbolName === 'string') {
       return symbolName
     }
@@ -334,7 +334,7 @@ export const TABLE_NAMES = {
 export type TableName = (typeof TABLE_NAMES)[keyof typeof TABLE_NAMES]
 
 // ============================================================================
-// Table Reference Exports (for CQL query builder API)
+// Table Reference Exports (for EQLite query builder API)
 // ============================================================================
 
 /**

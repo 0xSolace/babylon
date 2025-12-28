@@ -6,7 +6,7 @@
  */
 
 import { promises as fs } from 'node:fs'
-import type { JsonValue } from '@babylon/shared'
+import type { JsonValue } from '@jejunetwork/shared'
 import type {
   BenchmarkGameSnapshot,
   GameState,

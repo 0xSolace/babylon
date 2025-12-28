@@ -32,7 +32,7 @@ async function startServer(): Promise<void> {
   } catch (error) {
     console.error('❌ Failed to initialize database:', error)
     console.error(
-      'Make sure CQL and DWS are running and CQL_BLOCK_PRODUCER_ENDPOINT is set',
+      'Make sure EQLite and DWS are running and EQLITE_BLOCK_PRODUCER_ENDPOINT is set',
     )
     if (
       String(error).includes('4028') ||

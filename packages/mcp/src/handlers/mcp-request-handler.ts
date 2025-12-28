@@ -5,8 +5,8 @@
  * Similar to A2A's JsonRpcTransportHandler
  */
 
-import type { JsonValue } from '@babylon/shared'
 import { JsonValueSchema } from '@babylon/shared'
+import type { JsonValue } from '@jejunetwork/shared'
 import { z } from 'zod'
 import { authenticateAgent } from '../auth/agent-auth'
 import { getAvailableTools, getInitializeResult } from '../server/mcp-server'

@@ -4,7 +4,7 @@
  * Dev Command - Start the full Babylon development environment
  *
  * This command:
- * 1. Starts the Jeju localnet (L1, L2, CQL) via the Jeju CLI
+ * 1. Starts the Jeju localnet (L1, L2, EQLite) via the Jeju CLI
  * 2. Deploys Babylon contracts
  * 3. Starts the Babylon backend server (Elysia)
  * 4. Starts the Babylon web app (Next.js)
@@ -18,7 +18,11 @@
 
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
-import { getCQLUrl, getDWSUrl, getFarcasterHubUrl } from '@jejunetwork/config'
+import {
+  getDWSUrl,
+  getEQLiteUrl,
+  getFarcasterHubUrl,
+} from '@jejunetwork/config'
 import { $ } from 'bun'
 import { getFlag, parseArgs, wantsHelp } from '../lib/args.js'
 import { logger } from '../lib/logger.js'
@@ -32,33 +36,48 @@ interface DevOptions {
   minimal: boolean
   skipChain: boolean
   skipContracts: boolean
-  skipCqlWait: boolean
+  skipEqliteWait: boolean
+  skipTokenBootstrap: boolean
   stop: boolean
 }
 
 function printHelp(): void {
   console.log(`
-Dev Command - Start Babylon development environment
+Dev Command - Start Babylon development environment with full token ecosystem
 
 USAGE:
   babylon dev [options]
 
 OPTIONS:
-  --minimal         Start chain only (no web app)
-  --skip-chain      Skip chain startup (assumes already running)
-  --skip-contracts  Skip contract deployment
-  --skip-cql-wait   Don't wait for CQL to be ready (may cause DB errors)
-  --stop            Stop all services
+  --minimal              Start chain only (no web app)
+  --skip-chain           Skip chain startup (assumes already running)
+  --skip-contracts       Skip contract deployment
+  --skip-eqlite-wait     Don't wait for EQLite to be ready (may cause database errors)
+  --skip-token-bootstrap Skip BBLN token, DAO, and liquidity setup
+  --stop                 Stop all services
+
+ON STARTUP (unless skipped):
+  1. Starts Jeju localnet (L1, L2, EQLite)
+  2. Deploys Babylon game contracts
+  3. Bootstraps BBLN token ecosystem:
+     - Deploys BBLN token (if not deployed)
+     - Deploys DAO (Governor, Treasury, Timelock)
+     - Seeds ETH/BBLN liquidity pool
+     - Seeds JEJU/BBLN liquidity pool  
+     - Funds NPCs with initial BBLN allocation
+  4. Starts backend server and web app
 
 ENVIRONMENT:
-  JEJU_RPC_URL      Override L2 RPC URL (default: http://localhost:6546)
-  CQL_ENDPOINT      Override CQL endpoint (default: http://localhost:4661)
+  JEJU_RPC_URL           Override L2 RPC URL (default: http://localhost:6546)
+  EQLITE_ENDPOINT        Override EQLite endpoint (default: http://localhost:4661)
+  DEPLOYER_PRIVATE_KEY   Private key for contract deployment (optional for local)
 
 EXAMPLES:
-  babylon dev                    # Start everything
-  babylon dev --minimal          # Chain only
-  babylon dev --skip-chain       # Web app only
-  babylon dev --stop             # Stop all services
+  babylon dev                         # Start everything with full token setup
+  babylon dev --minimal               # Chain only
+  babylon dev --skip-chain            # Web app only (chain already running)
+  babylon dev --skip-token-bootstrap  # Skip token/DAO/liquidity setup
+  babylon dev --stop                  # Stop all services
 `)
 }
 
@@ -197,10 +216,10 @@ async function startChain(): Promise<void> {
   }
 }
 
-function getCQLEndpoint(): string {
+function getEQLiteEndpoint(): string {
   // Environment variable takes precedence
-  if (process.env.CQL_BLOCK_PRODUCER_ENDPOINT) {
-    return process.env.CQL_BLOCK_PRODUCER_ENDPOINT
+  if (process.env.EQLITE_BLOCK_PRODUCER_ENDPOINT) {
+    return process.env.EQLITE_BLOCK_PRODUCER_ENDPOINT
   }
 
   // Try to get from Jeju config
@@ -211,13 +230,13 @@ function getCQLEndpoint(): string {
       | 'mainnet'
       | undefined) || 'localnet'
   try {
-    return getCQLUrl(network)
+    return getEQLiteUrl(network)
   } catch {
     // Fallback if config not available
   }
 
   // Fallback to default port based on network
-  // localnet uses port 4661 for CQL
+  // localnet uses port 4661 for EQLite
   return network === 'localnet'
     ? 'http://localhost:4661'
     : 'http://localhost:4300'
@@ -257,9 +276,9 @@ async function checkDWS(): Promise<boolean> {
   }
 }
 
-async function checkCQL(): Promise<boolean> {
+async function checkEQLite(): Promise<boolean> {
   try {
-    const endpoint = getCQLEndpoint()
+    const endpoint = getEQLiteEndpoint()
     const healthUrl = endpoint.endsWith('/health')
       ? endpoint
       : `${endpoint}/health`
@@ -304,29 +323,31 @@ async function waitForDWS(maxAttempts = 60): Promise<boolean> {
   logger.warn(
     `DWS did not become ready after ${maxAttempts} attempts (~${maxAttempts * 2} seconds)`,
   )
-  logger.warn('CQL queries require DWS to be running')
+  logger.warn('EQLite queries require DWS to be running')
   logger.info(`Expected DWS at: ${dwsUrl}`)
   logger.info('DWS should start automatically with jeju dev')
   logger.info('If DWS is not starting, you can try:')
   logger.info('  1. Check Jeju logs for DWS startup errors')
   logger.info('  2. Try starting DWS separately: jeju dws dev')
-  logger.info('  3. Use --skip-cql-wait to continue without database features')
+  logger.info(
+    '  3. Use --skip-eqlite-wait to continue without database features',
+  )
   return false
 }
 
-async function waitForCQL(maxAttempts = 30): Promise<boolean> {
-  logger.step('Waiting for CQL to be ready...')
+async function waitForEQLite(maxAttempts = 30): Promise<boolean> {
+  logger.step('Waiting for EQLite to be ready...')
 
-  // Ensure CQL_BLOCK_PRODUCER_ENDPOINT is set for @babylon/db
-  const cqlEndpoint = getCQLEndpoint()
-  process.env.CQL_BLOCK_PRODUCER_ENDPOINT = cqlEndpoint
-  logger.info(`CQL endpoint: ${cqlEndpoint}`)
+  // Ensure EQLITE_BLOCK_PRODUCER_ENDPOINT is set for @babylon/db
+  const eqliteEndpoint = getEQLiteEndpoint()
+  process.env.EQLITE_BLOCK_PRODUCER_ENDPOINT = eqliteEndpoint
+  logger.info(`EQLite endpoint: ${eqliteEndpoint}`)
 
-  // First wait for DWS (required for CQL queries)
-  logger.info('DWS is required for CQL queries, checking DWS first...')
+  // First wait for DWS (required for EQLite queries)
+  logger.info('DWS is required for EQLite queries, checking DWS first...')
   const dwsReady = await waitForDWS()
   if (!dwsReady) {
-    logger.warn('DWS not ready - CQL queries will fail without DWS')
+    logger.warn('DWS not ready - EQLite queries will fail without DWS')
     logger.info('You can continue, but database features may not work')
     logger.info(
       'Tip: Try running "jeju dws dev" separately if DWS is not starting',
@@ -334,13 +355,13 @@ async function waitForCQL(maxAttempts = 30): Promise<boolean> {
   }
 
   // Quick check first - maybe it's already ready
-  const quickCheck = await checkCQL()
+  const quickCheck = await checkEQLite()
   if (quickCheck) {
-    logger.info('CQL appears ready, verifying database initialization...')
+    logger.info('EQLite appears ready, verifying database initialization...')
     try {
       const { initializeDatabase } = await import('@babylon/db')
       await initializeDatabase()
-      logger.success('CQL is healthy and database initialized')
+      logger.success('EQLite is healthy and database initialized')
       return true
     } catch (error) {
       logger.info(
@@ -361,21 +382,21 @@ async function waitForCQL(maxAttempts = 30): Promise<boolean> {
     // Show progress every 5 attempts
     if (i > 0 && i % 5 === 0) {
       logger.info(
-        `Still waiting for CQL... (${i}/${maxAttempts} attempts, ~${i * 2}s)`,
+        `Still waiting for EQLite... (${i}/${maxAttempts} attempts, ~${i * 2}s)`,
       )
     }
 
-    const healthy = await checkCQL()
+    const healthy = await checkEQLite()
     if (healthy) {
-      logger.info('CQL health endpoint responded, initializing database...')
+      logger.info('EQLite health endpoint responded, initializing database...')
       // Also verify the database can be initialized
       try {
         const { initializeDatabase } = await import('@babylon/db')
         await initializeDatabase()
-        logger.success('CQL is healthy and database initialized')
+        logger.success('EQLite is healthy and database initialized')
         return true
       } catch (error) {
-        // CQL health check passed but DB init failed, keep waiting
+        // EQLite health check passed but DB init failed, keep waiting
         if (i < maxAttempts - 1) {
           logger.info(
             `Database initialization failed, retrying... (${String(error).slice(0, 80)})`,
@@ -384,7 +405,7 @@ async function waitForCQL(maxAttempts = 30): Promise<boolean> {
           continue
         }
         logger.warn(
-          'CQL health check passed but database initialization failed',
+          'EQLite health check passed but database initialization failed',
         )
         logger.warn(String(error))
         return false
@@ -397,10 +418,10 @@ async function waitForCQL(maxAttempts = 30): Promise<boolean> {
   }
 
   logger.warn(
-    `CQL did not become ready after ${maxAttempts} attempts (~${maxAttempts * 2} seconds)`,
+    `EQLite did not become ready after ${maxAttempts} attempts (~${maxAttempts * 2} seconds)`,
   )
   logger.info('You can continue, but database features may not work')
-  logger.info('Tip: Use --skip-cql-wait to skip this wait in the future')
+  logger.info('Tip: Use --skip-eqlite-wait to skip this wait in the future')
   return false
 }
 
@@ -427,6 +448,72 @@ async function deployContracts(): Promise<void> {
   logger.success('Contracts deployed')
 }
 
+async function bootstrapTokenEcosystem(): Promise<void> {
+  logger.header('Bootstrapping BBLN Token Ecosystem')
+
+  try {
+    // Dynamic import to avoid circular dependencies
+    const { bootstrapTokenEcosystem: bootstrap, isTokenEcosystemReady } =
+      await import('@babylon/api')
+
+    // Check if already ready
+    if (isTokenEcosystemReady()) {
+      logger.success('Token ecosystem already initialized')
+      return
+    }
+
+    logger.step('Deploying BBLN token, DAO, and liquidity pools...')
+
+    const result = await bootstrap({
+      force: false,
+      skipLiquidity: false,
+      skipNpcFunding: false,
+      dryRun: false,
+    })
+
+    if (result.alreadyInitialized) {
+      logger.success('Token ecosystem was already initialized')
+      return
+    }
+
+    if (result.errors.length > 0) {
+      logger.warn(
+        `Token bootstrap completed with ${result.errors.length} errors`,
+      )
+      for (const err of result.errors) {
+        console.log(`  - ${err}`)
+      }
+    } else {
+      logger.success('Token ecosystem bootstrapped successfully')
+    }
+
+    // Log summary
+    console.log('\n  Token Ecosystem Summary:')
+    console.log(`    BBLN Token:     ${result.tokenAddress ?? 'Not deployed'}`)
+    if (result.daoAddresses) {
+      console.log(
+        `    DAO Governor:   ${result.daoAddresses.governor ?? 'Not deployed'}`,
+      )
+      console.log(
+        `    DAO Treasury:   ${result.daoAddresses.treasury ?? 'Not deployed'}`,
+      )
+    }
+    console.log(
+      `    ETH/BBLN Pool:  ${result.liquidityPairs.ethBbln ?? 'Not created'}`,
+    )
+    console.log(
+      `    JEJU/BBLN Pool: ${result.liquidityPairs.jejuBbln ?? 'Not created'}`,
+    )
+    console.log(`    NPCs Funded:    ${result.npcsCount}`)
+  } catch (error) {
+    logger.warn('Token bootstrap failed - game will use simulated balances')
+    console.log(
+      `  Error: ${error instanceof Error ? error.message : String(error)}`,
+    )
+    console.log('  Run "babylon token fund-npcs" manually to retry funding')
+  }
+}
+
 async function startWebApp(): Promise<void> {
   logger.header('Starting Babylon')
 
@@ -434,8 +521,8 @@ async function startWebApp(): Promise<void> {
   const dwsEndpoint = getDWSEndpoint()
 
   logger.step('Starting backend server...')
-  const cqlEndpoint = getCQLEndpoint()
-  logger.info(`Using CQL endpoint: ${cqlEndpoint}`)
+  const eqliteEndpoint = getEQLiteEndpoint()
+  logger.info(`Using EQLite endpoint: ${eqliteEndpoint}`)
 
   const serverProc = Bun.spawn(['bun', 'run', 'dev'], {
     cwd: join(BABYLON_ROOT, 'apps/server'),
@@ -445,7 +532,7 @@ async function startWebApp(): Promise<void> {
       ...process.env,
       JEJU_NETWORK: 'localnet',
       PUBLIC_RPC_URL: 'http://localhost:6546',
-      CQL_BLOCK_PRODUCER_ENDPOINT: cqlEndpoint,
+      EQLITE_BLOCK_PRODUCER_ENDPOINT: eqliteEndpoint,
       JEJU_DWS_ENDPOINT: dwsEndpoint,
       MESSAGING_MODE: 'decentralized',
       FARCASTER_HUB_URL: getFarcasterHubUrl(),
@@ -465,7 +552,7 @@ async function startWebApp(): Promise<void> {
       ...process.env,
       JEJU_NETWORK: 'localnet',
       PUBLIC_RPC_URL: 'http://localhost:6546',
-      CQL_BLOCK_PRODUCER_ENDPOINT: cqlEndpoint,
+      EQLITE_BLOCK_PRODUCER_ENDPOINT: eqliteEndpoint,
       JEJU_DWS_ENDPOINT: dwsEndpoint,
       MESSAGING_MODE: 'decentralized',
       FARCASTER_HUB_URL: getFarcasterHubUrl(),
@@ -510,7 +597,8 @@ export async function runDevCommand(args: string[]): Promise<void> {
     minimal: getFlag(parsed, 'minimal'),
     skipChain: getFlag(parsed, 'skip-chain'),
     skipContracts: getFlag(parsed, 'skip-contracts'),
-    skipCqlWait: getFlag(parsed, 'skip-cql-wait'),
+    skipEqliteWait: getFlag(parsed, 'skip-eqlite-wait'),
+    skipTokenBootstrap: getFlag(parsed, 'skip-token-bootstrap'),
     stop: getFlag(parsed, 'stop'),
   }
 
@@ -541,31 +629,33 @@ export async function runDevCommand(args: string[]): Promise<void> {
     }
   }
 
-  // Start chain (L1, L2, CQL)
+  // Start chain (L1, L2, EQLite)
   if (!options.skipChain) {
     await startChain()
 
-    // Wait for CQL to be fully ready and database initialized
-    if (!options.skipCqlWait) {
-      const cqlReady = await waitForCQL()
-      if (!cqlReady) {
-        logger.warn('CQL not fully ready - some features may not work')
-        const endpoint = getCQLEndpoint()
-        logger.info(`CQL endpoint: ${endpoint}`)
-        logger.info('You may need to wait a bit longer for CQL to initialize')
-        logger.info('Or use --skip-cql-wait to continue anyway')
+    // Wait for EQLite to be fully ready and database initialized
+    if (!options.skipEqliteWait) {
+      const eqliteReady = await waitForEQLite()
+      if (!eqliteReady) {
+        logger.warn('EQLite not fully ready - some features may not work')
+        const endpoint = getEQLiteEndpoint()
+        logger.info(`EQLite endpoint: ${endpoint}`)
+        logger.info(
+          'You may need to wait a bit longer for EQLite to initialize',
+        )
+        logger.info('Or use --skip-eqlite-wait to continue anyway')
       }
     } else {
-      logger.info('Skipping CQL wait (--skip-cql-wait)')
-      logger.warn('Database features may not work until CQL is ready')
+      logger.info('Skipping EQLite wait (--skip-eqlite-wait)')
+      logger.warn('Database features may not work until EQLite is ready')
     }
   } else {
-    // Even if skipping chain, check if CQL is available
-    const cqlHealthy = await checkCQL()
-    if (!cqlHealthy) {
-      logger.warn('CQL not responding - decentralized features may not work')
-      const endpoint = getCQLEndpoint()
-      logger.info(`CQL endpoint: ${endpoint}`)
+    // Even if skipping chain, check if EQLite is available
+    const eqliteHealthy = await checkEQLite()
+    if (!eqliteHealthy) {
+      logger.warn('EQLite not responding - decentralized features may not work')
+      const endpoint = getEQLiteEndpoint()
+      logger.info(`EQLite endpoint: ${endpoint}`)
     }
   }
 
@@ -574,13 +664,20 @@ export async function runDevCommand(args: string[]): Promise<void> {
     await deployContracts()
   }
 
+  // Bootstrap token ecosystem (BBLN, DAO, liquidity pools, NPC funding)
+  if (!options.skipTokenBootstrap) {
+    await bootstrapTokenEcosystem()
+  } else {
+    logger.info('Skipping token bootstrap (--skip-token-bootstrap)')
+  }
+
   // Start web app
   if (!options.minimal) {
     await startWebApp()
   } else {
     logger.success('Minimal mode - chain is running')
     logger.info('L2 RPC: http://localhost:6546')
-    logger.info('CQL API: http://localhost:4661')
+    logger.info('EQLite API: http://localhost:4661')
     logger.info('\nPress Ctrl+C to stop')
 
     // Keep running

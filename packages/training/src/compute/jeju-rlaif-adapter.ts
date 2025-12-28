@@ -12,7 +12,8 @@
  */
 
 import { getDB, initializeDB } from '@babylon/db'
-import { type JsonValue, logger } from '@babylon/shared'
+import { logger } from '@babylon/shared'
+import type { JsonValue } from '@jejunetwork/shared'
 import {
   type JudgeRubric as JejuJudgeRubric,
   registerOrUpdateRubric as jejuRegisterRubric,

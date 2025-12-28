@@ -10,24 +10,54 @@
   "scripts": {
     "postinstall": "bun run scripts/postinstall-solidity-deps.ts && bun run scripts/postinstall-install-python-deps.ts",
     "babylon": "bun run apps/cli/src/index.ts",
+    
     "dev": "bun run apps/cli/src/index.ts dev",
     "dev:web": "turbo dev --filter=babylon-web",
+    "dev:server": "bun run --watch apps/server/src/index.ts",
+    "dev:hmr": "concurrently -n server,web -c blue,green \"bun run dev:server\" \"bun run dev:web\"",
+    
+    "start": "bun run apps/server/src/index.ts",
+    "start:production": "bun run apps/cli/src/index.ts deploy dws --env=localnet && bun run apps/cli/src/index.ts deploy ipfs",
+    "start:static": "bun run build:static && bun run deploy:ipfs && bun run deploy:dws-local",
+    
     "build": "turbo build",
-    "build:static": "bun run apps/cli/src/index.ts deploy build",
+    "build:static": "bun run apps/cli/src/index.ts deploy build --env=local",
+    "build:testnet": "bun run apps/cli/src/index.ts deploy build --env=testnet",
+    "build:mainnet": "bun run apps/cli/src/index.ts deploy build --env=mainnet",
+    "build:worker": "bun build apps/api/dws-worker.ts --outdir dist/worker --target bun --minify",
+    
+    "test": "bun run test:setup && turbo test",
+    "test:setup": "bun run packages/testing/infrastructure/setup.ts --mode=integration --deploy",
+    "test:unit": "bun test packages/testing/unit/ --timeout 120000",
+    "test:integration": "bun run test:setup && bun test packages/testing/integration/ --timeout 180000",
+    "test:e2e": "bun run test:setup && bunx playwright test --config packages/testing/playwright.config.ts",
+    "test:synpress": "bun run test:setup && bunx playwright test --config packages/testing/synpress/synpress.config.ts",
+    "test:all": "bun run test:unit && bun run test:integration && bun run test:e2e",
+    
     "typecheck": "turbo typecheck",
     "lint": "biome check --write --unsafe .",
-    "check": "biome check --write .",
+    "check": "biome check --write --unsafe .",
+    
     "db:seed": "bun run apps/cli/src/index.ts db seed",
     "db:status": "bun run apps/cli/src/index.ts db status",
+    "db:migrate": "bun run apps/cli/src/index.ts db migrate",
+    
     "docs:generate": "bun run apps/cli/src/index.ts docs all",
     "docs:vendors": "bun run apps/cli/src/index.ts docs vendors",
+    
     "game:tick": "bun run apps/cli/src/index.ts game tick",
     "game:cron": "bun run apps/cli/src/index.ts game cron",
+    
+    "deploy": "bun run apps/cli/src/index.ts deploy",
     "deploy:local": "bun run apps/cli/src/index.ts deploy local",
-    "deploy:testnet": "bun run apps/cli/src/index.ts deploy testnet",
-    "deploy:mainnet": "bun run apps/cli/src/index.ts deploy mainnet --force",
+    "deploy:dws-local": "bun run apps/cli/src/index.ts deploy dws --env=testnet --dry-run",
+    "deploy:testnet": "bun run build:testnet && bun run apps/cli/src/index.ts deploy testnet && bun run apps/cli/src/index.ts deploy full --env=testnet",
+    "deploy:mainnet": "bun run build:mainnet && bun run apps/cli/src/index.ts deploy mainnet --force && bun run apps/cli/src/index.ts deploy full --env=mainnet",
     "deploy:frontend": "bun run apps/cli/src/index.ts deploy frontend",
     "deploy:ipfs": "bun run apps/cli/src/index.ts deploy ipfs",
+    "deploy:dws": "bun run apps/cli/src/index.ts deploy dws",
+    "deploy:full": "bun run apps/cli/src/index.ts deploy full",
+    
     "knip": "knip",
     "knip:fix": "knip --fix"
   },

@@ -1,5 +1,6 @@
-import { useJejuWallet } from '@babylon/auth'
-import { type JsonValue, logger, WALLET_ERROR_MESSAGES } from '@babylon/shared'
+import { logger, WALLET_ERROR_MESSAGES } from '@babylon/shared'
+import { useJejuWallet } from '@jejunetwork/auth'
+import type { JsonValue } from '@jejunetwork/shared'
 import { useCallback, useEffect, useMemo, useRef } from 'react'
 import type { Address, Hex } from 'viem'
 

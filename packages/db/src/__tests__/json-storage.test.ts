@@ -10,7 +10,7 @@ import {
   getStorageMode,
   initializeJsonMode,
   isSimulationMode,
-  resetToCQLMode,
+  resetToEQLiteMode,
 } from '../index'
 import { getJsonState, saveJsonSnapshot } from '../json-storage'
 
@@ -26,7 +26,7 @@ describe('JSON Storage Backend', () => {
   })
 
   afterEach(() => {
-    resetToCQLMode()
+    resetToEQLiteMode()
   })
 
   test('initializes in JSON mode', () => {
@@ -320,7 +320,7 @@ describe('Question Arc Plans in JSON Mode', () => {
   })
 
   afterEach(() => {
-    resetToCQLMode()
+    resetToEQLiteMode()
   })
 
   test('creates and retrieves arc plans', async () => {
@@ -378,7 +378,7 @@ describe('Complex Queries in JSON Mode', () => {
   })
 
   afterEach(() => {
-    resetToCQLMode()
+    resetToEQLiteMode()
   })
 
   test('handles multiple tables (posts and users)', async () => {
@@ -607,7 +607,7 @@ describe('Snapshot Operations', () => {
   })
 
   afterEach(() => {
-    resetToCQLMode()
+    resetToEQLiteMode()
   })
 
   test('saves and loads snapshots', async () => {
@@ -636,7 +636,7 @@ describe('Snapshot Operations', () => {
     expect(state?.tables.users).toBeDefined()
 
     // Reset and reload
-    resetToCQLMode()
+    resetToEQLiteMode()
     await initializeJsonMode(testDir)
 
     // Verify data is restored

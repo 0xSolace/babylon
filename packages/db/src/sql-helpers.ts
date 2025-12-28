@@ -2,7 +2,7 @@
  * Native SQL Helpers
  *
  * Provides SQL condition builders (eq, and, or, etc).
- * These work directly with CQL.
+ * These work directly with EQLite.
  */
 
 import type { QueryParam } from '@jejunetwork/db'

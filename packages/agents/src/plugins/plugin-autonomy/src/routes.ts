@@ -1,19 +1,12 @@
-import type { JsonValue } from '@babylon/shared'
-import type { IAgentRuntime, Route } from '@elizaos/core'
+import type {
+  IAgentRuntime,
+  Route,
+  RouteRequest,
+  RouteResponse,
+} from '@elizaos/core'
+import type { JsonValue } from '@jejunetwork/shared'
 import type { AutonomyService } from './service'
 import { AutonomousServiceType } from './types'
-
-// Route handler types compatible with ElizaOS
-interface RouteRequest {
-  body?: unknown
-  params?: Record<string, string>
-  query?: Record<string, string | string[]>
-}
-
-interface RouteResponse {
-  status?: (code: number) => RouteResponse
-  json?: (data: unknown) => void
-}
 
 // Helper to safely send JSON responses
 function sendJson(res: RouteResponse, data: unknown, statusCode = 200): void {

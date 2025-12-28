@@ -1,10 +1,10 @@
-import { useJejuAuth } from '@babylon/auth'
 import {
   getReferralUrl,
   logger,
   POINTS,
   signInWithFarcaster,
 } from '@babylon/shared'
+import { useJejuAuth } from '@jejunetwork/auth'
 import {
   Check,
   ChevronDown,

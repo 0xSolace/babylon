@@ -19,8 +19,8 @@ import type {
   RequestContext,
 } from '@a2a-js/sdk/server'
 import { db } from '@babylon/db'
-import type { JsonValue } from '@babylon/shared'
 import { JsonValueSchema, logger } from '@babylon/shared'
+import type { JsonValue } from '@jejunetwork/shared'
 import { generateSnowflakeId, isJsonRecord } from '@jejunetwork/shared'
 import { v4 as uuidv4 } from 'uuid'
 import { z } from 'zod'

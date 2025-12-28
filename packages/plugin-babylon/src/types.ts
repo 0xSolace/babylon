@@ -5,13 +5,13 @@
  * Includes type guards, API response interfaces, and state extensions
  */
 
+import { asUUID, type State, type UUID } from '@elizaos/core'
 import {
   hasBooleanProperty,
   hasNumberProperty,
   hasStringProperty,
   isObject,
-} from '@babylon/shared'
-import { asUUID, type State, type UUID } from '@elizaos/core'
+} from '@jejunetwork/shared'
 
 export { isObject }
 

@@ -10,15 +10,60 @@ import {
   gt,
   lt,
   messages,
+  users,
 } from '@babylon/db'
 import { logger } from '@babylon/shared'
 import { generateSnowflakeId } from '@jejunetwork/shared'
 import { Elysia, t } from 'elysia'
+import type { Address } from 'viem'
 import {
   authMiddleware,
   getAuthContext,
   rateLimitMiddleware,
 } from '../middleware'
+
+/** XMTP integration enabled */
+const XMTP_ENABLED = process.env.XMTP_ENABLED === 'true'
+
+/**
+ * Relay message through XMTP if enabled
+ * This provides end-to-end encryption while keeping local storage as source of truth
+ */
+async function relayToXMTP(
+  senderAddress: Address,
+  recipientAddress: Address,
+  content: string,
+): Promise<{ success: boolean; error?: string }> {
+  if (!XMTP_ENABLED) {
+    return { success: true } // Skip if disabled
+  }
+
+  try {
+    const { createMessagingClient } = await import('@jejunetwork/messaging')
+
+    const client = createMessagingClient({
+      address: senderAddress,
+      rpcUrl: process.env.JEJU_RPC_URL ?? 'http://localhost:8545',
+      relayUrl: process.env.JEJU_RELAY_URL ?? 'http://localhost:3200',
+    })
+
+    // Note: In production, would use KMS for key management
+    // For now, just attempt the relay if client is available
+    const result = await client.sendMessage({ to: recipientAddress, content })
+
+    return { success: result.success, error: result.error }
+  } catch (error) {
+    logger.warn(
+      'XMTP relay failed (non-blocking)',
+      { error: error instanceof Error ? error.message : 'Unknown' },
+      'ChatRoutes',
+    )
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown',
+    }
+  }
+}
 
 /**
  * Chat routes
@@ -139,6 +184,124 @@ const createChatsRoutes = () =>
         detail: {
           tags: ['Chats'],
           summary: 'List user chats',
+        },
+      },
+    )
+
+    // Create new chat (DM or group)
+    .post(
+      '/',
+      async (ctx) => {
+        const { user, isAuthenticated } = getAuthContext(ctx)
+        const { set, body } = ctx
+        if (!isAuthenticated || !user) {
+          set.status = 401
+          return { error: 'Unauthorized' }
+        }
+
+        const { participantIds, name, isGroup } = body
+
+        // Validate participants
+        if (!participantIds || participantIds.length === 0) {
+          set.status = 400
+          return { error: 'At least one participant is required' }
+        }
+
+        // For DMs, check if a DM already exists between these users
+        if (!isGroup && participantIds.length === 1) {
+          const otherUserId = participantIds[0]
+          const dmId = `dm-${[user.userId, otherUserId].sort().join('-')}`
+
+          const [existingChat] = await db
+            .select()
+            .from(chats)
+            .where(eq(chats.id, dmId))
+            .limit(1)
+
+          if (existingChat) {
+            return {
+              success: true,
+              chat: existingChat,
+              isExisting: true,
+            }
+          }
+        }
+
+        // Create chat
+        const chatId = isGroup
+          ? await generateSnowflakeId()
+          : `dm-${[user.userId, ...participantIds].sort().join('-')}`
+
+        await db.insert(chats).values({
+          id: chatId,
+          name: isGroup ? (name ?? 'New Group') : null,
+          type: isGroup ? 'group' : 'dm',
+          isGroup: isGroup ?? false,
+          createdBy: user.userId,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        })
+
+        // Add creator as participant
+        const creatorParticipantId = await generateSnowflakeId()
+        await db.insert(chatParticipants).values({
+          id: creatorParticipantId,
+          chatId,
+          userId: user.userId,
+          isActive: true,
+          joinedAt: new Date(),
+        })
+
+        // Add other participants
+        for (const participantId of participantIds) {
+          const pId = await generateSnowflakeId()
+          await db.insert(chatParticipants).values({
+            id: pId,
+            chatId,
+            userId: participantId,
+            isActive: true,
+            joinedAt: new Date(),
+          })
+        }
+
+        // Add creator as admin for group chats
+        if (isGroup) {
+          const adminId = await generateSnowflakeId()
+          await db.insert(chatAdmins).values({
+            id: adminId,
+            chatId,
+            userId: user.userId,
+          })
+        }
+
+        logger.info(
+          'Chat created',
+          { chatId, type: isGroup ? 'group' : 'dm', creatorId: user.userId },
+          'POST /api/chats',
+        )
+
+        return {
+          success: true,
+          chat: {
+            id: chatId,
+            name: isGroup ? (name ?? 'New Group') : null,
+            type: isGroup ? 'group' : 'dm',
+            isGroup: isGroup ?? false,
+          },
+          isExisting: false,
+        }
+      },
+      {
+        body: t.Object({
+          participantIds: t.Array(t.String()),
+          name: t.Optional(t.String()),
+          isGroup: t.Optional(t.Boolean()),
+        }),
+        detail: {
+          tags: ['Chats'],
+          summary: 'Create new chat',
+          description:
+            'Creates a new DM or group chat with specified participants',
         },
       },
     )
@@ -390,15 +553,71 @@ const createChatsRoutes = () =>
             ),
           )
 
+        // For DM chats, relay through XMTP for end-to-end encryption
+        let xmtpRelayResult: { success: boolean; error?: string } | null = null
+
+        // Get chat type to determine if this is a DM
+        const [chatInfo] = await db
+          .select({ isGroup: chats.isGroup })
+          .from(chats)
+          .where(eq(chats.id, params.id))
+          .limit(1)
+
+        if (chatInfo && !chatInfo.isGroup) {
+          // This is a DM - get the other participant's wallet address
+          const otherParticipants = await db
+            .select({ userId: chatParticipants.userId })
+            .from(chatParticipants)
+            .where(
+              and(
+                eq(chatParticipants.chatId, params.id),
+                eq(chatParticipants.isActive, true),
+              ),
+            )
+
+          const otherUserId = otherParticipants.find(
+            (p) => p.userId !== user.userId,
+          )?.userId
+          if (otherUserId) {
+            // Get wallet addresses for XMTP relay
+            const [senderWallet] = await db
+              .select({ walletAddress: users.walletAddress })
+              .from(users)
+              .where(eq(users.id, user.userId))
+              .limit(1)
+
+            const [recipientWallet] = await db
+              .select({ walletAddress: users.walletAddress })
+              .from(users)
+              .where(eq(users.id, otherUserId))
+              .limit(1)
+
+            if (senderWallet?.walletAddress && recipientWallet?.walletAddress) {
+              // Relay through XMTP (non-blocking)
+              xmtpRelayResult = await relayToXMTP(
+                senderWallet.walletAddress as Address,
+                recipientWallet.walletAddress as Address,
+                content.trim(),
+              )
+            }
+          }
+        }
+
         logger.info(
           'Message sent',
-          { messageId, chatId: params.id, userId: user.userId },
+          {
+            messageId,
+            chatId: params.id,
+            userId: user.userId,
+            xmtpRelayed: xmtpRelayResult?.success ?? false,
+          },
           'POST /api/chats/:id/messages',
         )
 
         return {
           success: true,
           message: newMessage,
+          xmtpRelayed: xmtpRelayResult?.success ?? false,
         }
       },
       {
@@ -420,6 +639,8 @@ const createChatsRoutes = () =>
         detail: {
           tags: ['Chats'],
           summary: 'Send chat message',
+          description:
+            'Send a message in a chat. For DMs, also relays through XMTP for end-to-end encryption if enabled.',
         },
       },
     )

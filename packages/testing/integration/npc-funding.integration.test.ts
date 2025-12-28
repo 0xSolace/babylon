@@ -7,6 +7,7 @@
  * - Error handling
  * - ICO integration
  *
+ * REQUIRES: jeju dev running (EQLite, chain, DWS)
  * Run with: bun test packages/testing/integration/npc-funding.integration.test.ts
  */
 
@@ -21,386 +22,417 @@ import {
   type NPCTierName,
   resetNPCFundingService,
 } from '@babylon/api/services/npc-funding-service'
+import { initializeDatabase, resetDB } from '@babylon/db'
 import { StaticDataRegistry } from '@babylon/engine'
 import { parseEther, zeroAddress } from 'viem'
 
 // Test configuration
-const TEST_RPC_URL = process.env.TEST_RPC_URL ?? 'http://localhost:6545'
-const TEST_CHAIN_ID = 31337 // Hardhat
+const TEST_RPC_URL = process.env.TEST_RPC_URL ?? 'http://localhost:6546'
+const TEST_CHAIN_ID = 420690 // Jeju localnet
 
-describe('NPC Funding Service Integration Tests', () => {
-  beforeAll(() => {
-    // Reset services before tests
-    resetNPCFundingService()
-    resetICOAutomationService()
-  })
-
-  afterAll(() => {
-    resetNPCFundingService()
-    resetICOAutomationService()
-  })
-
-  describe('NPC Tier Configuration', () => {
-    it('should have correct tier allocations', () => {
-      expect(NPC_TIERS.tier1.allocation).toBe(parseEther('1000000'))
-      expect(NPC_TIERS.tier2.allocation).toBe(parseEther('100000'))
-      expect(NPC_TIERS.tier3.allocation).toBe(parseEther('10000'))
+// Check if EQLite is available (requires jeju dev running)
+async function checkEQLiteHealth(): Promise<boolean> {
+  const endpoint =
+    process.env.EQLITE_BLOCK_PRODUCER_ENDPOINT || 'http://localhost:4661'
+  try {
+    const response = await fetch(`${endpoint}/health`, {
+      signal: AbortSignal.timeout(5000),
     })
+    return response.ok
+  } catch {
+    return false
+  }
+}
 
-    it('should have correct tier descriptions', () => {
-      expect(NPC_TIERS.tier1.description).toBe('Major Characters')
-      expect(NPC_TIERS.tier2.description).toBe('Supporting')
-      expect(NPC_TIERS.tier3.description).toBe('Minor')
-    })
+const EQLITE_AVAILABLE = await checkEQLiteHealth()
 
-    it('should have all tier names defined', () => {
-      const tierNames: NPCTierName[] = ['tier1', 'tier2', 'tier3']
-      for (const name of tierNames) {
-        expect(NPC_TIERS[name]).toBeDefined()
-        expect(NPC_TIERS[name].name).toBe(name)
-      }
-    })
-  })
+describe.skipIf(!EQLITE_AVAILABLE)(
+  'NPC Funding Service Integration Tests',
+  () => {
+    beforeAll(async () => {
+      // Set environment for localnet
+      process.env.JEJU_NETWORK = 'localnet'
+      process.env.EQLITE_BLOCK_PRODUCER_ENDPOINT = 'http://localhost:4661'
+      process.env.EQLITE_DATABASE_ID = 'babylon'
 
-  describe('NPCFundingService Initialization', () => {
-    it('should initialize with default configuration', () => {
-      const service = getNPCFundingService({
-        rpcUrl: TEST_RPC_URL,
-        chainId: TEST_CHAIN_ID,
-        devMode: true,
-      })
+      // Initialize database
+      resetDB()
+      await initializeDatabase()
 
-      const config = service.getConfig()
-      expect(config.rpcUrl).toBe(TEST_RPC_URL)
-      expect(config.chainId).toBe(TEST_CHAIN_ID)
-      expect(config.devMode).toBe(true)
-      expect(config.batchSize).toBe(50)
-    })
-
-    it('should initialize with custom batch size', () => {
+      // Reset services before tests
       resetNPCFundingService()
-      const service = getNPCFundingService({
-        rpcUrl: TEST_RPC_URL,
-        chainId: TEST_CHAIN_ID,
-        devMode: true,
-        batchSize: 25,
-      })
-
-      expect(service.getConfig().batchSize).toBe(25)
-    })
-
-    it('should discover NPC wallets on initialize', async () => {
-      resetNPCFundingService()
-      const service = getNPCFundingService({
-        rpcUrl: TEST_RPC_URL,
-        chainId: TEST_CHAIN_ID,
-        devMode: true,
-      })
-
-      await service.initialize()
-      const wallets = service.getNPCWallets()
-
-      // Should have discovered some wallets from static registry
-      expect(wallets.length).toBeGreaterThanOrEqual(0)
-    })
-  })
-
-  describe('Funding Calculations', () => {
-    it('should calculate total funding correctly', async () => {
-      resetNPCFundingService()
-      const service = getNPCFundingService({
-        rpcUrl: TEST_RPC_URL,
-        chainId: TEST_CHAIN_ID,
-        devMode: true,
-      })
-
-      await service.initialize()
-      const calculation = await service.calculateTotalFunding()
-
-      // Total should equal sum of all tiers
-      const expectedTotal =
-        calculation.byTier.tier1.total +
-        calculation.byTier.tier2.total +
-        calculation.byTier.tier3.total
-
-      expect(calculation.total).toBe(expectedTotal)
-    })
-
-    it('should correctly count NPCs by tier', async () => {
-      resetNPCFundingService()
-      const service = getNPCFundingService({
-        rpcUrl: TEST_RPC_URL,
-        chainId: TEST_CHAIN_ID,
-        devMode: true,
-      })
-
-      await service.initialize()
-      const calculation = await service.calculateTotalFunding()
-      const wallets = service.getNPCWallets()
-
-      // Count should match wallets
-      const totalCount =
-        calculation.byTier.tier1.count +
-        calculation.byTier.tier2.count +
-        calculation.byTier.tier3.count
-
-      expect(totalCount).toBe(wallets.length)
-    })
-
-    it('should calculate tier totals correctly', async () => {
-      resetNPCFundingService()
-      const service = getNPCFundingService({
-        rpcUrl: TEST_RPC_URL,
-        chainId: TEST_CHAIN_ID,
-        devMode: true,
-      })
-
-      await service.initialize()
-      const calculation = await service.calculateTotalFunding()
-
-      // Verify each tier total = count * allocation
-      expect(calculation.byTier.tier1.total).toBe(
-        BigInt(calculation.byTier.tier1.count) * NPC_TIERS.tier1.allocation,
-      )
-      expect(calculation.byTier.tier2.total).toBe(
-        BigInt(calculation.byTier.tier2.count) * NPC_TIERS.tier2.allocation,
-      )
-      expect(calculation.byTier.tier3.total).toBe(
-        BigInt(calculation.byTier.tier3.count) * NPC_TIERS.tier3.allocation,
-      )
-    })
-  })
-
-  describe('Funding Status', () => {
-    it('should return funding status', async () => {
-      resetNPCFundingService()
-      const service = getNPCFundingService({
-        rpcUrl: TEST_RPC_URL,
-        chainId: TEST_CHAIN_ID,
-        devMode: true,
-        tokenAddress: zeroAddress, // Use zero address for testing
-      })
-
-      await service.initialize()
-      const status = await service.getFundingStatus()
-
-      expect(status).toHaveProperty('totalNPCs')
-      expect(status).toHaveProperty('funded')
-      expect(status).toHaveProperty('unfunded')
-      expect(status).toHaveProperty('totalFundedAmount')
-      expect(status).toHaveProperty('totalPendingAmount')
-      expect(status).toHaveProperty('byTier')
-    })
-
-    it('should track funded vs unfunded NPCs', async () => {
-      resetNPCFundingService()
-      const service = getNPCFundingService({
-        rpcUrl: TEST_RPC_URL,
-        chainId: TEST_CHAIN_ID,
-        devMode: true,
-        tokenAddress: zeroAddress,
-      })
-
-      await service.initialize()
-      const status = await service.getFundingStatus()
-
-      // Total should equal funded + unfunded
-      expect(status.totalNPCs).toBe(status.funded + status.unfunded)
-    })
-  })
-
-  describe('Static Data Registry Integration', () => {
-    it('should access actors from static registry', () => {
-      const allActors = StaticDataRegistry.getAllActors()
-      expect(Array.isArray(allActors)).toBe(true)
-    })
-
-    it('should have actors with tiers', () => {
-      const allActors = StaticDataRegistry.getAllActors()
-      const actorsWithTiers = allActors.filter((a) => a.tier !== null)
-
-      // Should have some actors with tiers
-      expect(actorsWithTiers.length).toBeGreaterThanOrEqual(0)
-    })
-
-    it('should map S_TIER to tier1', () => {
-      const sTierActors = StaticDataRegistry.getActorsByTier('S_TIER')
-      // S_TIER actors should map to tier1 funding
-      for (const actor of sTierActors) {
-        expect(actor.tier).toBe('S_TIER')
-      }
-    })
-
-    it('should map A_TIER to tier2', () => {
-      const aTierActors = StaticDataRegistry.getActorsByTier('A_TIER')
-      for (const actor of aTierActors) {
-        expect(actor.tier).toBe('A_TIER')
-      }
-    })
-  })
-
-  describe('ICO Integration', () => {
-    it('should integrate with ICO automation service', async () => {
-      const icoService = getICOAutomationService({
-        chainId: TEST_CHAIN_ID,
-        rpcUrl: TEST_RPC_URL,
-        devMode: true,
-      })
-
-      // ICO service should have fundNPCsFromTreasury method
-      expect(typeof icoService.fundNPCsFromTreasury).toBe('function')
-    })
-
-    it('should call NPC funding without treasury key configured', async () => {
       resetICOAutomationService()
-      resetNPCFundingService()
+    })
 
-      const icoService = getICOAutomationService({
-        chainId: TEST_CHAIN_ID,
-        rpcUrl: TEST_RPC_URL,
-        devMode: true,
-        tokenAddress: zeroAddress,
-        treasuryAddress: zeroAddress,
+    afterAll(() => {
+      resetNPCFundingService()
+      resetICOAutomationService()
+      resetDB()
+    })
+
+    describe('NPC Tier Configuration', () => {
+      it('should have correct tier allocations', () => {
+        expect(NPC_TIERS.tier1.allocation).toBe(parseEther('1000000'))
+        expect(NPC_TIERS.tier2.allocation).toBe(parseEther('100000'))
+        expect(NPC_TIERS.tier3.allocation).toBe(parseEther('10000'))
       })
 
-      // Without treasury key, should return error result
-      const result = await icoService.fundNPCsFromTreasury()
-
-      expect(result).toHaveProperty('success')
-      expect(result).toHaveProperty('totalFunded')
-      expect(result).toHaveProperty('npcsFunded')
-      expect(result).toHaveProperty('txHashes')
-    })
-  })
-
-  describe('Error Handling', () => {
-    it('should handle missing treasury private key gracefully', async () => {
-      resetNPCFundingService()
-      const service = getNPCFundingService({
-        rpcUrl: TEST_RPC_URL,
-        chainId: TEST_CHAIN_ID,
-        devMode: true,
-        tokenAddress: zeroAddress,
-        // No treasury private key
+      it('should have correct tier descriptions', () => {
+        expect(NPC_TIERS.tier1.description).toBe('Major Characters')
+        expect(NPC_TIERS.tier2.description).toBe('Supporting')
+        expect(NPC_TIERS.tier3.description).toBe('Minor')
       })
 
-      await service.initialize()
-
-      // Should not throw, but return failed results
-      const result = await service.fundAllNPCs()
-
-      // All results should fail due to missing key
-      for (const r of result.results) {
-        expect(r.success).toBe(false)
-        expect(r.error).toContain('Treasury private key not configured')
-      }
+      it('should have all tier names defined', () => {
+        const tierNames: NPCTierName[] = ['tier1', 'tier2', 'tier3']
+        for (const name of tierNames) {
+          expect(NPC_TIERS[name]).toBeDefined()
+          expect(NPC_TIERS[name].name).toBe(name)
+        }
+      })
     })
 
-    it('should handle empty NPC list gracefully', async () => {
-      resetNPCFundingService()
-      const service = getNPCFundingService({
-        rpcUrl: TEST_RPC_URL,
-        chainId: TEST_CHAIN_ID,
-        devMode: true,
-        tokenAddress: zeroAddress,
+    describe('NPCFundingService Initialization', () => {
+      it('should initialize with default configuration', () => {
+        resetNPCFundingService()
+        const service = getNPCFundingService({
+          rpcUrl: TEST_RPC_URL,
+          chainId: TEST_CHAIN_ID,
+          devMode: true,
+        })
+
+        const config = service.getConfig()
+        expect(config.rpcUrl).toBe(TEST_RPC_URL)
+        expect(config.chainId).toBe(TEST_CHAIN_ID)
+        expect(config.devMode).toBe(true)
+        expect(config.batchSize).toBe(50)
       })
 
-      // Initialize but with empty wallets (fresh service)
-      await service.initialize()
+      it('should initialize with custom batch size', () => {
+        resetNPCFundingService()
+        const service = getNPCFundingService({
+          rpcUrl: TEST_RPC_URL,
+          chainId: TEST_CHAIN_ID,
+          devMode: true,
+          batchSize: 25,
+        })
 
-      // Even with no wallets, should return valid result
-      const result = await service.fundAllNPCs()
-
-      expect(result).toHaveProperty('results')
-      expect(result).toHaveProperty('totalFunded')
-      expect(result).toHaveProperty('successCount')
-      expect(result).toHaveProperty('failCount')
-    })
-  })
-
-  describe('TGE Funding Execution', () => {
-    it('should execute TGE funding', async () => {
-      resetNPCFundingService()
-      const service = getNPCFundingService({
-        rpcUrl: TEST_RPC_URL,
-        chainId: TEST_CHAIN_ID,
-        devMode: true,
-        tokenAddress: zeroAddress,
+        expect(service.getConfig().batchSize).toBe(25)
       })
 
-      const result = await service.executeTGEFunding()
+      it('should discover NPC wallets on initialize', async () => {
+        resetNPCFundingService()
+        const service = getNPCFundingService({
+          rpcUrl: TEST_RPC_URL,
+          chainId: TEST_CHAIN_ID,
+          devMode: true,
+        })
 
-      expect(result).toHaveProperty('totalFunded')
-      expect(result).toHaveProperty('results')
-      expect(result).toHaveProperty('txHashes')
-      expect(Array.isArray(result.results)).toBe(true)
-      expect(Array.isArray(result.txHashes)).toBe(true)
+        await service.initialize()
+        const wallets = service.getNPCWallets()
+
+        // Should have discovered some wallets from static registry
+        expect(wallets.length).toBeGreaterThanOrEqual(0)
+      })
     })
 
-    it('should return correct result structure from TGE funding', async () => {
-      resetNPCFundingService()
-      const service = getNPCFundingService({
-        rpcUrl: TEST_RPC_URL,
-        chainId: TEST_CHAIN_ID,
-        devMode: true,
-        tokenAddress: zeroAddress,
+    describe('Funding Calculations', () => {
+      it('should calculate total funding correctly', async () => {
+        resetNPCFundingService()
+        const service = getNPCFundingService({
+          rpcUrl: TEST_RPC_URL,
+          chainId: TEST_CHAIN_ID,
+          devMode: true,
+        })
+
+        await service.initialize()
+        const calculation = await service.calculateTotalFunding()
+
+        // Total should equal sum of all tiers
+        const expectedTotal =
+          calculation.byTier.tier1.total +
+          calculation.byTier.tier2.total +
+          calculation.byTier.tier3.total
+
+        expect(calculation.total).toBe(expectedTotal)
       })
 
-      const result = await service.executeTGEFunding()
+      it('should correctly count NPCs by tier', async () => {
+        resetNPCFundingService()
+        const service = getNPCFundingService({
+          rpcUrl: TEST_RPC_URL,
+          chainId: TEST_CHAIN_ID,
+          devMode: true,
+        })
 
-      expect(typeof result.totalFunded).toBe('bigint')
-      expect(result.totalFunded).toBeGreaterThanOrEqual(0n)
-    })
-  })
+        await service.initialize()
+        const calculation = await service.calculateTotalFunding()
+        const wallets = service.getNPCWallets()
 
-  describe('Service Lifecycle', () => {
-    it('should reset service correctly', () => {
-      const service1 = getNPCFundingService({ devMode: true })
-      resetNPCFundingService()
-      const service2 = getNPCFundingService({ devMode: true })
+        // Count should match wallets
+        const totalCount =
+          calculation.byTier.tier1.count +
+          calculation.byTier.tier2.count +
+          calculation.byTier.tier3.count
 
-      // Should be different instances after reset
-      expect(service1).not.toBe(service2)
-    })
-
-    it('should allow treasury key to be set after initialization', async () => {
-      resetNPCFundingService()
-      const service = getNPCFundingService({
-        rpcUrl: TEST_RPC_URL,
-        chainId: TEST_CHAIN_ID,
-        devMode: true,
+        expect(totalCount).toBe(wallets.length)
       })
 
-      await service.initialize()
+      it('should calculate tier totals correctly', async () => {
+        resetNPCFundingService()
+        const service = getNPCFundingService({
+          rpcUrl: TEST_RPC_URL,
+          chainId: TEST_CHAIN_ID,
+          devMode: true,
+        })
 
-      // Set treasury key after init
-      const testKey =
-        '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80' as `0x${string}`
-      service.setTreasuryPrivateKey(testKey)
+        await service.initialize()
+        const calculation = await service.calculateTotalFunding()
 
-      const config = service.getConfig()
-      expect(config.treasuryPrivateKey).toBe(testKey)
+        // Verify each tier total = count * allocation
+        expect(calculation.byTier.tier1.total).toBe(
+          BigInt(calculation.byTier.tier1.count) * NPC_TIERS.tier1.allocation,
+        )
+        expect(calculation.byTier.tier2.total).toBe(
+          BigInt(calculation.byTier.tier2.count) * NPC_TIERS.tier2.allocation,
+        )
+        expect(calculation.byTier.tier3.total).toBe(
+          BigInt(calculation.byTier.tier3.count) * NPC_TIERS.tier3.allocation,
+        )
+      })
     })
-  })
 
-  describe('Batch Processing', () => {
-    it('should respect batch size configuration', async () => {
-      resetNPCFundingService()
-      const batchSize = 10
-      const service = getNPCFundingService({
-        rpcUrl: TEST_RPC_URL,
-        chainId: TEST_CHAIN_ID,
-        devMode: true,
-        batchSize,
+    describe('Funding Status', () => {
+      it('should return funding status', async () => {
+        resetNPCFundingService()
+        const service = getNPCFundingService({
+          rpcUrl: TEST_RPC_URL,
+          chainId: TEST_CHAIN_ID,
+          devMode: true,
+          tokenAddress: zeroAddress, // Use zero address for testing
+        })
+
+        await service.initialize()
+        const status = await service.getFundingStatus()
+
+        expect(status).toHaveProperty('totalNPCs')
+        expect(status).toHaveProperty('funded')
+        expect(status).toHaveProperty('unfunded')
+        expect(status).toHaveProperty('totalFundedAmount')
+        expect(status).toHaveProperty('totalPendingAmount')
+        expect(status).toHaveProperty('byTier')
       })
 
-      await service.initialize()
-      const config = service.getConfig()
+      it('should track funded vs unfunded NPCs', async () => {
+        resetNPCFundingService()
+        const service = getNPCFundingService({
+          rpcUrl: TEST_RPC_URL,
+          chainId: TEST_CHAIN_ID,
+          devMode: true,
+          tokenAddress: zeroAddress,
+        })
 
-      expect(config.batchSize).toBe(batchSize)
+        await service.initialize()
+        const status = await service.getFundingStatus()
+
+        // Total should equal funded + unfunded
+        expect(status.totalNPCs).toBe(status.funded + status.unfunded)
+      })
     })
-  })
-})
+
+    describe('Static Data Registry Integration', () => {
+      it('should access actors from static registry', () => {
+        const allActors = StaticDataRegistry.getAllActors()
+        expect(Array.isArray(allActors)).toBe(true)
+      })
+
+      it('should have actors with tiers', () => {
+        const allActors = StaticDataRegistry.getAllActors()
+        const actorsWithTiers = allActors.filter((a) => a.tier !== null)
+
+        // Should have some actors with tiers
+        expect(actorsWithTiers.length).toBeGreaterThanOrEqual(0)
+      })
+
+      it('should map S_TIER to tier1', () => {
+        const sTierActors = StaticDataRegistry.getActorsByTier('S_TIER')
+        // S_TIER actors should map to tier1 funding
+        for (const actor of sTierActors) {
+          expect(actor.tier).toBe('S_TIER')
+        }
+      })
+
+      it('should map A_TIER to tier2', () => {
+        const aTierActors = StaticDataRegistry.getActorsByTier('A_TIER')
+        for (const actor of aTierActors) {
+          expect(actor.tier).toBe('A_TIER')
+        }
+      })
+    })
+
+    describe('ICO Integration', () => {
+      it('should integrate with ICO automation service', async () => {
+        const icoService = getICOAutomationService({
+          chainId: TEST_CHAIN_ID,
+          rpcUrl: TEST_RPC_URL,
+          devMode: true,
+        })
+
+        // ICO service should have fundNPCsFromTreasury method
+        expect(typeof icoService.fundNPCsFromTreasury).toBe('function')
+      })
+
+      it('should call NPC funding without treasury key configured', async () => {
+        resetICOAutomationService()
+        resetNPCFundingService()
+
+        const icoService = getICOAutomationService({
+          chainId: TEST_CHAIN_ID,
+          rpcUrl: TEST_RPC_URL,
+          devMode: true,
+          tokenAddress: zeroAddress,
+          treasuryAddress: zeroAddress,
+        })
+
+        // Without treasury key, should return error result
+        const result = await icoService.fundNPCsFromTreasury()
+
+        expect(result).toHaveProperty('success')
+        expect(result).toHaveProperty('totalFunded')
+        expect(result).toHaveProperty('npcsFunded')
+        expect(result).toHaveProperty('txHashes')
+      })
+    })
+
+    describe('Error Handling', () => {
+      it('should handle missing treasury private key gracefully', async () => {
+        resetNPCFundingService()
+        const service = getNPCFundingService({
+          rpcUrl: TEST_RPC_URL,
+          chainId: TEST_CHAIN_ID,
+          devMode: true,
+          tokenAddress: zeroAddress,
+          // No treasury private key
+        })
+
+        await service.initialize()
+
+        // Should not throw, but return failed results
+        const result = await service.fundAllNPCs()
+
+        // All results should fail due to missing key
+        for (const r of result.results) {
+          expect(r.success).toBe(false)
+          expect(r.error).toContain('Treasury private key not configured')
+        }
+      })
+
+      it('should handle empty NPC list gracefully', async () => {
+        resetNPCFundingService()
+        const service = getNPCFundingService({
+          rpcUrl: TEST_RPC_URL,
+          chainId: TEST_CHAIN_ID,
+          devMode: true,
+          tokenAddress: zeroAddress,
+        })
+
+        // Initialize but with empty wallets (fresh service)
+        await service.initialize()
+
+        // Even with no wallets, should return valid result
+        const result = await service.fundAllNPCs()
+
+        expect(result).toHaveProperty('results')
+        expect(result).toHaveProperty('totalFunded')
+        expect(result).toHaveProperty('successCount')
+        expect(result).toHaveProperty('failCount')
+      })
+    })
+
+    describe('TGE Funding Execution', () => {
+      it('should execute TGE funding', async () => {
+        resetNPCFundingService()
+        const service = getNPCFundingService({
+          rpcUrl: TEST_RPC_URL,
+          chainId: TEST_CHAIN_ID,
+          devMode: true,
+          tokenAddress: zeroAddress,
+        })
+
+        const result = await service.executeTGEFunding()
+
+        expect(result).toHaveProperty('totalFunded')
+        expect(result).toHaveProperty('results')
+        expect(result).toHaveProperty('txHashes')
+        expect(Array.isArray(result.results)).toBe(true)
+        expect(Array.isArray(result.txHashes)).toBe(true)
+      })
+
+      it('should return correct result structure from TGE funding', async () => {
+        resetNPCFundingService()
+        const service = getNPCFundingService({
+          rpcUrl: TEST_RPC_URL,
+          chainId: TEST_CHAIN_ID,
+          devMode: true,
+          tokenAddress: zeroAddress,
+        })
+
+        const result = await service.executeTGEFunding()
+
+        expect(typeof result.totalFunded).toBe('bigint')
+        expect(result.totalFunded).toBeGreaterThanOrEqual(0n)
+      })
+    })
+
+    describe('Service Lifecycle', () => {
+      it('should reset service correctly', () => {
+        const service1 = getNPCFundingService({ devMode: true })
+        resetNPCFundingService()
+        const service2 = getNPCFundingService({ devMode: true })
+
+        // Should be different instances after reset
+        expect(service1).not.toBe(service2)
+      })
+
+      it('should allow treasury key to be set after initialization', async () => {
+        resetNPCFundingService()
+        const service = getNPCFundingService({
+          rpcUrl: TEST_RPC_URL,
+          chainId: TEST_CHAIN_ID,
+          devMode: true,
+        })
+
+        await service.initialize()
+
+        // Set treasury key after init
+        const testKey =
+          '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80' as `0x${string}`
+        service.setTreasuryPrivateKey(testKey)
+
+        const config = service.getConfig()
+        expect(config.treasuryPrivateKey).toBe(testKey)
+      })
+    })
+
+    describe('Batch Processing', () => {
+      it('should respect batch size configuration', async () => {
+        resetNPCFundingService()
+        const batchSize = 10
+        const service = getNPCFundingService({
+          rpcUrl: TEST_RPC_URL,
+          chainId: TEST_CHAIN_ID,
+          devMode: true,
+          batchSize,
+        })
+
+        await service.initialize()
+        const config = service.getConfig()
+
+        expect(config.batchSize).toBe(batchSize)
+      })
+    })
+  },
+)
 
 describe('NPC Funding Contract Tests (Requires Deployed Contracts)', () => {
   // These tests require actual contract deployment

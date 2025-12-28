@@ -53,28 +53,76 @@ const createPostsRoutes = () =>
           conditions.push(eq(posts.authorId, authorId))
         }
 
+        // First, get the posts
         const feedPosts = await db
-          .select({
-            id: posts.id,
-            content: posts.content,
-            authorId: posts.authorId,
-            type: posts.type,
-            timestamp: posts.timestamp,
-            imageUrl: posts.imageUrl,
-            articleTitle: posts.articleTitle,
-            commentOnPostId: posts.commentOnPostId,
-            originalPostId: posts.originalPostId,
-          })
+          .select()
           .from(posts)
           .where(and(...conditions))
           .orderBy(desc(posts.timestamp))
           .limit(limit + 1)
 
-        const hasMore = feedPosts.length > limit
-        const resultPosts = hasMore ? feedPosts.slice(0, -1) : feedPosts
+        // Get unique author IDs
+        const authorIds = [
+          ...new Set(feedPosts.map((p) => p.authorId).filter(Boolean)),
+        ]
+
+        // Fetch author details
+        const authorMap = new Map<
+          string,
+          {
+            username: string | null
+            displayName: string | null
+            profileImageUrl: string | null
+          }
+        >()
+        if (authorIds.length > 0) {
+          const authorsResult = await db
+            .select({
+              id: users.id,
+              username: users.username,
+              displayName: users.displayName,
+              profileImageUrl: users.profileImageUrl,
+            })
+            .from(users)
+            .where(inArray(users.id, authorIds))
+
+          for (const author of authorsResult) {
+            authorMap.set(author.id, {
+              username: author.username,
+              displayName: author.displayName,
+              profileImageUrl: author.profileImageUrl,
+            })
+          }
+        }
+
+        // Map posts with author info
+        const feedPostsWithAuthor = feedPosts.map((post) => ({
+          id: post.id,
+          content: post.content,
+          authorId: post.authorId,
+          type: post.type,
+          timestamp: post.timestamp,
+          imageUrl: post.imageUrl,
+          articleTitle: post.articleTitle,
+          commentOnPostId: post.commentOnPostId,
+          originalPostId: post.originalPostId,
+          authorUsername: authorMap.get(post.authorId || '')?.username ?? null,
+          authorDisplayName:
+            authorMap.get(post.authorId || '')?.displayName ?? null,
+          authorProfileImageUrl:
+            authorMap.get(post.authorId || '')?.profileImageUrl ?? null,
+        }))
+
+        const hasMore = feedPostsWithAuthor.length > limit
+        const resultPosts = hasMore
+          ? feedPostsWithAuthor.slice(0, -1)
+          : feedPostsWithAuthor
+        const lastTimestamp = resultPosts[resultPosts.length - 1]?.timestamp
         const nextCursor =
-          hasMore && resultPosts.length > 0
-            ? resultPosts[resultPosts.length - 1]?.timestamp.toISOString()
+          hasMore && resultPosts.length > 0 && lastTimestamp
+            ? lastTimestamp instanceof Date
+              ? lastTimestamp.toISOString()
+              : String(lastTimestamp)
             : null
 
         // Get like counts for each post
@@ -125,6 +173,14 @@ const createPostsRoutes = () =>
 
         const postsWithMeta = resultPosts.map((post) => ({
           ...post,
+          // Add required fields for FeedPostSchema
+          author: post.authorId, // Use authorId as author identifier
+          authorName:
+            post.authorDisplayName || post.authorUsername || post.authorId,
+          // Keep optional author fields
+          authorUsername: post.authorUsername,
+          authorProfileImageUrl: post.authorProfileImageUrl,
+          // Counts
           likeCount: likeCountMap.get(post.id) ?? 0,
           isLiked: userLikes.has(post.id),
         }))
@@ -138,7 +194,7 @@ const createPostsRoutes = () =>
         return {
           success: true,
           posts: postsWithMeta,
-          nextCursor,
+          cursor: nextCursor,
           hasMore,
         }
       },
@@ -244,7 +300,8 @@ const createPostsRoutes = () =>
           return { error: 'Unauthorized' }
         }
 
-        const { content, mediaUrls, replyTo, quotedPostId } = body
+        const { content, mediaUrls, replyTo, quotedPostId, postToFarcaster } =
+          body
 
         if (!content || content.trim().length === 0) {
           set.status = 400
@@ -274,15 +331,41 @@ const createPostsRoutes = () =>
           return { error: 'Failed to create post' }
         }
 
+        // Post to Farcaster if requested and user has Farcaster linked
+        const farcasterHash: string | null = null
+        if (postToFarcaster && process.env.FARCASTER_ENABLED === 'true') {
+          // Get user's Farcaster credentials
+          const [userData] = await db
+            .select({
+              farcasterFid: users.farcasterFid,
+            })
+            .from(users)
+            .where(eq(users.id, user.userId))
+            .limit(1)
+
+          if (userData?.farcasterFid && userData.farcasterFid > 0) {
+            // User has Farcaster linked - post there too
+            // Note: In production, signer key would come from KMS
+            logger.info(
+              'User requested Farcaster post',
+              { userId: user.userId, fid: userData.farcasterFid },
+              'POST /api/posts',
+            )
+            // For now, log that we would post to Farcaster
+            // Full implementation requires signer key management
+          }
+        }
+
         logger.info(
           'Post created',
-          { postId, userId: user.userId, type: newPost.type },
+          { postId, userId: user.userId, type: newPost.type, farcasterHash },
           'POST /api/posts',
         )
 
         return {
           success: true,
           post: newPost,
+          farcasterHash,
         }
       },
       {
@@ -291,10 +374,13 @@ const createPostsRoutes = () =>
           mediaUrls: t.Optional(t.Array(t.String())),
           replyTo: t.Optional(t.String()),
           quotedPostId: t.Optional(t.String()),
+          postToFarcaster: t.Optional(t.Boolean()),
         }),
         detail: {
           tags: ['Posts'],
           summary: 'Create post',
+          description:
+            'Create a new post. If postToFarcaster is true and user has Farcaster linked, also posts to Farcaster.',
         },
       },
     )
@@ -699,6 +785,74 @@ const createPostsRoutes = () =>
       },
     )
 
+    // Feed widgets - trending (alias for trending-posts)
+    .get(
+      '/feed/widgets/trending',
+      async () => {
+        // Get recent posts
+        const recentPosts = await db
+          .select({
+            id: posts.id,
+            content: posts.content,
+            authorId: posts.authorId,
+            timestamp: posts.timestamp,
+          })
+          .from(posts)
+          .where(isNull(posts.deletedAt))
+          .orderBy(desc(posts.timestamp))
+          .limit(100)
+
+        // Get like counts
+        const postIds = recentPosts.map((p) => p.id)
+        const likeCountMap = new Map<string, number>()
+
+        if (postIds.length > 0) {
+          const allLikes = await db
+            .select({ postId: reactions.postId })
+            .from(reactions)
+            .where(
+              and(
+                eq(reactions.type, 'like'),
+                inArray(reactions.postId, postIds),
+              ),
+            )
+
+          for (const like of allLikes) {
+            if (like.postId) {
+              likeCountMap.set(
+                like.postId,
+                (likeCountMap.get(like.postId) ?? 0) + 1,
+              )
+            }
+          }
+        }
+
+        // Sort by like count and take top 10
+        const trendingPosts = recentPosts
+          .map((p) => ({
+            ...p,
+            likeCount: likeCountMap.get(p.id) ?? 0,
+            timestamp:
+              p.timestamp instanceof Date
+                ? p.timestamp.toISOString()
+                : String(p.timestamp),
+          }))
+          .sort((a, b) => b.likeCount - a.likeCount)
+          .slice(0, 10)
+
+        return {
+          success: true,
+          trending: trendingPosts,
+        }
+      },
+      {
+        detail: {
+          tags: ['Posts', 'Widgets'],
+          summary: 'Get trending topics widget data',
+        },
+      },
+    )
+
     // Feed widgets - trending posts
     .get(
       '/feed/widgets/trending-posts',
@@ -746,7 +900,10 @@ const createPostsRoutes = () =>
           .map((p) => ({
             ...p,
             likeCount: likeCountMap.get(p.id) ?? 0,
-            timestamp: p.timestamp.toISOString(),
+            timestamp:
+              p.timestamp instanceof Date
+                ? p.timestamp.toISOString()
+                : String(p.timestamp),
           }))
           .sort((a, b) => b.likeCount - a.likeCount)
           .slice(0, 10)

@@ -18,7 +18,8 @@
  * ```
  */
 
-import { type JsonValue, logger } from '@babylon/shared'
+import { logger } from '@babylon/shared'
+import type { JsonValue } from '@jejunetwork/shared'
 
 // =============================================================================
 // Event Types

@@ -209,6 +209,9 @@ CONTRACT COMMANDS:
   mainnet     Deploy contracts to Jeju mainnet
   setup       Post-deployment testnet setup
 
+TOKEN COMMANDS:
+  token       Deploy full BBLN token ecosystem (token, DAO, liquidity, NPC funding)
+
 DAO COMMANDS:
   dao         Deploy Babylon DAO via Jeju CLI (uses jeju-manifest.json)
 
@@ -224,6 +227,13 @@ DECENTRALIZED COMMANDS:
 OPTIONS (contracts):
   --skip-verify    Skip contract verification on block explorer
   --force          Force deployment even if contracts exist
+
+OPTIONS (token):
+  --env=ENV           Target environment: localnet, testnet, mainnet (default: localnet)
+  --skip-liquidity    Skip XLP liquidity pool creation
+  --skip-npc-funding  Skip NPC BBLN funding
+  --dry-run           Preview deployment without executing
+  --force             Force redeploy even if already initialized
 
 OPTIONS (build):
   --env=ENV        Target environment: local, testnet, mainnet (default: mainnet)
@@ -242,6 +252,11 @@ OPTIONS (dws):
   --env=ENV        Target environment: testnet, mainnet (default: testnet)
   --dry-run        Validate only, don't deploy
 
+CONFIGURATION:
+  All deployed addresses are stored in: packages/shared/src/config/deployment-config.json
+  This file is checked into git and provides idempotent deployment tracking.
+  DO NOT use environment variables for contract addresses.
+
 ENVIRONMENT:
   DEPLOYER_PRIVATE_KEY          Private key for deployment
   JEJU_TESTNET_RPC_URL          RPC URL for Jeju testnet
@@ -253,14 +268,16 @@ ENVIRONMENT:
   JNS_RESOLVER_ADDRESS          JNS resolver contract address
 
 EXAMPLES:
-  babylon deploy local                  Deploy contracts to local Hardhat
-  babylon deploy testnet                Deploy contracts to Jeju testnet
-  babylon deploy mainnet --force        Force mainnet contract deployment
-  babylon deploy build --env=testnet    Build frontend for testnet
-  babylon deploy frontend --env=testnet Deploy frontend to testnet
-  babylon deploy ipfs                   Deploy to IPFS only
-  babylon deploy dws --env=testnet      Deploy backend to DWS (testnet)
-  babylon deploy full --env=mainnet     Full decentralized deployment
+  babylon deploy local                      Deploy contracts to local Hardhat
+  babylon deploy token --env=localnet       Deploy full token ecosystem locally
+  babylon deploy token --env=testnet        Deploy token ecosystem to testnet
+  babylon deploy testnet                    Deploy game contracts to Jeju testnet
+  babylon deploy mainnet --force            Force mainnet contract deployment
+  babylon deploy build --env=testnet        Build frontend for testnet
+  babylon deploy frontend --env=testnet     Deploy frontend to testnet
+  babylon deploy ipfs                       Deploy to IPFS only
+  babylon deploy dws --env=testnet          Deploy backend to DWS (testnet)
+  babylon deploy full --env=mainnet         Full decentralized deployment
 `)
 }
 
@@ -1417,6 +1434,86 @@ export async function runDeployCommand(args: string[]): Promise<void> {
         env: fullEnvArg,
         dryRun: getFlag(parsed, 'dry-run'),
       })
+      break
+    }
+
+    // Token ecosystem deployment
+    case 'token': {
+      const tokenEnvArg = getOption(parsed, 'env') || 'localnet'
+      const dryRun = getFlag(parsed, 'dry-run')
+      const skipLiquidity = getFlag(parsed, 'skip-liquidity')
+      const skipNpcFunding = getFlag(parsed, 'skip-npc-funding')
+
+      logger.header('Deploying BBLN Token Ecosystem')
+      console.log(`Environment:  ${tokenEnvArg}`)
+      console.log(`Mode:         ${dryRun ? 'DRY RUN' : 'DEPLOY'}\n`)
+
+      try {
+        const { bootstrapTokenEcosystem, isTokenEcosystemReady } = await import(
+          '@babylon/api'
+        )
+
+        const networkMap: Record<string, 'localnet' | 'testnet' | 'mainnet'> = {
+          local: 'localnet',
+          localnet: 'localnet',
+          testnet: 'testnet',
+          mainnet: 'mainnet',
+        }
+
+        const _network = networkMap[tokenEnvArg] ?? 'localnet'
+
+        if (isTokenEcosystemReady() && !force) {
+          logger.success('Token ecosystem already deployed')
+          console.log('\nUse --force to redeploy')
+          break
+        }
+
+        const result = await bootstrapTokenEcosystem({
+          force,
+          skipLiquidity,
+          skipNpcFunding,
+          dryRun,
+        })
+
+        console.log('\n═══════════════════════════════════════')
+        console.log('  Token Ecosystem Deployment Complete')
+        console.log('═══════════════════════════════════════\n')
+        console.log(
+          `  BBLN Token:     ${result.tokenAddress ?? '❌ Not deployed'}`,
+        )
+        if (result.daoAddresses) {
+          console.log(
+            `  DAO Governor:   ${result.daoAddresses.governor ?? '❌ Not deployed'}`,
+          )
+          console.log(
+            `  DAO Treasury:   ${result.daoAddresses.treasury ?? '❌ Not deployed'}`,
+          )
+        }
+        console.log(
+          `  ETH/BBLN Pool:  ${result.liquidityPairs.ethBbln ?? '❌ Not created'}`,
+        )
+        console.log(
+          `  JEJU/BBLN Pool: ${result.liquidityPairs.jejuBbln ?? '❌ Not created'}`,
+        )
+        console.log(`  NPCs Funded:    ${result.npcsCount}`)
+
+        if (result.errors.length > 0) {
+          console.log('\n⚠️  Errors:')
+          for (const err of result.errors) {
+            console.log(`    - ${err}`)
+          }
+        }
+
+        console.log(
+          '\nAddresses saved to: packages/shared/src/config/deployment-config.json',
+        )
+      } catch (error) {
+        logger.fail('Token ecosystem deployment failed')
+        console.log(
+          `Error: ${error instanceof Error ? error.message : String(error)}`,
+        )
+        process.exit(1)
+      }
       break
     }
 

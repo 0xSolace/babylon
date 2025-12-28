@@ -2,17 +2,12 @@
  * Rate Limiting and Duplicate Detection
  *
  * Centralized exports for rate limiting functionality
+ *
+ * NOTE: For duplicate detection utilities, import directly from @jejunetwork/shared:
+ * checkDuplicate, cleanupDuplicates, clearAllDuplicates, clearDuplicates,
+ * DUPLICATE_DETECTION_CONFIGS, getDuplicateStats
  */
 
-// Duplicate detection - import from @jejunetwork/shared
-export {
-  checkDuplicate,
-  cleanupDuplicates,
-  clearAllDuplicates,
-  clearDuplicates,
-  DUPLICATE_DETECTION_CONFIGS,
-  getDuplicateStats,
-} from '@jejunetwork/shared'
 // Middleware
 export {
   addRateLimitHeaders,

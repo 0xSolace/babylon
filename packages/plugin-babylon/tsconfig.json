@@ -40,8 +40,6 @@
       "@babylon/training/*": ["../training/src/*"],
       "@babylon/a2a": ["../a2a/src/index.ts"],
       "@babylon/a2a/*": ["../a2a/src/*"],
-      "@babylon/auth": ["../auth/src/index.ts"],
-      "@babylon/auth/*": ["../auth/src/*"]
     }
   },
   "include": ["src/**/*.ts"],

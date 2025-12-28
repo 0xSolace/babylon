@@ -244,8 +244,8 @@ export function getRpcUrl(): string {
     return jejuConfig.networkConfig.rpcUrl
   }
 
-  // Fallback to hardhat default
-  return 'http://localhost:6545'
+  // Fallback to Jeju localnet default
+  return 'http://localhost:6546'
 }
 
 /**

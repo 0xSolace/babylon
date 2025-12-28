@@ -1,6 +1,8 @@
 // @ts-nocheck - Elysia body type inference issues, needs refactoring
 import {
   FEE_CONFIG,
+  PerpDbAdapter,
+  PerpMarketService,
   PredictionDbAdapter,
   PredictionMarketService,
   WalletService,
@@ -45,6 +47,38 @@ function createMarketService() {
           description ?? '',
           relatedId,
         ),
+      credit: ({ userId, amount, reason, description, relatedId }) =>
+        WalletService.credit(
+          userId,
+          amount,
+          reason,
+          description ?? '',
+          relatedId,
+        ),
+      recordPnL: async ({ userId, pnl, reason, relatedId }) => {
+        await WalletService.recordPnL(userId, pnl, reason, relatedId)
+      },
+      getBalance: (uid: string) => WalletService.getBalance(uid),
+    },
+    fees: {
+      tradingFeeRate: FEE_CONFIG.TRADING_FEE_RATE,
+      platformShare: FEE_CONFIG.PLATFORM_SHARE,
+      referrerShare: FEE_CONFIG.REFERRER_SHARE,
+      minFeeAmount: FEE_CONFIG.MIN_FEE_AMOUNT,
+    },
+  })
+}
+
+/**
+ * Create PerpMarketService instance
+ */
+function createPerpService() {
+  const dbAdapter = new PerpDbAdapter()
+  return new PerpMarketService({
+    db: dbAdapter,
+    wallet: {
+      debit: ({ userId, amount, reason, description }) =>
+        WalletService.debit(userId, amount, reason, description ?? ''),
       credit: ({ userId, amount, reason, description, relatedId }) =>
         WalletService.credit(
           userId,
@@ -532,15 +566,83 @@ const createMarketsRoutes = () =>
       },
     )
 
+    // List perpetual markets
+    .get(
+      '/perps',
+      async () => {
+        const service = createPerpService()
+        const markets = await service.getMarketsSnapshot()
+
+        const formattedMarkets = markets.map((m) => ({
+          ticker: m.ticker,
+          name: m.name,
+          organizationId: m.organizationId,
+          currentPrice: m.currentPrice,
+          change24h: m.change24h,
+          changePercent24h: m.changePercent24h,
+          high24h: m.high24h,
+          low24h: m.low24h,
+          volume24h: m.volume24h,
+          openInterest: m.openInterest,
+          fundingRate: m.fundingRate,
+          maxLeverage: m.maxLeverage,
+          minOrderSize: m.minOrderSize,
+          markPrice: m.markPrice,
+          indexPrice: m.indexPrice,
+        }))
+
+        logger.info(
+          'Perpetual markets fetched',
+          { count: formattedMarkets.length },
+          'GET /api/markets/perps',
+        )
+
+        return {
+          success: true,
+          markets: formattedMarkets,
+          count: formattedMarkets.length,
+        }
+      },
+      {
+        detail: {
+          tags: ['Markets'],
+          summary: 'List perpetual markets',
+        },
+      },
+    )
+
     // Get perp trades by ticker
     .get(
       '/perps/trades/:ticker',
       async ({ params }) => {
         const { ticker } = params
 
+        // Get all positions (open and closed) for this ticker to show trades
+        const dbAdapter = new PerpDbAdapter()
+        const market = await dbAdapter.getMarketByTicker(ticker)
+
+        if (!market) {
+          return {
+            success: true,
+            ticker,
+            trades: [],
+            count: 0,
+            message: 'Market not found',
+          }
+        }
+
+        // For now, return empty trades - would need a separate trades table
+        // to track individual trade events
         return {
           success: true,
           ticker,
+          market: {
+            ticker: market.ticker,
+            name: market.name,
+            currentPrice: market.currentPrice,
+            volume24h: market.volume24h,
+            openInterest: market.openInterest,
+          },
           trades: [],
           count: 0,
         }
@@ -556,6 +658,190 @@ const createMarketsRoutes = () =>
         detail: {
           tags: ['Markets'],
           summary: 'Get perpetual trades',
+        },
+      },
+    )
+
+    // Close a perp position
+    .post(
+      '/perps/close',
+      async (ctx) => {
+        const { user, isAuthenticated } = getAuthContext(ctx)
+        const { set, body } = ctx
+
+        if (!isAuthenticated || !user?.userId) {
+          set.status = 401
+          return { error: 'Authentication required' }
+        }
+
+        const { positionId, percentage } = body
+        const service = createPerpService()
+
+        try {
+          const result = await service.closePosition({
+            userId: user.userId,
+            positionId,
+            percentage: percentage ?? 1.0,
+          })
+
+          logger.info(
+            'User closed perp position',
+            {
+              userId: user.userId,
+              positionId,
+              percentage: percentage ?? 1.0,
+              realizedPnL: result.realizedPnL,
+            },
+            'POST /api/markets/perps/close',
+          )
+
+          return {
+            success: true,
+            ...result,
+          }
+        } catch (error) {
+          logger.error(
+            'Failed to close perp position',
+            { error: error instanceof Error ? error.message : String(error) },
+            'POST /api/markets/perps/close',
+          )
+          set.status = 400
+          return {
+            success: false,
+            error:
+              error instanceof Error
+                ? error.message
+                : 'Failed to close position',
+          }
+        }
+      },
+      {
+        body: t.Object({
+          positionId: t.String(),
+          percentage: t.Optional(t.Number()),
+        }),
+        detail: {
+          tags: ['Markets'],
+          summary: 'Close a perpetual position',
+        },
+      },
+    )
+
+    // Get user's perp positions
+    .get(
+      '/perps/positions',
+      async (ctx) => {
+        const { user, isAuthenticated } = getAuthContext(ctx)
+
+        if (!isAuthenticated || !user?.userId) {
+          return {
+            success: true,
+            positions: [],
+            count: 0,
+          }
+        }
+
+        const dbAdapter = new PerpDbAdapter()
+        const positions = await dbAdapter.getOpenPositionsByUser(user.userId)
+
+        const formattedPositions = positions.map((p) => ({
+          id: p.id,
+          ticker: p.ticker,
+          organizationId: p.organizationId,
+          side: p.side,
+          size: p.size,
+          leverage: p.leverage,
+          entryPrice: p.entryPrice,
+          currentPrice: p.currentPrice,
+          liquidationPrice: p.liquidationPrice,
+          unrealizedPnL: p.unrealizedPnL,
+          unrealizedPnLPercent: p.unrealizedPnLPercent,
+          fundingPaid: p.fundingPaid,
+          openedAt: p.openedAt,
+          lastUpdated: p.lastUpdated,
+        }))
+
+        return {
+          success: true,
+          positions: formattedPositions,
+          count: formattedPositions.length,
+        }
+      },
+      {
+        detail: {
+          tags: ['Markets'],
+          summary: 'Get user perpetual positions',
+        },
+      },
+    )
+
+    // Open a new perp position
+    .post(
+      '/perps/open',
+      async (ctx) => {
+        const { user, isAuthenticated } = getAuthContext(ctx)
+        const { set, body } = ctx
+
+        if (!isAuthenticated || !user?.userId) {
+          set.status = 401
+          return { error: 'Authentication required' }
+        }
+
+        const { ticker, side, size, leverage } = body
+        const service = createPerpService()
+
+        try {
+          const result = await service.openPosition({
+            userId: user.userId,
+            ticker,
+            side,
+            size,
+            leverage: leverage ?? 1,
+          })
+
+          logger.info(
+            'User opened perp position',
+            {
+              userId: user.userId,
+              ticker,
+              side,
+              size,
+              leverage: leverage ?? 1,
+              positionId: result.positionId,
+            },
+            'POST /api/markets/perps/open',
+          )
+
+          return {
+            success: true,
+            ...result,
+          }
+        } catch (error) {
+          logger.error(
+            'Failed to open perp position',
+            { error: error instanceof Error ? error.message : String(error) },
+            'POST /api/markets/perps/open',
+          )
+          set.status = 400
+          return {
+            success: false,
+            error:
+              error instanceof Error
+                ? error.message
+                : 'Failed to open position',
+          }
+        }
+      },
+      {
+        body: t.Object({
+          ticker: t.String(),
+          side: t.Union([t.Literal('long'), t.Literal('short')]),
+          size: t.Number(),
+          leverage: t.Optional(t.Number()),
+        }),
+        detail: {
+          tags: ['Markets'],
+          summary: 'Open a perpetual position',
         },
       },
     )
