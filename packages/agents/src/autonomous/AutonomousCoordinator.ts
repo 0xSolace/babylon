@@ -33,6 +33,7 @@ import { getAgentConfig } from '../shared/agent-config';
 import { logger } from '../shared/logger';
 
 // Import services
+import { autonomousDMService } from './AutonomousDMService';
 import { autonomousGroupChatService } from './AutonomousGroupChatService';
 import { autonomousPlanningCoordinator } from './AutonomousPlanningCoordinator';
 import { multiStepExecutor } from './MultiStepExecutor';
@@ -256,6 +257,15 @@ export class AutonomousCoordinator {
             runtime
           );
         result.actionsExecuted.groupMessages += groupMessages;
+      }
+
+      // Handle DMs separately (reactive to incoming messages)
+      if (config?.autonomousDMs) {
+        const dmResponses = await autonomousDMService.respondToDMs(
+          agentUserId,
+          runtime
+        );
+        result.actionsExecuted.messages += dmResponses;
       }
 
       logger.info(
