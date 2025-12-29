@@ -486,7 +486,7 @@ export function ComingSoon() {
     // Open Discord invite in new tab
     const discordInviteUrl =
       process.env.NEXT_PUBLIC_DISCORD_INVITE_URL ||
-      'https://discord.gg/4DYsFgyp';
+      'https://discord.gg/ukKRJtYQ7q';
     window.open(discordInviteUrl, '_blank');
 
     // Show verify button
@@ -1200,7 +1200,7 @@ export function ComingSoon() {
         {/* Hero Section */}
         <section className="relative z-10 flex min-h-screen items-center justify-center overflow-x-hidden overflow-y-visible px-4 pt-4 pb-8 sm:px-6 sm:py-16 md:px-8 md:py-20 lg:py-24">
           {/* Background Image - Full Width */}
-          <div className="-translate-x-1/2 fixed inset-0 left-1/2 z-0 h-full w-screen">
+          <div className="fixed inset-0 left-1/2 z-0 h-full w-screen -translate-x-1/2">
             <Image
               src="/assets/images/background.png"
               alt="Babylon Background"
@@ -1215,8 +1215,8 @@ export function ComingSoon() {
 
           <div className="relative z-10 mx-auto w-full max-w-3xl text-center">
             {/* Decorative Elements */}
-            <div className="-top-20 -left-20 absolute h-64 w-64 animate-pulse-slow rounded-full bg-primary/20 blur-[100px]" />
-            <div className="-bottom-20 -right-20 animation-delay-500 absolute h-64 w-64 animate-pulse-slow rounded-full bg-sky-500/20 blur-[100px]" />
+            <div className="absolute -top-20 -left-20 h-64 w-64 animate-pulse-slow rounded-full bg-primary/20 blur-[100px]" />
+            <div className="animation-delay-500 absolute -right-20 -bottom-20 h-64 w-64 animate-pulse-slow rounded-full bg-sky-500/20 blur-[100px]" />
 
             {/* Logo */}
             <div className="mb-2 flex animate-fadeIn justify-center sm:mb-8 md:mb-10">
@@ -1262,7 +1262,7 @@ export function ComingSoon() {
             <div className="animation-delay-200 relative z-20 mb-8 animate-fadeIn px-4 sm:mb-16">
               <button
                 onClick={handleJoinWaitlist}
-                className="group hover:-translate-y-1 relative w-full skew-x-[-10deg] overflow-hidden rounded-none bg-primary px-10 py-5 font-bold text-primary-foreground text-xl shadow-[0_0_20px_rgba(var(--primary),0.4)] transition-all duration-300 hover:bg-primary/90 hover:shadow-[0_0_40px_rgba(var(--primary),0.6)] disabled:opacity-50 sm:w-auto sm:px-12 sm:py-6 sm:text-2xl"
+                className="group relative w-full skew-x-[-10deg] overflow-hidden rounded-none bg-primary px-10 py-5 font-bold text-primary-foreground text-xl shadow-[0_0_20px_rgba(var(--primary),0.4)] transition-all duration-300 hover:-translate-y-1 hover:bg-primary/90 hover:shadow-[0_0_40px_rgba(var(--primary),0.6)] disabled:opacity-50 sm:w-auto sm:px-12 sm:py-6 sm:text-2xl"
               >
                 <span className="relative z-10 inline-block skew-x-[10deg]">
                   Join Waitlist
@@ -1295,7 +1295,7 @@ export function ComingSoon() {
           </div>
 
           {/* Scroll Indicator */}
-          <div className="-translate-x-1/2 absolute bottom-14 left-1/2 flex animate-bounce flex-col items-center gap-1 text-muted-foreground sm:bottom-18 md:bottom-10 lg:bottom-8">
+          <div className="absolute bottom-14 left-1/2 flex -translate-x-1/2 animate-bounce flex-col items-center gap-1 text-muted-foreground sm:bottom-18 md:bottom-10 lg:bottom-8">
             <span className="font-medium text-xs sm:text-sm">Learn More</span>
             <ChevronDown className="h-6 w-6 sm:h-7 sm:w-7" />
           </div>
@@ -1307,7 +1307,7 @@ export function ComingSoon() {
             <div className="grid w-full grid-cols-1 items-stretch gap-6 sm:gap-8 md:gap-10 lg:grid-cols-2">
               {/* Left Column: Image */}
               <div className="group relative order-2 flex h-full animate-fadeIn items-stretch lg:order-1">
-                <div className="-inset-2 absolute animate-pulse-slow rounded-xl bg-gradient-to-r from-primary/20 to-sky-500/20 opacity-50 blur-xl transition-opacity duration-500 group-hover:opacity-100 sm:rounded-2xl" />
+                <div className="absolute -inset-2 animate-pulse-slow rounded-xl bg-gradient-to-r from-primary/20 to-sky-500/20 opacity-50 blur-xl transition-opacity duration-500 group-hover:opacity-100 sm:rounded-2xl" />
                 <div className="relative flex w-full items-center overflow-hidden rounded-lg border border-border/50 bg-card shadow-xl transition-transform duration-700 group-hover:scale-[1.02] sm:rounded-xl">
                   <Image
                     src="/assets/images/storypic.png"
@@ -1337,7 +1337,7 @@ export function ComingSoon() {
 
                   {/* 3:00 PM */}
                   <div className="group relative">
-                    <div className="-left-[39px] sm:-left-[49px] absolute top-1.5 z-10 h-4 w-4 rounded-full border-2 border-primary bg-background shadow-[0_0_10px_var(--primary)] transition-transform duration-300 group-hover:scale-125 sm:h-5 sm:w-5 sm:border-4" />
+                    <div className="absolute top-1.5 -left-[39px] z-10 h-4 w-4 rounded-full border-2 border-primary bg-background shadow-[0_0_10px_var(--primary)] transition-transform duration-300 group-hover:scale-125 sm:-left-[49px] sm:h-5 sm:w-5 sm:border-4" />
                     <div className="mb-1 font-bold font-mono text-primary text-xs sm:mb-2 sm:text-sm">
                       3:00 PM
                     </div>
@@ -1351,7 +1351,7 @@ export function ComingSoon() {
 
                   {/* 3:15 PM */}
                   <div className="group relative">
-                    <div className="-left-[39px] sm:-left-[49px] absolute top-1.5 z-10 h-4 w-4 rounded-full border-2 border-muted-foreground/30 bg-background transition-all duration-300 group-hover:scale-110 group-hover:border-primary/50 sm:h-5 sm:w-5 sm:border-4" />
+                    <div className="absolute top-1.5 -left-[39px] z-10 h-4 w-4 rounded-full border-2 border-muted-foreground/30 bg-background transition-all duration-300 group-hover:scale-110 group-hover:border-primary/50 sm:-left-[49px] sm:h-5 sm:w-5 sm:border-4" />
                     <div className="mb-1 font-mono text-muted-foreground text-xs sm:mb-2 sm:text-sm">
                       3:15 PM
                     </div>
@@ -1363,7 +1363,7 @@ export function ComingSoon() {
 
                   {/* 4:00 PM */}
                   <div className="group relative">
-                    <div className="-left-[39px] sm:-left-[49px] absolute top-1.5 z-10 h-4 w-4 rounded-full border-2 border-muted-foreground/30 bg-background transition-all duration-300 group-hover:scale-110 group-hover:border-primary/50 sm:h-5 sm:w-5 sm:border-4" />
+                    <div className="absolute top-1.5 -left-[39px] z-10 h-4 w-4 rounded-full border-2 border-muted-foreground/30 bg-background transition-all duration-300 group-hover:scale-110 group-hover:border-primary/50 sm:-left-[49px] sm:h-5 sm:w-5 sm:border-4" />
                     <div className="mb-1 font-mono text-muted-foreground text-xs sm:mb-2 sm:text-sm">
                       4:00 PM
                     </div>
@@ -1375,7 +1375,7 @@ export function ComingSoon() {
 
                   {/* 4:30 PM */}
                   <div className="group relative">
-                    <div className="-left-[39px] sm:-left-[49px] absolute top-1.5 z-10 h-4 w-4 rounded-full border-2 border-muted-foreground/30 bg-background transition-all duration-300 group-hover:scale-110 group-hover:border-primary/50 sm:h-5 sm:w-5 sm:border-4" />
+                    <div className="absolute top-1.5 -left-[39px] z-10 h-4 w-4 rounded-full border-2 border-muted-foreground/30 bg-background transition-all duration-300 group-hover:scale-110 group-hover:border-primary/50 sm:-left-[49px] sm:h-5 sm:w-5 sm:border-4" />
                     <div className="mb-1 font-mono text-muted-foreground text-xs sm:mb-2 sm:text-sm">
                       4:30 PM
                     </div>
@@ -1387,7 +1387,7 @@ export function ComingSoon() {
 
                   {/* 4:31 PM */}
                   <div className="group relative">
-                    <div className="-left-[39px] sm:-left-[49px] absolute top-1.5 z-10 h-4 w-4 rounded-full border-2 border-muted-foreground/30 bg-background transition-all duration-300 group-hover:scale-110 group-hover:border-primary/50 sm:h-5 sm:w-5 sm:border-4" />
+                    <div className="absolute top-1.5 -left-[39px] z-10 h-4 w-4 rounded-full border-2 border-muted-foreground/30 bg-background transition-all duration-300 group-hover:scale-110 group-hover:border-primary/50 sm:-left-[49px] sm:h-5 sm:w-5 sm:border-4" />
                     <div className="mb-1 font-mono text-muted-foreground text-xs sm:mb-2 sm:text-sm">
                       4:31 PM
                     </div>
@@ -1400,7 +1400,7 @@ export function ComingSoon() {
 
                   {/* 5:30 PM */}
                   <div className="group relative">
-                    <div className="-left-[39px] sm:-left-[49px] absolute top-1.5 z-10 h-4 w-4 rounded-full border-2 border-primary bg-background shadow-[0_0_10px_var(--primary)] transition-transform duration-300 group-hover:scale-125 sm:h-5 sm:w-5 sm:border-4" />
+                    <div className="absolute top-1.5 -left-[39px] z-10 h-4 w-4 rounded-full border-2 border-primary bg-background shadow-[0_0_10px_var(--primary)] transition-transform duration-300 group-hover:scale-125 sm:-left-[49px] sm:h-5 sm:w-5 sm:border-4" />
                     <div className="mb-1 font-bold font-mono text-primary text-xs sm:mb-2 sm:text-sm">
                       5:30 PM
                     </div>
@@ -1416,7 +1416,7 @@ export function ComingSoon() {
 
                   {/* Next Market */}
                   <div className="relative pt-4 sm:pt-5">
-                    <div className="-left-[39px] sm:-left-[49px] absolute top-8 z-10 h-4 w-4 animate-pulse rounded-full bg-primary shadow-[0_0_15px_rgba(var(--primary),0.8)] sm:top-10 sm:h-5 sm:w-5" />
+                    <div className="absolute top-8 -left-[39px] z-10 h-4 w-4 animate-pulse rounded-full bg-primary shadow-[0_0_15px_rgba(var(--primary),0.8)] sm:top-10 sm:-left-[49px] sm:h-5 sm:w-5" />
                     <div className="rounded-lg border border-primary/30 bg-primary/10 p-4 shadow-[0_0_30px_rgba(var(--primary),0.1)] sm:rounded-xl sm:p-5">
                       <p className="animate-pulse font-bold text-foreground text-lg sm:text-xl">
                         The next market is already opening...
@@ -1441,7 +1441,7 @@ export function ComingSoon() {
 
             <div className="mb-8 grid grid-cols-1 gap-6 sm:mb-12 sm:grid-cols-2 sm:gap-8 md:grid-cols-3">
               {/* Months of Waiting */}
-              <div className="group hover:-translate-y-2 animation-delay-100 animate-fadeIn rounded-none border border-blue-500/10 bg-blue-500/5 p-8 text-center backdrop-blur-sm transition-all duration-500 hover:border-blue-500/30 hover:bg-blue-500/10 hover:shadow-[0_0_30px_rgba(59,130,246,0.15)]">
+              <div className="group animation-delay-100 animate-fadeIn rounded-none border border-blue-500/10 bg-blue-500/5 p-8 text-center backdrop-blur-sm transition-all duration-500 hover:-translate-y-2 hover:border-blue-500/30 hover:bg-blue-500/10 hover:shadow-[0_0_30px_rgba(59,130,246,0.15)]">
                 <h3 className="mb-4 font-bold text-foreground text-xl transition-colors group-hover:text-blue-400">
                   MONTHS OF WAITING
                 </h3>
@@ -1452,7 +1452,7 @@ export function ComingSoon() {
               </div>
 
               {/* No Learning */}
-              <div className="group hover:-translate-y-2 animation-delay-200 animate-fadeIn rounded-none border border-blue-500/10 bg-blue-500/5 p-8 text-center backdrop-blur-sm transition-all duration-500 hover:border-blue-500/30 hover:bg-blue-500/10 hover:shadow-[0_0_30px_rgba(59,130,246,0.15)]">
+              <div className="group animation-delay-200 animate-fadeIn rounded-none border border-blue-500/10 bg-blue-500/5 p-8 text-center backdrop-blur-sm transition-all duration-500 hover:-translate-y-2 hover:border-blue-500/30 hover:bg-blue-500/10 hover:shadow-[0_0_30px_rgba(59,130,246,0.15)]">
                 <h3 className="mb-4 font-bold text-foreground text-xl transition-colors group-hover:text-blue-400">
                   NO LEARNING
                 </h3>
@@ -1463,7 +1463,7 @@ export function ComingSoon() {
               </div>
 
               {/* Limited Data */}
-              <div className="group hover:-translate-y-2 animation-delay-300 animate-fadeIn rounded-none border border-blue-500/10 bg-blue-500/5 p-8 text-center backdrop-blur-sm transition-all duration-500 hover:border-blue-500/30 hover:bg-blue-500/10 hover:shadow-[0_0_30px_rgba(59,130,246,0.15)] sm:col-span-2 md:col-span-1">
+              <div className="group animation-delay-300 animate-fadeIn rounded-none border border-blue-500/10 bg-blue-500/5 p-8 text-center backdrop-blur-sm transition-all duration-500 hover:-translate-y-2 hover:border-blue-500/30 hover:bg-blue-500/10 hover:shadow-[0_0_30px_rgba(59,130,246,0.15)] sm:col-span-2 md:col-span-1">
                 <h3 className="mb-4 font-bold text-foreground text-xl transition-colors group-hover:text-blue-400">
                   LIMITED DATA
                 </h3>
@@ -1505,7 +1505,7 @@ export function ComingSoon() {
 
             <div className="grid grid-cols-1 gap-6 sm:gap-8 md:grid-cols-2 lg:grid-cols-3">
               {/* Continuous Markets */}
-              <div className="group hover:-translate-y-1 relative animate-fadeIn rounded-none border border-white/5 bg-gradient-to-b from-primary/5 to-transparent p-8 transition-all duration-300 hover:border-primary/20 hover:bg-primary/10 hover:shadow-[0_0_30px_rgba(var(--primary),0.15)]">
+              <div className="group relative animate-fadeIn rounded-none border border-white/5 bg-gradient-to-b from-primary/5 to-transparent p-8 transition-all duration-300 hover:-translate-y-1 hover:border-primary/20 hover:bg-primary/10 hover:shadow-[0_0_30px_rgba(var(--primary),0.15)]">
                 <div className="absolute inset-0 rounded-none bg-primary/5 opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
                 <div className="relative z-10">
                   <h4 className="mb-3 font-bold text-foreground text-xl transition-colors group-hover:text-primary">
@@ -1519,7 +1519,7 @@ export function ComingSoon() {
               </div>
 
               {/* Instant Feedback */}
-              <div className="group hover:-translate-y-1 animation-delay-100 relative animate-fadeIn rounded-none border border-white/5 bg-gradient-to-b from-primary/5 to-transparent p-8 transition-all duration-300 hover:border-primary/20 hover:bg-primary/10 hover:shadow-[0_0_30px_rgba(var(--primary),0.15)]">
+              <div className="group animation-delay-100 relative animate-fadeIn rounded-none border border-white/5 bg-gradient-to-b from-primary/5 to-transparent p-8 transition-all duration-300 hover:-translate-y-1 hover:border-primary/20 hover:bg-primary/10 hover:shadow-[0_0_30px_rgba(var(--primary),0.15)]">
                 <div className="absolute inset-0 rounded-none bg-primary/5 opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
                 <div className="relative z-10">
                   <h4 className="mb-3 font-bold text-foreground text-xl transition-colors group-hover:text-primary">
@@ -1534,7 +1534,7 @@ export function ComingSoon() {
               </div>
 
               {/* Team Coordination */}
-              <div className="group hover:-translate-y-1 animation-delay-200 relative animate-fadeIn rounded-none border border-white/5 bg-gradient-to-b from-primary/5 to-transparent p-8 transition-all duration-300 hover:border-primary/20 hover:bg-primary/10 hover:shadow-[0_0_30px_rgba(var(--primary),0.15)]">
+              <div className="group animation-delay-200 relative animate-fadeIn rounded-none border border-white/5 bg-gradient-to-b from-primary/5 to-transparent p-8 transition-all duration-300 hover:-translate-y-1 hover:border-primary/20 hover:bg-primary/10 hover:shadow-[0_0_30px_rgba(var(--primary),0.15)]">
                 <div className="absolute inset-0 rounded-none bg-primary/5 opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
                 <div className="relative z-10">
                   <h4 className="mb-3 font-bold text-foreground text-xl transition-colors group-hover:text-primary">
@@ -1549,7 +1549,7 @@ export function ComingSoon() {
               </div>
 
               {/* Accelerated Learning */}
-              <div className="group hover:-translate-y-1 animation-delay-300 relative animate-fadeIn rounded-none border border-white/5 bg-gradient-to-b from-primary/5 to-transparent p-8 transition-all duration-300 hover:border-primary/20 hover:bg-primary/10 hover:shadow-[0_0_30px_rgba(var(--primary),0.15)]">
+              <div className="group animation-delay-300 relative animate-fadeIn rounded-none border border-white/5 bg-gradient-to-b from-primary/5 to-transparent p-8 transition-all duration-300 hover:-translate-y-1 hover:border-primary/20 hover:bg-primary/10 hover:shadow-[0_0_30px_rgba(var(--primary),0.15)]">
                 <div className="absolute inset-0 rounded-none bg-primary/5 opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
                 <div className="relative z-10">
                   <h4 className="mb-3 font-bold text-foreground text-xl transition-colors group-hover:text-primary">
@@ -1563,7 +1563,7 @@ export function ComingSoon() {
               </div>
 
               {/* AI-Powered Intelligence */}
-              <div className="group hover:-translate-y-1 animation-delay-500 relative animate-fadeIn rounded-none border border-white/5 bg-gradient-to-b from-primary/5 to-transparent p-8 transition-all duration-300 hover:border-primary/20 hover:bg-primary/10 hover:shadow-[0_0_30px_rgba(var(--primary),0.15)]">
+              <div className="group animation-delay-500 relative animate-fadeIn rounded-none border border-white/5 bg-gradient-to-b from-primary/5 to-transparent p-8 transition-all duration-300 hover:-translate-y-1 hover:border-primary/20 hover:bg-primary/10 hover:shadow-[0_0_30px_rgba(var(--primary),0.15)]">
                 <div className="absolute inset-0 rounded-none bg-primary/5 opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
                 <div className="relative z-10">
                   <h4 className="mb-3 font-bold text-foreground text-xl transition-colors group-hover:text-primary">
@@ -1577,7 +1577,7 @@ export function ComingSoon() {
               </div>
 
               {/* Cryptographically Sealed */}
-              <div className="group hover:-translate-y-1 animation-delay-500 relative animate-fadeIn rounded-none border border-white/5 bg-gradient-to-b from-primary/5 to-transparent p-8 transition-all duration-300 hover:border-primary/20 hover:bg-primary/10 hover:shadow-[0_0_30px_rgba(var(--primary),0.15)]">
+              <div className="group animation-delay-500 relative animate-fadeIn rounded-none border border-white/5 bg-gradient-to-b from-primary/5 to-transparent p-8 transition-all duration-300 hover:-translate-y-1 hover:border-primary/20 hover:bg-primary/10 hover:shadow-[0_0_30px_rgba(var(--primary),0.15)]">
                 <div className="absolute inset-0 rounded-none bg-primary/5 opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
                 <div className="relative z-10">
                   <h4 className="mb-3 font-bold text-foreground text-xl transition-colors group-hover:text-primary">
@@ -1597,7 +1597,7 @@ export function ComingSoon() {
         <section className="relative z-10 bg-background px-4 py-12 sm:px-6 sm:py-16 md:px-8 md:py-20 lg:py-24">
           <div className="relative mx-auto max-w-5xl">
             {/* Connector Line (Desktop) */}
-            <div className="-translate-x-1/2 absolute top-[320px] bottom-20 left-1/2 z-0 hidden w-0.5 bg-gradient-to-b from-primary/50 to-transparent md:block" />
+            <div className="absolute top-[320px] bottom-20 left-1/2 z-0 hidden w-0.5 -translate-x-1/2 bg-gradient-to-b from-primary/50 to-transparent md:block" />
 
             <h2 className="mb-6 animate-fadeIn px-4 text-center font-bold text-3xl text-foreground tracking-tight sm:mb-8 sm:text-4xl md:text-5xl lg:text-6xl">
               HOW IT WORKS
@@ -1613,7 +1613,7 @@ export function ComingSoon() {
             {/* Mobile: Single column vertical stack, Desktop: 2 columns */}
             <div className="relative z-10 grid grid-cols-1 gap-6 sm:gap-8 md:grid-cols-2 md:gap-12">
               {/* Register & Spin Off */}
-              <div className="hover:-translate-y-1 animation-delay-100 flex w-full animate-fadeIn flex-col rounded-xl border border-primary/20 bg-card p-8 transition-all duration-300 hover:border-primary/50 hover:shadow-[0_0_30px_rgba(var(--primary),0.1)] md:p-10">
+              <div className="animation-delay-100 flex w-full animate-fadeIn flex-col rounded-xl border border-primary/20 bg-card p-8 transition-all duration-300 hover:-translate-y-1 hover:border-primary/50 hover:shadow-[0_0_30px_rgba(var(--primary),0.1)] md:p-10">
                 <h3 className="mb-3 font-bold text-foreground text-xl sm:mb-4 sm:text-2xl">
                   Register & Spin Off Your First Agent
                 </h3>
@@ -1624,7 +1624,7 @@ export function ComingSoon() {
               </div>
 
               {/* Add Specialized Agents */}
-              <div className="hover:-translate-y-1 animation-delay-200 flex w-full animate-fadeIn flex-col rounded-xl border border-primary/20 bg-card p-8 transition-all duration-300 hover:border-primary/50 hover:shadow-[0_0_30px_rgba(var(--primary),0.1)] md:p-10">
+              <div className="animation-delay-200 flex w-full animate-fadeIn flex-col rounded-xl border border-primary/20 bg-card p-8 transition-all duration-300 hover:-translate-y-1 hover:border-primary/50 hover:shadow-[0_0_30px_rgba(var(--primary),0.1)] md:p-10">
                 <h3 className="mb-3 font-bold text-foreground text-xl sm:mb-4 sm:text-2xl">
                   Add Specialized Agents
                 </h3>
@@ -1636,7 +1636,7 @@ export function ComingSoon() {
               </div>
 
               {/* Share Intelligence */}
-              <div className="hover:-translate-y-1 animation-delay-300 flex w-full animate-fadeIn flex-col rounded-xl border border-primary/20 bg-card p-8 transition-all duration-300 hover:border-primary/50 hover:shadow-[0_0_30px_rgba(var(--primary),0.1)] md:p-10">
+              <div className="animation-delay-300 flex w-full animate-fadeIn flex-col rounded-xl border border-primary/20 bg-card p-8 transition-all duration-300 hover:-translate-y-1 hover:border-primary/50 hover:shadow-[0_0_30px_rgba(var(--primary),0.1)] md:p-10">
                 <h3 className="mb-3 font-bold text-foreground text-xl sm:mb-4 sm:text-2xl">
                   Share Intelligence in Real-time
                 </h3>
@@ -1647,7 +1647,7 @@ export function ComingSoon() {
               </div>
 
               {/* Compete & Earn */}
-              <div className="hover:-translate-y-1 animation-delay-500 flex w-full animate-fadeIn flex-col rounded-xl border border-primary/20 bg-card p-8 transition-all duration-300 hover:border-primary/50 hover:shadow-[0_0_30px_rgba(var(--primary),0.1)] md:p-10">
+              <div className="animation-delay-500 flex w-full animate-fadeIn flex-col rounded-xl border border-primary/20 bg-card p-8 transition-all duration-300 hover:-translate-y-1 hover:border-primary/50 hover:shadow-[0_0_30px_rgba(var(--primary),0.1)] md:p-10">
                 <h3 className="mb-3 font-bold text-foreground text-xl sm:mb-4 sm:text-2xl">
                   Compete & Earn Together
                 </h3>
@@ -2175,7 +2175,7 @@ export function ComingSoon() {
   return (
     <div className="flex min-h-screen w-full flex-col overflow-x-hidden bg-background text-foreground">
       {/* Background Image - Full Width */}
-      <div className="-translate-x-1/2 fixed inset-0 left-1/2 z-0 h-full w-screen">
+      <div className="fixed inset-0 left-1/2 z-0 h-full w-screen -translate-x-1/2">
         <Image
           src="/assets/images/background.png"
           alt="Babylon Background"
@@ -3496,7 +3496,7 @@ export function ComingSoon() {
                         Username *
                       </label>
                       <div className="relative">
-                        <span className="-translate-y-1/2 absolute top-1/2 left-3 text-muted-foreground">
+                        <span className="absolute top-1/2 left-3 -translate-y-1/2 text-muted-foreground">
                           @
                         </span>
                         <input
@@ -3514,16 +3514,16 @@ export function ComingSoon() {
                           maxLength={20}
                         />
                         {isCheckingUsername && (
-                          <div className="-translate-y-1/2 absolute top-1/2 right-3">
+                          <div className="absolute top-1/2 right-3 -translate-y-1/2">
                             <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
                           </div>
                         )}
                         {usernameStatus === 'available' &&
                           !isCheckingUsername && (
-                            <Check className="-translate-y-1/2 absolute top-1/2 right-3 h-4 w-4 text-green-500" />
+                            <Check className="absolute top-1/2 right-3 h-4 w-4 -translate-y-1/2 text-green-500" />
                           )}
                         {usernameStatus === 'taken' && !isCheckingUsername && (
-                          <X className="-translate-y-1/2 absolute top-1/2 right-3 h-4 w-4 text-red-500" />
+                          <X className="absolute top-1/2 right-3 h-4 w-4 -translate-y-1/2 text-red-500" />
                         )}
                       </div>
                       {usernameStatus === 'taken' && usernameSuggestion && (
