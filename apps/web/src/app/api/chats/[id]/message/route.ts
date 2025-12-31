@@ -109,7 +109,6 @@ import {
   chatParticipants,
   db,
   eq,
-  groupMembers,
   hasBlocked,
   users,
 } from '@babylon/db';
@@ -349,32 +348,15 @@ export const POST = withErrorHandling(
 
           if (!verification.canAccess) {
             // Remove user from chat since they no longer have NFT access
-            // Wrap in transaction for consistency
-            await db.transaction(async (tx) => {
-              await tx
-                .update(groupMembers)
-                .set({
-                  isActive: false,
-                  kickedAt: new Date(),
-                  kickReason: 'Lost NFT access',
-                })
-                .where(
-                  and(
-                    eq(groupMembers.groupId, chatId),
-                    eq(groupMembers.userId, user.userId),
-                    eq(groupMembers.isActive, true)
-                  )
-                );
-
-              await tx
-                .delete(chatParticipants)
-                .where(
-                  and(
-                    eq(chatParticipants.chatId, chatId),
-                    eq(chatParticipants.userId, user.userId)
-                  )
-                );
-            });
+            await db
+              .update(chatParticipants)
+              .set({ isActive: false })
+              .where(
+                and(
+                  eq(chatParticipants.chatId, chatId),
+                  eq(chatParticipants.userId, user.userId)
+                )
+              );
 
             // Invalidate NFT cache for this user/contract combination
             if (userData?.walletAddress && chat.requiredNftContractAddress) {
