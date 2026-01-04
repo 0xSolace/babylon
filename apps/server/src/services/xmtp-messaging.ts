@@ -31,9 +31,7 @@ const XMTP_ENV: XMTPEnv = xmtpConfig.env
 const XMTP_DB_PATH = xmtpConfig.dbPath
 
 // Client instances per user (keyed by wallet address)
-// Note: XMTP SDK has complex generics - using 'any' for map storage
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const xmtpClients = new Map<string, any>()
+const xmtpClients = new Map<string, InstanceType<typeof XMTPClient>>()
 const kmsSigsners = new Map<string, KMSSigner>()
 
 /**
@@ -130,8 +128,9 @@ async function getUserWallet(userId: string): Promise<Address> {
  * Get or create an XMTP client for a user
  * Uses KMS for all signing operations
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function getOrCreateXMTPClient(userId: string): Promise<any> {
+async function getOrCreateXMTPClient(
+  userId: string,
+): Promise<InstanceType<typeof XMTPClient>> {
   const walletAddress = await getUserWallet(userId)
   const clientKey = walletAddress.toLowerCase()
 
@@ -258,13 +257,12 @@ export async function createXMTPGroup(
   )
 
   // Create group on XMTP network
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const group = await client.conversations.newGroupWithIdentifiers(
     participantIdentifiers,
     {
-      groupName: name,
-      groupDescription: description ?? '',
-    } as any,
+      name,
+      description: description ?? '',
+    },
   )
 
   const groupId = await generateSnowflakeId()
