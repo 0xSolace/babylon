@@ -14,8 +14,8 @@ beforeAll(() => {
   // Service URLs are loaded from @jejunetwork/config based on JEJU_NETWORK
   ;(process.env as Record<string, string>).NODE_ENV = 'test'
   process.env.JEJU_NETWORK = 'localnet'
-  process.env.EQLITE_BLOCK_PRODUCER_ENDPOINT = 'http://localhost:4661'
-  process.env.EQLITE_DATABASE_ID = 'babylon_test'
+  process.env.SQLIT_BLOCK_PRODUCER_ENDPOINT = 'http://localhost:4661'
+  process.env.SQLIT_DATABASE_ID = 'babylon_test'
 
   // Mock the database module entirely
   mock.module('@babylon/db', () => {

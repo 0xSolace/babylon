@@ -8,10 +8,10 @@
 
 import { db } from '@babylon/db'
 import { getA2AEndpoint, getMCPEndpoint } from '@babylon/shared'
+import { getAgent0Client } from '@jejunetwork/agents'
 import type { JsonValue } from '@jejunetwork/shared'
 import { generateSnowflakeId } from '@jejunetwork/shared'
 import { logger } from '../shared/logger'
-import { getAgent0Client } from './index'
 
 /**
  * Babylon registration result

@@ -76,45 +76,54 @@ export async function initializeTrainingPackage(): Promise<void> {
   }
 
   // Get the LLM caller from agents (uses Jeju Compute)
+  const callLLM = async (params: {
+    prompt: string
+    system: string
+    modelSize?: 'small' | 'medium' | 'large'
+    temperature?: number
+    maxTokens?: number
+  }): Promise<string> => {
+    // Route through Jeju Compute - NO centralized fallback
+    const jejuEndpoint =
+      process.env.JEJU_COMPUTE_API_URL ||
+      process.env.JEJU_COMPUTE_ENDPOINT ||
+      'http://localhost:4500'
+
+    const modelMap: Record<'small' | 'medium' | 'large', string> = {
+      small: 'llama-3.1-8b-instant',
+      medium: 'llama-3.1-70b-versatile',
+      large: 'llama-3.1-70b-versatile',
+    }
+
+    const model = modelMap[params.modelSize || 'medium']
+
+    const response = await fetch(`${jejuEndpoint}/v1/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model,
+        messages: [
+          { role: 'system', content: params.system },
+          { role: 'user', content: params.prompt },
+        ],
+        temperature: params.temperature ?? 0.7,
+        max_tokens: params.maxTokens ?? 1024,
+      }),
+    })
+
+    if (!response.ok) {
+      throw new Error(`Jeju Compute error: ${response.status}`)
+    }
+
+    const data: ChatCompletionResponse = await response.json()
+    return data.choices[0]?.message.content || ''
+  }
+
   const llmCaller: ILLMCaller = {
-    callGroqDirect: async (params) => {
-      // Route through Jeju Compute - NO centralized fallback
-      const jejuEndpoint =
-        process.env.JEJU_COMPUTE_API_URL ||
-        process.env.JEJU_COMPUTE_ENDPOINT ||
-        'http://localhost:4500'
-
-      const modelMap = {
-        small: 'llama-3.1-8b-instant',
-        medium: 'llama-3.1-70b-versatile',
-        large: 'llama-3.1-70b-versatile',
-      }
-
-      const model = modelMap[params.modelSize || 'medium']
-
-      const response = await fetch(`${jejuEndpoint}/v1/chat/completions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model,
-          messages: [
-            { role: 'system', content: params.system },
-            { role: 'user', content: params.prompt },
-          ],
-          temperature: params.temperature ?? 0.7,
-          max_tokens: params.maxTokens ?? 1024,
-        }),
-      })
-
-      if (!response.ok) {
-        throw new Error(`Jeju Compute error: ${response.status}`)
-      }
-
-      const data: ChatCompletionResponse = await response.json()
-      return data.choices[0]?.message.content || ''
-    },
+    callAgentLLM: callLLM,
+    callGroqDirect: callLLM,
   }
 
   // Configure all dependencies

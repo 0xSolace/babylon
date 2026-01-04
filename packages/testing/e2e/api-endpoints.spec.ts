@@ -13,40 +13,6 @@ import { expect, test } from '@playwright/test'
 const BABYLON_API_PORT = process.env.BABYLON_API_PORT ?? '5009'
 const API_URL = `http://127.0.0.1:${BABYLON_API_PORT}`
 
-// Helper to make API requests with proper error handling
-async function _apiRequest(
-  request: ReturnType<typeof test.info>['fixme'] extends never
-    ? never
-    : Parameters<typeof test>[1] extends { request: infer R }
-      ? R
-      : never,
-  method: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH',
-  endpoint: string,
-  body?: Record<string, unknown>,
-) {
-  const url = `${API_URL}${endpoint}`
-  const options: RequestInit = {
-    headers: { 'Content-Type': 'application/json' },
-  }
-
-  if (body) {
-    Object.assign(options, { data: body })
-  }
-
-  switch (method) {
-    case 'GET':
-      return request.get(url)
-    case 'POST':
-      return request.post(url, options)
-    case 'PUT':
-      return request.put(url, options)
-    case 'DELETE':
-      return request.delete(url, options)
-    case 'PATCH':
-      return request.patch(url, options)
-  }
-}
-
 test.describe('Health & System Endpoints', () => {
   test('GET /health - returns healthy status', async ({ request }) => {
     const response = await request.get(`${API_URL}/health`)

@@ -1,9 +1,9 @@
 #!/usr/bin/env bun
 
 /**
- * @fileoverview Database management commands for EQLite
+ * @fileoverview Database management commands for SQLit
  *
- * Provides commands for managing the EQLite database connection, running seeds,
+ * Provides commands for managing the SQLit database connection, running seeds,
  * and checking database status. Integrates with Jeju DWS for automatic
  * configuration and database provisioning.
  *
@@ -19,20 +19,21 @@ import {
 } from '@babylon/db'
 import { GameBootstrapService } from '@babylon/engine'
 import { isJejuNetwork, type JejuNetwork } from '@babylon/shared'
-import { getDWSUrl, getEQLiteUrl } from '@jejunetwork/config'
+import { getSQLitEndpoint, getNetworkName } from '@babylon/shared/config'
+import { getDWSUrl, getSQLitUrl } from '@jejunetwork/config'
 import { getFlag, parseArgs, wantsHelp } from '../lib/args.js'
 import { logger } from '../lib/logger.js'
 
 function printHelp(): void {
   console.log(`
-Database Management (EQLite via Jeju DWS)
+Database Management (SQLit via Jeju DWS)
 
 USAGE:
   babylon db <command>
 
 COMMANDS:
-  status    Show EQLite database status and health
-  connect   Test EQLite connection and show info
+  status    Show SQLit database status and health
+  connect   Test SQLit connection and show info
   seed      Seed database with initial data
   reset     Reset database (clear all data)
   stats     Show database statistics
@@ -48,15 +49,15 @@ EXAMPLES:
 
 ENVIRONMENT:
   JEJU_NETWORK                 Network: localnet, testnet, mainnet (recommended)
-  EQLITE_BLOCK_PRODUCER_ENDPOINT  Override: Jeju block producer endpoint
-  EQLITE_DATABASE_ID              Database identifier (default: babylon)
-  EQLITE_PRIVATE_KEY              Optional private key for signed transactions
-  EQLITE_TIMEOUT                  Query timeout in ms (default: 30000)
-  EQLITE_DEBUG                    Enable debug logging (true/false)
+  SQLIT_BLOCK_PRODUCER_ENDPOINT  Override: Jeju block producer endpoint
+  SQLIT_DATABASE_ID              Database identifier (default: babylon)
+  SQLIT_PRIVATE_KEY              Optional private key for signed transactions
+  SQLIT_TIMEOUT                  Query timeout in ms (default: 30000)
+  SQLIT_DEBUG                    Enable debug logging (true/false)
 
 CONFIGURATION:
-  The EQLite endpoint is resolved in this order:
-  1. EQLITE_BLOCK_PRODUCER_ENDPOINT env var (explicit override)
+  The SQLit endpoint is resolved in this order:
+  1. SQLIT_BLOCK_PRODUCER_ENDPOINT env var (explicit override)
   2. JEJU_NETWORK env var (auto-resolves via @jejunetwork/config)
 
   For local development, set JEJU_NETWORK=localnet and run:
@@ -65,21 +66,26 @@ CONFIGURATION:
 }
 
 /**
- * Verifies EQLite environment is configured.
+ * Verifies SQLit environment is configured.
  * Supports both explicit endpoint and network-aware configuration.
  *
- * @throws Exits process with code 1 if EQLite is not configured
+ * @throws Exits process with code 1 if SQLit is not configured
  * @internal
  */
-function checkEQLiteConfig(): void {
-  const endpoint = process.env.EQLITE_BLOCK_PRODUCER_ENDPOINT
-  const network = process.env.JEJU_NETWORK
+function checkSQLitConfig(): void {
+  const endpoint =
+    (typeof process !== 'undefined'
+      ? process.env.SQLIT_BLOCK_PRODUCER_ENDPOINT
+      : undefined) || getSQLitEndpoint()
+  const network =
+    (typeof process !== 'undefined' ? process.env.JEJU_NETWORK : undefined) ||
+    getNetworkName()
 
   if (!endpoint && !network) {
-    logger.fail('EQLite not configured')
+    logger.fail('SQLit not configured')
     console.log('\nConfigure using one of these methods:')
     console.log('  1. Set JEJU_NETWORK=localnet (recommended for development)')
-    console.log('  2. Set EQLITE_BLOCK_PRODUCER_ENDPOINT explicitly')
+    console.log('  2. Set SQLIT_BLOCK_PRODUCER_ENDPOINT explicitly')
     console.log('\nFor local development, start Jeju first:')
     console.log('  cd /path/to/jeju && jeju dev')
     process.exit(1)
@@ -87,30 +93,30 @@ function checkEQLiteConfig(): void {
 }
 
 /**
- * Tests the EQLite connection and displays connection info.
+ * Tests the SQLit connection and displays connection info.
  *
  * @internal
  */
 async function testConnection(): Promise<void> {
-  logger.header('Testing EQLite Connection')
+  logger.header('Testing SQLit Connection')
 
-  checkEQLiteConfig()
+  checkSQLitConfig()
 
-  logger.step('Initializing EQLite client...')
+  logger.step('Initializing SQLit client...')
   await initializeDB()
 
   logger.step('Checking health...')
-  const eqliteDb = getDB()
-  const healthy = await eqliteDb.isHealthy()
+  const sqlitDb = getDB()
+  const healthy = await sqlitDb.isHealthy()
 
   if (!healthy) {
-    logger.fail('EQLite is not healthy')
+    logger.fail('SQLit is not healthy')
     console.log('\nEnsure Jeju is running:')
     console.log('  cd /path/to/jeju && jeju dev')
     process.exit(1)
   }
 
-  logger.success('EQLite connection established')
+  logger.success('SQLit connection established')
   await showConnectionInfo()
 }
 
@@ -122,11 +128,11 @@ async function testConnection(): Promise<void> {
  * @internal
  */
 async function showStatus(): Promise<void> {
-  logger.header('Database Status (EQLite via Jeju DWS)')
+  logger.header('Database Status (SQLit via Jeju DWS)')
 
-  const endpoint = process.env.EQLITE_BLOCK_PRODUCER_ENDPOINT
+  const endpoint = process.env.SQLIT_BLOCK_PRODUCER_ENDPOINT
   const network = process.env.JEJU_NETWORK
-  const databaseId = process.env.EQLITE_DATABASE_ID || 'babylon'
+  const databaseId = process.env.SQLIT_DATABASE_ID || 'babylon'
 
   console.log('Configuration:')
   if (network) {
@@ -140,22 +146,22 @@ async function showStatus(): Promise<void> {
   if (!endpoint && !network) {
     console.log('\nStatus: ❌ Not configured')
     console.log(
-      '\nSet JEJU_NETWORK=localnet or EQLITE_BLOCK_PRODUCER_ENDPOINT.',
+      '\nSet JEJU_NETWORK=localnet or SQLIT_BLOCK_PRODUCER_ENDPOINT.',
     )
     console.log('Start Jeju: cd /path/to/jeju && jeju dev')
     return
   }
 
-  logger.step('Checking EQLite health...')
+  logger.step('Checking SQLit health...')
 
   await initializeDB()
-  const eqliteDb = getDB()
-  const healthy = await eqliteDb.isHealthy()
+  const sqlitDb = getDB()
+  const healthy = await sqlitDb.isHealthy()
 
   if (healthy) {
     console.log('Status: ✅ Connected')
 
-    const blockHeight = await eqliteDb.getBlockHeight()
+    const blockHeight = await sqlitDb.getBlockHeight()
     console.log(`Block Height: ${blockHeight}`)
   } else {
     console.log('Status: ❌ Unhealthy')
@@ -170,10 +176,10 @@ async function showStatus(): Promise<void> {
  * @internal
  */
 async function showConnectionInfo(): Promise<void> {
-  const endpoint = process.env.EQLITE_BLOCK_PRODUCER_ENDPOINT || 'not set'
-  const databaseId = process.env.EQLITE_DATABASE_ID || 'babylon'
-  const timeout = process.env.EQLITE_TIMEOUT || '30000'
-  const debug = process.env.EQLITE_DEBUG || 'false'
+  const endpoint = process.env.SQLIT_BLOCK_PRODUCER_ENDPOINT || 'not set'
+  const databaseId = process.env.SQLIT_DATABASE_ID || 'babylon'
+  const timeout = process.env.SQLIT_TIMEOUT || '30000'
+  const debug = process.env.SQLIT_DEBUG || 'false'
 
   console.log('\nConnection Info:')
   console.log(`  Endpoint:    ${endpoint}`)
@@ -181,9 +187,9 @@ async function showConnectionInfo(): Promise<void> {
   console.log(`  Timeout:     ${timeout}ms`)
   console.log(`  Debug:       ${debug}`)
 
-  const eqliteDb = getDB()
-  if (eqliteDb.isInitialized()) {
-    const blockHeight = await eqliteDb.getBlockHeight()
+  const sqlitDb = getDB()
+  if (sqlitDb.isInitialized()) {
+    const blockHeight = await sqlitDb.getBlockHeight()
     console.log(`  Block Height: ${blockHeight}`)
   }
 }
@@ -192,7 +198,7 @@ async function showConnectionInfo(): Promise<void> {
  * Seeds the database with initial data.
  *
  * Uses GameBootstrapService to populate the database with actors, organizations,
- * and other initial data. Requires EQLite connection.
+ * and other initial data. Requires SQLit connection.
  *
  * @param args - Parsed command-line arguments
  * @internal
@@ -200,15 +206,15 @@ async function showConnectionInfo(): Promise<void> {
 async function seedDatabase(args: ReturnType<typeof parseArgs>): Promise<void> {
   logger.header('Seeding Database')
 
-  checkEQLiteConfig()
+  checkSQLitConfig()
 
-  logger.step('Initializing EQLite and creating tables...')
+  logger.step('Initializing SQLit and creating tables...')
   await initializeDatabase()
 
-  const eqliteDb = getDB()
-  const healthy = await eqliteDb.isHealthy()
+  const sqlitDb = getDB()
+  const healthy = await sqlitDb.isHealthy()
   if (!healthy) {
-    logger.fail('EQLite is not healthy')
+    logger.fail('SQLit is not healthy')
     console.log('Start Jeju first: cd /path/to/jeju && jeju dev')
     process.exit(1)
   }
@@ -272,15 +278,15 @@ async function seedDatabase(args: ReturnType<typeof parseArgs>): Promise<void> {
 async function showStats(): Promise<void> {
   logger.header('Database Statistics')
 
-  checkEQLiteConfig()
+  checkSQLitConfig()
 
-  logger.step('Initializing EQLite...')
+  logger.step('Initializing SQLit...')
   await initializeDB()
 
-  const eqliteDb = getDB()
-  const healthy = await eqliteDb.isHealthy()
+  const sqlitDb = getDB()
+  const healthy = await sqlitDb.isHealthy()
   if (!healthy) {
-    logger.fail('EQLite is not healthy')
+    logger.fail('SQLit is not healthy')
     process.exit(1)
   }
 
@@ -309,24 +315,24 @@ async function resetDatabase(): Promise<void> {
 
   logger.warn('This will delete all data!')
 
-  checkEQLiteConfig()
+  checkSQLitConfig()
 
-  logger.step('Initializing EQLite...')
+  logger.step('Initializing SQLit...')
   await initializeDB()
 
-  const eqliteDb = getDB()
-  const healthy = await eqliteDb.isHealthy()
+  const sqlitDb = getDB()
+  const healthy = await sqlitDb.isHealthy()
   if (!healthy) {
-    logger.fail('EQLite is not healthy')
+    logger.fail('SQLit is not healthy')
     process.exit(1)
   }
 
   logger.step('Clearing database...')
 
   // Get list of all tables and truncate them
-  // Note: EQLite/SQLite uses sqlite_master, not information_schema
+  // Note: SQLit/SQLit uses sqlite_master, not information_schema
   const tables = await db.query<{ name: string }>(
-    `SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_eqlite_%'`,
+    `SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name NOT LIKE '_sqlit_%'`,
   )
 
   for (const table of tables) {
@@ -397,18 +403,18 @@ async function provisionDatabase(args: string[]): Promise<void> {
     process.exit(1)
   }
 
-  // Get EQLite URL from Jeju config
-  let eqliteUrl: string
+  // Get SQLit URL from Jeju config
+  let sqlitUrl: string
   try {
-    eqliteUrl = getEQLiteUrl(network)
+    sqlitUrl = getSQLitUrl(network)
   } catch {
     // Fallback for local development
-    eqliteUrl =
+    sqlitUrl =
       network === 'localnet'
         ? 'http://localhost:4661'
         : network === 'testnet'
-          ? 'https://eqlite-testnet.jejunetwork.org'
-          : 'https://eqlite.jejunetwork.org'
+          ? 'https://sqlit-testnet.jejunetwork.org'
+          : 'https://sqlit.jejunetwork.org'
   }
 
   logger.success('Database provisioned')
@@ -417,13 +423,13 @@ async function provisionDatabase(args: string[]): Promise<void> {
   console.log('Add to your .env file:')
   console.log('```')
   console.log(`JEJU_NETWORK=${network}`)
-  console.log(`EQLITE_DATABASE_ID=${databaseId}`)
+  console.log(`SQLIT_DATABASE_ID=${databaseId}`)
   console.log('```')
   console.log('')
   console.log('Or use explicit endpoint:')
   console.log('```')
-  console.log(`EQLITE_BLOCK_PRODUCER_ENDPOINT=${eqliteUrl}`)
-  console.log(`EQLITE_DATABASE_ID=${databaseId}`)
+  console.log(`SQLIT_BLOCK_PRODUCER_ENDPOINT=${sqlitUrl}`)
+  console.log(`SQLIT_DATABASE_ID=${databaseId}`)
   console.log('```')
 }
 
@@ -433,8 +439,8 @@ async function provisionDatabase(args: string[]): Promise<void> {
  * Routes to appropriate sub-command handlers based on parsed arguments.
  *
  * **Supported Commands:**
- * - `status` - Show EQLite database status
- * - `connect` - Test EQLite connection
+ * - `status` - Show SQLit database status
+ * - `connect` - Test SQLit connection
  * - `seed` - Seed database with initial data
  * - `stats` - Show database statistics
  * - `reset` - Reset database (clear all data)
@@ -479,14 +485,14 @@ export async function runDbCommand(args: string[]): Promise<void> {
     case 'start':
     case 'stop':
     case 'restart':
-      logger.warn(`The '${parsed.command}' command is not needed with EQLite.`)
-      console.log('\nEQLite connects to a Jeju block producer instance.')
+      logger.warn(`The '${parsed.command}' command is not needed with SQLit.`)
+      console.log('\nSQLit connects to a Jeju block producer instance.')
       console.log('Start Jeju instead: cd /path/to/jeju && jeju dev')
       break
 
     case 'migrate':
-      logger.warn("The 'migrate' command is not needed with EQLite.")
-      console.log('\nEQLite handles schema management automatically.')
+      logger.warn("The 'migrate' command is not needed with SQLit.")
+      console.log('\nSQLit handles schema management automatically.')
       console.log('Use "babylon db status" to check connection health.')
       break
 

@@ -17,6 +17,17 @@ import {
 } from '@babylon/training'
 import { MarketMoverAgent } from '../services/market-mover-agent'
 
+/** Type-safe array access with validation */
+function getAt<T>(arr: T[], index: number): T {
+  const value = arr[index]
+  if (value === undefined) {
+    throw new Error(
+      `Expected value at index ${index}, but array has length ${arr.length}`,
+    )
+  }
+  return value
+}
+
 // Shared config for most tests - minimal but sufficient
 const BASE_CONFIG: BenchmarkConfig = {
   durationMinutes: 25 * 24 * 60, // 25 days
@@ -53,6 +64,7 @@ describe('BenchmarkDataGenerator - Causal Simulation', () => {
     expect(snapshot.groundTruth.hiddenNarrativeFacts?.length).toBe(1)
 
     const fact = snapshot.groundTruth.hiddenNarrativeFacts?.[0]
+    if (!fact) throw new Error('Expected fact to exist')
     expect(fact.id).toMatch(/^narrative-fact-/)
     expect(fact.fact.length).toBeGreaterThan(10)
     expect(fact.affectsTickers).toHaveLength(1)
@@ -82,7 +94,9 @@ describe('BenchmarkDataGenerator - Causal Simulation', () => {
 
     // Events sorted by tick
     for (let i = 1; i < events.length; i++) {
-      expect(events[i]?.tick).toBeGreaterThanOrEqual(events[i - 1]?.tick)
+      const curr = getAt(events, i)
+      const prev = getAt(events, i - 1)
+      expect(curr.tick).toBeGreaterThanOrEqual(prev.tick)
     }
 
     // Verify price changes in valid ranges
@@ -135,6 +149,7 @@ describe('BenchmarkDataGenerator - Causal Simulation', () => {
 
     const fact1 = snap1.groundTruth.hiddenNarrativeFacts?.[0]
     const fact2 = snap2.groundTruth.hiddenNarrativeFacts?.[0]
+    if (!fact1 || !fact2) throw new Error('Expected facts to exist')
 
     // At least something should differ
     const differs =
@@ -149,6 +164,7 @@ describe('BenchmarkDataGenerator - Causal Simulation', () => {
 
     for (const perp of snapshot.initialState.perpetualMarkets) {
       const history = snapshot.groundTruth.priceHistory[perp.ticker]
+      if (!history) throw new Error('Expected history to exist')
       const minAllowed = perp.price * 0.1
       const maxAllowed = perp.price * 4.0
 
@@ -175,8 +191,10 @@ describe('MarketMoverAgent', () => {
       { affectedTickers: ['TSLA'] },
     )
 
-    expect(adj.get('TSLA')).toBeLessThan(0)
-    expect(Math.abs(adj.get('TSLA'))).toBeGreaterThanOrEqual(0.05)
+    const tslaAdj = adj.get('TSLA')
+    if (tslaAdj === undefined) throw new Error('Expected TSLA adjustment')
+    expect(tslaAdj).toBeLessThan(0)
+    expect(Math.abs(tslaAdj)).toBeGreaterThanOrEqual(0.05)
   })
 
   test('generates positive adjustments for positive events', async () => {
@@ -227,7 +245,9 @@ describe('MarketMoverAgent', () => {
         medium: [0.05, 0.1],
         high: [0.15, 0.25],
       }
-      const [min, max] = ranges[bucket]
+      const range = ranges[bucket]
+      if (!range) throw new Error(`Unknown bucket: ${bucket}`)
+      const [min, max] = range
       expect(absVal).toBeGreaterThanOrEqual(min)
       expect(absVal).toBeLessThanOrEqual(max)
     }
@@ -402,11 +422,13 @@ describe('Integration - Full Causal Chain', () => {
     const snapshot = await generator.generate()
 
     const fact = snapshot.groundTruth.hiddenNarrativeFacts?.[0]
+    if (!fact) throw new Error('Expected fact to exist')
     const events = snapshot.groundTruth.causalEvents
     if (!events) {
       throw new Error('Causal events not found in snapshot')
     }
     const ticker = fact.affectsTickers[0]
+    if (!ticker) throw new Error('Expected ticker to exist')
     const isNegative = fact.sentiment === 'negative'
 
     // All events affect the fact's ticker
@@ -425,6 +447,7 @@ describe('Integration - Full Causal Chain', () => {
 
     // Price history changes only at event ticks
     const history = snapshot.groundTruth.priceHistory[ticker]
+    if (!history) throw new Error('Expected history to exist')
     const eventTicks = new Set(events.map((e) => e.tick))
 
     let changesAtEvents = 0
@@ -496,6 +519,9 @@ describe('BenchmarkDataGenerator - Edge Cases', () => {
 
     for (const perp of snapshot.initialState.perpetualMarkets) {
       const history = snapshot.groundTruth.priceHistory[perp.ticker]
+      if (!history) {
+        throw new Error(`Expected price history for ticker ${perp.ticker}`)
+      }
       for (const entry of history) {
         expect(entry.price).toBeGreaterThan(0)
       }
@@ -507,10 +533,10 @@ describe('BenchmarkDataGenerator - Edge Cases', () => {
     const snapshot = await generator.generate()
 
     for (const perp of snapshot.initialState.perpetualMarkets) {
-      expect(snapshot.groundTruth.priceHistory[perp.ticker]).toBeDefined()
-      expect(
-        snapshot.groundTruth.priceHistory[perp.ticker]?.length,
-      ).toBeGreaterThan(0)
+      const history = snapshot.groundTruth.priceHistory[perp.ticker]
+      expect(history).toBeDefined()
+      if (!history) throw new Error('Expected history to exist')
+      expect(history.length).toBeGreaterThan(0)
     }
   })
 
@@ -520,8 +546,10 @@ describe('BenchmarkDataGenerator - Edge Cases', () => {
 
     for (const perp of snapshot.initialState.perpetualMarkets) {
       const history = snapshot.groundTruth.priceHistory[perp.ticker]
-      const finalPrice = history[history.length - 1]?.price
-      expect(finalPrice).toBeGreaterThan(0)
+      if (!history || history.length === 0) throw new Error('Expected history')
+      const lastEntry = history[history.length - 1]
+      if (!lastEntry) throw new Error('Expected last entry')
+      expect(lastEntry.price).toBeGreaterThan(0)
     }
   })
 
@@ -531,6 +559,7 @@ describe('BenchmarkDataGenerator - Edge Cases', () => {
 
     for (const perp of snapshot.initialState.perpetualMarkets) {
       const history = snapshot.groundTruth.priceHistory[perp.ticker]
+      if (!history) throw new Error('Expected history to exist')
       // Price history should have entries
       expect(history.length).toBeGreaterThan(0)
       // All prices should be valid positive numbers
@@ -791,7 +820,9 @@ describe('Event Timing', () => {
     }
 
     for (let i = 1; i < events.length; i++) {
-      expect(events[i]?.tick).toBeGreaterThanOrEqual(events[i - 1]?.tick)
+      expect(getAt(events, i).tick).toBeGreaterThanOrEqual(
+        getAt(events, i - 1).tick,
+      )
     }
   })
 
@@ -800,6 +831,7 @@ describe('Event Timing', () => {
     const snapshot = await generator.generate()
 
     const fact = snapshot.groundTruth.hiddenNarrativeFacts?.[0]
+    if (!fact) throw new Error('Expected hidden narrative fact')
 
     for (const scheduled of fact.eventSchedule) {
       expect(scheduled.jitterHours).toBeGreaterThanOrEqual(-8)

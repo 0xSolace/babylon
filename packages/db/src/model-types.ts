@@ -2,7 +2,7 @@
  * Database Model Types
  *
  * Pure TypeScript interfaces for all database tables.
- * These types match the EQLite schema definitions.
+ * These types match the SQLit schema definitions.
  *
  * Example:
  *   import type { User, Post, Market } from '@babylon/db';
@@ -584,10 +584,14 @@ export interface UserMute {
 export interface Report {
   id: string
   reporterId: string
-  reportedId: string
+  reportedUserId: string | null
+  reportedPostId: string | null
+  reportedCommentId: string | null
+  reportedMessageId: string | null
   reason: string
   status: string
   createdAt: Date
+  updatedAt: Date
 }
 
 export interface TwitterOAuthToken {
@@ -1018,7 +1022,7 @@ export type NewUserBlock = Partial<UserBlock> &
 export type NewUserMute = Partial<UserMute> &
   Pick<UserMute, 'id' | 'muterId' | 'mutedId'>
 export type NewReport = Partial<Report> &
-  Pick<Report, 'id' | 'reporterId' | 'reportedId' | 'reason'>
+  Pick<Report, 'id' | 'reporterId' | 'reason'>
 export type NewTwitterOAuthToken = Partial<TwitterOAuthToken> &
   Pick<TwitterOAuthToken, 'id' | 'userId' | 'oauth1Token' | 'oauth1TokenSecret'>
 export type NewOnboardingIntent = Partial<OnboardingIntent> &

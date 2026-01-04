@@ -1,18 +1,18 @@
 /**
  * Table Registry
  *
- * Provides table metadata for EQLite operations.
+ * Provides table metadata for SQLit operations.
  * Maps table objects to their database names.
  */
 
-import type * as SchemaTypes from './eqlite-schema-types'
+import type * as SchemaTypes from './sqlit-schema-types'
 
 // ============================================================================
 // Table Metadata
 // ============================================================================
 
 /**
- * Table metadata for EQLite operations.
+ * Table metadata for SQLit operations.
  */
 export interface TableMeta {
   /** Database table name */
@@ -24,12 +24,12 @@ export interface TableMeta {
 }
 
 /**
- * Symbol used for EQLite table names.
+ * Symbol used for SQLit table names.
  */
-export const EQLITE_NAME_SYMBOL = Symbol.for('eqlite:Name')
+export const SQLIT_NAME_SYMBOL = Symbol.for('sqlit:Name')
 
 /**
- * Column reference for EQLite queries.
+ * Column reference for SQLit queries.
  * Returned when accessing table.columnName (e.g., users.id)
  */
 export interface ColumnRef {
@@ -141,7 +141,7 @@ export function getTableMeta(table: object | string): TableMeta | undefined {
  *
  * Supports:
  * - Tables with _: { name }
- * - Tables with Symbol.for('eqlite:Name')
+ * - Tables with Symbol.for('sqlit:Name')
  * - Registered tables in the registry
  */
 export function getTableName(table: object | string): string {
@@ -163,11 +163,11 @@ export function getTableName(table: object | string): string {
   }
 
   // Try Symbol-based name
-  const eqliteNameSymbol = Symbol.for('eqlite:Name')
-  if (eqliteNameSymbol in table) {
+  const sqlitNameSymbol = Symbol.for('sqlit:Name')
+  if (sqlitNameSymbol in table) {
     // Symbol is in object, access via computed property
     const tableWithSymbol = table as { [key: symbol]: unknown }
-    const symbolName = tableWithSymbol[eqliteNameSymbol]
+    const symbolName = tableWithSymbol[sqlitNameSymbol]
     if (typeof symbolName === 'string') {
       return symbolName
     }
@@ -334,7 +334,7 @@ export const TABLE_NAMES = {
 export type TableName = (typeof TABLE_NAMES)[keyof typeof TABLE_NAMES]
 
 // ============================================================================
-// Table Reference Exports (for EQLite query builder API)
+// Table Reference Exports (for SQLit query builder API)
 // ============================================================================
 
 /**

@@ -147,10 +147,14 @@ describe('NPC Anti-Repetition Service', () => {
       antiRepetitionService.addPost('actor2', 'Post 1')
 
       const stats = antiRepetitionService.getStats()
+      const actor1Stats = stats.actor1
+      const actor2Stats = stats.actor2
+      if (!actor1Stats || !actor2Stats)
+        throw new Error('Expected stats to exist')
 
-      expect(stats.actor1.postCount).toBe(2)
-      expect(stats.actor2.postCount).toBe(1)
-      expect(stats.actor1.lastUpdated).toBeDefined()
+      expect(actor1Stats.postCount).toBe(2)
+      expect(actor2Stats.postCount).toBe(1)
+      expect(actor1Stats.lastUpdated).toBeDefined()
     })
   })
 })

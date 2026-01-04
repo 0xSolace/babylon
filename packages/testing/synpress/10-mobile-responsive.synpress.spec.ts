@@ -5,14 +5,16 @@
  * Tests core functionality on mobile, not redundant viewport size variations.
  */
 
-import { expect, test } from '@playwright/test'
-import { loginWithWallet } from './helpers/oauth3-auth'
 import {
   cooldownBetweenTests,
+  loginWithWallet,
   navigateTo,
+  TIMEOUTS,
+  VIEWPORTS,
   waitForPageLoad,
-} from './helpers/page-helpers'
-import { ROUTES, TIMEOUTS, VIEWPORTS } from './helpers/test-data'
+} from '@jejunetwork/tests'
+import { expect, test } from '@playwright/test'
+import { ROUTES } from './helpers/test-data'
 
 test.setTimeout(TIMEOUTS.EXTRA_LONG)
 

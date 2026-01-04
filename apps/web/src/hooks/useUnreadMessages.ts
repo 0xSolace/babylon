@@ -1,5 +1,5 @@
 import { UnreadMessagesApiResponseSchema } from '@babylon/shared'
-import { useJejuAuth } from '@jejunetwork/auth'
+import { useJejuAuth } from '@jejunetwork/auth/react'
 import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '@/hooks/useAuth'
 

@@ -186,8 +186,11 @@ function generateUUID(): string {
     const bytes = new Uint8Array(16)
     crypto.getRandomValues(bytes)
     // Set version (4) and variant (RFC4122)
-    bytes[6] = (bytes[6] & 0x0f) | 0x40
-    bytes[8] = (bytes[8] & 0x3f) | 0x80
+    // bytes is always 16 elements, so indices 6 and 8 are always defined
+    const byte6 = bytes[6] as number
+    const byte8 = bytes[8] as number
+    bytes[6] = (byte6 & 0x0f) | 0x40
+    bytes[8] = (byte8 & 0x3f) | 0x80
     const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join(
       '',
     )

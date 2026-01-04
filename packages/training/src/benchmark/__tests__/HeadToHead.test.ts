@@ -1,27 +1,22 @@
 /**
  * Head-to-Head Benchmark Infrastructure Tests
  *
- * @deprecated These tests are skipped because SimulationEngine and MetricsVisualizer
- * were deprecated during an architecture migration. The simulation functionality
- * was moved to the main game engine. Re-enable these tests when the benchmark
- * infrastructure is updated to use the new game engine API.
+ * NOTE: These tests are skipped because SimulationEngine and MetricsVisualizer
+ * were migrated to the game engine. Re-enable when benchmark infrastructure
+ * is updated to use the new game engine API.
  */
 import { describe, it } from 'bun:test'
 import type { SimulationResult } from '../SimulationEngine'
 
 describe('Head-to-Head Benchmark Infrastructure', () => {
-  // @deprecated SimulationEngine was removed during architecture migration.
-  // These tests would verify PnL history tracking through the simulation.
+  // SimulationEngine was migrated - tests verify PnL history tracking.
   describe.skip('SimulationEngine PnL History', () => {
     it('should initialize with empty pnlHistory and return it after run()', async () => {
-      // Test disabled: SimulationEngine is deprecated.
-      // Would create a mock snapshot, initialize engine, run simulation,
-      // and verify pnlHistory is returned correctly.
+      // Test disabled - use game engine API instead.
     })
   })
 
-  // @deprecated MetricsVisualizer was removed during architecture migration.
-  // These tests would verify the comparison logic for benchmark results.
+  // MetricsVisualizer was migrated - tests verify comparison logic.
   describe.skip('MetricsVisualizer Comparison Logic', () => {
     // Mock Result Helper
     const _createMockResult = (

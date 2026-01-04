@@ -11,6 +11,7 @@
  */
 
 import { logger } from '@babylon/shared'
+import { getFarcasterHubUrl, getKMSEndpoint } from '@babylon/shared/config'
 import type { Hex } from 'viem'
 
 /** Configuration for the Farcaster posting service */
@@ -57,15 +58,27 @@ class FarcasterPostingService {
 
   constructor() {
     this.config = {
-      enabled: process.env.FARCASTER_ENABLED === 'true',
+      enabled:
+        (typeof process !== 'undefined'
+          ? process.env.FARCASTER_ENABLED
+          : undefined) === 'true',
       hubUrl:
-        process.env.FARCASTER_HUB_URL ?? 'https://nemes.farcaster.xyz:2281',
-      fallbackHubUrls: process.env.FARCASTER_FALLBACK_HUBS?.split(','),
+        (typeof process !== 'undefined'
+          ? process.env.FARCASTER_HUB_URL
+          : undefined) ?? getFarcasterHubUrl(),
+      fallbackHubUrls:
+        typeof process !== 'undefined' && process.env.FARCASTER_FALLBACK_HUBS
+          ? process.env.FARCASTER_FALLBACK_HUBS.split(',')
+          : undefined,
       network:
-        (process.env.FARCASTER_NETWORK as FarcasterPostingConfig['network']) ??
+        ((typeof process !== 'undefined'
+          ? process.env.FARCASTER_NETWORK
+          : undefined) as FarcasterPostingConfig['network'] | undefined) ??
         'mainnet',
-      kmsEndpoint: process.env.JEJU_KMS_ENDPOINT,
-      signerSeed: process.env.SIGNER_SEED,
+      kmsEndpoint: getKMSEndpoint(),
+      // Signer seed is a secret - keep as env var
+      signerSeed:
+        typeof process !== 'undefined' ? process.env.SIGNER_SEED : undefined,
     }
   }
 

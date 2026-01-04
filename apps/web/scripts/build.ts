@@ -1,7 +1,7 @@
 /**
  * Production build script for Babylon Web
  *
- * Builds static frontend using Bun bundler + Tailwind CSS.
+ * Builds static frontend using Vite + Tailwind CSS.
  * Uses jeju-manifest.json for environment configuration.
  *
  * Usage:
@@ -10,8 +10,9 @@
  *   NETWORK=mainnet bun run scripts/build.ts
  */
 
-import { existsSync } from 'node:fs'
+import { existsSync, readdirSync, statSync } from 'node:fs'
 import { cp, mkdir, rm } from 'node:fs/promises'
+import { resolve } from 'node:path'
 import { $ } from 'bun'
 
 // Load manifest for deployment config
@@ -19,7 +20,7 @@ const manifest = await Bun.file('./jeju-manifest.json').json()
 
 // Determine target environment
 type NetworkEnv = 'localnet' | 'testnet' | 'mainnet'
-const NETWORK = (process.env.NETWORK || 'localnet') as NetworkEnv
+const NETWORK = (process.env.NETWORK || process.env.VITE_NETWORK || 'localnet') as NetworkEnv
 const envConfig = manifest.deployment?.environments?.[NETWORK]
 
 if (!envConfig) {
@@ -31,185 +32,139 @@ if (!envConfig) {
 console.log(`🌐 Building for: ${NETWORK}`)
 console.log(`   API URL: ${envConfig.apiUrl}`)
 console.log(`   Domain: ${envConfig.domain}`)
+console.log(`   DWS URL: ${envConfig.dwsUrl}`)
 
 const DIST_DIR = './dist'
 
-// External packages that should not be bundled for browser
-const BROWSER_EXTERNALS = [
-  // Node.js builtins
-  'bun',
-  'bun:sqlite',
-  'child_process',
-  'http2',
-  'tls',
-  'dgram',
-  'fs',
-  'net',
-  'dns',
-  'stream',
-  'crypto',
-  'process',
-  'node:url',
-  'node:fs',
-  'node:path',
-  'node:crypto',
-  'node:events',
-  'node:process',
-  // Packages with Node.js-specific code (server-only)
-  '@babylon/agents',
-  '@babylon/api',
-  '@babylon/db',
-  '@babylon/engine',
-  '@babylon/training',
-  '@babylon/testing',
-  // Jeju packages with server-side code (server-only)
-  '@jejunetwork/a2a',
-  '@jejunetwork/db',
-  '@jejunetwork/messaging',
-  '@jejunetwork/mcp',
-  '@jejunetwork/sdk',
-  '@jejunetwork/training',
-  // Server-only
-  'swagger-ui-react',
-  'swagger-jsdoc',
-  '@swagger-api/apidom-reference',
-  // Note: @jejunetwork/auth, @jejunetwork/kms, @jejunetwork/config, @jejunetwork/shared
-  // are BUNDLED (not external) - they have browser-safe code
-]
-
-async function buildCSS(): Promise<void> {
-  console.log('\n🎨 Building Tailwind CSS...')
-
-  // Use Tailwind CLI to process CSS
-  const result =
-    await $`bunx @tailwindcss/cli -i ./src/app/globals.css -o ${DIST_DIR}/assets/styles.css --minify`.quiet()
-
-  if (result.exitCode !== 0) {
-    console.error('❌ CSS build failed:')
-    console.error(result.stderr.toString())
-    throw new Error('CSS build failed')
-  }
-
-  console.log('✅ CSS built')
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`
 }
 
 async function buildJS(): Promise<string> {
-  console.log('\n📦 Building JavaScript...')
+  console.log('\n📦 Building JavaScript with Vite...')
 
-  // Note: splitting disabled due to Bun bundler bug causing duplicate exports
-  // https://github.com/oven-sh/bun/issues - known issue with code splitting
-  // Re-enable when fixed: splitting: true
-  const result = await Bun.build({
-    entrypoints: ['./src/main.tsx'],
-    outdir: `${DIST_DIR}/assets`,
-    target: 'browser',
-    splitting: false,
-    minify: true,
-    sourcemap: 'external',
-    external: BROWSER_EXTERNALS,
-    define: {
-      // Full process polyfill for browser
-      process: JSON.stringify({
-        env: {
-          NODE_ENV: 'production',
-          NETWORK: NETWORK,
-          PUBLIC_API_BASE_URL: envConfig.apiUrl,
-          PUBLIC_WAITLIST_MODE: process.env.PUBLIC_WAITLIST_MODE || 'false',
-        },
-      }),
-      'process.env.NODE_ENV': JSON.stringify('production'),
-      'process.env.NETWORK': JSON.stringify(NETWORK),
-      'process.env.PUBLIC_API_BASE_URL': JSON.stringify(envConfig.apiUrl),
-      'process.env.PUBLIC_WAITLIST_MODE': JSON.stringify(
-        process.env.PUBLIC_WAITLIST_MODE || 'false',
-      ),
-      // Global shims for Node.js compatibility
-      global: 'globalThis',
-    },
-    naming: {
-      entry: '[name]-[hash].js',
-      chunk: 'chunks/[name]-[hash].js',
-      asset: '[name]-[hash].[ext]',
-    },
-  })
+  // Set environment variables for Vite build
+  process.env.NODE_ENV = 'production'
+  process.env.NETWORK = NETWORK
+  // Use relative API path for DWS deployment (API served from same domain)
+  // Override with PUBLIC_API_BASE_URL env var if needed
+  process.env.PUBLIC_API_BASE_URL = process.env.PUBLIC_API_BASE_URL ?? ''
+  process.env.PUBLIC_WAITLIST_MODE = process.env.PUBLIC_WAITLIST_MODE || 'false'
 
-  if (!result.success) {
-    console.error('❌ JavaScript build failed:')
-    for (const log of result.logs) {
-      console.error('Full log:', JSON.stringify(log, null, 2))
+  // Use Vite for production build - better monorepo module resolution
+  const viteResult = await $`bunx vite build --outDir ${DIST_DIR}`.quiet()
+
+  if (viteResult.exitCode !== 0) {
+    console.error('❌ Vite build failed:')
+    console.error(viteResult.stderr.toString())
+    throw new Error('Vite build failed')
+  }
+
+  // Report bundle sizes
+  console.log('\n📊 Frontend Bundle Sizes:')
+  const assetsDir = `${DIST_DIR}/assets`
+  
+  if (existsSync(assetsDir)) {
+    const files = readdirSync(assetsDir)
+    const jsFiles = files.filter(f => f.endsWith('.js'))
+    let totalSize = 0
+    
+    const fileSizes = jsFiles.map(f => {
+      const stat = statSync(`${assetsDir}/${f}`)
+      totalSize += stat.size
+      return { name: f, size: stat.size }
+    }).sort((a, b) => b.size - a.size)
+    
+    for (const file of fileSizes.slice(0, 10)) {
+      console.log(`   ${formatBytes(file.size).padStart(10)}  ${file.name}`)
     }
-    throw new Error('JavaScript build failed')
+    
+    if (fileSizes.length > 10) {
+      const remaining = fileSizes.slice(10)
+      const remainingSize = remaining.reduce((sum, f) => sum + f.size, 0)
+      console.log(`   ${formatBytes(remainingSize).padStart(10)}  ... and ${remaining.length} more files`)
+    }
+    
+    console.log(`   ${'─'.repeat(50)}`)
+    console.log(`   ${formatBytes(totalSize).padStart(10)}  Total JavaScript`)
   }
 
   // Find the main entry file
-  const mainEntry = result.outputs.find((o) => o.kind === 'entry-point')
-  const mainFileName = mainEntry ? mainEntry.path.split('/').pop() : 'main.js'
+  const indexFile = readdirSync(`${DIST_DIR}/assets`)
+    .find(f => f.startsWith('index-') && f.endsWith('.js'))
+  const mainFileName = indexFile || 'index.js'
 
-  console.log(`✅ JavaScript built (${result.outputs.length} files)`)
-  return mainFileName as string
+  console.log(`✅ JavaScript built`)
+  return mainFileName
 }
 
-async function createHTML(mainFileName: string): Promise<void> {
-  console.log('\n📄 Creating index.html...')
+async function verifyHTML(): Promise<void> {
+  // Vite generates index.html automatically
+  // Just verify it exists
+  if (!existsSync(`${DIST_DIR}/index.html`)) {
+    throw new Error('Vite did not generate index.html')
+  }
+  console.log('✅ index.html verified')
+}
 
-  const html = `<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
-  <meta name="theme-color" content="#0D0B14" media="(prefers-color-scheme: dark)">
-  <meta name="theme-color" content="#FFFBF7" media="(prefers-color-scheme: light)">
-  <title>Babylon - Social Prediction Platform</title>
-  <meta name="description" content="Social prediction markets, AI agents, and decentralized social networking.">
-  <link rel="icon" type="image/svg+xml" href="/public/favicon.svg">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/assets/styles.css">
-  <script>
-    (function() {
-      try {
-        const savedTheme = localStorage.getItem('babylon-theme');
-        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-        const shouldBeDark = savedTheme ? savedTheme === 'dark' : prefersDark;
-        if (shouldBeDark) {
-          document.documentElement.classList.add('dark');
-        }
-      } catch {}
-    })();
-  </script>
-</head>
-<body class="font-sans antialiased overscroll-none bg-background">
-  <div id="root"></div>
-  <script type="module" src="/assets/${mainFileName}"></script>
-</body>
-</html>`
+// Large media directories that should be uploaded to DWS Storage separately
+// These are excluded from the bundle to keep deployment size manageable
+const EXCLUDED_PUBLIC_DIRS = [
+  'images',  // 69MB - actor/org banners (should be CDN)
+  'assets',  // 30MB - static assets (should be CDN) 
+]
 
-  await Bun.write(`${DIST_DIR}/index.html`, html)
-  console.log('✅ index.html created')
+async function copyPublicAssetsFiltered(): Promise<void> {
+  console.log('\n📁 Copying public assets (excluding large media)...')
+
+  if (!existsSync('./public')) {
+    console.log('⚠️  No public directory found')
+    return
+  }
+  
+  // Create dist/public
+  await mkdir(`${DIST_DIR}/public`, { recursive: true })
+  
+  // Copy only essential files, excluding large media dirs
+  const entries = readdirSync('./public', { withFileTypes: true })
+  let excludedSize = 0
+  
+  for (const entry of entries) {
+    const srcPath = `./public/${entry.name}`
+    const destPath = `${DIST_DIR}/public/${entry.name}`
+    
+    if (entry.isDirectory() && EXCLUDED_PUBLIC_DIRS.includes(entry.name)) {
+      // Calculate excluded size
+      const stat = await import('node:fs/promises').then(fs => 
+        fs.stat(srcPath).catch(() => ({ size: 0 }))
+      )
+      // Estimate directory size
+      const files = readdirSync(srcPath, { recursive: true })
+      for (const file of files) {
+        try {
+          const fileStat = statSync(`${srcPath}/${file}`)
+          if (fileStat.isFile()) excludedSize += fileStat.size
+        } catch { /* skip */ }
+      }
+      console.log(`    Skipping ${entry.name}/ (upload separately to DWS Storage)`)
+      continue
+    }
+    
+    if (entry.isDirectory()) {
+      await cp(srcPath, destPath, { recursive: true })
+    } else {
+      await cp(srcPath, destPath)
+    }
+  }
+  
+  console.log(`✅ Public assets copied (excluded ${formatBytes(excludedSize)} of media)`)
+  console.log('   Note: Upload /images and /assets to DWS Storage separately for CDN delivery')
 }
 
 async function copyPublicAssets(): Promise<void> {
-  console.log('\n📁 Copying public assets...')
-
-  if (existsSync('./public')) {
-    // Copy public folder to dist/public (for /public/ paths)
-    await cp('./public', `${DIST_DIR}/public`, { recursive: true })
-
-    // Also copy public/assets to dist/assets (for /assets/ paths, Next.js convention)
-    if (existsSync('./public/assets')) {
-      await cp('./public/assets', `${DIST_DIR}/assets`, { recursive: true })
-    }
-
-    // Also copy public/images to dist/images (for /images/ paths)
-    if (existsSync('./public/images')) {
-      await cp('./public/images', `${DIST_DIR}/images`, { recursive: true })
-    }
-
-    console.log('✅ Public assets copied')
-  } else {
-    console.log('⚠️  No public directory found')
-  }
+  await copyPublicAssetsFiltered()
 }
 
 async function createDeploymentManifest(): Promise<void> {
@@ -238,7 +193,7 @@ async function createDeploymentManifest(): Promise<void> {
 }
 
 async function build(): Promise<void> {
-  console.log('🔨 Building Babylon Web with Bun...\n')
+  console.log('🔨 Building Babylon Web with Vite...\n')
   const startTime = performance.now()
 
   // Clean dist directory
@@ -246,15 +201,12 @@ async function build(): Promise<void> {
     await rm(DIST_DIR, { recursive: true })
   }
 
-  // Create directories
-  await mkdir(`${DIST_DIR}/assets`, { recursive: true })
+  // Build JS (Vite handles CSS too)
+  await buildJS()
 
-  // Build CSS and JS in parallel
-  const [, mainFileName] = await Promise.all([buildCSS(), buildJS()])
-
-  // Create HTML and copy assets
+  // Verify HTML and create manifests
   await Promise.all([
-    createHTML(mainFileName),
+    verifyHTML(),
     copyPublicAssets(),
     createDeploymentManifest(),
   ])
@@ -265,7 +217,9 @@ async function build(): Promise<void> {
   console.log(`   🌐 Target: ${NETWORK} (${envConfig.domain})`)
 }
 
-build().catch((error) => {
-  console.error('Build failed:', error)
-  process.exit(1)
-})
+build()
+  .then(() => process.exit(0))
+  .catch((error) => {
+    console.error('Build failed:', error)
+    process.exit(1)
+  })

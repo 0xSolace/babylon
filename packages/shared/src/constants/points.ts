@@ -50,42 +50,6 @@ export const BBLN_REWARDS = {
 } as const
 
 /**
- * @deprecated Use BBLN_REWARDS instead. Points have been converted to BBLN tokens.
- * This is kept for backward compatibility during migration.
- */
-export const POINTS = {
-  INITIAL_SIGNUP: 1000,
-  PROFILE_COMPLETION: 200,
-  FARCASTER_LINK: 300,
-  FARCASTER_FOLLOW: 100,
-  TWITTER_LINK: 300,
-  TWITTER_FOLLOW: 100,
-  DISCORD_LINK: 300,
-  DISCORD_JOIN: 100,
-  WALLET_CONNECT: 300,
-  SHARE_ACTION: 500,
-  SHARE_TO_TWITTER: 500,
-  REFERRAL_SIGNUP: 100,
-  REFERRAL_BONUS: 100,
-  REFERRAL_QUALIFIED: 100,
-  PRIVATE_GROUP_CREATE: 200,
-  PRIVATE_CHANNEL_CREATE: 200,
-} as const
-
-/**
- * Conversion rate: 1 point = 0.1 BBLN
- * Used for migrating existing points to BBLN tokens
- */
-export const POINTS_TO_BBLN_RATE = 0.1
-
-/**
- * Convert legacy points to BBLN (wei)
- */
-export function pointsToBbln(points: number): bigint {
-  return bblnToWei(points * POINTS_TO_BBLN_RATE)
-}
-
-/**
  * Valid reasons for BBLN token transactions
  *
  * @description Enumeration of all valid reasons for awarding or transferring BBLN tokens.
@@ -123,6 +87,33 @@ export type BBLNRewardReason =
   | 'treasury_allocation'
 
 /**
- * @deprecated Use BBLNRewardReason instead
+ * Display-friendly point values (human-readable numbers, not wei).
+ * Used in frontend for showing reward amounts to users.
  */
-export type PointsReason = BBLNRewardReason
+export const POINTS = {
+  // Signup & Profile
+  INITIAL_SIGNUP: 100,
+  PROFILE_COMPLETION: 20,
+
+  // Social Links
+  FARCASTER_LINK: 30,
+  FARCASTER_FOLLOW: 10,
+  TWITTER_LINK: 30,
+  TWITTER_FOLLOW: 10,
+  DISCORD_LINK: 30,
+  DISCORD_JOIN: 10,
+  WALLET_CONNECT: 30,
+
+  // Sharing
+  SHARE_ACTION: 50,
+  SHARE_TO_TWITTER: 50,
+
+  // Referrals
+  REFERRAL_SIGNUP: 10,
+  REFERRAL_BONUS: 10,
+  REFERRAL_QUALIFIED: 10,
+
+  // Group Creation
+  PRIVATE_GROUP_CREATE: 20,
+  PRIVATE_CHANNEL_CREATE: 20,
+} as const

@@ -11,11 +11,12 @@ import { FeedGenerator, type FeedGeneratorLLMClient } from '../FeedGenerator'
 
 /**
  * Create a minimal mock LLM client for validation tests.
- * Uses FeedGeneratorLLMClient interface to ensure type safety without casts.
  */
 function createMockLLMClient(): FeedGeneratorLLMClient {
   return {
-    generateJSON: mock(() => Promise.resolve({})),
+    generateJSON: mock(() =>
+      Promise.resolve({}),
+    ) as FeedGeneratorLLMClient['generateJSON'],
   }
 }
 

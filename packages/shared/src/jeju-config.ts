@@ -150,19 +150,19 @@ const NETWORK_CONFIGS: Record<JejuNetworkType, JejuNetworkConfig> = {
     chainId: jejuLocalnet.id,
   },
   testnet: {
-    rpcUrl: 'https://testnet-rpc.jeju.network',
-    computeApiUrl: 'https://compute.jeju.network',
-    storageApiUrl: 'https://storage.jeju.network',
-    ipfsGateway: 'https://ipfs.jeju.network',
-    explorerUrl: 'https://testnet-explorer.jeju.network',
+    rpcUrl: 'https://testnet-rpc.jejunetwork.org',
+    computeApiUrl: 'https://compute.jejunetwork.org',
+    storageApiUrl: 'https://storage.jejunetwork.org',
+    ipfsGateway: 'https://ipfs.jejunetwork.org',
+    explorerUrl: 'https://testnet-explorer.jejunetwork.org',
     chainId: jejuTestnet.id,
   },
   mainnet: {
-    rpcUrl: 'https://rpc.jeju.network',
-    computeApiUrl: 'https://compute.jeju.network',
-    storageApiUrl: 'https://storage.jeju.network',
-    ipfsGateway: 'https://ipfs.jeju.network',
-    explorerUrl: 'https://explorer.jeju.network',
+    rpcUrl: 'https://rpc.jejunetwork.org',
+    computeApiUrl: 'https://compute.jejunetwork.org',
+    storageApiUrl: 'https://storage.jejunetwork.org',
+    ipfsGateway: 'https://ipfs.jejunetwork.org',
+    explorerUrl: 'https://explorer.jejunetwork.org',
     chainId: jejuMainnet.id,
   },
 }
@@ -238,7 +238,7 @@ export function getJejuConfig(): JejuConfig | null {
  * Get RPC URL for current environment
  * Uses Jeju RPC if in Jeju mode, otherwise falls back to hardhat default
  */
-export function getRpcUrl(): string {
+export function getJejuRpcUrl(): string {
   const jejuConfig = getJejuConfig()
   if (jejuConfig) {
     return jejuConfig.networkConfig.rpcUrl
@@ -249,9 +249,9 @@ export function getRpcUrl(): string {
 }
 
 /**
- * Get chain ID for current environment
+ * Get chain ID for current environment from Jeju config
  */
-export function getChainId(): number {
+export function getJejuChainId(): number {
   const jejuConfig = getJejuConfig()
   if (jejuConfig) {
     return jejuConfig.networkConfig.chainId

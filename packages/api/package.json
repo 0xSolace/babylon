@@ -16,6 +16,9 @@
   "dependencies": {
     "@babylon/db": "workspace:*",
     "@jejunetwork/auth": "workspace:*",
+    "@jejunetwork/contracts": "workspace:*",
+    "@jejunetwork/kms": "workspace:*",
+    "@jejunetwork/messaging": "workspace:*",
     "@babylon/shared": "workspace:*",
     "@jejunetwork/shared": "workspace:*",
     "viem": "2.43.3",

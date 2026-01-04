@@ -78,7 +78,7 @@ mock.module('@babylon/engine', () => ({
   },
 }))
 
-// Mock fetch for KMS and EQLite
+// Mock fetch for KMS and SQLit
 const originalFetch = globalThis.fetch
 beforeAll(() => {
   globalThis.fetch = mock((url: string, options?: RequestInit) => {
@@ -106,7 +106,7 @@ beforeAll(() => {
       )
     }
 
-    // Mock EQLite endpoints
+    // Mock SQLit endpoints
     if (urlStr.includes('/v1/query')) {
       return Promise.resolve(
         new Response(

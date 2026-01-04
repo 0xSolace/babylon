@@ -2,7 +2,7 @@
  * Unit Tests for AutomationPipeline
  *
  * Tests core functionality without external dependencies
- * Uses EQLite mocks for database operations
+ * Uses SQLit mocks for database operations
  */
 
 import { beforeEach, describe, expect, mock, test } from 'bun:test'
@@ -101,7 +101,7 @@ const getNextUserCountResult = () => {
   return mockUserCountResults.shift() ?? 0
 }
 
-// Create a chainable EQLite query builder mock for select queries
+// Create a chainable SQLit query builder mock for select queries
 const createQueryChain = () => {
   const chain = {
     from: () => chain,
@@ -124,9 +124,9 @@ const createQueryChain = () => {
   })
 }
 
-// Define mocks for EQLite db client
+// Define mocks for SQLit db client
 const mockDb = {
-  // EQLite query builder methods
+  // SQLit query builder methods
   select: mock(() => createQueryChain()),
   insert: mock(() => ({
     values: () => ({
@@ -146,13 +146,13 @@ const mockDb = {
       returning: () => Promise.resolve([]),
     }),
   })),
-  // Raw EQLite query methods
+  // Raw SQLit query methods
   query: mock(async () => []),
   queryOne: mock(async () => null),
   exec: mock(async () => ({ rowsAffected: 0 })),
   $queryRaw: mock(() => Promise.resolve([{ result: 1 }])),
   $executeRaw: mock(() => Promise.resolve(0)),
-  // EQLite table repositories
+  // SQLit table repositories
   trajectory: {
     count: mock(() => Promise.resolve(getNextCountResult())),
     groupBy: mock(async () => getNextGroupByResult()),
@@ -195,7 +195,7 @@ const mockLogger = {
 // Include all exports that may be imported by AutomationPipeline and its dependencies
 mock.module('@babylon/db', () => ({
   db: mockDb,
-  // EQLite initialization functions
+  // SQLit initialization functions
   initializeDB: mock(async () => {}),
   resetDB: mock(() => {}),
   getDB: mock(() => mockDb),
@@ -321,10 +321,10 @@ mock.module('node:fs/promises', () => ({
   stat: mockStat,
 }))
 
-// Set EQLite endpoint to prevent database from complaining
+// Set SQLit endpoint to prevent database from complaining
 // This must be done before importing the module
-process.env.EQLITE_BLOCK_PRODUCER_ENDPOINT =
-  process.env.EQLITE_BLOCK_PRODUCER_ENDPOINT || 'http://localhost:4661'
+process.env.SQLIT_BLOCK_PRODUCER_ENDPOINT =
+  process.env.SQLIT_BLOCK_PRODUCER_ENDPOINT || 'http://localhost:4661'
 
 import { AutomationPipeline } from '@babylon/training/training'
 

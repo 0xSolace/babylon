@@ -5,18 +5,8 @@
  * For core auth functionality, import directly from @jejunetwork/auth.
  */
 
-// Re-export commonly used items from @jejunetwork/auth
-export {
-  AuthProvider,
-  ChainId,
-  createOAuth3Client,
-  OAuth3Client,
-  type OAuth3Config,
-  OAuth3Provider,
-  type OAuth3Session,
-  type SponsorshipPolicy,
-  useOAuth3,
-} from '@jejunetwork/auth'
+// Import directly from @jejunetwork/auth:
+// import { AuthProvider, ChainId, createOAuth3Client, OAuth3Client, OAuth3Config, OAuth3Provider, OAuth3Session, SponsorshipPolicy, useOAuth3 } from '@jejunetwork/auth'
 
 // =============================================================================
 // Babylon OAuth3 Client Factory

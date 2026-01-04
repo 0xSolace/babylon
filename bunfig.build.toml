@@ -1,0 +1,5 @@
+# Bun build configuration for Babylon backend worker
+
+[install.scopes]
+"@babylon" = "./packages"
+"@jejunetwork" = "../../packages"

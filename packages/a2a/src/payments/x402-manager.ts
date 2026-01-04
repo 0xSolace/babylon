@@ -2,7 +2,7 @@
  * x402 Micropayment Manager
  * Implements HTTP 402-based micropayment protocol for agent services
  *
- * Supports optional Redis for persistent storage across serverless functions
+ * Uses distributed cache for persistent storage across distributed deployments
  */
 
 import {
@@ -12,6 +12,7 @@ import {
   type PaymentVerificationResult,
   randomBytesHex,
 } from '@babylon/shared'
+import { type CacheClient, getCacheClient } from '@jejunetwork/shared'
 import { createPublicClient, type Hash, http, isHex } from 'viem'
 import { z } from 'zod'
 import type { PaymentRequest } from '../types/a2a'
@@ -48,17 +49,6 @@ export interface X402Config {
   rpcUrl: string
   minPaymentAmount?: string // Minimum payment in wei (default: 0)
   paymentTimeout?: number // Payment timeout in ms (default: 5 minutes)
-  redis?: RedisClient // Optional Redis client for persistence
-}
-
-/**
- * Generic Redis client interface to avoid dependency on specific Redis libraries
- */
-export interface RedisClient {
-  get(key: string): Promise<string | null>
-  set(key: string, value: string, options?: { ex?: number }): Promise<void>
-  del(key: string): Promise<void>
-  keys(pattern: string): Promise<string[]>
 }
 
 interface PendingPayment {
@@ -73,14 +63,23 @@ const PendingPaymentSchema = z.object({
   verified: z.boolean(),
 })
 
-const REDIS_PREFIX = 'x402:payment:'
+const CACHE_PREFIX = 'x402:payment:'
+
+// Distributed cache for x402 payments
+let paymentCache: CacheClient | null = null
+
+function getPaymentCache(): CacheClient {
+  if (!paymentCache) {
+    paymentCache = getCacheClient('babylon-x402-payments')
+  }
+  return paymentCache
+}
 
 export class X402Manager {
   private provider: ReturnType<typeof createPublicClient>
-  private config: Required<Omit<X402Config, 'redis'>> & { redis?: RedisClient }
+  private config: Required<X402Config>
   private readonly DEFAULT_MIN_PAYMENT = '1000000000000000' // 0.001 ETH
   private readonly DEFAULT_TIMEOUT = 5 * 60 * 1000 // 5 minutes
-  private inMemoryStore: Map<string, PendingPayment> = new Map()
 
   constructor(config: X402Config) {
     this.provider = createPublicClient({ transport: http(config.rpcUrl) })
@@ -88,56 +87,36 @@ export class X402Manager {
       rpcUrl: config.rpcUrl,
       minPaymentAmount: config.minPaymentAmount || this.DEFAULT_MIN_PAYMENT,
       paymentTimeout: config.paymentTimeout || this.DEFAULT_TIMEOUT,
-      redis: config.redis,
     }
   }
 
   /**
-   * Store payment with optional Redis persistence
+   * Store payment in distributed cache
    */
   private async storePayment(
     requestId: string,
     payment: PendingPayment,
   ): Promise<void> {
-    const key = `${REDIS_PREFIX}${requestId}`
+    const cache = getPaymentCache()
+    const key = `${CACHE_PREFIX}${requestId}`
     const ttlSeconds = Math.ceil(this.config.paymentTimeout / 1000)
     const serialized = JSON.stringify(payment)
 
-    // Always store in memory for fast access
-    this.inMemoryStore.set(requestId, payment)
-
-    // Also store in Redis if available
-    if (this.config.redis) {
-      await this.config.redis.set(key, serialized, { ex: ttlSeconds })
-      logger.debug('[X402Manager] Stored payment in Redis', {
-        requestId,
-        ttl: ttlSeconds,
-      })
-    } else {
-      logger.debug('[X402Manager] Redis not configured, using memory storage', {
-        requestId,
-      })
-    }
+    await cache.set(key, serialized, ttlSeconds)
+    logger.debug('[X402Manager] Stored payment', {
+      requestId,
+      ttl: ttlSeconds,
+    })
   }
 
   /**
-   * Retrieve payment from storage
+   * Retrieve payment from distributed cache
    */
   private async getPayment(requestId: string): Promise<PendingPayment | null> {
-    // First check in-memory store
-    const inMemory = this.inMemoryStore.get(requestId)
-    if (inMemory) {
-      return inMemory
-    }
+    const cache = getPaymentCache()
+    const key = `${CACHE_PREFIX}${requestId}`
 
-    // Try Redis if available
-    if (!this.config.redis) {
-      return null
-    }
-
-    const key = `${REDIS_PREFIX}${requestId}`
-
-    const cached = await this.config.redis.get(key)
+    const cached = await cache.get(key)
 
     if (!cached) {
       logger.debug('[X402Manager] Payment not found', { requestId })
@@ -156,54 +135,39 @@ export class X402Manager {
       return null
     }
 
-    // validation.data.request has metadata typed as Record<string, JsonValue> | undefined
-    // which matches PaymentRequest.metadata - no cast needed
     const payment: PendingPayment = {
       ...validation.data,
       request: validation.data.request,
     }
 
-    // Cache in memory
-    this.inMemoryStore.set(requestId, payment)
     return payment
   }
 
   /**
-   * Update payment in storage
+   * Update payment in distributed cache
    */
   private async updatePayment(
     requestId: string,
     payment: PendingPayment,
   ): Promise<void> {
-    const key = `${REDIS_PREFIX}${requestId}`
+    const cache = getPaymentCache()
+    const key = `${CACHE_PREFIX}${requestId}`
     const remainingMs = payment.request.expiresAt - Date.now()
     const ttlSeconds = Math.max(Math.ceil(remainingMs / 1000), 1)
     const serialized = JSON.stringify(payment)
 
-    // Update in-memory
-    this.inMemoryStore.set(requestId, payment)
-
-    // Update Redis if available
-    if (this.config.redis) {
-      await this.config.redis.set(key, serialized, { ex: ttlSeconds })
-      logger.debug('[X402Manager] Updated payment', { requestId })
-    }
+    await cache.set(key, serialized, ttlSeconds)
+    logger.debug('[X402Manager] Updated payment', { requestId })
   }
 
   /**
-   * Delete payment from storage
+   * Delete payment from distributed cache
    */
   private async deletePayment(requestId: string): Promise<void> {
-    const key = `${REDIS_PREFIX}${requestId}`
-
-    // Remove from memory
-    this.inMemoryStore.delete(requestId)
-
-    // Remove from Redis if available
-    if (this.config.redis) {
-      await this.config.redis.del(key)
-      logger.debug('[X402Manager] Deleted payment', { requestId })
-    }
+    const cache = getPaymentCache()
+    const key = `${CACHE_PREFIX}${requestId}`
+    await cache.delete(key)
+    logger.debug('[X402Manager] Deleted payment', { requestId })
   }
 
   /**
@@ -389,37 +353,54 @@ export class X402Manager {
    * Get all pending payments (for testing/debugging)
    */
   async getPendingPayments(): Promise<PendingPayment[]> {
-    // Get from in-memory store
-    const payments = Array.from(this.inMemoryStore.values())
-    return payments.filter((p) => !p.verified)
+    const cache = getPaymentCache()
+    const keys = await cache.keys(`${CACHE_PREFIX}*`)
+    const payments: PendingPayment[] = []
+
+    for (const key of keys) {
+      const cached = await cache.get(key)
+      if (cached) {
+        const payment: PendingPayment = JSON.parse(cached)
+        if (!payment.verified) {
+          payments.push(payment)
+        }
+      }
+    }
+
+    return payments
   }
 
   /**
    * Get statistics about payments (for testing/debugging)
    */
   async getStatistics() {
-    const payments = Array.from(this.inMemoryStore.values())
+    const cache = getPaymentCache()
+    const keys = await cache.keys(`${CACHE_PREFIX}*`)
     const now = Date.now()
+    const stats = { pending: 0, verified: 0, expired: 0 }
 
-    return payments.reduce(
-      (acc, p) => {
-        if (p.verified) {
-          acc.verified++
-        } else if (p.request.expiresAt < now) {
-          acc.expired++
+    for (const key of keys) {
+      const cached = await cache.get(key)
+      if (cached) {
+        const payment: PendingPayment = JSON.parse(cached)
+        if (payment.verified) {
+          stats.verified++
+        } else if (payment.request.expiresAt < now) {
+          stats.expired++
         } else {
-          acc.pending++
+          stats.pending++
         }
-        return acc
-      },
-      { pending: 0, verified: 0, expired: 0 },
-    )
+      }
+    }
+
+    return stats
   }
 
   /**
-   * Cleanup method to clear in-memory storage
+   * Cleanup method to clear storage
    */
-  cleanup(): void {
-    this.inMemoryStore.clear()
+  async cleanup(): Promise<void> {
+    const cache = getPaymentCache()
+    await cache.clear()
   }
 }

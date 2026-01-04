@@ -332,7 +332,9 @@ describe('Trending Topics & News Integration', () => {
     it('should provide trend context to feed generator', () => {
       feedGen.updateTrendContext()
 
-      const context = feedGen.trendContext
+      // Access private property for testing
+      const context = (feedGen as unknown as { trendContext: string })
+        .trendContext
       expect(context).toBeDefined()
       expect(context.trim().length).toBeGreaterThan(0)
       expect(context).toContain('TRENDING TOPICS')
@@ -354,7 +356,9 @@ describe('Trending Topics & News Integration', () => {
       await trendEngine.updateTrends(posts, 10)
       feedGen.updateTrendContext()
 
-      const context = feedGen.trendContext
+      // Access private property for testing
+      const context = (feedGen as unknown as { trendContext: string })
+        .trendContext
       // Context should contain the trend topics from the posts
       expect(context).toContain('ai')
     })
@@ -394,10 +398,12 @@ describe('Trending Topics & News Integration', () => {
         rank: 1,
       } as Question
 
+      const org = mockOrgs[0]
+      if (!org) throw new Error('Expected org to exist')
       await expect(async () => {
         await articleGen.generateArticleForQuestion(
           invalidQuestion,
-          mockOrgs[0],
+          org,
           'breaking',
           mockActors,
           [],
@@ -426,10 +432,12 @@ describe('Trending Topics & News Integration', () => {
     })
 
     it('should throw on empty actors array', async () => {
+      const org = mockOrgs[0]
+      if (!org) throw new Error('Expected org to exist')
       await expect(async () => {
         await articleGen.generateArticleForQuestion(
           mockQuestion,
-          mockOrgs[0],
+          org,
           'breaking',
           [], // Empty!
           [],
@@ -471,13 +479,15 @@ describe('Trending Topics & News Integration', () => {
   describe('Context Validation', () => {
     it('should never provide empty trend context to agents', () => {
       feedGen.updateTrendContext()
-      let context = feedGen.trendContext
+      // Access private property for testing
+      const feedGenPrivate = feedGen as unknown as { trendContext: string }
+      let context = feedGenPrivate.trendContext
       expect(context.trim()).not.toBe('')
       expect(context).toContain('TRENDING TOPICS')
 
       trendEngine.updateTrends([], 10)
       feedGen.updateTrendContext()
-      context = feedGen.trendContext
+      context = feedGenPrivate.trendContext
       expect(context.trim()).not.toBe('')
       expect(context).toContain('TRENDING TOPICS')
     })
@@ -518,10 +528,12 @@ describe('Trending Topics & News Integration', () => {
 
       const badArticleGen = new ArticleGenerator(badLLM)
 
+      const org = mockOrgs[0]
+      if (!org) throw new Error('Expected org to exist')
       await expect(async () => {
         await badArticleGen.generateArticleForQuestion(
           mockQuestion,
-          mockOrgs[0],
+          org,
           'breaking',
           mockActors,
           [],
@@ -548,10 +560,12 @@ describe('Trending Topics & News Integration', () => {
 
       const badArticleGen = new ArticleGenerator(badLLM)
 
+      const org = mockOrgs[0]
+      if (!org) throw new Error('Expected org to exist')
       await expect(async () => {
         await badArticleGen.generateArticleForQuestion(
           mockQuestion,
-          mockOrgs[0],
+          org,
           'breaking',
           mockActors,
           [],
@@ -578,10 +592,12 @@ describe('Trending Topics & News Integration', () => {
 
       const badArticleGen = new ArticleGenerator(badLLM)
 
+      const org = mockOrgs[0]
+      if (!org) throw new Error('Expected org to exist')
       await expect(async () => {
         await badArticleGen.generateArticleForQuestion(
           mockQuestion,
-          mockOrgs[0],
+          org,
           'breaking',
           mockActors,
           [],

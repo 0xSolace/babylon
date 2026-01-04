@@ -4,7 +4,7 @@
  * Validates the complete NPC messaging pipeline:
  * 1. NPC identity setup (wallet + keys)
  * 2. Message sending through relay
- * 3. Storage in EQLite
+ * 3. Storage in SQLit
  * 4. NPC response generation
  * 5. On-chain verification
  */
@@ -44,8 +44,8 @@ const describeFn = RUN_MESSAGING_E2E ? describe : describe.skip
 describeFn('Decentralized Messaging E2E', () => {
   const KMS_ENDPOINT = process.env.KMS_ENDPOINT ?? 'http://localhost:3300'
   const RELAY_ENDPOINT = process.env.RELAY_ENDPOINT ?? 'http://localhost:3200'
-  const EQLITE_ENDPOINT =
-    process.env.EQLITE_BLOCK_PRODUCER_ENDPOINT ?? 'http://localhost:8546'
+  const SQLIT_ENDPOINT =
+    process.env.SQLIT_BLOCK_PRODUCER_ENDPOINT ?? 'http://localhost:8546'
   const RPC_URL = process.env.PUBLIC_RPC_URL ?? 'http://localhost:6545'
 
   let testWallet: { address: Address; privateKey: `0x${string}` }
@@ -102,8 +102,8 @@ describeFn('Decentralized Messaging E2E', () => {
       expect(data.status).toBe('healthy')
     })
 
-    it('EQLite service is healthy', async () => {
-      const response = await fetch(`${EQLITE_ENDPOINT}/v1/health`)
+    it('SQLit service is healthy', async () => {
+      const response = await fetch(`${SQLIT_ENDPOINT}/v1/health`)
       expect(response.ok).toBe(true)
     })
 

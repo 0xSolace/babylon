@@ -286,10 +286,10 @@ export class StorageUtil {
   getGatewayUrl(cid: string): string {
     const network = process.env.JEJU_NETWORK
     if (network === 'mainnet') {
-      return `https://ipfs.jeju.network/ipfs/${cid}`
+      return `https://ipfs.jejunetwork.org/ipfs/${cid}`
     }
     if (network === 'testnet') {
-      return `https://ipfs.testnet.jeju.network/ipfs/${cid}`
+      return `https://ipfs.testnet.jejunetwork.org/ipfs/${cid}`
     }
     return `${this.endpoint}/ipfs/${cid}`
   }

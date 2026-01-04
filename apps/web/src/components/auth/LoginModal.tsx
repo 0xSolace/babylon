@@ -1,4 +1,4 @@
-import { useJejuAuth } from '@jejunetwork/auth'
+import { useJejuAuth } from '@jejunetwork/auth/react'
 import { useEffect, useRef } from 'react'
 
 /**

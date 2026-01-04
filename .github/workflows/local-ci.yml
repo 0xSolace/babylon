@@ -1,10 +1,10 @@
 # Local CI workflow optimized for act (local GitHub Actions runner)
 # Run with: bun run test (or: act -W .github/workflows/local-ci.yml)
 #
-# This workflow uses EQLite - decentralized database via Jeju.
+# This workflow uses SQLit - decentralized database via Jeju.
 # Works reliably on all platforms including Apple Silicon with act.
 #
-# NOTE: This workflow is designed to run locally via act. EQLite services
+# NOTE: This workflow is designed to run locally via act. SQLit services
 # are accessed via the Jeju platform.
 
 name: Local CI
@@ -72,8 +72,8 @@ jobs:
 
       - name: Setup test environment
         env:
-          EQLITE_BLOCK_PRODUCER_ENDPOINT: ${{ secrets.TEST_EQLITE_ENDPOINT }}
-          EQLITE_DATABASE_ID: test_babylon
+          SQLIT_BLOCK_PRODUCER_ENDPOINT: ${{ secrets.TEST_SQLIT_ENDPOINT }}
+          SQLIT_DATABASE_ID: test_babylon
           JEJU_OAUTH3_SERVICE_URL: ${{ secrets.JEJU_OAUTH3_SERVICE_URL }}
           BABYLON_OAUTH3_APP_ID: ${{ secrets.BABYLON_OAUTH3_APP_ID }}
           OAUTH3_TEST_EMAIL: ${{ secrets.OAUTH3_TEST_EMAIL }}
@@ -86,26 +86,26 @@ jobs:
           SKIP_E2E_CHECKS: true
         run: |
           echo "📋 Setting up test environment..."
-          echo "   EQLITE_BLOCK_PRODUCER_ENDPOINT: $EQLITE_BLOCK_PRODUCER_ENDPOINT"
+          echo "   SQLIT_BLOCK_PRODUCER_ENDPOINT: $SQLIT_BLOCK_PRODUCER_ENDPOINT"
           echo "   REDIS_URL: $REDIS_URL"
           if [ -f scripts/ci/prepare-env.sh ]; then
             bash scripts/ci/prepare-env.sh
           else
             echo "NODE_ENV=test" > .env.test
             echo "CI=true" >> .env.test
-            echo "EQLITE_BLOCK_PRODUCER_ENDPOINT=$EQLITE_BLOCK_PRODUCER_ENDPOINT" >> .env.test
-            echo "EQLITE_DATABASE_ID=$EQLITE_DATABASE_ID" >> .env.test
+            echo "SQLIT_BLOCK_PRODUCER_ENDPOINT=$SQLIT_BLOCK_PRODUCER_ENDPOINT" >> .env.test
+            echo "SQLIT_DATABASE_ID=$SQLIT_DATABASE_ID" >> .env.test
             echo "REDIS_URL=$REDIS_URL" >> .env.test
           fi
 
-      - name: Setup EQLite Database
+      - name: Setup SQLit Database
         env:
-          EQLITE_BLOCK_PRODUCER_ENDPOINT: ${{ secrets.TEST_EQLITE_ENDPOINT }}
-          EQLITE_DATABASE_ID: test_babylon
+          SQLIT_BLOCK_PRODUCER_ENDPOINT: ${{ secrets.TEST_SQLIT_ENDPOINT }}
+          SQLIT_DATABASE_ID: test_babylon
         run: |
-          echo "🗄️ Setting up EQLite database..."
-          echo "   EQLITE_BLOCK_PRODUCER_ENDPOINT: $EQLITE_BLOCK_PRODUCER_ENDPOINT"
-          bun run scripts/setup-test-eqlite.ts
+          echo "🗄️ Setting up SQLit database..."
+          echo "   SQLIT_BLOCK_PRODUCER_ENDPOINT: $SQLIT_BLOCK_PRODUCER_ENDPOINT"
+          bun run scripts/setup-test-sqlit.ts
 
       - name: Type Check
         env:
@@ -124,7 +124,7 @@ jobs:
         env:
           NODE_OPTIONS: '--max-old-space-size=4096'
           SKIP_ENV_VALIDATION: true
-          EQLITE_BLOCK_PRODUCER_ENDPOINT: ${{ secrets.TEST_EQLITE_ENDPOINT }}
+          SQLIT_BLOCK_PRODUCER_ENDPOINT: ${{ secrets.TEST_SQLIT_ENDPOINT }}
         run: |
           echo "🏗️ Building project..."
           bun run build
@@ -137,8 +137,8 @@ jobs:
 
       - name: Run Unit Tests
         env:
-          EQLITE_BLOCK_PRODUCER_ENDPOINT: ${{ secrets.TEST_EQLITE_ENDPOINT }}
-          EQLITE_DATABASE_ID: test_babylon
+          SQLIT_BLOCK_PRODUCER_ENDPOINT: ${{ secrets.TEST_SQLIT_ENDPOINT }}
+          SQLIT_DATABASE_ID: test_babylon
           REDIS_URL: ${{ steps.services.outputs.REDIS_URL }}
         run: |
           echo "🧪 Running unit tests..."
@@ -146,8 +146,8 @@ jobs:
 
       - name: Run Integration Tests
         env:
-          EQLITE_BLOCK_PRODUCER_ENDPOINT: ${{ secrets.TEST_EQLITE_ENDPOINT }}
-          EQLITE_DATABASE_ID: test_babylon
+          SQLIT_BLOCK_PRODUCER_ENDPOINT: ${{ secrets.TEST_SQLIT_ENDPOINT }}
+          SQLIT_DATABASE_ID: test_babylon
           REDIS_URL: ${{ steps.services.outputs.REDIS_URL }}
           TEST_API_URL: http://localhost:3000
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -164,4 +164,4 @@ jobs:
           echo "✅ Local CI Pipeline Complete!"
           echo "================================"
           echo ""
-          echo "Using EQLite - decentralized database"
+          echo "Using SQLit - decentralized database"

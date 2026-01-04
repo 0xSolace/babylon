@@ -8,6 +8,7 @@
  * ONLY NPCs receive this context - user agents get nothing (they're playing the game).
  */
 
+import { db, eq, questions } from '@babylon/db'
 import {
   type DatabaseArcPlan,
   gameService,
@@ -142,12 +143,15 @@ Remember: You are ${npcActor.name}. Post in YOUR voice, not as a reporter.
 
     const phase = getPhaseForDay(currentDay, arcPlan)
 
-    // Note: DatabaseArcPlan doesn't include the predetermined outcome (it's on the questions table).
-    // The outcome would need to be fetched separately via a join or additional query.
-    // For now, default to true - this matches the pattern in event-generation-helpers.ts
-    // which uses `question.outcome ?? true`. This means insiders point to YES by default.
-    // TODO: Fetch actual outcome from questions table if precise signal direction is needed.
-    const outcome = true
+    // Fetch actual outcome from questions table for precise signal direction
+    const [question] = await db
+      .select({ outcome: questions.outcome })
+      .from(questions)
+      .where(eq(questions.marketId, market.id))
+      .limit(1)
+
+    // Use actual outcome if available, default to true (YES) if not found
+    const outcome = question?.outcome !== 'NO'
 
     const signal = getSignalDirection(arcPlan, phase, agentId, outcome)
 

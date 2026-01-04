@@ -42,8 +42,8 @@ describe.skipIf(SKIP)('Narrative State Service - Integration', () => {
         id: testQuestionId,
         questionNumber: 99999,
         text: 'Test question for narrative arc',
-        scenarioId: 1,
-        outcome: true,
+        scenarioId: '1',
+        outcome: 'true',
         rank: 1,
         resolutionDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
         status: 'active',
@@ -123,7 +123,7 @@ describe.skipIf(SKIP)('Narrative State Service - Integration', () => {
     expect(saved?.insiderActorIds).toEqual(['actor-1', 'actor-2'])
     expect(saved?.deceiverActorIds).toEqual(['actor-3'])
 
-    const ratios = saved?.phaseRatios as PhaseRatios
+    const ratios = saved?.phaseRatios as unknown as PhaseRatios
     expect(ratios.early).toBeCloseTo(0.4, 2) // 2/5
     expect(ratios.middle).toBeCloseTo(0.6, 2) // 3/5
     expect(ratios.late).toBeCloseTo(0.75, 2) // 3/4
@@ -195,7 +195,7 @@ describe.skipIf(SKIP)('Narrative State Service - Integration', () => {
     expect(arcPlan).toBeDefined()
     if (!arcPlan) return
 
-    const ratios = arcPlan.phaseRatios as PhaseRatios
+    const ratios = arcPlan.phaseRatios as unknown as PhaseRatios
 
     // Signal accuracy should increase as we progress through phases
     // early < middle < late < climax

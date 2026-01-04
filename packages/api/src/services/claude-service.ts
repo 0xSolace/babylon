@@ -7,12 +7,10 @@
  */
 
 import { logger } from '@babylon/shared'
+import { getJejuComputeEndpoint } from '@babylon/shared/config'
 
 // Jeju Compute endpoint - must be set
-const JEJU_COMPUTE_ENDPOINT =
-  process.env.JEJU_COMPUTE_ENDPOINT ||
-  process.env.JEJU_DWS_ENDPOINT ||
-  'http://localhost:4100'
+const JEJU_COMPUTE_ENDPOINT = getJejuComputeEndpoint()
 
 interface ClaudeParams {
   prompt: string

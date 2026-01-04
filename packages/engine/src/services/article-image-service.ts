@@ -6,23 +6,14 @@
  */
 
 import { logger } from '@babylon/shared'
+import { getJejuComputeEndpoint } from '@babylon/shared/config'
 import { articleCover, renderPrompt } from '../prompts'
-
-// Port configuration via env var
-const COMPUTE_PORT = process.env.JEJU_COMPUTE_PORT ?? '5010'
 
 /**
  * Jeju Compute endpoint for image generation
  * Uses decentralized compute marketplace for inference
  */
-const JEJU_COMPUTE_ENDPOINT =
-  process.env.JEJU_COMPUTE_ENDPOINT ||
-  process.env.JEJU_DWS_ENDPOINT ||
-  (process.env.JEJU_NETWORK === 'mainnet'
-    ? 'https://compute.jeju.network'
-    : process.env.JEJU_NETWORK === 'testnet'
-      ? 'https://compute.testnet.jeju.network'
-      : `http://localhost:${COMPUTE_PORT}`)
+const JEJU_COMPUTE_ENDPOINT = getJejuComputeEndpoint()
 
 interface JejuImageResponse {
   id: string
@@ -62,12 +53,8 @@ export function initFalClient(): boolean {
  * Requires Jeju Compute endpoint to be configured
  */
 export function isImageGenerationAvailable(): boolean {
-  // Available if we have a Jeju network configured or explicit endpoint
-  return !!(
-    process.env.JEJU_COMPUTE_ENDPOINT ||
-    process.env.JEJU_DWS_ENDPOINT ||
-    process.env.JEJU_NETWORK
-  )
+  // Available if we have a compute endpoint configured
+  return !!JEJU_COMPUTE_ENDPOINT && JEJU_COMPUTE_ENDPOINT !== ''
 }
 
 /**

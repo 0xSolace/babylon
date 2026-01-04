@@ -19,6 +19,11 @@ import {
   writeContract,
 } from '@babylon/shared'
 import {
+  getChainId,
+  getContractAddress,
+  getRpcUrl,
+} from '@babylon/shared/config'
+import {
   type Address,
   createWalletClient,
   encodeFunctionData,
@@ -248,25 +253,56 @@ export class NPCFundingService {
   private initialized = false
 
   constructor(config: Partial<NPCFundingConfig> = {}) {
+    // Get contract addresses from config with fallback
+    const getAddressFromConfig = (
+      category: string,
+      name: string,
+      envVar: string,
+      defaultValue: Address,
+    ): Address => {
+      try {
+        return getContractAddress(category, name) as Address
+      } catch {
+        return ((typeof process !== 'undefined'
+          ? process.env[envVar]
+          : undefined) ?? defaultValue) as Address
+      }
+    }
+
     this.config = {
       tokenAddress:
-        (process.env.BBLN_TOKEN_ADDRESS as Address) ??
         config.tokenAddress ??
-        ('0x0000000000000000000000000000000000000000' as Address),
+        getAddressFromConfig(
+          'tokens',
+          'bbln',
+          'BBLN_TOKEN_ADDRESS',
+          '0x0000000000000000000000000000000000000000' as Address,
+        ),
       treasuryAddress:
-        (process.env.TREASURY_ADDRESS as Address) ??
         config.treasuryAddress ??
-        ('0x0000000000000000000000000000000000000000' as Address),
+        getAddressFromConfig(
+          'governance',
+          'treasury',
+          'TREASURY_ADDRESS',
+          '0x0000000000000000000000000000000000000000' as Address,
+        ),
       vaultAddress:
-        (process.env.VAULT_ADDRESS as Address) ??
         config.vaultAddress ??
-        ('0x0000000000000000000000000000000000000000' as Address),
-      rpcUrl:
-        process.env.JEJU_RPC_URL ?? config.rpcUrl ?? 'http://localhost:9545',
-      chainId: parseInt(process.env.JEJU_CHAIN_ID ?? '31337', 10),
+        getAddressFromConfig(
+          'governance',
+          'vault',
+          'VAULT_ADDRESS',
+          '0x0000000000000000000000000000000000000000' as Address,
+        ),
+      rpcUrl: config.rpcUrl ?? getRpcUrl() ?? 'http://localhost:9545',
+      chainId: config.chainId ?? getChainId() ?? 31337,
       treasuryPrivateKey: config.treasuryPrivateKey,
       batchSize: config.batchSize ?? 50,
-      devMode: config.devMode ?? process.env.NODE_ENV !== 'production',
+      devMode:
+        config.devMode ??
+        (typeof process !== 'undefined'
+          ? process.env.NODE_ENV !== 'production'
+          : true),
     }
 
     this.publicClient = createBabylonPublicClient({

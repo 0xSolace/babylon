@@ -11,7 +11,6 @@
 import { promises as fs } from 'node:fs'
 import * as path from 'node:path'
 import { db } from '@babylon/db'
-// TODO: SimulationEngine.ts was deleted in merge - using type export from benchmark/index
 import type { SimulationMetrics } from '../benchmark'
 import { parseSimulationMetrics } from '../benchmark/parseSimulationMetrics'
 import {

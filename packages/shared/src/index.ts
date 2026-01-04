@@ -95,45 +95,8 @@ export * from './utils/viem-helpers'
 // Type Guards
 // =============================================================================
 
-// Core type guards - re-export from @jejunetwork/shared
-export {
-  assertDefined,
-  assertNotNull,
-  fetchJsonAs,
-  getErrorMessage,
-  hasArrayProperty,
-  hasBooleanProperty,
-  hasNumberProperty,
-  hasProperty,
-  hasStringProperty,
-  isArray,
-  isArrayOf,
-  isBoolean,
-  isDate,
-  isFiniteNumber,
-  isJsonRecord,
-  isJsonValue,
-  isNonEmptyString,
-  isNotNullish,
-  isNullish,
-  isNumber,
-  isNumberArray,
-  isObject,
-  isPlainObject,
-  isPositiveInteger,
-  isString,
-  isStringArray,
-  isStringRecord,
-  isUint8Array,
-  type JsonValue,
-  parseJson,
-  parseJsonAs,
-  responseJson,
-  toError,
-  toJsonRecord,
-  toJsonValueOrNull,
-  toStringArray,
-} from '@jejunetwork/shared'
+// Import directly from @jejunetwork/shared:
+// import { assertDefined, assertNotNull, fetchJsonAs, getErrorMessage, hasArrayProperty, hasBooleanProperty, hasNumberProperty, hasProperty, hasStringProperty, isArray, isArrayOf, isBoolean, isDate, isFiniteNumber, isJsonRecord, isJsonValue, isNonEmptyString, isNotNullish, isNullish, isNumber, isNumberArray, isObject, isPlainObject, isPositiveInteger, isString, isStringArray, isStringRecord, isUint8Array, JsonValue, parseJson, parseJsonAs, responseJson, toError, toJsonRecord, toJsonValueOrNull, toStringArray } from '@jejunetwork/shared'
 
 // Babylon-specific type guards (blockchain, entities, game)
 export * from './type-guards'

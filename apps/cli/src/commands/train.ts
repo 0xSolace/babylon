@@ -212,28 +212,30 @@ async function scoreArchetypeTrajectories(
 
   // Configure LLM for scoring
   const llmClient = BabylonLLMClient.forGameTick()
+  const llmCallImpl = async (params: {
+    prompt: string
+    system: string
+    modelSize?: 'small' | 'medium' | 'large'
+    temperature?: number
+    maxTokens?: number
+    actionType?: string
+    responseFormat?: { type: 'json_object' }
+  }): Promise<string> => {
+    const fullPrompt = `${params.system}\n\n${params.prompt}`
+    const response = await llmClient.generateJSON<{ result: string }>(
+      fullPrompt,
+      undefined,
+      {
+        maxTokens: params.maxTokens ?? 1000,
+        temperature: params.temperature ?? 0.3,
+        format: 'json',
+      },
+    )
+    return typeof response === 'string' ? response : JSON.stringify(response)
+  }
   const llmCaller = {
-    callGroqDirect: async (params: {
-      prompt: string
-      system: string
-      modelSize?: 'small' | 'medium' | 'large'
-      temperature?: number
-      maxTokens?: number
-      actionType?: string
-      responseFormat?: { type: 'json_object' }
-    }): Promise<string> => {
-      const fullPrompt = `${params.system}\n\n${params.prompt}`
-      const response = await llmClient.generateJSON<{ result: string }>(
-        fullPrompt,
-        undefined,
-        {
-          maxTokens: params.maxTokens ?? 1000,
-          temperature: params.temperature ?? 0.3,
-          format: 'json',
-        },
-      )
-      return typeof response === 'string' ? response : JSON.stringify(response)
-    },
+    callAgentLLM: llmCallImpl,
+    callGroqDirect: llmCallImpl,
   }
   configureTrainingDependencies({ llmCaller })
   console.log('   Calling scoring service...')
@@ -600,28 +602,30 @@ async function scoreTrajectories(): Promise<void> {
   // Configure LLM for scoring
   console.log('Configuring LLM for scoring...')
   const llmClient = BabylonLLMClient.forGameTick()
+  const llmCallImplScoring = async (params: {
+    prompt: string
+    system: string
+    modelSize?: 'small' | 'medium' | 'large'
+    temperature?: number
+    maxTokens?: number
+    actionType?: string
+    responseFormat?: { type: 'json_object' }
+  }): Promise<string> => {
+    const fullPrompt = `${params.system}\n\n${params.prompt}`
+    const response = await llmClient.generateJSON<{ result: string }>(
+      fullPrompt,
+      undefined,
+      {
+        maxTokens: params.maxTokens ?? 1000,
+        temperature: params.temperature ?? 0.3,
+        format: 'json',
+      },
+    )
+    return typeof response === 'string' ? response : JSON.stringify(response)
+  }
   const llmCaller = {
-    callGroqDirect: async (params: {
-      prompt: string
-      system: string
-      modelSize?: 'small' | 'medium' | 'large'
-      temperature?: number
-      maxTokens?: number
-      actionType?: string
-      responseFormat?: { type: 'json_object' }
-    }): Promise<string> => {
-      const fullPrompt = `${params.system}\n\n${params.prompt}`
-      const response = await llmClient.generateJSON<{ result: string }>(
-        fullPrompt,
-        undefined,
-        {
-          maxTokens: params.maxTokens ?? 1000,
-          temperature: params.temperature ?? 0.3,
-          format: 'json',
-        },
-      )
-      return typeof response === 'string' ? response : JSON.stringify(response)
-    },
+    callAgentLLM: llmCallImplScoring,
+    callGroqDirect: llmCallImplScoring,
   }
   configureTrainingDependencies({ llmCaller })
   console.log('Scoring trajectories with AI judge...')

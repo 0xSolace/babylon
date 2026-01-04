@@ -18,11 +18,16 @@ import { db, type UserInsert } from '@babylon/db'
 import { type StaticActor, StaticDataRegistry } from '@babylon/engine'
 import {
   generateRandomWallet,
-  getFarcasterHubUrl,
   isValidHex,
   keccak256,
   toAddressOrNull,
 } from '@babylon/shared'
+import {
+  getFarcasterHubUrl as getBabylonFarcasterHubUrl,
+  getContractAddress,
+  getKMSEndpoint,
+  getRpcUrl,
+} from '@babylon/shared/config'
 import { toNull } from '@jejunetwork/shared'
 import type { Address, Hex } from 'viem'
 import { isProductionEnvironment } from '../config/tee'
@@ -97,17 +102,15 @@ export class NPCIdentityService {
   constructor(config: Partial<NPCIdentityConfig> = {}) {
     this.config = {
       kmsEndpoint:
-        config.kmsEndpoint ??
-        process.env.JEJU_KMS_ENDPOINT ??
-        'http://localhost:3300',
-      farcasterHubUrl: config.farcasterHubUrl ?? getFarcasterHubUrl(),
-      jejuRpcUrl:
-        config.jejuRpcUrl ??
-        process.env.JEJU_RPC_URL ??
-        'http://localhost:6545',
+        config.kmsEndpoint ?? getKMSEndpoint() ?? 'http://localhost:3300',
+      farcasterHubUrl: config.farcasterHubUrl ?? getBabylonFarcasterHubUrl(),
+      jejuRpcUrl: config.jejuRpcUrl ?? getRpcUrl() ?? 'http://localhost:6545',
       keyRegistryAddress:
         toAddressOrNull(
-          config.keyRegistryAddress ?? process.env.JEJU_KEY_REGISTRY_ADDRESS,
+          config.keyRegistryAddress ??
+            (getContractAddress('registry', 'keyRegistry') as
+              | Address
+              | undefined),
         ) ?? '0x0000000000000000000000000000000000000000',
       enableExternalFarcaster:
         config.enableExternalFarcaster ??

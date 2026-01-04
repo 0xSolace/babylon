@@ -16,7 +16,7 @@
  * ```
  */
 
-import { logger, POINTS } from '@babylon/shared'
+import { BBLN_REWARDS, logger } from '@babylon/shared'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { Check, Lock, Twitter, X as XIcon } from 'lucide-react'
 import { useState } from 'react'
@@ -362,7 +362,8 @@ export function ShareEarnModal({
           {/* Content */}
           <div className="space-y-4 p-6">
             <p className="mb-4 text-muted-foreground text-sm">
-              Share to earn +{POINTS.SHARE_ACTION} points (one-time reward)
+              Share to earn +{BBLN_REWARDS.SHARE_ACTION} points (one-time
+              reward)
             </p>
 
             {checkingExistingShares ? (
@@ -423,7 +424,7 @@ export function ShareEarnModal({
                         : twitterLoading
                           ? 'Processing...'
                           : shareStatus.twitter.earned
-                            ? `Earned +${POINTS.SHARE_TO_TWITTER} points`
+                            ? `Earned +${BBLN_REWARDS.SHARE_TO_TWITTER} points`
                             : 'Share your profile'}
                     </p>
                   </div>
@@ -433,7 +434,7 @@ export function ShareEarnModal({
                     <div className="flex items-center gap-2">
                       <Check className="h-5 w-5 text-green-500" />
                       <span className="font-semibold text-green-500 text-xs">
-                        +{POINTS.SHARE_TO_TWITTER}
+                        +{BBLN_REWARDS.SHARE_TO_TWITTER}
                       </span>
                     </div>
                   ) : null}
@@ -463,7 +464,7 @@ export function ShareEarnModal({
                       {farcasterLoading
                         ? 'Processing...'
                         : shareStatus.farcaster.earned
-                          ? `Earned +${POINTS.SHARE_ACTION} points`
+                          ? `Earned +${BBLN_REWARDS.SHARE_ACTION} points`
                           : 'Share your profile'}
                     </p>
                   </div>
@@ -471,7 +472,7 @@ export function ShareEarnModal({
                     <div className="flex items-center gap-2">
                       <Check className="h-5 w-5 text-green-500" />
                       <span className="font-semibold text-green-500 text-xs">
-                        +{POINTS.SHARE_ACTION}
+                        +{BBLN_REWARDS.SHARE_ACTION}
                       </span>
                     </div>
                   )}

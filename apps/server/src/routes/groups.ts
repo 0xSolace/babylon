@@ -1,9 +1,10 @@
-// @ts-nocheck - Elysia body type inference issues, needs refactoring
+import type { JsonValue } from '@babylon/db'
 import {
   and,
   db,
   desc,
   eq,
+  inArray,
   userGroupAdmins,
   userGroupInvites,
   userGroupMembers,
@@ -18,6 +19,37 @@ import {
   getAuthContext,
   rateLimitMiddleware,
 } from '../middleware'
+
+// Local type for userGroups select result
+interface UserGroup {
+  id: string
+  name: string
+  description: string | null
+  ownerId: string
+  createdAt: Date | null
+  updatedAt: Date | null
+  isPrivate: boolean | null
+  imageUrl: string | null
+  memberCount: number | null
+  metadata: JsonValue | null
+}
+
+// Local type for userGroupInvites select result
+interface UserGroupInvite {
+  id: string
+  groupId: string
+  inviterId: string
+  inviteeId: string | null
+  invitedUserId: string | null
+  invitedBy: string | null
+  code: string | null
+  createdAt: Date | null
+  expiresAt: Date | null
+  usedAt: Date | null
+  status: string
+  invitedAt: Date | null
+  respondedAt: Date | null
+}
 
 /**
  * Groups routes
@@ -39,7 +71,11 @@ const createGroupsRoutes = () =>
           return { error: 'Unauthorized' }
         }
 
-        const { name, description, memberIds } = body
+        const { name, description, memberIds } = body as {
+          name: string
+          description?: string
+          memberIds?: string[]
+        }
 
         if (!name || name.trim().length === 0) {
           set.status = 400
@@ -52,7 +88,7 @@ const createGroupsRoutes = () =>
           id: groupId,
           name: name.trim(),
           description: description?.trim() ?? null,
-          createdById: user.userId,
+          ownerId: user.userId,
           createdAt: new Date(),
           updatedAt: new Date(),
         })
@@ -84,7 +120,7 @@ const createGroupsRoutes = () =>
               id: inviteId,
               groupId,
               invitedUserId: memberId,
-              invitedById: user.userId,
+              invitedBy: user.userId,
               status: 'pending',
               invitedAt: new Date(),
             })
@@ -109,7 +145,7 @@ const createGroupsRoutes = () =>
             id: groupId,
             name: name.trim(),
             description: description?.trim() ?? null,
-            createdById: user.userId,
+            ownerId: user.userId,
           },
           invites: inviteResults,
         }
@@ -144,11 +180,11 @@ const createGroupsRoutes = () =>
         const { groupId } = params
 
         // Get group
-        const [group] = await db
+        const [group] = (await db
           .select()
           .from(userGroups)
           .where(eq(userGroups.id, groupId))
-          .limit(1)
+          .limit(1)) as unknown as UserGroup[]
 
         if (!group) {
           set.status = 404
@@ -191,7 +227,7 @@ const createGroupsRoutes = () =>
                   profileImageUrl: users.profileImageUrl,
                 })
                 .from(users)
-                .where(eq(users.id, memberIds[0])) // TODO: proper IN query
+                .where(inArray(users.id, memberIds))
             : []
 
         const memberMap = new Map(memberUsers.map((u) => [u.id, u]))
@@ -214,12 +250,12 @@ const createGroupsRoutes = () =>
             id: group.id,
             name: group.name,
             description: group.description,
-            createdById: group.createdById,
+            ownerId: group.ownerId,
             createdAt: group.createdAt,
             updatedAt: group.updatedAt,
             members: membersWithDetails,
             isAdmin,
-            isCreator: group.createdById === user.userId,
+            isCreator: group.ownerId === user.userId,
           },
         }
       },
@@ -267,10 +303,13 @@ const createGroupsRoutes = () =>
         }
 
         // Update group
+        const { name, description } = body as {
+          name?: string
+          description?: string
+        }
         const updates: Record<string, unknown> = { updatedAt: new Date() }
-        if (body.name !== undefined) updates.name = body.name
-        if (body.description !== undefined)
-          updates.description = body.description
+        if (name !== undefined) updates.name = name
+        if (description !== undefined) updates.description = description
 
         await db
           .update(userGroups)
@@ -423,7 +462,7 @@ const createGroupsRoutes = () =>
         }
 
         const { groupId } = params
-        const { userId: newUserId } = body
+        const { userId: newUserId } = body as { userId: string }
 
         // Check if requesting user is admin
         const [isAdmin] = await db
@@ -538,7 +577,7 @@ const createGroupsRoutes = () =>
         }
 
         const { groupId } = params
-        const { userId: inviteeUserId } = body
+        const { userId: inviteeUserId } = body as { userId: string }
 
         // Check if requesting user is admin
         const [isAdmin] = await db
@@ -574,7 +613,7 @@ const createGroupsRoutes = () =>
         }
 
         // Check if invite already exists
-        const [existingInvite] = await db
+        const [existingInvite] = (await db
           .select()
           .from(userGroupInvites)
           .where(
@@ -584,7 +623,7 @@ const createGroupsRoutes = () =>
               eq(userGroupInvites.status, 'pending'),
             ),
           )
-          .limit(1)
+          .limit(1)) as unknown as UserGroupInvite[]
 
         if (existingInvite) {
           return {
@@ -600,7 +639,7 @@ const createGroupsRoutes = () =>
           id: inviteId,
           groupId,
           invitedUserId: inviteeUserId,
-          invitedById: user.userId,
+          invitedBy: user.userId,
           status: 'pending',
           invitedAt: new Date(),
         })
@@ -682,11 +721,11 @@ const createGroupsRoutes = () =>
         const { inviteId } = params
 
         // Get invite
-        const [invite] = await db
+        const [invite] = (await db
           .select()
           .from(userGroupInvites)
           .where(eq(userGroupInvites.id, inviteId))
-          .limit(1)
+          .limit(1)) as unknown as UserGroupInvite[]
 
         if (!invite) {
           set.status = 404
@@ -753,11 +792,11 @@ const createGroupsRoutes = () =>
         const { inviteId } = params
 
         // Get invite
-        const [invite] = await db
+        const [invite] = (await db
           .select()
           .from(userGroupInvites)
           .where(eq(userGroupInvites.id, inviteId))
-          .limit(1)
+          .limit(1)) as unknown as UserGroupInvite[]
 
         if (!invite) {
           set.status = 404

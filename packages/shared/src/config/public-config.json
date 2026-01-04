@@ -33,9 +33,21 @@
         "gameOracle": "0xc6e7DF5E7b4f2A278906862b61205850344D4e7d"
       }
     },
+    "jejuTestnet": {
+      "chainId": 420690,
+      "name": "Jeju Testnet",
+      "rpcUrl": "https://testnet-rpc.jejunetwork.org",
+      "contracts": {
+        "diamond": "0x0000000000000000000000000000000000000000",
+        "identityRegistry": "0x0000000000000000000000000000000000000000",
+        "reputationSystem": "0x0000000000000000000000000000000000000000",
+        "predictionMarketFacet": "0x0000000000000000000000000000000000000000",
+        "oracleFacet": "0x0000000000000000000000000000000000000000"
+      }
+    },
     "baseSepolia": {
       "chainId": 84532,
-      "name": "Base Sepolia (Testnet)",
+      "name": "Base Sepolia (Legacy)",
       "rpcUrl": "https://sepolia.base.org",
       "contracts": {
         "diamond": "0xdC3f0aD2f76Cea9379af897fa8EAD4A6d5e43990",
@@ -45,9 +57,21 @@
         "oracleFacet": "0x58A0Cd5307CdE4F2ccD8E2cA71510206F1365D9B"
       }
     },
+    "jejuMainnet": {
+      "chainId": 420691,
+      "name": "Jeju Mainnet",
+      "rpcUrl": "https://rpc.jejunetwork.org",
+      "contracts": {
+        "diamond": "0x0000000000000000000000000000000000000000",
+        "identityRegistry": "0x0000000000000000000000000000000000000000",
+        "reputationSystem": "0x0000000000000000000000000000000000000000",
+        "predictionMarketFacet": "0x0000000000000000000000000000000000000000",
+        "oracleFacet": "0x0000000000000000000000000000000000000000"
+      }
+    },
     "base": {
       "chainId": 8453,
-      "name": "Base Mainnet",
+      "name": "Base Mainnet (Legacy)",
       "rpcUrl": "https://mainnet.base.org",
       "contracts": {
         "diamond": "0x0000000000000000000000000000000000000000",
@@ -71,17 +95,17 @@
       }
     },
     "testnet": {
-      "network": "baseSepolia",
+      "network": "jejuTestnet",
       "endpoints": {
-        "apiBaseUrl": "https://babylon-api.testnet.jejunetwork.org",
+        "apiBaseUrl": "",
         "frontendUrl": "https://babylon.testnet.jejunetwork.org",
-        "a2aEndpoint": "https://babylon-api.testnet.jejunetwork.org/a2a",
-        "mcpEndpoint": "https://babylon-api.testnet.jejunetwork.org/mcp",
+        "a2aEndpoint": "/a2a",
+        "mcpEndpoint": "/mcp",
         "ipfsGateway": "https://ipfs.testnet.jejunetwork.org"
       }
     },
     "mainnet": {
-      "network": "base",
+      "network": "jejuMainnet",
       "endpoints": {
         "apiBaseUrl": "https://babylon-api.jejunetwork.org",
         "frontendUrl": "https://babylon.jejunetwork.org",

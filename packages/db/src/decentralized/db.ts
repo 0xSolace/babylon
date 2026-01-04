@@ -5,19 +5,20 @@
  * configuration and a unified interface.
  *
  * Configuration is resolved in this order:
- * 1. Environment variable override (EQLITE_BLOCK_PRODUCER_ENDPOINT)
+ * 1. Environment variable override (SQLIT_BLOCK_PRODUCER_ENDPOINT)
  * 2. Network-based config from @jejunetwork/config (based on JEJU_NETWORK)
  */
 
-import { getEQLiteUrl } from '@jejunetwork/config'
+import { getSQLitEndpoint, getNetworkName } from '@babylon/shared/config'
+import { getSQLitUrl } from '@jejunetwork/config'
 import {
-  type EQLiteClient,
+  type SQLitClient,
   type ExecResult,
-  getEQLite,
+  getSQLit,
   type QueryParam,
 } from '@jejunetwork/db'
 import { first } from '@jejunetwork/shared'
-import { createQueryTransaction, type QueryTransaction } from '../eqlite-client'
+import { createQueryTransaction, type QueryTransaction } from '../sqlit-client'
 import { toQueryParam } from '../type-guards'
 
 /** Jeju network type */
@@ -80,13 +81,13 @@ export type { QueryTransaction }
 // ============================================================================
 
 class DB {
-  private client: EQLiteClient | null = null
+  private client: SQLitClient | null = null
   private initialized = false
   private databaseId: string
   private _endpoint: string | null = null
 
   constructor() {
-    this.databaseId = process.env.EQLITE_DATABASE_ID || 'babylon'
+    this.databaseId = process.env.SQLIT_DATABASE_ID || 'babylon'
   }
 
   getEndpoint(): string | null {
@@ -96,13 +97,21 @@ class DB {
   async initialize(): Promise<void> {
     if (this.initialized) return
 
-    let endpoint = process.env.EQLITE_BLOCK_PRODUCER_ENDPOINT
+    // Env override takes precedence, then config
+    let endpoint =
+      (typeof process !== 'undefined'
+        ? process.env.SQLIT_BLOCK_PRODUCER_ENDPOINT
+        : undefined) || getSQLitEndpoint()
 
+    // Fallback: try network-based config if endpoint still not set
     if (!endpoint) {
-      const network = process.env.JEJU_NETWORK
+      const network =
+        (typeof process !== 'undefined'
+          ? process.env.JEJU_NETWORK
+          : undefined) || getNetworkName()
       if (network && isJejuNetwork(network)) {
         try {
-          endpoint = getEQLiteUrl(network)
+          endpoint = getSQLitUrl(network)
         } catch {
           // Config not available, use default
         }
@@ -116,24 +125,24 @@ class DB {
 
     this._endpoint = endpoint
 
-    const privateKey = process.env.EQLITE_PRIVATE_KEY
-    this.client = getEQLite({
+    const privateKey = process.env.SQLIT_PRIVATE_KEY
+    this.client = getSQLit({
       blockProducerEndpoint: endpoint,
       databaseId: this.databaseId,
       privateKey: isHexPrivateKey(privateKey) ? privateKey : undefined,
-      timeout: parseInt(process.env.EQLITE_TIMEOUT ?? '30000', 10),
-      debug: process.env.EQLITE_DEBUG === 'true',
+      timeout: parseInt(process.env.SQLIT_TIMEOUT ?? '30000', 10),
+      debug: process.env.SQLIT_DEBUG === 'true',
     })
 
     const healthy = await this.client.isHealthy()
     if (!healthy) {
-      throw new Error(`[DB] EQLite at ${endpoint} is not healthy.`)
+      throw new Error(`[DB] SQLit at ${endpoint} is not healthy.`)
     }
 
     this.initialized = true
   }
 
-  private requireClient(): EQLiteClient {
+  private requireClient(): SQLitClient {
     if (!this.client || !this.initialized) {
       throw new Error('[DB] Database not initialized. Call initialize() first.')
     }

@@ -1,4 +1,4 @@
-import { db } from '@babylon/db'
+import { getDB, initializeDB } from '@babylon/db'
 import { Elysia, t } from 'elysia'
 
 /**
@@ -45,15 +45,21 @@ async function checkDatabase(): Promise<HealthCheck> {
     latencyMs: 0,
   }
 
-  const result = await db.user.findFirst({}).catch(() => null)
-  check.latencyMs = Date.now() - start
+  try {
+    const db = getDB()
+    const healthy = await db.isHealthy()
+    check.latencyMs = Date.now() - start
 
-  if (result !== undefined) {
-    check.status = check.latencyMs < 100 ? 'healthy' : 'degraded'
-    if (check.latencyMs > 100) {
-      check.message = 'High latency'
+    if (healthy) {
+      check.status = check.latencyMs < 100 ? 'healthy' : 'degraded'
+      if (check.latencyMs > 100) {
+        check.message = 'High latency'
+      }
+    } else {
+      check.message = 'Connection failed'
     }
-  } else {
+  } catch {
+    check.latencyMs = Date.now() - start
     check.message = 'Connection failed'
   }
 

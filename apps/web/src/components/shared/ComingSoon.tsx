@@ -4,7 +4,7 @@ import {
   POINTS,
   signInWithFarcaster,
 } from '@babylon/shared'
-import { useJejuAuth } from '@jejunetwork/auth'
+import { useJejuAuth } from '@jejunetwork/auth/react'
 import {
   Check,
   ChevronDown,

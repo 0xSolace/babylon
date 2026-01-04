@@ -1,6 +1,5 @@
 import { logger, WALLET_ERROR_MESSAGES } from '@babylon/shared'
-import { useJejuWallet } from '@jejunetwork/auth'
-import type { JsonValue } from '@jejunetwork/shared'
+import { type TypedDataParams, useJejuWallet } from '@jejunetwork/auth/react'
 import { useCallback, useEffect, useMemo, useRef } from 'react'
 import type { Address, Hex } from 'viem'
 
@@ -42,7 +41,7 @@ interface UseSmartWalletResult {
   /** Function to sign a message */
   signMessage: (message: string) => Promise<Hex>
   /** Function to sign typed data (EIP-712) */
-  signTypedData: (typedData: Record<string, JsonValue>) => Promise<Hex>
+  signTypedData: (typedData: TypedDataParams) => Promise<Hex>
 }
 
 /**
@@ -151,7 +150,7 @@ export function useSmartWallet(): UseSmartWalletResult {
   )
 
   const signTypedData = useCallback(
-    async (typedData: Record<string, JsonValue>): Promise<Hex> => {
+    async (typedData: TypedDataParams): Promise<Hex> => {
       if (!ready) {
         throw new Error(WALLET_ERROR_MESSAGES.NO_EMBEDDED_WALLET)
       }

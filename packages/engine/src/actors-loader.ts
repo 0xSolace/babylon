@@ -84,18 +84,8 @@ function initializeCache(): void {
 /**
  * Loads all actors data from TypeScript imports
  *
- * @deprecated Use StaticDataRegistry.getAllActors() and StaticDataRegistry.getAllOrganizations() instead.
- * This function maintains a separate cache from StaticDataRegistry, causing memory duplication.
- *
- * **Migration:**
- * ```typescript
- * // Before:
- * const { actors, organizations } = loadActorsData();
- *
- * // After:
- * const actors = StaticDataRegistry.getAllActors();
- * const organizations = StaticDataRegistry.getAllOrganizations();
- * ```
+ * NOTE: Consider using StaticDataRegistry.getAllActors() and StaticDataRegistry.getAllOrganizations()
+ * for better memory efficiency.
  *
  * @param options Optional configuration for selective loading
  * @returns ActorsDatabase with requested data

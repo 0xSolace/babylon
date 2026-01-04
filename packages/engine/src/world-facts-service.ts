@@ -4,7 +4,7 @@
  * Manages world facts that provide context for game generation.
  * Includes crypto prices, political state, AI developments, etc.
  *
- * Uses the typed EQLite repository pattern (db.worldFact) for strong typing.
+ * Uses the typed SQLit repository pattern (db.worldFact) for strong typing.
  *
  * @module services/world-facts-service
  */

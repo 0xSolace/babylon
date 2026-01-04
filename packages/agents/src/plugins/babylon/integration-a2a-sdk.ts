@@ -5,7 +5,7 @@
  *
  * Architecture optimized for 300k+ users:
  * - Singleton A2A base client (agent card is shared across all agents)
- * - Agent identity caching with Redis/memory fallback
+ * - Distributed agent identity caching via shared cache
  * - Lazy header injection per-request (not per-client initialization)
  */
 
@@ -14,13 +14,17 @@ import { A2AClient } from '@a2a-js/sdk/client'
 import { db } from '@babylon/db'
 import type { AgentRuntime, Plugin } from '@elizaos/core'
 import type { JsonValue } from '@jejunetwork/shared'
-import { isJsonValue } from '@jejunetwork/shared'
+import {
+  type CacheClient,
+  getCacheClient,
+  isJsonValue,
+} from '@jejunetwork/shared'
 import { agentWalletService } from '../../identity/AgentWalletService'
 import { logger } from '../../shared/logger'
 import { toBabylonRuntime } from './types'
 
 // =============================================================================
-// Agent Identity Cache - Redis/Memory fallback for 300k+ users
+// Agent Identity Cache - Distributed cache for 300k+ users
 // =============================================================================
 
 /**
@@ -35,13 +39,17 @@ interface CachedAgentIdentity {
   cachedAt: number
 }
 
-/**
- * In-memory LRU cache for agent identities
- * Max 10,000 entries with 5-minute TTL
- */
-const AGENT_IDENTITY_CACHE = new Map<string, CachedAgentIdentity>()
-const AGENT_IDENTITY_TTL_MS = 5 * 60 * 1000 // 5 minutes
-const AGENT_IDENTITY_MAX_SIZE = 10000
+const AGENT_IDENTITY_TTL_SECONDS = 5 * 60 // 5 minutes
+
+// Distributed cache for agent identities
+let identityCache: CacheClient | null = null
+
+function getIdentityCache(): CacheClient {
+  if (!identityCache) {
+    identityCache = getCacheClient('babylon-agent-identity')
+  }
+  return identityCache
+}
 
 /**
  * Get agent identity from cache or database
@@ -52,11 +60,14 @@ async function getCachedAgentIdentity(
   agentUserId: string,
 ): Promise<CachedAgentIdentity | null> {
   const now = Date.now()
-  const cached = AGENT_IDENTITY_CACHE.get(agentUserId)
+  const cache = getIdentityCache()
+  const cacheKey = `identity:${agentUserId}`
 
-  // Return cached if valid
-  if (cached && now - cached.cachedAt < AGENT_IDENTITY_TTL_MS) {
-    return cached
+  // Check distributed cache
+  const cached = await cache.get(cacheKey)
+  if (cached) {
+    const identity: CachedAgentIdentity = JSON.parse(cached)
+    return identity
   }
 
   // First try User table (USER_CONTROLLED agents)
@@ -80,7 +91,7 @@ async function getCachedAgentIdentity(
       cachedAt: now,
     }
 
-    cacheIdentity(agentUserId, identity)
+    await cacheIdentity(agentUserId, identity)
     return identity
   }
 
@@ -97,7 +108,7 @@ async function getCachedAgentIdentity(
       cachedAt: now,
     }
 
-    cacheIdentity(agentUserId, identity)
+    await cacheIdentity(agentUserId, identity)
     return identity
   }
 
@@ -105,28 +116,28 @@ async function getCachedAgentIdentity(
 }
 
 /**
- * Helper to cache identity with LRU eviction
+ * Helper to cache identity in distributed cache
  */
-function cacheIdentity(
+async function cacheIdentity(
   agentUserId: string,
   identity: CachedAgentIdentity,
-): void {
-  // LRU eviction if at capacity
-  if (AGENT_IDENTITY_CACHE.size >= AGENT_IDENTITY_MAX_SIZE) {
-    const oldestKey = AGENT_IDENTITY_CACHE.keys().next().value
-    if (oldestKey) {
-      AGENT_IDENTITY_CACHE.delete(oldestKey)
-    }
-  }
-
-  AGENT_IDENTITY_CACHE.set(agentUserId, identity)
+): Promise<void> {
+  const cache = getIdentityCache()
+  await cache.set(
+    `identity:${agentUserId}`,
+    JSON.stringify(identity),
+    AGENT_IDENTITY_TTL_SECONDS,
+  )
 }
 
 /**
  * Invalidate agent identity cache (call after wallet provisioning)
  */
-function invalidateAgentIdentityCache(agentUserId: string): void {
-  AGENT_IDENTITY_CACHE.delete(agentUserId)
+async function invalidateAgentIdentityCache(
+  agentUserId: string,
+): Promise<void> {
+  const cache = getIdentityCache()
+  await cache.delete(`identity:${agentUserId}`)
 }
 
 // =============================================================================
@@ -323,7 +334,7 @@ async function ensureAgentWallet(
     )
 
     // Invalidate cache and return updated identity
-    invalidateAgentIdentityCache(agentUserId)
+    await invalidateAgentIdentityCache(agentUserId)
     return {
       ...identity,
       walletAddress: walletResult.walletAddress,

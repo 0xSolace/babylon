@@ -4,7 +4,8 @@
  * Provides API middleware and utilities for authentication, authorization,
  * and common API patterns.
  */
-// Admin Audit Logging (removed - unused)
+// Admin Audit Logging
+export { type LogAdminModifyParams, logAdminModify } from './admin-audit'
 // Admin Middleware
 export { isUserAdmin, requireAdmin } from './admin-middleware'
 // Agent Authentication
@@ -121,7 +122,6 @@ export {
   applyRateLimit,
   checkRateLimit,
   checkRateLimitAndDuplicates,
-  cleanupRateLimits,
   clearAllRateLimits,
   duplicateContentError,
   getRateLimitStatus,

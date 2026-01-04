@@ -2,9 +2,9 @@
  * Message Storage utilities
  */
 
-import { getEQLite } from '@jejunetwork/db'
+import { getSQLit } from '@jejunetwork/db'
 
-export interface EQLiteConfig {
+export interface SQLitConfig {
   blockProducerEndpoint?: string
   databaseId?: string
   privateKey?: string
@@ -15,7 +15,7 @@ export interface QueryResult<T> {
 }
 
 export class MessageStorage {
-  private client = getEQLite()
+  private client = getSQLit()
   private initialized = false
 
   async initialize(): Promise<void> {
@@ -38,7 +38,7 @@ export class MessageStorage {
 
 let storage: MessageStorage | null = null
 
-export function createStorage(_config?: EQLiteConfig): MessageStorage {
+export function createStorage(_config?: SQLitConfig): MessageStorage {
   if (!storage) storage = new MessageStorage()
   return storage
 }

@@ -58,7 +58,7 @@ export async function getAgentContext(
     throw new Error(`Agent not found: ${agentUserId}`)
   }
 
-  // Convert displayName to string, handling possible null/undefined/object types from EQLite
+  // Convert displayName to string, handling possible null/undefined/object types from SQLit
   const displayName =
     typeof agent.displayName === 'string' && agent.displayName
       ? agent.displayName

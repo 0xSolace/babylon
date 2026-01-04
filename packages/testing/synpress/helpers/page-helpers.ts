@@ -1,13 +1,16 @@
 /**
  * Page navigation helpers for Babylon synpress tests.
  *
- * This module re-exports the canonical Jeju navigation helpers
- * and adds Babylon-specific configuration.
+ * Re-exports common page helpers from @jejunetwork/tests and adds
+ * Babylon-specific helpers.
  *
  * @module @babylon/testing/synpress/helpers/page-helpers
  */
 
-// Re-export all navigation helpers from Jeju
+import { navigateTo as jejuNavigateTo } from '@jejunetwork/tests'
+import type { Page } from '@playwright/test'
+
+// Re-export common page helpers from @jejunetwork/tests
 export {
   cooldownBetweenTests,
   getCurrentRoute,
@@ -19,9 +22,6 @@ export {
   waitForRoute,
   waitForServerHealthy,
 } from '@jejunetwork/tests'
-
-import { navigateTo as jejuNavigateTo } from '@jejunetwork/tests'
-import type { Page } from '@playwright/test'
 
 // Babylon-specific port configuration
 const WEB_PORT = process.env.BABYLON_WEB_PORT ?? '5008'

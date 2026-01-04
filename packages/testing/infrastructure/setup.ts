@@ -12,7 +12,7 @@
  * 1. Unit tests: No infrastructure needed (mocks)
  * 2. Integration tests: Postgres + Redis + Hardhat (via Jeju)
  * 3. E2E tests: Full stack including web server
- * 4. Decentralized tests: Full Jeju stack (EQLite, KMS, OAuth3, etc.)
+ * 4. Decentralized tests: Full Jeju stack (SQLit, KMS, OAuth3, etc.)
  *
  * Usage:
  *   bun run packages/testing/infrastructure/setup.ts --mode=integration --deploy
@@ -116,27 +116,27 @@ async function ensureJejuRunning(maxWaitSeconds = 120): Promise<boolean> {
 }
 
 /**
- * Wait for EQLite database to be ready and initialized
+ * Wait for SQLit database to be ready and initialized
  */
-async function waitForEQLite(maxAttempts = 30): Promise<boolean> {
-  const eqliteEndpoint =
-    process.env.EQLITE_BLOCK_PRODUCER_ENDPOINT ?? 'http://localhost:4661'
-  console.log(`[Setup] Waiting for EQLite at ${eqliteEndpoint}...`)
+async function waitForSQLit(maxAttempts = 30): Promise<boolean> {
+  const sqlitEndpoint =
+    process.env.SQLIT_BLOCK_PRODUCER_ENDPOINT ?? 'http://localhost:4661'
+  console.log(`[Setup] Waiting for SQLit at ${sqlitEndpoint}...`)
 
   for (let i = 0; i < maxAttempts; i++) {
-    const response = await fetch(`${eqliteEndpoint}/v1/health`, {
+    const response = await fetch(`${sqlitEndpoint}/v1/health`, {
       signal: AbortSignal.timeout(3000),
     }).catch(() => null)
 
     if (response?.ok) {
-      console.log('[Setup] EQLite is ready')
+      console.log('[Setup] SQLit is ready')
       return true
     }
 
     await new Promise((r) => setTimeout(r, 2000))
   }
 
-  console.warn('[Setup] EQLite did not become ready in time')
+  console.warn('[Setup] SQLit did not become ready in time')
   return false
 }
 
@@ -172,8 +172,7 @@ async function seedDatabase(): Promise<boolean> {
     }
     // Alternative: use GameBootstrapService directly
     const { GameBootstrapService } = await import('@babylon/engine')
-    const bootstrap = new GameBootstrapService()
-    await bootstrap.bootstrapAll()
+    await GameBootstrapService.bootstrapIfNeeded()
     console.log('[Setup] Database seeded via GameBootstrapService')
     return true
   } catch (error) {
@@ -281,8 +280,8 @@ export async function setupTestInfrastructure(
   process.env.BUN_ENV = 'test'
 
   // Set required environment variables if not present
-  if (!process.env.EQLITE_BLOCK_PRODUCER_ENDPOINT) {
-    process.env.EQLITE_BLOCK_PRODUCER_ENDPOINT = 'http://localhost:4661'
+  if (!process.env.SQLIT_BLOCK_PRODUCER_ENDPOINT) {
+    process.env.SQLIT_BLOCK_PRODUCER_ENDPOINT = 'http://localhost:4661'
   }
   if (!process.env.JEJU_DWS_ENDPOINT) {
     process.env.JEJU_DWS_ENDPOINT = 'http://localhost:4030'
@@ -372,9 +371,9 @@ export async function setupTestInfrastructure(
 
     console.log('[Setup] ✅ Jeju services ready')
 
-    // Wait for EQLite to be ready
-    const eqliteReady = await waitForEQLite()
-    if (eqliteReady) {
+    // Wait for SQLit to be ready
+    const sqlitReady = await waitForSQLit()
+    if (sqlitReady) {
       // Initialize database
       dbInitialized = await initializeDatabase()
 

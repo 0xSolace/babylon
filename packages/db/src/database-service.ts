@@ -19,7 +19,7 @@ import type {
   JsonValue,
   OrganizationStateRow,
   Question,
-} from './eqlite-schema-types'
+} from './sqlit-schema-types'
 import { db } from './index'
 import { logger } from './logger'
 

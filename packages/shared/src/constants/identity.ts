@@ -16,7 +16,17 @@ import { getERC8004ContractAddresses } from '../contracts/addresses'
 export const CAPABILITIES_HASH =
   '0x0000000000000000000000000000000000000000000000000000000000000001'
 
-export { IDENTITY_REGISTRY_ABI, REPUTATION_SYSTEM_ABI } from '../contracts/abis'
+// Import from @jejunetwork/contracts and re-export with both casing conventions
+import {
+  identityRegistryAbi,
+  reputationRegistryAbi,
+} from '@jejunetwork/contracts'
+
+export const IDENTITY_REGISTRY_ABI = identityRegistryAbi
+export const REPUTATION_SYSTEM_ABI = reputationRegistryAbi
+
+// Camel case aliases for modern code
+export { identityRegistryAbi, reputationRegistryAbi }
 
 /**
  * Get the identity registry contract address for the current chain

@@ -9,12 +9,13 @@ import {
   TrendingUp,
   Wallet,
 } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { toast } from 'sonner'
 import { AssetTradesFeed } from '@/components/markets/AssetTradesFeed'
 import { PerpPositionsList } from '@/components/markets/PerpPositionsList'
-import { PerpPriceChart } from '@/components/markets/PerpPriceChart'
+// Lazy load PerpPriceChart (contains heavy recharts dependency)
+const PerpPriceChart = lazy(() => import('@/components/markets/PerpPriceChart').then(m => ({ default: m.PerpPriceChart })))
 import {
   type OpenPerpDetails,
   TradeConfirmationDialog,
@@ -379,11 +380,13 @@ export default function PerpsDetailClient() {
         <div className="lg:col-span-2">
           <div className="rounded-lg border border-border bg-card/50 p-4 backdrop-blur">
             <h2 className="mb-4 font-bold text-lg">Price Chart</h2>
-            <PerpPriceChart
-              data={priceHistory}
-              currentPrice={displayPrice}
-              ticker={ticker}
-            />
+            <Suspense fallback={<div className="h-[300px] animate-pulse rounded bg-muted" />}>
+              <PerpPriceChart
+                data={priceHistory}
+                currentPrice={displayPrice}
+                ticker={ticker}
+              />
+            </Suspense>
           </div>
 
           {/* Funding Rate Info */}

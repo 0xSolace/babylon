@@ -142,7 +142,7 @@ export class TrajectoryLoggerService {
   }
 
   /**
-   * Save LLM call to database using EQLite
+   * Save LLM call to database using SQLit
    */
   private async saveLLMCallToDB(
     trajectoryId: string,
@@ -313,7 +313,7 @@ export class TrajectoryLoggerService {
   }
 
   /**
-   * End trajectory and save to database using EQLite
+   * End trajectory and save to database using SQLit
    */
   async endTrajectory(
     trajectoryId: string,
@@ -383,7 +383,7 @@ export class TrajectoryLoggerService {
       }
     }
 
-    // Save to database using EQLite
+    // Save to database using SQLit
     await db.insert(trajectories).values({
       id: await generateSnowflakeId(),
       trajectoryId,

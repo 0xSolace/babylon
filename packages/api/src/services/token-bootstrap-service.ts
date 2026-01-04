@@ -34,6 +34,8 @@ import {
   setDAOContracts,
   setLiquidityContracts,
 } from '@babylon/shared'
+import { getWethAddress } from '@babylon/shared/config'
+import { readContract } from '@jejunetwork/contracts/viem'
 import {
   type Address,
   type Chain,
@@ -191,14 +193,12 @@ export class TokenBootstrapService {
   private publicClient: ReturnType<typeof createPublicClient>
   private walletClient: ReturnType<typeof createWalletClient>
   private account: ReturnType<typeof privateKeyToAccount>
-  private chainId: number
   private rpcUrl: string
   private chain: Chain
 
   constructor(network?: NetworkName) {
     this.network = network ?? getCurrentNetwork()
     const config = getNetworkConfig(this.network)
-    this.chainId = config.chainId
     this.rpcUrl = config.rpcUrl
 
     // Set chain based on network
@@ -232,6 +232,13 @@ export class TokenBootstrapService {
       chain: this.chain,
       transport: http(this.rpcUrl),
     })
+  }
+
+  /**
+   * Get the network this service is configured for
+   */
+  getNetwork(): NetworkName {
+    return this.network
   }
 
   /**
@@ -613,7 +620,9 @@ export class TokenBootstrapService {
     }
 
     // WETH address (for local, use deployer to fund with ETH directly)
-    const wethAddress = process.env.WETH_ADDRESS as Address | undefined
+    const wethAddress = (getWethAddress(this.network) || undefined) as
+      | Address
+      | undefined
 
     // 1. Create ETH/BBLN pair
     logger.info(
@@ -662,7 +671,7 @@ export class TokenBootstrapService {
       )
 
       // Get pair address
-      const pairAddress = (await this.publicClient.readContract({
+      const pairAddress = (await readContract(this.publicClient, {
         address: contracts.xlpV2Factory,
         abi: XLP_FACTORY_ABI,
         functionName: 'getPair',
@@ -734,9 +743,7 @@ export class TokenBootstrapService {
         // Transfer tokens from treasury to NPC wallet
         // This requires the NPC identity service to get wallet addresses
         try {
-          const { getNPCIdentityService } = await import(
-            '@babylon/agents/identity/NPCIdentityService'
-          )
+          const { getNPCIdentityService } = await import('@babylon/agents')
           const identityService = getNPCIdentityService()
           const identity = await identityService.getNPCIdentity(actor.id)
 
@@ -804,7 +811,7 @@ export function getTokenBootstrapService(
 ): TokenBootstrapService {
   if (
     !bootstrapServiceInstance ||
-    (network && network !== bootstrapServiceInstance.network)
+    (network && network !== bootstrapServiceInstance.getNetwork())
   ) {
     bootstrapServiceInstance = new TokenBootstrapService(network)
   }

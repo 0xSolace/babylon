@@ -1,5 +1,5 @@
 import { logger, UserMeApiResponseSchema } from '@babylon/shared'
-import { useJejuAuth, useJejuWallet } from '@jejunetwork/auth'
+import { useJejuAuth, useJejuWallet } from '@jejunetwork/auth/react'
 import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { toast } from 'sonner'
 import { type User, useAuthStore } from '@/stores/authStore'

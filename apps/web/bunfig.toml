@@ -1,9 +1,5 @@
-[install]
-# Use lockfile for deterministic builds
-save = true
+[install.scopes]
+"@babylon" = { url = "workspace:*" }
 
-[install.lockfile]
-save = true
-
-[test]
-preload = ["./src/lib/test-setup.ts"]
+[alias]
+"@babylon/shared" = "../packages/shared/src/browser.ts"

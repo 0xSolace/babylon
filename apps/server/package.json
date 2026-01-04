@@ -30,7 +30,11 @@
     "@babylon/engine": "workspace:*",
     "@jejunetwork/auth": "workspace:*",
     "@babylon/training": "workspace:*",
-    "@jejunetwork/training": "workspace:*"
+    "@jejunetwork/training": "workspace:*",
+    "@jejunetwork/messaging": "workspace:*",
+    "@jejunetwork/shared": "workspace:*",
+    "@jejunetwork/kms": "workspace:*",
+    "@jejunetwork/config": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^24.10.0",

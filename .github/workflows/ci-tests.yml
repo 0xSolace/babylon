@@ -39,7 +39,7 @@ jobs:
           JEJU_OAUTH3_SERVICE_URL: ${{ secrets.JEJU_OAUTH3_SERVICE_URL }}
           BABYLON_OAUTH3_APP_ID: ${{ secrets.BABYLON_OAUTH3_APP_ID }}
           OAUTH3_TEST_EMAIL: ${{ secrets.OAUTH3_TEST_EMAIL }}
-          EQLITE_BLOCK_PRODUCER_ENDPOINT: ${{ secrets.TEST_EQLITE_ENDPOINT }}
+          SQLIT_BLOCK_PRODUCER_ENDPOINT: ${{ secrets.TEST_SQLIT_ENDPOINT }}
         run: |
           echo "🔐 Checking GitHub secrets availability..."
           echo ""
@@ -62,10 +62,10 @@ jobs:
             echo "  ❌ OAUTH3_TEST_EMAIL: NOT SET"
           fi
 
-          if [ -n "$EQLITE_BLOCK_PRODUCER_ENDPOINT" ]; then
-            echo "  ✅ TEST_EQLITE_ENDPOINT: SET"
+          if [ -n "$SQLIT_BLOCK_PRODUCER_ENDPOINT" ]; then
+            echo "  ✅ TEST_SQLIT_ENDPOINT: SET"
           else
-            echo "  ❌ TEST_EQLITE_ENDPOINT: NOT SET (required for EQLite database)"
+            echo "  ❌ TEST_SQLIT_ENDPOINT: NOT SET (required for SQLit database)"
           fi
           
           echo ""
@@ -102,8 +102,8 @@ jobs:
 
       - name: Setup test environment
         env:
-          EQLITE_BLOCK_PRODUCER_ENDPOINT: ${{ secrets.TEST_EQLITE_ENDPOINT }}
-          EQLITE_DATABASE_ID: test_babylon
+          SQLIT_BLOCK_PRODUCER_ENDPOINT: ${{ secrets.TEST_SQLIT_ENDPOINT }}
+          SQLIT_DATABASE_ID: test_babylon
           JEJU_OAUTH3_SERVICE_URL: ${{ secrets.JEJU_OAUTH3_SERVICE_URL || '' }}
           BABYLON_OAUTH3_APP_ID: ${{ secrets.BABYLON_OAUTH3_APP_ID || '' }}
           OAUTH3_TEST_EMAIL: ${{ secrets.OAUTH3_TEST_EMAIL || '' }}
@@ -120,20 +120,20 @@ jobs:
           REDIS_URL: redis://localhost:6379
         run: bash scripts/ci/prepare-env.sh
 
-      - name: Setup EQLite Database
+      - name: Setup SQLit Database
         env:
-          EQLITE_BLOCK_PRODUCER_ENDPOINT: ${{ secrets.TEST_EQLITE_ENDPOINT }}
-          EQLITE_DATABASE_ID: test_babylon
+          SQLIT_BLOCK_PRODUCER_ENDPOINT: ${{ secrets.TEST_SQLIT_ENDPOINT }}
+          SQLIT_DATABASE_ID: test_babylon
         run: |
           set -euo pipefail
-          echo "🗄️ Setting up EQLite database..."
-          bun run scripts/setup-test-eqlite.ts
+          echo "🗄️ Setting up SQLit database..."
+          bun run scripts/setup-test-sqlit.ts
 
       - name: Build production
         env:
           NODE_OPTIONS: '--max-old-space-size=8192'
           SKIP_ENV_VALIDATION: true
-          EQLITE_BLOCK_PRODUCER_ENDPOINT: ${{ secrets.TEST_EQLITE_ENDPOINT }}
+          SQLIT_BLOCK_PRODUCER_ENDPOINT: ${{ secrets.TEST_SQLIT_ENDPOINT }}
           JEJU_OAUTH3_SERVICE_URL: ${{ secrets.JEJU_OAUTH3_SERVICE_URL || '' }}
           BABYLON_OAUTH3_APP_ID: ${{ secrets.BABYLON_OAUTH3_APP_ID || '' }}
         run: |
@@ -168,8 +168,8 @@ jobs:
           }
           echo "✅ Production server is ready"
         env:
-          EQLITE_BLOCK_PRODUCER_ENDPOINT: ${{ secrets.TEST_EQLITE_ENDPOINT }}
-          EQLITE_DATABASE_ID: test_babylon
+          SQLIT_BLOCK_PRODUCER_ENDPOINT: ${{ secrets.TEST_SQLIT_ENDPOINT }}
+          SQLIT_DATABASE_ID: test_babylon
           REDIS_URL: redis://localhost:6379
           DEPLOYMENT_ENV: localnet
           NODE_ENV: production
@@ -181,7 +181,7 @@ jobs:
       - name: Run Synpress Tests (Wallet E2E)
         run: cd packages/testing && bunx playwright test --config=synpress.config.ts --reporter=list,json
         env:
-          EQLITE_BLOCK_PRODUCER_ENDPOINT: ${{ secrets.TEST_EQLITE_ENDPOINT }}
+          SQLIT_BLOCK_PRODUCER_ENDPOINT: ${{ secrets.TEST_SQLIT_ENDPOINT }}
           PLAYWRIGHT_BASE_URL: http://localhost:3000
           WALLET_SEED_PHRASE: ${{ secrets.WALLET_SEED_PHRASE || '' }}
           WALLET_PASSWORD: ${{ secrets.WALLET_PASSWORD || '' }}
@@ -196,7 +196,7 @@ jobs:
         if: success() || failure()
         run: cd packages/testing && bunx playwright test e2e --reporter=list,json
         env:
-          EQLITE_BLOCK_PRODUCER_ENDPOINT: ${{ secrets.TEST_EQLITE_ENDPOINT }}
+          SQLIT_BLOCK_PRODUCER_ENDPOINT: ${{ secrets.TEST_SQLIT_ENDPOINT }}
           PLAYWRIGHT_BASE_URL: http://localhost:3000
           OAUTH3_TEST_EMAIL: ${{ secrets.OAUTH3_TEST_EMAIL || '' }}
           OAUTH3_TEST_PASSWORD: ${{ secrets.OAUTH3_TEST_PASSWORD || '' }}

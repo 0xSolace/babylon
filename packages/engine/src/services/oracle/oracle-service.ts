@@ -21,9 +21,10 @@ import {
   toHexString,
   zeroHash,
 } from '@babylon/shared'
+import { getRpcUrl as getConfigRpcUrl } from '@babylon/shared/config'
 
 function getRpcUrl(): string {
-  return process.env.RPC_URL ?? 'http://localhost:6545'
+  return getConfigRpcUrl() ?? 'http://localhost:6545'
 }
 
 import {

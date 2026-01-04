@@ -23,9 +23,8 @@ import {
   sql,
 } from '@babylon/db'
 import { logger } from '@babylon/shared'
-import type { NextRequest } from 'next/server'
 
-export const GET = withErrorHandling(async (request: NextRequest) => {
+export const GET = withErrorHandling(async (request: Request) => {
   await requireAdmin(request)
 
   const { searchParams } = new URL(request.url)
@@ -51,10 +50,10 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   const marketStatsResult = (await db
     .select({
       total: count(),
-      active: sql<number>`COUNT(*) FILTER (WHERE ${markets.resolved} = false AND ${markets.endDate} > ${now})`,
-      expired: sql<number>`COUNT(*) FILTER (WHERE ${markets.resolved} = false AND ${markets.endDate} <= ${now})`,
-      resolved: sql<number>`COUNT(*) FILTER (WHERE ${markets.resolved} = true)`,
-      totalLiquidity: sql<number>`COALESCE(SUM(${markets.liquidity}::numeric), 0)`,
+      active: sql`COUNT(*) FILTER (WHERE ${markets.resolved} = false AND ${markets.endDate} > ${now})`,
+      expired: sql`COUNT(*) FILTER (WHERE ${markets.resolved} = false AND ${markets.endDate} <= ${now})`,
+      resolved: sql`COUNT(*) FILTER (WHERE ${markets.resolved} = true)`,
+      totalLiquidity: sql`COALESCE(SUM(${markets.liquidity}::numeric), 0)`,
     })
     .from(markets)) as unknown as MarketStats[]
   const marketStats = marketStatsResult[0]
@@ -68,8 +67,8 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   const positionStatsResult = (await db
     .select({
       totalPositions: count(),
-      activePositions: sql<number>`COUNT(*) FILTER (WHERE ${positions.status} = 'active')`,
-      totalValue: sql<number>`COALESCE(SUM(${positions.amount}::numeric), 0)`,
+      activePositions: sql`COUNT(*) FILTER (WHERE ${positions.status} = 'active')`,
+      totalValue: sql`COALESCE(SUM(${positions.amount}::numeric), 0)`,
     })
     .from(positions)) as unknown as PositionStats[]
   const positionStats = positionStatsResult[0]
@@ -98,12 +97,12 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       endDate: markets.endDate,
       createdAt: markets.createdAt,
       onChainMarketId: markets.onChainMarketId,
-      positionCount: sql<number>`(
+      positionCount: sql`(
         SELECT COUNT(*) FROM "Position" 
         WHERE "Position"."marketId" = ${markets.id}
       )`,
-      tradeCount: sql<number>`0`,
-      totalVolume: sql<number>`0`,
+      tradeCount: sql`0`,
+      totalVolume: sql`0`,
     })
     .from(markets)
     .where(statusFilter)

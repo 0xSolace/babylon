@@ -60,10 +60,20 @@ export interface IAgentRuntimeManager {
 /**
  * Interface for LLM calling functionality
  * Routes through Jeju Compute - NO centralized fallback
- * @note callGroqDirect is a legacy name maintained for compatibility
  */
 export interface ILLMCaller {
-  /** @deprecated Use callAgentLLM - this routes through Jeju Compute */
+  /** Call agent LLM through Jeju Compute */
+  callAgentLLM(params: {
+    prompt: string
+    system: string
+    modelSize?: 'small' | 'medium' | 'large'
+    temperature?: number
+    maxTokens?: number
+    actionType?: string
+    responseFormat?: { type: 'json_object' }
+  }): Promise<string>
+
+  /** Direct call to Groq for scoring/evaluation - same interface as callAgentLLM */
   callGroqDirect(params: {
     prompt: string
     system: string

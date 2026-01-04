@@ -6,6 +6,7 @@
  */
 
 import { logger } from '@babylon/shared'
+import { type CacheClient, getCacheClient } from '@jejunetwork/shared'
 
 interface RateLimitRecord {
   count: number
@@ -19,9 +20,15 @@ interface RateLimitConfig {
   actionType: string
 }
 
-// In-memory store for rate limit records
-// In production, you might want to use Redis for distributed rate limiting
-const rateLimitStore = new Map<string, RateLimitRecord>()
+// Distributed rate limit cache
+let rateLimitCache: CacheClient | null = null
+
+function getRateLimitCache(): CacheClient {
+  if (!rateLimitCache) {
+    rateLimitCache = getCacheClient('babylon-user-ratelimit')
+  }
+  return rateLimitCache
+}
 
 /**
  * Predefined rate limit configurations for different actions
@@ -118,23 +125,27 @@ export const RATE_LIMIT_CONFIGS = {
  * Check if user has exceeded rate limit for a specific action
  * Uses sliding window algorithm for accurate rate limiting
  */
-export function checkRateLimit(
+export async function checkRateLimit(
   userId: string,
   config: RateLimitConfig,
-): { allowed: boolean; retryAfter?: number; remaining?: number } {
-  const key = `${userId}:${config.actionType}`
+): Promise<{ allowed: boolean; retryAfter?: number; remaining?: number }> {
+  const cache = getRateLimitCache()
+  const key = `ratelimit:${userId}:${config.actionType}`
   const now = Date.now()
+  const ttlSeconds = Math.ceil((config.windowMs * 2) / 1000) // TTL longer than window
 
   // Get or create rate limit record
-  let record = rateLimitStore.get(key)
+  let record: RateLimitRecord
+  const cached = await cache.get(key)
 
-  if (!record) {
+  if (cached) {
+    record = JSON.parse(cached)
+  } else {
     record = {
       count: 0,
       windowStart: now,
       recentActions: [],
     }
-    rateLimitStore.set(key, record)
   }
 
   // Remove actions outside the current window (sliding window)
@@ -170,6 +181,9 @@ export function checkRateLimit(
   record.count = record.recentActions.length
   record.windowStart = now
 
+  // Save updated record
+  await cache.set(key, JSON.stringify(record), ttlSeconds)
+
   const remaining = config.maxRequests - record.recentActions.length
 
   logger.debug('Rate limit check passed', {
@@ -190,9 +204,13 @@ export function checkRateLimit(
  * Reset rate limit for a specific user and action
  * Useful for testing or manual intervention
  */
-export function resetRateLimit(userId: string, actionType: string): void {
-  const key = `${userId}:${actionType}`
-  rateLimitStore.delete(key)
+export async function resetRateLimit(
+  userId: string,
+  actionType: string,
+): Promise<void> {
+  const cache = getRateLimitCache()
+  const key = `ratelimit:${userId}:${actionType}`
+  await cache.delete(key)
   logger.info('Rate limit reset', { userId, actionType })
 }
 
@@ -200,29 +218,33 @@ export function resetRateLimit(userId: string, actionType: string): void {
  * Clear all rate limit records
  * Useful for testing
  */
-export function clearAllRateLimits(): void {
-  rateLimitStore.clear()
+export async function clearAllRateLimits(): Promise<void> {
+  const cache = getRateLimitCache()
+  await cache.clear()
   logger.info('All rate limits cleared')
 }
 
 /**
  * Get current rate limit status for a user and action
  */
-export function getRateLimitStatus(
+export async function getRateLimitStatus(
   userId: string,
   config: RateLimitConfig,
-): { count: number; remaining: number; resetAt: Date } {
-  const key = `${userId}:${config.actionType}`
+): Promise<{ count: number; remaining: number; resetAt: Date }> {
+  const cache = getRateLimitCache()
+  const key = `ratelimit:${userId}:${config.actionType}`
   const now = Date.now()
-  const record = rateLimitStore.get(key)
+  const cached = await cache.get(key)
 
-  if (!record) {
+  if (!cached) {
     return {
       count: 0,
       remaining: config.maxRequests,
       resetAt: new Date(now + config.windowMs),
     }
   }
+
+  const record: RateLimitRecord = JSON.parse(cached)
 
   // Remove expired actions
   const windowStart = now - config.windowMs
@@ -239,37 +261,4 @@ export function getRateLimitStatus(
   }
 }
 
-/**
- * Cleanup old rate limit records periodically
- * Should be called periodically (e.g., every 5 minutes) to prevent memory leaks
- */
-export function cleanupRateLimits(): void {
-  const now = Date.now()
-  const maxAge = 5 * 60 * 1000 // 5 minutes
-
-  let cleanedCount = 0
-
-  for (const [key, record] of rateLimitStore.entries()) {
-    // Remove records where all actions are older than maxAge
-    const hasRecentActions = record.recentActions.some(
-      (timestamp) => now - timestamp < maxAge,
-    )
-
-    if (!hasRecentActions) {
-      rateLimitStore.delete(key)
-      cleanedCount++
-    }
-  }
-
-  if (cleanedCount > 0) {
-    logger.info('Cleaned up old rate limit records', {
-      cleanedCount,
-      totalRemaining: rateLimitStore.size,
-    })
-  }
-}
-
-// Run cleanup every 5 minutes
-if (typeof setInterval !== 'undefined') {
-  setInterval(cleanupRateLimits, 5 * 60 * 1000)
-}
+// Cleanup handled by distributed cache TTL - no setInterval needed

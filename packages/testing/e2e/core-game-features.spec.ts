@@ -769,7 +769,7 @@ test.describe('Data Integrity', () => {
 
     for (const actor of data.actors) {
       expect(actor.id).toBeDefined()
-      // SQLite may return 1 instead of true for boolean fields
+      // SQLit may return 1 instead of true for boolean fields
       expect(actor.isActor).toBeTruthy()
     }
   })

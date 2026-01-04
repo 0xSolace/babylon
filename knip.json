@@ -109,8 +109,8 @@
       "entry": ["src/index.ts"],
       "project": ["src/**/*.ts"],
       "ignore": [
-        "src/eqlite-driver.ts",
-        "src/eqlite-schema-types.ts",
+        "src/sqlit-driver.ts",
+        "src/sqlit-schema-types.ts",
         "src/decentralized/**",
         "src/schema/misc.ts",
         "src/schema/trading.ts",

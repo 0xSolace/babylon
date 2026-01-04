@@ -3,6 +3,7 @@
  */
 
 import { logger } from '@babylon/shared'
+import { getKMSEndpoint } from '@babylon/shared/config'
 import type { Address, Hex } from 'viem'
 import { keccak256, toBytes } from 'viem'
 import { getBabylonEnclave } from '../tee/babylon-enclave'
@@ -267,8 +268,8 @@ export class KMSIntegrationService {
   // ============================================================================
 
   private async tryConnectKMS(): Promise<JejuKMSClient | null> {
-    // Check if Jeju KMS environment variables are set
-    const kmsEndpoint = process.env.JEJU_KMS_ENDPOINT
+    // Get KMS endpoint from config
+    const kmsEndpoint = getKMSEndpoint()
     if (!kmsEndpoint) {
       this.log('Jeju KMS not configured')
       return null
@@ -276,7 +277,11 @@ export class KMSIntegrationService {
 
     const client = new JejuKMSClient({
       endpoint: kmsEndpoint,
-      apiKey: process.env.JEJU_KMS_API_KEY,
+      // API key is a secret - keep as env var
+      apiKey:
+        typeof process !== 'undefined'
+          ? process.env.JEJU_KMS_API_KEY
+          : undefined,
       preferredProvider: this.config.preferredProvider,
     })
 

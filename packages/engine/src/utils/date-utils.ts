@@ -72,7 +72,7 @@ export function getGameDayNumber(
   startedAt: Date | string,
   timestamp: Date | string,
 ): number {
-  // Handle ISO string dates from EQLite
+  // Handle ISO string dates from SQLit
   const start = typeof startedAt === 'string' ? new Date(startedAt) : startedAt
   const ts = typeof timestamp === 'string' ? new Date(timestamp) : timestamp
   return Math.floor((ts.getTime() - start.getTime()) / MS_PER_DAY)

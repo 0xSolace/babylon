@@ -142,7 +142,7 @@ class GameService {
 
     const now = new Date()
     const dayMs = 24 * 60 * 60 * 1000
-    // Handle both Date objects and ISO string dates from EQLite
+    // Handle both Date objects and ISO string dates from SQLit
     const startedAt =
       typeof game.startedAt === 'string'
         ? new Date(game.startedAt)

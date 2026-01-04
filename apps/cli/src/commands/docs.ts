@@ -4,7 +4,7 @@
  * Docs Command - Generate and manage Babylon documentation
  *
  * Subcommands:
- *   vendors    Pull vendor documentation (bun, eqlite, elysia)
+ *   vendors    Pull vendor documentation (bun, sqlit, elysia)
  *   api        Generate API documentation from routes
  *   all        Generate all documentation
  *
@@ -22,7 +22,7 @@ import { logger } from '../lib/logger.js'
 
 const BABYLON_ROOT = process.cwd()
 
-type Vendor = 'bun' | 'eqlite' | 'elysia'
+type Vendor = 'bun' | 'sqlit' | 'elysia'
 
 function printHelp(): void {
   console.log(`
@@ -32,12 +32,12 @@ USAGE:
   babylon docs <subcommand> [options]
 
 SUBCOMMANDS:
-  vendors     Pull vendor documentation (Bun, EQLite, Elysia)
+  vendors     Pull vendor documentation (Bun, SQLit, Elysia)
   api         Generate API documentation from routes
   all         Generate all documentation
 
 OPTIONS:
-  --vendor <name>   For 'vendors': pull specific vendor only (bun, eqlite, elysia)
+  --vendor <name>   For 'vendors': pull specific vendor only (bun, sqlit, elysia)
   --output <dir>    Output directory for vendor docs (default: docs/vendors)
   --list            List available vendors
 

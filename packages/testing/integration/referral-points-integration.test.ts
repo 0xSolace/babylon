@@ -29,7 +29,7 @@ import {
   type User,
   users,
 } from '@babylon/db'
-import { POINTS } from '@babylon/shared'
+import { BBLN_REWARDS } from '@babylon/shared'
 import { generateSnowflakeId } from '@jejunetwork/shared'
 
 // Test user IDs that we'll clean up
@@ -136,8 +136,8 @@ describe('Referral Points Integration Tests', () => {
       const result = await awardReferralSignup(referrerId, referredUserId)
 
       expect(result.success).toBe(true)
-      expect(result.pointsAwarded).toBe(POINTS.REFERRAL_SIGNUP)
-      expect(result.newTotal).toBe(pointsBefore + POINTS.REFERRAL_SIGNUP)
+      expect(result.pointsAwarded).toBe(BBLN_REWARDS.REFERRAL_SIGNUP)
+      expect(result.newTotal).toBe(pointsBefore + BBLN_REWARDS.REFERRAL_SIGNUP)
 
       // Verify invite points were incremented
       const [referrerAfter] = await db
@@ -149,7 +149,7 @@ describe('Referral Points Integration Tests', () => {
         .where(eq(users.id, referrerId))
 
       expect(referrerAfter?.invitePoints).toBe(
-        invitePointsBefore + POINTS.REFERRAL_SIGNUP,
+        invitePointsBefore + BBLN_REWARDS.REFERRAL_SIGNUP,
       )
     })
 
@@ -174,14 +174,14 @@ describe('Referral Points Integration Tests', () => {
       // Award referral bonus to new user
       const result = await awardPoints(
         referredUserId,
-        POINTS.REFERRAL_BONUS,
+        BBLN_REWARDS.REFERRAL_BONUS,
         'referral_bonus',
         { referrerId },
       )
 
       expect(result.success).toBe(true)
-      expect(result.pointsAwarded).toBe(POINTS.REFERRAL_BONUS)
-      expect(result.newTotal).toBe(pointsBefore + POINTS.REFERRAL_BONUS)
+      expect(result.pointsAwarded).toBe(BBLN_REWARDS.REFERRAL_BONUS)
+      expect(result.newTotal).toBe(pointsBefore + BBLN_REWARDS.REFERRAL_BONUS)
     })
   })
 
@@ -248,7 +248,7 @@ describe('Referral Points Integration Tests', () => {
       const result = await awardReferralSignup(referrerId, referredUserId)
 
       expect(result.success).toBe(true)
-      expect(result.pointsAwarded).toBe(POINTS.REFERRAL_SIGNUP)
+      expect(result.pointsAwarded).toBe(BBLN_REWARDS.REFERRAL_SIGNUP)
     })
 
     it('should allow referral with different IPs regardless of timing', async () => {
@@ -272,7 +272,7 @@ describe('Referral Points Integration Tests', () => {
       const result = await awardReferralSignup(referrerId, referredUserId)
 
       expect(result.success).toBe(true)
-      expect(result.pointsAwarded).toBe(POINTS.REFERRAL_SIGNUP)
+      expect(result.pointsAwarded).toBe(BBLN_REWARDS.REFERRAL_SIGNUP)
     })
   })
 
@@ -379,7 +379,7 @@ describe('Referral Points Integration Tests', () => {
 
       expect(result).not.toBeNull()
       expect(result?.success).toBe(true)
-      expect(result?.pointsAwarded).toBe(POINTS.REFERRAL_QUALIFIED)
+      expect(result?.pointsAwarded).toBe(BBLN_REWARDS.REFERRAL_QUALIFIED)
 
       // Verify referral was marked as qualified
       const [referral] = await db
@@ -398,7 +398,7 @@ describe('Referral Points Integration Tests', () => {
         .where(eq(users.id, referrerId))
 
       expect(referrerAfter?.reputationPoints).toBe(
-        pointsBefore + POINTS.REFERRAL_QUALIFIED,
+        pointsBefore + BBLN_REWARDS.REFERRAL_QUALIFIED,
       )
     })
 
@@ -459,7 +459,7 @@ describe('Referral Points Integration Tests', () => {
       expect(transactions.length).toBeGreaterThan(0)
 
       const transaction = transactions[0]
-      expect(transaction?.amount).toBe(POINTS.REFERRAL_SIGNUP)
+      expect(transaction?.amount).toBe(BBLN_REWARDS.REFERRAL_SIGNUP)
       expect(transaction?.reason).toBe('referral_signup')
     })
 

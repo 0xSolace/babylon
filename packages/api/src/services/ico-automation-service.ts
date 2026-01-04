@@ -13,6 +13,12 @@
 
 import { logger } from '@babylon/shared'
 import {
+  getChainId,
+  getContractAddress,
+  getRpcUrl,
+  getWethAddress,
+} from '@babylon/shared/config'
+import {
   type Address,
   type Chain,
   createPublicClient,
@@ -320,41 +326,80 @@ export class ICOAutomationService {
   private initialized = false
 
   constructor(config: Partial<ICOConfig> = {}) {
-    const chainId = config.chainId ?? parseInt(process.env.CHAIN_ID ?? '1', 10)
+    const getAddress = (
+      category: string,
+      name: string,
+      envVar: string,
+      defaultValue: Address,
+    ): Address => {
+      try {
+        return (getContractAddress(category, name) as Address) || defaultValue
+      } catch {
+        return (
+          ((typeof process !== 'undefined' ? process.env[envVar] : undefined) as
+            | Address
+            | undefined) ?? defaultValue
+        )
+      }
+    }
+
+    const chainId = config.chainId ?? getChainId() ?? 1
     this.chain = chainId === 1 ? mainnet : sepolia
 
     this.config = {
       chainId,
-      rpcUrl:
-        config.rpcUrl ?? process.env.ETH_RPC_URL ?? 'http://localhost:6545',
+      rpcUrl: config.rpcUrl ?? getRpcUrl() ?? 'http://localhost:6545',
+      // Private key is a secret - keep as env var
       deployerPrivateKey:
         config.deployerPrivateKey ??
-        (process.env.DEPLOYER_PRIVATE_KEY as `0x${string}`) ??
+        ((typeof process !== 'undefined'
+          ? process.env.DEPLOYER_PRIVATE_KEY
+          : undefined) as `0x${string}` | undefined) ??
         '0x0',
       treasuryAddress:
         config.treasuryAddress ??
-        (process.env.TREASURY_ADDRESS as Address) ??
-        '0x0000000000000000000000000000000000000000',
+        getAddress(
+          'governance',
+          'treasury',
+          'TREASURY_ADDRESS',
+          '0x0000000000000000000000000000000000000000',
+        ),
       tokenAddress:
         config.tokenAddress ??
-        (process.env.BBLN_TOKEN_ADDRESS as Address) ??
-        '0x0000000000000000000000000000000000000000',
+        getAddress(
+          'tokens',
+          'bbln',
+          'BBLN_TOKEN_ADDRESS',
+          '0x0000000000000000000000000000000000000000',
+        ),
       presaleAddress:
         config.presaleAddress ??
-        (process.env.BBLN_PRESALE_ADDRESS as Address) ??
-        '0x0000000000000000000000000000000000000000',
+        getAddress(
+          'tokens',
+          'presale',
+          'BBLN_PRESALE_ADDRESS',
+          '0x0000000000000000000000000000000000000000',
+        ),
       lpLockerAddress:
         config.lpLockerAddress ??
-        (process.env.LP_LOCKER_ADDRESS as Address) ??
-        '0x0000000000000000000000000000000000000000',
+        getAddress(
+          'liquidity',
+          'locker',
+          'LP_LOCKER_ADDRESS',
+          '0x0000000000000000000000000000000000000000',
+        ),
       xlpV2FactoryAddress:
         config.xlpV2FactoryAddress ??
-        (process.env.XLP_V2_FACTORY_ADDRESS as Address) ??
-        '0x0000000000000000000000000000000000000000',
+        getAddress(
+          'liquidity',
+          'factory',
+          'XLP_V2_FACTORY_ADDRESS',
+          '0x0000000000000000000000000000000000000000',
+        ),
       wethAddress:
         config.wethAddress ??
-        (process.env.WETH_ADDRESS as Address) ??
-        '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2', // Mainnet WETH
+        (getWethAddress() as Address | undefined) ??
+        '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2', // Mainnet WETH fallback
       presale: {
         ...DEFAULT_PRESALE_CONFIG,
         ...config.presale,

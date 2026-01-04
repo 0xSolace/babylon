@@ -29,7 +29,7 @@ export async function findUserByIdentifier(
   identifier: string,
   _select?: Record<string, boolean>,
 ): Promise<User | null> {
-  // `_select` kept for backward compatibility. EQLite repositories currently
+  // `_select` kept for backward compatibility. SQLit repositories currently
   // return full rows.
   void _select
   return (await db.user.findFirst({

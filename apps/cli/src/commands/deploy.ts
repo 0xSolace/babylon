@@ -39,6 +39,8 @@ import {
   toAddressOrDefault,
   toHexString,
 } from '@babylon/shared'
+import { getRpcUrl, getStorageServiceUrl } from '@babylon/shared/config'
+import { getIpfsApiUrl } from '@jejunetwork/config'
 import { $ } from 'bun'
 import {
   type Address,
@@ -84,15 +86,48 @@ const NETWORKS = {
     name: 'Hardhat Local (for unit/local only)',
   },
   testnet: {
-    rpcUrl: process.env.JEJU_TESTNET_RPC_URL || process.env.JEJU_RPC_URL || '',
+    rpcUrl: (() => {
+      // Env override takes precedence
+      if (typeof process !== 'undefined' && process.env.JEJU_TESTNET_RPC_URL) {
+        return process.env.JEJU_TESTNET_RPC_URL
+      }
+      if (typeof process !== 'undefined' && process.env.JEJU_RPC_URL) {
+        return process.env.JEJU_RPC_URL
+      }
+      // Use config
+      try {
+        return getRpcUrl('testnet') || ''
+      } catch {
+        return ''
+      }
+    })(),
     chainId: 420690,
-    privateKey: process.env.DEPLOYER_PRIVATE_KEY || '',
+    // Private key is a secret - keep as env var
+    privateKey:
+      (typeof process !== 'undefined'
+        ? process.env.DEPLOYER_PRIVATE_KEY
+        : undefined) || '',
     name: 'Jeju Testnet',
   },
   mainnet: {
-    rpcUrl: process.env.JEJU_MAINNET_RPC_URL || '',
+    rpcUrl: (() => {
+      // Env override takes precedence
+      if (typeof process !== 'undefined' && process.env.JEJU_MAINNET_RPC_URL) {
+        return process.env.JEJU_MAINNET_RPC_URL
+      }
+      // Use config
+      try {
+        return getRpcUrl('mainnet') || ''
+      } catch {
+        return ''
+      }
+    })(),
     chainId: 420691,
-    privateKey: process.env.DEPLOYER_PRIVATE_KEY || '',
+    // Private key is a secret - keep as env var
+    privateKey:
+      (typeof process !== 'undefined'
+        ? process.env.DEPLOYER_PRIVATE_KEY
+        : undefined) || '',
     name: 'Jeju Mainnet',
   },
 } as const
@@ -121,11 +156,24 @@ interface FrontendDeployConfig {
 }
 
 // Port configuration from centralized env vars
-const IPFS_PORT = process.env.IPFS_API_PORT ?? '5001'
-const API_PORT = process.env.API_PORT ?? '5007'
+const IPFS_PORT =
+  (typeof process !== 'undefined' ? process.env.IPFS_API_PORT : undefined) ??
+  '5001'
+const API_PORT =
+  (typeof process !== 'undefined' ? process.env.API_PORT : undefined) ?? '5007'
 const DEFAULT_IPFS_URL = `http://localhost:${IPFS_PORT}`
-const STORAGE_URL =
-  process.env.JEJU_STORAGE_SERVICE_URL || 'http://localhost:5004'
+const STORAGE_URL = (() => {
+  // Env override takes precedence
+  if (typeof process !== 'undefined' && process.env.JEJU_STORAGE_SERVICE_URL) {
+    return process.env.JEJU_STORAGE_SERVICE_URL
+  }
+  // Use config
+  try {
+    return getStorageServiceUrl() || 'http://localhost:5004'
+  } catch {
+    return 'http://localhost:5004'
+  }
+})()
 
 const BUILD_CONFIGS: Record<Environment, BuildConfig> = {
   local: {
@@ -165,9 +213,30 @@ const FRONTEND_DEPLOY_CONFIGS: Record<
     environment: 'testnet',
     domain: 'testnet.babylon.market',
     s3Bucket: 'babylon-testnet-frontend',
-    cloudfrontDistributionId: process.env.CF_DISTRIBUTION_ID_TESTNET ?? '',
-    ipfsApiUrl: process.env.IPFS_API_URL ?? DEFAULT_IPFS_URL,
-    rpcUrl: process.env.RPC_URL ?? 'https://sepolia.base.org',
+    cloudfrontDistributionId:
+      (typeof process !== 'undefined'
+        ? process.env.CF_DISTRIBUTION_ID_TESTNET
+        : undefined) ?? '',
+    ipfsApiUrl: (() => {
+      if (typeof process !== 'undefined' && process.env.IPFS_API_URL) {
+        return process.env.IPFS_API_URL
+      }
+      try {
+        return getIpfsApiUrl('testnet') || DEFAULT_IPFS_URL
+      } catch {
+        return DEFAULT_IPFS_URL
+      }
+    })(),
+    rpcUrl: (() => {
+      if (typeof process !== 'undefined' && process.env.RPC_URL) {
+        return process.env.RPC_URL
+      }
+      try {
+        return getRpcUrl('testnet') || 'https://sepolia.base.org'
+      } catch {
+        return 'https://sepolia.base.org'
+      }
+    })(),
     jnsRegistryAddress: getAddressEnv('JNS_REGISTRY_ADDRESS'),
     jnsResolverAddress: getAddressEnv('JNS_RESOLVER_ADDRESS'),
   },
@@ -175,9 +244,30 @@ const FRONTEND_DEPLOY_CONFIGS: Record<
     environment: 'mainnet',
     domain: 'babylon.market',
     s3Bucket: 'babylon-mainnet-frontend',
-    cloudfrontDistributionId: process.env.CF_DISTRIBUTION_ID_MAINNET ?? '',
-    ipfsApiUrl: process.env.IPFS_API_URL ?? DEFAULT_IPFS_URL,
-    rpcUrl: process.env.RPC_URL ?? 'https://mainnet.base.org',
+    cloudfrontDistributionId:
+      (typeof process !== 'undefined'
+        ? process.env.CF_DISTRIBUTION_ID_MAINNET
+        : undefined) ?? '',
+    ipfsApiUrl: (() => {
+      if (typeof process !== 'undefined' && process.env.IPFS_API_URL) {
+        return process.env.IPFS_API_URL
+      }
+      try {
+        return getIpfsApiUrl('mainnet') || DEFAULT_IPFS_URL
+      } catch {
+        return DEFAULT_IPFS_URL
+      }
+    })(),
+    rpcUrl: (() => {
+      if (typeof process !== 'undefined' && process.env.RPC_URL) {
+        return process.env.RPC_URL
+      }
+      try {
+        return getRpcUrl('mainnet') || 'https://mainnet.base.org'
+      } catch {
+        return 'https://mainnet.base.org'
+      }
+    })(),
     jnsRegistryAddress: getAddressEnv('JNS_REGISTRY_ADDRESS'),
     jnsResolverAddress: getAddressEnv('JNS_RESOLVER_ADDRESS'),
   },
@@ -1257,8 +1347,17 @@ async function runTestnetSetup(): Promise<void> {
   }
 
   const rpcUrl =
-    process.env.JEJU_TESTNET_RPC_URL ||
-    process.env.JEJU_RPC_URL ||
+    (typeof process !== 'undefined'
+      ? process.env.JEJU_TESTNET_RPC_URL
+      : undefined) ||
+    (typeof process !== 'undefined' ? process.env.JEJU_RPC_URL : undefined) ||
+    (() => {
+      try {
+        return getRpcUrl('testnet') || ''
+      } catch {
+        return ''
+      }
+    })() ||
     'http://localhost:6546'
 
   logger.step('Initializing game state...')
@@ -1452,15 +1551,6 @@ export async function runDeployCommand(args: string[]): Promise<void> {
         const { bootstrapTokenEcosystem, isTokenEcosystemReady } = await import(
           '@babylon/api'
         )
-
-        const networkMap: Record<string, 'localnet' | 'testnet' | 'mainnet'> = {
-          local: 'localnet',
-          localnet: 'localnet',
-          testnet: 'testnet',
-          mainnet: 'mainnet',
-        }
-
-        const _network = networkMap[tokenEnvArg] ?? 'localnet'
 
         if (isTokenEcosystemReady() && !force) {
           logger.success('Token ecosystem already deployed')

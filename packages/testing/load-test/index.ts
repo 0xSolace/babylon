@@ -207,6 +207,9 @@ export class LoadTestSimulator {
         }
       }
       const stats = endpointStats[r.endpoint]
+      if (!stats) {
+        throw new Error(`Expected stats for endpoint ${r.endpoint}`)
+      }
       stats.count++
       const ok = r.statusCode >= 200 && r.statusCode < 300
       if (ok) {

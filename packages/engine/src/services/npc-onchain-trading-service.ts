@@ -20,6 +20,11 @@ import {
 } from '@babylon/agents'
 import { db, npcTrades } from '@babylon/db'
 import { logger } from '@babylon/shared'
+import {
+  getChainId,
+  getContractAddress,
+  getRpcUrl,
+} from '@babylon/shared/config'
 import { generateSnowflakeId } from '@jejunetwork/shared'
 import {
   type Address,
@@ -47,10 +52,26 @@ interface OnChainConfig {
 
 function getOnChainConfig(): OnChainConfig {
   return {
-    rpcUrl: process.env.JEJU_RPC_URL ?? 'http://localhost:6546',
-    diamondAddress: (process.env.DIAMOND_ADDRESS ?? '0x0') as Address,
-    tokenAddress: (process.env.BBLN_TOKEN_ADDRESS ?? '0x0') as Address,
-    chainId: parseInt(process.env.JEJU_CHAIN_ID ?? '31337', 10),
+    rpcUrl: getRpcUrl() ?? 'http://localhost:6546',
+    diamondAddress: (() => {
+      try {
+        return getContractAddress('babylon', 'diamond') as Address
+      } catch {
+        return ((typeof process !== 'undefined'
+          ? process.env.DIAMOND_ADDRESS
+          : undefined) ?? '0x0') as Address
+      }
+    })(),
+    tokenAddress: (() => {
+      try {
+        return getContractAddress('tokens', 'bbln') as Address
+      } catch {
+        return ((typeof process !== 'undefined'
+          ? process.env.BBLN_TOKEN_ADDRESS
+          : undefined) ?? '0x0') as Address
+      }
+    })(),
+    chainId: getChainId() ?? 31337,
   }
 }
 

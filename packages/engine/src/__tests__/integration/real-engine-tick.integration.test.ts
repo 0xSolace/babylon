@@ -18,7 +18,7 @@
  * - All time modes: realtime, simulated, fed-in time
  *
  * **Requirements:**
- * - EQLite database must be running (EQLite via Jeju)
+ * - SQLit database must be running (SQLit via Jeju)
  * - LLM API key must be set (GROQ_API_KEY, ANTHROPIC_API_KEY, or OPENAI_API_KEY)
  * - Run with: RUN_REAL_ENGINE_TESTS=true bun test real-engine-tick
  *
@@ -105,7 +105,7 @@ describe.skipIf(!hasJejuCompute)('Engine Integration Tests (No Mocks)', () => {
     console.log('This test uses LLM calls - no mocks')
     console.log('')
 
-    // Initialize EQLite database
+    // Initialize SQLit database
     await initializeDB()
 
     // Detect which LLM provider is available
@@ -129,7 +129,7 @@ describe.skipIf(!hasJejuCompute)('Engine Integration Tests (No Mocks)', () => {
       trendingCalculated: false,
     }
 
-    // Verify database tables exist before running tests using EQLite
+    // Verify database tables exist before running tests using SQLit
     const tableCheck = await db.query<{ count: number }>(
       'SELECT COUNT(*) as count FROM questions LIMIT 1',
     )
@@ -140,7 +140,7 @@ describe.skipIf(!hasJejuCompute)('Engine Integration Tests (No Mocks)', () => {
       )
     }
 
-    // Get baseline counts using EQLite raw query
+    // Get baseline counts using SQLit raw query
     const questionCountResult = await db.query<{ count: number }>(
       `SELECT COUNT(*) as count FROM questions WHERE status = 'active'`,
     )
@@ -273,7 +273,7 @@ describe.skipIf(!hasJejuCompute)('Engine Integration Tests (No Mocks)', () => {
   test('should have generated news articles (not mocked)', async () => {
     expect(results.tickExecuted).toBe(true)
 
-    // Get articles created after test start using EQLite repository
+    // Get articles created after test start using SQLit repository
     const newArticles = await db.post.findMany({
       where: {
         type: 'article',
@@ -349,7 +349,7 @@ describe.skipIf(!hasJejuCompute)('Engine Integration Tests (No Mocks)', () => {
   test('should have created prediction market questions (not mocked)', async () => {
     expect(results.tickExecuted).toBe(true)
 
-    // Get questions created after test start using EQLite repository
+    // Get questions created after test start using SQLit repository
     const newQuestions = await db.question.findMany({
       where: {
         createdAt: { gte: testStartTime },
@@ -400,7 +400,7 @@ describe.skipIf(!hasJejuCompute)('Engine Integration Tests (No Mocks)', () => {
   test('should have generated world events (not mocked)', async () => {
     expect(results.tickExecuted).toBe(true)
 
-    // Get events created after test start using EQLite repository
+    // Get events created after test start using SQLit repository
     const newEvents = await db.worldEvent.findMany({
       where: {
         timestamp: { gte: testStartTime },
@@ -593,7 +593,7 @@ describe.skipIf(!hasJejuCompute)('Engine Integration Tests (No Mocks)', () => {
 
     console.log('\n🎓 Validating outputs for training readiness...')
 
-    // Use EQLite raw query for groupBy aggregation
+    // Use SQLit raw query for groupBy aggregation
     const postsByType = await db.query<{ type: string; count: number }>(
       `SELECT type, COUNT(*) as count FROM posts WHERE timestamp >= $1 GROUP BY type`,
       [testStartTime.toISOString()],
@@ -604,7 +604,7 @@ describe.skipIf(!hasJejuCompute)('Engine Integration Tests (No Mocks)', () => {
       console.log(`   - ${group.type}: ${group.count}`)
     }
 
-    // Use raw EQLite for complex queries
+    // Use raw SQLit for complex queries
     const eventsWithActorsResult = await db.query<{ count: number }>(
       `SELECT COUNT(*) as count FROM world_events WHERE timestamp >= $1 AND actors IS NOT NULL`,
       [testStartTime.toISOString()],

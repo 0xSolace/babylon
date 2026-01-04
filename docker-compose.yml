@@ -1,14 +1,14 @@
 # Babylon Local Development Stack
 #
 # This docker-compose file is for local development auxiliary services only.
-# The primary database is EQLite which runs via Jeju.
+# The primary database is SQLit which runs via Jeju.
 #
 # To start the full Babylon development environment:
 #   1. Start Jeju: cd /path/to/jeju && bun run dev
 #   2. Start Redis: docker-compose up redis -d
 #   3. Start Babylon: bun run dev
 #
-# PostgreSQL is no longer used - all data is stored in EQLite.
+# PostgreSQL is no longer used - all data is stored in SQLit.
 
 services:
   redis:

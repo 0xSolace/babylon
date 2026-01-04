@@ -54,7 +54,6 @@ import {
   users,
 } from '@babylon/db'
 import { logger } from '@babylon/shared'
-import type { NextRequest } from 'next/server'
 
 type PeriodType = 'day' | 'week' | 'month'
 
@@ -100,7 +99,7 @@ function formatDateKey(date: Date, period: PeriodType): string {
 
 const VALID_PERIODS: PeriodType[] = ['day', 'week', 'month']
 
-export const GET = withErrorHandling(async (request: NextRequest) => {
+export const GET = withErrorHandling(async (request: Request) => {
   await requireAdmin(request)
 
   const { searchParams } = new URL(request.url)
@@ -129,8 +128,8 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     db
       .select({
         date: (period === 'month'
-          ? sql<string>`TO_CHAR(DATE_TRUNC('month', ${users.createdAt}), 'YYYY-MM')`
-          : sql<string>`DATE(${users.createdAt})`
+          ? sql`TO_CHAR(DATE_TRUNC('month', ${users.createdAt}), 'YYYY-MM')`
+          : sql`DATE(${users.createdAt})`
         ).as('date'),
         count: count(),
       })
@@ -151,8 +150,8 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     db
       .select({
         date: (period === 'month'
-          ? sql<string>`TO_CHAR(DATE_TRUNC('month', ${posts.createdAt}), 'YYYY-MM')`
-          : sql<string>`DATE(${posts.createdAt})`
+          ? sql`TO_CHAR(DATE_TRUNC('month', ${posts.createdAt}), 'YYYY-MM')`
+          : sql`DATE(${posts.createdAt})`
         ).as('date'),
         count: count(),
       })
@@ -173,8 +172,8 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     db
       .select({
         date: (period === 'month'
-          ? sql<string>`TO_CHAR(DATE_TRUNC('month', ${comments.createdAt}), 'YYYY-MM')`
-          : sql<string>`DATE(${comments.createdAt})`
+          ? sql`TO_CHAR(DATE_TRUNC('month', ${comments.createdAt}), 'YYYY-MM')`
+          : sql`DATE(${comments.createdAt})`
         ).as('date'),
         count: count(),
       })
@@ -195,8 +194,8 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     db
       .select({
         date: (period === 'month'
-          ? sql<string>`TO_CHAR(DATE_TRUNC('month', ${reactions.createdAt}), 'YYYY-MM')`
-          : sql<string>`DATE(${reactions.createdAt})`
+          ? sql`TO_CHAR(DATE_TRUNC('month', ${reactions.createdAt}), 'YYYY-MM')`
+          : sql`DATE(${reactions.createdAt})`
         ).as('date'),
         count: count(),
       })
@@ -219,8 +218,8 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     db
       .select({
         date: (period === 'month'
-          ? sql<string>`TO_CHAR(DATE_TRUNC('month', ${follows.createdAt}), 'YYYY-MM')`
-          : sql<string>`DATE(${follows.createdAt})`
+          ? sql`TO_CHAR(DATE_TRUNC('month', ${follows.createdAt}), 'YYYY-MM')`
+          : sql`DATE(${follows.createdAt})`
         ).as('date'),
         count: count(),
       })

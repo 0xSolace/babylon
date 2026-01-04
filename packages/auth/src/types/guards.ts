@@ -4,13 +4,7 @@
  * Auth-specific type guards.
  */
 
-import {
-  isValidAddress,
-  isValidHex,
-  isAddress as sharedIsAddress,
-  isHex as sharedIsHex,
-  toHexString,
-} from '@babylon/shared'
+import { isValidAddress, isValidHex, toHexString } from '@babylon/shared'
 import { hasStringProperty, isObject } from '@jejunetwork/shared'
 import type { Address, Hex } from 'viem'
 import type {
@@ -104,14 +98,6 @@ export function makeDID(
 // ============================================================================
 
 /**
- * Check if a string is a valid hex string.
- * @deprecated Use isHex from @babylon/shared directly
- */
-export function isHex(value: string): value is Hex {
-  return sharedIsHex(value)
-}
-
-/**
  * Convert a string to Hex type with validation.
  */
 export function toHexStrict(value: string): Hex {
@@ -131,14 +117,6 @@ export function bufferToHex(buffer: Uint8Array | Buffer): Hex {
 // ============================================================================
 // Address Utilities
 // ============================================================================
-
-/**
- * Check if a string is a valid Ethereum address.
- * @deprecated Use isAddress from @babylon/shared directly
- */
-export function isAddress(value: string): value is Address {
-  return sharedIsAddress(value)
-}
 
 /**
  * Convert a string to Address type with validation.

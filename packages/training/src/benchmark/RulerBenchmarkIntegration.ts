@@ -78,8 +78,8 @@ export function extractMarketOutcomesFromBenchmark(
 export function getHiddenFactsForTick(
   snapshot: BenchmarkGameSnapshot,
   tickNumber: number,
-): GroundTruth['hiddenFacts'] {
-  return (snapshot.groundTruth.hiddenFacts || []).filter(
+): NonNullable<GroundTruth['hiddenFacts']> {
+  return (snapshot.groundTruth.hiddenFacts ?? []).filter(
     (f) => f.tick === tickNumber,
   )
 }
@@ -121,7 +121,7 @@ export function wasDecisionOptimal(
   actionType: string,
   target: string,
 ): boolean {
-  const optimalActions = snapshot.groundTruth.optimalActions
+  const optimalActions = snapshot.groundTruth.optimalActions ?? []
 
   // Find optimal actions near this tick
   const window = 2 // Allow 2 tick window
@@ -217,13 +217,16 @@ export function scoreActionAgainstGroundTruth(
 
   // Check if action was reasonable given hidden facts
   const hiddenFacts = getHiddenFactsForTick(snapshot, tickNumber)
-  const relevantFacts = hiddenFacts.filter(
-    (f) =>
-      f.value &&
-      typeof f.value === 'object' &&
-      'marketId' in f.value &&
-      (f.value as { marketId: string }).marketId === target,
-  )
+  const relevantFacts = hiddenFacts.filter((f) => {
+    const value = f.value
+    return (
+      value !== null &&
+      value !== undefined &&
+      typeof value === 'object' &&
+      'marketId' in value &&
+      (value as { marketId: string }).marketId === target
+    )
+  })
 
   if (relevantFacts.length > 0) {
     // Partial credit for actions that align with hidden facts

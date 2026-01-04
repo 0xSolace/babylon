@@ -219,15 +219,15 @@ export interface GroundTruth {
     sourceFactId: string
   }>
 
+  /** Computed facts from initial state */
+  trueFacts: Record<string, JsonValue>
+
   // =========================================================================
-  // LEGACY/SYNTHETIC DATA - For backward compatibility only
-  // These fields contain placeholder values, NOT real ground truth
+  // SYNTHETIC/PLACEHOLDER DATA - Not used for real training, kept for compatibility
   // =========================================================================
 
-  /**
-   * @deprecated SYNTHETIC placeholder - simple heuristic, not real optimal actions
-   */
-  optimalActions: Array<{
+  /** Optimal actions (synthetic placeholder data) */
+  optimalActions?: Array<{
     tick: number
     type: string
     target: string
@@ -235,38 +235,28 @@ export interface GroundTruth {
     reason: string
   }>
 
-  /**
-   * @deprecated SYNTHETIC placeholder - not real social opportunities
-   */
-  socialOpportunities: Array<{
+  /** Social opportunities (synthetic placeholder data) */
+  socialOpportunities?: Array<{
     tick: number
     type: string
     value: number
     description: string
   }>
 
-  /**
-   * @deprecated SYNTHETIC - empty array, never meaningfully implemented
-   */
-  hiddenFacts: Array<{
+  /** Hidden facts (synthetic placeholder - empty array) */
+  hiddenFacts?: Array<{
     tick: number
     fact: string
-    category: 'market' | 'social' | 'event' | 'insider'
-    value: JsonValue
+    category: string
+    value?: { marketId: string } | number | null
   }>
 
-  /**
-   * @deprecated SYNTHETIC - empty array, never meaningfully implemented
-   */
-  hiddenEvents: Array<{
+  /** Hidden events (synthetic placeholder - empty array) */
+  hiddenEvents?: Array<{
     tick: number
     type: string
     description: string
-    impact: Record<string, JsonValue>
   }>
-
-  /** Computed facts from initial state (not synthetic, but not all fields are meaningful) */
-  trueFacts: Record<string, JsonValue>
 }
 
 export interface BenchmarkGameSnapshot {

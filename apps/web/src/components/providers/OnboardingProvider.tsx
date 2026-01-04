@@ -6,7 +6,7 @@ import {
   POINTS,
   WALLET_ERROR_MESSAGES,
 } from '@babylon/shared'
-import { useJejuAuth } from '@jejunetwork/auth'
+import { useJejuAuth } from '@jejunetwork/auth/react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   type ImportedProfileData,

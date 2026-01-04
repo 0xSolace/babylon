@@ -22,6 +22,11 @@
  * ```
  */
 
+import {
+  getJejuComputeEndpoint,
+  getNetworkName,
+  getRpcUrl,
+} from '@babylon/shared/config'
 import type { IAgentRuntime } from '@elizaos/core'
 import {
   getInferenceOptions,
@@ -75,57 +80,42 @@ interface JejuComputeConfig {
   preferredPaymentToken?: 'JEJU' | 'ETH' | 'USDC'
 }
 
-// Port configuration via env vars
-const L2_RPC_PORT = process.env.L2_RPC_PORT ?? '6546'
-const COMPUTE_API_PORT = process.env.JEJU_COMPUTE_PORT ?? '5010'
-
 /**
  * Get Jeju compute configuration from environment
  */
 function getJejuConfig(): JejuComputeConfig | null {
-  const jejuNetwork =
-    process.env.JEJU_NETWORK || process.env.PUBLIC_JEJU_NETWORK
+  const jejuNetwork = getNetworkName()
 
   if (!jejuNetwork) {
     return null
   }
 
-  // Get RPC URL based on network
-  const rpcUrls: Record<string, string> = {
-    localnet: `http://127.0.0.1:${L2_RPC_PORT}`,
-    testnet: 'https://testnet-rpc.jeju.network',
-    mainnet: 'https://rpc.jeju.network',
+  // Get RPC URL from config
+  const rpcUrl = getRpcUrl(jejuNetwork)
+  if (!rpcUrl) {
+    return null
   }
 
-  // Get compute API URL based on network
-  const computeApiUrls: Record<string, string> = {
-    localnet: `http://127.0.0.1:${COMPUTE_API_PORT}`,
-    testnet: 'https://compute.jeju.network',
-    mainnet: 'https://compute.jeju.network',
-  }
-
-  const rpcUrl =
-    process.env.JEJU_RPC_URL ||
-    rpcUrls[jejuNetwork] ||
-    `http://127.0.0.1:${L2_RPC_PORT}`
+  // Get compute API URL from config
   const computeApiUrl =
-    process.env.JEJU_COMPUTE_API_URL ||
-    computeApiUrls[jejuNetwork] ||
-    `http://127.0.0.1:${COMPUTE_API_PORT}`
+    (typeof process !== 'undefined'
+      ? process.env.JEJU_COMPUTE_API_URL
+      : undefined) || getJejuComputeEndpoint(jejuNetwork)
 
-  const paymentToken = process.env.JEJU_PAYMENT_TOKEN
-  const validPaymentTokens = ['JEJU', 'ETH', 'USDC'] as const
-  type PaymentToken = (typeof validPaymentTokens)[number]
-  const isValidPaymentToken = (t: string | undefined): t is PaymentToken =>
-    validPaymentTokens.includes(t as PaymentToken)
+  if (!computeApiUrl) {
+    return null
+  }
 
   return {
     rpcUrl,
     computeApiUrl,
-    walletAddress: process.env.JEJU_WALLET_ADDRESS,
-    preferredPaymentToken: isValidPaymentToken(paymentToken)
-      ? paymentToken
-      : 'JEJU',
+    walletAddress:
+      typeof process !== 'undefined'
+        ? process.env.JEJU_WALLET_ADDRESS
+        : undefined,
+    preferredPaymentToken: (typeof process !== 'undefined'
+      ? process.env.JEJU_PREFERRED_PAYMENT_TOKEN
+      : undefined) as 'JEJU' | 'ETH' | 'USDC' | undefined,
   }
 }
 

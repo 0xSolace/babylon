@@ -2,7 +2,7 @@
  * Native SQL Helpers
  *
  * Provides SQL condition builders (eq, and, or, etc).
- * These work directly with EQLite.
+ * These work directly with SQLit.
  */
 
 import type { QueryParam } from '@jejunetwork/db'
@@ -90,6 +90,8 @@ export interface SQLExpression<T = unknown> {
   _type: 'sql'
   /** Phantom type for result type inference */
   readonly __columnType?: T
+  /** Alias this expression with AS clause */
+  as(alias: string): SQLExpression<T>
 }
 
 // ============================================================================
@@ -492,6 +494,27 @@ export function notExists(
 // ============================================================================
 
 /**
+ * Create an SQLExpression object with the .as() method
+ */
+function createSQLExpression<T = unknown>(
+  template: string,
+  values: QueryParam[],
+): SQLExpression<T> {
+  const expr: SQLExpression<T> = {
+    template,
+    values,
+    _type: 'sql',
+    as(alias: string): SQLExpression<T> {
+      return createSQLExpression(
+        `(${this.template}) AS "${alias}"`,
+        this.values,
+      )
+    },
+  }
+  return expr
+}
+
+/**
  * Create a raw SQL expression with parameterized values.
  *
  * @example
@@ -522,11 +545,7 @@ export function sql(
     }
   })
 
-  return {
-    template,
-    values: params,
-    _type: 'sql',
-  }
+  return createSQLExpression(template, params)
 }
 
 // ============================================================================
@@ -538,10 +557,10 @@ export function sql(
  */
 export function count(column?: ColumnRef | string): SQLExpression<number> {
   if (!column) {
-    return { template: 'COUNT(*)', values: [], _type: 'sql' }
+    return createSQLExpression<number>('COUNT(*)', [])
   }
   const colName = typeof column === 'string' ? column : formatColumn(column)
-  return { template: `COUNT(${colName})`, values: [], _type: 'sql' }
+  return createSQLExpression<number>(`COUNT(${colName})`, [])
 }
 
 /**
@@ -550,7 +569,7 @@ export function count(column?: ColumnRef | string): SQLExpression<number> {
 export function sum(column: ColumnRef | string): SQLExpression<number> {
   const colName =
     typeof column === 'string' ? `"${column}"` : formatColumn(column)
-  return { template: `SUM(${colName})`, values: [], _type: 'sql' }
+  return createSQLExpression<number>(`SUM(${colName})`, [])
 }
 
 /**
@@ -559,7 +578,7 @@ export function sum(column: ColumnRef | string): SQLExpression<number> {
 export function avg(column: ColumnRef | string): SQLExpression<number> {
   const colName =
     typeof column === 'string' ? `"${column}"` : formatColumn(column)
-  return { template: `AVG(${colName})`, values: [], _type: 'sql' }
+  return createSQLExpression<number>(`AVG(${colName})`, [])
 }
 
 /**
@@ -568,7 +587,7 @@ export function avg(column: ColumnRef | string): SQLExpression<number> {
 export function min<T = unknown>(column: ColumnRef | string): SQLExpression<T> {
   const colName =
     typeof column === 'string' ? `"${column}"` : formatColumn(column)
-  return { template: `MIN(${colName})`, values: [], _type: 'sql' }
+  return createSQLExpression<T>(`MIN(${colName})`, [])
 }
 
 /**
@@ -577,7 +596,7 @@ export function min<T = unknown>(column: ColumnRef | string): SQLExpression<T> {
 export function max<T = unknown>(column: ColumnRef | string): SQLExpression<T> {
   const colName =
     typeof column === 'string' ? `"${column}"` : formatColumn(column)
-  return { template: `MAX(${colName})`, values: [], _type: 'sql' }
+  return createSQLExpression<T>(`MAX(${colName})`, [])
 }
 
 // ============================================================================

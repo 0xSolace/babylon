@@ -43,7 +43,7 @@
     }
   },
   "dependencies": [
-    "eqlite",
+    "sqlit",
     "cache-service",
     "storage",
     "kms",
@@ -78,7 +78,8 @@
     "description": "Decentralized prediction markets and social game with AI agents, governed by AI CEO",
     "url": "https://babylon.game",
     "subdomains": {
-      "api": "Backend API",
+      "babylon": "Main frontend (babylon.testnet.jejunetwork.org)",
+      "babylon-api": "Backend API (babylon-api.testnet.jejunetwork.org)",
       "ws": "WebSocket connections",
       "training": "Training orchestrator",
       "monkeyking": "AI CEO agent"
@@ -156,10 +157,23 @@
     }
   },
   "dws": {
-    "worker": {
+    "backend": {
+      "enabled": true,
       "name": "babylon-api",
       "entrypoint": "apps/api/dws-worker.ts",
+      "outputDir": "dist/worker",
+      "runtime": "workerd",
       "compatibilityDate": "2025-06-01",
+      "handler": "fetch",
+      "memory": 512,
+      "timeout": 60000,
+      "routes": [
+        { "pattern": "/api/*" },
+        { "pattern": "/health" },
+        { "pattern": "/a2a/*" },
+        { "pattern": "/mcp/*" },
+        { "pattern": "/ws/*" }
+      ],
       "tee": {
         "required": false,
         "preferred": true,
@@ -170,38 +184,32 @@
           "BABYLON_CACHE": "babylon-cache-kv",
           "BABYLON_SESSION": "babylon-session-kv"
         },
-        "secrets": ["DATABASE_URL", "PRIVATE_KEY", "OPENAI_API_KEY"]
-      },
-      "routes": [
-        { "pattern": "/api/*", "zone": "babylon-api" },
-        { "pattern": "/health", "zone": "babylon-api" },
-        { "pattern": "/a2a/*", "zone": "babylon-api" },
-        { "pattern": "/mcp/*", "zone": "babylon-api" },
-        { "pattern": "/ws/*", "zone": "babylon-api" }
-      ]
+        "secrets": ["DATABASE_URL", "PRIVATE_KEY", "OPENAI_API_KEY", "ANTHROPIC_API_KEY"]
+      }
     },
     "database": {
-      "type": "eqlite",
+      "type": "sqlit",
       "name": "babylon-db",
       "consistency": "strong",
       "tables": ["users", "agents", "markets", "predictions", "trajectories", "game_state"]
     },
-    "cdn": {
+    "frontend": {
       "enabled": true,
-      "regions": ["global"],
-      "staticDir": "apps/web/dist",
+      "buildDir": "apps/web/dist",
+      "buildCommand": "cd apps/web && bun run build",
+      "spa": true,
       "cacheRules": [
         { "pattern": "/assets/**", "ttl": 31536000, "immutable": true },
         { "pattern": "/*.js", "ttl": 86400 },
         { "pattern": "/*.css", "ttl": 86400 },
-        { "pattern": "/**/*.html", "ttl": 60, "staleWhileRevalidate": 3600 }
+        { "pattern": "/index.html", "ttl": 60, "staleWhileRevalidate": 3600 }
       ]
     },
     "cron": [
       { "name": "game-tick", "schedule": "*/5 * * * *", "endpoint": "/api/cron/game-tick" },
       { "name": "market-resolution", "schedule": "0 * * * *", "endpoint": "/api/cron/resolve-markets" },
       { "name": "agent-tick", "schedule": "*/2 * * * *", "endpoint": "/api/cron/agent-tick" },
-      { "name": "training-check", "schedule": "0 */6 * * *", "endpoint": "/api/cron/training-check" },
+      { "name": "training-check", "schedule": "0 */6 * * * *", "endpoint": "/api/cron/training-check" },
       { "name": "health-check", "schedule": "*/5 * * * *", "endpoint": "/api/cron/health-check" }
     ]
   },
@@ -265,7 +273,7 @@
     "components": [
       {
         "name": "database",
-        "type": "eqlite",
+        "type": "sqlit",
         "priority": 1,
         "backupMethod": "snapshot",
         "targets": ["ipfs", "arweave"]
@@ -294,98 +302,25 @@
     ]
   },
   "decentralization": {
-    "worker": {
-      "name": "babylon-api",
-      "entrypoint": "apps/api/dws-worker.ts",
-      "runtime": "workerd",
-      "memory": 512,
-      "timeout": 60000,
-      "compatibilityDate": "2025-06-01",
-      "bindings": {
-        "BABYLON_CACHE": { "type": "kv", "name": "babylon-cache-kv" },
-        "BABYLON_SESSION": { "type": "kv", "name": "babylon-session-kv" }
-      },
-      "secrets": ["DATABASE_URL", "PRIVATE_KEY", "OPENAI_API_KEY", "INFERENCE_API_KEY"],
-      "routes": [
-        { "pattern": "/api/*" },
-        { "pattern": "/health" },
-        { "pattern": "/a2a/*" },
-        { "pattern": "/mcp/*" },
-        { "pattern": "/ws/*" }
-      ],
-      "tee": {
-        "required": false,
-        "preferred": true,
-        "platforms": ["dstack", "phala"]
-      }
-    },
+    "enabled": true,
     "frontend": {
-      "buildDir": "apps/web/dist",
-      "buildCommand": "cd apps/web && bun run scripts/build.ts",
-      "spa": true,
-      "jnsName": "babylon.jeju",
       "ipfs": true,
       "arweave": true,
-      "cacheRules": [
-        { "pattern": "/assets/**", "ttl": 31536000, "immutable": true },
-        { "pattern": "/*.js", "ttl": 86400 },
-        { "pattern": "/*.css", "ttl": 86400 },
-        { "pattern": "/**/*.html", "ttl": 60, "staleWhileRevalidate": 3600 }
-      ]
+      "jnsName": "babylon.jeju",
+      "buildDir": "apps/web/dist",
+      "spa": true
+    },
+    "backend": {
+      "enabled": true,
+      "runtime": "workerd",
+      "jnsName": "babylon-api.jeju"
     },
     "robustness": {
       "multiOrigin": true,
       "offlineSupport": true,
       "p2pFallback": true,
       "contentAddressed": true
-    },
-    "triggers": [
-      {
-        "name": "game-tick",
-        "type": "cron",
-        "cronExpression": "*/5 * * * *",
-        "endpoint": "/api/cron/game-tick",
-        "description": "Process game tick every 5 minutes",
-        "timeout": 30000,
-        "retries": 2
-      },
-      {
-        "name": "market-resolution",
-        "type": "cron",
-        "cronExpression": "0 * * * *",
-        "endpoint": "/api/cron/resolve-markets",
-        "description": "Check and resolve expired markets hourly",
-        "timeout": 60000,
-        "retries": 3
-      },
-      {
-        "name": "agent-tick",
-        "type": "cron",
-        "cronExpression": "*/2 * * * *",
-        "endpoint": "/api/cron/agent-tick",
-        "description": "Process AI agent actions every 2 minutes",
-        "timeout": 45000,
-        "retries": 2
-      },
-      {
-        "name": "training-check",
-        "type": "cron",
-        "cronExpression": "0 */6 * * *",
-        "endpoint": "/api/cron/training-check",
-        "description": "Check if training should be triggered",
-        "timeout": 60000,
-        "retries": 1
-      },
-      {
-        "name": "health-check",
-        "type": "cron",
-        "cronExpression": "*/5 * * * *",
-        "endpoint": "/api/cron/health-check",
-        "description": "Report health to keepalive registry",
-        "timeout": 30000,
-        "retries": 2
-      }
-    ]
+    }
   },
   "keepalive": {
     "enabled": true,
@@ -424,16 +359,14 @@
     "recoveryTarget": "1h"
   },
   "defaultEnv": {
-    "JEJU_NETWORK": "localnet",
-    "EQLITE_BLOCK_PRODUCER_ENDPOINT": "http://localhost:4661",
-    "EQLITE_DATABASE_ID": "babylon",
+    "JEJU_NETWORK": "testnet",
+    "SQLIT_DATABASE_ID": "babylon",
     "BABYLON_OAUTH3_APP_ID": "babylon",
     "CACHE_NAMESPACE": "babylon",
     "STORAGE_NAMESPACE": "babylon",
     "KMS_NAMESPACE": "babylon",
-    "VITE_DOMAIN": "babylon.game",
-    "VITE_API_BASE_URL": "https://api.babylon.game",
-    "VITE_IPFS_GATEWAY": "https://ipfs.babylon.game",
+    "VITE_DOMAIN": "babylon.testnet.jejunetwork.org",
+    "VITE_API_BASE_URL": "https://babylon-api.testnet.jejunetwork.org",
     "AI_CEO_AGENT_ID": "1",
     "AI_CEO_DECISION_THRESHOLD": "0.7",
     "AI_CEO_MIN_VAULT_BALANCE": "100000000000000000",
@@ -491,6 +424,6 @@
       "description": "Test recovery within 1 hour",
       "scenarios": ["backend-crash", "low-funds", "tee-failure"]
     },
-    "services": ["contracts", "eqlite", "cache-service", "storage", "kms"]
+    "services": ["contracts", "sqlit", "cache-service", "storage", "kms"]
   }
 }

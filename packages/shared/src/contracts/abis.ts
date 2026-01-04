@@ -1,33 +1,14 @@
 /**
  * Contract ABIs for ERC-8004 and Prediction Market interactions
  *
- * Moderation and identity ABIs are re-exported from @jejunetwork/contracts.
  * Babylon-specific ABIs (prediction markets, pricing) remain defined here.
  *
- * For new code, prefer direct imports from @jejunetwork/contracts:
+ * For moderation and identity ABIs, import directly from @jejunetwork/contracts:
  *   import { banManagerAbi, moderationMarketplaceAbi, identityRegistryAbi } from '@jejunetwork/contracts'
  */
 
-// =============================================================================
-// Re-export from @jejunetwork/contracts (canonical source)
-// =============================================================================
-// Alias exports for legacy code expecting SCREAMING_CASE
-export {
-  // PascalCase aliases for backward compatibility
-  BanManagerAbi,
-  BanManagerAbi as BAN_MANAGER_ABI,
-  // Typed ABIs (camelCase) - with full viem type inference
-  banManagerAbi,
-  IdentityRegistryAbi,
-  IdentityRegistryAbi as IDENTITY_REGISTRY_ABI,
-  identityRegistryAbi,
-  ModerationMarketplaceAbi,
-  ModerationMarketplaceAbi as MODERATION_MARKETPLACE_ABI,
-  moderationMarketplaceAbi,
-  ReputationRegistryAbi,
-  ReputationRegistryAbi as REPUTATION_SYSTEM_ABI,
-  reputationRegistryAbi,
-} from '@jejunetwork/contracts'
+// Import directly from @jejunetwork/contracts:
+// import { banManagerAbi, identityRegistryAbi, moderationMarketplaceAbi, reputationRegistryAbi } from '@jejunetwork/contracts'
 
 // =============================================================================
 // Babylon-specific ABIs (not in @jejunetwork/contracts)

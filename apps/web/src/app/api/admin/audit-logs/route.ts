@@ -52,7 +52,6 @@
 import { requireAdmin, successResponse, withErrorHandling } from '@babylon/api'
 import { adminAuditLogs, and, count, db, desc, eq, users } from '@babylon/db'
 import { logger } from '@babylon/shared'
-import type { NextRequest } from 'next/server'
 import { z } from 'zod'
 
 // Valid action and resource types for audit logs
@@ -82,7 +81,7 @@ const AuditLogFiltersSchema = z.object({
   resourceType: z.enum(VALID_RESOURCE_TYPES).optional(),
 })
 
-export const GET = withErrorHandling(async (request: NextRequest) => {
+export const GET = withErrorHandling(async (request: Request) => {
   await requireAdmin(request)
 
   const { searchParams } = new URL(request.url)

@@ -1,27 +1,23 @@
 import { initializeDatabase } from '@babylon/db'
+import {
+  getBabylonHost,
+  getBabylonPort,
+  getDWSEndpoint,
+} from '@babylon/shared/config'
 import { type App, app } from './app'
 import { setupEngineEvents } from './engine-events'
-import { toNetwork } from './utils'
 
 export type { App }
 
-const PORT =
-  Number(process.env.PORT) || Number(process.env.BABYLON_API_PORT) || 5009
-const HOST = process.env.HOST || '0.0.0.0'
+const PORT = getBabylonPort() ?? 5009
+const HOST = getBabylonHost() ?? '0.0.0.0'
 
 async function startServer(): Promise<void> {
   // Ensure DWS endpoint is set for @jejunetwork/db
-  if (!process.env.JEJU_DWS_ENDPOINT) {
-    const network = toNetwork(process.env.JEJU_NETWORK || 'localnet')
-
-    try {
-      const { getDWSUrl } = await import('@jejunetwork/config')
-      process.env.JEJU_DWS_ENDPOINT = getDWSUrl(network)
-    } catch {
-      // Fallback for local development
-      process.env.JEJU_DWS_ENDPOINT = 'http://localhost:4030'
-    }
-    console.log(`DWS endpoint: ${process.env.JEJU_DWS_ENDPOINT}`)
+  const dwsEndpoint = getDWSEndpoint()
+  if (dwsEndpoint && typeof process !== 'undefined') {
+    process.env.JEJU_DWS_ENDPOINT = dwsEndpoint
+    console.log(`DWS endpoint: ${dwsEndpoint}`)
   }
 
   // Initialize database before starting server
@@ -32,7 +28,7 @@ async function startServer(): Promise<void> {
   } catch (error) {
     console.error('❌ Failed to initialize database:', error)
     console.error(
-      'Make sure EQLite and DWS are running and EQLITE_BLOCK_PRODUCER_ENDPOINT is set',
+      'Make sure SQLit and DWS are running and SQLIT_BLOCK_PRODUCER_ENDPOINT is set',
     )
     if (
       String(error).includes('4028') ||

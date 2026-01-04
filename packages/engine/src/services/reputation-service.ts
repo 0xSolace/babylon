@@ -15,7 +15,7 @@ import {
   REPUTATION_SYSTEM_BASE_SEPOLIA,
   readContract,
 } from '@babylon/shared'
-import { type Address, createWalletClient, http, parseEther } from 'viem'
+import { type Address, createWalletClient, http } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
 import { baseSepolia } from 'viem/chains'
 
@@ -188,42 +188,42 @@ export async function updateReputationForResolvedMarket(
     const tokenId = Number(user.nftTokenId)
     const positionSide = Boolean(position.side)
     const isWinner = positionSide === resolution.outcome
-    const sharesAmount = Number(position.shares)
-    const amount = parseEther(Math.abs(sharesAmount).toString())
 
-    let txHash: `0x${string}`
+    // NOTE: The current ReputationRegistry contract doesn't have recordWin/recordLoss.
+    // It uses giveFeedback for recording feedback. For now, we use giveFeedback with a
+    // score based on win/loss outcome.
+    const score = isWinner ? 200 : 50 // uint8: 200 for win (~78%), 50 for loss (~20%)
 
     if (isWinner) {
-      // Winner: +10 reputation
       logger.info(
-        `Recording WIN for token ${tokenId} (+10 reputation)`,
+        `Recording WIN for token ${tokenId} (+10 reputation via feedback)`,
         { tokenId, change: 10 },
         'ReputationService',
       )
-      txHash = await walletClient.writeContract({
-        address: REPUTATION_SYSTEM,
-        abi: REPUTATION_SYSTEM_ABI,
-        functionName: 'recordWin',
-        args: [BigInt(tokenId), amount],
-        chain: baseSepolia,
-        account,
-      })
     } else {
-      // Loser: -5 reputation
       logger.info(
-        `Recording LOSS for token ${tokenId} (-5 reputation)`,
+        `Recording LOSS for token ${tokenId} (-5 reputation via feedback)`,
         { tokenId, change: -5 },
         'ReputationService',
       )
-      txHash = await walletClient.writeContract({
-        address: REPUTATION_SYSTEM,
-        abi: REPUTATION_SYSTEM_ABI,
-        functionName: 'recordLoss',
-        args: [BigInt(tokenId), amount],
-        chain: baseSepolia,
-        account,
-      })
     }
+
+    const txHash = await walletClient.writeContract({
+      address: REPUTATION_SYSTEM,
+      abi: REPUTATION_SYSTEM_ABI,
+      functionName: 'giveFeedback',
+      args: [
+        BigInt(tokenId),
+        score,
+        '0x0000000000000000000000000000000000000000000000000000000000000000' as `0x${string}`, // tag1
+        '0x0000000000000000000000000000000000000000000000000000000000000000' as `0x${string}`, // tag2
+        '', // fileuri
+        '0x0000000000000000000000000000000000000000000000000000000000000000' as `0x${string}`, // filehash
+        '0x' as `0x${string}`, // feedbackAuth
+      ],
+      chain: baseSepolia,
+      account,
+    })
 
     // Wait for transaction confirmation
     await publicClient.waitForTransactionReceipt({

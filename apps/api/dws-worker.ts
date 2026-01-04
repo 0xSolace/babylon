@@ -16,6 +16,11 @@
  */
 
 import { initializeDatabase } from '@babylon/db'
+import {
+  getDWSEndpoint,
+  getNetworkName,
+  getRpcUrl,
+} from '@babylon/shared/config'
 import { app as elysiaApp } from '../server/src/app'
 import { setupEngineEvents } from '../server/src/engine-events'
 import { toNetwork } from '../server/src/utils'
@@ -89,34 +94,28 @@ export async function startBabylonWorker(options: {
     5009
   const HOST = options.host ?? process.env.HOST ?? '0.0.0.0'
 
-  // Configure DWS endpoint
-  if (options.dwsEndpoint) {
-    process.env.JEJU_DWS_ENDPOINT = options.dwsEndpoint
-  } else if (!process.env.JEJU_DWS_ENDPOINT) {
-    const network = toNetwork(process.env.JEJU_NETWORK || 'localnet')
-    process.env.JEJU_DWS_ENDPOINT =
-      network === 'localnet'
-        ? 'http://localhost:4030'
-        : network === 'testnet'
-          ? 'https://dws.testnet.jejunetwork.org'
-          : 'https://dws.jejunetwork.org'
+  // Get network from config or env
+  const network = toNetwork(
+    (typeof process !== 'undefined' ? process.env.JEJU_NETWORK : undefined) ||
+      getNetworkName() ||
+      'localnet',
+  )
+
+  // Configure DWS endpoint from config
+  const dwsEndpoint =
+    options.dwsEndpoint ?? getDWSEndpoint(network) ?? 'http://localhost:4030'
+  if (typeof process !== 'undefined') {
+    process.env.JEJU_DWS_ENDPOINT = dwsEndpoint
   }
 
-  // Configure RPC URL
-  if (options.rpcUrl) {
-    process.env.JEJU_RPC_URL = options.rpcUrl
-  } else if (!process.env.JEJU_RPC_URL) {
-    const network = toNetwork(process.env.JEJU_NETWORK || 'localnet')
-    process.env.JEJU_RPC_URL =
-      network === 'localnet'
-        ? 'http://localhost:6546'
-        : network === 'testnet'
-          ? 'https://rpc.testnet.jejunetwork.org'
-          : 'https://rpc.jejunetwork.org'
+  // Configure RPC URL from config
+  const rpcUrl = options.rpcUrl ?? getRpcUrl(network) ?? 'http://localhost:6546'
+  if (typeof process !== 'undefined') {
+    process.env.JEJU_RPC_URL = rpcUrl
   }
 
-  console.log(`DWS endpoint: ${process.env.JEJU_DWS_ENDPOINT}`)
-  console.log(`RPC URL: ${process.env.JEJU_RPC_URL}`)
+  console.log(`DWS endpoint: ${dwsEndpoint}`)
+  console.log(`RPC URL: ${rpcUrl}`)
 
   // Initialize database
   console.log('Initializing database...')
@@ -141,7 +140,8 @@ export async function startBabylonWorker(options: {
 `)
 }
 
-// Auto-start if running directly with Bun (not imported as module)
+// Auto-start the server when running directly (not bundled)
+// When bundled, we export `startBabylonWorker` for explicit invocation
 if (import.meta.main) {
   startBabylonWorker({})
 }

@@ -5,7 +5,12 @@
  */
 
 import 'dotenv/config'
-import { getJejuConfig, logger } from '@babylon/shared'
+import { type getJejuConfig, logger } from '@babylon/shared'
+import {
+  getJejuComputeEndpoint,
+  getNetworkName,
+  getRpcUrl,
+} from '@babylon/shared/config'
 import type { LLMCallTokenUsage } from '../types/token-stats'
 import { isPromptLoggingEnabled, logPrompt } from '../utils/prompt-logger'
 import {
@@ -74,10 +79,7 @@ export class BabylonLLMClient {
   }
 
   constructor(_apiKey?: string, _forceProvider?: string) {
-    this.jejuConfig = getJejuConfig()
-
-    const jejuNetwork =
-      process.env.JEJU_NETWORK || process.env.PUBLIC_JEJU_NETWORK
+    const jejuNetwork = getNetworkName()
 
     if (!jejuNetwork) {
       throw new Error(
@@ -86,6 +88,34 @@ export class BabylonLLMClient {
           'Set JEJU_NETWORK=mainnet, testnet, or localnet.',
       )
     }
+
+    // Get config using new helpers
+    const rpcUrl = getRpcUrl(jejuNetwork)
+    const computeApiUrl = getJejuComputeEndpoint(jejuNetwork)
+
+    this.jejuConfig =
+      rpcUrl && computeApiUrl
+        ? {
+            network: jejuNetwork,
+            networkConfig: {
+              rpcUrl,
+              computeApiUrl,
+              storageApiUrl: '',
+              ipfsGateway: '',
+              explorerUrl: null,
+              chainId: 0,
+            },
+            walletAddress:
+              (typeof process !== 'undefined'
+                ? process.env.JEJU_WALLET_ADDRESS
+                : undefined) ?? null,
+            paymentToken: ((typeof process !== 'undefined'
+              ? process.env.JEJU_PAYMENT_TOKEN
+              : undefined) ?? 'JEJU') as 'JEJU' | 'ETH' | 'USDC',
+            storageEnabled: false,
+            computeEnabled: true,
+          }
+        : null
 
     logger.info(
       `Using Jeju decentralized compute (${jejuNetwork})`,
@@ -420,22 +450,14 @@ WORLD RULES:
   }
 
   private getComputeApiUrl(): string {
-    if (process.env.JEJU_COMPUTE_API_URL) {
+    // Env override takes precedence
+    if (typeof process !== 'undefined' && process.env.JEJU_COMPUTE_API_URL) {
       return process.env.JEJU_COMPUTE_API_URL
     }
 
-    const network = process.env.JEJU_NETWORK || process.env.PUBLIC_JEJU_NETWORK
-
-    // Port configuration via env var
-    const computePort = process.env.JEJU_COMPUTE_PORT ?? '5010'
-
-    const urls: Record<string, string> = {
-      localnet: `http://127.0.0.1:${computePort}`,
-      testnet: 'https://compute.jeju.network',
-      mainnet: 'https://compute.jeju.network',
-    }
-
-    return urls[network ?? 'localnet'] ?? `http://127.0.0.1:${computePort}`
+    // Use config
+    const network = getNetworkName()
+    return getJejuComputeEndpoint(network)
   }
 
   private estimateTokens(text: string): number {

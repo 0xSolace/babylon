@@ -171,4 +171,73 @@ describe('Agent Authentication', () => {
       expect(result).toEqual({ agentId: 'custom-agent' })
     })
   })
+
+  describe('Edge Cases', () => {
+    it('handles empty agentId', async () => {
+      const session = await createAgentSession('', 'token-empty-agent')
+      expect(session.agentId).toBe('')
+
+      const result = await verifyAgentSession('token-empty-agent')
+      expect(result).toEqual({ agentId: '' })
+    })
+
+    it('handles special characters in token', async () => {
+      const specialToken = 'token/with+special=chars&more'
+      await createAgentSession('agent-special', specialToken)
+
+      const result = await verifyAgentSession(specialToken)
+      expect(result).toEqual({ agentId: 'agent-special' })
+    })
+
+    it('handles very long agentId', async () => {
+      const longAgentId = 'a'.repeat(1000)
+      await createAgentSession(longAgentId, 'token-long-id')
+
+      const result = await verifyAgentSession('token-long-id')
+      expect(result).toEqual({ agentId: longAgentId })
+    })
+
+    it('handles concurrent session creation for same token', async () => {
+      // Last write wins
+      const results = await Promise.all([
+        createAgentSession('agent-1', 'same-token'),
+        createAgentSession('agent-2', 'same-token'),
+        createAgentSession('agent-3', 'same-token'),
+      ])
+
+      expect(results.length).toBe(3)
+
+      // Verify only one agent is stored (last write wins)
+      const stored = await verifyAgentSession('same-token')
+      expect(stored).not.toBeNull()
+    })
+
+    it('handles multiple different sessions', async () => {
+      await createAgentSession('agent-a', 'token-a')
+      await createAgentSession('agent-b', 'token-b')
+      await createAgentSession('agent-c', 'token-c')
+
+      expect(await verifyAgentSession('token-a')).toEqual({ agentId: 'agent-a' })
+      expect(await verifyAgentSession('token-b')).toEqual({ agentId: 'agent-b' })
+      expect(await verifyAgentSession('token-c')).toEqual({ agentId: 'agent-c' })
+    })
+
+    it('verifyAgentCredentials handles both AGENT_SECRET and CRON_SECRET', () => {
+      // Test AGENT_SECRET takes precedence
+      process.env.AGENT_SECRET = 'agent-secret'
+      process.env.CRON_SECRET = 'cron-secret'
+
+      expect(verifyAgentCredentials('test-agent', 'agent-secret')).toBe(true)
+      expect(verifyAgentCredentials('test-agent', 'cron-secret')).toBe(false)
+    })
+
+    it('verifyAgentCredentials requires BABYLON_AGENT_ID in production', () => {
+      delete process.env.BABYLON_AGENT_ID
+      process.env.NODE_ENV = 'production'
+      process.env.CRON_SECRET = 'test-secret'
+
+      const result = verifyAgentCredentials('any-agent', 'test-secret')
+      expect(result).toBe(false)
+    })
+  })
 })

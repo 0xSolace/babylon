@@ -470,11 +470,8 @@ export class SimulationA2AInterface {
       )
     }
 
-    // @deprecated SimulationEngine.performAction() was removed when the engine was deprecated.
-    // To re-enable this functionality, implement using the new game engine API.
-    throw new Error(
-      'performAction not available - SimulationEngine is deprecated',
-    )
+    // SimulationEngine.performAction() was moved to game engine.
+    throw new Error('performAction not available - use game engine API')
   }
 
   /**
@@ -595,11 +592,8 @@ export class SimulationA2AInterface {
       )
     }
 
-    // @deprecated SimulationEngine.performAction() was removed when the engine was deprecated.
-    // To re-enable this functionality, implement using the new game engine API.
-    throw new Error(
-      'performAction not available - SimulationEngine is deprecated',
-    )
+    // SimulationEngine.performAction() was moved to game engine.
+    throw new Error('performAction not available - use game engine API')
   }
 
   /**
@@ -635,11 +629,8 @@ export class SimulationA2AInterface {
       )
     }
 
-    // @deprecated SimulationEngine.performAction() was removed when the engine was deprecated.
-    // To re-enable this functionality, implement using the new game engine API.
-    throw new Error(
-      'performAction not available - SimulationEngine is deprecated',
-    )
+    // SimulationEngine.performAction() was moved to game engine.
+    throw new Error('performAction not available - use game engine API')
   }
 
   /**
@@ -708,11 +699,8 @@ export class SimulationA2AInterface {
       )
     }
 
-    // @deprecated SimulationEngine.performAction() was removed when the engine was deprecated.
-    // To re-enable this functionality, implement using the new game engine API.
-    throw new Error(
-      'performAction not available - SimulationEngine is deprecated',
-    )
+    // SimulationEngine.performAction() was moved to game engine.
+    throw new Error('performAction not available - use game engine API')
   }
 
   /**
@@ -775,11 +763,8 @@ export class SimulationA2AInterface {
       )
     }
 
-    // @deprecated SimulationEngine.performAction() was removed when the engine was deprecated.
-    // To re-enable this functionality, implement using the new game engine API.
-    throw new Error(
-      'performAction not available - SimulationEngine is deprecated',
-    )
+    // SimulationEngine.performAction() was moved to game engine.
+    throw new Error('performAction not available - use game engine API')
   }
 
   /**

@@ -18,63 +18,63 @@ import {
 } from '@jejunetwork/shared'
 
 describe('Rate Limiting (Shared)', () => {
-  beforeEach(() => {
-    clearAllRateLimits()
-    clearAllDuplicates()
+  beforeEach(async () => {
+    await clearAllRateLimits()
+    await clearAllDuplicates()
   })
 
   describe('User Rate Limiter', () => {
-    it('should allow requests within rate limit', () => {
+    it('should allow requests within rate limit', async () => {
       const userId = 'shared-test-user-1'
       const config = RATE_LIMIT_CONFIGS.CREATE_POST
 
-      const result1 = checkRateLimit(userId, config)
+      const result1 = await checkRateLimit(userId, config)
       expect(result1.allowed).toBe(true)
       expect(result1.remaining).toBe(2)
 
-      const result2 = checkRateLimit(userId, config)
+      const result2 = await checkRateLimit(userId, config)
       expect(result2.allowed).toBe(true)
       expect(result2.remaining).toBe(1)
     })
 
-    it('should block requests exceeding rate limit', () => {
+    it('should block requests exceeding rate limit', async () => {
       const userId = 'shared-test-user-2'
       const config = RATE_LIMIT_CONFIGS.CREATE_POST
 
       // Use up all 3 requests
-      checkRateLimit(userId, config)
-      checkRateLimit(userId, config)
-      checkRateLimit(userId, config)
+      await checkRateLimit(userId, config)
+      await checkRateLimit(userId, config)
+      await checkRateLimit(userId, config)
 
       // Fourth request should be blocked
-      const result = checkRateLimit(userId, config)
+      const result = await checkRateLimit(userId, config)
       expect(result.allowed).toBe(false)
       expect(result.retryAfter).toBeGreaterThan(0)
     })
 
-    it('should track rate limits separately for different users', () => {
+    it('should track rate limits separately for different users', async () => {
       const user1 = 'shared-test-user-3'
       const user2 = 'shared-test-user-4'
       const config = RATE_LIMIT_CONFIGS.CREATE_POST
 
       // User 1 uses 2 requests
-      checkRateLimit(user1, config)
-      checkRateLimit(user1, config)
+      await checkRateLimit(user1, config)
+      await checkRateLimit(user1, config)
 
       // User 2 should have full quota
-      const result = checkRateLimit(user2, config)
+      const result = await checkRateLimit(user2, config)
       expect(result.allowed).toBe(true)
       expect(result.remaining).toBe(2)
     })
 
-    it('should provide accurate rate limit status', () => {
+    it('should provide accurate rate limit status', async () => {
       const userId = 'shared-test-user-5'
       const config = RATE_LIMIT_CONFIGS.CREATE_POST
 
-      checkRateLimit(userId, config)
-      checkRateLimit(userId, config)
+      await checkRateLimit(userId, config)
+      await checkRateLimit(userId, config)
 
-      const status = getRateLimitStatus(userId, config)
+      const status = await getRateLimitStatus(userId, config)
       expect(status.count).toBe(2)
       expect(status.remaining).toBe(1)
       expect(status.resetAt).toBeInstanceOf(Date)
@@ -82,19 +82,19 @@ describe('Rate Limiting (Shared)', () => {
   })
 
   describe('Duplicate Detection', () => {
-    it('should allow unique content', () => {
+    it('should allow unique content', async () => {
       const userId = 'shared-test-user-6'
       const content1 = 'Unique content A'
       const content2 = 'Unique content B'
 
-      const result1 = checkDuplicate(
+      const result1 = await checkDuplicate(
         userId,
         content1,
         DUPLICATE_DETECTION_CONFIGS.POST,
       )
       expect(result1.isDuplicate).toBe(false)
 
-      const result2 = checkDuplicate(
+      const result2 = await checkDuplicate(
         userId,
         content2,
         DUPLICATE_DETECTION_CONFIGS.POST,
@@ -102,12 +102,12 @@ describe('Rate Limiting (Shared)', () => {
       expect(result2.isDuplicate).toBe(false)
     })
 
-    it('should detect duplicate content', () => {
+    it('should detect duplicate content', async () => {
       const userId = 'shared-test-user-7'
       const content = 'Duplicate content'
 
-      checkDuplicate(userId, content, DUPLICATE_DETECTION_CONFIGS.POST)
-      const result = checkDuplicate(
+      await checkDuplicate(userId, content, DUPLICATE_DETECTION_CONFIGS.POST)
+      const result = await checkDuplicate(
         userId,
         content,
         DUPLICATE_DETECTION_CONFIGS.POST,
@@ -116,13 +116,13 @@ describe('Rate Limiting (Shared)', () => {
       expect(result.lastPostedAt).toBeInstanceOf(Date)
     })
 
-    it('should normalize content for duplicate detection', () => {
+    it('should normalize content for duplicate detection', async () => {
       const userId = 'shared-test-user-8'
       const content1 = 'Same Content'
       const content2 = '  same content  ' // Different case and whitespace
 
-      checkDuplicate(userId, content1, DUPLICATE_DETECTION_CONFIGS.POST)
-      const result = checkDuplicate(
+      await checkDuplicate(userId, content1, DUPLICATE_DETECTION_CONFIGS.POST)
+      const result = await checkDuplicate(
         userId,
         content2,
         DUPLICATE_DETECTION_CONFIGS.POST,
@@ -130,13 +130,13 @@ describe('Rate Limiting (Shared)', () => {
       expect(result.isDuplicate).toBe(true)
     })
 
-    it('should track duplicates separately for different users', () => {
+    it('should track duplicates separately for different users', async () => {
       const user1 = 'shared-test-user-9'
       const user2 = 'shared-test-user-10'
       const content = 'Shared content'
 
-      checkDuplicate(user1, content, DUPLICATE_DETECTION_CONFIGS.POST)
-      const result = checkDuplicate(
+      await checkDuplicate(user1, content, DUPLICATE_DETECTION_CONFIGS.POST)
+      const result = await checkDuplicate(
         user2,
         content,
         DUPLICATE_DETECTION_CONFIGS.POST,
@@ -160,16 +160,20 @@ describe('Rate Limiting (Shared)', () => {
   })
 
   describe('Duplicate Detection Stats', () => {
-    it('should return stats about duplicate detection', () => {
-      const stats = getDuplicateStats()
+    it('should return stats about duplicate detection', async () => {
+      const stats = await getDuplicateStats()
       expect(stats).toHaveProperty('totalUsers')
       expect(stats).toHaveProperty('totalRecords')
       expect(stats).toHaveProperty('recordsByType')
     })
 
-    it('should update stats after recording content', () => {
-      checkDuplicate('stats-user', 'content', DUPLICATE_DETECTION_CONFIGS.POST)
-      const stats = getDuplicateStats()
+    it('should update stats after recording content', async () => {
+      await checkDuplicate(
+        'stats-user',
+        'content',
+        DUPLICATE_DETECTION_CONFIGS.POST,
+      )
+      const stats = await getDuplicateStats()
       expect(stats.totalUsers).toBeGreaterThan(0)
     })
   })

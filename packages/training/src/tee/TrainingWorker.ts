@@ -466,7 +466,7 @@ export class TrainingWorker {
     })
 
     // Download prepared data and run LLM judging
-    const preparedData = await this.downloadAndDecrypt(
+    const preparedData = await this.downloadAndDecrypt<Record<string, unknown>>(
       preparedDataCid,
       isGenericObject,
     )

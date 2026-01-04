@@ -2,11 +2,12 @@
  * Agent Authentication Utilities
  *
  * @description Provides session management and verification for Babylon agents.
- * Supports pluggable session stores (Redis, in-memory, etc.).
- * Sessions expire after 24 hours and are automatically cleaned up.
+ * Uses distributed cache for session storage.
+ * Sessions expire after 24 hours and are automatically cleaned up via TTL.
  */
 
 import { logger } from '@babylon/shared'
+import { type CacheClient, getCacheClient } from '@jejunetwork/shared'
 import { getDevCredentials, isValidAgentSecret } from './dev-credentials'
 import { type AgentSessionData, parseAgentSession } from './utils/type-guards'
 
@@ -24,39 +25,80 @@ export interface SessionStore {
   delete(key: string): Promise<void>
 }
 
-// In-memory session storage (default fallback)
-const agentSessions = new Map<string, AgentSession>()
-
 // Session duration: 24 hours
 const SESSION_DURATION = 24 * 60 * 60 * 1000
 const SESSION_PREFIX = 'agent:session:'
 const DEFAULT_TEST_AGENT_ID = 'babylon-agent-alice'
 const isProduction = process.env.NODE_ENV === 'production'
 
-// Configurable session store - defaults to in-memory
-let sessionStore: SessionStore | null = null
+// Distributed session cache
+let sessionCache: CacheClient | null = null
+
+function getSessionCache(): CacheClient {
+  if (!sessionCache) {
+    sessionCache = getCacheClient('babylon-agent-sessions')
+  }
+  return sessionCache
+}
+
+// Configurable session store - defaults to in-memory for tests, distributed for production
+let customSessionStore: SessionStore | null = null
+let useInMemoryStore = false
+
+// In-memory session storage for tests and development
+const inMemoryStore = new Map<string, { value: string; expiresAt: number }>()
 
 /**
- * Configure a custom session store (e.g., Redis)
+ * In-memory store implementation for tests and single-instance deployments
  */
-export function setSessionStore(store: SessionStore | null): void {
-  sessionStore = store
+const memoryStore: SessionStore = {
+  async get(key: string): Promise<string | null> {
+    const entry = inMemoryStore.get(key)
+    if (!entry) return null
+    if (Date.now() > entry.expiresAt) {
+      inMemoryStore.delete(key)
+      return null
+    }
+    return entry.value
+  },
+  async set(key: string, value: string, ttlMs: number): Promise<void> {
+    inMemoryStore.set(key, { value, expiresAt: Date.now() + ttlMs })
+  },
+  async delete(key: string): Promise<void> {
+    inMemoryStore.delete(key)
+  },
 }
 
 /**
- * In-memory session store implementation
+ * Configure a custom session store (e.g., Redis)
+ * Pass null to use in-memory store (for tests)
  */
-const inMemoryStore: SessionStore = {
+export function setSessionStore(store: SessionStore | null): void {
+  customSessionStore = store
+  // When explicitly set to null, use in-memory store
+  useInMemoryStore = store === null
+  // Clear in-memory store when switching
+  if (useInMemoryStore) {
+    inMemoryStore.clear()
+  }
+}
+
+/**
+ * Distributed cache store implementation
+ */
+const distributedStore: SessionStore = {
   async get(key: string): Promise<string | null> {
-    const session = agentSessions.get(key.replace(SESSION_PREFIX, ''))
-    return session ? JSON.stringify(session) : null
+    const cache = getSessionCache()
+    return cache.get(key)
   },
-  async set(key: string, value: string, _ttlMs: number): Promise<void> {
-    const session = parseAgentSession(value)
-    agentSessions.set(key.replace(SESSION_PREFIX, ''), session)
+  async set(key: string, value: string, ttlMs: number): Promise<void> {
+    const cache = getSessionCache()
+    const ttlSeconds = Math.ceil(ttlMs / 1000)
+    await cache.set(key, value, ttlSeconds)
   },
   async delete(key: string): Promise<void> {
-    agentSessions.delete(key.replace(SESSION_PREFIX, ''))
+    const cache = getSessionCache()
+    await cache.delete(key)
   },
 }
 
@@ -64,29 +106,25 @@ const inMemoryStore: SessionStore = {
  * Get the current session store
  */
 function getStore(): SessionStore {
-  return sessionStore ?? inMemoryStore
+  if (customSessionStore) return customSessionStore
+  if (useInMemoryStore) return memoryStore
+  return distributedStore
 }
 
 /**
- * Clean up expired sessions (for in-memory store)
+ * Clean up expired sessions
+ * Note: Distributed cache handles TTL automatically via TTL.
+ * For in-memory store, we manually remove expired entries.
  */
 export function cleanupExpiredSessions(): void {
-  if (sessionStore) {
-    // External stores (Redis) handle expiration automatically
-    return
-  }
-
+  // Only clean up in-memory store
+  if (!useInMemoryStore) return
+  
   const now = Date.now()
-  const tokensToDelete: string[] = []
-
-  agentSessions.forEach((session, token) => {
-    if (now > session.expiresAt) {
-      tokensToDelete.push(token)
+  for (const [key, entry] of inMemoryStore.entries()) {
+    if (now > entry.expiresAt) {
+      inMemoryStore.delete(key)
     }
-  })
-
-  for (const token of tokensToDelete) {
-    agentSessions.delete(token)
   }
 }
 

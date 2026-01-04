@@ -1,6 +1,6 @@
 import {
   db as defaultDb,
-  type EQLiteClient,
+  type SQLitClient,
   type PerpPosition,
 } from '@babylon/db'
 import type {
@@ -64,7 +64,7 @@ interface PerpMarketSnapshot {
 }
 
 /**
- * EQLite adapter for PerpDbPort.
+ * SQLit adapter for PerpDbPort.
  *
  * Notes:
  * - Uses PerpMarketSnapshot as single source for market-level stats.
@@ -72,9 +72,9 @@ interface PerpMarketSnapshot {
  * - Uses raw SQL for PerpMarketSnapshot (has ticker as PK, not id).
  */
 export class PerpDbAdapter implements PerpDbPort {
-  private readonly dbClient: EQLiteClient
+  private readonly dbClient: SQLitClient
 
-  constructor(dbClient?: EQLiteClient, _isTransaction = false) {
+  constructor(dbClient?: SQLitClient, _isTransaction = false) {
     void _isTransaction // Stored for potential future transaction-aware operations
     this.dbClient = dbClient ?? defaultDb
   }
@@ -404,10 +404,10 @@ export class PerpDbAdapter implements PerpDbPort {
   /**
    * Execute operations within a transaction.
    *
-   * NOTE: EQLite handles transactions through the client.
+   * NOTE: SQLit handles transactions through the client.
    */
   async transaction<T>(fn: (tx: PerpDbPort) => Promise<T>): Promise<T> {
-    return this.dbClient.transaction(async (tx: EQLiteClient) => {
+    return this.dbClient.transaction(async (tx: SQLitClient) => {
       const txAdapter = new PerpDbAdapter(tx, true)
       return fn(txAdapter)
     })

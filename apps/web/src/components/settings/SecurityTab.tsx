@@ -1,5 +1,5 @@
 import { logger } from '@babylon/shared'
-import { useJejuAuth, useJejuWallet } from '@jejunetwork/auth'
+import { useJejuAuth, useJejuWallet } from '@jejunetwork/auth/react'
 import {
   AlertCircle,
   CheckCircle2,
@@ -202,7 +202,7 @@ export function SecurityTab() {
         <h3 className="font-semibold">Security Resources</h3>
         <div className="space-y-2">
           <a
-            href="https://docs.jeju.network/security"
+            href="https://docs.jejunetwork.org/security"
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center gap-2 text-[#0066FF] text-sm hover:underline"

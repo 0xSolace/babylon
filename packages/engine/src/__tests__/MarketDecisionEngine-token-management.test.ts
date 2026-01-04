@@ -45,7 +45,7 @@
 
 import { beforeEach, describe, expect, mock, test } from 'bun:test'
 
-// Create chainable mock for EQLite query builder API
+// Create chainable mock for SQLit query builder API
 const createChainableMock = (
   returnValue: Array<Record<string, unknown>> = [],
 ) => {
@@ -72,9 +72,9 @@ const createChainableMock = (
   return chainable
 }
 
-// Mock EQLite database client BEFORE importing MarketDecisionEngine
+// Mock SQLit database client BEFORE importing MarketDecisionEngine
 const mockDb = {
-  // Table repositories (EQLite style)
+  // Table repositories (SQLit style)
   actorState: {
     findMany: mock(async () => []),
   },
@@ -91,7 +91,7 @@ const mockDb = {
   npcTrade: { findMany: mock(async () => []) },
   worldFact: { findMany: mock(async () => []) },
   agentTrade: { findMany: mock(async () => []) },
-  // EQLite query builder API
+  // SQLit query builder API
   select: () => createChainableMock([]),
   insert: () => createChainableMock([]),
   update: () => createChainableMock([]),
@@ -104,7 +104,7 @@ const mockDb = {
   $executeRaw: mock(async () => 0),
 }
 
-// Mock table objects (for EQLite schema references)
+// Mock table objects (for SQLit schema references)
 const mockTable = {}
 const mockOperator = () => ({})
 
@@ -119,7 +119,7 @@ mock.module('@babylon/db', () => ({
   worldFacts: mockTable,
   users: mockTable,
   perpPositions: mockTable,
-  // EQLite operators
+  // SQLit operators
   eq: mockOperator,
   and: mockOperator,
   or: mockOperator,
@@ -134,7 +134,7 @@ mock.module('@babylon/db', () => ({
   isNotNull: mockOperator,
   inArray: mockOperator,
   sql: () => ({}),
-  // EQLite initialization functions
+  // SQLit initialization functions
   initializeDB: mock(async () => {}),
   resetDB: mock(() => {}),
   getDB: mock(() => mockDb),

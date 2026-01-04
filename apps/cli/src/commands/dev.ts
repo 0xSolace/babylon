@@ -4,7 +4,7 @@
  * Dev Command - Start the full Babylon development environment
  *
  * This command:
- * 1. Starts the Jeju localnet (L1, L2, EQLite) via the Jeju CLI
+ * 1. Starts the Jeju localnet (L1, L2, SQLit) via the Jeju CLI
  * 2. Deploys Babylon contracts
  * 3. Starts the Babylon backend server (Elysia)
  * 4. Starts the Babylon web app (Next.js)
@@ -20,7 +20,7 @@ import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import {
   getDWSUrl,
-  getEQLiteUrl,
+  getSQLitUrl,
   getFarcasterHubUrl,
 } from '@jejunetwork/config'
 import { $ } from 'bun'
@@ -36,7 +36,7 @@ interface DevOptions {
   minimal: boolean
   skipChain: boolean
   skipContracts: boolean
-  skipEqliteWait: boolean
+  skipSQLitWait: boolean
   skipTokenBootstrap: boolean
   stop: boolean
 }
@@ -52,12 +52,12 @@ OPTIONS:
   --minimal              Start chain only (no web app)
   --skip-chain           Skip chain startup (assumes already running)
   --skip-contracts       Skip contract deployment
-  --skip-eqlite-wait     Don't wait for EQLite to be ready (may cause database errors)
+  --skip-sqlit-wait     Don't wait for SQLit to be ready (may cause database errors)
   --skip-token-bootstrap Skip BBLN token, DAO, and liquidity setup
   --stop                 Stop all services
 
 ON STARTUP (unless skipped):
-  1. Starts Jeju localnet (L1, L2, EQLite)
+  1. Starts Jeju localnet (L1, L2, SQLit)
   2. Deploys Babylon game contracts
   3. Bootstraps BBLN token ecosystem:
      - Deploys BBLN token (if not deployed)
@@ -69,7 +69,7 @@ ON STARTUP (unless skipped):
 
 ENVIRONMENT:
   JEJU_RPC_URL           Override L2 RPC URL (default: http://localhost:6546)
-  EQLITE_ENDPOINT        Override EQLite endpoint (default: http://localhost:4661)
+  SQLIT_ENDPOINT        Override SQLit endpoint (default: http://localhost:4661)
   DEPLOYER_PRIVATE_KEY   Private key for contract deployment (optional for local)
 
 EXAMPLES:
@@ -216,45 +216,56 @@ async function startChain(): Promise<void> {
   }
 }
 
-function getEQLiteEndpoint(): string {
-  // Environment variable takes precedence
-  if (process.env.EQLITE_BLOCK_PRODUCER_ENDPOINT) {
-    return process.env.EQLITE_BLOCK_PRODUCER_ENDPOINT
+function getSQLitEndpoint(): string {
+  // Environment variable override takes precedence
+  if (
+    typeof process !== 'undefined' &&
+    process.env.SQLIT_BLOCK_PRODUCER_ENDPOINT
+  ) {
+    return process.env.SQLIT_BLOCK_PRODUCER_ENDPOINT
   }
 
-  // Try to get from Jeju config
+  // Get from config
   const network =
-    (process.env.JEJU_NETWORK as
-      | 'localnet'
-      | 'testnet'
-      | 'mainnet'
-      | undefined) || 'localnet'
+    (typeof process !== 'undefined'
+      ? (process.env.JEJU_NETWORK as
+          | 'localnet'
+          | 'testnet'
+          | 'mainnet'
+          | undefined)
+      : undefined) || 'localnet'
   try {
-    return getEQLiteUrl(network)
+    return getSQLitUrl(network)
   } catch {
     // Fallback if config not available
   }
 
   // Fallback to default port based on network
-  // localnet uses port 4661 for EQLite
   return network === 'localnet'
     ? 'http://localhost:4661'
     : 'http://localhost:4300'
 }
 
 function getDWSEndpoint(): string {
-  const network = process.env.JEJU_NETWORK as
-    | 'localnet'
-    | 'testnet'
-    | 'mainnet'
-    | undefined
+  // Environment variable override takes precedence
+  if (typeof process !== 'undefined' && process.env.JEJU_DWS_ENDPOINT) {
+    return process.env.JEJU_DWS_ENDPOINT
+  }
+
+  // Get from config
+  const network =
+    (typeof process !== 'undefined'
+      ? (process.env.JEJU_NETWORK as
+          | 'localnet'
+          | 'testnet'
+          | 'mainnet'
+          | undefined)
+      : undefined) || 'localnet'
   try {
-    return getDWSUrl(network || 'localnet')
+    return getDWSUrl(network)
   } catch {
     // Fallback for local development
-    return network === 'localnet'
-      ? 'http://localhost:4030'
-      : 'http://localhost:4030'
+    return 'http://localhost:4030'
   }
 }
 
@@ -276,9 +287,9 @@ async function checkDWS(): Promise<boolean> {
   }
 }
 
-async function checkEQLite(): Promise<boolean> {
+async function checkSQLit(): Promise<boolean> {
   try {
-    const endpoint = getEQLiteEndpoint()
+    const endpoint = getSQLitEndpoint()
     const healthUrl = endpoint.endsWith('/health')
       ? endpoint
       : `${endpoint}/health`
@@ -323,31 +334,31 @@ async function waitForDWS(maxAttempts = 60): Promise<boolean> {
   logger.warn(
     `DWS did not become ready after ${maxAttempts} attempts (~${maxAttempts * 2} seconds)`,
   )
-  logger.warn('EQLite queries require DWS to be running')
+  logger.warn('SQLit queries require DWS to be running')
   logger.info(`Expected DWS at: ${dwsUrl}`)
   logger.info('DWS should start automatically with jeju dev')
   logger.info('If DWS is not starting, you can try:')
   logger.info('  1. Check Jeju logs for DWS startup errors')
   logger.info('  2. Try starting DWS separately: jeju dws dev')
   logger.info(
-    '  3. Use --skip-eqlite-wait to continue without database features',
+    '  3. Use --skip-sqlit-wait to continue without database features',
   )
   return false
 }
 
-async function waitForEQLite(maxAttempts = 30): Promise<boolean> {
-  logger.step('Waiting for EQLite to be ready...')
+async function waitForSQLit(maxAttempts = 30): Promise<boolean> {
+  logger.step('Waiting for SQLit to be ready...')
 
-  // Ensure EQLITE_BLOCK_PRODUCER_ENDPOINT is set for @babylon/db
-  const eqliteEndpoint = getEQLiteEndpoint()
-  process.env.EQLITE_BLOCK_PRODUCER_ENDPOINT = eqliteEndpoint
-  logger.info(`EQLite endpoint: ${eqliteEndpoint}`)
+  // Ensure SQLIT_BLOCK_PRODUCER_ENDPOINT is set for @babylon/db
+  const sqlitEndpoint = getSQLitEndpoint()
+  process.env.SQLIT_BLOCK_PRODUCER_ENDPOINT = sqlitEndpoint
+  logger.info(`SQLit endpoint: ${sqlitEndpoint}`)
 
-  // First wait for DWS (required for EQLite queries)
-  logger.info('DWS is required for EQLite queries, checking DWS first...')
+  // First wait for DWS (required for SQLit queries)
+  logger.info('DWS is required for SQLit queries, checking DWS first...')
   const dwsReady = await waitForDWS()
   if (!dwsReady) {
-    logger.warn('DWS not ready - EQLite queries will fail without DWS')
+    logger.warn('DWS not ready - SQLit queries will fail without DWS')
     logger.info('You can continue, but database features may not work')
     logger.info(
       'Tip: Try running "jeju dws dev" separately if DWS is not starting',
@@ -355,13 +366,13 @@ async function waitForEQLite(maxAttempts = 30): Promise<boolean> {
   }
 
   // Quick check first - maybe it's already ready
-  const quickCheck = await checkEQLite()
+  const quickCheck = await checkSQLit()
   if (quickCheck) {
-    logger.info('EQLite appears ready, verifying database initialization...')
+    logger.info('SQLit appears ready, verifying database initialization...')
     try {
       const { initializeDatabase } = await import('@babylon/db')
       await initializeDatabase()
-      logger.success('EQLite is healthy and database initialized')
+      logger.success('SQLit is healthy and database initialized')
       return true
     } catch (error) {
       logger.info(
@@ -382,21 +393,21 @@ async function waitForEQLite(maxAttempts = 30): Promise<boolean> {
     // Show progress every 5 attempts
     if (i > 0 && i % 5 === 0) {
       logger.info(
-        `Still waiting for EQLite... (${i}/${maxAttempts} attempts, ~${i * 2}s)`,
+        `Still waiting for SQLit... (${i}/${maxAttempts} attempts, ~${i * 2}s)`,
       )
     }
 
-    const healthy = await checkEQLite()
+    const healthy = await checkSQLit()
     if (healthy) {
-      logger.info('EQLite health endpoint responded, initializing database...')
+      logger.info('SQLit health endpoint responded, initializing database...')
       // Also verify the database can be initialized
       try {
         const { initializeDatabase } = await import('@babylon/db')
         await initializeDatabase()
-        logger.success('EQLite is healthy and database initialized')
+        logger.success('SQLit is healthy and database initialized')
         return true
       } catch (error) {
-        // EQLite health check passed but DB init failed, keep waiting
+        // SQLit health check passed but DB init failed, keep waiting
         if (i < maxAttempts - 1) {
           logger.info(
             `Database initialization failed, retrying... (${String(error).slice(0, 80)})`,
@@ -405,7 +416,7 @@ async function waitForEQLite(maxAttempts = 30): Promise<boolean> {
           continue
         }
         logger.warn(
-          'EQLite health check passed but database initialization failed',
+          'SQLit health check passed but database initialization failed',
         )
         logger.warn(String(error))
         return false
@@ -418,10 +429,10 @@ async function waitForEQLite(maxAttempts = 30): Promise<boolean> {
   }
 
   logger.warn(
-    `EQLite did not become ready after ${maxAttempts} attempts (~${maxAttempts * 2} seconds)`,
+    `SQLit did not become ready after ${maxAttempts} attempts (~${maxAttempts * 2} seconds)`,
   )
   logger.info('You can continue, but database features may not work')
-  logger.info('Tip: Use --skip-eqlite-wait to skip this wait in the future')
+  logger.info('Tip: Use --skip-sqlit-wait to skip this wait in the future')
   return false
 }
 
@@ -521,8 +532,8 @@ async function startWebApp(): Promise<void> {
   const dwsEndpoint = getDWSEndpoint()
 
   logger.step('Starting backend server...')
-  const eqliteEndpoint = getEQLiteEndpoint()
-  logger.info(`Using EQLite endpoint: ${eqliteEndpoint}`)
+  const sqlitEndpoint = getSQLitEndpoint()
+  logger.info(`Using SQLit endpoint: ${sqlitEndpoint}`)
 
   const serverProc = Bun.spawn(['bun', 'run', 'dev'], {
     cwd: join(BABYLON_ROOT, 'apps/server'),
@@ -532,7 +543,7 @@ async function startWebApp(): Promise<void> {
       ...process.env,
       JEJU_NETWORK: 'localnet',
       PUBLIC_RPC_URL: 'http://localhost:6546',
-      EQLITE_BLOCK_PRODUCER_ENDPOINT: eqliteEndpoint,
+      SQLIT_BLOCK_PRODUCER_ENDPOINT: sqlitEndpoint,
       JEJU_DWS_ENDPOINT: dwsEndpoint,
       MESSAGING_MODE: 'decentralized',
       FARCASTER_HUB_URL: getFarcasterHubUrl(),
@@ -552,7 +563,7 @@ async function startWebApp(): Promise<void> {
       ...process.env,
       JEJU_NETWORK: 'localnet',
       PUBLIC_RPC_URL: 'http://localhost:6546',
-      EQLITE_BLOCK_PRODUCER_ENDPOINT: eqliteEndpoint,
+      SQLIT_BLOCK_PRODUCER_ENDPOINT: sqlitEndpoint,
       JEJU_DWS_ENDPOINT: dwsEndpoint,
       MESSAGING_MODE: 'decentralized',
       FARCASTER_HUB_URL: getFarcasterHubUrl(),
@@ -597,7 +608,7 @@ export async function runDevCommand(args: string[]): Promise<void> {
     minimal: getFlag(parsed, 'minimal'),
     skipChain: getFlag(parsed, 'skip-chain'),
     skipContracts: getFlag(parsed, 'skip-contracts'),
-    skipEqliteWait: getFlag(parsed, 'skip-eqlite-wait'),
+    skipSQLitWait: getFlag(parsed, 'skip-sqlit-wait'),
     skipTokenBootstrap: getFlag(parsed, 'skip-token-bootstrap'),
     stop: getFlag(parsed, 'stop'),
   }
@@ -629,33 +640,33 @@ export async function runDevCommand(args: string[]): Promise<void> {
     }
   }
 
-  // Start chain (L1, L2, EQLite)
+  // Start chain (L1, L2, SQLit)
   if (!options.skipChain) {
     await startChain()
 
-    // Wait for EQLite to be fully ready and database initialized
-    if (!options.skipEqliteWait) {
-      const eqliteReady = await waitForEQLite()
-      if (!eqliteReady) {
-        logger.warn('EQLite not fully ready - some features may not work')
-        const endpoint = getEQLiteEndpoint()
-        logger.info(`EQLite endpoint: ${endpoint}`)
+    // Wait for SQLit to be fully ready and database initialized
+    if (!options.skipSQLitWait) {
+      const sqlitReady = await waitForSQLit()
+      if (!sqlitReady) {
+        logger.warn('SQLit not fully ready - some features may not work')
+        const endpoint = getSQLitEndpoint()
+        logger.info(`SQLit endpoint: ${endpoint}`)
         logger.info(
-          'You may need to wait a bit longer for EQLite to initialize',
+          'You may need to wait a bit longer for SQLit to initialize',
         )
-        logger.info('Or use --skip-eqlite-wait to continue anyway')
+        logger.info('Or use --skip-sqlit-wait to continue anyway')
       }
     } else {
-      logger.info('Skipping EQLite wait (--skip-eqlite-wait)')
-      logger.warn('Database features may not work until EQLite is ready')
+      logger.info('Skipping SQLit wait (--skip-sqlit-wait)')
+      logger.warn('Database features may not work until SQLit is ready')
     }
   } else {
-    // Even if skipping chain, check if EQLite is available
-    const eqliteHealthy = await checkEQLite()
-    if (!eqliteHealthy) {
-      logger.warn('EQLite not responding - decentralized features may not work')
-      const endpoint = getEQLiteEndpoint()
-      logger.info(`EQLite endpoint: ${endpoint}`)
+    // Even if skipping chain, check if SQLit is available
+    const sqlitHealthy = await checkSQLit()
+    if (!sqlitHealthy) {
+      logger.warn('SQLit not responding - decentralized features may not work')
+      const endpoint = getSQLitEndpoint()
+      logger.info(`SQLit endpoint: ${endpoint}`)
     }
   }
 
@@ -677,7 +688,7 @@ export async function runDevCommand(args: string[]): Promise<void> {
   } else {
     logger.success('Minimal mode - chain is running')
     logger.info('L2 RPC: http://localhost:6546')
-    logger.info('EQLite API: http://localhost:4661')
+    logger.info('SQLit API: http://localhost:4661')
     logger.info('\nPress Ctrl+C to stop')
 
     // Keep running

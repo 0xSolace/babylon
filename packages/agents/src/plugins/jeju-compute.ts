@@ -27,8 +27,8 @@ import type { TrajectoryLoggerService } from './plugin-trajectory-logger/src/Tra
 // Jeju Compute gateway URLs by network
 const JEJU_GATEWAY_URLS: Record<'localnet' | 'testnet' | 'mainnet', string> = {
   localnet: 'http://localhost:4200',
-  testnet: 'https://gateway.testnet.jeju.network',
-  mainnet: 'https://gateway.jeju.network',
+  testnet: 'https://gateway.testnet.jejunetwork.org',
+  mainnet: 'https://gateway.jejunetwork.org',
 }
 
 // Default models for small/large inference

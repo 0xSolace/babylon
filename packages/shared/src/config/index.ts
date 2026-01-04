@@ -13,7 +13,7 @@ import { base, getChainById, hardhat, isJejuChain } from '../constants/chains'
 import configData from './public-config.json'
 
 // =============================================================================
-// Re-export deployment configuration
+// Deployment configuration
 // =============================================================================
 
 export * from './deployment'
@@ -53,6 +53,8 @@ interface RawPublicConfig {
   external: ExternalConfig
   networks: {
     local: RawNetworkConfig
+    jejuTestnet: RawNetworkConfig
+    jejuMainnet: RawNetworkConfig
     baseSepolia: RawNetworkConfig
     base: RawNetworkConfig
   }
@@ -114,6 +116,8 @@ export interface PublicConfig {
   external: ExternalConfig
   networks: {
     local: NetworkConfig
+    jejuTestnet: NetworkConfig
+    jejuMainnet: NetworkConfig
     baseSepolia: NetworkConfig
     base: NetworkConfig
   }
@@ -185,6 +189,8 @@ function convertPublicConfig(raw: RawPublicConfig): PublicConfig {
     external: raw.external,
     networks: {
       local: convertNetworkConfig(raw.networks.local),
+      jejuTestnet: convertNetworkConfig(raw.networks.jejuTestnet),
+      jejuMainnet: convertNetworkConfig(raw.networks.jejuMainnet),
       baseSepolia: convertNetworkConfig(raw.networks.baseSepolia),
       base: convertNetworkConfig(raw.networks.base),
     },
@@ -199,25 +205,29 @@ function convertPublicConfig(raw: RawPublicConfig): PublicConfig {
 const rawConfig = configData as RawPublicConfig
 export const PUBLIC_CONFIG: PublicConfig = convertPublicConfig(rawConfig)
 
-export type NetworkId = 'local' | 'baseSepolia' | 'base'
+export type NetworkId = 'local' | 'jejuTestnet' | 'jejuMainnet' | 'baseSepolia' | 'base'
 export type EnvironmentName = 'localnet' | 'testnet' | 'mainnet'
 
 const CHAIN_ID_TO_NETWORK: Record<number, NetworkId> = {
   31337: 'local',
+  420690: 'jejuTestnet',
+  420691: 'jejuMainnet',
   84532: 'baseSepolia',
   8453: 'base',
 }
 
 const NETWORK_ID_TO_ENVIRONMENT: Record<NetworkId, EnvironmentName> = {
   local: 'localnet',
+  jejuTestnet: 'testnet',
+  jejuMainnet: 'mainnet',
   baseSepolia: 'testnet',
   base: 'mainnet',
 }
 
 const ENVIRONMENT_TO_NETWORK_ID: Record<EnvironmentName, NetworkId> = {
   localnet: 'local',
-  testnet: 'baseSepolia',
-  mainnet: 'base',
+  testnet: 'jejuTestnet',
+  mainnet: 'jejuMainnet',
 }
 
 // Default environment - can be overridden at build time
@@ -384,16 +394,28 @@ export function getFarcasterConfig(): FarcasterConfig {
 }
 
 // =============================================================================
-// Chain Exports (for backwards compatibility)
+// Chain Exports (dynamic getters for correct environment resolution)
 // =============================================================================
 
 /**
  * Current chain ID based on configuration
+ * Note: Use getCurrentChainId() directly for up-to-date value after setDefaultEnvironment()
+ * @deprecated Use getCurrentChainId() instead to get current value
  */
 export const CHAIN_ID = getCurrentChainId()
 
 /**
+ * Get current chain object based on configuration
+ * This is a getter function to ensure correct value after setDefaultEnvironment()
+ */
+export function getChain(): Chain {
+  return getChainById(getCurrentChainId()) ?? hardhat
+}
+
+/**
  * Current chain object based on configuration
+ * Note: For backwards compatibility - use getChain() for dynamic resolution
+ * @deprecated Use getChain() instead
  */
 export const CHAIN: Chain = getChainById(CHAIN_ID) ?? hardhat
 
@@ -412,3 +434,9 @@ export const NETWORK: 'mainnet' | 'testnet' =
  * Whether we're on a Jeju network
  */
 export const IS_JEJU_NETWORK = isJejuChain(CHAIN_ID)
+
+// =============================================================================
+// Babylon config helper
+// =============================================================================
+
+export * from './babylon-config'

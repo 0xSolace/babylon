@@ -19,7 +19,6 @@ import {
 } from '@babylon/api'
 import { comments, db, eq, posts, reports, withTransaction } from '@babylon/db'
 import { logger } from '@babylon/shared'
-import type { NextRequest } from 'next/server'
 import { z } from 'zod'
 
 /**
@@ -41,25 +40,27 @@ const ModerateRequestSchema = z.object({
  * Get real client IP address from x-forwarded-for header
  * Takes the last IP in the chain which is the most reliable (added by our proxy)
  */
-function getClientIp(request: NextRequest): string | undefined {
+function getClientIp(request: Request): string | undefined {
   const forwardedFor = request.headers.get('x-forwarded-for')
   if (!forwardedFor) return undefined
   // Take the last IP (most reliable - added by our reverse proxy)
   return forwardedFor
     .split(',')
-    .map((s) => s.trim())
+    .map((s: string) => s.trim())
     .pop()
 }
 
 export const POST = withErrorHandling(
   async (
-    request: NextRequest,
-    { params }: { params: Promise<{ contentId: string }> },
+    request: Request,
+    context?: { params: Promise<{ contentId: string }> },
   ) => {
+    if (!context) throw new Error('Route context required')
+    const { params } = context
     const admin = await requireAdmin(request)
 
     // Rate limit admin actions to prevent abuse
-    const rateLimitResponse = checkRateLimitAndDuplicates(
+    const rateLimitResponse = await checkRateLimitAndDuplicates(
       admin.userId,
       null,
       RATE_LIMIT_CONFIGS.ADMIN_ACTION,

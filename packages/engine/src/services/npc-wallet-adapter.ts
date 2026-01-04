@@ -18,6 +18,7 @@ import {
   type NetworkName,
   type WalletPort,
 } from '@babylon/shared'
+import { readContract, writeContract } from '@jejunetwork/contracts/viem'
 import {
   type Address,
   createPublicClient,
@@ -36,18 +37,7 @@ const BBLN_DECIMALS = 18
  * NPCs have User records with wallet addresses created by NPCIdentityService
  */
 async function getNPCWalletAddress(actorId: string): Promise<Address | null> {
-  // First check actorState for walletAddress
-  const [actor] = await db
-    .select({ walletAddress: actorState.walletAddress })
-    .from(actorState)
-    .where(eq(actorState.id, actorId))
-    .limit(1)
-
-  if (actor?.walletAddress) {
-    return actor.walletAddress as Address
-  }
-
-  // NPCs may also have User records with wallet addresses
+  // NPCs have User records with wallet addresses created by NPCIdentityService
   const user = await db.user.findUnique({ where: { id: actorId } })
   if (user?.walletAddress) {
     return user.walletAddress as Address
@@ -96,7 +86,7 @@ async function getBBLNBalance(
   }
 
   const { publicClient } = createBBLNClients(network)
-  const balance = await publicClient.readContract({
+  const balance = await readContract(publicClient, {
     address: contracts.token,
     abi: BBLN_TOKEN_ABI,
     functionName: 'balanceOf',
@@ -119,12 +109,15 @@ async function transferBBLN(
     throw new Error(`BBLN token not deployed on ${network}`)
   }
 
+  const chain =
+    network === 'mainnet' ? base : network === 'testnet' ? baseSepolia : hardhat
   const { walletClient } = createBBLNClients(network)
-  const txHash = await walletClient.writeContract({
+  const txHash = await writeContract(walletClient, {
     address: contracts.token,
     abi: BBLN_TOKEN_ABI,
     functionName: 'transfer',
     args: [to, amount],
+    chain,
   })
 
   return txHash

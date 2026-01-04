@@ -442,7 +442,7 @@ const createUsersRoutes = () =>
         // Get stats
         const stats = await getUserProfileStats(user.id)
 
-        // Handle createdAt - could be Date or string from EQLite
+        // Handle createdAt - could be Date or string from SQLit
         const createdAt =
           user.createdAt instanceof Date
             ? user.createdAt.toISOString()

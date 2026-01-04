@@ -1,6 +1,6 @@
 import { logger } from '@babylon/shared'
 import { sdk } from '@farcaster/miniapp-sdk'
-import { useJejuAuth } from '@jejunetwork/auth'
+import { useJejuAuth } from '@jejunetwork/auth/react'
 import { createContext, useContext, useEffect, useRef, useState } from 'react'
 
 /**

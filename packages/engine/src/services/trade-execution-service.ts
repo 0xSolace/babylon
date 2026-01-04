@@ -13,7 +13,7 @@ import {
   actorState,
   and,
   db,
-  type EQLiteClient,
+  type SQLitClient,
   eq,
   gte,
   npcTrades,
@@ -460,7 +460,7 @@ export class TradeExecutionService {
 
     // Back-compat: store poolPositions/npcTrades for NPC analytics
     // Use onConflictDoUpdate to handle re-runs where position already exists
-    await db.transaction(async (tx: EQLiteClient) => {
+    await db.transaction(async (tx: SQLitClient) => {
       await tx
         .insert(poolPositions)
         .values({
@@ -646,7 +646,7 @@ export class TradeExecutionService {
       })
 
       // Back-compat storage updates
-      await db.transaction(async (tx: EQLiteClient) => {
+      await db.transaction(async (tx: SQLitClient) => {
         await tx
           .update(poolPositions)
           .set({
@@ -750,7 +750,7 @@ export class TradeExecutionService {
     const netReturn = Math.max(0, grossReturn - feeCalc.feeAmount)
 
     // Execute in transaction
-    await db.transaction(async (tx: EQLiteClient) => {
+    await db.transaction(async (tx: SQLitClient) => {
       // Close position
       await tx
         .update(poolPositions)

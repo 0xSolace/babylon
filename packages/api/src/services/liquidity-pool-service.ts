@@ -12,6 +12,12 @@
 
 import { logger } from '@babylon/shared'
 import {
+  getChainId,
+  getContractAddress,
+  getRpcUrl,
+  getWethAddress,
+} from '@babylon/shared/config'
+import {
   type Address,
   type Chain,
   createPublicClient,
@@ -390,45 +396,68 @@ export class LiquidityPoolService {
   private pairAddress: Address | null = null
 
   constructor(config: Partial<LiquidityConfig> = {}) {
-    const chainId = config.chainId ?? parseInt(process.env.CHAIN_ID ?? '1', 10)
+    const getAddress = (
+      category: string,
+      name: string,
+      envVar: string,
+      defaultValue: Address,
+    ): Address => {
+      try {
+        return (getContractAddress(category, name) as Address) || defaultValue
+      } catch {
+        return (
+          ((typeof process !== 'undefined' ? process.env[envVar] : undefined) as
+            | Address
+            | undefined) ?? defaultValue
+        )
+      }
+    }
+
+    const chainId = config.chainId ?? getChainId() ?? 1
     this.chain = LiquidityPoolService.getChainFromId(chainId)
 
     this.config = {
       chainId,
-      rpcUrl:
-        config.rpcUrl ?? process.env.ETH_RPC_URL ?? 'http://localhost:6545',
+      rpcUrl: config.rpcUrl ?? getRpcUrl() ?? 'http://localhost:6545',
       tokenAddress:
         config.tokenAddress ??
-        (process.env.BBLN_TOKEN_ADDRESS as Address) ??
-        zeroAddress,
+        getAddress('tokens', 'bbln', 'BBLN_TOKEN_ADDRESS', zeroAddress),
       wethAddress:
         config.wethAddress ??
-        (process.env.WETH_ADDRESS as Address) ??
+        (getWethAddress() as Address | undefined) ??
         '0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2',
       xlpV2FactoryAddress:
         config.xlpV2FactoryAddress ??
-        (process.env.XLP_V2_FACTORY_ADDRESS as Address) ??
-        zeroAddress,
+        getAddress(
+          'liquidity',
+          'factory',
+          'XLP_V2_FACTORY_ADDRESS',
+          zeroAddress,
+        ),
       xlpRouterAddress:
         config.xlpRouterAddress ??
-        (process.env.XLP_ROUTER_ADDRESS as Address) ??
-        zeroAddress,
+        getAddress('liquidity', 'router', 'XLP_ROUTER_ADDRESS', zeroAddress),
       lpLockerAddress:
         config.lpLockerAddress ??
-        (process.env.LP_LOCKER_ADDRESS as Address) ??
-        zeroAddress,
+        getAddress('liquidity', 'locker', 'LP_LOCKER_ADDRESS', zeroAddress),
       feeDistributorAddress:
         config.feeDistributorAddress ??
-        (process.env.FEE_DISTRIBUTOR_ADDRESS as Address) ??
-        zeroAddress,
+        getAddress(
+          'liquidity',
+          'feeDistributor',
+          'FEE_DISTRIBUTOR_ADDRESS',
+          zeroAddress,
+        ),
+      // Private key is a secret - keep as env var
       deployerPrivateKey:
         config.deployerPrivateKey ??
-        (process.env.DEPLOYER_PRIVATE_KEY as `0x${string}`) ??
+        ((typeof process !== 'undefined'
+          ? process.env.DEPLOYER_PRIVATE_KEY
+          : undefined) as `0x${string}` | undefined) ??
         '0x0',
       treasuryAddress:
         config.treasuryAddress ??
-        (process.env.TREASURY_ADDRESS as Address) ??
-        zeroAddress,
+        getAddress('governance', 'treasury', 'TREASURY_ADDRESS', zeroAddress),
       lpTokensToLock: config.lpTokensToLock ?? 100, // 100% locked by default
       lpLockDuration: config.lpLockDuration ?? 180 * 24 * 60 * 60, // 180 days
       teamFeeBps: config.teamFeeBps ?? 5000, // 50%

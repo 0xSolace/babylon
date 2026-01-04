@@ -118,7 +118,7 @@ bun run dev:jeju         # Uses Jeju decentralized services
 
 When running as part of the [Jeju](https://github.com/jeju-ai/jeju) ecosystem, Babylon gains:
 
-- **Decentralized Database**: EQLite via Jeju DWS for persistent storage
+- **Decentralized Database**: SQLit via Jeju DWS for persistent storage
 - **Decentralized Compute**: GPU training via Jeju compute marketplace
 - **On-chain Treasury**: Training audit trail on BabylonTreasury contract
 - **TEE Execution**: Phala Network trusted execution
@@ -127,7 +127,7 @@ When running as part of the [Jeju](https://github.com/jeju-ai/jeju) ecosystem, B
 ### Running in Jeju
 
 ```bash
-# From Jeju root, start Jeju first (provisions EQLite, DWS, etc.)
+# From Jeju root, start Jeju first (provisions SQLit, DWS, etc.)
 jeju dev
 
 # Then run Babylon
@@ -170,12 +170,12 @@ Babylon automatically detects its environment:
 | `NODE_ENV` | `development` | `production` |
 | `USE_JEJU` | not set | `true` |
 | `JEJU_NETWORK` | `localnet` | `mainnet` |
-| `EQLITE_DATABASE_ID` | `babylon` | `babylon` |
+| `SQLIT_DATABASE_ID` | `babylon` | `babylon` |
 | `BABYLON_TREASURY_ADDRESS` | not set | `0x...` (deployed contract) |
 | `STORAGE_MODE` | `local` | `jeju` |
 | `TEE_MODE` | `simulated` | `phala` |
 
-**Database Configuration**: With `JEJU_NETWORK` set, the EQLite endpoint is automatically resolved from `@jejunetwork/config`. You can override with `EQLITE_BLOCK_PRODUCER_ENDPOINT` if needed.
+**Database Configuration**: With `JEJU_NETWORK` set, the SQLit endpoint is automatically resolved from `@jejunetwork/config`. You can override with `SQLIT_BLOCK_PRODUCER_ENDPOINT` if needed.
 
 ### Training Pipeline
 
@@ -278,7 +278,7 @@ bun run deploy:frontend
 **Required Environment Variables:**
 
 - `JEJU_NETWORK` - Network: localnet, testnet, mainnet
-- `EQLITE_BLOCK_PRODUCER_ENDPOINT` - EQLite endpoint (or auto-resolved via JEJU_NETWORK)
+- `SQLIT_BLOCK_PRODUCER_ENDPOINT` - SQLit endpoint (or auto-resolved via JEJU_NETWORK)
 - `JEJU_OAUTH3_SERVICE_URL` - OAuth3 authentication service
 - `OPENAI_API_KEY` or `GROQ_API_KEY` - AI agents
 
@@ -338,7 +338,7 @@ Configure your Jeju OAuth3 service with:
 Ensure these are set in production:
 
 ```bash
-JEJU_OAUTH3_SERVICE_URL=https://auth.jeju.network
+JEJU_OAUTH3_SERVICE_URL=https://auth.jejunetwork.org
 BABYLON_OAUTH3_APP_ID=babylon
 ```
 
@@ -385,5 +385,5 @@ function MyComponent() {
 ### Key Resources
 
 - **Farcaster Mini Apps**: https://miniapps.farcaster.xyz/
-- **Jeju OAuth3 Docs**: https://docs.jeju.network/oauth3
+- **Jeju OAuth3 Docs**: https://docs.jejunetwork.org/oauth3
 - **Mini Apps SDK**: https://github.com/farcaster/miniapp-sdk

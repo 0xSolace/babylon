@@ -5,7 +5,7 @@
  *
  * Prerequisites:
  *   1. Start Jeju: cd /path/to/jeju && bun run dev
- *   2. All services: EQLite, Cache, Storage, KMS, OAuth3, Devnet
+ *   2. All services: SQLit, Cache, Storage, KMS, OAuth3, Devnet
  *
  * Run with: bun test packages/testing/integration/jeju-e2e.integration.test.ts
  */
@@ -190,24 +190,24 @@ describe('Local Devnet', () => {
 })
 
 // ============================================================================
-// EQLite Database (requires Jeju gateway)
+// SQLit Database (requires Jeju gateway)
 // ============================================================================
 
-describe('Jeju EQLite Database', () => {
-  const eqliteEndpoint = `${JEJU_GATEWAY_URL}/v1/eqlite`
+describe('Jeju SQLit Database', () => {
+  const sqlitEndpoint = `${JEJU_GATEWAY_URL}/v1/sqlit`
 
-  it('should connect to EQLite endpoint', async () => {
+  it('should connect to SQLit endpoint', async () => {
     if (!jejuGatewayAvailable) {
       console.log('Skipped: Jeju gateway not running')
       return
     }
 
-    const response = await fetch(`${eqliteEndpoint}/health`, {
+    const response = await fetch(`${sqlitEndpoint}/health`, {
       signal: AbortSignal.timeout(5000),
     }).catch(() => null)
 
     if (!response?.ok) {
-      console.log('Skipped: EQLite service not available')
+      console.log('Skipped: SQLit service not available')
       return
     }
 
@@ -221,17 +221,17 @@ describe('Jeju EQLite Database', () => {
       return
     }
 
-    const healthResponse = await fetch(`${eqliteEndpoint}/health`).catch(
+    const healthResponse = await fetch(`${sqlitEndpoint}/health`).catch(
       () => null,
     )
     if (!healthResponse?.ok) {
-      console.log('Skipped: EQLite service not available')
+      console.log('Skipped: SQLit service not available')
       return
     }
 
     const testTable = `e2e_test_${Date.now()}`
 
-    const createResponse = await fetch(`${eqliteEndpoint}/exec`, {
+    const createResponse = await fetch(`${sqlitEndpoint}/exec`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -241,11 +241,11 @@ describe('Jeju EQLite Database', () => {
     })
 
     if (!createResponse.ok) {
-      console.log('Skipped: EQLite exec not implemented')
+      console.log('Skipped: SQLit exec not implemented')
       return
     }
 
-    console.log('EQLite table created:', testTable)
+    console.log('SQLit table created:', testTable)
     expect(createResponse.ok).toBe(true)
   })
 })

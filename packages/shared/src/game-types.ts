@@ -274,12 +274,10 @@ export interface WorldEvent {
   actors: string[]
   description: string
   relatedQuestion?: number | null
-  /**
-   * @deprecated Use sentimentSignal instead for more nuanced signal direction.
-   * Kept for backwards compatibility - will be derived from sentimentSignal if not set.
-   */
-  pointsToward?: 'YES' | 'NO' | null
   visibility: 'public' | 'leaked' | 'secret' | 'private' | 'group'
+
+  /** Direction the event points toward (yes/no/YES/NO) for related prediction markets */
+  pointsToward?: 'yes' | 'no' | 'YES' | 'NO' | null
 
   // New sentiment-based signal fields (preferred over pointsToward)
   /** Sentiment signal from -1.0 (negative) to 1.0 (positive) */

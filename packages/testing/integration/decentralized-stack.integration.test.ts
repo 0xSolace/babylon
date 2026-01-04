@@ -8,7 +8,7 @@
  *
  * Prerequisites:
  *   1. Start Jeju: cd /path/to/jeju && bun run dev
- *   2. Services running: EQLite, Cache, Storage, KMS, OAuth3
+ *   2. Services running: SQLit, Cache, Storage, KMS, OAuth3
  */
 
 import { afterAll, beforeAll, describe, expect, it } from 'bun:test'
@@ -46,19 +46,19 @@ import type {
 // Run with: bun test packages/testing/integration/decentralized-stack.integration.test.ts
 
 // ============================================================================
-// EQLite Tests
+// SQLit Tests
 // ============================================================================
 
-describe('EQLite Integration', () => {
+describe('SQLit Integration', () => {
   let db: DBClient
 
   beforeAll(async () => {
-    if (!process.env.EQLITE_BLOCK_PRODUCER_ENDPOINT) {
+    if (!process.env.SQLIT_BLOCK_PRODUCER_ENDPOINT) {
       console.warn(
-        '[Test] EQLITE_BLOCK_PRODUCER_ENDPOINT not set, using default localhost:4661',
+        '[Test] SQLIT_BLOCK_PRODUCER_ENDPOINT not set, using default localhost:4661',
       )
-      process.env.EQLITE_BLOCK_PRODUCER_ENDPOINT = 'http://localhost:4661'
-      process.env.EQLITE_DATABASE_ID = 'babylon_test'
+      process.env.SQLIT_BLOCK_PRODUCER_ENDPOINT = 'http://localhost:4661'
+      process.env.SQLIT_DATABASE_ID = 'babylon_test'
     }
 
     // Cast to test-specific DBClient interface which has simplified method signatures
@@ -67,7 +67,7 @@ describe('EQLite Integration', () => {
     await initializeDB()
   })
 
-  it('should connect to EQLite and report healthy', async () => {
+  it('should connect to SQLit and report healthy', async () => {
     const healthy = await db.isHealthy()
     expect(healthy).toBe(true)
   })
@@ -551,14 +551,14 @@ describe('Treasury Integration', () => {
 describe('End-to-End Decentralized Flow', () => {
   it('should handle a complete user flow with all services', async () => {
     // This test simulates a real user flow:
-    // 1. Store user data in EQLite
+    // 1. Store user data in SQLit
     // 2. Cache frequently accessed data
     // 3. Upload user avatar to storage
     // 4. Encrypt sensitive data with KMS
 
     const userId = `e2e-user-${Date.now()}`
 
-    // 1. Create user in EQLite
+    // 1. Create user in SQLit
     // Cast to test-specific DBClient interface with simplified method signatures
     const db = getDB() as unknown as DBClient
 

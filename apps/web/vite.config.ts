@@ -12,9 +12,21 @@ const API_PORT =
   Number(process.env.BABYLON_API_PORT) || manifest.ports?.api || 5009
 
 export default defineConfig({
+  // Use relative paths for IPFS/decentralized deployment
+  base: process.env.VITE_BASE_URL ?? './',
   plugins: [react()],
+  // Production optimizations
+  esbuild: {
+    drop: ['debugger'],
+    legalComments: 'none',
+  },
   resolve: {
+    // Ensure only one React instance is used (critical for hooks to work)
+    dedupe: ['react', 'react-dom', 'react-router-dom', '@tanstack/react-query'],
     alias: {
+      // Force React to use the same instance across all packages
+      'react': resolve(__dirname, '../../node_modules/react'),
+      'react-dom': resolve(__dirname, '../../node_modules/react-dom'),
       '@': resolve(__dirname, './src'),
       '@/components': resolve(__dirname, './src/components'),
       '@/lib': resolve(__dirname, './src/lib'),
@@ -22,8 +34,8 @@ export default defineConfig({
       '@/stores': resolve(__dirname, './src/stores'),
       '@/app': resolve(__dirname, './src/app'),
       '@/contexts': resolve(__dirname, './src/contexts'),
-      // Workspace packages - using directory paths to support subpath imports
-      '@babylon/shared': resolve(__dirname, '../../packages/shared/src'),
+      // Browser-safe exports only (excludes elysia plugins, dev-server)
+      '@babylon/shared': resolve(__dirname, '../../packages/shared/src/browser.ts'),
       '@babylon/core': resolve(__dirname, '../../packages/core'),
       '@babylon/core/markets': resolve(
         __dirname,
@@ -68,23 +80,56 @@ export default defineConfig({
   },
   build: {
     outDir: 'dist',
-    sourcemap: true,
+    sourcemap: 'hidden', // External sourcemaps for production
+    minify: 'esbuild',
+    target: 'es2022',
+    chunkSizeWarningLimit: 500,
     rollupOptions: {
+      external: [
+        'elysia',
+        '@elysiajs/cors',
+        '@elysiajs/jwt',
+        'bun',
+        'bun:sqlite',
+        'node:fs',
+        'node:fs/promises',
+        'node:path',
+        'node:crypto',
+        'node:http',
+        'node:url',
+        'fs',
+        'fs/promises',
+        'path',
+        'crypto',
+        'http',
+        'child_process',
+        'net',
+        'tls',
+        'dgram',
+        'dns',
+        'stream',
+      ],
       output: {
-        manualChunks: {
-          react: ['react', 'react-dom', 'react-router-dom'],
-          query: ['@tanstack/react-query'],
-        },
+        // Single bundle for simpler DWS deployment
+        manualChunks: undefined,
+        inlineDynamicImports: true,
+        compact: true,
+      },
+      treeshake: {
+        moduleSideEffects: false,
+        propertyReadSideEffects: false,
       },
     },
   },
   define: {
-    'process.env.PUBLIC_API_BASE_URL': JSON.stringify(
-      process.env.PUBLIC_API_BASE_URL || `http://localhost:${API_PORT}`,
-    ),
-    'process.env.PUBLIC_WAITLIST_MODE': JSON.stringify(
-      process.env.PUBLIC_WAITLIST_MODE || 'false',
-    ),
+    // Define process.env for browser - must define the whole object
+    // Use ?? (nullish coalescing) to allow empty string for relative API paths
+    'process.env': JSON.stringify({
+      PUBLIC_API_BASE_URL: process.env.PUBLIC_API_BASE_URL ?? `http://localhost:${API_PORT}`,
+      PUBLIC_WAITLIST_MODE: process.env.PUBLIC_WAITLIST_MODE ?? 'false',
+      NODE_ENV: process.env.NODE_ENV ?? 'production',
+      NETWORK: process.env.NETWORK ?? 'testnet',
+    }),
   },
   optimizeDeps: {
     include: [

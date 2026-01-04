@@ -22,6 +22,8 @@ import {
   type NetworkName,
   setLiquidityContracts,
 } from '@babylon/shared'
+import { getContractAddress, getRpcUrl } from '@babylon/shared/config'
+import { readContract } from '@jejunetwork/contracts/viem'
 import {
   type Address,
   type Chain,
@@ -267,7 +269,7 @@ export class XLPLiquidityService {
       this.account = privateKeyToAccount(privateKey as `0x${string}`)
     }
 
-    const rpcUrl = process.env.JEJU_RPC_URL ?? 'http://localhost:6546'
+    const rpcUrl = getRpcUrl() ?? 'http://localhost:6546'
 
     this.publicClient = createPublicClient({
       chain: this.chain,
@@ -360,13 +362,13 @@ export class XLPLiquidityService {
       'XLPLiquidity',
     )
 
-    // Wait for transaction and get receipt
-    const _receipt = await this.publicClient.waitForTransactionReceipt({
+    // Wait for transaction confirmation
+    await this.publicClient.waitForTransactionReceipt({
       hash: addLiqTx,
     })
 
     // Get pair address
-    const wethAddress = (await this.publicClient.readContract({
+    const wethAddress = (await readContract(this.publicClient, {
       address: routerAddress,
       abi: XLP_ROUTER_ABI,
       functionName: 'WETH',
@@ -382,7 +384,7 @@ export class XLPLiquidityService {
       return null
     }
 
-    const pairAddress = (await this.publicClient.readContract({
+    const pairAddress = (await readContract(this.publicClient, {
       address: factoryAddress,
       abi: XLP_FACTORY_ABI,
       functionName: 'getPair',
@@ -393,7 +395,7 @@ export class XLPLiquidityService {
     await setLiquidityContracts(this.network, { ethBblnPair: pairAddress })
 
     // Get LP token balance
-    const lpBalance = (await this.publicClient.readContract({
+    const lpBalance = (await readContract(this.publicClient, {
       address: pairAddress,
       abi: ERC20_ABI,
       functionName: 'balanceOf',
@@ -484,9 +486,17 @@ export class XLPLiquidityService {
       return null
     }
 
-    const jejuTokenAddress = process.env.JEJU_TOKEN_ADDRESS as
-      | Address
-      | undefined
+    let jejuTokenAddress: Address | undefined
+    try {
+      jejuTokenAddress = getContractAddress('tokens', 'jeju') as Address
+    } catch {
+      // Fallback to env var if not in config
+      jejuTokenAddress = (
+        typeof process !== 'undefined'
+          ? process.env.JEJU_TOKEN_ADDRESS
+          : undefined
+      ) as Address | undefined
+    }
     if (!jejuTokenAddress) {
       logger.warn(
         'JEJU token address not configured, skipping JEJU/BBLN pool',
@@ -573,7 +583,7 @@ export class XLPLiquidityService {
       return null
     }
 
-    const pairAddress = (await this.publicClient.readContract({
+    const pairAddress = (await readContract(this.publicClient, {
       address: factoryAddress,
       abi: XLP_FACTORY_ABI,
       functionName: 'getPair',
@@ -584,7 +594,7 @@ export class XLPLiquidityService {
     await setLiquidityContracts(this.network, { jejuBblnPair: pairAddress })
 
     // Get LP token balance
-    const lpBalance = (await this.publicClient.readContract({
+    const lpBalance = (await readContract(this.publicClient, {
       address: pairAddress,
       abi: ERC20_ABI,
       functionName: 'balanceOf',
@@ -627,22 +637,22 @@ export class XLPLiquidityService {
     }
 
     const [reserves, token0, token1, totalSupply] = await Promise.all([
-      this.publicClient.readContract({
+      readContract(this.publicClient, {
         address: pairAddress,
         abi: XLP_PAIR_ABI,
         functionName: 'getReserves',
       }) as Promise<[bigint, bigint, number]>,
-      this.publicClient.readContract({
+      readContract(this.publicClient, {
         address: pairAddress,
         abi: XLP_PAIR_ABI,
         functionName: 'token0',
       }) as Promise<Address>,
-      this.publicClient.readContract({
+      readContract(this.publicClient, {
         address: pairAddress,
         abi: XLP_PAIR_ABI,
         functionName: 'token1',
       }) as Promise<Address>,
-      this.publicClient.readContract({
+      readContract(this.publicClient, {
         address: pairAddress,
         abi: XLP_PAIR_ABI,
         functionName: 'totalSupply',

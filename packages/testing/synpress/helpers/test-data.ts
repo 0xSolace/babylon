@@ -7,8 +7,9 @@
  * @module @babylon/testing/synpress/helpers/test-data
  */
 
-// Re-export base test data from Jeju
+// Re-export common test data from @jejunetwork/tests
 export {
+  BASE_SELECTORS,
   generateTestEmail,
   generateTestId,
   generateTestUsername,
@@ -16,16 +17,14 @@ export {
   sleep,
   TEST_FORM_DATA,
   TEST_NUMBERS,
+  TEST_WALLET_ADDRESS,
   TIMEOUTS,
   TRADING_TEST_DATA,
   VIEWPORTS,
 } from '@jejunetwork/tests'
 
 // Import for extending
-import {
-  BASE_SELECTORS as JEJU_BASE_SELECTORS,
-  TEST_WALLET_ADDRESS,
-} from '@jejunetwork/tests'
+import { BASE_SELECTORS as JEJU_BASE_SELECTORS } from '@jejunetwork/tests'
 
 // ============================================================================
 // Babylon-Specific Routes
@@ -205,9 +204,9 @@ export const SELECTORS = {
  * Default test account - uses canonical Jeju test wallet
  */
 export const DEFAULT_ANVIL_ACCOUNT = {
-  address: TEST_WALLET_ADDRESS,
+  address: '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266' as const,
   privateKey:
-    '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80',
+    '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80' as const,
   mnemonic: 'test test test test test test test test test test test junk',
 } as const
 

@@ -67,10 +67,10 @@ function getComputeEndpoint(): string {
   // On-chain provider uses network-specific endpoints
   const network = process.env.JEJU_NETWORK
   if (network === 'mainnet') {
-    return 'https://compute.jeju.network'
+    return 'https://compute.jejunetwork.org'
   }
   if (network === 'testnet') {
-    return 'https://compute.testnet.jeju.network'
+    return 'https://compute.testnet.jejunetwork.org'
   }
 
   // Localnet default
@@ -85,9 +85,9 @@ const DEFAULT_CONFIG: Required<ComputeTrainingConfig> = {
   jejuRpcUrl:
     process.env.JEJU_RPC_URL ||
     (process.env.JEJU_NETWORK === 'mainnet'
-      ? 'https://rpc.jeju.network'
+      ? 'https://rpc.jejunetwork.org'
       : process.env.JEJU_NETWORK === 'testnet'
-        ? 'https://testnet-rpc.jeju.network'
+        ? 'https://testnet-rpc.jejunetwork.org'
         : `http://localhost:${L2_RPC_PORT}`),
   computeMarketplaceAddress: (process.env.COMPUTE_MARKETPLACE_ADDRESS ||
     '0x0') as Address,

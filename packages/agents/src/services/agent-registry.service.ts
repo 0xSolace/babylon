@@ -458,9 +458,9 @@ export class AgentRegistryService {
     const whereClause =
       whereParts.length > 0 ? `WHERE ${whereParts.join(' AND ')}` : ''
 
-    // Type for raw SQL join result (camelCase column names from EQLite)
+    // Type for raw SQL join result (camelCase column names from SQLit)
     interface RawJoinedRow {
-      // AgentRegistry fields (actual EQLite schema)
+      // AgentRegistry fields (actual SQLit schema)
       id: string
       agentId: string
       userId: string | null
@@ -1019,7 +1019,7 @@ export class AgentRegistryService {
   /**
    * Map database model to AgentRegistration type
    *
-   * @description Maps EQLite AgentRegistry model with relations to AgentRegistration
+   * @description Maps SQLit AgentRegistry model with relations to AgentRegistration
    * type. Handles capabilities, discovery metadata, on-chain data, and Agent0 data mapping.
    *
    * @param {RegistryWithRelations} registry - Registry with relations

@@ -408,7 +408,7 @@ export default function DAOPage() {
         <div className="mb-4 flex items-center justify-between">
           <h2 className="font-semibold text-lg">Buyback History</h2>
           <a
-            href="https://jeju.network/explorer"
+            href="https://jejunetwork.org/explorer"
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center gap-1 text-muted-foreground text-sm hover:text-foreground"
@@ -427,7 +427,7 @@ export default function DAOPage() {
         </p>
         <div className="flex flex-wrap justify-center gap-4">
           <a
-            href="https://jeju.network"
+            href="https://jejunetwork.org"
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-2 rounded-lg border border-border px-4 py-2 text-sm hover:bg-muted"
@@ -435,7 +435,7 @@ export default function DAOPage() {
             Jeju Network <ExternalLink className="h-3 w-3" />
           </a>
           <a
-            href="https://jeju.network/governance"
+            href="https://jejunetwork.org/governance"
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-2 rounded-lg border border-border px-4 py-2 text-sm hover:bg-muted"

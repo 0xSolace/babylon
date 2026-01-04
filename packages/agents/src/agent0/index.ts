@@ -36,7 +36,8 @@ export type {
   IReputationBridge,
   ReputationData,
 } from '@jejunetwork/agents'
-// Re-export core Agent0 types and utilities from Jeju
+
+// Re-export runtime functions from @jejunetwork/agents for Babylon consumers
 export {
   Agent0Client,
   createAgent0Client,

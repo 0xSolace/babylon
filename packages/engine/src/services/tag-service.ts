@@ -9,6 +9,7 @@
 
 import { db } from '@babylon/db'
 import { logger } from '@babylon/shared'
+import { getJejuComputeEndpoint } from '@babylon/shared/config'
 import { generateSnowflakeId } from '@jejunetwork/shared'
 import { isPromptLoggingEnabled, logPrompt } from '../utils/prompt-logger'
 
@@ -28,35 +29,6 @@ export interface GeneratedTag {
 // =============================================================================
 // LLM Client Setup - Routes through Jeju Compute
 // =============================================================================
-
-// Port configuration via env var
-const COMPUTE_PORT = process.env.JEJU_COMPUTE_PORT ?? '5010'
-
-/**
- * Get Jeju Compute endpoint based on network configuration
- * Uses decentralized compute marketplace for LLM inference
- */
-function getJejuComputeEndpoint(): string {
-  // Explicit override takes precedence
-  if (process.env.JEJU_COMPUTE_ENDPOINT) {
-    return process.env.JEJU_COMPUTE_ENDPOINT
-  }
-  if (process.env.JEJU_DWS_ENDPOINT) {
-    return process.env.JEJU_DWS_ENDPOINT
-  }
-
-  // Network-based configuration
-  const network = process.env.JEJU_NETWORK
-  if (network === 'mainnet') {
-    return 'https://compute.jeju.network'
-  }
-  if (network === 'testnet') {
-    return 'https://compute.testnet.jeju.network'
-  }
-
-  // Localnet default
-  return `http://localhost:${COMPUTE_PORT}`
-}
 
 const JEJU_COMPUTE_ENDPOINT = getJejuComputeEndpoint()
 

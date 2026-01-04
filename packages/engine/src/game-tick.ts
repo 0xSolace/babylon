@@ -1084,7 +1084,7 @@ async function bootstrapTrending(): Promise<void> {
   logger.info('Bootstrapping trending tags...', undefined, 'GameTick')
 
   // Check if we have enough posts and tags
-  // Note: EQLite's select builder types don't support field projection, so we cast the result
+  // Note: SQLit's select builder types don't support field projection, so we cast the result
   const [postCountResult, taggedPostCountResult] = await Promise.all([
     db.select({ count: count() }).from(posts),
     db

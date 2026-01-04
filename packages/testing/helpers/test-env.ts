@@ -7,7 +7,7 @@
  * Usage:
  *   import { ensureTestEnv, isServiceAvailable, skipIfNoService } from '../helpers/test-env'
  *
- *   describe.skipIf(!await isServiceAvailable('eqlite'))('My Test Suite', () => {
+ *   describe.skipIf(!await isServiceAvailable('sqlit'))('My Test Suite', () => {
  *     beforeAll(async () => {
  *       await ensureTestEnv()
  *     })
@@ -16,7 +16,7 @@
  */
 
 export type ServiceName =
-  | 'eqlite'
+  | 'sqlit'
   | 'dws'
   | 'chain'
   | 'oauth3'
@@ -27,8 +27,8 @@ const SERVICE_ENDPOINTS: Record<
   ServiceName,
   { url: string; healthPath: string }
 > = {
-  eqlite: {
-    url: process.env.EQLITE_BLOCK_PRODUCER_ENDPOINT ?? 'http://localhost:4661',
+  sqlit: {
+    url: process.env.SQLIT_BLOCK_PRODUCER_ENDPOINT ?? 'http://localhost:4661',
     healthPath: '/health',
   },
   dws: {
@@ -105,7 +105,7 @@ export async function getServiceStatus(): Promise<
   Record<ServiceName, boolean>
 > {
   const services: ServiceName[] = [
-    'eqlite',
+    'sqlit',
     'dws',
     'chain',
     'oauth3',
@@ -136,7 +136,7 @@ export function skipIfNoService(service: ServiceName): () => boolean {
 
 // Cache service status at module load
 let _cachedServiceStatus: Record<ServiceName, boolean> = {
-  eqlite: false,
+  sqlit: false,
   dws: false,
   chain: false,
   oauth3: false,
@@ -173,7 +173,7 @@ export function hasContracts(): boolean {
  * Ensure test environment is properly configured
  */
 export async function ensureTestEnv(): Promise<{
-  eqliteAvailable: boolean
+  sqlitAvailable: boolean
   dwsAvailable: boolean
   chainAvailable: boolean
   dbInitialized: boolean
@@ -182,18 +182,18 @@ export async function ensureTestEnv(): Promise<{
   process.env.NODE_ENV = 'test'
   process.env.BUN_ENV = 'test'
   process.env.JEJU_NETWORK = process.env.JEJU_NETWORK ?? 'localnet'
-  process.env.EQLITE_BLOCK_PRODUCER_ENDPOINT =
-    process.env.EQLITE_BLOCK_PRODUCER_ENDPOINT ?? 'http://localhost:4661'
+  process.env.SQLIT_BLOCK_PRODUCER_ENDPOINT =
+    process.env.SQLIT_BLOCK_PRODUCER_ENDPOINT ?? 'http://localhost:4661'
   process.env.JEJU_DWS_ENDPOINT =
     process.env.JEJU_DWS_ENDPOINT ?? 'http://localhost:4030'
 
-  const eqliteAvailable = await isServiceAvailable('eqlite')
+  const sqlitAvailable = await isServiceAvailable('sqlit')
   const dwsAvailable = await isServiceAvailable('dws')
   const chainAvailable = await isServiceAvailable('chain')
 
   let dbInitialized = false
 
-  if (eqliteAvailable) {
+  if (sqlitAvailable) {
     try {
       const { initializeDatabase } = await import('@babylon/db')
       await initializeDatabase()
@@ -204,7 +204,7 @@ export async function ensureTestEnv(): Promise<{
   }
 
   return {
-    eqliteAvailable,
+    sqlitAvailable,
     dwsAvailable,
     chainAvailable,
     dbInitialized,
@@ -215,7 +215,7 @@ export async function ensureTestEnv(): Promise<{
  * Pre-computed service availability for use in describe.skipIf
  */
 export const services = {
-  eqlite: await isServiceAvailable('eqlite'),
+  sqlit: await isServiceAvailable('sqlit'),
   dws: await isServiceAvailable('dws'),
   chain: await isServiceAvailable('chain'),
   oauth3: await isServiceAvailable('oauth3'),

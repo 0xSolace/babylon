@@ -33,16 +33,16 @@ import {
   InsufficientFundsError,
   type NetworkName,
 } from '@babylon/shared'
+import { readContract, writeContract } from '@jejunetwork/contracts/viem'
 import { generateSnowflakeId, NotFoundError } from '@jejunetwork/shared'
 import {
   type Address,
   createPublicClient,
-  createWalletClient,
+  type createWalletClient,
   formatUnits,
   http,
   parseUnits,
 } from 'viem'
-import { privateKeyToAccount } from 'viem/accounts'
 import { base, baseSepolia, hardhat } from 'viem/chains'
 
 // =============================================================================
@@ -91,8 +91,35 @@ const getPoolCustodyAddress = (): Address => {
 // biome-ignore lint/complexity/noStaticOnlyClass: Service pattern
 export class BBLNWalletService {
   private static network: NetworkName = getCurrentNetwork()
+  private static chain =
+    BBLNWalletService.network === 'mainnet'
+      ? base
+      : BBLNWalletService.network === 'testnet'
+        ? baseSepolia
+        : hardhat
   private static publicClient = BBLNWalletService.createPublicClient()
-  private static walletClient = BBLNWalletService.createWalletClient()
+  private static walletClient: ReturnType<typeof createWalletClient> | null =
+    null
+
+  /**
+   * Set the wallet client for pool custody operations
+   * Must be called before debit/credit/fundUser operations
+   */
+  static setWalletClient(client: ReturnType<typeof createWalletClient>): void {
+    BBLNWalletService.walletClient = client
+  }
+
+  /**
+   * Get wallet client, throwing if not set
+   */
+  private static getWalletClient(): ReturnType<typeof createWalletClient> {
+    if (!BBLNWalletService.walletClient) {
+      throw new Error(
+        'BBLNWalletService wallet client not configured. Call setWalletClient() first.',
+      )
+    }
+    return BBLNWalletService.walletClient
+  }
 
   private static createPublicClient() {
     const config = getNetworkConfig(BBLNWalletService.network)
@@ -104,27 +131,6 @@ export class BBLNWalletService {
           : hardhat
 
     return createPublicClient({
-      chain,
-      transport: http(config.rpcUrl),
-    })
-  }
-
-  private static createWalletClient() {
-    const config = getNetworkConfig(BBLNWalletService.network)
-    const chain =
-      BBLNWalletService.network === 'mainnet'
-        ? base
-        : BBLNWalletService.network === 'testnet'
-          ? baseSepolia
-          : hardhat
-
-    // Pool custody wallet for executing transfers
-    const privateKey = (process.env.POOL_CUSTODY_PRIVATE_KEY ??
-      '0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d') as `0x${string}` // hardhat[1]
-    const account = privateKeyToAccount(privateKey)
-
-    return createWalletClient({
-      account,
       chain,
       transport: http(config.rpcUrl),
     })
@@ -165,7 +171,7 @@ export class BBLNWalletService {
   static async getOnChainBalance(address: Address): Promise<bigint> {
     const tokenAddress = BBLNWalletService.getTokenAddress()
 
-    const balance = await BBLNWalletService.publicClient.readContract({
+    const balance = await readContract(BBLNWalletService.publicClient, {
       address: tokenAddress,
       abi: BBLN_TOKEN_ABI,
       functionName: 'balanceOf',
@@ -251,11 +257,12 @@ export class BBLNWalletService {
     // Execute transferFrom (requires user approval)
     // In a real implementation, this would be called by a smart contract
     // For now, we assume the pool has been approved to spend user tokens
-    const txHash = await BBLNWalletService.walletClient.writeContract({
+    const txHash = await writeContract(BBLNWalletService.getWalletClient(), {
       address: tokenAddress,
       abi: BBLN_TOKEN_ABI,
       functionName: 'transfer',
       args: [poolAddress, amountWei],
+      chain: BBLNWalletService.chain,
     })
 
     // Record transaction in database
@@ -303,11 +310,12 @@ export class BBLNWalletService {
       await BBLNWalletService.getOnChainBalance(walletAddress)
 
     // Transfer from pool to user
-    const txHash = await BBLNWalletService.walletClient.writeContract({
+    const txHash = await writeContract(BBLNWalletService.getWalletClient(), {
       address: tokenAddress,
       abi: BBLN_TOKEN_ABI,
       functionName: 'transfer',
       args: [walletAddress, amountWei],
+      chain: BBLNWalletService.chain,
     })
 
     // Record transaction in database
@@ -401,7 +409,18 @@ export class BBLNWalletService {
       .orderBy(desc(balanceTransactions.createdAt))
       .limit(limit)
 
-    return transactionsResult.map((tx) => ({
+    type TxRecord = {
+      id: string
+      type: string
+      amount: string
+      balanceBefore: string
+      balanceAfter: string
+      description: string | null
+      relatedId: string | null
+      createdAt: Date
+    }
+
+    return (transactionsResult as TxRecord[]).map((tx) => ({
       id: tx.id,
       type: tx.type,
       amount: Number(tx.amount),
@@ -428,11 +447,12 @@ export class BBLNWalletService {
     const amountWei = parseUnits(String(amount), BBLN_DECIMALS)
 
     // Transfer from pool to user
-    const txHash = await BBLNWalletService.walletClient.writeContract({
+    const txHash = await writeContract(BBLNWalletService.getWalletClient(), {
       address: tokenAddress,
       abi: BBLN_TOKEN_ABI,
       functionName: 'transfer',
       args: [walletAddress, amountWei],
+      chain: BBLNWalletService.chain,
     })
 
     // Record in database

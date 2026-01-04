@@ -455,7 +455,7 @@ async function executePerpTrade(params: {
           },
         }
       : {
-          debit: ({
+          debit: async ({
             userId: uid,
             amount: amt,
             reason,
@@ -467,28 +467,36 @@ async function executePerpTrade(params: {
             reason: string
             description?: string
             relatedId?: string
-          }) =>
-            WalletService.debit(uid, amt, reason, description ?? '', relatedId),
-          credit: ({
-            userId: uid,
-            amount: amt,
-            reason,
-            description,
-            relatedId,
-          }: {
-            userId: string
-            amount: number
-            reason: string
-            description?: string
-            relatedId?: string
-          }) =>
-            WalletService.credit(
+          }): Promise<void> => {
+            await WalletService.debit(
               uid,
               amt,
               reason,
               description ?? '',
               relatedId,
-            ),
+            )
+          },
+          credit: async ({
+            userId: uid,
+            amount: amt,
+            reason,
+            description,
+            relatedId,
+          }: {
+            userId: string
+            amount: number
+            reason: string
+            description?: string
+            relatedId?: string
+          }): Promise<void> => {
+            await WalletService.credit(
+              uid,
+              amt,
+              reason,
+              description ?? '',
+              relatedId,
+            )
+          },
           recordPnL: async ({
             userId: uid,
             pnl,
@@ -499,7 +507,7 @@ async function executePerpTrade(params: {
             pnl: number
             reason: string
             relatedId?: string
-          }) => {
+          }): Promise<void> => {
             await WalletService.recordPnL(uid, pnl, reason, relatedId)
           },
           getBalance: (uid: string) => WalletService.getBalance(uid),

@@ -1,4 +1,3 @@
-// @ts-nocheck - Elysia body type inference issues, needs refactoring
 import {
   and,
   comments,
@@ -9,6 +8,7 @@ import {
   isNull,
   lt,
   markets,
+  type Post,
   posts,
   reactions,
   shares,
@@ -17,11 +17,19 @@ import {
 import { logger } from '@babylon/shared'
 import { generateSnowflakeId } from '@jejunetwork/shared'
 import { Elysia, t } from 'elysia'
+import type { Hex } from 'viem'
 import {
   authMiddleware,
   getAuthContext,
   rateLimitMiddleware,
 } from '../middleware'
+import {
+  checkHubHealth,
+  fetchFarcasterFeedPosts,
+  getFollowingFids,
+  postToFarcaster,
+  storeSignerKey,
+} from '../services/farcaster'
 
 /**
  * Post routes
@@ -54,17 +62,21 @@ const createPostsRoutes = () =>
         }
 
         // First, get the posts
-        const feedPosts = await db
+        const feedPosts = (await db
           .select()
           .from(posts)
           .where(and(...conditions))
           .orderBy(desc(posts.timestamp))
-          .limit(limit + 1)
+          .limit(limit + 1)) as unknown as Post[]
 
-        // Get unique author IDs
-        const authorIds = [
-          ...new Set(feedPosts.map((p) => p.authorId).filter(Boolean)),
-        ]
+        // Get unique author IDs (filter out null/undefined with type guard)
+        const authorIds = Array.from(
+          new Set(
+            feedPosts
+              .map((p) => p.authorId)
+              .filter((id): id is string => typeof id === 'string'),
+          ),
+        )
 
         // Fetch author details
         const authorMap = new Map<
@@ -96,22 +108,24 @@ const createPostsRoutes = () =>
         }
 
         // Map posts with author info
-        const feedPostsWithAuthor = feedPosts.map((post) => ({
-          id: post.id,
-          content: post.content,
-          authorId: post.authorId,
-          type: post.type,
-          timestamp: post.timestamp,
-          imageUrl: post.imageUrl,
-          articleTitle: post.articleTitle,
-          commentOnPostId: post.commentOnPostId,
-          originalPostId: post.originalPostId,
-          authorUsername: authorMap.get(post.authorId || '')?.username ?? null,
-          authorDisplayName:
-            authorMap.get(post.authorId || '')?.displayName ?? null,
-          authorProfileImageUrl:
-            authorMap.get(post.authorId || '')?.profileImageUrl ?? null,
-        }))
+        const feedPostsWithAuthor = feedPosts.map((post) => {
+          const authorId = post.authorId ?? ''
+          return {
+            id: post.id,
+            content: post.content,
+            authorId: post.authorId,
+            type: post.type,
+            timestamp: post.timestamp,
+            imageUrl: post.imageUrl,
+            articleTitle: post.articleTitle,
+            commentOnPostId: post.commentOnPostId,
+            originalPostId: post.originalPostId,
+            authorUsername: authorMap.get(authorId)?.username ?? null,
+            authorDisplayName: authorMap.get(authorId)?.displayName ?? null,
+            authorProfileImageUrl:
+              authorMap.get(authorId)?.profileImageUrl ?? null,
+          }
+        })
 
         const hasMore = feedPostsWithAuthor.length > limit
         const resultPosts = hasMore
@@ -220,11 +234,12 @@ const createPostsRoutes = () =>
         const { user } = getAuthContext(ctx)
         const { params, set } = ctx
 
-        const [post] = await db
+        const postResult = (await db
           .select()
           .from(posts)
           .where(and(eq(posts.id, params.id), isNull(posts.deletedAt)))
-          .limit(1)
+          .limit(1)) as unknown as Post[]
+        const post = postResult[0]
 
         if (!post) {
           set.status = 404
@@ -294,14 +309,28 @@ const createPostsRoutes = () =>
       '/posts',
       async (ctx) => {
         const { user, isAuthenticated } = getAuthContext(ctx)
-        const { set, body } = ctx
+        const { set } = ctx
         if (!isAuthenticated || !user) {
           set.status = 401
           return { error: 'Unauthorized' }
         }
 
-        const { content, mediaUrls, replyTo, quotedPostId, postToFarcaster } =
-          body
+        // Type assertion for body (Elysia type inference limitation)
+        const body = ctx.body as {
+          content: string
+          mediaUrls?: string[]
+          replyTo?: string
+          quotedPostId?: string
+          postToFarcaster?: boolean
+        }
+
+        const {
+          content,
+          mediaUrls,
+          replyTo,
+          quotedPostId,
+          postToFarcaster: shouldPostToFarcaster,
+        } = body
 
         if (!content || content.trim().length === 0) {
           set.status = 400
@@ -332,27 +361,50 @@ const createPostsRoutes = () =>
         }
 
         // Post to Farcaster if requested and user has Farcaster linked
-        const farcasterHash: string | null = null
-        if (postToFarcaster && process.env.FARCASTER_ENABLED === 'true') {
-          // Get user's Farcaster credentials
-          const [userData] = await db
-            .select({
-              farcasterFid: users.farcasterFid,
-            })
-            .from(users)
-            .where(eq(users.id, user.userId))
-            .limit(1)
+        let farcasterHash: string | null = null
+        if (shouldPostToFarcaster) {
+          try {
+            const farcasterResult = await postToFarcaster(
+              user.userId,
+              content.trim(),
+              { embeds: mediaUrls },
+            )
 
-          if (userData?.farcasterFid && userData.farcasterFid > 0) {
-            // User has Farcaster linked - post there too
-            // Note: In production, signer key would come from KMS
+            farcasterHash = farcasterResult.hash
+            // Update post with Farcaster hash in metadata
+            await db
+              .update(posts)
+              .set({
+                metadata: {
+                  farcasterHash: farcasterResult.hash,
+                  source: 'local+farcaster',
+                },
+              })
+              .where(eq(posts.id, postId))
+
             logger.info(
-              'User requested Farcaster post',
-              { userId: user.userId, fid: userData.farcasterFid },
+              'Posted to Farcaster',
+              {
+                postId,
+                userId: user.userId,
+                farcasterHash: farcasterResult.hash,
+              },
               'POST /api/posts',
             )
-            // For now, log that we would post to Farcaster
-            // Full implementation requires signer key management
+          } catch (farcasterError) {
+            // Log but don't fail the local post creation
+            logger.warn(
+              'Failed to post to Farcaster',
+              {
+                postId,
+                userId: user.userId,
+                error:
+                  farcasterError instanceof Error
+                    ? farcasterError.message
+                    : 'Unknown',
+              },
+              'POST /api/posts',
+            )
           }
         }
 
@@ -397,11 +449,12 @@ const createPostsRoutes = () =>
           return { error: 'Unauthorized' }
         }
 
-        const [post] = await db
+        const deleteQueryResult = (await db
           .select()
           .from(posts)
           .where(eq(posts.id, params.id))
-          .limit(1)
+          .limit(1)) as unknown as Post[]
+        const post = deleteQueryResult[0]
 
         if (!post) {
           set.status = 404
@@ -619,12 +672,17 @@ const createPostsRoutes = () =>
       '/posts/:id/comment',
       async (ctx) => {
         const { user, isAuthenticated } = getAuthContext(ctx)
-        const { params, set, body } = ctx
+        const { params, set } = ctx
         if (!isAuthenticated || !user) {
           set.status = 401
           return { error: 'Unauthorized' }
         }
 
+        // Type assertion for body (Elysia type inference limitation)
+        const body = ctx.body as {
+          content: string
+          parentCommentId?: string
+        }
         const { content, parentCommentId } = body
 
         if (!content || content.trim().length === 0) {
@@ -1002,6 +1060,148 @@ const createPostsRoutes = () =>
         detail: {
           tags: ['Posts', 'Widgets'],
           summary: 'Get markets widget data',
+        },
+      },
+    )
+
+    // Farcaster feed - fetch casts from decentralized Farcaster Hubs
+    .get(
+      '/feed/farcaster',
+      async (ctx) => {
+        const { user } = getAuthContext(ctx)
+        const { query, set } = ctx
+        const pageSize = Math.min(Number.parseInt(query.limit || '20', 10), 100)
+        const pageToken = query.cursor
+
+        // Must have either channel or authenticated user with Farcaster
+        if (!query.channel && !user?.userId) {
+          set.status = 400
+          return {
+            error:
+              'Must provide channel parameter or be authenticated with Farcaster linked',
+          }
+        }
+
+        let fids: number[] | undefined
+
+        // If authenticated, get following FIDs
+        if (user?.userId) {
+          const [userData] = await db
+            .select({ farcasterFid: users.farcasterFid })
+            .from(users)
+            .where(eq(users.id, user.userId))
+            .limit(1)
+
+          if (userData?.farcasterFid) {
+            const userFid = Number(userData.farcasterFid)
+            // Get FIDs of users they follow
+            const followingFids = await getFollowingFids(userFid)
+            fids = followingFids.length > 0 ? followingFids : [userFid]
+          } else if (!query.channel) {
+            set.status = 400
+            return {
+              error:
+                'User has no Farcaster account linked and no channel provided',
+            }
+          }
+        }
+
+        // Fetch from Farcaster
+        const result = await fetchFarcasterFeedPosts({
+          fids,
+          channelUrl: query.channel,
+          pageSize,
+          pageToken,
+        })
+
+        logger.info(
+          'Fetched Farcaster feed',
+          { postCount: result.posts.length, userId: user?.userId },
+          'GET /api/feed/farcaster',
+        )
+
+        return {
+          success: true,
+          posts: result.posts,
+          cursor: result.nextPageToken,
+          hasMore: !!result.nextPageToken,
+          source: 'farcaster',
+        }
+      },
+      {
+        query: t.Object({
+          cursor: t.Optional(t.String()),
+          limit: t.Optional(t.String()),
+          channel: t.Optional(t.String()),
+        }),
+        detail: {
+          tags: ['Posts', 'Farcaster'],
+          summary: 'Get Farcaster feed',
+          description:
+            'Fetch posts directly from Farcaster Hubs. Returns casts from followed users or a specific channel.',
+        },
+      },
+    )
+
+    // Register Farcaster signer key
+    .post(
+      '/farcaster/signer',
+      async (ctx) => {
+        const { user, isAuthenticated } = getAuthContext(ctx)
+        const { set } = ctx
+        if (!isAuthenticated || !user) {
+          set.status = 401
+          return { error: 'Unauthorized' }
+        }
+
+        // Type assertion for body (Elysia type inference limitation)
+        const body = ctx.body as { signerKey: string }
+        const { signerKey } = body
+
+        // Validate signer key format
+        if (!signerKey || !signerKey.startsWith('0x')) {
+          set.status = 400
+          return { error: 'Invalid signer key format' }
+        }
+
+        // Store signer key (in production, encrypt and store in KMS)
+        storeSignerKey(user.userId, signerKey as Hex)
+
+        logger.info(
+          'Farcaster signer key registered',
+          { userId: user.userId },
+          'POST /api/farcaster/signer',
+        )
+
+        return { success: true }
+      },
+      {
+        body: t.Object({
+          signerKey: t.String(),
+        }),
+        detail: {
+          tags: ['Farcaster'],
+          summary: 'Register Farcaster signer key',
+          description:
+            'Register a signer key for posting to Farcaster. In production, this would be stored in KMS.',
+        },
+      },
+    )
+
+    // Farcaster Hub health check
+    .get(
+      '/farcaster/health',
+      async () => {
+        const health = await checkHubHealth()
+        return {
+          success: true,
+          health,
+        }
+      },
+      {
+        detail: {
+          tags: ['Farcaster'],
+          summary: 'Check Farcaster Hub health',
         },
       },
     )

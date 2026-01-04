@@ -7,7 +7,13 @@
 
 // Prediction pricing (pure math, no db deps)
 export {
+  calculateBuy,
+  calculateBuyWithFees,
   calculateExpectedPayout,
+  calculateSell,
+  calculateSellWithFees,
+  getCurrentPrice,
+  initializeMarket,
   PredictionPricing,
   type ShareCalculation,
   type ShareCalculationWithFees,

@@ -44,8 +44,8 @@ jobs:
 
       - name: Setup test environment
         env:
-          EQLITE_BLOCK_PRODUCER_ENDPOINT: ${{ secrets.TEST_EQLITE_ENDPOINT }}
-          EQLITE_DATABASE_ID: test_babylon
+          SQLIT_BLOCK_PRODUCER_ENDPOINT: ${{ secrets.TEST_SQLIT_ENDPOINT }}
+          SQLIT_DATABASE_ID: test_babylon
           JEJU_OAUTH3_SERVICE_URL: ${{ secrets.JEJU_OAUTH3_SERVICE_URL || '' }}
           BABYLON_OAUTH3_APP_ID: ${{ secrets.BABYLON_OAUTH3_APP_ID || '' }}
           OAUTH3_TEST_EMAIL: ${{ secrets.OAUTH3_TEST_EMAIL || '' }}
@@ -62,20 +62,20 @@ jobs:
           REDIS_URL: redis://localhost:6379
         run: bash scripts/ci/prepare-env.sh
 
-      - name: Setup EQLite Database
+      - name: Setup SQLit Database
         env:
-          EQLITE_BLOCK_PRODUCER_ENDPOINT: ${{ secrets.TEST_EQLITE_ENDPOINT }}
-          EQLITE_DATABASE_ID: test_babylon
+          SQLIT_BLOCK_PRODUCER_ENDPOINT: ${{ secrets.TEST_SQLIT_ENDPOINT }}
+          SQLIT_DATABASE_ID: test_babylon
         run: |
           set -euo pipefail
-          echo "🗄️ Setting up EQLite database..."
-          bun run scripts/setup-test-eqlite.ts
+          echo "🗄️ Setting up SQLit database..."
+          bun run scripts/setup-test-sqlit.ts
 
       - name: Build for tests
         env:
           NODE_OPTIONS: '--max-old-space-size=4096'
           SKIP_ENV_VALIDATION: true
-          EQLITE_BLOCK_PRODUCER_ENDPOINT: ${{ secrets.TEST_EQLITE_ENDPOINT }}
+          SQLIT_BLOCK_PRODUCER_ENDPOINT: ${{ secrets.TEST_SQLIT_ENDPOINT }}
         run: |
           set -euo pipefail
           echo "🏗️ Building project for tests..."
@@ -84,19 +84,19 @@ jobs:
 
       - name: Run Unit Tests
         env:
-          EQLITE_BLOCK_PRODUCER_ENDPOINT: ${{ secrets.TEST_EQLITE_ENDPOINT }}
-          EQLITE_DATABASE_ID: test_babylon
+          SQLIT_BLOCK_PRODUCER_ENDPOINT: ${{ secrets.TEST_SQLIT_ENDPOINT }}
+          SQLIT_DATABASE_ID: test_babylon
           REDIS_URL: redis://localhost:6379
           NODE_ENV: test
         run: |
-          echo "🧪 Running unit tests with EQLite..."
+          echo "🧪 Running unit tests with SQLit..."
           bun test packages/testing/unit/ --preload ./packages/testing/unit/preload.ts --coverage
         continue-on-error: false
 
       - name: Start Next.js dev server
         env:
-          EQLITE_BLOCK_PRODUCER_ENDPOINT: ${{ secrets.TEST_EQLITE_ENDPOINT }}
-          EQLITE_DATABASE_ID: test_babylon
+          SQLIT_BLOCK_PRODUCER_ENDPOINT: ${{ secrets.TEST_SQLIT_ENDPOINT }}
+          SQLIT_DATABASE_ID: test_babylon
           REDIS_URL: redis://localhost:6379
           PUBLIC_APP_URL: http://localhost:3000
           PORT: 3000
@@ -122,8 +122,8 @@ jobs:
 
       - name: Setup Playwright authentication for integration tests
         env:
-          EQLITE_BLOCK_PRODUCER_ENDPOINT: ${{ secrets.TEST_EQLITE_ENDPOINT }}
-          EQLITE_DATABASE_ID: test_babylon
+          SQLIT_BLOCK_PRODUCER_ENDPOINT: ${{ secrets.TEST_SQLIT_ENDPOINT }}
+          SQLIT_DATABASE_ID: test_babylon
           REDIS_URL: redis://localhost:6379
           PLAYWRIGHT_BASE_URL: http://localhost:3000
           JEJU_OAUTH3_SERVICE_URL: ${{ secrets.JEJU_OAUTH3_SERVICE_URL || '' }}
@@ -142,8 +142,8 @@ jobs:
 
       - name: Run Integration Tests
         env:
-          EQLITE_BLOCK_PRODUCER_ENDPOINT: ${{ secrets.TEST_EQLITE_ENDPOINT }}
-          EQLITE_DATABASE_ID: test_babylon
+          SQLIT_BLOCK_PRODUCER_ENDPOINT: ${{ secrets.TEST_SQLIT_ENDPOINT }}
+          SQLIT_DATABASE_ID: test_babylon
           REDIS_URL: redis://localhost:6379
           TEST_API_URL: http://localhost:3000
           NODE_ENV: test

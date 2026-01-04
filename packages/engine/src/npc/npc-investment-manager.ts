@@ -696,7 +696,7 @@ export class NPCInvestmentManager {
    * Periodic portfolio monitoring for all active NPC pools
    */
   static async monitorAllNPCPortfolios(): Promise<void> {
-    // Get active pools using EQLite
+    // Get active pools using SQLit
     const activePoolsRows = await db
       .select()
       .from(pools)

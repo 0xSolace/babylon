@@ -30,7 +30,7 @@ export interface ComparisonData {
 
 /**
  * MetricsVisualizer provides visualization utilities for benchmark results.
- * @deprecated This is a stub - full visualization was removed in merge
+ * NOTE: This is a stub - full visualization was removed in merge
  */
 // biome-ignore lint/complexity/noStaticOnlyClass: Service pattern uses static methods for stateless operations
 export class MetricsVisualizer {
@@ -134,19 +134,5 @@ avg_response_time,${metrics.timing.avgResponseTime}
 `,
       )
     }
-  }
-
-  /**
-   * Generate a comparison report between baseline and challenger
-   * @deprecated Use visualizeComparison instead
-   */
-  static async generateComparisonReport(
-    _baseline: SimulationResult,
-    _challenger: SimulationResult,
-    _outputDir: string,
-  ): Promise<void> {
-    console.warn(
-      '[MetricsVisualizer] generateComparisonReport is a stub - not implemented',
-    )
   }
 }

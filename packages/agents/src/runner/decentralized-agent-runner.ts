@@ -1,11 +1,11 @@
 /**
  * Decentralized Agent Runner
  *
- * Runs on any Jeju compute node, pulling agent configurations from EQLite,
+ * Runs on any Jeju compute node, pulling agent configurations from SQLit,
  * executing autonomous ticks, and reporting execution on-chain.
  *
  * Architecture:
- * 1. Pull: Fetches agent configs from EQLite database
+ * 1. Pull: Fetches agent configs from SQLit database
  * 2. Hydrate: Creates ElizaOS runtime with Jeju Compute plugin
  * 3. Execute: Runs autonomous tick for each agent
  * 4. Report: Records execution results on-chain
@@ -65,15 +65,15 @@ export interface ExecutionReport {
 
 const GATEWAY_URLS = {
   localnet: 'http://localhost:4200',
-  testnet: 'https://gateway.testnet.jeju.network',
-  mainnet: 'https://gateway.jeju.network',
+  testnet: 'https://gateway.testnet.jejunetwork.org',
+  mainnet: 'https://gateway.jejunetwork.org',
 } as const
 
 /**
  * Decentralized Agent Runner
  *
  * Runs agent autonomous loops on any Jeju compute node.
- * Pulls configs from EQLite, executes via ElizaOS, reports on-chain.
+ * Pulls configs from SQLit, executes via ElizaOS, reports on-chain.
  */
 export class DecentralizedAgentRunner {
   private config: AgentRunnerConfig
@@ -253,7 +253,7 @@ export class DecentralizedAgentRunner {
   }
 
   /**
-   * Fetch agents assigned to this compute node from EQLite
+   * Fetch agents assigned to this compute node from SQLit
    */
   private async fetchAssignedAgents(): Promise<string[]> {
     // Query the agent registry for agents assigned to this node
@@ -271,7 +271,7 @@ export class DecentralizedAgentRunner {
 
     if (!response?.ok) {
       // Fallback to local query if gateway unavailable
-      return this.fetchAgentsFromEQLite()
+      return this.fetchAgentsFromSQLit()
     }
 
     const data = (await response.json()) as { agents: string[] }
@@ -279,9 +279,9 @@ export class DecentralizedAgentRunner {
   }
 
   /**
-   * Fetch agents directly from EQLite database
+   * Fetch agents directly from SQLit database
    */
-  private async fetchAgentsFromEQLite(): Promise<string[]> {
+  private async fetchAgentsFromSQLit(): Promise<string[]> {
     // Query for active autonomous agents using raw SQL
     // Join users with userAgentConfigs to find agents with any autonomous feature enabled
     const results = await db.query<{ id: string }>(

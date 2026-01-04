@@ -1,4 +1,4 @@
-import { useJejuAuth } from '@jejunetwork/auth'
+import { useJejuAuth } from '@jejunetwork/auth/react'
 import { cn } from '@jejunetwork/shared'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Check, Loader2, Search, Users, X } from 'lucide-react'

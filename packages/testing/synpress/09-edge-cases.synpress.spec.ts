@@ -5,20 +5,21 @@
  * Focuses on meaningful security/validation checks, not just "doesn't crash".
  */
 
+import {
+  cooldownBetweenTests,
+  loginWithWallet,
+  navigateTo,
+  TIMEOUTS,
+  VIEWPORTS,
+  waitForPageLoad,
+} from '@jejunetwork/tests'
 import { expect, test } from '@playwright/test'
+import { ROUTES } from './helpers/test-data'
 
 // Type for window with potential XSS trigger flag (used in security tests)
 interface WindowWithXSS extends Window {
   xssTriggered?: boolean
 }
-
-import { loginWithWallet } from './helpers/oauth3-auth'
-import {
-  cooldownBetweenTests,
-  navigateTo,
-  waitForPageLoad,
-} from './helpers/page-helpers'
-import { ROUTES, TIMEOUTS, VIEWPORTS } from './helpers/test-data'
 
 test.setTimeout(TIMEOUTS.EXTRA_LONG)
 

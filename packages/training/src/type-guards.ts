@@ -15,6 +15,16 @@ import {
 
 export { isAddress, isArrayOf, isObject, isString }
 
+/**
+ * Type guard for generic Record<string, unknown> objects
+ * Used for validating downloaded/decrypted data before processing
+ */
+export function isGenericObject(
+  value: unknown,
+): value is Record<string, unknown> {
+  return isObject(value)
+}
+
 // ============================================================================
 // Environment Type Guards (Training-specific)
 // ============================================================================
@@ -192,12 +202,6 @@ export function isJudgingScoreResponse(
 export type ScoredTrainingData = JudgingScoreResponse
 
 export const isScoredTrainingData = isJudgingScoreResponse
-
-/**
- * Generic object guard for unstructured data (e.g., trajectory steps)
- * @deprecated Use isObject from @babylon/shared instead
- */
-export const isGenericObject = isObject
 
 // ============================================================================
 // JSON Parsing Guards

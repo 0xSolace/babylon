@@ -1,5 +1,5 @@
 import { logger } from '@babylon/shared'
-import { useJejuAuth } from '@jejunetwork/auth'
+import { useJejuAuth } from '@jejunetwork/auth/react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 /**

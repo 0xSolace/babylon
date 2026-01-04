@@ -33,14 +33,14 @@ export const BABYLON_NETWORKS = {
   // Jeju Testnet
   jejuTestnet: {
     name: 'Jeju Testnet',
-    rpcUrl: 'https://testnet-rpc.jeju.network',
+    rpcUrl: 'https://testnet-rpc.jejunetwork.org',
     chainId: 420690,
     symbol: 'ETH',
   },
   // Jeju Mainnet
   jejuMainnet: {
     name: 'Jeju',
-    rpcUrl: 'https://rpc.jeju.network',
+    rpcUrl: 'https://rpc.jejunetwork.org',
     chainId: 420691,
     symbol: 'ETH',
   },

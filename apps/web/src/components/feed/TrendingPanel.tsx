@@ -132,9 +132,7 @@ export function TrendingPanel() {
                     ))
                   ) : (
                     <span className="font-semibold text-foreground text-sm leading-snug">
-                      {item.summary ||
-                        item.content?.slice(0, 50) ||
-                        'Trending topic'}
+                      {item.summary || 'Trending topic'}
                     </span>
                   )}
                 </div>

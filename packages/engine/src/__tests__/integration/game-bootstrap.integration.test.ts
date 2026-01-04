@@ -6,7 +6,7 @@
  */
 
 import { afterEach, describe, expect, it } from 'bun:test'
-import { db, eq, games } from '@babylon/db'
+import { db, eq, type Game, games } from '@babylon/db'
 import { generateSnowflakeId } from '@jejunetwork/shared'
 
 // Check if database is available
@@ -88,7 +88,9 @@ describe.skipIf(!hasDatabase)('Game Auto-Start Logic', () => {
         updatedAt: new Date(),
       })
     } else {
-      gameId = existingGames[0]?.id
+      const existingGame = existingGames[0] as Game | undefined
+      if (!existingGame) throw new Error('Expected existing game')
+      gameId = existingGame.id
 
       // Pause it for the test
       await db
@@ -163,10 +165,11 @@ describe.skipIf(!hasDatabase)('Game Auto-Start Logic', () => {
       expect(newGame[0]?.isRunning).toBe(true)
     } else {
       // Game exists
-      const game = existingGame[0]
+      const game = existingGame[0] as Game | undefined
       console.log(`Game exists: ${game?.id}, isRunning: ${game?.isRunning}`)
 
-      if (game && !game.isRunning) {
+      if (!game) throw new Error('Expected game to exist')
+      if (!game.isRunning) {
         // Bootstrap would start it
         await db
           .update(games)
@@ -183,7 +186,7 @@ describe.skipIf(!hasDatabase)('Game Auto-Start Logic', () => {
           .where(eq(games.id, game.id))
         expect(startedGame[0]?.isRunning).toBe(true)
       } else {
-        expect(game?.isRunning).toBe(true)
+        expect(game.isRunning).toBe(true)
       }
     }
   })

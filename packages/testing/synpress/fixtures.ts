@@ -2,13 +2,14 @@
  * Synpress test fixtures for MetaMask wallet integration
  *
  * This module provides test fixtures for Babylon E2E testing with MetaMask.
- * It re-exports the Jeju test infrastructure and adds Babylon-specific configuration.
+ * It adds Babylon-specific configuration.
  *
  * @module @babylon/testing/synpress/fixtures
  *
  * @example
  * ```typescript
  * import { test, expect } from '@babylon/testing/synpress/fixtures';
+ * import { expect } from '@playwright/test';
  *
  * test('should connect wallet', async ({ page, metamask }) => {
  *   await page.goto('/');
@@ -35,11 +36,11 @@ import basicSetup from './wallet.setup'
  */
 export const test = metaMaskFixtures(basicSetup, 0)
 
-// Re-export from Playwright for convenience
-export { expect } from '@playwright/test'
+// Import directly from @playwright/test:
+// import { expect } from '@playwright/test'
 
-// Re-export wallet password for MetaMask initialization
+// Import directly from @jejunetwork/tests:
+// import { PASSWORD } from '@jejunetwork/tests'
 export const walletPassword = PASSWORD
 
-// Re-export the basic setup for apps that need it
 export { basicSetup }

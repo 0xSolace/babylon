@@ -4,6 +4,7 @@ import {
   db,
   desc,
   eq,
+  moderationEscrows,
   reports,
   userBlocks,
   userMutes,
@@ -537,33 +538,214 @@ const createModerationRoutes = () =>
       '/appeal',
       async (ctx) => {
         const { user, isAuthenticated } = getAuthContext(ctx)
-        const { set } = ctx
+        const { set, body } = ctx
         if (!isAuthenticated || !user) {
           set.status = 401
           return { error: 'Unauthorized' }
         }
 
-        // TODO: Implement appeal logic with staking requirement
+        const {
+          reason,
+          evidence: _evidence,
+          escrowPaymentTxHash,
+        } = body as {
+          reason: string
+          evidence?: string
+          escrowPaymentTxHash?: string
+        }
+
+        // Validate reason length
+        if (reason.length < 10) {
+          set.status = 400
+          return { error: 'Appeal reason must be at least 10 characters' }
+        }
+
+        if (reason.length > 2000) {
+          set.status = 400
+          return { error: 'Appeal reason must be at most 2000 characters' }
+        }
+
+        // Get user ban status
+        const [dbUser] = await db
+          .select({
+            id: users.id,
+            isBanned: users.isBanned,
+            bannedAt: users.bannedAt,
+            bannedReason: users.bannedReason,
+            appealCount: users.appealCount,
+            appealStaked: users.appealStaked,
+            appealStatus: users.appealStatus,
+            appealStakeTxHash: users.appealStakeTxHash,
+          })
+          .from(users)
+          .where(eq(users.id, user.userId))
+          .limit(1)
+
+        if (!dbUser) {
+          set.status = 404
+          return { error: 'User not found' }
+        }
+
+        // Only banned users can appeal
+        if (!dbUser.isBanned) {
+          set.status = 400
+          return { error: 'You are not banned and cannot submit an appeal' }
+        }
+
+        // Check if already has pending appeal
+        if (
+          dbUser.appealStatus === 'lenient_review' ||
+          dbUser.appealStatus === 'human_review'
+        ) {
+          set.status = 400
+          return {
+            error:
+              'You already have a pending appeal. Please wait for a decision.',
+            appealStatus: dbUser.appealStatus,
+          }
+        }
+
+        // Check appeal count - first appeal is free, subsequent require staking
+        const appealCount = dbUser.appealCount ?? 0
+
+        if (appealCount >= 1 && !escrowPaymentTxHash) {
+          set.status = 400
+          return {
+            error:
+              'You have already used your free appeal. You must stake $10 for a second review.',
+            requiresStake: true,
+            stakeAmount: 10,
+            stakeUnit: 'USD',
+          }
+        }
+
+        // If staking is required, verify escrow payment
+        if (escrowPaymentTxHash) {
+          const [escrow] = await db
+            .select()
+            .from(moderationEscrows)
+            .where(eq(moderationEscrows.paymentTxHash, escrowPaymentTxHash))
+            .limit(1)
+
+          if (!escrow) {
+            set.status = 400
+            return {
+              error: 'Escrow payment not found for this transaction hash',
+            }
+          }
+
+          if (escrow.recipientId !== user.userId) {
+            set.status = 400
+            return { error: 'Escrow payment does not belong to this user' }
+          }
+
+          if (escrow.status !== 'paid') {
+            set.status = 400
+            return {
+              error: `Escrow payment is not paid (status: ${escrow.status})`,
+            }
+          }
+
+          if (escrow.refundTxHash) {
+            set.status = 400
+            return {
+              error:
+                'Escrow payment has been refunded and cannot be used for appeal',
+            }
+          }
+
+          // Check if escrow was already used for an appeal
+          const [existingAppealWithEscrow] = await db
+            .select({ id: users.id })
+            .from(users)
+            .where(eq(users.appealStakeTxHash, escrowPaymentTxHash))
+            .limit(1)
+
+          if (existingAppealWithEscrow) {
+            set.status = 400
+            return {
+              error: 'This escrow payment has already been used for an appeal',
+            }
+          }
+
+          // Update user with staked appeal (goes to human review)
+          await db
+            .update(users)
+            .set({
+              appealCount: appealCount + 1,
+              appealStaked: true,
+              appealStakeAmount: String(escrow.amountUSD),
+              appealStakeTxHash: escrowPaymentTxHash,
+              appealStatus: 'human_review',
+              appealSubmittedAt: new Date(),
+              updatedAt: new Date(),
+            })
+            .where(eq(users.id, user.userId))
+
+          logger.info(
+            'Appeal submitted with stake',
+            {
+              userId: user.userId,
+              escrowId: escrow.id,
+              amountUSD: escrow.amountUSD,
+              reason: reason.substring(0, 100),
+            },
+            'POST /api/moderation/appeal',
+          )
+
+          return {
+            success: true,
+            message:
+              'Appeal submitted with stake. Your case will receive human review.',
+            appealStatus: 'human_review',
+            staked: true,
+            stakeAmount: escrow.amountUSD,
+          }
+        }
+
+        // First free appeal - goes to lenient AI review
+        await db
+          .update(users)
+          .set({
+            appealCount: appealCount + 1,
+            appealStaked: false,
+            appealStatus: 'lenient_review',
+            appealSubmittedAt: new Date(),
+            updatedAt: new Date(),
+          })
+          .where(eq(users.id, user.userId))
+
         logger.info(
-          'Appeal submitted',
-          { userId: user.userId },
+          'Free appeal submitted',
+          {
+            userId: user.userId,
+            appealCount: appealCount + 1,
+            reason: reason.substring(0, 100),
+          },
           'POST /api/moderation/appeal',
         )
 
         return {
           success: true,
-          message: 'Appeal submitted for review',
+          message: 'Appeal submitted for lenient review.',
+          appealStatus: 'lenient_review',
+          staked: false,
+          nextAppealRequiresStake: true,
+          stakeAmount: 10,
+          stakeUnit: 'USD',
         }
       },
       {
         body: t.Object({
           reason: t.String(),
           evidence: t.Optional(t.String()),
+          escrowPaymentTxHash: t.Optional(t.String()),
         }),
         detail: {
           tags: ['Moderation'],
           summary: 'Submit appeal',
-          description: 'Submits an appeal for a moderation action',
+          description:
+            'Submits an appeal for a moderation action. First appeal is free, subsequent appeals require staking $10 via escrow.',
         },
       },
     )

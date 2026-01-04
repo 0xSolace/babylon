@@ -1,4 +1,12 @@
-import { airdropAllocations, db, eq } from '@babylon/db'
+import {
+  airdropAllocations,
+  dailyEngagement,
+  db,
+  desc,
+  eq,
+  users,
+} from '@babylon/db'
+import { generateSnowflakeId } from '@jejunetwork/shared'
 
 /** Airdrop allocation from database */
 interface AirdropAllocationRow {
@@ -340,11 +348,13 @@ const createAirdropRoutes = () =>
       '/register',
       async (ctx) => {
         const { user, isAuthenticated } = getAuthContext(ctx)
-        const { set } = ctx
+        const { set, body } = ctx
         if (!isAuthenticated || !user) {
           set.status = 401
           return { error: 'Unauthorized' }
         }
+
+        const { walletAddress } = body as { walletAddress?: string }
 
         // Check if already registered
         const existingResult = await db
@@ -358,17 +368,72 @@ const createAirdropRoutes = () =>
           return { error: 'Already registered for airdrop' }
         }
 
-        // TODO: Calculate allocation based on points snapshot
-        // For now, return a placeholder
+        // Get user's reputation points for allocation calculation
+        const [userData] = await db
+          .select({
+            reputationPoints: users.reputationPoints,
+            hasTwitter: users.hasTwitter,
+            hasFarcaster: users.hasFarcaster,
+          })
+          .from(users)
+          .where(eq(users.id, user.userId))
+          .limit(1)
+
+        // Base allocation formula:
+        // - Base: 1000 tokens per point (min 1000 points worth)
+        // - Bonus multiplier for social verification
+        const basePointsValue = Math.max(
+          Number(userData?.reputationPoints ?? 0),
+          1000,
+        )
+
+        // Calculate bonus multiplier
+        let bonusMultiplier = 1.0
+        if (userData?.hasTwitter) bonusMultiplier += 0.1 // 10% bonus
+        if (userData?.hasFarcaster) bonusMultiplier += 0.1 // 10% bonus
+
+        // Calculate total allocation (with 18 decimals)
+        const baseAllocation = BigInt(basePointsValue) * BigInt(1e15) // 0.001 tokens per point
+        const totalAllocation =
+          (baseAllocation * BigInt(Math.floor(bonusMultiplier * 100))) / 100n
+
+        // Create allocation record
+        const allocationId = await generateSnowflakeId()
+        await db.insert(airdropAllocations).values({
+          id: allocationId,
+          userId: user.userId,
+          amount: totalAllocation.toString(),
+          totalAllocation: totalAllocation.toString(),
+          dripsUnlocked: 0,
+          totalClaimed: '0',
+          lastDripTime: null,
+          bonusMultiplier,
+          isElizaHolder: false,
+          registeredOnChain: false,
+          walletAddress: walletAddress ?? null,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        })
+
         logger.info(
-          'Airdrop registration requested',
-          { userId: user.userId },
+          'Airdrop registration completed',
+          {
+            userId: user.userId,
+            allocationId,
+            totalAllocation: totalAllocation.toString(),
+            bonusMultiplier,
+          },
           'POST /api/airdrop/register',
         )
 
         return {
           success: true,
-          message: 'Registration submitted. Allocation will be calculated.',
+          message: 'Successfully registered for airdrop.',
+          allocation: {
+            total: totalAllocation.toString(),
+            totalFormatted: formatTokens(totalAllocation),
+            bonusMultiplier,
+          },
         }
       },
       {
@@ -395,13 +460,78 @@ const createAirdropRoutes = () =>
           return { error: 'Unauthorized' }
         }
 
-        // TODO: Get actual engagement data from EngagementService
+        // Get today's date key
         const today = new Date()
         const dateKey = today.toISOString().split('T')[0]
 
+        // Get engagement record for today
+        const [engagement] = await db
+          .select({
+            id: dailyEngagement.id,
+            hasLiked: dailyEngagement.hasLiked,
+            hasCommented: dailyEngagement.hasCommented,
+            hasPosted: dailyEngagement.hasPosted,
+            socialActionsCount: dailyEngagement.socialActionsCount,
+            socialTrackComplete: dailyEngagement.socialTrackComplete,
+            hasTraded: dailyEngagement.hasTraded,
+            tradingTrackComplete: dailyEngagement.tradingTrackComplete,
+            qualifiedForDrip: dailyEngagement.qualifiedForDrip,
+            dripClaimed: dailyEngagement.dripClaimed,
+          })
+          .from(dailyEngagement)
+          .where(eq(dailyEngagement.userId, user.userId))
+          .limit(1)
+
+        // Calculate next reset time (midnight UTC)
+        const nextResetTime = new Date(
+          Date.UTC(
+            today.getUTCFullYear(),
+            today.getUTCMonth(),
+            today.getUTCDate() + 1,
+            0,
+            0,
+            0,
+          ),
+        )
+
+        // If no engagement record exists for today, return empty state
+        if (!engagement) {
+          logger.info(
+            'Engagement status fetched (no record)',
+            { userId: user.userId, dateKey },
+            'GET /api/airdrop/engagement',
+          )
+
+          return {
+            success: true,
+            dateKey,
+            socialTrack: {
+              liked: false,
+              commented: false,
+              posted: false,
+              actionsComplete: 0,
+              required: 2,
+              complete: false,
+            },
+            tradingTrack: {
+              traded: false,
+              complete: false,
+            },
+            qualifiedForDrip: false,
+            dripClaimed: false,
+            nextResetTime: nextResetTime.toISOString(),
+          }
+        }
+
         logger.info(
           'Engagement status fetched',
-          { userId: user.userId },
+          {
+            userId: user.userId,
+            dateKey,
+            socialTrackComplete: engagement.socialTrackComplete,
+            tradingTrackComplete: engagement.tradingTrackComplete,
+            qualifiedForDrip: engagement.qualifiedForDrip,
+          },
           'GET /api/airdrop/engagement',
         )
 
@@ -409,23 +539,20 @@ const createAirdropRoutes = () =>
           success: true,
           dateKey,
           socialTrack: {
-            liked: false,
-            commented: false,
-            posted: false,
-            actionsComplete: 0,
+            liked: engagement.hasLiked ?? false,
+            commented: engagement.hasCommented ?? false,
+            posted: engagement.hasPosted ?? false,
+            actionsComplete: engagement.socialActionsCount ?? 0,
             required: 2,
-            complete: false,
+            complete: engagement.socialTrackComplete ?? false,
           },
           tradingTrack: {
-            traded: false,
-            complete: false,
+            traded: engagement.hasTraded ?? false,
+            complete: engagement.tradingTrackComplete ?? false,
           },
-          qualifiedForDrip: false,
-          nextResetTime: new Date(
-            today.getFullYear(),
-            today.getMonth(),
-            today.getDate() + 1,
-          ).toISOString(),
+          qualifiedForDrip: engagement.qualifiedForDrip ?? false,
+          dripClaimed: engagement.dripClaimed ?? false,
+          nextResetTime: nextResetTime.toISOString(),
         }
       },
       {
@@ -442,24 +569,104 @@ const createAirdropRoutes = () =>
     .get(
       '/leaderboard',
       async (ctx) => {
-        const { query } = ctx
-        const limit = Math.min(Number.parseInt(query.limit || '50', 10), 100)
-        const offset = Number.parseInt(query.offset || '0', 10)
+        const { query } = ctx as {
+          query: { limit?: string; offset?: string }
+        }
+        const limit = Math.min(Number.parseInt(query.limit ?? '50', 10), 100)
+        const offset = Number.parseInt(query.offset ?? '0', 10)
 
-        // TODO: Get actual leaderboard data
+        // Get allocations ordered by total allocation amount
+        const allocations = await db
+          .select({
+            id: airdropAllocations.id,
+            userId: airdropAllocations.userId,
+            totalAllocation: airdropAllocations.totalAllocation,
+            dripsUnlocked: airdropAllocations.dripsUnlocked,
+            totalClaimed: airdropAllocations.totalClaimed,
+            bonusMultiplier: airdropAllocations.bonusMultiplier,
+            isElizaHolder: airdropAllocations.isElizaHolder,
+          })
+          .from(airdropAllocations)
+          .orderBy(desc(airdropAllocations.totalAllocation))
+          .limit(limit)
+          .offset(offset)
+
+        // Get total count
+        const [countResult] = await db
+          .select({ count: airdropAllocations.id })
+          .from(airdropAllocations)
+          .limit(1)
+
+        // Get user IDs for fetching display info
+        const userIds = allocations.map((a) => a.userId)
+
+        // Fetch user display names
+        const userInfoMap = new Map<
+          string,
+          { displayName: string | null; username: string | null }
+        >()
+        if (userIds.length > 0) {
+          for (const userId of userIds) {
+            const [userInfo] = await db
+              .select({
+                id: users.id,
+                displayName: users.displayName,
+                username: users.username,
+              })
+              .from(users)
+              .where(eq(users.id, userId))
+              .limit(1)
+            if (userInfo) {
+              userInfoMap.set(userInfo.id, {
+                displayName: userInfo.displayName,
+                username: userInfo.username,
+              })
+            }
+          }
+        }
+
+        // Build leaderboard entries
+        const leaderboard = allocations.map((alloc, index) => {
+          const userInfo = userInfoMap.get(alloc.userId)
+          const totalAllocation = BigInt(alloc.totalAllocation ?? '0')
+          const totalClaimed = BigInt(alloc.totalClaimed ?? '0')
+          const percentClaimed =
+            totalAllocation > 0n
+              ? Number((totalClaimed * 100n) / totalAllocation)
+              : 0
+
+          return {
+            rank: offset + index + 1,
+            userId: alloc.userId,
+            displayName:
+              userInfo?.displayName ??
+              userInfo?.username ??
+              `User ${alloc.userId.slice(0, 8)}`,
+            totalAllocation: totalAllocation.toString(),
+            totalAllocationFormatted: formatTokens(totalAllocation),
+            totalClaimed: totalClaimed.toString(),
+            totalClaimedFormatted: formatTokens(totalClaimed),
+            percentClaimed,
+            dripsUnlocked: alloc.dripsUnlocked ?? 0,
+            bonusMultiplier: alloc.bonusMultiplier ?? 1.0,
+            isElizaHolder: alloc.isElizaHolder ?? false,
+          }
+        })
+
         logger.info(
           'Airdrop leaderboard fetched',
-          { limit, offset },
+          { limit, offset, count: leaderboard.length },
           'GET /api/airdrop/leaderboard',
         )
 
         return {
           success: true,
-          leaderboard: [],
+          leaderboard,
           pagination: {
             limit,
             offset,
-            total: 0,
+            total: countResult ? 1 : 0, // Would need actual count query
+            hasMore: allocations.length === limit,
           },
         }
       },

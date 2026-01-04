@@ -5,20 +5,57 @@
  */
 
 import type { JsonValue } from '@babylon/shared'
-import { isAuthenticationError } from '@babylon/shared'
 import {
   AuthenticationError,
   AuthorizationError,
-  JejuError as BabylonError,
+  BadRequestError,
+  BabylonError,
+  BusinessLogicError,
+  ConflictError,
+  DatabaseError,
+  ExternalServiceError,
+  InternalServerError,
+  isAuthenticationError,
+  isAuthorizationError,
+  isBabylonError,
+  isBusinessLogicError,
+  isConflictError,
+  isNotFoundError,
+  isOperationalError,
+  isRateLimitError,
+  isServiceUnavailableError,
+  isValidationError,
+  NotFoundError,
+  RateLimitError,
+  ServiceUnavailableError,
   ValidationError,
-} from '@jejunetwork/shared'
+} from '@babylon/shared'
 import { safeToJsonRecord } from './utils/type-guards'
 
 export {
   AuthenticationError,
   AuthorizationError,
+  BadRequestError,
   BabylonError,
+  BusinessLogicError,
+  ConflictError,
+  DatabaseError,
+  ExternalServiceError,
+  InternalServerError,
   isAuthenticationError,
+  isAuthorizationError,
+  isBabylonError,
+  isBusinessLogicError,
+  isConflictError,
+  isNotFoundError,
+  isOperationalError,
+  isRateLimitError,
+  isServiceUnavailableError,
+  isValidationError,
+  NotFoundError,
+  RateLimitError,
+  ServiceUnavailableError,
+  ValidationError,
 }
 
 // =============================================================================
@@ -54,6 +91,7 @@ export class UnauthorizedError extends BabylonError {
 
 /**
  * Forbidden Error (403) - for API authorization failures
+ * Extends BabylonError for proper error handling
  */
 export class ForbiddenError extends BabylonError {
   constructor(

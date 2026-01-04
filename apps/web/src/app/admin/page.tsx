@@ -55,11 +55,12 @@ import {
   TrendingUp,
   Users,
 } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { AdminManagementTab } from '@/components/admin/AdminManagementTab'
 import { AgentsTab } from '@/components/admin/AgentsTab'
 import { AIModelsTab } from '@/components/admin/AIModelsTab'
-import { AnalyticsTab } from '@/components/admin/AnalyticsTab'
+// Lazy load AnalyticsTab (contains heavy recharts dependency)
+const AnalyticsTab = lazy(() => import('@/components/admin/AnalyticsTab').then(m => ({ default: m.AnalyticsTab })))
 import { AuditLogsTab } from '@/components/admin/AuditLogsTab'
 import { ContentModerationTab } from '@/components/admin/ContentModerationTab'
 import { EscrowManagementTab } from '@/components/admin/EscrowManagementTab'
@@ -371,7 +372,11 @@ export default function AdminDashboard() {
       {/* Tab Content */}
       <div className="flex-1 overflow-auto">
         {activeTab === 'stats' && <StatsTab />}
-        {activeTab === 'analytics' && <AnalyticsTab />}
+        {activeTab === 'analytics' && (
+          <Suspense fallback={<div className="flex items-center justify-center p-8">Loading analytics...</div>}>
+            <AnalyticsTab />
+          </Suspense>
+        )}
         {activeTab === 'system-health' && <SystemHealthTab />}
         {activeTab === 'game-control' && <GameControlTab />}
         {activeTab === 'markets' && <MarketOversightTab />}

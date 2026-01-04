@@ -1017,18 +1017,6 @@ Return your response as XML:
   }
 
   /**
-   * @deprecated Use GroupInviteOrchestrator.processQueuedInvites() instead.
-   * This method is now a no-op - invites are processed by the orchestrator.
-   *
-   * The new event-driven system works as follows:
-   * 1. When users do positive actions (reply, follow, share), they're queued
-   *    as invite candidates via GroupInviteOrchestrator.queueInviteCandidate()
-   * 2. On each tick, processQueuedInvites() processes the queue with probability
-   * 3. NPC tier affects selectivity (legendary NPCs are more selective)
-   */
-  // Removed: inviteUsersToGroups - now delegated to GroupInviteOrchestrator.processQueuedInvites()
-
-  /**
    * Calculate kick probability with exponential scaling for over-posting
    *
    * Delegates to the pure calculation module for testability.

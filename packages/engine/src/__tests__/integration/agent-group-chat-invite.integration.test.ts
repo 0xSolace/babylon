@@ -25,9 +25,6 @@ import {
 
 import { db } from '@babylon/db'
 
-// Check if database is available
-const hasDatabase = !!process.env.DATABASE_URL
-
 import {
   AlphaGroupInviteService,
   GroupChatService,
@@ -35,6 +32,18 @@ import {
   NPCInteractionTracker,
 } from '@babylon/engine'
 import { generateSnowflakeId } from '@jejunetwork/shared'
+
+// Helper function for safe array access
+function getAt<T>(arr: T[], index: number): T {
+  const value = arr[index]
+  if (value === undefined) {
+    throw new Error(`Expected value at index ${index}`)
+  }
+  return value
+}
+
+// Check if database is available
+const hasDatabase = !!process.env.DATABASE_URL
 
 // Set timeout to 60 seconds for integration tests
 setDefaultTimeout(60000)
@@ -267,6 +276,17 @@ async function createGroupChat(
       npcAdminId,
       gameId: 'realtime',
       updatedAt: new Date(),
+      description: null,
+      type: 'group',
+      groupOwnerId: npcAdminId,
+      createdBy: npcAdminId,
+      lastMessageAt: null,
+      lastMessagePreview: null,
+      participantCount: 1,
+      metadata: null,
+      isArchived: false,
+      archivedAt: null,
+      imageUrl: null,
     },
   })
 
@@ -345,6 +365,14 @@ async function createMessage(options: {
       senderId: options.senderId,
       content: options.content,
       createdAt: options.createdAt || new Date(),
+      isDeleted: false,
+      deletedAt: null,
+      isEdited: false,
+      editedAt: null,
+      replyToId: null,
+      metadata: null,
+      readBy: null,
+      deliveredTo: null,
     },
   })
 
@@ -540,14 +568,14 @@ describe.skipIf(!hasDatabase)('Agent Group Chat Invite Flow', () => {
 
       await createFollow(agent.id, npc.id)
 
-      await createComment(agent.id, posts[0], 'Excellent analysis!')
-      await createComment(agent.id, posts[1], 'Very insightful, thanks')
+      await createComment(agent.id, getAt(posts, 0), 'Excellent analysis!')
+      await createComment(agent.id, getAt(posts, 1), 'Very insightful, thanks')
 
       for (let i = 0; i < 5; i++) {
-        await createLike(agent.id, posts[i])
+        await createLike(agent.id, getAt(posts, i))
       }
 
-      await createShare(agent.id, posts[0])
+      await createShare(agent.id, getAt(posts, 0))
 
       const { score, breakdown } =
         await NPCGroupDynamicsService.calculateReplyGuyScore(agent.id, [npc.id])
@@ -649,34 +677,24 @@ describe.skipIf(!hasDatabase)('Agent Group Chat Invite Flow', () => {
 
       // Top agent: 8 high-quality comments
       for (let i = 0; i < 8; i++) {
+        const post = getAt(posts, i)
         const comment = await createComment(
           topAgent.id,
-          posts[i],
+          post,
           `Agent comment ${i}`,
         )
-        await recordUserInteraction(
-          topAgent.id,
-          npc.id,
-          posts[i],
-          comment,
-          0.92,
-        )
+        await recordUserInteraction(topAgent.id, npc.id, post, comment, 0.92)
       }
 
       // Medium user: 4 comments
       for (let i = 8; i < 12; i++) {
+        const post = getAt(posts, i)
         const comment = await createComment(
           mediumUser.id,
-          posts[i],
+          post,
           `User comment ${i}`,
         )
-        await recordUserInteraction(
-          mediumUser.id,
-          npc.id,
-          posts[i],
-          comment,
-          0.75,
-        )
+        await recordUserInteraction(mediumUser.id, npc.id, post, comment, 0.75)
       }
 
       // Get top engaged
@@ -737,18 +755,22 @@ describe.skipIf(!hasDatabase)('Agent Group Chat Invite Flow', () => {
 
       // 3. Agent engages with content (ideal amounts)
       // Comments: 2-3 per NPC
-      await createComment(agent.id, posts[0], 'Great market analysis!')
-      await createComment(agent.id, posts[2], 'Excellent risk assessment')
-      await createComment(agent.id, posts[1], 'Thanks for the alpha')
+      await createComment(agent.id, getAt(posts, 0), 'Great market analysis!')
+      await createComment(
+        agent.id,
+        getAt(posts, 2),
+        'Excellent risk assessment',
+      )
+      await createComment(agent.id, getAt(posts, 1), 'Thanks for the alpha')
 
       // Likes: 6-8 total
       for (let i = 0; i < 8; i++) {
-        await createLike(agent.id, posts[i])
+        await createLike(agent.id, getAt(posts, i))
       }
 
       // Shares: 1-2
-      await createShare(agent.id, posts[0])
-      await createShare(agent.id, posts[1])
+      await createShare(agent.id, getAt(posts, 0))
+      await createShare(agent.id, getAt(posts, 1))
 
       // Calculate engagement score
       const { score, breakdown } =

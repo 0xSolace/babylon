@@ -12,9 +12,8 @@
 import { requireAdmin, successResponse, withErrorHandling } from '@babylon/api'
 import { count, db, desc, games, gte, posts, users } from '@babylon/db'
 import { logger } from '@babylon/shared'
-import type { NextRequest } from 'next/server'
 
-export const GET = withErrorHandling(async (request: NextRequest) => {
+export const GET = withErrorHandling(async (request: Request) => {
   await requireAdmin(request)
 
   logger.info(
@@ -35,8 +34,9 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     .limit(1)
 
   // Calculate time since last tick
-  const timeSinceLastTick = currentGame?.lastTickAt
-    ? now.getTime() - new Date(currentGame.lastTickAt).getTime()
+  const lastTickAt = currentGame?.lastTickAt as Date | null | undefined
+  const timeSinceLastTick = lastTickAt
+    ? now.getTime() - new Date(lastTickAt).getTime()
     : null
 
   // Get user activity stats as proxy for API health
@@ -105,11 +105,11 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     gameEngine: {
       isRunning: currentGame?.isRunning ?? false,
       currentDay: currentGame?.currentDay ?? 0,
-      lastTickAt: currentGame?.lastTickAt?.toISOString() ?? null,
+      lastTickAt: lastTickAt ? new Date(lastTickAt).toISOString() : null,
       timeSinceLastTickMs: timeSinceLastTick,
       tickIntervalMs: currentGame?.speed ?? 60000,
       uptimeMs: currentGame?.startedAt
-        ? now.getTime() - new Date(currentGame.startedAt).getTime()
+        ? now.getTime() - new Date(currentGame.startedAt as Date).getTime()
         : 0,
     },
     // NOTE: LLM metrics not currently tracked - would require adding

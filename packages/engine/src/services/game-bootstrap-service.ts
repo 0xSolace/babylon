@@ -420,6 +420,7 @@ export class GameBootstrapService {
       description?: string
       type?: string
       username?: string
+      imageUrl?: string
     }>,
   ): Promise<number> {
     // Filter to media organizations that post content
@@ -449,7 +450,7 @@ export class GameBootstrapService {
             username,
             displayName: org.name,
             bio: org.description ?? null,
-            profileImageUrl: null, // TODO: Add org image support
+            profileImageUrl: org.imageUrl ?? null,
             isActor: true, // Media orgs are actors too
             isAdmin: false,
             isBanned: false,

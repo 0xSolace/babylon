@@ -1,6 +1,6 @@
 import {
   db as defaultDb,
-  type EQLiteClient,
+  type SQLitClient,
   type Market,
   type NewMarket,
   type NewPosition,
@@ -28,7 +28,7 @@ type MarketRowWithOracleFields = MarketRow & {
   oracleRevealTxHash?: string | null
 }
 
-/** EQLite query parameter type (matches @jejunetwork/db QueryParam) */
+/** SQLit query parameter type (matches @jejunetwork/db QueryParam) */
 type Param = string | number | boolean | bigint | Uint8Array | null
 type ParamInput =
   | string
@@ -44,7 +44,7 @@ type ParamInput =
 const toSideBool = (side: PredictionSide) => side === 'yes'
 const fromSideBool = (side: boolean): PredictionSide => (side ? 'yes' : 'no')
 
-/** Convert a value to a EQLite-compatible query parameter */
+/** Convert a value to a SQLit-compatible query parameter */
 function toParam(value: ParamInput): Param {
   if (value === undefined || value === null) return null
   if (value instanceof Date) return value.toISOString()
@@ -61,8 +61,17 @@ function toParam(value: ParamInput): Param {
 }
 
 const mapMarket = (m: MarketRowWithOracleFields): PredictionMarketRecord => {
-  // Ensure dates are proper Date objects
-  const parseDate = (
+  // Parse date for fields that expect Date | null
+  const parseDateOrNull = (
+    val: string | Date | null | undefined,
+  ): Date | null => {
+    if (!val) return null
+    if (val instanceof Date) return val
+    return new Date(val)
+  }
+
+  // Parse date for fields that expect Date | undefined
+  const parseDateOrUndefined = (
     val: string | Date | null | undefined,
   ): Date | undefined => {
     if (!val) return undefined
@@ -77,7 +86,7 @@ const mapMarket = (m: MarketRowWithOracleFields): PredictionMarketRecord => {
     yesShares: Number(m.yesShares),
     noShares: Number(m.noShares),
     liquidity: Number(m.liquidity),
-    endDate: parseDate(m.endDate),
+    endDate: parseDateOrNull(m.endDate),
     resolved: m.resolved ?? false,
     resolution:
       m.resolution === 'yes' || m.resolution === 'true'
@@ -92,8 +101,8 @@ const mapMarket = (m: MarketRowWithOracleFields): PredictionMarketRecord => {
     oracleRevealTxHash: m.oracleRevealTxHash,
     resolutionProofUrl: m.resolutionProofUrl,
     resolutionDescription: m.resolutionDescription,
-    createdAt: parseDate(m.createdAt),
-    updatedAt: parseDate(m.updatedAt),
+    createdAt: parseDateOrUndefined(m.createdAt),
+    updatedAt: parseDateOrUndefined(m.updatedAt),
   }
 }
 
@@ -137,12 +146,12 @@ const mapQuestion = (q: QuestionRow): QuestionRecord => ({
 })
 
 /**
- * EQLite adapter for PredictionDbPort.
+ * SQLit adapter for PredictionDbPort.
  *
  * Uses raw SQL queries for all operations to ensure proper condition handling.
  */
 export class PredictionDbAdapter implements PredictionDbPort {
-  constructor(private readonly client: EQLiteClient = defaultDb) {}
+  constructor(private readonly client: SQLitClient = defaultDb) {}
 
   async getMarketById(id: string): Promise<PredictionMarketRecord | null> {
     const results = await this.client.query<MarketRow>(

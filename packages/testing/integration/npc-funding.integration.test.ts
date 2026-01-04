@@ -7,7 +7,7 @@
  * - Error handling
  * - ICO integration
  *
- * REQUIRES: jeju dev running (EQLite, chain, DWS)
+ * REQUIRES: jeju dev running (SQLit, chain, DWS)
  * Run with: bun test packages/testing/integration/npc-funding.integration.test.ts
  */
 
@@ -30,10 +30,10 @@ import { parseEther, zeroAddress } from 'viem'
 const TEST_RPC_URL = process.env.TEST_RPC_URL ?? 'http://localhost:6546'
 const TEST_CHAIN_ID = 420690 // Jeju localnet
 
-// Check if EQLite is available (requires jeju dev running)
-async function checkEQLiteHealth(): Promise<boolean> {
+// Check if SQLit is available (requires jeju dev running)
+async function checkSQLitHealth(): Promise<boolean> {
   const endpoint =
-    process.env.EQLITE_BLOCK_PRODUCER_ENDPOINT || 'http://localhost:4661'
+    process.env.SQLIT_BLOCK_PRODUCER_ENDPOINT || 'http://localhost:4661'
   try {
     const response = await fetch(`${endpoint}/health`, {
       signal: AbortSignal.timeout(5000),
@@ -44,16 +44,16 @@ async function checkEQLiteHealth(): Promise<boolean> {
   }
 }
 
-const EQLITE_AVAILABLE = await checkEQLiteHealth()
+const SQLIT_AVAILABLE = await checkSQLitHealth()
 
-describe.skipIf(!EQLITE_AVAILABLE)(
+describe.skipIf(!SQLIT_AVAILABLE)(
   'NPC Funding Service Integration Tests',
   () => {
     beforeAll(async () => {
       // Set environment for localnet
       process.env.JEJU_NETWORK = 'localnet'
-      process.env.EQLITE_BLOCK_PRODUCER_ENDPOINT = 'http://localhost:4661'
-      process.env.EQLITE_DATABASE_ID = 'babylon'
+      process.env.SQLIT_BLOCK_PRODUCER_ENDPOINT = 'http://localhost:4661'
+      process.env.SQLIT_DATABASE_ID = 'babylon'
 
       // Initialize database
       resetDB()

@@ -1,5 +1,4 @@
 import { cn } from '@jejunetwork/shared'
-import { AnimatePresence, motion } from 'framer-motion'
 import type { ReactNode } from 'react'
 import { useEffect, useRef, useState } from 'react'
 
@@ -7,8 +6,8 @@ import { useEffect, useRef, useState } from 'react'
  * Dropdown menu component with configurable placement and width.
  *
  * Provides a dropdown menu that opens on trigger click and closes on outside
- * click. Supports multiple placement options and width variants. Uses Framer
- * Motion for smooth animations.
+ * click. Supports multiple placement options and width variants. Uses CSS
+ * transitions for smooth animations.
  *
  * @param props - Dropdown component props
  * @returns Dropdown element
@@ -53,24 +52,11 @@ export function Dropdown({
 
   // Determine position classes based on placement
   const positionClasses = {
-    'top-right': 'bottom-full right-0 mb-2',
-    'bottom-right': 'top-full right-0 mt-2',
-    'top-left': 'bottom-full left-0 mb-2',
-    'bottom-left': 'top-full left-0 mt-2',
+    'top-right': 'bottom-full right-0 mb-2 origin-bottom',
+    'bottom-right': 'top-full right-0 mt-2 origin-top',
+    'top-left': 'bottom-full left-0 mb-2 origin-bottom',
+    'bottom-left': 'top-full left-0 mt-2 origin-top',
   }[placement]
-
-  // Determine animation based on placement
-  const animationProps = placement.startsWith('top')
-    ? {
-        initial: { opacity: 0, y: 10 },
-        animate: { opacity: 1, y: 0 },
-        exit: { opacity: 0, y: 10 },
-      }
-    : {
-        initial: { opacity: 0, y: -10 },
-        animate: { opacity: 1, y: 0 },
-        exit: { opacity: 0, y: -10 },
-      }
 
   // Determine width based on width prop
   const widthClass = width === 'sidebar' ? 'w-64 lg:w-64 xl:w-72' : 'w-60'
@@ -90,21 +76,18 @@ export function Dropdown({
       >
         {trigger}
       </button>
-      <AnimatePresence>
-        {isOpen && (
-          <motion.div
-            {...animationProps}
-            transition={{ duration: 0.2 }}
-            className={cn(
-              'absolute z-50 rounded-lg border border-border bg-popover shadow-lg',
-              widthClass,
-              positionClasses,
-            )}
-          >
-            {children}
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {isOpen && (
+        <div
+          className={cn(
+            'absolute z-50 rounded-lg border border-border bg-popover shadow-lg',
+            'animate-in fade-in-0 zoom-in-95 duration-200',
+            widthClass,
+            positionClasses,
+          )}
+        >
+          {children}
+        </div>
+      )}
     </div>
   )
 }

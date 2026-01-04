@@ -4,14 +4,16 @@
  * Tests admin functionality: dashboard, user management, agents, reports.
  */
 
-import { expect, test } from '@playwright/test'
-import { loginWithWallet } from './helpers/oauth3-auth'
 import {
   cooldownBetweenTests,
+  loginWithWallet,
   navigateTo,
+  TIMEOUTS,
+  VIEWPORTS,
   waitForPageLoad,
-} from './helpers/page-helpers'
-import { ROUTES, TIMEOUTS, VIEWPORTS } from './helpers/test-data'
+} from '@jejunetwork/tests'
+import { expect, test } from '@playwright/test'
+import { ROUTES } from './helpers/test-data'
 
 // Centralized port configuration
 const WEB_PORT = process.env.BABYLON_WEB_PORT ?? '5008'

@@ -19,6 +19,11 @@ import type { UserOperation } from '@babylon/api'
 import { db } from '@babylon/db'
 import { StaticDataRegistry } from '@babylon/engine'
 import { type ActorTier, logger, toAddressOrNull } from '@babylon/shared'
+import {
+  getChainId,
+  getContractAddress,
+  getRpcUrl,
+} from '@babylon/shared/config'
 
 export interface PaymasterClient {
   initialize(): Promise<void>
@@ -191,13 +196,31 @@ interface ContractAddresses {
 const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000' as const
 
 function getContractAddresses(): ContractAddresses {
+  const getAddress = (
+    category: string,
+    name: string,
+    envVar: string,
+  ): Address => {
+    try {
+      return (getContractAddress(category, name) as Address) ?? ZERO_ADDRESS
+    } catch {
+      return (
+        toAddressOrNull(
+          typeof process !== 'undefined' ? process.env[envVar] : undefined,
+        ) ?? ZERO_ADDRESS
+      )
+    }
+  }
+
   return {
-    babylonToken:
-      toAddressOrNull(process.env.BBLN_TOKEN_ADDRESS) ?? ZERO_ADDRESS,
-    diamond: toAddressOrNull(process.env.DIAMOND_ADDRESS) ?? ZERO_ADDRESS,
-    treasury: toAddressOrNull(process.env.TREASURY_ADDRESS) ?? ZERO_ADDRESS,
-    feeRecipient:
-      toAddressOrNull(process.env.FEE_RECIPIENT_ADDRESS) ?? ZERO_ADDRESS,
+    babylonToken: getAddress('tokens', 'bbln', 'BBLN_TOKEN_ADDRESS'),
+    diamond: getAddress('babylon', 'diamond', 'DIAMOND_ADDRESS'),
+    treasury: getAddress('governance', 'treasury', 'TREASURY_ADDRESS'),
+    feeRecipient: getAddress(
+      'governance',
+      'feeRecipient',
+      'FEE_RECIPIENT_ADDRESS',
+    ),
   }
 }
 
@@ -255,9 +278,9 @@ export class NPCTokenWalletService {
   private chain: Chain
 
   constructor() {
-    this.rpcUrl = process.env.JEJU_RPC_URL ?? 'http://localhost:6546'
+    this.rpcUrl = getRpcUrl() ?? 'http://localhost:6546'
     this.chain = {
-      id: parseInt(process.env.JEJU_CHAIN_ID ?? '31337', 10),
+      id: getChainId() ?? 31337,
       name: 'Jeju',
       nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
       rpcUrls: {

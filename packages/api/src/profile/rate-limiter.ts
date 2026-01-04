@@ -57,7 +57,7 @@ export async function checkProfileUpdateRateLimit(
   // Username changes in last 24 hours
   let recentUsernameChanges = 0
   if (isUsernameChange) {
-    // Query all username updates in last 24h and filter in JS since EQLite doesn't support array contains
+    // Query all username updates in last 24h and filter in JS since SQLit doesn't support array contains
     const allRecentUpdates = await db
       .select({
         changedFields: profileUpdateLogs.changedFields,

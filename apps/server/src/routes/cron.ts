@@ -41,18 +41,18 @@ let dbPersistence: TrainingDbPersistence | null = null
 async function getDbPersistence(): Promise<TrainingDbPersistence | null> {
   if (dbPersistence) return dbPersistence
 
-  const dbEndpoint = process.env.EQLITE_ENDPOINT
+  const dbEndpoint = process.env.SQLIT_ENDPOINT
   if (!dbEndpoint) {
     logger.warn(
-      'EQLITE_ENDPOINT not set - trajectory batches will not be persisted to database',
+      'SQLIT_ENDPOINT not set - trajectory batches will not be persisted to database',
       undefined,
       'CronRoutes',
     )
     return null
   }
 
-  const { EQLiteClient } = await import('@jejunetwork/db')
-  const client = new EQLiteClient({ blockProducerEndpoint: dbEndpoint })
+  const { SQLitClient } = await import('@jejunetwork/db')
+  const client = new SQLitClient({ blockProducerEndpoint: dbEndpoint })
   dbPersistence = new TrainingDbPersistence(client)
   return dbPersistence
 }

@@ -1,7 +1,7 @@
 /**
  * Babylon Database Layer
  *
- * EQLite (EQLite) database for decentralized data persistence.
+ * SQLit (SQLit) database for decentralized data persistence.
  *
  * API:
  * - Raw SQL: db.query(sql, params), db.exec(sql, params)
@@ -13,26 +13,26 @@
 import type { JsonValue, SQLValue } from './types'
 
 // ============================================================================
-// EQLite Client (Decentralized Database)
+// SQLit Client (Decentralized Database)
 // ============================================================================
 
-export type { QueryTransaction } from './decentralized/eqlite-compat'
+export type { QueryTransaction } from './decentralized/sqlit-compat'
 export {
-  createEQLiteClient,
-  type EQLiteClient,
-  getEQLiteClient,
-  resetEQLiteClient,
-} from './eqlite-client'
+  createSQLitClient,
+  type SQLitClient,
+  getSQLitClient,
+  resetSQLitClient,
+} from './sqlit-client'
 export {
   type DB,
-  EQLiteTableRepository,
+  SQLitTableRepository,
   getDB,
   initializeDB,
   resetDB,
-} from './eqlite-repository'
+} from './sqlit-repository'
 
-import { type EQLiteClient, db as eqliteDatabase } from './eqlite-client'
-export { eqliteDatabase as eqliteDb }
+import { type SQLitClient, db as sqlitDatabase } from './sqlit-client'
+export { sqlitDatabase as sqlitDb }
 
 // ============================================================================
 // Type Exports
@@ -82,7 +82,7 @@ export type {
   UserInsert,
   WorldEvent,
   WorldFact,
-} from './eqlite-schema-types'
+} from './sqlit-schema-types'
 
 // Export Decimal class from types
 export { Decimal } from './types'
@@ -120,13 +120,13 @@ export {
 // Types
 // ============================================================================
 
-export type DbClient = EQLiteClient
-export type Database = EQLiteClient
+export type DbClient = SQLitClient
+export type Database = SQLitClient
 
 // Transaction type matches what db.transaction() provides
-export type Transaction = EQLiteClient
+export type Transaction = SQLitClient
 
-export const db: DbClient = eqliteDatabase
+export const db: DbClient = sqlitDatabase
 
 // ============================================================================
 // SQL Query Helpers (Native Implementation)
@@ -184,19 +184,19 @@ export type UserIdOrUser = string | { userId: string }
 
 /**
  * Execute as a specific user (with RLS)
- * Note: EQLite doesn't support Postgres RLS, so this just runs the operation
+ * Note: SQLit doesn't support Postgres RLS, so this just runs the operation
  */
 export async function asUser<T>(
   userIdOrUser: UserIdOrUser,
   operation: (database: DbClient) => Promise<T>,
 ): Promise<T> {
-  void userIdOrUser // RLS not supported in EQLite
+  void userIdOrUser // RLS not supported in SQLit
   return operation(db)
 }
 
 /**
  * Execute as system (bypass RLS)
- * Note: EQLite doesn't support Postgres RLS, so this just runs the operation
+ * Note: SQLit doesn't support Postgres RLS, so this just runs the operation
  */
 export async function asSystem<T>(
   operation: (database: DbClient) => Promise<T>,
@@ -263,7 +263,7 @@ export {
   comments,
   dailyEngagement,
   dmAcceptances,
-  EQLITE_NAME_SYMBOL,
+  SQLIT_NAME_SYMBOL,
   elizaHolderAllocations,
   elizaHolders,
   externalAgentConnections,
@@ -349,7 +349,7 @@ export {
   userInteractions,
   userMessagingKeys,
   userMutes,
-  // Table reference exports (for EQLite query builder API)
+  // Table reference exports (for SQLit query builder API)
   users,
   vestingSchedules,
   widgetCaches,
@@ -370,8 +370,6 @@ export {
 export {
   $connect,
   $disconnect,
-  $executeRaw,
-  $queryRaw,
   isRetryableError,
   withRetry,
 } from './helpers'
@@ -387,7 +385,7 @@ export {
   isJsonMode,
   isSimulationMode,
   loadJsonSnapshot,
-  resetToEQLiteMode,
+  resetToSQLitMode,
   type StorageMode,
   saveJsonSnapshot,
 } from './json-storage'
@@ -407,19 +405,19 @@ export {
 // ============================================================================
 
 import {
-  createEQLiteTables,
+  createSQLitTables,
   generateAllDDL,
-} from './decentralized/eqlite-schema'
-import { getDB, initializeDB, resetDB } from './eqlite-repository'
+} from './decentralized/sqlit-schema'
+import { getDB, initializeDB, resetDB } from './sqlit-repository'
 
 export { generateAllDDL }
 
 let tablesCreated = false
 
 export async function initializeDatabase(): Promise<void> {
-  if (!process.env.EQLITE_BLOCK_PRODUCER_ENDPOINT) {
+  if (!process.env.SQLIT_BLOCK_PRODUCER_ENDPOINT) {
     throw new Error(
-      '[DB] EQLITE_BLOCK_PRODUCER_ENDPOINT is required. ' +
+      '[DB] SQLIT_BLOCK_PRODUCER_ENDPOINT is required. ' +
         'Start Jeju: cd /path/to/jeju && bun run dev',
     )
   }
@@ -427,14 +425,14 @@ export async function initializeDatabase(): Promise<void> {
 
   // Create tables if they don't exist (first-run schema setup)
   if (!tablesCreated) {
-    await createEQLiteTables(db)
+    await createSQLitTables(db)
     tablesCreated = true
   }
 }
 
 export async function checkDatabaseHealth(): Promise<boolean> {
-  const eqliteDb = getDB()
-  return eqliteDb.isHealthy()
+  const sqlitDb = getDB()
+  return sqlitDb.isHealthy()
 }
 
 export async function closeDatabase(): Promise<void> {

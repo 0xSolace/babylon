@@ -1,5 +1,5 @@
-import { CHAIN, getJejuNetwork, isRunningInJeju } from '@babylon/shared'
-import { JejuAuthProvider } from '@jejunetwork/auth'
+import { getChain, getJejuNetwork, isRunningInJeju } from '@babylon/shared'
+import { JejuAuthProvider } from '@jejunetwork/auth/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Suspense, useEffect, useState } from 'react'
 import { PostHogErrorBoundary } from '@/components/analytics/PostHogErrorBoundary'
@@ -61,9 +61,10 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
   // OAuth3 configuration for Jeju decentralized auth
   const oauth3Network = getJejuNetwork() ?? getEnvironment()
+  const chain = getChain()
   const rpcUrl = isRunningInJeju()
     ? getRpcUrl()
-    : getRpcUrl() || CHAIN.rpcUrls.default.http[0]
+    : getRpcUrl() || chain.rpcUrls.default.http[0]
 
   // Development mode detection via NODE_ENV (set by bundler):
   // - bun run dev → NODE_ENV='development' → decentralized: false (fast HMR)
@@ -91,7 +92,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
                       mpcEndpoints: getMpcEndpoints(),
                       redirectUri: getRedirectUri(),
                       rpcUrl,
-                      chainId: CHAIN.id,
+                      chainId: chain.id,
                       // Development mode: skip JNS for fast HMR
                       // Production mode: use full decentralized JNS discovery
                       decentralized: !isDevMode,

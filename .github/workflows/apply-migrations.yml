@@ -20,18 +20,18 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
-      - name: Apply EQLite migrations (staging)
+      - name: Apply SQLit migrations (staging)
         if: github.ref == 'refs/heads/staging'
         env:
-          EQLITE_BLOCK_PRODUCER_ENDPOINT: ${{ secrets.STAGING_EQLITE_ENDPOINT }}
-          EQLITE_DATABASE_ID: ${{ secrets.STAGING_EQLITE_DATABASE_ID }}
-          EQLITE_PRIVATE_KEY: ${{ secrets.STAGING_EQLITE_PRIVATE_KEY }}
-        run: bun run scripts/apply-eqlite-migrations.ts
+          SQLIT_BLOCK_PRODUCER_ENDPOINT: ${{ secrets.STAGING_SQLIT_ENDPOINT }}
+          SQLIT_DATABASE_ID: ${{ secrets.STAGING_SQLIT_DATABASE_ID }}
+          SQLIT_PRIVATE_KEY: ${{ secrets.STAGING_SQLIT_PRIVATE_KEY }}
+        run: bun run scripts/apply-sqlit-migrations.ts
 
-      - name: Apply EQLite migrations (production)
+      - name: Apply SQLit migrations (production)
         if: github.ref == 'refs/heads/production'
         env:
-          EQLITE_BLOCK_PRODUCER_ENDPOINT: ${{ secrets.PROD_EQLITE_ENDPOINT }}
-          EQLITE_DATABASE_ID: ${{ secrets.PROD_EQLITE_DATABASE_ID }}
-          EQLITE_PRIVATE_KEY: ${{ secrets.PROD_EQLITE_PRIVATE_KEY }}
-        run: bun run scripts/apply-eqlite-migrations.ts
+          SQLIT_BLOCK_PRODUCER_ENDPOINT: ${{ secrets.PROD_SQLIT_ENDPOINT }}
+          SQLIT_DATABASE_ID: ${{ secrets.PROD_SQLIT_DATABASE_ID }}
+          SQLIT_PRIVATE_KEY: ${{ secrets.PROD_SQLIT_PRIVATE_KEY }}
+        run: bun run scripts/apply-sqlit-migrations.ts

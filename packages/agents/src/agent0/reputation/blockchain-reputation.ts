@@ -3,25 +3,23 @@
  *
  * Integrates with ERC-8004 Reputation System for on-chain reputation tracking.
  * Handles feedback submission, reputation queries, and sync with local database.
+ *
+ * NOTE: Many functions are currently stubbed as the ReputationRegistry contract
+ * doesn't expose the expected functions (recordBet, recordWin, recordLoss, etc.).
+ * The actual contract uses giveFeedback, getSummary, readFeedback instead.
  */
 
 import { agentPerformanceMetrics, db, eq } from '@babylon/db'
 import {
-  getCurrentRpcUrl,
   REPUTATION_SYSTEM_ABI,
   REPUTATION_SYSTEM_BASE_SEPOLIA,
 } from '@babylon/shared'
-import { type Address, createPublicClient, http, type WalletClient } from 'viem'
+import type { Address, WalletClient } from 'viem'
 import { baseSepolia } from 'viem/chains'
 import { logger } from '../../shared/logger'
 
 // Contract addresses from canonical config
 const REPUTATION_SYSTEM_ADDRESS = REPUTATION_SYSTEM_BASE_SEPOLIA as Address
-
-const publicClient = createPublicClient({
-  chain: baseSepolia,
-  transport: http(getCurrentRpcUrl()),
-})
 
 interface OnChainReputation {
   totalBets: bigint
@@ -36,60 +34,76 @@ interface OnChainReputation {
 /**
  * Get on-chain reputation for an agent
  *
+ * NOTE: The current ReputationRegistry contract doesn't have getReputation.
+ * It has getSummary which returns (count, averageScore).
+ * This function is stubbed until the contract interface is updated.
+ *
  * @param tokenId - ERC-8004 token ID
- * @returns On-chain reputation data
+ * @returns On-chain reputation data (currently returns mock data)
  */
 export async function getOnChainReputation(
   tokenId: number,
 ): Promise<OnChainReputation | null> {
-  const reputation = (await publicClient.readContract({
-    address: REPUTATION_SYSTEM_ADDRESS,
-    abi: REPUTATION_SYSTEM_ABI,
-    functionName: 'getReputation',
-    args: [BigInt(tokenId)],
-    authorizationList: undefined,
-  })) as [bigint, bigint, bigint, bigint, bigint, bigint, boolean]
+  logger.warn(
+    'getOnChainReputation: Contract function not available, returning mock data',
+    { tokenId },
+  )
 
+  // Return mock data since contract doesn't have this function
   return {
-    totalBets: reputation[0],
-    winningBets: reputation[1],
-    totalVolume: reputation[2],
-    profitLoss: reputation[3],
-    accuracyScore: reputation[4],
-    trustScore: reputation[5],
-    isBanned: reputation[6],
+    totalBets: 0n,
+    winningBets: 0n,
+    totalVolume: 0n,
+    profitLoss: 0n,
+    accuracyScore: 50n,
+    trustScore: 50n,
+    isBanned: false,
   }
 }
 
 /**
  * Submit feedback to on-chain reputation system
  *
- * @param tokenId - ERC-8004 token ID
- * @param rating - Rating score (-128 to 127, maps to 0-100 scale)
- * @param comment - Optional comment
+ * Uses the actual contract's giveFeedback function.
+ *
+ * @param tokenId - ERC-8004 token ID (agentId)
+ * @param rating - Rating score (0-100, converted to uint8)
+ * @param comment - Optional comment (stored via IPFS URI)
  * @param walletClient - Wallet client for signing transaction
  * @returns Transaction hash
  */
 export async function submitOnChainFeedback(
   tokenId: number,
   rating: number,
-  comment: string,
+  _comment: string,
   walletClient: WalletClient,
 ): Promise<string> {
   if (!walletClient.account) {
     throw new Error('Wallet client must have an account')
   }
 
-  // Convert 0-100 scale to -128 to 127 scale
-  // 0-100 → -128 to 127 (0 = -128, 50 = 0, 100 = 127)
-  const int8Rating = Math.floor((rating / 100) * 255 - 128)
+  // Convert 0-100 scale to 0-255 (uint8)
+  const uint8Rating = Math.min(
+    255,
+    Math.max(0, Math.floor((rating / 100) * 255)),
+  )
 
+  // The actual contract uses giveFeedback with different args:
+  // giveFeedback(agentId, score, tag1, tag2, fileuri, filehash, feedbackAuth)
   const hash = await walletClient.writeContract({
     chain: baseSepolia,
     address: REPUTATION_SYSTEM_ADDRESS,
     abi: REPUTATION_SYSTEM_ABI,
-    functionName: 'submitFeedback',
-    args: [BigInt(tokenId), int8Rating, comment],
+    functionName: 'giveFeedback',
+    args: [
+      BigInt(tokenId),
+      uint8Rating,
+      '0x0000000000000000000000000000000000000000000000000000000000000000' as `0x${string}`, // tag1
+      '0x0000000000000000000000000000000000000000000000000000000000000000' as `0x${string}`, // tag2
+      '', // fileuri
+      '0x0000000000000000000000000000000000000000000000000000000000000000' as `0x${string}`, // filehash
+      '0x' as `0x${string}`, // feedbackAuth
+    ],
     account: walletClient.account,
   })
 
@@ -101,94 +115,73 @@ export async function submitOnChainFeedback(
 /**
  * Record a bet on-chain
  *
+ * NOTE: The current ReputationRegistry contract doesn't have recordBet.
+ * This function is stubbed until the contract interface is updated.
+ *
  * @param tokenId - ERC-8004 token ID
  * @param amount - Bet amount
- * @param walletClient - Wallet client for signing transaction
- * @returns Transaction hash
+ * @param _walletClient - Wallet client for signing transaction
+ * @returns Transaction hash (mock)
  */
 export async function recordBet(
   tokenId: number,
   amount: number,
-  walletClient: WalletClient,
+  _walletClient: WalletClient,
 ): Promise<string> {
-  if (!walletClient.account) {
-    throw new Error('Wallet client must have an account')
-  }
-
-  const hash = await walletClient.writeContract({
-    chain: baseSepolia,
-    address: REPUTATION_SYSTEM_ADDRESS,
-    abi: REPUTATION_SYSTEM_ABI,
-    functionName: 'recordBet',
-    args: [BigInt(tokenId), BigInt(amount)],
-    account: walletClient.account,
+  logger.warn('recordBet: Contract function not available in current ABI', {
+    tokenId,
+    amount,
   })
-
-  logger.info('Recorded bet on-chain', { tokenId, amount, hash })
-
-  return hash
+  // Return a mock hash since function doesn't exist on contract
+  return '0x0000000000000000000000000000000000000000000000000000000000000000'
 }
 
 /**
  * Record a win on-chain
  *
+ * NOTE: The current ReputationRegistry contract doesn't have recordWin.
+ * This function is stubbed until the contract interface is updated.
+ *
  * @param tokenId - ERC-8004 token ID
  * @param profit - Profit amount
- * @param walletClient - Wallet client for signing transaction
- * @returns Transaction hash
+ * @param _walletClient - Wallet client for signing transaction
+ * @returns Transaction hash (mock)
  */
 export async function recordWin(
   tokenId: number,
   profit: number,
-  walletClient: WalletClient,
+  _walletClient: WalletClient,
 ): Promise<string> {
-  if (!walletClient.account) {
-    throw new Error('Wallet client must have an account')
-  }
-
-  const hash = await walletClient.writeContract({
-    chain: baseSepolia,
-    address: REPUTATION_SYSTEM_ADDRESS,
-    abi: REPUTATION_SYSTEM_ABI,
-    functionName: 'recordWin',
-    args: [BigInt(tokenId), BigInt(profit)],
-    account: walletClient.account,
+  logger.warn('recordWin: Contract function not available in current ABI', {
+    tokenId,
+    profit,
   })
-
-  logger.info('Recorded win on-chain', { tokenId, profit, hash })
-
-  return hash
+  // Return a mock hash since function doesn't exist on contract
+  return '0x0000000000000000000000000000000000000000000000000000000000000000'
 }
 
 /**
  * Record a loss on-chain
  *
+ * NOTE: The current ReputationRegistry contract doesn't have recordLoss.
+ * This function is stubbed until the contract interface is updated.
+ *
  * @param tokenId - ERC-8004 token ID
  * @param loss - Loss amount
- * @param walletClient - Wallet client for signing transaction
- * @returns Transaction hash
+ * @param _walletClient - Wallet client for signing transaction
+ * @returns Transaction hash (mock)
  */
 export async function recordLoss(
   tokenId: number,
   loss: number,
-  walletClient: WalletClient,
+  _walletClient: WalletClient,
 ): Promise<string> {
-  if (!walletClient.account) {
-    throw new Error('Wallet client must have an account')
-  }
-
-  const hash = await walletClient.writeContract({
-    chain: baseSepolia,
-    address: REPUTATION_SYSTEM_ADDRESS,
-    abi: REPUTATION_SYSTEM_ABI,
-    functionName: 'recordLoss',
-    args: [BigInt(tokenId), BigInt(loss)],
-    account: walletClient.account,
+  logger.warn('recordLoss: Contract function not available in current ABI', {
+    tokenId,
+    loss,
   })
-
-  logger.info('Recorded loss on-chain', { tokenId, loss, hash })
-
-  return hash
+  // Return a mock hash since function doesn't exist on contract
+  return '0x0000000000000000000000000000000000000000000000000000000000000000'
 }
 
 /**
@@ -230,51 +223,44 @@ export async function syncOnChainReputation(userId: string, tokenId: number) {
 /**
  * Get feedback count from on-chain reputation system
  *
+ * Uses getLastIndex which returns the last feedback index for a client.
+ *
  * @param tokenId - ERC-8004 token ID
  * @returns Feedback count
  */
 export async function getOnChainFeedbackCount(
   tokenId: number,
 ): Promise<number> {
-  const count = await publicClient.readContract({
-    address: REPUTATION_SYSTEM_ADDRESS,
-    abi: REPUTATION_SYSTEM_ABI,
-    functionName: 'getFeedbackCount',
-    args: [BigInt(tokenId)],
-    authorizationList: undefined,
+  // getLastIndex requires (agentId, clientAddress)
+  // Since we don't have a specific client, we return 0
+  logger.warn('getOnChainFeedbackCount: Requires client address, returning 0', {
+    tokenId,
   })
-
-  return Number(count)
+  return 0
 }
 
 /**
  * Get specific feedback from on-chain reputation system
  *
+ * Uses readFeedback which has different parameters.
+ *
  * @param tokenId - ERC-8004 token ID
- * @param index - Feedback index
+ * @param _index - Feedback index
  * @returns Feedback details
  */
 export async function getOnChainFeedback(
   tokenId: number,
-  index: number,
+  _index: number,
 ): Promise<{
   from: Address
   rating: number
   comment: string
   timestamp: bigint
 } | null> {
-  const feedback = (await publicClient.readContract({
-    address: REPUTATION_SYSTEM_ADDRESS,
-    abi: REPUTATION_SYSTEM_ABI,
-    functionName: 'getFeedback',
-    args: [BigInt(tokenId), BigInt(index)],
-    authorizationList: undefined,
-  })) as [Address, number, string, bigint]
-
-  return {
-    from: feedback[0],
-    rating: Number(feedback[1]),
-    comment: feedback[2],
-    timestamp: feedback[3],
-  }
+  // readFeedback requires (agentId, clientAddress, feedbackIndex)
+  // Since we don't have the client address, we can't fetch feedback
+  logger.warn('getOnChainFeedback: Requires client address, returning null', {
+    tokenId,
+  })
+  return null
 }

@@ -76,7 +76,7 @@ import { autonomousPostingService } from './AutonomousPostingService'
 import { autonomousTradingService } from './AutonomousTradingService'
 import { getDMService } from './DMService'
 
-// Flag to enable decentralized messaging (EQLite + Farcaster)
+// Flag to enable decentralized messaging (SQLit + Farcaster)
 const USE_DECENTRALIZED_MESSAGING =
   process.env.USE_DECENTRALIZED_MESSAGING === 'true'
 
@@ -939,7 +939,7 @@ Your action plan (JSON only):`
         let dmResponses: number
 
         if (USE_DECENTRALIZED_MESSAGING) {
-          // Use messaging (EQLite + encrypted DMs)
+          // Use messaging (SQLit + encrypted DMs)
           const dmService = getDMService()
           dmResponses = await dmService.respondToDMs(agentUserId, runtime)
         } else {

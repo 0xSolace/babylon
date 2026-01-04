@@ -44,7 +44,7 @@ const createActorsRoutes = () =>
         return {
           success: true,
           actors: actors.map((actor) => {
-            // Handle createdAt - could be Date or string from EQLite
+            // Handle createdAt - could be Date or string from SQLit
             let createdAt: string | null = null
             if (actor.createdAt) {
               createdAt =

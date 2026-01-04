@@ -1,5 +1,5 @@
 /**
- * Typed Table References for EQLite
+ * Typed Table References for SQLit
  *
  * This module provides strongly-typed table references that carry their schema type.
  * When used with db.select().from(typedTable), the result will be properly typed
@@ -10,7 +10,7 @@
  *   const questions = await db.select().from(typedTables.questions) // Question[]
  */
 
-import type * as SchemaTypes from './eqlite-schema-types'
+import type * as SchemaTypes from './sqlit-schema-types'
 import { type ColumnRef, TABLE_NAMES } from './table-registry'
 
 // ============================================================================

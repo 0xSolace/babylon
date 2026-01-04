@@ -160,12 +160,12 @@ export interface RateLimitCheckResult {
  * if (errorResponse) return errorResponse;
  * ```
  */
-export function checkRateLimitAndDuplicates(
+export async function checkRateLimitAndDuplicates(
   userId: string,
   content: string | null,
   rateLimitConfig: (typeof RATE_LIMIT_CONFIGS)[keyof typeof RATE_LIMIT_CONFIGS],
   duplicateConfig?: (typeof DUPLICATE_DETECTION_CONFIGS)[keyof typeof DUPLICATE_DETECTION_CONFIGS],
-): Response | null {
+): Promise<Response | null> {
   // Skip rate limiting in test environment if DISABLE_RATE_LIMITING is set
   if (
     process.env.NODE_ENV === 'test' &&
@@ -175,7 +175,7 @@ export function checkRateLimitAndDuplicates(
   }
 
   // Check rate limit first
-  const rateLimitResult = checkRateLimit(userId, rateLimitConfig)
+  const rateLimitResult = await checkRateLimit(userId, rateLimitConfig)
   if (!rateLimitResult.allowed) {
     logger.warn('Rate limit check failed', {
       userId,
@@ -187,7 +187,11 @@ export function checkRateLimitAndDuplicates(
 
   // Check for duplicates if content is provided and config is given
   if (content && duplicateConfig) {
-    const duplicateResult = checkDuplicate(userId, content, duplicateConfig)
+    const duplicateResult = await checkDuplicate(
+      userId,
+      content,
+      duplicateConfig,
+    )
     if (duplicateResult.isDuplicate) {
       logger.warn('Duplicate content detected', {
         userId,
@@ -211,18 +215,18 @@ export function checkRateLimitAndDuplicates(
 /**
  * Check rate limits for Elysia (returns result object instead of Response)
  */
-export function checkRateLimitsForElysia(
+export async function checkRateLimitsForElysia(
   userId: string,
   content: string | null,
   rateLimitConfig: (typeof RATE_LIMIT_CONFIGS)[keyof typeof RATE_LIMIT_CONFIGS],
   duplicateConfig?: (typeof DUPLICATE_DETECTION_CONFIGS)[keyof typeof DUPLICATE_DETECTION_CONFIGS],
-): {
+): Promise<{
   passed: boolean
   status?: number
   body?: RateLimitErrorResult | DuplicateContentErrorResult
   headers?: Record<string, string>
   remaining?: number
-} {
+}> {
   // Skip rate limiting in test environment if DISABLE_RATE_LIMITING is set
   if (
     process.env.NODE_ENV === 'test' &&
@@ -232,7 +236,7 @@ export function checkRateLimitsForElysia(
   }
 
   // Check rate limit first
-  const rateLimitResult = checkRateLimit(userId, rateLimitConfig)
+  const rateLimitResult = await checkRateLimit(userId, rateLimitConfig)
   if (!rateLimitResult.allowed) {
     logger.warn('Rate limit check failed', {
       userId,
@@ -255,7 +259,11 @@ export function checkRateLimitsForElysia(
 
   // Check for duplicates if content is provided and config is given
   if (content && duplicateConfig) {
-    const duplicateResult = checkDuplicate(userId, content, duplicateConfig)
+    const duplicateResult = await checkDuplicate(
+      userId,
+      content,
+      duplicateConfig,
+    )
     if (duplicateResult.isDuplicate) {
       logger.warn('Duplicate content detected', {
         userId,

@@ -19,7 +19,6 @@ import {
 } from '@babylon/api'
 import { db, desc, eq, markets, positions, withTransaction } from '@babylon/db'
 import { logger } from '@babylon/shared'
-import type { NextRequest } from 'next/server'
 import { z } from 'zod'
 
 const MarketActionSchema = z.object({
@@ -31,9 +30,11 @@ const MarketActionSchema = z.object({
 
 export const GET = withErrorHandling(
   async (
-    request: NextRequest,
-    { params }: { params: Promise<{ marketId: string }> },
+    request: Request,
+    context?: { params: Promise<{ marketId: string }> },
   ) => {
+    if (!context) throw new Error('Route context required')
+    const { params } = context
     await requireAdmin(request)
     const { marketId } = await params
 
@@ -83,7 +84,7 @@ export const GET = withErrorHandling(
         noPrice: Math.round((1 - yesPrice) * 100),
         status: market.resolved
           ? 'resolved'
-          : new Date(market.endDate) <= new Date()
+          : new Date(market.endDate as Date) <= new Date()
             ? 'expired'
             : 'active',
       },
@@ -101,13 +102,15 @@ export const GET = withErrorHandling(
 
 export const POST = withErrorHandling(
   async (
-    request: NextRequest,
-    { params }: { params: Promise<{ marketId: string }> },
+    request: Request,
+    context?: { params: Promise<{ marketId: string }> },
   ) => {
+    if (!context) throw new Error('Route context required')
+    const { params } = context
     const admin = await requireAdmin(request)
 
     // Rate limit admin actions to prevent abuse
-    const rateLimitResponse = checkRateLimitAndDuplicates(
+    const rateLimitResponse = await checkRateLimitAndDuplicates(
       admin.userId,
       null,
       RATE_LIMIT_CONFIGS.ADMIN_ACTION,
@@ -220,7 +223,7 @@ export const POST = withErrorHandling(
         adminId: admin.userId,
         resourceType: 'market',
         resourceId: marketId,
-        previousValue: { endDate: market.endDate.toISOString() },
+        previousValue: { endDate: (market.endDate as Date).toISOString() },
         newValue: { endDate: newEnd.toISOString(), reason: reason ?? null },
         ipAddress: request.headers.get('x-forwarded-for') ?? undefined,
         userAgent: request.headers.get('user-agent') ?? undefined,

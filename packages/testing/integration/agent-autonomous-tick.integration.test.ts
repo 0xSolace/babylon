@@ -11,14 +11,10 @@
  */
 
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
-import {
-  AgentStatus,
-  AgentType,
-  createTestAgent,
-  getAgentConfig,
-} from '@babylon/agents'
+import { createTestAgent, getAgentConfig } from '@babylon/agents'
 import { agentRegistry } from '@babylon/agents/services/agent-registry.service'
 import { asSystem, db, eq, userAgentConfigs } from '@babylon/db'
+import { AgentStatus, AgentType } from '@jejunetwork/agents'
 import { generateSnowflakeId } from '@jejunetwork/shared'
 
 // Centralized port configuration
@@ -96,11 +92,12 @@ describe('Agent Autonomous Tick Integration', () => {
 
     if (!gameState) {
       // Create game state if it doesn't exist
-      createdGameId = await generateSnowflakeId()
+      const newGameId = await generateSnowflakeId()
+      createdGameId = newGameId
       await asSystem(async (db) => {
         await db.game.create({
           data: {
-            id: createdGameId,
+            id: newGameId,
             isContinuous: true,
             isRunning: true,
             createdAt: new Date(),
@@ -108,7 +105,7 @@ describe('Agent Autonomous Tick Integration', () => {
           },
         })
       }, 'agent-tick-test-create-game-state')
-      console.log('Created continuous game:', createdGameId)
+      console.log('Created continuous game:', newGameId)
     } else {
       initialGameRunning = gameState.isRunning
       // Ensure game is running for tests
@@ -157,7 +154,10 @@ describe('Agent Autonomous Tick Integration', () => {
     console.log('Test Agent ID:', testAgentId)
     console.log('Is found?', foundIds.includes(testAgentId))
 
-    initialLastTickAt = config?.lastTickAt || null
+    // Note: lastTickAt is on Game schema, not UserAgentConfig
+    // Cast to access potential custom config field
+    initialLastTickAt =
+      (config as { lastTickAt?: Date | null } | null)?.lastTickAt ?? null
   })
 
   afterAll(async () => {
@@ -340,12 +340,15 @@ describe('Agent Autonomous Tick Integration', () => {
 
     // Check lastTickAt was updated in config
     const agentConfig = await getAgentConfig(testAgentId)
+    // Note: lastTickAt is on Game schema, not UserAgentConfig
+    // Cast to access potential custom config field
+    const configWithTick = agentConfig as { lastTickAt?: Date | null } | null
 
     expect(agentConfig).toBeTruthy()
-    expect(agentConfig?.lastTickAt).toBeTruthy()
+    expect(configWithTick?.lastTickAt).toBeTruthy()
 
-    if (initialLastTickAt && agentConfig?.lastTickAt) {
-      expect(new Date(agentConfig.lastTickAt).getTime()).toBeGreaterThan(
+    if (initialLastTickAt && configWithTick?.lastTickAt) {
+      expect(new Date(configWithTick.lastTickAt).getTime()).toBeGreaterThan(
         initialLastTickAt.getTime(),
       )
     }

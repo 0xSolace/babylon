@@ -27,7 +27,6 @@ import {
   users,
 } from '@babylon/db'
 import { logger } from '@babylon/shared'
-import type { NextRequest } from 'next/server'
 import { z } from 'zod'
 
 // Allowed image URL domains for content moderation display
@@ -77,7 +76,7 @@ const ContentQueueQuerySchema = z.object({
   offset: z.coerce.number().min(0).max(10000).default(0), // Max offset to prevent abuse
 })
 
-export const GET = withErrorHandling(async (request: NextRequest) => {
+export const GET = withErrorHandling(async (request: Request) => {
   await requireAdmin(request)
 
   const { searchParams } = new URL(request.url)
@@ -203,8 +202,8 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   }
   const postStatsResult = (await db
     .select({
-      pending: sql<number>`COUNT(DISTINCT ${posts.id}) FILTER (WHERE ${posts.deletedAt} IS NULL)`,
-      deleted: sql<number>`COUNT(DISTINCT ${posts.id}) FILTER (WHERE ${posts.deletedAt} IS NOT NULL)`,
+      pending: sql`COUNT(DISTINCT ${posts.id}) FILTER (WHERE ${posts.deletedAt} IS NULL)`,
+      deleted: sql`COUNT(DISTINCT ${posts.id}) FILTER (WHERE ${posts.deletedAt} IS NOT NULL)`,
     })
     .from(posts)
     .innerJoin(

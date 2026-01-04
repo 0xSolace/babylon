@@ -5,8 +5,14 @@
  * Implements the daily 5% drip mechanism with visual progress tracking.
  */
 
+import { BBLN_ADDRESSES, BBLN_PRESALE_ABI } from '@babylon/shared'
 import { useCallback, useEffect, useState } from 'react'
-import { useAccount } from 'wagmi'
+import {
+  useAccount,
+  useChainId,
+  useWaitForTransactionReceipt,
+  useWriteContract,
+} from 'wagmi'
 
 interface AirdropStatus {
   success: boolean
@@ -38,12 +44,34 @@ interface AirdropStatus {
 
 export function AirdropCard() {
   const { isConnected } = useAccount()
+  const chainId = useChainId()
   const [status, setStatus] = useState<AirdropStatus | null>(null)
   const [loading, setLoading] = useState(true)
   const [dripLoading, setDripLoading] = useState(false)
   const [registerLoading, setRegisterLoading] = useState(false)
+  const [claimLoading, setClaimLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [countdown, setCountdown] = useState<string>('')
+
+  // Get presale contract address for current chain (Base mainnet = 8453, Base Sepolia = 84532)
+  const presaleAddress =
+    chainId === 8453
+      ? BBLN_ADDRESSES.base?.presale
+      : chainId === 84532
+        ? BBLN_ADDRESSES.baseSepolia?.presale
+        : null
+
+  // Write contract hook for on-chain claim
+  const {
+    writeContract,
+    data: txHash,
+    isPending: isClaimPending,
+    error: writeError,
+  } = useWriteContract()
+  const { isLoading: isConfirming, isSuccess: isClaimSuccess } =
+    useWaitForTransactionReceipt({
+      hash: txHash,
+    })
 
   // Fetch airdrop status
   const fetchStatus = useCallback(async () => {
@@ -61,6 +89,22 @@ export function AirdropCard() {
 
     setLoading(false)
   }, [])
+
+  // Handle successful claim
+  useEffect(() => {
+    if (isClaimSuccess) {
+      fetchStatus()
+      setClaimLoading(false)
+    }
+  }, [isClaimSuccess, fetchStatus])
+
+  // Handle write error
+  useEffect(() => {
+    if (writeError) {
+      setError(writeError.message || 'Claim transaction failed')
+      setClaimLoading(false)
+    }
+  }, [writeError])
 
   // Register for airdrop
   const handleRegister = async () => {
@@ -297,16 +341,39 @@ export function AirdropCard() {
           <p className="font-bold text-xl text-yellow-700 dark:text-yellow-400">
             {claim.claimableFormatted}
           </p>
-          <button
-            type="button"
-            className="mt-2 w-full rounded-lg bg-yellow-500 px-4 py-2 font-medium text-white hover:bg-yellow-600"
-            onClick={() => {
-              // TODO: Implement on-chain claim
-              alert('On-chain claiming coming soon!')
-            }}
-          >
-            Claim Tokens
-          </button>
+          {presaleAddress ? (
+            <button
+              type="button"
+              className="mt-2 w-full rounded-lg bg-yellow-500 px-4 py-2 font-medium text-white hover:bg-yellow-600 disabled:opacity-50"
+              disabled={claimLoading || isClaimPending || isConfirming}
+              onClick={() => {
+                setClaimLoading(true)
+                setError(null)
+                writeContract({
+                  address: presaleAddress as `0x${string}`,
+                  abi: BBLN_PRESALE_ABI,
+                  functionName: 'claim',
+                })
+              }}
+            >
+              {isConfirming
+                ? 'Confirming...'
+                : isClaimPending
+                  ? 'Signing...'
+                  : claimLoading
+                    ? 'Processing...'
+                    : 'Claim Tokens'}
+            </button>
+          ) : (
+            <p className="mt-2 text-sm text-yellow-600 dark:text-yellow-400">
+              On-chain claiming available on Base network
+            </p>
+          )}
+          {txHash && (
+            <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+              Tx: {txHash.slice(0, 10)}...{txHash.slice(-8)}
+            </p>
+          )}
         </div>
       )}
 

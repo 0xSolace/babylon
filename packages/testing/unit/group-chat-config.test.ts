@@ -26,7 +26,8 @@ describe('Group Chat Configuration', () => {
     })
 
     test('has valid tier multipliers', () => {
-      const tiers = ['S_TIER', 'A_TIER', 'B_TIER', 'C_TIER', 'NONE']
+      type TierKey = keyof typeof GroupInviteConfig.tierMultipliers
+      const tiers: TierKey[] = ['S_TIER', 'A_TIER', 'B_TIER', 'C_TIER', 'NONE']
       for (const tier of tiers) {
         const mult = GroupInviteConfig.tierMultipliers[tier]
         expect(mult).toBeDefined()

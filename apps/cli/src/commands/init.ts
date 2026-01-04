@@ -18,6 +18,7 @@ import { dirname, join } from 'node:path'
 import {
   getCurrentNetwork,
   getDWSCacheUrl,
+  getSQLitUrl,
   getServicesConfig,
 } from '@jejunetwork/config'
 import { getFlag, parseArgs, wantsHelp } from '../lib/args.js'
@@ -29,14 +30,15 @@ const API_PORT = process.env.API_PORT ?? '5007'
 
 // Get service URLs from Jeju config (network-aware)
 function getJejuServiceUrls() {
+  const network = getCurrentNetwork()
   const config = getServicesConfig()
   return {
-    EQLITE_BLOCK_PRODUCER_ENDPOINT: 'http://127.0.0.1:4661', // EQLite is local-only
-    CACHE_URL: getDWSCacheUrl(),
+    SQLIT_BLOCK_PRODUCER_ENDPOINT: getSQLitUrl(network),
+    CACHE_URL: getDWSCacheUrl(network),
     STORAGE_URL: config.storage.api,
     KMS_URL: config.kms.api,
     RPC_URL: config.rpc.l2,
-    NETWORK: getCurrentNetwork(),
+    NETWORK: network,
   }
 }
 
@@ -70,7 +72,7 @@ DESCRIPTION:
   'babylon dev' if .env.local doesn't exist.
 
   With --decentralized, also configures environment for Jeju
-  decentralized services (EQLite, Cache, Storage).
+  decentralized services (SQLit, Cache, Storage).
 
   Current network: ${network}
   Service URLs are loaded from @jejunetwork/config/services.json
@@ -170,8 +172,8 @@ async function waitForServices(maxWaitMs = 120000): Promise<boolean> {
   const startTime = Date.now()
   const requiredServices = [
     {
-      name: 'EQLite Database',
-      url: urls.EQLITE_BLOCK_PRODUCER_ENDPOINT,
+      name: 'SQLit Database',
+      url: urls.SQLIT_BLOCK_PRODUCER_ENDPOINT,
       path: '/health',
     },
     {
@@ -205,14 +207,20 @@ async function waitForServices(maxWaitMs = 120000): Promise<boolean> {
   return false
 }
 
-async function initializeEQLiteSchema(): Promise<void> {
-  logger.step('Initializing EQLite database schema...')
+async function initializeSQLitSchema(): Promise<void> {
+  logger.step('Initializing SQLit database schema...')
   const urls = getJejuServiceUrls()
 
+  // Env override takes precedence, then config
   const endpoint =
-    process.env.EQLITE_BLOCK_PRODUCER_ENDPOINT ||
-    urls.EQLITE_BLOCK_PRODUCER_ENDPOINT
-  const databaseId = process.env.EQLITE_DATABASE_ID || 'babylon-dev'
+    (typeof process !== 'undefined'
+      ? process.env.SQLIT_BLOCK_PRODUCER_ENDPOINT
+      : undefined) || urls.SQLIT_BLOCK_PRODUCER_ENDPOINT
+  // Database ID can remain as env var (runtime config)
+  const databaseId =
+    (typeof process !== 'undefined'
+      ? process.env.SQLIT_DATABASE_ID
+      : undefined) || 'babylon-dev'
 
   const { generateAllDDL } = await import('@babylon/db')
   const ddlStatements = generateAllDDL()
@@ -245,7 +253,7 @@ async function initializeEQLiteSchema(): Promise<void> {
   }
 
   logger.success(
-    `EQLite schema ready (${created} created, ${skipped} already exist)`,
+    `SQLit schema ready (${created} created, ${skipped} already exist)`,
   )
 }
 
@@ -255,8 +263,8 @@ async function checkServiceStatus(): Promise<void> {
 
   const services = await Promise.all([
     checkService(
-      'EQLite Database',
-      urls.EQLITE_BLOCK_PRODUCER_ENDPOINT,
+      'SQLit Database',
+      urls.SQLIT_BLOCK_PRODUCER_ENDPOINT,
       '/health',
       true,
     ),
@@ -306,8 +314,8 @@ export async function initDecentralized(): Promise<void> {
   // Quick check if services are already running
   const quickCheck = await Promise.all([
     checkService(
-      'EQLite',
-      urls.EQLITE_BLOCK_PRODUCER_ENDPOINT,
+      'SQLit',
+      urls.SQLIT_BLOCK_PRODUCER_ENDPOINT,
       '/health',
       true,
     ),
@@ -330,12 +338,12 @@ export async function initDecentralized(): Promise<void> {
   }
 
   await checkServiceStatus()
-  await initializeEQLiteSchema()
+  await initializeSQLitSchema()
 
   logger.success('Babylon Decentralized Ready')
   console.log('')
   console.log('Services (from config):')
-  console.log(`  EQLite:     ${urls.EQLITE_BLOCK_PRODUCER_ENDPOINT}`)
+  console.log(`  SQLit:     ${urls.SQLIT_BLOCK_PRODUCER_ENDPOINT}`)
   console.log(`  Cache:   ${urls.CACHE_URL}`)
   console.log(`  Storage: ${urls.STORAGE_URL}`)
   console.log('')

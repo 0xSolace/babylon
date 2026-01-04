@@ -27,7 +27,6 @@ const CRON_TIMEOUT = 60000 // 1 minute for cron endpoints
 const HEALTH_TIMEOUT = 10000 // 10 seconds for health check
 
 let serverAvailable = false
-let _gameId: string | null = null
 let initialGameRunning: boolean | undefined
 
 describe('Cron Endpoints E2E', () => {
@@ -55,7 +54,6 @@ describe('Cron Endpoints E2E', () => {
 
     if (!gameState) {
       const newGameId = await generateSnowflakeId()
-      _gameId = newGameId
       await asSystem(async (db) => {
         await db.game.create({
           data: {
@@ -68,7 +66,6 @@ describe('Cron Endpoints E2E', () => {
         })
       }, 'cron-e2e-create-game')
     } else {
-      _gameId = gameState.id
       initialGameRunning = gameState.isRunning
       if (!gameState.isRunning) {
         await asSystem(async (db) => {

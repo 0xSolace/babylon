@@ -1,12 +1,12 @@
 /**
  * Database Helper Functions
  *
- * Connection management and retry utilities for EQLite.
+ * Connection management and retry utilities for SQLit.
  */
 
 import { retryWithCondition } from '@jejunetwork/shared'
-import { initializeDB, resetDB } from './eqlite-repository'
-import type { DatabaseErrorType, SQLValue } from './types'
+import { initializeDB, resetDB } from './sqlit-repository'
+import type { DatabaseErrorType } from './types'
 
 /**
  * Determine if a database error is retryable.
@@ -63,37 +63,15 @@ export async function withRetry<T>(
 }
 
 /**
- * Connect to database (initialize EQLite connection).
+ * Connect to database (initialize SQLit connection).
  */
 export async function $connect(): Promise<void> {
   await initializeDB()
 }
 
 /**
- * Disconnect from database (reset EQLite connection).
+ * Disconnect from database (reset SQLit connection).
  */
 export async function $disconnect(): Promise<void> {
   resetDB()
-}
-
-/**
- * @deprecated Use db.$queryRaw template literal directly.
- * Kept for backwards compatibility.
- */
-export async function $queryRaw<T = Record<string, SQLValue>>(
-  ..._args: unknown[]
-): Promise<T[]> {
-  throw new Error(
-    '[DB] $queryRaw helper is deprecated. Use db.$queryRaw`SELECT ...` directly.',
-  )
-}
-
-/**
- * @deprecated Use db.$executeRaw template literal directly.
- * Kept for backwards compatibility.
- */
-export async function $executeRaw(..._args: unknown[]): Promise<number> {
-  throw new Error(
-    '[DB] $executeRaw helper is deprecated. Use db.$executeRaw`INSERT ...` directly.',
-  )
 }

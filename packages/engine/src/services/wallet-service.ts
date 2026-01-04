@@ -112,7 +112,7 @@ export class WalletService {
    * @description Internal method to apply a balance change and create a
    * transaction record. Used by debit and credit methods.
    *
-   * @param {Transaction} tx - EQLite transaction client
+   * @param {Transaction} tx - SQLit transaction client
    * @param {string} userId - User ID
    * @param {number} delta - Amount to change (positive for credit, negative for debit)
    * @param {string} type - Transaction type identifier

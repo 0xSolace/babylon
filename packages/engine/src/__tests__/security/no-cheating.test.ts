@@ -117,7 +117,8 @@ describe.skipIf(!hasJejuCompute)('Security: Prevent Cheating', () => {
       expect(game).toBeDefined()
 
       // Simulate what an API would return
-      const publicQuestions = game?.setup.questions.map((q) => {
+      if (!game) throw new Error('Expected game to exist')
+      const publicQuestions = game.setup.questions.map((q) => {
         // Before resolution, outcome should not be visible
         if (q.status !== 'resolved') {
           const { outcome: _outcome, ...publicQuestion } = q
@@ -209,7 +210,8 @@ describe.skipIf(!hasJejuCompute)('Security: Prevent Cheating', () => {
       // Game must be generated - enforced by beforeAll
       expect(game).toBeDefined()
 
-      const publicActors = game?.setup.mainActors.map((actor) => {
+      if (!game) throw new Error('Expected game to exist')
+      const publicActors = game.setup.mainActors.map((actor) => {
         // Return actor without internal properties that shouldn't be exposed
         return actor
       })
@@ -225,7 +227,8 @@ describe.skipIf(!hasJejuCompute)('Security: Prevent Cheating', () => {
       // Game must be generated - enforced by beforeAll
       expect(game).toBeDefined()
 
-      const publicQuestions = game?.setup.questions.map((q) => {
+      if (!game) throw new Error('Expected game to exist')
+      const publicQuestions = game.setup.questions.map((q) => {
         // Return question without internal metadata that shouldn't be exposed
         return q
       })
@@ -241,8 +244,9 @@ describe.skipIf(!hasJejuCompute)('Security: Prevent Cheating', () => {
     test('early game doesnt reveal too much', async () => {
       // Game must be generated - enforced by beforeAll
       expect(game).toBeDefined()
+      if (!game) throw new Error('Expected game to exist')
 
-      const earlyDays = game?.timeline.filter((d) => d.day <= 10)
+      const earlyDays = game.timeline.filter((d) => d.day <= 10)
       const earlyEvents = earlyDays.flatMap((d) => d.events)
 
       const hintsGiven = earlyEvents.filter(
@@ -257,8 +261,9 @@ describe.skipIf(!hasJejuCompute)('Security: Prevent Cheating', () => {
     test('late game provides sufficient clarity', async () => {
       // Game must be generated - enforced by beforeAll
       expect(game).toBeDefined()
+      if (!game) throw new Error('Expected game to exist')
 
-      const lateDays = game?.timeline.filter((d) => d.day >= 25)
+      const lateDays = game.timeline.filter((d) => d.day >= 25)
       const lateEvents = lateDays.flatMap((d) => d.events)
 
       const hintsGiven = lateEvents.filter(
@@ -291,8 +296,9 @@ describe.skipIf(!hasJejuCompute)('Security: Prevent Cheating', () => {
     test('group chat membership provides fair insider advantage', async () => {
       // Game must be generated - enforced by beforeAll
       expect(game).toBeDefined()
+      if (!game) throw new Error('Expected game to exist')
 
-      const groupChats = game?.setup.groupChats
+      const groupChats = game.setup.groupChats
 
       for (const group of groupChats) {
         expect(group.members.length).toBeGreaterThan(0)
@@ -305,8 +311,9 @@ describe.skipIf(!hasJejuCompute)('Security: Prevent Cheating', () => {
     test('posts have valid timestamps in sequence', async () => {
       // Game must be generated - enforced by beforeAll
       expect(game).toBeDefined()
+      if (!game) throw new Error('Expected game to exist')
 
-      const allPosts = game?.timeline.flatMap((d) => d.feedPosts)
+      const allPosts = game.timeline.flatMap((d) => d.feedPosts)
 
       for (let i = 1; i < allPosts.length; i++) {
         const prev = allPosts[i - 1]

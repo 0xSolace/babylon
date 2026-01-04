@@ -10,6 +10,7 @@
  */
 
 import { logger } from '@babylon/shared'
+import { getJejuComputeEndpoint } from '@babylon/shared/config'
 import { isPromptLoggingEnabled, logPrompt } from '../utils/prompt-logger'
 
 // Configuration
@@ -17,35 +18,6 @@ const LLM_TIMEOUT_MS = 15000 // 15 seconds
 const LLM_MAX_RETRIES = 2
 const GROUPING_MODEL = 'llama-3.1-8b-instant'
 const SUMMARY_MODEL = 'llama-3.1-8b-instant'
-
-// Port configuration via env var
-const COMPUTE_PORT = process.env.JEJU_COMPUTE_PORT ?? '5010'
-
-/**
- * Get Jeju Compute endpoint based on network configuration
- * Uses decentralized compute marketplace for LLM inference
- */
-function getJejuComputeEndpoint(): string {
-  // Explicit override takes precedence
-  if (process.env.JEJU_COMPUTE_ENDPOINT) {
-    return process.env.JEJU_COMPUTE_ENDPOINT
-  }
-  if (process.env.JEJU_DWS_ENDPOINT) {
-    return process.env.JEJU_DWS_ENDPOINT
-  }
-
-  // Network-based configuration
-  const network = process.env.JEJU_NETWORK
-  if (network === 'mainnet') {
-    return 'https://compute.jeju.network'
-  }
-  if (network === 'testnet') {
-    return 'https://compute.testnet.jeju.network'
-  }
-
-  // Localnet default
-  return `http://localhost:${COMPUTE_PORT}`
-}
 
 // Jeju Compute endpoint
 const JEJU_COMPUTE_ENDPOINT = getJejuComputeEndpoint()

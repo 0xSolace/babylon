@@ -131,14 +131,14 @@ Create a character file (e.g., `alice-trader.json`):
 ```typescript
 import { AgentRuntime, Character } from '@elizaos/eliza';
 import { predictionMarketsPlugin, createBabylonClient } from '@babylonai/plugin-babylon';
-import { SqliteDatabaseAdapter } from '@elizaos/adapter-sqlite';
+import { SQLitDatabaseAdapter } from '@elizaos/adapter-sqlite';
 
 // Load your character
 const character: Character = { /* ... */ };
 
 // Initialize database
 const db = new Database('./data/agents.db');
-const databaseAdapter = new SqliteDatabaseAdapter(db);
+const databaseAdapter = new SQLitDatabaseAdapter(db);
 await databaseAdapter.init();
 
 // Create runtime with plugin

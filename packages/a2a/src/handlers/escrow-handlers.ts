@@ -4,7 +4,7 @@
  * Handlers for moderation escrow payment methods via A2A protocol
  */
 
-import { db, type EQLiteClient, type JsonValue } from '@babylon/db'
+import { db, type SQLitClient, type JsonValue } from '@babylon/db'
 import { logger, parseEther } from '@babylon/shared'
 import { generateSnowflakeId, isJsonRecord } from '@jejunetwork/shared'
 import { z } from 'zod'
@@ -541,7 +541,7 @@ export async function handleVerifyEscrowPayment(
   }
 
   // Use transaction to prevent race conditions
-  const verificationResult = await db.transaction(async (tx: EQLiteClient) => {
+  const verificationResult = await db.transaction(async (tx: SQLitClient) => {
     // Re-fetch escrow within transaction
     const currentEscrow = await tx.moderationEscrow.findUnique({
       where: { id: params.escrowId },
@@ -683,7 +683,7 @@ export async function handleRefundEscrowPayment(
   }
 
   // Use transaction to prevent race conditions
-  const updatedEscrow = await db.transaction(async (tx: EQLiteClient) => {
+  const updatedEscrow = await db.transaction(async (tx: SQLitClient) => {
     // Re-fetch to ensure still refundable
     const currentEscrow = await tx.moderationEscrow.findUnique({
       where: { id: params.escrowId },

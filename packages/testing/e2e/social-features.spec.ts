@@ -17,21 +17,24 @@ const BABYLON_API_PORT = process.env.BABYLON_API_PORT ?? '5009'
 const API_URL = `http://127.0.0.1:${BABYLON_API_PORT}`
 
 // Test user IDs - these should exist in the database from seeding
-// We'll create test users dynamically if needed
-const _testUserId1 = ''
-const _testUserId2 = ''
-const _testUserId3 = ''
-const _authCookie = ''
+// Reserved for future authenticated tests
+const testUserId1 = ''
+const testUserId2 = ''
+const testUserId3 = ''
+const authCookie = ''
+void testUserId1
+void testUserId2
+void testUserId3
+void authCookie
 
 // Helper to create a mock auth session for testing
-async function _createTestSession(
-  _request: APIRequestContext,
-): Promise<string> {
+async function createTestSession(_request: APIRequestContext): Promise<string> {
   // For E2E tests, we'll create a test user and get a session
   // In real implementation, this would use OAuth3 or wallet auth
   // For now, we'll test the unauthenticated behavior
   return ''
 }
+void createTestSession
 
 // ============================================================================
 // FOLLOW SYSTEM TESTS

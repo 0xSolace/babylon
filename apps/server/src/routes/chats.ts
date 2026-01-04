@@ -1,6 +1,6 @@
-// @ts-nocheck - Elysia body type inference issues, needs refactoring
 import {
   and,
+  type Chat,
   chatAdmins,
   chatParticipants,
   chats,
@@ -9,61 +9,36 @@ import {
   eq,
   gt,
   lt,
+  type Message,
   messages,
-  users,
 } from '@babylon/db'
+
+// Local type for chatAdmins select result
+interface ChatAdmin {
+  id: string
+  chatId: string
+  userId: string
+  createdAt: Date | null
+}
+
 import { logger } from '@babylon/shared'
 import { generateSnowflakeId } from '@jejunetwork/shared'
 import { Elysia, t } from 'elysia'
-import type { Address } from 'viem'
 import {
   authMiddleware,
   getAuthContext,
   rateLimitMiddleware,
 } from '../middleware'
-
-/** XMTP integration enabled */
-const XMTP_ENABLED = process.env.XMTP_ENABLED === 'true'
-
-/**
- * Relay message through XMTP if enabled
- * This provides end-to-end encryption while keeping local storage as source of truth
- */
-async function relayToXMTP(
-  senderAddress: Address,
-  recipientAddress: Address,
-  content: string,
-): Promise<{ success: boolean; error?: string }> {
-  if (!XMTP_ENABLED) {
-    return { success: true } // Skip if disabled
-  }
-
-  try {
-    const { createMessagingClient } = await import('@jejunetwork/messaging')
-
-    const client = createMessagingClient({
-      address: senderAddress,
-      rpcUrl: process.env.JEJU_RPC_URL ?? 'http://localhost:8545',
-      relayUrl: process.env.JEJU_RELAY_URL ?? 'http://localhost:3200',
-    })
-
-    // Note: In production, would use KMS for key management
-    // For now, just attempt the relay if client is available
-    const result = await client.sendMessage({ to: recipientAddress, content })
-
-    return { success: result.success, error: result.error }
-  } catch (error) {
-    logger.warn(
-      'XMTP relay failed (non-blocking)',
-      { error: error instanceof Error ? error.message : 'Unknown' },
-      'ChatRoutes',
-    )
-    return {
-      success: false,
-      error: error instanceof Error ? error.message : 'Unknown',
-    }
-  }
-}
+import {
+  createMLSGroup,
+  getGroupEncryptionStatus,
+  sendMLSMessage,
+} from '../services/mls-groups'
+import {
+  getMessagingStatus,
+  isXMTPEnabled,
+  sendEncryptedDM,
+} from '../services/xmtp-messaging'
 
 /**
  * Chat routes
@@ -129,17 +104,17 @@ const createChatsRoutes = () =>
         // Get last message for each chat
         const lastMessages = await Promise.all(
           chatIds.map(async (chatId) => {
-            const [lastMsg] = await db
+            const msgResult = (await db
               .select()
               .from(messages)
               .where(eq(messages.chatId, chatId))
               .orderBy(desc(messages.createdAt))
-              .limit(1)
-            return { chatId, lastMessage: lastMsg ?? null }
+              .limit(1)) as unknown as Message[]
+            return { chatId, lastMessage: msgResult[0] ?? null }
           }),
         )
 
-        const lastMessageMap = new Map(
+        const lastMessageMap = new Map<string, Message | null>(
           lastMessages.map((lm) => [lm.chatId, lm.lastMessage]),
         )
 
@@ -147,8 +122,10 @@ const createChatsRoutes = () =>
           .map((chatId) => {
             const chat = chatMap.get(chatId)
             if (!chat) return null
-            const lastMessage = lastMessageMap.get(chatId)
-            const lastMessageAt = lastMessage?.createdAt ?? chat.updatedAt
+            const lastMessage = lastMessageMap.get(chatId) ?? null
+            const lastMessageAt = lastMessage?.createdAt
+              ? lastMessage.createdAt
+              : chat.updatedAt
             return {
               ...chat,
               lastMessage,
@@ -193,12 +170,18 @@ const createChatsRoutes = () =>
       '/',
       async (ctx) => {
         const { user, isAuthenticated } = getAuthContext(ctx)
-        const { set, body } = ctx
+        const { set } = ctx
         if (!isAuthenticated || !user) {
           set.status = 401
           return { error: 'Unauthorized' }
         }
 
+        // Type assertion for body (Elysia type inference limitation)
+        const body = ctx.body as {
+          participantIds: string[]
+          name?: string
+          isGroup?: boolean
+        }
         const { participantIds, name, isGroup } = body
 
         // Validate participants
@@ -336,11 +319,12 @@ const createChatsRoutes = () =>
           return { error: 'Not a participant in this chat' }
         }
 
-        const [chat] = await db
+        const chatQueryResult = (await db
           .select()
           .from(chats)
           .where(eq(chats.id, params.id))
-          .limit(1)
+          .limit(1)) as unknown as Chat[]
+        const chat = chatQueryResult[0]
 
         if (!chat) {
           set.status = 404
@@ -481,12 +465,18 @@ const createChatsRoutes = () =>
       '/:id/messages',
       async (ctx) => {
         const { user, isAuthenticated } = getAuthContext(ctx)
-        const { params, set, body } = ctx
+        const { params, set } = ctx
         if (!isAuthenticated || !user) {
           set.status = 401
           return { error: 'Unauthorized' }
         }
 
+        // Type assertion for body (Elysia type inference limitation)
+        const body = ctx.body as {
+          content: string
+          replyTo?: string
+          attachments?: Array<{ type: string; url: string }>
+        }
         const { content } = body
 
         if (!content || content.trim().length === 0) {
@@ -518,9 +508,145 @@ const createChatsRoutes = () =>
           return { error: 'Not a participant in this chat' }
         }
 
+        // Get chat info to determine if DM or group
+        const [chatInfo] = await db
+          .select({ isGroup: chats.isGroup, metadata: chats.metadata })
+          .from(chats)
+          .where(eq(chats.id, params.id))
+          .limit(1)
+
+        // Check if this is an MLS encrypted group
+        const chatMeta = chatInfo?.metadata as {
+          encryptionType?: string
+        } | null
+        const isMLS = chatMeta?.encryptionType === 'mls'
+
+        // For MLS groups, send via MLS service
+        if (chatInfo?.isGroup && isMLS) {
+          try {
+            const mlsResult = await sendMLSMessage(
+              user.userId,
+              params.id,
+              content.trim(),
+            )
+
+            logger.info(
+              'Message sent via MLS',
+              {
+                messageId: mlsResult.messageId,
+                chatId: params.id,
+                userId: user.userId,
+              },
+              'POST /api/chats/:id/messages',
+            )
+
+            // Get the stored message
+            const [storedMessage] = await db
+              .select()
+              .from(messages)
+              .where(eq(messages.id, mlsResult.messageId))
+              .limit(1)
+
+            return {
+              success: true,
+              message: storedMessage,
+              encrypted: true,
+              encryptionType: 'mls',
+            }
+          } catch (mlsError) {
+            // MLS is required for MLS groups - don't fallback to unencrypted
+            set.status = 500
+            return {
+              error: `MLS encryption failed: ${mlsError instanceof Error ? mlsError.message : 'Unknown error'}`,
+            }
+          }
+        }
+
         const messageId = await generateSnowflakeId()
         const now = new Date()
 
+        // For DM chats, use XMTP encryption service if enabled
+        if (chatInfo && !chatInfo.isGroup && isXMTPEnabled()) {
+          // This is a DM - get the other participant
+          const otherParticipants = await db
+            .select({ userId: chatParticipants.userId })
+            .from(chatParticipants)
+            .where(
+              and(
+                eq(chatParticipants.chatId, params.id),
+                eq(chatParticipants.isActive, true),
+              ),
+            )
+
+          const otherUserId = otherParticipants.find(
+            (p) => p.userId !== user.userId,
+          )?.userId
+
+          if (otherUserId) {
+            try {
+              // Send encrypted DM via XMTP service
+              const encryptionResult = await sendEncryptedDM(
+                user.userId,
+                otherUserId,
+                content.trim(),
+              )
+
+              // Message stored by XMTP service
+              logger.info(
+                'DM sent via XMTP',
+                {
+                  messageId: encryptionResult.messageId,
+                  chatId: params.id,
+                  userId: user.userId,
+                  encrypted: true,
+                },
+                'POST /api/chats/:id/messages',
+              )
+
+              // Get the stored message
+              const [storedMessage] = await db
+                .select()
+                .from(messages)
+                .where(eq(messages.id, encryptionResult.messageId))
+                .limit(1)
+
+              // Update participant's last message timestamp
+              const currentMessageCount = participation.messageCount ?? 0
+              await db
+                .update(chatParticipants)
+                .set({
+                  lastMessageAt: now,
+                  messageCount: currentMessageCount + 1,
+                })
+                .where(
+                  and(
+                    eq(chatParticipants.chatId, params.id),
+                    eq(chatParticipants.userId, user.userId),
+                  ),
+                )
+
+              return {
+                success: true,
+                message: storedMessage,
+                encrypted: true,
+                encryptionType: 'xmtp',
+              }
+            } catch (xmtpError) {
+              // Log but continue to unencrypted fallback for DMs (optional encryption)
+              logger.warn(
+                'XMTP encryption failed, storing unencrypted',
+                {
+                  chatId: params.id,
+                  error:
+                    xmtpError instanceof Error ? xmtpError.message : 'Unknown',
+                },
+                'POST /api/chats/:id/messages',
+              )
+            }
+          }
+        }
+
+        // Fallback: store message locally without encryption
         const [newMessage] = await db
           .insert(messages)
           .values({
@@ -529,6 +655,10 @@ const createChatsRoutes = () =>
             senderId: user.userId,
             content: content.trim(),
             createdAt: now,
+            metadata: {
+              isEncrypted: false,
+              encryptionType: 'none',
+            },
           })
           .returning()
 
@@ -553,63 +683,12 @@ const createChatsRoutes = () =>
             ),
           )
 
-        // For DM chats, relay through XMTP for end-to-end encryption
-        let xmtpRelayResult: { success: boolean; error?: string } | null = null
-
-        // Get chat type to determine if this is a DM
-        const [chatInfo] = await db
-          .select({ isGroup: chats.isGroup })
-          .from(chats)
-          .where(eq(chats.id, params.id))
-          .limit(1)
-
-        if (chatInfo && !chatInfo.isGroup) {
-          // This is a DM - get the other participant's wallet address
-          const otherParticipants = await db
-            .select({ userId: chatParticipants.userId })
-            .from(chatParticipants)
-            .where(
-              and(
-                eq(chatParticipants.chatId, params.id),
-                eq(chatParticipants.isActive, true),
-              ),
-            )
-
-          const otherUserId = otherParticipants.find(
-            (p) => p.userId !== user.userId,
-          )?.userId
-          if (otherUserId) {
-            // Get wallet addresses for XMTP relay
-            const [senderWallet] = await db
-              .select({ walletAddress: users.walletAddress })
-              .from(users)
-              .where(eq(users.id, user.userId))
-              .limit(1)
-
-            const [recipientWallet] = await db
-              .select({ walletAddress: users.walletAddress })
-              .from(users)
-              .where(eq(users.id, otherUserId))
-              .limit(1)
-
-            if (senderWallet?.walletAddress && recipientWallet?.walletAddress) {
-              // Relay through XMTP (non-blocking)
-              xmtpRelayResult = await relayToXMTP(
-                senderWallet.walletAddress as Address,
-                recipientWallet.walletAddress as Address,
-                content.trim(),
-              )
-            }
-          }
-        }
-
         logger.info(
-          'Message sent',
+          'Message sent (unencrypted)',
           {
             messageId,
             chatId: params.id,
             userId: user.userId,
-            xmtpRelayed: xmtpRelayResult?.success ?? false,
           },
           'POST /api/chats/:id/messages',
         )
@@ -617,7 +696,8 @@ const createChatsRoutes = () =>
         return {
           success: true,
           message: newMessage,
-          xmtpRelayed: xmtpRelayResult?.success ?? false,
+          encrypted: false,
+          encryptionType: 'none',
         }
       },
       {
@@ -640,7 +720,7 @@ const createChatsRoutes = () =>
           tags: ['Chats'],
           summary: 'Send chat message',
           description:
-            'Send a message in a chat. For DMs, also relays through XMTP for end-to-end encryption if enabled.',
+            'Send a message in a chat. For DMs, uses XMTP for end-to-end encryption. For MLS groups, uses MLS protocol.',
         },
       },
     )
@@ -708,13 +788,15 @@ const createChatsRoutes = () =>
       '/:id/participants',
       async (ctx) => {
         const { user, isAuthenticated } = getAuthContext(ctx)
-        const { params, set, body } = ctx
+        const { params, set } = ctx
         if (!isAuthenticated || !user) {
           set.status = 401
           return { error: 'Unauthorized' }
         }
 
-        const newUserId = body.userId as string
+        // Type assertion for body (Elysia type inference limitation)
+        const body = ctx.body as { userId: string }
+        const newUserId = body.userId
 
         // Check if requesting user is admin of chat
         const [adminStatus] = await db
@@ -878,11 +960,12 @@ const createChatsRoutes = () =>
           return { error: 'Not a participant in this chat' }
         }
 
-        const [chat] = await db
+        const groupChatQueryResult = (await db
           .select()
           .from(chats)
           .where(and(eq(chats.id, params.id), eq(chats.isGroup, true)))
-          .limit(1)
+          .limit(1)) as unknown as Chat[]
+        const chat = groupChatQueryResult[0]
 
         if (!chat) {
           set.status = 404
@@ -890,10 +973,10 @@ const createChatsRoutes = () =>
         }
 
         // Get admins
-        const admins = await db
+        const admins = (await db
           .select()
           .from(chatAdmins)
-          .where(eq(chatAdmins.chatId, params.id))
+          .where(eq(chatAdmins.chatId, params.id))) as unknown as ChatAdmin[]
 
         // Get member count
         const members = await db
@@ -933,10 +1016,17 @@ const createChatsRoutes = () =>
       '/:id/group',
       async (ctx) => {
         const { user, isAuthenticated } = getAuthContext(ctx)
-        const { params, set, body } = ctx
+        const { params, set } = ctx
         if (!isAuthenticated || !user) {
           set.status = 401
           return { error: 'Unauthorized' }
+        }
+
+        // Type assertion for body (Elysia type inference limitation)
+        const body = ctx.body as {
+          name?: string
+          description?: string
+          imageUrl?: string
         }
 
         // Check if user is admin
@@ -951,11 +1041,12 @@ const createChatsRoutes = () =>
           )
           .limit(1)
 
-        const [chat] = await db
+        const chatQueryResult = (await db
           .select()
           .from(chats)
           .where(eq(chats.id, params.id))
-          .limit(1)
+          .limit(1)) as unknown as Chat[]
+        const chat = chatQueryResult[0]
 
         if (!chat) {
           set.status = 404
@@ -1062,6 +1153,188 @@ const createChatsRoutes = () =>
         detail: {
           tags: ['Chats'],
           summary: 'Get unread message count',
+        },
+      },
+    )
+
+    // Create encrypted MLS group chat
+    .post(
+      '/encrypted',
+      async (ctx) => {
+        const { user, isAuthenticated } = getAuthContext(ctx)
+        const { set } = ctx
+        if (!isAuthenticated || !user) {
+          set.status = 401
+          return { error: 'Unauthorized' }
+        }
+
+        // Type assertion for body (Elysia type inference limitation)
+        const body = ctx.body as {
+          participantIds: string[]
+          name?: string
+        }
+        const { participantIds, name } = body
+
+        if (!participantIds || participantIds.length === 0) {
+          set.status = 400
+          return { error: 'At least one participant is required' }
+        }
+
+        try {
+          // Create MLS encrypted group
+          const result = await createMLSGroup(
+            user.userId,
+            name ?? 'Encrypted Group',
+            participantIds,
+          )
+
+          logger.info(
+            'Encrypted MLS group created',
+            { groupId: result.groupId, creatorId: user.userId },
+            'POST /api/chats/encrypted',
+          )
+
+          return {
+            success: true,
+            chatId: result.groupId,
+            encrypted: true,
+            encryptionType: 'mls',
+          }
+        } catch (error) {
+          set.status = 500
+          return {
+            error: `Failed to create encrypted group: ${error instanceof Error ? error.message : 'Unknown error'}`,
+          }
+        }
+      },
+      {
+        body: t.Object({
+          participantIds: t.Array(t.String()),
+          name: t.Optional(t.String()),
+        }),
+        detail: {
+          tags: ['Chats', 'Encryption'],
+          summary: 'Create encrypted group chat',
+          description:
+            'Creates a new group chat with MLS end-to-end encryption. All messages in this group will be encrypted.',
+        },
+      },
+    )
+
+    // Get chat encryption status
+    .get(
+      '/:id/encryption',
+      async (ctx) => {
+        const { user, isAuthenticated } = getAuthContext(ctx)
+        const { params, set } = ctx
+        if (!isAuthenticated || !user) {
+          set.status = 401
+          return { error: 'Unauthorized' }
+        }
+
+        // Check if user is participant
+        const [participation] = await db
+          .select()
+          .from(chatParticipants)
+          .where(
+            and(
+              eq(chatParticipants.chatId, params.id),
+              eq(chatParticipants.userId, user.userId),
+              eq(chatParticipants.isActive, true),
+            ),
+          )
+          .limit(1)
+
+        if (!participation) {
+          set.status = 403
+          return { error: 'Not a participant in this chat' }
+        }
+
+        // Get chat type
+        const [chat] = await db
+          .select({ isGroup: chats.isGroup })
+          .from(chats)
+          .where(eq(chats.id, params.id))
+          .limit(1)
+
+        if (!chat) {
+          set.status = 404
+          return { error: 'Chat not found' }
+        }
+
+        if (chat.isGroup) {
+          // Get MLS group encryption status (throws if chat not found)
+          const status = await getGroupEncryptionStatus(params.id)
+          return {
+            success: true,
+            encryption: {
+              isEncrypted: status.isEncrypted,
+              type: status.encryptionType ?? 'none',
+              protocol: status.encryptionType === 'mls' ? 'MLS' : null,
+              features:
+                status.encryptionType === 'mls'
+                  ? ['forward-secrecy', 'post-compromise-security']
+                  : [],
+            },
+          }
+        }
+        // DM - check XMTP status
+        return {
+          success: true,
+          encryption: {
+            isEncrypted: isXMTPEnabled(),
+            type: isXMTPEnabled() ? 'xmtp' : 'none',
+            protocol: isXMTPEnabled() ? 'XMTP' : null,
+            features: isXMTPEnabled()
+              ? ['end-to-end-encryption', 'decentralized']
+              : [],
+          },
+        }
+      },
+      {
+        params: t.Object({
+          id: t.String(),
+        }),
+        detail: {
+          tags: ['Chats', 'Encryption'],
+          summary: 'Get chat encryption status',
+          description:
+            'Returns the encryption status and type for a chat (XMTP for DMs, MLS for groups).',
+        },
+      },
+    )
+
+    // Get messaging status for current user
+    .get(
+      '/messaging-status',
+      async (ctx) => {
+        const { user, isAuthenticated } = getAuthContext(ctx)
+        const { set } = ctx
+        if (!isAuthenticated || !user) {
+          set.status = 401
+          return { error: 'Unauthorized' }
+        }
+
+        const status = await getMessagingStatus(user.userId)
+
+        return {
+          success: true,
+          status: {
+            xmtpEnabled: status.xmtpEnabled,
+            xmtpClientInitialized: status.hasClient,
+            hasPublicKey: status.hasPublicKey,
+            walletConnected: !!status.walletAddress,
+            encryptionAvailable:
+              status.xmtpEnabled && status.hasClient && !!status.walletAddress,
+          },
+        }
+      },
+      {
+        detail: {
+          tags: ['Chats', 'Encryption'],
+          summary: 'Get messaging status',
+          description:
+            'Returns the current user messaging status including XMTP availability.',
         },
       },
     )

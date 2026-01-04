@@ -18,9 +18,9 @@ export {
   rateLimitError,
 } from './middleware'
 // Rate limiting (moved from @babylon/shared)
+// Note: cleanupRateLimits is no longer needed - distributed cache handles TTL
 export {
   checkRateLimit,
-  cleanupRateLimits,
   clearAllRateLimits,
   getRateLimitStatus,
   RATE_LIMIT_CONFIGS,

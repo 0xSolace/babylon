@@ -39,7 +39,7 @@ apps/* → packages/* → contracts
 - **engine:** Game world, perpetuals, simulation logic (domain)
 - **agents:** Agent runtime, Agent0/A2A/MCP integrations
 - **api:** Server utilities (auth, rate limit, redis, SSE, token counting)
-- **db:** EQLite client and schema types
+- **db:** SQLit client and schema types
 - **shared:** Client-safe types, utils, config
 - **contracts:** Smart contracts (Hardhat + Foundry)
 
@@ -61,7 +61,7 @@ apps/* → packages/* → contracts
 
 Use Synpress for all auth'd E2E tests with MetaMask.
 
-### Database (EQLite via Jeju DWS)
+### Database (SQLit via Jeju DWS)
 - **Check status:** `bun run babylon db status`
 - **Connect/test:** `bun run babylon db connect`
 - **Provision:** `bun run babylon db provision --network localnet`
@@ -77,15 +77,15 @@ Use Synpress for all auth'd E2E tests with MetaMask.
 1. Copy `.env.example` to `.env`
 2. Run `scripts/pre-dev/pre-dev-local.ts` for localnet defaults
 3. Key variables:
-   - `JEJU_NETWORK` - Network: localnet, testnet, mainnet (auto-configures EQLite/DWS)
+   - `JEJU_NETWORK` - Network: localnet, testnet, mainnet (auto-configures SQLit/DWS)
    - `JEJU_OAUTH3_SERVICE_URL` - Auth (OAuth3)
    - `GROQ_API_KEY` or `OPENAI_API_KEY` - AI models
    - `CRON_SECRET` - For cron endpoints
    - `GAME_START` - Control game state (pause/running)
 
 **Database Configuration:**
-- `JEJU_NETWORK=localnet` - Auto-resolves EQLite endpoint from Jeju config (recommended)
-- `EQLITE_BLOCK_PRODUCER_ENDPOINT` - Explicit override for EQLite endpoint
+- `JEJU_NETWORK=localnet` - Auto-resolves SQLit endpoint from Jeju config (recommended)
+- `SQLIT_BLOCK_PRODUCER_ENDPOINT` - Explicit override for SQLit endpoint
 
 ## Migration Context
 
@@ -113,7 +113,7 @@ Currently migrating architecture while keeping new code portable:
 - `packages/a2a`, `packages/mcp`
 - `packages/api` - Auth/rate-limit/redis/sse/token counting
 - `packages/shared` - Client-safe types/utils/config
-- `packages/db` - EQLite client/schema
+- `packages/db` - SQLit client/schema
 - `packages/contracts`, `packages/testing`, `packages/training`, `packages/examples`
 
 ## Git Workflow

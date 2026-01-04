@@ -8,10 +8,10 @@
 export {
   buildOrderByClause,
   buildWhereClause,
-  EQLiteClient,
-  getEQLite,
+  SQLitClient,
+  getSQLit,
   type OrderByInput,
-  resetEQLite,
+  resetSQLit,
   toQueryParam,
   type WhereClauseResult,
   type WhereInput,
@@ -24,7 +24,7 @@ export {
   QueryTransaction,
   SelectBuilder,
   UpdateBuilder,
-} from '../eqlite-client'
+} from '../sqlit-client'
 // Decentralized Database (primary data layer)
 export {
   DB,
@@ -48,11 +48,11 @@ export {
 // Schema definitions
 export {
   BABYLON_SCHEMAS,
-  createEQLiteTables,
-  EQLITE_SCHEMA,
+  createSQLitTables,
+  SQLIT_SCHEMA,
   generateAllDDL,
   getSchemaByName,
-} from './eqlite-schema'
+} from './sqlit-schema'
 
 // Types
 export type {
@@ -63,14 +63,14 @@ export type {
   DatabaseConfig,
   DatabaseInfo,
   DatabaseStatus,
-  EQLiteColumn,
-  EQLiteConfig,
-  EQLiteConnection,
-  EQLiteConnectionPool,
-  EQLiteHealthStatus,
-  EQLiteIndex,
-  EQLiteTableSchema,
-  EQLiteTransaction,
+  SQLitColumn,
+  SQLitConfig,
+  SQLitConnection,
+  SQLitConnectionPool,
+  SQLitHealthStatus,
+  SQLitIndex,
+  SQLitTableSchema,
+  SQLitTransaction,
   ExecResult,
   GrantRequest,
   Migration,

@@ -288,8 +288,11 @@ ${actor.description || ''}
       // Verify no posts are too similar (crude similarity check)
       for (let i = 0; i < posts.length; i++) {
         for (let j = i + 1; j < posts.length; j++) {
-          const post1 = posts[i].post.toLowerCase()
-          const post2 = posts[j].post.toLowerCase()
+          const p1 = posts[i]
+          const p2 = posts[j]
+          if (!p1 || !p2) throw new Error('Expected posts to exist')
+          const post1 = p1.post.toLowerCase()
+          const post2 = p2.post.toLowerCase()
 
           // Count word overlap
           const words1 = new Set(post1.split(/\s+/))

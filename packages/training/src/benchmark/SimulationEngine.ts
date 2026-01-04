@@ -155,7 +155,7 @@ export interface SimulationResult {
  *
  * The actual simulation implementation was moved to the game engine.
  * This class provides a type-compatible stub that throws when used.
- * @deprecated Use game engine simulation instead
+ * NOTE: Use game engine simulation instead
  */
 export class SimulationEngine {
   private _tickNumber = 0
@@ -169,35 +169,23 @@ export class SimulationEngine {
     }
   }
 
-  /**
-   * Initialize the simulation engine
-   * @deprecated SimulationEngine is deprecated
-   */
+  /** Initialize the simulation engine */
   initialize(): void {
     this._initialized = true
     this._tickNumber = 0
   }
 
-  /**
-   * Check if simulation is complete
-   * @deprecated SimulationEngine is deprecated
-   */
+  /** Check if simulation is complete */
   isComplete(): boolean {
     return this._tickNumber >= this._maxTicks
   }
 
-  /**
-   * Get current tick number
-   * @deprecated SimulationEngine is deprecated
-   */
+  /** Get current tick number */
   getCurrentTickNumber(): number {
     return this._tickNumber
   }
 
-  /**
-   * Advance to next tick
-   * @deprecated SimulationEngine is deprecated
-   */
+  /** Advance to next tick */
   advanceTick(): void {
     this._tickNumber++
   }

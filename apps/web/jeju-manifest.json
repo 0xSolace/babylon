@@ -106,7 +106,7 @@
       "localnet": {
         "dwsUrl": "http://localhost:4030",
         "domain": "localhost:5008",
-        "apiUrl": ""
+        "apiUrl": "http://localhost:5009"
       },
       "testnet": {
         "dwsUrl": "https://dws.testnet.jejunetwork.org",
@@ -122,7 +122,9 @@
     "triggers": {
       "testnet": ["push:develop"],
       "mainnet": ["push:main", "manual"]
-    }
+    },
+    "decentralized": true,
+    "aws": false
   },
   "testing": {
     "unit": {

@@ -241,9 +241,10 @@ describe('Type Guards', () => {
       expect(isAuthorizationError(error)).toBe(true)
     })
 
-    it('returns true for ForbiddenError (same code)', () => {
+    it('returns false for ForbiddenError (different class)', () => {
+      // ForbiddenError is a separate API-specific error, not AuthorizationError subclass
       const error = new ForbiddenError()
-      expect(isAuthorizationError(error)).toBe(true)
+      expect(isAuthorizationError(error)).toBe(false)
     })
 
     it('returns false for AuthenticationError', () => {

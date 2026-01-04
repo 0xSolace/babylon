@@ -195,7 +195,8 @@ export function calculateSellWithFees(
 }
 
 /**
- * @deprecated Use individual functions instead: getCurrentPrice, calculateBuy, calculateSell, etc.
+ * Namespace object for backwards compatibility.
+ * Allows using PredictionPricing.calculateBuy() style calls.
  */
 export const PredictionPricing = {
   getCurrentPrice,
@@ -205,6 +206,4 @@ export const PredictionPricing = {
   calculateSell,
   calculateBuyWithFees,
   calculateSellWithFees,
-}
-
-// calculateExpectedPayout is already exported above
+} as const

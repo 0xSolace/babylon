@@ -9,13 +9,13 @@
  * - Real-time updates
  */
 
-import { expect, test } from '@playwright/test'
-import { loginWithWallet } from './helpers/oauth3-auth'
 import {
   cooldownBetweenTests,
+  loginWithWallet,
   navigateTo,
   waitForPageLoad,
-} from './helpers/page-helpers'
+} from '@jejunetwork/tests'
+import { expect, test } from '@playwright/test'
 import { ROUTES } from './helpers/test-data'
 
 // Increase test timeout for flaky server conditions

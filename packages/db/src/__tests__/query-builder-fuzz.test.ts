@@ -1,7 +1,7 @@
 /**
- * EQLite Query Builder Fuzz Tests
+ * SQLit Query Builder Fuzz Tests
  *
- * Comprehensive fuzzing and edge case testing for Babylon EQLite query builders.
+ * Comprehensive fuzzing and edge case testing for Babylon SQLit query builders.
  * Tests SQL helpers and builder classes with extreme inputs.
  */
 
@@ -829,15 +829,15 @@ describe('SQL Injection Prevention', () => {
   })
 
   test('between should parameterize injection attempts', () => {
-    const condition = between(
-      'field',
-      injectionAttempts[0],
-      injectionAttempts[1],
-    )
+    const firstAttempt = injectionAttempts[0]
+    const secondAttempt = injectionAttempts[1]
+    if (!firstAttempt || !secondAttempt)
+      throw new Error('Expected injection attempts')
+    const condition = between('field', firstAttempt, secondAttempt)
     const { sql, params } = condition.toSQL()
 
     expect(sql).toBe('"field" BETWEEN $1 AND $2')
-    expect(params).toEqual([injectionAttempts[0], injectionAttempts[1]])
+    expect(params).toEqual([firstAttempt, secondAttempt])
   })
 })
 

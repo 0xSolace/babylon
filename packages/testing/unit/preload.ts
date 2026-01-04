@@ -2,7 +2,7 @@
  * Preload file for pure unit tests
  *
  * This file is only loaded when running unit tests that DON'T need database.
- * Most tests use the integration preload which initializes real EQLite.
+ * Most tests use the integration preload which initializes real SQLit.
  *
  * Usage:
  *   bun test --preload ./packages/testing/unit/preload.ts packages/testing/unit/some-pure-test.ts

@@ -4,7 +4,7 @@
  * Production-ready types to replace all 'any' and 'unknown' usage
  */
 
-// Use Trajectory from eqlite-schema-types which has trajectoryId and stepsJson
+// Use Trajectory from sqlit-schema-types which has trajectoryId and stepsJson
 import type {
   TrainedModel,
   TrainingBatch,

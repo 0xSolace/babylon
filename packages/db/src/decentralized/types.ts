@@ -11,12 +11,12 @@ export type {
   DatabaseConfig,
   DatabaseInfo,
   DatabaseStatus,
-  EQLiteConfig,
-  EQLiteConnection,
-  EQLiteConnectionPool,
-  EQLiteDataType,
-  EQLiteEvent,
-  EQLiteTransaction,
+  SQLitConfig,
+  SQLitConnection,
+  SQLitConnectionPool,
+  SQLitDataType,
+  SQLitEvent,
+  SQLitTransaction,
   ExecResult,
   GrantRequest,
   Migration,
@@ -39,14 +39,14 @@ export type SQLValue =
   | SQLPrimitive[]
   | Record<string, SQLPrimitive>
 
-export interface EQLiteHealthStatus {
+export interface SQLitHealthStatus {
   healthy: boolean
   blockHeight: number
   nodeCount: number
   latencyMs: number
 }
 
-export interface EQLiteColumn {
+export interface SQLitColumn {
   name: string
   type:
     | 'TEXT'
@@ -65,16 +65,16 @@ export interface EQLiteColumn {
   scale?: number
 }
 
-export interface EQLiteIndex {
+export interface SQLitIndex {
   name: string
   columns: string[]
   unique?: boolean
 }
 
-export interface EQLiteTableSchema {
+export interface SQLitTableSchema {
   name: string
-  columns: EQLiteColumn[]
+  columns: SQLitColumn[]
   primaryKey: string[]
   uniqueConstraints?: Array<{ name: string; columns: string[] }>
-  indexes?: EQLiteIndex[]
+  indexes?: SQLitIndex[]
 }

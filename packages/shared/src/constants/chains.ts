@@ -35,12 +35,12 @@ export const jejuTestnet = defineChain({
     decimals: 18,
   },
   rpcUrls: {
-    default: { http: ['https://testnet-rpc.jeju.network'] },
+    default: { http: ['https://testnet-rpc.jejunetwork.org'] },
   },
   blockExplorers: {
     default: {
       name: 'Jeju Explorer',
-      url: 'https://testnet-explorer.jeju.network',
+      url: 'https://testnet-explorer.jejunetwork.org',
     },
   },
   testnet: true,
@@ -55,10 +55,10 @@ export const jejuMainnet = defineChain({
     decimals: 18,
   },
   rpcUrls: {
-    default: { http: ['https://rpc.jeju.network'] },
+    default: { http: ['https://rpc.jejunetwork.org'] },
   },
   blockExplorers: {
-    default: { name: 'Jeju Explorer', url: 'https://explorer.jeju.network' },
+    default: { name: 'Jeju Explorer', url: 'https://explorer.jejunetwork.org' },
   },
 })
 

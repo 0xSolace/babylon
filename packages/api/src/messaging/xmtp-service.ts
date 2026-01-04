@@ -1,52 +1,52 @@
 /**
  * Babylon XMTP Messaging Service
  *
- * Real implementation of XMTP messaging for Babylon using Jeju infrastructure.
- * This provides end-to-end encrypted private messaging between users.
- *
- * Features:
- * - End-to-end encryption (X25519 + AES-256-GCM)
- * - Decentralized relay network
- * - On-chain key registry
- * - MLS group messaging support
+ * Real XMTP SDK integration with Jeju KMS for secure signing.
+ * - End-to-end encryption via MLS (Message Layer Security)
+ * - Compatible with all XMTP clients (MetaMask, Coinbase, etc.)
+ * - Private keys never leave KMS enclave
  */
 
 import { logger } from '@babylon/shared'
+import { getRpcUrl } from '@babylon/shared/config'
+import {
+  Client as XMTPClient,
+  type Signer as XMTPSigner,
+  type Dm,
+  type Group,
+  type DecodedMessage,
+  type Identifier,
+  type IdentifierKind,
+} from '@xmtp/node-sdk'
+import { createKMSSigner, type KMSSigner } from '@jejunetwork/kms'
 import type { Address } from 'viem'
+import { toBytes } from 'viem'
+import { createHash } from 'crypto'
 
 /** Configuration for the XMTP service */
 export interface XMTPServiceConfig {
-  /** RPC URL for blockchain access */
-  rpcUrl: string
-  /** Relay URL for message routing */
-  relayUrl: string
-  /** Key registry contract address */
-  keyRegistryAddress?: Address
-  /** Node registry contract address */
-  nodeRegistryAddress?: Address
-  /** Whether to use KMS for key management (recommended) */
-  useKMS?: boolean
-  /** KMS endpoint URL */
-  kmsEndpoint?: string
+  /** XMTP environment */
+  env?: 'local' | 'dev' | 'production'
+  /** Path for XMTP database */
+  dbPath?: string
 }
 
 /** Message in the XMTP system */
 export interface XMTPMessage {
   id: string
-  senderId: Address
-  recipientId: Address
+  senderId: string
+  conversationId: string
   content: string
-  timestamp: number
-  status: 'pending' | 'sent' | 'delivered' | 'read' | 'failed'
+  sentAt: Date
 }
 
-/** Group chat in XMTP */
-export interface XMTPGroup {
+/** Conversation in XMTP */
+export interface XMTPConversation {
   id: string
-  name: string
-  members: Address[]
-  createdAt: number
-  lastMessageAt: number
+  peerInboxId?: string
+  name?: string
+  isGroup: boolean
+  createdAt: Date
 }
 
 /** Result of sending a message */
@@ -54,190 +54,267 @@ export interface SendMessageResult {
   success: boolean
   messageId?: string
   error?: string
-  deliveryTimeMs?: number
+}
+
+/**
+ * Generate DB encryption key from KMS signature
+ */
+async function getDbEncryptionKey(kmsSigner: KMSSigner): Promise<Uint8Array> {
+  const result = await kmsSigner.signMessage('XMTP_DB_ENCRYPTION_KEY_V1')
+  const hash = createHash('sha256').update(toBytes(result.signature)).digest()
+  return new Uint8Array(hash)
+}
+
+/**
+ * Create XMTP-compatible signer from KMS
+ */
+function createXMTPKMSSigner(kmsSigner: KMSSigner, address: Address): XMTPSigner {
+  return {
+    type: 'EOA',
+    getIdentifier: (): Identifier => ({
+      identifier: address.toLowerCase(),
+      identifierKind: 0 as IdentifierKind,
+    }),
+    signMessage: async (message: string): Promise<Uint8Array> => {
+      const result = await kmsSigner.signMessage(message)
+      return toBytes(result.signature)
+    },
+  }
 }
 
 /**
  * XMTP Messaging Service for Babylon
  *
- * Wraps @jejunetwork/messaging to provide Babylon-specific functionality
+ * Uses real XMTP SDK with KMS-backed signing
  */
 class XMTPMessagingService {
   private config: XMTPServiceConfig
+  private client: XMTPClient | null = null
+  private kmsSigner: KMSSigner | null = null
+  private userAddress: Address | null = null
   private initialized = false
-  private messagingClient:
-    | import('@jejunetwork/messaging').MessagingClient
-    | null = null
 
-  constructor(config: XMTPServiceConfig) {
+  constructor(config: XMTPServiceConfig = {}) {
     this.config = config
   }
 
   /**
-   * Initialize the XMTP service
+   * Initialize the XMTP service with KMS
    */
-  async initialize(userAddress: Address, signature?: string): Promise<void> {
-    if (this.initialized) return
+  async initialize(userAddress: Address): Promise<void> {
+    if (this.initialized && this.client) return
 
-    try {
-      // Dynamically import to avoid loading deps if not needed
-      const { createMessagingClient } = await import('@jejunetwork/messaging')
+    this.userAddress = userAddress
 
-      this.messagingClient = createMessagingClient({
-        address: userAddress,
-        rpcUrl: this.config.rpcUrl,
-        relayUrl: this.config.relayUrl,
-        keyRegistryAddress: this.config.keyRegistryAddress,
-        nodeRegistryAddress: this.config.nodeRegistryAddress,
-        autoReconnect: true,
-      })
+    // Create KMS signer
+    this.kmsSigner = createKMSSigner({
+      serviceId: `xmtp-${userAddress.toLowerCase()}`,
+      allowLocalDev: true,
+    })
+    await this.kmsSigner.initialize()
 
-      // Initialize with signature for key derivation
-      await this.messagingClient.initialize(signature)
+    // Create XMTP signer wrapper
+    const xmtpSigner = createXMTPKMSSigner(this.kmsSigner, userAddress)
 
-      logger.info(
-        'XMTP service initialized',
-        { userAddress },
-        'XMTPMessagingService',
-      )
-      this.initialized = true
-    } catch (error) {
-      logger.error(
-        'Failed to initialize XMTP service',
-        { error: error instanceof Error ? error.message : 'Unknown' },
-        'XMTPMessagingService',
-      )
-      throw error
-    }
+    // Get DB encryption key from KMS
+    const dbEncryptionKey = await getDbEncryptionKey(this.kmsSigner)
+
+    // Create real XMTP client
+    this.client = await XMTPClient.create(xmtpSigner, {
+      env: this.config.env ?? 'dev',
+      dbPath: this.config.dbPath ?? `./data/xmtp/${userAddress.toLowerCase()}.db3`,
+      dbEncryptionKey,
+    })
+
+    logger.info(
+      'XMTP service initialized',
+      { userAddress, inboxId: this.client.inboxId },
+      'XMTPMessagingService',
+    )
+    this.initialized = true
   }
 
   /**
    * Check if the service is initialized
    */
   isInitialized(): boolean {
-    return this.initialized && this.messagingClient !== null
+    return this.initialized && this.client !== null
   }
 
   /**
-   * Send a private message to another user
+   * Get the XMTP inbox ID
    */
-  async sendMessage(
-    recipient: Address,
-    content: string,
-  ): Promise<SendMessageResult> {
-    if (!this.messagingClient) {
+  getInboxId(): string | null {
+    return this.client?.inboxId ?? null
+  }
+
+  /**
+   * Send a DM to another user
+   */
+  async sendDM(recipientAddress: Address, content: string): Promise<SendMessageResult> {
+    if (!this.client) {
       return { success: false, error: 'Service not initialized' }
     }
 
-    try {
-      const result = await this.messagingClient.sendMessage({
-        to: recipient,
-        content,
-      })
+    const dm = await this.client.conversations.newDmWithIdentifier({
+      identifier: recipientAddress.toLowerCase(),
+      identifierKind: 0 as IdentifierKind,
+    })
 
-      return {
-        success: result.success,
-        messageId: result.messageId,
-        error: result.error,
-        deliveryTimeMs: result.deliveryTimeMs,
-      }
-    } catch (error) {
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error',
-      }
+    const messageId = await dm.send(content)
+
+    return {
+      success: true,
+      messageId,
     }
   }
 
   /**
-   * Get message history with a user
+   * Create a group conversation
    */
-  getMessages(chatId: string): XMTPMessage[] {
-    if (!this.messagingClient) return []
+  async createGroup(
+    participantAddresses: Address[],
+    name?: string,
+    description?: string,
+  ): Promise<Group> {
+    if (!this.client) {
+      throw new Error('Service not initialized')
+    }
 
-    return this.messagingClient.getMessages(chatId).map((msg) => ({
-      id: msg.id,
-      senderId: msg.senderId as Address,
-      recipientId: msg.recipientId as Address,
-      content: msg.content,
-      timestamp: msg.timestamp,
-      status: msg.status as XMTPMessage['status'],
+    const identifiers: Identifier[] = participantAddresses.map((addr) => ({
+      identifier: addr.toLowerCase(),
+      identifierKind: 0 as IdentifierKind,
     }))
-  }
 
-  /**
-   * Subscribe to new messages
-   */
-  onMessage(handler: (message: XMTPMessage) => void): () => void {
-    if (!this.messagingClient) {
-      return () => {}
-    }
-
-    return this.messagingClient.onMessage((event) => {
-      if (event.type === 'message:new') {
-        const msg = event.data as {
-          id: string
-          senderId: string
-          recipientId: string
-          content: string
-          timestamp: number
-          status: string
-        }
-        handler({
-          id: msg.id,
-          senderId: msg.senderId as Address,
-          recipientId: msg.recipientId as Address,
-          content: msg.content,
-          timestamp: msg.timestamp,
-          status: msg.status as XMTPMessage['status'],
-        })
-      }
+    return this.client.conversations.newGroupWithIdentifiers(identifiers, {
+      name: name ?? '',
+      description: description ?? '',
     })
   }
 
   /**
-   * Check if user has registered messaging keys
+   * Send message to a conversation
    */
-  async isUserRegistered(address: Address): Promise<boolean> {
-    if (!this.messagingClient) return false
-
-    const publicKey = await this.messagingClient.getRecipientPublicKey(address)
-    return publicKey !== undefined
-  }
-
-  /**
-   * Get the signature message for key derivation
-   */
-  getKeyDerivationMessage(): string {
-    if (!this.messagingClient) {
-      return 'Sign to enable encrypted messaging on Babylon'
+  async sendMessage(conversationId: string, content: string): Promise<SendMessageResult> {
+    if (!this.client) {
+      return { success: false, error: 'Service not initialized' }
     }
-    return this.messagingClient.getKeyDerivationMessage()
+
+    const conversation = await this.client.conversations.getConversationById(conversationId)
+    if (!conversation) {
+      return { success: false, error: 'Conversation not found' }
+    }
+
+    const messageId = await conversation.send(content)
+
+    return {
+      success: true,
+      messageId,
+    }
   }
 
   /**
-   * Disconnect from the relay
+   * Get messages from a conversation
+   */
+  async getMessages(conversationId: string, limit = 50): Promise<XMTPMessage[]> {
+    if (!this.client) return []
+
+    const conversation = await this.client.conversations.getConversationById(conversationId)
+    if (!conversation) return []
+
+    await conversation.sync()
+    const messages = await conversation.messages({ limit })
+
+    return messages.map((msg) => ({
+      id: msg.id,
+      senderId: msg.senderInboxId,
+      conversationId: msg.conversationId,
+      content: String(msg.content),
+      sentAt: msg.sentAt,
+    }))
+  }
+
+  /**
+   * List all conversations
+   */
+  async listConversations(): Promise<XMTPConversation[]> {
+    if (!this.client) return []
+
+    await this.client.conversations.sync()
+
+    const dms = this.client.conversations.listDms()
+    const groups = this.client.conversations.listGroups()
+
+    const result: XMTPConversation[] = []
+
+    for (const dm of dms) {
+      result.push({
+        id: dm.id,
+        peerInboxId: dm.peerInboxId,
+        isGroup: false,
+        createdAt: dm.createdAt,
+      })
+    }
+
+    for (const group of groups) {
+      result.push({
+        id: group.id,
+        name: group.name,
+        isGroup: true,
+        createdAt: group.createdAt,
+      })
+    }
+
+    return result
+  }
+
+  /**
+   * Stream incoming messages
+   */
+  async streamMessages(
+    callback: (message: XMTPMessage) => void,
+  ): Promise<() => Promise<void>> {
+    if (!this.client) {
+      throw new Error('Service not initialized')
+    }
+
+    const stream = await this.client.conversations.streamAllMessages({
+      onValue: (msg: DecodedMessage) => {
+        callback({
+          id: msg.id,
+          senderId: msg.senderInboxId,
+          conversationId: msg.conversationId,
+          content: String(msg.content),
+          sentAt: msg.sentAt,
+        })
+      },
+    })
+
+    return async () => {
+      await stream.return()
+    }
+  }
+
+  /**
+   * Check if we can message a wallet
+   */
+  async canMessage(address: Address): Promise<boolean> {
+    if (!this.client) return false
+
+    const result = await this.client.canMessage([
+      { identifier: address.toLowerCase(), identifierKind: 0 as IdentifierKind },
+    ])
+
+    return result.get(address.toLowerCase()) ?? false
+  }
+
+  /**
+   * Disconnect and cleanup
    */
   disconnect(): void {
-    if (this.messagingClient) {
-      this.messagingClient.disconnect()
-      this.messagingClient = null
-      this.initialized = false
-    }
-  }
-}
-
-// Default config from environment
-function getDefaultConfig(): XMTPServiceConfig {
-  return {
-    rpcUrl: process.env.JEJU_RPC_URL ?? 'http://localhost:8545',
-    relayUrl: process.env.JEJU_RELAY_URL ?? 'http://localhost:3200',
-    keyRegistryAddress: process.env.KEY_REGISTRY_ADDRESS as Address | undefined,
-    nodeRegistryAddress: process.env.NODE_REGISTRY_ADDRESS as
-      | Address
-      | undefined,
-    useKMS: process.env.USE_KMS_MESSAGING === 'true',
-    kmsEndpoint: process.env.JEJU_KMS_ENDPOINT,
+    this.client = null
+    this.kmsSigner = null
+    this.initialized = false
   }
 }
 
@@ -249,35 +326,33 @@ const userServices = new Map<Address, XMTPMessagingService>()
  */
 export function getXMTPService(
   userAddress: Address,
-  config?: Partial<XMTPServiceConfig>,
+  config?: XMTPServiceConfig,
 ): XMTPMessagingService {
-  const existing = userServices.get(userAddress)
+  const normalizedAddress = userAddress.toLowerCase() as Address
+  const existing = userServices.get(normalizedAddress)
   if (existing) return existing
 
-  const mergedConfig = { ...getDefaultConfig(), ...config }
-  const service = new XMTPMessagingService(mergedConfig)
-  userServices.set(userAddress, service)
+  const service = new XMTPMessagingService(config)
+  userServices.set(normalizedAddress, service)
   return service
 }
 
 /**
  * Create a new XMTP service instance
  */
-export function createXMTPService(
-  config?: Partial<XMTPServiceConfig>,
-): XMTPMessagingService {
-  const mergedConfig = { ...getDefaultConfig(), ...config }
-  return new XMTPMessagingService(mergedConfig)
+export function createXMTPService(config?: XMTPServiceConfig): XMTPMessagingService {
+  return new XMTPMessagingService(config)
 }
 
 /**
  * Remove a user's XMTP service (on logout)
  */
 export function removeXMTPService(userAddress: Address): void {
-  const service = userServices.get(userAddress)
+  const normalizedAddress = userAddress.toLowerCase() as Address
+  const service = userServices.get(normalizedAddress)
   if (service) {
     service.disconnect()
-    userServices.delete(userAddress)
+    userServices.delete(normalizedAddress)
   }
 }
 

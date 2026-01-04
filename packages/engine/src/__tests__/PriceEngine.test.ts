@@ -70,8 +70,10 @@ describe('PriceEngine', () => {
     // Prices should be identical
     expect(prices1.length).toBe(prices2.length)
     prices1.forEach((price, i) => {
-      expect(price.price).toBe(prices2[i]?.price)
-      expect(price.change).toBe(prices2[i]?.change)
+      const p2 = prices2[i]
+      if (!p2) throw new Error('Expected price2 to exist')
+      expect(price.price).toBe(p2.price)
+      expect(price.change).toBe(p2.change)
     })
   })
 
@@ -109,7 +111,9 @@ describe('PriceEngine', () => {
     // Prices should be different
     let hasDifference = false
     prices1.forEach((price, i) => {
-      if (Math.abs(price.price - prices2[i]?.price) > 0.01) {
+      const p2 = prices2[i]
+      if (!p2) throw new Error('Expected price2 to exist')
+      if (Math.abs(price.price - p2.price) > 0.01) {
         hasDifference = true
       }
     })
@@ -152,8 +156,9 @@ describe('PriceEngine', () => {
     )
 
     expect(update).not.toBeNull()
-    expect(update?.change).toBeLessThan(0) // Price went down
-    expect(Math.abs(update?.changePercent)).toBeGreaterThan(3) // At least 3% movement
+    if (!update) throw new Error('Expected update to exist')
+    expect(update.change).toBeLessThan(0) // Price went down
+    expect(Math.abs(update.changePercent)).toBeGreaterThan(3) // At least 3% movement
   })
 
   test('generates minute prices that smoothly interpolate', () => {
@@ -186,10 +191,11 @@ describe('PriceEngine', () => {
 
     // Prices should not have extreme jumps (no more than 1% per minute under normal conditions)
     for (let i = 1; i < prices.length; i++) {
-      const prevPrice = prices[i - 1]?.price
-      const currentPrice = prices[i]?.price
+      const prev = prices[i - 1]
+      const curr = prices[i]
+      if (!prev || !curr) throw new Error('Expected prices to exist')
       const percentChange = Math.abs(
-        ((currentPrice - prevPrice) / prevPrice) * 100,
+        ((curr.price - prev.price) / prev.price) * 100,
       )
 
       // Allow up to 2% per minute (which is already very volatile)

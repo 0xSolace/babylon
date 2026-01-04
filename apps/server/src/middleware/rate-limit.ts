@@ -1,3 +1,4 @@
+import { type CacheClient, getCacheClient } from '@jejunetwork/shared'
 import { Elysia } from 'elysia'
 
 /**
@@ -17,38 +18,55 @@ const RATE_LIMITS: Record<string, RateLimitConfig> = {
   realtime: { limit: 200, window: 60_000 }, // 200 req/min for realtime
 }
 
-/**
- * In-memory rate limit store
- * TODO: Replace with Redis-backed store for distributed rate limiting
- */
-const rateLimitStore = new Map<string, { count: number; resetAt: number }>()
+// Distributed rate limit cache
+let rateLimitCache: CacheClient | null = null
+
+function getRateLimitCache(): CacheClient {
+  if (!rateLimitCache) {
+    rateLimitCache = getCacheClient('babylon-ratelimit')
+  }
+  return rateLimitCache
+}
+
+interface RateLimitEntry {
+  count: number
+  resetAt: number
+}
 
 /**
  * Check and update rate limit for a key
  */
-function checkRateLimit(
+async function checkRateLimit(
   key: string,
   config: RateLimitConfig,
-): { allowed: boolean; remaining: number; resetAt: number } {
+): Promise<{ allowed: boolean; remaining: number; resetAt: number }> {
+  const cache = getRateLimitCache()
   const now = Date.now()
-  const existing = rateLimitStore.get(key)
+  const cacheKey = `ratelimit:${key}`
+  const ttlSeconds = Math.ceil(config.window / 1000)
 
-  if (!existing || existing.resetAt < now) {
-    const resetAt = now + config.window
-    rateLimitStore.set(key, { count: 1, resetAt })
-    return { allowed: true, remaining: config.limit - 1, resetAt }
+  const cached = await cache.get(cacheKey)
+  if (cached) {
+    const existing: RateLimitEntry = JSON.parse(cached)
+    if (existing.resetAt > now) {
+      if (existing.count >= config.limit) {
+        return { allowed: false, remaining: 0, resetAt: existing.resetAt }
+      }
+      existing.count++
+      await cache.set(cacheKey, JSON.stringify(existing), ttlSeconds)
+      return {
+        allowed: true,
+        remaining: config.limit - existing.count,
+        resetAt: existing.resetAt,
+      }
+    }
   }
 
-  if (existing.count >= config.limit) {
-    return { allowed: false, remaining: 0, resetAt: existing.resetAt }
-  }
-
-  existing.count++
-  return {
-    allowed: true,
-    remaining: config.limit - existing.count,
-    resetAt: existing.resetAt,
-  }
+  // New window
+  const resetAt = now + config.window
+  const entry: RateLimitEntry = { count: 1, resetAt }
+  await cache.set(cacheKey, JSON.stringify(entry), ttlSeconds)
+  return { allowed: true, remaining: config.limit - 1, resetAt }
 }
 
 /**
@@ -58,14 +76,14 @@ export function createRateLimiter(type: keyof typeof RATE_LIMITS = 'default') {
   const config: RateLimitConfig = RATE_LIMITS[type] || RATE_LIMITS.default
 
   return new Elysia({ name: `rate-limit-${type}` }).onBeforeHandle(
-    ({ set, headers }) => {
+    async ({ set, headers }) => {
       // Use IP address or auth token as rate limit key
       const ip = headers['x-forwarded-for'] || headers['x-real-ip'] || 'unknown'
       const authHeader = headers.authorization
       const auth = authHeader ? authHeader.slice(0, 20) : ''
       const key = `${type}:${ip}:${auth}`
 
-      const result = checkRateLimit(key, config)
+      const result = await checkRateLimit(key, config)
 
       // Set rate limit headers
       set.headers['X-RateLimit-Limit'] = String(config.limit)

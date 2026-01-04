@@ -32,7 +32,7 @@ export function isDecentralizedUrl(url: string): boolean {
     url.includes('/ipfs/') ||
     url.includes('ipfs.io') ||
     url.includes('arweave.net') ||
-    url.includes('ipfs.jeju.network') ||
+    url.includes('ipfs.jejunetwork.org') ||
     url.startsWith('ipfs:') ||
     url.startsWith('ar:')
   )
