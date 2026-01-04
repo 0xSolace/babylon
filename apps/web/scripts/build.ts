@@ -12,7 +12,6 @@
 
 import { existsSync, readdirSync, statSync } from 'node:fs'
 import { cp, mkdir, rm } from 'node:fs/promises'
-import { resolve } from 'node:path'
 import { $ } from 'bun'
 
 // Load manifest for deployment config
@@ -20,7 +19,9 @@ const manifest = await Bun.file('./jeju-manifest.json').json()
 
 // Determine target environment
 type NetworkEnv = 'localnet' | 'testnet' | 'mainnet'
-const NETWORK = (process.env.NETWORK || process.env.VITE_NETWORK || 'localnet') as NetworkEnv
+const NETWORK = (process.env.NETWORK ||
+  process.env.VITE_NETWORK ||
+  'localnet') as NetworkEnv
 const envConfig = manifest.deployment?.environments?.[NETWORK]
 
 if (!envConfig) {
@@ -65,35 +66,40 @@ async function buildJS(): Promise<string> {
   // Report bundle sizes
   console.log('\n📊 Frontend Bundle Sizes:')
   const assetsDir = `${DIST_DIR}/assets`
-  
+
   if (existsSync(assetsDir)) {
     const files = readdirSync(assetsDir)
-    const jsFiles = files.filter(f => f.endsWith('.js'))
+    const jsFiles = files.filter((f) => f.endsWith('.js'))
     let totalSize = 0
-    
-    const fileSizes = jsFiles.map(f => {
-      const stat = statSync(`${assetsDir}/${f}`)
-      totalSize += stat.size
-      return { name: f, size: stat.size }
-    }).sort((a, b) => b.size - a.size)
-    
+
+    const fileSizes = jsFiles
+      .map((f) => {
+        const stat = statSync(`${assetsDir}/${f}`)
+        totalSize += stat.size
+        return { name: f, size: stat.size }
+      })
+      .sort((a, b) => b.size - a.size)
+
     for (const file of fileSizes.slice(0, 10)) {
       console.log(`   ${formatBytes(file.size).padStart(10)}  ${file.name}`)
     }
-    
+
     if (fileSizes.length > 10) {
       const remaining = fileSizes.slice(10)
       const remainingSize = remaining.reduce((sum, f) => sum + f.size, 0)
-      console.log(`   ${formatBytes(remainingSize).padStart(10)}  ... and ${remaining.length} more files`)
+      console.log(
+        `   ${formatBytes(remainingSize).padStart(10)}  ... and ${remaining.length} more files`,
+      )
     }
-    
+
     console.log(`   ${'─'.repeat(50)}`)
     console.log(`   ${formatBytes(totalSize).padStart(10)}  Total JavaScript`)
   }
 
   // Find the main entry file
-  const indexFile = readdirSync(`${DIST_DIR}/assets`)
-    .find(f => f.startsWith('index-') && f.endsWith('.js'))
+  const indexFile = readdirSync(`${DIST_DIR}/assets`).find(
+    (f) => f.startsWith('index-') && f.endsWith('.js'),
+  )
   const mainFileName = indexFile || 'index.js'
 
   console.log(`✅ JavaScript built`)
@@ -112,8 +118,8 @@ async function verifyHTML(): Promise<void> {
 // Large media directories that should be uploaded to DWS Storage separately
 // These are excluded from the bundle to keep deployment size manageable
 const EXCLUDED_PUBLIC_DIRS = [
-  'images',  // 69MB - actor/org banners (should be CDN)
-  'assets',  // 30MB - static assets (should be CDN) 
+  'images', // 69MB - actor/org banners (should be CDN)
+  'assets', // 30MB - static assets (should be CDN)
 ]
 
 async function copyPublicAssetsFiltered(): Promise<void> {
@@ -123,22 +129,22 @@ async function copyPublicAssetsFiltered(): Promise<void> {
     console.log('⚠️  No public directory found')
     return
   }
-  
+
   // Create dist/public
   await mkdir(`${DIST_DIR}/public`, { recursive: true })
-  
+
   // Copy only essential files, excluding large media dirs
   const entries = readdirSync('./public', { withFileTypes: true })
   let excludedSize = 0
-  
+
   for (const entry of entries) {
     const srcPath = `./public/${entry.name}`
     const destPath = `${DIST_DIR}/public/${entry.name}`
-    
+
     if (entry.isDirectory() && EXCLUDED_PUBLIC_DIRS.includes(entry.name)) {
       // Calculate excluded size
-      const stat = await import('node:fs/promises').then(fs => 
-        fs.stat(srcPath).catch(() => ({ size: 0 }))
+      const _stat = await import('node:fs/promises').then((fs) =>
+        fs.stat(srcPath).catch(() => ({ size: 0 })),
       )
       // Estimate directory size
       const files = readdirSync(srcPath, { recursive: true })
@@ -146,21 +152,29 @@ async function copyPublicAssetsFiltered(): Promise<void> {
         try {
           const fileStat = statSync(`${srcPath}/${file}`)
           if (fileStat.isFile()) excludedSize += fileStat.size
-        } catch { /* skip */ }
+        } catch {
+          /* skip */
+        }
       }
-      console.log(`    Skipping ${entry.name}/ (upload separately to DWS Storage)`)
+      console.log(
+        `    Skipping ${entry.name}/ (upload separately to DWS Storage)`,
+      )
       continue
     }
-    
+
     if (entry.isDirectory()) {
       await cp(srcPath, destPath, { recursive: true })
     } else {
       await cp(srcPath, destPath)
     }
   }
-  
-  console.log(`✅ Public assets copied (excluded ${formatBytes(excludedSize)} of media)`)
-  console.log('   Note: Upload /images and /assets to DWS Storage separately for CDN delivery')
+
+  console.log(
+    `✅ Public assets copied (excluded ${formatBytes(excludedSize)} of media)`,
+  )
+  console.log(
+    '   Note: Upload /images and /assets to DWS Storage separately for CDN delivery',
+  )
 }
 
 async function copyPublicAssets(): Promise<void> {

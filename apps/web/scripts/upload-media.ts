@@ -1,22 +1,19 @@
 #!/usr/bin/env bun
 /**
  * Media Upload Script for DWS Storage
- * 
+ *
  * Uploads large media directories to DWS Storage for CDN delivery.
  * These assets are excluded from the main deployment bundle.
  */
 
-import { readdirSync, statSync, existsSync } from 'fs'
-import { join, resolve } from 'path'
+import { existsSync, readdirSync, statSync } from 'node:fs'
+import { join, resolve } from 'node:path'
 
 const ROOT_DIR = resolve(import.meta.dir, '..')
 const PUBLIC_DIR = join(ROOT_DIR, 'public')
 
 // Directories to upload to DWS Storage
-const MEDIA_DIRS = [
-  'images',
-  'assets',
-]
+const MEDIA_DIRS = ['images', 'assets']
 
 type NetworkType = 'localnet' | 'testnet' | 'mainnet'
 
@@ -30,9 +27,12 @@ function getNetwork(): NetworkType {
 
 function getStorageUrl(network: NetworkType): string {
   switch (network) {
-    case 'mainnet': return 'https://storage.jejunetwork.org'
-    case 'testnet': return 'https://storage.testnet.jejunetwork.org'
-    default: return process.env.DWS_STORAGE_URL ?? 'http://localhost:5004'
+    case 'mainnet':
+      return 'https://storage.jejunetwork.org'
+    case 'testnet':
+      return 'https://storage.testnet.jejunetwork.org'
+    default:
+      return process.env.DWS_STORAGE_URL ?? 'http://localhost:5004'
   }
 }
 
@@ -48,75 +48,83 @@ interface UploadResult {
   size: number
 }
 
-async function uploadFile(filePath: string, storageUrl: string): Promise<UploadResult> {
+async function uploadFile(
+  filePath: string,
+  storageUrl: string,
+): Promise<UploadResult> {
   const file = Bun.file(filePath)
   const fileName = filePath.split('/').pop() || 'file'
-  
+
   const formData = new FormData()
   formData.append('file', file, fileName)
   formData.append('tier', 'popular')
-  
+
   const response = await fetch(`${storageUrl}/api/v0/add?pin=true`, {
     method: 'POST',
     body: formData,
   })
-  
+
   if (!response.ok) {
-    throw new Error(`Upload failed: ${response.status} ${await response.text()}`)
+    throw new Error(
+      `Upload failed: ${response.status} ${await response.text()}`,
+    )
   }
-  
-  const result = await response.json() as { Hash?: string; cid?: string }
+
+  const result = (await response.json()) as { Hash?: string; cid?: string }
   const cid = result.Hash || result.cid
   if (!cid) {
     throw new Error('No CID in response')
   }
-  
+
   return { file: fileName, cid, size: file.size }
 }
 
 function collectFilesRecursive(dir: string, basePath: string = ''): string[] {
   const files: string[] = []
   const entries = readdirSync(dir, { withFileTypes: true })
-  
+
   for (const entry of entries) {
     const fullPath = join(dir, entry.name)
     const relativePath = basePath ? `${basePath}/${entry.name}` : entry.name
-    
+
     if (entry.isDirectory()) {
       files.push(...collectFilesRecursive(fullPath, relativePath))
     } else if (entry.isFile()) {
       files.push(relativePath)
     }
   }
-  
+
   return files
 }
 
-async function uploadDirectory(dirName: string, storageUrl: string): Promise<Map<string, string>> {
+async function uploadDirectory(
+  dirName: string,
+  storageUrl: string,
+): Promise<Map<string, string>> {
   const dirPath = join(PUBLIC_DIR, dirName)
   const results = new Map<string, string>()
-  
+
   if (!existsSync(dirPath)) {
     console.log(`  Directory ${dirName}/ not found, skipping`)
     return results
   }
-  
+
   console.log(`\n📤 Uploading ${dirName}/`)
-  
+
   const files = collectFilesRecursive(dirPath)
   let uploaded = 0
   let failed = 0
   let totalSize = 0
-  
+
   for (const file of files) {
     const filePath = join(dirPath, file)
-    
+
     try {
       const result = await uploadFile(filePath, storageUrl)
       results.set(`/${dirName}/${file}`, result.cid)
       uploaded++
       totalSize += result.size
-      
+
       // Progress every 50 files
       if (uploaded % 50 === 0) {
         console.log(`  Uploaded ${uploaded} files...`)
@@ -125,37 +133,39 @@ async function uploadDirectory(dirName: string, storageUrl: string): Promise<Map
       console.error(`  Failed: ${file} - ${error}`)
       failed++
     }
-    
+
     // Small delay to avoid rate limits
-    await new Promise(r => setTimeout(r, 30))
+    await new Promise((r) => setTimeout(r, 30))
   }
-  
-  console.log(`  Uploaded ${uploaded} files (${formatBytes(totalSize)}), ${failed} failed`)
-  
+
+  console.log(
+    `  Uploaded ${uploaded} files (${formatBytes(totalSize)}), ${failed} failed`,
+  )
+
   return results
 }
 
 async function main(): Promise<void> {
   const network = getNetwork()
   const storageUrl = getStorageUrl(network)
-  
+
   console.log('📦 Babylon Media Upload Script')
   console.log('==============================')
   console.log(`Network: ${network}`)
   console.log(`Storage: ${storageUrl}`)
-  
+
   const dryRun = process.argv.includes('--dry-run')
   if (dryRun) {
     console.log('Mode: DRY RUN')
   }
-  
+
   // Collect all file mappings
   const allMappings = new Map<string, string>()
-  
+
   for (const dir of MEDIA_DIRS) {
     const dirPath = join(PUBLIC_DIR, dir)
     if (!existsSync(dirPath)) continue
-    
+
     if (dryRun) {
       const files = collectFilesRecursive(dirPath)
       let totalSize = 0
@@ -163,7 +173,9 @@ async function main(): Promise<void> {
         const stats = statSync(join(dirPath, file))
         totalSize += stats.size
       }
-      console.log(`\n📁 ${dir}/ - ${files.length} files (${formatBytes(totalSize)})`)
+      console.log(
+        `\n📁 ${dir}/ - ${files.length} files (${formatBytes(totalSize)})`,
+      )
       console.log('  Would upload to DWS Storage')
     } else {
       const mappings = await uploadDirectory(dir, storageUrl)
@@ -172,7 +184,7 @@ async function main(): Promise<void> {
       }
     }
   }
-  
+
   if (!dryRun && allMappings.size > 0) {
     // Save mappings to a manifest file
     const manifest = {
@@ -180,21 +192,21 @@ async function main(): Promise<void> {
       uploadedAt: new Date().toISOString(),
       files: Object.fromEntries(allMappings),
     }
-    
+
     const manifestPath = join(ROOT_DIR, '.dws-media-manifest.json')
     await Bun.write(manifestPath, JSON.stringify(manifest, null, 2))
     console.log(`\n📋 Manifest saved: ${manifestPath}`)
     console.log(`   Total files: ${allMappings.size}`)
   }
-  
+
   console.log('\n✅ Upload complete')
   console.log('\nTo serve these assets from CDN, configure your app with:')
   console.log('  MEDIA_BASE_URL=https://storage.jejunetwork.org/ipfs/')
-  
+
   process.exit(0)
 }
 
-main().catch(error => {
+main().catch((error) => {
   console.error('Upload failed:', error)
   process.exit(1)
 })

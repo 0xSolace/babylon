@@ -14,14 +14,14 @@
  */
 
 import { generateSnowflakeId, toNull } from '@jejunetwork/shared'
+import { db } from './index'
+import { logger } from './logger'
 import type {
   ActorStateRow,
   JsonValue,
   OrganizationStateRow,
   Question,
 } from './sqlit-schema-types'
-import { db } from './index'
-import { logger } from './logger'
 
 /** Remove undefined values from object for JSON storage */
 function toJsonValue(obj: Record<string, unknown>): JsonValue | null {

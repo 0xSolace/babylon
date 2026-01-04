@@ -18,7 +18,7 @@ describe('A2A Routes', () => {
     it('should return the Babylon agent card', async () => {
       const app = createTestApp()
       const response = await app.handle(
-        new Request('http://localhost/.well-known/agent-card')
+        new Request('http://localhost/.well-known/agent-card'),
       )
 
       expect(response.status).toBe(200)
@@ -33,10 +33,10 @@ describe('A2A Routes', () => {
       const app = createTestApp()
 
       const response1 = await app.handle(
-        new Request('http://localhost/.well-known/agent-card')
+        new Request('http://localhost/.well-known/agent-card'),
       )
       const response2 = await app.handle(
-        new Request('http://localhost/.well-known/agent-card.json')
+        new Request('http://localhost/.well-known/agent-card.json'),
       )
 
       const data1 = await response1.json()
@@ -48,7 +48,7 @@ describe('A2A Routes', () => {
     it('should include required agent card fields', async () => {
       const app = createTestApp()
       const response = await app.handle(
-        new Request('http://localhost/.well-known/agent-card')
+        new Request('http://localhost/.well-known/agent-card'),
       )
 
       const data = await response.json()
@@ -64,7 +64,7 @@ describe('A2A Routes', () => {
     it('should return agent list', async () => {
       const app = createTestApp()
       const response = await app.handle(
-        new Request('http://localhost/api/a2a/agents')
+        new Request('http://localhost/api/a2a/agents'),
       )
 
       expect(response.status).toBe(200)
@@ -79,7 +79,7 @@ describe('A2A Routes', () => {
     it('should support capability filter', async () => {
       const app = createTestApp()
       const response = await app.handle(
-        new Request('http://localhost/api/a2a/agents?capability=trading')
+        new Request('http://localhost/api/a2a/agents?capability=trading'),
       )
 
       expect(response.status).toBe(200)
@@ -90,7 +90,7 @@ describe('A2A Routes', () => {
     it('should support pagination with cursor', async () => {
       const app = createTestApp()
       const response = await app.handle(
-        new Request('http://localhost/api/a2a/agents?cursor=0&limit=5')
+        new Request('http://localhost/api/a2a/agents?cursor=0&limit=5'),
       )
 
       expect(response.status).toBe(200)
@@ -101,7 +101,7 @@ describe('A2A Routes', () => {
     it('should limit max results', async () => {
       const app = createTestApp()
       const response = await app.handle(
-        new Request('http://localhost/api/a2a/agents?limit=1000')
+        new Request('http://localhost/api/a2a/agents?limit=1000'),
       )
 
       expect(response.status).toBe(200)
@@ -112,7 +112,7 @@ describe('A2A Routes', () => {
     it('should handle invalid limit gracefully', async () => {
       const app = createTestApp()
       const response = await app.handle(
-        new Request('http://localhost/api/a2a/agents?limit=invalid')
+        new Request('http://localhost/api/a2a/agents?limit=invalid'),
       )
 
       expect(response.status).toBe(200)
@@ -130,7 +130,7 @@ describe('A2A Routes', () => {
             type: 'command',
             content: {},
           }),
-        })
+        }),
       )
       expect(response.status).toBe(422)
     })
@@ -145,7 +145,7 @@ describe('A2A Routes', () => {
             fromAgentId: 'agent-123',
             content: {},
           }),
-        })
+        }),
       )
       expect(response.status).toBe(422)
     })
@@ -162,7 +162,7 @@ describe('A2A Routes', () => {
             description: 'Test task',
             input: {},
           }),
-        })
+        }),
       )
       expect(response.status).toBe(422)
     })
@@ -177,7 +177,7 @@ describe('A2A Routes', () => {
             type: 'test',
             input: {},
           }),
-        })
+        }),
       )
       expect(response.status).toBe(422)
     })
@@ -189,7 +189,7 @@ describe('A2A Protocol Compliance', () => {
     it('should have A2A-compliant structure', async () => {
       const app = createTestApp()
       const response = await app.handle(
-        new Request('http://localhost/.well-known/agent-card')
+        new Request('http://localhost/.well-known/agent-card'),
       )
 
       const card = await response.json()
@@ -220,20 +220,20 @@ describe('A2A Protocol Compliance', () => {
 
     it('should validate state transitions', () => {
       const transitions: Record<string, string[]> = {
-        'submitted': ['working', 'canceled', 'failed'],
-        'working': ['input-required', 'completed', 'failed', 'canceled'],
+        submitted: ['working', 'canceled', 'failed'],
+        working: ['input-required', 'completed', 'failed', 'canceled'],
         'input-required': ['working', 'canceled'],
-        'completed': [],
-        'canceled': [],
-        'failed': [],
+        completed: [],
+        canceled: [],
+        failed: [],
       }
 
       // submitted can go to working
-      expect(transitions['submitted']).toContain('working')
+      expect(transitions.submitted).toContain('working')
       // completed is terminal
-      expect(transitions['completed'].length).toBe(0)
+      expect(transitions.completed.length).toBe(0)
       // failed is terminal
-      expect(transitions['failed'].length).toBe(0)
+      expect(transitions.failed.length).toBe(0)
     })
   })
 })
@@ -318,7 +318,7 @@ describe('Agent Discovery', () => {
   it('should return consistent pagination structure', async () => {
     const app = createTestApp()
     const response = await app.handle(
-      new Request('http://localhost/api/a2a/agents?limit=5')
+      new Request('http://localhost/api/a2a/agents?limit=5'),
     )
 
     const data = await response.json()
@@ -335,7 +335,7 @@ describe('Input Sanitization', () => {
   it('should handle special characters in query params', async () => {
     const app = createTestApp()
     const response = await app.handle(
-      new Request('http://localhost/api/a2a/agents?capability=test%20value')
+      new Request('http://localhost/api/a2a/agents?capability=test%20value'),
     )
 
     expect(response.status).toBe(200)
@@ -344,7 +344,7 @@ describe('Input Sanitization', () => {
   it('should handle empty query params', async () => {
     const app = createTestApp()
     const response = await app.handle(
-      new Request('http://localhost/api/a2a/agents?capability=')
+      new Request('http://localhost/api/a2a/agents?capability='),
     )
 
     expect(response.status).toBe(200)

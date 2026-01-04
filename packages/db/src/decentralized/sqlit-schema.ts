@@ -232,10 +232,10 @@ export async function createSQLitTables(db: DB): Promise<void> {
   const ddl = generateAllDDL()
   const statements = ddl
     .split(';')
-    .map(s => s.trim())
-    .filter(s => s.length > 0 && !s.startsWith('--'))
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0 && !s.startsWith('--'))
 
   for (const statement of statements) {
-    await db.exec(statement + ';')
+    await db.exec(`${statement};`)
   }
 }

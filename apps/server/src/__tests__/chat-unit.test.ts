@@ -7,12 +7,12 @@
  * RUN: bun test chat-unit.test.ts
  */
 
-import { describe, expect, it, beforeAll } from 'bun:test'
+import { beforeAll, describe, expect, it } from 'bun:test'
 import * as jose from 'jose'
 
 // Test setup
 const TEST_JWT_SECRET = 'test-jwt-secret-for-chat-unit-testing!'
-const originalEnv = { ...process.env }
+const _originalEnv = { ...process.env }
 
 beforeAll(() => {
   process.env.JWT_SECRET = TEST_JWT_SECRET
@@ -27,11 +27,11 @@ describe('Chat ID Generation', () => {
   it('should generate deterministic DM chat IDs', () => {
     const user1 = 'user-abc'
     const user2 = 'user-xyz'
-    
+
     // DM IDs should be sorted for consistency
     const dmId1 = `dm-${[user1, user2].sort().join('-')}`
     const dmId2 = `dm-${[user2, user1].sort().join('-')}`
-    
+
     expect(dmId1).toBe(dmId2)
     expect(dmId1).toBe('dm-user-abc-user-xyz')
   })
@@ -39,7 +39,7 @@ describe('Chat ID Generation', () => {
   it('should handle multiple participants in DM ID', () => {
     const users = ['user-c', 'user-a', 'user-b']
     const sortedDmId = `dm-${users.sort().join('-')}`
-    
+
     expect(sortedDmId).toBe('dm-user-a-user-b-user-c')
   })
 })
@@ -48,25 +48,37 @@ describe('Chat ID Generation', () => {
  * Message Validation Tests
  */
 describe('Message Content Validation', () => {
-  function validateMessageContent(content: string): { valid: boolean; error?: string } {
+  function validateMessageContent(content: string): {
+    valid: boolean
+    error?: string
+  } {
     if (!content || content.trim().length === 0) {
       return { valid: false, error: 'Message content is required' }
     }
-    
+
     const trimmed = content.trim()
-    
+
     // Check max length (10KB)
     if (trimmed.length > 10000) {
       return { valid: false, error: 'Message too long (max 10000 characters)' }
     }
-    
+
     return { valid: true }
   }
 
   it('should reject empty messages', () => {
-    expect(validateMessageContent('')).toEqual({ valid: false, error: 'Message content is required' })
-    expect(validateMessageContent('   ')).toEqual({ valid: false, error: 'Message content is required' })
-    expect(validateMessageContent('\n\t')).toEqual({ valid: false, error: 'Message content is required' })
+    expect(validateMessageContent('')).toEqual({
+      valid: false,
+      error: 'Message content is required',
+    })
+    expect(validateMessageContent('   ')).toEqual({
+      valid: false,
+      error: 'Message content is required',
+    })
+    expect(validateMessageContent('\n\t')).toEqual({
+      valid: false,
+      error: 'Message content is required',
+    })
   })
 
   it('should accept valid messages', () => {
@@ -79,7 +91,9 @@ describe('Message Content Validation', () => {
     expect(validateMessageContent('你好')).toEqual({ valid: true })
     expect(validateMessageContent('مرحبا')).toEqual({ valid: true })
     expect(validateMessageContent('🌍🎉💬')).toEqual({ valid: true })
-    expect(validateMessageContent('Mixed: Hello 你好 🎉')).toEqual({ valid: true })
+    expect(validateMessageContent('Mixed: Hello 你好 🎉')).toEqual({
+      valid: true,
+    })
   })
 
   it('should reject overly long messages', () => {
@@ -98,27 +112,33 @@ describe('Message Content Validation', () => {
  * Participant Validation Tests
  */
 describe('Participant Validation', () => {
-  function validateParticipants(participantIds: string[], isGroup: boolean): { valid: boolean; error?: string } {
+  function validateParticipants(
+    participantIds: string[],
+    isGroup: boolean,
+  ): { valid: boolean; error?: string } {
     if (!participantIds || participantIds.length === 0) {
       return { valid: false, error: 'At least one participant is required' }
     }
-    
+
     // Check for duplicates
     const uniqueIds = new Set(participantIds)
     if (uniqueIds.size !== participantIds.length) {
       return { valid: false, error: 'Duplicate participants not allowed' }
     }
-    
+
     // Check for empty IDs
-    if (participantIds.some(id => !id || id.trim().length === 0)) {
+    if (participantIds.some((id) => !id || id.trim().length === 0)) {
       return { valid: false, error: 'Invalid participant ID' }
     }
-    
+
     // DMs should have exactly 1 other participant
     if (!isGroup && participantIds.length !== 1) {
-      return { valid: false, error: 'DMs must have exactly one other participant' }
+      return {
+        valid: false,
+        error: 'DMs must have exactly one other participant',
+      }
     }
-    
+
     return { valid: true }
   }
 
@@ -146,8 +166,12 @@ describe('Participant Validation', () => {
 
   it('should allow multiple participants for groups', () => {
     expect(validateParticipants(['user1'], true)).toEqual({ valid: true })
-    expect(validateParticipants(['user1', 'user2'], true)).toEqual({ valid: true })
-    expect(validateParticipants(['user1', 'user2', 'user3'], true)).toEqual({ valid: true })
+    expect(validateParticipants(['user1', 'user2'], true)).toEqual({
+      valid: true,
+    })
+    expect(validateParticipants(['user1', 'user2', 'user3'], true)).toEqual({
+      valid: true,
+    })
   })
 })
 
@@ -155,7 +179,10 @@ describe('Participant Validation', () => {
  * Chat Type Detection Tests
  */
 describe('Chat Type Detection', () => {
-  function getChatType(isGroup: boolean, encryptionType?: string): 'dm' | 'group' | 'encrypted-group' {
+  function getChatType(
+    isGroup: boolean,
+    encryptionType?: string,
+  ): 'dm' | 'group' | 'encrypted-group' {
     if (!isGroup) return 'dm'
     if (encryptionType === 'mls') return 'encrypted-group'
     return 'group'
@@ -182,7 +209,10 @@ describe('Chat Type Detection', () => {
  * JWT Token Tests for Chat Authentication
  */
 describe('Chat JWT Authentication', () => {
-  async function generateChatToken(userId: string, options: { isAdmin?: boolean } = {}): Promise<string> {
+  async function generateChatToken(
+    userId: string,
+    options: { isAdmin?: boolean } = {},
+  ): Promise<string> {
     const secret = new TextEncoder().encode(TEST_JWT_SECRET)
     return new jose.SignJWT({
       sub: userId,
@@ -195,7 +225,9 @@ describe('Chat JWT Authentication', () => {
       .sign(secret)
   }
 
-  async function verifyToken(token: string): Promise<{ userId: string; isAdmin: boolean } | null> {
+  async function verifyToken(
+    token: string,
+  ): Promise<{ userId: string; isAdmin: boolean } | null> {
     try {
       const secret = new TextEncoder().encode(TEST_JWT_SECRET)
       const { payload } = await jose.jwtVerify(token, secret)
@@ -211,7 +243,7 @@ describe('Chat JWT Authentication', () => {
   it('should generate valid tokens', async () => {
     const token = await generateChatToken('user-123')
     const verified = await verifyToken(token)
-    
+
     expect(verified).not.toBeNull()
     expect(verified?.userId).toBe('user-123')
     expect(verified?.isAdmin).toBe(false)
@@ -220,7 +252,7 @@ describe('Chat JWT Authentication', () => {
   it('should handle admin tokens', async () => {
     const token = await generateChatToken('admin-1', { isAdmin: true })
     const verified = await verifyToken(token)
-    
+
     expect(verified?.isAdmin).toBe(true)
   })
 
@@ -234,7 +266,7 @@ describe('Chat JWT Authentication', () => {
     const token = await new jose.SignJWT({ sub: 'user-123' })
       .setProtectedHeader({ alg: 'HS256' })
       .sign(wrongSecret)
-    
+
     const verified = await verifyToken(token)
     expect(verified).toBeNull()
   })
@@ -245,18 +277,18 @@ describe('Chat JWT Authentication', () => {
  */
 describe('Encryption Status', () => {
   function getEncryptionStatus(
-    isGroup: boolean, 
-    metadata: { encryptionType?: string } | null
+    isGroup: boolean,
+    metadata: { encryptionType?: string } | null,
   ): { isEncrypted: boolean; type: string; protocol: string | null } {
     if (isGroup && metadata?.encryptionType === 'mls') {
       return { isEncrypted: true, type: 'mls', protocol: 'MLS' }
     }
-    
+
     // For DMs, XMTP is always enabled (configured via packages/config)
     if (!isGroup) {
       return { isEncrypted: true, type: 'xmtp', protocol: 'XMTP' }
     }
-    
+
     return { isEncrypted: false, type: 'none', protocol: null }
   }
 
@@ -289,14 +321,14 @@ describe('Encryption Status', () => {
 describe('MLS Service Configuration', () => {
   it('should check MLS enabled status', async () => {
     const { isMLSEnabled } = await import('../services/mls-groups')
-    
+
     // MLS is disabled in test env
     expect(isMLSEnabled()).toBe(false)
   })
 
   it('should require MLS to be enabled for group creation', async () => {
     const { isMLSEnabled } = await import('../services/mls-groups')
-    
+
     if (!isMLSEnabled()) {
       // This is expected in test environment
       expect(true).toBe(true)
@@ -310,7 +342,7 @@ describe('MLS Service Configuration', () => {
 describe('XMTP Service Configuration', () => {
   it('should always have XMTP enabled via config', async () => {
     const { isXMTPEnabled } = await import('../services/xmtp-messaging')
-    
+
     // XMTP is always enabled via packages/config
     expect(isXMTPEnabled()).toBe(true)
   })
@@ -338,7 +370,7 @@ describe('Message Metadata', () => {
       encryptionType: options.encryptionType,
       status: 'sent',
     }
-    
+
     if (options.protocolMessageId) {
       if (options.encryptionType === 'mls') {
         metadata.mlsMessageId = options.protocolMessageId
@@ -346,7 +378,7 @@ describe('Message Metadata', () => {
         metadata.xmtpMessageId = options.protocolMessageId
       }
     }
-    
+
     return metadata
   }
 
@@ -355,7 +387,7 @@ describe('Message Metadata', () => {
       isEncrypted: false,
       encryptionType: 'none',
     })
-    
+
     expect(metadata.isEncrypted).toBe(false)
     expect(metadata.encryptionType).toBe('none')
     expect(metadata.mlsMessageId).toBeUndefined()
@@ -368,7 +400,7 @@ describe('Message Metadata', () => {
       encryptionType: 'mls',
       protocolMessageId: 'mls-msg-123',
     })
-    
+
     expect(metadata.isEncrypted).toBe(true)
     expect(metadata.encryptionType).toBe('mls')
     expect(metadata.mlsMessageId).toBe('mls-msg-123')
@@ -381,7 +413,7 @@ describe('Message Metadata', () => {
       encryptionType: 'xmtp',
       protocolMessageId: 'xmtp-msg-456',
     })
-    
+
     expect(metadata.isEncrypted).toBe(true)
     expect(metadata.encryptionType).toBe('xmtp')
     expect(metadata.xmtpMessageId).toBe('xmtp-msg-456')
@@ -405,10 +437,10 @@ describe('Chat Permissions', () => {
     userId: string,
     chat: { createdBy: string; isGroup: boolean },
     isAdmin: boolean,
-    isParticipant: boolean
+    isParticipant: boolean,
   ): ChatPermissions {
     const isCreator = chat.createdBy === userId
-    
+
     if (!isParticipant) {
       return {
         canSendMessage: false,
@@ -418,7 +450,7 @@ describe('Chat Permissions', () => {
         canDeleteChat: false,
       }
     }
-    
+
     return {
       canSendMessage: true,
       canAddMembers: isAdmin || isCreator,
@@ -429,8 +461,13 @@ describe('Chat Permissions', () => {
   }
 
   it('should deny all permissions to non-participants', () => {
-    const perms = getPermissions('user-1', { createdBy: 'user-2', isGroup: true }, false, false)
-    
+    const perms = getPermissions(
+      'user-1',
+      { createdBy: 'user-2', isGroup: true },
+      false,
+      false,
+    )
+
     expect(perms.canSendMessage).toBe(false)
     expect(perms.canAddMembers).toBe(false)
     expect(perms.canRemoveMembers).toBe(false)
@@ -439,8 +476,13 @@ describe('Chat Permissions', () => {
   })
 
   it('should allow basic permissions to participants', () => {
-    const perms = getPermissions('user-1', { createdBy: 'user-2', isGroup: true }, false, true)
-    
+    const perms = getPermissions(
+      'user-1',
+      { createdBy: 'user-2', isGroup: true },
+      false,
+      true,
+    )
+
     expect(perms.canSendMessage).toBe(true)
     expect(perms.canAddMembers).toBe(false)
     expect(perms.canRemoveMembers).toBe(false)
@@ -449,8 +491,13 @@ describe('Chat Permissions', () => {
   })
 
   it('should allow admin permissions to admins', () => {
-    const perms = getPermissions('user-1', { createdBy: 'user-2', isGroup: true }, true, true)
-    
+    const perms = getPermissions(
+      'user-1',
+      { createdBy: 'user-2', isGroup: true },
+      true,
+      true,
+    )
+
     expect(perms.canSendMessage).toBe(true)
     expect(perms.canAddMembers).toBe(true)
     expect(perms.canRemoveMembers).toBe(true)
@@ -459,8 +506,13 @@ describe('Chat Permissions', () => {
   })
 
   it('should allow full permissions to creator', () => {
-    const perms = getPermissions('user-1', { createdBy: 'user-1', isGroup: true }, false, true)
-    
+    const perms = getPermissions(
+      'user-1',
+      { createdBy: 'user-1', isGroup: true },
+      false,
+      true,
+    )
+
     expect(perms.canSendMessage).toBe(true)
     expect(perms.canAddMembers).toBe(true)
     expect(perms.canRemoveMembers).toBe(true)
@@ -522,7 +574,7 @@ describe('Chat Unit Tests Summary', () => {
     console.log('✓ Chat permissions')
     console.log('✓ NPC/Actor messaging logic')
     console.log('================================\n')
-    
+
     expect(true).toBe(true)
   })
 })

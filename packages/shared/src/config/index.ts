@@ -205,7 +205,12 @@ function convertPublicConfig(raw: RawPublicConfig): PublicConfig {
 const rawConfig = configData as RawPublicConfig
 export const PUBLIC_CONFIG: PublicConfig = convertPublicConfig(rawConfig)
 
-export type NetworkId = 'local' | 'jejuTestnet' | 'jejuMainnet' | 'baseSepolia' | 'base'
+export type NetworkId =
+  | 'local'
+  | 'jejuTestnet'
+  | 'jejuMainnet'
+  | 'baseSepolia'
+  | 'base'
 export type EnvironmentName = 'localnet' | 'testnet' | 'mainnet'
 
 const CHAIN_ID_TO_NETWORK: Record<number, NetworkId> = {

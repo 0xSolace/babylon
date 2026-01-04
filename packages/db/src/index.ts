@@ -19,16 +19,16 @@ import type { JsonValue, SQLValue } from './types'
 export type { QueryTransaction } from './decentralized/sqlit-compat'
 export {
   createSQLitClient,
-  type SQLitClient,
   getSQLitClient,
   resetSQLitClient,
+  type SQLitClient,
 } from './sqlit-client'
 export {
   type DB,
-  SQLitTableRepository,
   getDB,
   initializeDB,
   resetDB,
+  SQLitTableRepository,
 } from './sqlit-repository'
 
 import { type SQLitClient, db as sqlitDatabase } from './sqlit-client'
@@ -263,7 +263,6 @@ export {
   comments,
   dailyEngagement,
   dmAcceptances,
-  SQLIT_NAME_SYMBOL,
   elizaHolderAllocations,
   elizaHolders,
   externalAgentConnections,
@@ -319,6 +318,7 @@ export {
   rewardJudgments,
   rssFeedSources,
   rssHeadlines,
+  SQLIT_NAME_SYMBOL,
   shareActions,
   shares,
   stockPrices,
@@ -404,10 +404,7 @@ export {
 // Initialization
 // ============================================================================
 
-import {
-  createSQLitTables,
-  generateAllDDL,
-} from './decentralized/sqlit-schema'
+import { createSQLitTables, generateAllDDL } from './decentralized/sqlit-schema'
 import { getDB, initializeDB, resetDB } from './sqlit-repository'
 
 export { generateAllDDL }

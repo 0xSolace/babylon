@@ -19,7 +19,7 @@ import {
 } from '@babylon/db'
 import { GameBootstrapService } from '@babylon/engine'
 import { isJejuNetwork, type JejuNetwork } from '@babylon/shared'
-import { getSQLitEndpoint, getNetworkName } from '@babylon/shared/config'
+import { getNetworkName, getSQLitEndpoint } from '@babylon/shared/config'
 import { getDWSUrl, getSQLitUrl } from '@jejunetwork/config'
 import { getFlag, parseArgs, wantsHelp } from '../lib/args.js'
 import { logger } from '../lib/logger.js'
@@ -145,9 +145,7 @@ async function showStatus(): Promise<void> {
 
   if (!endpoint && !network) {
     console.log('\nStatus: ❌ Not configured')
-    console.log(
-      '\nSet JEJU_NETWORK=localnet or SQLIT_BLOCK_PRODUCER_ENDPOINT.',
-    )
+    console.log('\nSet JEJU_NETWORK=localnet or SQLIT_BLOCK_PRODUCER_ENDPOINT.')
     console.log('Start Jeju: cd /path/to/jeju && jeju dev')
     return
   }

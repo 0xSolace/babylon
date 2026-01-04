@@ -8,8 +8,8 @@ import type { JsonValue } from '@babylon/shared'
 import {
   AuthenticationError,
   AuthorizationError,
-  BadRequestError,
   BabylonError,
+  BadRequestError,
   BusinessLogicError,
   ConflictError,
   DatabaseError,

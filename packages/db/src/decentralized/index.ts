@@ -8,10 +8,10 @@
 export {
   buildOrderByClause,
   buildWhereClause,
-  SQLitClient,
   getSQLit,
   type OrderByInput,
   resetSQLit,
+  SQLitClient,
   toQueryParam,
   type WhereClauseResult,
   type WhereInput,
@@ -49,9 +49,9 @@ export {
 export {
   BABYLON_SCHEMAS,
   createSQLitTables,
-  SQLIT_SCHEMA,
   generateAllDDL,
   getSchemaByName,
+  SQLIT_SCHEMA,
 } from './sqlit-schema'
 
 // Types
@@ -63,14 +63,6 @@ export type {
   DatabaseConfig,
   DatabaseInfo,
   DatabaseStatus,
-  SQLitColumn,
-  SQLitConfig,
-  SQLitConnection,
-  SQLitConnectionPool,
-  SQLitHealthStatus,
-  SQLitIndex,
-  SQLitTableSchema,
-  SQLitTransaction,
   ExecResult,
   GrantRequest,
   Migration,
@@ -80,5 +72,13 @@ export type {
   RentalInfo,
   RentalPlan,
   RevokeRequest,
+  SQLitColumn,
+  SQLitConfig,
+  SQLitConnection,
+  SQLitConnectionPool,
+  SQLitHealthStatus,
+  SQLitIndex,
+  SQLitTableSchema,
+  SQLitTransaction,
   SQLPrimitive,
 } from './types'

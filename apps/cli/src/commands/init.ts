@@ -18,8 +18,8 @@ import { dirname, join } from 'node:path'
 import {
   getCurrentNetwork,
   getDWSCacheUrl,
-  getSQLitUrl,
   getServicesConfig,
+  getSQLitUrl,
 } from '@jejunetwork/config'
 import { getFlag, parseArgs, wantsHelp } from '../lib/args.js'
 import { logger } from '../lib/logger.js'
@@ -313,12 +313,7 @@ export async function initDecentralized(): Promise<void> {
 
   // Quick check if services are already running
   const quickCheck = await Promise.all([
-    checkService(
-      'SQLit',
-      urls.SQLIT_BLOCK_PRODUCER_ENDPOINT,
-      '/health',
-      true,
-    ),
+    checkService('SQLit', urls.SQLIT_BLOCK_PRODUCER_ENDPOINT, '/health', true),
     checkService('Cache', urls.CACHE_URL, '/health', true),
   ])
   const servicesRunning = quickCheck.every((s) => s.healthy)

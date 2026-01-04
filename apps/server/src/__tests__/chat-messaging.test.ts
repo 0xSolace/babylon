@@ -18,13 +18,14 @@
  *   JWT_SECRET="test-secret" bun test chat-messaging.test.ts
  */
 
-import { describe, expect, it, beforeAll } from 'bun:test'
+import { beforeAll, describe, expect, it } from 'bun:test'
 import { SignJWT } from 'jose'
 
 // Test configuration
 const SERVER_URL = process.env.BABYLON_SERVER_URL ?? 'http://localhost:5009'
 // Must match the server's JWT_SECRET
-const JWT_SECRET = process.env.JWT_SECRET ?? 'development-secret-change-in-production'
+const JWT_SECRET =
+  process.env.JWT_SECRET ?? 'development-secret-change-in-production'
 const SKIP_E2E = process.env.SKIP_E2E === 'true'
 
 // Test user IDs - will be used for authentication
@@ -38,23 +39,31 @@ const createdChats: string[] = []
 /**
  * Generate a valid JWT token for testing
  */
-async function generateTestToken(userId: string, options: { 
-  isAdmin?: boolean
-  walletAddress?: string 
-} = {}): Promise<string> {
+async function generateTestToken(
+  userId: string,
+  options: {
+    isAdmin?: boolean
+    walletAddress?: string
+  } = {},
+): Promise<string> {
   const secretKey = new TextEncoder().encode(JWT_SECRET)
-  
+
   const token = await new SignJWT({
     sub: userId,
     dbUserId: userId,
-    walletAddress: options.walletAddress ?? `0x${userId.replace(/[^a-f0-9]/gi, '').padEnd(40, '0').slice(0, 40)}`,
+    walletAddress:
+      options.walletAddress ??
+      `0x${userId
+        .replace(/[^a-f0-9]/gi, '')
+        .padEnd(40, '0')
+        .slice(0, 40)}`,
     isAdmin: options.isAdmin ?? false,
   })
     .setProtectedHeader({ alg: 'HS256' })
     .setIssuedAt()
     .setExpirationTime('1h')
     .sign(secretKey)
-  
+
   return token
 }
 
@@ -63,17 +72,17 @@ async function generateTestToken(userId: string, options: {
  */
 async function apiRequest(
   path: string,
-  options: RequestInit & { token?: string } = {}
+  options: RequestInit & { token?: string } = {},
 ): Promise<Response> {
   const { token, ...fetchOptions } = options
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
   }
-  
+
   if (token) {
-    headers['Authorization'] = `Bearer ${token}`
+    headers.Authorization = `Bearer ${token}`
   }
-  
+
   return fetch(`${SERVER_URL}${path}`, {
     ...fetchOptions,
     headers: {
@@ -120,7 +129,12 @@ describe('Chat & Messaging E2E Tests', () => {
     user2Token = await generateTestToken(TEST_USER_2)
     npcToken = await generateTestToken(TEST_NPC, { isAdmin: false })
 
-    console.log('Test tokens generated for users:', TEST_USER_1, TEST_USER_2, TEST_NPC)
+    console.log(
+      'Test tokens generated for users:',
+      TEST_USER_1,
+      TEST_USER_2,
+      TEST_NPC,
+    )
   })
 
   describe('Authentication', () => {
@@ -266,9 +280,12 @@ describe('Chat & Messaging E2E Tests', () => {
     it('should get participants', async () => {
       if (!serverAvailable || !groupChatId) return
 
-      const response = await apiRequest(`/api/chats/${groupChatId}/participants`, {
-        token: user1Token,
-      })
+      const response = await apiRequest(
+        `/api/chats/${groupChatId}/participants`,
+        {
+          token: user1Token,
+        },
+      )
 
       expect(response.ok).toBe(true)
       const data = await response.json()
@@ -336,7 +353,9 @@ describe('Chat & Messaging E2E Tests', () => {
       expect(data.messages.length).toBeGreaterThan(0)
 
       // Verify message content
-      const sentMessage = data.messages.find((m: { content: string }) => m.content === 'Hello from E2E test!')
+      const sentMessage = data.messages.find(
+        (m: { content: string }) => m.content === 'Hello from E2E test!',
+      )
       expect(sentMessage).toBeDefined()
     })
 
@@ -379,7 +398,7 @@ describe('Chat & Messaging E2E Tests', () => {
 
       const data = await response.json()
       const messages = data.messages as Array<{ createdAt: string }>
-      
+
       // Messages should be in chronological order
       for (let i = 1; i < messages.length; i++) {
         const prev = new Date(messages[i - 1].createdAt).getTime()
@@ -436,13 +455,16 @@ describe('Chat & Messaging E2E Tests', () => {
 
       const newUserId = 'test-user-invited-by-npc'
 
-      const response = await apiRequest(`/api/chats/${npcChatId}/participants`, {
-        method: 'POST',
-        token: npcToken,
-        body: JSON.stringify({
-          userId: newUserId,
-        }),
-      })
+      const response = await apiRequest(
+        `/api/chats/${npcChatId}/participants`,
+        {
+          method: 'POST',
+          token: npcToken,
+          body: JSON.stringify({
+            userId: newUserId,
+          }),
+        },
+      )
 
       // May succeed or fail depending on admin status
       // NPC is the creator so should be able to add
@@ -458,8 +480,10 @@ describe('Chat & Messaging E2E Tests', () => {
 
       expect(response.ok).toBe(true)
       const data = await response.json()
-      
-      const npcMessage = data.messages.find((m: { senderId: string }) => m.senderId === TEST_NPC)
+
+      const npcMessage = data.messages.find(
+        (m: { senderId: string }) => m.senderId === TEST_NPC,
+      )
       expect(npcMessage).toBeDefined()
       expect(npcMessage.content).toBe('Hello, I am an NPC agent!')
     })
@@ -586,9 +610,12 @@ describe('Chat & Messaging E2E Tests', () => {
     it('should deny non-participant access to messages', async () => {
       if (!serverAvailable || !privateChatId) return
 
-      const response = await apiRequest(`/api/chats/${privateChatId}/messages`, {
-        token: user2Token,
-      })
+      const response = await apiRequest(
+        `/api/chats/${privateChatId}/messages`,
+        {
+          token: user2Token,
+        },
+      )
 
       expect(response.status).toBe(403)
     })
@@ -597,13 +624,16 @@ describe('Chat & Messaging E2E Tests', () => {
       if (!serverAvailable || !privateChatId) return
 
       // User2 is not in the chat, can't add others
-      const response = await apiRequest(`/api/chats/${privateChatId}/participants`, {
-        method: 'POST',
-        token: user2Token,
-        body: JSON.stringify({
-          userId: 'some-other-user',
-        }),
-      })
+      const response = await apiRequest(
+        `/api/chats/${privateChatId}/participants`,
+        {
+          method: 'POST',
+          token: user2Token,
+          body: JSON.stringify({
+            userId: 'some-other-user',
+          }),
+        },
+      )
 
       expect([403, 404]).toContain(response.status)
     })
@@ -635,10 +665,13 @@ describe('Chat & Messaging E2E Tests', () => {
     it('should allow user to leave chat', async () => {
       if (!serverAvailable || !leavableChatId) return
 
-      const response = await apiRequest(`/api/chats/${leavableChatId}/participants/me`, {
-        method: 'DELETE',
-        token: user2Token,
-      })
+      const response = await apiRequest(
+        `/api/chats/${leavableChatId}/participants/me`,
+        {
+          method: 'DELETE',
+          token: user2Token,
+        },
+      )
 
       expect(response.ok).toBe(true)
       const data = await response.json()
@@ -648,9 +681,12 @@ describe('Chat & Messaging E2E Tests', () => {
     it('should deny access after leaving', async () => {
       if (!serverAvailable || !leavableChatId) return
 
-      const response = await apiRequest(`/api/chats/${leavableChatId}/messages`, {
-        token: user2Token,
-      })
+      const response = await apiRequest(
+        `/api/chats/${leavableChatId}/messages`,
+        {
+          token: user2Token,
+        },
+      )
 
       expect(response.status).toBe(403)
     })
@@ -694,9 +730,12 @@ describe('Chat & Messaging E2E Tests', () => {
     it('should paginate messages with limit', async () => {
       if (!serverAvailable || !chatForPagination) return
 
-      const response = await apiRequest(`/api/chats/${chatForPagination}/messages?limit=2`, {
-        token: user1Token,
-      })
+      const response = await apiRequest(
+        `/api/chats/${chatForPagination}/messages?limit=2`,
+        {
+          token: user1Token,
+        },
+      )
 
       expect(response.ok).toBe(true)
       const data = await response.json()
@@ -708,25 +747,31 @@ describe('Chat & Messaging E2E Tests', () => {
       if (!serverAvailable || !chatForPagination) return
 
       // Get first page
-      const firstPage = await apiRequest(`/api/chats/${chatForPagination}/messages?limit=2`, {
-        token: user1Token,
-      })
+      const firstPage = await apiRequest(
+        `/api/chats/${chatForPagination}/messages?limit=2`,
+        {
+          token: user1Token,
+        },
+      )
       const firstData = await firstPage.json()
 
       if (!firstData.nextCursor) return
 
       // Get second page using cursor
-      const secondPage = await apiRequest(`/api/chats/${chatForPagination}/messages?limit=2&cursor=${firstData.nextCursor}`, {
-        token: user1Token,
-      })
+      const secondPage = await apiRequest(
+        `/api/chats/${chatForPagination}/messages?limit=2&cursor=${firstData.nextCursor}`,
+        {
+          token: user1Token,
+        },
+      )
       const secondData = await secondPage.json()
 
       expect(secondData.success).toBe(true)
-      
+
       // Pages should have different messages
       const firstIds = firstData.messages.map((m: { id: string }) => m.id)
       const secondIds = secondData.messages.map((m: { id: string }) => m.id)
-      
+
       for (const id of secondIds) {
         expect(firstIds).not.toContain(id)
       }
@@ -818,7 +863,7 @@ describe('Chat & Messaging E2E Tests', () => {
           body: JSON.stringify({
             content: `Concurrent message ${i}`,
           }),
-        })
+        }),
       )
 
       const responses = await Promise.all(requests)
@@ -849,7 +894,7 @@ describe('Chat & Messaging Summary', () => {
     console.log('✓ Edge cases (unicode, long messages)')
     console.log('✓ Performance benchmarks')
     console.log('=====================================\n')
-    
+
     expect(true).toBe(true)
   })
 })

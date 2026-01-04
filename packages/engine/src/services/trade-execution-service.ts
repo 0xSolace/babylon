@@ -13,13 +13,13 @@ import {
   actorState,
   and,
   db,
-  type SQLitClient,
   eq,
   gte,
   npcTrades,
   organizationState,
   perpPositions,
   poolPositions,
+  type SQLitClient,
   sql,
 } from '@babylon/db'
 import type { WalletPort } from '@babylon/shared'

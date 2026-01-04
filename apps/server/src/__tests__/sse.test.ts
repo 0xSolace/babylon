@@ -4,7 +4,7 @@
  * Tests for Server-Sent Events - unit tests for token generation and utilities
  */
 
-import { describe, expect, it, beforeAll, afterAll } from 'bun:test'
+import { afterAll, beforeAll, describe, expect, it } from 'bun:test'
 import * as jose from 'jose'
 
 // Test setup
@@ -19,7 +19,7 @@ afterAll(() => {
   process.env = originalEnv
 })
 
-import { pushSSEEvent, pushSSEChannelEvent } from '../routes/sse'
+import { pushSSEChannelEvent, pushSSEEvent } from '../routes/sse'
 
 describe('SSE Utilities', () => {
   describe('pushSSEEvent', () => {
@@ -106,13 +106,19 @@ describe('JWT Token Generation', () => {
   it('should generate different tokens with different nonces', async () => {
     const secret = new TextEncoder().encode(TEST_JWT_SECRET)
 
-    const token1 = await new jose.SignJWT({ userId: 'user', nonce: crypto.randomUUID() })
+    const token1 = await new jose.SignJWT({
+      userId: 'user',
+      nonce: crypto.randomUUID(),
+    })
       .setProtectedHeader({ alg: 'HS256' })
       .setIssuedAt()
       .setExpirationTime('5m')
       .sign(secret)
 
-    const token2 = await new jose.SignJWT({ userId: 'user', nonce: crypto.randomUUID() })
+    const token2 = await new jose.SignJWT({
+      userId: 'user',
+      nonce: crypto.randomUUID(),
+    })
       .setProtectedHeader({ alg: 'HS256' })
       .setIssuedAt()
       .setExpirationTime('5m')
@@ -148,7 +154,10 @@ describe('Token Validation Edge Cases', () => {
   it('should reject tokens with invalid type claim', async () => {
     const secret = new TextEncoder().encode(TEST_JWT_SECRET)
 
-    const wrongTypeToken = await new jose.SignJWT({ type: 'session', userId: 'test' })
+    const wrongTypeToken = await new jose.SignJWT({
+      type: 'session',
+      userId: 'test',
+    })
       .setProtectedHeader({ alg: 'HS256' })
       .setSubject('test')
       .setExpirationTime('5m')
@@ -161,7 +170,10 @@ describe('Token Validation Edge Cases', () => {
   it('should reject tokens with missing subject', async () => {
     const secret = new TextEncoder().encode(TEST_JWT_SECRET)
 
-    const noSubToken = await new jose.SignJWT({ type: 'realtime', userId: 'test' })
+    const noSubToken = await new jose.SignJWT({
+      type: 'realtime',
+      userId: 'test',
+    })
       .setProtectedHeader({ alg: 'HS256' })
       .setExpirationTime('5m')
       .sign(secret)
@@ -192,7 +204,13 @@ describe('Token Validation Edge Cases', () => {
 })
 
 describe('Channel Validation', () => {
-  const VALID_CHANNEL_PREFIXES = ['chat:', 'market:', 'feed:', 'notifications:', 'agent:']
+  const VALID_CHANNEL_PREFIXES = [
+    'chat:',
+    'market:',
+    'feed:',
+    'notifications:',
+    'agent:',
+  ]
 
   it('should recognize valid channel prefixes', () => {
     const validChannels = [
@@ -206,7 +224,9 @@ describe('Channel Validation', () => {
     ]
 
     for (const channel of validChannels) {
-      const isValid = VALID_CHANNEL_PREFIXES.some(prefix => channel.startsWith(prefix))
+      const isValid = VALID_CHANNEL_PREFIXES.some((prefix) =>
+        channel.startsWith(prefix),
+      )
       expect(isValid).toBe(true)
     }
   })
@@ -219,7 +239,9 @@ describe('Channel Validation', () => {
     ]
 
     for (const channel of invalidChannels) {
-      const isValid = VALID_CHANNEL_PREFIXES.some(prefix => channel.startsWith(prefix))
+      const isValid = VALID_CHANNEL_PREFIXES.some((prefix) =>
+        channel.startsWith(prefix),
+      )
       expect(isValid).toBe(false)
     }
   })
@@ -260,7 +282,7 @@ describe('Message Format Validation', () => {
 
 describe('Edge Cases', () => {
   it('should handle very long channel names', () => {
-    const longChannel = 'chat:' + 'x'.repeat(10000)
+    const longChannel = `chat:${'x'.repeat(10000)}`
     expect(() => {
       pushSSEChannelEvent(longChannel, 'test', { test: true })
     }).not.toThrow()

@@ -217,9 +217,15 @@ describe('Agent Authentication', () => {
       await createAgentSession('agent-b', 'token-b')
       await createAgentSession('agent-c', 'token-c')
 
-      expect(await verifyAgentSession('token-a')).toEqual({ agentId: 'agent-a' })
-      expect(await verifyAgentSession('token-b')).toEqual({ agentId: 'agent-b' })
-      expect(await verifyAgentSession('token-c')).toEqual({ agentId: 'agent-c' })
+      expect(await verifyAgentSession('token-a')).toEqual({
+        agentId: 'agent-a',
+      })
+      expect(await verifyAgentSession('token-b')).toEqual({
+        agentId: 'agent-b',
+      })
+      expect(await verifyAgentSession('token-c')).toEqual({
+        agentId: 'agent-c',
+      })
     })
 
     it('verifyAgentCredentials handles both AGENT_SECRET and CRON_SECRET', () => {

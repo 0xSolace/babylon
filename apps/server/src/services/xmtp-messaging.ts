@@ -7,23 +7,23 @@
  * - Private keys never leave KMS (MPC threshold signing)
  */
 
+import { createHash } from 'node:crypto'
 import { db, eq, messages, users } from '@babylon/db'
 import { logger } from '@babylon/shared'
+import { getXMTPConfig, type XMTPEnv } from '@jejunetwork/config'
+import { createKMSSigner, type KMSSigner } from '@jejunetwork/kms'
 import {
-  XMTPClient,
   type XMTPClientOptions as ClientOptions,
+  type XMTPDecodedMessage as DecodedMessage,
   type XMTPDm as Dm,
   type XMTPGroup as Group,
-  type XMTPSigner,
   type XMTPIdentifier as Identifier,
   type IdentifierKind,
-  type XMTPDecodedMessage as DecodedMessage,
+  XMTPClient,
+  type XMTPSigner,
 } from '@jejunetwork/messaging'
-import { createKMSSigner, type KMSSigner } from '@jejunetwork/kms'
-import { getXMTPConfig, type XMTPEnv } from '@jejunetwork/config'
 import { generateSnowflakeId } from '@jejunetwork/shared'
-import { toBytes, toHex, type Address, type Hex } from 'viem'
-import { createHash, randomBytes } from 'crypto'
+import { type Address, toBytes } from 'viem'
 
 // XMTP is always enabled - configuration from packages/config
 const xmtpConfig = getXMTPConfig()
@@ -48,7 +48,10 @@ export function isXMTPEnabled(): boolean {
  * Note: With KMS-based signing, signatures are generated on-demand,
  * so this is a no-op for compatibility with older code patterns.
  */
-export function storeUserSignature(_userId: string, _signature: `0x${string}`): void {
+export function storeUserSignature(
+  _userId: string,
+  _signature: `0x${string}`,
+): void {
   // KMS generates signatures on-demand, nothing to store
 }
 
@@ -68,7 +71,10 @@ async function getDbEncryptionKey(kmsSigner: KMSSigner): Promise<Uint8Array> {
  * Create an XMTP-compatible signer that uses Jeju KMS
  * Private keys NEVER leave the KMS enclave
  */
-function createXMTPKMSSigner(kmsSigner: KMSSigner, address: Address): XMTPSigner {
+function createXMTPKMSSigner(
+  kmsSigner: KMSSigner,
+  address: Address,
+): XMTPSigner {
   return {
     type: 'EOA',
 
@@ -171,7 +177,11 @@ export async function sendEncryptedDM(
   senderUserId: string,
   recipientUserId: string,
   content: string,
-): Promise<{ messageId: string; xmtpMessageId: string; conversationId: string }> {
+): Promise<{
+  messageId: string
+  xmtpMessageId: string
+  conversationId: string
+}> {
   // Get recipient's wallet address
   const recipientWallet = await getUserWallet(recipientUserId)
 
@@ -287,7 +297,8 @@ export async function sendXMTPGroupMessage(
   const client = await getOrCreateXMTPClient(senderUserId)
 
   // Get the group conversation
-  const conversation = await client.conversations.getConversationById(xmtpGroupId)
+  const conversation =
+    await client.conversations.getConversationById(xmtpGroupId)
   if (!conversation) {
     throw new Error(`XMTP group ${xmtpGroupId} not found`)
   }
@@ -330,7 +341,8 @@ export async function addXMTPGroupMember(
   newMemberUserId: string,
 ): Promise<void> {
   const client = await getOrCreateXMTPClient(adminUserId)
-  const conversation = await client.conversations.getConversationById(xmtpGroupId)
+  const conversation =
+    await client.conversations.getConversationById(xmtpGroupId)
 
   if (!conversation || !('addMembersByIdentifiers' in conversation)) {
     throw new Error(`XMTP group ${xmtpGroupId} not found or not a group`)
@@ -362,7 +374,8 @@ export async function removeXMTPGroupMember(
   memberUserId: string,
 ): Promise<void> {
   const client = await getOrCreateXMTPClient(adminUserId)
-  const conversation = await client.conversations.getConversationById(xmtpGroupId)
+  const conversation =
+    await client.conversations.getConversationById(xmtpGroupId)
 
   if (!conversation || !('removeMembersByIdentifiers' in conversation)) {
     throw new Error(`XMTP group ${xmtpGroupId} not found or not a group`)
@@ -394,7 +407,8 @@ export async function getXMTPMessages(
   limit = 50,
 ): Promise<DecodedMessage[]> {
   const client = await getOrCreateXMTPClient(userId)
-  const conversation = await client.conversations.getConversationById(conversationId)
+  const conversation =
+    await client.conversations.getConversationById(conversationId)
 
   if (!conversation) {
     throw new Error(`Conversation ${conversationId} not found`)

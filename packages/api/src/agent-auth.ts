@@ -119,7 +119,7 @@ function getStore(): SessionStore {
 export function cleanupExpiredSessions(): void {
   // Only clean up in-memory store
   if (!useInMemoryStore) return
-  
+
   const now = Date.now()
   for (const [key, entry] of inMemoryStore.entries()) {
     if (now > entry.expiresAt) {

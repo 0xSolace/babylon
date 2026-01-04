@@ -6,7 +6,7 @@
 // Simple fetch handler
 export const fetch = async (request: Request): Promise<Response> => {
   const url = new URL(request.url)
-  
+
   // Strip /http prefix if present (from DWS worker routing)
   let pathname = url.pathname
   if (pathname.startsWith('/http/')) {
@@ -14,7 +14,7 @@ export const fetch = async (request: Request): Promise<Response> => {
   } else if (pathname === '/http') {
     pathname = '/'
   }
-  
+
   // Health endpoint
   if (pathname === '/health' || pathname === '/api/health') {
     return new Response(
@@ -48,7 +48,11 @@ export const fetch = async (request: Request): Promise<Response> => {
 
   // 404 for everything else
   return new Response(
-    JSON.stringify({ error: 'Not found', path: pathname, originalPath: url.pathname }),
+    JSON.stringify({
+      error: 'Not found',
+      path: pathname,
+      originalPath: url.pathname,
+    }),
     {
       status: 404,
       headers: { 'Content-Type': 'application/json' },
@@ -65,7 +69,7 @@ export default {
 if (import.meta.main) {
   const PORT = Number(process.env.PORT) || 5009
 
-  const server = Bun.serve({
+  const _server = Bun.serve({
     port: PORT,
     fetch,
   })

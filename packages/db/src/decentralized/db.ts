@@ -9,13 +9,13 @@
  * 2. Network-based config from @jejunetwork/config (based on JEJU_NETWORK)
  */
 
-import { getSQLitEndpoint, getNetworkName } from '@babylon/shared/config'
+import { getNetworkName, getSQLitEndpoint } from '@babylon/shared/config'
 import { getSQLitUrl } from '@jejunetwork/config'
 import {
-  type SQLitClient,
   type ExecResult,
   getSQLit,
   type QueryParam,
+  type SQLitClient,
 } from '@jejunetwork/db'
 import { first } from '@jejunetwork/shared'
 import { createQueryTransaction, type QueryTransaction } from '../sqlit-client'

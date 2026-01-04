@@ -18,11 +18,7 @@
 
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
-import {
-  getDWSUrl,
-  getSQLitUrl,
-  getFarcasterHubUrl,
-} from '@jejunetwork/config'
+import { getDWSUrl, getFarcasterHubUrl, getSQLitUrl } from '@jejunetwork/config'
 import { $ } from 'bun'
 import { getFlag, parseArgs, wantsHelp } from '../lib/args.js'
 import { logger } from '../lib/logger.js'
@@ -651,9 +647,7 @@ export async function runDevCommand(args: string[]): Promise<void> {
         logger.warn('SQLit not fully ready - some features may not work')
         const endpoint = getSQLitEndpoint()
         logger.info(`SQLit endpoint: ${endpoint}`)
-        logger.info(
-          'You may need to wait a bit longer for SQLit to initialize',
-        )
+        logger.info('You may need to wait a bit longer for SQLit to initialize')
         logger.info('Or use --skip-sqlit-wait to continue anyway')
       }
     } else {

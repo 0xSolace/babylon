@@ -4,7 +4,7 @@
  * Tests for OAuth authentication - unit tests and helpers
  */
 
-import { describe, expect, it, beforeAll, afterAll } from 'bun:test'
+import { afterAll, beforeAll, describe, expect, it } from 'bun:test'
 import { Elysia } from 'elysia'
 
 const originalEnv = { ...process.env }
@@ -37,7 +37,7 @@ describe('Auth Routes', () => {
 
       const app = createTestApp()
       const response = await app.handle(
-        new Request('http://localhost/api/auth/twitter/initiate')
+        new Request('http://localhost/api/auth/twitter/initiate'),
       )
 
       expect(response.status).toBe(500)
@@ -51,7 +51,7 @@ describe('Auth Routes', () => {
     it('should respond to initiate endpoint', async () => {
       const app = createTestApp()
       const response = await app.handle(
-        new Request('http://localhost/api/auth/twitter/initiate')
+        new Request('http://localhost/api/auth/twitter/initiate'),
       )
 
       // With test credentials, it will either return 200 or 500 depending on Twitter API
@@ -63,7 +63,9 @@ describe('Auth Routes', () => {
     it('should redirect on OAuth error', async () => {
       const app = createTestApp()
       const response = await app.handle(
-        new Request('http://localhost/api/auth/twitter/callback?error=access_denied')
+        new Request(
+          'http://localhost/api/auth/twitter/callback?error=access_denied',
+        ),
       )
 
       expect(response.status).toBe(302)
@@ -74,7 +76,9 @@ describe('Auth Routes', () => {
     it('should redirect when missing code', async () => {
       const app = createTestApp()
       const response = await app.handle(
-        new Request('http://localhost/api/auth/twitter/callback?state=test-state')
+        new Request(
+          'http://localhost/api/auth/twitter/callback?state=test-state',
+        ),
       )
 
       expect(response.status).toBe(302)
@@ -85,7 +89,9 @@ describe('Auth Routes', () => {
     it('should redirect when missing state', async () => {
       const app = createTestApp()
       const response = await app.handle(
-        new Request('http://localhost/api/auth/twitter/callback?code=test-code')
+        new Request(
+          'http://localhost/api/auth/twitter/callback?code=test-code',
+        ),
       )
 
       expect(response.status).toBe(302)
@@ -98,7 +104,9 @@ describe('Auth Routes', () => {
     it('should redirect on OAuth error', async () => {
       const app = createTestApp()
       const response = await app.handle(
-        new Request('http://localhost/api/auth/jeju/callback?error=server_error')
+        new Request(
+          'http://localhost/api/auth/jeju/callback?error=server_error',
+        ),
       )
 
       expect(response.status).toBe(302)
@@ -109,7 +117,7 @@ describe('Auth Routes', () => {
     it('should redirect when missing code', async () => {
       const app = createTestApp()
       const response = await app.handle(
-        new Request('http://localhost/api/auth/jeju/callback?provider=twitter')
+        new Request('http://localhost/api/auth/jeju/callback?provider=twitter'),
       )
 
       expect(response.status).toBe(302)
@@ -126,7 +134,7 @@ describe('Auth Routes', () => {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ code: 'test-auth-code' }),
-        })
+        }),
       )
 
       expect(response.status).toBe(200)
@@ -139,7 +147,7 @@ describe('Auth Routes', () => {
     it('should require userId parameter', async () => {
       const app = createTestApp()
       const response = await app.handle(
-        new Request('http://localhost/api/auth/onboarding/twitter/initiate')
+        new Request('http://localhost/api/auth/onboarding/twitter/initiate'),
       )
 
       expect(response.status).toBe(400)
@@ -150,7 +158,9 @@ describe('Auth Routes', () => {
     it('should respond to initiate endpoint with userId', async () => {
       const app = createTestApp()
       const response = await app.handle(
-        new Request('http://localhost/api/auth/onboarding/twitter/initiate?userId=user-123')
+        new Request(
+          'http://localhost/api/auth/onboarding/twitter/initiate?userId=user-123',
+        ),
       )
 
       // With test credentials, it will either return 200 or 500 depending on Twitter API
@@ -162,7 +172,9 @@ describe('Auth Routes', () => {
     it('should redirect on error', async () => {
       const app = createTestApp()
       const response = await app.handle(
-        new Request('http://localhost/api/auth/onboarding/twitter/callback?error=denied')
+        new Request(
+          'http://localhost/api/auth/onboarding/twitter/callback?error=denied',
+        ),
       )
 
       expect(response.status).toBe(302)
@@ -174,7 +186,7 @@ describe('Auth Routes', () => {
     it('should redirect when missing code/state', async () => {
       const app = createTestApp()
       const response = await app.handle(
-        new Request('http://localhost/api/auth/onboarding/twitter/callback')
+        new Request('http://localhost/api/auth/onboarding/twitter/callback'),
       )
 
       expect(response.status).toBe(302)
@@ -266,7 +278,9 @@ describe('OAuth State Management', () => {
 describe('Code Verifier Generation', () => {
   it('should generate hex string of correct length', () => {
     const bytes = crypto.getRandomValues(new Uint8Array(32))
-    const codeVerifier = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')
+    const codeVerifier = Array.from(bytes, (b) =>
+      b.toString(16).padStart(2, '0'),
+    ).join('')
 
     expect(codeVerifier.length).toBe(64)
     expect(codeVerifier).toMatch(/^[0-9a-f]+$/)
@@ -277,7 +291,9 @@ describe('Code Verifier Generation', () => {
 
     for (let i = 0; i < 100; i++) {
       const bytes = crypto.getRandomValues(new Uint8Array(32))
-      const verifier = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')
+      const verifier = Array.from(bytes, (b) =>
+        b.toString(16).padStart(2, '0'),
+      ).join('')
       verifiers.add(verifier)
     }
 

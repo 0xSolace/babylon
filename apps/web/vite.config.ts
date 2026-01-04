@@ -25,7 +25,7 @@ export default defineConfig({
     dedupe: ['react', 'react-dom', 'react-router-dom', '@tanstack/react-query'],
     alias: {
       // Force React to use the same instance across all packages
-      'react': resolve(__dirname, '../../node_modules/react'),
+      react: resolve(__dirname, '../../node_modules/react'),
       'react-dom': resolve(__dirname, '../../node_modules/react-dom'),
       '@': resolve(__dirname, './src'),
       '@/components': resolve(__dirname, './src/components'),
@@ -35,7 +35,10 @@ export default defineConfig({
       '@/app': resolve(__dirname, './src/app'),
       '@/contexts': resolve(__dirname, './src/contexts'),
       // Browser-safe exports only (excludes elysia plugins, dev-server)
-      '@babylon/shared': resolve(__dirname, '../../packages/shared/src/browser.ts'),
+      '@babylon/shared': resolve(
+        __dirname,
+        '../../packages/shared/src/browser.ts',
+      ),
       '@babylon/core': resolve(__dirname, '../../packages/core'),
       '@babylon/core/markets': resolve(
         __dirname,
@@ -125,7 +128,8 @@ export default defineConfig({
     // Define process.env for browser - must define the whole object
     // Use ?? (nullish coalescing) to allow empty string for relative API paths
     'process.env': JSON.stringify({
-      PUBLIC_API_BASE_URL: process.env.PUBLIC_API_BASE_URL ?? `http://localhost:${API_PORT}`,
+      PUBLIC_API_BASE_URL:
+        process.env.PUBLIC_API_BASE_URL ?? `http://localhost:${API_PORT}`,
       PUBLIC_WAITLIST_MODE: process.env.PUBLIC_WAITLIST_MODE ?? 'false',
       NODE_ENV: process.env.NODE_ENV ?? 'production',
       NETWORK: process.env.NETWORK ?? 'testnet',

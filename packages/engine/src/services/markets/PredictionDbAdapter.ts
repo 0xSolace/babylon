@@ -1,12 +1,12 @@
 import {
   db as defaultDb,
-  type SQLitClient,
   type Market,
   type NewMarket,
   type NewPosition,
   type NewPredictionPriceHistory,
   type Position,
   type Question,
+  type SQLitClient,
 } from '@babylon/db'
 import type {
   PredictionDbPort,

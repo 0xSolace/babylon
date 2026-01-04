@@ -10,7 +10,7 @@
  * Requires: Server running at BABYLON_SERVER_URL (default: localhost:5009)
  */
 
-import { describe, expect, it, beforeAll } from 'bun:test'
+import { beforeAll, describe, expect, it } from 'bun:test'
 
 // Test configuration
 const SERVER_URL = process.env.BABYLON_SERVER_URL ?? 'http://localhost:5009'
@@ -19,7 +19,7 @@ const SKIP_E2E = process.env.SKIP_E2E === 'true'
 // Helper to make API requests
 async function apiRequest(
   path: string,
-  options: RequestInit = {}
+  options: RequestInit = {},
 ): Promise<Response> {
   const url = `${SERVER_URL}${path}`
   return fetch(url, {
@@ -305,9 +305,7 @@ describe('E2E Performance Tests', () => {
     const start = Date.now()
 
     // Make 10 concurrent requests
-    const requests = Array.from({ length: 10 }, () =>
-      apiRequest('/health')
-    )
+    const requests = Array.from({ length: 10 }, () => apiRequest('/health'))
 
     const responses = await Promise.all(requests)
     const elapsed = Date.now() - start

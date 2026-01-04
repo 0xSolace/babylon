@@ -1,7 +1,7 @@
 import {
   db as defaultDb,
-  type SQLitClient,
   type PerpPosition,
+  type SQLitClient,
 } from '@babylon/db'
 import type {
   PerpDbPort,

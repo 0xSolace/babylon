@@ -1,4 +1,4 @@
-import { getDB, initializeDB } from '@babylon/db'
+import { getDB } from '@babylon/db'
 import { Elysia, t } from 'elysia'
 
 /**

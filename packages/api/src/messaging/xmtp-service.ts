@@ -7,21 +7,19 @@
  * - Private keys never leave KMS enclave
  */
 
+import { createHash } from 'node:crypto'
 import { logger } from '@babylon/shared'
-import { getRpcUrl } from '@babylon/shared/config'
+import { createKMSSigner, type KMSSigner } from '@jejunetwork/kms'
 import {
-  Client as XMTPClient,
-  type Signer as XMTPSigner,
-  type Dm,
-  type Group,
   type DecodedMessage,
+  type Group,
   type Identifier,
   type IdentifierKind,
+  Client as XMTPClient,
+  type Signer as XMTPSigner,
 } from '@xmtp/node-sdk'
-import { createKMSSigner, type KMSSigner } from '@jejunetwork/kms'
 import type { Address } from 'viem'
 import { toBytes } from 'viem'
-import { createHash } from 'crypto'
 
 /** Configuration for the XMTP service */
 export interface XMTPServiceConfig {
@@ -68,7 +66,10 @@ async function getDbEncryptionKey(kmsSigner: KMSSigner): Promise<Uint8Array> {
 /**
  * Create XMTP-compatible signer from KMS
  */
-function createXMTPKMSSigner(kmsSigner: KMSSigner, address: Address): XMTPSigner {
+function createXMTPKMSSigner(
+  kmsSigner: KMSSigner,
+  address: Address,
+): XMTPSigner {
   return {
     type: 'EOA',
     getIdentifier: (): Identifier => ({
@@ -91,7 +92,6 @@ class XMTPMessagingService {
   private config: XMTPServiceConfig
   private client: XMTPClient | null = null
   private kmsSigner: KMSSigner | null = null
-  private userAddress: Address | null = null
   private initialized = false
 
   constructor(config: XMTPServiceConfig = {}) {
@@ -122,7 +122,8 @@ class XMTPMessagingService {
     // Create real XMTP client
     this.client = await XMTPClient.create(xmtpSigner, {
       env: this.config.env ?? 'dev',
-      dbPath: this.config.dbPath ?? `./data/xmtp/${userAddress.toLowerCase()}.db3`,
+      dbPath:
+        this.config.dbPath ?? `./data/xmtp/${userAddress.toLowerCase()}.db3`,
       dbEncryptionKey,
     })
 
@@ -151,7 +152,10 @@ class XMTPMessagingService {
   /**
    * Send a DM to another user
    */
-  async sendDM(recipientAddress: Address, content: string): Promise<SendMessageResult> {
+  async sendDM(
+    recipientAddress: Address,
+    content: string,
+  ): Promise<SendMessageResult> {
     if (!this.client) {
       return { success: false, error: 'Service not initialized' }
     }
@@ -195,12 +199,16 @@ class XMTPMessagingService {
   /**
    * Send message to a conversation
    */
-  async sendMessage(conversationId: string, content: string): Promise<SendMessageResult> {
+  async sendMessage(
+    conversationId: string,
+    content: string,
+  ): Promise<SendMessageResult> {
     if (!this.client) {
       return { success: false, error: 'Service not initialized' }
     }
 
-    const conversation = await this.client.conversations.getConversationById(conversationId)
+    const conversation =
+      await this.client.conversations.getConversationById(conversationId)
     if (!conversation) {
       return { success: false, error: 'Conversation not found' }
     }
@@ -216,10 +224,14 @@ class XMTPMessagingService {
   /**
    * Get messages from a conversation
    */
-  async getMessages(conversationId: string, limit = 50): Promise<XMTPMessage[]> {
+  async getMessages(
+    conversationId: string,
+    limit = 50,
+  ): Promise<XMTPMessage[]> {
     if (!this.client) return []
 
-    const conversation = await this.client.conversations.getConversationById(conversationId)
+    const conversation =
+      await this.client.conversations.getConversationById(conversationId)
     if (!conversation) return []
 
     await conversation.sync()
@@ -302,7 +314,10 @@ class XMTPMessagingService {
     if (!this.client) return false
 
     const result = await this.client.canMessage([
-      { identifier: address.toLowerCase(), identifierKind: 0 as IdentifierKind },
+      {
+        identifier: address.toLowerCase(),
+        identifierKind: 0 as IdentifierKind,
+      },
     ])
 
     return result.get(address.toLowerCase()) ?? false
@@ -340,7 +355,9 @@ export function getXMTPService(
 /**
  * Create a new XMTP service instance
  */
-export function createXMTPService(config?: XMTPServiceConfig): XMTPMessagingService {
+export function createXMTPService(
+  config?: XMTPServiceConfig,
+): XMTPMessagingService {
   return new XMTPMessagingService(config)
 }
 

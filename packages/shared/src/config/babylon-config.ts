@@ -13,7 +13,6 @@ import {
   getCurrentNetwork,
   getDWSComputeUrl,
   getDWSUrl,
-  getSQLitUrl,
   getIpfsApiUrl,
   getIpfsGatewayUrl,
   getChainId as getJejuChainId,
@@ -21,6 +20,7 @@ import {
   getKMSUrl,
   getServicesConfig,
   getServiceUrl,
+  getSQLitUrl,
   type NetworkType,
 } from '@jejunetwork/config'
 import {

@@ -4,7 +4,7 @@
  * Tests for service layer - unit tests that don't require database
  */
 
-import { describe, expect, it, beforeAll, afterAll } from 'bun:test'
+import { afterAll, beforeAll, describe, expect, it } from 'bun:test'
 
 // Set test environment
 const originalEnv = { ...process.env }
@@ -25,8 +25,8 @@ afterAll(() => {
 // Import services
 import {
   getFarcasterClient,
-  storeSignerKey,
   getSignerKey,
+  storeSignerKey,
 } from '../services/farcaster'
 
 import {
@@ -53,7 +53,8 @@ describe('Farcaster Service', () => {
   describe('Signer Key Management', () => {
     it('should store and retrieve signer keys', () => {
       const userId = 'test-user-1'
-      const signerKey = '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef'
+      const signerKey =
+        '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef'
 
       storeSignerKey(userId, signerKey as `0x${string}`)
       const retrieved = getSignerKey(userId)
@@ -70,7 +71,8 @@ describe('Farcaster Service', () => {
 
     it('should handle hex keys with 0x prefix', () => {
       const userId = 'test-user-2'
-      const signerKey = '0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890'
+      const signerKey =
+        '0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890'
 
       storeSignerKey(userId, signerKey as `0x${string}`)
       const retrieved = getSignerKey(userId)
@@ -80,8 +82,10 @@ describe('Farcaster Service', () => {
 
     it('should overwrite existing keys', () => {
       const userId = 'test-user-3'
-      const key1 = '0x1111111111111111111111111111111111111111111111111111111111111111'
-      const key2 = '0x2222222222222222222222222222222222222222222222222222222222222222'
+      const key1 =
+        '0x1111111111111111111111111111111111111111111111111111111111111111'
+      const key2 =
+        '0x2222222222222222222222222222222222222222222222222222222222222222'
 
       storeSignerKey(userId, key1 as `0x${string}`)
       storeSignerKey(userId, key2 as `0x${string}`)
@@ -94,7 +98,8 @@ describe('Farcaster Service', () => {
   describe('Hex to Bytes Conversion', () => {
     it('should correctly convert hex strings', () => {
       const userId = 'test-hex-conversion'
-      const hex = '0x00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff'
+      const hex =
+        '0x00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff00ff'
 
       storeSignerKey(userId, hex as `0x${string}`)
       const bytes = getSignerKey(userId)
@@ -170,7 +175,10 @@ describe('Service Error Handling', () => {
 
       let threw = false
       try {
-        await createMLSGroup('creator-id', 'Test Group', ['member-1', 'member-2'])
+        await createMLSGroup('creator-id', 'Test Group', [
+          'member-1',
+          'member-2',
+        ])
       } catch (e) {
         threw = true
         expect((e as Error).message).toContain('MLS')
@@ -220,8 +228,9 @@ describe('Concurrent Operations', () => {
 
   it('should handle concurrent signature storage without race conditions', () => {
     const users = Array.from({ length: 50 }, (_, i) => `sig-user-${i}`)
-    const signatures = users.map((_, i) =>
-      `0x${'00'.repeat(31)}${i.toString(16).padStart(2, '0')}` as `0x${string}`
+    const signatures = users.map(
+      (_, i) =>
+        `0x${'00'.repeat(31)}${i.toString(16).padStart(2, '0')}` as `0x${string}`,
     )
 
     users.forEach((userId, i) => {
