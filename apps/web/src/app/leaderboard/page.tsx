@@ -13,7 +13,6 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { FollowButton } from '@/components/interactions/FollowButton';
 import type { SelectedUser } from '@/components/leaderboard/LeaderboardWidgetSidebar';
-import { NftPromoBanner } from '@/components/nft';
 import { OnChainBadge } from '@/components/profile/OnChainBadge';
 import { Avatar } from '@/components/shared/Avatar';
 import type { LeaderboardTab } from '@/components/shared/LeaderboardToggle';
@@ -586,9 +585,6 @@ export default function LeaderboardPage() {
 
   return (
     <PageContainer noPadding className="!overflow-visible flex w-full flex-col">
-      {/* NFT Collection Promo Banner */}
-      <NftPromoBanner variant="compact" />
-
       {/* Desktop: Content + Widgets layout */}
       <div className="hidden flex-1 overflow-hidden xl:flex">
         {/* Main content */}
