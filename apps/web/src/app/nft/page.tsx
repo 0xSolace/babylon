@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 import { NftGrid, RevealModal } from '@/components/nft';
 import { PageContainer } from '@/components/shared/PageContainer';
@@ -89,7 +90,8 @@ export default function NftGalleryPage() {
     if (nft.owner?.user?.id === user.id) return true;
     if (
       user.walletAddress &&
-      nft.owner?.walletAddress?.toLowerCase() === user.walletAddress.toLowerCase()
+      nft.owner?.walletAddress?.toLowerCase() ===
+        user.walletAddress.toLowerCase()
     )
       return true;
     return false;
@@ -138,12 +140,12 @@ export default function NftGalleryPage() {
             )}
 
             {eligibility?.hasMinted && eligibility.mintedNft && (
-              <a
+              <Link
                 href={`/nft/${eligibility.mintedNft.tokenId}`}
                 className="rounded-lg border border-green-500/30 bg-green-500/10 px-4 py-2 text-green-600 text-sm transition-colors hover:bg-green-500/20"
               >
                 View My NFT →
-              </a>
+              </Link>
             )}
           </div>
 
@@ -304,12 +306,12 @@ export default function NftGalleryPage() {
                     Close
                   </button>
                   {eligibility.mintedNft && (
-                    <a
+                    <Link
                       href={`/nft/${eligibility.mintedNft.tokenId}`}
                       className="flex-1 rounded-full bg-[#0066FF] py-2.5 text-center font-semibold text-sm text-white shadow-md transition-all hover:scale-105 hover:bg-[#2952d9] hover:shadow-lg"
                     >
                       View My NFT
-                    </a>
+                    </Link>
                   )}
                 </div>
               </div>
@@ -330,12 +332,12 @@ export default function NftGalleryPage() {
                   >
                     Close
                   </button>
-                  <a
+                  <Link
                     href="/leaderboard"
                     className="flex-1 rounded-full bg-[#0066FF] py-2.5 text-center font-semibold text-sm text-white shadow-md transition-all hover:scale-105 hover:bg-[#2952d9] hover:shadow-lg"
                   >
                     View Leaderboard
-                  </a>
+                  </Link>
                 </div>
               </div>
             )}

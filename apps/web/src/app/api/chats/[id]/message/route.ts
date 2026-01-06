@@ -348,15 +348,16 @@ export const POST = withErrorHandling(
 
           if (!verification.canAccess) {
             // Remove user from chat since they no longer have NFT access
+            // Mark participant as inactive (keep history)
             await db
               .update(chatParticipants)
               .set({ isActive: false })
-                .where(
-                  and(
-                    eq(chatParticipants.chatId, chatId),
-                    eq(chatParticipants.userId, user.userId)
-                  )
-                );
+              .where(
+                and(
+                  eq(chatParticipants.chatId, chatId),
+                  eq(chatParticipants.userId, user.userId)
+                )
+              );
 
             // Invalidate NFT cache for this user/contract combination
             if (userData?.walletAddress && chat.requiredNftContractAddress) {
