@@ -8,6 +8,7 @@ import {
   withErrorHandling,
 } from '@babylon/api';
 import {
+  and,
   db,
   eq,
   nftClaims,
@@ -54,6 +55,9 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     throw new BadRequestError('Invalid wallet address');
   }
 
+  const normalizedTxHash = txHash.toLowerCase();
+  const normalizedWalletAddress = walletAddress.toLowerCase();
+
   const [user] = await db
     .select({
       id: users.id,
@@ -67,7 +71,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     throw new BadRequestError('No wallet connected');
   }
 
-  if (user.walletAddress.toLowerCase() !== walletAddress.toLowerCase()) {
+  if (user.walletAddress.toLowerCase() !== normalizedWalletAddress) {
     throw new ForbiddenError('Wallet mismatch');
   }
 
@@ -108,6 +112,29 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     }
 
     if (snapshotEntry.hasMinted) {
+      if (
+        snapshotEntry.mintTxHash?.toLowerCase() === normalizedTxHash &&
+        snapshotEntry.mintedTokenId !== null
+      ) {
+        const [existingNft] = await tx
+          .select({
+            tokenId: nftCollection.tokenId,
+            name: nftCollection.name,
+            imageUrl: nftCollection.imageUrl,
+            thumbnailUrl: nftCollection.thumbnailUrl,
+            storyTitle: nftCollection.storyTitle,
+          })
+          .from(nftCollection)
+          .where(eq(nftCollection.tokenId, snapshotEntry.mintedTokenId))
+          .limit(1);
+
+        if (!existingNft) {
+          throw new ConflictError('Already minted');
+        }
+
+        return { mintedNft: existingNft };
+      }
+
       throw new ConflictError('Already minted');
     }
 
@@ -127,46 +154,59 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
       throw new BadRequestError('Minted token is not part of this collection');
     }
 
-    const [existingOwnership] = await tx
-      .select({ tokenId: nftOwnership.tokenId })
-      .from(nftOwnership)
-      .where(eq(nftOwnership.tokenId, mintedTokenId))
-      .limit(1);
-
-    if (existingOwnership) {
-      throw new ConflictError('NFT already claimed');
-    }
-
-    await tx
+    const [updatedSnapshot] = await tx
       .update(nftSnapshot)
       .set({
         hasMinted: true,
         mintedTokenId: mintedTokenId,
         mintedAt: now,
-        mintTxHash: txHash,
+        mintTxHash: normalizedTxHash,
       })
-      .where(eq(nftSnapshot.userId, userId));
+      .where(
+        and(eq(nftSnapshot.userId, userId), eq(nftSnapshot.hasMinted, false))
+      )
+      .returning({ id: nftSnapshot.id });
 
-    await tx.insert(nftOwnership).values({
-      id: nanoid(),
-      tokenId: mintedTokenId,
-      ownerAddress: walletAddress.toLowerCase(),
-      userId: userId,
-      acquiredAt: now,
-      txHash: txHash,
-      updatedAt: now,
-    });
+    if (!updatedSnapshot) {
+      throw new ConflictError('Already minted');
+    }
 
-    await tx.insert(nftClaims).values({
-      id: nanoid(),
-      tokenId: mintedTokenId,
-      claimerUserId: userId,
-      claimerAddress: walletAddress.toLowerCase(),
-      claimedAt: now,
-      txHash: txHash,
-      snapshotRank: snapshotEntry.rank,
-      snapshotPoints: snapshotEntry.points,
-    });
+    try {
+      await tx.insert(nftOwnership).values({
+        id: nanoid(),
+        tokenId: mintedTokenId,
+        ownerAddress: normalizedWalletAddress,
+        userId: userId,
+        acquiredAt: now,
+        txHash: normalizedTxHash,
+        updatedAt: now,
+      });
+    } catch (error) {
+      const code = (error as { code?: string } | null)?.code;
+      if (code === '23505') {
+        throw new ConflictError('NFT already claimed');
+      }
+      throw error;
+    }
+
+    try {
+      await tx.insert(nftClaims).values({
+        id: nanoid(),
+        tokenId: mintedTokenId,
+        claimerUserId: userId,
+        claimerAddress: normalizedWalletAddress,
+        claimedAt: now,
+        txHash: normalizedTxHash,
+        snapshotRank: snapshotEntry.rank,
+        snapshotPoints: snapshotEntry.points,
+      });
+    } catch (error) {
+      const code = (error as { code?: string } | null)?.code;
+      if (code === '23505') {
+        throw new ConflictError('NFT already claimed');
+      }
+      throw error;
+    }
 
     return { mintedNft, snapshotEntry };
   });
