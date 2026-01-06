@@ -7,10 +7,14 @@ import {
 } from '@babylon/api';
 import { db, eq, nftSnapshot, users } from '@babylon/db';
 import type { NextRequest } from 'next/server';
+import { encodeFunctionData, isAddress, parseAbi } from 'viem';
 import type { MintPrepareResponse } from '@/types/nft';
 
 const NFT_CONTRACT_ADDRESS = process.env.NFT_CONTRACT_ADDRESS;
 const NFT_CHAIN_ID = parseInt(process.env.NFT_CHAIN_ID ?? '1', 10);
+const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
+
+const MINT_ABI = parseAbi(['function mint(address to)']);
 
 export const POST = withErrorHandling(async (request: NextRequest) => {
   const authUser = await authenticate(request);
@@ -18,9 +22,14 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
 
   if (
     !NFT_CONTRACT_ADDRESS ||
-    !/^0x[a-fA-F0-9]{40}$/.test(NFT_CONTRACT_ADDRESS)
+    !/^0x[a-fA-F0-9]{40}$/.test(NFT_CONTRACT_ADDRESS) ||
+    NFT_CONTRACT_ADDRESS.toLowerCase() === ZERO_ADDRESS
   ) {
     throw new BadRequestError('NFT minting is not available yet');
+  }
+
+  if (Number.isNaN(NFT_CHAIN_ID) || NFT_CHAIN_ID <= 0) {
+    throw new BadRequestError('Invalid NFT chain configuration');
   }
 
   const [user] = await db
@@ -34,6 +43,10 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
 
   if (!user?.walletAddress) {
     throw new BadRequestError('Wallet not connected');
+  }
+
+  if (!isAddress(user.walletAddress)) {
+    throw new BadRequestError('Invalid wallet address');
   }
 
   const [snapshotEntry] = await db
@@ -57,11 +70,16 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     throw new ForbiddenError('Already minted');
   }
 
+  const data = encodeFunctionData({
+    abi: MINT_ABI,
+    functionName: 'mint',
+    args: [user.walletAddress],
+  });
+
   return successResponse({
     contractAddress: NFT_CONTRACT_ADDRESS,
     chainId: NFT_CHAIN_ID,
-    functionName: 'mint',
-    args: [user.walletAddress],
+    data,
     value: '0',
   } satisfies MintPrepareResponse);
 });

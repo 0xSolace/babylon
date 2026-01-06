@@ -335,8 +335,7 @@ describe('NFT Mint Flow - Transaction Data', () => {
     interface MintPrepareData {
       contractAddress: string;
       chainId: number;
-      functionName: string;
-      args: string[];
+      data: string;
       value: string;
     }
 
@@ -345,10 +344,10 @@ describe('NFT Mint Flow - Transaction Data', () => {
       if (!/^0x[a-fA-F0-9]{40}$/.test(data.contractAddress)) return false;
       // Validate chain ID
       if (data.chainId <= 0) return false;
-      // Validate function name
-      if (!data.functionName || data.functionName.length === 0) return false;
-      // Validate args
-      if (!Array.isArray(data.args)) return false;
+      // Validate calldata
+      if (!/^0x[a-fA-F0-9]*$/.test(data.data)) return false;
+      if (data.data.length < 10) return false; // at least 4-byte selector
+      if ((data.data.length - 2) % 2 !== 0) return false;
       // Validate value
       if (!/^\d+$/.test(data.value)) return false;
 
@@ -359,8 +358,7 @@ describe('NFT Mint Flow - Transaction Data', () => {
       const data: MintPrepareData = {
         contractAddress: '0x1234567890123456789012345678901234567890',
         chainId: 1,
-        functionName: 'mint',
-        args: ['0xabcdefabcdefabcdefabcdefabcdefabcdefabcd'],
+        data: '0x12345678',
         value: '0',
       };
       expect(validatePrepareData(data)).toBe(true);
@@ -370,8 +368,7 @@ describe('NFT Mint Flow - Transaction Data', () => {
       const data: MintPrepareData = {
         contractAddress: 'invalid',
         chainId: 1,
-        functionName: 'mint',
-        args: [],
+        data: '0x12345678',
         value: '0',
       };
       expect(validatePrepareData(data)).toBe(false);
@@ -381,19 +378,17 @@ describe('NFT Mint Flow - Transaction Data', () => {
       const data: MintPrepareData = {
         contractAddress: '0x1234567890123456789012345678901234567890',
         chainId: 0,
-        functionName: 'mint',
-        args: [],
+        data: '0x12345678',
         value: '0',
       };
       expect(validatePrepareData(data)).toBe(false);
     });
 
-    test('should reject empty function name', () => {
+    test('should reject invalid calldata', () => {
       const data: MintPrepareData = {
         contractAddress: '0x1234567890123456789012345678901234567890',
         chainId: 1,
-        functionName: '',
-        args: [],
+        data: 'not-hex',
         value: '0',
       };
       expect(validatePrepareData(data)).toBe(false);

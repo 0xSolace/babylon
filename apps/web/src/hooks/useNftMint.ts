@@ -145,21 +145,11 @@ export function useNftMint(): UseNftMintResult {
 
     setFlowState('awaiting_signature');
 
-    if (
-      prepareData.contractAddress ===
-      '0x0000000000000000000000000000000000000000'
-    ) {
-      setError('NFT contract not deployed');
-      toast.error('NFT contract not deployed');
-      setFlowState('error');
-      return;
-    }
-
     setFlowState('minting');
 
     const txHash = await sendSmartWalletTransaction({
       to: prepareData.contractAddress as `0x${string}`,
-      data: encodeMintFunctionCall(prepareData.functionName, prepareData.args),
+      data: prepareData.data,
       value: BigInt(prepareData.value),
     });
 
@@ -243,21 +233,4 @@ export function useNftMint(): UseNftMintResult {
     startMint,
     resetFlow,
   };
-}
-
-function encodeMintFunctionCall(
-  functionName: string,
-  args: string[]
-): `0x${string}` {
-  if (functionName !== 'mint' || args.length !== 1) {
-    throw new Error(`Unsupported: ${functionName}(${args.length} args)`);
-  }
-
-  const address = args[0]!;
-  if (!/^0x[a-fA-F0-9]{40}$/.test(address)) {
-    throw new Error(`Invalid address: ${address}`);
-  }
-
-  // mint(address) selector + padded address
-  return `0x6a627842${address.slice(2).toLowerCase().padStart(64, '0')}` as `0x${string}`;
 }

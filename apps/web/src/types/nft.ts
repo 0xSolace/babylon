@@ -122,8 +122,7 @@ export interface EligibilityResponse {
 export interface MintPrepareResponse {
   contractAddress: string;
   chainId: number;
-  functionName: string;
-  args: string[];
+  data: `0x${string}`;
   value: string;
 }
 

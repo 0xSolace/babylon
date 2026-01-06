@@ -509,17 +509,15 @@ describe('NFT Gallery API - Response Structure', () => {
       const prepareResponse = {
         contractAddress: VALID_WALLET,
         chainId: 1,
-        functionName: 'mint',
-        args: [VALID_WALLET],
+        data: '0x12345678',
         value: '0',
       };
 
       expect(prepareResponse).toHaveProperty('contractAddress');
       expect(prepareResponse).toHaveProperty('chainId');
-      expect(prepareResponse).toHaveProperty('functionName');
-      expect(prepareResponse).toHaveProperty('args');
+      expect(prepareResponse).toHaveProperty('data');
       expect(prepareResponse).toHaveProperty('value');
-      expect(Array.isArray(prepareResponse.args)).toBe(true);
+      expect(prepareResponse.data).toMatch(/^0x[a-fA-F0-9]+$/);
     });
 
     test('should have correct confirm response structure', () => {
