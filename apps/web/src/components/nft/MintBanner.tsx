@@ -20,7 +20,12 @@ export function MintBanner({ onMintClick }: MintBannerProps) {
   const loading = !ready || isCheckingEligibility;
 
   const handleMintClick = () => {
-    onMintClick?.() ?? startMint();
+    if (onMintClick) {
+      onMintClick();
+      return;
+    }
+
+    startMint();
   };
 
   // Not authenticated
