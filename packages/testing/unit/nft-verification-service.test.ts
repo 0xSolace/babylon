@@ -179,4 +179,42 @@ describe('NFTVerificationService', () => {
       expect(validAddress).toMatch(/^0x[a-fA-F0-9]{40}$/);
     });
   });
+
+  describe('verifyMintTransaction - Input Validation', () => {
+    test('should reject invalid transaction hash format', async () => {
+      const result = await NFTVerificationService.verifyMintTransaction(
+        'not-a-tx-hash',
+        validContract,
+        validWallet,
+        1
+      );
+
+      expect(result.valid).toBe(false);
+      expect(result.reason).toContain('Invalid transaction hash');
+    });
+
+    test('should reject invalid contract address format', async () => {
+      const result = await NFTVerificationService.verifyMintTransaction(
+        '0x' + '1'.repeat(64),
+        'not-an-address',
+        validWallet,
+        1
+      );
+
+      expect(result.valid).toBe(false);
+      expect(result.reason).toContain('Invalid contract address');
+    });
+
+    test('should reject invalid recipient address format', async () => {
+      const result = await NFTVerificationService.verifyMintTransaction(
+        '0x' + '1'.repeat(64),
+        validContract,
+        'not-an-address',
+        1
+      );
+
+      expect(result.valid).toBe(false);
+      expect(result.reason).toContain('Invalid recipient address');
+    });
+  });
 });

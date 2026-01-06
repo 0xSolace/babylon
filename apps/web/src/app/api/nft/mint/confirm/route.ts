@@ -3,14 +3,13 @@ import {
   BadRequestError,
   ConflictError,
   ForbiddenError,
-  InternalServerError,
+  NFTVerificationService,
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
 import {
   db,
   eq,
-  isNull,
   nftClaims,
   nftCollection,
   nftOwnership,
@@ -23,10 +22,26 @@ import type { MintConfirmRequest, MintConfirmResponse } from '@/types/nft';
 
 const TX_HASH_REGEX = /^0x[a-fA-F0-9]{64}$/;
 const ADDRESS_REGEX = /^0x[a-fA-F0-9]{40}$/;
+const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
+
+const NFT_CONTRACT_ADDRESS = process.env.NFT_CONTRACT_ADDRESS;
+const NFT_CHAIN_ID = parseInt(process.env.NFT_CHAIN_ID ?? '1', 10);
 
 export const POST = withErrorHandling(async (request: NextRequest) => {
   const authUser = await authenticate(request);
   const userId = authUser.dbUserId ?? authUser.userId;
+
+  if (
+    !NFT_CONTRACT_ADDRESS ||
+    !ADDRESS_REGEX.test(NFT_CONTRACT_ADDRESS) ||
+    NFT_CONTRACT_ADDRESS.toLowerCase() === ZERO_ADDRESS
+  ) {
+    throw new BadRequestError('NFT minting is not available yet');
+  }
+
+  if (Number.isNaN(NFT_CHAIN_ID) || NFT_CHAIN_ID <= 0) {
+    throw new BadRequestError('Invalid NFT chain configuration');
+  }
 
   const body = (await request.json()) as MintConfirmRequest;
   const { txHash, walletAddress } = body;
@@ -58,6 +73,22 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
 
   const now = new Date();
 
+  // Confirm on-chain mint before mutating DB.
+  const verification = await NFTVerificationService.verifyMintTransaction(
+    txHash,
+    NFT_CONTRACT_ADDRESS,
+    walletAddress,
+    NFT_CHAIN_ID
+  );
+
+  if (!verification.valid || verification.tokenId === undefined) {
+    throw new BadRequestError(
+      verification.reason ?? 'Unable to verify mint transaction'
+    );
+  }
+
+  const mintedTokenId = verification.tokenId;
+
   const result = await db.transaction(async (tx) => {
     const [snapshotEntry] = await tx
       .select({
@@ -80,7 +111,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
       throw new ConflictError('Already minted');
     }
 
-    const unclaimedNfts = await tx
+    const [mintedNft] = await tx
       .select({
         tokenId: nftCollection.tokenId,
         name: nftCollection.name,
@@ -89,21 +120,28 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
         storyTitle: nftCollection.storyTitle,
       })
       .from(nftCollection)
-      .leftJoin(nftOwnership, eq(nftCollection.tokenId, nftOwnership.tokenId))
-      .where(isNull(nftOwnership.tokenId));
+      .where(eq(nftCollection.tokenId, mintedTokenId))
+      .limit(1);
 
-    if (unclaimedNfts.length === 0) {
-      throw new InternalServerError('No NFTs available');
+    if (!mintedNft) {
+      throw new BadRequestError('Minted token is not part of this collection');
     }
 
-    const assignedNft =
-      unclaimedNfts[Math.floor(Math.random() * unclaimedNfts.length)]!;
+    const [existingOwnership] = await tx
+      .select({ tokenId: nftOwnership.tokenId })
+      .from(nftOwnership)
+      .where(eq(nftOwnership.tokenId, mintedTokenId))
+      .limit(1);
+
+    if (existingOwnership) {
+      throw new ConflictError('NFT already claimed');
+    }
 
     await tx
       .update(nftSnapshot)
       .set({
         hasMinted: true,
-        mintedTokenId: assignedNft.tokenId,
+        mintedTokenId: mintedTokenId,
         mintedAt: now,
         mintTxHash: txHash,
       })
@@ -111,7 +149,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
 
     await tx.insert(nftOwnership).values({
       id: nanoid(),
-      tokenId: assignedNft.tokenId,
+      tokenId: mintedTokenId,
       ownerAddress: walletAddress.toLowerCase(),
       userId: userId,
       acquiredAt: now,
@@ -121,7 +159,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
 
     await tx.insert(nftClaims).values({
       id: nanoid(),
-      tokenId: assignedNft.tokenId,
+      tokenId: mintedTokenId,
       claimerUserId: userId,
       claimerAddress: walletAddress.toLowerCase(),
       claimedAt: now,
@@ -130,20 +168,20 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
       snapshotPoints: snapshotEntry.points,
     });
 
-    return { assignedNft, snapshotEntry };
+    return { mintedNft, snapshotEntry };
   });
 
-  const { assignedNft } = result;
+  const { mintedNft } = result;
 
   return successResponse({
     success: true,
-    tokenId: assignedNft.tokenId,
+    tokenId: mintedNft.tokenId,
     nft: {
-      tokenId: assignedNft.tokenId,
-      name: assignedNft.name,
-      imageUrl: assignedNft.imageUrl,
-      thumbnailUrl: assignedNft.thumbnailUrl,
-      storyTitle: assignedNft.storyTitle,
+      tokenId: mintedNft.tokenId,
+      name: mintedNft.name,
+      imageUrl: mintedNft.imageUrl,
+      thumbnailUrl: mintedNft.thumbnailUrl,
+      storyTitle: mintedNft.storyTitle,
     },
   } satisfies MintConfirmResponse);
 });

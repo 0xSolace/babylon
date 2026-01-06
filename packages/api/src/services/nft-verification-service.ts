@@ -13,9 +13,11 @@ import type { Address } from 'viem';
 import {
   type Chain,
   createPublicClient,
+  decodeEventLog,
   http,
   isAddress,
   parseAbi,
+  parseAbiItem,
 } from 'viem';
 import {
   CACHE_KEYS,
@@ -29,6 +31,11 @@ const ERC721_ABI = [
   'function balanceOf(address owner) external view returns (uint256)',
   'function ownerOf(uint256 tokenId) external view returns (address)',
 ] as const;
+
+const ERC721_TRANSFER_EVENT = parseAbiItem(
+  'event Transfer(address indexed from, address indexed to, uint256 indexed tokenId)'
+);
+const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000' as const;
 
 const CHAIN_CONFIG: Record<number, { chain: Chain; rpcUrl: string }> = {
   [hardhat.id]: {
@@ -66,6 +73,106 @@ function getChainConfig(chainId: number) {
 }
 
 export class NFTVerificationService {
+  static async verifyMintTransaction(
+    txHash: string,
+    contractAddress: string,
+    recipientAddress: string,
+    chainId?: number
+  ): Promise<{ valid: boolean; tokenId?: number; reason?: string }> {
+    if (!/^0x[a-fA-F0-9]{64}$/.test(txHash)) {
+      return { valid: false, reason: 'Invalid transaction hash' };
+    }
+
+    if (!isAddress(contractAddress)) {
+      return { valid: false, reason: 'Invalid contract address' };
+    }
+
+    if (!isAddress(recipientAddress)) {
+      return { valid: false, reason: 'Invalid recipient address' };
+    }
+
+    const targetChainId = chainId ?? getCurrentChainId();
+    const normalizedContract = contractAddress.toLowerCase() as Address;
+    const normalizedRecipient = recipientAddress.toLowerCase() as Address;
+
+    try {
+      const { chain, rpcUrl } = getChainConfig(targetChainId);
+      const publicClient = createPublicClient({
+        chain,
+        transport: http(rpcUrl, { timeout: 10000 }),
+      });
+
+      const receipt = await publicClient.getTransactionReceipt({
+        hash: txHash as `0x${string}`,
+      });
+
+      if (receipt.status !== 'success') {
+        return { valid: false, reason: 'Transaction failed' };
+      }
+
+      if (!receipt.to || receipt.to.toLowerCase() !== normalizedContract) {
+        return {
+          valid: false,
+          reason: 'Transaction not sent to mint contract',
+        };
+      }
+
+      for (const log of receipt.logs) {
+        if (log.address.toLowerCase() !== normalizedContract) continue;
+
+        let decoded: ReturnType<typeof decodeEventLog> | null = null;
+        try {
+          decoded = decodeEventLog({
+            abi: [ERC721_TRANSFER_EVENT],
+            data: log.data,
+            topics: log.topics,
+          });
+        } catch {
+          continue;
+        }
+
+        if (!decoded || decoded.eventName !== 'Transfer') continue;
+
+        const from = (decoded.args as { from: Address; to: Address }).from;
+        const to = (decoded.args as { from: Address; to: Address }).to;
+
+        if (
+          from.toLowerCase() !== ZERO_ADDRESS ||
+          to.toLowerCase() !== normalizedRecipient
+        ) {
+          continue;
+        }
+
+        const tokenIdBigInt = (decoded.args as { tokenId: bigint }).tokenId;
+        if (tokenIdBigInt > BigInt(Number.MAX_SAFE_INTEGER)) {
+          return { valid: false, reason: 'Minted tokenId is too large' };
+        }
+
+        return { valid: true, tokenId: Number(tokenIdBigInt) };
+      }
+
+      return {
+        valid: false,
+        reason: 'No ERC721 mint transfer found for recipient',
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      logger.warn(
+        'Failed to verify mint transaction',
+        {
+          txHash,
+          contractAddress: normalizedContract,
+          recipientAddress: normalizedRecipient,
+          chainId: targetChainId,
+          error: message,
+        },
+        'NFTVerificationService'
+      );
+
+      return { valid: false, reason: 'Unable to verify transaction' };
+    }
+  }
+
   static async verifyOwnership(
     walletAddress: string,
     contractAddress: string,
