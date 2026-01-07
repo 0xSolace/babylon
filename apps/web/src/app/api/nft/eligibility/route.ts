@@ -55,7 +55,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
         ? {
             tokenId: mintedNft.tokenId,
             name: mintedNft.name,
-            thumbnailUrl: mintedNft.thumbnailUrl ?? '',
+            thumbnailUrl: `/api/nft/image/${mintedNft.tokenId}`,
             txHash: snapshotEntry.mintTxHash ?? '',
           }
         : undefined,

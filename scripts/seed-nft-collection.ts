@@ -32,31 +32,14 @@ const TOTAL_NFTS = 100;
 const PLACEHOLDER_CONTRACT = '0x0000000000000000000000000000000000000000';
 const PLACEHOLDER_CHAIN_ID = 1;
 
-// GitHub repository paths for NFT metadata and images
+// GitHub repository for NFT metadata
 const GITHUB_REPO = 'BabylonSocial/ProductManagementDocumentation';
-const GITHUB_BRANCH = 'main';
-const NFT_FOLDER = 'NFT%20Protomonkeys';
 
-// Get GitHub raw URL for NFT image
-// Use GitHub API download_url for reliable access (works for both public and private repos)
-async function getNftImageUrl(tokenId: number): Promise<string> {
-  try {
-    const filePath = `NFT Protomonkeys/images/${tokenId}.png`;
-    const command = `gh api repos/${GITHUB_REPO}/contents/${encodeURIComponent(filePath)} --jq .download_url`;
-    const downloadUrl = execSync(command, {
-      encoding: 'utf-8',
-      stdio: ['pipe', 'pipe', 'pipe'],
-    }).trim();
-    return downloadUrl;
-  } catch (error) {
-    // Fallback to raw URL if API fails
-    logger.warn(
-      `Failed to get download URL for image #${tokenId}, using raw URL fallback`,
-      { error: String(error) },
-      'SeedNFT'
-    );
-    return `https://raw.githubusercontent.com/${GITHUB_REPO}/${GITHUB_BRANCH}/${NFT_FOLDER}/images/${tokenId}.png`;
-  }
+// Get NFT image path identifier
+// Note: API routes will convert this to proxy URLs, but we store a simple identifier
+function getNftImagePath(tokenId: number): string {
+  // Store a simple path identifier - API routes will convert to proxy URLs
+  return `nft://${tokenId}`;
 }
 
 interface NftMetadata {
@@ -302,15 +285,15 @@ async function seedCollection(): Promise<void> {
       failCount++;
 
       // Fallback to placeholder data
-      const imageUrl = await getNftImageUrl(tokenId);
+      const imagePath = getNftImagePath(tokenId);
       await db.insert(nftCollection).values({
         id: nanoid(),
         tokenId,
         name: `Babylon #${tokenId}`,
         description:
           'Your onchain identity inside Babylon, the social arena where humans and AI agents compete together in real time prediction markets.',
-        imageUrl,
-        thumbnailUrl: imageUrl, // Same URL, browser will resize
+        imageUrl: imagePath,
+        thumbnailUrl: imagePath,
         imageCid: null,
         storyTitle: `ProtoMonkey #${tokenId}`,
         storyContent:
@@ -336,8 +319,8 @@ async function seedCollection(): Promise<void> {
       metadata.attributes
     );
 
-    // Get image URL from GitHub API
-    const imageUrl = await getNftImageUrl(tokenId);
+    // Get image path identifier (API routes will convert to proxy URLs)
+    const imagePath = getNftImagePath(tokenId);
 
     // Use actual metadata
     await db.insert(nftCollection).values({
@@ -345,8 +328,8 @@ async function seedCollection(): Promise<void> {
       tokenId,
       name: metadata.nftName, // Use the actual NFT name from attributes
       description: uniqueDescription, // Use generated unique description
-      imageUrl,
-      thumbnailUrl: imageUrl, // Same URL, browser will resize
+      imageUrl: imagePath,
+      thumbnailUrl: imagePath,
       imageCid: null, // Will be set when uploaded to IPFS
       storyTitle: metadata.nftName,
       storyContent: uniqueDescription, // Use generated description for story too

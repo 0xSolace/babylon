@@ -96,13 +96,14 @@ export const GET = withErrorHandling(
       .where(eq(nftClaims.tokenId, tokenId))
       .limit(1);
 
-    // Build response
+    // Build response - use proxy API URLs for reliable image serving
+    const imageUrl = `/api/nft/image/${nft.tokenId}`;
     const nftDetail: NftDetail = {
       tokenId: nft.tokenId,
       name: nft.name,
       description: nft.description,
-      imageUrl: nft.imageUrl,
-      thumbnailUrl: nft.thumbnailUrl,
+      imageUrl,
+      thumbnailUrl: imageUrl,
       imageCid: nft.imageCid,
       imageResolution: '4096x4096',
       metadataUri: nft.metadataUri,

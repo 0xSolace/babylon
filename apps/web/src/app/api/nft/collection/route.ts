@@ -139,27 +139,32 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   }
 
   // Transform results to response format
-  const nfts: NftSummary[] = nftsResult.map((nft) => ({
-    tokenId: nft.tokenId,
-    name: nft.name,
-    thumbnailUrl: nft.thumbnailUrl ?? nft.imageUrl,
-    imageUrl: nft.imageUrl,
-    owner: nft.ownerAddress
-      ? {
-          walletAddress: nft.ownerAddress,
-          user: nft.ownerUserId
-            ? {
-                id: nft.ownerUserId,
-                username: nft.ownerUsername,
-                displayName: nft.ownerDisplayName,
-                profileImageUrl: nft.ownerProfileImageUrl,
-              }
-            : null,
-          acquiredAt: nft.acquiredAt?.toISOString() ?? new Date().toISOString(),
-          txHash: nft.txHash,
-        }
-      : null,
-  }));
+  const nfts: NftSummary[] = nftsResult.map((nft) => {
+    // Use proxy API URLs for reliable image serving
+    const imageUrl = `/api/nft/image/${nft.tokenId}`;
+    return {
+      tokenId: nft.tokenId,
+      name: nft.name,
+      thumbnailUrl: imageUrl,
+      imageUrl,
+      owner: nft.ownerAddress
+        ? {
+            walletAddress: nft.ownerAddress,
+            user: nft.ownerUserId
+              ? {
+                  id: nft.ownerUserId,
+                  username: nft.ownerUsername,
+                  displayName: nft.ownerDisplayName,
+                  profileImageUrl: nft.ownerProfileImageUrl,
+                }
+              : null,
+            acquiredAt:
+              nft.acquiredAt?.toISOString() ?? new Date().toISOString(),
+            txHash: nft.txHash,
+          }
+        : null,
+    };
+  });
 
   // Calculate total for current filter
   const filteredTotal =
