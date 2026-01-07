@@ -227,7 +227,7 @@ describe('Babylon Training RLAIF Integration', () => {
         reward: 0.5,
         llmCalls: [
           {
-            model: 'gpt-4',
+            model: 'gpt-5',
             systemPrompt: 'You are a trader',
             userPrompt: 'Analyze this market',
             response: 'I recommend buying',

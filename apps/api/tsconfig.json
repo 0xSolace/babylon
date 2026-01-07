@@ -1,0 +1,12 @@
+{
+  "extends": "../../packages/tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "./dist",
+    "noEmit": true,
+    "types": ["bun-types"],
+    "noImplicitAny": false,
+    "strict": false
+  },
+  "include": ["src/**/*", "dws-worker.ts"],
+  "exclude": ["node_modules", "dist"]
+}

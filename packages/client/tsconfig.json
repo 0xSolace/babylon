@@ -20,8 +20,8 @@
     "types": ["bun-types"],
     "baseUrl": ".",
     "paths": {
-      "@babylon/server": ["../../apps/server/src/index.ts"],
-      "@babylon/server/*": ["../../apps/server/src/*"],
+      "@babylon/server": ["../../apps/api/src/index.ts"],
+      "@babylon/server/*": ["../../apps/api/src/*"]
     }
   },
   "include": ["src/**/*"],

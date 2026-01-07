@@ -15,9 +15,9 @@
       "project": ["**/*.{ts,tsx}"],
       "ignore": ["pages/_generated/**"]
     },
-    "apps/server": {
-      "entry": ["src/index.ts", "src/app.ts"],
-      "project": ["src/**/*.ts"],
+    "apps/api": {
+      "entry": ["src/index.ts", "src/app.ts", "dws-worker.ts"],
+      "project": ["src/**/*.ts", "dws-worker.ts"],
       "ignore": [
         "src/middleware/auth.ts"
       ]

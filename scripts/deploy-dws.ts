@@ -40,6 +40,7 @@ interface DeployConfig {
   dryRun: boolean
   skipFrontend: boolean
   skipBackend: boolean
+  skipMedia: boolean
 }
 
 function parseArgs(): DeployConfig {
@@ -49,13 +50,14 @@ function parseArgs(): DeployConfig {
   const dryRun = args.includes('--dry-run')
   const skipFrontend = args.includes('--skip-frontend')
   const skipBackend = args.includes('--skip-backend')
+  const skipMedia = args.includes('--skip-media')
 
   if (network !== 'localnet' && network !== 'testnet' && network !== 'mainnet') {
     console.error('Invalid network. Use --network=localnet, --network=testnet or --network=mainnet')
     process.exit(1)
   }
 
-  return { network: network as 'localnet' | 'testnet' | 'mainnet', dryRun, skipFrontend, skipBackend }
+  return { network: network as 'localnet' | 'testnet' | 'mainnet', dryRun, skipFrontend, skipBackend, skipMedia }
 }
 
 async function buildFrontend(config: DeployConfig): Promise<string> {
@@ -103,73 +105,51 @@ async function buildFrontend(config: DeployConfig): Promise<string> {
 async function buildBackend(config: DeployConfig): Promise<string> {
   console.log('\n📦 Building backend worker...')
 
-  const workerEntry = join(process.cwd(), 'apps/api/dws-worker-minimal.ts')
+  const workerEntry = join(process.cwd(), 'apps/api/dws-worker.ts')
   const distDir = join(process.cwd(), 'dist/worker')
 
   if (!existsSync(workerEntry)) {
     throw new Error(`Worker entry not found: ${workerEntry}`)
   }
 
-  // Clean dist directory
-  const { rmSync, mkdirSync } = await import('node:fs')
-  if (existsSync(distDir)) {
-    rmSync(distDir, { recursive: true })
-  }
-  mkdirSync(distDir, { recursive: true })
-
-  // Use Bun.build for proper tree shaking and optimization
-  // Only externalize true runtime dependencies (node builtins, bun:sqlite)
-  const buildResult = await Bun.build({
-    entrypoints: [workerEntry],
-    outdir: distDir,
-    target: 'bun',
-    minify: true,
-    sourcemap: 'external',
-    splitting: false,
-    packages: 'bundle', // Bundle all packages for tree shaking
-    drop: ['debugger'],
-    external: [
-      // Only externalize actual runtime dependencies
-      'bun:sqlite',
-      'node:*',
-      // Heavy ML packages that should be loaded separately
-      '@tensorflow/*',
-    ],
-    define: {
-      'process.env.NODE_ENV': JSON.stringify('production'),
-      'process.env.JEJU_NETWORK': JSON.stringify(config.network),
+  // Use esbuild script for better path alias resolution
+  console.log('   Running esbuild-backend.ts...')
+  const buildProc = Bun.spawn(['bun', 'run', 'scripts/esbuild-backend.ts'], {
+    cwd: process.cwd(),
+    env: {
+      ...process.env,
+      NETWORK: config.network,
+      JEJU_NETWORK: config.network,
     },
-    naming: {
-      entry: 'dws-worker-minimal.js',
-    },
+    stdout: 'inherit',
+    stderr: 'inherit',
   })
 
-  if (!buildResult.success) {
-    console.error('Backend build failed:')
-    for (const log of buildResult.logs) {
-      console.error(log)
-    }
+  const exitCode = await buildProc.exited
+  if (exitCode !== 0) {
     throw new Error('Backend build failed')
   }
 
-  const bundlePath = join(distDir, 'dws-worker-minimal.js')
+  const bundlePath = join(distDir, 'index.js')
   if (!existsSync(bundlePath)) {
     throw new Error(`Bundle not found: ${bundlePath}`)
   }
 
-  // Report bundle sizes
-  console.log('\n📊 Backend Bundle Sizes:')
-  let totalSize = 0
-  for (const output of buildResult.outputs) {
-    const size = output.size
-    totalSize += size
-    const sizeStr = size > 1024 * 1024 
-      ? `${(size / (1024 * 1024)).toFixed(2)} MB`
-      : `${(size / 1024).toFixed(1)} KB`
-    console.log(`   ${sizeStr.padStart(10)}  ${output.kind.padEnd(12)}  ${output.path.split('/').pop()}`)
+  // Report bundle size
+  const bundleFile = Bun.file(bundlePath)
+  const size = bundleFile.size
+  const sizeStr = size > 1024 * 1024 
+    ? `${(size / (1024 * 1024)).toFixed(2)} MB`
+    : `${(size / 1024).toFixed(1)} KB`
+  
+  console.log(`\n📊 Backend Bundle Size: ${sizeStr}`)
+  
+  // Warn if bundle is too large for workers
+  if (size > 50 * 1024 * 1024) {
+    console.warn('   ⚠️  Bundle exceeds 50MB - may be too large for worker deployment')
+  } else if (size > 25 * 1024 * 1024) {
+    console.warn('   ⚠️  Bundle exceeds 25MB - consider optimizing')
   }
-  console.log(`   ${'─'.repeat(40)}`)
-  console.log(`   ${totalSize > 1024 * 1024 ? `${(totalSize / (1024 * 1024)).toFixed(2)} MB` : `${(totalSize / 1024).toFixed(1)} KB`.padStart(10)}  Total`)
 
   console.log('✅ Backend built')
 
@@ -394,6 +374,34 @@ async function deployBackendWorker(
   return result.functionId
 }
 
+async function uploadMediaToCDN(config: DeployConfig): Promise<void> {
+  console.log('\n🖼️  Uploading media assets to CDN...')
+
+  if (config.dryRun) {
+    console.log('   [DRY RUN] Would upload media from apps/web/public/{images,assets}')
+    return
+  }
+
+  // Run the media upload script
+  const uploadProc = Bun.spawn(['bun', 'run', 'scripts/upload-media-cdn.ts'], {
+    cwd: process.cwd(),
+    env: {
+      ...process.env,
+      NETWORK: config.network,
+    },
+    stdout: 'inherit',
+    stderr: 'inherit',
+  })
+
+  const exitCode = await uploadProc.exited
+  if (exitCode !== 0) {
+    console.warn('⚠️  Media upload failed - continuing with deployment')
+    console.warn('   Media can be uploaded separately with: bun run scripts/upload-media-cdn.ts')
+  } else {
+    console.log('✅ Media uploaded to CDN')
+  }
+}
+
 async function deploy(): Promise<void> {
   const config = parseArgs()
 
@@ -402,10 +410,18 @@ async function deploy(): Promise<void> {
   console.log('═══════════════════════════════════════════════════════════')
   console.log(`  Network:       ${config.network}`)
   console.log(`  Mode:          ${config.dryRun ? 'DRY RUN' : 'DEPLOY'}`)
+  console.log(`  Skip frontend: ${config.skipFrontend}`)
+  console.log(`  Skip backend:  ${config.skipBackend}`)
+  console.log(`  Skip media:    ${config.skipMedia}`)
   console.log('═══════════════════════════════════════════════════════════')
 
   let frontendCid: string | null = null
   let backendWorkerId: string | null = null
+
+  // Upload media to CDN first (so frontend can reference CDN URLs)
+  if (!config.skipMedia) {
+    await uploadMediaToCDN(config)
+  }
 
   if (!config.skipFrontend) {
     const buildDir = await buildFrontend(config)

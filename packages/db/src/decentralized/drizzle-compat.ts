@@ -249,6 +249,11 @@ function serializeCondition(
   condition: SQLCondition,
   paramOffset: number,
 ): SerializedCondition {
+  // Guard against undefined/null conditions
+  if (!condition || condition.type === undefined) {
+    return { sql: '1=1', params: [] }
+  }
+
   const idx = paramOffset
   const params: QueryParam[] = []
 
@@ -423,6 +428,8 @@ export class SelectBuilder<T extends Record<string, unknown>>
   private _orderBy: string[] = []
   private _limit: number | null = null
   private _offset: number | null = null
+  private _joins: string[] = []
+  private _groupBy: string[] = []
 
   constructor(
     private executor: Executor,
@@ -445,8 +452,44 @@ export class SelectBuilder<T extends Record<string, unknown>>
     return this
   }
 
-  where(condition: SQLCondition): SelectBuilder<T> {
-    this._where = condition
+  innerJoin(
+    table: object | string,
+    condition: SQLCondition | undefined,
+  ): SelectBuilder<T> {
+    const joinTable = typeof table === 'string' ? table : getTableName(table)
+    if (condition) {
+      const condResult = serializeCondition(condition, 1)
+      this._joins.push(`INNER JOIN "${joinTable}" ON ${condResult.sql}`)
+    } else {
+      this._joins.push(`INNER JOIN "${joinTable}"`)
+    }
+    return this
+  }
+
+  leftJoin(
+    table: object | string,
+    condition: SQLCondition | undefined,
+  ): SelectBuilder<T> {
+    const joinTable = typeof table === 'string' ? table : getTableName(table)
+    if (condition) {
+      const condResult = serializeCondition(condition, 1)
+      this._joins.push(`LEFT JOIN "${joinTable}" ON ${condResult.sql}`)
+    } else {
+      this._joins.push(`LEFT JOIN "${joinTable}"`)
+    }
+    return this
+  }
+
+  groupBy(...columns: (string | { name: string })[]): SelectBuilder<T> {
+    for (const col of columns) {
+      const colName = typeof col === 'string' ? col : col.name
+      this._groupBy.push(`"${colName}"`)
+    }
+    return this
+  }
+
+  where(condition: SQLCondition | undefined): SelectBuilder<T> {
+    if (condition) this._where = condition
     return this
   }
 
@@ -473,10 +516,19 @@ export class SelectBuilder<T extends Record<string, unknown>>
     let sql = `SELECT ${this._fields} FROM "${this._table}"`
     const params: QueryParam[] = []
 
+    // Add joins
+    if (this._joins.length) {
+      sql += ` ${this._joins.join(' ')}`
+    }
+
     if (this._where) {
-      const whereResult = serializeCondition(this._where, 1)
+      const whereResult = serializeCondition(this._where, params.length + 1)
       sql += ` WHERE ${whereResult.sql}`
       params.push(...whereResult.params)
+    }
+
+    if (this._groupBy.length) {
+      sql += ` GROUP BY ${this._groupBy.join(', ')}`
     }
 
     if (this._orderBy.length) {
@@ -514,6 +566,9 @@ export class InsertBuilder<T extends Record<string, unknown>>
   private _table = ''
   private _values: Record<string, SQLValue>[] = []
   private _returning = false
+  private _onConflict: 'doNothing' | 'doUpdate' | null = null
+  private _conflictTarget: string[] = []
+  private _conflictUpdate: Record<string, SQLValue> = {}
 
   constructor(
     private executor: Executor,
@@ -531,6 +586,30 @@ export class InsertBuilder<T extends Record<string, unknown>>
 
   returning(): InsertBuilder<T> {
     this._returning = true
+    return this
+  }
+
+  onConflictDoNothing(opts?: {
+    target?: ColumnInput | ColumnInput[]
+  }): InsertBuilder<T> {
+    this._onConflict = 'doNothing'
+    if (opts?.target) {
+      const targets = Array.isArray(opts.target) ? opts.target : [opts.target]
+      this._conflictTarget = targets.map(getColName)
+    }
+    return this
+  }
+
+  onConflictDoUpdate(opts: {
+    target?: ColumnInput | ColumnInput[]
+    set: Record<string, SQLValue>
+  }): InsertBuilder<T> {
+    this._onConflict = 'doUpdate'
+    if (opts.target) {
+      const targets = Array.isArray(opts.target) ? opts.target : [opts.target]
+      this._conflictTarget = targets.map(getColName)
+    }
+    this._conflictUpdate = opts.set
     return this
   }
 
@@ -555,6 +634,26 @@ export class InsertBuilder<T extends Record<string, unknown>>
     }
 
     let sql = `INSERT INTO "${this._table}" (${columns.map((c) => `"${c}"`).join(', ')}) VALUES ${valueGroups.join(', ')}`
+
+    // Handle ON CONFLICT
+    if (this._onConflict === 'doNothing') {
+      if (this._conflictTarget.length > 0) {
+        sql += ` ON CONFLICT (${this._conflictTarget.map((c) => `"${c}"`).join(', ')}) DO NOTHING`
+      } else {
+        sql += ' ON CONFLICT DO NOTHING'
+      }
+    } else if (this._onConflict === 'doUpdate') {
+      const updateParts: string[] = []
+      for (const [col, val] of Object.entries(this._conflictUpdate)) {
+        params.push(toQueryParam(val))
+        updateParts.push(`"${col}" = $${params.length}`)
+      }
+      if (this._conflictTarget.length > 0) {
+        sql += ` ON CONFLICT (${this._conflictTarget.map((c) => `"${c}"`).join(', ')}) DO UPDATE SET ${updateParts.join(', ')}`
+      } else {
+        sql += ` ON CONFLICT DO UPDATE SET ${updateParts.join(', ')}`
+      }
+    }
 
     if (this._returning) {
       sql += ' RETURNING *'
@@ -601,8 +700,8 @@ export class UpdateBuilder<T extends Record<string, unknown>>
     return this
   }
 
-  where(condition: SQLCondition): UpdateBuilder<T> {
-    this._where = condition
+  where(condition: SQLCondition | undefined): UpdateBuilder<T> {
+    if (condition) this._where = condition
     return this
   }
 
@@ -667,8 +766,8 @@ export class DeleteBuilder<T extends Record<string, unknown>>
     this._table = typeof table === 'string' ? table : getTableName(table)
   }
 
-  where(condition: SQLCondition): DeleteBuilder<T> {
-    this._where = condition
+  where(condition: SQLCondition | undefined): DeleteBuilder<T> {
+    if (condition) this._where = condition
     return this
   }
 

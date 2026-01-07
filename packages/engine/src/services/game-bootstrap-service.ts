@@ -910,6 +910,7 @@ export class GameBootstrapService {
         text: questionText,
         type: 'binary',
         status: 'active',
+        resolutionDate: endDate, // Same as market endDate
         createdAt: now,
         createdDate: now,
         updatedAt: now,

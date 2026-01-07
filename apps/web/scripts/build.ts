@@ -11,7 +11,7 @@
  */
 
 import { existsSync, readdirSync, statSync } from 'node:fs'
-import { cp, mkdir, rm } from 'node:fs/promises'
+import { cp, rm } from 'node:fs/promises'
 import { $ } from 'bun'
 
 // Load manifest for deployment config
@@ -53,6 +53,8 @@ async function buildJS(): Promise<string> {
   // Override with PUBLIC_API_BASE_URL env var if needed
   process.env.PUBLIC_API_BASE_URL = process.env.PUBLIC_API_BASE_URL ?? ''
   process.env.PUBLIC_WAITLIST_MODE = process.env.PUBLIC_WAITLIST_MODE || 'false'
+  // Disable Vite's default public dir copying - we handle it with filtering
+  // This prevents 100MB+ of media from being copied into dist
 
   // Use Vite for production build - better monorepo module resolution
   const viteResult = await $`bunx vite build --outDir ${DIST_DIR}`.quiet()
@@ -130,27 +132,22 @@ async function copyPublicAssetsFiltered(): Promise<void> {
     return
   }
 
-  // Create dist/public
-  await mkdir(`${DIST_DIR}/public`, { recursive: true })
-
-  // Copy only essential files, excluding large media dirs
+  // Copy only essential files to dist root (same level as index.html)
+  // Vite's publicDir copies to dist root, so we match that behavior
   const entries = readdirSync('./public', { withFileTypes: true })
   let excludedSize = 0
 
   for (const entry of entries) {
     const srcPath = `./public/${entry.name}`
-    const destPath = `${DIST_DIR}/public/${entry.name}`
+    const destPath = `${DIST_DIR}/${entry.name}`
 
     if (entry.isDirectory() && EXCLUDED_PUBLIC_DIRS.includes(entry.name)) {
       // Calculate excluded size
-      const _stat = await import('node:fs/promises').then((fs) =>
-        fs.stat(srcPath).catch(() => ({ size: 0 })),
-      )
-      // Estimate directory size
       const files = readdirSync(srcPath, { recursive: true })
       for (const file of files) {
+        const filePath = `${srcPath}/${file}`
         try {
-          const fileStat = statSync(`${srcPath}/${file}`)
+          const fileStat = statSync(filePath)
           if (fileStat.isFile()) excludedSize += fileStat.size
         } catch {
           /* skip */

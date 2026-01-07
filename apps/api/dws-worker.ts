@@ -1,18 +1,16 @@
 /**
  * Babylon API DWS Worker Entry Point
  *
- * This file serves as the entry point for Babylon's backend when deployed
- * on Jeju's Decentralized Web Services (DWS).
+ * CANONICAL entry point for Babylon's backend on DWS.
+ * This is the ONLY worker entry file - do not create alternatives.
  *
- * Supports multiple runtimes:
+ * Supports:
  * - Bun runtime: Direct execution with `bun run dws-worker.ts`
- * - Workerd runtime: Cloudflare Workers compatible with fetch handler
- * - TEE Simulator: Local development with simulated TEE attestation
+ * - Workerd runtime: Cloudflare Workers compatible fetch handler
+ * - DWS scheduled: Cron triggers via scheduled() handler
  *
- * Deployment:
- * 1. Build: bun build apps/api/dws-worker.ts --outdir dist --target bun
- * 2. Upload: jeju storage upload dist/dws-worker.js
- * 3. Deploy: jeju deploy app babylon --target dws
+ * Build & Deploy:
+ *   bun run deploy:dws --network=testnet
  */
 
 import { initializeDatabase } from '@babylon/db'
@@ -21,15 +19,24 @@ import {
   getNetworkName,
   getRpcUrl,
 } from '@babylon/shared/config'
-import { app as elysiaApp } from '../server/src/app'
-import { setupEngineEvents } from '../server/src/engine-events'
-import { toNetwork } from '../server/src/utils'
+import { app as elysiaApp } from './src/app'
+import { setupEngineEvents } from './src/engine-events'
+import { toNetwork } from './src/utils'
 
 // Export the Elysia app for DWS worker invocation
 export const app = elysiaApp
 
 // Cloudflare Workers / workerd compatible fetch handler
 export const fetch = elysiaApp.fetch.bind(elysiaApp)
+
+// Cron schedule to endpoint mapping (must match jeju-manifest.json dws.cron)
+const CRON_MAP: Record<string, string> = {
+  '*/5 * * * *': '/api/cron/game-tick', // game-tick
+  '0 * * * *': '/api/cron/resolve-markets', // market-resolution (hourly)
+  '*/2 * * * *': '/api/cron/agent-tick', // agent-tick
+  '0 */6 * * *': '/api/cron/training-check', // training-check (every 6 hours)
+  // Note: health-check (*/5 * * * *) is handled by DWS keepalive, not cron
+}
 
 // Default export for module workers
 export default {
@@ -50,14 +57,6 @@ export default {
       }
     }
   },
-}
-
-// Cron schedule to endpoint mapping
-const CRON_MAP: Record<string, string> = {
-  '*/5 * * * *': '/api/cron/game-tick',
-  '0 * * * *': '/api/cron/resolve-markets',
-  '*/2 * * * *': '/api/cron/agent-tick',
-  '0 */6 * * *': '/api/cron/training-check',
 }
 
 // Types for Cloudflare Workers compatibility

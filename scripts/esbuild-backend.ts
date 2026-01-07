@@ -166,7 +166,8 @@ const pathAliasPlugin = {
     build.onResolve({ filter: /^@babylon\/client$/ }, () => ({ path: resolve(ROOT_DIR, 'packages/client/src/index.ts') }))
     // CRITICAL: @babylon/server must resolve to app.ts NOT index.ts
     // index.ts has startServer() auto-call which causes double listen() errors
-    build.onResolve({ filter: /^@babylon\/server$/ }, () => ({ path: resolve(ROOT_DIR, 'apps/server/src/app.ts') }))
+    // NOTE: Server consolidated into apps/api
+    build.onResolve({ filter: /^@babylon\/server$/ }, () => ({ path: resolve(ROOT_DIR, 'apps/api/src/app.ts') }))
 
     // @jejunetwork/* packages
     build.onResolve({ filter: /^@jejunetwork\/config$/ }, () => ({ path: resolve(MONOREPO_ROOT, 'packages/config/index.ts') }))
@@ -186,9 +187,8 @@ const pathAliasPlugin = {
 }
 
 const result = await build({
-  // Use bundle-entry.ts which explicitly calls startBabylonWorker()
-  // This avoids race conditions with module initialization
-  entryPoints: [resolve(ROOT_DIR, 'apps/api/bundle-entry.ts')],
+  // Use dws-worker.ts - the canonical worker entry point
+  entryPoints: [resolve(ROOT_DIR, 'apps/api/dws-worker.ts')],
   outfile: resolve(DIST_DIR, 'index.js'),
   bundle: true,
   platform: 'node',
@@ -201,7 +201,7 @@ const result = await build({
   nodePaths: [
     resolve(MONOREPO_ROOT, 'node_modules'),
     resolve(ROOT_DIR, 'node_modules'),
-    resolve(ROOT_DIR, 'apps/server/node_modules'),
+    resolve(ROOT_DIR, 'apps/api/node_modules'),
   ],
   external: [
     'bun',

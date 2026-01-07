@@ -12,6 +12,7 @@ import {
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { App } from './App'
+import './app/globals.css'
 
 // Configure environment based on build - MUST be done before any config reads
 const network = (process.env.NETWORK || 'localnet') as
@@ -29,8 +30,6 @@ setDefaultJejuNetwork(network)
 if (network === 'localnet') {
   setDefaultJejuRpcUrl('http://localhost:6546')
 }
-
-// CSS is built separately with Tailwind CLI and injected via index.html
 
 const rootElement = document.getElementById('root')
 if (!rootElement) {

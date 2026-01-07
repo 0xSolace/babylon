@@ -12,9 +12,15 @@ const API_PORT =
   Number(process.env.BABYLON_API_PORT) || manifest.ports?.api || 5009
 
 export default defineConfig({
-  // Use relative paths for IPFS/decentralized deployment
-  base: process.env.VITE_BASE_URL ?? './',
+  // Use absolute paths for SPA routing (deep links like /post/123)
+  base: '/',
   plugins: [react()],
+  // Use public-essential which excludes large media for production builds
+  // Full public dir is only used in dev (or set VITE_FULL_PUBLIC=true for dev with media)
+  publicDir:
+    process.env.NODE_ENV === 'production' && !process.env.VITE_FULL_PUBLIC
+      ? false // Disable default copying, build.ts handles filtered copy
+      : 'public',
   // Production optimizations
   esbuild: {
     drop: ['debugger'],

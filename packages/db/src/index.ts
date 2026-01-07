@@ -31,7 +31,11 @@ export {
   SQLitTableRepository,
 } from './sqlit-repository'
 
-import { type SQLitClient, db as sqlitDatabase } from './sqlit-client'
+import {
+  type DBProxyType,
+  type SQLitClient,
+  db as sqlitDatabase,
+} from './sqlit-client'
 export { sqlitDatabase as sqlitDb }
 
 // ============================================================================
@@ -120,8 +124,8 @@ export {
 // Types
 // ============================================================================
 
-export type DbClient = SQLitClient
-export type Database = SQLitClient
+export type DbClient = DBProxyType
+export type Database = DBProxyType
 
 // Transaction type matches what db.transaction() provides
 export type Transaction = SQLitClient
@@ -405,6 +409,7 @@ export {
 // ============================================================================
 
 import { createSQLitTables, generateAllDDL } from './decentralized/sqlit-schema'
+import { db as dbProxy } from './sqlit-client'
 import { getDB, initializeDB, resetDB } from './sqlit-repository'
 
 export { generateAllDDL }
@@ -418,12 +423,22 @@ export async function initializeDatabase(): Promise<void> {
         'Start Jeju: cd /path/to/jeju && bun run dev',
     )
   }
+
+  // Initialize BOTH database abstractions - critical for routes that use the DBProxy
+  console.log('[DB] Initializing DBProxy...')
+  await dbProxy.initialize()
+  console.log('[DB] DBProxy initialized')
+
+  console.log('[DB] Initializing DB...')
   const db = await initializeDB()
+  console.log('[DB] DB initialized')
 
   // Create tables if they don't exist (first-run schema setup)
+  console.log(`[DB] Creating tables... (tablesCreated=${tablesCreated})`)
   if (!tablesCreated) {
     await createSQLitTables(db)
     tablesCreated = true
+    console.log('[DB] Tables created')
   }
 }
 

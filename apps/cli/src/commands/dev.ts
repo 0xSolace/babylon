@@ -532,7 +532,7 @@ async function startWebApp(): Promise<void> {
   logger.info(`Using SQLit endpoint: ${sqlitEndpoint}`)
 
   const serverProc = Bun.spawn(['bun', 'run', 'dev'], {
-    cwd: join(BABYLON_ROOT, 'apps/server'),
+    cwd: join(BABYLON_ROOT, 'apps/api'),
     stdout: 'inherit',
     stderr: 'inherit',
     env: {
@@ -575,7 +575,7 @@ async function stopAll(): Promise<void> {
 
   // Stop backend server
   logger.step('Stopping backend server...')
-  await $`pkill -f "bun.*apps/server" || true`.quiet().nothrow()
+  await $`pkill -f "bun.*apps/api" || true`.quiet().nothrow()
 
   // Stop web app (kill Next.js processes)
   logger.step('Stopping web app...')

@@ -58,7 +58,19 @@ export interface AgentCapability {
 
 export interface AgentRegistry {
   id: string
+  userId: string
   agentId: string
+  actorId: string | null
+  name: string
+  description: string | null
+  systemPrompt: string | null
+  type: string
+  status: string
+  trustLevel: number
+  ownerId: string | null
+  runtimeInstanceId: string | null
+  registeredAt: Date
+  updatedAt: Date
   [key: string]: unknown
 }
 

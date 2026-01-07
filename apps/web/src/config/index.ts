@@ -160,17 +160,19 @@ export function _getStorageApiUrl(): string {
 // =============================================================================
 
 /**
- * Get MPC endpoints based on environment.
+ * Get MPC/TEE agent endpoints based on environment.
+ * These are the OAuth3 service endpoints that handle authentication
+ * and use MPC for threshold signing operations.
  */
 export function getMpcEndpoints(): string[] {
   const env = getEnvironment()
   switch (env) {
     case 'mainnet':
-      return ['https://mpc.jejunetwork.org']
+      return ['https://oauth3.jejunetwork.org']
     case 'testnet':
-      return ['https://mpc.testnet.jejunetwork.org']
+      return ['https://oauth3.testnet.jejunetwork.org']
     default:
-      return ['http://localhost:4010']
+      return ['http://localhost:4200']
   }
 }
 
