@@ -15,6 +15,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       rank: nftSnapshot.rank,
       points: nftSnapshot.points,
       snapshotTakenAt: nftSnapshot.snapshotTakenAt,
+      assignedTokenId: nftSnapshot.assignedTokenId,
       hasMinted: nftSnapshot.hasMinted,
       mintedTokenId: nftSnapshot.mintedTokenId,
       mintedAt: nftSnapshot.mintedAt,
@@ -33,6 +34,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     } satisfies EligibilityResponse);
   }
 
+  // User has already claimed their NFT
   if (snapshotEntry.hasMinted && snapshotEntry.mintedTokenId !== null) {
     const [mintedNft] = await db
       .select({
@@ -62,6 +64,31 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     } satisfies EligibilityResponse);
   }
 
+  // User is eligible - fetch their pre-assigned NFT info
+  let assignedNft: EligibilityResponse['assignedNft'] = undefined;
+
+  if (snapshotEntry.assignedTokenId !== null) {
+    const [nft] = await db
+      .select({
+        tokenId: nftCollection.tokenId,
+        name: nftCollection.name,
+        description: nftCollection.description,
+        thumbnailUrl: nftCollection.thumbnailUrl,
+      })
+      .from(nftCollection)
+      .where(eq(nftCollection.tokenId, snapshotEntry.assignedTokenId))
+      .limit(1);
+
+    if (nft) {
+      assignedNft = {
+        tokenId: nft.tokenId,
+        name: nft.name,
+        description: nft.description,
+        thumbnailUrl: `/api/nft/image/${nft.tokenId}`,
+      };
+    }
+  }
+
   return successResponse({
     eligible: true,
     status: 'eligible',
@@ -69,5 +96,6 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     snapshotPoints: snapshotEntry.points,
     snapshotTakenAt: snapshotEntry.snapshotTakenAt.toISOString(),
     hasMinted: false,
+    assignedNft,
   } satisfies EligibilityResponse);
 });

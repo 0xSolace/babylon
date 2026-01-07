@@ -100,8 +100,11 @@ export const nftClaims = pgTable(
 /**
  * NFT Snapshot - Records the Top 100 leaderboard snapshot for eligibility
  *
- * This table stores which users are eligible to mint, based on the
- * midnight UTC snapshot of the leaderboard.
+ * This table stores which users are eligible to claim an NFT based on the
+ * static CSV snapshot (2025-12-31). Each user is pre-assigned exactly one NFT.
+ *
+ * - assignedTokenId: Pre-assigned NFT that the user is entitled to claim (immutable)
+ * - mintedTokenId: Confirmed claimed NFT (set after successful claim)
  */
 export const nftSnapshot = pgTable(
   'NftSnapshot',
@@ -112,6 +115,8 @@ export const nftSnapshot = pgTable(
     rank: integer('rank').notNull(),
     points: integer('points').notNull(),
     snapshotTakenAt: timestamp('snapshotTakenAt', { mode: 'date' }).notNull(),
+    // Pre-assigned NFT tokenId (set by seed script, immutable)
+    assignedTokenId: integer('assignedTokenId'),
     hasMinted: boolean('hasMinted').notNull().default(false),
     mintedTokenId: integer('mintedTokenId'),
     mintedAt: timestamp('mintedAt', { mode: 'date' }),
@@ -119,10 +124,11 @@ export const nftSnapshot = pgTable(
   },
   (table) => [
     unique('NftSnapshot_userId_key').on(table.userId),
-    // Note: rank is NOT unique - it changes frequently during updates
+    unique('NftSnapshot_assignedTokenId_key').on(table.assignedTokenId),
     index('NftSnapshot_walletAddress_idx').on(table.walletAddress),
     index('NftSnapshot_hasMinted_idx').on(table.hasMinted),
     index('NftSnapshot_rank_idx').on(table.rank),
+    index('NftSnapshot_assignedTokenId_idx').on(table.assignedTokenId),
   ]
 );
 

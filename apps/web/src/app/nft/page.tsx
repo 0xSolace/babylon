@@ -270,6 +270,34 @@ export default function NftGalleryPage() {
                   </span>{' '}
                   on the leaderboard
                 </p>
+
+                {/* Show assigned NFT preview */}
+                {eligibility.assignedNft && (
+                  <div className="my-4 rounded-lg border border-border bg-muted/30 p-4">
+                    <p className="mb-2 text-muted-foreground text-xs uppercase">
+                      Your assigned NFT
+                    </p>
+                    <div className="flex items-center gap-3">
+                      <div className="h-16 w-16 overflow-hidden rounded-lg border border-border bg-muted">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={eligibility.assignedNft.thumbnailUrl}
+                          alt={eligibility.assignedNft.name}
+                          className="h-full w-full object-cover"
+                        />
+                      </div>
+                      <div className="text-left">
+                        <p className="font-semibold text-foreground">
+                          {eligibility.assignedNft.name}
+                        </p>
+                        <p className="text-muted-foreground text-sm">
+                          Token #{eligibility.assignedNft.tokenId}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 <p className="mb-6 text-muted-foreground text-sm">
                   Claim your exclusive NFT from the ProtoMonkeys collection
                 </p>

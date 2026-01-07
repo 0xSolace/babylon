@@ -1,12 +1,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
-import { useSmartWallet } from '@/hooks/useSmartWallet';
 import type {
   EligibilityResponse,
   MintConfirmResponse,
   MintFlowState,
-  MintPrepareResponse,
 } from '@/types/nft';
 
 const MINTING_STATES: MintFlowState[] = [
@@ -15,6 +13,20 @@ const MINTING_STATES: MintFlowState[] = [
   'minting',
   'confirming',
 ];
+
+interface ClaimResponse {
+  success: boolean;
+  tokenId: number;
+  nft: {
+    tokenId: number;
+    name: string;
+    description: string | null;
+    imageUrl: string;
+    thumbnailUrl: string;
+  };
+  txHash: string;
+  message: string;
+}
 
 interface UseNftMintResult {
   eligibility: EligibilityResponse | null;
@@ -30,8 +42,6 @@ interface UseNftMintResult {
 
 export function useNftMint(): UseNftMintResult {
   const { authenticated, getAccessToken } = useAuth();
-  const { smartWalletReady, smartWalletAddress, sendSmartWalletTransaction } =
-    useSmartWallet();
 
   const [eligibility, setEligibility] = useState<EligibilityResponse | null>(
     null
@@ -98,6 +108,10 @@ export function useNftMint(): UseNftMintResult {
     setIsCheckingEligibility(false);
   }, [authenticated, getAccessToken]);
 
+  /**
+   * Start the claim process using the simulated claim API
+   * This will claim the pre-assigned NFT for the user
+   */
   const startMint = useCallback(async () => {
     if (!authenticated) {
       toast.error('Please connect your wallet first');
@@ -105,16 +119,11 @@ export function useNftMint(): UseNftMintResult {
     }
 
     if (!eligibility?.eligible || eligibility.hasMinted) {
-      toast.error('You are not eligible to mint');
+      toast.error('You are not eligible to claim');
       return;
     }
 
-    if (!smartWalletReady || !smartWalletAddress) {
-      toast.error('Smart wallet not ready');
-      return;
-    }
-
-    setFlowState('preparing');
+    setFlowState('minting');
     setError(null);
 
     const token = await getAccessToken();
@@ -124,7 +133,8 @@ export function useNftMint(): UseNftMintResult {
       return;
     }
 
-    const prepareResponse = await fetch('/api/nft/mint/prepare', {
+    // Call the simulated claim API
+    const claimResponse = await fetch('/api/nft/claim', {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`,
@@ -132,54 +142,29 @@ export function useNftMint(): UseNftMintResult {
       },
     });
 
-    if (!prepareResponse.ok) {
-      const errorData = await prepareResponse.json();
-      const errorMessage = errorData.error ?? 'Failed to prepare mint';
+    if (!claimResponse.ok) {
+      const errorData = await claimResponse.json();
+      const errorMessage = errorData.error ?? 'Failed to claim NFT';
       setError(errorMessage);
       toast.error(errorMessage);
       setFlowState('error');
       return;
     }
 
-    const prepareData: MintPrepareResponse = await prepareResponse.json();
+    const claimData: ClaimResponse = await claimResponse.json();
 
-    setFlowState('awaiting_signature');
-
-    setFlowState('minting');
-
-    const txHash = await sendSmartWalletTransaction({
-      to: prepareData.contractAddress as `0x${string}`,
-      data: prepareData.data,
-      value: BigInt(prepareData.value),
+    // Set minted NFT for reveal modal
+    setMintedNft({
+      tokenId: claimData.nft.tokenId,
+      name: claimData.nft.name,
+      imageUrl: claimData.nft.imageUrl,
+      thumbnailUrl: claimData.nft.thumbnailUrl,
+      storyTitle: null,
     });
 
-    setFlowState('confirming');
-
-    const confirmResponse = await fetch('/api/nft/mint/confirm', {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        txHash,
-        walletAddress: smartWalletAddress,
-      }),
-    });
-
-    if (!confirmResponse.ok) {
-      const errorData = await confirmResponse.json();
-      const errorMessage = errorData.error ?? 'Failed to confirm mint';
-      setError(errorMessage);
-      toast.error(errorMessage);
-      setFlowState('error');
-      return;
-    }
-
-    const confirmData: MintConfirmResponse = await confirmResponse.json();
-
-    setMintedNft(confirmData.nft);
     setFlowState('revealing');
+
+    // Update eligibility state
     setEligibility((prev) =>
       prev
         ? {
@@ -187,24 +172,17 @@ export function useNftMint(): UseNftMintResult {
             hasMinted: true,
             status: 'already_minted',
             mintedNft: {
-              tokenId: confirmData.nft.tokenId,
-              name: confirmData.nft.name,
-              thumbnailUrl: confirmData.nft.thumbnailUrl ?? '',
-              txHash,
+              tokenId: claimData.nft.tokenId,
+              name: claimData.nft.name,
+              thumbnailUrl: claimData.nft.thumbnailUrl,
+              txHash: claimData.txHash,
             },
           }
         : null
     );
 
-    toast.success('NFT minted successfully!');
-  }, [
-    authenticated,
-    eligibility,
-    smartWalletReady,
-    smartWalletAddress,
-    getAccessToken,
-    sendSmartWalletTransaction,
-  ]);
+    toast.success(claimData.message);
+  }, [authenticated, eligibility, getAccessToken]);
 
   const resetFlow = useCallback(() => {
     setFlowState(eligibility?.hasMinted ? 'complete' : 'eligible');

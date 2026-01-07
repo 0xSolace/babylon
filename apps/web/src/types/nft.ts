@@ -106,6 +106,14 @@ export interface EligibilityResponse {
   snapshotPoints?: number;
   snapshotTakenAt?: string;
   hasMinted: boolean;
+  /** Pre-assigned NFT that the user can claim (if eligible and not minted) */
+  assignedNft?: {
+    tokenId: number;
+    name: string;
+    thumbnailUrl: string;
+    description: string | null;
+  };
+  /** NFT that was already minted by this user */
   mintedNft?: {
     tokenId: number;
     name: string;
