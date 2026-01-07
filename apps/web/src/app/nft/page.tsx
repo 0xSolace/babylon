@@ -54,30 +54,34 @@ export default function NftGalleryPage() {
     setLoading(true);
     setError(null);
 
-    const params = new URLSearchParams({
-      limit: '100',
-      sort: 'tokenId',
-      order: 'asc',
-    });
+    try {
+      const params = new URLSearchParams({
+        limit: '100',
+        sort: 'tokenId',
+        order: 'asc',
+      });
 
-    if (debouncedSearch.trim()) {
-      params.set('search', debouncedSearch.trim());
-    }
+      if (debouncedSearch.trim()) {
+        params.set('search', debouncedSearch.trim());
+      }
 
-    const response = await fetch(`/api/nft/collection?${params.toString()}`);
+      const response = await fetch(`/api/nft/collection?${params.toString()}`);
 
-    if (!response.ok) {
-      setError('Failed to load NFT collection');
+      if (!response.ok) {
+        setError('Failed to load NFT collection');
+        return;
+      }
+
+      const data: NftGalleryResponse = await response.json();
+
+      setNfts(data.data.nfts);
+      setTotalNfts(data.data.stats.totalNfts);
+      setClaimedCount(data.data.stats.claimedCount);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Network error');
+    } finally {
       setLoading(false);
-      return;
     }
-
-    const data: NftGalleryResponse = await response.json();
-
-    setNfts(data.data.nfts);
-    setTotalNfts(data.data.stats.totalNfts);
-    setClaimedCount(data.data.stats.claimedCount);
-    setLoading(false);
   }, [debouncedSearch]);
 
   useEffect(() => {

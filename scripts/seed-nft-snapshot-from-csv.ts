@@ -228,9 +228,14 @@ async function seedNftSnapshot(
       'SeedSnapshot'
     );
   } else if (missingUsers.length > 0) {
+    // Mask DIDs for privacy: show only last 6 chars
+    const maskDid = (id: string) => `...${id.slice(-6)}`;
     logger.warn(
       `${missingUsers.length} users from CSV not found in User table. Use --create-users to create them.`,
-      { missing: missingUsers.slice(0, 5).map((u) => u.id) },
+      {
+        missingCount: missingUsers.length,
+        sample: missingUsers.slice(0, 5).map((u) => maskDid(u.id)),
+      },
       'SeedSnapshot'
     );
   }

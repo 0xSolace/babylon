@@ -23,21 +23,25 @@ export default function NftDetailPage() {
     setLoading(true);
     setError(null);
 
-    const response = await fetch(`/api/nft/${tokenId}`);
+    try {
+      const response = await fetch(`/api/nft/${tokenId}`);
 
-    if (!response.ok) {
-      if (response.status === 404) {
-        setError('NFT not found');
-      } else {
-        setError('Failed to load NFT details');
+      if (!response.ok) {
+        if (response.status === 404) {
+          setError('NFT not found');
+        } else {
+          setError('Failed to load NFT details');
+        }
+        return;
       }
-      setLoading(false);
-      return;
-    }
 
-    const data: NftDetailResponse = await response.json();
-    setNft(data.data);
-    setLoading(false);
+      const data: NftDetailResponse = await response.json();
+      setNft(data.data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Network error');
+    } finally {
+      setLoading(false);
+    }
   }, [tokenId]);
 
   useEffect(() => {

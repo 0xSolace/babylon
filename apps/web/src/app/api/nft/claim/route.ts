@@ -87,7 +87,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
       return {
         alreadyClaimed: true,
         nft: buildNftResponse(nft),
-        txHash: snap.mintTxHash ?? '',
+        txHash: snap.mintTxHash ?? null,
       };
     }
 
