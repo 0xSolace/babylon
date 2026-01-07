@@ -167,10 +167,18 @@ async function cleanupTestData(): Promise<void> {
   }
 }
 
+// Check if running in CI environment
+const isCI = process.env.CI === 'true' || process.env.CI === '1';
+
 describe('NFT Claim Integration Tests', () => {
   beforeAll(async () => {
     serverAvailable = await checkServerHealth();
     if (!serverAvailable) {
+      if (isCI) {
+        throw new Error(
+          'CI FAILURE: Server not available. Integration tests require a running server.'
+        );
+      }
       console.warn(
         '⚠️  Server not available - some tests will be skipped. Start server with: bun run dev'
       );
@@ -181,6 +189,11 @@ describe('NFT Claim Integration Tests', () => {
       databaseAvailable = true;
     } catch {
       databaseAvailable = false;
+      if (isCI) {
+        throw new Error(
+          'CI FAILURE: Database not available. Integration tests require DATABASE_URL.'
+        );
+      }
       console.warn(
         '⚠️  Database not available - tests will be skipped. Set DATABASE_URL environment variable.'
       );
@@ -192,6 +205,11 @@ describe('NFT Claim Integration Tests', () => {
         nftTablesExist = true;
       } catch {
         nftTablesExist = false;
+        if (isCI) {
+          throw new Error(
+            'CI FAILURE: NFT tables do not exist. Run migrations first.'
+          );
+        }
         console.warn(
           '⚠️  NFT tables do not exist - NFT database tests will be skipped.'
         );

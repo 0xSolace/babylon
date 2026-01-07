@@ -1,503 +1,370 @@
 /**
- * Unit Tests: NFT Snapshot CSV Parsing
+ * Unit Tests: NFT CSV Parsing Logic
  *
- * Tests the CSV parsing logic used for seeding the NFT snapshot.
- * This is critical for correctly assigning NFTs to users from the CSV export.
- *
- * Tests cover:
- * - Basic CSV parsing
- * - Quoted fields with commas
- * - Special characters and unicode
- * - Edge cases and malformed data
- * - Sorting by reputation points
- * - Fisher-Yates shuffle for random assignment
+ * Tests the REAL CSV parsing functions from @babylon/shared:
+ * - parseCSVLine: robust line parsing with quoted fields
+ * - parseCsvContent: full CSV parsing with validation
+ * - shuffle: Fisher-Yates shuffle for random assignment
+ * - selectTop100: top 100 selection by points
  *
  * Run with: bun test unit/nft-csv-parsing.test.ts
  */
 
 import { describe, expect, test } from 'bun:test';
+import {
+  type CsvUser,
+  parseCSVLine,
+  parseCsvContent,
+  selectTop100,
+  shuffle,
+} from '@babylon/shared';
 
-/**
- * Robust CSV line parser that handles quoted fields
- * (matches implementation in seed-nft-snapshot-from-csv.ts)
- */
-function parseCSVLine(line: string): string[] {
-  const result: string[] = [];
-  let current = '';
-  let inQuotes = false;
-  let i = 0;
+describe('NFT CSV Parsing - parseCSVLine (Real Implementation)', () => {
+  test('should parse a basic CSV line', () => {
+    const line = 'id,walletAddress,username,displayName,reputationPoints';
+    expect(parseCSVLine(line)).toEqual([
+      'id',
+      'walletAddress',
+      'username',
+      'displayName',
+      'reputationPoints',
+    ]);
+  });
 
-  while (i < line.length) {
-    const char = line[i]!;
+  test('should handle quoted fields with commas', () => {
+    const line = '1,"0xabc","user1","Display, Name",1000';
+    expect(parseCSVLine(line)).toEqual([
+      '1',
+      '0xabc',
+      'user1',
+      'Display, Name',
+      '1000',
+    ]);
+  });
 
-    if (char === '"') {
-      if (inQuotes && line[i + 1] === '"') {
-        current += '"';
-        i += 2;
-        continue;
-      }
-      inQuotes = !inQuotes;
-      i++;
-      continue;
+  test('should handle quoted fields with escaped quotes', () => {
+    const line = '1,"0xabc","user1","Display ""Name""",1000';
+    expect(parseCSVLine(line)).toEqual([
+      '1',
+      '0xabc',
+      'user1',
+      'Display "Name"',
+      '1000',
+    ]);
+  });
+
+  test('should handle empty fields', () => {
+    const line = '1,,user1,,1000';
+    expect(parseCSVLine(line)).toEqual(['1', '', 'user1', '', '1000']);
+  });
+
+  test('should handle fields with leading/trailing whitespace', () => {
+    const line = ' 1 , 0xabc , user1 , 1000 ';
+    expect(parseCSVLine(line)).toEqual([' 1 ', ' 0xabc ', ' user1 ', ' 1000 ']);
+  });
+
+  test('should handle complex quoted fields', () => {
+    const line =
+      'did:privy:abc,"0x123","user_name","A display name with, commas and ""quotes"".",12345';
+    expect(parseCSVLine(line)).toEqual([
+      'did:privy:abc',
+      '0x123',
+      'user_name',
+      'A display name with, commas and "quotes".',
+      '12345',
+    ]);
+  });
+
+  test('should handle unicode characters', () => {
+    const line = '1,"0xabc","user_name","你好, 世界",1000';
+    expect(parseCSVLine(line)).toEqual([
+      '1',
+      '0xabc',
+      'user_name',
+      '你好, 世界',
+      '1000',
+    ]);
+  });
+
+  test('should handle emoji in fields', () => {
+    const line = '1,"0xabc","user","🚀 Rocket Man",1000';
+    expect(parseCSVLine(line)).toEqual([
+      '1',
+      '0xabc',
+      'user',
+      '🚀 Rocket Man',
+      '1000',
+    ]);
+  });
+
+  test('should handle completely empty line', () => {
+    expect(parseCSVLine('')).toEqual(['']);
+  });
+
+  test('should handle single field', () => {
+    expect(parseCSVLine('singlevalue')).toEqual(['singlevalue']);
+  });
+
+  test('should handle trailing comma', () => {
+    expect(parseCSVLine('a,b,c,')).toEqual(['a', 'b', 'c', '']);
+  });
+});
+
+describe('NFT CSV Parsing - parseCsvContent (Real Implementation)', () => {
+  test('should parse valid CSV content', () => {
+    const content = `id,walletAddress,username,displayName,reputationPoints
+did:privy:user1,0x1111111111111111111111111111111111111111,user1,User One,1000
+did:privy:user2,0x2222222222222222222222222222222222222222,user2,User Two,2000`;
+
+    const users = parseCsvContent(content);
+    expect(users).toHaveLength(2);
+    expect(users[0]?.id).toBe('did:privy:user1');
+    expect(users[0]?.reputationPoints).toBe(1000);
+    expect(users[1]?.walletAddress).toBe(
+      '0x2222222222222222222222222222222222222222'
+    );
+  });
+
+  test('should throw error for header-only CSV', () => {
+    const content = `id,walletAddress,username,displayName,reputationPoints`;
+    // Only has 1 line (header), not 2+ lines - should throw
+    expect(() => parseCsvContent(content)).toThrow('no data rows');
+  });
+
+  test('should throw error for completely empty CSV', () => {
+    expect(() => parseCsvContent('')).toThrow('CSV file is empty');
+  });
+
+  test('should throw error for missing required columns', () => {
+    const content = `id,username,reputationPoints
+did:privy:user1,user1,1000`;
+    expect(() => parseCsvContent(content)).toThrow(
+      'CSV missing required columns'
+    );
+  });
+
+  test('should skip rows with invalid Privy ID', () => {
+    const content = `id,walletAddress,username,displayName,reputationPoints
+invalid-id,0x1111111111111111111111111111111111111111,user1,User One,1000
+did:privy:user2,0x2222222222222222222222222222222222222222,user2,User Two,2000`;
+
+    const users = parseCsvContent(content);
+    expect(users).toHaveLength(1);
+    expect(users[0]?.id).toBe('did:privy:user2');
+  });
+
+  test('should skip rows with invalid wallet address', () => {
+    const content = `id,walletAddress,username,displayName,reputationPoints
+did:privy:user1,invalid-wallet,user1,User One,1000
+did:privy:user2,0x2222222222222222222222222222222222222222,user2,User Two,2000`;
+
+    const users = parseCsvContent(content);
+    expect(users).toHaveLength(1);
+    expect(users[0]?.id).toBe('did:privy:user2');
+  });
+
+  test('should handle empty lines gracefully', () => {
+    const content = `id,walletAddress,username,displayName,reputationPoints
+did:privy:user1,0x1111111111111111111111111111111111111111,user1,User One,1000
+
+did:privy:user2,0x2222222222222222222222222222222222222222,user2,User Two,2000`;
+
+    const users = parseCsvContent(content);
+    expect(users).toHaveLength(2);
+  });
+
+  test('should normalize wallet addresses to lowercase', () => {
+    const content = `id,walletAddress,username,displayName,reputationPoints
+did:privy:user1,0xAABBCCDDEEFF11223344556677889900AABBCCDD,user1,User One,1000`;
+
+    const users = parseCsvContent(content);
+    expect(users[0]?.walletAddress).toBe(
+      '0xaabbccddeeff11223344556677889900aabbccdd'
+    );
+  });
+
+  test('should parse points as integers', () => {
+    const content = `id,walletAddress,username,displayName,reputationPoints
+did:privy:user1,0x1111111111111111111111111111111111111111,user1,User One,1500`;
+
+    const users = parseCsvContent(content);
+    expect(users[0]?.reputationPoints).toBe(1500);
+    expect(typeof users[0]?.reputationPoints).toBe('number');
+  });
+
+  test('should default points to 0 for invalid values', () => {
+    const content = `id,walletAddress,username,displayName,reputationPoints
+did:privy:user1,0x1111111111111111111111111111111111111111,user1,User One,invalid`;
+
+    const users = parseCsvContent(content);
+    expect(users[0]?.reputationPoints).toBe(0);
+  });
+
+  test('should handle large CSV', () => {
+    let content = `id,walletAddress,username,displayName,reputationPoints\n`;
+    for (let i = 0; i < 500; i++) {
+      const paddedHex = i.toString(16).padStart(40, '0');
+      content += `did:privy:user${i},0x${paddedHex},user${i},User ${i},${1000 + i}\n`;
     }
 
-    if (char === ',' && !inQuotes) {
-      result.push(current);
-      current = '';
-      i++;
-      continue;
+    const users = parseCsvContent(content);
+    expect(users).toHaveLength(500);
+    expect(users[0]?.id).toBe('did:privy:user0');
+    expect(users[499]?.reputationPoints).toBe(1499);
+  });
+});
+
+describe('NFT CSV Parsing - shuffle (Real Implementation)', () => {
+  test('should return array of same length', () => {
+    const array = [1, 2, 3, 4, 5];
+    const shuffled = shuffle(array);
+    expect(shuffled).toHaveLength(array.length);
+  });
+
+  test('should contain all original elements', () => {
+    const array = [10, 20, 30, 40, 50];
+    const shuffled = shuffle(array);
+    array.forEach((item) => {
+      expect(shuffled).toContain(item);
+    });
+  });
+
+  test('should not modify original array', () => {
+    const original = [1, 2, 3, 4, 5];
+    const copy = [...original];
+    shuffle(original);
+    expect(original).toEqual(copy);
+  });
+
+  test('should handle empty array', () => {
+    expect(shuffle([])).toEqual([]);
+  });
+
+  test('should handle single element array', () => {
+    expect(shuffle([1])).toEqual([1]);
+  });
+
+  test('should produce different results on multiple runs (probabilistic)', () => {
+    const array = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+    const results = new Set<string>();
+    for (let i = 0; i < 100; i++) {
+      results.add(JSON.stringify(shuffle(array)));
     }
+    // With 10 elements, probability of getting same shuffle twice is tiny
+    expect(results.size).toBeGreaterThan(1);
+  });
 
-    current += char;
-    i++;
-  }
-
-  result.push(current);
-  return result;
-}
-
-/**
- * Fisher-Yates shuffle for random assignment
- * (matches implementation)
- */
-function shuffle<T>(array: T[]): T[] {
-  const shuffled = [...array];
-  for (let i = shuffled.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [shuffled[i], shuffled[j]] = [shuffled[j]!, shuffled[i]!];
-  }
-  return shuffled;
-}
-
-/**
- * Validate Privy ID format
- */
-function isValidPrivyId(id: string): boolean {
-  return id.startsWith('did:privy:');
-}
-
-/**
- * Validate wallet address format
- */
-function isValidWalletAddress(address: string): boolean {
-  return /^0x[a-fA-F0-9]{40}$/i.test(address);
-}
-
-describe('CSV Parsing - Basic Fields', () => {
-  describe('Simple CSV Lines', () => {
-    test('should parse simple comma-separated values', () => {
-      const line = 'value1,value2,value3';
-      const result = parseCSVLine(line);
-      expect(result).toEqual(['value1', 'value2', 'value3']);
-    });
-
-    test('should handle empty fields', () => {
-      const line = 'value1,,value3';
-      const result = parseCSVLine(line);
-      expect(result).toEqual(['value1', '', 'value3']);
-    });
-
-    test('should handle empty line', () => {
-      const line = '';
-      const result = parseCSVLine(line);
-      expect(result).toEqual(['']);
-    });
-
-    test('should handle single value', () => {
-      const line = 'single';
-      const result = parseCSVLine(line);
-      expect(result).toEqual(['single']);
-    });
-
-    test('should handle trailing comma', () => {
-      const line = 'value1,value2,';
-      const result = parseCSVLine(line);
-      expect(result).toEqual(['value1', 'value2', '']);
-    });
-
-    test('should handle leading comma', () => {
-      const line = ',value1,value2';
-      const result = parseCSVLine(line);
-      expect(result).toEqual(['', 'value1', 'value2']);
+  test('should work with string arrays', () => {
+    const array = ['a', 'b', 'c', 'd', 'e'];
+    const shuffled = shuffle(array);
+    expect(shuffled).toHaveLength(5);
+    array.forEach((item) => {
+      expect(shuffled).toContain(item);
     });
   });
 
-  describe('Quoted Fields', () => {
-    test('should parse quoted field', () => {
-      const line = '"quoted value",normal value';
-      const result = parseCSVLine(line);
-      expect(result).toEqual(['quoted value', 'normal value']);
-    });
-
-    test('should handle comma inside quotes', () => {
-      const line = '"value with, comma",other';
-      const result = parseCSVLine(line);
-      expect(result).toEqual(['value with, comma', 'other']);
-    });
-
-    test('should handle multiple commas inside quotes', () => {
-      const line = '"one, two, three",four';
-      const result = parseCSVLine(line);
-      expect(result).toEqual(['one, two, three', 'four']);
-    });
-
-    test('should handle escaped quotes (double quotes)', () => {
-      const line = '"He said ""hello""",value';
-      const result = parseCSVLine(line);
-      expect(result).toEqual(['He said "hello"', 'value']);
-    });
-
-    test('should handle empty quoted field', () => {
-      const line = '"",value';
-      const result = parseCSVLine(line);
-      expect(result).toEqual(['', 'value']);
-    });
-
-    test('should handle quoted field with only spaces', () => {
-      const line = '"   ",value';
-      const result = parseCSVLine(line);
-      expect(result).toEqual(['   ', 'value']);
-    });
-  });
-
-  describe('Special Characters', () => {
-    test('should handle newline in quoted field', () => {
-      // Note: In real CSV, newlines in quotes span multiple lines
-      // This tests the parser with the full content
-      const line = '"line1\nline2",value';
-      const result = parseCSVLine(line);
-      expect(result).toEqual(['line1\nline2', 'value']);
-    });
-
-    test('should handle unicode characters', () => {
-      const line = 'emoji🎉,unicode✨,normal';
-      const result = parseCSVLine(line);
-      expect(result).toEqual(['emoji🎉', 'unicode✨', 'normal']);
-    });
-
-    test('should handle unicode in quoted fields', () => {
-      const line = '"emoji🎉, with comma",value';
-      const result = parseCSVLine(line);
-      expect(result).toEqual(['emoji🎉, with comma', 'value']);
-    });
-
-    test('should handle tab characters', () => {
-      const line = 'value1\tvalue2,value3';
-      const result = parseCSVLine(line);
-      expect(result).toEqual(['value1\tvalue2', 'value3']);
-    });
-
-    test('should handle backslash', () => {
-      const line = 'path\\to\\file,value';
-      const result = parseCSVLine(line);
-      expect(result).toEqual(['path\\to\\file', 'value']);
-    });
-  });
-
-  describe('Real-World CSV Data', () => {
-    test('should parse user data with bio containing commas', () => {
-      const line =
-        'did:privy:abc123,0x1234567890123456789012345678901234567890,"Hello, I am a user, nice to meet you!",username,1000';
-      const result = parseCSVLine(line);
-      expect(result).toHaveLength(5);
-      expect(result[0]).toBe('did:privy:abc123');
-      expect(result[2]).toBe('Hello, I am a user, nice to meet you!');
-    });
-
-    test('should parse user data with special characters in bio', () => {
-      const line =
-        'did:privy:xyz789,0xabcdef1234567890abcdef1234567890abcdef12,"I ❤️ crypto! 🚀 To the moon!",cryptofan,5000';
-      const result = parseCSVLine(line);
-      expect(result).toHaveLength(5);
-      expect(result[2]).toContain('❤️');
-      expect(result[2]).toContain('🚀');
-    });
-
-    test('should parse header row', () => {
-      const line =
-        'id,walletAddress,bio,username,displayName,reputationPoints,invitePoints,earnedPoints';
-      const result = parseCSVLine(line);
-      expect(result).toContain('id');
-      expect(result).toContain('walletAddress');
-      expect(result).toContain('reputationPoints');
-    });
+  test('should work with object arrays', () => {
+    const array = [{ id: 1 }, { id: 2 }, { id: 3 }];
+    const shuffled = shuffle(array);
+    expect(shuffled).toHaveLength(3);
+    expect(shuffled.map((o) => o.id).sort()).toEqual([1, 2, 3]);
   });
 });
 
-describe('CSV Parsing - Privy ID Validation', () => {
-  describe('Valid Privy IDs', () => {
-    test('should accept valid Privy ID format', () => {
-      expect(isValidPrivyId('did:privy:abc123')).toBe(true);
-    });
+describe('NFT CSV Parsing - selectTop100 (Real Implementation)', () => {
+  test('should select top users by reputation points', () => {
+    const users: CsvUser[] = [
+      {
+        id: 'did:privy:user1',
+        walletAddress: '0x1111111111111111111111111111111111111111',
+        username: 'user1',
+        displayName: 'User 1',
+        reputationPoints: 100,
+      },
+      {
+        id: 'did:privy:user2',
+        walletAddress: '0x2222222222222222222222222222222222222222',
+        username: 'user2',
+        displayName: 'User 2',
+        reputationPoints: 300,
+      },
+      {
+        id: 'did:privy:user3',
+        walletAddress: '0x3333333333333333333333333333333333333333',
+        username: 'user3',
+        displayName: 'User 3',
+        reputationPoints: 200,
+      },
+    ];
 
-    test('should accept Privy ID with long suffix', () => {
-      expect(isValidPrivyId('did:privy:cm4abc123xyz789')).toBe(true);
-    });
+    const top = selectTop100(users, 2);
+    expect(top).toHaveLength(2);
+    expect(top[0]?.id).toBe('did:privy:user2'); // 300 points
+    expect(top[1]?.id).toBe('did:privy:user3'); // 200 points
   });
 
-  describe('Invalid Privy IDs', () => {
-    test('should reject ID without did:privy: prefix', () => {
-      expect(isValidPrivyId('abc123')).toBe(false);
-    });
+  test('should return all users if fewer than limit', () => {
+    const users: CsvUser[] = [
+      {
+        id: 'did:privy:user1',
+        walletAddress: '0x1111111111111111111111111111111111111111',
+        username: 'user1',
+        displayName: 'User 1',
+        reputationPoints: 100,
+      },
+    ];
 
-    test('should reject ID with wrong prefix', () => {
-      expect(isValidPrivyId('did:other:abc123')).toBe(false);
-    });
-
-    test('should reject empty string', () => {
-      expect(isValidPrivyId('')).toBe(false);
-    });
-
-    test('should reject partial prefix', () => {
-      expect(isValidPrivyId('did:priv')).toBe(false);
-    });
-  });
-});
-
-describe('CSV Parsing - Wallet Address Validation', () => {
-  describe('Valid Wallet Addresses', () => {
-    test('should accept valid lowercase address', () => {
-      expect(
-        isValidWalletAddress('0xabcdef1234567890abcdef1234567890abcdef12')
-      ).toBe(true);
-    });
-
-    test('should accept valid uppercase address', () => {
-      expect(
-        isValidWalletAddress('0xABCDEF1234567890ABCDEF1234567890ABCDEF12')
-      ).toBe(true);
-    });
-
-    test('should accept mixed case address', () => {
-      expect(
-        isValidWalletAddress('0xAbCdEf1234567890AbCdEf1234567890AbCdEf12')
-      ).toBe(true);
-    });
+    const top = selectTop100(users, 100);
+    expect(top).toHaveLength(1);
   });
 
-  describe('Invalid Wallet Addresses', () => {
-    test('should reject address without 0x prefix', () => {
-      expect(
-        isValidWalletAddress('abcdef1234567890abcdef1234567890abcdef12')
-      ).toBe(false);
-    });
-
-    test('should reject short address', () => {
-      expect(isValidWalletAddress('0xabcdef1234')).toBe(false);
-    });
-
-    test('should reject long address', () => {
-      expect(
-        isValidWalletAddress('0xabcdef1234567890abcdef1234567890abcdef12ab')
-      ).toBe(false);
-    });
-
-    test('should reject address with invalid characters', () => {
-      expect(
-        isValidWalletAddress('0xghijkl1234567890ghijkl1234567890ghijkl12')
-      ).toBe(false);
-    });
-  });
-});
-
-describe('CSV Parsing - Reputation Points Sorting', () => {
-  interface CsvUser {
-    id: string;
-    reputationPoints: number;
-  }
-
-  function sortByReputationDesc(users: CsvUser[]): CsvUser[] {
-    return [...users].sort((a, b) => b.reputationPoints - a.reputationPoints);
-  }
-
-  describe('Sorting Logic', () => {
-    test('should sort by reputation points descending', () => {
-      const users: CsvUser[] = [
-        { id: 'low', reputationPoints: 100 },
-        { id: 'high', reputationPoints: 1000 },
-        { id: 'mid', reputationPoints: 500 },
-      ];
-
-      const sorted = sortByReputationDesc(users);
-      expect(sorted[0]!.id).toBe('high');
-      expect(sorted[1]!.id).toBe('mid');
-      expect(sorted[2]!.id).toBe('low');
-    });
-
-    test('should handle equal reputation points', () => {
-      const users: CsvUser[] = [
-        { id: 'a', reputationPoints: 1000 },
-        { id: 'b', reputationPoints: 1000 },
-        { id: 'c', reputationPoints: 1000 },
-      ];
-
-      const sorted = sortByReputationDesc(users);
-      expect(sorted).toHaveLength(3);
-      // Order is stable for equal values
-    });
-
-    test('should handle zero points', () => {
-      const users: CsvUser[] = [
-        { id: 'zero', reputationPoints: 0 },
-        { id: 'positive', reputationPoints: 100 },
-      ];
-
-      const sorted = sortByReputationDesc(users);
-      expect(sorted[0]!.id).toBe('positive');
-      expect(sorted[1]!.id).toBe('zero');
-    });
-
-    test('should handle large numbers', () => {
-      const users: CsvUser[] = [
-        { id: 'large', reputationPoints: 1000000000 },
-        { id: 'small', reputationPoints: 1 },
-      ];
-
-      const sorted = sortByReputationDesc(users);
-      expect(sorted[0]!.id).toBe('large');
-    });
-
-    test('should return top 100 from larger list', () => {
-      const users: CsvUser[] = Array.from({ length: 150 }, (_, i) => ({
-        id: `user${i}`,
-        reputationPoints: 1000 - i,
-      }));
-
-      const sorted = sortByReputationDesc(users).slice(0, 100);
-      expect(sorted).toHaveLength(100);
-      expect(sorted[0]!.reputationPoints).toBe(1000);
-      expect(sorted[99]!.reputationPoints).toBe(901);
-    });
-  });
-});
-
-describe('CSV Parsing - Fisher-Yates Shuffle', () => {
-  describe('Shuffle Properties', () => {
-    test('should return same length array', () => {
-      const original = [1, 2, 3, 4, 5];
-      const shuffled = shuffle(original);
-      expect(shuffled).toHaveLength(5);
-    });
-
-    test('should contain all original elements', () => {
-      const original = [1, 2, 3, 4, 5];
-      const shuffled = shuffle(original);
-
-      original.forEach((item) => {
-        expect(shuffled).toContain(item);
-      });
-    });
-
-    test('should not modify original array', () => {
-      const original = [1, 2, 3, 4, 5];
-      const copy = [...original];
-      shuffle(original);
-      expect(original).toEqual(copy);
-    });
-
-    test('should handle empty array', () => {
-      const shuffled = shuffle([]);
-      expect(shuffled).toEqual([]);
-    });
-
-    test('should handle single element', () => {
-      const shuffled = shuffle([42]);
-      expect(shuffled).toEqual([42]);
-    });
-
-    test('should produce different orders with multiple runs', () => {
-      const original = Array.from({ length: 100 }, (_, i) => i + 1);
-      const shuffled1 = shuffle(original);
-      const shuffled2 = shuffle(original);
-
-      // Very unlikely to be identical (1/100! probability)
-      const identical = shuffled1.every((val, idx) => val === shuffled2[idx]);
-      expect(identical).toBe(false);
-    });
-
-    test('should produce roughly uniform distribution', () => {
-      // Shuffle 100 token IDs many times and check first position distribution
-      const counts = new Map<number, number>();
-      const tokenIds = Array.from({ length: 100 }, (_, i) => i + 1);
-
-      for (let i = 0; i < 10000; i++) {
-        const shuffled = shuffle(tokenIds);
-        const first = shuffled[0]!;
-        counts.set(first, (counts.get(first) ?? 0) + 1);
-      }
-
-      // Each token should appear first roughly 100 times (10000/100)
-      // Allow for variance: between 50 and 150
-      counts.forEach((count) => {
-        expect(count).toBeGreaterThan(50);
-        expect(count).toBeLessThan(150);
-      });
-    });
+  test('should handle empty array', () => {
+    expect(selectTop100([], 100)).toEqual([]);
   });
 
-  describe('Token ID Assignment', () => {
-    test('should shuffle 100 token IDs for assignment', () => {
-      const tokenIds = Array.from({ length: 100 }, (_, i) => i + 1);
-      const shuffled = shuffle(tokenIds);
+  test('should sort by descending points', () => {
+    const users: CsvUser[] = [
+      {
+        id: 'did:privy:low',
+        walletAddress: '0x1111111111111111111111111111111111111111',
+        username: 'low',
+        displayName: 'Low',
+        reputationPoints: 10,
+      },
+      {
+        id: 'did:privy:high',
+        walletAddress: '0x2222222222222222222222222222222222222222',
+        username: 'high',
+        displayName: 'High',
+        reputationPoints: 1000,
+      },
+      {
+        id: 'did:privy:mid',
+        walletAddress: '0x3333333333333333333333333333333333333333',
+        username: 'mid',
+        displayName: 'Mid',
+        reputationPoints: 500,
+      },
+    ];
 
-      expect(shuffled).toHaveLength(100);
-      expect(new Set(shuffled).size).toBe(100);
-      expect(Math.min(...shuffled)).toBe(1);
-      expect(Math.max(...shuffled)).toBe(100);
-    });
-  });
-});
-
-describe('CSV Parsing - Edge Cases', () => {
-  describe('Malformed Data', () => {
-    test('should handle unclosed quote at end of line', () => {
-      // Parser will treat rest of line as quoted content
-      const line = '"unclosed quote,value';
-      const result = parseCSVLine(line);
-      // Behavior: treats everything after opening quote as one field
-      expect(result[0]).toBe('unclosed quote,value');
-    });
-
-    test('should handle very long fields', () => {
-      const longValue = 'x'.repeat(10000);
-      const line = `${longValue},short`;
-      const result = parseCSVLine(line);
-      expect(result[0]).toHaveLength(10000);
-      expect(result[1]).toBe('short');
-    });
-
-    test('should handle many fields', () => {
-      const line = Array.from({ length: 100 }, (_, i) => `field${i}`).join(',');
-      const result = parseCSVLine(line);
-      expect(result).toHaveLength(100);
-    });
+    const top = selectTop100(users);
+    expect(top[0]?.reputationPoints).toBe(1000);
+    expect(top[1]?.reputationPoints).toBe(500);
+    expect(top[2]?.reputationPoints).toBe(10);
   });
 
-  describe('Points Parsing', () => {
-    function parsePoints(value: string): number {
-      const parsed = parseInt(value.trim(), 10);
-      return isNaN(parsed) ? 0 : parsed;
-    }
+  test('should default to 100 limit', () => {
+    const users: CsvUser[] = Array.from({ length: 150 }, (_, i) => ({
+      id: `did:privy:user${i}`,
+      walletAddress: `0x${i.toString(16).padStart(40, '0')}`,
+      username: `user${i}`,
+      displayName: `User ${i}`,
+      reputationPoints: 150 - i,
+    }));
 
-    test('should parse integer points', () => {
-      expect(parsePoints('1000')).toBe(1000);
-    });
-
-    test('should handle whitespace', () => {
-      expect(parsePoints('  1000  ')).toBe(1000);
-    });
-
-    test('should return 0 for non-numeric', () => {
-      expect(parsePoints('not a number')).toBe(0);
-    });
-
-    test('should return 0 for empty string', () => {
-      expect(parsePoints('')).toBe(0);
-    });
-
-    test('should handle negative numbers', () => {
-      // Points shouldn't be negative, but parser should handle it
-      expect(parsePoints('-100')).toBe(-100);
-    });
+    const top = selectTop100(users);
+    expect(top).toHaveLength(100);
+    expect(top[0]?.reputationPoints).toBe(150);
+    expect(top[99]?.reputationPoints).toBe(51);
   });
 });

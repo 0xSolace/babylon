@@ -112,6 +112,13 @@ export * from './referral';
 export * from './share';
 
 // =============================================================================
+// NFT utilities (validation, URL helpers, CSV parsing)
+// =============================================================================
+
+export * from './nft/csv-parser';
+export * from './nft/validation';
+
+// =============================================================================
 // Public configuration (canonical contract addresses, endpoints, game settings)
 // =============================================================================
 

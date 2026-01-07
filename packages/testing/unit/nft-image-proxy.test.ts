@@ -1,397 +1,330 @@
 /**
- * Unit Tests: NFT Image Proxy
+ * Unit Tests: NFT Image Proxy Logic
  *
- * Tests for the NFT image proxy endpoint that serves images from GitHub.
+ * Tests the REAL validation functions from @babylon/shared:
+ * - Token ID validation (isValidTokenId)
+ * - Image proxy URL generation (getNftImageProxyUrl)
  *
- * Tests cover:
- * - Token ID validation
- * - URL generation
- * - Cache headers
- * - Error handling
+ * Also tests caching and rate limiting logic patterns
+ * that would be used by the image proxy endpoint.
  *
  * Run with: bun test unit/nft-image-proxy.test.ts
  */
 
-import { describe, expect, test } from 'bun:test';
+import { beforeEach, describe, expect, test } from 'bun:test';
+import { getNftImageProxyUrl, isValidTokenId } from '@babylon/shared';
 
-// Image proxy URL generation (matches implementation)
-function getNftImageProxyUrl(tokenId: number): string {
-  return `/api/nft/image/${tokenId}`;
-}
-
-// Token ID validation for image proxy
-function isValidImageTokenId(tokenId: unknown): boolean {
-  if (typeof tokenId === 'string') {
-    const parsed = parseInt(tokenId, 10);
-    return !isNaN(parsed) && parsed >= 1 && parsed <= 100;
-  }
-  if (typeof tokenId === 'number') {
-    return Number.isInteger(tokenId) && tokenId >= 1 && tokenId <= 100;
-  }
-  return false;
-}
-
-// Cache header values
-const CACHE_CONTROL_IMMUTABLE = 'public, max-age=31536000, immutable';
-
-describe('NFT Image Proxy - URL Generation', () => {
-  describe('Proxy URL Format', () => {
-    test('should generate correct proxy URL for token ID 1', () => {
-      const url = getNftImageProxyUrl(1);
-      expect(url).toBe('/api/nft/image/1');
+describe('NFT Image Proxy - Token ID Validation (Real Implementation)', () => {
+  describe('isValidTokenId', () => {
+    test('should accept token ID 1', () => {
+      expect(isValidTokenId(1)).toBe(true);
     });
 
-    test('should generate correct proxy URL for token ID 100', () => {
-      const url = getNftImageProxyUrl(100);
-      expect(url).toBe('/api/nft/image/100');
+    test('should accept token ID 100', () => {
+      expect(isValidTokenId(100)).toBe(true);
     });
 
-    test('should generate correct proxy URL for token ID 42', () => {
-      const url = getNftImageProxyUrl(42);
-      expect(url).toBe('/api/nft/image/42');
+    test('should accept token ID 50', () => {
+      expect(isValidTokenId(50)).toBe(true);
     });
 
-    test('should not include external domains', () => {
-      const url = getNftImageProxyUrl(1);
-      expect(url).not.toContain('http');
-      expect(url).not.toContain('github');
-      expect(url).not.toContain('raw.githubusercontent');
-    });
-
-    test('should be a relative URL', () => {
-      const url = getNftImageProxyUrl(1);
-      expect(url).toMatch(/^\/api\/nft\/image\/\d+$/);
-    });
-  });
-
-  describe('Bulk URL Generation', () => {
-    test('should generate unique URLs for all 100 NFTs', () => {
-      const urls = new Set<string>();
-      for (let i = 1; i <= 100; i++) {
-        urls.add(getNftImageProxyUrl(i));
-      }
-      expect(urls.size).toBe(100);
-    });
-
-    test('should maintain consistent URL format', () => {
-      const pattern = /^\/api\/nft\/image\/\d+$/;
-      for (let i = 1; i <= 100; i++) {
-        expect(getNftImageProxyUrl(i)).toMatch(pattern);
-      }
-    });
-  });
-});
-
-describe('NFT Image Proxy - Token ID Validation', () => {
-  describe('Valid Token IDs', () => {
-    test('should accept token ID 1 as string', () => {
-      expect(isValidImageTokenId('1')).toBe(true);
-    });
-
-    test('should accept token ID 100 as string', () => {
-      expect(isValidImageTokenId('100')).toBe(true);
-    });
-
-    test('should accept token ID 50 as string', () => {
-      expect(isValidImageTokenId('50')).toBe(true);
-    });
-
-    test('should accept token ID 1 as number', () => {
-      expect(isValidImageTokenId(1)).toBe(true);
-    });
-
-    test('should accept token ID 100 as number', () => {
-      expect(isValidImageTokenId(100)).toBe(true);
-    });
-  });
-
-  describe('Invalid Token IDs', () => {
     test('should reject token ID 0', () => {
-      expect(isValidImageTokenId('0')).toBe(false);
-      expect(isValidImageTokenId(0)).toBe(false);
+      expect(isValidTokenId(0)).toBe(false);
     });
 
-    test('should reject token ID 101', () => {
-      expect(isValidImageTokenId('101')).toBe(false);
-      expect(isValidImageTokenId(101)).toBe(false);
+    test('should reject token ID 101 (default collection size)', () => {
+      expect(isValidTokenId(101)).toBe(false);
     });
 
     test('should reject negative token ID', () => {
-      expect(isValidImageTokenId('-1')).toBe(false);
-      expect(isValidImageTokenId(-1)).toBe(false);
+      expect(isValidTokenId(-1)).toBe(false);
+    });
+
+    test('should accept string token ID', () => {
+      expect(isValidTokenId('50')).toBe(true);
     });
 
     test('should reject non-numeric string', () => {
-      expect(isValidImageTokenId('abc')).toBe(false);
-      expect(isValidImageTokenId('not-a-number')).toBe(false);
+      expect(isValidTokenId('abc')).toBe(false);
     });
 
-    test('should reject empty string', () => {
-      expect(isValidImageTokenId('')).toBe(false);
+    test('should reject float', () => {
+      expect(isValidTokenId(50.5)).toBe(false);
     });
 
-    test('should reject null', () => {
-      expect(isValidImageTokenId(null)).toBe(false);
-    });
-
-    test('should reject undefined', () => {
-      expect(isValidImageTokenId(undefined)).toBe(false);
-    });
-
-    test('should reject float as number', () => {
-      expect(isValidImageTokenId(1.5)).toBe(false);
-    });
-
-    test('should parse float string as integer (parseInt behavior)', () => {
-      // parseInt('1.5') returns 1, which is valid
-      // This documents actual behavior of parseInt
-      expect(isValidImageTokenId('1.5')).toBe(true);
-    });
-
-    test('should reject very large numbers', () => {
-      expect(isValidImageTokenId(1000)).toBe(false);
-      expect(isValidImageTokenId('9999999')).toBe(false);
-    });
-  });
-
-  describe('Edge Cases', () => {
-    test('should handle whitespace in string', () => {
-      // parseInt handles leading/trailing whitespace
-      expect(isValidImageTokenId(' 50 ')).toBe(true);
-    });
-
-    test('should reject object', () => {
-      expect(isValidImageTokenId({ tokenId: 1 })).toBe(false);
-    });
-
-    test('should reject array', () => {
-      expect(isValidImageTokenId([1])).toBe(false);
+    test('should respect custom collection size', () => {
+      expect(isValidTokenId(150, 200)).toBe(true);
+      expect(isValidTokenId(201, 200)).toBe(false);
     });
   });
 });
 
-describe('NFT Image Proxy - Cache Headers', () => {
-  describe('Immutable Cache Control', () => {
-    test('should have immutable cache directive', () => {
-      expect(CACHE_CONTROL_IMMUTABLE).toContain('immutable');
+describe('NFT Image Proxy - URL Generation (Real Implementation)', () => {
+  describe('getNftImageProxyUrl', () => {
+    test('should generate correct proxy URL for token 1', () => {
+      expect(getNftImageProxyUrl(1)).toBe('/api/nft/image/1');
     });
 
-    test('should have public directive', () => {
-      expect(CACHE_CONTROL_IMMUTABLE).toContain('public');
+    test('should generate correct proxy URL for token 50', () => {
+      expect(getNftImageProxyUrl(50)).toBe('/api/nft/image/50');
     });
 
-    test('should have 1 year max-age', () => {
-      expect(CACHE_CONTROL_IMMUTABLE).toContain('max-age=31536000');
-    });
-
-    test('should be correct complete value', () => {
-      expect(CACHE_CONTROL_IMMUTABLE).toBe(
-        'public, max-age=31536000, immutable'
-      );
-    });
-  });
-
-  describe('Cache Duration', () => {
-    test('max-age should be 1 year in seconds', () => {
-      const oneYearInSeconds = 365 * 24 * 60 * 60;
-      expect(oneYearInSeconds).toBe(31536000);
+    test('should generate correct proxy URL for token 100', () => {
+      expect(getNftImageProxyUrl(100)).toBe('/api/nft/image/100');
     });
   });
 });
 
-describe('NFT Image Proxy - Content Type', () => {
-  describe('Expected Content Types', () => {
-    function getExpectedContentType(filename: string): string {
-      if (filename.endsWith('.png')) return 'image/png';
-      if (filename.endsWith('.jpg') || filename.endsWith('.jpeg'))
-        return 'image/jpeg';
-      if (filename.endsWith('.gif')) return 'image/gif';
-      if (filename.endsWith('.webp')) return 'image/webp';
-      return 'application/octet-stream';
+describe('NFT Image Proxy - Caching Logic Patterns', () => {
+  // These test the caching patterns that would be used by the image proxy
+  // The actual cache is implemented in the route handler
+
+  interface CacheEntry {
+    buffer: ArrayBuffer;
+    contentType: string;
+    cachedAt: number;
+  }
+
+  class ImageCache {
+    private cache = new Map<number, CacheEntry>();
+    private maxSize: number;
+    private ttlMs: number;
+
+    constructor(maxSize = 100, ttlMs = 3600000) {
+      this.maxSize = maxSize;
+      this.ttlMs = ttlMs;
     }
 
-    test('should return image/png for PNG files', () => {
-      expect(getExpectedContentType('1.png')).toBe('image/png');
-    });
+    get(tokenId: number): CacheEntry | undefined {
+      const entry = this.cache.get(tokenId);
+      if (!entry) return undefined;
+      if (this.isExpired(entry)) {
+        this.cache.delete(tokenId);
+        return undefined;
+      }
+      return entry;
+    }
 
-    test('should return image/jpeg for JPG files', () => {
-      expect(getExpectedContentType('1.jpg')).toBe('image/jpeg');
-      expect(getExpectedContentType('1.jpeg')).toBe('image/jpeg');
-    });
+    set(tokenId: number, buffer: ArrayBuffer, contentType: string): void {
+      if (this.cache.size >= this.maxSize) {
+        this.evictOldest();
+      }
+      this.cache.set(tokenId, {
+        buffer,
+        contentType,
+        cachedAt: Date.now(),
+      });
+    }
 
-    test('should return image/gif for GIF files', () => {
-      expect(getExpectedContentType('1.gif')).toBe('image/gif');
-    });
+    private isExpired(entry: CacheEntry): boolean {
+      return Date.now() - entry.cachedAt > this.ttlMs;
+    }
 
-    test('should return image/webp for WebP files', () => {
-      expect(getExpectedContentType('1.webp')).toBe('image/webp');
-    });
+    private evictOldest(): void {
+      let oldestKey: number | null = null;
+      let oldestTime = Infinity;
+      for (const [key, entry] of this.cache.entries()) {
+        if (entry.cachedAt < oldestTime) {
+          oldestTime = entry.cachedAt;
+          oldestKey = key;
+        }
+      }
+      if (oldestKey !== null) {
+        this.cache.delete(oldestKey);
+      }
+    }
 
-    test('should return octet-stream for unknown types', () => {
-      expect(getExpectedContentType('1.bmp')).toBe('application/octet-stream');
-    });
+    size(): number {
+      return this.cache.size;
+    }
+
+    clear(): void {
+      this.cache.clear();
+    }
+  }
+
+  test('should return undefined for cache miss', () => {
+    const cache = new ImageCache();
+    expect(cache.get(1)).toBeUndefined();
+  });
+
+  test('should return entry for cache hit', () => {
+    const cache = new ImageCache();
+    const buffer = new ArrayBuffer(8);
+    cache.set(1, buffer, 'image/png');
+    const entry = cache.get(1);
+    expect(entry).toBeDefined();
+    expect(entry?.contentType).toBe('image/png');
+  });
+
+  test('should evict oldest entry when max size reached', () => {
+    const cache = new ImageCache(3, 3600000);
+    cache.set(1, new ArrayBuffer(8), 'image/png');
+    cache.set(2, new ArrayBuffer(8), 'image/png');
+    cache.set(3, new ArrayBuffer(8), 'image/png');
+    expect(cache.size()).toBe(3);
+
+    cache.set(4, new ArrayBuffer(8), 'image/png');
+    expect(cache.size()).toBe(3);
+    expect(cache.get(1)).toBeUndefined(); // Evicted
+    expect(cache.get(4)).toBeDefined(); // Added
+  });
+
+  test('should expire entries after TTL', async () => {
+    const cache = new ImageCache(100, 50); // 50ms TTL
+    cache.set(1, new ArrayBuffer(8), 'image/png');
+    expect(cache.get(1)).toBeDefined();
+
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(cache.get(1)).toBeUndefined(); // Expired
+  });
+});
+
+describe('NFT Image Proxy - Rate Limiting Patterns', () => {
+  // These test the rate limiting patterns that would be used by the image proxy
+
+  class RateLimiter {
+    private requests = new Map<string, { count: number; resetAt: number }>();
+    private windowMs: number;
+    private maxRequests: number;
+
+    constructor(windowMs = 60000, maxRequests = 100) {
+      this.windowMs = windowMs;
+      this.maxRequests = maxRequests;
+    }
+
+    isLimited(key: string): boolean {
+      const now = Date.now();
+      const entry = this.requests.get(key);
+
+      if (!entry || now > entry.resetAt) {
+        this.requests.set(key, {
+          count: 1,
+          resetAt: now + this.windowMs,
+        });
+        return false;
+      }
+
+      if (entry.count >= this.maxRequests) {
+        return true;
+      }
+
+      entry.count++;
+      return false;
+    }
+
+    reset(key: string): void {
+      this.requests.delete(key);
+    }
+  }
+
+  let limiter: RateLimiter;
+
+  beforeEach(() => {
+    limiter = new RateLimiter(60000, 5);
+  });
+
+  test('should allow first request', () => {
+    expect(limiter.isLimited('ip1')).toBe(false);
+  });
+
+  test('should allow requests up to limit', () => {
+    for (let i = 0; i < 5; i++) {
+      expect(limiter.isLimited('ip1')).toBe(false);
+    }
+  });
+
+  test('should block requests over limit', () => {
+    for (let i = 0; i < 5; i++) {
+      limiter.isLimited('ip1');
+    }
+    expect(limiter.isLimited('ip1')).toBe(true);
+  });
+
+  test('should track different IPs separately', () => {
+    for (let i = 0; i < 5; i++) {
+      limiter.isLimited('ip1');
+    }
+    expect(limiter.isLimited('ip1')).toBe(true);
+    expect(limiter.isLimited('ip2')).toBe(false);
+  });
+
+  test('should reset after window expires', async () => {
+    const shortLimiter = new RateLimiter(50, 2); // 50ms window
+    shortLimiter.isLimited('ip1');
+    shortLimiter.isLimited('ip1');
+    expect(shortLimiter.isLimited('ip1')).toBe(true);
+
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(shortLimiter.isLimited('ip1')).toBe(false);
+  });
+});
+
+describe('NFT Image Proxy - Response Headers', () => {
+  function getProxyHeaders(
+    contentType: string,
+    cacheStatus: 'HIT' | 'MISS'
+  ): Record<string, string> {
+    return {
+      'Content-Type': contentType,
+      'Cache-Control': 'public, max-age=31536000, immutable',
+      'CDN-Cache-Control': 'public, max-age=31536000',
+      'Vercel-CDN-Cache-Control': 'public, max-age=31536000',
+      'X-Cache': cacheStatus,
+    };
+  }
+
+  test('should include correct content type', () => {
+    const headers = getProxyHeaders('image/png', 'HIT');
+    expect(headers['Content-Type']).toBe('image/png');
+  });
+
+  test('should include cache headers for CDN', () => {
+    const headers = getProxyHeaders('image/png', 'HIT');
+    expect(headers['Cache-Control']).toContain('max-age=31536000');
+    expect(headers['Cache-Control']).toContain('immutable');
+  });
+
+  test('should include Vercel CDN headers', () => {
+    const headers = getProxyHeaders('image/png', 'HIT');
+    expect(headers['Vercel-CDN-Cache-Control']).toBeDefined();
+  });
+
+  test('should include X-Cache header', () => {
+    expect(getProxyHeaders('image/png', 'HIT')['X-Cache']).toBe('HIT');
+    expect(getProxyHeaders('image/png', 'MISS')['X-Cache']).toBe('MISS');
   });
 });
 
 describe('NFT Image Proxy - GitHub URL Construction', () => {
+  const GITHUB_REPO = 'BabylonSocial/ProductManagementDocumentation';
   const NFT_FOLDER = 'NFT Protomonkeys';
 
-  function getGitHubFilePath(tokenId: number): string {
-    return `${NFT_FOLDER}/images/${tokenId}.png`;
+  function buildGitHubApiUrl(tokenId: number): string {
+    const filePath = `${NFT_FOLDER}/images/${tokenId}.png`;
+    return `https://api.github.com/repos/${GITHUB_REPO}/contents/${encodeURIComponent(filePath)}`;
   }
 
-  function encodeForGitHubAPI(path: string): string {
-    return encodeURIComponent(path);
+  function buildGitHubRawUrl(tokenId: number): string {
+    return `https://raw.githubusercontent.com/${GITHUB_REPO}/main/${NFT_FOLDER}/images/${tokenId}.png`;
   }
 
-  describe('File Path Generation', () => {
-    test('should generate correct file path for token 1', () => {
-      const path = getGitHubFilePath(1);
-      expect(path).toBe('NFT Protomonkeys/images/1.png');
-    });
-
-    test('should generate correct file path for token 100', () => {
-      const path = getGitHubFilePath(100);
-      expect(path).toBe('NFT Protomonkeys/images/100.png');
-    });
-
-    test('should include images subdirectory', () => {
-      const path = getGitHubFilePath(42);
-      expect(path).toContain('/images/');
-    });
-
-    test('should end with .png extension', () => {
-      const path = getGitHubFilePath(50);
-      expect(path).toMatch(/\.png$/);
-    });
+  test('should build correct GitHub API URL', () => {
+    const url = buildGitHubApiUrl(1);
+    expect(url).toContain('api.github.com');
+    expect(url).toContain(GITHUB_REPO);
+    expect(url).toContain('1.png');
   });
 
-  describe('URL Encoding', () => {
-    test('should encode spaces', () => {
-      const path = 'NFT Protomonkeys/images/1.png';
-      const encoded = encodeForGitHubAPI(path);
-      expect(encoded).not.toContain(' ');
-      expect(encoded).toContain('%20');
-    });
-
-    test('should encode slashes', () => {
-      const path = 'folder/subfolder/file.png';
-      const encoded = encodeForGitHubAPI(path);
-      expect(encoded).toContain('%2F');
-    });
-
-    test('should preserve alphanumeric characters', () => {
-      const simple = 'file123.png';
-      const encoded = encodeForGitHubAPI(simple);
-      expect(encoded).toContain('file123');
-    });
-  });
-});
-
-describe('NFT Image Proxy - Error Responses', () => {
-  interface ErrorResponse {
-    error: string;
-    status: number;
-  }
-
-  function createErrorResponse(code: string): ErrorResponse {
-    const errors: Record<string, ErrorResponse> = {
-      invalid_token_id: { error: 'Invalid token ID', status: 400 },
-      not_found: { error: 'Image not found', status: 404 },
-      fetch_failed: { error: 'Failed to fetch image', status: 502 },
-      internal_error: { error: 'Internal server error', status: 500 },
-    };
-    return errors[code] ?? { error: 'Unknown error', status: 500 };
-  }
-
-  describe('Error Status Codes', () => {
-    test('should return 400 for invalid token ID', () => {
-      const response = createErrorResponse('invalid_token_id');
-      expect(response.status).toBe(400);
-      expect(response.error).toContain('Invalid');
-    });
-
-    test('should return 404 for not found', () => {
-      const response = createErrorResponse('not_found');
-      expect(response.status).toBe(404);
-      expect(response.error).toContain('not found');
-    });
-
-    test('should return 502 for upstream fetch failure', () => {
-      const response = createErrorResponse('fetch_failed');
-      expect(response.status).toBe(502);
-    });
-
-    test('should return 500 for internal error', () => {
-      const response = createErrorResponse('internal_error');
-      expect(response.status).toBe(500);
-    });
-  });
-});
-
-describe('NFT Image Proxy - Integration with Collection', () => {
-  describe('Database Image URL Format', () => {
-    function parseNftImageIdentifier(
-      imageUrl: string
-    ): { type: 'nft'; tokenId: number } | { type: 'url'; url: string } {
-      if (imageUrl.startsWith('nft://')) {
-        const tokenId = parseInt(imageUrl.replace('nft://', ''), 10);
-        return { type: 'nft', tokenId };
-      }
-      return { type: 'url', url: imageUrl };
-    }
-
-    test('should parse nft:// protocol URLs', () => {
-      const result = parseNftImageIdentifier('nft://42');
-      expect(result.type).toBe('nft');
-      if (result.type === 'nft') {
-        expect(result.tokenId).toBe(42);
-      }
-    });
-
-    test('should handle regular URLs', () => {
-      const result = parseNftImageIdentifier('https://example.com/image.png');
-      expect(result.type).toBe('url');
-      if (result.type === 'url') {
-        expect(result.url).toBe('https://example.com/image.png');
-      }
-    });
-
-    test('should parse all 100 nft:// URLs', () => {
-      for (let i = 1; i <= 100; i++) {
-        const result = parseNftImageIdentifier(`nft://${i}`);
-        expect(result.type).toBe('nft');
-        if (result.type === 'nft') {
-          expect(result.tokenId).toBe(i);
-        }
-      }
-    });
+  test('should URL encode file path', () => {
+    const url = buildGitHubApiUrl(50);
+    expect(url).toContain(encodeURIComponent('NFT Protomonkeys/images/50.png'));
   });
 
-  describe('URL Transformation', () => {
-    function transformImageUrl(dbImageUrl: string): string {
-      if (dbImageUrl.startsWith('nft://')) {
-        const tokenId = dbImageUrl.replace('nft://', '');
-        return `/api/nft/image/${tokenId}`;
-      }
-      return dbImageUrl;
-    }
-
-    test('should transform nft:// to proxy URL', () => {
-      const result = transformImageUrl('nft://42');
-      expect(result).toBe('/api/nft/image/42');
-    });
-
-    test('should preserve external URLs', () => {
-      const url = 'https://example.com/image.png';
-      expect(transformImageUrl(url)).toBe(url);
-    });
-
-    test('should transform all collection URLs', () => {
-      for (let i = 1; i <= 100; i++) {
-        const result = transformImageUrl(`nft://${i}`);
-        expect(result).toBe(`/api/nft/image/${i}`);
-      }
-    });
+  test('should build correct raw GitHub URL', () => {
+    const url = buildGitHubRawUrl(100);
+    expect(url).toContain('raw.githubusercontent.com');
+    expect(url).toContain(GITHUB_REPO);
+    expect(url).toContain('100.png');
   });
 });

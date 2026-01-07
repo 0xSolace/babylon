@@ -13,150 +13,10 @@
  */
 
 import { db, eq, inArray, nftSnapshot, users } from '@babylon/db';
-import { logger } from '@babylon/shared';
-import { existsSync, readFileSync } from 'fs';
+import { logger, parseCsvFile, shuffle } from '@babylon/shared';
+import { existsSync } from 'fs';
 import { nanoid } from 'nanoid';
 import { join } from 'path';
-
-interface CsvUser {
-  id: string; // Privy ID (did:privy:...)
-  walletAddress: string;
-  username: string;
-  displayName: string;
-  reputationPoints: number;
-}
-
-/**
- * Parse CSV using a robust approach that handles:
- * - Quoted fields with commas inside
- * - Fields with special characters
- * - Unicode content
- */
-function parseCsv(csvPath: string): CsvUser[] {
-  const content = readFileSync(csvPath, 'utf-8');
-  const lines = content.split('\n');
-
-  if (lines.length < 2) {
-    throw new Error('CSV file is empty or has no data rows');
-  }
-
-  // Parse header - first line, simple comma split since header has no special chars
-  const headerLine = lines[0]!;
-  const headers = headerLine.split(',').map((h) => h.trim());
-
-  const idIndex = headers.indexOf('id');
-  const walletIndex = headers.indexOf('walletAddress');
-  const usernameIndex = headers.indexOf('username');
-  const displayNameIndex = headers.indexOf('displayName');
-  const pointsIndex = headers.indexOf('reputationPoints');
-
-  if (idIndex === -1 || walletIndex === -1 || pointsIndex === -1) {
-    throw new Error(
-      `CSV missing required columns. Found: ${headers.slice(0, 10).join(', ')}... Required: id, walletAddress, reputationPoints`
-    );
-  }
-
-  const csvUsers: CsvUser[] = [];
-
-  // Parse each data row using a robust CSV parser
-  for (let i = 1; i < lines.length; i++) {
-    const line = lines[i]?.trim();
-    if (!line) continue;
-
-    const fields = parseCSVLine(line);
-
-    const id = fields[idIndex]?.trim() ?? '';
-    const walletAddress = fields[walletIndex]?.trim().toLowerCase() ?? '';
-    const username = fields[usernameIndex]?.trim() ?? '';
-    const displayName = fields[displayNameIndex]?.trim() ?? '';
-    const pointsStr = fields[pointsIndex]?.trim() ?? '0';
-    const reputationPoints = parseInt(pointsStr, 10) || 0;
-
-    // Validate Privy ID format
-    if (!id.startsWith('did:privy:')) {
-      // Only warn if the id field looks like it should be a Privy ID
-      if (id.length > 0 && id.length < 50) {
-        logger.warn(
-          `Row ${i}: skipping invalid id "${id.slice(0, 30)}"`,
-          undefined,
-          'SeedSnapshot'
-        );
-      }
-      continue;
-    }
-
-    // Validate wallet address
-    if (!walletAddress.match(/^0x[a-f0-9]{40}$/i)) {
-      logger.warn(
-        `Row ${i}: invalid wallet for ${id}`,
-        undefined,
-        'SeedSnapshot'
-      );
-      continue;
-    }
-
-    csvUsers.push({
-      id,
-      walletAddress,
-      username,
-      displayName,
-      reputationPoints,
-    });
-  }
-
-  return csvUsers;
-}
-
-/**
- * Robust CSV line parser that handles quoted fields
- */
-function parseCSVLine(line: string): string[] {
-  const result: string[] = [];
-  let current = '';
-  let inQuotes = false;
-  let i = 0;
-
-  while (i < line.length) {
-    const char = line[i]!;
-
-    if (char === '"') {
-      // Check for escaped quote ("")
-      if (inQuotes && line[i + 1] === '"') {
-        current += '"';
-        i += 2;
-        continue;
-      }
-      inQuotes = !inQuotes;
-      i++;
-      continue;
-    }
-
-    if (char === ',' && !inQuotes) {
-      result.push(current);
-      current = '';
-      i++;
-      continue;
-    }
-
-    current += char;
-    i++;
-  }
-
-  result.push(current);
-  return result;
-}
-
-/**
- * Fisher-Yates shuffle for random assignment
- */
-function shuffle<T>(array: T[]): T[] {
-  const shuffled = [...array];
-  for (let i = shuffled.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [shuffled[i], shuffled[j]] = [shuffled[j]!, shuffled[i]!];
-  }
-  return shuffled;
-}
 
 async function seedNftSnapshot(
   csvPath: string,
@@ -165,8 +25,8 @@ async function seedNftSnapshot(
 ) {
   logger.info(`Reading CSV from: ${csvPath}`, undefined, 'SeedSnapshot');
 
-  // Parse CSV
-  const csvUsers = parseCsv(csvPath);
+  // Parse CSV using shared utility
+  const csvUsers = parseCsvFile(csvPath);
   logger.info(
     `Parsed ${csvUsers.length} users from CSV`,
     undefined,
