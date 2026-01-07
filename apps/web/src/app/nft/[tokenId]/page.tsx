@@ -206,18 +206,6 @@ export default function NftDetailPage() {
             )}
           </div>
 
-          {/* Story */}
-          {nft.story.content && (
-            <div className="rounded-lg border border-border bg-card p-3 sm:p-4">
-              <p className="mb-2 font-medium text-foreground text-sm sm:text-base">
-                {nft.story.title ?? 'Story'}
-              </p>
-              <p className="whitespace-pre-wrap text-muted-foreground text-xs sm:text-sm">
-                {nft.story.content}
-              </p>
-            </div>
-          )}
-
           {/* Attributes */}
           {nft.attributes.length > 0 && (
             <div className="rounded-lg border border-border bg-card p-3 sm:p-4">
