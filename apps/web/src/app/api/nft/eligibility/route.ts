@@ -1,5 +1,6 @@
 import { authenticate, successResponse, withErrorHandling } from '@babylon/api';
 import { db, eq, nftCollection, nftSnapshot } from '@babylon/db';
+import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import type { EligibilityResponse } from '@/types/nft';
 
@@ -56,6 +57,20 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   // Already claimed
   if (snap.hasMinted && snap.mintedTokenId !== null) {
     const nft = await getNftInfo(snap.mintedTokenId);
+
+    // Log warning if minted NFT not found in collection (data inconsistency)
+    if (!nft) {
+      logger.warn(
+        'Minted NFT not found in collection',
+        {
+          userId,
+          mintedTokenId: snap.mintedTokenId,
+          mintTxHash: snap.mintTxHash,
+        },
+        'GET /api/nft/eligibility'
+      );
+    }
+
     return successResponse({
       eligible: true,
       status: 'already_minted',
@@ -73,23 +88,39 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   }
 
   // Eligible - fetch assigned NFT
-  const assignedNft =
-    snap.assignedTokenId !== null
-      ? await getNftInfo(snap.assignedTokenId)
-      : null;
+  if (snap.assignedTokenId === null) {
+    // No NFT assigned yet - treat as not eligible
+    return successResponse({
+      eligible: false,
+      status: 'not_eligible',
+      hasMinted: false,
+      ...baseResponse,
+      reason: 'no_nft_assigned',
+    } satisfies EligibilityResponse);
+  }
+
+  const assignedNft = await getNftInfo(snap.assignedTokenId);
+  if (!assignedNft) {
+    // Assigned NFT not found in collection - treat as not eligible
+    return successResponse({
+      eligible: false,
+      status: 'not_eligible',
+      hasMinted: false,
+      ...baseResponse,
+      reason: 'assigned_nft_not_found',
+    } satisfies EligibilityResponse);
+  }
 
   return successResponse({
     eligible: true,
     status: 'eligible',
     hasMinted: false,
     ...baseResponse,
-    assignedNft: assignedNft
-      ? {
-          tokenId: assignedNft.tokenId,
-          name: assignedNft.name,
-          description: assignedNft.description,
-          thumbnailUrl: assignedNft.thumbnailUrl,
-        }
-      : undefined,
+    assignedNft: {
+      tokenId: assignedNft.tokenId,
+      name: assignedNft.name,
+      description: assignedNft.description,
+      thumbnailUrl: assignedNft.thumbnailUrl,
+    },
   } satisfies EligibilityResponse);
 });

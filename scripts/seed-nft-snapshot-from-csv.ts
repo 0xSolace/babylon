@@ -12,7 +12,7 @@
  * Required CSV columns: id (Privy ID), walletAddress, reputationPoints
  */
 
-import { db, inArray, nftSnapshot, users } from '@babylon/db';
+import { db, eq, inArray, nftSnapshot, users } from '@babylon/db';
 import { logger } from '@babylon/shared';
 import { existsSync, readFileSync } from 'fs';
 import { nanoid } from 'nanoid';
@@ -254,82 +254,86 @@ async function seedNftSnapshot(
     'SeedSnapshot'
   );
 
-  // Check for existing snapshots
-  const existingSnapshots = await db
-    .select({
-      userId: nftSnapshot.userId,
-      assignedTokenId: nftSnapshot.assignedTokenId,
-      hasMinted: nftSnapshot.hasMinted,
-    })
-    .from(nftSnapshot);
-
-  const hasMintedUsers = existingSnapshots.filter((s) => s.hasMinted);
-  if (hasMintedUsers.length > 0 && !force) {
-    throw new Error(
-      `${hasMintedUsers.length} users have already minted. Use --force to clear and reseed (this will lose claim data)`
-    );
-  }
-
   // Generate random NFT assignments
   const tokenIds = shuffle(Array.from({ length: 100 }, (_, i) => i + 1));
   const snapshotTime = new Date('2025-12-31T00:00:00Z');
 
-  // Clear existing snapshots (only non-minted ones unless force)
-  if (force) {
-    logger.info(
-      'Force mode: clearing all existing snapshots',
-      undefined,
-      'SeedSnapshot'
-    );
-    await db.delete(nftSnapshot);
-  } else if (existingSnapshots.length > 0) {
-    logger.info(
-      `Clearing ${existingSnapshots.length} existing non-minted snapshots`,
-      undefined,
-      'SeedSnapshot'
-    );
-    await db.delete(nftSnapshot);
-  }
-
-  // Insert new snapshots with assigned NFTs
-  let inserted = 0;
-  for (let i = 0; i < validUsers.length; i++) {
-    const csvUser = validUsers[i]!;
-    const rank = i + 1;
-    const tokenId = tokenIds[i]!;
-
-    // Use current wallet from database (not CSV) in case it changed
+  // Prepare snapshot values outside transaction
+  const snapshotValues = validUsers.map((csvUser, i) => {
     const currentWallet =
       existingUserMap.get(csvUser.id) ?? csvUser.walletAddress;
-
-    await db.insert(nftSnapshot).values({
+    return {
       id: nanoid(),
       userId: csvUser.id,
       walletAddress: currentWallet || null,
-      rank,
+      rank: i + 1,
       points: csvUser.reputationPoints,
       snapshotTakenAt: snapshotTime,
-      assignedTokenId: tokenId,
+      assignedTokenId: tokenIds[i]!,
       hasMinted: false,
-    });
+    };
+  });
 
-    inserted++;
+  // Wrap all DB operations in a transaction to ensure consistency
+  const inserted = await db.transaction(async (tx) => {
+    // Re-check for existing snapshots inside transaction to avoid race conditions
+    const existingSnapshots = await tx
+      .select({
+        userId: nftSnapshot.userId,
+        assignedTokenId: nftSnapshot.assignedTokenId,
+        hasMinted: nftSnapshot.hasMinted,
+      })
+      .from(nftSnapshot);
 
-    if (inserted % 20 === 0) {
+    const hasMintedUsers = existingSnapshots.filter((s) => s.hasMinted);
+    if (hasMintedUsers.length > 0 && !force) {
+      throw new Error(
+        `${hasMintedUsers.length} users have already minted. Use --force to clear and reseed (this will lose claim data)`
+      );
+    }
+
+    // Clear existing snapshots (only non-minted ones unless force)
+    if (force) {
       logger.info(
-        `Inserted ${inserted}/${validUsers.length} snapshots`,
+        'Force mode: clearing all existing snapshots',
         undefined,
         'SeedSnapshot'
       );
+      await tx.delete(nftSnapshot);
+    } else {
+      // Only delete non-minted snapshots (defensive filter to prevent race conditions)
+      const nonMintedCount = existingSnapshots.filter(
+        (s) => !s.hasMinted
+      ).length;
+      if (nonMintedCount > 0) {
+        logger.info(
+          `Clearing ${nonMintedCount} existing non-minted snapshots`,
+          undefined,
+          'SeedSnapshot'
+        );
+        await tx.delete(nftSnapshot).where(eq(nftSnapshot.hasMinted, false));
+      }
     }
-  }
+
+    // Insert new snapshots with assigned NFTs (batch insert for efficiency)
+    await tx.insert(nftSnapshot).values(snapshotValues);
+
+    return snapshotValues.length;
+  });
+
+  // Redact DID for privacy: show first 6 and last 4 chars
+  const redactId = (id: string) => `${id.slice(0, 6)}...${id.slice(-4)}`;
 
   logger.info(
     `Seeding complete: ${inserted} users assigned NFTs`,
     {
-      topUser: { id: validUsers[0]?.id, rank: 1, tokenId: tokenIds[0] },
+      topUser: {
+        id: redactId(validUsers[0]?.id ?? ''),
+        rank: 1,
+        tokenId: tokenIds[0],
+      },
       lastUser: {
-        id: validUsers[inserted - 1]?.id,
+        id: redactId(validUsers[inserted - 1]?.id ?? ''),
         rank: inserted,
         tokenId: tokenIds[inserted - 1],
       },
@@ -345,7 +349,7 @@ async function seedNftSnapshot(
   for (let i = 0; i < Math.min(10, validUsers.length); i++) {
     const user = validUsers[i]!;
     console.log(
-      `  Rank ${i + 1}: ${user.id.slice(0, 30)}... → NFT #${tokenIds[i]} (${user.reputationPoints} pts)`
+      `  Rank ${i + 1}: ${redactId(user.id)} → NFT #${tokenIds[i]} (${user.reputationPoints} pts)`
     );
   }
 }
@@ -358,12 +362,12 @@ const createUsers = args.includes('--create-users');
 // Find CSV path from args or use common locations
 const csvArg = args.find((a) => !a.startsWith('--'));
 const defaultPaths = [
-  join(
-    process.env.HOME ?? '',
-    'Downloads/user_snapshot_2025-12-31_top100 - user_snapshot_2025-12-31_top100.csv.csv'
-  ),
+  // Project-relative paths
   join(process.cwd(), 'data/nft-snapshot.csv'),
-];
+  join(process.cwd(), 'data/user_snapshot_top100.csv'),
+  // Environment-driven path (optional)
+  process.env.NFT_SNAPSHOT_CSV_PATH,
+].filter((p): p is string => !!p);
 const csvPath = csvArg ?? defaultPaths.find((p) => existsSync(p));
 
 if (!csvPath) {

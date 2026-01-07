@@ -96,33 +96,69 @@ export type EligibilityStatus =
   | 'eligible'
   | 'already_minted';
 
-/**
- * Eligibility check response
- */
-export interface EligibilityResponse {
-  eligible: boolean;
-  status: EligibilityStatus;
+/** Shared fields for all eligibility responses */
+interface BaseEligibility {
   snapshotRank?: number;
   snapshotPoints?: number;
   snapshotTakenAt?: string;
-  hasMinted: boolean;
-  /** Pre-assigned NFT that the user can claim (if eligible and not minted) */
-  assignedNft?: {
-    tokenId: number;
-    name: string;
-    thumbnailUrl: string;
-    description: string | null;
-  };
-  /** NFT that was already minted by this user */
-  mintedNft?: {
-    tokenId: number;
-    name: string;
-    thumbnailUrl: string;
-    txHash: string | null;
-  };
   currentRank?: number;
   reason?: string;
 }
+
+/** NFT info for assigned (not yet minted) NFTs */
+interface AssignedNftInfo {
+  tokenId: number;
+  name: string;
+  thumbnailUrl: string;
+  description: string | null;
+}
+
+/** NFT info for already minted NFTs */
+interface MintedNftInfo {
+  tokenId: number;
+  name: string;
+  thumbnailUrl: string;
+  txHash: string | null;
+}
+
+/** User is not authenticated */
+interface NotAuthenticatedEligibility extends BaseEligibility {
+  status: 'not_authenticated';
+  eligible: false;
+  hasMinted: false;
+}
+
+/** User is not eligible (not in top 100) */
+interface NotEligibleEligibility extends BaseEligibility {
+  status: 'not_eligible';
+  eligible: false;
+  hasMinted: false;
+}
+
+/** User is eligible and can claim their assigned NFT */
+interface EligibleEligibility extends BaseEligibility {
+  status: 'eligible';
+  eligible: true;
+  hasMinted: false;
+  assignedNft: AssignedNftInfo;
+}
+
+/** User has already minted their NFT */
+interface AlreadyMintedEligibility extends BaseEligibility {
+  status: 'already_minted';
+  eligible: true;
+  hasMinted: true;
+  mintedNft?: MintedNftInfo;
+}
+
+/**
+ * Eligibility check response - discriminated union by status
+ */
+export type EligibilityResponse =
+  | NotAuthenticatedEligibility
+  | NotEligibleEligibility
+  | EligibleEligibility
+  | AlreadyMintedEligibility;
 
 /**
  * Mint preparation response (contract call data)

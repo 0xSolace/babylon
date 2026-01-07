@@ -42,9 +42,10 @@ export const GET = withErrorHandling(
 
     logger.info('Fetching NFT details', { tokenId }, 'GET /api/nft/[tokenId]');
 
-    // Get NFT collection data
-    const [nft] = await db
+    // Single consolidated query with LEFT JOINs for ownership and claims
+    const [result] = await db
       .select({
+        // NFT collection fields
         tokenId: nftCollection.tokenId,
         name: nftCollection.name,
         description: nftCollection.description,
@@ -57,44 +58,56 @@ export const GET = withErrorHandling(
         attributes: nftCollection.attributes,
         contractAddress: nftCollection.contractAddress,
         chainId: nftCollection.chainId,
-      })
-      .from(nftCollection)
-      .where(eq(nftCollection.tokenId, tokenId))
-      .limit(1);
-
-    if (!nft) {
-      throw new NotFoundError(`NFT with token ID ${tokenId} not found`);
-    }
-
-    // Get current ownership
-    const [ownership] = await db
-      .select({
+        // Ownership fields (nullable due to LEFT JOIN)
         ownerAddress: nftOwnership.ownerAddress,
-        userId: nftOwnership.userId,
+        ownerUserId: nftOwnership.userId,
         acquiredAt: nftOwnership.acquiredAt,
-        txHash: nftOwnership.txHash,
-        username: users.username,
-        displayName: users.displayName,
-        profileImageUrl: users.profileImageUrl,
-      })
-      .from(nftOwnership)
-      .leftJoin(users, eq(nftOwnership.userId, users.id))
-      .where(eq(nftOwnership.tokenId, tokenId))
-      .limit(1);
-
-    // Get original claim info
-    const [claim] = await db
-      .select({
+        ownerTxHash: nftOwnership.txHash,
+        ownerUsername: users.username,
+        ownerDisplayName: users.displayName,
+        ownerProfileImageUrl: users.profileImageUrl,
+        // Claim fields (nullable due to LEFT JOIN)
         claimedAt: nftClaims.claimedAt,
         claimerAddress: nftClaims.claimerAddress,
         claimerUserId: nftClaims.claimerUserId,
         snapshotRank: nftClaims.snapshotRank,
         snapshotPoints: nftClaims.snapshotPoints,
-        txHash: nftClaims.txHash,
+        claimTxHash: nftClaims.txHash,
       })
-      .from(nftClaims)
-      .where(eq(nftClaims.tokenId, tokenId))
+      .from(nftCollection)
+      .leftJoin(nftOwnership, eq(nftCollection.tokenId, nftOwnership.tokenId))
+      .leftJoin(users, eq(nftOwnership.userId, users.id))
+      .leftJoin(nftClaims, eq(nftCollection.tokenId, nftClaims.tokenId))
+      .where(eq(nftCollection.tokenId, tokenId))
       .limit(1);
+
+    if (!result) {
+      throw new NotFoundError(`NFT with token ID ${tokenId} not found`);
+    }
+
+    // Destructure for clarity
+    const nft = result;
+    const ownership = result.ownerAddress
+      ? {
+          ownerAddress: result.ownerAddress,
+          userId: result.ownerUserId,
+          acquiredAt: result.acquiredAt!,
+          txHash: result.ownerTxHash,
+          username: result.ownerUsername,
+          displayName: result.ownerDisplayName,
+          profileImageUrl: result.ownerProfileImageUrl,
+        }
+      : null;
+    const claim = result.claimedAt
+      ? {
+          claimedAt: result.claimedAt,
+          claimerAddress: result.claimerAddress!,
+          claimerUserId: result.claimerUserId,
+          snapshotRank: result.snapshotRank,
+          snapshotPoints: result.snapshotPoints,
+          txHash: result.claimTxHash!,
+        }
+      : null;
 
     // Build response - use proxy API URLs for reliable image serving
     const imageUrl = `/api/nft/image/${nft.tokenId}`;

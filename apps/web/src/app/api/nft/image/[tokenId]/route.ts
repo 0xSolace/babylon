@@ -18,7 +18,10 @@ const GITHUB_REPO = 'BabylonSocial/ProductManagementDocumentation';
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 
 /** Collection size - configurable for different NFT collections */
-const COLLECTION_SIZE = 100;
+const COLLECTION_SIZE = Number(process.env.NFT_COLLECTION_SIZE) || 100;
+
+/** Max cache size to prevent memory leaks (LRU eviction when exceeded) */
+const MAX_CACHE_SIZE = 100;
 
 /** In-memory cache for image data (survives across requests in same worker) */
 const imageCache = new Map<
@@ -28,6 +31,60 @@ const imageCache = new Map<
 
 /** Cache TTL: 1 hour (images are immutable, but allow refresh for updates) */
 const CACHE_TTL_MS = 60 * 60 * 1000;
+
+/**
+ * Add to cache with LRU eviction when max size exceeded
+ * Removes oldest entry (by cachedAt) when cache is full
+ */
+function addToCache(
+  tokenId: number,
+  buffer: ArrayBuffer,
+  contentType: string
+): void {
+  // Evict oldest entry if cache is full
+  if (imageCache.size >= MAX_CACHE_SIZE) {
+    let oldestKey: number | null = null;
+    let oldestTime = Infinity;
+    for (const [key, entry] of imageCache.entries()) {
+      if (entry.cachedAt < oldestTime) {
+        oldestTime = entry.cachedAt;
+        oldestKey = key;
+      }
+    }
+    if (oldestKey !== null) {
+      imageCache.delete(oldestKey);
+    }
+  }
+
+  imageCache.set(tokenId, {
+    buffer,
+    contentType,
+    cachedAt: Date.now(),
+  });
+}
+
+/** Fetch timeout in milliseconds */
+const FETCH_TIMEOUT_MS = 10 * 1000; // 10 seconds
+
+/** Helper to create a fetch with timeout using AbortController */
+async function fetchWithTimeout(
+  url: string,
+  options: RequestInit = {},
+  timeoutMs: number = FETCH_TIMEOUT_MS
+): Promise<Response> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
+    return response;
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
 
 /**
  * Simple sliding window rate limiter
@@ -153,7 +210,7 @@ export async function GET(
       headers.Authorization = `Bearer ${GITHUB_TOKEN}`;
     }
 
-    const metadataResponse = await fetch(apiUrl, { headers });
+    const metadataResponse = await fetchWithTimeout(apiUrl, { headers });
 
     if (!metadataResponse.ok) {
       logger.warn(
@@ -179,8 +236,8 @@ export async function GET(
       return NextResponse.json({ error: 'Image not found' }, { status: 404 });
     }
 
-    // Fetch the image from GitHub
-    const imageResponse = await fetch(downloadUrl, {
+    // Fetch the image from GitHub with timeout
+    const imageResponse = await fetchWithTimeout(downloadUrl, {
       headers: { 'User-Agent': 'Babylon-NFT-Proxy/1.0' },
     });
 
@@ -201,12 +258,8 @@ export async function GET(
     const contentType =
       imageResponse.headers.get('content-type') || 'image/png';
 
-    // Store in cache
-    imageCache.set(tokenId, {
-      buffer: imageBuffer,
-      contentType,
-      cachedAt: Date.now(),
-    });
+    // Store in cache (with LRU eviction)
+    addToCache(tokenId, imageBuffer, contentType);
 
     // Return image with proper headers and caching
     return new NextResponse(imageBuffer, {
@@ -220,9 +273,23 @@ export async function GET(
       },
     });
   } catch (error) {
+    // Handle abort/timeout errors
+    if (error instanceof Error && error.name === 'AbortError') {
+      logger.warn(
+        `Timeout fetching NFT image #${tokenId}`,
+        { tokenId },
+        'GET /api/nft/image/[tokenId]'
+      );
+      return NextResponse.json({ error: 'Gateway timeout' }, { status: 504 });
+    }
+
     logger.error(
       `Error proxying NFT image #${tokenId}`,
-      { error: String(error) },
+      {
+        tokenId,
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      },
       'GET /api/nft/image/[tokenId]'
     );
 

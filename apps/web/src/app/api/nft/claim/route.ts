@@ -10,6 +10,7 @@ import {
   BadRequestError,
   ConflictError,
   ForbiddenError,
+  InternalServerError,
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
@@ -83,7 +84,12 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
         .where(eq(nftCollection.tokenId, snap.mintedTokenId))
         .limit(1);
 
-      if (!nft) throw new ConflictError('You have already claimed your NFT');
+      if (!nft) {
+        // Data inconsistency: snapshot says minted but NFT not in collection
+        throw new InternalServerError(
+          `Data inconsistency: minted NFT not found (tokenId: ${snap.mintedTokenId}, txHash: ${snap.mintTxHash ?? 'none'})`
+        );
+      }
       return {
         alreadyClaimed: true,
         nft: buildNftResponse(nft),

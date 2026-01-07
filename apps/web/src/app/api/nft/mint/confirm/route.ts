@@ -94,6 +94,17 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
   const mintedTokenId = verification.tokenId;
 
   const result = await db.transaction(async (tx) => {
+    // Check for transaction hash reuse across all users (prevent replay attacks)
+    const [existingTxHash] = await tx
+      .select({ userId: nftSnapshot.userId })
+      .from(nftSnapshot)
+      .where(eq(nftSnapshot.mintTxHash, normalizedTxHash))
+      .limit(1);
+
+    if (existingTxHash && existingTxHash.userId !== userId) {
+      throw new ConflictError('Transaction hash already used by another user');
+    }
+
     const [snapshotEntry] = await tx
       .select({
         id: nftSnapshot.id,

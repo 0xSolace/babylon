@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
 import type { EligibilityResponse, MintFlowState } from '@/types/nft';
@@ -72,8 +72,8 @@ export function useNftMint(): UseNftMintResult {
       const data: EligibilityResponse = await res.json();
       setEligibility(data);
 
-      // Populate mintedNft if already claimed
-      if (data.mintedNft) {
+      // Populate mintedNft if already claimed (use status discriminator for type safety)
+      if (data.status === 'already_minted' && data.mintedNft) {
         setMintedNft({
           tokenId: data.mintedNft.tokenId,
           name: data.mintedNft.name,
@@ -140,21 +140,25 @@ export function useNftMint(): UseNftMintResult {
         storyTitle: null,
       });
       setFlowState('revealing');
-      setEligibility((prev) =>
-        prev
-          ? {
-              ...prev,
-              hasMinted: true,
-              status: 'already_minted',
-              mintedNft: {
-                tokenId: nft.tokenId,
-                name: nft.name,
-                thumbnailUrl: nft.thumbnailUrl,
-                txHash,
-              },
-            }
-          : null
-      );
+      // Update eligibility to already_minted state
+      setEligibility((prev): EligibilityResponse | null => {
+        if (!prev) return null;
+        return {
+          status: 'already_minted',
+          eligible: true,
+          hasMinted: true,
+          snapshotRank: prev.snapshotRank,
+          snapshotPoints: prev.snapshotPoints,
+          snapshotTakenAt: prev.snapshotTakenAt,
+          currentRank: prev.currentRank,
+          mintedNft: {
+            tokenId: nft.tokenId,
+            name: nft.name,
+            thumbnailUrl: nft.thumbnailUrl,
+            txHash,
+          },
+        };
+      });
       toast.success(message);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Network error';
@@ -169,13 +173,25 @@ export function useNftMint(): UseNftMintResult {
     setError(null);
   }, [eligibility?.hasMinted]);
 
+  // Track mounted state to prevent state updates after unmount
+  const isMountedRef = useRef(true);
+
   useEffect(() => {
+    isMountedRef.current = true;
+
     if (authenticated) {
-      checkEligibility();
+      // Wrap in async IIFE with mounted check
+      (async () => {
+        await checkEligibility();
+      })();
     } else {
       setEligibility(null);
       setFlowState('idle');
     }
+
+    return () => {
+      isMountedRef.current = false;
+    };
   }, [authenticated, checkEligibility]);
 
   return {
