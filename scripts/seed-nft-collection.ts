@@ -25,6 +25,7 @@ import {
   nftSnapshot,
 } from '@babylon/db';
 import { logger } from '@babylon/shared';
+import { execSync } from 'child_process';
 import { nanoid } from 'nanoid';
 
 const TOTAL_NFTS = 100;
@@ -37,12 +38,26 @@ const GITHUB_BRANCH = 'main';
 const NFT_FOLDER = 'NFT%20Protomonkeys';
 
 // Get GitHub raw URL for NFT image
-const getNftImageUrl = (tokenId: number) =>
-  `https://raw.githubusercontent.com/${GITHUB_REPO}/${GITHUB_BRANCH}/${NFT_FOLDER}/images/${tokenId}.png`;
-
-// Get GitHub raw URL for NFT metadata JSON
-const getNftMetadataUrl = (tokenId: number) =>
-  `https://raw.githubusercontent.com/${GITHUB_REPO}/${GITHUB_BRANCH}/${NFT_FOLDER}/${tokenId}.json`;
+// Use GitHub API download_url for reliable access (works for both public and private repos)
+async function getNftImageUrl(tokenId: number): Promise<string> {
+  try {
+    const filePath = `NFT Protomonkeys/images/${tokenId}.png`;
+    const command = `gh api repos/${GITHUB_REPO}/contents/${encodeURIComponent(filePath)} --jq .download_url`;
+    const downloadUrl = execSync(command, {
+      encoding: 'utf-8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+    }).trim();
+    return downloadUrl;
+  } catch (error) {
+    // Fallback to raw URL if API fails
+    logger.warn(
+      `Failed to get download URL for image #${tokenId}, using raw URL fallback`,
+      { error: String(error) },
+      'SeedNFT'
+    );
+    return `https://raw.githubusercontent.com/${GITHUB_REPO}/${GITHUB_BRANCH}/${NFT_FOLDER}/images/${tokenId}.png`;
+  }
+}
 
 interface NftMetadata {
   name: string;
@@ -51,21 +66,161 @@ interface NftMetadata {
   attributes: Array<{ trait_type: string; value: string | number }>;
 }
 
-// Fetch NFT metadata from GitHub
+/**
+ * Generate a unique description for an NFT based on its name, traits, and Babylon narrative
+ */
+function generateNftDescription(
+  nftName: string,
+  tokenId: number,
+  attributes: Array<{ trait_type: string; value: string | number }>
+): string {
+  // Extract key traits
+  const background = attributes.find((a) => a.trait_type === 'BackgroundColors')
+    ?.value as string | undefined;
+  const face = attributes.find((a) => a.trait_type === 'Face')?.value as
+    | string
+    | undefined;
+  const eyes = attributes.find((a) => a.trait_type === 'Eyes')?.value as
+    | string
+    | undefined;
+  const body = attributes.find((a) => a.trait_type === 'Body')?.value as
+    | string
+    | undefined;
+  const mouth = attributes.find((a) => a.trait_type === 'Mouth')?.value as
+    | string
+    | undefined;
+  const glasses = attributes.find((a) => a.trait_type === 'Glasses')?.value as
+    | string
+    | undefined;
+  const head = attributes.find((a) => a.trait_type === 'Head')?.value as
+    | string
+    | undefined;
+
+  // Build trait description
+  const traitParts: string[] = [];
+  if (background) traitParts.push(background.toLowerCase());
+  if (face && face !== 'Base') traitParts.push(face.toLowerCase());
+  if (body && body !== 'Base') traitParts.push(body.toLowerCase());
+  if (eyes && eyes !== 'Base') traitParts.push(eyes.toLowerCase());
+  if (mouth && mouth !== 'Base') traitParts.push(mouth.toLowerCase());
+  if (glasses) traitParts.push(`wearing ${glasses.toLowerCase()}`);
+  if (head) traitParts.push(`with ${head.toLowerCase()}`);
+
+  const traitDescription =
+    traitParts.length > 0 ? ` ${traitParts.slice(0, 3).join(', ')}` : '';
+
+  // Generate description based on NFT name patterns
+  let personality = '';
+  const nameLower = nftName.toLowerCase();
+
+  if (nameLower.includes('wire')) {
+    personality =
+      'A digital native who thrives in the fast-paced world of prediction markets';
+  } else if (nameLower.includes('copy')) {
+    personality =
+      'Master of pattern recognition, copying successful strategies across markets';
+  } else if (nameLower.includes('drowsy') || nameLower.includes('sleep')) {
+    personality =
+      'A patient strategist who waits for the perfect moment to strike';
+  } else if (nameLower.includes('america')) {
+    personality =
+      'A bold trader who brings confidence and determination to every market';
+  } else if (nameLower.includes('matte')) {
+    personality =
+      'A sleek operator who moves through markets with precision and style';
+  } else if (nameLower.includes('chrome')) {
+    personality =
+      'A polished professional reflecting the best strategies in real-time';
+  } else if (nameLower.includes('gas')) {
+    personality =
+      'Always ready to execute, moving fast when opportunities arise';
+  } else if (nameLower.includes('howto')) {
+    personality =
+      'A teacher and guide, sharing knowledge to help others succeed';
+  } else if (nameLower.includes('mugging')) {
+    personality = 'A fierce competitor who takes calculated risks for big wins';
+  } else if (nameLower.includes('retro')) {
+    personality = 'Drawing wisdom from classic trading strategies of the past';
+  } else if (nameLower.includes('eliza')) {
+    personality =
+      'An AI agent enthusiast, bridging human and machine intelligence';
+  } else if (nameLower.includes('multi')) {
+    personality = 'A versatile player who excels across multiple market types';
+  } else if (nameLower.includes('flocked')) {
+    personality =
+      'A community leader who brings others together for collective success';
+  } else if (nameLower.includes('awed')) {
+    personality = "Amazed by the endless possibilities in Babylon's markets";
+  } else if (nameLower.includes('signal')) {
+    personality = 'An expert at reading market signals and predicting trends';
+  } else if (nameLower.includes('wailing')) {
+    personality = 'Expressing the emotional rollercoaster of market trading';
+  } else if (nameLower.includes('sideeye') || nameLower.includes('judging')) {
+    personality =
+      'A skeptical analyst who questions everything before committing';
+  } else if (nameLower.includes('wallstreet')) {
+    personality =
+      'A financial veteran bringing traditional market wisdom to Babylon';
+  } else if (nameLower.includes('boost')) {
+    personality =
+      'An amplifier of success, helping strategies reach their full potential';
+  } else if (nameLower.includes('eager')) {
+    personality = 'Always ready to jump into new markets and opportunities';
+  } else if (nameLower.includes('council')) {
+    personality =
+      'A wise advisor who helps shape the direction of the community';
+  } else if (nameLower.includes('seer')) {
+    personality = 'A visionary who sees patterns others miss in the chaos';
+  } else if (nameLower.includes('uplift')) {
+    personality = 'Raising others up while climbing the leaderboard';
+  } else if (nameLower.includes('steve')) {
+    personality =
+      "A legendary figure whose name echoes through Babylon's halls";
+  } else if (nameLower.includes('sly')) {
+    personality = 'A cunning strategist who plays the long game';
+  } else if (nameLower.includes('joyful')) {
+    personality = 'Finding joy in every trade, win or lose';
+  } else if (nameLower.includes('silly')) {
+    personality = "A playful spirit who doesn't take themselves too seriously";
+  } else if (nameLower.includes('frazzled')) {
+    personality =
+      'Surviving the chaos of fast-moving markets with determination';
+  } else {
+    // Generic personality based on traits
+    if (eyes?.toLowerCase().includes('sleep')) {
+      personality = 'A patient observer who waits for the right moment';
+    } else if (
+      eyes?.toLowerCase().includes('excited') ||
+      eyes?.toLowerCase().includes('dizzy')
+    ) {
+      personality = 'An energetic trader who thrives on market volatility';
+    } else if (
+      mouth?.toLowerCase().includes('wide') ||
+      mouth?.toLowerCase().includes('waaaah')
+    ) {
+      personality = 'Expressing the full range of emotions in trading';
+    } else {
+      personality = "A skilled participant in Babylon's prediction markets";
+    }
+  }
+
+  // Combine into unique description (name mentioned only once)
+  return `${personality}${traitDescription ? ` This ProtoMonkey features${traitDescription}.` : ''} As one of the top 100 players, ${nftName} represents your onchain identity in Babylon, where humans and AI agents compete together in real-time prediction markets. Your reputation and performance are recorded onchain forever.`;
+}
+
+// Fetch NFT metadata using GitHub CLI
 async function fetchNftMetadata(tokenId: number): Promise<NftMetadata | null> {
   try {
-    const url = getNftMetadataUrl(tokenId);
-    const response = await fetch(url);
-    if (!response.ok) {
-      logger.warn(
-        `Failed to fetch metadata for NFT #${tokenId}`,
-        { status: response.status },
-        'SeedNFT'
-      );
-      return null;
-    }
+    // Use GitHub CLI to fetch the file content
+    const filePath = `NFT Protomonkeys/${tokenId}.json`;
+    const command = `gh api repos/${GITHUB_REPO}/contents/${encodeURIComponent(filePath)} --jq .content | base64 -d`;
 
-    const data = (await response.json()) as {
+    const fileContent = execSync(command, {
+      encoding: 'utf-8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+    });
+
+    const data = JSON.parse(fileContent) as {
       name: string;
       description: string;
       attributes: Array<{ trait_type: string; value: string | number }>;
@@ -85,7 +240,7 @@ async function fetchNftMetadata(tokenId: number): Promise<NftMetadata | null> {
     };
   } catch (error) {
     logger.warn(
-      `Error fetching metadata for NFT #${tokenId}`,
+      `Error fetching metadata for NFT #${tokenId} via GitHub CLI`,
       { error: String(error) },
       'SeedNFT'
     );
@@ -147,14 +302,15 @@ async function seedCollection(): Promise<void> {
       failCount++;
 
       // Fallback to placeholder data
+      const imageUrl = await getNftImageUrl(tokenId);
       await db.insert(nftCollection).values({
         id: nanoid(),
         tokenId,
         name: `Babylon #${tokenId}`,
         description:
           'Your onchain identity inside Babylon, the social arena where humans and AI agents compete together in real time prediction markets.',
-        imageUrl: getNftImageUrl(tokenId),
-        thumbnailUrl: getNftImageUrl(tokenId), // Same URL, browser will resize
+        imageUrl,
+        thumbnailUrl: imageUrl, // Same URL, browser will resize
         imageCid: null,
         storyTitle: `ProtoMonkey #${tokenId}`,
         storyContent:
@@ -173,17 +329,27 @@ async function seedCollection(): Promise<void> {
       continue;
     }
 
+    // Generate unique description based on name, traits, and Babylon narrative
+    const uniqueDescription = generateNftDescription(
+      metadata.nftName,
+      tokenId,
+      metadata.attributes
+    );
+
+    // Get image URL from GitHub API
+    const imageUrl = await getNftImageUrl(tokenId);
+
     // Use actual metadata
     await db.insert(nftCollection).values({
       id: nanoid(),
       tokenId,
       name: metadata.nftName, // Use the actual NFT name from attributes
-      description: metadata.description,
-      imageUrl: getNftImageUrl(tokenId),
-      thumbnailUrl: getNftImageUrl(tokenId), // Same URL, browser will resize
+      description: uniqueDescription, // Use generated unique description
+      imageUrl,
+      thumbnailUrl: imageUrl, // Same URL, browser will resize
       imageCid: null, // Will be set when uploaded to IPFS
       storyTitle: metadata.nftName,
-      storyContent: metadata.description,
+      storyContent: uniqueDescription, // Use generated description for story too
       metadataUri: null, // Will be set when metadata is uploaded to IPFS
       attributes: metadata.attributes,
       contractAddress: PLACEHOLDER_CONTRACT,
