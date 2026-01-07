@@ -102,6 +102,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
         points: nftSnapshot.points,
         hasMinted: nftSnapshot.hasMinted,
         mintedTokenId: nftSnapshot.mintedTokenId,
+        mintTxHash: nftSnapshot.mintTxHash,
       })
       .from(nftSnapshot)
       .where(eq(nftSnapshot.userId, userId))
