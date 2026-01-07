@@ -7,7 +7,7 @@
  * @description
  * Proxies NFT images from GitHub repository to avoid CORS issues and token expiration.
  * Uses GitHub API to fetch images with proper authentication.
- * Includes in-memory caching to reduce GitHub API calls and rate limit impact.
+ * Includes in-memory caching and rate limiting to protect against abuse.
  */
 
 import { logger } from '@babylon/shared';
@@ -29,6 +29,45 @@ const imageCache = new Map<
 /** Cache TTL: 1 hour (images are immutable, but allow refresh for updates) */
 const CACHE_TTL_MS = 60 * 60 * 1000;
 
+/**
+ * Simple sliding window rate limiter
+ * Limits requests per IP to prevent abuse of GitHub API
+ */
+const rateLimitWindow = new Map<string, { count: number; resetAt: number }>();
+const RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1 minute window
+const RATE_LIMIT_MAX_REQUESTS = 60; // 60 requests per minute per IP
+
+function isRateLimited(ip: string): boolean {
+  const now = Date.now();
+  const entry = rateLimitWindow.get(ip);
+
+  if (!entry || now > entry.resetAt) {
+    // New window
+    rateLimitWindow.set(ip, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
+    return false;
+  }
+
+  if (entry.count >= RATE_LIMIT_MAX_REQUESTS) {
+    return true;
+  }
+
+  entry.count++;
+  return false;
+}
+
+// Cleanup old rate limit entries periodically (every 5 minutes)
+setInterval(
+  () => {
+    const now = Date.now();
+    for (const [ip, entry] of rateLimitWindow.entries()) {
+      if (now > entry.resetAt) {
+        rateLimitWindow.delete(ip);
+      }
+    }
+  },
+  5 * 60 * 1000
+);
+
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
@@ -43,20 +82,32 @@ if (!GITHUB_TOKEN) {
 
 /**
  * GET /api/nft/image/[tokenId]
- * Proxy NFT image from GitHub with caching
+ * Proxy NFT image from GitHub with caching and rate limiting
  */
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   context: { params: Promise<{ tokenId: string }> }
 ) {
+  // Get client IP for rate limiting
+  const ip =
+    request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+    request.headers.get('x-real-ip') ||
+    'unknown';
+
+  // Check rate limit (skip for cached responses)
   const { tokenId: tokenIdStr } = await context.params;
   const tokenId = Number(tokenIdStr);
 
-  if (!tokenIdStr || isNaN(tokenId) || tokenId < 1 || tokenId > COLLECTION_SIZE) {
+  if (
+    !tokenIdStr ||
+    isNaN(tokenId) ||
+    tokenId < 1 ||
+    tokenId > COLLECTION_SIZE
+  ) {
     return NextResponse.json({ error: 'Invalid token ID' }, { status: 400 });
   }
 
-  // Check in-memory cache first
+  // Check in-memory cache first (doesn't count against rate limit)
   const cached = imageCache.get(tokenId);
   if (cached && Date.now() - cached.cachedAt < CACHE_TTL_MS) {
     return new NextResponse(cached.buffer, {
@@ -69,6 +120,24 @@ export async function GET(
         'X-Cache': 'HIT',
       },
     });
+  }
+
+  // Apply rate limit only for cache misses (actual GitHub API calls)
+  if (isRateLimited(ip)) {
+    logger.warn(
+      `Rate limit exceeded for IP ${ip.slice(0, 8)}...`,
+      undefined,
+      'GET /api/nft/image/[tokenId]'
+    );
+    return NextResponse.json(
+      { error: 'Too many requests' },
+      {
+        status: 429,
+        headers: {
+          'Retry-After': '60',
+        },
+      }
+    );
   }
 
   try {
