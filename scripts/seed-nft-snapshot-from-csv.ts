@@ -232,7 +232,10 @@ async function seedNftSnapshot(
     const maskDid = (id: string) => `...${id.slice(-6)}`;
     logger.warn(
       `${missingUsers.length} users from CSV not found in User table. Use --create-users to create them.`,
-      { missingCount: missingUsers.length, sample: missingUsers.slice(0, 5).map((u) => maskDid(u.id)) },
+      {
+        missingCount: missingUsers.length,
+        sample: missingUsers.slice(0, 5).map((u) => maskDid(u.id)),
+      },
       'SeedSnapshot'
     );
   }
@@ -355,13 +358,18 @@ const createUsers = args.includes('--create-users');
 // Find CSV path from args or use common locations
 const csvArg = args.find((a) => !a.startsWith('--'));
 const defaultPaths = [
-  join(process.env.HOME ?? '', 'Downloads/user_snapshot_2025-12-31_top100 - user_snapshot_2025-12-31_top100.csv.csv'),
+  join(
+    process.env.HOME ?? '',
+    'Downloads/user_snapshot_2025-12-31_top100 - user_snapshot_2025-12-31_top100.csv.csv'
+  ),
   join(process.cwd(), 'data/nft-snapshot.csv'),
 ];
 const csvPath = csvArg ?? defaultPaths.find((p) => existsSync(p));
 
 if (!csvPath) {
-  console.error('Usage: bun run scripts/seed-nft-snapshot-from-csv.ts <csv-path>');
+  console.error(
+    'Usage: bun run scripts/seed-nft-snapshot-from-csv.ts <csv-path>'
+  );
   console.error('No CSV path provided and no default file found.');
   process.exit(1);
 }

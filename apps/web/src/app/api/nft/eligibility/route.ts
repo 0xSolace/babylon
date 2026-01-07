@@ -15,9 +15,7 @@ async function getNftInfo(tokenId: number) {
     .where(eq(nftCollection.tokenId, tokenId))
     .limit(1);
 
-  return nft
-    ? { ...nft, thumbnailUrl: `/api/nft/image/${nft.tokenId}` }
-    : null;
+  return nft ? { ...nft, thumbnailUrl: `/api/nft/image/${nft.tokenId}` } : null;
 }
 
 export const GET = withErrorHandling(async (request: NextRequest) => {
