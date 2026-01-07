@@ -25,7 +25,9 @@ interface UseNftMintResult {
 
 export function useNftMint(): UseNftMintResult {
   const { authenticated, getAccessToken } = useAuth();
-  const [eligibility, setEligibility] = useState<EligibilityResponse | null>(null);
+  const [eligibility, setEligibility] = useState<EligibilityResponse | null>(
+    null
+  );
   const [isCheckingEligibility, setIsCheckingEligibility] = useState(false);
   const [flowState, setFlowState] = useState<MintFlowState>('idle');
   const [mintedNft, setMintedNft] = useState<MintedNft | null>(null);
@@ -33,7 +35,11 @@ export function useNftMint(): UseNftMintResult {
 
   const checkEligibility = useCallback(async () => {
     if (!authenticated) {
-      setEligibility({ eligible: false, status: 'not_authenticated', hasMinted: false });
+      setEligibility({
+        eligible: false,
+        status: 'not_authenticated',
+        hasMinted: false,
+      });
       return;
     }
 
@@ -43,7 +49,11 @@ export function useNftMint(): UseNftMintResult {
 
     const token = await getAccessToken();
     if (!token) {
-      setEligibility({ eligible: false, status: 'not_authenticated', hasMinted: false });
+      setEligibility({
+        eligible: false,
+        status: 'not_authenticated',
+        hasMinted: false,
+      });
       setFlowState('idle');
       setIsCheckingEligibility(false);
       return;
@@ -101,7 +111,10 @@ export function useNftMint(): UseNftMintResult {
 
     const res = await fetch('/api/nft/claim', {
       method: 'POST',
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
     });
 
     if (!res.ok) {
@@ -128,7 +141,12 @@ export function useNftMint(): UseNftMintResult {
             ...prev,
             hasMinted: true,
             status: 'already_minted',
-            mintedNft: { tokenId: nft.tokenId, name: nft.name, thumbnailUrl: nft.thumbnailUrl, txHash },
+            mintedNft: {
+              tokenId: nft.tokenId,
+              name: nft.name,
+              thumbnailUrl: nft.thumbnailUrl,
+              txHash,
+            },
           }
         : null
     );

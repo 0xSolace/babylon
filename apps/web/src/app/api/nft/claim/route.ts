@@ -27,7 +27,11 @@ import { nanoid } from 'nanoid';
 import type { NextRequest } from 'next/server';
 
 /** Build NFT response object with proxy image URLs */
-function buildNftResponse(nft: { tokenId: number; name: string; description: string | null }) {
+function buildNftResponse(nft: {
+  tokenId: number;
+  name: string;
+  description: string | null;
+}) {
   const imageUrl = `/api/nft/image/${nft.tokenId}`;
   return { ...nft, imageUrl, thumbnailUrl: imageUrl };
 }
@@ -70,13 +74,21 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     // Already claimed - return existing NFT info
     if (snap.hasMinted && snap.mintedTokenId !== null) {
       const [nft] = await tx
-        .select({ tokenId: nftCollection.tokenId, name: nftCollection.name, description: nftCollection.description })
+        .select({
+          tokenId: nftCollection.tokenId,
+          name: nftCollection.name,
+          description: nftCollection.description,
+        })
         .from(nftCollection)
         .where(eq(nftCollection.tokenId, snap.mintedTokenId))
         .limit(1);
 
       if (!nft) throw new ConflictError('You have already claimed your NFT');
-      return { alreadyClaimed: true, nft: buildNftResponse(nft), txHash: snap.mintTxHash ?? '' };
+      return {
+        alreadyClaimed: true,
+        nft: buildNftResponse(nft),
+        txHash: snap.mintTxHash ?? '',
+      };
     }
 
     if (snap.assignedTokenId === null) {
@@ -86,7 +98,11 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     // Get assigned NFT
     const tokenId = snap.assignedTokenId;
     const [nft] = await tx
-      .select({ tokenId: nftCollection.tokenId, name: nftCollection.name, description: nftCollection.description })
+      .select({
+        tokenId: nftCollection.tokenId,
+        name: nftCollection.name,
+        description: nftCollection.description,
+      })
       .from(nftCollection)
       .where(eq(nftCollection.tokenId, tokenId))
       .limit(1);
@@ -99,8 +115,15 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     // Atomic update with optimistic lock
     const [updated] = await tx
       .update(nftSnapshot)
-      .set({ hasMinted: true, mintedTokenId: tokenId, mintedAt: now, mintTxHash: txHash })
-      .where(and(eq(nftSnapshot.userId, userId), eq(nftSnapshot.hasMinted, false)))
+      .set({
+        hasMinted: true,
+        mintedTokenId: tokenId,
+        mintedAt: now,
+        mintTxHash: txHash,
+      })
+      .where(
+        and(eq(nftSnapshot.userId, userId), eq(nftSnapshot.hasMinted, false))
+      )
       .returning({ id: nftSnapshot.id });
 
     if (!updated) throw new ConflictError('Claim failed - please try again');
