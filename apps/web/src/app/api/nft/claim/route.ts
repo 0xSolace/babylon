@@ -1,19 +1,8 @@
 /**
  * NFT Claim API (Simulated)
  *
- * @route POST /api/nft/claim
- * @access Authenticated users only
- *
- * @description
- * Claims the pre-assigned NFT for an eligible user. In this simulated version,
- * no real blockchain transaction is required - the claim is recorded directly
- * in the database with a placeholder transaction hash.
- *
- * When real minting is implemented, this endpoint will:
- * 1. Prepare the mint transaction data
- * 2. Wait for user to sign and submit
- * 3. Verify the on-chain transaction
- * 4. Record the claim
+ * Claims the pre-assigned NFT for an eligible user. Uses a simulated
+ * transaction hash until real blockchain minting is implemented.
  */
 
 import {
@@ -37,27 +26,19 @@ import {
 import { nanoid } from 'nanoid';
 import type { NextRequest } from 'next/server';
 
-interface ClaimResponse {
-  success: boolean;
-  tokenId: number;
-  nft: {
-    tokenId: number;
-    name: string;
-    description: string | null;
-    imageUrl: string;
-    thumbnailUrl: string;
-  };
-  txHash: string;
-  message: string;
+/** Build NFT response object with proxy image URLs */
+function buildNftResponse(nft: { tokenId: number; name: string; description: string | null }) {
+  const imageUrl = `/api/nft/image/${nft.tokenId}`;
+  return { ...nft, imageUrl, thumbnailUrl: imageUrl };
 }
 
 export const POST = withErrorHandling(async (request: NextRequest) => {
   const authUser = await authenticate(request);
   const userId = authUser.dbUserId ?? authUser.userId;
 
-  // Get user's wallet address
+  // Get user's wallet
   const [user] = await db
-    .select({ id: users.id, walletAddress: users.walletAddress })
+    .select({ walletAddress: users.walletAddress })
     .from(users)
     .where(eq(users.id, userId))
     .limit(1);
@@ -66,16 +47,13 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     throw new BadRequestError('You must connect a wallet to claim your NFT');
   }
 
-  const normalizedWalletAddress = user.walletAddress.toLowerCase();
+  const wallet = user.walletAddress.toLowerCase();
   const now = new Date();
 
-  // Perform claim in a transaction
   const result = await db.transaction(async (tx) => {
-    // Get snapshot entry with assigned NFT
-    const [snapshotEntry] = await tx
+    // Get snapshot with assigned NFT
+    const [snap] = await tx
       .select({
-        id: nftSnapshot.id,
-        userId: nftSnapshot.userId,
         rank: nftSnapshot.rank,
         points: nftSnapshot.points,
         assignedTokenId: nftSnapshot.assignedTokenId,
@@ -87,132 +65,78 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
       .where(eq(nftSnapshot.userId, userId))
       .limit(1);
 
-    if (!snapshotEntry) {
-      throw new ForbiddenError('You are not eligible to claim an NFT');
+    if (!snap) throw new ForbiddenError('You are not eligible to claim an NFT');
+
+    // Already claimed - return existing NFT info
+    if (snap.hasMinted && snap.mintedTokenId !== null) {
+      const [nft] = await tx
+        .select({ tokenId: nftCollection.tokenId, name: nftCollection.name, description: nftCollection.description })
+        .from(nftCollection)
+        .where(eq(nftCollection.tokenId, snap.mintedTokenId))
+        .limit(1);
+
+      if (!nft) throw new ConflictError('You have already claimed your NFT');
+      return { alreadyClaimed: true, nft: buildNftResponse(nft), txHash: snap.mintTxHash ?? '' };
     }
 
-    // Check if already claimed
-    if (snapshotEntry.hasMinted) {
-      if (snapshotEntry.mintedTokenId !== null) {
-        // Return existing claim info
-        const [existingNft] = await tx
-          .select({
-            tokenId: nftCollection.tokenId,
-            name: nftCollection.name,
-            description: nftCollection.description,
-            imageUrl: nftCollection.imageUrl,
-          })
-          .from(nftCollection)
-          .where(eq(nftCollection.tokenId, snapshotEntry.mintedTokenId))
-          .limit(1);
-
-        if (existingNft) {
-          return {
-            alreadyClaimed: true,
-            nft: {
-              tokenId: existingNft.tokenId,
-              name: existingNft.name,
-              description: existingNft.description,
-              imageUrl: `/api/nft/image/${existingNft.tokenId}`,
-              thumbnailUrl: `/api/nft/image/${existingNft.tokenId}`,
-            },
-            txHash: snapshotEntry.mintTxHash ?? 'simulated-0x0',
-          };
-        }
-      }
-      throw new ConflictError('You have already claimed your NFT');
-    }
-
-    // Check if user has an assigned NFT
-    if (snapshotEntry.assignedTokenId === null) {
+    if (snap.assignedTokenId === null) {
       throw new BadRequestError('No NFT has been assigned to you');
     }
 
-    const assignedTokenId = snapshotEntry.assignedTokenId;
-
-    // Get the assigned NFT details
-    const [assignedNft] = await tx
-      .select({
-        tokenId: nftCollection.tokenId,
-        name: nftCollection.name,
-        description: nftCollection.description,
-        imageUrl: nftCollection.imageUrl,
-      })
+    // Get assigned NFT
+    const tokenId = snap.assignedTokenId;
+    const [nft] = await tx
+      .select({ tokenId: nftCollection.tokenId, name: nftCollection.name, description: nftCollection.description })
       .from(nftCollection)
-      .where(eq(nftCollection.tokenId, assignedTokenId))
+      .where(eq(nftCollection.tokenId, tokenId))
       .limit(1);
 
-    if (!assignedNft) {
-      throw new BadRequestError('Assigned NFT not found in collection');
-    }
+    if (!nft) throw new BadRequestError('Assigned NFT not found');
 
-    // Generate simulated transaction hash
-    // Format: simulated-{timestamp}-{random}
-    const simulatedTxHash = `simulated-${Date.now()}-${nanoid(8)}`;
+    // Simulated tx hash
+    const txHash = `simulated-${Date.now()}-${nanoid(8)}`;
 
-    // Update snapshot to mark as minted
-    const [updatedSnapshot] = await tx
+    // Atomic update with optimistic lock
+    const [updated] = await tx
       .update(nftSnapshot)
-      .set({
-        hasMinted: true,
-        mintedTokenId: assignedTokenId,
-        mintedAt: now,
-        mintTxHash: simulatedTxHash,
-      })
-      .where(
-        and(eq(nftSnapshot.userId, userId), eq(nftSnapshot.hasMinted, false))
-      )
+      .set({ hasMinted: true, mintedTokenId: tokenId, mintedAt: now, mintTxHash: txHash })
+      .where(and(eq(nftSnapshot.userId, userId), eq(nftSnapshot.hasMinted, false)))
       .returning({ id: nftSnapshot.id });
 
-    if (!updatedSnapshot) {
-      throw new ConflictError('Claim failed - please try again');
-    }
+    if (!updated) throw new ConflictError('Claim failed - please try again');
 
-    // Create ownership record
+    // Create ownership + claim records
     await tx.insert(nftOwnership).values({
       id: nanoid(),
-      tokenId: assignedTokenId,
-      ownerAddress: normalizedWalletAddress,
-      userId: userId,
+      tokenId,
+      ownerAddress: wallet,
+      userId,
       acquiredAt: now,
-      txHash: simulatedTxHash,
+      txHash,
       updatedAt: now,
     });
 
-    // Create claim record (provenance)
     await tx.insert(nftClaims).values({
       id: nanoid(),
-      tokenId: assignedTokenId,
+      tokenId,
       claimerUserId: userId,
-      claimerAddress: normalizedWalletAddress,
+      claimerAddress: wallet,
       claimedAt: now,
-      txHash: simulatedTxHash,
-      snapshotRank: snapshotEntry.rank,
-      snapshotPoints: snapshotEntry.points,
+      txHash,
+      snapshotRank: snap.rank,
+      snapshotPoints: snap.points,
     });
 
-    return {
-      alreadyClaimed: false,
-      nft: {
-        tokenId: assignedNft.tokenId,
-        name: assignedNft.name,
-        description: assignedNft.description,
-        imageUrl: `/api/nft/image/${assignedNft.tokenId}`,
-        thumbnailUrl: `/api/nft/image/${assignedNft.tokenId}`,
-      },
-      txHash: simulatedTxHash,
-    };
+    return { alreadyClaimed: false, nft: buildNftResponse(nft), txHash };
   });
 
-  const response: ClaimResponse = {
+  return successResponse({
     success: true,
     tokenId: result.nft.tokenId,
     nft: result.nft,
     txHash: result.txHash,
     message: result.alreadyClaimed
       ? 'You have already claimed this NFT'
-      : 'NFT claimed successfully! (Simulated - real minting coming soon)',
-  };
-
-  return successResponse(response);
+      : 'NFT claimed successfully!',
+  });
 });

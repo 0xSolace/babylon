@@ -1,25 +1,22 @@
 /**
  * Seed NftSnapshot from CSV file
  *
- * This script imports the top 100 users from a CSV snapshot and randomly
- * assigns each user exactly one NFT (tokenId 1-100).
+ * Imports top 100 users from a CSV snapshot and randomly assigns each
+ * user exactly one NFT (tokenId 1-100).
  *
  * Usage:
  *   bun run scripts/seed-nft-snapshot-from-csv.ts <csv-path>
- *   bun run scripts/seed-nft-snapshot-from-csv.ts --force  # Re-run with default path
- *   bun run scripts/seed-nft-snapshot-from-csv.ts --create-users  # Create missing users for local dev
+ *   bun run scripts/seed-nft-snapshot-from-csv.ts --force        # Overwrite existing
+ *   bun run scripts/seed-nft-snapshot-from-csv.ts --create-users # Create missing users
  *
- * The CSV must have columns: id (Privy ID), walletAddress, reputationPoints
+ * Required CSV columns: id (Privy ID), walletAddress, reputationPoints
  */
 
 import { db, inArray, nftSnapshot, users } from '@babylon/db';
 import { logger } from '@babylon/shared';
-import { readFileSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import { nanoid } from 'nanoid';
-
-// Default CSV path
-const DEFAULT_CSV_PATH =
-  '/Users/janbrezina/Downloads/user_snapshot_2025-12-31_top100 - user_snapshot_2025-12-31_top100.csv.csv';
+import { join } from 'path';
 
 interface CsvUser {
   id: string; // Privy ID (did:privy:...)
@@ -352,7 +349,20 @@ async function seedNftSnapshot(
 const args = process.argv.slice(2);
 const force = args.includes('--force');
 const createUsers = args.includes('--create-users');
-const csvPath = args.find((a) => !a.startsWith('--')) ?? DEFAULT_CSV_PATH;
+
+// Find CSV path from args or use common locations
+const csvArg = args.find((a) => !a.startsWith('--'));
+const defaultPaths = [
+  join(process.env.HOME ?? '', 'Downloads/user_snapshot_2025-12-31_top100 - user_snapshot_2025-12-31_top100.csv.csv'),
+  join(process.cwd(), 'data/nft-snapshot.csv'),
+];
+const csvPath = csvArg ?? defaultPaths.find((p) => existsSync(p));
+
+if (!csvPath) {
+  console.error('Usage: bun run scripts/seed-nft-snapshot-from-csv.ts <csv-path>');
+  console.error('No CSV path provided and no default file found.');
+  process.exit(1);
+}
 
 seedNftSnapshot(csvPath, force, createUsers)
   .then(() => process.exit(0))
