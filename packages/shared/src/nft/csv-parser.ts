@@ -1,26 +1,18 @@
 /**
- * NFT CSV Parser Utilities
- *
- * Robust CSV parsing for NFT snapshot data.
- * Handles quoted fields, commas within fields, escaped quotes, and special characters.
+ * CSV parsing for NFT snapshot data
  */
 
 import { readFileSync } from 'node:fs';
 
-/**
- * Parsed user data from CSV
- */
 export interface CsvUser {
-  id: string; // Privy ID (did:privy:...)
+  id: string;
   walletAddress: string;
   username: string;
   displayName: string;
   reputationPoints: number;
 }
 
-/**
- * Parse a single CSV line, handling quoted fields with commas and escaped quotes
- */
+/** Parse CSV line handling quoted fields with commas and escaped quotes */
 export function parseCSVLine(line: string): string[] {
   const result: string[] = [];
   let current = '';
@@ -31,7 +23,6 @@ export function parseCSVLine(line: string): string[] {
     const char = line[i]!;
 
     if (char === '"') {
-      // Handle escaped quotes (double-double quote)
       if (inQuotes && line[i + 1] === '"') {
         current += '"';
         i += 2;
@@ -57,10 +48,6 @@ export function parseCSVLine(line: string): string[] {
   return result;
 }
 
-/**
- * Parse CSV content string into CsvUser array
- * Validates Privy IDs and wallet addresses
- */
 export function parseCsvContent(content: string): CsvUser[] {
   const lines = content.split('\n');
 
@@ -68,9 +55,7 @@ export function parseCsvContent(content: string): CsvUser[] {
     throw new Error('CSV file is empty or has no data rows');
   }
 
-  const headerLine = lines[0]!;
-  const headers = parseCSVLine(headerLine).map((h) => h.trim());
-
+  const headers = parseCSVLine(lines[0]!).map((h) => h.trim());
   const idIndex = headers.indexOf('id');
   const walletIndex = headers.indexOf('walletAddress');
   const usernameIndex = headers.indexOf('username');
@@ -90,48 +75,26 @@ export function parseCsvContent(content: string): CsvUser[] {
     if (!line) continue;
 
     const fields = parseCSVLine(line);
-
     const id = fields[idIndex]?.trim() ?? '';
     const walletAddress = fields[walletIndex]?.trim().toLowerCase() ?? '';
     const username = fields[usernameIndex]?.trim() ?? '';
     const displayName = fields[displayNameIndex]?.trim() ?? '';
-    const pointsStr = fields[pointsIndex]?.trim() ?? '0';
-    const reputationPoints = parseInt(pointsStr, 10) || 0;
+    const reputationPoints = parseInt(fields[pointsIndex]?.trim() ?? '0', 10) || 0;
 
-    // Validate Privy ID format
-    if (!id.startsWith('did:privy:')) {
-      continue;
-    }
+    if (!id.startsWith('did:privy:')) continue;
+    if (!walletAddress.match(/^0x[a-f0-9]{40}$/i)) continue;
 
-    // Validate wallet address format
-    if (!walletAddress.match(/^0x[a-f0-9]{40}$/i)) {
-      continue;
-    }
-
-    csvUsers.push({
-      id,
-      walletAddress,
-      username,
-      displayName,
-      reputationPoints,
-    });
+    csvUsers.push({ id, walletAddress, username, displayName, reputationPoints });
   }
 
   return csvUsers;
 }
 
-/**
- * Parse CSV file from path
- */
 export function parseCsvFile(filePath: string): CsvUser[] {
-  const content = readFileSync(filePath, 'utf-8');
-  return parseCsvContent(content);
+  return parseCsvContent(readFileSync(filePath, 'utf-8'));
 }
 
-/**
- * Fisher-Yates shuffle for random NFT assignment
- * Produces an unbiased permutation of the input array
- */
+/** Fisher-Yates shuffle */
 export function shuffle<T>(array: T[]): T[] {
   const shuffled = [...array];
   for (let i = shuffled.length - 1; i > 0; i--) {
@@ -141,9 +104,6 @@ export function shuffle<T>(array: T[]): T[] {
   return shuffled;
 }
 
-/**
- * Select top N users by reputation points
- */
 export function selectTop100(users: CsvUser[], limit = 100): CsvUser[] {
   return users
     .sort((a, b) => b.reputationPoints - a.reputationPoints)
