@@ -185,7 +185,9 @@ describe('NFT Image Proxy - Cache Headers', () => {
     });
 
     test('should be correct complete value', () => {
-      expect(CACHE_CONTROL_IMMUTABLE).toBe('public, max-age=31536000, immutable');
+      expect(CACHE_CONTROL_IMMUTABLE).toBe(
+        'public, max-age=31536000, immutable'
+      );
     });
   });
 

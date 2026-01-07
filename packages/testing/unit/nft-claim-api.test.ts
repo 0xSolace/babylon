@@ -224,7 +224,9 @@ describe('NFT Claim API - Claim Eligibility', () => {
       expect(result.canClaim).toBe(false);
       // Empty string fails the regex validation, returns 'invalid_wallet'
       // Our canUserClaim checks wallet validity with regex after null check
-      expect(['no_wallet', 'invalid_wallet']).toContain(result.reason ?? 'undefined');
+      expect(['no_wallet', 'invalid_wallet']).toContain(
+        result.reason ?? 'undefined'
+      );
     });
 
     test('should reject user with invalid wallet format', () => {

@@ -11,7 +11,14 @@
  * Run with: bun test integration/nft-claim.integration.test.ts
  */
 
-import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test';
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  describe,
+  expect,
+  test,
+} from 'bun:test';
 import {
   and,
   db,
@@ -257,7 +264,9 @@ describe('NFT Claim Integration Tests', () => {
           mintedAt: new Date(),
           mintTxHash: 'simulated-test-hash',
         })
-        .where(and(eq(nftSnapshot.userId, user.id), eq(nftSnapshot.hasMinted, false)))
+        .where(
+          and(eq(nftSnapshot.userId, user.id), eq(nftSnapshot.hasMinted, false))
+        )
         .returning();
 
       expect(updated).toBeDefined();
@@ -284,7 +293,9 @@ describe('NFT Claim Integration Tests', () => {
           mintedAt: new Date(),
           mintTxHash: 'simulated-first-claim',
         })
-        .where(and(eq(nftSnapshot.userId, user.id), eq(nftSnapshot.hasMinted, false)))
+        .where(
+          and(eq(nftSnapshot.userId, user.id), eq(nftSnapshot.hasMinted, false))
+        )
         .returning();
 
       expect(firstClaim).toBeDefined();
@@ -298,7 +309,9 @@ describe('NFT Claim Integration Tests', () => {
           mintedAt: new Date(),
           mintTxHash: 'simulated-second-claim',
         })
-        .where(and(eq(nftSnapshot.userId, user.id), eq(nftSnapshot.hasMinted, false)))
+        .where(
+          and(eq(nftSnapshot.userId, user.id), eq(nftSnapshot.hasMinted, false))
+        )
         .returning();
 
       expect(secondClaim).toHaveLength(0);
@@ -385,7 +398,13 @@ describe('NFT Claim Integration Tests', () => {
       const user2 = await createTestUser();
 
       // First user gets the token
-      await createTestSnapshot(user1.id, 1, 10000, user1.walletAddress, tokenId);
+      await createTestSnapshot(
+        user1.id,
+        1,
+        10000,
+        user1.walletAddress,
+        tokenId
+      );
 
       // Second user trying to get same token should fail
       try {
@@ -411,7 +430,9 @@ describe('NFT Claim Integration Tests', () => {
   describe('Eligibility with Assigned NFT', () => {
     test('should show assigned NFT in eligibility response', async () => {
       if (!serverAvailable || !databaseAvailable || !nftTablesExist) {
-        console.log('Skipping test: server, database, or NFT tables not available');
+        console.log(
+          'Skipping test: server, database, or NFT tables not available'
+        );
         return;
       }
 
@@ -478,7 +499,10 @@ describe('NFT Claim Integration Tests', () => {
 
       // After claim
       const [after] = await db
-        .select({ hasMinted: nftSnapshot.hasMinted, mintedTokenId: nftSnapshot.mintedTokenId })
+        .select({
+          hasMinted: nftSnapshot.hasMinted,
+          mintedTokenId: nftSnapshot.mintedTokenId,
+        })
         .from(nftSnapshot)
         .where(eq(nftSnapshot.userId, user.id))
         .limit(1);
@@ -509,7 +533,12 @@ describe('NFT Claim Integration Tests', () => {
             mintedAt: new Date(),
             mintTxHash: `simulated-concurrent-${i}`,
           })
-          .where(and(eq(nftSnapshot.userId, user.id), eq(nftSnapshot.hasMinted, false)))
+          .where(
+            and(
+              eq(nftSnapshot.userId, user.id),
+              eq(nftSnapshot.hasMinted, false)
+            )
+          )
           .returning()
       );
 
@@ -536,12 +565,21 @@ describe('NFT Claim Integration Tests', () => {
       }
 
       // Create 5 users with different assigned NFTs sequentially to track tokenIds
-      const userTokenPairs: Array<{ user: { id: string; walletAddress: string }; tokenId: number }> = [];
+      const userTokenPairs: Array<{
+        user: { id: string; walletAddress: string };
+        tokenId: number;
+      }> = [];
 
       for (let i = 0; i < 5; i++) {
         const tokenId = await createTestNft();
         const user = await createTestUser();
-        await createTestSnapshot(user.id, i + 1, 10000 - i * 1000, user.walletAddress, tokenId);
+        await createTestSnapshot(
+          user.id,
+          i + 1,
+          10000 - i * 1000,
+          user.walletAddress,
+          tokenId
+        );
         userTokenPairs.push({ user, tokenId });
       }
 
@@ -555,7 +593,12 @@ describe('NFT Claim Integration Tests', () => {
             mintedAt: new Date(),
             mintTxHash: `simulated-multi-user-${i}`,
           })
-          .where(and(eq(nftSnapshot.userId, user.id), eq(nftSnapshot.hasMinted, false)))
+          .where(
+            and(
+              eq(nftSnapshot.userId, user.id),
+              eq(nftSnapshot.hasMinted, false)
+            )
+          )
           .returning()
       );
 
