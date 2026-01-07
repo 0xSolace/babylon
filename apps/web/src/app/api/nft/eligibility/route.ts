@@ -68,7 +68,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
             tokenId: nft.tokenId,
             name: nft.name,
             thumbnailUrl: nft.thumbnailUrl,
-            txHash: snap.mintTxHash ?? '',
+            txHash: snap.mintTxHash ?? null,
           }
         : undefined,
     } satisfies EligibilityResponse);

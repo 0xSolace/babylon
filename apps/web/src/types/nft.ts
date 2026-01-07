@@ -118,7 +118,7 @@ export interface EligibilityResponse {
     tokenId: number;
     name: string;
     thumbnailUrl: string;
-    txHash: string;
+    txHash: string | null;
   };
   currentRank?: number;
   reason?: string;

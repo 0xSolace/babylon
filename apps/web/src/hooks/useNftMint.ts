@@ -41,41 +41,45 @@ export function useNftMint(): UseNftMintResult {
     setFlowState('checking_eligibility');
     setError(null);
 
-    const token = await getAccessToken();
-    if (!token) {
-      setEligibility({ eligible: false, status: 'not_authenticated', hasMinted: false });
-      setFlowState('idle');
-      setIsCheckingEligibility(false);
-      return;
-    }
+    try {
+      const token = await getAccessToken();
+      if (!token) {
+        setEligibility({ eligible: false, status: 'not_authenticated', hasMinted: false });
+        setFlowState('idle');
+        return;
+      }
 
-    const res = await fetch('/api/nft/eligibility', {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-
-    if (!res.ok) {
-      setError((await res.json()).error ?? 'Failed to check eligibility');
-      setFlowState('error');
-      setIsCheckingEligibility(false);
-      return;
-    }
-
-    const data: EligibilityResponse = await res.json();
-    setEligibility(data);
-
-    // Populate mintedNft if already claimed
-    if (data.mintedNft) {
-      setMintedNft({
-        tokenId: data.mintedNft.tokenId,
-        name: data.mintedNft.name,
-        imageUrl: data.mintedNft.thumbnailUrl,
-        thumbnailUrl: data.mintedNft.thumbnailUrl,
-        storyTitle: null,
+      const res = await fetch('/api/nft/eligibility', {
+        headers: { Authorization: `Bearer ${token}` },
       });
-    }
 
-    setFlowState(data.eligible ? 'eligible' : 'idle');
-    setIsCheckingEligibility(false);
+      if (!res.ok) {
+        setError((await res.json()).error ?? 'Failed to check eligibility');
+        setFlowState('error');
+        return;
+      }
+
+      const data: EligibilityResponse = await res.json();
+      setEligibility(data);
+
+      // Populate mintedNft if already claimed
+      if (data.mintedNft) {
+        setMintedNft({
+          tokenId: data.mintedNft.tokenId,
+          name: data.mintedNft.name,
+          imageUrl: data.mintedNft.thumbnailUrl,
+          thumbnailUrl: data.mintedNft.thumbnailUrl,
+          storyTitle: null,
+        });
+      }
+
+      setFlowState(data.eligible ? 'eligible' : 'idle');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Network error');
+      setFlowState('error');
+    } finally {
+      setIsCheckingEligibility(false);
+    }
   }, [authenticated, getAccessToken]);
 
   /** Claim the pre-assigned NFT */
@@ -92,47 +96,54 @@ export function useNftMint(): UseNftMintResult {
     setFlowState('minting');
     setError(null);
 
-    const token = await getAccessToken();
-    if (!token) {
-      toast.error('Authentication failed');
-      setFlowState('error');
-      return;
-    }
+    try {
+      const token = await getAccessToken();
+      if (!token) {
+        toast.error('Authentication failed');
+        setFlowState('error');
+        return;
+      }
 
-    const res = await fetch('/api/nft/claim', {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    });
+      const res = await fetch('/api/nft/claim', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      });
 
-    if (!res.ok) {
-      const msg = (await res.json()).error ?? 'Failed to claim NFT';
+      if (!res.ok) {
+        const msg = (await res.json()).error ?? 'Failed to claim NFT';
+        setError(msg);
+        toast.error(msg);
+        setFlowState('error');
+        return;
+      }
+
+      const { nft, txHash, message } = await res.json();
+
+      setMintedNft({
+        tokenId: nft.tokenId,
+        name: nft.name,
+        imageUrl: nft.imageUrl,
+        thumbnailUrl: nft.thumbnailUrl,
+        storyTitle: null,
+      });
+      setFlowState('revealing');
+      setEligibility((prev) =>
+        prev
+          ? {
+              ...prev,
+              hasMinted: true,
+              status: 'already_minted',
+              mintedNft: { tokenId: nft.tokenId, name: nft.name, thumbnailUrl: nft.thumbnailUrl, txHash },
+            }
+          : null
+      );
+      toast.success(message);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Network error';
       setError(msg);
       toast.error(msg);
       setFlowState('error');
-      return;
     }
-
-    const { nft, txHash, message } = await res.json();
-
-    setMintedNft({
-      tokenId: nft.tokenId,
-      name: nft.name,
-      imageUrl: nft.imageUrl,
-      thumbnailUrl: nft.thumbnailUrl,
-      storyTitle: null,
-    });
-    setFlowState('revealing');
-    setEligibility((prev) =>
-      prev
-        ? {
-            ...prev,
-            hasMinted: true,
-            status: 'already_minted',
-            mintedNft: { tokenId: nft.tokenId, name: nft.name, thumbnailUrl: nft.thumbnailUrl, txHash },
-          }
-        : null
-    );
-    toast.success(message);
   }, [authenticated, eligibility, getAccessToken]);
 
   const resetFlow = useCallback(() => {

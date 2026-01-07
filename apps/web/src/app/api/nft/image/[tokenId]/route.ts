@@ -10,11 +10,11 @@
  */
 
 import { logger } from '@babylon/shared';
-import { execSync } from 'child_process';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 
 const GITHUB_REPO = 'BabylonSocial/ProductManagementDocumentation';
+const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -39,20 +39,47 @@ export async function GET(
   }
 
   try {
-    // Use GitHub CLI to get download URL
+    // Fetch file metadata from GitHub API
     const filePath = `NFT Protomonkeys/images/${tokenId}.png`;
-    const command = `gh api repos/${GITHUB_REPO}/contents/${encodeURIComponent(filePath)} --jq .download_url`;
+    const apiUrl = `https://api.github.com/repos/${GITHUB_REPO}/contents/${encodeURIComponent(filePath)}`;
 
-    const downloadUrl = execSync(command, {
-      encoding: 'utf-8',
-      stdio: ['pipe', 'pipe', 'pipe'],
-    }).trim();
+    const headers: Record<string, string> = {
+      Accept: 'application/vnd.github.v3+json',
+      'User-Agent': 'Babylon-NFT-Proxy/1.0',
+    };
+    if (GITHUB_TOKEN) {
+      headers.Authorization = `Bearer ${GITHUB_TOKEN}`;
+    }
+
+    const metadataResponse = await fetch(apiUrl, { headers });
+
+    if (!metadataResponse.ok) {
+      logger.warn(
+        `Failed to fetch NFT metadata #${tokenId} from GitHub API`,
+        { status: metadataResponse.status },
+        'GET /api/nft/image/[tokenId]'
+      );
+      return NextResponse.json(
+        { error: 'Image not found' },
+        { status: metadataResponse.status === 404 ? 404 : 502 }
+      );
+    }
+
+    const metadata = await metadataResponse.json();
+    const downloadUrl = metadata.download_url;
+
+    if (!downloadUrl) {
+      logger.warn(
+        `No download URL for NFT image #${tokenId}`,
+        undefined,
+        'GET /api/nft/image/[tokenId]'
+      );
+      return NextResponse.json({ error: 'Image not found' }, { status: 404 });
+    }
 
     // Fetch the image from GitHub
     const imageResponse = await fetch(downloadUrl, {
-      headers: {
-        'User-Agent': 'Babylon-NFT-Proxy/1.0',
-      },
+      headers: { 'User-Agent': 'Babylon-NFT-Proxy/1.0' },
     });
 
     if (!imageResponse.ok) {

@@ -76,7 +76,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
         .limit(1);
 
       if (!nft) throw new ConflictError('You have already claimed your NFT');
-      return { alreadyClaimed: true, nft: buildNftResponse(nft), txHash: snap.mintTxHash ?? '' };
+      return { alreadyClaimed: true, nft: buildNftResponse(nft), txHash: snap.mintTxHash ?? null };
     }
 
     if (snap.assignedTokenId === null) {
