@@ -17,7 +17,11 @@ describe('parseCSVLine', () => {
   });
 
   test('handles quoted fields with commas', () => {
-    expect(parseCSVLine('1,"hello, world",2')).toEqual(['1', 'hello, world', '2']);
+    expect(parseCSVLine('1,"hello, world",2')).toEqual([
+      '1',
+      'hello, world',
+      '2',
+    ]);
   });
 
   test('handles escaped quotes', () => {
@@ -53,11 +57,15 @@ did:privy:user2,0x2222222222222222222222222222222222222222,user2,User Two,2000`;
 
   test('throws for empty/header-only CSV', () => {
     expect(() => parseCsvContent('')).toThrow('empty');
-    expect(() => parseCsvContent('id,walletAddress,reputationPoints')).toThrow('no data rows');
+    expect(() => parseCsvContent('id,walletAddress,reputationPoints')).toThrow(
+      'no data rows'
+    );
   });
 
   test('throws for missing columns', () => {
-    expect(() => parseCsvContent('id,username\nuser1,user1')).toThrow('missing required');
+    expect(() => parseCsvContent('id,username\nuser1,user1')).toThrow(
+      'missing required'
+    );
   });
 
   test('skips invalid rows', () => {
@@ -73,7 +81,9 @@ did:privy:user3,0x3333333333333333333333333333333333333333,u3,U3,300`;
   test('normalizes wallets to lowercase', () => {
     const csv = `id,walletAddress,username,displayName,reputationPoints
 did:privy:u,0xAABBCCDDEE1122334455667788990011AABBCCDD,u,U,100`;
-    expect(parseCsvContent(csv)[0]?.walletAddress).toBe('0xaabbccddee1122334455667788990011aabbccdd');
+    expect(parseCsvContent(csv)[0]?.walletAddress).toBe(
+      '0xaabbccddee1122334455667788990011aabbccdd'
+    );
   });
 
   test('defaults invalid points to 0', () => {
@@ -119,9 +129,13 @@ describe('selectTop100', () => {
   });
 
   test('selects top by points', () => {
-    const users = [makeUser('low', 10), makeUser('high', 100), makeUser('mid', 50)];
+    const users = [
+      makeUser('low', 10),
+      makeUser('high', 100),
+      makeUser('mid', 50),
+    ];
     const top = selectTop100(users, 2);
-    expect(top.map(u => u.reputationPoints)).toEqual([100, 50]);
+    expect(top.map((u) => u.reputationPoints)).toEqual([100, 50]);
   });
 
   test('handles edge cases', () => {
@@ -130,7 +144,9 @@ describe('selectTop100', () => {
   });
 
   test('defaults to 100 limit', () => {
-    const users = Array.from({ length: 150 }, (_, i) => makeUser(`u${i}`, 150 - i));
+    const users = Array.from({ length: 150 }, (_, i) =>
+      makeUser(`u${i}`, 150 - i)
+    );
     expect(selectTop100(users)).toHaveLength(100);
   });
 });

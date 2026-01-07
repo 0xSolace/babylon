@@ -3,21 +3,20 @@
 import { X } from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
-
-const STORAGE_KEY = 'nft-banner-dismissed';
+import { NFT_BANNER_DISMISSED_KEY } from '@/lib/constants/nft';
 
 export function NftPromoBanner() {
   const [isVisible, setIsVisible] = useState(false);
 
   useEffect(() => {
-    if (!localStorage.getItem(STORAGE_KEY)) setIsVisible(true);
+    if (!localStorage.getItem(NFT_BANNER_DISMISSED_KEY)) setIsVisible(true);
   }, []);
 
   if (!isVisible) return null;
 
   const handleDismiss = () => {
     setIsVisible(false);
-    localStorage.setItem(STORAGE_KEY, 'true');
+    localStorage.setItem(NFT_BANNER_DISMISSED_KEY, 'true');
   };
 
   return (

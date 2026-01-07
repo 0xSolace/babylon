@@ -79,12 +79,19 @@ export function parseCsvContent(content: string): CsvUser[] {
     const walletAddress = fields[walletIndex]?.trim().toLowerCase() ?? '';
     const username = fields[usernameIndex]?.trim() ?? '';
     const displayName = fields[displayNameIndex]?.trim() ?? '';
-    const reputationPoints = parseInt(fields[pointsIndex]?.trim() ?? '0', 10) || 0;
+    const reputationPoints =
+      parseInt(fields[pointsIndex]?.trim() ?? '0', 10) || 0;
 
     if (!id.startsWith('did:privy:')) continue;
     if (!walletAddress.match(/^0x[a-f0-9]{40}$/i)) continue;
 
-    csvUsers.push({ id, walletAddress, username, displayName, reputationPoints });
+    csvUsers.push({
+      id,
+      walletAddress,
+      username,
+      displayName,
+      reputationPoints,
+    });
   }
 
   return csvUsers;

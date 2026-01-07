@@ -36,7 +36,8 @@ export const GET = withErrorHandling(
     const { tokenId: tokenIdParam } = await context.params;
     const tokenId = parseInt(tokenIdParam, 10);
 
-    if (isNaN(tokenId) || tokenId < 0) {
+    const maxTokenId = parseInt(process.env.NFT_COLLECTION_SIZE ?? '100', 10);
+    if (isNaN(tokenId) || tokenId < 1 || tokenId > maxTokenId) {
       throw new NotFoundError('Invalid token ID');
     }
 

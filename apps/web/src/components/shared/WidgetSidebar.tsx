@@ -5,28 +5,29 @@ import { EntitySearchAutocomplete } from '@/components/explore/EntitySearchAutoc
 import { LatestNewsPanel } from '@/components/feed/LatestNewsPanel';
 import { MarketsPanel } from '@/components/feed/MarketsPanel';
 import { TrendingPanel } from '@/components/feed/TrendingPanel';
+import { NFT_BANNER_DISMISSED_KEY } from '@/lib/constants/nft';
 
-/**
- * Widget sidebar component for desktop layouts.
- *
- * Provides a sticky sidebar with search, latest news, trending, and markets
- * panels. Implements smart scrolling behavior on XL+ screens where the sidebar
- * translates vertically as the user scrolls to keep content visible. On smaller
- * screens, the sidebar is hidden.
- *
- * Features:
- * - Entity search autocomplete
- * - Latest news panel
- * - Trending panel
- * - Markets panel
- * - Smart sticky scrolling on XL+ screens
- *
- * @returns Widget sidebar element (hidden on screens < XL)
- */
 export function WidgetSidebar() {
   const [searchQuery, setSearchQuery] = useState('');
   const containerRef = useRef<HTMLDivElement>(null);
   const innerRef = useRef<HTMLDivElement>(null);
+  // Cache banner dismissed state to avoid localStorage reads per frame
+  const bannerDismissedRef = useRef<boolean>(false);
+
+  useEffect(() => {
+    // Read once on mount
+    bannerDismissedRef.current =
+      localStorage.getItem(NFT_BANNER_DISMISSED_KEY) !== null;
+
+    // Listen for changes from other tabs/components
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === NFT_BANNER_DISMISSED_KEY) {
+        bannerDismissedRef.current = e.newValue !== null;
+      }
+    };
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
+  }, []);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -57,9 +58,8 @@ export function WidgetSidebar() {
       // Check if sidebar fits in viewport
       const fitsInViewport = sidebarHeight <= viewportHeight;
 
-      // Check if NFT promo banner is visible (not dismissed)
-      const bannerDismissed = localStorage.getItem('nft-banner-dismissed');
-      const bannerOffset = bannerDismissed ? 0 : 40;
+      // Use cached banner state (no localStorage read per frame)
+      const bannerOffset = bannerDismissedRef.current ? 0 : 40;
 
       if (fitsInViewport) {
         // Sidebar fits - simple sticky to top (below banner)

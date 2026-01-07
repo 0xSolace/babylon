@@ -40,7 +40,9 @@ describe('isValidWalletAddress', () => {
   });
 
   test('rejects invalid formats', () => {
-    expect(isValidWalletAddress('1234567890123456789012345678901234567890')).toBe(false); // no 0x
+    expect(
+      isValidWalletAddress('1234567890123456789012345678901234567890')
+    ).toBe(false); // no 0x
     expect(isValidWalletAddress('0x123')).toBe(false); // too short
     expect(isValidWalletAddress('0x' + '1'.repeat(41))).toBe(false); // too long
     expect(isValidWalletAddress('0x' + 'G'.repeat(40))).toBe(false); // invalid chars

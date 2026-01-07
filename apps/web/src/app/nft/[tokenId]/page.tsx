@@ -49,8 +49,12 @@ export default function NftDetailPage() {
   }, [fetchNft]);
 
   const handleCopy = async (text: string, label: string) => {
-    await navigator.clipboard.writeText(text);
-    toast.success(`${label} copied`);
+    try {
+      await navigator.clipboard.writeText(text);
+      toast.success(`${label} copied`);
+    } catch {
+      toast.error('Failed to copy to clipboard');
+    }
   };
 
   const handleShare = async () => {
@@ -58,11 +62,17 @@ export default function NftDetailPage() {
 
     const url = `${window.location.origin}/nft/${nft.tokenId}`;
 
-    if (navigator.share) {
-      await navigator.share({ title: nft.name, url });
-    } else {
-      await navigator.clipboard.writeText(url);
-      toast.success('Link copied');
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: nft.name, url });
+      } else {
+        await navigator.clipboard.writeText(url);
+        toast.success('Link copied');
+      }
+    } catch (err) {
+      // User cancelled share dialog - not an error
+      if (err instanceof Error && err.name === 'AbortError') return;
+      toast.error('Failed to share');
     }
   };
 
