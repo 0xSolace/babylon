@@ -35,11 +35,9 @@ const PLACEHOLDER_CHAIN_ID = 1;
 // GitHub repository for NFT metadata
 const GITHUB_REPO = 'BabylonSocial/ProductManagementDocumentation';
 
-// Get NFT image path identifier
-// Note: API routes will convert this to proxy URLs, but we store a simple identifier
+// Get static NFT image URL (served from public folder)
 function getNftImagePath(tokenId: number): string {
-  // Store a simple path identifier - API routes will convert to proxy URLs
-  return `nft://${tokenId}`;
+  return `/nft/images/${tokenId}.png`;
 }
 
 interface NftMetadata {

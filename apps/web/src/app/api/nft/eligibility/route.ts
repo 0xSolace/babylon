@@ -4,19 +4,28 @@ import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import type { EligibilityResponse } from '@/types/nft';
 
-/** Fetch NFT info by tokenId, returns proxy image URL */
+/** Fetch NFT info by tokenId */
 async function getNftInfo(tokenId: number) {
   const [nft] = await db
     .select({
       tokenId: nftCollection.tokenId,
       name: nftCollection.name,
       description: nftCollection.description,
+      imageUrl: nftCollection.imageUrl,
+      thumbnailUrl: nftCollection.thumbnailUrl,
     })
     .from(nftCollection)
     .where(eq(nftCollection.tokenId, tokenId))
     .limit(1);
 
-  return nft ? { ...nft, thumbnailUrl: `/api/nft/image/${nft.tokenId}` } : null;
+  if (!nft) return null;
+
+  return {
+    tokenId: nft.tokenId,
+    name: nft.name,
+    description: nft.description,
+    thumbnailUrl: nft.thumbnailUrl ?? nft.imageUrl,
+  };
 }
 
 export const GET = withErrorHandling(async (request: NextRequest) => {

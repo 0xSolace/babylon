@@ -5,7 +5,7 @@ import { EntitySearchAutocomplete } from '@/components/explore/EntitySearchAutoc
 import { LatestNewsPanel } from '@/components/feed/LatestNewsPanel';
 import { MarketsPanel } from '@/components/feed/MarketsPanel';
 import { TrendingPanel } from '@/components/feed/TrendingPanel';
-import { NFT_BANNER_DISMISSED_KEY } from '@/lib/constants/nft';
+import { NFT_BANNER_DISMISSED_KEY, NFT_BANNER_HEIGHT } from '@/lib/constants/nft';
 
 export function WidgetSidebar() {
   const [searchQuery, setSearchQuery] = useState('');
@@ -37,8 +37,6 @@ export function WidgetSidebar() {
     // Only run on xl+ screens
     if (window.innerWidth < 1280) return;
 
-    let lastScrollTop = 0;
-    let direction: 'up' | 'down' = 'down';
     let translateY = 0;
     let ticking = false;
 
@@ -47,19 +45,11 @@ export function WidgetSidebar() {
       const viewportHeight = window.innerHeight;
       const sidebarHeight = inner.offsetHeight;
 
-      // Determine scroll direction
-      if (scrollTop > lastScrollTop) {
-        direction = 'down';
-      } else if (scrollTop < lastScrollTop) {
-        direction = 'up';
-      }
-      lastScrollTop = scrollTop;
-
       // Check if sidebar fits in viewport
       const fitsInViewport = sidebarHeight <= viewportHeight;
 
       // Use cached banner state (no localStorage read per frame)
-      const bannerOffset = bannerDismissedRef.current ? 0 : 40;
+      const bannerOffset = bannerDismissedRef.current ? 0 : NFT_BANNER_HEIGHT;
 
       if (fitsInViewport) {
         // Sidebar fits - simple sticky to top (below banner)
@@ -67,29 +57,14 @@ export function WidgetSidebar() {
         inner.style.top = `${bannerOffset}px`;
         inner.style.transform = '';
       } else {
-        // Sidebar is taller than viewport
+        // Sidebar is taller than viewport - translate based on scroll position
         const effectiveViewportHeight = viewportHeight - bannerOffset;
+        const maxTranslate = sidebarHeight - effectiveViewportHeight;
+        translateY = Math.min(scrollTop, maxTranslate);
 
-        if (direction === 'down') {
-          // Scrolling down - sidebar bottom should stick to viewport bottom
-          const maxTranslate = sidebarHeight - effectiveViewportHeight;
-
-          // Calculate how much we should translate
-          // As we scroll down, increase translateY until maxTranslate
-          translateY = Math.min(scrollTop, maxTranslate);
-
-          inner.style.position = 'fixed';
-          inner.style.top = `${bannerOffset}px`;
-          inner.style.transform = `translateY(-${translateY}px)`;
-        } else {
-          // Scrolling up - keep current translation until we scroll back up enough
-          const maxTranslate = sidebarHeight - effectiveViewportHeight;
-          translateY = Math.min(scrollTop, maxTranslate);
-
-          inner.style.position = 'fixed';
-          inner.style.top = `${bannerOffset}px`;
-          inner.style.transform = `translateY(-${translateY}px)`;
-        }
+        inner.style.position = 'fixed';
+        inner.style.top = `${bannerOffset}px`;
+        inner.style.transform = `translateY(-${translateY}px)`;
       }
 
       ticking = false;

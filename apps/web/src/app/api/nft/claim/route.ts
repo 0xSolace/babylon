@@ -27,14 +27,21 @@ import {
 import { nanoid } from 'nanoid';
 import type { NextRequest } from 'next/server';
 
-/** Build NFT response object with proxy image URLs */
+/** Build NFT response object with fallback for null thumbnailUrl */
 function buildNftResponse(nft: {
   tokenId: number;
   name: string;
   description: string | null;
+  imageUrl: string;
+  thumbnailUrl: string | null;
 }) {
-  const imageUrl = `/api/nft/image/${nft.tokenId}`;
-  return { ...nft, imageUrl, thumbnailUrl: imageUrl };
+  return {
+    tokenId: nft.tokenId,
+    name: nft.name,
+    description: nft.description,
+    imageUrl: nft.imageUrl,
+    thumbnailUrl: nft.thumbnailUrl ?? nft.imageUrl,
+  };
 }
 
 export const POST = withErrorHandling(async (request: NextRequest) => {
@@ -79,6 +86,8 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
           tokenId: nftCollection.tokenId,
           name: nftCollection.name,
           description: nftCollection.description,
+          imageUrl: nftCollection.imageUrl,
+          thumbnailUrl: nftCollection.thumbnailUrl,
         })
         .from(nftCollection)
         .where(eq(nftCollection.tokenId, snap.mintedTokenId))
@@ -108,6 +117,8 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
         tokenId: nftCollection.tokenId,
         name: nftCollection.name,
         description: nftCollection.description,
+        imageUrl: nftCollection.imageUrl,
+        thumbnailUrl: nftCollection.thumbnailUrl,
       })
       .from(nftCollection)
       .where(eq(nftCollection.tokenId, tokenId))

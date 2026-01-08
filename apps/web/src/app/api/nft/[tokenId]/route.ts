@@ -110,14 +110,13 @@ export const GET = withErrorHandling(
         }
       : null;
 
-    // Build response - use proxy API URLs for reliable image serving
-    const imageUrl = `/api/nft/image/${nft.tokenId}`;
+    // Build response using stored image URLs
     const nftDetail: NftDetail = {
       tokenId: nft.tokenId,
       name: nft.name,
       description: nft.description,
-      imageUrl,
-      thumbnailUrl: imageUrl,
+      imageUrl: nft.imageUrl,
+      thumbnailUrl: nft.thumbnailUrl,
       imageCid: nft.imageCid,
       imageResolution: '4096x4096',
       metadataUri: nft.metadataUri,

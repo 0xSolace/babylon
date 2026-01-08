@@ -49,7 +49,8 @@ export function parseCSVLine(line: string): string[] {
 }
 
 export function parseCsvContent(content: string): CsvUser[] {
-  const lines = content.split('\n');
+  // Handle Windows (\r\n), old Mac (\r), and Unix (\n) line endings
+  const lines = content.split(/\r\n|\r|\n/);
 
   if (lines.length < 2) {
     throw new Error('CSV file is empty or has no data rows');
@@ -83,7 +84,7 @@ export function parseCsvContent(content: string): CsvUser[] {
       parseInt(fields[pointsIndex]?.trim() ?? '0', 10) || 0;
 
     if (!id.startsWith('did:privy:')) continue;
-    if (!walletAddress.match(/^0x[a-f0-9]{40}$/i)) continue;
+    if (!walletAddress.match(/^0x[a-f0-9]{40}$/)) continue;
 
     csvUsers.push({
       id,
@@ -112,7 +113,8 @@ export function shuffle<T>(array: T[]): T[] {
 }
 
 export function selectTop100(users: CsvUser[], limit = 100): CsvUser[] {
-  return users
+  // Copy array to avoid mutating input
+  return [...users]
     .sort((a, b) => b.reputationPoints - a.reputationPoints)
     .slice(0, limit);
 }

@@ -139,14 +139,11 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   }
 
   // Transform results to response format
-  const nfts: NftSummary[] = nftsResult.map((nft) => {
-    // Use proxy API URLs for reliable image serving
-    const imageUrl = `/api/nft/image/${nft.tokenId}`;
-    return {
+  const nfts: NftSummary[] = nftsResult.map((nft) => ({
       tokenId: nft.tokenId,
       name: nft.name,
-      thumbnailUrl: imageUrl,
-      imageUrl,
+      thumbnailUrl: nft.thumbnailUrl ?? nft.imageUrl,
+      imageUrl: nft.imageUrl,
       owner: nft.ownerAddress
         ? {
             walletAddress: nft.ownerAddress,
@@ -163,8 +160,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
             txHash: nft.txHash,
           }
         : null,
-    };
-  });
+  }));
 
   // Calculate total for current filter
   const filteredTotal =

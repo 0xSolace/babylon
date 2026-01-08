@@ -65,7 +65,3 @@ export function canUserClaim(eligibility: {
   }
   return { canClaim: true };
 }
-
-export function getNftImageProxyUrl(tokenId: number): string {
-  return `/api/nft/image/${tokenId}`;
-}

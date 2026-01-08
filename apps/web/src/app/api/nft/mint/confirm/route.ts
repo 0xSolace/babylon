@@ -144,14 +144,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
           throw new ConflictError('Already minted');
         }
 
-        // Use proxy API URL for image
-        return {
-          mintedNft: {
-            ...existingNft,
-            imageUrl: `/api/nft/image/${existingNft.tokenId}`,
-            thumbnailUrl: `/api/nft/image/${existingNft.tokenId}`,
-          },
-        };
+        return { mintedNft: existingNft };
       }
 
       throw new ConflictError('Already minted');
@@ -227,15 +220,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
       throw error;
     }
 
-    // Use proxy API URLs for images
-    return {
-      mintedNft: {
-        ...mintedNft,
-        imageUrl: `/api/nft/image/${mintedNft.tokenId}`,
-        thumbnailUrl: `/api/nft/image/${mintedNft.tokenId}`,
-      },
-      snapshotEntry,
-    };
+    return { mintedNft, snapshotEntry };
   });
 
   const { mintedNft } = result;

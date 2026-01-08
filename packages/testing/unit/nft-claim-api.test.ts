@@ -67,9 +67,18 @@ describe('canUserClaim', () => {
     expect(result.canClaim).toBe(true);
   });
 
-  test('rejects no wallet', () => {
+  test('rejects no wallet (null)', () => {
     const result = canUserClaim({
       walletAddress: null,
+      assignedTokenId: 1,
+      hasMinted: false,
+    });
+    expect(result).toEqual({ canClaim: false, reason: 'no_wallet' });
+  });
+
+  test('rejects no wallet (empty string)', () => {
+    const result = canUserClaim({
+      walletAddress: '',
       assignedTokenId: 1,
       hasMinted: false,
     });

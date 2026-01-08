@@ -3,7 +3,7 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { Avatar } from '@/components/shared/Avatar';
 import { PageContainer } from '@/components/shared/PageContainer';
@@ -12,41 +12,55 @@ import type { NftDetail, NftDetailResponse } from '@/types/nft';
 
 export default function NftDetailPage() {
   const params = useParams();
-  const tokenId = params.tokenId as string;
+  const rawTokenId = params.tokenId;
+
+  // Validate tokenId at runtime - must be a single non-empty string
+  const tokenId =
+    typeof rawTokenId === 'string' && rawTokenId.trim() !== ''
+      ? rawTokenId.trim()
+      : null;
 
   const [nft, setNft] = useState<NftDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [imageError, setImageError] = useState(false);
 
-  const fetchNft = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+  useEffect(() => {
+    if (!tokenId) {
+      setError('Invalid NFT ID');
+      setLoading(false);
+      return;
+    }
 
-    try {
-      const response = await fetch(`/api/nft/${tokenId}`);
+    const controller = new AbortController();
+
+    async function fetchNft() {
+      setLoading(true);
+      setError(null);
+
+      const response = await fetch(`/api/nft/${tokenId}`, {
+        signal: controller.signal,
+      });
 
       if (!response.ok) {
-        if (response.status === 404) {
-          setError('NFT not found');
-        } else {
-          setError('Failed to load NFT details');
-        }
+        setError(response.status === 404 ? 'NFT not found' : 'Failed to load NFT details');
+        setLoading(false);
         return;
       }
 
       const data: NftDetailResponse = await response.json();
       setNft(data.data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Network error');
-    } finally {
       setLoading(false);
     }
-  }, [tokenId]);
 
-  useEffect(() => {
-    fetchNft();
-  }, [fetchNft]);
+    fetchNft().catch((err) => {
+      if (err instanceof Error && err.name === 'AbortError') return;
+      setError(err instanceof Error ? err.message : 'Network error');
+      setLoading(false);
+    });
+
+    return () => controller.abort();
+  }, [tokenId]);
 
   const handleCopy = async (text: string, label: string) => {
     try {
@@ -134,6 +148,7 @@ export default function NftDetailPage() {
         </Link>
         <button
           onClick={handleShare}
+          aria-label="Share NFT"
           className="rounded-full border border-border px-3 py-1.5 text-muted-foreground text-sm transition-colors hover:bg-muted hover:text-foreground"
         >
           Share
@@ -208,6 +223,7 @@ export default function NftDetailPage() {
                       onClick={() =>
                         handleCopy(nft.currentOwner!.walletAddress, 'Address')
                       }
+                      aria-label="Copy owner wallet address"
                       className="font-mono text-foreground text-sm hover:text-[#0066FF]"
                     >
                       {ownerName}
@@ -227,9 +243,9 @@ export default function NftDetailPage() {
                 Attributes
               </p>
               <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3 sm:gap-2">
-                {nft.attributes.map((attr, i) => (
+                {nft.attributes.map((attr) => (
                   <div
-                    key={i}
+                    key={`${attr.trait_type}-${attr.value}`}
                     className="rounded bg-muted/50 p-1.5 text-center sm:p-2"
                   >
                     <p className="text-[10px] text-muted-foreground sm:text-xs">
@@ -294,6 +310,7 @@ export default function NftDetailPage() {
                   onClick={() =>
                     handleCopy(nft.contractAddress, 'Contract address')
                   }
+                  aria-label="Copy contract address"
                   className="font-mono text-foreground hover:text-[#0066FF]"
                 >
                   {nft.contractAddress.slice(0, 6)}...
