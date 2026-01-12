@@ -330,9 +330,9 @@ Looking at the risk, a small position of 0.1 BTC seems reasonable.
         
         result = score_response(response, scenario, "trader")
         
-        # Short responses should have lower format scores and length penalties
+        # Short responses should have lower format scores and length penalty
         assert result.format_score < 0.5
-        assert result.length_penalty < 0
+        assert result.length_penalty < 0  # Penalized for being short
 
     def test_reasoning_with_analysis_terms(self):
         scenario = Scenario(id="test", source="synthetic")
@@ -359,8 +359,8 @@ Given the probability of success and managing risk, I'll proceed.
         degen_result = score_response(response, scenario, "degen")
         
         # Both should be scored (actual values depend on reward weights)
-        assert trader_result is not None
-        assert degen_result is not None
+        assert trader_result.total_score is not None
+        assert degen_result.total_score is not None
 
 
 # =============================================================================
