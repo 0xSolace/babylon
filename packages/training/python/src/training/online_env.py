@@ -499,7 +499,9 @@ class BabylonOnlineEnv(BaseEnv):
                 base_url="http://localhost:9001/v1",
                 api_key="x",
                 num_requests_for_eval=64,
-                server_type="openai",  # vLLM provides OpenAI-compatible API
+                # Use 'openai' for compatibility across atroposlib versions
+                # 'vllm' and 'sglang' were added in later versions
+                server_type="openai",
             ),
         ]
         
