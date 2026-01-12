@@ -160,11 +160,21 @@ jobs:
           DEPLOYMENT_ENV: localnet
           NODE_ENV: development
         run: |
+          set -euo pipefail
           echo "🌱 Seeding database with actors and game data..."
+          
           # Main seed populates NPCs, actors, and game data needed for pages to render
-          bun run db:seed 2>&1 || echo "⚠️ Main seed had issues, trying test seed..."
-          # Test seed adds trading agents and test-specific data
-          bun run db:seed:test 2>&1 || echo "⚠️ Test seed had issues, continuing..."
+          echo "📦 Running main seed (actors, NPCs, game data)..."
+          if ! bun run db:seed 2>&1; then
+            echo "❌ Main seed FAILED - this will cause 500 errors on page loads"
+            echo "Check if migrations ran successfully and DATABASE_URL is correct"
+            exit 1
+          fi
+          
+          # Test seed adds trading agents and test-specific data (optional)
+          echo "📦 Running test seed (trading agents)..."
+          bun run db:seed:test 2>&1 || echo "⚠️ Test seed had issues (non-critical)"
+          
           echo "✅ Database seeding complete"
 
       - name: Build production

@@ -29,7 +29,7 @@ export function resetServerHealthCheck(): void {
  * Checks server health once and caches the result.
  * Used to fail fast if server is consistently broken.
  * Only caches after a successful check to allow retry on failure.
- * 
+ *
  * IMPORTANT: This checks ACTUAL PAGE LOADS, not just /api/health.
  * The health endpoint can return 200 while pages return 500 due to
  * missing data, database issues, etc.
