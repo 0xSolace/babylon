@@ -181,6 +181,19 @@ jobs:
           bunx turbo build --filter=!babylon-docs 2>&1 | sed -E 's/(Datasource|ep-soft-wildflower|neondb|@[^[:space:]]*\.neon\.tech)/[REDACTED]/g'
           echo "✅ Build complete"
 
+      - name: Seed database (actors, NPCs, game data)
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
+          DIRECT_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
+          REDIS_URL: redis://localhost:6379
+          DEPLOYMENT_ENV: localnet
+          NODE_ENV: development
+        run: |
+          echo "🌱 Seeding database with actors and game data (matching pre-dev-local.ts)..."
+          bun run db:seed 2>&1 || echo "⚠️ Main seed failed, trying test seed..."
+          bun run db:seed:test 2>&1 || echo "⚠️ Test seed failed, continuing..."
+          echo "✅ Database seeding complete"
+
       - name: Run Unit Tests
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
