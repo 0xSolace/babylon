@@ -38,12 +38,18 @@ from src.training.rubric_loader import (
 from tests.integration.conftest import (
     TrajectoryFixture,
     skip_if_no_database,
+    skip_if_no_trajectories_table,
     is_database_available,
+    is_trajectories_table_available,
 )
 
 
-# Skip all tests in this module if database is not available
-pytestmark = skip_if_no_database()
+# Skip all tests in this module if database or trajectories table is not available
+# The trajectories table is created by TypeScript migrations, which may not run in CI
+pytestmark = [
+    skip_if_no_database(),
+    skip_if_no_trajectories_table(),
+]
 
 
 def generate_test_id() -> str:

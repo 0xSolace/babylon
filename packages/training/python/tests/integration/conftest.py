@@ -42,11 +42,51 @@ def is_database_available() -> bool:
         return False
 
 
+def is_trajectories_table_available() -> bool:
+    """Check if the trajectories table exists in the database.
+    
+    The trajectories table is created by TypeScript migrations.
+    If running in an environment without migrations (e.g., CI with bare Postgres),
+    tests that require this table should be skipped.
+    """
+    database_url = os.environ.get("DATABASE_URL")
+    if not database_url:
+        return False
+    
+    try:
+        import psycopg2
+        conn = psycopg2.connect(database_url)
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT EXISTS (
+                SELECT FROM information_schema.tables 
+                WHERE table_name = 'trajectories'
+            )
+        """)
+        exists = cur.fetchone()[0]
+        cur.close()
+        conn.close()
+        return exists
+    except Exception:
+        return False
+
+
 def skip_if_no_database():
     """Pytest marker to skip tests requiring database."""
     return pytest.mark.skipif(
         not is_database_available(),
         reason="Database not available (set DATABASE_URL or run docker compose)"
+    )
+
+
+def skip_if_no_trajectories_table():
+    """Pytest marker to skip tests requiring the trajectories table.
+    
+    Use this for tests that need the full database schema.
+    """
+    return pytest.mark.skipif(
+        not is_trajectories_table_available(),
+        reason="Trajectories table not available (run TypeScript migrations first)"
     )
 
 
