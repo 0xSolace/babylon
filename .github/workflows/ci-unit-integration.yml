@@ -37,6 +37,14 @@ jobs:
           - 5434:5432
 
     steps:
+      - name: Free disk space
+        run: |
+          echo "🧹 Freeing disk space for Python training..."
+          df -h /
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+          sudo apt-get clean
+          df -h /
+
       - uses: actions/checkout@v4
 
       - name: Setup Python
