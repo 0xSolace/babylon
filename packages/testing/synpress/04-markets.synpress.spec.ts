@@ -6,6 +6,7 @@
 
 import { expect, test } from '@playwright/test';
 import {
+  assertServerHealthy,
   cooldownBetweenTests,
   isServerHealthy,
   navigateTo,
@@ -15,6 +16,11 @@ import { loginWithWallet } from './helpers/privy-auth';
 import { ROUTES, TIMEOUTS, VIEWPORTS } from './helpers/test-data';
 
 test.setTimeout(TIMEOUTS.EXTRA_LONG);
+
+// Fail fast if server is broken
+test.beforeAll(async () => {
+  await assertServerHealthy();
+});
 
 test.describe('Markets Dashboard', () => {
   test.beforeEach(async ({ page }) => {

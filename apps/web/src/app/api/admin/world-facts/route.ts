@@ -96,8 +96,8 @@ import { db } from '@babylon/db';
 import {
   characterMappingService,
   createParodyHeadlineGenerator,
+  getWorldFactsGenerator,
   rssFeedService,
-  worldFactsGenerator,
   worldFactsService,
 } from '@babylon/engine';
 import { generateSnowflakeId, logger } from '@babylon/shared';
@@ -275,7 +275,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
         undefined,
         'WorldFactsAdmin'
       );
-      const result = await worldFactsGenerator.generateNewWorldFacts();
+      const result = await getWorldFactsGenerator().generateNewWorldFacts();
       logger.info(
         `Generated ${result.generated} world facts, archived ${result.archived}`,
         result,

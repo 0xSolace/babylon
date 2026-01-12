@@ -67,15 +67,16 @@ describe('formatCurrency - Comprehensive Tests', () => {
     });
 
     it('should handle negative values correctly', () => {
-      expect(formatCurrency(-100)).toBe('ƀ-100.00');
-      expect(formatCurrency(-123.456)).toBe('ƀ-123.46');
-      expect(formatCurrency(-0.01)).toBe('ƀ-0.01');
+      // Standard currency format: negative sign before symbol (like -$100.00)
+      expect(formatCurrency(-100)).toBe('-ƀ100.00');
+      expect(formatCurrency(-123.456)).toBe('-ƀ123.46');
+      expect(formatCurrency(-0.01)).toBe('-ƀ0.01');
     });
 
     it('should handle very small negative values', () => {
-      expect(formatCurrency(-0.001)).toBe('ƀ-0.00'); // Rounds to 0.00
-      expect(formatCurrency(-0.001, 3)).toBe('ƀ-0.001');
-      expect(formatCurrency(-0.0001, 4)).toBe('ƀ-0.0001');
+      expect(formatCurrency(-0.001)).toBe('-ƀ0.00'); // Rounds to 0.00
+      expect(formatCurrency(-0.001, 3)).toBe('-ƀ0.001');
+      expect(formatCurrency(-0.0001, 4)).toBe('-ƀ0.0001');
     });
   });
 
@@ -137,9 +138,10 @@ describe('formatCurrency - Comprehensive Tests', () => {
   describe('Edge Cases - Special Number Values', () => {
     it('should handle Infinity (produces string representation)', () => {
       // toFixed() converts Infinity to "Infinity" string
+      // Negative sign comes before symbol (standard currency format)
       expect(formatCurrency(Infinity)).toBe('ƀInfinity');
       expect(formatCurrency(Number.POSITIVE_INFINITY)).toBe('ƀInfinity');
-      expect(formatCurrency(Number.NEGATIVE_INFINITY)).toBe('ƀ-Infinity');
+      expect(formatCurrency(Number.NEGATIVE_INFINITY)).toBe('-ƀInfinity');
     });
 
     it('should handle NaN (produces string representation)', () => {
@@ -230,10 +232,11 @@ describe('formatCurrency - Comprehensive Tests', () => {
     });
 
     it('should handle negative sign placement', () => {
+      // Standard currency format: negative sign before symbol (like -$100.00)
       const result = formatCurrency(-100);
-      expect(result).toBe('ƀ-100.00');
-      expect(result).toStartWith('ƀ');
-      expect(result).toContain('-');
+      expect(result).toBe('-ƀ100.00');
+      expect(result).toStartWith('-');
+      expect(result).toContain('ƀ');
     });
   });
 
@@ -261,7 +264,7 @@ describe('formatCurrency - Comprehensive Tests', () => {
 
     it('should format PnL values (can be negative)', () => {
       expect(formatCurrency(123.45)).toBe('ƀ123.45');
-      expect(formatCurrency(-123.45)).toBe('ƀ-123.45');
+      expect(formatCurrency(-123.45)).toBe('-ƀ123.45');
       expect(formatCurrency(0)).toBe('ƀ0.00');
     });
 

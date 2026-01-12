@@ -47,6 +47,31 @@ jobs:
     timeout-minutes: 360  # 6 hours max
     
     steps:
+      - name: Free disk space
+        run: |
+          echo "🧹 Freeing disk space..."
+          echo "Before cleanup:"
+          df -h /
+          
+          # Remove large unused tools (saves ~30GB)
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /opt/hostedtoolcache/CodeQL
+          sudo rm -rf /usr/share/swift
+          sudo rm -rf /usr/local/share/boost
+          sudo rm -rf /usr/local/.ghcup
+          
+          # Clean apt cache
+          sudo apt-get clean
+          sudo apt-get autoremove -y
+          
+          # Clean docker images if any
+          docker system prune -af 2>/dev/null || true
+          
+          echo "After cleanup:"
+          df -h /
+      
       - name: Checkout code
         uses: actions/checkout@v4
       
@@ -327,6 +352,10 @@ jobs:
           MAX_EXAMPLES: "2000"
           MAX_STEPS_PER_TRAJECTORY: "20"
           MAX_SEQ_LENGTH: "8192"
+          # Reduce disk usage for model loading
+          HF_HUB_ENABLE_HF_TRANSFER: "1"
+          TRANSFORMERS_CACHE: /tmp/hf_cache
+          HF_HOME: /tmp/hf_home
         working-directory: packages/training/python
         run: |
           echo "🚀 Starting training"
@@ -394,6 +423,13 @@ jobs:
           
           asyncio.run(update())
           "
+      
+      - name: Cleanup model cache
+        if: always()
+        run: |
+          echo "🧹 Cleaning up model cache..."
+          rm -rf /tmp/hf_cache /tmp/hf_home ~/.cache/huggingface 2>/dev/null || true
+          df -h /
       
       - name: Upload training logs
         if: always()

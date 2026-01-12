@@ -61,8 +61,8 @@ import {
 import type { ParodyHeadline } from '@babylon/db';
 import {
   createParodyHeadlineGenerator,
+  getWorldFactsGenerator,
   rssFeedService,
-  worldFactsGenerator,
 } from '@babylon/engine';
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
@@ -137,7 +137,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     sources: { events: 0, markets: 0, questions: 0, actors: 0 },
   };
   try {
-    factsResult = await worldFactsGenerator.generateNewWorldFacts();
+    factsResult = await getWorldFactsGenerator().generateNewWorldFacts();
     logger.info(
       `Generated ${factsResult.generated} new world facts, archived ${factsResult.archived}`,
       factsResult,

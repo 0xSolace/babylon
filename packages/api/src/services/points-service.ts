@@ -23,7 +23,21 @@ import {
   sql,
   users,
 } from '@babylon/db';
-import { StaticDataRegistry } from '@babylon/engine';
+
+// NOTE: StaticDataRegistry is imported dynamically to avoid circular dependency
+// @babylon/api -> points-service -> @babylon/engine -> @babylon/api
+// Cache the import promise to avoid race conditions in concurrent calls
+let _engineModule: typeof import('@babylon/engine') | null = null;
+let _engineModulePromise: Promise<typeof import('@babylon/engine')> | null =
+  null;
+async function getEngineModule() {
+  if (!_engineModule) {
+    _engineModulePromise ||= import('@babylon/engine');
+    _engineModule = await _engineModulePromise;
+  }
+  return _engineModule;
+}
+
 import {
   generateSnowflakeId,
   logger,
@@ -1084,6 +1098,7 @@ export class PointsService {
         .where(gte(actorState.reputationPoints, minPoints));
 
       // Combine with static data
+      const { StaticDataRegistry } = await getEngineModule();
       combined.push(
         ...actorStates
           .map((state) => {

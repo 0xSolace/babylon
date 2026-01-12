@@ -585,8 +585,16 @@ Return as XML:
   }
 }
 
-// Singleton instance
-export const worldFactsGenerator = new WorldFactsGeneratorService();
+// Lazy singleton instance - only initialized when first accessed
+// This prevents throwing errors at module load time when no LLM API key is set
+let _worldFactsGenerator: WorldFactsGeneratorService | null = null;
+
+export function getWorldFactsGenerator(): WorldFactsGeneratorService {
+  if (!_worldFactsGenerator) {
+    _worldFactsGenerator = new WorldFactsGeneratorService();
+  }
+  return _worldFactsGenerator;
+}
 
 /**
  * Create a custom world facts generator

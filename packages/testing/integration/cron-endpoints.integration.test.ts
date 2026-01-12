@@ -1,5 +1,5 @@
 /**
- * Cron Endpoints E2E Test Suite
+ * Cron Endpoints Integration Test Suite
  *
  * Tests cron endpoints against a running server with proper auth.
  * Verifies database state changes, lock acquisition, and response formats.
@@ -9,7 +9,7 @@
  * - CRON_SECRET environment variable set
  * - Database running with game state initialized
  *
- * Run with: bun test packages/testing/e2e/cron-endpoints.e2e.test.ts
+ * Run with: bun test packages/testing/integration/cron-endpoints.integration.test.ts
  */
 
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
@@ -30,7 +30,7 @@ let serverAvailable = false;
 let gameId: string | null = null;
 let initialGameRunning: boolean | undefined;
 
-describe('Cron Endpoints E2E', () => {
+describe('Cron Endpoints Integration', () => {
   beforeAll(async () => {
     // Check if server is running
     try {

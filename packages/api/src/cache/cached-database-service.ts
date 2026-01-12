@@ -37,7 +37,20 @@ import {
   userActorFollows,
   users,
 } from '@babylon/db';
-import { StaticDataRegistry } from '@babylon/engine';
+
+// NOTE: StaticDataRegistry imported dynamically to avoid circular dependency
+// Cache the import promise to avoid race conditions in concurrent calls
+let _engineModule: typeof import('@babylon/engine') | null = null;
+let _engineModulePromise: Promise<typeof import('@babylon/engine')> | null =
+  null;
+async function getEngineModule() {
+  if (!_engineModule) {
+    _engineModulePromise ||= import('@babylon/engine');
+    _engineModule = await _engineModulePromise;
+  }
+  return _engineModule;
+}
+
 import { logger } from '@babylon/shared';
 import {
   CACHE_KEYS,
@@ -133,6 +146,7 @@ class CachedDatabaseService {
           .where(and(inArray(users.id, followedIds), eq(users.isTest, true)));
 
         // Get test actors from static registry
+        const { StaticDataRegistry } = await getEngineModule();
         const testActorIds = StaticDataRegistry.getAllActors()
           .filter((a) => a.isTest && followedIds.includes(a.id))
           .map((a) => a.id);
@@ -323,6 +337,7 @@ class CachedDatabaseService {
    */
   async getActorById(actorId: string) {
     // Static data from registry - no caching needed (already in memory)
+    const { StaticDataRegistry } = await getEngineModule();
     const staticActor = StaticDataRegistry.getActor(actorId);
     if (!staticActor) return null;
 
@@ -352,6 +367,7 @@ class CachedDatabaseService {
    */
   async getOrganizationById(orgId: string) {
     // Static data from registry - no caching needed (already in memory)
+    const { StaticDataRegistry } = await getEngineModule();
     const staticOrg = StaticDataRegistry.getOrganization(orgId);
     if (!staticOrg) return null;
 

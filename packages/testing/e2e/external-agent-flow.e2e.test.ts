@@ -53,9 +53,9 @@ test.describe('External Agent E2E Flow', () => {
   let authCookies: string;
 
   test.beforeAll(async ({ browser }) => {
-    // Get authentication cookies from saved state
+    // Get authentication cookies from saved state (path relative to monorepo root)
     const context = await browser.newContext({
-      storageState: '.playwright/auth.json',
+      storageState: '../../.playwright/auth.json',
     });
     const cookies = await context.cookies();
     authCookies = cookies.map((c) => `${c.name}=${c.value}`).join('; ');

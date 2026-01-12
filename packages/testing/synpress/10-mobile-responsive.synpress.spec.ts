@@ -7,6 +7,7 @@
 
 import { expect, test } from '@playwright/test';
 import {
+  assertServerHealthy,
   cooldownBetweenTests,
   navigateTo,
   waitForPageLoad,
@@ -15,6 +16,11 @@ import { loginWithWallet } from './helpers/privy-auth';
 import { ROUTES, TIMEOUTS, VIEWPORTS } from './helpers/test-data';
 
 test.setTimeout(TIMEOUTS.EXTRA_LONG);
+
+// Fail fast if server is broken
+test.beforeAll(async () => {
+  await assertServerHealthy();
+});
 
 test.describe('Mobile Responsiveness', () => {
   test.beforeEach(async ({ page }) => {

@@ -5,7 +5,21 @@
  */
 
 import { db, eq, or, users } from '@babylon/db';
-import { type StaticActor, StaticDataRegistry } from '@babylon/engine';
+
+// NOTE: Dynamic import to avoid circular dependency: @babylon/api -> @babylon/engine -> @babylon/api
+// Cache the import promise to avoid race conditions in concurrent calls
+let _engineModule: typeof import('@babylon/engine') | null = null;
+let _engineModulePromise: Promise<typeof import('@babylon/engine')> | null =
+  null;
+async function getEngineModule() {
+  if (!_engineModule) {
+    _engineModulePromise ||= import('@babylon/engine');
+    _engineModule = await _engineModulePromise;
+  }
+  return _engineModule;
+}
+
+import type { StaticActor } from '@babylon/engine';
 import type { InferSelectModel } from 'drizzle-orm';
 import { sql } from 'drizzle-orm';
 import type { SelectedFields } from 'drizzle-orm/pg-core';
@@ -167,6 +181,7 @@ export async function findTargetByIdentifier(
   }
 
   // Check if it's an actor (NPC) - now also searches by username
+  const { StaticDataRegistry } = await getEngineModule();
   const actor = StaticDataRegistry.getActor(identifier);
 
   if (actor) {

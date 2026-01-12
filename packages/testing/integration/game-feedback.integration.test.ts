@@ -15,23 +15,29 @@ mock.module('@babylon/api/linear', () => ({
     return;
   },
   getLinearConfig: () => null,
+  formatFeedbackForLinear: () => ({ title: 'Test', description: 'Test' }),
+  createLinearIssue: async () => ({
+    id: 'mock-issue',
+    url: 'https://mock.linear.app',
+  }),
 }));
 
 // Mock auth to return a test user (includes requireAdmin for admin endpoint tests)
 const testUserId = `test-user-${Date.now()}`;
-mock.module('@babylon/api', () => {
-  const actual = require('@babylon/api');
-  return {
-    ...actual,
-    authenticate: async () => ({ userId: testUserId }),
-    checkRateLimitAndDuplicates: () => null,
-    requireUserByIdentifier: async () => ({
-      id: testUserId,
-      email: 'test@example.com',
-    }),
-    requireAdmin: async () => ({ userId: testUserId, isAdmin: true }),
-  };
-});
+
+// Import real module and override only auth functions
+// This preserves real DB operations while mocking auth
+const realApi = await import('@babylon/api');
+mock.module('@babylon/api', () => ({
+  ...realApi,
+  authenticate: async () => ({ userId: testUserId }),
+  checkRateLimitAndDuplicates: () => null,
+  requireUserByIdentifier: async () => ({
+    id: testUserId,
+    email: 'test@example.com',
+  }),
+  requireAdmin: async () => ({ userId: testUserId, isAdmin: true }),
+}));
 
 // Dynamic import to ensure mocks are applied
 const { POST: submitGameFeedback } = await import(

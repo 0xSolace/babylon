@@ -10,6 +10,7 @@
 
 import { expect, test } from '@playwright/test';
 import {
+  assertServerHealthy,
   cooldownBetweenTests,
   navigateTo,
   waitForPageLoad,
@@ -24,6 +25,11 @@ import {
 } from './helpers/test-data';
 
 test.setTimeout(TIMEOUTS.EXTRA_LONG);
+
+// Fail fast if server is broken - runs for all describe blocks in this file
+test.beforeAll(async () => {
+  await assertServerHealthy();
+});
 
 test.describe('Authentication - Wallet Connection', () => {
   test.beforeEach(async ({ page }) => {

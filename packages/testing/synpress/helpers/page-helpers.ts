@@ -12,6 +12,79 @@ const BASE_URL = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:3000';
 let consecutiveFailures = 0;
 const MAX_CONSECUTIVE_FAILURES = 3;
 
+// Track if server health check has been done and its result
+let serverHealthChecked = false;
+let serverIsHealthy = false;
+
+/**
+ * Resets server health check state.
+ * Use between long-running suites where the server might recover.
+ */
+export function resetServerHealthCheck(): void {
+  serverHealthChecked = false;
+  serverIsHealthy = false;
+}
+
+/**
+ * Checks server health once and caches the result.
+ * Used to fail fast if server is consistently broken.
+ * Only caches after a successful check to allow retry on failure.
+ */
+export async function checkServerHealthOnce(): Promise<boolean> {
+  if (serverHealthChecked && serverIsHealthy) {
+    return true;
+  }
+
+  // Try 5 times with 2 second delay
+  for (let attempt = 1; attempt <= 5; attempt++) {
+    try {
+      const response = await fetch(`${BASE_URL}/api/health`, {
+        method: 'GET',
+        signal: AbortSignal.timeout(10000),
+      });
+      if (response.status < 500) {
+        serverIsHealthy = true;
+        serverHealthChecked = true;
+        console.log(
+          `✅ Server health check passed (status: ${response.status})`
+        );
+        return true;
+      }
+      console.log(
+        `⚠️ Server health check failed (attempt ${attempt}/5): ${response.status}`
+      );
+    } catch (error) {
+      console.log(
+        `⚠️ Server health check error (attempt ${attempt}/5): ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+
+    if (attempt < 5) {
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+    }
+  }
+
+  console.error(
+    '❌ Server is not healthy after 5 attempts - tests will be skipped'
+  );
+  serverIsHealthy = false;
+  serverHealthChecked = true; // Cache failure to avoid repeated checks
+  return false;
+}
+
+/**
+ * Asserts that server is healthy, throws if not.
+ * Use this in beforeAll/beforeEach to skip tests when server is broken.
+ */
+export async function assertServerHealthy(): Promise<void> {
+  const healthy = await checkServerHealthOnce();
+  if (!healthy) {
+    throw new Error(
+      'Server is not healthy (returning 500 errors). Skipping tests to avoid 1+ hour timeout.'
+    );
+  }
+}
+
 /**
  * Waits for the server to be responsive before proceeding.
  *
@@ -138,19 +211,13 @@ export async function waitForPageLoad(
     // Hide Next.js dev overlay to prevent test interference
     await hideNextDevOverlay(page);
 
-    // Wait for page to have interactive elements
-    let hasButtons = false;
-    for (let i = 0; i < 20; i++) {
-      const buttonCount = await page
-        .locator('button')
-        .count()
-        .catch(() => 0);
-      if (buttonCount > 0) {
-        hasButtons = true;
-        break;
-      }
-      await page.waitForTimeout(500);
-    }
+    // Wait for page to have interactive elements (10 second timeout)
+    const hasButtons = await page
+      .locator('button')
+      .first()
+      .waitFor({ state: 'attached', timeout: 10000 })
+      .then(() => true)
+      .catch(() => false);
 
     if (!hasButtons) {
       // Try reloading the page once

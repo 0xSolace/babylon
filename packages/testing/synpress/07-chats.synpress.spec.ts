@@ -11,6 +11,7 @@
 
 import { expect, test } from '@playwright/test';
 import {
+  assertServerHealthy,
   cooldownBetweenTests,
   navigateTo,
   waitForPageLoad,
@@ -20,6 +21,11 @@ import { ROUTES } from './helpers/test-data';
 
 // Increase test timeout for flaky server conditions
 test.setTimeout(90000);
+
+// Fail fast if server is broken
+test.beforeAll(async () => {
+  await assertServerHealthy();
+});
 
 test.describe('Chats Page - Updated Design', () => {
   test.beforeEach(async ({ page }) => {

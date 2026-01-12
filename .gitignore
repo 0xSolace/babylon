@@ -125,3 +125,7 @@ circular-deps.*
 /opencode.json
 /opencode.json.bak
 # END Ruler Generated Files
+
+# Playwright auth state and debug artifacts
+**/.playwright/
+**/test-results/
