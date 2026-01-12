@@ -29,46 +29,66 @@ export function resetServerHealthCheck(): void {
  * Checks server health once and caches the result.
  * Used to fail fast if server is consistently broken.
  * Only caches after a successful check to allow retry on failure.
+ * 
+ * IMPORTANT: This checks ACTUAL PAGE LOADS, not just /api/health.
+ * The health endpoint can return 200 while pages return 500 due to
+ * missing data, database issues, etc.
  */
 export async function checkServerHealthOnce(): Promise<boolean> {
   if (serverHealthChecked && serverIsHealthy) {
     return true;
   }
 
-  // Try 5 times with 2 second delay
-  for (let attempt = 1; attempt <= 5; attempt++) {
-    try {
-      const response = await fetch(`${BASE_URL}/api/health`, {
-        method: 'GET',
-        signal: AbortSignal.timeout(10000),
-      });
-      if (response.status < 500) {
-        serverIsHealthy = true;
-        serverHealthChecked = true;
+  // Check both health endpoint AND an actual page
+  const endpoints = [
+    { url: `${BASE_URL}/api/health`, name: 'health' },
+    { url: `${BASE_URL}/`, name: 'homepage' },
+  ];
+
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    let allPassed = true;
+
+    for (const endpoint of endpoints) {
+      try {
+        const response = await fetch(endpoint.url, {
+          method: 'GET',
+          signal: AbortSignal.timeout(15000),
+        });
+
+        if (response.status >= 500) {
+          console.log(
+            `❌ ${endpoint.name} returned ${response.status} (attempt ${attempt}/3)`
+          );
+          allPassed = false;
+          break;
+        }
+      } catch (error) {
         console.log(
-          `✅ Server health check passed (status: ${response.status})`
+          `❌ ${endpoint.name} error (attempt ${attempt}/3): ${error instanceof Error ? error.message : String(error)}`
         );
-        return true;
+        allPassed = false;
+        break;
       }
-      console.log(
-        `⚠️ Server health check failed (attempt ${attempt}/5): ${response.status}`
-      );
-    } catch (error) {
-      console.log(
-        `⚠️ Server health check error (attempt ${attempt}/5): ${error instanceof Error ? error.message : String(error)}`
-      );
     }
 
-    if (attempt < 5) {
-      await new Promise((resolve) => setTimeout(resolve, 2000));
+    if (allPassed) {
+      serverIsHealthy = true;
+      serverHealthChecked = true;
+      console.log('✅ Server health check passed (health + homepage)');
+      return true;
+    }
+
+    if (attempt < 3) {
+      console.log(`⏳ Retrying in 5 seconds...`);
+      await new Promise((resolve) => setTimeout(resolve, 5000));
     }
   }
 
   console.error(
-    '❌ Server is not healthy after 5 attempts - tests will be skipped'
+    '❌ Server pages are returning 500 errors - SKIPPING ALL TESTS to avoid 1+ hour timeout'
   );
   serverIsHealthy = false;
-  serverHealthChecked = true; // Cache failure to avoid repeated checks
+  serverHealthChecked = true;
   return false;
 }
 
@@ -91,13 +111,14 @@ export async function assertServerHealthy(): Promise<void> {
  * Checks the root URL and accepts any response (except network errors or 5xx).
  * This prevents flakiness when the server is slow to start.
  *
- * @param maxRetries - Maximum number of retry attempts (default: 15)
+ * @param maxRetries - Maximum number of retry attempts (default: 3)
  * @param retryDelay - Delay between retries in milliseconds (default: 2000)
+ * @throws Error if server is returning 5xx errors after all retries
  */
 export async function waitForServerHealthy(
-  maxRetries = 15,
+  maxRetries = 3,
   retryDelay = 2000
-): Promise<boolean> {
+): Promise<void> {
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       const response = await fetch(`${BASE_URL}/`, {
@@ -107,10 +128,15 @@ export async function waitForServerHealthy(
       // Accept any non-5xx response as "server is up"
       if (response.status < 500) {
         consecutiveFailures = 0;
-        return true;
+        return;
       }
-    } catch {
-      // Silent retry - don't spam logs
+      console.log(
+        `⚠️ Server returned 5xx (attempt ${attempt}/${maxRetries}): ${response.status}`
+      );
+    } catch (error) {
+      console.log(
+        `⚠️ Server not reachable (attempt ${attempt}/${maxRetries}): ${error instanceof Error ? error.message : String(error)}`
+      );
     }
 
     if (attempt < maxRetries) {
@@ -119,7 +145,12 @@ export async function waitForServerHealthy(
   }
 
   consecutiveFailures++;
-  return false;
+  // THROW instead of continuing - server is broken
+  throw new Error(
+    `Server returned 5xx errors after ${maxRetries} attempts. ` +
+      `This indicates a server-side issue (missing data, DB connection, etc). ` +
+      `Check the production server logs for details.`
+  );
 }
 
 /**
@@ -132,11 +163,11 @@ export async function waitForServerHealthy(
  * @throws Error if navigation fails after all retries
  */
 export async function navigateTo(page: Page, route: string): Promise<void> {
-  // Quick health check first
-  const isHealthy = await waitForServerHealthy(5, 1000);
-
-  // If server seems down, do a longer wait
-  if (!isHealthy) {
+  // Quick health check first - throws if server is returning 5xx
+  try {
+    await waitForServerHealthy(5, 1000);
+  } catch {
+    // If server seems down, do a longer wait and try again
     await new Promise((resolve) => setTimeout(resolve, 5000));
     await waitForServerHealthy(10, 2000);
   }
