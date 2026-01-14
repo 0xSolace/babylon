@@ -53,8 +53,12 @@ function initializeCache(): void {
         templateCache.set(templateData.archetype, templateData);
       });
     } catch (error) {
-      initializationError = error instanceof Error ? error : new Error(String(error));
-      console.error('Failed to initialize template cache:', initializationError.message);
+      initializationError =
+        error instanceof Error ? error : new Error(String(error));
+      console.error(
+        'Failed to initialize template cache:',
+        initializationError.message
+      );
     }
   }
 }
@@ -80,7 +84,10 @@ export function getTemplateIds(): readonly string[] {
 export function getAllTemplates(): AgentTemplate[] {
   initializeCache();
   if (initializationError) {
-    console.error('Template initialization failed:', initializationError.message);
+    console.error(
+      'Template initialization failed:',
+      initializationError.message
+    );
     return [];
   }
   return Array.from(templateCache.values());
@@ -95,7 +102,10 @@ export function getAllTemplates(): AgentTemplate[] {
 export function getTemplate(archetype: string): AgentTemplate | null {
   initializeCache();
   if (initializationError) {
-    console.error('Template initialization failed:', initializationError.message);
+    console.error(
+      'Template initialization failed:',
+      initializationError.message
+    );
     return null;
   }
   return templateCache.get(archetype) ?? null;
@@ -109,7 +119,10 @@ export function getTemplate(archetype: string): AgentTemplate | null {
 export function getRandomTemplate(): AgentTemplate | null {
   initializeCache();
   if (initializationError) {
-    console.error('Template initialization failed:', initializationError.message);
+    console.error(
+      'Template initialization failed:',
+      initializationError.message
+    );
     return null;
   }
   const allTemplates = Array.from(templateCache.values());
