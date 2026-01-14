@@ -234,6 +234,12 @@ jobs:
           echo ""
           echo "✅ Next.js dev server is ready"
 
+      - name: Install Playwright browsers
+        run: |
+          echo "🎭 Installing Playwright browsers..."
+          cd packages/testing && bunx playwright install chromium
+          echo "✅ Playwright browsers installed"
+
       - name: Setup Playwright authentication for integration tests
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/test_db
@@ -246,12 +252,13 @@ jobs:
           PRIVY_TEST_PASSWORD: ${{ secrets.PRIVY_TEST_PASSWORD || '' }}
         run: |
           echo "🔐 Setting up Playwright authentication for integration tests..."
+          cd packages/testing
           # First run E2E auth setup
-          cd packages/testing && bunx playwright test --project=setup || {
+          bunx playwright test --project=setup || {
             echo "⚠️  E2E auth setup failed, but continuing..."
           }
           # Then run integration auth setup to extract tokens
-          cd packages/testing && bunx playwright test --project=setup-integration-auth || {
+          bunx playwright test --project=setup-integration-auth || {
             echo "⚠️  Integration auth setup failed, but continuing..."
           }
           echo "✅ Playwright authentication setup complete"
