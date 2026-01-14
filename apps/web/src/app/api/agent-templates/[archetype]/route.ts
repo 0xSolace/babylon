@@ -5,14 +5,12 @@
  * @access Public
  *
  * @description
- * Returns a specific agent template by archetype ID. Uses TypeScript imports
- * for optimal performance and type safety.
+ * Returns a specific agent template by archetype ID. Uses dynamic imports to
+ * handle module loading errors gracefully in serverless environments.
  *
  * @returns {Promise<NextResponse>} JSON response with template data
  */
 
-import { getTemplate } from '@babylon/agents';
-import { logger } from '@babylon/shared';
 import { NextResponse } from 'next/server';
 
 // Force dynamic rendering to prevent caching of templates
@@ -31,6 +29,9 @@ export async function GET(
 ) {
   try {
     const { archetype } = await params;
+
+    // Use dynamic import to catch module-level errors
+    const { getTemplate } = await import('@babylon/agents');
     const template = getTemplate(archetype);
 
     if (!template) {
@@ -42,15 +43,15 @@ export async function GET(
 
     return NextResponse.json(template);
   } catch (error) {
-    logger.error(
-      'Failed to load agent template',
-      { error: error instanceof Error ? error.message : String(error) },
-      'AgentTemplatesAPI'
-    );
+    console.error('[AgentTemplatesAPI] Failed to load template:', error);
     return NextResponse.json(
       {
         error: 'Failed to load template',
         details: error instanceof Error ? error.message : String(error),
+        stack:
+          process.env.NODE_ENV !== 'production' && error instanceof Error
+            ? error.stack
+            : undefined,
       },
       { status: 500 }
     );

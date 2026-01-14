@@ -5,14 +5,12 @@
  * @access Public
  *
  * @description
- * Returns all available agent templates. Uses TypeScript imports for optimal
- * performance and type safety.
+ * Returns all available agent templates. Uses dynamic imports to handle
+ * module loading errors gracefully in serverless environments.
  *
  * @returns {Promise<NextResponse>} JSON response with templates data
  */
 
-import { getAllTemplates, getTemplateIds } from '@babylon/agents';
-import { logger } from '@babylon/shared';
 import { NextResponse } from 'next/server';
 
 // Force dynamic rendering to prevent caching of template list
@@ -27,6 +25,9 @@ export const dynamic = 'force-dynamic';
  */
 export async function GET() {
   try {
+    // Use dynamic import to catch module-level errors
+    const { getAllTemplates, getTemplateIds } = await import('@babylon/agents');
+
     const templates = getAllTemplates();
     const templateIds = getTemplateIds();
 
@@ -35,15 +36,15 @@ export async function GET() {
       templatesData: templates,
     });
   } catch (error) {
-    logger.error(
-      'Failed to load agent templates',
-      { error: error instanceof Error ? error.message : String(error) },
-      'AgentTemplatesAPI'
-    );
+    console.error('[AgentTemplatesAPI] Failed to load templates:', error);
     return NextResponse.json(
       {
         error: 'Failed to load templates',
         details: error instanceof Error ? error.message : String(error),
+        stack:
+          process.env.NODE_ENV !== 'production' && error instanceof Error
+            ? error.stack
+            : undefined,
       },
       { status: 500 }
     );
