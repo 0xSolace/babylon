@@ -5,6 +5,7 @@
  */
 
 import { beforeAll, beforeEach, describe, expect, mock, test } from 'bun:test';
+import * as sharedModule from '@babylon/shared';
 
 // Tests use mocked db module
 const describeTests = describe;
@@ -231,6 +232,7 @@ mock.module('@babylon/db', () => ({
 }));
 
 mock.module('@babylon/shared', () => ({
+  ...sharedModule,
   logger: mockLogger,
 }));
 

@@ -175,8 +175,11 @@ mock.module('@babylon/engine', () => ({
   },
 }));
 
-// Mock @babylon/shared
+// Mock @babylon/shared - include all exports to avoid polluting other tests
+// We import first to get the actual implementations, then spread in the mock
+import * as sharedModule from '@babylon/shared';
 mock.module('@babylon/shared', () => ({
+  ...sharedModule,
   logger: {
     info: () => {},
     warn: () => {},

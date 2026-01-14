@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
 import { NextRequest } from 'next/server';
+import * as sharedModule from '@babylon/shared';
 
 /**
  * Markets Tick Cron Job Tests
@@ -282,8 +283,9 @@ mock.module('@babylon/engine', () => ({
   },
 }));
 
-// Mock @babylon/shared
+// Mock @babylon/shared - include all exports to avoid polluting other tests
 mock.module('@babylon/shared', () => ({
+  ...sharedModule,
   logger: {
     info: () => {},
     warn: () => {},
