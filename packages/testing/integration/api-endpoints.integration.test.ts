@@ -111,10 +111,13 @@ describe('API Endpoints - Complete Coverage', () => {
       expect(res.status).toBe(200);
     });
 
-    test('GET /api/posts/feed/favorites - requires auth', async () => {
+    test('GET /api/posts/feed/favorites - returns empty when not authenticated', async () => {
       if (!serverAvailable) return;
       const res = await get('/api/posts/feed/favorites');
-      expect(res.status).toBe(401);
+      // Route uses optionalAuth - returns 200 with empty array when not authenticated
+      expect(res.status).toBe(200);
+      const data = await res.json();
+      expect(data.posts).toEqual([]);
     });
 
     test('POST /api/posts - requires auth', async () => {
@@ -179,11 +182,9 @@ describe('API Endpoints - Complete Coverage', () => {
       expect(res.status).toBe(401);
     });
 
-    test('DELETE /api/users/delete-account - requires auth', async () => {
+    test('POST /api/users/delete-account - requires auth', async () => {
       if (!serverAvailable) return;
-      const res = await fetch(`${BASE_URL}/api/users/delete-account`, {
-        method: 'DELETE',
-      });
+      const res = await post('/api/users/delete-account', {});
       expect(res.status).toBe(401);
     });
   });
@@ -192,10 +193,10 @@ describe('API Endpoints - Complete Coverage', () => {
   // AGENTS ENDPOINTS
   // ============================================
   describe('Agents', () => {
-    test('GET /api/agents', async () => {
+    test('GET /api/agents - requires auth', async () => {
       if (!serverAvailable) return;
       const res = await get('/api/agents');
-      expect(res.status).toBe(200);
+      expect(res.status).toBe(401);
     });
 
     test('GET /api/agents/discover', async () => {
@@ -463,16 +464,23 @@ describe('API Endpoints - Complete Coverage', () => {
   // NPC ENDPOINTS
   // ============================================
   describe('NPC', () => {
-    test('GET /api/npc/allocation', async () => {
+    test('POST /api/npc/allocation - requires cron auth', async () => {
       if (!serverAvailable) return;
-      const res = await get('/api/npc/allocation');
-      expect(res.status).toBe(200);
+      // This is a POST endpoint that requires cron auth
+      const res = await post('/api/npc/allocation', {
+        npcUserId: 'test',
+        baseAmount: 100,
+      });
+      expect(res.status).toBe(401);
     });
 
-    test('GET /api/npc/position-size', async () => {
+    test('GET /api/npc/position-size - requires cron auth', async () => {
       if (!serverAvailable) return;
-      const res = await get('/api/npc/position-size');
-      expect(res.status).toBeLessThan(500);
+      // This endpoint requires cron auth
+      const res = await get(
+        '/api/npc/position-size?npcUserId=test&poolId=test'
+      );
+      expect(res.status).toBe(401);
     });
   });
 
@@ -497,11 +505,12 @@ describe('API Endpoints - Complete Coverage', () => {
       expect(res.status).toBe(200);
     });
 
-    test('POST /api/onboarding/check-username', async () => {
+    test('GET /api/onboarding/check-username', async () => {
       if (!serverAvailable) return;
-      const res = await post('/api/onboarding/check-username', {
-        username: 'test_unique_user_xyz123',
-      });
+      // This is a GET endpoint with query params
+      const res = await get(
+        '/api/onboarding/check-username?username=test_unique_user_xyz123'
+      );
       expect(res.status).toBe(200);
       const data = await res.json();
       expect(typeof data.available).toBe('boolean');
