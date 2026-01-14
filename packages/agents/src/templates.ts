@@ -20,4 +20,3 @@ export {
 } from './templates-loader';
 
 export type { AgentTemplate } from './types/agent-template';
-

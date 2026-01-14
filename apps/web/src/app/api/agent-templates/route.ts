@@ -12,10 +12,7 @@
  * @returns {Promise<NextResponse>} JSON response with templates
  */
 
-import {
-  getAllTemplates,
-  getTemplateIds,
-} from '@babylon/agents/templates';
+import { getAllTemplates, getTemplateIds } from '@babylon/agents/templates';
 import { NextResponse } from 'next/server';
 
 // Force dynamic rendering to prevent caching of template list
