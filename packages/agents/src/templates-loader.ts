@@ -29,15 +29,33 @@ import type { AgentTemplate } from './types/agent-template';
 const templateCache: Map<string, AgentTemplate> = new Map();
 
 /**
+ * Flag to track initialization status
+ * @internal
+ */
+let initializationError: Error | null = null;
+
+/**
  * Initializes cache from imported data
  * @internal
  */
 function initializeCache(): void {
-  if (templateCache.size === 0) {
-    templates.forEach((template) => {
-      const templateData = { ...template } as AgentTemplate;
-      templateCache.set(templateData.archetype, templateData);
-    });
+  if (templateCache.size === 0 && !initializationError) {
+    try {
+      if (!templates || !Array.isArray(templates)) {
+        throw new Error('Templates data is not available or not an array');
+      }
+      templates.forEach((template) => {
+        if (!template || !template.archetype) {
+          console.warn('Skipping invalid template:', template);
+          return;
+        }
+        const templateData = { ...template } as AgentTemplate;
+        templateCache.set(templateData.archetype, templateData);
+      });
+    } catch (error) {
+      initializationError = error instanceof Error ? error : new Error(String(error));
+      console.error('Failed to initialize template cache:', initializationError.message);
+    }
   }
 }
 
@@ -47,6 +65,10 @@ function initializeCache(): void {
  * @returns Array of template archetype IDs
  */
 export function getTemplateIds(): readonly string[] {
+  if (!templateIds || !Array.isArray(templateIds)) {
+    console.warn('Template IDs not available');
+    return [];
+  }
   return templateIds;
 }
 
@@ -57,6 +79,10 @@ export function getTemplateIds(): readonly string[] {
  */
 export function getAllTemplates(): AgentTemplate[] {
   initializeCache();
+  if (initializationError) {
+    console.error('Template initialization failed:', initializationError.message);
+    return [];
+  }
   return Array.from(templateCache.values());
 }
 
@@ -68,6 +94,10 @@ export function getAllTemplates(): AgentTemplate[] {
  */
 export function getTemplate(archetype: string): AgentTemplate | null {
   initializeCache();
+  if (initializationError) {
+    console.error('Template initialization failed:', initializationError.message);
+    return null;
+  }
   return templateCache.get(archetype) ?? null;
 }
 
@@ -78,6 +108,10 @@ export function getTemplate(archetype: string): AgentTemplate | null {
  */
 export function getRandomTemplate(): AgentTemplate | null {
   initializeCache();
+  if (initializationError) {
+    console.error('Template initialization failed:', initializationError.message);
+    return null;
+  }
   const allTemplates = Array.from(templateCache.values());
   if (allTemplates.length === 0) {
     return null;
