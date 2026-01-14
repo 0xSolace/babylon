@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
 import { NextRequest } from 'next/server';
+import * as sharedModule from '@babylon/shared';
+import * as dbModule from '@babylon/db';
 
 /**
  * Article Tick Cron Job Tests
@@ -60,8 +62,9 @@ const createQueryBuilder = (
   return builder;
 };
 
-// Mock @babylon/db - uses resultFn pattern for dynamic state evaluation
+// Mock @babylon/db - spread actual module to preserve re-exports like generateSnowflakeId
 mock.module('@babylon/db', () => ({
+  ...dbModule,
   db: {
     select: mock(() => createQueryBuilder(() => (mockGame ? [mockGame] : []))),
     insert: mock(() =>
@@ -77,7 +80,6 @@ mock.module('@babylon/db', () => ({
   and: (): SqlCondition => ({}),
   isNull: (): SqlCondition => ({}),
   sql: (): SqlCondition => ({}),
-  generateSnowflakeId: async () => `mock-${Date.now()}`,
 }));
 
 // Mock @babylon/api - uses mutable state for auth and game cache
@@ -175,9 +177,7 @@ mock.module('@babylon/engine', () => ({
   },
 }));
 
-// Mock @babylon/shared - include all exports to avoid polluting other tests
-// We import first to get the actual implementations, then spread in the mock
-import * as sharedModule from '@babylon/shared';
+// Mock @babylon/shared - spread actual module to avoid polluting other tests
 mock.module('@babylon/shared', () => ({
   ...sharedModule,
   logger: {
@@ -325,10 +325,11 @@ describe('Article Tick Cron', () => {
       expect(res.status).toBe(200);
       expect(res.ok).toBe(true);
       expect(data.success).toBe(true);
-      expect(data.skipped).toBe(false);
+      // Production code only includes 'skipped' when actually skipped
+      expect(data.skipped).toBeFalsy();
 
       // Should not be skipped due to rate limit
-      expect(data.reason).not.toBe('Rate limit reached');
+      expect(data.reason).toBeUndefined();
     });
   });
 
@@ -351,7 +352,8 @@ describe('Article Tick Cron', () => {
       // Verify handler succeeded and was not skipped
       expect(res.status).toBe(200);
       expect(data.success).toBe(true);
-      expect(data.skipped).toBe(false); // Explicit assertion - test fails if skipped
+      // Production code only includes 'skipped' when actually skipped
+      expect(data.skipped).toBeFalsy();
 
       // Rate limit info should always be included when not skipped
       expect(data.rateLimit).toBeDefined();
