@@ -191,15 +191,11 @@ jobs:
           
           # Clear any existing Next.js cache to ensure fresh build
           echo "🧹 Clearing Next.js cache..."
-          rm -rf .next
+          rm -rf apps/web/.next .next
           
           # Debug: Show which secrets are available (without revealing values)
           echo "📋 Secret availability check:"
           echo "   NEXT_PUBLIC_PRIVY_APP_ID: ${NEXT_PUBLIC_PRIVY_APP_ID:+SET (${#NEXT_PUBLIC_PRIVY_APP_ID} chars, starts with '${NEXT_PUBLIC_PRIVY_APP_ID:0:5}')}${NEXT_PUBLIC_PRIVY_APP_ID:-NOT SET}"
-          
-          # Also show what's in .env files
-          echo "📄 Checking .env files for NEXT_PUBLIC_PRIVY_APP_ID:"
-          grep -h "NEXT_PUBLIC_PRIVY_APP_ID" .env .env.local .env.test 2>/dev/null | head -3 || echo "   (not found in .env files)"
           
           if [ -z "$NEXT_PUBLIC_PRIVY_APP_ID" ]; then
             echo "❌ ERROR: NEXT_PUBLIC_PRIVY_APP_ID is not set or empty!"
@@ -216,36 +212,47 @@ jobs:
             echo "✅ NEXT_PUBLIC_PRIVY_APP_ID format looks valid (starts with 'cl')"
           fi
           
-          # CRITICAL: Update .env files to ensure Next.js picks up the correct value
+          # CRITICAL: Update .env files in BOTH root AND apps/web to ensure Next.js picks up the correct value
           # Next.js reads env vars from: process.env (shell) > .env.local > .env
-          # But there can be precedence issues, so we explicitly update the files
+          # The apps/web directory is where the actual Next.js app lives
           echo "📝 Ensuring .env files have correct NEXT_PUBLIC_PRIVY_APP_ID..."
-          for envfile in .env .env.local .env.test; do
-            if [ -f "$envfile" ]; then
-              # Remove any existing NEXT_PUBLIC_PRIVY_APP_ID line and add the correct one
-              grep -v "^NEXT_PUBLIC_PRIVY_APP_ID=" "$envfile" > "$envfile.tmp" || true
-              echo "NEXT_PUBLIC_PRIVY_APP_ID=$NEXT_PUBLIC_PRIVY_APP_ID" >> "$envfile.tmp"
-              mv "$envfile.tmp" "$envfile"
-              echo "   Updated $envfile"
-            fi
+          for envdir in . apps/web; do
+            for envfile in $envdir/.env $envdir/.env.local; do
+              if [ -f "$envfile" ]; then
+                # Remove any existing NEXT_PUBLIC_PRIVY_APP_ID line and add the correct one
+                grep -v "^NEXT_PUBLIC_PRIVY_APP_ID=" "$envfile" > "$envfile.tmp" || true
+                echo "NEXT_PUBLIC_PRIVY_APP_ID=$NEXT_PUBLIC_PRIVY_APP_ID" >> "$envfile.tmp"
+                mv "$envfile.tmp" "$envfile"
+                echo "   Updated $envfile"
+              else
+                # Create the file if it doesn't exist
+                echo "NEXT_PUBLIC_PRIVY_APP_ID=$NEXT_PUBLIC_PRIVY_APP_ID" > "$envfile"
+                echo "   Created $envfile"
+              fi
+            done
           done
           
           # Verify the update
-          echo "📄 After update, .env contains:"
-          grep "NEXT_PUBLIC_PRIVY_APP_ID" .env | head -1 || echo "   (not found)"
+          echo "📄 After update:"
+          echo "   Root .env: $(grep 'NEXT_PUBLIC_PRIVY_APP_ID' .env 2>/dev/null | head -1 || echo 'not found')"
+          echo "   apps/web/.env: $(grep 'NEXT_PUBLIC_PRIVY_APP_ID' apps/web/.env 2>/dev/null | head -1 || echo 'not found')"
           
           echo "🔨 Running build..."
           bunx turbo build --filter=!babylon-docs 2>&1 | sed -E 's/(Datasource|ep-soft-wildflower|neondb|@[^[:space:]]*\.neon\.tech)/[REDACTED]/g'
           
           # Verify the build includes the Privy App ID by checking the actual value
+          # Note: build output is in apps/web/.next, not .next at root
           echo "🔍 Verifying Privy App ID is embedded in build..."
-          if grep -rq "${NEXT_PUBLIC_PRIVY_APP_ID:0:10}" .next 2>/dev/null; then
+          if grep -rq "${NEXT_PUBLIC_PRIVY_APP_ID:0:10}" apps/web/.next 2>/dev/null; then
             echo "✅ Build verified: Privy App ID value found in build output"
           else
             echo "❌ WARNING: Could not find Privy App ID in build output!"
             echo "   This likely means the build didn't pick up the env var correctly"
             echo "   Checking for privy-related content in build..."
-            grep -r "privy" .next/static 2>/dev/null | head -5 || echo "   No privy references found in static"
+            grep -r "privy" apps/web/.next/static 2>/dev/null | head -5 || echo "   No privy references found in static"
+            # Check if .next exists at all
+            echo "   Build directory check:"
+            ls -la apps/web/.next 2>/dev/null | head -5 || echo "   apps/web/.next does not exist!"
           fi
           
           echo "✅ Build complete"
