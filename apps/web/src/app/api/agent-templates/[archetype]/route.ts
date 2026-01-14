@@ -12,6 +12,7 @@
  */
 
 import { getTemplate } from '@babylon/agents';
+import { logger } from '@babylon/shared';
 import { NextResponse } from 'next/server';
 
 // Force dynamic rendering to prevent caching of templates
@@ -28,15 +29,30 @@ export async function GET(
   _req: Request,
   { params }: { params: Promise<{ archetype: string }> }
 ) {
-  const { archetype } = await params;
-  const template = getTemplate(archetype);
+  try {
+    const { archetype } = await params;
+    const template = getTemplate(archetype);
 
-  if (!template) {
+    if (!template) {
+      return NextResponse.json(
+        { error: `Template '${archetype}' not found` },
+        { status: 404 }
+      );
+    }
+
+    return NextResponse.json(template);
+  } catch (error) {
+    logger.error(
+      'Failed to load agent template',
+      { error: error instanceof Error ? error.message : String(error) },
+      'AgentTemplatesAPI'
+    );
     return NextResponse.json(
-      { error: `Template '${archetype}' not found` },
-      { status: 404 }
+      {
+        error: 'Failed to load template',
+        details: error instanceof Error ? error.message : String(error),
+      },
+      { status: 500 }
     );
   }
-
-  return NextResponse.json(template);
 }
