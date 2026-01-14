@@ -7,11 +7,14 @@
  * 3. Set up graceful cleanup handlers
  * 4. Configure LLM timeouts for faster test failures
  *
- * NOTE: Integration tests are split into two groups:
- * - PARALLEL: Most tests run with default concurrency (fast)
- * - SEQUENTIAL: Tests using mock.module() run with --concurrency=1
- *   because mocks affect global state and cause conflicts in parallel.
- *   Files requiring sequential: game-feedback*.test.ts, gameplay-tick*.test.ts
+ * NOTE: Integration tests run with --concurrency=4 to balance speed and stability.
+ * Higher concurrency can cause issues with:
+ * - mock.module() affecting global state (game-feedback*.test.ts)
+ * - Database write conflicts between tests
+ * - Shared singleton services
+ *
+ * IMPORTANT: Do NOT use `mock.module('pkg', async () => { await import('pkg') })`
+ * This pattern causes Bun module resolution deadlock.
  *
  * @module testing/integration/preload
  */

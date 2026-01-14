@@ -8,364 +8,13 @@
  * - Questions resolve with payouts
  * - Content is generated (posts/articles/events)
  * - Market pricing is reasonable (0-100% for predictions)
- */
-
-import { afterAll, beforeAll, describe, expect, mock, test } from 'bun:test';
-import { db } from '@babylon/db';
-import type { MockJSONSchema } from '../types/test-types';
-
-/**
- * Mock LLM client BEFORE importing serverless-game-tick.
  *
- * This ensures executeGameTick uses the mock. We mock @babylon/engine and override
- * only BabylonLLMClient. Internal code uses relative imports, but BabylonLLMClient
- * is exported from root for external use.
+ * NOTE: This test uses the real LLM client because mocking '@babylon/engine'
+ * causes Bun module resolution deadlock. Integration tests accept real API calls.
  */
-mock.module('@babylon/engine', async () => {
-  // Import actual engine to preserve all other exports
-  const actualEngine = await import('@babylon/engine');
 
-  // Create mock LLM client factory function
-  const createMockClient = () => ({
-    getStats: () => ({ provider: 'mock', model: 'mock-model' }),
-    getProvider: () => 'mock',
-    generateJSON: async (
-      _prompt: string,
-      schema: MockJSONSchema | undefined
-    ) => {
-      // CRITICAL: This mock MUST prevent all real API calls
-      // Always return a valid response structure based on schema or prompt patterns
-
-      // Priority 1: Question resolution validation (no schema, prompt contains Question/Outcome)
-      // QuestionManager.generateResolutionEvent calls with undefined schema
-      if (
-        !schema &&
-        _prompt.includes('Question:') &&
-        _prompt.includes('Outcome:')
-      ) {
-        const outcomeMatch = _prompt.match(/Outcome:\s*(YES|NO)/i);
-        const questionMatch = _prompt.match(/Question:\s*([^\n]+)/i);
-        const outcome = outcomeMatch?.[1]?.toUpperCase() ?? 'YES';
-        const questionText = questionMatch?.[1]?.trim() ?? 'test question';
-
-        // QuestionManager expects: { event: string; type: string } | { response: { event: string; type: string } }
-        return {
-          response: {
-            event: `Mock resolution event: ${questionText} outcome confirmed as ${outcome}`,
-            type: 'announcement',
-          },
-        };
-      }
-
-      // Priority 2: Schema-based detection (more reliable than prompt parsing)
-      if (schema?.properties) {
-        /**
-         * Question generation (has questions array property).
-         *
-         * Return format matches what XML parser produces (root element unwrapped).
-         */
-        if (schema.properties.questions) {
-          return {
-            questions: [
-              {
-                id: 1,
-                scenario: 1,
-                text: 'Will AIlon Musk tweet about Mars this week?',
-                resolutionCriteria:
-                  'If AIlon Musk posts about Mars on social media',
-                daysUntilResolution: 3,
-                expectedOutcome: 'yes',
-                dramaPotential: 8,
-                uncertainty: 7,
-                satiricalValue: 9,
-                observableOutcome: 'Public tweet from AIlon Musk about Mars',
-              },
-              {
-                id: 2,
-                scenario: 1,
-                text: 'Will Sam AIltman announce a new AI feature?',
-                resolutionCriteria: 'If OpenAGI announces a new feature',
-                daysUntilResolution: 5,
-                expectedOutcome: 'yes',
-                dramaPotential: 7,
-                uncertainty: 6,
-                satiricalValue: 8,
-                observableOutcome: 'Official announcement from OpenAGI',
-              },
-            ],
-          };
-        }
-
-        // Question resolution (has response.event property)
-        if (schema.properties.response?.properties?.event) {
-          return {
-            response: {
-              event: 'Mock resolution event confirming the outcome',
-              type: 'announcement',
-            },
-          };
-        }
-
-        // Market decisions (has npcId property)
-        if (schema.properties.npcId || schema.properties.decisions) {
-          // Extract from ID=xxx NAME="yyy" patterns in TRADERS section
-          const idMatches = _prompt.matchAll(/ID=([^\s]+)\s+NAME="([^"]+)"/g);
-          const npcsFromPrompt = Array.from(idMatches).slice(0, 3);
-
-          if (npcsFromPrompt.length > 0) {
-            // All hold actions to avoid balance warnings
-            return {
-              decisions: npcsFromPrompt.map(([, id, name]) => ({
-                npcId: id,
-                npcName: name,
-                reasoning: `Mock reasoning for ${name} - holding for now`,
-                action: 'hold',
-                confidence: 0.5,
-                marketType: null,
-                marketId: null,
-                amount: 0,
-              })),
-            };
-          }
-          // Fallback - no trades (empty decisions means no warnings)
-          return { decisions: [] };
-        }
-
-        // Article generation (has title and/or article properties)
-        if (
-          schema.properties.title ||
-          schema.properties.article ||
-          schema.properties.content
-        ) {
-          // Extract question context from prompt if available
-          const questionMatch = _prompt.match(/Question[:\s]*([^\n]+)/i);
-          const questionText = questionMatch?.[1]?.trim() || 'Market Update';
-
-          return {
-            response: {
-              title: `Breaking: ${questionText.substring(0, 50)}`,
-              summary: `Analysis of the latest developments regarding ${questionText.substring(0, 100)}`,
-              content: `This is a comprehensive mock article analyzing the current market situation.\n\nThe question "${questionText}" has generated significant interest.\n\nExperts weigh in on the potential outcomes.\n\nMarket participants remain divided on the final resolution.`,
-              slant: 'Neutral analysis of market conditions',
-              sentiment: 'neutral',
-              category: 'markets',
-              tags: { tag: ['markets', 'analysis', 'prediction'] },
-            },
-          };
-        }
-
-        // Post generation (has post property)
-        if (schema.properties.post) {
-          return {
-            post: 'This is a mock post content.',
-          };
-        }
-
-        // Question generation (has question property)
-        if (schema.properties.question) {
-          return {
-            question: 'Will testing succeed?',
-            resolutionCriteria: 'If tests pass',
-          };
-        }
-
-        // Scenarios or questions (has scenarios or response property)
-        if (schema.properties.scenarios || schema.properties.response) {
-          // Check prompt to distinguish between scenarios and questions
-          // Use more specific checks to avoid false positives with "ORGANIZATIONS IN PLAY"
-          const isScenarioGeneration = _prompt.includes(
-            'Create 3 dramatic, satirical scenarios'
-          );
-          const isQuestionGeneration =
-            !isScenarioGeneration &&
-            (_prompt.includes('ORGANIZATIONS IN PLAY') ||
-              _prompt.includes('Create prediction market questions'));
-
-          if (isQuestionGeneration) {
-            return {
-              questions: [
-                {
-                  id: 1,
-                  text: 'Will testing succeed?',
-                  scenario: 1,
-                  outcome: true,
-                  rank: 1,
-                  createdDate: new Date().toISOString(),
-                  resolutionDate: new Date(
-                    Date.now() + 24 * 60 * 60 * 1000
-                  ).toISOString(),
-                  status: 'active',
-                },
-              ],
-            };
-          }
-
-          // Extract actor IDs for scenarios
-          const mainActorsMatch = _prompt.match(
-            /MAIN ACTORS[:\s]*\n((?:- [^\n]+\n?)+)/i
-          );
-          let actorIds = ['actor-1', 'actor-2', 'actor-3'];
-
-          if (mainActorsMatch?.[1]) {
-            const actorLines = mainActorsMatch[1].match(/- ([^:]+):/g) || [];
-            actorIds = actorLines.slice(0, 3).map((m) => {
-              const name =
-                m
-                  .replace(/^- |:/g, '')
-                  .trim()
-                  .split(' - ')[0]
-                  ?.split(' [')[0] ?? 'actor';
-              return (
-                name
-                  .toLowerCase()
-                  .replace(/\s+/g, '-')
-                  .replace(/[^a-z0-9-]/g, '')
-                  .substring(0, 50) || `actor-${actorIds.length + 1}`
-              );
-            });
-            if (actorIds.length === 0)
-              actorIds = ['actor-1', 'actor-2', 'actor-3'];
-          }
-
-          return {
-            scenarios: [
-              {
-                id: 1,
-                title: 'Test Scenario: Will Testing Succeed?',
-                description:
-                  'A test scenario to verify the gameplay tick functionality works correctly.',
-                mainActors: actorIds,
-                theme: 'testing',
-                involvedOrganizations: [],
-              },
-            ],
-          };
-        }
-      }
-
-      // Priority 3: No schema - infer from prompt content
-      if (!schema || !schema.properties) {
-        // IMPORTANT: Check scenario generation FIRST because "MAIN ACTORS:" contains "ACTORS:"
-        // which would falsely match the question generation check
-        const isScenarioGeneration =
-          _prompt.includes('Create 3 dramatic, satirical scenarios') ||
-          (_prompt.includes('MAIN ACTORS:') && _prompt.includes('<scenarios>'));
-
-        if (isScenarioGeneration) {
-          // Extract actor IDs from the MAIN ACTORS section if possible
-          const mainActorsMatch = _prompt.match(
-            /MAIN ACTORS:\s*([\s\S]*?)(?:AFFILIATED|IMPORTANT|$)/i
-          );
-          let actorIds = ['actor-1', 'actor-2', 'actor-3'];
-          if (mainActorsMatch?.[1]) {
-            const actorLines = mainActorsMatch[1].match(/- ([^:]+):/g) || [];
-            const extractedIds = actorLines.slice(0, 3).map((m) => {
-              const name =
-                m
-                  .replace(/^- |:/g, '')
-                  .trim()
-                  .split(' - ')[0]
-                  ?.split(' [')[0] ?? 'actor';
-              return (
-                name
-                  .toLowerCase()
-                  .replace(/\s+/g, '-')
-                  .replace(/[^a-z0-9-]/g, '')
-                  .substring(0, 50) || `actor-${actorIds.length + 1}`
-              );
-            });
-            if (extractedIds.length > 0) actorIds = extractedIds;
-          }
-
-          return {
-            scenarios: [
-              {
-                id: 1,
-                title: 'Test Scenario: Will Testing Succeed?',
-                description:
-                  'A test scenario to verify the gameplay tick functionality works correctly.',
-                mainActors: actorIds,
-                theme: 'testing',
-                involvedOrganizations: [],
-              },
-            ],
-          };
-        }
-
-        /**
-         * Question generation prompts - look for "Generate X prediction market questions".
-         *
-         * Check for 'ACTORS:' only after excluding MAIN ACTORS scenario prompts.
-         */
-        const isQuestionGeneration =
-          _prompt.includes('prediction market questions') ||
-          _prompt.includes('COMPANIES:') ||
-          (_prompt.includes('ACTORS:') && !_prompt.includes('MAIN ACTORS:'));
-
-        if (isQuestionGeneration) {
-          /**
-           * Return format matches what XML parser produces (root element unwrapped).
-           */
-          return {
-            questions: [
-              {
-                id: 1,
-                scenario: 1,
-                text: 'Will AIlon Musk tweet about Mars this week?',
-                resolutionCriteria:
-                  'If AIlon Musk posts about Mars on social media',
-                daysUntilResolution: 3,
-                expectedOutcome: 'yes',
-                dramaPotential: 8,
-                uncertainty: 7,
-                satiricalValue: 9,
-                observableOutcome: 'Public tweet from AIlon Musk about Mars',
-              },
-              {
-                id: 2,
-                scenario: 1,
-                text: 'Will Sam AIltman announce a new AI feature?',
-                resolutionCriteria: 'If OpenAGI announces a new feature',
-                daysUntilResolution: 5,
-                expectedOutcome: 'yes',
-                dramaPotential: 7,
-                uncertainty: 6,
-                satiricalValue: 8,
-                observableOutcome: 'Official announcement from OpenAGI',
-              },
-            ],
-          };
-        }
-
-        // Default fallback - return empty object (will be caught by error handling)
-        return {};
-      }
-
-      // Final fallback: return safe empty structure (never return {} which could cause parsing errors)
-      // This should never be reached, but ensures we never return undefined or empty object
-      return {
-        response: {
-          event: 'Mock event',
-          type: 'announcement',
-        },
-      };
-    },
-    complete: async () => 'Mock completion response',
-  });
-
-  // Return actual engine exports with mocked BabylonLLMClient
-  return {
-    ...actualEngine,
-    BabylonLLMClient: {
-      forGameTick: createMockClient,
-      forGroq: createMockClient,
-      forClaude: createMockClient,
-      forOpenAI: createMockClient,
-    },
-  };
-});
-
-import { asSystem } from '@babylon/db';
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import { db, asSystem } from '@babylon/db';
 import { executeGameTick } from '@babylon/engine';
 import { generateSnowflakeId } from '@babylon/shared';
 
@@ -475,7 +124,7 @@ describe('Gameplay Tick Integration', () => {
     if (testQuestionId) {
       try {
         await db.question.delete({ where: { id: testQuestionId } });
-      } catch (_error) {
+      } catch {
         // Cleanup errors not critical
       }
     }
@@ -483,7 +132,7 @@ describe('Gameplay Tick Integration', () => {
     if (testMarketId) {
       try {
         await db.market.delete({ where: { id: testMarketId } });
-      } catch (_error) {
+      } catch {
         // Cleanup errors not critical
       }
     }
@@ -642,7 +291,7 @@ describe('Gameplay Tick Integration', () => {
     // Use random questionNumber to avoid conflicts
     const pastQuestionId = await generateSnowflakeId();
     const uniqueQuestionNumber =
-      Math.floor(Math.random() * 1000000000) + 1000000; // Random int between 1M and 1B
+      Math.floor(Math.random() * 1000000000) + 1000000;
     await db.question.create({
       data: {
         id: pastQuestionId,
@@ -692,8 +341,6 @@ describe('Gameplay Tick Integration', () => {
       );
       expect(resolvedQuestion?.status).toBe('resolved');
     } else {
-      // If result says 0 resolved but we made one that SHOULD be resolved, that's suspicious but maybe it wasn't picked up?
-      // Check if it was picked up by logic
       console.log(
         'No questions resolved in this tick. Our past question status:',
         resolvedQuestion?.status
@@ -703,7 +350,7 @@ describe('Gameplay Tick Integration', () => {
     // Cleanup
     try {
       await db.question.delete({ where: { id: pastQuestionId } });
-    } catch (_error) {
+    } catch {
       // Cleanup errors not critical
     }
   }, 60000);
@@ -722,7 +369,7 @@ describe('Gameplay Tick Integration', () => {
 
     // Use a shorter timeout for the test to fail fast if endpoint hangs
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
 
     try {
       const response = await fetch(`${BASE_URL}/api/cron/agent-tick`, {
@@ -731,7 +378,7 @@ describe('Gameplay Tick Integration', () => {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${cronSecret}`,
         },
-        signal: AbortSignal.timeout(30000), // 30 second timeout for cron job
+        signal: AbortSignal.timeout(30000),
       });
 
       clearTimeout(timeoutId);
@@ -743,20 +390,17 @@ describe('Gameplay Tick Integration', () => {
       if (response.ok) {
         const data = await response.json();
         console.log('✅ Cron endpoint response:', data);
-        // Verify response structure
         expect(data).toHaveProperty('success');
         expect(typeof data.success).toBe('boolean');
       }
     } catch (error) {
       clearTimeout(timeoutId);
-      // If it's an abort error, the endpoint took too long
       if (error instanceof Error && error.name === 'AbortError') {
         throw new Error(
           `Cron endpoint timed out after 10 seconds - endpoint may be hanging`
         );
       }
-      // Other network errors are acceptable for this test
       console.log('⚠️  Cron endpoint test error (acceptable):', error);
     }
-  }, 15000); // 15 second test timeout (longer than fetch timeout)
+  }, 15000);
 });

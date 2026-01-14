@@ -261,17 +261,20 @@ export const queryMonitor = new QueryMonitor();
  */
 export type { QueryMetrics, SlowQueryStats };
 
+// Use unref() so these intervals don't prevent process exit (important for tests)
 if (typeof setInterval !== 'undefined') {
-  setInterval(() => {
+  const cleanupInterval = setInterval(() => {
     queryMonitor.cleanup();
   }, 300000);
+  cleanupInterval.unref();
 }
 
 if (
   process.env.NODE_ENV === 'development' &&
   typeof setInterval !== 'undefined'
 ) {
-  setInterval(() => {
+  const logInterval = setInterval(() => {
     queryMonitor.logSummary();
   }, 60000);
+  logInterval.unref();
 }
