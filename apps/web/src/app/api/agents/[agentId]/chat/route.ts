@@ -1,3 +1,6 @@
+// Force dynamic to prevent static generation issues with @elizaos/core ESM
+export const dynamic = 'force-dynamic';
+
 /**
  * Agent Chat Interaction API
  *
