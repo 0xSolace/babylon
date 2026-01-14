@@ -37,10 +37,14 @@ export function AgentSetupModal({
   const [localData, setLocalData] = useState<ProfileFormData>(profileData);
   const bioInitialized = useRef(false);
 
-  // Reset bio initialization flag when modal closes so new data can sync on reopen
+  // Track if image indices have been initialized from profileData
+  const imagesInitialized = useRef(false);
+
+  // Reset initialization flags when modal closes so new data can sync on reopen
   useEffect(() => {
     if (!isOpen) {
       bioInitialized.current = false;
+      imagesInitialized.current = false;
     }
   }, [isOpen]);
 
@@ -56,6 +60,39 @@ export function AgentSetupModal({
       bioInitialized.current = true;
     }
   }, [profileData.bio]);
+
+  // Sync profile image from profileData when template loads
+  // This handles the case where the modal opens before the template has loaded
+  useEffect(() => {
+    if (profileData.profileImageUrl && !imagesInitialized.current) {
+      // Check if it's a local asset
+      const match = profileData.profileImageUrl.match(/profile-(\d+)\.jpg/);
+      if (match?.[1]) {
+        setProfilePictureIndex(parseInt(match[1], 10));
+        setUploadedProfileImage(null);
+      } else if (!profileData.profileImageUrl.startsWith('/assets/')) {
+        // It's an uploaded image
+        setUploadedProfileImage(profileData.profileImageUrl);
+      }
+    }
+  }, [profileData.profileImageUrl]);
+
+  // Sync cover image from profileData when template loads
+  useEffect(() => {
+    if (profileData.coverImageUrl && !imagesInitialized.current) {
+      // Check if it's a local asset
+      const match = profileData.coverImageUrl.match(/banner-(\d+)\.jpg/);
+      if (match?.[1]) {
+        setBannerIndex(parseInt(match[1], 10));
+        setUploadedBanner(null);
+      } else if (!profileData.coverImageUrl.startsWith('/assets/')) {
+        // It's an uploaded image
+        setUploadedBanner(profileData.coverImageUrl);
+      }
+      // Mark as initialized after both images are synced
+      imagesInitialized.current = true;
+    }
+  }, [profileData.coverImageUrl]);
 
   // Username availability check
   const { usernameStatus, usernameSuggestion, isCheckingUsername, retryCheck } =

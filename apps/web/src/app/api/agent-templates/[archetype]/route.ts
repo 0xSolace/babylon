@@ -14,6 +14,9 @@
 import { getTemplate } from '@babylon/agents';
 import { NextResponse } from 'next/server';
 
+// Force dynamic rendering to prevent caching of templates
+export const dynamic = 'force-dynamic';
+
 /**
  * GET /api/agent-templates/[archetype]
  *
