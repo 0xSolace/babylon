@@ -9,6 +9,7 @@
 import {
   broadcastAgentActivity,
   broadcastChatMessage,
+  broadcastToChannel,
   type CommentActivityData,
   type MessageActivityData,
   type PostActivityData,
@@ -33,6 +34,7 @@ import {
   perpPositions,
   positions,
   posts,
+  predictionPriceHistories,
   reactions,
   shares,
   sql,
@@ -42,6 +44,7 @@ import {
   FEE_CONFIG,
   type GeneratedTag,
   generateTagsFromPost,
+  invalidateAfterPredictionTrade,
   PredictionPricing,
   StaticDataRegistry,
   storeTagsForPost,
@@ -576,6 +579,19 @@ async function executePredictionTrade(params: {
       });
     }
 
+    await txDb.insert(predictionPriceHistories).values({
+      id: await generateSnowflakeId(),
+      marketId: market.id,
+      yesPrice: calculation.newYesPrice,
+      noPrice: calculation.newNoPrice,
+      yesShares: String(calculation.newYesShares),
+      noShares: String(calculation.newNoShares),
+      liquidity: String(Number(market.liquidity) + calculation.netAmount),
+      eventType: 'trade',
+      source: isNpc ? 'npc_trade' : 'user_trade',
+      createdAt: new Date(),
+    });
+
     return { calculation };
   };
 
@@ -604,6 +620,44 @@ async function executePredictionTrade(params: {
     { shares: sharesRounded },
     'DirectExecutors'
   );
+
+  await invalidateAfterPredictionTrade(market.id).catch((error) => {
+    logger.debug(
+      'Failed to invalidate prediction trades cache after direct trade',
+      {
+        marketId: market.id,
+        error: error instanceof Error ? error.message : String(error),
+      },
+      'DirectExecutors'
+    );
+  });
+
+  broadcastToChannel('markets', {
+    type: 'prediction_trade',
+    marketId: market.id,
+    yesPrice: result.calculation.newYesPrice,
+    noPrice: result.calculation.newNoPrice,
+    yesShares: result.calculation.newYesShares,
+    noShares: result.calculation.newNoShares,
+    liquidity: Number(market.liquidity) + result.calculation.netAmount,
+    trade: {
+      actorType: isNpc ? 'npc' : 'user',
+      actorId: agentUserId,
+      action: 'buy',
+      side: isBuyYes ? 'yes' : 'no',
+      shares: result.calculation.sharesBought,
+      amount,
+      price: result.calculation.avgPrice,
+      source: isNpc ? 'npc_trade' : 'user_trade',
+      timestamp: new Date().toISOString(),
+    },
+  }).catch((error: Error) => {
+    logger.debug(
+      'Failed to broadcast prediction trade update',
+      { marketId: market.id, error: error.message },
+      'DirectExecutors'
+    );
+  });
 
   return {
     success: true,
@@ -777,6 +831,19 @@ async function executePredictionSell(params: {
         .where(eq(positions.id, existingPosition.id));
     }
 
+    await txDb.insert(predictionPriceHistories).values({
+      id: await generateSnowflakeId(),
+      marketId: market.id,
+      yesPrice: calculation.newYesPrice,
+      noPrice: calculation.newNoPrice,
+      yesShares: String(calculation.newYesShares),
+      noShares: String(calculation.newNoShares),
+      liquidity: String(Number(market.liquidity) - calculation.totalCost),
+      eventType: 'trade',
+      source: isNpc ? 'npc_trade' : 'user_trade',
+      createdAt: new Date(),
+    });
+
     return { calculation, sharesToSell, remainingShares, netProceeds };
   };
 
@@ -823,6 +890,46 @@ async function executePredictionSell(params: {
     { sharesSold: result.sharesToSell, remaining: result.remainingShares },
     'DirectExecutors'
   );
+
+  await invalidateAfterPredictionTrade(market.id).catch((error) => {
+    logger.debug(
+      'Failed to invalidate prediction trades cache after direct sell',
+      {
+        marketId: market.id,
+        error: error instanceof Error ? error.message : String(error),
+      },
+      'DirectExecutors'
+    );
+  });
+
+  const tradeAction =
+    Math.abs(result.remainingShares) < MIN_SHARES_THRESHOLD ? 'close' : 'sell';
+  broadcastToChannel('markets', {
+    type: 'prediction_trade',
+    marketId: market.id,
+    yesPrice: result.calculation.newYesPrice,
+    noPrice: result.calculation.newNoPrice,
+    yesShares: result.calculation.newYesShares,
+    noShares: result.calculation.newNoShares,
+    liquidity: Number(market.liquidity) - result.calculation.totalCost,
+    trade: {
+      actorType: isNpc ? 'npc' : 'user',
+      actorId: agentUserId,
+      action: tradeAction,
+      side: isSellYes ? 'yes' : 'no',
+      shares: result.sharesToSell,
+      amount: result.netProceeds,
+      price: result.calculation.avgPrice,
+      source: isNpc ? 'npc_trade' : 'user_trade',
+      timestamp: new Date().toISOString(),
+    },
+  }).catch((error: Error) => {
+    logger.debug(
+      'Failed to broadcast prediction trade update',
+      { marketId: market.id, error: error.message },
+      'DirectExecutors'
+    );
+  });
 
   return {
     success: true,

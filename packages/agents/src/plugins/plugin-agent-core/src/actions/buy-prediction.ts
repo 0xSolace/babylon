@@ -4,8 +4,24 @@
  * (Same pattern as AutonomousTradingService)
  */
 
-import { and, asUser, db, eq, gte, markets, positions, sql } from '@babylon/db';
-import { FEE_CONFIG, PredictionPricing, WalletService } from '@babylon/engine';
+import { broadcastToChannel } from '@babylon/api';
+import {
+  and,
+  asUser,
+  db,
+  eq,
+  gte,
+  markets,
+  positions,
+  predictionPriceHistories,
+  sql,
+} from '@babylon/db';
+import {
+  FEE_CONFIG,
+  invalidateAfterPredictionTrade,
+  PredictionPricing,
+  WalletService,
+} from '@babylon/engine';
 import type {
   Action,
   ActionResult,
@@ -179,6 +195,19 @@ export const buyPredictionAction: Action = {
           })
           .where(eq(markets.id, market.id));
 
+        await txDb.insert(predictionPriceHistories).values({
+          id: await generateSnowflakeId(),
+          marketId: market.id,
+          yesPrice: calculation.newYesPrice,
+          noPrice: calculation.newNoPrice,
+          yesShares: String(calculation.newYesShares),
+          noShares: String(calculation.newNoShares),
+          liquidity: String(nextLiquidity),
+          eventType: 'trade',
+          source: 'user_trade',
+          createdAt: new Date(),
+        });
+
         // Check for existing position
         const [existingPosition] = await txDb
           .select()
@@ -260,6 +289,44 @@ export const buyPredictionAction: Action = {
         shares: result.calculation.sharesBought,
         avgPrice: result.calculation.avgPrice,
         cost: amount,
+      });
+
+      await invalidateAfterPredictionTrade(market.id).catch((error) => {
+        logger.debug(
+          'Failed to invalidate prediction trades cache after agent buy',
+          {
+            marketId: market.id,
+            error: error instanceof Error ? error.message : String(error),
+          }
+        );
+      });
+
+      const nextLiquidity =
+        Number(market.liquidity) + result.calculation.netAmount;
+      broadcastToChannel('markets', {
+        type: 'prediction_trade',
+        marketId: market.id,
+        yesPrice: result.calculation.newYesPrice,
+        noPrice: result.calculation.newNoPrice,
+        yesShares: result.calculation.newYesShares,
+        noShares: result.calculation.newNoShares,
+        liquidity: nextLiquidity,
+        trade: {
+          actorType: 'user',
+          actorId: agentUserId,
+          action: 'buy',
+          side: isBuyYes ? 'yes' : 'no',
+          shares: result.calculation.sharesBought,
+          amount,
+          price: result.calculation.avgPrice,
+          source: 'user_trade',
+          timestamp: new Date().toISOString(),
+        },
+      }).catch((error: Error) => {
+        logger.debug('Failed to broadcast prediction trade update', {
+          marketId: market.id,
+          error: error.message,
+        });
       });
 
       return {

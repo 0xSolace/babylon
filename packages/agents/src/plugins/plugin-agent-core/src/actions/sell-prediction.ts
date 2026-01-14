@@ -4,8 +4,22 @@
  * (Same pattern as AutonomousTradingService)
  */
 
-import { and, asUser, db, eq, markets, positions } from '@babylon/db';
-import { FEE_CONFIG, PredictionPricing, WalletService } from '@babylon/engine';
+import { broadcastToChannel } from '@babylon/api';
+import {
+  and,
+  asUser,
+  db,
+  eq,
+  markets,
+  positions,
+  predictionPriceHistories,
+} from '@babylon/db';
+import {
+  FEE_CONFIG,
+  invalidateAfterPredictionTrade,
+  PredictionPricing,
+  WalletService,
+} from '@babylon/engine';
 import type {
   Action,
   ActionResult,
@@ -16,6 +30,7 @@ import type {
 } from '@elizaos/core';
 import { AgentPnLService } from '../../../../services/AgentPnLService';
 import { logger } from '../../../../shared/logger';
+import { generateSnowflakeId } from '../../../../shared/snowflake';
 
 const agentPnLService = new AgentPnLService();
 
@@ -180,6 +195,19 @@ export const sellPredictionAction: Action = {
           })
           .where(eq(markets.id, market.id));
 
+        await txDb.insert(predictionPriceHistories).values({
+          id: await generateSnowflakeId(),
+          marketId: market.id,
+          yesPrice: calculation.newYesPrice,
+          noPrice: calculation.newNoPrice,
+          yesShares: String(calculation.newYesShares),
+          noShares: String(calculation.newNoShares),
+          liquidity: String(nextLiquidity),
+          eventType: 'trade',
+          source: 'user_trade',
+          createdAt: new Date(),
+        });
+
         // Update or close position
         const remainingShares = currentShares - sharesToSell;
         if (remainingShares <= 0) {
@@ -249,6 +277,45 @@ export const sellPredictionAction: Action = {
         sharesSold: sharesToSell,
         proceeds,
         remainingShares: result.remainingShares,
+      });
+
+      await invalidateAfterPredictionTrade(market.id).catch((error) => {
+        logger.debug(
+          'Failed to invalidate prediction trades cache after agent sell',
+          {
+            marketId: market.id,
+            error: error instanceof Error ? error.message : String(error),
+          }
+        );
+      });
+
+      const nextLiquidity =
+        Number(market.liquidity) - result.calculation.totalCost;
+      const tradeAction = result.remainingShares <= 0 ? 'close' : 'sell';
+      broadcastToChannel('markets', {
+        type: 'prediction_trade',
+        marketId: market.id,
+        yesPrice: result.calculation.newYesPrice,
+        noPrice: result.calculation.newNoPrice,
+        yesShares: result.calculation.newYesShares,
+        noShares: result.calculation.newNoShares,
+        liquidity: nextLiquidity,
+        trade: {
+          actorType: 'user',
+          actorId: agentUserId,
+          action: tradeAction,
+          side: isSellYes ? 'yes' : 'no',
+          shares: sharesToSell,
+          amount: proceeds,
+          price: result.calculation.avgPrice ?? proceeds / sharesToSell,
+          source: 'user_trade',
+          timestamp: new Date().toISOString(),
+        },
+      }).catch((error: Error) => {
+        logger.debug('Failed to broadcast prediction trade update', {
+          marketId: market.id,
+          error: error.message,
+        });
       });
 
       return {
