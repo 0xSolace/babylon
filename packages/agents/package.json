@@ -17,9 +17,9 @@
       "require": "./src/client.ts"
     },
     "./templates": {
-      "types": "./src/templates.ts",
-      "import": "./src/templates.ts",
-      "require": "./src/templates.ts"
+      "types": "./src/templates-export.ts",
+      "import": "./src/templates-export.ts",
+      "require": "./src/templates-export.ts"
     }
   },
   "scripts": {
