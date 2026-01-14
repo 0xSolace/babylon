@@ -207,8 +207,8 @@ mock.module('@babylon/api/services/cron-relay-service', () => ({
 
 // Import the route handler after mocks are set up - SKIP due to server-only
 // import { POST } from '@/app/api/cron/agent-tick/route';
-const POST = async () => {
-  throw new Error('Test skipped');
+const POST = async (_req: NextRequest): Promise<Response> => {
+  throw new Error('Test skipped - server-only import issue');
 };
 
 // TODO: Fix server-only import issue in route dependencies
