@@ -284,6 +284,19 @@ jobs:
           # at runtime for any server-side rendering or API routes that might need them
           NEXT_PUBLIC_PRIVY_APP_ID: ${{ secrets.NEXT_PUBLIC_PRIVY_APP_ID || secrets.PRIVY_APP_ID || '' }}
 
+      - name: Prepare Synpress Cache (MetaMask wallet setup)
+        run: |
+          echo "🔐 Preparing Synpress MetaMask cache..."
+          cd packages/testing
+          # Create the wallet cache that MetaMask fixtures require
+          bunx synpress synpress/wallet.setup.ts || {
+            echo "⚠️  Synpress cache preparation failed, MetaMask tests may fail"
+          }
+          echo "✅ Synpress cache prepared"
+        env:
+          WALLET_SEED_PHRASE: ${{ secrets.WALLET_SEED_PHRASE || 'test test test test test test test test test test test junk' }}
+          WALLET_PASSWORD: ${{ secrets.WALLET_PASSWORD || 'Tester@1234' }}
+
       - name: Run Synpress Tests (Wallet E2E)
         run: cd packages/testing && bunx playwright test --config=synpress.config.ts --reporter=list,json
         env:
