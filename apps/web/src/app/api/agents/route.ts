@@ -9,6 +9,12 @@
  * Core API for creating and managing autonomous agents. Agents are special User
  * entities with AI capabilities, autonomous action permissions, and points-based
  * resource management.
+ */
+
+// Force dynamic to prevent static generation issues with @elizaos/core ESM
+export const dynamic = 'force-dynamic';
+
+/**
  *
  * @openapi
  * /api/agents:
