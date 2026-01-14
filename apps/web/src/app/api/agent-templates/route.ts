@@ -5,12 +5,17 @@
  * @access Public
  *
  * @description
- * Returns all available agent templates. Uses dynamic imports to handle
- * module loading errors gracefully in serverless environments.
+ * Returns all available agent templates for the agent creation flow.
+ * Uses the isolated @babylon/agents/templates export to avoid loading
+ * @elizaos/core and other heavy server-side dependencies.
  *
- * @returns {Promise<NextResponse>} JSON response with templates data
+ * @returns {Promise<NextResponse>} JSON response with templates
  */
 
+import {
+  getAllTemplates,
+  getTemplateIds,
+} from '@babylon/agents/templates';
 import { NextResponse } from 'next/server';
 
 // Force dynamic rendering to prevent caching of template list
@@ -21,13 +26,10 @@ export const dynamic = 'force-dynamic';
  *
  * @description Fetches all available agent templates
  *
- * @returns {Promise<NextResponse>} Templates data
+ * @returns {Promise<NextResponse>} Array of templates with IDs
  */
 export async function GET() {
   try {
-    // Use dynamic import to catch module-level errors
-    const { getAllTemplates, getTemplateIds } = await import('@babylon/agents');
-
     const templates = getAllTemplates();
     const templateIds = getTemplateIds();
 
@@ -41,10 +43,6 @@ export async function GET() {
       {
         error: 'Failed to load templates',
         details: error instanceof Error ? error.message : String(error),
-        stack:
-          process.env.NODE_ENV !== 'production' && error instanceof Error
-            ? error.stack
-            : undefined,
       },
       { status: 500 }
     );

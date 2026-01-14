@@ -5,12 +5,14 @@
  * @access Public
  *
  * @description
- * Returns a specific agent template by archetype ID. Uses dynamic imports to
- * handle module loading errors gracefully in serverless environments.
+ * Returns a specific agent template by archetype ID. Uses the isolated
+ * @babylon/agents/templates export to avoid loading @elizaos/core and
+ * other heavy server-side dependencies.
  *
  * @returns {Promise<NextResponse>} JSON response with template data
  */
 
+import { getTemplate } from '@babylon/agents/templates';
 import { NextResponse } from 'next/server';
 
 // Force dynamic rendering to prevent caching of templates
@@ -29,9 +31,6 @@ export async function GET(
 ) {
   try {
     const { archetype } = await params;
-
-    // Use dynamic import to catch module-level errors
-    const { getTemplate } = await import('@babylon/agents');
     const template = getTemplate(archetype);
 
     if (!template) {
@@ -43,15 +42,15 @@ export async function GET(
 
     return NextResponse.json(template);
   } catch (error) {
-    console.error('[AgentTemplatesAPI] Failed to load template:', error);
+    const { archetype } = await params;
+    console.error(
+      `[AgentTemplatesAPI] Failed to load template '${archetype}':`,
+      error
+    );
     return NextResponse.json(
       {
-        error: 'Failed to load template',
+        error: `Failed to load template '${archetype}'`,
         details: error instanceof Error ? error.message : String(error),
-        stack:
-          process.env.NODE_ENV !== 'production' && error instanceof Error
-            ? error.stack
-            : undefined,
       },
       { status: 500 }
     );

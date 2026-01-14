@@ -15,6 +15,11 @@
       "types": "./src/client.ts",
       "import": "./src/client.ts",
       "require": "./src/client.ts"
+    },
+    "./templates": {
+      "types": "./src/templates.ts",
+      "import": "./src/templates.ts",
+      "require": "./src/templates.ts"
     }
   },
   "scripts": {
