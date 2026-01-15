@@ -9,8 +9,6 @@
  * @see src/lib/services/agent-registry.service.ts
  */
 
-// Force dynamic to prevent static generation issues with @elizaos/core ESM
-export const dynamic = 'force-dynamic';
 
 import type { ExternalAgentConnectionParams } from '@babylon/agents';
 import { agentRegistry } from '@babylon/agents';
