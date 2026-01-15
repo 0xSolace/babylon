@@ -159,12 +159,12 @@
  */
 
 import { agentService, getAgentConfig } from '@babylon/agents';
-import { authenticateUser } from '@babylon/api';
+import { authenticateUser, withErrorHandling } from '@babylon/api';
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandling(async (req: NextRequest) => {
   const user = await authenticateUser(req);
 
   const body = await req.json();
@@ -245,9 +245,9 @@ export async function POST(req: NextRequest) {
       createdAt: agentUser.createdAt.toISOString(),
     },
   });
-}
+});
 
-export async function GET(req: NextRequest) {
+export const GET = withErrorHandling(async (req: NextRequest) => {
   const user = await authenticateUser(req);
 
   const { searchParams } = new URL(req.url);
@@ -301,4 +301,4 @@ export async function GET(req: NextRequest) {
     success: true,
     agents: agentsWithStats,
   });
-}
+});

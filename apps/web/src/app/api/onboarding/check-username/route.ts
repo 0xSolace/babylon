@@ -94,7 +94,12 @@
  * @see {@link /lib/db/context} RLS context
  */
 
-import { errorResponse, optionalAuth, successResponse } from '@babylon/api';
+import {
+  errorResponse,
+  optionalAuth,
+  successResponse,
+  withErrorHandling,
+} from '@babylon/api';
 import type { DrizzleClient } from '@babylon/db';
 import { asPublic, asUser } from '@babylon/db';
 import { logger } from '@babylon/shared';
@@ -172,7 +177,7 @@ async function checkUsernameAvailability(
  * Check username availability
  * Query params: username (required)
  */
-export async function GET(request: NextRequest) {
+export const GET = withErrorHandling(async (request: NextRequest) => {
   const { searchParams } = new URL(request.url);
   const username = searchParams.get('username');
 
@@ -217,4 +222,4 @@ export async function GET(request: NextRequest) {
   );
 
   return successResponse(result);
-}
+});
