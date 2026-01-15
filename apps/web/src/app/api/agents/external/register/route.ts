@@ -9,7 +9,6 @@
  * @see src/lib/services/agent-registry.service.ts
  */
 
-
 import type { ExternalAgentConnectionParams } from '@babylon/agents';
 import { agentRegistry } from '@babylon/agents';
 import {

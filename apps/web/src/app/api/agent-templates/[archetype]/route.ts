@@ -1,4 +1,3 @@
-
 /**
  * Agent Template by Archetype API
  *

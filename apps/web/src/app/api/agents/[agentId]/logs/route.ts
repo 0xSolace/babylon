@@ -1,4 +1,3 @@
-
 /**
  * Agent Logs and Activity History API
  *

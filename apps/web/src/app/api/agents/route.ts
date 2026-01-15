@@ -11,7 +11,6 @@
  * resource management.
  */
 
-
 /**
  *
  * @openapi

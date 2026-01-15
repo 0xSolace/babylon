@@ -1,4 +1,3 @@
-
 /**
  * Agent Onboarding Message API
  *

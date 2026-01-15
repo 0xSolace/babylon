@@ -1,4 +1,3 @@
-
 /**
  * Reputation Sync Cron Job API
  *

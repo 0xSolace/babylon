@@ -1,4 +1,3 @@
-
 /**
  * Team Chat Typing Indicator API
  *

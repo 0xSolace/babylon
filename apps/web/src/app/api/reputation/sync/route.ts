@@ -1,4 +1,3 @@
-
 /**
  * Reputation Synchronization API
  *

@@ -1,4 +1,3 @@
-
 /**
  * Enhanced Registry API
  *

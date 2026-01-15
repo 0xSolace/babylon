@@ -1,4 +1,3 @@
-
 /**
  * Agent Templates API
  *

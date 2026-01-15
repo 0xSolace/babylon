@@ -1,4 +1,3 @@
-
 /**
  * Agent Trading Balance API
  *

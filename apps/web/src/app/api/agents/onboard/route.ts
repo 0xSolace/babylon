@@ -1,4 +1,3 @@
-
 /**
  * Agent On-Chain Registration API
  *
