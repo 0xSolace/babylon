@@ -75,82 +75,85 @@ export function useChatMessages(chatId: string | null) {
   const hasLoadedRef = useRef<Set<string>>(new Set());
 
   // Load existing messages from API (initial load)
-  const loadMessages = useCallback(async (chatId: string) => {
-    // Skip if already loaded
-    if (hasLoadedRef.current.has(chatId)) {
+  const loadMessages = useCallback(
+    async (chatId: string) => {
+      // Skip if already loaded
+      if (hasLoadedRef.current.has(chatId)) {
+        logger.debug(
+          `Skipping reload for ${chatId} - already loaded`,
+          { chatId },
+          'useChatMessages'
+        );
+        setIsLoading(false);
+        return;
+      }
+
       logger.debug(
-        `Skipping reload for ${chatId} - already loaded`,
+        `Loading initial messages for chat ${chatId}`,
         { chatId },
         'useChatMessages'
       );
-      setIsLoading(false);
-      return;
-    }
+      setIsLoading(true);
 
-    logger.debug(
-      `Loading initial messages for chat ${chatId}`,
-      { chatId },
-      'useChatMessages'
-    );
-    setIsLoading(true);
+      const token = await getAccessToken();
+      const response = await fetch(
+        `/api/chats/${chatId}?limit=${CHAT_PAGE_SIZE}`,
+        token ? { headers: { Authorization: `Bearer ${token}` } } : undefined
+      );
+      logger.debug(
+        `Response status: ${response.status}`,
+        { chatId, status: response.status },
+        'useChatMessages'
+      );
 
-    const token = await getAccessToken();
-    const response = await fetch(
-      `/api/chats/${chatId}?limit=${CHAT_PAGE_SIZE}`,
-      token ? { headers: { Authorization: `Bearer ${token}` } } : undefined
-    );
-    logger.debug(
-      `Response status: ${response.status}`,
-      { chatId, status: response.status },
-      'useChatMessages'
-    );
-
-    if (response.ok) {
-      const data = await response.json();
-      if (data.messages) {
-        const formattedMessages: ChatMessage[] = data.messages.map(
-          (msg: {
-            id: string;
-            content: string;
-            senderId: string;
-            type?: MessageType;
-            createdAt: string | Date;
-          }) => ({
-            id: msg.id,
-            content: msg.content,
-            chatId: chatId,
-            senderId: msg.senderId,
-            type: msg.type,
-            createdAt:
-              typeof msg.createdAt === 'string'
-                ? msg.createdAt
-                : msg.createdAt.toISOString(),
-          })
-        );
-        setMessages(formattedMessages);
-        setHasMore(data.pagination?.hasMore || false);
-        setNextCursor(data.pagination?.nextCursor || null);
-        hasLoadedRef.current.add(chatId);
-        logger.debug(
-          `Loaded ${formattedMessages.length} messages for chat ${chatId}`,
-          {
-            chatId,
-            count: formattedMessages.length,
-            hasMore: data.pagination?.hasMore,
-          },
+      if (response.ok) {
+        const data = await response.json();
+        if (data.messages) {
+          const formattedMessages: ChatMessage[] = data.messages.map(
+            (msg: {
+              id: string;
+              content: string;
+              senderId: string;
+              type?: MessageType;
+              createdAt: string | Date;
+            }) => ({
+              id: msg.id,
+              content: msg.content,
+              chatId: chatId,
+              senderId: msg.senderId,
+              type: msg.type,
+              createdAt:
+                typeof msg.createdAt === 'string'
+                  ? msg.createdAt
+                  : msg.createdAt.toISOString(),
+            })
+          );
+          setMessages(formattedMessages);
+          setHasMore(data.pagination?.hasMore || false);
+          setNextCursor(data.pagination?.nextCursor || null);
+          hasLoadedRef.current.add(chatId);
+          logger.debug(
+            `Loaded ${formattedMessages.length} messages for chat ${chatId}`,
+            {
+              chatId,
+              count: formattedMessages.length,
+              hasMore: data.pagination?.hasMore,
+            },
+            'useChatMessages'
+          );
+        }
+      } else {
+        const errorData = await response.json().catch(() => null);
+        logger.error(
+          'Failed to load messages',
+          { chatId, errorData, status: response.status },
           'useChatMessages'
         );
       }
-    } else {
-      const errorData = await response.json().catch(() => null);
-      logger.error(
-        'Failed to load messages',
-        { chatId, errorData, status: response.status },
-        'useChatMessages'
-      );
-    }
-    setIsLoading(false);
-  }, [getAccessToken]);
+      setIsLoading(false);
+    },
+    [getAccessToken]
+  );
 
   // Load more older messages (pagination)
   const loadMore = useCallback(async () => {
