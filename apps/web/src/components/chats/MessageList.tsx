@@ -1,7 +1,6 @@
 'use client';
 
 import type { MessageType } from '@babylon/db';
-import { cn } from '@babylon/shared';
 import { Loader2, MessageCircle } from 'lucide-react';
 import React from 'react';
 import { Skeleton } from '@/components/shared/Skeleton';
@@ -41,8 +40,8 @@ export function MessageList({
   currentUserId,
   loading,
   isLoadingMore,
-  hasMore,
-  pullDistance,
+  hasMore: _hasMore,
+  pullDistance: _pullDistance,
   authenticated,
   topSentinelRef,
   messagesEndRef,
@@ -64,38 +63,18 @@ export function MessageList({
 
   return (
     <>
-      {/* Gradient overlay to hint more messages */}
-      {hasMore && (
-        <div className="pointer-events-none absolute top-0 right-0 left-0 z-10 h-8 bg-gradient-to-b from-background via-background/90 to-transparent" />
-      )}
-
-      {/* Pull-to-refresh indicator */}
-      {pullDistance > 0 && (
-        <div
-          className="absolute top-0 right-0 left-0 flex items-center justify-center py-2 transition-opacity"
-          style={{ opacity: Math.min(pullDistance / 80, 1) }}
-        >
-          <Loader2
-            className={cn(
-              'h-6 w-6 text-primary',
-              pullDistance > 80 ? 'animate-spin' : ''
-            )}
-          />
-        </div>
-      )}
-
-      {/* Sentinel for infinite scroll */}
-      <div ref={topSentinelRef} className="h-1 w-full" />
-
-      {/* Loading more messages indicator */}
+      {/* Loading more messages indicator - shown at top when loading older messages */}
       {isLoadingMore && (
-        <div className="sticky top-2 z-20 flex justify-center">
+        <div className="flex justify-center py-2">
           <div className="flex items-center gap-2 rounded-full bg-background/85 px-3 py-1 font-medium text-muted-foreground text-xs shadow-sm backdrop-blur">
             <Loader2 className="h-4 w-4 animate-spin text-primary" />
             <span>Loading previous messages…</span>
           </div>
         </div>
       )}
+
+      {/* Sentinel for infinite scroll - kept for potential future use */}
+      <div ref={topSentinelRef} className="h-px w-full" />
 
       {/* Messages */}
       {messages.map((msg) => {

@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useChatMessages } from '@/hooks/useChatMessages';
 import { usePullToRefresh } from '@/hooks/usePullToRefresh';
+import { CHAT_PAGE_SIZE } from '@/lib/constants';
 import { useAuthStore } from '@/stores/authStore';
 import type { Chat, ChatDetails, ChatFilter } from '../types';
 
@@ -139,7 +140,9 @@ export function useChatPage() {
       setLoadingChat(true);
 
       if (isDebugMode) {
-        const response = await fetch(`/api/chats/${chatId}?debug=true`);
+        const response = await fetch(
+          `/api/chats/${chatId}?debug=true&limit=${CHAT_PAGE_SIZE}`
+        );
         const data = await response.json();
         setChatDetails({
           ...data,
@@ -157,9 +160,12 @@ export function useChatPage() {
         return;
       }
 
-      const response = await fetch(`/api/chats/${chatId}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const response = await fetch(
+        `/api/chats/${chatId}?limit=${CHAT_PAGE_SIZE}`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        }
+      );
 
       if (response.status === 404) {
         setLoadingChat(false);
@@ -410,15 +416,18 @@ export function useChatPage() {
     [getAccessToken, user]
   );
 
-  // Scroll to newest messages (scrollTop = 0 due to flex-col-reverse)
+  // Scroll to newest messages
   const scrollToBottom = useCallback((behavior: ScrollBehavior = 'auto') => {
-    const container = chatContainerRef.current;
-    if (container) {
-      container.scrollTo({ top: 0, behavior });
-    }
+    setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior, block: 'end' });
+    }, 0);
   }, []);
 
-  // Pull-to-refresh
+  // Pull-to-refresh disabled for chat page
+  // The chat uses flex-col-reverse for scroll anchoring, which inverts scrollTop.
+  // Pull-to-refresh interprets scrollTop=0 + scroll-up as a refresh gesture,
+  // but with flex-col-reverse that's actually "at bottom, scrolling to older messages".
+  // Chat doesn't need pull-to-refresh anyway - it has SSE real-time updates.
   const { pullDistance, containerRef: setPullToRefreshRef } = usePullToRefresh({
     onRefresh: async () => {
       if (!selectedChatId) return;
@@ -426,6 +435,7 @@ export function useChatPage() {
         console.error('Error refreshing chat details:', error);
       });
     },
+    enabled: false,
   });
 
   const setRefs = useCallback(
@@ -532,20 +542,22 @@ export function useChatPage() {
     }
   }, [chatDetails?.messages, isAtBottom, scrollToBottom, loadingChat]);
 
-  // Load older messages when scrolling up
+  // Load older messages when scrolling up (near top)
   useEffect(() => {
     const container = chatContainerRef.current;
     const sentinel = topSentinelRef.current;
-
     if (!container || !sentinel || !selectedChatId) return;
 
     const observer = new IntersectionObserver(
       (entries) => {
         const entry = entries[0];
         if (!entry) return;
-        const maxScrollTop = container.scrollHeight - container.clientHeight;
-        const nearTop = container.scrollTop >= maxScrollTop - 200;
-        if (entry.isIntersecting && nearTop && hasMore && !isLoadingMore) {
+        if (
+          entry.isIntersecting &&
+          container.scrollTop < 200 &&
+          hasMore &&
+          !isLoadingMore
+        ) {
           pendingScrollAdjustRef.current = {
             previousHeight: container.scrollHeight,
             previousTop: container.scrollTop,
@@ -580,7 +592,10 @@ export function useChatPage() {
 
     const handleScroll = () => {
       const threshold = 50;
-      const atBottom = container.scrollTop <= threshold;
+      // Normal scroll: at bottom when scrollTop + clientHeight >= scrollHeight - threshold
+      const atBottom =
+        container.scrollTop + container.clientHeight >=
+        container.scrollHeight - threshold;
       setIsAtBottom(atBottom);
     };
 

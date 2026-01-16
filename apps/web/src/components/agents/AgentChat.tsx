@@ -101,12 +101,11 @@ export function AgentChat({
   // Use pro mode based on agent's model tier
   const usePro = agent.modelTier === 'pro';
 
-  // Scroll to newest messages (scrollTop = 0 due to flex-col-reverse)
   const scrollToBottom = useCallback((behavior: ScrollBehavior = 'smooth') => {
-    const container = chatContainerRef.current;
-    if (container) {
-      container.scrollTo({ top: 0, behavior });
-    }
+    // Use setTimeout to ensure DOM is fully rendered after state update
+    setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior, block: 'end' });
+    }, 0);
   }, []);
 
   // Create ChatDetails for the header component
@@ -248,15 +247,21 @@ export function AgentChat({
     fetchMessages();
   }, [fetchMessages]);
 
-  // Track last message for change detection
+  // Scroll to bottom on initial load and when switching agents
   useEffect(() => {
     const lastId =
       messages.length > 0 ? messages[messages.length - 1]?.id : null;
     if (!lastId || loading) return;
-    lastMessageIdRef.current = lastId;
-  }, [messages, loading]);
 
-  // Load older messages when scrolling up
+    const shouldForce = lastMessageIdRef.current === null;
+    lastMessageIdRef.current = lastId;
+
+    if (shouldForce) {
+      scrollToBottom('auto');
+    }
+  }, [messages, loading, scrollToBottom]);
+
+  // Intersection observer for infinite scroll
   useEffect(() => {
     const container = chatContainerRef.current;
     const sentinel = topSentinelRef.current;
@@ -267,9 +272,12 @@ export function AgentChat({
       (entries) => {
         const entry = entries[0];
         if (!entry) return;
-        const maxScrollTop = container.scrollHeight - container.clientHeight;
-        const nearTop = container.scrollTop >= maxScrollTop - 200;
-        if (entry.isIntersecting && nearTop && hasMore && !isLoadingMore) {
+        if (
+          entry.isIntersecting &&
+          container.scrollTop < 200 &&
+          hasMore &&
+          !isLoadingMore
+        ) {
           pendingScrollAdjustRef.current = {
             previousHeight: container.scrollHeight,
             previousTop: container.scrollTop,
@@ -408,25 +416,23 @@ export function AgentChat({
         </div>
       </div>
 
-      {/* Messages - Scrollable, starts at bottom via flex-col-reverse */}
+      {/* Messages - Scrollable using shared MessageList */}
       <div
         ref={chatContainerRef}
-        className="relative flex min-h-0 flex-1 flex-col-reverse overflow-y-auto px-4 py-3"
+        className="relative min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-3"
       >
-        <div className="flex flex-col space-y-4">
-          <MessageList
-            messages={chatMessages}
-            participants={participants}
-            currentUserId={user?.id}
-            loading={loading}
-            isLoadingMore={isLoadingMore}
-            hasMore={hasMore}
-            pullDistance={0}
-            authenticated={!!user}
-            topSentinelRef={topSentinelRef}
-            messagesEndRef={messagesEndRef}
-          />
-        </div>
+        <MessageList
+          messages={chatMessages}
+          participants={participants}
+          currentUserId={user?.id}
+          loading={loading}
+          isLoadingMore={isLoadingMore}
+          hasMore={hasMore}
+          pullDistance={0}
+          authenticated={!!user}
+          topSentinelRef={topSentinelRef}
+          messagesEndRef={messagesEndRef}
+        />
       </div>
 
       {/* Footer - Fixed */}

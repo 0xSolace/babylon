@@ -103,25 +103,23 @@ export function ChatView({
         )}
       </div>
 
-      {/* Messages - Scrollable, starts at bottom via flex-col-reverse */}
+      {/* Messages - Scrollable */}
       <div
         ref={containerRef}
-        className="relative flex min-h-0 flex-1 flex-col-reverse overflow-y-auto px-4 py-3"
+        className="relative min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-3"
       >
-        <div className="flex flex-col space-y-4">
-          <MessageList
-            messages={chatDetails.messages || []}
-            participants={chatDetails.participants || []}
-            currentUserId={currentUserId}
-            loading={loading}
-            isLoadingMore={isLoadingMore}
-            hasMore={hasMore}
-            pullDistance={pullDistance}
-            authenticated={authenticated}
-            topSentinelRef={topSentinelRef}
-            messagesEndRef={messagesEndRef}
-          />
-        </div>
+        <MessageList
+          messages={chatDetails.messages || []}
+          participants={chatDetails.participants || []}
+          currentUserId={currentUserId}
+          loading={loading}
+          isLoadingMore={isLoadingMore}
+          hasMore={hasMore}
+          pullDistance={pullDistance}
+          authenticated={authenticated}
+          topSentinelRef={topSentinelRef}
+          messagesEndRef={messagesEndRef}
+        />
       </div>
 
       {/* Footer - Fixed */}
