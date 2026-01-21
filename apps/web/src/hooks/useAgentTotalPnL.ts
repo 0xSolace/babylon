@@ -25,6 +25,7 @@ export function useAgentTotalPnL(
     predictionPositions: predictions,
     perpPositions: perps,
     loading: positionsLoading,
+    error: positionsError,
   } = useUserPositions(agentId);
 
   // Calculate unrealized P&L and points in positions in a single pass
@@ -91,6 +92,8 @@ export function useAgentTotalPnL(
     isProfitable,
     /** Whether positions are still loading */
     loading: positionsLoading,
+    /** Error from fetching positions */
+    error: positionsError,
     /** Prediction positions */
     predictions,
     /** Perpetual positions */

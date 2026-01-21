@@ -41,6 +41,7 @@ export function AgentPerformance({ agent }: AgentPerformanceProps) {
     pointsInPositions,
     isProfitable,
     loading: positionsLoading,
+    error: positionsError,
     predictions,
     perps,
   } = useAgentTotalPnL(agent.id, agent.lifetimePnL);
@@ -203,6 +204,11 @@ export function AgentPerformance({ agent }: AgentPerformanceProps) {
           <div className="py-8 text-center text-muted-foreground">
             <Activity className="mx-auto mb-4 h-12 w-12 animate-pulse opacity-50" />
             <p>Loading activity...</p>
+          </div>
+        ) : positionsError ? (
+          <div className="py-8 text-center text-muted-foreground">
+            <Activity className="mx-auto mb-4 h-12 w-12 opacity-50" />
+            <p>Failed to load positions</p>
           </div>
         ) : totalTrades === 0 &&
           predictions.length === 0 &&
