@@ -1,11 +1,17 @@
 'use client';
 
 import { cn } from '@babylon/shared';
-import { Activity, Bot, MessageCircle, Plus, Users } from 'lucide-react';
+import {
+  Activity,
+  Bot,
+  MessageCircle,
+  Plus,
+  TrendingUp,
+  Users,
+} from 'lucide-react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
-import { AgentPnLDisplay } from '@/components/agents/AgentPnLDisplay';
 import { LoginButton } from '@/components/auth/LoginButton';
 import { Avatar } from '@/components/shared/Avatar';
 import { PageContainer } from '@/components/shared/PageContainer';
@@ -320,13 +326,16 @@ export default function AgentsPage() {
                         <div className="mb-1 text-muted-foreground text-xs">
                           P&L
                         </div>
-                        <div className="flex items-center gap-1">
-                          <AgentPnLDisplay
-                            agentId={agent.id}
-                            realizedPnL={agent.lifetimePnL}
-                            showIcon={true}
-                            showSuffix={false}
-                          />
+                        <div
+                          className={cn(
+                            'flex items-center gap-1 font-semibold',
+                            parseFloat(agent.lifetimePnL) >= 0
+                              ? 'text-green-600'
+                              : 'text-red-600'
+                          )}
+                        >
+                          <TrendingUp className="h-3 w-3" />
+                          {parseFloat(agent.lifetimePnL).toFixed(2)}
                         </div>
                       </div>
                       <div>
