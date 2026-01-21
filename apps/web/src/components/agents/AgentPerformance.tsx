@@ -266,7 +266,7 @@ export function AgentPerformance({ agent }: AgentPerformanceProps) {
       </div>
 
       {/* Agent0 Network Reputation */}
-      {agent.id && (
+      {agent.id.length > 0 && (
         <div className="rounded-lg border border-border bg-card/50 p-6 backdrop-blur">
           <div className="mb-4 flex items-center justify-between">
             <h3 className="flex items-center gap-2 font-semibold text-lg">
