@@ -34,16 +34,17 @@ export function AgentPnLDisplay({
   className,
   showSuffix = true,
 }: AgentPnLDisplayProps) {
-  const { totalPnL, isProfitable, loading } = useAgentTotalPnL(
-    agentId,
-    realizedPnL
-  );
+  const {
+    totalPnL,
+    realizedPnL: parsedRealizedPnL,
+    isProfitable,
+    loading,
+  } = useAgentTotalPnL(agentId, realizedPnL);
 
-  const realized =
-    typeof realizedPnL === 'string'
-      ? parseFloat(realizedPnL) || 0
-      : realizedPnL;
-  const displayValue = loading ? realized.toFixed(2) : totalPnL.toFixed(2);
+  // Use hook's parsed value to avoid duplicate parsing
+  const displayValue = loading
+    ? parsedRealizedPnL.toFixed(2)
+    : totalPnL.toFixed(2);
   const suffix = showSuffix ? ' pts' : '';
 
   const Icon = isProfitable ? TrendingUp : TrendingDown;

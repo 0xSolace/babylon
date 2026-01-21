@@ -28,23 +28,38 @@ export function useAgentTotalPnL(
   } = useUserPositions(agentId);
 
   // Calculate unrealized P&L and points in positions in a single pass
+  // Uses explicit Number coercion with isFinite checks to prevent NaN propagation
   const { unrealizedPnL, pointsInPositions } = useMemo(() => {
     let predictionPnL = 0;
     let predictionValue = 0;
 
     for (const pos of predictions) {
-      predictionPnL += pos.unrealizedPnL ?? 0;
-      predictionValue += pos.currentValue ?? pos.shares * pos.currentPrice;
+      const unrealized = Number(pos.unrealizedPnL);
+      predictionPnL += Number.isFinite(unrealized) ? unrealized : 0;
+
+      const currentVal = Number(pos.currentValue);
+      if (Number.isFinite(currentVal)) {
+        predictionValue += currentVal;
+      } else {
+        const shares = Number(pos.shares);
+        const price = Number(pos.currentPrice);
+        if (Number.isFinite(shares) && Number.isFinite(price)) {
+          predictionValue += shares * price;
+        }
+      }
     }
 
     let perpPnL = 0;
     let perpValue = 0;
 
     for (const pos of perps) {
-      perpPnL += pos.unrealizedPnL ?? 0;
+      const unrealized = Number(pos.unrealizedPnL);
+      perpPnL += Number.isFinite(unrealized) ? unrealized : 0;
+
       const leverage = Number(pos.leverage);
-      if (Number.isFinite(leverage) && leverage > 0) {
-        perpValue += Math.abs(pos.size / leverage);
+      const size = Number(pos.size);
+      if (Number.isFinite(leverage) && leverage > 0 && Number.isFinite(size)) {
+        perpValue += Math.abs(size / leverage);
       }
     }
 

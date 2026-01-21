@@ -399,7 +399,7 @@ export default function AgentDetailPage() {
             </TabsContent>
 
             <TabsContent value="performance">
-              <AgentPerformance agent={agent} agentId={agent.id} />
+              <AgentPerformance agent={agent} />
             </TabsContent>
 
             <TabsContent value="logs">
