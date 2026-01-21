@@ -55,12 +55,16 @@ export function useAgentTotalPnL(
 
     for (const pos of perps) {
       const unrealized = Number(pos.unrealizedPnL);
-      perpPnL += Number.isFinite(unrealized) ? unrealized : 0;
+      const unrealizedSafe = Number.isFinite(unrealized) ? unrealized : 0;
+      perpPnL += unrealizedSafe;
 
       const leverage = Number(pos.leverage);
       const size = Number(pos.size);
       if (Number.isFinite(leverage) && leverage > 0 && Number.isFinite(size)) {
-        perpValue += Math.abs(size / leverage);
+        // Include margin (collateral) + unrealized P&L for consistent portfolio value
+        // This matches prediction positions which use currentValue (cost + unrealized)
+        const margin = Math.abs(size / leverage);
+        perpValue += margin + unrealizedSafe;
       }
     }
 
@@ -70,10 +74,12 @@ export function useAgentTotalPnL(
     };
   }, [predictions, perps]);
 
-  const realized =
+  // Guard against non-finite numbers to prevent NaN propagation
+  const realizedRaw =
     typeof realizedPnL === 'string'
-      ? parseFloat(realizedPnL) || 0
-      : realizedPnL;
+      ? parseFloat(realizedPnL)
+      : Number(realizedPnL);
+  const realized = Number.isFinite(realizedRaw) ? realizedRaw : 0;
   const totalPnL = realized + unrealizedPnL;
 
   // Defer profitability determination until positions are loaded to avoid color flash
