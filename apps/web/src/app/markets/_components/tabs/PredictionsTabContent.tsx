@@ -9,8 +9,8 @@ import type {
   PredictionSort,
 } from '@/types/markets';
 import type { CategoryPnLData } from '../../_hooks';
-import { PredictionMarketCard, ResolvedPredictionCard } from '../cards';
 import { PredictionSortControls } from '../sections';
+import { PredictionMarketsTable } from '../tables/PredictionMarketsTable';
 
 interface PredictionsTabContentProps {
   // Auth state
@@ -143,28 +143,10 @@ export const PredictionsTabContent = memo(function PredictionsTabContent({
         />
       </div>
 
-      <div className="space-y-2">
-        {displayedPredictions.length > 0 ? (
-          displayedPredictions.map((prediction) =>
-            prediction.status === 'resolved' ? (
-              <ResolvedPredictionCard
-                key={`resolved-${prediction.id}`}
-                prediction={prediction}
-              />
-            ) : (
-              <PredictionMarketCard
-                key={`prediction-${prediction.id}`}
-                prediction={prediction}
-                onClick={onPredictionClick}
-              />
-            )
-          )
-        ) : (
-          <p className="py-8 text-center text-muted-foreground text-sm">
-            No markets found
-          </p>
-        )}
-      </div>
+      <PredictionMarketsTable
+        predictions={displayedPredictions}
+        onPredictionClick={onPredictionClick}
+      />
     </div>
   );
 });

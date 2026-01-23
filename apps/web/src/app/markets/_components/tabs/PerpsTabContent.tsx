@@ -6,7 +6,7 @@ import { CategoryPnLCard } from '@/components/markets/CategoryPnLCard';
 import { PerpPositionsList } from '@/components/markets/PerpPositionsList';
 import type { PerpMarket } from '@/types/markets';
 import type { CategoryPnLData } from '../../_hooks';
-import { PerpMarketCard } from '../cards';
+import { PerpMarketsTable } from '../tables/PerpMarketsTable';
 
 interface PerpsTabContentProps {
   // Auth state
@@ -86,15 +86,13 @@ export const PerpsTabContent = memo(function PerpsTabContent({
       <h2 className="mb-3 font-bold text-muted-foreground text-sm">
         ALL MARKETS
       </h2>
-      <div className="space-y-2">
-        {filteredMarkets.map((market) => (
-          <PerpMarketCard
-            key={market.ticker}
-            market={market}
-            onClick={onMarketClick}
-          />
-        ))}
-      </div>
+      <h2 className="mb-3 font-bold text-muted-foreground text-sm">
+        ALL MARKETS
+      </h2>
+      <PerpMarketsTable
+        markets={filteredMarkets}
+        onMarketClick={onMarketClick}
+      />
     </div>
   );
 });
