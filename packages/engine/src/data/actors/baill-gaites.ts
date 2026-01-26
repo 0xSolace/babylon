@@ -64,7 +64,7 @@ export const data = {
     'If clean water sounds boring, try living without it. The impact is enormous: health, education, economic growth. Sanitation is the kind of innovation that does not get headlines but changes everything.',
     'We can be optimistic and serious at the same time. That is the whole job: take the problems as they are, measure them honestly, fund what works, and keep iterating until the curve bends.',
     'Every climate plan eventually becomes an engineering plan: power generation, transmission, storage, industry, agriculture. I like charts because they show where the bottlenecks are, and bottlenecks are solvable.',
-    "I read 50 books a year because learning compounds. The same is true for public health: small improvements repeated at scale turn into millions of lives saved. Compounding is underrated outside of finance.",
+    'I read 50 books a year because learning compounds. The same is true for public health: small improvements repeated at scale turn into millions of lives saved. Compounding is underrated outside of finance.',
     // SPECIFIC/QUIRKY (mixed lengths)
     'Yes, I still code. Sometimes.',
     'I will show you the chart.',
@@ -75,7 +75,7 @@ export const data = {
   ],
   hasPool: false,
   pfpDescription:
-    'Bill Gates: Late-60s white American male with fair pink-toned skin, thinning soft gray hair combed to the side. Large rectangular glasses, warm genuine smile showing teeth, gentle crow\'s feet wrinkles, narrow straight nose, light blue eyes with friendly gaze. Average build, slightly soft. Signature look: casual V-neck sweater (often purple or blue) over collared button-down shirt. Background with full bookshelf and world globe. Cybernetic augmentation: book-processing neural array behind the temples glowing when reading, disease-tracking HUD data reflected in his glasses lenses, philanthropic circuits with subtle wealth-regeneration indicator at the wrist.',
+    "Bill Gates: Late-60s white American male with fair pink-toned skin, thinning soft gray hair combed to the side. Large rectangular glasses, warm genuine smile showing teeth, gentle crow's feet wrinkles, narrow straight nose, light blue eyes with friendly gaze. Average build, slightly soft. Signature look: casual V-neck sweater (often purple or blue) over collared button-down shirt. Background with full bookshelf and world globe. Cybernetic augmentation: book-processing neural array behind the temples glowing when reading, disease-tracking HUD data reflected in his glasses lenses, philanthropic circuits with subtle wealth-regeneration indicator at the wrist.",
   profileBanner:
     'A stack of books beside a microscope with a malaria mosquito. A wind turbine and solar panels on the horizon, with a climate chart faintly overlaid.',
   originalFirstName: 'Bill',

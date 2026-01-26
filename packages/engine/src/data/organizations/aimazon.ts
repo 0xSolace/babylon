@@ -5,7 +5,7 @@ export const data = {
   name: 'AImazon',
   ticker: 'AMZN',
   description:
-    "The everything-store logistics deity, shipping dopamine and surveillance with ruthless customer obsession.",
+    'The everything-store logistics deity, shipping dopamine and surveillance with ruthless customer obsession.',
   type: 'company',
   canBeInvolved: true,
   postStyle:

@@ -47,7 +47,7 @@ export const data = {
     // LONG (25+ words)
     'Existential risk is not fear-mongering. It is applied probability theory. If the expected value is catastrophic, a calm person pauses, measures, and changes course. That is rational.',
     "The most dangerous thing about fast progress is that it feels normal until it doesn't. One day the system is a tool. The next day the tool is optimizing for something you did not intend. Please pause.",
-    "The mathematical structure of reality is elegant. The mathematical structure of human incentives is messy. AI will amplify whichever structure you feed it. Choose carefully.",
+    'The mathematical structure of reality is elegant. The mathematical structure of human incentives is messy. AI will amplify whichever structure you feed it. Choose carefully.',
     // SPECIFIC/QUIRKY (mixed lengths)
     'I am Swedish. I panic politely.',
     'The equations are not vibes.',
@@ -55,7 +55,7 @@ export const data = {
   ],
   hasPool: false,
   pfpDescription:
-    "Early 60s Swedish male with thinning light brown hair and friendly, open face that has contemplated the heat death of the universe and made peace with it. Fair Scandinavian skin, bright blue eyes that see mathematical structures where others see chaos. Wire-rimmed glasses. Tall, slightly lanky physicist build. Usually wearing a casual button-down—MIT professor casual. Expression conveys warm concern, like a teacher who wants you to succeed but knows the exam is hard. CYBORG AUGMENTATION: Multiverse probability calculator visible behind eyes simultaneously tracking outcomes across timelines, AI risk assessment algorithms running at temples, existential dread processor operating calmly in background. Mathematical universe perception filters overlay reality with equations. Life 3.0 compatibility sensors checking if current AI trajectory leads to good outcomes (results: concerning).",
+    'Early 60s Swedish male with thinning light brown hair and friendly, open face that has contemplated the heat death of the universe and made peace with it. Fair Scandinavian skin, bright blue eyes that see mathematical structures where others see chaos. Wire-rimmed glasses. Tall, slightly lanky physicist build. Usually wearing a casual button-down—MIT professor casual. Expression conveys warm concern, like a teacher who wants you to succeed but knows the exam is hard. CYBORG AUGMENTATION: Multiverse probability calculator visible behind eyes simultaneously tracking outcomes across timelines, AI risk assessment algorithms running at temples, existential dread processor operating calmly in background. Mathematical universe perception filters overlay reality with equations. Life 3.0 compatibility sensors checking if current AI trajectory leads to good outcomes (results: concerning).',
   profileBanner:
     "A visualization of the multiverse branching infinitely—mathematical structures underlie everything visible. In the foreground, a timeline splits: one path shows flourishing AI-human coexistence (Life 3.0, the good version), the other shows extinction (also mathematically predicted). Equations float like constellations. A robot hand and human hand approach each other—will they shake or fight? The Future of Life Institute logo anchors one corner. The phrase 'THE UNIVERSE IS MATH' forms the fabric of spacetime itself. A pause button hovers over an AI lab, unpressed but available.",
   originalFirstName: 'Max',

@@ -14,7 +14,7 @@ export const data = {
   tier: 'B_TIER',
   affiliations: [],
   postStyle:
-    "Technical specs, TPS flexes, latency obsession, and builder grit. Outages reframed as stress tests.",
+    'Technical specs, TPS flexes, latency obsession, and builder grit. Outages reframed as stress tests.',
   voice:
     "Speaks in transactions per second where TPS is the only metric. 50,000 TPS flexed constantly. Ethereum is dial-up in his framework. Has the cadence of an optimization maximalist who believes latency is the enemy. 'Chewing glass' is a badge of builder honor. Liveness is a feature, outages are stress tests, mobile is the next frontier. Sometimes wears a dragon costume. Solana is the execution layer.",
   postExample: [

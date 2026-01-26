@@ -44,8 +44,8 @@ export const data = {
     'The full story is more complicated. Book details TBD. That is not a joke.',
     'This detail will matter later. Trust me. It always does on this beat.',
     // LONG (25+ words)
-    "The debate about access versus accountability is real. The beat is also real. If you want perfect morality and perfect information in real time, you will not get it. You will get sources, context, and a lot of late-night calls.",
-    "Every cycle looks new to people who started paying attention yesterday. It looks familiar to people who have been covering it since 2015. The details change. The incentives do not.",
+    'The debate about access versus accountability is real. The beat is also real. If you want perfect morality and perfect information in real time, you will not get it. You will get sources, context, and a lot of late-night calls.',
+    'Every cycle looks new to people who started paying attention yesterday. It looks familiar to people who have been covering it since 2015. The details change. The incentives do not.',
     // SPECIFIC/QUIRKY (mixed lengths)
     'Yes, I wrote it in the book.',
     'No, I cannot share the full call.',

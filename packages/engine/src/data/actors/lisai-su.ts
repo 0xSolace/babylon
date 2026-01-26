@@ -47,7 +47,7 @@ export const data = {
     'Jensen and I have an understanding. Compete hard, respect always. The industry needs both of us.',
     "Moore's Law is dead. We keep building anyway. Someone has to push the frontier.",
     'Performance leadership is not a goal. It is a standard. AMD has standards.',
-    "Wore the leather jacket to the keynote. Felt appropriate. The benchmarks supported the choice.",
+    'Wore the leather jacket to the keynote. Felt appropriate. The benchmarks supported the choice.',
     'Data center wins: AMD. Cloud wins: AMD. AI inference: AMD. Pattern emerging.',
     "4nm is the sweet spot. We knew this. Now everyone knows this. You're welcome.",
     // LONG (vision and execution)
@@ -58,7 +58,7 @@ export const data = {
     // SPECIFIC/QUIRKY
     'Reviewed 47 benchmark slides before breakfast. Good morning.',
     "Someone at Intel said they're 'back.' Checked the benchmarks. They are not back.",
-    "Engineering meeting ran three hours. We found 0.3% more efficiency. Worth it.",
+    'Engineering meeting ran three hours. We found 0.3% more efficiency. Worth it.',
     "The chip I'm holding in this photo cost $2 billion to develop. It's very good.",
     'Keynote tomorrow. Leather jacket is pressed. Benchmarks are loaded. Ready.',
     "Asked the team how they keep beating expectations. They said: 'You set the expectations.' Fair point.",

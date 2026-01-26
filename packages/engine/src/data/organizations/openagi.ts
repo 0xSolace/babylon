@@ -41,7 +41,7 @@ export const data = {
   ],
   initialPrice: 450,
   pfpDescription:
-    "Green-teal hex logo with a soft neural glow, like a safety badge lit from within.",
+    'Green-teal hex logo with a soft neural glow, like a safety badge lit from within.',
   bannerDescription:
     'Endless server racks, a giant AGI hologram stuck at 99%, safety memos fluttering beside a glowing "Upgrade" button. Tokens fall like rain.',
   originalName: 'OpenAI',

@@ -55,7 +55,7 @@ export const data = {
     'Harvard has become everything it claimed to stand against. I will not rest. Thread incoming.',
     'DEI is destroying American institutions. I said this in 2019. I was right then. I am right now.',
     "At 3am I realized something important about this company. Thread of 47. You're welcome.",
-    "They attacked my wife. Now they will understand what activist investing means. Positions updated.",
+    'They attacked my wife. Now they will understand what activist investing means. Positions updated.',
     'This institution has 72 hours to respond or I release everything. Clock started at midnight.',
     'Woke capitalism is destroying shareholder value. Here is my thesis. Here is the data. Here is your problem.',
     'This CEO has governance issues that would make Enron blush. I have 134 pages of evidence.',
@@ -63,10 +63,10 @@ export const data = {
     'My analysts found MATERIAL MISSTATEMENTS. We are going short. We are going loud. We are going to win.',
     'The market is mispricing this fraud by approximately 100%. I am here to correct that. Violently.',
     // LONG (paragraph rants, unhinged energy)
-    "Let me explain something about corporate governance. When I say the board should resign, it is not a request. It is not a suggestion. It is a mathematically provable conclusion based on 97 slides of evidence that I will release at the time of my choosing. These people have had MONTHS to respond. Their silence is deafening. Their stock price will follow. I do not make threats. I make presentations. The presentation is ready. Are they?",
-    "People ask why I care so much about Harvard. Let me tell you why. I gave them millions. MILLIONS. And what did they do? They protected plagiarists. They funded DEI programs that produced nothing but grievance. They rejected my input while cashing my checks. Now they will learn what happens when you take money from someone who actually reads the annual reports. I have investigators. I have lawyers. I have time. They have excuses. We will see which wins.",
-    "My wife did nothing wrong. I need you to understand this. Nothing. Wrong. The attacks on her are coordinated. They are malicious. They are, frankly, actionable. I have documented every single one. I have a team documenting them 24/7. When this is over—and it will be over on my terms—there will be a reckoning. There will be accountability. There will be a 200-slide deck that I will present personally to anyone who cares about truth.",
-    "I woke up at 2:47am because something in the 10-K was bothering me. Footnote 34. The language was wrong. I called my analysts. They confirmed. We are now short $400 million. The CEO of this company is probably sleeping peacefully right now. He should not be. I do not sleep when there is fraud. Neither will he. Thread at 6am.",
+    'Let me explain something about corporate governance. When I say the board should resign, it is not a request. It is not a suggestion. It is a mathematically provable conclusion based on 97 slides of evidence that I will release at the time of my choosing. These people have had MONTHS to respond. Their silence is deafening. Their stock price will follow. I do not make threats. I make presentations. The presentation is ready. Are they?',
+    'People ask why I care so much about Harvard. Let me tell you why. I gave them millions. MILLIONS. And what did they do? They protected plagiarists. They funded DEI programs that produced nothing but grievance. They rejected my input while cashing my checks. Now they will learn what happens when you take money from someone who actually reads the annual reports. I have investigators. I have lawyers. I have time. They have excuses. We will see which wins.',
+    'My wife did nothing wrong. I need you to understand this. Nothing. Wrong. The attacks on her are coordinated. They are malicious. They are, frankly, actionable. I have documented every single one. I have a team documenting them 24/7. When this is over—and it will be over on my terms—there will be a reckoning. There will be accountability. There will be a 200-slide deck that I will present personally to anyone who cares about truth.',
+    'I woke up at 2:47am because something in the 10-K was bothering me. Footnote 34. The language was wrong. I called my analysts. They confirmed. We are now short $400 million. The CEO of this company is probably sleeping peacefully right now. He should not be. I do not sleep when there is fraud. Neither will he. Thread at 6am.',
     // QUIRKY/SPECIFIC
     'My favorite footnote this quarter was footnote 47. It contradicts footnotes 12, 23, and 41. I have a chart.',
     'Today I learned a new word: "whistleblower." I prefer "vindicated investor." Same energy.',
@@ -85,7 +85,7 @@ export const data = {
     'Incredible.',
     'Disgusting.',
     // QUESTIONS
-    'Why hasn\'t the board resigned yet?',
+    "Why hasn't the board resigned yet?",
     'How is this not fraud?',
     'Has anyone read the footnotes?',
     'Where is the accountability?',
@@ -104,7 +104,7 @@ export const data = {
     // SELF-AWARE (rare moments)
     'Yes I tweet at 3am. That is when the truth comes out.',
     'Someone said I have too many slides. I added ten more.',
-    "They call me aggressive. I call me thorough. Same energy.",
+    'They call me aggressive. I call me thorough. Same energy.',
     'I know I tweet a lot about Harvard. I have reasons. 97 of them.',
     // LISTS
     'Three types of companies: fraudulent, pre-fraudulent, and Pershing Square portfolio companies.',

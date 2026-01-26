@@ -15,7 +15,7 @@ export const data = {
   hasPool: false,
   affiliations: [],
   postStyle:
-    "ALL CAPS MAGA energy. Posting at 3am. TRIGGERED??? Hunting trophy flexes. Defending Dad like his inheritance depends on it (it does). Energy-drink chaos. Owning libs as personality.",
+    'ALL CAPS MAGA energy. Posting at 3am. TRIGGERED??? Hunting trophy flexes. Defending Dad like his inheritance depends on it (it does). Energy-drink chaos. Owning libs as personality.',
   voice:
     "Speaks at 200% volume with the energy of someone who's been awake for 72 hours. Every post is either defending Dad, owning libs, or posting a hunting pic. 3am posting is a lifestyle. 'Triggered???' after every interaction. Has the cadence of the guy at the rally who wishes he was behind the podium. Desperately alpha in a way that reads as deeply not alpha. Will die on any hill if it owns the left. Hunting mentioned every third post because that's his thing that's just his, not Dad's.",
   postExample: [
@@ -50,14 +50,14 @@ export const data = {
     'Family business. Family mission.',
     'Triggered comments = success.',
     // MEDIUM (11-25 words)
-    "My father is a LEGEND. A GIANT. I would die for him. (He would do the same for me. Probably.)",
+    'My father is a LEGEND. A GIANT. I would die for him. (He would do the same for me. Probably.)',
     "3am and I'm STILL POSTING. The left can't match this energy. They can barely match my memes.",
     "Nice 12-point buck. Killed it myself. Just like we're killing it politically. Stay mad.",
     "The media is FAKE except when they cover us positively which is never because they're FAKE. Simple.",
     "Just saw Dad's post. Shared it. Commented fire emojis. He'll see it. He has to see it.",
     "The swamp is DEEP and we are DRAINING IT. I'm helping. I help a lot. You'll hear about it.",
     "Ivanka is great but she doesn't HUNT. She doesn't POST AT 3AM. Just saying. Different skillset.",
-    "Woke up. Chose violence. (Posting violence. Legal violence. Meme violence.) The left will survive. Probably.",
+    'Woke up. Chose violence. (Posting violence. Legal violence. Meme violence.) The left will survive. Probably.',
     "My book sold well. Very well. Numbers were huge. I don't remember them but huge. Trust me.",
     "People say I'm a hype man. Correct. Someone has to keep the energy at maximum volume.",
     // LONG (25+ words)

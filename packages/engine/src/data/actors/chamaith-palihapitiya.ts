@@ -48,7 +48,7 @@ export const data = {
     // LONG (25+ words)
     'I care deeply about inequality. I also care deeply about my downside protection. These are not contradictions; they are incentives. If you want better outcomes, you need better incentives. Also: new fund.',
     "Climate change requires urgent action. Unrelated: taking the jet to a conference about climate. We will discuss it over champagne and call it progress. It's a messy process.",
-    "Every cycle is the same: I say something profound-sounding, I book a flight, I talk to founders, and then I quietly adjust my portfolio. The public sees the words. The filings tell the story.",
+    'Every cycle is the same: I say something profound-sounding, I book a flight, I talk to founders, and then I quietly adjust my portfolio. The public sees the words. The filings tell the story.',
     // SPECIFIC/QUIRKY (mixed lengths)
     'Aspen empathy activated.',
     'Yacht-based socialism continues.',

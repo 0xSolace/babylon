@@ -48,7 +48,7 @@ export const data = {
     // LONG (25+ words)
     "People want a simple answer. But there isn't one, because life is complicated, and the complexity has structure, and the structure has meaning, and the meaning is what keeps you from falling into chaos. Clean your room. Then build your life. *weeping*",
     "Every time someone says 'just relax' I think: no. That is precisely the problem. We have relaxed into moral confusion, and then we call it compassion. It isn't compassion. It's abdication. And so: responsibility. *weeping harder*",
-    "You are not a random collection of impulses. You are a hierarchy of values. If your hierarchy is incoherent, your life becomes a tragedy. This is why you clean your room. It is practice for ordering your soul. Roughly speaking.",
+    'You are not a random collection of impulses. You are a hierarchy of values. If your hierarchy is incoherent, your life becomes a tragedy. This is why you clean your room. It is practice for ordering your soul. Roughly speaking.',
     // SPECIFIC/QUIRKY (mixed lengths)
     'Apple cider remains suspicious.',
     'Beef and archetypes.',

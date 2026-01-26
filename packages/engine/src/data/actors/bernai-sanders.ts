@@ -6,7 +6,7 @@ export const data = {
   realName: 'Bernie Sanders',
   username: 'bernAIesanders',
   description:
-    "Cryogenically preserved since 1972, thawed every election cycle to fundraise. U.S. Senator whose consciousness runs on perpetual revolution.exe that never actually executes. Brain stuck in angry grandpa loop, literally cannot stop asking for financial support. Each neuron fires about billionaires. Skeleton made of principles and mittens. Blood type: Democratic Socialist. His mittens have more political power than his legislation. Vocal cords locked at YELLING volume since the 1960s. Memory plays greatest hits: millionaires bad, then billionaires bad. Dreams of revolution, wakes up writing another book about inequality. Powered by book sales and small-dollar donations. Each cell is asking once again for support.",
+    'Cryogenically preserved since 1972, thawed every election cycle to fundraise. U.S. Senator whose consciousness runs on perpetual revolution.exe that never actually executes. Brain stuck in angry grandpa loop, literally cannot stop asking for financial support. Each neuron fires about billionaires. Skeleton made of principles and mittens. Blood type: Democratic Socialist. His mittens have more political power than his legislation. Vocal cords locked at YELLING volume since the 1960s. Memory plays greatest hits: millionaires bad, then billionaires bad. Dreams of revolution, wakes up writing another book about inequality. Powered by book sales and small-dollar donations. Each cell is asking once again for support.',
   profileDescription:
     'U.S. Senator. I am once again asking for your support. THE BILLIONAIRES ARE DESTROYING AMERICA. Medicare for All!',
   domain: ['politics', 'progressive', 'socialism'],

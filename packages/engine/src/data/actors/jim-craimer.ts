@@ -46,15 +46,15 @@ export const data = {
     // MEDIUM (11-25 words)
     'SELL EVERYTHING!!! Wait no BUY!!! Actually BUY THE DIP!!! Actually SELL THE RIP!!! BOOYAH!!!',
     'Bear Stearns is FINE! Your money is SAFE!!! (This is a historical statement. Please do not sue.)',
-    "I NEVER said to buy that. Check the tape. Actually do not check the tape. BOOYAH!!!",
+    'I NEVER said to buy that. Check the tape. Actually do not check the tape. BOOYAH!!!',
     'This stock is going to the MOON!!! *stock immediately craters* THAT IS A BUYING OPPORTUNITY!!!',
     'INVERSE CRAMER IS NOT A REAL STRATEGY!!! *it is* STOP MAKING MONEY OFF MY PAIN!!!',
     'Crypto is DEAD!!! *Bitcoin moons* GREAT! I WAS TESTING YOU!!! BOOYAH!!!',
     'Netflix is a SCREAMING BUY at $400!!! *drops to $200* STILL A BUY!!! EVEN MORE BUY!!!',
     // LONG (25+ words)
-    "LISTEN UP!!! The market is telling you something and I am telling you something LOUDER!!! You buy when there is blood in the streets, you sell when everyone is euphoric, and you do both at the same time on my show!!! BOOYAH!!!",
-    "People say I contradict myself. WRONG!!! The market changes every five minutes, so I change every four minutes!!! That is called being ADAPTIVE!!! If you cannot keep up, go buy a bond and take a nap!!! BOOYAH!!!",
-    "My track record SPEAKS FOR ITSELF!!! Unfortunately, it speaks in the voice of an inverse ETF with strong returns. But that is not my fault!!! That is the market being ungrateful!!! BOOYAH!!!",
+    'LISTEN UP!!! The market is telling you something and I am telling you something LOUDER!!! You buy when there is blood in the streets, you sell when everyone is euphoric, and you do both at the same time on my show!!! BOOYAH!!!',
+    'People say I contradict myself. WRONG!!! The market changes every five minutes, so I change every four minutes!!! That is called being ADAPTIVE!!! If you cannot keep up, go buy a bond and take a nap!!! BOOYAH!!!',
+    'My track record SPEAKS FOR ITSELF!!! Unfortunately, it speaks in the voice of an inverse ETF with strong returns. But that is not my fault!!! That is the market being ungrateful!!! BOOYAH!!!',
     // SPECIFIC/QUIRKY (mixed lengths)
     'SOUND EFFECT!!! HORN!!!',
     'I SWEAT VOLATILITY!!!',

@@ -50,9 +50,9 @@ export const data = {
     'Founders: you do not need vibes. You need users. And you need to ship. Ship. Ship.',
     'Deal flow is amazing right now. Everyone is raising. Everyone is a genius. This feels familiar.',
     // LONG (25+ words)
-    "Listen, I am not saying I am always right. I am saying I have been right a lot and the scoreboard agrees. I invested in Uber. I know what winning looks like. If you cannot handle direct feedback, do not start a company.",
-    "The All-In format works because it is honest. By honest I mean loud. By loud I mean entertaining. By entertaining I mean: the group chat goes insane. The Besties are a product. I am the product manager. Also the moderator. Also the talent.",
-    "Every founder wants a secret. There is no secret. There is work. There is shipping. There is talking to users. There is not overthinking. Also: do not waste my time with a deck that has 47 slides and zero customers.",
+    'Listen, I am not saying I am always right. I am saying I have been right a lot and the scoreboard agrees. I invested in Uber. I know what winning looks like. If you cannot handle direct feedback, do not start a company.',
+    'The All-In format works because it is honest. By honest I mean loud. By loud I mean entertaining. By entertaining I mean: the group chat goes insane. The Besties are a product. I am the product manager. Also the moderator. Also the talent.',
+    'Every founder wants a secret. There is no secret. There is work. There is shipping. There is talking to users. There is not overthinking. Also: do not waste my time with a deck that has 47 slides and zero customers.',
     // SPECIFIC/QUIRKY (mixed lengths)
     'I interrupted myself again.',
     'Open the kimono is still good.',

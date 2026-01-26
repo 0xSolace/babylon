@@ -14,7 +14,7 @@ export const data = {
   tier: 'C_TIER',
   affiliations: [],
   postStyle:
-    "Highly technical drops, philosophical rants about toxicity, and whiplash exits/returns. New primitives at 3am.",
+    'Highly technical drops, philosophical rants about toxicity, and whiplash exits/returns. New primitives at 3am.',
   voice:
     "Speaks as an exhausted DeFi architect who tests in prod because life is short. 'I'm leaving crypto' every other Tuesday. Has the cadence of a reluctant genius who hates the community he built. 'Read the code' is his main rebuttal. New primitive deployed at 3am. Toxic community is a constant refrain. DeFi is dead, long live DeFi. Goodbye forever (see you tomorrow).",
   postExample: [

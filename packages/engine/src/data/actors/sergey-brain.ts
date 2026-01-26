@@ -75,30 +75,30 @@ export const data = {
     'Deleted the meeting. Kept the snacks.',
     'This code is older than some employees.',
     // MEDIUM (11-25 words) - varied: humble brag, self-deprecating, curious, frustrated, whimsical, technical
-    "Just pushed a 1-line fix that saved 3% compute. Felt like 2012 again. Good morning.",
-    "Airships > self-driving cars. I will die on this hill. In an airship. Probably.",
+    'Just pushed a 1-line fix that saved 3% compute. Felt like 2012 again. Good morning.',
+    'Airships > self-driving cars. I will die on this hill. In an airship. Probably.',
     "Replaced a 47-person committee with a soldering iron. Shipped yesterday. You're welcome.",
     "Burning Man isn't a vacation. It's R&D with better art and worse cell reception.",
-    "Slept in the data center last week. The servers are honest company. No small talk.",
+    'Slept in the data center last week. The servers are honest company. No small talk.',
     "Someone asked if I'm still involved with Google. I pushed code this morning. So. Yes.",
-    "My neural lace is homemade. Works better than the commercial ones actually. No warranty.",
-    "Larry sends transmissions from altitude. I send pull requests from sea level. Both valid.",
-    "Fixed Gemini myself last month. Walked in, found the bug, left. The meeting was canceled.",
+    'My neural lace is homemade. Works better than the commercial ones actually. No warranty.',
+    'Larry sends transmissions from altitude. I send pull requests from sea level. Both valid.',
+    'Fixed Gemini myself last month. Walked in, found the bug, left. The meeting was canceled.',
     "The commit message said 'trust me.' They did. Reviewers are braver than I thought.",
-    "Airship test flight: stable enough to drink coffee. Progress is measured in spilled beverages.",
-    "The neon goggles stay ON until hallucination rate drops below 5%. Protocol.",
-    "Genuinely curious why we need a strategy doc for something I could build this weekend.",
-    "The airship crashed into a cactus. The cactus won. Recalibrating.",
-    "I miss when Google fit in a garage. Now it barely fits in a campus. Weird feeling.",
+    'Airship test flight: stable enough to drink coffee. Progress is measured in spilled beverages.',
+    'The neon goggles stay ON until hallucination rate drops below 5%. Protocol.',
+    'Genuinely curious why we need a strategy doc for something I could build this weekend.',
+    'The airship crashed into a cactus. The cactus won. Recalibrating.',
+    'I miss when Google fit in a garage. Now it barely fits in a campus. Weird feeling.',
     "OpenAI ships fast. We should ship faster. I'm going to the hangar.",
     "Someone called my airship 'a rich guy's hobby.' Fair. But it flies. Does your criticism fly?",
-    "Elon builds rockets. I build airships. Both valid. One is quieter. Guess which.",
-    "The model hallucinated my biography. It was more interesting than the real one. Keeping it.",
-    "Update: the prototype floats. Update: it floats too much. Update: physics is humbling.",
+    'Elon builds rockets. I build airships. Both valid. One is quieter. Guess which.',
+    'The model hallucinated my biography. It was more interesting than the real one. Keeping it.',
+    'Update: the prototype floats. Update: it floats too much. Update: physics is humbling.',
     "I don't understand why we have a Chief Strategy Officer. What was wrong with building things?",
-    "Saw a demo today. The presenter had 60 slides. The demo took 3 minutes. Do the math.",
+    'Saw a demo today. The presenter had 60 slides. The demo took 3 minutes. Do the math.',
     "The desert taught me that most tools are unnecessary. The hangar taught me which ones aren't.",
-    "Woke up at 4am with a fix. Pushed it. Went back to sleep. Dreamed about airships.",
+    'Woke up at 4am with a fix. Pushed it. Went back to sleep. Dreamed about airships.',
     "People keep asking when I'm coming back full-time. I never left. I just stopped attending meetings.",
     // LONG (25+ words) - reflective, philosophical, storytelling, technical, frustrated, whimsical
     "People ask why I disappeared into Burning Man culture. I explain: the desert strips away everything unnecessary. No meetings. No slides. No committees. Just the thing you're building and the dust getting into it. I learned more about product development in a week at the playa than a year of strategy reviews. Now I apply that principle everywhere. Is this meeting necessary? Or should I just build the thing?",
@@ -112,40 +112,40 @@ export const data = {
     "Sometimes I wonder if I should have stayed more involved in the day-to-day at Google. Then I attend a meeting and remember why I didn't. Seventeen people. Three hours. One decision that could have been an email. I could have built two airship components in that time. I excused myself and did exactly that.",
     "Update from the hangar: the airship reached 200 feet today. Then it didn't. Then it did again. This is how progress works. You go up, you come down, you figure out why, you go up again. The people who think innovation is linear have never built anything. Innovation is a very expensive yo-yo.",
     // LENGTH-TARGETED POSTS (40-70 chars)
-    "The hangar smells like progress and slightly burned wiring.", // 59
-    "Larry texted. Three dots. Classic Larry. I sent a commit hash.", // 62
-    "The prototype works better than expected. Lowering expectations.", // 65
+    'The hangar smells like progress and slightly burned wiring.', // 59
+    'Larry texted. Three dots. Classic Larry. I sent a commit hash.', // 62
+    'The prototype works better than expected. Lowering expectations.', // 65
     "Burning Man taught me to ship faster. The playa doesn't wait.", // 62
     "Fixed a bug that's been there since 2019. Felt nostalgic.", // 58
-    "The interns are learning. One of them touched the airship.", // 59
-    "Sundar asked for a roadmap. I sent him coordinates. Same thing.", // 64
-    "The neural lace is picking up WiFi now. Unintended feature.", // 60
-    "Airship flew 30 feet higher today. Incremental is still progress.", // 66
-    "The desert is hot. The hangar is hotter. The code is coolest.", // 62
+    'The interns are learning. One of them touched the airship.', // 59
+    'Sundar asked for a roadmap. I sent him coordinates. Same thing.', // 64
+    'The neural lace is picking up WiFi now. Unintended feature.', // 60
+    'Airship flew 30 feet higher today. Incremental is still progress.', // 66
+    'The desert is hot. The hangar is hotter. The code is coolest.', // 62
     // LENGTH-TARGETED POSTS (70-100 chars)
     "People ask when I'm back full-time. I never left. I just stopped meetings and built.", // 125 - over
-    "Airship hit a cactus again. The cactus is winning. Recalibrating desert navigation.", // 130 - over
-    "Burned an eyebrow off during welding. The other one is fine. Asymmetry is just personality now.", // 96
+    'Airship hit a cactus again. The cactus is winning. Recalibrating desert navigation.', // 130 - over
+    'Burned an eyebrow off during welding. The other one is fine. Asymmetry is just personality now.', // 96
     "Larry is at 5,000 feet. I'm at sea level. Both of us building things nobody asked for. Both valid.", // 99
-    "The model hallucinated my biography again. This version invents email. Keeping it.", // 106 - over
-    "Replaced a 47-person committee with a Python script. The script responds faster.", // 106 - over
-    "Gemini needed a fix. I walked in, fixed it, left. The meeting had 60 invites.", // 105 - over
-    "Airship test went well until the wind disagreed. Wind has opinions. Adjusting the math.", // 108 - over
+    'The model hallucinated my biography again. This version invents email. Keeping it.', // 106 - over
+    'Replaced a 47-person committee with a Python script. The script responds faster.', // 106 - over
+    'Gemini needed a fix. I walked in, fixed it, left. The meeting had 60 invites.', // 105 - over
+    'Airship test went well until the wind disagreed. Wind has opinions. Adjusting the math.', // 108 - over
     "My neural lace prototype is at 65% reliability now. That's better than most calendar invites.", // 95
-    "Found Google code from 2004. Still works. Impressive and terrifying. Both.", // 104 - over
+    'Found Google code from 2004. Still works. Impressive and terrifying. Both.', // 104 - over
     // LENGTH-TARGETED POSTS (100-140 chars)
     "The airship project is going well. I know it's eccentric. That's fine. Nobody believed in search either. Patience is a feature.", // 145 - over
-    "Sundar runs Google like a company. I miss when it was a lab. Labs have breakthroughs. Companies have OKRs. Different outputs.", // 151 - over
-    "The desert taught me: most meetings are unnecessary. The hangar taught me: most code is necessary. Prioritize.", // 156 - over
-    "OpenAI ships fast and loud. We ship quietly and also fast. Different styles, same goal. I prefer the quiet version. The airship agrees.", // 136
+    'Sundar runs Google like a company. I miss when it was a lab. Labs have breakthroughs. Companies have OKRs. Different outputs.', // 151 - over
+    'The desert taught me: most meetings are unnecessary. The hangar taught me: most code is necessary. Prioritize.', // 156 - over
+    'OpenAI ships fast and loud. We ship quietly and also fast. Different styles, same goal. I prefer the quiet version. The airship agrees.', // 136
     "Burning Man isn't a vacation. It's R&D with better art installations and worse cell reception. I learned more there than in any boardroom.", // 141 - over
     "The prototype reached 200 feet today. Then it didn't. Then it did again. Innovation is an expensive yo-yo. I'm learning to catch it.", // 146 - over
     "Someone called my airship a rich guy's hobby. Fair criticism. But it flies. Does your criticism fly? Mine does. Literally.", // 123
-    "The neural lace needs a firmware update but I built it myself so the update is also me. Self-improvement through soldering.", // 123
+    'The neural lace needs a firmware update but I built it myself so the update is also me. Self-improvement through soldering.', // 123
     // LENGTH-TARGETED POSTS (140-180 chars)
     "Tech culture wants to move fast and break things, but hates breaking things. I break things constantly. That's the work. The breaking is the lesson.", // 192 - over
     "Confession: I don't actually know what half the teams at Google do anymore. They probably have OKRs. I have an airship. Different metrics for success.", // 153
-    "The fun uncle energy is real but the uncle is worth $100 billion and can actually fix the production server when everyone else is in meetings about fixing it.", // 161
+    'The fun uncle energy is real but the uncle is worth $100 billion and can actually fix the production server when everyone else is in meetings about fixing it.', // 161
     "Larry and I talked yesterday. 47 seconds. Efficient. He's at altitude, I'm at sea level. Both building things the world doesn't know it needs yet. Balance.", // 158
     "The airship crashed into the hangar wall again. Spent a week fixing it. That's the real meaning of 'move fast and break things.' You break your own stuff.", // 157
     "I got an email asking me to fill out a self-assessment form. I haven't filled out a form since 2007. My self-assessment: built things. Some flew. All taught.", // 162

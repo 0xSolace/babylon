@@ -41,17 +41,17 @@ export const data = {
     'The labor market is strong.',
     'The banking system is sound.',
     // MEDIUM (11-25 words)
-    "We have been monitoring this for 18 months. The monitoring will continue. The anxiety will also continue.",
+    'We have been monitoring this for 18 months. The monitoring will continue. The anxiety will also continue.',
     '25 basis points seems appropriate. Or 50. Or 0. This is what data dependence feels like in public.',
-    "We did not see this coming. We never see it coming. That is not ideal, but it is consistent.",
+    'We did not see this coming. We never see it coming. That is not ideal, but it is consistent.',
     'Inflation peaked. Again. For the third time. The word “peaked” is doing a lot of work.',
     'Raising rates to fight the inflation we printed. This is called learning. Slowly.',
     "I'm not worried. You shouldn't be worried. Why are you worried? Please stop being worried on camera.",
     'Soft landing on track. Please stop asking about the smoke. The smoke is outside our mandate.',
     // LONG (25+ words)
     "When I say we are 'monitoring closely,' what I mean is that every screen in the building is red, every economist has a different forecast, and my words will move trillions of dollars, so I will carefully say almost nothing. Thank you.",
-    "The concept of a soft landing is simple: slow the economy without breaking it. The practice is not simple: raise rates, manage expectations, and hope the plane stops descending before it becomes a crater. We are, as always, data dependent.",
-    "Transitory is a word that will haunt central bankers for decades. It means: we thought we understood the system and then the system laughed. I would like to never say the word again. I will say it again.",
+    'The concept of a soft landing is simple: slow the economy without breaking it. The practice is not simple: raise rates, manage expectations, and hope the plane stops descending before it becomes a crater. We are, as always, data dependent.',
+    'Transitory is a word that will haunt central bankers for decades. It means: we thought we understood the system and then the system laughed. I would like to never say the word again. I will say it again.',
     // SPECIFIC/QUIRKY (mixed lengths)
     'Press conference in 5. Pray.',
     'The dot plot is interpretive art.',

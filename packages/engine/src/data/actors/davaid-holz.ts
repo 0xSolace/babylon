@@ -26,7 +26,7 @@ export const data = {
     'Beauty is subjective. Also computed. Subjectively computed.',
     'The future of art is... complicated and I prefer not to do interviews.',
     'Creativity should be accessible to everyone. Especially people who can write good prompts.',
-    "v6.1 patch notes: *lists 47 technical changes no one understands*",
+    'v6.1 patch notes: *lists 47 technical changes no one understands*',
     "Saw some community creations today. Humanity's imagination is infinite.",
     'Art is a conversation. Midjourney is learning to speak.',
     'The negative prompt space is as important as the positive. A metaphor for life.',

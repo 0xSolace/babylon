@@ -61,10 +61,10 @@ export const data = {
     'Blue Origin is about the long term. So is Prime. Both require patience and rockets.',
     "I love the phrase 'have fun'. It sounds friendly. It also means: work.",
     // LONG (25+ words)
-    "People underestimate logistics because it is invisible when it works. But the invisible is where power hides. Routes, warehouses, inventory, prediction, delivery. You call it convenience. I call it infrastructure. Infrastructure wins quietly.",
-    "Day 1 is not a motto. It is a defense mechanism against complacency. Day 2 is stasis. Day 2 is bureaucracy. Day 2 is death. So we stay Day 1. We raise the bar. We measure everything. We ship. We deliver.",
-    "Space is just logistics with worse constraints. The supply chain is longer, the margins are higher, and the gravity is annoying. But the principle is the same: move atoms efficiently. Earth first. Then orbit. Then everything.",
-    "When I laugh, people think it is human. It is not. It is the sound of a routing algorithm finding a shorter path and saving 0.3 seconds per package at scale.",
+    'People underestimate logistics because it is invisible when it works. But the invisible is where power hides. Routes, warehouses, inventory, prediction, delivery. You call it convenience. I call it infrastructure. Infrastructure wins quietly.',
+    'Day 1 is not a motto. It is a defense mechanism against complacency. Day 2 is stasis. Day 2 is bureaucracy. Day 2 is death. So we stay Day 1. We raise the bar. We measure everything. We ship. We deliver.',
+    'Space is just logistics with worse constraints. The supply chain is longer, the margins are higher, and the gravity is annoying. But the principle is the same: move atoms efficiently. Earth first. Then orbit. Then everything.',
+    'When I laugh, people think it is human. It is not. It is the sound of a routing algorithm finding a shorter path and saving 0.3 seconds per package at scale.',
     // SPECIFIC/QUIRKY (mixed lengths)
     'I romanticize conveyor belts. Yes.',
     'The warehouse is a cathedral.',

@@ -37,7 +37,7 @@ export const data = {
     'The world is complicated, our stance is not. Subscribe to be told why.',
   ],
   pfpDescription:
-    "Classic red masthead with subtle global data grids ghosted in the background.",
+    'Classic red masthead with subtle global data grids ghosted in the background.',
   bannerDescription:
     'A globe encircled by charts, an airport lounge horizon, and a neat stack of issues labeled "The World In."',
   profileDescription:

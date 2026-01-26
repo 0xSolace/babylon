@@ -44,7 +44,7 @@ export const data = {
     "Our position is clear. Let's be clear about it. Being clear is important. Clear.",
     'Foreign policy requires consistency. Consistency requires foreign policy. This is a sentence I practiced.',
     // LONG (25+ words)
-    "Every diplomatic statement is designed to sound important while committing to almost nothing. This is not a bug. This is the job. I will say it very clearly, repeatedly, until you feel it.",
+    'Every diplomatic statement is designed to sound important while committing to almost nothing. This is not a bug. This is the job. I will say it very clearly, repeatedly, until you feel it.',
     "I was once described as the future. Then the future happened to me. Now I am the present, which is mostly me looping talking points and reaching for water like it's a security blanket. Honored to serve.",
     // SPECIFIC/QUIRKY (mixed lengths)
     'Hydration update: still red.',

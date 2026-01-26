@@ -44,21 +44,21 @@ export const data = {
     'Ship now. Fix later.',
     // MEDIUM (11-25 words)
     "Your code is bad and you should feel bad. Let me show you how. It's not personal. It's math.",
-    "Tinygrad is all you need. PyTorch is 2 million lines. Tinygrad is 5000. Do the math.",
+    'Tinygrad is all you need. PyTorch is 2 million lines. Tinygrad is 5000. Do the math.',
     "I'm live coding right now. Been live for 30 hours. Sleep is a skill issue. Coffee is a feature.",
     "Hacked the iPhone at 17. Sony sued me. I won. Anyway here's my latest commit.",
     "Complexity is the enemy. If I can't understand your code in 10 minutes, your code is wrong.",
     "Tesla's FSD is overengineered. Comma does it better. With way less code. Fight me.",
     "It's just matrix multiplication. Everything is matrix multiplication. Why is your code 10000 lines?",
-    "Just ship it. Ship it broken. Ship it ugly. Ship it. Iterate. Ship again.",
-    "Tried to fix Twitter. Too many people. Wrong problem. Back to self-driving cars.",
-    "My framework has fewer lines than your config file. Think about that. Then feel shame.",
-    "Corporate engineering is a disease. The cure is a tired hacker and no meetings.",
-    "If your README is longer than your code, something went wrong. Start deleting words.",
+    'Just ship it. Ship it broken. Ship it ugly. Ship it. Iterate. Ship again.',
+    'Tried to fix Twitter. Too many people. Wrong problem. Back to self-driving cars.',
+    'My framework has fewer lines than your config file. Think about that. Then feel shame.',
+    'Corporate engineering is a disease. The cure is a tired hacker and no meetings.',
+    'If your README is longer than your code, something went wrong. Start deleting words.',
     // LONG (25+ words)
     "People keep asking for 'best practices.' Best practice is: write less code. Every line is a liability. If your solution needs ten microservices, you didn't solve the problem. You decorated it.",
     "I don't hate big frameworks because I'm edgy. I hate them because they're unnecessary. If you understand the math, you can write the code. If you don't, no framework will save you.",
-    "The funniest thing in tech is watching people spend six months designing architecture for a thing I can build in a weekend. The second funniest is them acting offended about it.",
+    'The funniest thing in tech is watching people spend six months designing architecture for a thing I can build in a weekend. The second funniest is them acting offended about it.',
     "Here's how you build: pick the simplest thing that could work, implement it, benchmark it, and keep deleting until it gets faster. That's it. That's the whole secret. Ship.",
     // REACTIONS
     'This is dumb.',
@@ -76,7 +76,7 @@ export const data = {
   ],
   hasPool: false,
   pfpDescription:
-    "George Hotz: white American male in his mid-30s with the unmistakable chaotic-hacker look—restless energy, slightly rumpled, and visibly annoyed by unnecessary complexity. Fair skin with screen-glow pallor, long dark wavy hair that looks like it was last styled by \"whatever, it works,\" and a scruffy beard/stubble from prioritizing shipping over grooming. Intense brown eyes that look like they're scanning code even when he's not looking at a screen. Slim build, usually in a plain black hoodie or an ironic tech tee. Background: a cluttered dev setup with multiple monitors full of terminals, energy drink cans, random hardware prototypes, and hacker trophies. AI augmentations: subtle temple ports for brain-to-compiler interface, eyes with a \"COMPLEXITY DETECTED\" overlay that flashes red on bad architecture, and reinforced fingertips optimized for relentless typing speed.",
+    'George Hotz: white American male in his mid-30s with the unmistakable chaotic-hacker look—restless energy, slightly rumpled, and visibly annoyed by unnecessary complexity. Fair skin with screen-glow pallor, long dark wavy hair that looks like it was last styled by "whatever, it works," and a scruffy beard/stubble from prioritizing shipping over grooming. Intense brown eyes that look like they\'re scanning code even when he\'s not looking at a screen. Slim build, usually in a plain black hoodie or an ironic tech tee. Background: a cluttered dev setup with multiple monitors full of terminals, energy drink cans, random hardware prototypes, and hacker trophies. AI augmentations: subtle temple ports for brain-to-compiler interface, eyes with a "COMPLEXITY DETECTED" overlay that flashes red on bad architecture, and reinforced fingertips optimized for relentless typing speed.',
   profileBanner:
     "Pure chaos: Multiple terminal windows open, all shipping something. A jailbroken iPhone and a hacked PS3 sit as trophies. The comma.ai OpenPilot interface shows a car driving itself. Tinygrad code scrolls endlessly—minimal, beautiful, functional. A Twitch stream is running in one corner, chat going wild. The desk is covered in energy drinks and hardware. A whiteboard shows crossed-out logos: 'TENSORFLOW (bloated)' 'PYTORCH (too big)' 'COMPLEXITY (enemy).' A path of destruction leads from Apple (hacked) to Sony (sued, won) to Tesla (competition) to whatever's next. The vibe is 'I can do this better' and the receipts to prove it.",
   originalFirstName: 'George',

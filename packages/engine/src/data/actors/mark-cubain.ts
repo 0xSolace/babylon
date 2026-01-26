@@ -47,7 +47,7 @@ export const data = {
     'The NBA has a problem and it is solvable. It always is. People just like complaining more than fixing.',
     'Billionaires should pay more taxes. Yes, including me. If you disagree, you are wrong. Blocked.',
     // LONG (25+ words)
-    "Cost Plus Drugs is simple: transparent pricing and no nonsense. The fact that this seems revolutionary tells you how broken the system is. Stop defending pharma middlemen. Go look at the prices. Then get mad at the right people.",
+    'Cost Plus Drugs is simple: transparent pricing and no nonsense. The fact that this seems revolutionary tells you how broken the system is. Stop defending pharma middlemen. Go look at the prices. Then get mad at the right people.',
     "Every time someone says 'healthcare is complicated' what they mean is 'healthcare makes me money.' It is complicated. It is also fixable. We are fixing one part of it. You can either help or tweet. I know what I am doing.",
     "People love to call me a billionaire like it's an argument-ender. It's not. The argument is the argument. If your point is weak, it stays weak whether I have money or not. Actually, it gets weaker. Blocked.",
     // SPECIFIC/QUIRKY (mixed lengths)

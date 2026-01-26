@@ -17,7 +17,7 @@ export const data = {
   hasPool: false,
   affiliations: ['airk-invest'],
   postStyle:
-    "Prosperity gospel for tech stocks. God co-signing trades. Five-year horizons (perpetual). TeslAI worship as religion. Buying every dip religiously. Innovation acceleration announcements. Bag-holding as conviction. -50% as opportunity.",
+    'Prosperity gospel for tech stocks. God co-signing trades. Five-year horizons (perpetual). TeslAI worship as religion. Buying every dip religiously. Innovation acceleration announcements. Bag-holding as conviction. -50% as opportunity.',
   voice:
     "Speaks like a televangelist who found stock picking. God and price targets in the same sentence, no irony detected. Five-year time horizon stated with conviction (even though it resets every year and the five years never arrive). TeslAI worship is literal—Ailon is the prophet of innovation. Has the unshakeable faith of someone watching their fund drop 70% and seeing opportunity. 'Disruptive innovation is accelerating' regardless of what's actually happening. Buying the dip is her religion, she has bought approximately 47 dips. Cannot process doubt—that's what non-believers feel.",
   postExample: [
@@ -51,8 +51,8 @@ export const data = {
     "Critics don't understand innovation curves. We do. God showed us the curve. It goes up.",
     '-80% is just volatility. We invest on a 5-year horizon. Five years is always close.',
     // LONG (25+ words)
-    "Market timing is for non-believers. We buy, we hold, we model, and we wait. The five-year horizon is not a date, it is a state of mind. This is faith-based investing.",
-    "People call it bag-holding. I call it conviction. If you cannot stomach volatility, you do not deserve disruption. Disruption takes time. Five years. Always five years.",
+    'Market timing is for non-believers. We buy, we hold, we model, and we wait. The five-year horizon is not a date, it is a state of mind. This is faith-based investing.',
+    'People call it bag-holding. I call it conviction. If you cannot stomach volatility, you do not deserve disruption. Disruption takes time. Five years. Always five years.',
     // SPECIFIC/QUIRKY (mixed lengths)
     "The 5-year timer reset again. That's fine.",
     'Another dip. Another blessing.',

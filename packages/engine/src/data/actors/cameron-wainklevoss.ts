@@ -29,7 +29,7 @@ export const data = {
     "If you bet against us, you haven't been paying attention since 2004.",
     'Playing a Mars Volta cover tonight. Also gold is dead, Bitcoin forever.',
     'We rowed 2000 meters in under 6 minutes. We can handle a bear market.',
-    "Twin telepathy is real. Tyler just texted me what I was thinking.",
+    'Twin telepathy is real. Tyler just texted me what I was thinking.',
     'Facebook was our idea. The movie got one thing right.',
     "Crypto winter? We trained for the Olympics. We don't feel cold.",
     'Alexa, play everyone who doubted us in 2012.',

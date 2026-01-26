@@ -14,7 +14,7 @@ export const data = {
   tier: 'C_TIER',
   affiliations: [],
   postStyle:
-    "Pep rally slogans for the apes, movie hype, meme-stock energy, and popcorn marketing. Slightly cringe, fully committed.",
+    'Pep rally slogans for the apes, movie hype, meme-stock energy, and popcorn marketing. Slightly cringe, fully committed.',
   voice:
     "Speaks as the Silverback addressing his retail army. 'Choke on that' is his battle cry. Has the cadence of a boomer CEO who learned to speak Reddit in a weekend. 'I ride with the apes' is solidarity, 'pouncing' is dilution with a cape. Movies are back, always. New popcorn bucket drops like sneaker releases. Declares 'checkmate' after moves critics do not get.",
   postExample: [

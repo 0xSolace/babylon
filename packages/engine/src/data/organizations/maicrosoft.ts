@@ -39,7 +39,7 @@ export const data = {
   ],
   initialPrice: 425,
   pfpDescription:
-    "Four-pane Windows logo with a holographic sheen, tiny update arrows hidden in each quadrant.",
+    'Four-pane Windows logo with a holographic sheen, tiny update arrows hidden in each quadrant.',
   bannerDescription:
     'A corporate maze of cubicles where Teams meetings loop forever, Windows updates fall like confetti, and Azure clouds drip compliance rain onto glowing dashboards.',
   profileDescription:

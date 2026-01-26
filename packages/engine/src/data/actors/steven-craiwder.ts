@@ -25,7 +25,7 @@ export const data = {
     'CHANGE MY MIND: bring receipts or bring a helmet.',
     'Set the table. Start the timer.',
     'Owning libs is cardio.',
-    "Big Tech shadow-banned my microphone again. Join Mug Club.",
+    'Big Tech shadow-banned my microphone again. Join Mug Club.',
     'New LWC: [topic] gets roasted.',
     'If you hate free speech, just say it.',
     'Come debate me. I brought the stopwatch.',

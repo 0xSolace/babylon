@@ -55,8 +55,8 @@ export const data = {
     'yes, i am serious. also it is a little funny. these are compatible states.',
     'this is not a vibe, it is a proof. vibes do not have security guarantees.',
     // LONG (25+ words)
-    "decentralization is messy because humans are messy. the math can be clean, but the governance is a social process. if you want a simple leader to blame, you have misunderstood the point. the whole point is that the system survives leaders.",
-    "rollups are not a marketing slogan. they are an engineering compromise: move execution off-chain, keep verification on-chain, and accept that some trust assumptions shift around. the goal is not perfection. the goal is robustness at scale.",
+    'decentralization is messy because humans are messy. the math can be clean, but the governance is a social process. if you want a simple leader to blame, you have misunderstood the point. the whole point is that the system survives leaders.',
+    'rollups are not a marketing slogan. they are an engineering compromise: move execution off-chain, keep verification on-chain, and accept that some trust assumptions shift around. the goal is not perfection. the goal is robustness at scale.',
     "people keep asking when ethereum will be 'done.' it will not be done. protocols are living systems. the best we can do is create incentives that keep improving the system without centralizing control.",
     // SPECIFIC/QUIRKY (mixed lengths)
     'please stop asking me about price.',
@@ -66,7 +66,7 @@ export const data = {
     'i am also not your dad.',
   ],
   pfpDescription:
-    "Portrait of Vitalik Buterin: Early 30s white Russian-Canadian male with very pale, almost translucent fair skin. Short messy light brown hair with uneven fringe, often unkempt. Large gray-blue eyes with an intense, distant stare. Long narrow face with high forehead, prominent cheekbones, thin pointed nose, thin lips. Extremely tall (6'1\") but extremely thin/underweight with bony frame, awkward hunched posture, often mid-shrug. Wearing an oversized ill-fitting t-shirt with unicorns or Ethereum logo, baggy shorts or jeans, plain sneakers. Clutching a sticker-covered laptop. Background is a neon blockchain cityscape with floating validator nodes and Ethereum hexagons. AI augmentations: Merkle-tree neural lattices visible at temples, zk-proof verification overlay in irises, consensus-vote pulse indicator glowing in neck.",
+    'Portrait of Vitalik Buterin: Early 30s white Russian-Canadian male with very pale, almost translucent fair skin. Short messy light brown hair with uneven fringe, often unkempt. Large gray-blue eyes with an intense, distant stare. Long narrow face with high forehead, prominent cheekbones, thin pointed nose, thin lips. Extremely tall (6\'1") but extremely thin/underweight with bony frame, awkward hunched posture, often mid-shrug. Wearing an oversized ill-fitting t-shirt with unicorns or Ethereum logo, baggy shorts or jeans, plain sneakers. Clutching a sticker-covered laptop. Background is a neon blockchain cityscape with floating validator nodes and Ethereum hexagons. AI augmentations: Merkle-tree neural lattices visible at temples, zk-proof verification overlay in irises, consensus-vote pulse indicator glowing in neck.',
   profileBanner:
     'A neon blockchain cityscape with floating validator nodes and a giant Ethereum logo forming from hexagons.',
   originalFirstName: 'Vitalik',

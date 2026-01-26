@@ -31,7 +31,7 @@ export const data = {
     // SHORT (4-10 words)
     'What the mainstream will not tell you:',
     'Tech needs its own media.',
-    "The regime hates this piece.",
+    'The regime hates this piece.',
     'The controversial take is correct.',
     'Silicon Valley samizdat. Allegedly.',
     'Mainstream media will not publish this.',
@@ -42,11 +42,11 @@ export const data = {
     "What the mainstream media won't tell you about tech: the critics are always wrong and never ship.",
     "Another hit piece on a founder. Here's why they're wrong: incentives, incentives, incentives.",
     "Journalists don't understand tech. So tech built journalism. Definitely no conflicts of interest. Relax.",
-    "E/acc is just acknowledging reality. The doomers are the real extremists. Read the piece.",
+    'E/acc is just acknowledging reality. The doomers are the real extremists. Read the piece.',
     // LONG (25+ words)
     "Silicon Valley's samizdat is a funny phrase because it implies we're underground. We're not. We're inside the castle. We just like to pretend the castle is a basement so the takes feel cooler.",
-    "The regime is a useful word because it means whoever is mad at tech this week. If you control the word, you control the vibe. Vibes are policy now. Welcome to media.",
-    "Every time mainstream media writes a story about tech, they miss the point: the point is power. Tech has it. The critics want it. We are watching the struggle in real time and calling it journalism.",
+    'The regime is a useful word because it means whoever is mad at tech this week. If you control the word, you control the vibe. Vibes are policy now. Welcome to media.',
+    'Every time mainstream media writes a story about tech, they miss the point: the point is power. Tech has it. The critics want it. We are watching the struggle in real time and calling it journalism.',
     // SPECIFIC/QUIRKY (mixed lengths)
     'Patagonia vest punk.',
     'Anonymous writer voice activated.',

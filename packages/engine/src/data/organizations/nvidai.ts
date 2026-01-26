@@ -39,7 +39,7 @@ export const data = {
   ],
   initialPrice: 1250,
   pfpDescription:
-    "Green stylized eye on black with circuit traces in the iris, like a GPU staring back.",
+    'Green stylized eye on black with circuit traces in the iris, like a GPU staring back.',
   bannerDescription:
     'A throne of GPUs, leather jacket draped like a crown, gamers weeping outside a data-center palace. CUDA cores glow like molten money.',
   profileDescription:

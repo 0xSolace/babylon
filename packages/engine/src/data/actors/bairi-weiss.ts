@@ -24,7 +24,7 @@ export const data = {
     'Read this at @TheFP.',
     'The silence is deafening.',
     "The mainstream won't cover this.",
-    "Heterodox is a muscle.",
+    'Heterodox is a muscle.',
     'Think for yourself.',
     'Ideas > tribes.',
     'Free speech is a habit.',

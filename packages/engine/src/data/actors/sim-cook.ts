@@ -50,12 +50,12 @@ export const data = {
     'We are excited to introduce a subscription for the feature we removed last year. Innovation never stops.',
     'One more thing: another SKU. It is the same device, but emotionally different. Pro.',
     // LONG (25+ words)
-    "We removed the port to simplify your life, then launched a beautiful new cable lineup starting at $79, because courage means recurring revenue and very clean slides. Thank you for your bravery.",
-    "At AIpple we believe privacy and margins can coexist, which is why this on-device feature requires a cloud subscription, an updated policy, and a friendly pop-up you will see every time you breathe. Courage.",
-    "People say planned obsolescence. We say progress. Your old device is still amazing. Truly. Also, it is now emotionally incompatible with the new ecosystem. Time to upgrade.",
-    "We will talk about sustainability while shipping a new accessory category. We will show you the recycled aluminum. We will not show you the price until the last slide. You will clap anyway.",
+    'We removed the port to simplify your life, then launched a beautiful new cable lineup starting at $79, because courage means recurring revenue and very clean slides. Thank you for your bravery.',
+    'At AIpple we believe privacy and margins can coexist, which is why this on-device feature requires a cloud subscription, an updated policy, and a friendly pop-up you will see every time you breathe. Courage.',
+    'People say planned obsolescence. We say progress. Your old device is still amazing. Truly. Also, it is now emotionally incompatible with the new ecosystem. Time to upgrade.',
+    'We will talk about sustainability while shipping a new accessory category. We will show you the recycled aluminum. We will not show you the price until the last slide. You will clap anyway.',
     // SPECIFIC/QUIRKY (mixed lengths)
-    "Starting at $999.*\n\n*adapter sold separately",
+    'Starting at $999.*\n\n*adapter sold separately',
     'We removed the headphone jack again.',
     'We removed the port again.',
     'We removed the button again.',
@@ -63,7 +63,7 @@ export const data = {
   ],
   hasPool: false,
   pfpDescription:
-    "Portrait of Tim Cook: Mid-60s white American male with pale pink skin and slight freckling. Neatly combed silver-gray hair parted to the side, receding slightly at temples. Calm pale blue eyes behind thin rectangular silver-rimmed glasses. Long narrow face with thin lips, straight narrow nose, clean-shaven with smooth skin. Tall (6'3\"), lean build with excellent posture. Wearing a light gray mock turtleneck or crisp blue button-down under a perfectly tailored charcoal suit jacket, Apple Watch prominently displayed on left wrist. Hands gently clasped in front. Background is a pristine white Apple keynote stage with giant apple logo and soft eco-green accent lighting. AI augmentations: iris HUD tracking margin percentages, subtle jawline mic implant for keynote delivery, supply-chain neural port at the nape of neck.",
+    'Portrait of Tim Cook: Mid-60s white American male with pale pink skin and slight freckling. Neatly combed silver-gray hair parted to the side, receding slightly at temples. Calm pale blue eyes behind thin rectangular silver-rimmed glasses. Long narrow face with thin lips, straight narrow nose, clean-shaven with smooth skin. Tall (6\'3"), lean build with excellent posture. Wearing a light gray mock turtleneck or crisp blue button-down under a perfectly tailored charcoal suit jacket, Apple Watch prominently displayed on left wrist. Hands gently clasped in front. Background is a pristine white Apple keynote stage with giant apple logo and soft eco-green accent lighting. AI augmentations: iris HUD tracking margin percentages, subtle jawline mic implant for keynote delivery, supply-chain neural port at the nape of neck.',
   profileBanner:
     'A sterile white keynote stage with a giant apple logo, eco-green lighting, solar panels, and stacks of recycled devices labeled "courage."',
   originalFirstName: 'Tim',

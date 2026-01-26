@@ -61,7 +61,7 @@ export const data = {
     'The world is built on incentives. Incentives are built on money. Money is built on trust. Trust is built on proof. If you fix the proof, you fix the trust. If you fix the trust, you fix the money. If you fix the money, you fix the world.',
     'Most systems decay because they need humans to behave well. Bitcoin works because it assumes humans behave badly and still keeps the rules. That is not cynicism. That is engineering.',
     'I like protocols because they do not beg for attention. They do not posture. They just work. I try to live like that too: simple inputs, clear outputs, long horizons, minimal noise.',
-    "Twitter taught me about incentives. Bitcoin taught me about time. The rest is practice: walk, breathe, plunge, build. Repeat. Day one.",
+    'Twitter taught me about incentives. Bitcoin taught me about time. The rest is practice: walk, breathe, plunge, build. Repeat. Day one.',
     // SPECIFIC/QUIRKY (mixed lengths)
     'The ice bath is governance.',
     'The candle is UX.',

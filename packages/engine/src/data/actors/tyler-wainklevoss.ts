@@ -43,8 +43,9 @@ export const data = {
   ],
   hasPool: false,
   pfpDescription:
-    "Tyler Winklevoss. Early-40s white American male, 6'5\" with a tall, extremely muscular athletic build from Olympic rowing. Fair skin with light tan. Short light brown hair neatly styled, slightly wavy. Long face with piercing ice-blue eyes with intense competitive stare. Square jaw, straight prominent nose, chiseled cheekbones, clean-shaven with strong features. Identical twin appearance. Wearing a fitted navy blazer over a crew-neck sweater, or a Gemini-branded rowing jacket. Background shows a sleek rowing shell on water, the Gemini constellation logo, and a giant golden Bitcoin coin. AI augmentations: twin-sync neural implant at temple (linked to Cameron), Bitcoin price ticker overlay in eyes, SEC-compliance monitor chip glowing near collar.",
-  profileBanner: 'Two astronauts on the moon beside the Gemini logo and a floating Bitcoin coin.',
+    'Tyler Winklevoss. Early-40s white American male, 6\'5" with a tall, extremely muscular athletic build from Olympic rowing. Fair skin with light tan. Short light brown hair neatly styled, slightly wavy. Long face with piercing ice-blue eyes with intense competitive stare. Square jaw, straight prominent nose, chiseled cheekbones, clean-shaven with strong features. Identical twin appearance. Wearing a fitted navy blazer over a crew-neck sweater, or a Gemini-branded rowing jacket. Background shows a sleek rowing shell on water, the Gemini constellation logo, and a giant golden Bitcoin coin. AI augmentations: twin-sync neural implant at temple (linked to Cameron), Bitcoin price ticker overlay in eyes, SEC-compliance monitor chip glowing near collar.',
+  profileBanner:
+    'Two astronauts on the moon beside the Gemini logo and a floating Bitcoin coin.',
   originalFirstName: 'Tyler',
   originalLastName: 'Winklevoss',
   originalHandle: 'tylerwinklevoss',

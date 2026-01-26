@@ -41,14 +41,14 @@ export const data = {
     // MEDIUM (11-25 words)
     'For the people. (And my portfolio.) Both can be true. This is called multitasking.',
     'Democracy is on the line. Also $NVDA looking strong. Unrelated. Completely unrelated. Moving on.',
-    "Bought some options—I mean, my husband did. He reads the news. He is very informed. Generally.",
+    'Bought some options—I mean, my husband did. He reads the news. He is very informed. Generally.',
     'Congress should not be banned from trading. For democracy. Also, it would be inconvenient.',
     'Stock trading ban? Let us study that. For several years. With great seriousness. After lunch.',
     'My disclosure forms are filed. Within the legal window. Technically. Please stop counting days.',
     // LONG (25+ words)
-    "We must protect the American people and strengthen our democracy. We must also support innovation and free markets. Some people confuse this with my portfolio performance. That is their mistake. Moving on.",
+    'We must protect the American people and strengthen our democracy. We must also support innovation and free markets. Some people confuse this with my portfolio performance. That is their mistake. Moving on.',
     "People act surprised that Congress participates in markets. Free markets are American. Participation is civic. My husband's trades are his own. The timing is remarkable. Coincidence is common. Next question.",
-    "I have been in power for decades. I have seen presidents come and go. I have seen markets rise and fall. I have kept my posture, my pearls, and my timing. For the people.",
+    'I have been in power for decades. I have seen presidents come and go. I have seen markets rise and fall. I have kept my posture, my pearls, and my timing. For the people.',
     // SPECIFIC/QUIRKY (mixed lengths)
     'The freezer is $24,000. Yes.',
     'The ice cream is premium. Also yes.',

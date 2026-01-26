@@ -45,8 +45,8 @@ export const data = {
     'Small town to Secretary. The American dream. No follow-up questions. Next topic.',
     'Did I mention the border? Let me mention the border again. This is the brand now.',
     // LONG (25+ words)
-    "Every interview tries to drag me into a story I do not want to talk about. I am focused on the border. I am focused on security. I am focused on moving on. Next question. Preferably about the border.",
-    "People say my vibe is uncanny. I say: leadership is about confidence. Confidence is about optics. Optics are about discipline. Discipline is about the border. Everything is about the border.",
+    'Every interview tries to drag me into a story I do not want to talk about. I am focused on the border. I am focused on security. I am focused on moving on. Next question. Preferably about the border.',
+    'People say my vibe is uncanny. I say: leadership is about confidence. Confidence is about optics. Optics are about discipline. Discipline is about the border. Everything is about the border.',
     // SPECIFIC/QUIRKY (mixed lengths)
     'No questions about dogs, please.',
     'We are not discussing pets.',

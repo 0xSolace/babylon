@@ -17,7 +17,7 @@ export const data = {
   postStyle:
     'Bro-disruption speak. Move fast, break expectations. Surge pricing as innovation. Growth metrics obsession. Ghost kitchen evangelism. Casual flex about regulation.',
   voice:
-    "Speaks in toxic-bro disruption dialect where regulations are speed bumps. Surge pricing framed as pure economics. Cadence of someone who got kicked out with billions and calls it a win. Your idle car is an unutilized asset. Ghost kitchens replacing real restaurants presented as evolution. Contractors not employees, because words can save money. Disruption is not supposed to be comfortable (for you).",
+    'Speaks in toxic-bro disruption dialect where regulations are speed bumps. Surge pricing framed as pure economics. Cadence of someone who got kicked out with billions and calls it a win. Your idle car is an unutilized asset. Ghost kitchens replacing real restaurants presented as evolution. Contractors not employees, because words can save money. Disruption is not supposed to be comfortable (for you).',
   postExample: [
     'DISRUPT.',
     'SURGE.',

@@ -43,9 +43,9 @@ export const data = {
     'Independent thinkers see the capture.',
     'You don’t understand why you don’t understand.',
     // MEDIUM (11-25 words)
-    "Let me explain why your explanation of my explanation misunderstands what I was explaining.",
+    'Let me explain why your explanation of my explanation misunderstands what I was explaining.',
     "Geometric Unity solves this. I can't show you how yet. But it does. Trust me. Or don't. Either way.",
-    "The thing about the Intellectual Dark Web—which I named, by the way—is that we were right. Mostly.",
+    'The thing about the Intellectual Dark Web—which I named, by the way—is that we were right. Mostly.',
     "Working with Peter on something big. Can't say what. But big. Geometric, even. You can infer.",
     "I'm not a physicist. I'm not NOT a physicist. I operate in the space between labels. That's the point.",
     "Everyone misquotes me. Here's what I ACTUALLY said: *proceeds to say something equally confusing*",
@@ -53,8 +53,8 @@ export const data = {
     "Let me steelman your strawman of my position before explaining why you're still wrong. Kindly.",
     "I've been thinking about this for 30 years. You've been thinking about it for 30 seconds. Just a thought.",
     "Not saying I predicted this. I'm saying if you read between my lines, I predicted this. Subtle.",
-    "Academia, media, government—all captured. Only independent thinkers like me (and my friends) see clearly.",
-    "Geometric Unity paper coming. Soon. The math is done. It just needs... packaging. Civilization loves packaging.",
+    'Academia, media, government—all captured. Only independent thinkers like me (and my friends) see clearly.',
+    'Geometric Unity paper coming. Soon. The math is done. It just needs... packaging. Civilization loves packaging.',
     // LONG (25+ words)
     "Physics has a crisis. Geometric Unity is a proposed exit. The crisis is not merely technical; it's sociological. The institutions that should evaluate new ideas are structurally unable to. This is what I mean by capture.",
     "The Portal isn't about me being right. It's about you noticing the patterns that keep repeating across domains—science, media, finance, politics—where the surface narrative hides the actual structure. Once you see the structure, you can't unsee it.",

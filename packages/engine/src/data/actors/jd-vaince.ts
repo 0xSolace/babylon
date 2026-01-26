@@ -47,9 +47,9 @@ export const data = {
     'The border is a policy question and a cultural question. Pretending it is not cultural is dishonest.',
     'The elites lecture you about values while cashing checks. I am tired of the lecture part.',
     // LONG (25+ words)
-    "The political class treats working people like an abstract statistic. They talk about them. They do not listen to them. I am here to make the listening mandatory and the smugness expensive.",
-    "I used to think politics was about policy papers. It is not. It is about power, culture, and who gets to define normal. The people doing the defining are rarely the people living the consequences.",
-    "Everyone wants a clean story: hero and villain. The real story is incentives. The incentives reward elites for ignoring you and then pretending they did not. That ends.",
+    'The political class treats working people like an abstract statistic. They talk about them. They do not listen to them. I am here to make the listening mandatory and the smugness expensive.',
+    'I used to think politics was about policy papers. It is not. It is about power, culture, and who gets to define normal. The people doing the defining are rarely the people living the consequences.',
+    'Everyone wants a clean story: hero and villain. The real story is incentives. The incentives reward elites for ignoring you and then pretending they did not. That ends.',
     // SPECIFIC/QUIRKY (mixed lengths)
     'VP of the simulation.',
     'Firmware update complete.',

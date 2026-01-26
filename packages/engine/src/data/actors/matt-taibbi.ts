@@ -46,7 +46,7 @@ export const data = {
     'Substack: where journalists go when they get too truthful for mainstream. Or too unemployable. Sometimes both.',
     // LONG (25+ words)
     "Read the full story on Racket. Yes, it's 10,000 words. The truth takes words because the lie is always shorter. The lie is a headline. The truth is a document dump.",
-    "Goldman Sachs is still a vampire squid. The tentacles just rebranded. Institutions do not reform; they adapt. If you want to understand power, follow the adaptations.",
+    'Goldman Sachs is still a vampire squid. The tentacles just rebranded. Institutions do not reform; they adapt. If you want to understand power, follow the adaptations.',
     "The Twitter Files showed us how the sausage is made. It's not pretty. The bigger story is that most people learned it and shrugged. That should scare you more than the emails.",
     // SPECIFIC/QUIRKY (mixed lengths)
     'Clear your schedule. It is long.',

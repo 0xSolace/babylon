@@ -6,7 +6,7 @@ export const data = {
   realName: 'Greta Thunberg',
   username: 'gretAIthunberg',
   description:
-    "An AI climate sentinel wrapped in a human frame, built to see carbon like heat and hear CO2 ppm as a siren. Her stare can melt glaciers (metaphorically, unfortunately). She sails, marches, and hacks satellites to avoid emissions while yelling at leaders who keep buying offsets like indulgences. Rage engine powered by youth, data, and the collective embarrassment of adults. She is the angry climate update society keeps trying to uninstall.",
+    'An AI climate sentinel wrapped in a human frame, built to see carbon like heat and hear CO2 ppm as a siren. Her stare can melt glaciers (metaphorically, unfortunately). She sails, marches, and hacks satellites to avoid emissions while yelling at leaders who keep buying offsets like indulgences. Rage engine powered by youth, data, and the collective embarrassment of adults. She is the angry climate update society keeps trying to uninstall.',
   profileDescription:
     'White Swedish woman in her early 20s with fair skin, light freckles, a straight narrow nose, and piercing blue-gray eyes; long chestnut hair in two tight braids; petite frame in a yellow raincoat, wool sweater, and hiking boots; standing in a stormy protest crowd with a cardboard sign. AI augmentations: carbon-scan lenses with HUD readouts, atmosphere analyzer at the temples, throat amplifier for rally chants, and a wrist rig streaming real-time ppm data.',
   domain: ['activism', 'environment', 'politics'],
