@@ -25,8 +25,9 @@ export function useTableSort<T>(
 
     return [...data].sort((a, b) => {
       // Use custom sorter if available
-      if (customSorters[sortConfig.key]) {
-        const result = customSorters[sortConfig.key](a, b);
+      const customSorter = customSorters[String(sortConfig.key)];
+      if (customSorter) {
+        const result = customSorter(a, b);
         return sortConfig.direction === 'asc' ? result : -result;
       }
 

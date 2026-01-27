@@ -149,12 +149,14 @@ interface AssetTradesFeedProps {
   marketType: 'prediction' | 'perp';
   assetId: string; // marketId for predictions, ticker for perps
   containerRef?: React.RefObject<HTMLDivElement | null>;
+  compact?: boolean;
 }
 
 export function AssetTradesFeed({
   marketType,
   assetId,
   containerRef,
+  compact = false,
 }: AssetTradesFeedProps) {
   const [trades, setTrades] = useState<Trade[]>([]);
   const [loading, setLoading] = useState(true);
@@ -446,6 +448,7 @@ export function AssetTradesFeed({
           trade={trade}
           formatCurrency={formatCurrency}
           formatTime={formatTime}
+          compact={compact}
         />
       ))}
 
@@ -473,9 +476,10 @@ interface TradeCardProps {
   trade: Trade;
   formatCurrency: (value: string | number) => string;
   formatTime: (timestamp: string) => string;
+  compact?: boolean;
 }
 
-function TradeCard({ trade, formatCurrency, formatTime }: TradeCardProps) {
+function TradeCard({ trade, formatCurrency, formatTime, compact }: TradeCardProps) {
   const user = trade.user;
   const profileUrl = user?.isActor
     ? `/profile/${user.id}`
@@ -484,8 +488,11 @@ function TradeCard({ trade, formatCurrency, formatTime }: TradeCardProps) {
       : '#';
 
   return (
-    <div className="rounded-lg bg-muted/30 p-4 transition-colors hover:bg-muted/50">
-      <div className="flex items-start gap-3">
+    <div className={cn(
+      "rounded-lg transition-colors hover:bg-muted/50",
+      compact ? "p-2 bg-transparent border-b border-white/5 rounded-none" : "p-4 bg-muted/30"
+    )}>
+      <div className={cn("flex items-start gap-3", compact && "gap-2")}>
         {/* User Avatar */}
         <Link href={user ? profileUrl : '#'} className="flex-shrink-0">
           {user?.profileImageUrl ? (

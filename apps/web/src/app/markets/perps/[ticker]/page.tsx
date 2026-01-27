@@ -2,14 +2,7 @@
 
 import { FEE_CONFIG } from '@babylon/engine/config/fees';
 import { BABYLON_POINTS_SYMBOL, cn } from '@babylon/shared';
-import {
-  AlertTriangle,
-  ArrowLeft,
-  Info,
-  TrendingDown,
-  TrendingUp,
-  Wallet,
-} from 'lucide-react';
+import { AlertTriangle, ArrowLeft } from 'lucide-react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
@@ -85,7 +78,6 @@ export default function PerpDetailPage() {
   });
   const {
     balance,
-    loading: balanceLoading,
     refresh: refreshWalletBalance,
   } = useWalletBalance(authenticated ? user?.id : null);
 
@@ -306,7 +298,6 @@ export default function PerpDetailPage() {
       ? displayPrice * (1 - 0.9 / leverage)
       : displayPrice * (1 + 0.9 / leverage);
 
-  const positionValue = sizeNum * leverage;
   const liquidationDistance =
     side === 'long'
       ? ((displayPrice - liquidationPrice) / displayPrice) * 100
@@ -332,206 +323,167 @@ export default function PerpDetailPage() {
 
   if (!market) return null;
 
-  const isHighRisk = leverage > 50 || baseMargin > 1000;
-
   return (
-    <PageContainer className="mx-auto max-w-7xl pt-2" ref={pageContainerRef}>
-      {/* Header */}
-      <div className="mb-6">
-        <button
-          onClick={() => {
-            if (from === 'dashboard') {
-              router.push('/markets');
-            } else {
-              router.push('/markets?tab=perps');
-            }
-          }}
-          className="mb-4 flex items-center gap-2 rounded-md bg-[#0066FF] px-3 py-1.5 font-medium text-primary-foreground text-sm transition-colors hover:bg-[#2952d9]"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          {from === 'dashboard' ? 'Back to Dashboard' : 'Back to Perps'}
-        </button>
+    <PageContainer noPadding className="flex h-[calc(100vh-theme(spacing.16))] flex-col bg-background/20">
+      {/* 1. Compact Header Bar (Ticker Tape Style) */}
+      <div className="flex flex-shrink-0 items-center justify-between border-b border-white/5 bg-background/40 px-4 py-2 backdrop-blur-md">
+        <div className="flex items-center gap-6">
+          <button
+            onClick={() => {
+              if (from === 'dashboard') {
+                router.push('/markets');
+              } else {
+                router.push('/markets?tab=perps');
+              }
+            }}
+            className="flex items-center gap-1 text-muted-foreground text-xs hover:text-foreground transition-colors"
+          >
+            <ArrowLeft className="h-3 w-3" /> Back
+          </button>
 
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <h1 className="mb-1 font-bold text-3xl">${market.ticker}</h1>
-            <p className="text-muted-foreground">{market.name}</p>
+          <div className="h-4 w-px bg-white/10" />
+
+          <div className="flex items-center gap-3">
+            <h1 className="font-bold text-lg tracking-tight">${market.ticker}</h1>
+            <span className="text-muted-foreground text-xs px-2 py-0.5 rounded-full bg-white/5 border border-white/5">Perp</span>
           </div>
-          <div className="text-right">
-            <div className="font-bold text-3xl">
+
+          <div className="flex items-baseline gap-2">
+            <span className="font-mono font-bold text-lg text-foreground">
               {formatPrice(displayPrice)}
-            </div>
-            <div
+            </span>
+            <span
               className={cn(
-                'flex items-center justify-end gap-2 font-bold text-lg',
-                market.change24h >= 0 ? 'text-green-600' : 'text-red-600'
+                'font-mono text-xs font-medium',
+                market.change24h >= 0 ? 'text-green-500' : 'text-red-500'
               )}
             >
-              {market.change24h >= 0 ? (
-                <TrendingUp className="h-5 w-5" />
-              ) : (
-                <TrendingDown className="h-5 w-5" />
-              )}
-              {market.change24h >= 0 ? '+' : ''}
-              {formatPrice(market.change24h)} (
-              {market.changePercent24h.toFixed(2)}%)
+              {market.change24h >= 0 ? '+' : ''}{market.changePercent24h.toFixed(2)}%
+            </span>
+          </div>
+
+          {/* Quick Stats in Header */}
+          <div className="hidden lg:flex items-center gap-6 text-xs text-muted-foreground">
+            <div>
+              <span className="block opacity-50 text-[10px] uppercase">24h Vol</span>
+              <span className="text-foreground">{formatVolume(market.volume24h)}</span>
+            </div>
+            <div>
+              <span className="block opacity-50 text-[10px] uppercase">Funding (8h)</span>
+              <span className={market.fundingRate.rate >= 0 ? 'text-orange-400' : 'text-blue-400'}>
+                {(market.fundingRate.rate * 100).toFixed(4)}%
+              </span>
+            </div>
+            <div>
+              <span className="block opacity-50 text-[10px] uppercase">OI</span>
+              <span className="text-foreground">{formatVolume(market.openInterest)}</span>
             </div>
           </div>
         </div>
 
-        {/* Market Stats */}
-        <div className="mt-4 grid grid-cols-2 gap-4 md:grid-cols-4">
-          <div className="rounded-lg bg-muted/30 p-3">
-            <div className="mb-1 text-muted-foreground text-xs">24h High</div>
-            <div className="font-bold text-lg">
-              {formatPrice(market.high24h)}
-            </div>
+        {/* Right Header Actions (Wallet/Account snippet) */}
+        {authenticated && (
+          <div className="flex items-center gap-3 text-xs">
+            <span className="text-muted-foreground">Available:</span>
+            <span className="font-mono font-medium text-foreground">{formatPrice(balance)}</span>
           </div>
-          <div className="rounded-lg bg-muted/30 p-3">
-            <div className="mb-1 text-muted-foreground text-xs">24h Low</div>
-            <div className="font-bold text-lg">
-              {formatPrice(market.low24h)}
-            </div>
-          </div>
-          <div className="rounded-lg bg-muted/30 p-3">
-            <div className="mb-1 text-muted-foreground text-xs">24h Volume</div>
-            <div className="font-bold text-lg">
-              {formatVolume(market.volume24h)}
-            </div>
-          </div>
-        </div>
+        )}
       </div>
 
-      {/* User Positions */}
-      {userPositions.length > 0 && (
-        <div className="mb-6">
-          <h2 className="mb-3 font-bold text-lg">Your Positions</h2>
-          <PerpPositionsList
-            positions={userPositions}
-            onPositionClosed={handlePositionClosed}
-          />
-        </div>
-      )}
+      {/* 2. Main Grid Layout */}
+      <div className="flex flex-1 overflow-hidden">
 
-      {/* Main Content Grid */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        {/* Chart */}
-        <div className="lg:col-span-2">
-          <div className="rounded-lg border border-border bg-card/50 p-4 backdrop-blur">
-            <h2 className="mb-4 font-bold text-lg">Price Chart</h2>
-            <PerpPriceChart
-              data={priceHistory}
-              currentPrice={displayPrice}
-              ticker={ticker}
-              timeRange={timeRange}
-              onTimeRangeChange={setTimeRange}
-            />
-          </div>
-
-          {/* Funding Rate Info */}
-          <div className="mt-4 rounded-lg bg-muted/30 p-4">
-            <div className="flex items-start gap-2">
-              <Info className="mt-0.5 h-5 w-5 flex-shrink-0 text-muted-foreground" />
-              <div className="flex-1">
-                <div className="mb-2 flex items-center justify-between">
-                  <span className="font-medium">Funding Rate</span>
-                  <span
-                    className={cn(
-                      'font-bold',
-                      market.fundingRate.rate >= 0
-                        ? 'text-orange-500'
-                        : 'text-blue-500'
-                    )}
-                  >
-                    {(market.fundingRate.rate * 100).toFixed(4)}% / 8h
-                  </span>
-                </div>
-                <p className="text-muted-foreground text-sm">
-                  {market.fundingRate.rate >= 0
-                    ? 'Long positions pay shorts every 8 hours'
-                    : 'Short positions pay longs every 8 hours'}
-                </p>
-              </div>
+        {/* Left Column: Main Chart (Flexible width) */}
+        <div className="flex flex-1 flex-col overflow-hidden border-r border-white/5 bg-background/10">
+          <div className="flex-1 relative min-h-0 p-1">
+            {/* Chart Container - Maximized */}
+            <div className="h-full w-full rounded-md border border-white/5 bg-background/20 backdrop-blur-sm overflow-hidden">
+              <PerpPriceChart
+                data={priceHistory}
+                currentPrice={displayPrice}
+                ticker={ticker}
+                timeRange={timeRange}
+                onTimeRangeChange={setTimeRange}
+              // Need to ensure chart component takes 100% height
+              />
             </div>
           </div>
 
-          {/* Recent Trades */}
-          <div className="mt-4 rounded-lg border border-border bg-card/50 p-4 backdrop-blur">
-            <h2 className="mb-4 font-bold text-lg">Recent Trades</h2>
-            <AssetTradesFeed
-              marketType="perp"
-              assetId={ticker}
-              containerRef={pageContainerRef}
-            />
+          {/* Bottom Panel: Positions (Collapsible or Tabbed in future, fixed height for now) */}
+          <div className="h-[250px] flex-shrink-0 border-t border-white/5 bg-background/20 backdrop-blur-md overflow-hidden flex flex-col">
+            <div className="px-4 py-2 border-b border-white/5 bg-white/5 flex items-center gap-4">
+              <button className="text-xs font-bold text-primary border-b-2 border-primary pb-2 -mb-2.5">Positions ({userPositions.length})</button>
+              <button className="text-xs font-medium text-muted-foreground hover:text-foreground pb-2 -mb-2">Open Orders (0)</button>
+              <button className="text-xs font-medium text-muted-foreground hover:text-foreground pb-2 -mb-2">History</button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-0">
+              {userPositions.length > 0 ? (
+                <PerpPositionsList
+                  positions={userPositions}
+                  onPositionClosed={handlePositionClosed}
+                />
+              ) : (
+                <div className="flex justify-center items-center h-full text-muted-foreground text-xs">
+                  No open positions
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
-        {/* Trading Panel */}
-        <div className="lg:col-span-1">
-          <div className="sticky top-4 rounded-lg border border-border bg-card/50 p-4 backdrop-blur">
-            <h2 className="mb-4 font-bold text-lg">Trade</h2>
+        {/* Right Column: Order Entry & Trades (Fixed width) */}
+        <div className="w-[360px] flex flex-col border-l border-white/5 bg-background/30 backdrop-blur-md overflow-y-auto overflow-x-hidden">
 
-            {authenticated && (
-              <div className="mb-4 flex items-center justify-between rounded-lg bg-muted/40 p-3 text-sm">
-                <span className="flex items-center gap-2 text-muted-foreground">
-                  <Wallet className="h-4 w-4" /> Balance
-                </span>
-                <span className="font-semibold text-foreground">
-                  {balanceLoading ? '...' : formatPrice(balance)}
-                </span>
-              </div>
-            )}
-
-            {/* Long/Short Tabs */}
-            <div className="mb-4 flex gap-2">
+          {/* Order Entry Section */}
+          <div className="p-4 border-b border-white/5">
+            <div className="flex gap-1 mb-4 p-1 bg-muted/20 rounded-lg">
               <button
                 onClick={() => setSide('long')}
                 className={cn(
-                  'flex flex-1 cursor-pointer items-center justify-center gap-2 rounded py-3 font-bold transition-all',
+                  'flex-1 py-1.5 text-xs font-bold rounded-md transition-all',
                   side === 'long'
-                    ? 'bg-green-600 text-primary-foreground'
-                    : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                    ? 'bg-green-600/20 text-green-500 shadow-sm border border-green-600/20'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-white/5'
                 )}
               >
-                <TrendingUp size={18} />
                 LONG
               </button>
               <button
                 onClick={() => setSide('short')}
                 className={cn(
-                  'flex flex-1 cursor-pointer items-center justify-center gap-2 rounded py-3 font-bold transition-all',
+                  'flex-1 py-1.5 text-xs font-bold rounded-md transition-all',
                   side === 'short'
-                    ? 'bg-red-600 text-primary-foreground'
-                    : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                    ? 'bg-red-600/20 text-red-500 shadow-sm border border-red-600/20'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-white/5'
                 )}
               >
-                <TrendingDown size={18} />
                 SHORT
               </button>
             </div>
 
-            {/* Size & Leverage */}
-            <div className="mb-4 space-y-4 rounded-lg bg-muted/30 p-4">
+            <div className="space-y-4">
               <div>
-                <label className="mb-2 block font-medium text-muted-foreground text-sm">
-                  Position Size (PTS)
-                </label>
-                <input
-                  type="number"
-                  value={size}
-                  onChange={(e) => setSize(e.target.value)}
-                  min={market.minOrderSize}
-                  step="10"
-                  className="w-full rounded bg-background px-4 py-3 font-medium text-foreground focus:outline-none focus:ring-2 focus:ring-[#0066FF]/30"
-                  placeholder={`Min: ${BABYLON_POINTS_SYMBOL}${market.minOrderSize}`}
-                />
+                <div className="flex justify-between mb-1">
+                  <label className="text-[10px] uppercase font-bold text-muted-foreground">Size (PTS)</label>
+                  <span className="text-[10px] text-muted-foreground">Max leverage: {market.maxLeverage}x</span>
+                </div>
+                <div className="relative">
+                  <input
+                    type="number"
+                    value={size}
+                    onChange={(e) => setSize(e.target.value)}
+                    min={market.minOrderSize}
+                    step="10"
+                    className="w-full bg-black/20 border border-white/10 rounded px-3 py-2 text-sm font-mono focus:outline-none focus:border-primary/50"
+                  />
+                  <div className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">USD</div>
+                </div>
               </div>
+
               <div>
-                <div className="mb-2 flex items-center justify-between">
-                  <label className="font-medium text-muted-foreground text-sm">
-                    Leverage
-                  </label>
-                  <span className="font-bold text-xl">{leverage}x</span>
+                <div className="flex justify-between mb-1">
+                  <label className="text-[10px] uppercase font-bold text-muted-foreground">Leverage</label>
+                  <span className="text-[10px] font-mono text-foreground">{leverage}x</span>
                 </div>
                 <input
                   type="range"
@@ -539,223 +491,61 @@ export default function PerpDetailPage() {
                   max={market.maxLeverage}
                   value={leverage}
                   onChange={(e) => setLeverage(Number.parseInt(e.target.value))}
-                  className="h-3 w-full cursor-pointer appearance-none rounded-lg bg-muted"
-                  style={{
-                    background: `linear-gradient(to right, ${side === 'long' ? '#16a34a' : '#dc2626'} 0%, ${side === 'long' ? '#16a34a' : '#dc2626'} ${(leverage / market.maxLeverage) * 100}%, hsl(var(--muted)) ${(leverage / market.maxLeverage) * 100}%, hsl(var(--muted)) 100%)`,
-                  }}
+                  className="w-full h-1.5 bg-muted rounded-full appearance-none cursor-pointer accent-primary"
                 />
-                <div className="mt-1 flex justify-between text-muted-foreground text-xs">
-                  <span>1x</span>
-                  <span>{market.maxLeverage}x</span>
+              </div>
+
+              <div className="p-3 rounded bg-white/5 space-y-1">
+                <div className="flex justify-between text-xs">
+                  <span className="text-muted-foreground">Margin</span>
+                  <span className="font-mono">{formatPrice(baseMargin)}</span>
+                </div>
+                <div className="flex justify-between text-xs">
+                  <span className="text-muted-foreground">Fees</span>
+                  <span className="font-mono">{formatPrice(estimatedFee)}</span>
+                </div>
+                <div className="flex justify-between text-xs pt-1 border-t border-white/5 mt-1">
+                  <span className="text-muted-foreground">Total</span>
+                  <span className="font-mono font-bold">{formatPrice(totalRequired)}</span>
                 </div>
               </div>
-            </div>
 
-            {/* Position Preview */}
-            <div className="mb-4 rounded-lg bg-muted/20 p-4">
-              <h3 className="mb-3 font-bold text-muted-foreground text-sm">
-                Position Preview
-              </h3>
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Margin Required</span>
-                  <span className="font-bold">{formatPrice(baseMargin)}</span>
+              {showBalanceWarning && (
+                <div className="text-[10px] text-red-400 bg-red-500/10 p-2 rounded">
+                  Insufficient balance ({formatPrice(balance)})
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Position Value</span>
-                  <span className="font-bold">
-                    {formatPrice(positionValue)}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Entry Price</span>
-                  <span className="font-medium">
-                    {formatPrice(displayPrice)}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">
-                    Liquidation Price
-                  </span>
-                  <span className="font-bold text-red-600">
-                    {formatPrice(liquidationPrice)}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Distance to Liq</span>
-                  <span
-                    className={cn(
-                      'font-medium',
-                      liquidationDistance > 5
-                        ? 'text-green-600'
-                        : liquidationDistance > 2
-                          ? 'text-yellow-600'
-                          : 'text-red-600'
-                    )}
-                  >
-                    {liquidationDistance.toFixed(2)}%
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">
-                    Est. Trading Fee (
-                    {(FEE_CONFIG.TRADING_FEE_RATE * 100).toFixed(1)}%)
-                  </span>
-                  <span className="font-bold">{formatPrice(estimatedFee)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Total Required</span>
-                  <span className="font-bold">
-                    {formatPrice(totalRequired)}
-                  </span>
-                </div>
-              </div>
-            </div>
+              )}
 
-            {authenticated && (
-              <>
-                <div className="mb-2 text-muted-foreground text-sm">
-                  Required (margin + est. fee):{' '}
-                  <span className="font-semibold text-foreground">
-                    {formatPrice(totalRequired)}
-                  </span>
-                  {estimatedFee > 0 && (
-                    <span className="ml-1">
-                      (fee ≈ {formatPrice(estimatedFee)})
-                    </span>
-                  )}
-                </div>
-                {showBalanceWarning && (
-                  <div className="mb-4 text-red-500 text-xs">
-                    Insufficient balance to cover margin and fees for this
-                    trade.
-                  </div>
-                )}
-              </>
-            )}
-
-            {/* High Risk Warning */}
-            {isHighRisk && (
-              <div className="mb-4 flex items-start gap-2 rounded-lg bg-yellow-500/15 p-3">
-                <AlertTriangle className="mt-0.5 h-5 w-5 flex-shrink-0 text-yellow-500" />
-                <div className="text-sm">
-                  <div className="mb-1 font-bold text-yellow-600">
-                    High Risk Position
-                  </div>
-                  <p className="text-muted-foreground">
-                    {leverage > 50 && 'Leverage above 50x is extremely risky. '}
-                    {baseMargin > 1000 &&
-                      'This position requires significant margin. '}
-                    Small price movements can lead to liquidation.
-                  </p>
-                </div>
-              </div>
-            )}
-
-            {/* Rebalance Info Banner */}
-            {rebalanceInfo && (
-              <div
+              <button
+                onClick={handleSubmit}
+                disabled={submitting || (authenticated && showBalanceWarning)}
                 className={cn(
-                  'mb-4 flex items-start gap-2 rounded-lg p-3',
-                  rebalanceInfo.type === 'add'
-                    ? 'bg-blue-500/15'
-                    : rebalanceInfo.type === 'flip'
-                      ? 'bg-orange-500/15'
-                      : 'bg-yellow-500/15'
+                  "w-full py-3 rounded font-bold text-sm transition-all text-white shadow-lg",
+                  side === 'long'
+                    ? 'bg-gradient-to-r from-green-600 to-green-500 hover:from-green-500 hover:to-green-400 shadow-green-900/20'
+                    : 'bg-gradient-to-r from-red-600 to-red-500 hover:from-red-500 hover:to-red-400 shadow-red-900/20',
+                  (submitting || (authenticated && showBalanceWarning)) && 'opacity-50 cursor-not-allowed'
                 )}
               >
-                <Info
-                  className={cn(
-                    'mt-0.5 h-5 w-5 flex-shrink-0',
-                    rebalanceInfo.type === 'add'
-                      ? 'text-blue-500'
-                      : rebalanceInfo.type === 'flip'
-                        ? 'text-orange-500'
-                        : 'text-yellow-500'
-                  )}
-                />
-                <div className="text-sm">
-                  <div
-                    className={cn(
-                      'mb-1 font-bold',
-                      rebalanceInfo.type === 'add'
-                        ? 'text-blue-600'
-                        : rebalanceInfo.type === 'flip'
-                          ? 'text-orange-600'
-                          : 'text-yellow-600'
-                    )}
-                  >
-                    {rebalanceInfo.label}
-                  </div>
-                  <p className="text-muted-foreground">
-                    {rebalanceInfo.description}
-                    {rebalanceInfo.type === 'add' &&
-                      rebalanceInfo.avgEntryPrice && (
-                        <>
-                          <br />
-                          <span className="text-foreground">
-                            New avg entry:{' '}
-                            {formatPrice(rebalanceInfo.avgEntryPrice)} | New
-                            size: {formatPrice(rebalanceInfo.newSize)}
-                          </span>
-                        </>
-                      )}
-                    {rebalanceInfo.type === 'reduce' && (
-                      <>
-                        <br />
-                        <span className="text-foreground">
-                          Remaining size: {formatPrice(rebalanceInfo.newSize)}
-                        </span>
-                      </>
-                    )}
-                  </p>
-                </div>
-              </div>
-            )}
+                {startCaseAction(submitting ? 'Processing...' : (!authenticated ? 'Log In to Trade' : `Place ${side.toUpperCase()} Order`))}
+              </button>
+            </div>
+          </div>
 
-            {/* Submit Button */}
-            <button
-              onClick={handleSubmit}
-              disabled={
-                submitting ||
-                sizeNum < market.minOrderSize ||
-                (authenticated && showBalanceWarning) ||
-                balanceLoading
-              }
-              className={cn(
-                'w-full cursor-pointer rounded-lg py-4 font-bold text-lg text-primary-foreground transition-all',
-                rebalanceInfo?.type === 'flip'
-                  ? 'bg-orange-600 hover:bg-orange-700'
-                  : rebalanceInfo?.type === 'reduce' ||
-                      rebalanceInfo?.type === 'close'
-                    ? 'bg-yellow-600 hover:bg-yellow-700'
-                    : side === 'long'
-                      ? 'bg-green-600 hover:bg-green-700'
-                      : 'bg-red-600 hover:bg-red-700',
-                (submitting ||
-                  sizeNum < market.minOrderSize ||
-                  (authenticated && showBalanceWarning) ||
-                  balanceLoading) &&
-                  'cursor-not-allowed opacity-50'
-              )}
-            >
-              {submitting ? (
-                <span className="flex items-center justify-center gap-2">
-                  <div className="h-5 w-5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
-                  {rebalanceInfo
-                    ? rebalanceInfo.label + '...'
-                    : 'Opening Position...'}
-                </span>
-              ) : authenticated ? (
-                rebalanceInfo ? (
-                  rebalanceInfo.label
-                ) : (
-                  `${side === 'long' ? 'LONG' : 'SHORT'} ${market.ticker} ${leverage}x`
-                )
-              ) : (
-                'Connect Wallet to Trade'
-              )}
-            </button>
+          {/* Trades Feed (Orderbook replacement for now) */}
+          <div className="flex-1 flex flex-col min-h-0 bg-background/10">
+            <div className="px-4 py-2 border-b border-white/5 bg-white/5">
+              <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Recent Trades</h3>
+            </div>
+            <div className="flex-1 overflow-hidden relative">
+              <div className="absolute inset-0 overflow-y-auto">
+                <AssetTradesFeed
+                  marketType="perp"
+                  assetId={ticker}
+                  containerRef={pageContainerRef}
+                />
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -769,20 +559,24 @@ export default function PerpDetailPage() {
         tradeDetails={
           market
             ? ({
-                type: 'open-perp',
-                ticker: market.ticker,
-                side,
-                size: sizeNum,
-                leverage,
-                entryPrice: displayPrice,
-                margin: baseMargin,
-                estimatedFee,
-                liquidationPrice,
-                liquidationDistance,
-              } as OpenPerpDetails)
+              type: 'open-perp',
+              ticker: market.ticker,
+              side,
+              size: sizeNum,
+              leverage,
+              entryPrice: displayPrice,
+              margin: baseMargin,
+              estimatedFee,
+              liquidationPrice,
+              liquidationDistance,
+            } as OpenPerpDetails)
             : null
         }
       />
     </PageContainer>
   );
+}
+
+function startCaseAction(str: string) {
+  return str; // Placeholder helper formatting if needed
 }

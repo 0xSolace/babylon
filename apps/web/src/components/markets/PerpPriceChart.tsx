@@ -1,5 +1,6 @@
 'use client';
 
+import { cn } from '@babylon/shared';
 import type { ISeriesApi, Time } from 'lightweight-charts';
 import { AreaSeries, CrosshairMode } from 'lightweight-charts';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -9,17 +10,11 @@ import {
   formatChartTime,
   useLightweightChart,
 } from '@/components/charts/LightweightChartBase';
-import { MARKET_TIME_RANGES, type MarketTimeRange } from '@/types/markets';
-
-/**
- * Price point structure for chart data.
- */
-interface PricePoint {
-  /** Timestamp in milliseconds */
-  time: number;
-  /** Price value */
-  price: number;
-}
+import {
+  MARKET_TIME_RANGES,
+  type MarketTimeRange,
+  type PerpHistoryPoint,
+} from '@/types/markets';
 
 /**
  * Chart data point for Lightweight Charts series.
@@ -34,7 +29,7 @@ interface ChartDataPoint {
  */
 interface PerpPriceChartProps {
   /** Array of price history points */
-  data: PricePoint[];
+  data: PerpHistoryPoint[];
   /** Current live price */
   currentPrice: number;
   /** Market ticker symbol */
@@ -45,6 +40,8 @@ interface PerpPriceChartProps {
   onTimeRangeChange: (range: MarketTimeRange) => void;
   /** Whether to show brush selector (unused, for future) */
   showBrush?: boolean;
+  /** Optional className for the container */
+  className?: string;
 }
 
 /**
@@ -71,6 +68,7 @@ export function PerpPriceChart({
   ticker,
   timeRange,
   onTimeRangeChange,
+  className,
 }: PerpPriceChartProps) {
   const [chartInitError, setChartInitError] = useState<string | null>(null);
   const priceSeries = useRef<ISeriesApi<'Area'> | null>(null);
@@ -294,16 +292,22 @@ export function PerpPriceChart({
   }
 
   return (
-    <div className="w-full space-y-3" key={ticker}>
+    <div
+      className={cn('flex h-full w-full flex-col space-y-3', className)}
+      key={ticker}
+    >
       {/* Header with price info and time range selector */}
-      <div className="flex flex-wrap items-center justify-between gap-3 px-1">
+      <div className="flex flex-shrink-0 flex-wrap items-center justify-between gap-3 px-1">
         <div className="flex items-center gap-3">
           <div>
             <div className="font-bold text-2xl">
               {formatChartPrice(currentPrice, true)}
             </div>
             <div
-              className={`font-medium text-sm ${isPositive ? 'text-green-600' : 'text-red-600'}`}
+              className={cn(
+                'font-medium text-sm',
+                isPositive ? 'text-green-600' : 'text-red-600'
+              )}
             >
               {isPositive ? '↑' : '↓'}{' '}
               {formatChartPrice(Math.abs(priceChange), true)} (
@@ -319,11 +323,12 @@ export function PerpPriceChart({
             <button
               key={range}
               onClick={() => onTimeRangeChange(range)}
-              className={`cursor-pointer rounded px-2 py-1 text-xs transition-colors ${
+              className={cn(
+                'cursor-pointer rounded px-2 py-1 text-xs transition-colors',
                 timeRange === range
                   ? 'bg-primary text-primary-foreground'
                   : 'text-muted-foreground hover:text-foreground'
-              }`}
+              )}
             >
               {range}
             </button>
@@ -332,10 +337,10 @@ export function PerpPriceChart({
       </div>
 
       {/* Chart container */}
-      <div className="relative">
+      <div className="relative min-h-0 flex-1">
         <div
           ref={chartContainerRef}
-          className="h-[400px] w-full rounded-lg bg-muted/10"
+          className="h-full w-full rounded-lg bg-muted/10"
         />
         {!chart && (
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center">

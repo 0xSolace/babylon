@@ -1,9 +1,8 @@
 'use client';
 
-import type { PerpPosition } from '@babylon/shared';
+
 import { memo } from 'react';
 import { CategoryPnLCard } from '@/components/markets/CategoryPnLCard';
-import { PerpPositionsList } from '@/components/markets/PerpPositionsList';
 import type { PerpMarket } from '@/types/markets';
 import type { CategoryPnLData } from '../../_hooks';
 import { PerpMarketsTable } from '../tables/PerpMarketsTable';
@@ -20,13 +19,14 @@ interface PerpsTabContentProps {
   onShowCategoryPnLShare: () => void;
   onRefreshPortfolio: () => Promise<void>;
 
-  // Positions
-  perpPositions: PerpPosition[];
-  onPositionClosed: () => Promise<void>;
+
 
   // Markets
   filteredMarkets: PerpMarket[];
   onMarketClick: (market: PerpMarket) => void;
+  selectedMarketTicker?: string | null;
+  onMarketSelect?: (market: PerpMarket) => void;
+  onTradeAction?: (market: PerpMarket, side: 'long' | 'short') => void;
 }
 
 /**
@@ -43,10 +43,11 @@ export const PerpsTabContent = memo(function PerpsTabContent({
   portfolioUpdatedAt,
   onShowCategoryPnLShare,
   onRefreshPortfolio,
-  perpPositions,
-  onPositionClosed,
   filteredMarkets,
   onMarketClick,
+  selectedMarketTicker,
+  onMarketSelect,
+  onTradeAction,
 }: PerpsTabContentProps) {
   return (
     <div
@@ -69,29 +70,14 @@ export const PerpsTabContent = memo(function PerpsTabContent({
         </div>
       )}
 
-      {authenticated && perpPositions.length > 0 && (
-        <>
-          <h2 className="mb-3 font-bold text-muted-foreground text-sm">
-            YOUR POSITIONS ({perpPositions.length})
-          </h2>
-          <div className="mb-6">
-            <PerpPositionsList
-              positions={perpPositions}
-              onPositionClosed={onPositionClosed}
-            />
-          </div>
-        </>
-      )}
 
-      <h2 className="mb-3 font-bold text-muted-foreground text-sm">
-        ALL MARKETS
-      </h2>
-      <h2 className="mb-3 font-bold text-muted-foreground text-sm">
-        ALL MARKETS
-      </h2>
+
+
       <PerpMarketsTable
         markets={filteredMarkets}
-        onMarketClick={onMarketClick}
+        onMarketClick={onMarketSelect || onMarketClick}
+        selectedMarketTicker={selectedMarketTicker}
+        onTradeAction={onTradeAction}
       />
     </div>
   );

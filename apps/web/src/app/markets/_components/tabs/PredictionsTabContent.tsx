@@ -1,9 +1,7 @@
 'use client';
 
-import type { UserPredictionPosition } from '@babylon/shared';
 import { memo, useState } from 'react';
 import { CategoryPnLCard } from '@/components/markets/CategoryPnLCard';
-import { PredictionPositionsList } from '@/components/markets/PredictionPositionsList';
 import type {
   PredictionMarketWithPosition,
   PredictionSort,
@@ -24,9 +22,7 @@ interface PredictionsTabContentProps {
   onShowCategoryPnLShare: () => void;
   onRefreshPortfolio: () => Promise<void>;
 
-  // Positions
-  predictionPositions: UserPredictionPosition[];
-  onPositionSold: () => Promise<void>;
+
 
   // Sort
   predictionSort: PredictionSort;
@@ -36,6 +32,8 @@ interface PredictionsTabContentProps {
   activePredictions: PredictionMarketWithPosition[];
   resolvedPredictions: PredictionMarketWithPosition[];
   onPredictionClick: (prediction: PredictionMarketWithPosition) => void;
+  onTradeAction?: (prediction: PredictionMarketWithPosition, side: 'yes' | 'no') => void;
+  selectedPredictionId?: string | number | null;
 
   /** Error message when predictions fail to load */
   predictionsError?: string | null;
@@ -59,14 +57,15 @@ export const PredictionsTabContent = memo(function PredictionsTabContent({
   portfolioUpdatedAt,
   onShowCategoryPnLShare,
   onRefreshPortfolio,
-  predictionPositions,
-  onPositionSold,
+
   predictionSort,
   onSortChange,
   activePredictions,
   resolvedPredictions,
   onPredictionClick,
+  onTradeAction,
   predictionsError,
+  selectedPredictionId,
   compact = false,
 }: PredictionsTabContentProps) {
   // Resolved markets hidden by default
@@ -106,19 +105,7 @@ export const PredictionsTabContent = memo(function PredictionsTabContent({
         </div>
       )}
 
-      {authenticated && predictionPositions.length > 0 && (
-        <>
-          <h2 className="mb-3 font-bold text-muted-foreground text-sm">
-            YOUR POSITIONS ({predictionPositions.length})
-          </h2>
-          <div className="mb-6">
-            <PredictionPositionsList
-              positions={predictionPositions}
-              onPositionSold={onPositionSold}
-            />
-          </div>
-        </>
-      )}
+
 
       <div
         className={compact ? 'mb-3' : 'mb-3 flex items-center justify-between'}
@@ -146,6 +133,8 @@ export const PredictionsTabContent = memo(function PredictionsTabContent({
       <PredictionMarketsTable
         predictions={displayedPredictions}
         onPredictionClick={onPredictionClick}
+        onTradeAction={onTradeAction}
+        selectedPredictionId={selectedPredictionId}
       />
     </div>
   );
