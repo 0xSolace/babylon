@@ -2,7 +2,7 @@
 
 import { FEE_CONFIG } from '@babylon/engine/config/fees';
 import { BABYLON_POINTS_SYMBOL, cn } from '@babylon/shared';
-import { AlertTriangle, ArrowLeft } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
@@ -76,10 +76,9 @@ export default function PerpDetailPage() {
   const { openPosition } = usePerpTrade({
     getAccessToken,
   });
-  const {
-    balance,
-    refresh: refreshWalletBalance,
-  } = useWalletBalance(authenticated ? user?.id : null);
+  const { balance, refresh: refreshWalletBalance } = useWalletBalance(
+    authenticated ? user?.id : null
+  );
 
   const trackedTicker = market?.ticker ?? ticker;
   const livePrices = useMarketPrices(trackedTicker ? [trackedTicker] : []);
@@ -324,9 +323,12 @@ export default function PerpDetailPage() {
   if (!market) return null;
 
   return (
-    <PageContainer noPadding className="flex h-[calc(100vh-theme(spacing.16))] flex-col bg-background/20">
+    <PageContainer
+      noPadding
+      className="flex h-[calc(100vh-theme(spacing.16))] flex-col bg-background/20"
+    >
       {/* 1. Compact Header Bar (Ticker Tape Style) */}
-      <div className="flex flex-shrink-0 items-center justify-between border-b border-white/5 bg-background/40 px-4 py-2 backdrop-blur-md">
+      <div className="flex flex-shrink-0 items-center justify-between border-white/5 border-b bg-background/40 px-4 py-2 backdrop-blur-md">
         <div className="flex items-center gap-6">
           <button
             onClick={() => {
@@ -336,7 +338,7 @@ export default function PerpDetailPage() {
                 router.push('/markets?tab=perps');
               }
             }}
-            className="flex items-center gap-1 text-muted-foreground text-xs hover:text-foreground transition-colors"
+            className="flex items-center gap-1 text-muted-foreground text-xs transition-colors hover:text-foreground"
           >
             <ArrowLeft className="h-3 w-3" /> Back
           </button>
@@ -344,39 +346,58 @@ export default function PerpDetailPage() {
           <div className="h-4 w-px bg-white/10" />
 
           <div className="flex items-center gap-3">
-            <h1 className="font-bold text-lg tracking-tight">${market.ticker}</h1>
-            <span className="text-muted-foreground text-xs px-2 py-0.5 rounded-full bg-white/5 border border-white/5">Perp</span>
+            <h1 className="font-bold text-lg tracking-tight">
+              ${market.ticker}
+            </h1>
+            <span className="rounded-full border border-white/5 bg-white/5 px-2 py-0.5 text-muted-foreground text-xs">
+              Perp
+            </span>
           </div>
 
           <div className="flex items-baseline gap-2">
-            <span className="font-mono font-bold text-lg text-foreground">
+            <span className="font-bold font-mono text-foreground text-lg">
               {formatPrice(displayPrice)}
             </span>
             <span
               className={cn(
-                'font-mono text-xs font-medium',
+                'font-medium font-mono text-xs',
                 market.change24h >= 0 ? 'text-green-500' : 'text-red-500'
               )}
             >
-              {market.change24h >= 0 ? '+' : ''}{market.changePercent24h.toFixed(2)}%
+              {market.change24h >= 0 ? '+' : ''}
+              {market.changePercent24h.toFixed(2)}%
             </span>
           </div>
 
           {/* Quick Stats in Header */}
-          <div className="hidden lg:flex items-center gap-6 text-xs text-muted-foreground">
+          <div className="hidden items-center gap-6 text-muted-foreground text-xs lg:flex">
             <div>
-              <span className="block opacity-50 text-[10px] uppercase">24h Vol</span>
-              <span className="text-foreground">{formatVolume(market.volume24h)}</span>
+              <span className="block text-[10px] uppercase opacity-50">
+                24h Vol
+              </span>
+              <span className="text-foreground">
+                {formatVolume(market.volume24h)}
+              </span>
             </div>
             <div>
-              <span className="block opacity-50 text-[10px] uppercase">Funding (8h)</span>
-              <span className={market.fundingRate.rate >= 0 ? 'text-orange-400' : 'text-blue-400'}>
+              <span className="block text-[10px] uppercase opacity-50">
+                Funding (8h)
+              </span>
+              <span
+                className={
+                  market.fundingRate.rate >= 0
+                    ? 'text-orange-400'
+                    : 'text-blue-400'
+                }
+              >
                 {(market.fundingRate.rate * 100).toFixed(4)}%
               </span>
             </div>
             <div>
-              <span className="block opacity-50 text-[10px] uppercase">OI</span>
-              <span className="text-foreground">{formatVolume(market.openInterest)}</span>
+              <span className="block text-[10px] uppercase opacity-50">OI</span>
+              <span className="text-foreground">
+                {formatVolume(market.openInterest)}
+              </span>
             </div>
           </div>
         </div>
@@ -385,36 +406,43 @@ export default function PerpDetailPage() {
         {authenticated && (
           <div className="flex items-center gap-3 text-xs">
             <span className="text-muted-foreground">Available:</span>
-            <span className="font-mono font-medium text-foreground">{formatPrice(balance)}</span>
+            <span className="font-medium font-mono text-foreground">
+              {formatPrice(balance)}
+            </span>
           </div>
         )}
       </div>
 
       {/* 2. Main Grid Layout */}
       <div className="flex flex-1 overflow-hidden">
-
         {/* Left Column: Main Chart (Flexible width) */}
-        <div className="flex flex-1 flex-col overflow-hidden border-r border-white/5 bg-background/10">
-          <div className="flex-1 relative min-h-0 p-1">
+        <div className="flex flex-1 flex-col overflow-hidden border-white/5 border-r bg-background/10">
+          <div className="relative min-h-0 flex-1 p-1">
             {/* Chart Container - Maximized */}
-            <div className="h-full w-full rounded-md border border-white/5 bg-background/20 backdrop-blur-sm overflow-hidden">
+            <div className="h-full w-full overflow-hidden rounded-md border border-white/5 bg-background/20 backdrop-blur-sm">
               <PerpPriceChart
                 data={priceHistory}
                 currentPrice={displayPrice}
                 ticker={ticker}
                 timeRange={timeRange}
                 onTimeRangeChange={setTimeRange}
-              // Need to ensure chart component takes 100% height
+                // Need to ensure chart component takes 100% height
               />
             </div>
           </div>
 
           {/* Bottom Panel: Positions (Collapsible or Tabbed in future, fixed height for now) */}
-          <div className="h-[250px] flex-shrink-0 border-t border-white/5 bg-background/20 backdrop-blur-md overflow-hidden flex flex-col">
-            <div className="px-4 py-2 border-b border-white/5 bg-white/5 flex items-center gap-4">
-              <button className="text-xs font-bold text-primary border-b-2 border-primary pb-2 -mb-2.5">Positions ({userPositions.length})</button>
-              <button className="text-xs font-medium text-muted-foreground hover:text-foreground pb-2 -mb-2">Open Orders (0)</button>
-              <button className="text-xs font-medium text-muted-foreground hover:text-foreground pb-2 -mb-2">History</button>
+          <div className="flex h-[250px] flex-shrink-0 flex-col overflow-hidden border-white/5 border-t bg-background/20 backdrop-blur-md">
+            <div className="flex items-center gap-4 border-white/5 border-b bg-white/5 px-4 py-2">
+              <button className="-mb-2.5 border-primary border-b-2 pb-2 font-bold text-primary text-xs">
+                Positions ({userPositions.length})
+              </button>
+              <button className="-mb-2 pb-2 font-medium text-muted-foreground text-xs hover:text-foreground">
+                Open Orders (0)
+              </button>
+              <button className="-mb-2 pb-2 font-medium text-muted-foreground text-xs hover:text-foreground">
+                History
+              </button>
             </div>
             <div className="flex-1 overflow-y-auto p-0">
               {userPositions.length > 0 ? (
@@ -423,7 +451,7 @@ export default function PerpDetailPage() {
                   onPositionClosed={handlePositionClosed}
                 />
               ) : (
-                <div className="flex justify-center items-center h-full text-muted-foreground text-xs">
+                <div className="flex h-full items-center justify-center text-muted-foreground text-xs">
                   No open positions
                 </div>
               )}
@@ -432,18 +460,17 @@ export default function PerpDetailPage() {
         </div>
 
         {/* Right Column: Order Entry & Trades (Fixed width) */}
-        <div className="w-[360px] flex flex-col border-l border-white/5 bg-background/30 backdrop-blur-md overflow-y-auto overflow-x-hidden">
-
+        <div className="flex w-[360px] flex-col overflow-y-auto overflow-x-hidden border-white/5 border-l bg-background/30 backdrop-blur-md">
           {/* Order Entry Section */}
-          <div className="p-4 border-b border-white/5">
-            <div className="flex gap-1 mb-4 p-1 bg-muted/20 rounded-lg">
+          <div className="border-white/5 border-b p-4">
+            <div className="mb-4 flex gap-1 rounded-lg bg-muted/20 p-1">
               <button
                 onClick={() => setSide('long')}
                 className={cn(
-                  'flex-1 py-1.5 text-xs font-bold rounded-md transition-all',
+                  'flex-1 rounded-md py-1.5 font-bold text-xs transition-all',
                   side === 'long'
-                    ? 'bg-green-600/20 text-green-500 shadow-sm border border-green-600/20'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-white/5'
+                    ? 'border border-green-600/20 bg-green-600/20 text-green-500 shadow-sm'
+                    : 'text-muted-foreground hover:bg-white/5 hover:text-foreground'
                 )}
               >
                 LONG
@@ -451,10 +478,10 @@ export default function PerpDetailPage() {
               <button
                 onClick={() => setSide('short')}
                 className={cn(
-                  'flex-1 py-1.5 text-xs font-bold rounded-md transition-all',
+                  'flex-1 rounded-md py-1.5 font-bold text-xs transition-all',
                   side === 'short'
-                    ? 'bg-red-600/20 text-red-500 shadow-sm border border-red-600/20'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-white/5'
+                    ? 'border border-red-600/20 bg-red-600/20 text-red-500 shadow-sm'
+                    : 'text-muted-foreground hover:bg-white/5 hover:text-foreground'
                 )}
               >
                 SHORT
@@ -463,9 +490,13 @@ export default function PerpDetailPage() {
 
             <div className="space-y-4">
               <div>
-                <div className="flex justify-between mb-1">
-                  <label className="text-[10px] uppercase font-bold text-muted-foreground">Size (PTS)</label>
-                  <span className="text-[10px] text-muted-foreground">Max leverage: {market.maxLeverage}x</span>
+                <div className="mb-1 flex justify-between">
+                  <label className="font-bold text-[10px] text-muted-foreground uppercase">
+                    Size (PTS)
+                  </label>
+                  <span className="text-[10px] text-muted-foreground">
+                    Max leverage: {market.maxLeverage}x
+                  </span>
                 </div>
                 <div className="relative">
                   <input
@@ -474,16 +505,22 @@ export default function PerpDetailPage() {
                     onChange={(e) => setSize(e.target.value)}
                     min={market.minOrderSize}
                     step="10"
-                    className="w-full bg-black/20 border border-white/10 rounded px-3 py-2 text-sm font-mono focus:outline-none focus:border-primary/50"
+                    className="w-full rounded border border-white/10 bg-black/20 px-3 py-2 font-mono text-sm focus:border-primary/50 focus:outline-none"
                   />
-                  <div className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">USD</div>
+                  <div className="-translate-y-1/2 absolute top-1/2 right-2 text-muted-foreground text-xs">
+                    USD
+                  </div>
                 </div>
               </div>
 
               <div>
-                <div className="flex justify-between mb-1">
-                  <label className="text-[10px] uppercase font-bold text-muted-foreground">Leverage</label>
-                  <span className="text-[10px] font-mono text-foreground">{leverage}x</span>
+                <div className="mb-1 flex justify-between">
+                  <label className="font-bold text-[10px] text-muted-foreground uppercase">
+                    Leverage
+                  </label>
+                  <span className="font-mono text-[10px] text-foreground">
+                    {leverage}x
+                  </span>
                 </div>
                 <input
                   type="range"
@@ -491,11 +528,11 @@ export default function PerpDetailPage() {
                   max={market.maxLeverage}
                   value={leverage}
                   onChange={(e) => setLeverage(Number.parseInt(e.target.value))}
-                  className="w-full h-1.5 bg-muted rounded-full appearance-none cursor-pointer accent-primary"
+                  className="h-1.5 w-full cursor-pointer appearance-none rounded-full bg-muted accent-primary"
                 />
               </div>
 
-              <div className="p-3 rounded bg-white/5 space-y-1">
+              <div className="space-y-1 rounded bg-white/5 p-3">
                 <div className="flex justify-between text-xs">
                   <span className="text-muted-foreground">Margin</span>
                   <span className="font-mono">{formatPrice(baseMargin)}</span>
@@ -504,14 +541,16 @@ export default function PerpDetailPage() {
                   <span className="text-muted-foreground">Fees</span>
                   <span className="font-mono">{formatPrice(estimatedFee)}</span>
                 </div>
-                <div className="flex justify-between text-xs pt-1 border-t border-white/5 mt-1">
+                <div className="mt-1 flex justify-between border-white/5 border-t pt-1 text-xs">
                   <span className="text-muted-foreground">Total</span>
-                  <span className="font-mono font-bold">{formatPrice(totalRequired)}</span>
+                  <span className="font-bold font-mono">
+                    {formatPrice(totalRequired)}
+                  </span>
                 </div>
               </div>
 
               {showBalanceWarning && (
-                <div className="text-[10px] text-red-400 bg-red-500/10 p-2 rounded">
+                <div className="rounded bg-red-500/10 p-2 text-[10px] text-red-400">
                   Insufficient balance ({formatPrice(balance)})
                 </div>
               )}
@@ -520,24 +559,33 @@ export default function PerpDetailPage() {
                 onClick={handleSubmit}
                 disabled={submitting || (authenticated && showBalanceWarning)}
                 className={cn(
-                  "w-full py-3 rounded font-bold text-sm transition-all text-white shadow-lg",
+                  'w-full rounded py-3 font-bold text-sm text-white shadow-lg transition-all',
                   side === 'long'
-                    ? 'bg-gradient-to-r from-green-600 to-green-500 hover:from-green-500 hover:to-green-400 shadow-green-900/20'
-                    : 'bg-gradient-to-r from-red-600 to-red-500 hover:from-red-500 hover:to-red-400 shadow-red-900/20',
-                  (submitting || (authenticated && showBalanceWarning)) && 'opacity-50 cursor-not-allowed'
+                    ? 'bg-gradient-to-r from-green-600 to-green-500 shadow-green-900/20 hover:from-green-500 hover:to-green-400'
+                    : 'bg-gradient-to-r from-red-600 to-red-500 shadow-red-900/20 hover:from-red-500 hover:to-red-400',
+                  (submitting || (authenticated && showBalanceWarning)) &&
+                    'cursor-not-allowed opacity-50'
                 )}
               >
-                {startCaseAction(submitting ? 'Processing...' : (!authenticated ? 'Log In to Trade' : `Place ${side.toUpperCase()} Order`))}
+                {startCaseAction(
+                  submitting
+                    ? 'Processing...'
+                    : !authenticated
+                      ? 'Log In to Trade'
+                      : `Place ${side.toUpperCase()} Order`
+                )}
               </button>
             </div>
           </div>
 
           {/* Trades Feed (Orderbook replacement for now) */}
-          <div className="flex-1 flex flex-col min-h-0 bg-background/10">
-            <div className="px-4 py-2 border-b border-white/5 bg-white/5">
-              <h3 className="text-xs font-bold text-muted-foreground uppercase tracking-wider">Recent Trades</h3>
+          <div className="flex min-h-0 flex-1 flex-col bg-background/10">
+            <div className="border-white/5 border-b bg-white/5 px-4 py-2">
+              <h3 className="font-bold text-muted-foreground text-xs uppercase tracking-wider">
+                Recent Trades
+              </h3>
             </div>
-            <div className="flex-1 overflow-hidden relative">
+            <div className="relative flex-1 overflow-hidden">
               <div className="absolute inset-0 overflow-y-auto">
                 <AssetTradesFeed
                   marketType="perp"
@@ -559,17 +607,17 @@ export default function PerpDetailPage() {
         tradeDetails={
           market
             ? ({
-              type: 'open-perp',
-              ticker: market.ticker,
-              side,
-              size: sizeNum,
-              leverage,
-              entryPrice: displayPrice,
-              margin: baseMargin,
-              estimatedFee,
-              liquidationPrice,
-              liquidationDistance,
-            } as OpenPerpDetails)
+                type: 'open-perp',
+                ticker: market.ticker,
+                side,
+                size: sizeNum,
+                leverage,
+                entryPrice: displayPrice,
+                margin: baseMargin,
+                estimatedFee,
+                liquidationPrice,
+                liquidationDistance,
+              } as OpenPerpDetails)
             : null
         }
       />

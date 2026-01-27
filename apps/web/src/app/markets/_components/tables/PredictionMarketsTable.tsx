@@ -1,7 +1,8 @@
 'use client';
 
 import { cn, formatNumberWithSeparators } from '@babylon/shared';
-import { ArrowDown, ArrowUp } from 'lucide-react';
+import { ArrowDown, ArrowUp, Star } from 'lucide-react';
+import { PredictionSparkline } from '@/components/markets/PredictionSparkline';
 import {
   Table,
   TableBody,
@@ -12,16 +13,16 @@ import {
 } from '@/components/ui/table';
 import type { PredictionMarketWithPosition } from '@/types/markets';
 import { type SortConfig, useTableSort } from '../../_hooks/useTableSort';
-import { calculateSharePercentages, getDaysLeft } from '../../_lib/formatters';
-
-import { Star } from 'lucide-react';
 import { useWatchlistStore } from '../../_hooks/useWatchlistStore';
-import { PredictionSparkline } from '@/components/markets/PredictionSparkline';
+import { calculateSharePercentages, getDaysLeft } from '../../_lib/formatters';
 
 interface PredictionMarketsTableProps {
   predictions: PredictionMarketWithPosition[];
   onPredictionClick: (prediction: PredictionMarketWithPosition) => void;
-  onTradeAction?: (prediction: PredictionMarketWithPosition, side: 'yes' | 'no') => void;
+  onTradeAction?: (
+    prediction: PredictionMarketWithPosition,
+    side: 'yes' | 'no'
+  ) => void;
   selectedPredictionId?: string | number | null;
 }
 
@@ -107,7 +108,7 @@ export function PredictionMarketsTable({
       <div className="flex-1 overflow-auto">
         <Table>
           <TableHeader className="sticky top-0 z-10 bg-background/80 backdrop-blur-md">
-            <TableRow className="h-10 border-b border-white/5 hover:bg-transparent">
+            <TableRow className="h-10 border-white/5 border-b hover:bg-transparent">
               {/* Star Column */}
               <TableHead className="w-[40px]"></TableHead>
               <SortHeader
@@ -132,31 +133,33 @@ export function PredictionMarketsTable({
                 onSort={handleSort}
                 className="hidden text-right md:table-cell"
               />
-              <TableHead className="hidden text-right md:table-cell">History</TableHead>
+              <TableHead className="hidden text-right md:table-cell">
+                History
+              </TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-          {sortedData.map((market) => {
-            const marketId = String(market.id);
-            const marketIdNumber =
-              typeof market.id === 'number' ? market.id : Number(market.id);
-            const marketIdPhase = Number.isFinite(marketIdNumber)
-              ? marketIdNumber
-              : 0;
-            const { yesPercent, noPercent, totalShares } =
-              calculateSharePercentages(market.yesShares, market.noShares);
-            const daysLeft = getDaysLeft(market.resolutionDate);
+            {sortedData.map((market) => {
+              const marketId = String(market.id);
+              const marketIdNumber =
+                typeof market.id === 'number' ? market.id : Number(market.id);
+              const marketIdPhase = Number.isFinite(marketIdNumber)
+                ? marketIdNumber
+                : 0;
+              const { yesPercent, noPercent, totalShares } =
+                calculateSharePercentages(market.yesShares, market.noShares);
+              const daysLeft = getDaysLeft(market.resolutionDate);
 
               return (
                 <TableRow
                   key={market.id}
                   className={cn(
-                    'group h-12 cursor-pointer border-b border-white/5 transition-colors hover:bg-muted/50',
+                    'group h-12 cursor-pointer border-white/5 border-b transition-colors hover:bg-muted/50',
                     selectedPredictionId !== null &&
-                    selectedPredictionId !== undefined &&
-                    String(selectedPredictionId) === marketId &&
-                    'bg-muted/60'
+                      selectedPredictionId !== undefined &&
+                      String(selectedPredictionId) === marketId &&
+                      'bg-muted/60'
                   )}
                   onClick={() => onPredictionClick(market)}
                 >
@@ -171,7 +174,12 @@ export function PredictionMarketsTable({
                       <Star
                         size={16}
                         fill={isFavorite(marketId) ? 'currentColor' : 'none'}
-                        className={cn("transition-all", isFavorite(marketId) ? 'text-yellow-400 scale-110' : '')}
+                        className={cn(
+                          'transition-all',
+                          isFavorite(marketId)
+                            ? 'scale-110 text-yellow-400'
+                            : ''
+                        )}
                       />
                     </button>
                   </TableCell>
@@ -191,10 +199,10 @@ export function PredictionMarketsTable({
                       </span>
                     </div>
                   </TableCell>
-                  <TableCell className="hidden py-2 text-right font-mono text-sm tabular-nums text-muted-foreground sm:table-cell">
+                  <TableCell className="hidden py-2 text-right font-mono text-muted-foreground text-sm tabular-nums sm:table-cell">
                     {formatNumberWithSeparators(totalShares)}
                   </TableCell>
-                  <TableCell className="hidden py-2 text-right font-mono text-sm tabular-nums text-muted-foreground md:table-cell">
+                  <TableCell className="hidden py-2 text-right font-mono text-muted-foreground text-sm tabular-nums md:table-cell">
                     {daysLeft !== null ? `${daysLeft}d` : 'Soon'}
                   </TableCell>
                   <TableCell className="hidden py-2 pl-4 md:table-cell">
@@ -202,7 +210,7 @@ export function PredictionMarketsTable({
                       <PredictionSparkline
                         data={[
                           ...Array.from({ length: 20 }, (_, i) => ({
-                            time: (Date.now() - (19 - i) * 3600),
+                            time: Date.now() - (19 - i) * 3600,
                             yesPrice:
                               yesPercent / 100 +
                               Math.sin(i + marketIdPhase) * 0.05,
@@ -215,7 +223,7 @@ export function PredictionMarketsTable({
                       />
                     </div>
                   </TableCell>
-                  <TableCell className="py-2 text-right pr-4">
+                  <TableCell className="py-2 pr-4 text-right">
                     <div
                       className="flex justify-end gap-2"
                       onClick={(e) => e.stopPropagation()}
@@ -239,7 +247,10 @@ export function PredictionMarketsTable({
             })}
             {sortedData.length === 0 && (
               <TableRow>
-                <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
+                <TableCell
+                  colSpan={6}
+                  className="h-24 text-center text-muted-foreground"
+                >
                   No prediction markets found.
                 </TableCell>
               </TableRow>

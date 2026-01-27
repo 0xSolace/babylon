@@ -3,8 +3,8 @@
 import {
   ColorType,
   createChart,
-  LineSeries,
   type ISeriesApi,
+  LineSeries,
   type Time,
 } from 'lightweight-charts';
 import { memo, useEffect, useMemo, useRef } from 'react';
@@ -45,8 +45,7 @@ function generateMockHistory(
 
   // Generate path
   for (let i = 0; i < points; i++) {
-    const trend =
-      startPrice + (currentPrice - startPrice) * (i / (points - 1));
+    const trend = startPrice + (currentPrice - startPrice) * (i / (points - 1));
     // For truly deterministic we'd need a seed, but basic Math.sin is fine for "look"
     const noise = Math.sin(i * 0.5) * volatility;
 

@@ -1,25 +1,28 @@
 import { cn } from '@babylon/shared';
-import { useMemo, useState } from 'react';
-import { Button } from '@/components/ui/button';
 import { X } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { PerpPriceChart } from '@/components/markets/PerpPriceChart';
+import { Button } from '@/components/ui/button';
 import type {
   MarketTimeRange,
   PerpHistoryPoint,
   PerpMarket,
   PredictionMarketWithPosition,
 } from '@/types/markets';
-import { calculateSharePercentages, formatPrice, formatVolume } from '../../_lib/formatters';
-import { PerpPriceChart } from '@/components/markets/PerpPriceChart';
+import {
+  calculateSharePercentages,
+  formatPrice,
+  formatVolume,
+} from '../../_lib/formatters';
 import { generateMockHistory } from '../../_lib/mockData';
-
 
 export type SelectedMarket =
   | { type: 'perp'; market: PerpMarket; side?: 'long' | 'short' }
   | {
-    type: 'prediction';
-    market: PredictionMarketWithPosition;
-    side?: 'yes' | 'no';
-  }
+      type: 'prediction';
+      market: PredictionMarketWithPosition;
+      side?: 'yes' | 'no';
+    }
   | null;
 
 interface OrderEntryPanelProps {
@@ -155,7 +158,7 @@ export function OrderEntryPanel({
         {type === 'perp' ? (
           <>
             {/* Chart Section */}
-            <div className="rounded-xl border border-white/5 bg-muted/5 p-2 overflow-hidden h-[250px]">
+            <div className="h-[250px] overflow-hidden rounded-xl border border-white/5 bg-muted/5 p-2">
               <PerpPriceChart
                 data={chartData}
                 currentPrice={market.currentPrice}
@@ -190,7 +193,7 @@ export function OrderEntryPanel({
                   Order Size (USD)
                 </label>
                 <div className="relative">
-                  <span className="absolute top-1/2 left-4 -translate-y-1/2 text-muted-foreground">
+                  <span className="-translate-y-1/2 absolute top-1/2 left-4 text-muted-foreground">
                     $
                   </span>
                   <input

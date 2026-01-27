@@ -1,6 +1,5 @@
 'use client';
 
-
 import { memo } from 'react';
 import { CategoryPnLCard } from '@/components/markets/CategoryPnLCard';
 import type { PerpMarket } from '@/types/markets';
@@ -18,8 +17,6 @@ interface PerpsTabContentProps {
   portfolioUpdatedAt: number | null;
   onShowCategoryPnLShare: () => void;
   onRefreshPortfolio: () => Promise<void>;
-
-
 
   // Markets
   filteredMarkets: PerpMarket[];
@@ -69,9 +66,6 @@ export const PerpsTabContent = memo(function PerpsTabContent({
           />
         </div>
       )}
-
-
-
 
       <PerpMarketsTable
         markets={filteredMarkets}

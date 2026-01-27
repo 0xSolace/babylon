@@ -34,18 +34,18 @@ export function PositionsPanel({
 
   return (
     <div className={className}>
-      <div className="flex items-center justify-between border-b border-white/5 bg-muted/10 px-4 py-3">
+      <div className="flex items-center justify-between border-white/5 border-b bg-muted/10 px-4 py-3">
         <div className="flex items-center gap-2">
           <h3 className="font-bold text-foreground text-xs uppercase tracking-wider">
             Active Positions
           </h3>
-          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-muted/20 text-[10px] font-bold">
-            {activeTab === 'perps' ? perpPositions.length : predictionPositions.length}
+          <span className="flex h-5 w-5 items-center justify-center rounded-full bg-muted/20 font-bold text-[10px]">
+            {activeTab === 'perps'
+              ? perpPositions.length
+              : predictionPositions.length}
           </span>
         </div>
-        <div className="flex gap-2">
-          {/* Action buttons can go here */}
-        </div>
+        <div className="flex gap-2">{/* Action buttons can go here */}</div>
       </div>
 
       <div className="h-[calc(100%-48px)] overflow-y-auto p-0">

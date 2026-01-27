@@ -5,6 +5,6 @@ export type {
   TrendingPerpMarket,
 } from './useMarketsPageData';
 export { useMarketsPageData } from './useMarketsPageData';
-export { useTableSort } from './useTableSort';
 export * from './usePositionsStore';
+export { useTableSort } from './useTableSort';
 export * from './useWatchlistStore';

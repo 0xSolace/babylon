@@ -1,7 +1,7 @@
 'use client';
 
 import { cn } from '@babylon/shared';
-import { ArrowDown, ArrowUp } from 'lucide-react';
+import { ArrowDown, ArrowUp, Star } from 'lucide-react';
 import {
   Table,
   TableBody,
@@ -12,9 +12,8 @@ import {
 } from '@/components/ui/table';
 import type { PerpMarket } from '@/types/markets';
 import { type SortConfig, useTableSort } from '../../_hooks/useTableSort';
-import { formatPrice, formatVolume } from '../../_lib/formatters';
-import { Star } from 'lucide-react';
 import { useWatchlistStore } from '../../_hooks/useWatchlistStore';
+import { formatPrice, formatVolume } from '../../_lib/formatters';
 import { PerpSparkline } from '../PerpSparkline';
 
 interface PerpMarketsTableProps {
@@ -75,7 +74,7 @@ export function PerpMarketsTable({
       <div className="flex-1 overflow-auto">
         <Table>
           <TableHeader className="sticky top-0 z-10 bg-background/80 backdrop-blur-md">
-            <TableRow className="h-10 border-b border-white/5 hover:bg-transparent">
+            <TableRow className="h-10 border-white/5 border-b hover:bg-transparent">
               {/* Star Column */}
               <TableHead className="w-[40px]"></TableHead>
               <SortHeader
@@ -119,7 +118,9 @@ export function PerpMarketsTable({
                 onSort={handleSort}
                 className="hidden text-right lg:table-cell"
               />
-              <TableHead className="hidden text-right md:table-cell">Trend (7d)</TableHead>
+              <TableHead className="hidden text-right md:table-cell">
+                Trend (7d)
+              </TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
@@ -128,9 +129,8 @@ export function PerpMarketsTable({
               <TableRow
                 key={market.ticker}
                 className={cn(
-                  'h-12 cursor-pointer border-b border-white/5 transition-colors hover:bg-muted/50',
-                  selectedMarketTicker === market.ticker &&
-                  'bg-muted/60'
+                  'h-12 cursor-pointer border-white/5 border-b transition-colors hover:bg-muted/50',
+                  selectedMarketTicker === market.ticker && 'bg-muted/60'
                 )}
                 onClick={() => onMarketClick(market)}
               >
@@ -144,8 +144,13 @@ export function PerpMarketsTable({
                   >
                     <Star
                       size={16}
-                      fill={isFavorite(market.ticker) ? "currentColor" : "none"}
-                      className={cn("transition-all", isFavorite(market.ticker) ? "text-yellow-400 scale-110" : "")}
+                      fill={isFavorite(market.ticker) ? 'currentColor' : 'none'}
+                      className={cn(
+                        'transition-all',
+                        isFavorite(market.ticker)
+                          ? 'scale-110 text-yellow-400'
+                          : ''
+                      )}
                     />
                   </button>
                 </TableCell>
@@ -157,39 +162,37 @@ export function PerpMarketsTable({
                     </span>
                   </div>
                 </TableCell>
-                <TableCell className="py-2 text-right font-mono text-sm tabular-nums text-foreground/90">
+                <TableCell className="py-2 text-right font-mono text-foreground/90 text-sm tabular-nums">
                   {formatPrice(market.currentPrice)}
                 </TableCell>
-                <TableCell
-                  className={cn(
-                    'py-2 text-right'
-                  )}
-                >
-                  <div className={cn(
-                    "inline-flex items-center justify-end rounded-full px-2 py-0.5 text-xs font-medium tabular-nums",
-                    market.changePercent24h >= 0
-                      ? 'bg-green-500/10 text-green-500'
-                      : 'bg-red-500/10 text-red-500'
-                  )}>
+                <TableCell className={cn('py-2 text-right')}>
+                  <div
+                    className={cn(
+                      'inline-flex items-center justify-end rounded-full px-2 py-0.5 font-medium text-xs tabular-nums',
+                      market.changePercent24h >= 0
+                        ? 'bg-green-500/10 text-green-500'
+                        : 'bg-red-500/10 text-red-500'
+                    )}
+                  >
                     {market.changePercent24h >= 0 ? '+' : ''}
                     {market.changePercent24h.toFixed(2)}%
                   </div>
                 </TableCell>
-                <TableCell className="hidden py-2 text-right font-mono text-sm tabular-nums text-muted-foreground sm:table-cell">
+                <TableCell className="hidden py-2 text-right font-mono text-muted-foreground text-sm tabular-nums sm:table-cell">
                   {formatVolume(market.volume24h)}
                 </TableCell>
-                <TableCell className="hidden py-2 text-right font-mono text-sm tabular-nums text-muted-foreground md:table-cell">
+                <TableCell className="hidden py-2 text-right font-mono text-muted-foreground text-sm tabular-nums md:table-cell">
                   {formatVolume(market.openInterest)}
                 </TableCell>
-                <TableCell
-                  className="hidden py-2 text-right lg:table-cell"
-                >
-                  <span className={cn(
-                    "font-mono text-sm tabular-nums",
-                    market.fundingRate.rate >= 0
-                      ? 'text-orange-400'
-                      : 'text-blue-400'
-                  )}>
+                <TableCell className="hidden py-2 text-right lg:table-cell">
+                  <span
+                    className={cn(
+                      'font-mono text-sm tabular-nums',
+                      market.fundingRate.rate >= 0
+                        ? 'text-orange-400'
+                        : 'text-blue-400'
+                    )}
+                  >
                     {(market.fundingRate.rate * 100).toFixed(4)}%
                   </span>
                 </TableCell>
@@ -203,7 +206,7 @@ export function PerpMarketsTable({
                     />
                   </div>
                 </TableCell>
-                <TableCell className="py-2 text-right pr-4">
+                <TableCell className="py-2 pr-4 text-right">
                   <div
                     className="flex justify-end gap-2"
                     onClick={(e) => e.stopPropagation()}
@@ -226,7 +229,10 @@ export function PerpMarketsTable({
             ))}
             {sortedData.length === 0 && (
               <TableRow>
-                <TableCell colSpan={8} className="h-24 text-center text-muted-foreground">
+                <TableCell
+                  colSpan={8}
+                  className="h-24 text-center text-muted-foreground"
+                >
                   No markets found.
                 </TableCell>
               </TableRow>

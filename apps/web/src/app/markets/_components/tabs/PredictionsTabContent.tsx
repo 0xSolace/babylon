@@ -22,8 +22,6 @@ interface PredictionsTabContentProps {
   onShowCategoryPnLShare: () => void;
   onRefreshPortfolio: () => Promise<void>;
 
-
-
   // Sort
   predictionSort: PredictionSort;
   onSortChange: (sort: PredictionSort) => void;
@@ -32,7 +30,10 @@ interface PredictionsTabContentProps {
   activePredictions: PredictionMarketWithPosition[];
   resolvedPredictions: PredictionMarketWithPosition[];
   onPredictionClick: (prediction: PredictionMarketWithPosition) => void;
-  onTradeAction?: (prediction: PredictionMarketWithPosition, side: 'yes' | 'no') => void;
+  onTradeAction?: (
+    prediction: PredictionMarketWithPosition,
+    side: 'yes' | 'no'
+  ) => void;
   selectedPredictionId?: string | number | null;
 
   /** Error message when predictions fail to load */
@@ -104,8 +105,6 @@ export const PredictionsTabContent = memo(function PredictionsTabContent({
           />
         </div>
       )}
-
-
 
       <div
         className={compact ? 'mb-3' : 'mb-3 flex items-center justify-between'}

@@ -479,7 +479,12 @@ interface TradeCardProps {
   compact?: boolean;
 }
 
-function TradeCard({ trade, formatCurrency, formatTime, compact }: TradeCardProps) {
+function TradeCard({
+  trade,
+  formatCurrency,
+  formatTime,
+  compact,
+}: TradeCardProps) {
   const user = trade.user;
   const profileUrl = user?.isActor
     ? `/profile/${user.id}`
@@ -488,11 +493,15 @@ function TradeCard({ trade, formatCurrency, formatTime, compact }: TradeCardProp
       : '#';
 
   return (
-    <div className={cn(
-      "rounded-lg transition-colors hover:bg-muted/50",
-      compact ? "p-2 bg-transparent border-b border-white/5 rounded-none" : "p-4 bg-muted/30"
-    )}>
-      <div className={cn("flex items-start gap-3", compact && "gap-2")}>
+    <div
+      className={cn(
+        'rounded-lg transition-colors hover:bg-muted/50',
+        compact
+          ? 'rounded-none border-white/5 border-b bg-transparent p-2'
+          : 'bg-muted/30 p-4'
+      )}
+    >
+      <div className={cn('flex items-start gap-3', compact && 'gap-2')}>
         {/* User Avatar */}
         <Link href={user ? profileUrl : '#'} className="flex-shrink-0">
           {user?.profileImageUrl ? (

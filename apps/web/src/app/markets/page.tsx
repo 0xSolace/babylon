@@ -354,12 +354,12 @@ export default function MarketsPage() {
       className="flex h-[calc(100vh-theme(spacing.16))] flex-col"
     >
       {/* Desktop Layout (Terminal) */}
-      <div className="hidden flex-1 overflow-hidden xl:flex bg-background/20">
+      <div className="hidden flex-1 overflow-hidden bg-background/20 xl:flex">
         {/* Left Panel: Navigation & Table */}
-        <div className="flex min-w-0 flex-1 flex-col overflow-hidden border-r border-white/5">
+        <div className="flex min-w-0 flex-1 flex-col overflow-hidden border-white/5 border-r">
           {/* Header */}
           <div className="sticky top-0 z-10 flex-shrink-0 bg-background/80 backdrop-blur-md">
-            <div className="flex items-center justify-between px-4 py-3 border-b border-white/5">
+            <div className="flex items-center justify-between border-white/5 border-b px-4 py-3">
               <MarketsToggle
                 activeTab={activeTab}
                 onTabChange={handleTabChange}
@@ -381,8 +381,9 @@ export default function MarketsPage() {
 
           {/* Content (Table) */}
           <div
-            className={`flex-1 overflow-y-auto p-4 transition-opacity duration-150 ${isPending ? 'opacity-80' : 'opacity-100'
-              }`}
+            className={`flex-1 overflow-y-auto p-4 transition-opacity duration-150 ${
+              isPending ? 'opacity-80' : 'opacity-100'
+            }`}
           >
             {renderTabContent(false)}
 
@@ -396,7 +397,7 @@ export default function MarketsPage() {
 
         {/* Right Panel: Order Entry & Aux (Positions later) */}
         {activeTab !== 'dashboard' && selectedMarket && (
-          <div className="flex w-[380px] flex-col border-l border-white/5 bg-background/30 backdrop-blur-sm">
+          <div className="flex w-[380px] flex-col border-white/5 border-l bg-background/30 backdrop-blur-sm">
             <OrderEntryPanel
               selectedMarket={selectedMarket}
               onTradeClick={handleOrderEntryTrade}
@@ -404,7 +405,7 @@ export default function MarketsPage() {
               className="flex-1"
             />
             {/* Positions Panel (Bottom Right) */}
-            <div className="min-h-[250px] flex-1 overflow-hidden border-t border-white/5 bg-background/30">
+            <div className="min-h-[250px] flex-1 overflow-hidden border-white/5 border-t bg-background/30">
               <PositionsPanel
                 activeTab={activeTab}
                 perpPositions={data.perpPositions}
@@ -444,8 +445,9 @@ export default function MarketsPage() {
 
         {/* Content */}
         <div
-          className={`flex-1 overflow-y-auto transition-opacity duration-150 ${isPending ? 'opacity-80' : 'opacity-100'
-            }`}
+          className={`flex-1 overflow-y-auto transition-opacity duration-150 ${
+            isPending ? 'opacity-80' : 'opacity-100'
+          }`}
         >
           {renderTabContent(true)}
         </div>
