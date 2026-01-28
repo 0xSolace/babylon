@@ -109,6 +109,8 @@ export function AgentResponseGrid({
     <div
       className={cn(
         'rounded-xl border border-border bg-muted/30 p-4',
+        // Enable container queries for responsive grid
+        '@container',
         className
       )}
     >
@@ -147,16 +149,17 @@ export function AgentResponseGrid({
         )}
       </div>
 
-      {/* Grid / Expanded view */}
+      {/* Grid / Expanded view - uses container queries for responsive columns */}
       <div
         className={cn(
           'grid gap-3',
           // When expanded, single column full width
           expandedAgentId && 'grid-cols-1',
-          // Grid view: responsive columns
+          // Grid view: responsive columns based on container width (not viewport)
+          // @md = 28rem (448px) container width
           !expandedAgentId && totalCount === 1 && 'grid-cols-1',
-          !expandedAgentId && totalCount === 2 && 'grid-cols-1 sm:grid-cols-2',
-          !expandedAgentId && totalCount >= 3 && 'grid-cols-1 sm:grid-cols-2'
+          !expandedAgentId && totalCount === 2 && '@md:grid-cols-2 grid-cols-1',
+          !expandedAgentId && totalCount >= 3 && '@md:grid-cols-2 grid-cols-1'
         )}
       >
         {agentsWithStatus.map((agent) => {

@@ -1,3 +1,4 @@
+import containerQueries from '@tailwindcss/container-queries';
 import type { Config } from 'tailwindcss';
 import type { PluginAPI } from 'tailwindcss/types/config';
 import tailwindcssAnimate from 'tailwindcss-animate';
@@ -143,6 +144,7 @@ const config: Config = {
   },
   plugins: [
     tailwindcssAnimate,
+    containerQueries,
     ({ addUtilities }: PluginAPI) => {
       addUtilities({
         '.scrollbar-hide': {
