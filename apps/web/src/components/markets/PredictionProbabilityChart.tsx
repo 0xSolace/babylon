@@ -1,5 +1,6 @@
 'use client';
 
+import { cn } from '@babylon/shared';
 import type { ISeriesApi, Time } from 'lightweight-charts';
 import { AreaSeries, LineSeries } from 'lightweight-charts';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -47,6 +48,10 @@ interface PredictionProbabilityChartProps {
   onTimeRangeChange: (range: MarketTimeRange) => void;
   /** Whether to show brush selector (unused, for future) */
   showBrush?: boolean;
+  /** Optional height class for the chart area (default: h-[400px]). */
+  chartHeightClassName?: string;
+  /** Optional className for the container */
+  className?: string;
 }
 
 /**
@@ -72,6 +77,8 @@ export function PredictionProbabilityChart({
   marketId,
   timeRange,
   onTimeRangeChange,
+  chartHeightClassName = 'h-[400px]',
+  className,
 }: PredictionProbabilityChartProps) {
   const [chartInitError, setChartInitError] = useState<string | null>(null);
   const yesSeries = useRef<ISeriesApi<'Area'> | null>(null);
@@ -259,7 +266,12 @@ export function PredictionProbabilityChart({
   // Loading state when no data
   if (!data.length) {
     return (
-      <div className="flex h-[400px] items-center justify-center text-muted-foreground">
+      <div
+        className={cn(
+          'flex items-center justify-center text-muted-foreground',
+          chartHeightClassName
+        )}
+      >
         <div className="text-center">
           <div className="text-sm">Loading chart data...</div>
         </div>
@@ -269,7 +281,12 @@ export function PredictionProbabilityChart({
 
   if (chartInitError) {
     return (
-      <div className="flex h-[400px] items-center justify-center text-muted-foreground">
+      <div
+        className={cn(
+          'flex items-center justify-center text-muted-foreground',
+          chartHeightClassName
+        )}
+      >
         <div className="text-center">
           <div className="text-sm">Chart unavailable</div>
           <div className="mt-1 text-xs">{chartInitError}</div>
@@ -279,7 +296,10 @@ export function PredictionProbabilityChart({
   }
 
   return (
-    <div className="w-full space-y-3" key={marketId}>
+    <div
+      className={cn('flex w-full flex-col space-y-3', className)}
+      key={marketId}
+    >
       {/* Header with probabilities and time range selector */}
       <div className="flex flex-wrap items-center justify-between gap-3 px-1">
         <div className="flex items-center gap-4">
@@ -316,10 +336,10 @@ export function PredictionProbabilityChart({
       </div>
 
       {/* Chart container */}
-      <div className="relative">
+      <div className={cn('relative', chartHeightClassName)}>
         <div
           ref={chartContainerRef}
-          className="h-[400px] w-full rounded-lg bg-muted/10"
+          className="h-full w-full rounded-lg bg-muted/10"
         />
         {!chart && (
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center">

@@ -136,6 +136,12 @@ function computeYesPctFromShares(
   return (yes / total) * 100;
 }
 
+function serializeWatchlistKey(key: MarketKey): string {
+  const id = key.id.trim();
+  if (!id) return '';
+  return `${key.kind}:${key.kind === 'perp' ? id.toUpperCase() : id}`;
+}
+
 export function MarketsTradingTerminal({
   onRequestBuyPoints,
 }: MarketsTradingTerminalProps) {
@@ -181,6 +187,7 @@ export function MarketsTradingTerminal({
   const [selected, setSelected] = useState<MarketKey | null>(() =>
     parseSelected(searchParams)
   );
+  const [favoritesOnly, setFavoritesOnly] = useState(false);
 
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [rightCollapsed, setRightCollapsed] = useState(false);
@@ -224,6 +231,7 @@ export function MarketsTradingTerminal({
   }, [searchParams]);
 
   const favorites = useMarketWatchlistStore((s) => s.favorites);
+  const favoritesSet = useMarketWatchlistStore((s) => s.favoritesSet);
   const toggleFavorite = useMarketWatchlistStore((s) => s.toggleFavorite);
   const isFavorite = useMarketWatchlistStore((s) => s.isFavorite);
 
@@ -267,6 +275,9 @@ export function MarketsTradingTerminal({
 
     const filtered = combined.filter((row) => {
       if (filter !== 'all' && row.kind !== filter) return false;
+      if (favoritesOnly && !favoritesSet.has(serializeWatchlistKey(row.key))) {
+        return false;
+      }
       if (q.length === 0) return true;
       return (
         row.title.toLowerCase().includes(q) ||
@@ -276,10 +287,20 @@ export function MarketsTradingTerminal({
     });
 
     return filtered.sort((a, b) => {
+      const aFavorite = favoritesSet.has(serializeWatchlistKey(a.key));
+      const bFavorite = favoritesSet.has(serializeWatchlistKey(b.key));
+      if (aFavorite !== bFavorite) return aFavorite ? -1 : 1;
       if (b.sortVolume !== a.sortVolume) return b.sortVolume - a.sortVolume;
       return a.sortName.localeCompare(b.sortName);
     });
-  }, [perpMarkets, predictionMarkets, query, filter]);
+  }, [
+    perpMarkets,
+    predictionMarkets,
+    query,
+    filter,
+    favoritesOnly,
+    favoritesSet,
+  ]);
 
   // Ensure a default selection
   useEffect(() => {
@@ -287,6 +308,19 @@ export function MarketsTradingTerminal({
     if (rows.length === 0) return;
     setSelected(rows[0]?.key ?? null);
   }, [selected, rows]);
+
+  // If the current selection is filtered out (search/favorites), select the first visible row.
+  useEffect(() => {
+    if (!selected) return;
+    if (rows.length === 0) return;
+    const stillVisible = rows.some(
+      (row) =>
+        row.key.kind === selected.kind &&
+        row.key.id.toString() === selected.id.toString()
+    );
+    if (stillVisible) return;
+    setSelected(rows[0]?.key ?? null);
+  }, [rows, selected]);
 
   // Keep selection consistent with the active filter (avoids hidden-selection confusion).
   useEffect(() => {
@@ -597,6 +631,21 @@ export function MarketsTradingTerminal({
           ))}
         </div>
 
+        <button
+          type="button"
+          onClick={() => setFavoritesOnly((prev) => !prev)}
+          className={cn(
+            'inline-flex shrink-0 items-center gap-1 rounded border border-white/10 px-2 py-1 text-xs transition-colors',
+            favoritesOnly
+              ? 'bg-yellow-400/15 text-yellow-400'
+              : 'bg-background/20 text-muted-foreground hover:bg-muted/20 hover:text-foreground'
+          )}
+          aria-pressed={favoritesOnly}
+        >
+          <Star size={14} fill={favoritesOnly ? 'currentColor' : 'none'} />
+          Favorites
+        </button>
+
         <div className="relative min-w-0 flex-1">
           <input
             type="search"
@@ -785,33 +834,16 @@ export function MarketsTradingTerminal({
                 {formatYesPct(100 - predictionYesPct)}
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              <div className="flex items-center gap-1 rounded-md bg-muted/20 p-1 font-semibold text-xs">
-                {MARKET_TIME_RANGES.map((range) => (
-                  <button
-                    key={range}
-                    type="button"
-                    onClick={() => setPredictionTimeRange(range)}
-                    className={cn(
-                      'rounded px-2 py-1 transition-colors',
-                      predictionTimeRange === range
-                        ? 'bg-foreground text-background'
-                        : 'text-muted-foreground hover:text-foreground'
-                    )}
-                  >
-                    {range}
-                  </button>
-                ))}
-              </div>
-            </div>
           </div>
 
-          <div className="min-h-0 flex-1">
+          <div className="min-h-0 flex-1 p-4">
             <PredictionProbabilityChart
               data={predictionHistory}
               marketId={selectedPredictionId ?? 'unknown'}
               timeRange={predictionTimeRange}
               onTimeRangeChange={setPredictionTimeRange}
+              className="h-full min-h-0"
+              chartHeightClassName="flex-1 min-h-0"
             />
           </div>
         </>
@@ -826,6 +858,25 @@ export function MarketsTradingTerminal({
                 {selectedPerp.name}
               </div>
             </div>
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1 rounded-md bg-muted/20 p-1 font-semibold text-xs">
+                {MARKET_TIME_RANGES.map((range) => (
+                  <button
+                    key={range}
+                    type="button"
+                    onClick={() => setPerpTimeRange(range)}
+                    className={cn(
+                      'rounded px-2 py-1 transition-colors',
+                      perpTimeRange === range
+                        ? 'bg-foreground text-background'
+                        : 'text-muted-foreground hover:text-foreground'
+                    )}
+                  >
+                    {range}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
           <div className="min-h-0 flex-1 p-4">
             <PerpPriceChart
@@ -835,7 +886,8 @@ export function MarketsTradingTerminal({
               timeRange={perpTimeRange}
               onTimeRangeChange={setPerpTimeRange}
               showHeader={false}
-              className="h-full"
+              className="h-full min-h-0"
+              chartHeightClassName="flex-1 min-h-0"
             />
           </div>
         </>
@@ -1239,6 +1291,23 @@ export function MarketsTradingTerminal({
                   </button>
                 ))}
               </div>
+              <button
+                type="button"
+                onClick={() => setFavoritesOnly((prev) => !prev)}
+                className={cn(
+                  'inline-flex shrink-0 items-center gap-1 rounded border border-white/10 px-2 py-2 text-xs transition-colors',
+                  favoritesOnly
+                    ? 'bg-yellow-400/15 text-yellow-400'
+                    : 'bg-background/20 text-muted-foreground hover:bg-muted/20 hover:text-foreground'
+                )}
+                aria-pressed={favoritesOnly}
+              >
+                <Star
+                  size={14}
+                  fill={favoritesOnly ? 'currentColor' : 'none'}
+                />
+                Fav
+              </button>
               <input
                 type="search"
                 value={query}
@@ -1252,7 +1321,7 @@ export function MarketsTradingTerminal({
 
         <div className="min-h-0 flex-1 overflow-hidden">
           <div className="hide-scrollbar flex h-full flex-col overflow-y-auto overflow-x-hidden">
-            <div className="h-[45vh] w-full shrink-0 border-white/5 border-b">
+            <div className="relative h-[45vh] w-full shrink-0 border-white/5 border-b">
               {selected?.kind === 'prediction' ? (
                 <PredictionProbabilityChart
                   data={predictionHistory}
@@ -1271,11 +1340,32 @@ export function MarketsTradingTerminal({
                   timeRange={perpTimeRange}
                   onTimeRangeChange={setPerpTimeRange}
                   showHeader={false}
-                  className="h-full"
+                  className="h-full min-h-0"
+                  chartHeightClassName="h-full"
                 />
               ) : (
                 <div className="flex h-full items-center justify-center text-muted-foreground">
                   Select a market
+                </div>
+              )}
+
+              {selectedPerp && (
+                <div className="absolute top-3 right-3 z-10 flex max-w-[calc(100%-24px)] items-center gap-1 overflow-x-auto rounded-md border border-white/10 bg-background/70 p-1 font-semibold text-[10px] backdrop-blur-md">
+                  {MARKET_TIME_RANGES.map((range) => (
+                    <button
+                      key={range}
+                      type="button"
+                      onClick={() => setPerpTimeRange(range)}
+                      className={cn(
+                        'shrink-0 rounded px-2 py-1 transition-colors',
+                        perpTimeRange === range
+                          ? 'bg-foreground text-background'
+                          : 'text-muted-foreground hover:text-foreground'
+                      )}
+                    >
+                      {range}
+                    </button>
+                  ))}
                 </div>
               )}
             </div>

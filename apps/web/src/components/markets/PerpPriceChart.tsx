@@ -48,6 +48,8 @@ interface PerpPriceChartProps {
   showBrush?: boolean;
   /** Whether to show the header (price + range controls). Defaults to true. */
   showHeader?: boolean;
+  /** Optional height class for the chart area (default: h-[400px]). */
+  chartHeightClassName?: string;
   /** Optional className for the container */
   className?: string;
 }
@@ -77,6 +79,7 @@ export function PerpPriceChart({
   timeRange,
   onTimeRangeChange,
   showHeader = true,
+  chartHeightClassName = 'h-[400px]',
   className,
 }: PerpPriceChartProps) {
   const [chartInitError, setChartInitError] = useState<string | null>(null);
@@ -285,7 +288,12 @@ export function PerpPriceChart({
   // Loading state when no data
   if (!data.length) {
     return (
-      <div className="flex h-[400px] items-center justify-center text-muted-foreground">
+      <div
+        className={cn(
+          'flex items-center justify-center text-muted-foreground',
+          chartHeightClassName
+        )}
+      >
         <div className="text-center">
           <div className="text-sm">Loading chart data...</div>
         </div>
@@ -295,7 +303,12 @@ export function PerpPriceChart({
 
   if (chartInitError) {
     return (
-      <div className="flex h-[400px] items-center justify-center text-muted-foreground">
+      <div
+        className={cn(
+          'flex items-center justify-center text-muted-foreground',
+          chartHeightClassName
+        )}
+      >
         <div className="text-center">
           <div className="text-sm">Chart unavailable</div>
           <div className="mt-1 text-xs">{chartInitError}</div>
@@ -306,7 +319,12 @@ export function PerpPriceChart({
 
   if (chartBaseError) {
     return (
-      <div className="flex h-[400px] items-center justify-center text-muted-foreground">
+      <div
+        className={cn(
+          'flex items-center justify-center text-muted-foreground',
+          chartHeightClassName
+        )}
+      >
         <div className="text-center">
           <div className="text-sm">Chart unavailable</div>
           <div className="mt-1 text-xs">{chartBaseError}</div>
@@ -366,10 +384,10 @@ export function PerpPriceChart({
       )}
 
       {/* Chart container */}
-      <div className="relative">
+      <div className={cn('relative', chartHeightClassName)}>
         <div
           ref={chartContainerRef}
-          className="h-[400px] w-full rounded-lg bg-muted/10"
+          className="h-full w-full rounded-lg bg-muted/10"
         />
         {!chart && (
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
