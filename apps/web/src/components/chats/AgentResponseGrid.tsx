@@ -15,6 +15,66 @@ import { Avatar } from '@/components/shared/Avatar';
 import type { AgentResponseStatus } from './AgentResponseCard';
 import type { ChatParticipant } from './types';
 
+/** Character limit for truncation - approximately 6 lines of text */
+const TRUNCATE_LENGTH = 400;
+
+/**
+ * Component to render agent content with optional "Read more" / "Show less" toggle.
+ * - Collapsed: Plain text preview (no markdown) to keep cards compact
+ * - Expanded: Full formatted content with Response component
+ * Only shows toggle if content exceeds truncation length.
+ */
+function AgentContentWithReadMore({
+  content,
+  isExpanded,
+  onToggle,
+}: {
+  content: string;
+  isExpanded: boolean;
+  onToggle: () => void;
+}) {
+  const needsTruncation = content.length > TRUNCATE_LENGTH;
+
+  if (isExpanded) {
+    // Expanded: Full formatted content with overflow handling for tables
+    return (
+      <div className="text-foreground text-sm">
+        <div className="max-h-[400px] overflow-auto">
+          <Response>{content}</Response>
+        </div>
+        <button
+          type="button"
+          onClick={onToggle}
+          className="mt-2 font-medium text-primary text-xs hover:underline"
+        >
+          Show less
+        </button>
+      </div>
+    );
+  }
+
+  // Collapsed: Plain text preview (no markdown formatting)
+  // This keeps cards compact even if content has tables/lists
+  const previewText = needsTruncation
+    ? `${content.slice(0, TRUNCATE_LENGTH).trim()}...`
+    : content;
+
+  return (
+    <div className="text-foreground text-sm">
+      <p className="line-clamp-6 whitespace-pre-wrap">{previewText}</p>
+      {needsTruncation && (
+        <button
+          type="button"
+          onClick={onToggle}
+          className="mt-1 font-medium text-primary text-xs hover:underline"
+        >
+          Read more
+        </button>
+      )}
+    </div>
+  );
+}
+
 interface AgentResponse {
   messageId: string;
   agentId: string;
@@ -216,19 +276,13 @@ export function AgentResponseGrid({
                   </div>
                 )}
                 {agent.status === 'complete' && agent.content && (
-                  <div className="transition-all duration-300 ease-in-out">
-                    {isExpanded ? (
-                      // Expanded: full content with formatting
-                      <div className="fade-in animate-in text-foreground text-sm duration-300">
-                        <Response>{agent.content}</Response>
-                      </div>
-                    ) : (
-                      // Collapsed: truncated preview
-                      <p className="line-clamp-6 whitespace-pre-wrap text-foreground text-sm">
-                        {agent.content}
-                      </p>
-                    )}
-                  </div>
+                  <AgentContentWithReadMore
+                    content={agent.content}
+                    isExpanded={isExpanded}
+                    onToggle={() =>
+                      setExpandedAgentId(isExpanded ? null : agent.id)
+                    }
+                  />
                 )}
                 {agent.status === 'error' && (
                   <p className="text-destructive text-sm italic">
@@ -236,21 +290,6 @@ export function AgentResponseGrid({
                   </p>
                 )}
               </div>
-
-              {/* Footer: Read more / Show less */}
-              {agent.status === 'complete' && agent.content && (
-                <div className="mt-3 border-border border-t pt-3">
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setExpandedAgentId(isExpanded ? null : agent.id)
-                    }
-                    className="font-medium text-primary text-xs hover:underline"
-                  >
-                    {isExpanded ? 'Show less' : 'Read more'}
-                  </button>
-                </div>
-              )}
             </div>
           );
         })}
