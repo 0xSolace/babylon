@@ -264,6 +264,7 @@ export class MultiStepExecutor {
       iterationTimings.llmDecision = Date.now() - llmStartTime;
 
       if (!decisionResult) {
+        iterationTimings.total = Date.now() - iterationStartTime;
         logger.warn(
           `[MultiStep] Failed to parse decision at iteration ${iteration}, finishing`,
           { iterationTimings },
@@ -286,6 +287,7 @@ export class MultiStepExecutor {
 
       // Check if we should finish
       if (decision.isFinish || !decision.action) {
+        iterationTimings.total = Date.now() - iterationStartTime;
         if (trace.length === 0 && actionability.hasAny) {
           logger.warn(
             `[MultiStep] Finished without actions despite actionable context`,
@@ -516,7 +518,8 @@ export class MultiStepExecutor {
             agentPositions.predictions.length + agentPositions.perps.length,
           recentPosts: recentPosts.length,
           pendingCommentReplies: pendingCommentRepliesRaw.length,
-          pendingChatMessages: pendingChatMessagesRaw.length,
+          pendingChatMessages: pendingChatMessages.length,
+          pendingChatMessagesRaw: pendingChatMessagesRaw.length,
           groupChats: agentGroupChats.length,
           ownPosts: agentOwnPosts.length,
         },
