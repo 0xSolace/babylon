@@ -205,7 +205,7 @@ export function MarketsTradingTerminal({
 
   const [perpTimeRange, setPerpTimeRange] = useState<MarketTimeRange>('1D');
   const [predictionTimeRange, setPredictionTimeRange] =
-    useState<MarketTimeRange>('ALL');
+    useState<MarketTimeRange>('1D');
   const [perpSideFromUrl, setPerpSideFromUrl] = useState<TradeSide | null>(() =>
     parsePerpSide(searchParams)
   );
@@ -436,9 +436,26 @@ export function MarketsTradingTerminal({
     [predictionEffectiveShares]
   );
 
+  const predictionHistoryLimit = useMemo(() => {
+    switch (predictionTimeRange) {
+      case '1H':
+        return 200;
+      case '4H':
+        return 400;
+      case '1D':
+        return 800;
+      case '1W':
+        return 1200;
+      case 'ALL':
+        return 2000;
+      default:
+        return 800;
+    }
+  }, [predictionTimeRange]);
+
   const { history: predictionHistory, refresh: refreshPredictionHistory } =
     usePredictionHistory(selected?.kind === 'prediction' ? selected.id : null, {
-      limit: 1000,
+      limit: predictionHistoryLimit,
       seed: predictionHistorySeed,
       range: predictionTimeRange,
     });
@@ -1328,6 +1345,8 @@ export function MarketsTradingTerminal({
                   marketId={selectedPredictionId ?? 'unknown'}
                   timeRange={predictionTimeRange}
                   onTimeRangeChange={setPredictionTimeRange}
+                  className="h-full min-h-0"
+                  chartHeightClassName="h-full"
                 />
               ) : selectedPerp ? (
                 <PerpPriceChart

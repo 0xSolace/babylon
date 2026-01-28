@@ -85,7 +85,11 @@ export function PredictionProbabilityChart({
   const noSeries = useRef<ISeriesApi<'Line'> | null>(null);
   const seriesInitialized = useRef(false);
 
-  const { chartContainerRef, chart } = useLightweightChart({
+  const {
+    chartContainerRef,
+    chart,
+    error: chartBaseError,
+  } = useLightweightChart({
     rightPriceScale: {
       scaleMargins: { top: 0.1, bottom: 0.1 },
       autoScale: true,
@@ -155,6 +159,20 @@ export function PredictionProbabilityChart({
     const latest = sorted[0];
     return latest ? latest.yesPrice * 100 : 50;
   }, [data]);
+
+  // When the market changes, clear out any previous series data immediately so we don't
+  // show stale history while new data loads.
+  useEffect(() => {
+    if (!marketId) return;
+    if (!yesSeries.current || !noSeries.current) return;
+    try {
+      yesSeries.current.setData([]);
+      noSeries.current.setData([]);
+      setChartInitError(null);
+    } catch {
+      // ignore; if the chart isn't ready yet, the regular data effect will handle it.
+    }
+  }, [marketId]);
 
   // Initialize series when chart is ready
   useEffect(() => {
@@ -236,6 +254,7 @@ export function PredictionProbabilityChart({
 
   // Update data when chart data changes
   useEffect(() => {
+    if (chartBaseError) return;
     if (!yesSeries.current || !noSeries.current || !chart) return;
 
     if (!chartData.yes.length || !chartData.no.length) {
@@ -261,45 +280,12 @@ export function PredictionProbabilityChart({
         error instanceof Error ? error.message : 'Failed to render chart data';
       setChartInitError(message);
     }
-  }, [chart, chartData]);
+  }, [chart, chartData, chartBaseError]);
 
-  // Loading state when no data
-  if (!data.length) {
-    return (
-      <div
-        className={cn(
-          'flex items-center justify-center text-muted-foreground',
-          chartHeightClassName
-        )}
-      >
-        <div className="text-center">
-          <div className="text-sm">Loading chart data...</div>
-        </div>
-      </div>
-    );
-  }
-
-  if (chartInitError) {
-    return (
-      <div
-        className={cn(
-          'flex items-center justify-center text-muted-foreground',
-          chartHeightClassName
-        )}
-      >
-        <div className="text-center">
-          <div className="text-sm">Chart unavailable</div>
-          <div className="mt-1 text-xs">{chartInitError}</div>
-        </div>
-      </div>
-    );
-  }
+  const unavailableError = chartBaseError ?? chartInitError;
 
   return (
-    <div
-      className={cn('flex w-full flex-col space-y-3', className)}
-      key={marketId}
-    >
+    <div className={cn('flex w-full flex-col space-y-3', className)}>
       {/* Header with probabilities and time range selector */}
       <div className="flex flex-wrap items-center justify-between gap-3 px-1">
         <div className="flex items-center gap-4">
@@ -341,14 +327,31 @@ export function PredictionProbabilityChart({
           ref={chartContainerRef}
           className="h-full w-full rounded-lg bg-muted/10"
         />
-        {!chart && (
+        {unavailableError && (
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+            <div className="rounded-lg bg-card/90 px-4 py-2 text-muted-foreground text-sm">
+              <div className="text-center">
+                <div>Chart unavailable</div>
+                <div className="mt-1 text-xs">{unavailableError}</div>
+              </div>
+            </div>
+          </div>
+        )}
+        {!unavailableError && !chart && (
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
             <div className="rounded-lg bg-card/90 px-4 py-2 text-muted-foreground text-sm">
               Initializing chart…
             </div>
           </div>
         )}
-        {chartData.yes.length === 0 && data.length > 0 && (
+        {!unavailableError && data.length === 0 && (
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+            <div className="rounded-lg bg-card/90 px-4 py-2 text-muted-foreground text-sm">
+              Loading chart data...
+            </div>
+          </div>
+        )}
+        {!unavailableError && chartData.yes.length === 0 && data.length > 0 && (
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
             <div className="rounded-lg bg-card/90 px-4 py-2 text-muted-foreground text-sm">
               No data in selected time range
