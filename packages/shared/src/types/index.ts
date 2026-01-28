@@ -37,3 +37,5 @@ export * from './payments';
 export * from './profile';
 // Profile types (user/actor profiles)
 export * from './profiles';
+// Response session types (Command Center grouped responses)
+export * from './responseSession';

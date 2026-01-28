@@ -112,6 +112,8 @@ export default function TeamChatPage() {
     createConversation,
     switchConversation,
     renameConversation,
+    // Response sessions (grouped agent responses)
+    responseSessions,
   } = useTeamChat();
 
   // Mobile member drawer state
@@ -558,6 +560,7 @@ export default function TeamChatPage() {
             onToggleLeftSidebar={() => setLeftSidebarCollapsed((p) => !p)}
             rightSidebarOpen={rightSidebarOpen}
             onToggleRightSidebar={toggleRightSidebar}
+            responseSessions={responseSessions}
           />
         </div>
 

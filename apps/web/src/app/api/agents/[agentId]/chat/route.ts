@@ -20,7 +20,14 @@ import {
   broadcastChatMessage,
   withErrorHandling,
 } from '@babylon/api';
-import { db, eq, messages, userAgentConfigs, users } from '@babylon/db';
+import {
+  db,
+  eq,
+  messages,
+  responseSessions,
+  userAgentConfigs,
+  users,
+} from '@babylon/db';
 import {
   checkUserInput,
   GROQ_MODELS,
@@ -280,6 +287,69 @@ Output ONLY this XML with your actual response (not examples or placeholders):
 </response>`;
 
 // =============================================================================
+// Helper Functions
+// =============================================================================
+
+/**
+ * Update response session status after an agent responds.
+ * Checks if all expected agents have responded and marks session complete.
+ */
+async function updateResponseSessionStatus(
+  sessionId: string,
+  respondingAgentId: string
+): Promise<void> {
+  try {
+    // Get the session to check expected agents
+    const [session] = await db
+      .select()
+      .from(responseSessions)
+      .where(eq(responseSessions.id, sessionId))
+      .limit(1);
+
+    if (!session || session.status !== 'processing') {
+      return; // Session doesn't exist or already completed
+    }
+
+    // Count how many expected agents have responded
+    const responses = await db
+      .select({ senderId: messages.senderId })
+      .from(messages)
+      .where(eq(messages.responseSessionId, sessionId));
+
+    const respondedAgentIds = new Set(responses.map((r) => r.senderId));
+
+    // Check if all expected agents have responded
+    const allResponded = session.expectedAgentIds.every((agentId) =>
+      respondedAgentIds.has(agentId)
+    );
+
+    if (allResponded) {
+      // Mark session as complete
+      await db
+        .update(responseSessions)
+        .set({
+          status: 'complete',
+          completedAt: new Date(),
+        })
+        .where(eq(responseSessions.id, sessionId));
+
+      logger.info(
+        `Response session ${sessionId} completed - all agents responded`,
+        { expectedAgents: session.expectedAgentIds.length },
+        'AgentChat'
+      );
+    }
+  } catch (error) {
+    // Don't fail the request if session update fails
+    logger.warn(
+      `Failed to update response session status: ${error}`,
+      { sessionId, respondingAgentId },
+      'AgentChat'
+    );
+  }
+}
+
+// =============================================================================
 // POST Handler
 // =============================================================================
 
@@ -300,12 +370,15 @@ export const POST = withErrorHandling(
       teamChatOwnerName?: string;
       /** Owner username for team chat context */
       teamChatOwnerUsername?: string;
+      /** Optional response session ID - links this response to a session for grouping */
+      responseSessionId?: string;
     };
     const message = body.message;
     const usePro = body.usePro ?? false;
     const teamChatId = body.teamChatId;
     const teamChatOwnerName = body.teamChatOwnerName;
     const teamChatOwnerUsername = body.teamChatOwnerUsername;
+    const responseSessionId = body.responseSessionId;
     const isTeamChatMode = !!teamChatId;
 
     // Get abort signal from request for cancellation support
@@ -795,16 +868,24 @@ export const POST = withErrorHandling(
       // User message is written by frontend (once) before calling multiple agents
       responseMessageId = await generateSnowflakeId();
 
-      // Write agent response to team chat
+      // Write agent response to team chat (with optional session link)
       await db.insert(messages).values({
         id: responseMessageId,
         chatId: teamChatId,
         senderId: agentId,
         content: responseText,
         createdAt: assistantMessageTime,
+        // Link to response session if provided (for grouped agent responses)
+        responseSessionId: responseSessionId || null,
       });
 
+      // Update response session status if this completes all expected responses
+      if (responseSessionId) {
+        await updateResponseSessionStatus(responseSessionId, agentId);
+      }
+
       // Broadcast agent response to team chat
+      // Include responseSessionId so client can filter grouped responses
       broadcastChatMessage(teamChatId, {
         id: responseMessageId,
         content: responseText,
@@ -812,6 +893,7 @@ export const POST = withErrorHandling(
         senderId: agentId,
         type: 'user',
         createdAt: assistantMessageTime.toISOString(),
+        responseSessionId: responseSessionId || undefined,
       }).catch((err) => {
         logger.warn(
           `Failed to broadcast agent message to team chat: ${err}`,
@@ -822,7 +904,7 @@ export const POST = withErrorHandling(
 
       logger.info(
         `Agent response written to team chat ${teamChatId}`,
-        { agentMessageId: responseMessageId, agentId },
+        { agentMessageId: responseMessageId, agentId, responseSessionId },
         'AgentChat'
       );
     } else {

@@ -1,5 +1,6 @@
 'use client';
 
+import type { ResponseSession } from '@babylon/shared';
 import {
   Brain,
   MessageCircle,
@@ -10,11 +11,24 @@ import {
 } from 'lucide-react';
 import React from 'react';
 import { Separator } from '@/components/shared/Separator';
+import { CommandCenterMessageList } from './CommandCenterMessageList';
 import { FeedbackMessages } from './FeedbackMessages';
 import type { MentionableAgent } from './MentionAutocomplete';
 import { MessageInput } from './MessageInput';
-import { MessageList } from './MessageList';
 import type { ChatDetails } from './types';
+
+/** Agent response for session */
+interface AgentResponse {
+  messageId: string;
+  agentId: string;
+  content: string;
+  createdAt: string | null;
+}
+
+/** Response session with responses */
+type ResponseSessionWithResponses = ResponseSession & {
+  responses: AgentResponse[];
+};
 
 /** Typing user info */
 interface TypingUserInfo {
@@ -123,6 +137,8 @@ interface TeamChatViewProps {
   rightSidebarOpen?: boolean;
   /** Callback to toggle right sidebar */
   onToggleRightSidebar?: () => void;
+  /** Response sessions for grouped agent responses */
+  responseSessions?: Map<string, ResponseSessionWithResponses>;
 }
 
 /**
@@ -154,6 +170,7 @@ export function TeamChatView({
   onToggleLeftSidebar,
   rightSidebarOpen = false,
   onToggleRightSidebar,
+  responseSessions = new Map(),
 }: TeamChatViewProps) {
   // Empty state when no chat selected
   if (!chatDetails) {
@@ -241,7 +258,7 @@ export function TeamChatView({
         className="relative min-h-0 min-w-0 flex-1 space-y-4 overflow-y-auto overflow-x-hidden px-4 py-3"
         onScroll={(e) => onScroll?.(e.currentTarget)}
       >
-        <MessageList
+        <CommandCenterMessageList
           messages={chatDetails.messages || []}
           participants={chatDetails.participants || []}
           currentUserId={currentUserId}
@@ -251,6 +268,7 @@ export function TeamChatView({
           authenticated={authenticated}
           topSentinelRef={topSentinelRef}
           messagesEndRef={messagesEndRef}
+          responseSessions={responseSessions}
         />
       </div>
 

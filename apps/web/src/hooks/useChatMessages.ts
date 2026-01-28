@@ -18,6 +18,8 @@ export interface ChatMessage {
   isGameChat?: boolean;
   /** Stable key for React rendering - prevents flash when optimistic messages are replaced */
   stableKey?: string;
+  /** Response session ID - if set, this message is part of a grouped response */
+  responseSessionId?: string;
 }
 
 /** Raw message from API (createdAt may be string or Date) */
@@ -27,6 +29,7 @@ interface RawApiMessage {
   senderId: string;
   type?: MessageType;
   createdAt: string | Date;
+  responseSessionId?: string | null;
 }
 
 /** Format raw API message to ChatMessage */
@@ -41,6 +44,7 @@ function formatMessage(msg: RawApiMessage, chatId: string): ChatMessage {
       typeof msg.createdAt === 'string'
         ? msg.createdAt
         : msg.createdAt.toISOString(),
+    responseSessionId: msg.responseSessionId || undefined,
   };
 }
 
@@ -187,9 +191,10 @@ export function useChatMessages(chatId: string | null) {
       if (response.ok) {
         const data = await response.json();
         if (data.messages) {
-          const formatted = (data.messages as RawApiMessage[]).map((msg) =>
-            formatMessage(msg, chatId)
-          );
+          // Filter out messages that belong to response sessions (shown in grid)
+          const formatted = (data.messages as RawApiMessage[])
+            .map((msg) => formatMessage(msg, chatId))
+            .filter((msg) => !msg.responseSessionId);
           setMessages(formatted);
           setHasMore(data.pagination?.hasMore ?? false);
           setNextCursor(data.pagination?.nextCursor ?? null);
@@ -242,9 +247,10 @@ export function useChatMessages(chatId: string | null) {
     if (response.ok) {
       const data = await response.json();
       if (data.messages?.length > 0) {
-        const formatted = (data.messages as RawApiMessage[]).map((msg) =>
-          formatMessage(msg, chatId)
-        );
+        // Filter out messages that belong to response sessions (shown in grid)
+        const formatted = (data.messages as RawApiMessage[])
+          .map((msg) => formatMessage(msg, chatId))
+          .filter((msg) => !msg.responseSessionId);
         setMessages((prev) => [...formatted, ...prev]);
         setHasMore(data.pagination?.hasMore ?? false);
         setNextCursor(data.pagination?.nextCursor ?? null);
@@ -274,6 +280,17 @@ export function useChatMessages(chatId: string | null) {
         typeof m.createdAt !== 'string' ||
         m.chatId !== chatId
       ) {
+        return;
+      }
+
+      // Skip messages that belong to a response session (Command Center grouped responses)
+      // These are displayed in the AgentResponseGrid, not as individual bubbles
+      if (typeof m.responseSessionId === 'string' && m.responseSessionId) {
+        logger.debug(
+          'Skipping SSE message with responseSessionId',
+          { messageId: m.id, responseSessionId: m.responseSessionId },
+          'useChatMessages'
+        );
         return;
       }
 
@@ -352,9 +369,10 @@ export function useChatMessages(chatId: string | null) {
           const data = await response.json();
           if (!data.messages) return;
 
-          const formatted = (data.messages as RawApiMessage[]).map((msg) =>
-            formatMessage(msg, chatId)
-          );
+          // Filter out messages that belong to response sessions (shown in grid)
+          const formatted = (data.messages as RawApiMessage[])
+            .map((msg) => formatMessage(msg, chatId))
+            .filter((msg) => !msg.responseSessionId);
 
           setMessages((prev) => {
             const existingIds = new Set(prev.map((m) => m.id));
@@ -404,6 +422,15 @@ export function useChatMessages(chatId: string | null) {
   }, [isConnected, chatId]);
 
   const addMessage = useCallback((message: ChatMessage) => {
+    // Skip messages that belong to a response session (shown in grid, not as bubbles)
+    if (message.responseSessionId) {
+      logger.debug(
+        'Skipping addMessage with responseSessionId',
+        { messageId: message.id, responseSessionId: message.responseSessionId },
+        'useChatMessages'
+      );
+      return;
+    }
     setMessages((prev) => replaceOptimisticMessage(prev, message));
   }, []);
 

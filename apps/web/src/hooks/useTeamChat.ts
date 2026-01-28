@@ -5,6 +5,8 @@
  * containing all their agents.
  */
 
+import type { ResponseSession } from '@babylon/shared';
+import { MAX_RESPONDING_AGENTS } from '@babylon/shared';
 import { usePrivy } from '@privy-io/react-auth';
 import {
   useCallback,
@@ -25,8 +27,6 @@ const SCROLL_NEAR_BOTTOM_THRESHOLD = 150;
 const SCROLL_STABLE_FRAMES_REQUIRED = 5;
 // Maximum retries for scroll height stabilization (~2 seconds max)
 const MAX_SCROLL_STABLE_RETRIES = 20;
-// Default number of agents to respond when no one is tagged
-const DEFAULT_AGENTS_TO_RESPOND = 4;
 
 /**
  * Extract agent IDs from @mentions in message content.
@@ -149,6 +149,22 @@ interface UseTeamChatReturn {
   renameConversation: (chatId: string, newTitle: string) => Promise<void>;
   deleteConversation: (chatId: string) => Promise<void>;
   refreshConversations: () => Promise<void>;
+
+  // Response sessions (grouped agent responses)
+  responseSessions: Map<string, ResponseSessionWithResponses>;
+  refreshSessions: () => Promise<void>;
+}
+
+/** Response session with agent responses for rendering */
+interface ResponseSessionWithResponses extends ResponseSession {
+  responses: {
+    messageId: string;
+    agentId: string;
+    content: string;
+    createdAt: string | null;
+  }[];
+  /** Agent IDs that failed to respond (client-side tracking only) */
+  failedAgentIds?: string[];
 }
 
 export function useTeamChat(): UseTeamChatReturn {
@@ -181,6 +197,11 @@ export function useTeamChat(): UseTeamChatReturn {
   // Conversations state (fresh chat feature)
   const [conversations, setConversations] = useState<ConversationInfo[]>([]);
   const [conversationsLoading, setConversationsLoading] = useState(false);
+
+  // Response sessions state (grouped agent responses)
+  const [responseSessions, setResponseSessions] = useState<
+    Map<string, ResponseSessionWithResponses>
+  >(new Map());
 
   // Refs
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
@@ -313,6 +334,24 @@ export function useTeamChat(): UseTeamChatReturn {
       if (timeoutId) clearTimeout(timeoutId);
     };
   }, [realtimeMessages.length, scrollToBottom]);
+
+  // Scroll to bottom when response sessions update (agent responses added)
+  const prevSessionSizeRef = useRef(0);
+  useEffect(() => {
+    // Calculate total responses across all sessions
+    let totalResponses = 0;
+    for (const session of responseSessions.values()) {
+      totalResponses += session.responses.length;
+    }
+
+    const prevSize = prevSessionSizeRef.current;
+    prevSessionSizeRef.current = totalResponses;
+
+    // If responses were added and user was near bottom, scroll down
+    if (totalResponses > prevSize && wasNearBottomRef.current) {
+      setTimeout(() => scrollToBottom('instant'), 50);
+    }
+  }, [responseSessions, scrollToBottom]);
 
   // Maintain scroll position when messages are replaced (optimistic → confirmed)
   // Runs synchronously before paint to prevent visible jump
@@ -656,7 +695,7 @@ export function useTeamChat(): UseTeamChatReturn {
     const agentsToCall =
       mentionedAgentIds.length > 0
         ? mentionedAgentIds
-        : teamChat.agents.slice(0, DEFAULT_AGENTS_TO_RESPOND).map((a) => a.id);
+        : teamChat.agents.slice(0, MAX_RESPONDING_AGENTS).map((a) => a.id);
 
     // Filter out any agents that are already processing
     const availableAgents = agentsToCall.filter(
@@ -694,13 +733,17 @@ export function useTeamChat(): UseTeamChatReturn {
       }
 
       // First, save user message to team chat (happens once for all agents)
+      // Also creates a response session for grouping agent responses
       const response = await fetch('/api/agents/team-chat/message', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ content }),
+        body: JSON.stringify({
+          content,
+          expectedAgentIds: availableAgents,
+        }),
       });
 
       if (!response.ok) {
@@ -710,6 +753,101 @@ export function useTeamChat(): UseTeamChatReturn {
         setSendError(data.message || data.error || 'Failed to send message');
         return;
       }
+
+      // Get session ID from response for linking agent responses
+      const messageData = (await response.json()) as {
+        success: boolean;
+        message: { id: string };
+        sessionId?: string;
+        expectedAgentIds?: string[];
+      };
+      const sessionId = messageData.sessionId;
+
+      // Initialize the session in local state for real-time UI updates
+      // Key by BOTH optimistic ID and server ID so lookup works before SSE confirms
+      if (sessionId && messageData.message) {
+        const sessionData = {
+          id: sessionId,
+          chatId: teamChat.chatId,
+          userMessageId: messageData.message.id,
+          expectedAgentIds: availableAgents,
+          status: 'processing' as const,
+          summary: null,
+          createdAt: new Date().toISOString(),
+          completedAt: null,
+          responses: [],
+          failedAgentIds: [],
+        };
+        setResponseSessions((prev) => {
+          const next = new Map(prev);
+          // Key by optimistic ID (for immediate UI) and server ID (for persistence)
+          next.set(optimisticId, sessionData);
+          next.set(messageData.message.id, sessionData);
+          return next;
+        });
+      }
+
+      // Helper to mark agent as failed and update session status
+      const markAgentFailed = (agentId: string) => {
+        if (!sessionId || !messageData.message) return;
+
+        // Update local state
+        setResponseSessions((prev) => {
+          const session =
+            prev.get(messageData.message.id) || prev.get(optimisticId);
+          if (!session) return prev;
+
+          const currentFailedIds =
+            (session as { failedAgentIds?: string[] }).failedAgentIds || [];
+          if (currentFailedIds.includes(agentId)) return prev; // Already marked
+
+          const newFailedIds = [...currentFailedIds, agentId];
+          const updatedSession = {
+            ...session,
+            failedAgentIds: newFailedIds,
+          };
+
+          // Check if all agents have either responded or failed
+          const totalHandled =
+            updatedSession.responses.length + newFailedIds.length;
+          if (totalHandled >= updatedSession.expectedAgentIds.length) {
+            updatedSession.status = 'complete';
+            updatedSession.completedAt = new Date().toISOString();
+          }
+
+          const next = new Map(prev);
+          next.set(optimisticId, updatedSession);
+          next.set(messageData.message.id, updatedSession);
+          return next;
+        });
+      };
+
+      // Helper to update DB session status after all agents complete
+      const updateSessionStatusInDb = async () => {
+        if (!sessionId) return;
+        try {
+          const apiToken = await getAccessToken();
+          const response = await fetch(
+            `/api/agents/team-chat/sessions/${sessionId}`,
+            {
+              method: 'PATCH',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${apiToken}`,
+              },
+              body: JSON.stringify({ status: 'complete' }),
+            }
+          );
+          if (!response.ok) {
+            console.error(
+              'Failed to update session status in DB:',
+              response.status
+            );
+          }
+        } catch (err) {
+          console.error('Failed to update session status in DB:', err);
+        }
+      };
 
       // Call available agents in parallel (skip any that are already processing)
       // Mark agents as processing
@@ -750,6 +888,8 @@ export function useTeamChat(): UseTeamChatReturn {
               teamChatId: teamChat.chatId,
               teamChatOwnerName: ownerName,
               teamChatOwnerUsername: ownerUsername,
+              // Link response to session for grouped display
+              responseSessionId: sessionId,
             }),
             signal: controller.signal,
           });
@@ -765,20 +905,52 @@ export function useTeamChat(): UseTeamChatReturn {
               isLLMFailure?: boolean;
             };
 
-            // Add agent response message IMMEDIATELY from JSON response
-            // This prevents the delay from waiting for SSE broadcast
-            // stableKey prevents duplicate if SSE also delivers the same message
-            // Note: Auto-scroll is handled by the realtimeMessages.length effect
+            // Handle successful agent response
             if (data.response && data.messageId) {
-              addMessage({
-                id: data.messageId,
-                chatId: teamChat.chatId,
-                content: data.response,
-                senderId: agentId,
-                type: 'user',
-                createdAt: new Date().toISOString(),
-                stableKey: data.messageId,
-              });
+              // IMPORTANT: Update session FIRST so sessionResponseMessageIds
+              // includes this message before it renders (prevents flash as regular bubble)
+              if (sessionId && messageData.message) {
+                setResponseSessions((prev) => {
+                  const session =
+                    prev.get(messageData.message.id) || prev.get(optimisticId);
+                  if (!session) return prev;
+
+                  const next = new Map(prev);
+                  const currentFailedIds =
+                    (session as { failedAgentIds?: string[] }).failedAgentIds ||
+                    [];
+                  const updatedSession = {
+                    ...session,
+                    responses: [
+                      ...session.responses,
+                      {
+                        messageId: data.messageId!,
+                        agentId,
+                        content: data.response!,
+                        createdAt: new Date().toISOString(),
+                      },
+                    ],
+                    failedAgentIds: currentFailedIds,
+                  };
+
+                  // Check if all agents have either responded or failed
+                  const totalHandled =
+                    updatedSession.responses.length + currentFailedIds.length;
+                  if (totalHandled >= updatedSession.expectedAgentIds.length) {
+                    updatedSession.status = 'complete';
+                    updatedSession.completedAt = new Date().toISOString();
+                  }
+
+                  // Update both keys
+                  next.set(optimisticId, updatedSession);
+                  next.set(messageData.message.id, updatedSession);
+                  return next;
+                });
+              }
+
+              // NOTE: We don't call addMessage here because agent responses in Command Center
+              // are shown in the grid via session.responses, not as individual message bubbles.
+              // The session update above already adds the response to the grid.
             }
 
             // Show toast based on response type
@@ -810,6 +982,7 @@ export function useTeamChat(): UseTeamChatReturn {
             }
           } else {
             // Handle error response from backend
+            markAgentFailed(agentId);
             try {
               const errorData = (await agentResponse.json()) as {
                 error?: string;
@@ -832,6 +1005,8 @@ export function useTeamChat(): UseTeamChatReturn {
             }
           }
         } catch (err) {
+          // Mark agent as failed in session
+          markAgentFailed(agentId);
           // Don't show toast for abort errors - they're expected when user stops
           if (err instanceof Error && err.name === 'AbortError') {
             // User cancelled, no need to notify
@@ -855,8 +1030,10 @@ export function useTeamChat(): UseTeamChatReturn {
 
       // Don't await - let agents process in background
       // Responses will come through SSE/broadcast
-      Promise.all(agentCalls).catch((err) => {
-        console.error('Error in parallel agent calls:', err);
+      // After all agents complete (success or fail), update DB session status
+      Promise.allSettled(agentCalls).then(() => {
+        // Update DB session status to complete after all agents have finished
+        updateSessionStatusInDb();
       });
     } catch (err) {
       // Rollback optimistic message on network error
@@ -909,6 +1086,58 @@ export function useTeamChat(): UseTeamChatReturn {
       setConversationsLoading(false);
     }
   }, [user, getAccessToken]);
+
+  /**
+   * Fetch response sessions for the current chat
+   */
+  const refreshSessions = useCallback(async () => {
+    if (!user || !teamChat?.chatId) return;
+
+    try {
+      const token = await getAccessToken();
+      const response = await fetch('/api/agents/team-chat/sessions?limit=50', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (response.ok) {
+        const data = (await response.json()) as {
+          sessions: ResponseSessionWithResponses[];
+        };
+
+        // Build map keyed by userMessageId for easy lookup
+        // If session is complete but some agents have no response, they failed
+        const sessionsMap = new Map<string, ResponseSessionWithResponses>();
+
+        for (const session of data.sessions) {
+          const respondedAgentIds = new Set(
+            session.responses.map((r) => r.agentId)
+          );
+
+          // If session is complete but some expected agents didn't respond, mark them as failed
+          if (session.status === 'complete') {
+            const failedAgentIds = session.expectedAgentIds.filter(
+              (id) => !respondedAgentIds.has(id)
+            );
+            sessionsMap.set(session.userMessageId, {
+              ...session,
+              failedAgentIds:
+                failedAgentIds.length > 0 ? failedAgentIds : undefined,
+            });
+          } else {
+            sessionsMap.set(session.userMessageId, session);
+          }
+        }
+        setResponseSessions(sessionsMap);
+
+        // Scroll to bottom after sessions load (content may have grown)
+        if (sessionsMap.size > 0) {
+          setTimeout(() => scrollToBottom('instant'), 100);
+        }
+      }
+    } catch (err) {
+      console.error('Failed to fetch response sessions:', err);
+    }
+  }, [user, teamChat?.chatId, getAccessToken, scrollToBottom]);
 
   /**
    * Create a new conversation (New Chat)
@@ -1109,6 +1338,14 @@ export function useTeamChat(): UseTeamChatReturn {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally depend on id only
   }, [teamChat?.id, user, refreshConversations]);
 
+  // Fetch response sessions when team chat loads
+  useEffect(() => {
+    if (teamChat?.chatId && user) {
+      refreshSessions();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally depend on chatId only
+  }, [teamChat?.chatId, user, refreshSessions]);
+
   return {
     teamChat,
     chatDetails,
@@ -1145,5 +1382,9 @@ export function useTeamChat(): UseTeamChatReturn {
     renameConversation,
     deleteConversation,
     refreshConversations,
+
+    // Response sessions (grouped agent responses)
+    responseSessions,
+    refreshSessions,
   };
 }

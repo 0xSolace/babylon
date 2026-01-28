@@ -27,6 +27,13 @@ export const groupTypeEnum = pgEnum('group_type', [
 // Enum for message types
 export const messageTypeEnum = pgEnum('message_type', ['user', 'system']);
 
+// Enum for response session status (Command Center grouped responses)
+export const responseSessionStatusEnum = pgEnum('response_session_status', [
+  'processing',
+  'complete',
+  'timeout',
+]);
+
 // Chat
 export const chats = pgTable(
   'Chat',
@@ -98,11 +105,43 @@ export const messages = pgTable(
     content: text('content').notNull(),
     type: messageTypeEnum('type').notNull().default('user'),
     createdAt: timestamp('createdAt', { mode: 'date' }).notNull().defaultNow(),
+    // Links agent response to its response session (Command Center)
+    responseSessionId: text('responseSessionId'),
   },
   (table) => [
     index('Message_chatId_createdAt_idx').on(table.chatId, table.createdAt),
     index('Message_senderId_idx').on(table.senderId),
     index('Message_type_idx').on(table.type),
+    index('Message_responseSessionId_idx').on(table.responseSessionId),
+  ]
+);
+
+// Response Session (Command Center grouped agent responses)
+// Tracks a group of agent responses to a single user message
+export const responseSessions = pgTable(
+  'ResponseSession',
+  {
+    id: text('id').primaryKey(),
+    chatId: text('chatId').notNull(),
+    userMessageId: text('userMessageId').notNull(),
+    // Array of agent IDs expected to respond (max 4)
+    expectedAgentIds: text('expectedAgentIds').array().notNull(),
+    status: responseSessionStatusEnum('status').notNull().default('processing'),
+    // AI-generated summary of all agent responses (for future implementation)
+    summary: text('summary'),
+    createdAt: timestamp('createdAt', { withTimezone: true, mode: 'date' })
+      .notNull()
+      .defaultNow(),
+    completedAt: timestamp('completedAt', { withTimezone: true, mode: 'date' }),
+  },
+  (table) => [
+    index('ResponseSession_chatId_idx').on(table.chatId),
+    index('ResponseSession_userMessageId_idx').on(table.userMessageId),
+    index('ResponseSession_chatId_createdAt_idx').on(
+      table.chatId,
+      table.createdAt
+    ),
+    index('ResponseSession_status_idx').on(table.status),
   ]
 );
 
@@ -356,7 +395,26 @@ export const messagesRelations = relations(messages, ({ one }) => ({
     fields: [messages.chatId],
     references: [chats.id],
   }),
+  responseSession: one(responseSessions, {
+    fields: [messages.responseSessionId],
+    references: [responseSessions.id],
+  }),
 }));
+
+export const responseSessionsRelations = relations(
+  responseSessions,
+  ({ one, many }) => ({
+    chat: one(chats, {
+      fields: [responseSessions.chatId],
+      references: [chats.id],
+    }),
+    userMessage: one(messages, {
+      fields: [responseSessions.userMessageId],
+      references: [messages.id],
+    }),
+    agentResponses: many(messages),
+  })
+);
 
 export const groupsRelations = relations(groups, ({ many }) => ({
   chats: many(chats),
@@ -388,6 +446,8 @@ export type ChatParticipant = typeof chatParticipants.$inferSelect;
 export type NewChatParticipant = typeof chatParticipants.$inferInsert;
 export type Message = typeof messages.$inferSelect;
 export type NewMessage = typeof messages.$inferInsert;
+export type ResponseSession = typeof responseSessions.$inferSelect;
+export type NewResponseSession = typeof responseSessions.$inferInsert;
 export type DMAcceptance = typeof dmAcceptances.$inferSelect;
 export type NewDMAcceptance = typeof dmAcceptances.$inferInsert;
 export type Notification = typeof notifications.$inferSelect;
@@ -407,6 +467,7 @@ export type GroupMemberRole = 'owner' | 'admin' | 'member';
 export type GroupInviteStatus = 'pending' | 'accepted' | 'declined';
 // MessageType is exported from @babylon/shared - use that canonical definition
 export type { MessageType } from '@babylon/shared';
+export type ResponseSessionStatus = 'processing' | 'complete' | 'timeout';
 // TierLevel is exported from @babylon/shared - use that canonical definition
 
 // Alpha group enhancement types (for grandfathering and invite decay)

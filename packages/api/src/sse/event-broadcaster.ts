@@ -85,6 +85,8 @@ export async function broadcastChatMessage(
     createdAt: string;
     isGameChat?: boolean;
     isDMChat?: boolean;
+    /** Response session ID for grouped agent responses in Command Center */
+    responseSessionId?: string;
   }
 ): Promise<void> {
   logger.info(

@@ -44,6 +44,8 @@ export interface Message {
   createdAt: string;
   /** Stable key for React rendering - prevents flash when optimistic messages are replaced */
   stableKey?: string;
+  /** Response session ID - if set, this message is part of a grouped response */
+  responseSessionId?: string;
 }
 
 export interface ChatParticipant {

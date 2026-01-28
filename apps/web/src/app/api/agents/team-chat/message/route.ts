@@ -48,8 +48,13 @@ import {
   checkRateLimitAsync,
   RATE_LIMIT_CONFIGS,
 } from '@babylon/api';
-import { db, generateSnowflakeId, messages } from '@babylon/db';
-import { logger } from '@babylon/shared';
+import {
+  db,
+  generateSnowflakeId,
+  messages,
+  responseSessions,
+} from '@babylon/db';
+import { logger, MAX_RESPONDING_AGENTS } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
@@ -64,6 +69,14 @@ const messageSchema = z.object({
     .string()
     .min(1, 'Message content is required')
     .max(4000, 'Message too long. Maximum 4000 characters allowed.'),
+  // Optional: List of agent IDs expected to respond (for creating response session)
+  expectedAgentIds: z
+    .array(z.string())
+    .max(
+      MAX_RESPONDING_AGENTS,
+      `Maximum ${MAX_RESPONDING_AGENTS} agents can respond`
+    )
+    .optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -105,7 +118,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const { content } = parseResult.data;
+  const { content, expectedAgentIds } = parseResult.data;
 
   // Get user's team chat
   const teamChat = await teamChatService.getTeamChat(user.id);
@@ -134,9 +147,29 @@ export async function POST(req: NextRequest) {
     createdAt: now,
   });
 
+  // Create response session if agents are expected to respond
+  let sessionId: string | undefined;
+  if (expectedAgentIds && expectedAgentIds.length > 0) {
+    sessionId = await generateSnowflakeId();
+    await db.insert(responseSessions).values({
+      id: sessionId,
+      chatId: teamChat.chatId,
+      userMessageId: messageId,
+      expectedAgentIds: expectedAgentIds.slice(0, MAX_RESPONDING_AGENTS),
+      status: 'processing',
+      createdAt: now,
+    });
+
+    logger.info(
+      `Response session created for user ${user.id}`,
+      { sessionId, expectedAgentIds: expectedAgentIds.length },
+      'TeamChatMessageAPI'
+    );
+  }
+
   logger.info(
     `Team chat message sent by user ${user.id}`,
-    { chatId: teamChat.chatId, messageId },
+    { chatId: teamChat.chatId, messageId, sessionId },
     'TeamChatMessageAPI'
   );
 
@@ -167,6 +200,9 @@ export async function POST(req: NextRequest) {
         type: 'user',
         createdAt: now.toISOString(),
       },
+      // Include session info if created
+      sessionId,
+      expectedAgentIds: expectedAgentIds?.slice(0, MAX_RESPONDING_AGENTS),
     },
     { status: 201 }
   );

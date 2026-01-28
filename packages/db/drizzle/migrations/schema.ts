@@ -3,6 +3,7 @@ export const agentStatus = pgEnum("AgentStatus", ['REGISTERED', 'INITIALIZED', '
 export const agentType = pgEnum("AgentType", ['USER_CONTROLLED', 'NPC', 'EXTERNAL'])
 export const onboardingStatus = pgEnum("OnboardingStatus", ['PENDING_PROFILE', 'PENDING_ONCHAIN', 'ONCHAIN_IN_PROGRESS', 'ONCHAIN_FAILED', 'COMPLETED'])
 export const realtimeOutboxStatus = pgEnum("RealtimeOutboxStatus", ['pending', 'sent', 'failed'])
+export const responseSessionStatus = pgEnum("response_session_status", ['processing', 'complete', 'timeout'])
 
 
 export const worldEvent = pgTable("WorldEvent", {
@@ -1529,9 +1530,27 @@ export const message = pgTable("Message", {
 	senderId: text().notNull(),
 	content: text().notNull(),
 	createdAt: timestamp({ mode: 'string' }).defaultNow().notNull(),
+	responseSessionId: text(),
 }, (table) => [
 	index("Message_chatId_createdAt_idx").using("btree", table.chatId.asc().nullsLast().op("text_ops"), table.createdAt.asc().nullsLast().op("text_ops")),
 	index("Message_senderId_idx").using("btree", table.senderId.asc().nullsLast().op("text_ops")),
+	index("Message_responseSessionId_idx").using("btree", table.responseSessionId.asc().nullsLast().op("text_ops")),
+]);
+
+export const responseSession = pgTable("ResponseSession", {
+	id: text().primaryKey().notNull(),
+	chatId: text().notNull(),
+	userMessageId: text().notNull(),
+	expectedAgentIds: text().array().notNull(),
+	status: responseSessionStatus().default('processing').notNull(),
+	summary: text(),
+	createdAt: timestamp({ withTimezone: true, mode: 'string' }).defaultNow().notNull(),
+	completedAt: timestamp({ withTimezone: true, mode: 'string' }),
+}, (table) => [
+	index("ResponseSession_chatId_idx").using("btree", table.chatId.asc().nullsLast().op("text_ops")),
+	index("ResponseSession_userMessageId_idx").using("btree", table.userMessageId.asc().nullsLast().op("text_ops")),
+	index("ResponseSession_chatId_createdAt_idx").using("btree", table.chatId.asc().nullsLast().op("text_ops"), table.createdAt.asc().nullsLast().op("timestamp_ops")),
+	index("ResponseSession_status_idx").using("btree", table.status.asc().nullsLast()),
 ]);
 
 export const notification = pgTable("Notification", {
