@@ -412,6 +412,8 @@ export const GET = withErrorHandling(
         senderId: msg.senderId,
         type: msg.type,
         createdAt: msg.createdAt,
+        // Include responseSessionId so client can filter grouped agent responses
+        responseSessionId: msg.responseSessionId,
       })),
       participants: participantsInfo,
       pagination: {
