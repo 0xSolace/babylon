@@ -1,0 +1,237 @@
+# Babylon RL Training - Phala Cloud TEE Deployment
+#
+# This docker-compose.yml is designed for Phala Cloud's Confidential Virtual Machines (CVMs).
+# It leverages TEE (Trusted Execution Environment) features for secure, verifiable training.
+#
+# Features:
+#   - TEE-protected training environment
+#   - Remote attestation for verifiable computation
+#   - Secure secret management via dstack.sock
+#   - GPU passthrough for accelerated training
+#   - Integrated log viewer (Dozzle)
+#   - Supports both PostgreSQL (live data) and HuggingFace datasets
+#
+# Usage:
+#   1. Set environment variables in .env file or export them
+#   2. Deploy via Phala Cloud CLI: phala cvms deploy docker-compose.yml
+#   3. Or upload via Phala Cloud Console: https://cloud.phala.network
+#
+# For local testing (without TEE):
+#   docker compose up -d
+#
+# =============================================================================
+
+version: "3.8"
+
+services:
+  # ===========================================================================
+  # Main Training Service
+  # ===========================================================================
+  babylon-training:
+    image: ${DOCKER_REGISTRY:-docker.io/revlentless}/babylon-training:${TAG:-latest}
+    container_name: babylon-training
+    restart: unless-stopped
+    
+    # GPU Configuration
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: ${GPU_COUNT:-1}
+              capabilities: [gpu]
+    
+    # Network ports
+    ports:
+      - "8000:8000"  # Training API (if enabled)
+      - "9001:9001"  # vLLM inference server
+      - "6006:6006"  # TensorBoard (if enabled)
+    
+    # Environment Configuration
+    environment:
+      # === Trajectory Source (choose one) ===
+      # "db" = PostgreSQL (default, for live training data)
+      # "huggingface" = HuggingFace dataset (frozen, reproducible)
+      - TRAJECTORY_SOURCE=${TRAJECTORY_SOURCE:-db}
+      
+      # === Database Source (used when TRAJECTORY_SOURCE=db) ===
+      - DATABASE_URL=${DATABASE_URL:-}
+      
+      # === HuggingFace Source (used when TRAJECTORY_SOURCE=huggingface) ===
+      - HF_TRAJECTORY_DATASET=${HF_TRAJECTORY_DATASET:-}
+      - HF_TRAJECTORY_SPLIT=${HF_TRAJECTORY_SPLIT:-raw}
+      
+      # === Training Data Configuration ===
+      # Minimum trajectories per window (set to 1 if windows have single trajectories)
+      - MIN_AGENTS_PER_WINDOW=${MIN_AGENTS_PER_WINDOW:-1}
+      
+      # === Experiment Tracking ===
+      - WANDB_API_KEY=${WANDB_API_KEY:-}
+      - WANDB_PROJECT=${WANDB_PROJECT:-babylon-training}
+      - WANDB_MODE=${WANDB_MODE:-offline}
+      - WANDB_RUN_NAME=${WANDB_RUN_NAME:-}
+      
+      # === HuggingFace Hub (model access and push) ===
+      - HF_TOKEN=${HF_TOKEN:-}
+      - HF_HOME=/app/.cache/huggingface
+      
+      # === Model Push (optional, post-training) ===
+      - HF_PUSH_REPO=${HF_PUSH_REPO:-}
+      - HF_MODEL_CODENAME=${HF_MODEL_CODENAME:-gilgamesh}
+      - HF_MODEL_PRIVATE=${HF_MODEL_PRIVATE:-false}
+      
+      # === Training Configuration ===
+      - TRAINING_PROFILE=${TRAINING_PROFILE:-auto}
+      - TRAINING_STEPS=${TRAINING_STEPS:-1000}
+      - TRAINING_CHECKPOINT_EVERY=${TRAINING_CHECKPOINT_EVERY:-100}
+      - TRAINING_RESUME_FROM=${TRAINING_RESUME_FROM:-}
+      
+      # === GPU Configuration ===
+      - CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-all}
+      # FLASHINFER is built into vLLM 0.14.0, no external deps needed
+      - VLLM_ATTENTION_BACKEND=${VLLM_ATTENTION_BACKEND:-FLASHINFER}
+      
+      # === TEE Configuration ===
+      # Enable attestation at training start/end
+      - TEE_ATTESTATION_ENABLED=${TEE_ATTESTATION_ENABLED:-true}
+      # Encrypt model checkpoints with TEE-derived keys
+      - TEE_ENCRYPT_CHECKPOINTS=${TEE_ENCRYPT_CHECKPOINTS:-false}
+      
+      # === Phala-specific ===
+      # App identifier for logging/monitoring
+      - PHALA_APP_ID=${PHALA_APP_ID:-babylon-training}
+    
+    # Volume Mounts
+    volumes:
+      # === TEE Socket (Required for attestation/key derivation) ===
+      # This socket is provided by Phala Cloud's CVM runtime
+      - /var/run/dstack.sock:/var/run/dstack.sock:ro
+      
+      # === Persistent Storage ===
+      # Trained model checkpoints
+      - trained_models:/app/trained_models
+      # Training logs
+      - logs:/app/logs
+      # HuggingFace model cache
+      - hf_cache:/app/.cache/huggingface
+      # Attestation reports
+      - attestations:/app/attestations
+    
+    # Startup Command
+    # Note: --hf-dataset is set dynamically via TRAJECTORY_SOURCE + HF_TRAJECTORY_DATASET
+    command: >
+      python3 python/scripts/run_training.py
+        --profile ${TRAINING_PROFILE:-auto}
+        --steps ${TRAINING_STEPS:-1000}
+        --checkpoint-every ${TRAINING_CHECKPOINT_EVERY:-100}
+        --min-agents-per-window ${MIN_AGENTS_PER_WINDOW:-1}
+        ${TRAINING_RESUME_FROM:+--resume-from ${TRAINING_RESUME_FROM}}
+        ${HF_TRAJECTORY_DATASET:+--hf-dataset ${HF_TRAJECTORY_DATASET}}
+    
+    # Health Check
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import torch; assert torch.cuda.is_available(), 'No GPU'"]
+      interval: 60s
+      timeout: 30s
+      retries: 3
+      start_period: 180s  # Allow time for model loading
+    
+    # Logging
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "200m"
+        max-file: "5"
+        labels: "service,training"
+    
+    # Labels for monitoring
+    labels:
+      - "app=babylon-training"
+      - "component=trainer"
+      - "tee=enabled"
+
+  # ===========================================================================
+  # Log Viewer (Dozzle)
+  # ===========================================================================
+  # Provides a web UI for viewing container logs
+  # Access at: http://<cvm-ip>:9999
+  dozzle:
+    image: amir20/dozzle:latest
+    container_name: dozzle
+    restart: unless-stopped
+    ports:
+      - "9999:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - DOZZLE_LEVEL=info
+      - DOZZLE_TAILSIZE=300
+      - DOZZLE_FILTER=name=babylon
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ===========================================================================
+  # Attestation Service (Optional)
+  # ===========================================================================
+  # Runs periodic attestation and exposes attestation endpoint
+  # attestation-service:
+  #   image: ${DOCKER_REGISTRY:-docker.io/revlentless}/babylon-training:${TAG:-latest}
+  #   container_name: attestation-service
+  #   restart: unless-stopped
+  #   ports:
+  #     - "8080:8080"  # Attestation API
+  #   volumes:
+  #     - /var/run/dstack.sock:/var/run/dstack.sock:ro
+  #     - attestations:/app/attestations
+  #   command: >
+  #     python3 -m phala.scripts.attestation_server
+  #       --port 8080
+  #       --interval 3600
+  #   depends_on:
+  #     - babylon-training
+
+# =============================================================================
+# Volumes
+# =============================================================================
+volumes:
+  trained_models:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${VOLUME_PATH:-/data}/trained_models
+  
+  logs:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${VOLUME_PATH:-/data}/logs
+  
+  hf_cache:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${VOLUME_PATH:-/data}/hf_cache
+  
+  attestations:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${VOLUME_PATH:-/data}/attestations
+
+# =============================================================================
+# Networks (Optional)
+# =============================================================================
+# Uncomment for custom network configuration
+# networks:
+#   training-net:
+#     driver: bridge
+#     ipam:
+#       config:
+#         - subnet: 172.28.0.0/16
