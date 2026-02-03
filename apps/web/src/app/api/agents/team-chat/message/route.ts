@@ -44,7 +44,7 @@
  */
 
 import { createGroq } from '@ai-sdk/groq';
-import { teamChatService } from '@babylon/agents';
+import { instructionService, teamChatService } from '@babylon/agents';
 import {
   authenticateUser,
   broadcastChatMessage,
@@ -57,6 +57,59 @@ import { generateText } from 'ai';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
+
+// =============================================================================
+// Instruction Parsing
+// =============================================================================
+
+/**
+ * Parse message for instructions and store them for targeted agents.
+ * Runs asynchronously (fire-and-forget) to not block the response.
+ *
+ * @param ownerId - The user who sent the message
+ * @param agentIds - The agents targeted by this message
+ * @param content - The message content
+ * @param messageId - The ID of the source message
+ */
+async function parseAndStoreInstructions(
+  ownerId: string,
+  agentIds: string[],
+  content: string,
+  messageId: string
+): Promise<void> {
+  // Parse the message to check if it contains an instruction
+  const parsed = await instructionService.parseUserMessage(content);
+
+  if (!parsed) {
+    // Not an instruction or low confidence - no action needed
+    return;
+  }
+
+  logger.info(
+    'Detected instruction in message',
+    {
+      ownerId,
+      agentCount: agentIds.length,
+      rule: parsed.rule,
+      category: parsed.category,
+      confidence: parsed.confidence,
+    },
+    'TeamChatMessageAPI'
+  );
+
+  // Create instruction for each targeted agent
+  await Promise.all(
+    agentIds.map((agentId) =>
+      instructionService.createInstruction(
+        agentId,
+        ownerId,
+        parsed,
+        content,
+        messageId
+      )
+    )
+  );
+}
 
 // =============================================================================
 // Title Generation
@@ -263,6 +316,23 @@ export async function POST(req: NextRequest) {
     isGameChat: false,
     isDMChat: false,
   });
+
+  // Parse message for instructions (fire-and-forget, don't block response)
+  // Only parse if targeting specific agents (not the coordinator)
+  if (providedTargetIds && providedTargetIds.length > 0) {
+    void parseAndStoreInstructions(
+      user.id,
+      providedTargetIds,
+      content.trim(),
+      messageId
+    ).catch((error) => {
+      logger.warn(
+        'Instruction parsing failed',
+        { error: error instanceof Error ? error.message : String(error) },
+        'TeamChatMessageAPI'
+      );
+    });
+  }
 
   // Generate chat title on first message
   // Check if chat needs title (name is null) and this is the first user message
