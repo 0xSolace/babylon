@@ -5,6 +5,7 @@
 export * from './actor-state';
 export * from './actors';
 export * from './admin';
+export * from './agent-instructions';
 export * from './agents';
 // Enums
 export * from './enums';
