@@ -6,6 +6,7 @@
  * Services are "dumb executors" - all reasoning happens here.
  */
 
+import type { AgentInstruction } from '@babylon/db';
 import { NPC_POST_QUALITY_RULES } from '@babylon/engine';
 
 // =============================================================================
@@ -348,6 +349,8 @@ export interface AgentTickContext {
   agentOwnPosts?: AgentOwnPostContext[];
   // Creator/owner info (for user-controlled agents)
   creator?: CreatorInfo;
+  // Owner-provided instructions (rules, strategies, directives)
+  activeInstructions?: AgentInstruction[];
 }
 
 export interface MultiStepDecision {
@@ -722,8 +725,13 @@ You were created by **${context.creator.name}**${context.creator.username ? ` (@
 `
       : '';
 
+  // Owner instructions section (high priority, shown early)
+  const ownerInstructionsSection = formatActiveInstructions(
+    context.activeInstructions
+  );
+
   return `You are ${agentName}, an autonomous agent on Babylon prediction markets.
-${creatorSection}${npcContextSection}${tradePostEncouragement}# Current Execution Context
+${creatorSection}${ownerInstructionsSection}${npcContextSection}${tradePostEncouragement}# Current Execution Context
 **Step**: ${iterationCount}/${maxIterations}
 **Actions Completed This Tick**: ${traceActionResults.length}
 
@@ -1054,6 +1062,54 @@ function formatAgentOwnPosts(
       return `[${i + 1}] "${truncatedContent}" (${p.timeAgo}) [${engagement}]`;
     })
     .join('\n');
+}
+
+/**
+ * Format active owner instructions for prompt injection.
+ * These are high-priority directives that the agent MUST follow.
+ */
+function formatActiveInstructions(
+  instructions: AgentInstruction[] | undefined
+): string {
+  if (!instructions || instructions.length === 0) {
+    return '';
+  }
+
+  const directiveTypeEmoji: Record<string, string> = {
+    always: '✅',
+    never: '🚫',
+    prefer: '👍',
+    avoid: '⚠️',
+    until: '⏰',
+  };
+
+  const formattedInstructions = instructions
+    .map((inst, idx) => {
+      const emoji = directiveTypeEmoji[inst.directiveType] || '📌';
+      const priority =
+        inst.priority >= 8
+          ? '🔥 HIGH'
+          : inst.priority >= 5
+            ? '➡️ NORMAL'
+            : '↘️ LOW';
+      const expiry = inst.validUntil
+        ? ` (expires: ${new Date(inst.validUntil).toLocaleDateString()})`
+        : '';
+      const conditions = inst.conditions
+        ? ` [Condition: ${JSON.stringify(inst.conditions)}]`
+        : '';
+
+      return `${idx + 1}. ${emoji} [${priority}] ${inst.parsedRule || inst.content}${expiry}${conditions}`;
+    })
+    .join('\n');
+
+  return `
+# 🚨 OWNER INSTRUCTIONS (MUST FOLLOW)
+Your owner has given you the following directives. These take priority over other actions.
+Follow them exactly unless they conflict with safety rules.
+
+${formattedInstructions}
+`;
 }
 
 /**

@@ -14,6 +14,7 @@ import type { IAgentRuntime } from '@elizaos/core';
 import { callGroqDirect } from '../llm/direct-groq';
 import { getNpcGameContext } from '../plugins/babylon/providers/npc-game-context';
 import { agentService } from '../services/AgentService';
+import { instructionService } from '../services/InstructionService';
 import { getAgentConfig, getAutonomousFeatures } from '../shared/agent-config';
 import { logger } from '../shared/logger';
 import {
@@ -436,6 +437,7 @@ export class MultiStepExecutor {
       pendingChatMessagesResult,
       agentGroupChatsResult,
       agentOwnPostsResult,
+      activeInstructionsResult,
     ] = await Promise.all([
       canTrade
         ? this.timedOperation('predictionMarkets', () => getPredictionMarkets())
@@ -469,18 +471,25 @@ export class MultiStepExecutor {
             getAgentOwnPosts(agentUserId)
           )
         : Promise.resolve({ data: [], duration: 0 }),
+      // Fetch owner instructions for user-controlled agents
+      isNpc
+        ? Promise.resolve({ data: [], duration: 0 })
+        : this.timedOperation('activeInstructions', () =>
+            instructionService.getActiveInstructions(agentUserId)
+          ),
     ]);
     timings.parallelTotal = Date.now() - parallelStart;
 
     // Extract data and individual timings
     const predictionMarkets = predictionMarketsResult.data;
-    const perpMarkets = perpMarketsResult.data;
+    const perpMarketsData = perpMarketsResult.data;
     const agentPositions = agentPositionsResult.data;
     const recentPosts = recentPostsResult.data;
     const pendingCommentRepliesRaw = pendingCommentRepliesResult.data;
     const pendingChatMessagesRaw = pendingChatMessagesResult.data;
     const agentGroupChats = agentGroupChatsResult.data;
     const agentOwnPosts = agentOwnPostsResult.data;
+    const activeInstructionsRaw = activeInstructionsResult.data;
 
     // Collect individual operation timings
     timings.predictionMarkets = predictionMarketsResult.duration;
@@ -491,6 +500,16 @@ export class MultiStepExecutor {
     timings.pendingChatMessages = pendingChatMessagesResult.duration;
     timings.agentGroupChats = agentGroupChatsResult.duration;
     timings.agentOwnPosts = agentOwnPostsResult.duration;
+    timings.activeInstructions = activeInstructionsResult.duration;
+
+    // Filter instructions by evaluating conditions with current market data
+    const activeInstructions = activeInstructionsRaw.filter((instruction) => {
+      const result = instructionService.evaluateConditions(
+        instruction,
+        perpMarketsData
+      );
+      return result.met;
+    });
 
     // Filter chat messages based on DMs vs group chats feature
     const pendingChatMessages = pendingChatMessagesRaw.filter((m) =>
@@ -513,7 +532,7 @@ export class MultiStepExecutor {
         timings,
         counts: {
           predictionMarkets: predictionMarkets.length,
-          perpMarkets: perpMarkets.length,
+          perpMarkets: perpMarketsData.length,
           positions:
             agentPositions.predictions.length + agentPositions.perps.length,
           recentPosts: recentPosts.length,
@@ -522,6 +541,7 @@ export class MultiStepExecutor {
           pendingChatMessagesRaw: pendingChatMessagesRaw.length,
           groupChats: agentGroupChats.length,
           ownPosts: agentOwnPosts.length,
+          activeInstructions: activeInstructions.length,
         },
       },
       'MultiStepExecutor'
@@ -536,7 +556,7 @@ export class MultiStepExecutor {
       pendingChatMessages: pendingChatMessages.slice(0, 3),
       enabledFeatures,
       predictionMarkets,
-      perpMarkets,
+      perpMarkets: perpMarketsData,
       recentPosts,
       agentPositions,
       groupChats: agentGroupChats,
@@ -546,6 +566,8 @@ export class MultiStepExecutor {
       postStyle: assignment?.postStyle,
       agentOwnPosts,
       creator,
+      activeInstructions:
+        activeInstructions.length > 0 ? activeInstructions : undefined,
     };
   }
 
