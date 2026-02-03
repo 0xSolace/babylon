@@ -7,7 +7,14 @@
  */
 
 import { relations } from 'drizzle-orm';
-import { index, integer, jsonb, pgTable, text, timestamp } from 'drizzle-orm/pg-core';
+import {
+  index,
+  integer,
+  jsonb,
+  pgTable,
+  text,
+  timestamp,
+} from 'drizzle-orm/pg-core';
 import { users } from './users';
 
 // =============================================================================
@@ -30,7 +37,12 @@ export interface InstructionCondition {
 }
 
 export type InstructionCategory = 'trading' | 'social' | 'behavior' | 'general';
-export type InstructionDirectiveType = 'always' | 'never' | 'prefer' | 'avoid' | 'until';
+export type InstructionDirectiveType =
+  | 'always'
+  | 'never'
+  | 'prefer'
+  | 'avoid'
+  | 'until';
 export type InstructionStatus = 'active' | 'expired' | 'revoked' | 'completed';
 
 // =============================================================================
@@ -50,11 +62,16 @@ export const agentInstructions = pgTable(
     category: text('category').$type<InstructionCategory>().notNull(),
 
     // Directive type
-    directiveType: text('directiveType').$type<InstructionDirectiveType>().notNull(),
+    directiveType: text('directiveType')
+      .$type<InstructionDirectiveType>()
+      .notNull(),
 
     // Priority & Status
     priority: integer('priority').notNull().default(5),
-    status: text('status').$type<InstructionStatus>().notNull().default('active'),
+    status: text('status')
+      .$type<InstructionStatus>()
+      .notNull()
+      .default('active'),
 
     // Time bounds
     validFrom: timestamp('validFrom', { mode: 'date' }).notNull().defaultNow(),
@@ -106,4 +123,3 @@ export const agentInstructionsRelations = relations(
 
 export type AgentInstruction = typeof agentInstructions.$inferSelect;
 export type NewAgentInstruction = typeof agentInstructions.$inferInsert;
-
