@@ -109,8 +109,8 @@ describe('GET /api/agents/[agentId]/instructions', () => {
     });
 
     it('should reject requests from non-owners', () => {
-      const agentManagedBy = OWNER_ID;
-      const requestingUserId = 'other-user';
+      const agentManagedBy: string = OWNER_ID;
+      const requestingUserId: string = 'other-user';
       const isOwner = agentManagedBy === requestingUserId;
       expect(isOwner).toBe(false);
     });
@@ -498,8 +498,8 @@ describe('DELETE /api/agents/[agentId]/instructions', () => {
     });
 
     it('should reject revocation from non-owner', () => {
-      const instructionOwnerId = OWNER_ID;
-      const requestingUserId = 'other-user';
+      const instructionOwnerId: string = OWNER_ID;
+      const requestingUserId: string = 'other-user';
       const canRevoke = instructionOwnerId === requestingUserId;
       expect(canRevoke).toBe(false);
     });
