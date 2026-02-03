@@ -10,6 +10,7 @@ export * from './AgentPnLService';
 export * from './AgentService';
 export * from './agent-lock-service';
 export * from './agent-registry.service';
+export * from './InstructionService';
 export {
   getService,
   getServiceContainer,
