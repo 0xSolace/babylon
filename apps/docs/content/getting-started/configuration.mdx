@@ -27,8 +27,8 @@ GROQ_API_KEY="gsk_..."
 ### Redis (Production)
 
 ```env
-UPSTASH_REDIS_REST_URL="https://your-redis.upstash.io"
-UPSTASH_REDIS_REST_TOKEN="your_token"
+# Example format: rediss://default:<password>@<host>:6379
+REDIS_URL="rediss://default:your-password@your-upstash-host:6379"
 ```
 
 ### Blockchain
@@ -108,4 +108,3 @@ DATABASE_URL="postgresql://user:pass@localhost:5432/babylon"
 
 - [Run Locally](/getting-started/local-development)
 - [Deploy to Vercel](/deployment/vercel)
-

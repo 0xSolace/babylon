@@ -75,6 +75,23 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     'ReputationSyncCron'
   );
 
+  // If Agent0 integration is not enabled, treat this cron as a no-op.
+  // This avoids noisy failures in production when ERC-8004 syncing is intentionally deferred.
+  if (process.env.AGENT0_ENABLED !== 'true') {
+    logger.info(
+      'Agent0 disabled - skipping reputation sync',
+      { AGENT0_ENABLED: process.env.AGENT0_ENABLED ?? 'not set' },
+      'ReputationSyncCron'
+    );
+
+    return successResponse({
+      success: true,
+      duration: Date.now() - startTime,
+      disabled: true,
+      result: { total: 0, synced: 0, failed: 0, skipped: 0 },
+    });
+  }
+
   await relayCronToStaging(request, 'reputation-sync');
 
   // Parse query parameters for batch processing

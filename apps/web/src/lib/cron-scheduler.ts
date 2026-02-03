@@ -151,9 +151,9 @@ export async function triggerScheduledCrons(): Promise<{
 
   // Get base URL for internal API calls
   const baseUrl =
-    process.env.NEXT_PUBLIC_API_URL || process.env.VERCEL_URL
-      ? `https://${process.env.VERCEL_URL}`
-      : 'http://localhost:3000';
+    process.env.NEXT_PUBLIC_API_URL ||
+    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null) ||
+    'http://localhost:3000';
 
   const cronSecret = process.env.CRON_SECRET;
   if (!cronSecret) {

@@ -19,8 +19,8 @@ import type {
 import {
   BusinessLogicError,
   CHAIN,
-  getCurrentChainId,
   generateSnowflakeId,
+  getCurrentChainId,
   IDENTITY_REGISTRY_ABI,
   InternalServerError,
   identityRegistryAbi,

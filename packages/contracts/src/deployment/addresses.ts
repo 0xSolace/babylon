@@ -11,7 +11,11 @@
  * and resolved via @babylon/shared.
  */
 
-import { getCurrentChainId, getCurrentContractAddresses, getCurrentRpcUrl } from '@babylon/shared';
+import {
+  getCurrentChainId,
+  getCurrentContractAddresses,
+  getCurrentRpcUrl,
+} from '@babylon/shared';
 import type { Address } from 'viem';
 
 /**

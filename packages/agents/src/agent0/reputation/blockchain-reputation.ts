@@ -8,9 +8,9 @@
 import { agentPerformanceMetrics, db, eq } from '@babylon/db';
 import {
   CHAIN,
+  REPUTATION_SYSTEM_ADDRESS as CURRENT_REPUTATION_SYSTEM_ADDRESS,
   getCurrentRpcUrl,
   REPUTATION_SYSTEM_ABI,
-  REPUTATION_SYSTEM_ADDRESS as CURRENT_REPUTATION_SYSTEM_ADDRESS,
 } from '@babylon/shared';
 import {
   type Address,
@@ -22,8 +22,7 @@ import {
 import { logger } from '../../shared/logger';
 
 // Contract addresses from canonical config
-const REPUTATION_SYSTEM_ADDRESS =
-  CURRENT_REPUTATION_SYSTEM_ADDRESS as Address;
+const REPUTATION_SYSTEM_ADDRESS = CURRENT_REPUTATION_SYSTEM_ADDRESS as Address;
 
 const publicClient = createPublicClient({
   chain: CHAIN,

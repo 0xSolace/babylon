@@ -37,9 +37,7 @@ const hardhat = defineChain({
  */
 export type BabylonNetwork = 'mainnet' | 'sepolia';
 
-function normalizeNetwork(
-  raw: string | undefined
-): BabylonNetwork | undefined {
+function normalizeNetwork(raw: string | undefined): BabylonNetwork | undefined {
   if (!raw) return undefined;
   const v = raw.trim().toLowerCase();
   if (v === 'mainnet' || v === 'eth-mainnet' || v === 'ethereum-mainnet') {
@@ -63,7 +61,10 @@ function getLegacyChainIdFromEnv(): number {
   return Number(chainId);
 }
 
-function resolveBabylonChain(): typeof mainnet | typeof sepolia | typeof hardhat {
+function resolveBabylonChain():
+  | typeof mainnet
+  | typeof sepolia
+  | typeof hardhat {
   const explicitNetwork = normalizeNetwork(process.env.BABYLON_NETWORK);
   if (explicitNetwork === 'mainnet') return mainnet;
   if (explicitNetwork === 'sepolia') return sepolia;

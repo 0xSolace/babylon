@@ -100,8 +100,9 @@ The application uses **Server-Sent Events (SSE)** for real-time updates (Vercel-
 **For Production (Vercel):** Optionally set up Redis for cross-instance broadcasting:
 ```bash
 # Add to Vercel environment variables
-UPSTASH_REDIS_REST_URL=https://your-redis-url.upstash.io
-UPSTASH_REDIS_REST_TOKEN=your-token
+# Upstash Redis (recommended): use the Redis protocol URL
+# Example format: rediss://default:<password>@<host>:6379
+REDIS_URL=rediss://default:your-password@your-upstash-host:6379
 ```
 
 ---

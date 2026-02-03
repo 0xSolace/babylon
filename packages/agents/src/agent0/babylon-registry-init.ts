@@ -153,11 +153,7 @@ export async function registerBabylonGame(): Promise<BabylonRegistrationResult |
     },
   });
 
-  logger.info(
-    '✅ Babylon registered on agent0',
-    undefined,
-    'BabylonRegistry'
-  );
+  logger.info('✅ Babylon registered on agent0', undefined, 'BabylonRegistry');
   logger.info(
     '   Discovery: External agents can find Babylon via agent0',
     undefined,

@@ -6,8 +6,8 @@
  */
 
 import type { Address } from 'viem';
-import configData from './public-config.json';
 import { CHAIN_ID, RPC_URL } from '../constants/chains';
+import configData from './public-config.json';
 
 // =============================================================================
 // Types
@@ -122,13 +122,13 @@ export const REPUTATION_SYSTEM_ADDRESS =
 /**
  * @deprecated Use `IDENTITY_REGISTRY_ADDRESS` (single-network app).
  */
-export const IDENTITY_REGISTRY_BASE_SEPOLIA =
-  PUBLIC_CONFIG.networks.sepolia.contracts.identityRegistry as Address;
+export const IDENTITY_REGISTRY_BASE_SEPOLIA = PUBLIC_CONFIG.networks.sepolia
+  .contracts.identityRegistry as Address;
 /**
  * @deprecated Use `REPUTATION_SYSTEM_ADDRESS` (single-network app).
  */
-export const REPUTATION_SYSTEM_BASE_SEPOLIA =
-  PUBLIC_CONFIG.networks.sepolia.contracts.reputationSystem as Address;
+export const REPUTATION_SYSTEM_BASE_SEPOLIA = PUBLIC_CONFIG.networks.sepolia
+  .contracts.reputationSystem as Address;
 
 // =============================================================================
 // RPC & Endpoints

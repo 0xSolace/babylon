@@ -58,13 +58,14 @@ bun run db:seed
  - Region: Same as your Vercel deployment
  - Type: Regional (or Global for multi-region)
 3. **Copy credentials**:
- - REST URL
- - REST Token
+ - Redis endpoint (host/port)
+ - Password (or full connection URL)
 
 Example:
 ```
-UPSTASH_REDIS_REST_URL=https://xxx.upstash.io
-UPSTASH_REDIS_REST_TOKEN=AabBcc...
+# Use Redis protocol (what the codebase expects)
+# Example format: rediss://default:<password>@<host>:6379
+REDIS_URL=rediss://default:your-password@your-upstash-host:6379
 ```
 
 ## Step 3: Vercel Deployment
@@ -90,9 +91,8 @@ Add these in Vercel dashboard under **Settings → Environment Variables**:
 DATABASE_URL="postgresql://user:pass@host/babylon?sslmode=require&pgbouncer=true"
 DIRECT_DATABASE_URL="postgresql://user:pass@host/babylon?sslmode=require"
 
-# Redis (Upstash)
-UPSTASH_REDIS_REST_URL="https://xxx.upstash.io"
-UPSTASH_REDIS_REST_TOKEN="your_token"
+# Redis (Upstash) - Redis protocol URL
+REDIS_URL="rediss://default:your-password@your-upstash-host:6379"
 
 # Privy Authentication
 NEXT_PUBLIC_PRIVY_APP_ID="clp..."
@@ -305,9 +305,9 @@ bun run db:push
 **Issue**: `ECONNREFUSED` or timeout
 
 **Solution**:
-1. Verify `UPSTASH_REDIS_REST_URL` and token
+1. Verify `REDIS_URL`
 2. Check Upstash dashboard for database status
-3. Ensure using REST API (not Redis protocol)
+3. Ensure the URL uses TLS (`rediss://`) for Upstash
 
 ### Cron Jobs Not Running
 
@@ -375,4 +375,3 @@ Having issues deploying?
 - Review [Build Logs](https://vercel.com/docs/deployments/logs)
 - Join our [Discord](https://discord.gg/babylon)
 - Open a [GitHub Issue](https://github.com/BabylonSocial/babylon/issues)
-

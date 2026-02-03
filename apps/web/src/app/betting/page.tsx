@@ -128,8 +128,8 @@ export default function OnChainBettingPage() {
             <Wallet className="mx-auto h-16 w-16 text-[#0066FF]" />
             <h1 className="font-bold text-3xl">On-Chain Betting</h1>
             <p className="max-w-md text-muted-foreground">
-              Bet with real ETH (Sepolia/Mainnet). All transactions are on-chain and
-              verifiable.
+              Bet with real ETH (Sepolia/Mainnet). All transactions are on-chain
+              and verifiable.
             </p>
           </div>
           <button

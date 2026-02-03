@@ -70,7 +70,8 @@ export const CHAIN_CONFIGS: Record<DeploymentEnv, ChainConfig> = {
   mainnet: {
     chainId: 1,
     name: 'Ethereum Mainnet',
-    rpcUrl: process.env.ETHEREUM_RPC_URL || 'https://ethereum-rpc.publicnode.com',
+    rpcUrl:
+      process.env.ETHEREUM_RPC_URL || 'https://ethereum-rpc.publicnode.com',
     explorerUrl: 'https://etherscan.io',
     nativeCurrency: {
       name: 'Ethereum',

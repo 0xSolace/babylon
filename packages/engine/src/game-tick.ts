@@ -38,8 +38,8 @@ import {
   worldFacts,
 } from '@babylon/db';
 import {
-  calculatePriceFromHoldings,
   CHAIN,
+  calculatePriceFromHoldings,
   DIAMOND_ADDRESS,
   generateSnowflakeId,
   getCurrentRpcUrl,

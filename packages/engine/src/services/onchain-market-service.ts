@@ -3,7 +3,12 @@
  */
 
 import { db, eq, markets } from '@babylon/db';
-import { CHAIN, DIAMOND_ADDRESS, getCurrentRpcUrl, logger } from '@babylon/shared';
+import {
+  CHAIN,
+  DIAMOND_ADDRESS,
+  getCurrentRpcUrl,
+  logger,
+} from '@babylon/shared';
 import {
   type Address,
   createPublicClient,

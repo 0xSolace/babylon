@@ -35,6 +35,12 @@ interface CronAuthOptions {
   allowVercelCronUserAgent?: boolean;
 }
 
+function isVercelCronRequest(request: NextRequest): boolean {
+  const userAgent = request.headers.get('user-agent')?.toLowerCase() || '';
+  // Per Vercel docs, cron jobs use `vercel-cron/1.0` as the user agent.
+  return userAgent.includes('vercel-cron/1.0');
+}
+
 /**
  * Verify cron request authorization
  *
@@ -53,16 +59,14 @@ export function verifyCronAuth(
   const authHeader = request.headers.get('authorization');
   const cronSecret = process.env.CRON_SECRET;
 
-  // Check for Vercel Cron user-agent (some cron services use this)
+  // Optional: allow Vercel Cron user-agent for GET endpoints.
+  // This must NOT rely on generic Vercel headers like `x-vercel-id` which can
+  // be present on normal requests and is not an authentication mechanism.
   if (allowVercelCronUserAgent) {
-    const userAgent = request.headers.get('user-agent')?.toLowerCase() || '';
-    const isVercelCron = userAgent.includes('vercel-cron');
-    const hasVercelHeader = request.headers.has('x-vercel-id');
-
-    if (isVercelCron || hasVercelHeader) {
+    if (isVercelCronRequest(request)) {
       logger.info(
-        'Cron request authorized via Vercel headers',
-        { userAgent, hasVercelHeader },
+        'Cron request authorized via Vercel Cron user-agent',
+        { userAgent: request.headers.get('user-agent') || '' },
         jobName
       );
       return true;
