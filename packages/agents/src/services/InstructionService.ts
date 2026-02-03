@@ -312,7 +312,7 @@ export async function getActiveInstructions(
       )
     );
 
-  // Then fetch active instructions
+  // Fetch active instructions, ordered by priority descending
   const instructions = await db
     .select()
     .from(agentInstructions)
@@ -326,10 +326,9 @@ export async function getActiveInstructions(
         )
       )
     )
-    .orderBy(agentInstructions.priority)
     .limit(MAX_INSTRUCTIONS_PER_AGENT);
 
-  // Sort by priority descending (highest first) since orderBy is ascending
+  // Sort by priority descending (highest priority first)
   return instructions.sort((a, b) => b.priority - a.priority);
 }
 

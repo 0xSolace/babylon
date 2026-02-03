@@ -69,7 +69,12 @@ const INSTRUCTION_TEMPLATES: InstructionTemplate[] = [
     directiveType: 'never',
     ruleTemplate: 'Never buy {ticker}',
     variables: [
-      { name: 'ticker', type: 'ticker', description: 'Asset ticker (e.g., BTC, ETH)', required: true },
+      {
+        name: 'ticker',
+        type: 'ticker',
+        description: 'Asset ticker (e.g., BTC, ETH)',
+        required: true,
+      },
     ],
     defaultPriority: 8,
   },
@@ -81,8 +86,19 @@ const INSTRUCTION_TEMPLATES: InstructionTemplate[] = [
     directiveType: 'until',
     ruleTemplate: 'Only buy {ticker} when price is below ${price}',
     variables: [
-      { name: 'ticker', type: 'ticker', description: 'Asset ticker', required: true },
-      { name: 'price', type: 'number', description: 'Maximum price', required: true, min: 0 },
+      {
+        name: 'ticker',
+        type: 'ticker',
+        description: 'Asset ticker',
+        required: true,
+      },
+      {
+        name: 'price',
+        type: 'number',
+        description: 'Maximum price',
+        required: true,
+        min: 0,
+      },
     ],
     defaultPriority: 7,
   },
@@ -94,7 +110,13 @@ const INSTRUCTION_TEMPLATES: InstructionTemplate[] = [
     directiveType: 'always',
     ruleTemplate: 'Limit position sizes to ${maxSize} points per trade',
     variables: [
-      { name: 'maxSize', type: 'number', description: 'Max points per trade', required: true, min: 1 },
+      {
+        name: 'maxSize',
+        type: 'number',
+        description: 'Max points per trade',
+        required: true,
+        min: 1,
+      },
     ],
     defaultPriority: 6,
   },
@@ -104,7 +126,8 @@ const INSTRUCTION_TEMPLATES: InstructionTemplate[] = [
     description: 'Prioritize prediction markets over perps',
     category: 'trading',
     directiveType: 'prefer',
-    ruleTemplate: 'Prioritize prediction market trades over perpetual positions',
+    ruleTemplate:
+      'Prioritize prediction market trades over perpetual positions',
     variables: [],
     defaultPriority: 5,
   },
@@ -114,7 +137,8 @@ const INSTRUCTION_TEMPLATES: InstructionTemplate[] = [
     description: 'Trade more conservatively',
     category: 'trading',
     directiveType: 'prefer',
-    ruleTemplate: 'Be conservative - prefer smaller positions and high-confidence opportunities',
+    ruleTemplate:
+      'Be conservative - prefer smaller positions and high-confidence opportunities',
     variables: [],
     defaultPriority: 6,
   },
@@ -252,8 +276,12 @@ export function CreateInstructionModal({
   const [error, setError] = useState<string | null>(null);
 
   // Template state
-  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
-  const [templateValues, setTemplateValues] = useState<Record<string, string | number>>({});
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(
+    null
+  );
+  const [templateValues, setTemplateValues] = useState<
+    Record<string, string | number>
+  >({});
 
   // Get selected template
   const selectedTemplate = useMemo(
@@ -377,7 +405,8 @@ export function CreateInstructionModal({
     (d) => d.value === directiveType
   );
 
-  const canSubmit = mode === 'template' ? isTemplateValid : rule.trim().length >= 5;
+  const canSubmit =
+    mode === 'template' ? isTemplateValid : rule.trim().length >= 5;
 
   return (
     <div
@@ -469,8 +498,10 @@ export function CreateInstructionModal({
                         )}
                         disabled={isSubmitting}
                       >
-                        <div className="font-medium text-sm">{template.name}</div>
-                        <div className="mt-1 text-muted-foreground text-xs line-clamp-2">
+                        <div className="font-medium text-sm">
+                          {template.name}
+                        </div>
+                        <div className="mt-1 line-clamp-2 text-muted-foreground text-xs">
                           {template.description}
                         </div>
                       </button>
@@ -486,9 +517,11 @@ export function CreateInstructionModal({
                     </label>
                     {selectedTemplate.variables.map((variable) => (
                       <div key={variable.name}>
-                        <label className="mb-1 block text-sm text-muted-foreground">
+                        <label className="mb-1 block text-muted-foreground text-sm">
                           {variable.description}
-                          {variable.required && <span className="text-red-500"> *</span>}
+                          {variable.required && (
+                            <span className="text-red-500"> *</span>
+                          )}
                         </label>
                         <input
                           type={variable.type === 'number' ? 'number' : 'text'}
@@ -619,7 +652,9 @@ export function CreateInstructionModal({
                           disabled={isSubmitting}
                         >
                           <Icon className="h-4 w-4" />
-                          <span className="font-medium text-sm">{cat.label}</span>
+                          <span className="font-medium text-sm">
+                            {cat.label}
+                          </span>
                         </button>
                       );
                     })}
@@ -653,9 +688,7 @@ export function CreateInstructionModal({
 
             {/* Duration */}
             <div>
-              <label className="mb-2 block font-medium text-sm">
-                Duration
-              </label>
+              <label className="mb-2 block font-medium text-sm">Duration</label>
               <div className="flex flex-wrap gap-2">
                 {DURATION_PRESETS.map((preset, index) => (
                   <button

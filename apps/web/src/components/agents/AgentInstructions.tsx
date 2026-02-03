@@ -11,10 +11,10 @@ import { cn } from '@babylon/shared';
 import { AlertCircle, FileText, Plus, RefreshCw } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
-import { CreateInstructionModal } from './CreateInstructionModal';
-import { InstructionCard, InstructionCardSkeleton } from './InstructionCard';
 import type { InstructionStatus } from '@/hooks/useAgentInstructions';
 import { useAgentInstructions } from '@/hooks/useAgentInstructions';
+import { CreateInstructionModal } from './CreateInstructionModal';
+import { InstructionCard, InstructionCardSkeleton } from './InstructionCard';
 
 // =============================================================================
 // Types
@@ -107,9 +107,7 @@ export function AgentInstructions({ agentId }: AgentInstructionsProps) {
             )}
             title="Refresh"
           >
-            <RefreshCw
-              className={cn('h-4 w-4', isLoading && 'animate-spin')}
-            />
+            <RefreshCw className={cn('h-4 w-4', isLoading && 'animate-spin')} />
           </button>
           <button
             onClick={() => setIsModalOpen(true)}
@@ -218,4 +216,3 @@ export function AgentInstructions({ agentId }: AgentInstructionsProps) {
     </div>
   );
 }
-

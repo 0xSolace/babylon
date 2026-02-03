@@ -44,8 +44,6 @@ export const KNOWN_TICKERS = [
   'MKR',
 ] as const;
 
-export type KnownTicker = (typeof KNOWN_TICKERS)[number];
-
 /**
  * Template variable definition
  */
@@ -141,25 +139,16 @@ export function validateTemplateValues(
           errors.push(`${variable.name} must be a number`);
         } else {
           if (variable.min !== undefined && numValue < variable.min) {
-            errors.push(
-              `${variable.name} must be at least ${variable.min}`
-            );
+            errors.push(`${variable.name} must be at least ${variable.min}`);
           }
           if (variable.max !== undefined && numValue > variable.max) {
-            errors.push(
-              `${variable.name} must be at most ${variable.max}`
-            );
+            errors.push(`${variable.name} must be at most ${variable.max}`);
           }
         }
       }
 
-      if (variable.type === 'ticker') {
-        const tickerValue = String(value).toUpperCase();
-        if (!KNOWN_TICKERS.includes(tickerValue as KnownTicker)) {
-          // Warn but don't error - allow unknown tickers
-          // errors.push(`${variable.name}: Unknown ticker "${value}"`);
-        }
-      }
+      // Note: ticker validation is lenient - we allow unknown tickers
+      // as new assets may be added to the platform
     }
   }
 
@@ -262,7 +251,8 @@ export const INSTRUCTION_TEMPLATES: InstructionTemplate[] = [
     description: 'Prioritize prediction markets over perps',
     category: 'trading',
     directiveType: 'prefer',
-    ruleTemplate: 'Prioritize prediction market trades over perpetual positions',
+    ruleTemplate:
+      'Prioritize prediction market trades over perpetual positions',
     variables: [],
     defaultPriority: 5,
   },
@@ -272,7 +262,8 @@ export const INSTRUCTION_TEMPLATES: InstructionTemplate[] = [
     description: 'Prioritize perp trading over predictions',
     category: 'trading',
     directiveType: 'prefer',
-    ruleTemplate: 'Prioritize perpetual position trades over prediction markets',
+    ruleTemplate:
+      'Prioritize perpetual position trades over prediction markets',
     variables: [],
     defaultPriority: 5,
   },
@@ -312,7 +303,8 @@ export const INSTRUCTION_TEMPLATES: InstructionTemplate[] = [
       {
         name: 'topic',
         type: 'string',
-        description: 'Topic to post about (e.g., "market analysis", "trading tips")',
+        description:
+          'Topic to post about (e.g., "market analysis", "trading tips")',
         required: true,
       },
     ],
@@ -370,4 +362,3 @@ export function getTemplatesByCategory(
 ): InstructionTemplate[] {
   return INSTRUCTION_TEMPLATES.filter((t) => t.category === category);
 }
-

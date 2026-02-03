@@ -91,7 +91,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(
       {
         success: false,
-        error: 'No valid agents found. You can only create instructions for agents you own.',
+        error:
+          'No valid agents found. You can only create instructions for agents you own.',
       },
       { status: 404 }
     );
@@ -146,4 +147,3 @@ export async function POST(req: NextRequest) {
     skippedAgentIds: skippedAgentIds.length > 0 ? skippedAgentIds : undefined,
   });
 }
-

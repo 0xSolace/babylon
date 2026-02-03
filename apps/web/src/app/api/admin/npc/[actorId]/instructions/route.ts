@@ -302,4 +302,3 @@ async function handleDelete(req: NextRequest, context: RouteContext) {
 export const GET = withErrorHandling(handleGet);
 export const POST = withErrorHandling(handlePost);
 export const DELETE = withErrorHandling(handleDelete);
-

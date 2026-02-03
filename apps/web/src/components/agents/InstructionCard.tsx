@@ -164,14 +164,14 @@ export function InstructionCard({
 
         {/* Status badge for non-active */}
         {!isActive && (
-          <span className={cn('text-xs font-medium', statusConfig.color)}>
+          <span className={cn('font-medium text-xs', statusConfig.color)}>
             {statusConfig.label}
           </span>
         )}
       </div>
 
       {/* Rule Content */}
-      <p className="mb-3 leading-relaxed text-foreground">{displayRule}</p>
+      <p className="mb-3 text-foreground leading-relaxed">{displayRule}</p>
 
       {/* Footer: Category + Timestamps */}
       <div className="flex flex-wrap items-center gap-3 text-muted-foreground text-xs">
@@ -239,4 +239,3 @@ export function InstructionCardSkeleton() {
     </div>
   );
 }
-

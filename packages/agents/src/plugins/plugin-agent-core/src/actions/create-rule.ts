@@ -12,6 +12,7 @@ import {
   type InstructionDirectiveType,
   users,
 } from '@babylon/db';
+import { StaticDataRegistry } from '@babylon/engine';
 import type {
   Action,
   ActionResult,
@@ -20,7 +21,6 @@ import type {
   Memory,
   State,
 } from '@elizaos/core';
-import { StaticDataRegistry } from '@babylon/engine';
 import { instructionService } from '../../../../services/InstructionService';
 import { logger } from '../../../../shared/logger';
 
@@ -248,4 +248,3 @@ export const createRuleAction: Action = {
     };
   },
 };
-
