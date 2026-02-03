@@ -2,6 +2,7 @@
  * Agent Core Actions
  */
 
+export { acknowledgeInstructionAction } from './acknowledge-instruction';
 export { buyPredictionAction } from './buy-prediction';
 export { checkAutonomyAction } from './check-autonomy';
 export { checkBalanceAction } from './check-balance';
@@ -17,8 +18,10 @@ export { checkRecentMarketTradesAction } from './check-recent-market-trades';
 export { checkRecentPostsAction } from './check-recent-posts';
 export { checkTeamChatAction } from './check-team-chat';
 export { closePerpAction } from './close-perp';
+export { completeInstructionAction } from './complete-instruction';
 export { createCommentAction } from './create-comment';
 export { createPostAction } from './create-post';
+export { createRuleAction } from './create-rule';
 export { lookupUserAction } from './lookup-user';
 export { openPerpAction } from './open-perp';
 export { sellPredictionAction } from './sell-prediction';

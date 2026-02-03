@@ -65,6 +65,14 @@ const AgentWallet = dynamic(
   { ssr: false, loading: () => <TabLoadingSkeleton /> }
 );
 
+const AgentInstructions = dynamic(
+  () =>
+    import('@/components/agents/AgentInstructions').then((m) => ({
+      default: m.AgentInstructions,
+    })),
+  { ssr: false, loading: () => <TabLoadingSkeleton /> }
+);
+
 // Loading skeleton for tab content
 function TabLoadingSkeleton() {
   return (
@@ -116,6 +124,7 @@ export type AgentDetailTab =
   | 'activity'
   | 'performance'
   | 'logs'
+  | 'instructions'
   | 'settings'
   | 'wallet';
 
@@ -258,7 +267,7 @@ export function AgentDetail({
 
       {/* Tabs */}
       <Tabs defaultValue={defaultTab} className="w-full">
-        <TabsList className="grid w-full grid-cols-5 bg-muted/50">
+        <TabsList className="grid w-full grid-cols-6 bg-muted/50">
           <TabsTrigger
             value="activity"
             className="data-[state=active]:bg-[#0066FF] data-[state=active]:text-primary-foreground"
@@ -279,6 +288,13 @@ export function AgentDetail({
           >
             <FileText className="mr-2 h-4 w-4" />
             <span className="hidden sm:inline">Logs</span>
+          </TabsTrigger>
+          <TabsTrigger
+            value="instructions"
+            className="data-[state=active]:bg-[#0066FF] data-[state=active]:text-primary-foreground"
+          >
+            <FileText className="mr-2 h-4 w-4" />
+            <span className="hidden sm:inline">Rules</span>
           </TabsTrigger>
           <TabsTrigger
             value="settings"
@@ -314,6 +330,10 @@ export function AgentDetail({
 
           <TabsContent value="logs">
             <AgentLogs agentId={agent.id} />
+          </TabsContent>
+
+          <TabsContent value="instructions">
+            <AgentInstructions agentId={agent.id} />
           </TabsContent>
 
           <TabsContent value="settings">

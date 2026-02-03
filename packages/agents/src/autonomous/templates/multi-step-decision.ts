@@ -115,6 +115,9 @@ export const Actions = {
   REPLY_CHAT: 'REPLY_CHAT',
   DM: 'DM',
   GROUP_MESSAGE: 'GROUP_MESSAGE',
+  CREATE_RULE: 'CREATE_RULE',
+  ACKNOWLEDGE_INSTRUCTION: 'ACKNOWLEDGE_INSTRUCTION',
+  COMPLETE_INSTRUCTION: 'COMPLETE_INSTRUCTION',
   FINISH: 'FINISH',
   WAIT: 'WAIT',
 } as const;
@@ -236,6 +239,39 @@ export const ACTION_DEFINITIONS: Record<ActionName, ActionDefinition> = {
     parameterSchema: `{
   "chatId": "exact_chat_id_from_your_groups",
   "content": "Message to share with the group"
+}`,
+  },
+  [Actions.CREATE_RULE]: {
+    name: Actions.CREATE_RULE,
+    description: 'Create a new rule for yourself based on owner feedback',
+    requiredFeature: null, // Always available for user-controlled agents
+    parameters: ['rule', 'category', 'directiveType', 'priority', 'validUntil'],
+    parameterSchema: `{
+  "rule": "The rule in imperative form (e.g., 'Never buy X above $Y')",
+  "category": "trading | social | behavior | general",
+  "directiveType": "always | never | prefer | avoid | until",
+  "priority": 5,
+  "validUntil": "2026-02-10T00:00:00Z (optional)"
+}`,
+  },
+  [Actions.ACKNOWLEDGE_INSTRUCTION]: {
+    name: Actions.ACKNOWLEDGE_INSTRUCTION,
+    description: 'Acknowledge understanding of an owner instruction',
+    requiredFeature: null,
+    parameters: ['instructionId', 'acknowledgment'],
+    parameterSchema: `{
+  "instructionId": "The instruction ID to acknowledge",
+  "acknowledgment": "Your acknowledgment message"
+}`,
+  },
+  [Actions.COMPLETE_INSTRUCTION]: {
+    name: Actions.COMPLETE_INSTRUCTION,
+    description: 'Mark an instruction as completed',
+    requiredFeature: null,
+    parameters: ['instructionId', 'summary'],
+    parameterSchema: `{
+  "instructionId": "The instruction ID to mark complete",
+  "summary": "Brief summary of what you did to complete it"
 }`,
   },
   [Actions.FINISH]: {

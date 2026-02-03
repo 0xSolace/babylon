@@ -471,12 +471,11 @@ export class MultiStepExecutor {
             getAgentOwnPosts(agentUserId)
           )
         : Promise.resolve({ data: [], duration: 0 }),
-      // Fetch owner instructions for user-controlled agents
-      isNpc
-        ? Promise.resolve({ data: [], duration: 0 })
-        : this.timedOperation('activeInstructions', () =>
-            instructionService.getActiveInstructions(agentUserId)
-          ),
+      // Fetch instructions for both user-controlled agents and NPCs
+      // NPCs get instructions from admin panel, user agents from team chat
+      this.timedOperation('activeInstructions', () =>
+        instructionService.getActiveInstructions(agentUserId)
+      ),
     ]);
     timings.parallelTotal = Date.now() - parallelStart;
 

@@ -86,7 +86,14 @@
 
 import { instructionService } from '@babylon/agents';
 import { authenticateUser } from '@babylon/api';
-import { agentInstructions, and, db, eq, users } from '@babylon/db';
+import {
+  agentInstructions,
+  and,
+  db,
+  eq,
+  type InstructionStatus,
+  users,
+} from '@babylon/db';
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
@@ -153,7 +160,7 @@ export async function GET(req: NextRequest, context: RouteContext) {
       .where(
         and(
           eq(agentInstructions.agentUserId, agentId),
-          eq(agentInstructions.status, statusFilter)
+          eq(agentInstructions.status, statusFilter as InstructionStatus)
         )
       )
       .orderBy(agentInstructions.createdAt)
@@ -176,6 +183,119 @@ export async function GET(req: NextRequest, context: RouteContext) {
       createdAt: inst.createdAt.toISOString(),
     })),
     count: instructions.length,
+  });
+}
+
+// =============================================================================
+// DELETE - Revoke instruction
+// =============================================================================
+
+// =============================================================================
+// POST - Create instruction
+// =============================================================================
+
+const createInstructionSchema = z.object({
+  rule: z.string().min(5, 'Rule must be at least 5 characters').max(500),
+  category: z.enum(['trading', 'social', 'behavior', 'general']),
+  directiveType: z.enum(['always', 'never', 'prefer', 'avoid', 'until']),
+  priority: z.number().int().min(1).max(10).default(5),
+  validUntil: z.string().datetime().optional().nullable(),
+  conditions: z
+    .object({
+      priceBelow: z
+        .object({ ticker: z.string(), value: z.number() })
+        .optional(),
+      priceAbove: z
+        .object({ ticker: z.string(), value: z.number() })
+        .optional(),
+      afterDate: z.string().datetime().optional(),
+      beforeDate: z.string().datetime().optional(),
+    })
+    .optional()
+    .nullable(),
+});
+
+export async function POST(req: NextRequest, context: RouteContext) {
+  const user = await authenticateUser(req);
+  const { agentId } = await context.params;
+
+  // Verify ownership
+  const isOwner = await verifyAgentOwnership(user.id, agentId);
+  if (!isOwner) {
+    return NextResponse.json(
+      { success: false, error: 'Agent not found or unauthorized' },
+      { status: 404 }
+    );
+  }
+
+  let body: unknown;
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json(
+      { success: false, error: 'Invalid JSON in request body' },
+      { status: 400 }
+    );
+  }
+
+  const parseResult = createInstructionSchema.safeParse(body);
+  if (!parseResult.success) {
+    const firstError = parseResult.error.issues[0];
+    return NextResponse.json(
+      { success: false, error: firstError?.message || 'Invalid request body' },
+      { status: 400 }
+    );
+  }
+
+  const { rule, category, directiveType, priority, validUntil, conditions } =
+    parseResult.data;
+
+  // Create instruction directly (bypasses LLM parsing since user provides structure)
+  const instruction = await instructionService.createInstruction(
+    agentId,
+    user.id,
+    {
+      isInstruction: true,
+      confidence: 1.0, // User-created = full confidence
+      rule,
+      category,
+      directiveType,
+      priority,
+      validUntil: validUntil || undefined,
+      conditions: conditions || undefined,
+    },
+    rule, // Original content = the rule itself
+    undefined // No source message ID
+  );
+
+  logger.info(
+    'Instruction created via API',
+    {
+      instructionId: instruction.id,
+      agentId,
+      userId: user.id,
+      category,
+      directiveType,
+      priority,
+    },
+    'AgentInstructionsAPI'
+  );
+
+  return NextResponse.json({
+    success: true,
+    instruction: {
+      id: instruction.id,
+      content: instruction.content,
+      parsedRule: instruction.parsedRule,
+      category: instruction.category,
+      directiveType: instruction.directiveType,
+      priority: instruction.priority,
+      status: instruction.status,
+      validFrom: instruction.validFrom.toISOString(),
+      validUntil: instruction.validUntil?.toISOString() || null,
+      conditions: instruction.conditions,
+      createdAt: instruction.createdAt.toISOString(),
+    },
   });
 }
 
