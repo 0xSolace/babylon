@@ -35,7 +35,7 @@ export interface Agent0SearchFilters {
 
   /**
    * Chain IDs to search across (Agent0 SDK v0.31.0 multi-chain support)
-   * - Array of chain IDs: [11155111, 84532, 80002] for ETH Sepolia, Base Sepolia, Polygon Amoy
+   * - Array of chain IDs: [11155111, 1] for ETH Sepolia, ETH Mainnet
    * - 'all': Search all configured chains
    * - undefined: Use SDK's default chain
    */

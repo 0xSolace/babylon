@@ -7,7 +7,12 @@
  */
 
 import { db } from '@babylon/db';
-import { getA2AEndpoint, getMCPEndpoint } from '@babylon/shared';
+import {
+  getA2AEndpoint,
+  getCurrentChainId,
+  getMCPEndpoint,
+  IDENTITY_REGISTRY_ADDRESS,
+} from '@babylon/shared';
 import { logger } from '../shared/logger';
 import { generateSnowflakeId } from '../shared/snowflake';
 import type { JsonValue } from '../types/common';
@@ -29,7 +34,7 @@ export interface BabylonRegistrationResult {
  * Register Babylon game in ERC-8004 + Agent0 registry
  *
  * @description Registers Babylon as a discoverable game platform in the Agent0
- * registry on Ethereum Sepolia. Publishes game metadata, capabilities, MCP/A2A
+ * registry on the selected Ethereum network. Publishes game metadata, capabilities, MCP/A2A
  * endpoints, and tool definitions. Skips registration if already registered or
  * if Agent0 integration is disabled.
  *
@@ -90,12 +95,7 @@ export async function registerBabylonGame(): Promise<BabylonRegistrationResult |
 
   // 2. Register with Agent0 SDK (which handles IPFS publishing internally)
   logger.info(
-    'Registering Babylon with Agent0 SDK on Ethereum Sepolia...',
-    undefined,
-    'BabylonRegistry'
-  );
-  logger.info(
-    'Game operates on Base network with cross-chain discovery via agent0',
+    `Registering Babylon with Agent0 SDK (chainId=${getCurrentChainId()})...`,
     undefined,
     'BabylonRegistry'
   );
@@ -154,7 +154,7 @@ export async function registerBabylonGame(): Promise<BabylonRegistrationResult |
   });
 
   logger.info(
-    '✅ Babylon registered on agent0 (Ethereum Sepolia)',
+    '✅ Babylon registered on agent0',
     undefined,
     'BabylonRegistry'
   );
@@ -164,12 +164,12 @@ export async function registerBabylonGame(): Promise<BabylonRegistrationResult |
     'BabylonRegistry'
   );
   logger.info(
-    `   Game Network: Base ${process.env.BASE_CHAIN_ID || '8453'}`,
+    `   Game Network: Ethereum (chainId=${getCurrentChainId()})`,
     undefined,
     'BabylonRegistry'
   );
   logger.info(
-    `   Registry: ${process.env.BASE_IDENTITY_REGISTRY_ADDRESS}`,
+    `   Registry: ${IDENTITY_REGISTRY_ADDRESS}`,
     undefined,
     'BabylonRegistry'
   );

@@ -16,22 +16,22 @@
         "babylonOracle": "0xc6e7DF5E7b4f2A278906862b61205850344D4e7d"
       }
     },
-    "baseSepolia": {
-      "chainId": 84532,
-      "name": "Base Sepolia (Staging)",
-      "rpcUrl": "https://sepolia.base.org",
+    "sepolia": {
+      "chainId": 11155111,
+      "name": "Ethereum Sepolia (Testnet)",
+      "rpcUrl": "https://ethereum-sepolia-rpc.publicnode.com",
       "contracts": {
-        "diamond": "0xdC3f0aD2f76Cea9379af897fa8EAD4A6d5e43990",
-        "identityRegistry": "0x4102F9b209796b53a18B063A438D05C7C9Af31A2",
-        "reputationSystem": "0x7960E6044bbeE480F5388be1903b3A1dd69c126D",
-        "predictionMarketFacet": "0x95A1aEe004de01267daDD1e55C1a3fc2818636cE",
-        "oracleFacet": "0x58A0Cd5307CdE4F2ccD8E2cA71510206F1365D9B"
+        "diamond": "0x0000000000000000000000000000000000000000",
+        "identityRegistry": "0x0000000000000000000000000000000000000000",
+        "reputationSystem": "0x0000000000000000000000000000000000000000",
+        "predictionMarketFacet": "0x0000000000000000000000000000000000000000",
+        "oracleFacet": "0x0000000000000000000000000000000000000000"
       }
     },
-    "base": {
-      "chainId": 8453,
-      "name": "Base Mainnet (Production)",
-      "rpcUrl": "https://mainnet.base.org",
+    "mainnet": {
+      "chainId": 1,
+      "name": "Ethereum Mainnet (Production)",
+      "rpcUrl": "https://ethereum-rpc.publicnode.com",
       "contracts": {
         "diamond": "0x0000000000000000000000000000000000000000",
         "identityRegistry": "0x0000000000000000000000000000000000000000",
@@ -52,7 +52,7 @@
       }
     },
     "staging": {
-      "network": "baseSepolia",
+      "network": "sepolia",
       "endpoints": {
         "apiBaseUrl": "https://staging.babylon.market/api",
         "a2aEndpoint": "wss://staging.babylon.market/ws/a2a",
@@ -60,7 +60,7 @@
       }
     },
     "production": {
-      "network": "base",
+      "network": "mainnet",
       "endpoints": {
         "apiBaseUrl": "https://babylon.market/api",
         "a2aEndpoint": "wss://babylon.market/ws/a2a",

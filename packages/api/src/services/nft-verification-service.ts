@@ -1,6 +1,5 @@
 import {
-  base,
-  baseSepolia,
+  CHAIN,
   getCurrentChainId,
   getCurrentRpcUrl,
   hardhat,
@@ -35,14 +34,6 @@ const CHAIN_CONFIG: Record<number, { chain: Chain; rpcUrl: string }> = {
     chain: hardhat,
     rpcUrl: 'http://localhost:8545',
   },
-  [base.id]: {
-    chain: base,
-    rpcUrl: process.env.BASE_MAINNET_RPC_URL || 'https://mainnet.base.org',
-  },
-  [baseSepolia.id]: {
-    chain: baseSepolia,
-    rpcUrl: process.env.BASE_SEPOLIA_RPC_URL || 'https://sepolia.base.org',
-  },
   [mainnet.id]: {
     chain: mainnet,
     rpcUrl:
@@ -59,7 +50,7 @@ const CHAIN_CONFIG: Record<number, { chain: Chain; rpcUrl: string }> = {
 function getChainConfig(chainId: number) {
   return (
     CHAIN_CONFIG[chainId] || {
-      chain: baseSepolia,
+      chain: CHAIN,
       rpcUrl: getCurrentRpcUrl(),
     }
   );

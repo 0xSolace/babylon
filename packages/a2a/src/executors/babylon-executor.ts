@@ -33,6 +33,7 @@ import {
   checkUserInput,
   generateSnowflakeId,
   getAPIBaseUrl,
+  getCurrentRpcUrl,
   logger,
 } from '@babylon/shared';
 import { v4 as uuidv4 } from 'uuid';
@@ -3676,9 +3677,7 @@ export class BabylonAgentExecutor implements AgentExecutor {
    * Get or create the X402 payment manager instance
    */
   private getX402Manager(): X402Manager {
-    const rpcUrl =
-      process.env.NEXT_PUBLIC_RPC_URL || 'https://sepolia.base.org';
-    return new X402Manager({ rpcUrl });
+    return new X402Manager({ rpcUrl: getCurrentRpcUrl() });
   }
 
   /**

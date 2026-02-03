@@ -1,6 +1,6 @@
 'use client';
 
-import { IDENTITY_REGISTRY_BASE_SEPOLIA } from '@babylon/shared';
+import { IDENTITY_REGISTRY_ADDRESS } from '@babylon/shared';
 import { Award, Medal, Target, Trophy } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { PageContainer } from '@/components/shared/PageContainer';
@@ -204,7 +204,7 @@ export default function ReputationPage() {
                 Contract Address
               </label>
               <p className="truncate font-mono text-foreground text-sm">
-                {IDENTITY_REGISTRY_BASE_SEPOLIA}
+                {IDENTITY_REGISTRY_ADDRESS}
               </p>
             </div>
           </div>

@@ -8,10 +8,11 @@
 
 import { db, eq, inArray, positions, users } from '@babylon/db';
 import {
+  CHAIN,
   getCurrentRpcUrl,
   logger,
   REPUTATION_SYSTEM_ABI,
-  REPUTATION_SYSTEM_BASE_SEPOLIA,
+  REPUTATION_SYSTEM_ADDRESS,
 } from '@babylon/shared';
 import {
   type Address,
@@ -22,7 +23,6 @@ import {
   parseEther,
 } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
-import { baseSepolia } from 'viem/chains';
 
 // =============================================================================
 // Reputation Sync Interface
@@ -89,7 +89,7 @@ export async function syncReputationIfAvailable(
 }
 
 // Contract addresses from canonical config
-const REPUTATION_SYSTEM = REPUTATION_SYSTEM_BASE_SEPOLIA as Address;
+const REPUTATION_SYSTEM = REPUTATION_SYSTEM_ADDRESS as Address;
 
 // Server wallet for paying gas (testnet only!)
 const DEPLOYER_PRIVATE_KEY = process.env.DEPLOYER_PRIVATE_KEY as `0x${string}`;
@@ -166,14 +166,14 @@ export class ReputationService {
 
     // 2. Create clients
     const publicClient = createPublicClient({
-      chain: baseSepolia,
+      chain: CHAIN,
       transport: http(getCurrentRpcUrl()),
     });
 
     const account = privateKeyToAccount(DEPLOYER_PRIVATE_KEY);
     const walletClient = createWalletClient({
       account,
-      chain: baseSepolia,
+      chain: CHAIN,
       transport: http(getCurrentRpcUrl()),
     });
 
@@ -270,7 +270,7 @@ export class ReputationService {
 
     // Query on-chain reputation
     const publicClient = createPublicClient({
-      chain: baseSepolia,
+      chain: CHAIN,
       transport: http(getCurrentRpcUrl()),
     });
 

@@ -7,6 +7,7 @@
 
 import type { Address } from 'viem';
 import configData from './public-config.json';
+import { CHAIN_ID, RPC_URL } from '../constants/chains';
 
 // =============================================================================
 // Types
@@ -41,8 +42,8 @@ export interface PublicConfig {
   version: string;
   networks: {
     local: NetworkConfig;
-    baseSepolia: NetworkConfig;
-    base: NetworkConfig;
+    sepolia: NetworkConfig;
+    mainnet: NetworkConfig;
   };
   environments: {
     development: { network: string; endpoints: EndpointsConfig };
@@ -57,29 +58,23 @@ export interface PublicConfig {
 
 export const PUBLIC_CONFIG = configData as PublicConfig;
 
-type NetworkId = 'local' | 'baseSepolia' | 'base';
+type NetworkId = 'local' | 'sepolia' | 'mainnet';
 type EnvironmentName = 'development' | 'staging' | 'production';
 
 const CHAIN_ID_TO_NETWORK: Record<number, NetworkId> = {
   31337: 'local',
-  84532: 'baseSepolia',
-  8453: 'base',
+  11155111: 'sepolia',
+  1: 'mainnet',
 };
 
 const NETWORK_TO_ENVIRONMENT: Record<NetworkId, EnvironmentName> = {
   local: 'development',
-  baseSepolia: 'staging',
-  base: 'production',
+  sepolia: 'staging',
+  mainnet: 'production',
 };
 
 export function getCurrentChainId(): number {
-  const envChainId = process.env.NEXT_PUBLIC_CHAIN_ID;
-  if (envChainId) return Number.parseInt(envChainId, 10);
-
-  // Default to local for development, Base Sepolia for test
-  if (process.env.NODE_ENV === 'production') return 8453;
-  if (process.env.NODE_ENV === 'test') return 84532;
-  return 31337;
+  return CHAIN_ID;
 }
 
 function getCurrentEnvironment(): EnvironmentName {
@@ -88,7 +83,7 @@ function getCurrentEnvironment(): EnvironmentName {
 }
 
 function getCurrentNetwork(): NetworkConfig {
-  const networkId = CHAIN_ID_TO_NETWORK[getCurrentChainId()] || 'local';
+  const networkId = CHAIN_ID_TO_NETWORK[getCurrentChainId()] || 'sepolia';
   return PUBLIC_CONFIG.networks[networkId];
 }
 
@@ -116,19 +111,31 @@ export function areContractsDeployed(chainId: number): boolean {
 
 export const LOCAL_CONTRACT_ADDRESSES = PUBLIC_CONFIG.networks.local
   .contracts as LocalContractAddresses;
-export const DIAMOND_ADDRESS = LOCAL_CONTRACT_ADDRESSES.diamond;
-export const REPUTATION_SYSTEM_BASE_SEPOLIA = PUBLIC_CONFIG.networks.baseSepolia
-  .contracts.reputationSystem as Address;
-export const IDENTITY_REGISTRY_BASE_SEPOLIA = PUBLIC_CONFIG.networks.baseSepolia
-  .contracts.identityRegistry as Address;
+
+export const CURRENT_CONTRACT_ADDRESSES = getCurrentContractAddresses();
+export const DIAMOND_ADDRESS = CURRENT_CONTRACT_ADDRESSES.diamond as Address;
+export const IDENTITY_REGISTRY_ADDRESS =
+  CURRENT_CONTRACT_ADDRESSES.identityRegistry as Address;
+export const REPUTATION_SYSTEM_ADDRESS =
+  CURRENT_CONTRACT_ADDRESSES.reputationSystem as Address;
+
+/**
+ * @deprecated Use `IDENTITY_REGISTRY_ADDRESS` (single-network app).
+ */
+export const IDENTITY_REGISTRY_BASE_SEPOLIA =
+  PUBLIC_CONFIG.networks.sepolia.contracts.identityRegistry as Address;
+/**
+ * @deprecated Use `REPUTATION_SYSTEM_ADDRESS` (single-network app).
+ */
+export const REPUTATION_SYSTEM_BASE_SEPOLIA =
+  PUBLIC_CONFIG.networks.sepolia.contracts.reputationSystem as Address;
 
 // =============================================================================
 // RPC & Endpoints
 // =============================================================================
 
 export function getCurrentRpcUrl(): string {
-  if (process.env.NEXT_PUBLIC_RPC_URL) return process.env.NEXT_PUBLIC_RPC_URL;
-  return getCurrentNetwork().rpcUrl;
+  return RPC_URL || getCurrentNetwork().rpcUrl;
 }
 
 export function getAPIBaseUrl(): string {

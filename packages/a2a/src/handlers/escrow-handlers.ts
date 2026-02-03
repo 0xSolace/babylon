@@ -5,7 +5,7 @@
  */
 
 import { and, db, eq, lt, moderationEscrows, sql, users } from '@babylon/db';
-import { generateSnowflakeId, logger } from '@babylon/shared';
+import { generateSnowflakeId, getCurrentRpcUrl, logger } from '@babylon/shared';
 import type { SQL } from 'drizzle-orm';
 import { parseEther } from 'ethers';
 import { z } from 'zod';
@@ -19,7 +19,7 @@ import { ErrorCode } from '../types/a2a';
 
 // Initialize x402 manager
 const x402Manager = new X402Manager({
-  rpcUrl: process.env.NEXT_PUBLIC_RPC_URL || 'https://sepolia.base.org',
+  rpcUrl: getCurrentRpcUrl(),
   paymentTimeout: 15 * 60 * 1000, // 15 minutes
 });
 

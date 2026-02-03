@@ -28,7 +28,7 @@ import { apiFetch } from '@/utils/api-fetch';
 /**
  * Check if we're on a local network where smart wallets aren't supported.
  * Smart wallets (ERC-4337) require bundler infrastructure that only exists
- * on supported chains like Base/Base Sepolia, not on local Hardhat networks.
+ * on supported Ethereum chains (Mainnet/Sepolia), not on local Hardhat networks.
  */
 const isLocalNetwork = CHAIN.id === 31337;
 

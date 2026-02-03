@@ -6,7 +6,7 @@
  *
  * @description
  * Triggers on-chain registration for a user. Registers user to EIP-8004
- * Identity Registry on Base Sepolia. Supports referral codes.
+ * Identity Registry on the selected Ethereum network. Supports referral codes.
  *
  * @openapi
  * /api/users/onboarding/onchain:

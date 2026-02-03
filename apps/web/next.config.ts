@@ -51,6 +51,9 @@ const nextConfig: NextConfig = {
   },
   env: {
     WAITLIST_MODE: process.env.WAITLIST_MODE ?? 'false',
+    // Expose network selection to the client bundle (single env var).
+    // Client-side code must not rely on non-exposed process.env values.
+    BABYLON_NETWORK: process.env.BABYLON_NETWORK ?? '',
   },
   async redirects() {
     if (!waitlistEnabled) return [];

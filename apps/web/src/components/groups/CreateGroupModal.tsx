@@ -594,9 +594,6 @@ export function CreateGroupModal({
                       className="w-full rounded-lg border border-border bg-background px-4 py-2 text-sm transition-colors focus:border-primary focus:outline-none"
                       disabled={creating}
                     >
-                      <option value={31337}>Local (Hardhat)</option>
-                      <option value={84532}>Base Sepolia</option>
-                      <option value={8453}>Base Mainnet</option>
                       <option value={1}>Ethereum Mainnet</option>
                       <option value={11155111}>Ethereum Sepolia</option>
                     </select>

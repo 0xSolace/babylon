@@ -80,10 +80,9 @@ import {
 import type { JsonValue } from '@babylon/db';
 import { db } from '@babylon/db';
 import { WalletService } from '@babylon/engine';
-import { logger } from '@babylon/shared';
+import { CHAIN, getCurrentRpcUrl, logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { type Address, createPublicClient, http } from 'viem';
-import { baseSepolia } from 'viem/chains';
 import { z } from 'zod';
 
 const AppealSchema = z.object({
@@ -589,12 +588,8 @@ async function verifyStakeTransaction(
   userId: string
 ): Promise<{ verified: boolean; amount?: number; error?: string }> {
   const publicClient = createPublicClient({
-    chain: baseSepolia,
-    transport: http(
-      process.env.NEXT_PUBLIC_RPC_URL ||
-        process.env.BASE_SEPOLIA_RPC_URL ||
-        'https://sepolia.base.org'
-    ),
+    chain: CHAIN,
+    transport: http(getCurrentRpcUrl()),
   });
 
   const tx = await publicClient.getTransaction({ hash: txHash as Address });

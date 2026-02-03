@@ -95,8 +95,6 @@ export function NftVerificationBanner({
   };
 
   const EXPLORER_URLS: Record<number, string> = {
-    8453: 'https://basescan.org/token/',
-    84532: 'https://sepolia.basescan.org/token/',
     1: 'https://etherscan.io/token/',
     11155111: 'https://sepolia.etherscan.io/token/',
   };

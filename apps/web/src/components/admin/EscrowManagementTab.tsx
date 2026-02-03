@@ -20,6 +20,7 @@ import { z } from 'zod';
 import { Avatar } from '@/components/shared/Avatar';
 import { Skeleton } from '@/components/shared/Skeleton';
 import { getAuthToken } from '@/lib/auth';
+import { getExplorerTxUrl } from '@/lib/chain/explorer';
 
 /**
  * Escrow schema for validation.
@@ -371,7 +372,7 @@ export function EscrowManagementTab() {
                       <div>
                         <span className="font-medium">Payment TX: </span>
                         <a
-                          href={`https://basescan.org/tx/${escrow.paymentTxHash}`}
+                          href={getExplorerTxUrl(escrow.paymentTxHash)}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="font-mono text-primary hover:underline"
@@ -385,7 +386,7 @@ export function EscrowManagementTab() {
                       <div>
                         <span className="font-medium">Refund TX: </span>
                         <a
-                          href={`https://basescan.org/tx/${escrow.refundTxHash}`}
+                          href={getExplorerTxUrl(escrow.refundTxHash)}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="font-mono text-primary hover:underline"

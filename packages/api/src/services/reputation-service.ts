@@ -7,10 +7,12 @@
 
 import { db, eq, inArray, positions, users } from '@babylon/db';
 import {
+  CHAIN,
+  getCurrentChainId,
   getCurrentRpcUrl,
   logger,
   REPUTATION_SYSTEM_ABI,
-  REPUTATION_SYSTEM_BASE_SEPOLIA,
+  REPUTATION_SYSTEM_ADDRESS,
 } from '@babylon/shared';
 import {
   type Address,
@@ -21,17 +23,16 @@ import {
   parseEther,
 } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
-import { baseSepolia } from 'viem/chains';
 
 // Contract addresses from canonical config
-const REPUTATION_SYSTEM = REPUTATION_SYSTEM_BASE_SEPOLIA as Address;
+const REPUTATION_SYSTEM = REPUTATION_SYSTEM_ADDRESS as Address;
 
 // Hardhat default account #0 private key (has 10000 ETH on local node)
 const HARDHAT_DEFAULT_PRIVATE_KEY =
   '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80' as const;
 
 // Server wallet for paying gas - uses Hardhat's pre-funded account for local dev
-const chainId = Number(process.env.NEXT_PUBLIC_CHAIN_ID || 31337);
+const chainId = getCurrentChainId();
 const DEPLOYER_PRIVATE_KEY: `0x${string}` =
   chainId === 31337
     ? HARDHAT_DEFAULT_PRIVATE_KEY
@@ -109,14 +110,14 @@ export class ReputationService {
 
     // 2. Create clients
     const publicClient = createPublicClient({
-      chain: baseSepolia,
+      chain: CHAIN,
       transport: http(getCurrentRpcUrl()),
     });
 
     const account = privateKeyToAccount(DEPLOYER_PRIVATE_KEY);
     const walletClient = createWalletClient({
       account,
-      chain: baseSepolia,
+      chain: CHAIN,
       transport: http(getCurrentRpcUrl()),
     });
 
@@ -213,7 +214,7 @@ export class ReputationService {
 
     // Query on-chain reputation
     const publicClient = createPublicClient({
-      chain: baseSepolia,
+      chain: CHAIN,
       transport: http(getCurrentRpcUrl()),
     });
 

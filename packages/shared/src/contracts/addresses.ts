@@ -2,7 +2,7 @@
  * Contract Address Configuration
  *
  * ERC-8004 Identity, Reputation, and Prediction Market contract addresses.
- * Supports: localnet (Hardhat), Base Sepolia (staging), Base Mainnet (production).
+ * Supports: localnet (Hardhat), Ethereum Sepolia (testnet), Ethereum Mainnet.
  *
  * @see packages/shared/src/config/default-config.ts for the canonical source
  */
@@ -45,29 +45,28 @@ export const LOCAL_CONTRACTS: ERC8004ContractAddresses = {
   oracleFacet: PUBLIC_CONFIG.networks.local.contracts.oracleFacet as Address,
 };
 
-/** Base Sepolia (Staging) - Chain ID: 84532 */
-export const BASE_SEPOLIA_CONTRACTS: ERC8004ContractAddresses = {
-  identityRegistry: PUBLIC_CONFIG.networks.baseSepolia.contracts
+/** Ethereum Sepolia (Testnet) - Chain ID: 11155111 */
+export const SEPOLIA_CONTRACTS: ERC8004ContractAddresses = {
+  identityRegistry: PUBLIC_CONFIG.networks.sepolia.contracts
     .identityRegistry as Address,
-  reputationSystem: PUBLIC_CONFIG.networks.baseSepolia.contracts
+  reputationSystem: PUBLIC_CONFIG.networks.sepolia.contracts
     .reputationSystem as Address,
-  diamond: PUBLIC_CONFIG.networks.baseSepolia.contracts.diamond as Address,
-  predictionMarketFacet: PUBLIC_CONFIG.networks.baseSepolia.contracts
+  diamond: PUBLIC_CONFIG.networks.sepolia.contracts.diamond as Address,
+  predictionMarketFacet: PUBLIC_CONFIG.networks.sepolia.contracts
     .predictionMarketFacet as Address,
-  oracleFacet: PUBLIC_CONFIG.networks.baseSepolia.contracts
-    .oracleFacet as Address,
+  oracleFacet: PUBLIC_CONFIG.networks.sepolia.contracts.oracleFacet as Address,
 };
 
-/** Base Mainnet (Production) - Chain ID: 8453 */
-export const BASE_MAINNET_CONTRACTS: ERC8004ContractAddresses = {
-  identityRegistry: PUBLIC_CONFIG.networks.base.contracts
+/** Ethereum Mainnet (Production) - Chain ID: 1 */
+export const MAINNET_CONTRACTS: ERC8004ContractAddresses = {
+  identityRegistry: PUBLIC_CONFIG.networks.mainnet.contracts
     .identityRegistry as Address,
-  reputationSystem: PUBLIC_CONFIG.networks.base.contracts
+  reputationSystem: PUBLIC_CONFIG.networks.mainnet.contracts
     .reputationSystem as Address,
-  diamond: PUBLIC_CONFIG.networks.base.contracts.diamond as Address,
-  predictionMarketFacet: PUBLIC_CONFIG.networks.base.contracts
+  diamond: PUBLIC_CONFIG.networks.mainnet.contracts.diamond as Address,
+  predictionMarketFacet: PUBLIC_CONFIG.networks.mainnet.contracts
     .predictionMarketFacet as Address,
-  oracleFacet: PUBLIC_CONFIG.networks.base.contracts.oracleFacet as Address,
+  oracleFacet: PUBLIC_CONFIG.networks.mainnet.contracts.oracleFacet as Address,
 };
 
 // =============================================================================
@@ -83,12 +82,12 @@ export function getERC8004ContractAddresses(
   switch (chainId) {
     case 31337:
       return LOCAL_CONTRACTS;
-    case 84532:
-      return BASE_SEPOLIA_CONTRACTS;
-    case 8453:
-      return BASE_MAINNET_CONTRACTS;
+    case 11155111:
+      return SEPOLIA_CONTRACTS;
+    case 1:
+      return MAINNET_CONTRACTS;
     default:
-      return BASE_SEPOLIA_CONTRACTS;
+      return SEPOLIA_CONTRACTS;
   }
 }
 

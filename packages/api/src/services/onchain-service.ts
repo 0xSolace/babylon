@@ -18,6 +18,8 @@ import type {
 } from '@babylon/shared';
 import {
   BusinessLogicError,
+  CHAIN,
+  getCurrentChainId,
   generateSnowflakeId,
   IDENTITY_REGISTRY_ABI,
   InternalServerError,
@@ -38,7 +40,7 @@ import {
   type WalletClient,
 } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
-import { baseSepolia, foundry } from 'viem/chains';
+import { foundry } from 'viem/chains';
 
 /**
  * Agent0Client interface for dependency injection
@@ -117,8 +119,7 @@ export const REPUTATION_SYSTEM = contracts.reputationSystem as Address;
 const HARDHAT_DEFAULT_PRIVATE_KEY =
   '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80' as const;
 
-// Use Hardhat's pre-funded account for local development, otherwise use env var
-const chainId = Number(process.env.NEXT_PUBLIC_CHAIN_ID || 31337);
+const chainId = getCurrentChainId();
 export const DEPLOYER_PRIVATE_KEY: `0x${string}` =
   chainId === 31337
     ? HARDHAT_DEFAULT_PRIVATE_KEY
@@ -377,11 +378,11 @@ export async function processOnchainRegistration({
     referrerId = dbUser.referredBy;
   }
 
-  const chainId = Number(process.env.NEXT_PUBLIC_CHAIN_ID || 31337);
+  const chainId = getCurrentChainId();
 
   // Create publicClient at function scope for use throughout registration flow
   const publicClient = createPublicClient({
-    chain: chainId === 31337 ? foundry : baseSepolia,
+    chain: chainId === 31337 ? foundry : CHAIN,
     transport: http(getRpcUrl()),
   });
 
@@ -485,11 +486,11 @@ export async function processOnchainRegistration({
   let walletClient: WalletClient | null = null;
 
   if (deployerConfigured) {
-    const chainId = Number(process.env.NEXT_PUBLIC_CHAIN_ID || 31337);
+    const chainId = getCurrentChainId();
     deployerAccount = privateKeyToAccount(DEPLOYER_PRIVATE_KEY!);
     walletClient = createWalletClient({
       account: deployerAccount,
-      chain: chainId === 31337 ? foundry : baseSepolia,
+      chain: chainId === 31337 ? foundry : CHAIN,
       transport: http(getRpcUrl()),
     });
   }
@@ -1026,9 +1027,9 @@ export async function confirmOnchainProfileUpdate({
   }
 
   const lowerWallet = walletAddress.toLowerCase();
-  const chainId = Number(process.env.NEXT_PUBLIC_CHAIN_ID || 31337);
+  const chainId = getCurrentChainId();
   const publicClient = createPublicClient({
-    chain: chainId === 31337 ? foundry : baseSepolia,
+    chain: chainId === 31337 ? foundry : CHAIN,
     transport: http(getRpcUrl()),
   });
 
@@ -1192,13 +1193,13 @@ export async function getOnchainRegistrationStatus(
   let tokenId = userRecord.nftTokenId;
   let isRegistered = Boolean(userRecord.onChainRegistered && tokenId !== null);
 
-  const chainId = Number(process.env.NEXT_PUBLIC_CHAIN_ID || 31337);
+  const chainId = getCurrentChainId();
 
   // Local development - skip blockchain calls, use database state
   // On testnets/mainnet, verify against the chain
   if (!user.isAgent && userRecord.walletAddress && chainId !== 31337) {
     const publicClient = createPublicClient({
-      chain: baseSepolia,
+      chain: CHAIN,
       transport: http(getRpcUrl()),
     });
 

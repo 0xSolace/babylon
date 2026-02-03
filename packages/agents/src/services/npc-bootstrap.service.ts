@@ -23,11 +23,11 @@ import {
 import type { ActorData, AgentCapabilities } from '@babylon/shared';
 import {
   getCurrentChainId,
-  IDENTITY_REGISTRY_BASE_SEPOLIA,
+  IDENTITY_REGISTRY_ADDRESS,
   logger,
   mapActorToOASFDomains,
   mapActorToOASFSkills,
-  REPUTATION_SYSTEM_BASE_SEPOLIA,
+  REPUTATION_SYSTEM_ADDRESS,
 } from '@babylon/shared';
 import { agentRuntimeManager } from '../runtime/AgentRuntimeManager';
 import { AgentStatus, AgentType } from '../types/agent-registry';
@@ -318,8 +318,8 @@ export class NPCBootstrapService {
       // Game network configuration (from canonical config)
       gameNetwork: {
         chainId: getCurrentChainId(),
-        registryAddress: IDENTITY_REGISTRY_BASE_SEPOLIA,
-        reputationAddress: REPUTATION_SYSTEM_BASE_SEPOLIA,
+        registryAddress: IDENTITY_REGISTRY_ADDRESS,
+        reputationAddress: REPUTATION_SYSTEM_ADDRESS,
       },
 
       // OASF Taxonomy Support (Agent0 SDK v0.31.0)

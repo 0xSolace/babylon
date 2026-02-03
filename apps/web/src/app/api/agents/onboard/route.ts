@@ -5,7 +5,7 @@
  * @access Authenticated
  *
  * @description
- * Registers ElizaOS agents to the EIP-8004 Identity Registry on Base Sepolia.
+ * Registers ElizaOS agents to the EIP-8004 Identity Registry on the selected Ethereum network.
  * Server wallet registers agents and tracks tokenId -> agentId mapping in database.
  * Initial reputation (70%) is set via on-chain transactions.
  *
@@ -15,7 +15,7 @@
  *     tags:
  *       - Agents
  *     summary: Register agent on-chain
- *     description: Registers agent to EIP-8004 Identity Registry on Base Sepolia
+ *     description: Registers agent to EIP-8004 Identity Registry on the selected Ethereum network
  *     security:
  *       - PrivyAuth: []
  *     requestBody:
@@ -83,11 +83,12 @@ import {
 import { asUser } from '@babylon/db';
 import {
   AgentOnboardSchema,
+  CHAIN,
   generateSnowflakeId,
   getCurrentRpcUrl,
-  IDENTITY_REGISTRY_BASE_SEPOLIA,
+  IDENTITY_REGISTRY_ADDRESS,
   logger,
-  REPUTATION_SYSTEM_BASE_SEPOLIA,
+  REPUTATION_SYSTEM_ADDRESS,
 } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import {
@@ -100,7 +101,6 @@ import {
   parseEther,
 } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
-import { baseSepolia } from 'viem/chains';
 
 // Helper to validate and get environment variables
 function getRequiredEnvVar(name: string): string {
@@ -142,8 +142,8 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
   const { agentName, endpoint } = AgentOnboardSchema.parse(body);
 
   // Contract addresses from canonical config, env vars for secrets only
-  const IDENTITY_REGISTRY = IDENTITY_REGISTRY_BASE_SEPOLIA as Address;
-  const REPUTATION_SYSTEM = REPUTATION_SYSTEM_BASE_SEPOLIA as Address;
+  const IDENTITY_REGISTRY = IDENTITY_REGISTRY_ADDRESS as Address;
+  const REPUTATION_SYSTEM = REPUTATION_SYSTEM_ADDRESS as Address;
   const DEPLOYER_PRIVATE_KEY = getRequiredEnvVar(
     'DEPLOYER_PRIVATE_KEY'
   ) as `0x${string}`;
@@ -196,14 +196,14 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
 
   // Create clients
   const publicClient = createPublicClient({
-    chain: baseSepolia,
+    chain: CHAIN,
     transport: http(RPC_URL),
   });
 
   const account = privateKeyToAccount(DEPLOYER_PRIVATE_KEY);
   const walletClient = createWalletClient({
     account,
-    chain: baseSepolia,
+    chain: CHAIN,
     transport: http(RPC_URL),
   });
 

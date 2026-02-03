@@ -7,13 +7,12 @@
  * Loads deployed contract addresses based on the current network environment.
  * Uses canonical config from @babylon/shared/config for network detection.
  *
- * @remarks Base mainnet support will be added when contracts are deployed.
+ * @remarks Network selection is driven by `BABYLON_NETWORK` (mainnet|sepolia)
+ * and resolved via @babylon/shared.
  */
 
-import { getCurrentChainId, getCurrentRpcUrl } from '@babylon/shared';
+import { getCurrentChainId, getCurrentContractAddresses, getCurrentRpcUrl } from '@babylon/shared';
 import type { Address } from 'viem';
-import baseSepoliaDeployment from '../../deployments/base-sepolia';
-import localDeployment from '../../deployments/local';
 
 /**
  * Deployed contract addresses for the current network.
@@ -43,7 +42,7 @@ export interface DeployedContracts {
 /**
  * Get deployed contract addresses for the current network.
  *
- * Automatically detects the network from `NEXT_PUBLIC_CHAIN_ID` environment variable
+ * Automatically detects the network from `BABYLON_NETWORK` (or legacy chain ID env vars)
  * and returns the corresponding contract addresses.
  *
  * @returns Contract addresses for the detected network
@@ -57,56 +56,21 @@ export interface DeployedContracts {
  */
 export function getContractAddresses(): DeployedContracts {
   const chainId = getCurrentChainId();
+  const contracts = getCurrentContractAddresses();
+  const babylonOracle =
+    'babylonOracle' in contracts
+      ? (contracts.babylonOracle as Address)
+      : (contracts.oracleFacet as Address);
 
-  if (chainId === 31337) {
-    return {
-      diamond: localDeployment.contracts.diamond as Address,
-      babylonOracle: localDeployment.contracts.babylonOracle as Address,
-      predictionMarketFacet: localDeployment.contracts
-        .predictionMarketFacet as Address,
-      identityRegistry: localDeployment.contracts.identityRegistry as Address,
-      reputationSystem: localDeployment.contracts.reputationSystem as Address,
-      chainId: 31337,
-      network: 'localnet',
-    };
-  }
-
-  if (chainId === 84532) {
-    // Note: BabylonGameOracle needs to be deployed to Sepolia
-    // Currently using oracleFacet as placeholder until deployed
-    return {
-      diamond: baseSepoliaDeployment.contracts.diamond as Address,
-      babylonOracle:
-        ((baseSepoliaDeployment.contracts as Record<string, string>)
-          .babylonOracle as Address) ||
-        (baseSepoliaDeployment.contracts.oracleFacet as Address),
-      predictionMarketFacet: baseSepoliaDeployment.contracts
-        .predictionMarketFacet as Address,
-      identityRegistry: baseSepoliaDeployment.contracts
-        .identityRegistry as Address,
-      reputationSystem: baseSepoliaDeployment.contracts
-        .reputationSystem as Address,
-      chainId: 84532,
-      network: 'base-sepolia',
-    };
-  }
-
-  if (chainId === 8453) {
-    throw new Error(
-      'Base mainnet contracts are not yet deployed. Use localnet or base-sepolia.'
-    );
-  }
-
-  // Default to localnet for unknown chains
   return {
-    diamond: localDeployment.contracts.diamond as Address,
-    babylonOracle: localDeployment.contracts.babylonOracle as Address,
-    predictionMarketFacet: localDeployment.contracts
-      .predictionMarketFacet as Address,
-    identityRegistry: localDeployment.contracts.identityRegistry as Address,
-    reputationSystem: localDeployment.contracts.reputationSystem as Address,
-    chainId: 31337,
-    network: 'localnet',
+    diamond: contracts.diamond as Address,
+    babylonOracle,
+    predictionMarketFacet: contracts.predictionMarketFacet as Address,
+    identityRegistry: contracts.identityRegistry as Address,
+    reputationSystem: contracts.reputationSystem as Address,
+    chainId,
+    network:
+      chainId === 1 ? 'mainnet' : chainId === 11155111 ? 'sepolia' : 'localnet',
   };
 }
 

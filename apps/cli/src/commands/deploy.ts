@@ -5,8 +5,8 @@
  *
  * Commands:
  *   local     - Deploy contracts to local Hardhat
- *   testnet   - Deploy contracts to Base Sepolia testnet
- *   mainnet   - Deploy contracts to Base mainnet
+ *   testnet   - Deploy contracts to Ethereum Sepolia testnet
+ *   mainnet   - Deploy contracts to Ethereum mainnet
  *   setup     - Post-deployment testnet setup
  */
 
@@ -38,16 +38,24 @@ const NETWORKS = {
     name: 'Hardhat Local',
   },
   testnet: {
-    rpcUrl: process.env.BASE_SEPOLIA_RPC_URL || 'https://sepolia.base.org',
-    chainId: 84532,
+    rpcUrl:
+      process.env.ETHEREUM_SEPOLIA_RPC_URL ||
+      process.env.SEPOLIA_RPC_URL ||
+      process.env.BASE_SEPOLIA_RPC_URL ||
+      'https://ethereum-sepolia-rpc.publicnode.com',
+    chainId: 11155111,
     privateKey: process.env.DEPLOYER_PRIVATE_KEY || '',
-    name: 'Base Sepolia',
+    name: 'Ethereum Sepolia',
   },
   mainnet: {
-    rpcUrl: process.env.BASE_MAINNET_RPC_URL || 'https://mainnet.base.org',
-    chainId: 8453,
+    rpcUrl:
+      process.env.ETHEREUM_RPC_URL ||
+      process.env.MAINNET_RPC_URL ||
+      process.env.BASE_MAINNET_RPC_URL ||
+      'https://ethereum-rpc.publicnode.com',
+    chainId: 1,
     privateKey: process.env.DEPLOYER_PRIVATE_KEY || '',
-    name: 'Base Mainnet',
+    name: 'Ethereum Mainnet',
   },
 } as const;
 
@@ -62,8 +70,8 @@ USAGE:
 
 COMMANDS:
   local       Deploy to local Hardhat node
-  testnet     Deploy to Base Sepolia testnet
-  mainnet     Deploy to Base mainnet
+  testnet     Deploy to Ethereum Sepolia testnet
+  mainnet     Deploy to Ethereum mainnet
   setup       Post-deployment testnet setup
 
 OPTIONS:
@@ -72,13 +80,13 @@ OPTIONS:
 
 ENVIRONMENT:
   DEPLOYER_PRIVATE_KEY    Private key for deployment (testnet/mainnet)
-  BASE_SEPOLIA_RPC_URL    RPC URL for testnet
-  BASE_MAINNET_RPC_URL    RPC URL for mainnet
+  ETHEREUM_SEPOLIA_RPC_URL  RPC URL for Sepolia (testnet)
+  ETHEREUM_RPC_URL          RPC URL for Ethereum mainnet
   ETHERSCAN_API_KEY       API key for contract verification
 
 EXAMPLES:
   babylon deploy local              Deploy to local Hardhat
-  babylon deploy testnet            Deploy to Base Sepolia
+  babylon deploy testnet            Deploy to Ethereum Sepolia
   babylon deploy mainnet --force    Force mainnet deployment
   babylon deploy setup              Run testnet setup after deploy
 `);
@@ -137,8 +145,8 @@ function saveDeploymentJson(
     network === 'local'
       ? 'local'
       : network === 'testnet'
-        ? 'base-sepolia'
-        : 'base';
+        ? 'sepolia'
+        : 'mainnet';
   const deploymentDir = join(DEPLOYMENTS_DIR, networkDir);
 
   // Ensure directory exists
@@ -311,7 +319,11 @@ async function runTestnetSetup(): Promise<void> {
     process.exit(1);
   }
 
-  const rpcUrl = process.env.BASE_SEPOLIA_RPC_URL || 'https://sepolia.base.org';
+  const rpcUrl =
+    process.env.ETHEREUM_SEPOLIA_RPC_URL ||
+    process.env.SEPOLIA_RPC_URL ||
+    process.env.BASE_SEPOLIA_RPC_URL ||
+    'https://ethereum-sepolia-rpc.publicnode.com';
 
   logger.step('Initializing game state...');
 

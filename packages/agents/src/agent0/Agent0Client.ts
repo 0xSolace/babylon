@@ -11,7 +11,13 @@
  * @packageDocumentation
  */
 
-import { logger } from '@babylon/shared';
+import {
+  DIAMOND_ADDRESS,
+  getCurrentChainId,
+  IDENTITY_REGISTRY_ADDRESS,
+  logger,
+  REPUTATION_SYSTEM_ADDRESS,
+} from '@babylon/shared';
 import type {
   AgentSummary,
   Feedback,
@@ -304,28 +310,28 @@ export class Agent0Client implements IAgent0Client {
    * - External agent onboarding
    * - Interoperability with agent0 network
    *
-   * The game's metadata includes pointers to Base network where game operates
+   * The game's metadata includes pointers to the current Ethereum network
    */
   async registerBabylonGame(): Promise<Agent0RegistrationResult> {
-    const baseChainId = Number.parseInt(
-      process.env.BASE_CHAIN_ID || '8453',
-      10
-    ); // Base mainnet by default
-    const baseRegistryAddress = process.env.BASE_IDENTITY_REGISTRY_ADDRESS;
-    const baseReputationAddress = process.env.BASE_REPUTATION_SYSTEM_ADDRESS;
-    const baseMarketAddress = process.env.BASE_DIAMOND_ADDRESS;
+    const chainId = getCurrentChainId();
+    const registryAddress = IDENTITY_REGISTRY_ADDRESS;
+    const reputationAddress = REPUTATION_SYSTEM_ADDRESS;
+    const marketAddress = DIAMOND_ADDRESS;
 
-    if (!baseRegistryAddress) {
+    if (
+      !registryAddress ||
+      registryAddress === '0x0000000000000000000000000000000000000000'
+    ) {
       throw new Error(
-        'BASE_IDENTITY_REGISTRY_ADDRESS required for game registration'
+        'IDENTITY_REGISTRY_ADDRESS must be set (deploy contracts / update public-config.json)'
       );
     }
 
     logger.info(
       'Registering Babylon game on agent0',
       {
-        baseChainId,
-        baseRegistryAddress,
+        chainId,
+        registryAddress,
       },
       'Agent0Client [registerBabylonGame]'
     );
@@ -334,7 +340,7 @@ export class Agent0Client implements IAgent0Client {
       name: process.env.BABYLON_GAME_NAME || 'Babylon Prediction Game',
       description:
         process.env.BABYLON_GAME_DESCRIPTION ||
-        'AI-powered prediction market game on Base network',
+        'AI-powered prediction market game on Ethereum',
       imageUrl: process.env.BABYLON_LOGO_URL,
       walletAddress:
         process.env.BABYLON_GAME_WALLET || process.env.AGENT0_PRIVATE_KEY || '',
@@ -366,10 +372,10 @@ export class Agent0Client implements IAgent0Client {
         domains: [],
         // Cross-chain game network info
         gameNetwork: {
-          chainId: baseChainId,
-          registryAddress: baseRegistryAddress,
-          reputationAddress: baseReputationAddress,
-          marketAddress: baseMarketAddress,
+          chainId,
+          registryAddress,
+          reputationAddress,
+          marketAddress,
         },
       },
     });

@@ -39,13 +39,14 @@ import {
 } from '@babylon/db';
 import {
   calculatePriceFromHoldings,
+  CHAIN,
   DIAMOND_ADDRESS,
   generateSnowflakeId,
   getCurrentRpcUrl,
   logger,
   PERP_MARKET_CONFIG,
   PREDICTION_MARKET_ABI,
-  REPUTATION_SYSTEM_BASE_SEPOLIA,
+  REPUTATION_SYSTEM_ADDRESS,
 } from '@babylon/shared';
 import { BabylonLLMClient } from './llm/openai-client';
 import { MarketDecisionEngine } from './MarketDecisionEngine';
@@ -1501,7 +1502,7 @@ export async function resolveQuestionPayouts(
   }
 
   // Check if on-chain reputation updates are configured (requires deployer key)
-  if (process.env.DEPLOYER_PRIVATE_KEY && REPUTATION_SYSTEM_BASE_SEPOLIA) {
+  if (process.env.DEPLOYER_PRIVATE_KEY && REPUTATION_SYSTEM_ADDRESS) {
     await ReputationService.updateReputationForResolvedMarket({
       marketId: marketId,
       outcome: winningSide,
@@ -1566,17 +1567,16 @@ async function resolveMarketOnChain(
   const { createPublicClient, createWalletClient, http, parseAbi } =
     await import('viem');
   const { privateKeyToAccount } = await import('viem/accounts');
-  const { baseSepolia } = await import('viem/chains');
 
   const publicClient = createPublicClient({
-    chain: baseSepolia,
+    chain: CHAIN,
     transport: http(rpcUrl),
   });
 
   const account = privateKeyToAccount(deployerPrivateKey);
   const walletClient = createWalletClient({
     account,
-    chain: baseSepolia,
+    chain: CHAIN,
     transport: http(rpcUrl),
   });
 

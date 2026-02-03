@@ -34,8 +34,8 @@ import type { AgentCapabilities } from '@babylon/shared';
 import {
   BABYLON_POINTS_SYMBOL,
   getCurrentChainId,
-  IDENTITY_REGISTRY_BASE_SEPOLIA,
-  REPUTATION_SYSTEM_BASE_SEPOLIA,
+  IDENTITY_REGISTRY_ADDRESS,
+  REPUTATION_SYSTEM_ADDRESS,
 } from '@babylon/shared';
 import { AuthorizationError } from '../errors';
 import { agentIdentityService } from '../identity/AgentIdentityService';
@@ -310,8 +310,8 @@ export class AgentServiceV2 {
         userType: 'user_controlled',
         gameNetwork: {
           chainId: getCurrentChainId(),
-          registryAddress: IDENTITY_REGISTRY_BASE_SEPOLIA,
-          reputationAddress: REPUTATION_SYSTEM_BASE_SEPOLIA,
+          registryAddress: IDENTITY_REGISTRY_ADDRESS,
+          reputationAddress: REPUTATION_SYSTEM_ADDRESS,
         },
         skills: [],
         domains: [],

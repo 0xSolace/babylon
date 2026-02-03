@@ -66,14 +66,14 @@
 
 import { X402Manager } from '@babylon/a2a';
 import { authenticate } from '@babylon/api';
-import { logger } from '@babylon/shared';
+import { getCurrentRpcUrl, logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { trackServerEvent } from '@/lib/posthog/server';
 
 // Initialize x402 manager (you'll need to configure RPC URL)
 const x402Manager = new X402Manager({
-  rpcUrl: process.env.NEXT_PUBLIC_RPC_URL || 'https://sepolia.base.org',
+  rpcUrl: getCurrentRpcUrl(),
   paymentTimeout: 15 * 60 * 1000, // 15 minutes
 });
 

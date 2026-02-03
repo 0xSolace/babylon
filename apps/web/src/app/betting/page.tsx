@@ -3,7 +3,7 @@
 /**
  * On-Chain Betting Page
  *
- * Real betting with Base Sepolia ETH
+ * Real betting on-chain (Ethereum Sepolia/Mainnet)
  * Transactions execute on blockchain via smart wallet
  */
 
@@ -25,6 +25,7 @@ import { Skeleton } from '@/components/shared/Skeleton';
 import { useAuth } from '@/hooks/useAuth';
 import { useOnChainBetting } from '@/hooks/useOnChainBetting';
 import { useSmartWallet } from '@/hooks/useSmartWallet';
+import { getExplorerBaseUrl } from '@/lib/chain/explorer';
 import { usePerpMarkets } from '@/stores/perpMarketsStore';
 import {
   type PredictionMarket,
@@ -62,11 +63,10 @@ export default function OnChainBettingPage() {
   // Get network info
   const { network, diamond, chainId } = getContractAddresses();
   const isLocal = chainId === 31337;
-  const explorerUrl = isLocal
-    ? null // No explorer for localnet
-    : chainId === 84532
-      ? 'https://sepolia.basescan.org'
-      : 'https://basescan.org';
+  const explorerUrl = (() => {
+    const url = getExplorerBaseUrl();
+    return url ? url : null;
+  })();
 
   const handleBet = async () => {
     if (!selectedMarket || !betAmount) return;
@@ -128,7 +128,7 @@ export default function OnChainBettingPage() {
             <Wallet className="mx-auto h-16 w-16 text-[#0066FF]" />
             <h1 className="font-bold text-3xl">On-Chain Betting</h1>
             <p className="max-w-md text-muted-foreground">
-              Bet with real Base Sepolia ETH. All transactions are on-chain and
+              Bet with real ETH (Sepolia/Mainnet). All transactions are on-chain and
               verifiable.
             </p>
           </div>
@@ -187,7 +187,7 @@ export default function OnChainBettingPage() {
           <p className="text-muted-foreground">
             {isLocal
               ? `Local Hardhat (Chain ID: ${chainId}) • Testing mode`
-              : 'Base Sepolia ETH • All transactions on blockchain'}
+              : 'On-chain • All transactions on blockchain'}
           </p>
           <div className="mt-1 text-muted-foreground text-xs">
             Network: {network} • Diamond: {diamond.slice(0, 10)}...
@@ -400,7 +400,7 @@ export default function OnChainBettingPage() {
               <div className="rounded-lg border border-yellow-500/20 bg-yellow-500/10 p-3">
                 <p className="text-xs text-yellow-600">
                   ⚠️ This is a real on-chain transaction. Gas fees apply.
-                  Transaction will be visible on Base Sepolia block explorer.
+                  Transaction will be visible on the block explorer.
                 </p>
               </div>
 

@@ -55,10 +55,12 @@ export const CHAIN_CONFIGS: Record<DeploymentEnv, ChainConfig> = {
     },
   },
   testnet: {
-    chainId: 84532,
-    name: 'Base Sepolia',
-    rpcUrl: 'https://sepolia.base.org',
-    explorerUrl: 'https://sepolia.basescan.org',
+    chainId: 11155111,
+    name: 'Ethereum Sepolia',
+    rpcUrl:
+      process.env.ETHEREUM_SEPOLIA_RPC_URL ||
+      'https://ethereum-sepolia-rpc.publicnode.com',
+    explorerUrl: 'https://sepolia.etherscan.io',
     nativeCurrency: {
       name: 'Ethereum',
       symbol: 'ETH',
@@ -66,10 +68,10 @@ export const CHAIN_CONFIGS: Record<DeploymentEnv, ChainConfig> = {
     },
   },
   mainnet: {
-    chainId: 8453,
-    name: 'Base',
-    rpcUrl: 'https://mainnet.base.org',
-    explorerUrl: 'https://basescan.org',
+    chainId: 1,
+    name: 'Ethereum Mainnet',
+    rpcUrl: process.env.ETHEREUM_RPC_URL || 'https://ethereum-rpc.publicnode.com',
+    explorerUrl: 'https://etherscan.io',
     nativeCurrency: {
       name: 'Ethereum',
       symbol: 'ETH',
@@ -99,10 +101,11 @@ export interface EnvValidationResult {
  *
  * Checks multiple sources in order of precedence:
  * 1. `DEPLOYMENT_ENV` environment variable
- * 2. `USE_MAINNET` flag
- * 3. `NODE_ENV` (production defaults to testnet)
- * 4. `NEXT_PUBLIC_CHAIN_ID` chain ID
- * 5. RPC URL patterns
+ * 2. `BABYLON_NETWORK` ("mainnet" | "sepolia")
+ * 3. `USE_MAINNET` flag (legacy safety switch)
+ * 4. `NODE_ENV` (production defaults to testnet)
+ * 5. `NEXT_PUBLIC_CHAIN_ID` chain ID (legacy)
+ * 6. RPC URL patterns
  *
  * @returns Detected deployment environment
  */
@@ -115,6 +118,10 @@ export function detectEnvironment(): DeploymentEnv {
   ) {
     return explicitEnv;
   }
+
+  const network = (process.env.BABYLON_NETWORK || '').toLowerCase().trim();
+  if (network === 'mainnet') return 'mainnet';
+  if (network === 'sepolia' || network === 'testnet') return 'testnet';
 
   if (process.env.USE_MAINNET === 'true') {
     return 'mainnet';
@@ -129,6 +136,11 @@ export function detectEnvironment(): DeploymentEnv {
     switch (Number.parseInt(chainId)) {
       case 31337:
         return 'localnet';
+      case 11155111:
+        return 'testnet';
+      case 1:
+        return 'mainnet';
+      // Legacy Base chain IDs (deprecated)
       case 84532:
         return 'testnet';
       case 8453:
@@ -138,8 +150,8 @@ export function detectEnvironment(): DeploymentEnv {
 
   const rpcUrl =
     process.env.NEXT_PUBLIC_RPC_URL ||
-    process.env.BASE_SEPOLIA_RPC_URL ||
-    process.env.BASE_RPC_URL;
+    process.env.ETHEREUM_SEPOLIA_RPC_URL ||
+    process.env.ETHEREUM_RPC_URL;
   if (rpcUrl) {
     if (rpcUrl.includes('localhost') || rpcUrl.includes('127.0.0.1')) {
       return 'localnet';
@@ -147,7 +159,7 @@ export function detectEnvironment(): DeploymentEnv {
     if (rpcUrl.includes('sepolia')) {
       return 'testnet';
     }
-    if (rpcUrl.includes('mainnet.base.org')) {
+    if (rpcUrl.includes('ethereum') || rpcUrl.includes('mainnet')) {
       return 'mainnet';
     }
   }
@@ -220,7 +232,7 @@ function validateTestnet(errors: string[], warnings: string[]): void {
   // Contract addresses are now in canonical config (packages/shared/src/config/default-config.ts)
   // Only warn if config has zero addresses (not deployed yet)
   warnings.push(
-    'Ensure Base Sepolia contracts are deployed. Check packages/shared/src/config/default-config.ts'
+    'Ensure Sepolia contracts are deployed. Check packages/shared/src/config/public-config.json'
   );
 
   if (!process.env.DEPLOYER_PRIVATE_KEY) {
@@ -230,8 +242,10 @@ function validateTestnet(errors: string[], warnings: string[]): void {
   }
 
   if (process.env.AGENT0_ENABLED === 'true') {
-    if (!process.env.BASE_SEPOLIA_RPC_URL) {
-      errors.push('BASE_SEPOLIA_RPC_URL is required when AGENT0_ENABLED=true');
+    if (!process.env.AGENT0_RPC_URL && !process.env.ETHEREUM_SEPOLIA_RPC_URL) {
+      errors.push(
+        'AGENT0_RPC_URL (or ETHEREUM_SEPOLIA_RPC_URL) is required when AGENT0_ENABLED=true'
+      );
     }
     if (!process.env.BABYLON_GAME_PRIVATE_KEY) {
       errors.push(
@@ -273,9 +287,9 @@ function validateMainnet(errors: string[], warnings: string[]): void {
   }
 
   if (process.env.AGENT0_ENABLED === 'true') {
-    if (!process.env.BASE_RPC_URL) {
+    if (!process.env.AGENT0_RPC_URL && !process.env.ETHEREUM_RPC_URL) {
       errors.push(
-        'BASE_RPC_URL is required when AGENT0_ENABLED=true on mainnet'
+        'AGENT0_RPC_URL (or ETHEREUM_RPC_URL) is required when AGENT0_ENABLED=true on mainnet'
       );
     }
     if (!process.env.BABYLON_GAME_PRIVATE_KEY) {

@@ -68,10 +68,10 @@ const PREDICTION_MARKET_ABI = [
 ] as const;
 
 /**
- * Hook for on-chain prediction market betting with Base Sepolia ETH.
+ * Hook for on-chain prediction market betting (Ethereum Sepolia/Mainnet).
  *
  * Enables users to buy and sell shares in prediction markets using their
- * smart wallet. Transactions execute on the Base Sepolia blockchain through
+ * smart wallet. Transactions execute on the selected Ethereum chain through
  * the prediction market diamond contract. Supports gasless transactions when
  * using an embedded wallet.
  *

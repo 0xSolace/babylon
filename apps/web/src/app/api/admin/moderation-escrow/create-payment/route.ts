@@ -71,7 +71,7 @@
 import { X402Manager } from '@babylon/a2a';
 import { requireAdmin } from '@babylon/api';
 import { db } from '@babylon/db';
-import { generateSnowflakeId, logger } from '@babylon/shared';
+import { generateSnowflakeId, getCurrentRpcUrl, logger } from '@babylon/shared';
 import { parseEther } from 'ethers';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
@@ -79,7 +79,7 @@ import { z } from 'zod';
 
 // Initialize x402 manager
 const x402Manager = new X402Manager({
-  rpcUrl: process.env.NEXT_PUBLIC_RPC_URL || 'https://sepolia.base.org',
+  rpcUrl: getCurrentRpcUrl(),
   paymentTimeout: 15 * 60 * 1000, // 15 minutes
 });
 

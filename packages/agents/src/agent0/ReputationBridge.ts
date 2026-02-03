@@ -97,11 +97,11 @@ export class ReputationBridge implements IReputationBridge {
 
   /**
    * Extract token ID from agent ID string
-   * Supports formats: "84532:1234", "agent0-1234", "1234"
+   * Supports formats: "11155111:1234", "agent0-1234", "1234"
    */
   private extractTokenId(agentId: string): number | null {
     if (agentId.includes(':')) {
-      // Format: "chainId:tokenId" (e.g., "84532:1234")
+      // Format: "chainId:tokenId" (e.g., "11155111:1234")
       const parts = agentId.split(':');
       const tokenId = Number.parseInt(parts[1] || '', 10);
       return Number.isNaN(tokenId) ? null : tokenId;

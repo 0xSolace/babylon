@@ -1,8 +1,8 @@
 /**
  * On-Chain Prediction Market Service
  *
- * @description Handles on-chain prediction market transactions using Base Sepolia
- * testnet ETH. Interacts with the PredictionMarketFacet through a Diamond proxy
+ * @description Handles on-chain prediction market transactions on Ethereum
+ * (Sepolia/Mainnet). Interacts with the PredictionMarketFacet through a Diamond proxy
  * pattern for buying and selling shares in prediction markets.
  */
 

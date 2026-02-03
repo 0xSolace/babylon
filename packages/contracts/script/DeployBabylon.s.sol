@@ -303,7 +303,7 @@ contract DeployBabylon is Script {
         console.log("ReputationSystem:", address(reputationSystem));
 
         // 10. Deploy Oracle Mocks (for testnet)
-        if (block.chainid == 84532 || block.chainid == 31337) { // Base Sepolia or Localnet
+        if (block.chainid == 11155111 || block.chainid == 31337) { // Sepolia or Localnet
             console.log("\n10. Deploying Oracle Mocks (Testnet)...");
             chainlinkOracle = new ChainlinkOracleMock();
             console.log("ChainlinkOracle:", address(chainlinkOracle));
@@ -361,7 +361,7 @@ contract DeployBabylon is Script {
         console.log("\n--- Moderation ---");
         console.log("BanManager:", address(banManager));
         
-        if (block.chainid == 84532 || block.chainid == 31337) {
+        if (block.chainid == 11155111 || block.chainid == 31337) {
             console.log("\n--- Test Infrastructure ---");
             console.log("ChainlinkOracle (Mock):", address(chainlinkOracle));
             console.log("MockOracle:", address(mockOracle));

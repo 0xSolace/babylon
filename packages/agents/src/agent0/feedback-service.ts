@@ -28,7 +28,7 @@ import type {
 } from './types';
 
 /**
- * Converts an Agent0 ID string (e.g., "84532:1234") to a token ID number
+ * Converts an Agent0 ID string (e.g., "11155111:1234") to a token ID number
  */
 function parseTokenId(agentId: string): number {
   if (agentId.includes(':')) {

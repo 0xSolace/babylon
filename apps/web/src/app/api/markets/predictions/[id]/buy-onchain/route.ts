@@ -5,11 +5,11 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
+import { getContractAddresses } from '@babylon/contracts';
 import { db } from '@babylon/db';
-import { logger } from '@babylon/shared';
+import { CHAIN, getCurrentRpcUrl, logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { createPublicClient, http } from 'viem';
-import { baseSepolia } from 'viem/chains';
 import { z } from 'zod';
 
 const OnChainBuySchema = z.object({
@@ -19,7 +19,7 @@ const OnChainBuySchema = z.object({
   walletAddress: z.string().startsWith('0x'),
 });
 
-const DIAMOND_ADDRESS = '0xdC3f0aD2f76Cea9379af897fa8EAD4A6d5e43990';
+const { diamond: DIAMOND_ADDRESS } = getContractAddresses();
 
 /**
  * POST /api/markets/predictions/[id]/buy-onchain
@@ -63,10 +63,8 @@ export const POST = withErrorHandling(
 
     // Verify transaction on blockchain
     const publicClient = createPublicClient({
-      chain: baseSepolia,
-      transport: http(
-        process.env.NEXT_PUBLIC_RPC_URL || 'https://sepolia.base.org'
-      ),
+      chain: CHAIN,
+      transport: http(getCurrentRpcUrl()),
     });
 
     const receipt = await publicClient.waitForTransactionReceipt({
@@ -149,7 +147,10 @@ export const POST = withErrorHandling(
         shares: numShares,
         txHash,
         blockNumber: receipt.blockNumber.toString(),
-        explorerUrl: `https://sepolia.basescan.org/tx/${txHash}`,
+        explorerUrl:
+          CHAIN.id === 1
+            ? `https://etherscan.io/tx/${txHash}`
+            : `https://sepolia.etherscan.io/tx/${txHash}`,
       },
     });
   }

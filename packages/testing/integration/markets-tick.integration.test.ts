@@ -582,13 +582,14 @@ describe('Idempotency Check Logic', () => {
 
 describe('POST Handler Integration', () => {
   // Import the POST handler dynamically to ensure mocks are applied
-  let POST: (request: Request) => Promise<Response>;
-  let GET: (request: Request) => Promise<Response>;
+  type NextRequest = import('next/server').NextRequest;
+  let POST: (request: NextRequest) => Promise<Response>;
+  let GET: (request: NextRequest) => Promise<Response>;
 
   beforeAll(async () => {
     // Dynamic import after mocks are set up
     const routeModule = await import(
-      '@babylon/web/src/app/api/cron/markets-tick/route'
+      '../../../apps/web/src/app/api/cron/markets-tick/route'
     );
     POST = routeModule.POST;
     GET = routeModule.GET;
@@ -606,7 +607,7 @@ describe('POST Handler Integration', () => {
       headers: {
         Authorization: `Bearer ${process.env.CRON_SECRET || 'test-secret'}`,
       },
-    });
+    }) as unknown as NextRequest;
 
     const response = await POST(request);
     expect(response.status).toBe(200);
@@ -627,7 +628,7 @@ describe('POST Handler Integration', () => {
       headers: {
         Authorization: `Bearer ${process.env.CRON_SECRET || 'test-secret'}`,
       },
-    });
+    }) as unknown as NextRequest;
 
     const response = await POST(request);
     const data = await response.json();
@@ -652,7 +653,7 @@ describe('POST Handler Integration', () => {
       headers: {
         Authorization: `Bearer ${process.env.CRON_SECRET || 'test-secret'}`,
       },
-    });
+    }) as unknown as NextRequest;
 
     const response = await POST(request);
     const data = await response.json();
@@ -677,12 +678,12 @@ describe('POST Handler Integration', () => {
     const getRequest = new Request('http://localhost/api/cron/markets-tick', {
       method: 'GET',
       headers,
-    });
+    }) as unknown as NextRequest;
 
     const postRequest = new Request('http://localhost/api/cron/markets-tick', {
       method: 'POST',
       headers,
-    });
+    }) as unknown as NextRequest;
 
     const getResponse = await GET(getRequest);
     const postResponse = await POST(postRequest);
@@ -709,7 +710,7 @@ describe('POST Handler Integration', () => {
       headers: {
         Authorization: `Bearer ${process.env.CRON_SECRET || 'test-secret'}`,
       },
-    });
+    }) as unknown as NextRequest;
 
     const response = await POST(request);
     const data = await response.json();
@@ -733,7 +734,7 @@ describe('POST Handler Integration', () => {
       headers: {
         Authorization: `Bearer ${process.env.CRON_SECRET || 'test-secret'}`,
       },
-    });
+    }) as unknown as NextRequest;
 
     const response = await POST(request);
     const data = await response.json();

@@ -232,7 +232,7 @@ describe('Agent0 SDK Complete Integration', () => {
 
       // If we get here, feedback was submitted successfully
       // Verify by checking the result or querying back
-      const testAgentId = '84532:1';
+      const testAgentId = '11155111:1';
       const reputation = await feedbackService.getAgentReputation(testAgentId);
       expect(reputation).toBeDefined();
     });
@@ -260,7 +260,7 @@ describe('Agent0 SDK Complete Integration', () => {
         return;
       }
 
-      const reputation = await feedbackService.getAgentReputation('84532:1');
+      const reputation = await feedbackService.getAgentReputation('11155111:1');
 
       if (reputation) {
         expect(reputation.agentId).toBeDefined();
@@ -279,7 +279,7 @@ describe('Agent0 SDK Complete Integration', () => {
       }
 
       const reputation =
-        await feedbackService.getAgentReputation('84532:999999999');
+        await feedbackService.getAgentReputation('11155111:999999999');
 
       // Should return null or empty result
       expect(reputation === null || typeof reputation === 'object').toBe(true);

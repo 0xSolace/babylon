@@ -3,7 +3,7 @@
  */
 
 import { db, eq, markets } from '@babylon/db';
-import { DIAMOND_ADDRESS, getCurrentRpcUrl, logger } from '@babylon/shared';
+import { CHAIN, DIAMOND_ADDRESS, getCurrentRpcUrl, logger } from '@babylon/shared';
 import {
   type Address,
   createPublicClient,
@@ -13,7 +13,6 @@ import {
   toBytes,
 } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
-import { baseSepolia } from 'viem/chains';
 
 /**
  * Create a prediction market on-chain
@@ -52,7 +51,7 @@ export async function createMarketOnChain(
           nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 },
           rpcUrls: { default: { http: [rpcUrl] } },
         }
-      : baseSepolia,
+      : CHAIN,
     transport: http(rpcUrl),
   });
 
@@ -66,7 +65,7 @@ export async function createMarketOnChain(
           nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 },
           rpcUrls: { default: { http: [rpcUrl] } },
         }
-      : baseSepolia,
+      : CHAIN,
     transport: http(rpcUrl),
   });
 
@@ -219,7 +218,7 @@ export async function getMarketIdFromTx(
           nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 },
           rpcUrls: { default: { http: [rpcUrl] } },
         }
-      : baseSepolia,
+      : CHAIN,
     transport: http(rpcUrl),
   });
 

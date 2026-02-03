@@ -7,9 +7,10 @@
 
 import { agentPerformanceMetrics, db, eq } from '@babylon/db';
 import {
+  CHAIN,
   getCurrentRpcUrl,
   REPUTATION_SYSTEM_ABI,
-  REPUTATION_SYSTEM_BASE_SEPOLIA,
+  REPUTATION_SYSTEM_ADDRESS as CURRENT_REPUTATION_SYSTEM_ADDRESS,
 } from '@babylon/shared';
 import {
   type Address,
@@ -18,14 +19,14 @@ import {
   parseAbi,
   type WalletClient,
 } from 'viem';
-import { baseSepolia } from 'viem/chains';
 import { logger } from '../../shared/logger';
 
 // Contract addresses from canonical config
-const REPUTATION_SYSTEM_ADDRESS = REPUTATION_SYSTEM_BASE_SEPOLIA as Address;
+const REPUTATION_SYSTEM_ADDRESS =
+  CURRENT_REPUTATION_SYSTEM_ADDRESS as Address;
 
 const publicClient = createPublicClient({
-  chain: baseSepolia,
+  chain: CHAIN,
   transport: http(getCurrentRpcUrl()),
 });
 
@@ -90,7 +91,7 @@ export async function submitOnChainFeedback(
   const int8Rating = Math.floor((rating / 100) * 255 - 128);
 
   const hash = await walletClient.writeContract({
-    chain: baseSepolia,
+    chain: CHAIN,
     address: REPUTATION_SYSTEM_ADDRESS,
     abi: parseAbi(REPUTATION_SYSTEM_ABI),
     functionName: 'submitFeedback',
@@ -121,7 +122,7 @@ export async function recordBet(
   }
 
   const hash = await walletClient.writeContract({
-    chain: baseSepolia,
+    chain: CHAIN,
     address: REPUTATION_SYSTEM_ADDRESS,
     abi: parseAbi(REPUTATION_SYSTEM_ABI),
     functionName: 'recordBet',
@@ -152,7 +153,7 @@ export async function recordWin(
   }
 
   const hash = await walletClient.writeContract({
-    chain: baseSepolia,
+    chain: CHAIN,
     address: REPUTATION_SYSTEM_ADDRESS,
     abi: REPUTATION_SYSTEM_ABI,
     functionName: 'recordWin',
@@ -183,7 +184,7 @@ export async function recordLoss(
   }
 
   const hash = await walletClient.writeContract({
-    chain: baseSepolia,
+    chain: CHAIN,
     address: REPUTATION_SYSTEM_ADDRESS,
     abi: REPUTATION_SYSTEM_ABI,
     functionName: 'recordLoss',
