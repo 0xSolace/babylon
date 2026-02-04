@@ -125,13 +125,13 @@ export default async function RootLayout({
 
           {/* Mobile Header - Fixed, not affected by pull-to-refresh */}
           <Suspense fallback={null}>
-            <MobileHeader />
+            <MobileHeader isWaitlistHost={isWaitlistHost} />
           </Suspense>
 
           <div className="mark mx-auto flex min-h-screen max-w-7xl bg-sidebar">
             {/* Desktop Sidebar - Sticky, not affected by pull-to-refresh */}
             <Suspense fallback={null}>
-              <Sidebar />
+              <Sidebar isWaitlistHost={isWaitlistHost} />
             </Suspense>
 
             {/* Main Content Area - Scrollable content with pull-to-refresh */}
@@ -141,7 +141,7 @@ export default async function RootLayout({
 
             {/* Mobile Bottom Navigation - Fixed, not affected by pull-to-refresh */}
             <Suspense fallback={null}>
-              <BottomNav />
+              <BottomNav isWaitlistHost={isWaitlistHost} />
             </Suspense>
           </div>
 

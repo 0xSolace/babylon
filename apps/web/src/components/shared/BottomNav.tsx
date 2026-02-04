@@ -18,14 +18,15 @@ import { getAuthToken } from '@/lib/auth';
  *
  * @returns Bottom navigation element or null if hidden
  */
-function BottomNavContent() {
+function BottomNavContent({ isWaitlistHost }: { isWaitlistHost?: boolean }) {
   const pathname = usePathname();
   const { authenticated, user } = useAuth();
   const [unreadNotifications, setUnreadNotifications] = useState(0);
   const { totalUnread: unreadMessages } = useUnreadMessages();
 
-  // Hide bottom nav when WAITLIST_MODE is enabled on home page
-  const isWaitlistMode = process.env.NEXT_PUBLIC_WAITLIST_MODE === 'true';
+  // Hide bottom nav on home page for waitlist hosts
+  const isWaitlistMode =
+    isWaitlistHost || process.env.NEXT_PUBLIC_WAITLIST_MODE === 'true';
   const isHomePage = pathname === '/';
   const shouldHide = isWaitlistMode && isHomePage;
 
@@ -165,6 +166,6 @@ function BottomNavContent() {
  *
  * @returns Bottom navigation element or null if hidden
  */
-export function BottomNav() {
-  return <BottomNavContent />;
+export function BottomNav({ isWaitlistHost }: { isWaitlistHost?: boolean }) {
+  return <BottomNavContent isWaitlistHost={isWaitlistHost} />;
 }

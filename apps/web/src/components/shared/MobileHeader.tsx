@@ -32,7 +32,7 @@ import { useAuthStore } from '@/stores/authStore';
  *
  * @returns Mobile header element or null if hidden
  */
-function MobileHeaderContent() {
+function MobileHeaderContent({ isWaitlistHost }: { isWaitlistHost?: boolean }) {
   const { authenticated, logout } = useAuth();
   const { user, setUser } = useAuthStore();
   const [showSideMenu, setShowSideMenu] = useState(false);
@@ -44,8 +44,9 @@ function MobileHeaderContent() {
   const [unreadNotifications, setUnreadNotifications] = useState(0);
   const pathname = usePathname();
 
-  // Hide mobile header when WAITLIST_MODE is enabled on home page
-  const isWaitlistMode = process.env.NEXT_PUBLIC_WAITLIST_MODE === 'true';
+  // Hide mobile header on home page for waitlist hosts
+  const isWaitlistMode =
+    isWaitlistHost || process.env.NEXT_PUBLIC_WAITLIST_MODE === 'true';
   const isHomePage = pathname === '/';
   const shouldHide = isWaitlistMode && isHomePage;
 
@@ -464,6 +465,6 @@ function MobileHeaderContent() {
  *
  * @returns Mobile header element or null if hidden
  */
-export function MobileHeader() {
-  return <MobileHeaderContent />;
+export function MobileHeader({ isWaitlistHost }: { isWaitlistHost?: boolean }) {
+  return <MobileHeaderContent isWaitlistHost={isWaitlistHost} />;
 }

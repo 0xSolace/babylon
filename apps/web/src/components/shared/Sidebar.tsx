@@ -38,7 +38,7 @@ import { getAuthToken } from '@/lib/auth';
  *
  * @returns Sidebar content element
  */
-function SidebarContent() {
+function SidebarContent({ isWaitlistHost }: { isWaitlistHost?: boolean }) {
   const [collapsed, setCollapsed] = useState(false);
   const [showMdMenu, setShowMdMenu] = useState(false);
   const [copiedReferral, setCopiedReferral] = useState(false);
@@ -48,8 +48,9 @@ function SidebarContent() {
   const { ready, authenticated, user, logout, login } = useAuth();
   const { totalUnread: unreadMessages } = useUnreadMessages();
 
-  // Hide sidebar when WAITLIST_MODE is enabled on home page
-  const isWaitlistMode = process.env.NEXT_PUBLIC_WAITLIST_MODE === 'true';
+  // Hide sidebar on home page for waitlist hosts
+  const isWaitlistMode =
+    isWaitlistHost || process.env.NEXT_PUBLIC_WAITLIST_MODE === 'true';
   const isHomePage = pathname === '/';
   const shouldHideSidebar = isWaitlistMode && isHomePage;
 
@@ -418,6 +419,6 @@ function SidebarContent() {
  *
  * @returns Sidebar element or null if hidden
  */
-export function Sidebar() {
-  return <SidebarContent />;
+export function Sidebar({ isWaitlistHost }: { isWaitlistHost?: boolean }) {
+  return <SidebarContent isWaitlistHost={isWaitlistHost} />;
 }
