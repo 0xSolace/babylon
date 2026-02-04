@@ -110,50 +110,48 @@ export default async function RootLayout({
             <GlobalLoginModal />
           </Suspense>
 
-          {isWaitlistHost ? (
-            children
-          ) : (
-            <>
-              <Suspense fallback={null}>
-                <NftAccessGate enabled={nftGatingEnabled} />
-              </Suspense>
-
-              {/* NFT Collection Promo Banner - at the very top */}
-              <Suspense fallback={null}>
-                <NftPromoBanner />
-              </Suspense>
-
-              {/* Mobile Header - Fixed, not affected by pull-to-refresh */}
-              <Suspense fallback={null}>
-                <MobileHeader />
-              </Suspense>
-
-              <div className="mark mx-auto flex min-h-screen max-w-7xl bg-sidebar">
-                {/* Desktop Sidebar - Sticky, not affected by pull-to-refresh */}
-                <Suspense fallback={null}>
-                  <Sidebar />
-                </Suspense>
-
-                {/* Main Content Area - Scrollable content with pull-to-refresh */}
-                <main className="min-h-screen min-w-0 flex-1 bg-background pt-14 pb-14 md:pt-0 md:pb-0">
-                  {children}
-                </main>
-
-                {/* Mobile Bottom Navigation - Fixed, not affected by pull-to-refresh */}
-                <Suspense fallback={null}>
-                  <BottomNav />
-                </Suspense>
-              </div>
-
-              {/* Auth Banner - shows on all pages when not authenticated */}
-              <Suspense fallback={null}>
-                <FeedAuthBanner />
-              </Suspense>
-
-              {/* Floating Feedback Button - shows on all pages when authenticated */}
-              <FeedbackButton />
-            </>
+          {!isWaitlistHost && (
+            <Suspense fallback={null}>
+              <NftAccessGate enabled={nftGatingEnabled} />
+            </Suspense>
           )}
+
+          {!isWaitlistHost && (
+            /* NFT Collection Promo Banner - at the very top */
+            <Suspense fallback={null}>
+              <NftPromoBanner />
+            </Suspense>
+          )}
+
+          {/* Mobile Header - Fixed, not affected by pull-to-refresh */}
+          <Suspense fallback={null}>
+            <MobileHeader />
+          </Suspense>
+
+          <div className="mark mx-auto flex min-h-screen max-w-7xl bg-sidebar">
+            {/* Desktop Sidebar - Sticky, not affected by pull-to-refresh */}
+            <Suspense fallback={null}>
+              <Sidebar />
+            </Suspense>
+
+            {/* Main Content Area - Scrollable content with pull-to-refresh */}
+            <main className="min-h-screen min-w-0 flex-1 bg-background pt-14 pb-14 md:pt-0 md:pb-0">
+              {children}
+            </main>
+
+            {/* Mobile Bottom Navigation - Fixed, not affected by pull-to-refresh */}
+            <Suspense fallback={null}>
+              <BottomNav />
+            </Suspense>
+          </div>
+
+          {/* Auth Banner - shows on all pages when not authenticated */}
+          <Suspense fallback={null}>
+            <FeedAuthBanner />
+          </Suspense>
+
+          {/* Floating Feedback Button - shows on all pages when authenticated */}
+          <FeedbackButton />
         </Providers>
         <Analytics />
         <SpeedInsights />

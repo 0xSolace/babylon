@@ -2,6 +2,7 @@ const DEFAULT_WAITLIST_HOSTS = [
   'babylon.market',
   'www.babylon.market',
   'staging.babylon.market',
+  'localhost',
 ] as const;
 
 export function getWaitlistHostnames(): Set<string> {
