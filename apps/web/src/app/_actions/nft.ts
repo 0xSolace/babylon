@@ -18,12 +18,10 @@ import { requirePrivyToken } from './utils';
  * Result of the NFT mint action.
  * - `status: 'confirmed'`: Transaction confirmed and NFT data available
  * - `status: 'pending'`: Transaction submitted but not yet confirmed (user can check later)
- * - `status: 'error'`: An error occurred — message is safe to show in UI
  */
 export type MintNftActionResult =
   | ({ status: 'confirmed'; txHash: Hex } & ConfirmResult)
-  | { status: 'pending'; txHash: Hex; message: string }
-  | { status: 'error'; error: string; step: string };
+  | { status: 'pending'; txHash: Hex; message: string };
 
 /**
  * Exponential backoff sleep with jitter for polling.
@@ -54,52 +52,22 @@ function backoffSleep(
 export async function mintNftAction(input?: {
   userJwt?: string;
 }): Promise<MintNftActionResult> {
-  // Step 1: Auth
-  let privyToken: string;
-  try {
-    privyToken = await requirePrivyToken(input?.userJwt);
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : 'Auth failed';
-    return { status: 'error', error: msg, step: 'auth' };
-  }
+  const privyToken = await requirePrivyToken(input?.userJwt);
+  const ctx = await getAuthedUserContextFromPrivyToken(privyToken);
 
-  // Step 2: User context
-  let ctx: Awaited<ReturnType<typeof getAuthedUserContextFromPrivyToken>>;
-  try {
-    ctx = await getAuthedUserContextFromPrivyToken(privyToken);
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : 'User context failed';
-    return { status: 'error', error: msg, step: 'user_context' };
-  }
+  const prepare = await prepareMint(ctx.dbUserId);
+  const { hash } = await sendSponsoredEvmTransaction({
+    userJwt: privyToken,
+    walletId: ctx.privyWalletId,
+    to: prepare.contractAddress as Address,
+    data: prepare.encodedData,
+    valueWei: 0n,
+    caip2: `eip155:${prepare.chainId}`,
+    chainId: prepare.chainId,
+  });
 
-  // Step 3: Prepare mint
-  let prepare: Awaited<ReturnType<typeof prepareMint>>;
-  try {
-    prepare = await prepareMint(ctx.dbUserId);
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : 'Prepare failed';
-    return { status: 'error', error: msg, step: 'prepare' };
-  }
-
-  // Step 4: Send transaction via Privy
-  let hash: Hex;
-  try {
-    const result = await sendSponsoredEvmTransaction({
-      userJwt: privyToken,
-      walletId: ctx.privyWalletId,
-      to: prepare.contractAddress as Address,
-      data: prepare.encodedData,
-      valueWei: 0n,
-      caip2: `eip155:${prepare.chainId}`,
-      chainId: prepare.chainId,
-    });
-    hash = result.hash;
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : 'Send transaction failed';
-    return { status: 'error', error: msg, step: 'send_transaction' };
-  }
-
-  // Step 5: Poll for confirmation
+  // Poll for transaction confirmation with exponential backoff.
+  // Total timeout ~60 seconds: attempts at 0s, 1s, 3s, 7s, 12s, 17s, 22s, 27s, 32s, 37s, 42s, 47s, 52s, 57s
   const maxAttempts = 14;
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     try {
@@ -113,11 +81,12 @@ export async function mintNftAction(input?: {
         await backoffSleep(attempt);
         continue;
       }
-      const msg = error instanceof Error ? error.message : 'Confirm failed';
-      return { status: 'error', error: msg, step: 'confirm' };
+      throw error;
     }
   }
 
+  // Transaction submitted but not yet confirmed after ~60 seconds.
+  // Return pending status with txHash so user can manually verify on block explorer.
   logger.warn(
     'NFT mint transaction pending after timeout',
     { txHash: hash, userId: ctx.dbUserId, attempts: maxAttempts },
