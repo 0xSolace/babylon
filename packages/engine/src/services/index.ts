@@ -55,6 +55,7 @@ export * from './event-market-linker'; // BAB-5: Event-market connection
 // Event-market pipeline for narrative-driven market impacts
 export * from './event-market-pipeline';
 export * from './market-metrics-service'; // BAB-5: Metrics-based question generation
+export * from './market-momentum-service'; // Cascade/herd behavior for NPC trading
 export * from './market-mover-agent';
 export * from './market-timeframes'; // Multi-timeframe market system
 export * from './onchain-market-service';
@@ -102,6 +103,7 @@ export * from './trending-grouping-service';
 export * from './character-mapping-service';
 export * from './distributed-lock-service';
 export * from './earned-points-service';
+export * from './fee-redistribution-service'; // Stability fund for NPC liquidity
 export * from './fee-service';
 export {
   bootstrapGameIfNeeded,

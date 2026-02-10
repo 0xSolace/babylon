@@ -43,6 +43,7 @@ import {
 } from './prompts';
 import { RelationshipEvolutionEngine } from './RelationshipEvolutionEngine';
 import { characterMappingService } from './services/character-mapping-service';
+import { StaticDataRegistry } from './services/static-data-registry';
 import type { TrendingTopicsEngine } from './TrendingTopicsEngine';
 import type {
   Actor,
@@ -68,6 +69,22 @@ import {
   formatCharacterInfoWithEntropy,
   rateLimitedParallel,
 } from './utils/shared-utils';
+
+function resolveRealNameForPrompt(
+  entity: Organization | Actor
+): string | undefined {
+  // Organizations: use original name if available (real company/org anchor)
+  if ('type' in entity) {
+    return (
+      entity.originalName ??
+      StaticDataRegistry.getOrganization(entity.id)?.originalName ??
+      undefined
+    );
+  }
+
+  // Actors: resolve real name via static registry (real person anchor)
+  return StaticDataRegistry.getActor(entity.id)?.realName ?? undefined;
+}
 
 // Re-export types for backwards compatibility with external consumers
 export type {
@@ -491,8 +508,10 @@ export class FeedGenerator extends EventEmitter {
 
     // Format character info with ALL available actor data
     const actorPersona = actor.persona || (persona as typeof actor.persona);
+    const realName = StaticDataRegistry.getActor(actor.id)?.realName;
     const characterInfo = formatCharacterInfoWithEntropy({
       name: actor.name,
+      realName,
       description: actor.description || undefined,
       profileDescription: actor.profileDescription || undefined,
       domain: actor.domain || undefined,
@@ -1012,7 +1031,8 @@ export class FeedGenerator extends EventEmitter {
     const mediaList = mediaEntities
       .map((entity, i) => {
         const isOrg = 'type' in entity && entity.type === 'media';
-        const voiceContext = formatActorVoiceContext(entity);
+        const realName = resolveRealNameForPrompt(entity);
+        const voiceContext = formatActorVoiceContext({ ...entity, realName });
         let emotionalContext = '';
         let personaContext = '';
 
@@ -1045,6 +1065,7 @@ export class FeedGenerator extends EventEmitter {
 ╔══════════════════════════════════════════════════════════════════╗
 ║ MEDIA ${i + 1}: ${entity.name.toUpperCase()}
 ╚══════════════════════════════════════════════════════════════════╝
+   ${realName ? `Real person/org (anchor): ${realName}` : ''}
    Identity: ${entity.description}
    ${roleStyle}
    ${personaContext ? `${personaContext}` : ''}
@@ -1832,12 +1853,14 @@ ${voiceContext}
           }
         }
 
-        const voiceContext = formatActorVoiceContext(actor);
+        const realName = resolveRealNameForPrompt(actor);
+        const voiceContext = formatActorVoiceContext({ ...actor, realName });
 
         return `
 ╔══════════════════════════════════════════════════════════════════╗
 ║ CONSPIRACIST ${i + 1}: ${actor.name.toUpperCase()}
 ╚══════════════════════════════════════════════════════════════════╝
+   ${realName ? `Real person (anchor): ${realName}` : ''}
    Identity: ${actor.description}
    ${personaContext ? `${personaContext}` : ''}
 ${voiceContext}
@@ -2866,13 +2889,18 @@ ${voiceContext}
           }
         }
 
-        const voiceContext = formatActorVoiceContext(ctx.actor);
+        const realName = resolveRealNameForPrompt(ctx.actor);
+        const voiceContext = formatActorVoiceContext({
+          ...ctx.actor,
+          realName,
+        });
         const groupContext = this.actorGroupContexts.get(ctx.actor.id) || '';
 
         return `
 ╔══════════════════════════════════════════════════════════════════╗
 ║ CHARACTER ${i + 1}: ${ctx.actor.name.toUpperCase()}
 ╚══════════════════════════════════════════════════════════════════╝
+   ${realName ? `Real person (anchor): ${realName}` : ''}
    Identity: ${ctx.actor.description}
    Domain: ${ctx.actor.domain?.join(', ')}
    ${personaContext ? `${personaContext}` : ''}
@@ -3377,7 +3405,11 @@ ${voiceContext}
 
     const repliersList = contexts
       .map((ctx, i) => {
-        const voiceContext = formatActorVoiceContext(ctx.actor);
+        const realName = resolveRealNameForPrompt(ctx.actor);
+        const voiceContext = formatActorVoiceContext({
+          ...ctx.actor,
+          realName,
+        });
         const replyBehavior = ctx.actor.personality?.includes('contrarian')
           ? 'Disagree or challenge the original post'
           : 'Consider your relationship with author when replying';
@@ -3386,6 +3418,7 @@ ${voiceContext}
 ╔══════════════════════════════════════════════════════════════════╗
 ║ REPLIER ${i + 1}: ${ctx.actor.name.toUpperCase()}
 ╚══════════════════════════════════════════════════════════════════╝
+   ${realName ? `Real person (anchor): ${realName}` : ''}
    Identity: ${ctx.actor.description}
    ${ctx.emotionalContext}
 ${voiceContext}

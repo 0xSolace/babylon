@@ -67,6 +67,7 @@ import {
   characterMappingService,
   createArcState,
   createParodyHeadlineGenerator,
+  FeeRedistributionService,
   FollowingMechanics,
   generateArcPulseEventsIfNeeded,
   generateArticleImageWithRetry,
@@ -160,6 +161,12 @@ export interface GameTickResult {
   relationshipsUpdated?: number;
   /** Number of markets with simulated price volatility applied */
   priceVolatilitySimulated?: number;
+  /** Fee redistribution stats for NPC liquidity maintenance */
+  feeRedistribution?: {
+    npcsToppedUp: number;
+    totalDistributed: number;
+    fundBalance: number;
+  };
   /** Narrative arc processing stats */
   narrativeArcs?: {
     arcsProcessed: number;
@@ -1401,6 +1408,37 @@ export async function executeGameTick(
   } catch (error) {
     logger.warn(
       'Volatility simulation failed',
+      { error: error instanceof Error ? error.message : String(error) },
+      'GameTick'
+    );
+  }
+
+  // =========================================================================
+  // FEE REDISTRIBUTION - Keep NPC economy liquid
+  // Redistributes collected trading fees to NPCs below threshold
+  // =========================================================================
+  try {
+    const redistributionResult =
+      await FeeRedistributionService.redistributeFunds();
+    if (redistributionResult.npcsToppedUp > 0) {
+      result.feeRedistribution = {
+        npcsToppedUp: redistributionResult.npcsToppedUp,
+        totalDistributed: redistributionResult.totalDistributed,
+        fundBalance: redistributionResult.fundBalanceAfter,
+      };
+      logger.info(
+        'Fee redistribution completed',
+        {
+          npcsToppedUp: redistributionResult.npcsToppedUp,
+          totalDistributed: redistributionResult.totalDistributed,
+          fundBalance: redistributionResult.fundBalanceAfter,
+        },
+        'GameTick'
+      );
+    }
+  } catch (error) {
+    logger.warn(
+      'Fee redistribution failed',
       { error: error instanceof Error ? error.message : String(error) },
       'GameTick'
     );

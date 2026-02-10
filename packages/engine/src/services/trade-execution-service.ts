@@ -423,10 +423,11 @@ export class TradeExecutionService {
     const leverage = 5; // Standard leverage for NPCs
     const side = decision.action === 'open_long' ? 'long' : 'short';
 
-    // Cap position size to market limit (max 10,000 or 10% of open interest)
-    // This prevents NPC trades from exceeding market limits
-    const MAX_POSITION_SIZE = 10_000;
-    const maxAmount = MAX_POSITION_SIZE / leverage; // e.g., 10,000 / 5 = 2,000
+    // Cap position size to market limit (max 50,000)
+    // Increased from 10k to allow NPCs to have more market impact
+    // This creates more dynamic, volatile markets with bigger price swings
+    const MAX_POSITION_SIZE = 50_000;
+    const maxAmount = MAX_POSITION_SIZE / leverage; // e.g., 50,000 / 5 = 10,000
     const cappedAmount = Math.min(decision.amount, maxAmount);
     const positionSize = cappedAmount * leverage;
 

@@ -255,12 +255,24 @@ DECISION FACTORS:
 - RESOLVED QUESTIONS inform ongoing market dynamics
 - ONGOING NARRATIVES suggest future movements
 
+MARKET MOMENTUM ALERTS (CRITICAL for cascade behavior):
+{{momentumAlerts}}
+- PANIC ALERTS (🚨/⚠️): Markets crashing - triggers panic selling cascade
+  * Herd personalities: MORE likely to sell, LESS likely to buy
+  * Contrarian personalities: See buying opportunity ("buy the dip")
+- FOMO ALERTS (🚀/📈): Markets pumping - triggers FOMO buying cascade
+  * Herd personalities: MORE likely to buy, LESS likely to sell
+  * Contrarian personalities: Take profits, fade the pump
+- If no alerts shown, markets are stable - trade based on fundamentals
+
 CONTRARIAN BEHAVIOR (CRITICAL - avoid herding):
 - At least 20-30% of traders should take contrarian (NO) positions
 - Some personalities are naturally skeptical (NassAIm Taleb, Peter ThAIl)
 - When YES price is high (>0.7), contrarians should bet NO for value
 - When NO price is low (<0.3), contrarians see opportunity
 - Skeptics, bears, and pessimists often trade against the crowd
+- DURING PANIC: Contrarians BUY while others sell
+- DURING FOMO: Contrarians SELL while others buy
 
 INDIVIDUAL STRATEGY BIAS (CRITICAL - avoid copy trading):
 - Each TRADER DASHBOARD includes a "Strategy" and "Bias" line (Follow trend / Contrarian / Random).

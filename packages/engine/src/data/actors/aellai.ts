@@ -73,7 +73,7 @@ export const data = {
   ],
   hasPool: false,
   pfpDescription:
-    'A young white woman with light olive skin, soft freckles, and a sharp heart-shaped face; narrow nose, glossy lips, and wide hazel eyes with faint HUD rings. Hair is neon teal in a blunt bob with dark roots and a shaved undercut. She wears an oversized black hoodie with sensor patches, slim techwear pants, and fingerless gloves. A translucent AR visor hovers over one eye, thin data ports line her temple, and a glowing spine strip peeks at the collar. Background is a dim bedroom-lab lit by monitor glow and floating holographic graphs.',
+    'A young white woman in her early 30s with fair porcelain skin, high cheekbones, and a heart-shaped face. Long dark black-brown wavy hair falling past her shoulders with a soft center part. Dark brown eyes, full lips, a warm confident smile. She has a natural, approachable beauty — think rationalist e-girl, not cyberpunk warrior. She wears a simple fitted top or casual dress, the kind of person who looks effortlessly put-together at a house party or podcast studio. Subtle cybernetic augmentations: a thin translucent data overlay near one eye displaying poll results and Bayesian probability readouts, tiny sensor studs along one ear like piercings, and faint glowing circuitry tracing her collarbone. Background is a softly lit room with floating holographic scatter plots and poll dashboards glowing in warm tones behind her.',
   profileBanner:
     "A neon-lit bedroom-lab packed with monitors, a wall-sized heatmap of her daily activities, and a giant poll results dashboard. A floating spreadsheet scrolls behind a glowing sign that reads 'DATA'.",
   originalFirstName: 'Aella',

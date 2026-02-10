@@ -94,6 +94,7 @@ import {
 } from './prompts';
 import { EventMarketLinkerService } from './services/event-market-linker';
 import type { MarketContextService } from './services/market-context-service';
+import { MarketMomentumService } from './services/market-momentum-service';
 import { StaticDataRegistry } from './services/static-data-registry';
 import { isSimulationMode } from './storage-bridge';
 import type { JsonValue } from './types/common';
@@ -162,6 +163,10 @@ export class MarketDecisionEngine {
     null;
   private eventMarketSignalsCache: {
     signals: string;
+    timestamp: number;
+  } | null = null;
+  private momentumAlertsCache: {
+    alerts: string;
     timestamp: number;
   } | null = null;
   private readonly CACHE_TTL_MS = 60000; // 1 minute TTL for caches
@@ -649,6 +654,9 @@ Current Focus: ${recentTopics || 'Market General'}
     // Get event-market signals for trading context (BAB-5)
     const eventMarketSignals = await this.getCachedEventMarketSignals();
 
+    // Get momentum alerts for cascade/herd behavior
+    const momentumAlerts = await this.getCachedMomentumAlerts();
+
     // Build valid IDs/tickers for the prompt
     // Note: Removed redundant fields (validNpcIds, validTickers) as they are now in the dashboards
     const validNpcIds = contexts.map((ctx) => ctx.npcId).join(', ');
@@ -681,6 +689,8 @@ Current Focus: ${recentTopics || 'Market General'}
       richGameContext: worldContext.richGameContext || '',
       // BAB-5: Event-market signals for informed trading decisions
       eventMarketSignals,
+      // Momentum alerts for cascade/herd behavior
+      momentumAlerts,
     });
 
     // Count tokens and enforce limit
@@ -724,6 +734,8 @@ Current Focus: ${recentTopics || 'Market General'}
         richGameContext: worldContext.richGameContext || '',
         // BAB-5: Event-market signals (required variable)
         eventMarketSignals,
+        // Momentum alerts for cascade/herd behavior
+        momentumAlerts,
       });
       const prefixTokens = countTokensSync(promptPrefix);
       const bufferTokens = Math.floor(this.tokenConfig.maxContextTokens * 0.1); // 10% buffer
@@ -748,6 +760,8 @@ Current Focus: ${recentTopics || 'Market General'}
         richGameContext: worldContext.richGameContext || '',
         // BAB-5: Event-market signals (required variable)
         eventMarketSignals,
+        // Momentum alerts for cascade/herd behavior
+        momentumAlerts,
       });
 
       promptTokens = countTokensSync(prompt);
@@ -2356,6 +2370,58 @@ ${prompt}`
   }
 
   /**
+   * Get cached momentum alerts or fetch if expired
+   * Provides cascade/herd behavior context for trading decisions
+   *
+   * Returns alerts for markets experiencing panic (crashes) or FOMO (pumps)
+   * to guide NPC trading behavior based on their personality type.
+   */
+  private async getCachedMomentumAlerts(): Promise<string> {
+    const now = Date.now();
+    const FALLBACK_ALERTS = '(No active momentum alerts - markets stable)';
+
+    // Return cached if still valid
+    if (
+      this.momentumAlertsCache &&
+      now - this.momentumAlertsCache.timestamp < this.CACHE_TTL_MS
+    ) {
+      logger.debug(
+        'Using cached momentum alerts',
+        { age: now - this.momentumAlertsCache.timestamp },
+        'MarketDecisionEngine'
+      );
+      return this.momentumAlertsCache.alerts;
+    }
+
+    // Fetch fresh momentum alerts
+    let alerts: string;
+    try {
+      alerts = await MarketMomentumService.getMomentumPromptContext();
+      // If no active alerts, use fallback
+      if (!alerts || alerts.trim().length === 0) {
+        alerts = FALLBACK_ALERTS;
+      }
+    } catch (error) {
+      logger.warn(
+        'Failed to fetch momentum alerts, using fallback',
+        { error: error instanceof Error ? error.message : String(error) },
+        'MarketDecisionEngine'
+      );
+      alerts = FALLBACK_ALERTS;
+    }
+
+    // Cache it
+    this.momentumAlertsCache = { alerts, timestamp: now };
+    logger.debug(
+      'Cached momentum alerts',
+      { alertsLength: alerts.length, hasAlerts: alerts !== FALLBACK_ALERTS },
+      'MarketDecisionEngine'
+    );
+
+    return alerts;
+  }
+
+  /**
    * Clear all caches
    * Call this when you want to force fresh data on next query
    */
@@ -2364,6 +2430,7 @@ ${prompt}`
     this.activeQuestionsCache = null;
     this.recentEventsCache = null;
     this.eventMarketSignalsCache = null;
+    this.momentumAlertsCache = null;
     logger.debug('Cleared all caches', {}, 'MarketDecisionEngine');
   }
 

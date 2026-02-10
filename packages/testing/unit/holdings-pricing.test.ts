@@ -231,12 +231,12 @@ describe('Holdings-Based Spot Pricing', () => {
   describe('integration with shared config', () => {
     test('shared config uses correct supply and liquidity factor', () => {
       expect(PERP_MARKET_CONFIG.SYNTHETIC_SUPPLY).toBe(10000);
-      expect(PERP_MARKET_CONFIG.LIQUIDITY_FACTOR).toBe(20);
+      expect(PERP_MARKET_CONFIG.LIQUIDITY_FACTOR).toBe(50);
     });
 
     test('effective supply is calculated correctly', () => {
       const effectiveSupply = getEffectiveSupply();
-      expect(effectiveSupply).toBe(500); // 10000 / 20
+      expect(effectiveSupply).toBe(200); // 10000 / 50
     });
 
     test('liquidity factor amplifies price impact', () => {

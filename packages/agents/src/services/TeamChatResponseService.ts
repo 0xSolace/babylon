@@ -781,7 +781,6 @@ Generate ONLY the response text:`;
         // U+202A-U+202E: LTR/RTL embedding, override, isolate
         // U+2066-U+2069: isolate controls
         // U+200E, U+200F: LTR/RTL marks
-        // biome-ignore lint/suspicious/noMisleadingCharacterClass: Intentionally matching Unicode control characters for security sanitization
         .replace(/[\u202A-\u202E\u2066-\u2069\u200E\u200F]/g, '')
         // Escape backticks to prevent code block injection
         .replace(/```/g, '` ` `')
