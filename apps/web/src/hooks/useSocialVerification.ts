@@ -10,6 +10,7 @@ import {
   isPrivyTwitterLinkConflictError,
   X_ACCOUNT_ALREADY_LINKED_MESSAGE,
 } from '@/lib/privy-link-account-errors';
+import { apiUrl } from '@/utils/api-url';
 
 interface UseSocialVerificationOptions {
   authenticated: boolean;
@@ -226,7 +227,9 @@ export function useSocialVerification({
     try {
       const token = await getAccessToken();
       const response = await fetch(
-        `/api/users/${encodeURIComponent(userId)}/verify-farcaster-follow`,
+        apiUrl(
+          `/api/users/${encodeURIComponent(userId)}/verify-farcaster-follow`
+        ),
         {
           method: 'POST',
           headers: {
@@ -305,7 +308,9 @@ export function useSocialVerification({
     try {
       const token = await getAccessToken();
       const response = await fetch(
-        `/api/users/${encodeURIComponent(userId)}/verify-twitter-follow`,
+        apiUrl(
+          `/api/users/${encodeURIComponent(userId)}/verify-twitter-follow`
+        ),
         {
           method: 'POST',
           headers: {
@@ -381,7 +386,7 @@ export function useSocialVerification({
     try {
       const token = await getAccessToken();
       const response = await fetch(
-        `/api/users/${encodeURIComponent(userId)}/verify-discord-join`,
+        apiUrl(`/api/users/${encodeURIComponent(userId)}/verify-discord-join`),
         {
           method: 'POST',
           headers: {

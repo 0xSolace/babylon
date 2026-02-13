@@ -22,6 +22,7 @@ import { Avatar } from '@/components/shared/Avatar';
 import { Dropdown, DropdownItem } from '@/components/shared/Dropdown';
 import { useAuth } from '@/hooks/useAuth';
 import { useAuthStore } from '@/stores/authStore';
+import { apiUrl } from '@/utils/api-url';
 
 /**
  * User menu component displaying user profile and account actions.
@@ -55,7 +56,7 @@ export function UserMenu() {
     if (!user?.id) return;
     try {
       const res = await fetch(
-        `/api/users/${encodeURIComponent(user.id)}/portfolio-breakdown`
+        apiUrl(`/api/users/${encodeURIComponent(user.id)}/portfolio-breakdown`)
       );
       if (res.ok) {
         const data = await res.json();

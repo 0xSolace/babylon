@@ -33,6 +33,7 @@ import { usePostHog } from '@/hooks/usePostHog';
 import { useUnreadMessages } from '@/hooks/useUnreadMessages';
 import { useUnreadNotifications } from '@/hooks/useUnreadNotifications';
 import { getUserDisplayName } from '@/lib/user-display';
+import { apiUrl } from '@/utils/api-url';
 
 /**
  * Main sidebar content component with navigation and user menu.
@@ -83,6 +84,8 @@ function SidebarContent() {
     }
     return undefined;
   }, [showMdMenu]);
+
+
 
   // Adjust sidebar height to account for elements above it (e.g. NFT banner)
   // so the user profile bar at the bottom is always visible

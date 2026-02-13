@@ -23,6 +23,7 @@ import { create } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
 import type { PredictionMarket } from '@/types/markets';
 import { MARKETS_CONFIG } from '@/types/markets';
+import { apiUrl } from '@/utils/api-url';
 
 // Re-export for backwards compatibility
 export type { PredictionMarket } from '@/types/markets';
@@ -85,8 +86,10 @@ export const usePredictionMarketsStore = create<PredictionMarketsState>(
 
         try {
           const url = userId
-            ? `/api/markets/predictions?userId=${encodeURIComponent(userId)}`
-            : '/api/markets/predictions';
+            ? apiUrl(
+                `/api/markets/predictions?userId=${encodeURIComponent(userId)}`
+              )
+            : apiUrl('/api/markets/predictions');
           const response = await fetch(url);
           if (!response.ok) {
             throw new Error(

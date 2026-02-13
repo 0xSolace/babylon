@@ -85,6 +85,7 @@ import type {
   TradeSide,
 } from '@/types/markets';
 import { MARKET_TIME_RANGES } from '@/types/markets';
+import { apiUrl } from '@/utils/api-url';
 import { PerpsOrderEntryPanel } from '../perps-terminal/PerpsOrderEntryPanel';
 import { useMarketsTutorial } from '../tutorial/useMarketsTutorial';
 import {
@@ -1377,12 +1378,12 @@ export function MarketsTradingTerminal({
 
       const url =
         predictionTradeMode === 'buy'
-          ? `/api/markets/predictions/${encodeURIComponent(
-              predictionState.id.toString()
-            )}/buy`
-          : `/api/markets/predictions/${encodeURIComponent(
-              predictionState.id.toString()
-            )}/sell`;
+          ? apiUrl(
+              `/api/markets/predictions/${encodeURIComponent(predictionState.id.toString())}/buy`
+            )
+          : apiUrl(
+              `/api/markets/predictions/${encodeURIComponent(predictionState.id.toString())}/sell`
+            );
 
       // Note: sellPosition is validated earlier in this function for sell mode
       const body =
