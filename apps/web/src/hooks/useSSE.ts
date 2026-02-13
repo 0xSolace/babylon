@@ -36,6 +36,7 @@ export type {
   SSEMessage,
   StaticChannel,
 } from '@/lib/sse';
+import { apiUrl } from '@/utils/api-url';
 
 /**
  * Options for configuring the SSE hook.
@@ -118,7 +119,7 @@ const fetchRealtimeToken = async (
   const accessToken = await tokenFn();
   if (!accessToken) return null;
 
-  const res = await fetch('/api/realtime/token', {
+  const res = await fetch(apiUrl('/api/realtime/token'), {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${accessToken}`,
