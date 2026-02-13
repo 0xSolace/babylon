@@ -125,6 +125,9 @@ scripts/cleanup-excess-markets.ts
 .env.hook-test
 /thoughts
 
+# tmp
+apps/mobile-poc/
+
 # START Ruler Generated Files
 /.agent/rules/ruler.md
 /.agent/rules/ruler.md.bak
