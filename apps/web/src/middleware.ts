@@ -31,7 +31,6 @@ const DEV_ORIGINS = [
   // mobile
   'capacitor://localhost',
   'http://localhost:3077',
-  
 ] as const;
 
 /**
