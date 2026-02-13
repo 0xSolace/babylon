@@ -5,6 +5,7 @@ import { Copy, Plus, Trash2 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
+import { apiUrl } from '@/utils/api-url';
 
 interface ApiKey {
   id: string;
@@ -49,7 +50,7 @@ export function ApiKeysTab() {
       return;
     }
 
-    const response = await fetch('/api/users/api-keys', {
+    const response = await fetch(apiUrl('/api/users/api-keys'), {
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${token}`,
@@ -86,7 +87,7 @@ export function ApiKeysTab() {
       return;
     }
 
-    const response = await fetch('/api/users/api-keys', {
+    const response = await fetch(apiUrl('/api/users/api-keys'), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -132,7 +133,7 @@ export function ApiKeysTab() {
       return;
     }
 
-    const response = await fetch(`/api/users/api-keys/${keyId}`, {
+    const response = await fetch(apiUrl(`/api/users/api-keys/${keyId}`), {
       method: 'DELETE',
       headers: {
         'Content-Type': 'application/json',

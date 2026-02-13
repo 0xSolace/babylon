@@ -23,6 +23,7 @@ import {
 } from 'react';
 import { toast } from 'sonner';
 import { Skeleton } from '@/components/shared/Skeleton';
+import { apiUrl } from '@/utils/api-url';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -118,7 +119,7 @@ export function WhitelistTab() {
 
   const fetchEntries = useCallback(async () => {
     try {
-      const res = await fetch('/api/admin/whitelist');
+      const res = await fetch(apiUrl('/api/admin/whitelist'));
       if (!res.ok) throw new Error('Failed to fetch whitelist');
       const data = await res.json();
       setEntries(data.entries ?? []);
@@ -137,7 +138,7 @@ export function WhitelistTab() {
 
   const fetchConfig = useCallback(async () => {
     try {
-      const res = await fetch('/api/admin/whitelist/config');
+      const res = await fetch(apiUrl('/api/admin/whitelist/config'));
       if (!res.ok) throw new Error('Failed to fetch config');
       const data = await res.json();
       const cfg = data.config ?? null;
@@ -170,7 +171,7 @@ export function WhitelistTab() {
 
     startTransition(async () => {
       try {
-        const res = await fetch('/api/admin/whitelist', {
+        const res = await fetch(apiUrl('/api/admin/whitelist'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -204,7 +205,7 @@ export function WhitelistTab() {
 
     setRemovingUserId(userId);
     try {
-      const res = await fetch('/api/admin/whitelist', {
+      const res = await fetch(apiUrl('/api/admin/whitelist'), {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId }),
@@ -238,7 +239,7 @@ export function WhitelistTab() {
         return;
       }
 
-      const res = await fetch('/api/admin/whitelist/config', {
+      const res = await fetch(apiUrl('/api/admin/whitelist/config'), {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ leaderboardRankThreshold: threshold }),

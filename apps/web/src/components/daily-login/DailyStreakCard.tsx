@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
 import { useAuthStore } from '@/stores/authStore';
+import { apiUrl } from '@/utils/api-url';
 import { DailyLoginModal } from './DailyLoginModal';
 import {
   type ClaimResult,
@@ -40,7 +41,7 @@ export function DailyStreakCard() {
     }
 
     try {
-      const res = await fetch('/api/users/daily-login', {
+      const res = await fetch(apiUrl('/api/users/daily-login'), {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (res.ok) {
@@ -131,7 +132,7 @@ export function DailyStreakCard() {
     }
 
     try {
-      const res = await fetch('/api/users/daily-login', {
+      const res = await fetch(apiUrl('/api/users/daily-login'), {
         method: 'POST',
         headers: { Authorization: `Bearer ${token}` },
       });
