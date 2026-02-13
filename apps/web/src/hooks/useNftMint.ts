@@ -1,7 +1,6 @@
 import { logger } from '@babylon/shared';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
-import { mintNftAction } from '@/app/_actions/nft';
 import { useAuth } from '@/hooks/useAuth';
 import type {
   EligibilityApiResponse,
@@ -170,7 +169,16 @@ export function useNftMint(): UseNftMintResult {
         return;
       }
 
-      const result = await mintNftAction({ userJwt });
+      const mintResponse = await fetch(apiUrl('/api/nft/mint/execute'), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${userJwt}`,
+        },
+        credentials: 'include',
+      });
+
+      const result = await mintResponse.json();
 
       if (result.status === 'error') {
         logger.error(
