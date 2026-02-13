@@ -70,6 +70,7 @@ import {
   type TeamScope,
   useTeamTradingSummary,
 } from '@/hooks/useTeamTradingSummary';
+import { apiUrl } from '@/utils/api-url';
 import {
   TUTORIAL_PERPS_DATA,
   TUTORIAL_PERPS_ENTITY_ID,
@@ -534,7 +535,7 @@ export default function TeamChatPage() {
       }
 
       try {
-        const res = await fetch(`/api/agents/${agentId}`, {
+        const res = await fetch(apiUrl(`/api/agents/${agentId}`), {
           headers: { Authorization: `Bearer ${token}` },
         });
 

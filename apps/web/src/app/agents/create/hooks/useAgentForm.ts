@@ -3,6 +3,7 @@ import { logger } from '@babylon/shared';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
+import { apiUrl } from '@/utils/api-url';
 import { createNameMatchRegex, generateAgentName } from '@/utils/nameGenerator';
 
 const STORAGE_KEY = 'babylon_agent_draft';
@@ -88,7 +89,7 @@ export function useAgentForm(): UseAgentFormResult {
       localStorage.removeItem(STORAGE_KEY);
 
       // Load random template
-      const indexResponse = await fetch('/api/agent-templates');
+      const indexResponse = await fetch(apiUrl('/api/agent-templates'));
       if (!indexResponse.ok) {
         logger.error(
           'Failed to load template index',
@@ -227,7 +228,7 @@ export function useAgentForm(): UseAgentFormResult {
         return;
       }
 
-      const response = await fetch('/api/agents/generate-field', {
+      const response = await fetch(apiUrl('/api/agents/generate-field'), {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,
