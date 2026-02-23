@@ -238,7 +238,8 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 
   // Step 5: Poll for confirmation
-  const maxAttempts = 14;
+  // Keep total runtime comfortably below typical serverless timeouts (~60s on Vercel).
+  const maxAttempts = 11;
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     try {
       const confirmed = await confirmMint(ctx.dbUserId, hash, prepare.to);
