@@ -122,7 +122,7 @@ describe('apiUrl', () => {
     it('handles path without leading slash', async () => {
       const apiUrl = await importApiUrl('https://play.babylon.market');
       // This is technically a misuse but should still produce a valid URL
-      expect(apiUrl('api/posts')).toBe('https://play.babylon.marketapi/posts');
+      expect(apiUrl('api/posts')).toBe('https://play.babylon.market/api/posts');
     });
   });
 

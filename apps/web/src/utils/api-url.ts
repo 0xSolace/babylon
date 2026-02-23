@@ -14,6 +14,8 @@ const API_BASE_URL = (process.env.NEXT_PUBLIC_API_URL ?? '').replace(
 
 export function apiUrl(path: string): string {
   if (!API_BASE_URL) return path;
+  if (!path) return API_BASE_URL;
   if (path.startsWith('http://') || path.startsWith('https://')) return path;
-  return `${API_BASE_URL}${path}`;
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+  return `${API_BASE_URL}${normalizedPath}`;
 }
