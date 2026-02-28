@@ -53,7 +53,6 @@ import {
   syncAllReputationsToERC8004,
 } from '@babylon/agents';
 import {
-  relayCronToStaging,
   requireCronAuth,
   successResponse,
   withErrorHandling,
@@ -74,8 +73,6 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     undefined,
     'ReputationSyncCron'
   );
-
-  await relayCronToStaging(request, 'reputation-sync');
 
   // Parse query parameters for batch processing
   const { searchParams } = new URL(request.url);

@@ -208,7 +208,6 @@ const registerMocks = () => {
         ? cronMockState.marketsCronAuthResult
         : cronMockState.articleCronAuthResult;
     },
-    relayCronToStaging: async () => ({ forwarded: false }),
     broadcastAgentActivity: async () => {},
     broadcastToChannel: async () => {},
     notifyGroupChatInvite: async () => {},

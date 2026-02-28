@@ -64,7 +64,6 @@ import {
 import {
   DistributedLockService,
   recordCronExecution,
-  relayCronToStaging,
   verifyCronAuth,
 } from '@babylon/api';
 import type { User, UserAgentConfig } from '@babylon/db';
@@ -154,19 +153,6 @@ export async function POST(_req: NextRequest) {
   const startTime = Date.now();
   const processId = `agent-tick-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
   logger.info('Agent tick started', { processId }, 'AgentTick');
-
-  // 1. Relay to staging if REDIRECT_CRON_STAGING is enabled (fan-out)
-  const relayResult = await relayCronToStaging(_req, 'agent-tick');
-  if (relayResult.forwarded) {
-    logger.info(
-      'Cron execution relayed to staging (fan-out: continuing local execution)',
-      {
-        status: relayResult.status,
-        error: relayResult.error,
-      },
-      'AgentTick'
-    );
-  }
 
   // 1.5 Acquire global lock to prevent overlapping cron invocations
   // Duration matches function timeout (300s) to prevent overlap when ticks take longer than cron interval

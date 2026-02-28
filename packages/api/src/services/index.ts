@@ -9,7 +9,6 @@
 
 // Claude LLM Service
 export * from './claude-service';
-export * from './cron-relay-service';
 // Daily Login Service (BAB-88)
 export * from './daily-login-service';
 // Distributed Lock Service

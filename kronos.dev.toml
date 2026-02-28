@@ -1,0 +1,93 @@
+# Kronos configuration for local development.
+# Used by docker-compose to schedule cron triggers against the local Next.js dev server.
+#
+# The CRON_SECRET env var must match the one in your .env file.
+# Set via: docker-compose (pulls from .env automatically)
+
+[server]
+listen = "0.0.0.0:8080"
+
+[cleanup]
+interval_secs = 300
+max_failures = 10
+timeout_secs = 5
+health_path = "/api/cron/health-check"
+
+[alerts]
+failure_threshold = 10
+
+[registry]
+path = "/data/deployments.json"
+
+# With network_mode: host, kronos shares the host network stack directly
+# so it can reach the Next.js dev server at localhost:3000.
+[[registry.seeds]]
+id = "local"
+url = "http://localhost:3000"
+tier = "all"
+
+# --- Cron jobs (same schedules as production) ---
+
+[[crons]]
+path = "/api/cron/game-tick"
+schedule = "* * * * *"
+
+[[crons]]
+path = "/api/cron/markets-tick"
+schedule = "* * * * *"
+
+[[crons]]
+path = "/api/cron/realtime-drain"
+schedule = "*/1 * * * *"
+
+[[crons]]
+path = "/api/cron/npc-tick"
+schedule = "*/2 * * * *"
+
+[[crons]]
+path = "/api/cron/agent-tick"
+schedule = "*/3 * * * *"
+
+[[crons]]
+path = "/api/cron/organization-tick"
+schedule = "*/5 * * * *"
+
+[[crons]]
+path = "/api/cron/health-check"
+schedule = "*/5 * * * *"
+
+[[crons]]
+path = "/api/cron/points-recompute"
+schedule = "*/15 * * * *"
+
+[[crons]]
+path = "/api/cron/article-tick"
+schedule = "*/30 * * * *"
+
+[[crons]]
+path = "/api/cron/metrics-snapshot"
+schedule = "0 * * * *"
+
+[[crons]]
+path = "/api/cron/training-check"
+schedule = "0 * * * *"
+
+[[crons]]
+path = "/api/cron/perp-funding"
+schedule = "0 */8 * * *"
+
+[[crons]]
+path = "/api/cron/profile-chain-sync"
+schedule = "0 */6 * * *"
+
+[[crons]]
+path = "/api/cron/world-facts"
+schedule = "0 6,18 * * *"
+
+[[crons]]
+path = "/api/cron/whitelist-topn"
+schedule = "0 0 * * *"
+
+[[crons]]
+path = "/api/cron/reputation-sync"
+schedule = "0 2 * * *"

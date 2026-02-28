@@ -128,10 +128,25 @@ services:
       timeout: 20s
       retries: 3
 
+  kronos:
+    image: babylonsocial/kronos:0.1.0
+    container_name: babylon-kronos
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      CRON_SECRET: ${CRON_SECRET:-dev_local_secret_for_realtime_signing_12345}
+      SCHEDULER_SECRET: ${SCHEDULER_SECRET:-dev_scheduler_secret}
+      KRONOS_CONFIG: /kronos.toml
+    volumes:
+      - ./kronos.dev.toml:/kronos.toml:ro
+      - kronos_data:/data
+
 volumes:
   postgres_data:
     driver: local
   minio_data:
     driver: local
   redis_data:
+    driver: local
+  kronos_data:
     driver: local

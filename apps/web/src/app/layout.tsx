@@ -7,8 +7,7 @@ import { Analytics } from '@vercel/analytics/react';
 import { SpeedInsights } from '@vercel/speed-insights/next';
 import { headers } from 'next/headers';
 import { Suspense } from 'react';
-// Game tick runs via cron (production) or local-cron-simulator (development)
-// No initialization needed in layout - tick runs independently
+// Game tick runs via Kronos (external cron scheduler) in all environments
 import { Toaster } from 'sonner';
 import { FeedAuthBanner } from '@/components/auth/FeedAuthBanner';
 import { GlobalLoginModal } from '@/components/auth/GlobalLoginModal';

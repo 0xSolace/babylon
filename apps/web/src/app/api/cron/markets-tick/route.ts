@@ -38,7 +38,6 @@ import {
   getCacheOrFetch,
   invalidateCache,
   recordCronExecution,
-  relayCronToStaging,
   verifyCronAuth,
 } from '@babylon/api';
 import {
@@ -451,16 +450,6 @@ export async function POST(_req: NextRequest) {
   const startTime = Date.now();
   const processId = `markets-tick-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
   logger.info('Markets tick started', { processId }, 'MarketsTick');
-
-  // Relay to staging if configured (fan-out)
-  const relayResult = await relayCronToStaging(_req, 'markets-tick');
-  if (relayResult.forwarded) {
-    logger.info(
-      'Cron execution relayed to staging (fan-out: continuing local execution)',
-      { status: relayResult.status, error: relayResult.error },
-      'MarketsTick'
-    );
-  }
 
   // Acquire global lock to prevent overlapping cron invocations
   const globalLockAcquired = await DistributedLockService.acquireLock({

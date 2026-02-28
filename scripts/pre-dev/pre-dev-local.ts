@@ -5,7 +5,7 @@
  * Sets up complete development environment:
  * - Detects environment from .env (localnet/testnet/mainnet)
  * - For localnet: Kills any processes on port 3000, checks for Hardhat node
- * - Starts PostgreSQL, Redis, MinIO
+ * - Starts PostgreSQL, Redis, MinIO, Kronos
  * - Runs database migrations
  * - Seeds data
  */
@@ -24,11 +24,12 @@ import {
 const POSTGRES_CONTAINER = 'babylon-postgres';
 const REDIS_CONTAINER = 'babylon-redis';
 const MINIO_CONTAINER = 'babylon-minio';
+const KRONOS_CONTAINER = 'babylon-kronos';
 
 /**
  * Valid Docker service names for the development environment
  */
-type DockerService = 'postgres' | 'redis' | 'minio';
+type DockerService = 'postgres' | 'redis' | 'minio' | 'kronos';
 
 // Detect docker compose command (docker compose vs docker-compose)
 let useDockerComposePlugin = false;
@@ -290,6 +291,26 @@ if (minioRunning.trim() !== MINIO_CONTAINER) {
   console.info('✅ MinIO is running');
 }
 
+// 8.5. Start Kronos (optional)
+const kronosRunning =
+  await $`docker ps --filter name=${KRONOS_CONTAINER} --format "{{.Names}}"`
+    .quiet()
+    .text();
+
+if (kronosRunning.trim() !== KRONOS_CONTAINER) {
+  console.info('Starting Kronos...');
+  await dockerComposeUp('kronos')
+    .then(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+      console.info('✅ Kronos started');
+    })
+    .catch(() => {
+      console.warn('⚠️  Kronos start failed (optional, continuing)');
+    });
+} else {
+  console.info('✅ Kronos is running');
+}
+
 // 9. Run database migrations and seed
 // Force local database URL for local development (overrides .env.local if present)
 const LOCAL_DATABASE_URL =
@@ -396,6 +417,7 @@ if (isLocalnet) {
 console.info('  PostgreSQL: localhost:5433');
 console.info('  Redis:      localhost:6380');
 console.info('  MinIO:      http://localhost:9000 (console: :9001)');
+console.info('  Kronos:     http://localhost:8080');
 console.info('');
 console.info('App Routes:');
 console.info('  Main:       http://localhost:3000');

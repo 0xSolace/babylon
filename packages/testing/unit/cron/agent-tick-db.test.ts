@@ -200,10 +200,6 @@ mock.module('@babylon/agents/autonomous', () => ({
   },
 }));
 
-mock.module('@babylon/api/services/cron-relay-service', () => ({
-  relayCronToStaging: async () => ({ forwarded: false }),
-}));
-
 mock.module('@/lib/engine/ensure-engine-services', () => ({
   ensureEngineServices: () => {},
 }));

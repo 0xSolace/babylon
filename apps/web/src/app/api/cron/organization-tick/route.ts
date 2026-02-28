@@ -33,7 +33,6 @@ import {
   DistributedLockService,
   getCacheOrFetch,
   recordCronExecution,
-  relayCronToStaging,
   verifyCronAuth,
 } from '@babylon/api';
 import {
@@ -168,16 +167,6 @@ export async function POST(_req: NextRequest) {
   const startTime = Date.now();
   const processId = `org-tick-${Date.now()}-${crypto.randomUUID().slice(0, 8)}`;
   logger.info('Organization tick started', { processId }, 'OrganizationTick');
-
-  // Relay to staging if configured (fan-out)
-  const relayResult = await relayCronToStaging(_req, 'organization-tick');
-  if (relayResult.forwarded) {
-    logger.info(
-      'Cron execution relayed to staging (fan-out: continuing local execution)',
-      { status: relayResult.status, error: relayResult.error },
-      'OrganizationTick'
-    );
-  }
 
   // Acquire global lock to prevent overlapping cron invocations
   // Duration matches maxDuration (300s) to prevent overlap when ticks take longer than cron interval

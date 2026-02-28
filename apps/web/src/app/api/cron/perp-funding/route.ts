@@ -1,6 +1,5 @@
 import {
   recordCronExecution,
-  relayCronToStaging,
   requireCronAuth,
   successResponse,
   withErrorHandling,
@@ -17,17 +16,6 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
 
   // Use centralized cron auth (fail-closed in production)
   requireCronAuth(request, { jobName: 'PerpFunding' });
-
-  // Relay to staging if configured (Vercel cron runs only on production)
-  // but still execute locally (fan-out).
-  const relay = await relayCronToStaging(request, 'perp-funding');
-  if (relay.forwarded) {
-    logger.info(
-      'Perp funding cron relayed to staging (fan-out: also executing locally)',
-      { status: relay.status, error: relay.error },
-      'Cron:perp-funding'
-    );
-  }
 
   const service = new PerpMarketService({
     db: new PerpDbAdapter(),

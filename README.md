@@ -73,11 +73,14 @@ Visit `http://localhost:3000` - everything runs and generates content automatica
 
 **Default Mode** (Recommended):
 ```bash
-bun run dev   # ← Web + Game Engine (both automatically!)
+bun run dev   # ← Web + Game Engine
 ```
-Runs web server plus the local cron simulator. Content is generated via cron endpoints every 60 seconds.
+Runs the Next.js dev server. For cron-driven content generation, start Kronos alongside it:
+```bash
+docker compose up kronos -d   # starts cron scheduler (fires every minute)
+```
 
-**Web Only** (UI/API only, no local cron simulator):
+**Web Only** (UI/API only, no cron triggers):
 ```bash
 bun run dev:web
 ```

@@ -49,7 +49,6 @@
  */
 
 import {
-  relayCronToStaging,
   requireCronAuth,
   successResponse,
   withErrorHandling,
@@ -71,8 +70,6 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     undefined,
     'ProfileChainSyncCron'
   );
-
-  await relayCronToStaging(request, 'profile-chain-sync');
 
   // Get counts for monitoring
   const [totalOnChainResult] = await db
