@@ -1,5 +1,6 @@
 'use client';
 
+import { claimDailyLogin, getDailyLoginStatus } from '@babylon/api-hooks';
 import { logger } from '@babylon/shared';
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
@@ -19,7 +20,7 @@ const STAT_ITEMS = [
 ] as const;
 
 export function DailyStreakCard() {
-  const { authenticated, getAccessToken, user } = useAuth();
+  const { authenticated, user } = useAuth();
   const { setUser } = useAuthStore();
   const [data, setData] = useState<StreakData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -32,43 +33,12 @@ export function DailyStreakCard() {
       return;
     }
 
-    const token = await getAccessToken();
-    if (!token) {
-      toast.error('Failed to authenticate. Please try again.');
-      setLoading(false);
-      return;
-    }
-
     try {
-      const res = await fetch('/api/users/daily-login', {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (res.ok) {
-        // Validate response is JSON before parsing
-        const contentType = res.headers.get('content-type');
-        if (!contentType?.includes('application/json')) {
-          logger.warn(
-            'Daily login API returned unexpected content type',
-            { contentType },
-            'DailyStreakCard'
-          );
-          setData(null);
-        } else {
-          const json = await res.json();
-          setData(json);
-        }
-      } else {
-        // Silently fail - don't show error toast, just don't render the card
-        // This prevents blocking the page if the API/database isn't ready
-        logger.warn(
-          'Daily login API not available',
-          { status: res.status },
-          'DailyStreakCard'
-        );
-        setData(null);
-      }
+      const json = (await getDailyLoginStatus()) as unknown as StreakData;
+      setData(json);
     } catch (error) {
-      // Silently fail - don't show error toast (includes JSON parse errors)
+      // Silently fail - don't show error toast
+      // This prevents blocking the page if the API/database isn't ready
       logger.warn(
         'Daily login API error',
         error instanceof Error ? error : { error },
@@ -78,7 +48,7 @@ export function DailyStreakCard() {
     } finally {
       setLoading(false);
     }
-  }, [authenticated, getAccessToken]);
+  }, [authenticated]);
 
   useEffect(() => {
     fetchData();
@@ -123,32 +93,15 @@ export function DailyStreakCard() {
     if (!authenticated || claiming) return;
     setClaiming(true);
 
-    const token = await getAccessToken();
-    if (!token) {
-      toast.error('Failed to authenticate. Please try again.');
-      setClaiming(false);
-      return;
-    }
-
     try {
-      const res = await fetch('/api/users/daily-login', {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      if (!res.ok) {
-        toast.error('Failed to claim reward. Please try again.');
-        setClaiming(false);
-        return;
-      }
-
-      const result: ClaimResult = await res.json();
+      const result = (await claimDailyLogin()) as unknown as ClaimResult;
 
       if (result.success) {
         setModal(result);
         await fetchData();
 
         // Fetch latest portfolio breakdown (same as profile page) to update totalPoints & virtualBalance
+        // No generated function for portfolio-breakdown yet, use raw fetch
         if (user?.id) {
           const breakdownRes = await fetch(
             `/api/users/${encodeURIComponent(user.id)}/portfolio-breakdown`
