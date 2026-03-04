@@ -36,6 +36,9 @@
     },
     "clean": {
       "cache": false
+    },
+    "generate:api": {
+      "cache": false
     }
   }
 }

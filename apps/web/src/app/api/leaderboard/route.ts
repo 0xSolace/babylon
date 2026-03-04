@@ -9,37 +9,23 @@
  * rank/position alongside the page data. Leaderboard pages are cached
  * in Redis (shared); user positions are always computed fresh.
  *
- * @openapi
- * /api/leaderboard:
- *   get:
- *     tags:
- *       - Leaderboard
- *     summary: Get leaderboard (wallet or team)
- *     parameters:
- *       - in: query
- *         name: type
- *         schema:
- *           type: string
- *           enum: [wallet, team]
- *           default: wallet
- *       - in: query
- *         name: page
- *         schema:
- *           type: integer
- *           minimum: 1
- *           default: 1
- *       - in: query
- *         name: pageSize
- *         schema:
- *           type: integer
- *           minimum: 1
- *           maximum: 100
- *           default: 100
- *       - in: query
- *         name: userId
- *         schema:
- *           type: string
- *         description: Optional user ID to include their rank in the response
+ * @example
+ * ```typescript
+ * // Get top 50 users by reputation
+ * const response = await fetch('/api/leaderboard?page=1&pageSize=50');
+ * const { leaderboard, pagination } = await response.json();
+ *
+ * // Get referral leaders
+ * const referralLeaders = await fetch('/api/leaderboard?pointsType=referral&minPoints=1000');
+ *
+ * // Display leaderboard
+ * leaderboard.forEach(user => {
+ *   console.log(`#${user.rank}: ${user.displayName} - ${user.points} points`);
+ * });
+ * ```
+ *
+ * @see {@link /lib/services/points-service} Points calculation
+ * @see {@link /src/app/leaderboard/page.tsx} Leaderboard UI
  */
 
 import {
