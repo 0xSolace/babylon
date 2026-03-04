@@ -1,6 +1,7 @@
 'use client';
 
-import { BABYLON_POINTS_SYMBOL, cn, logger } from '@babylon/shared';
+import { getMarketWidgets } from '@babylon/api-hooks';
+import { BABYLON_POINTS_SYMBOL, cn } from '@babylon/shared';
 import { TrendingDown, TrendingUp } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -55,35 +56,11 @@ export function MarketsPanel() {
 
   const fetchMarkets = useCallback(async () => {
     // Fetch prediction markets only - perps come from shared store
-    const response = await fetch('/api/feed/widgets/markets');
-
-    if (!response.ok) {
-      logger.error(
-        'Failed to fetch markets',
-        { status: response.status, statusText: response.statusText },
-        'MarketsPanel'
-      );
-      setMarkets([]);
-      setPredictionsLoading(false);
-      return;
-    }
-
-    const text = await response.text();
-    if (!text) {
-      logger.error(
-        'Empty response from markets API',
-        undefined,
-        'MarketsPanel'
-      );
-      setMarkets([]);
-      setPredictionsLoading(false);
-      return;
-    }
-
-    const data = JSON.parse(text);
-    if (data.success) {
-      setMarkets(data.markets || []);
-    } else {
+    try {
+      const data = await getMarketWidgets();
+      setMarkets((data.markets as Market[]) || []);
+    } catch (err) {
+      console.error('Failed to fetch markets:', err);
       setMarkets([]);
     }
     setPredictionsLoading(false);
