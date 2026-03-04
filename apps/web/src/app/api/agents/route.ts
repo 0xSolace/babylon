@@ -240,7 +240,7 @@ export const POST = withErrorHandling(async function POST(req: NextRequest) {
       autonomousDMs: config?.autonomousDMs ?? false,
       autonomousGroupChats: config?.autonomousGroupChats ?? false,
       modelTier: config?.modelTier ?? 'lite',
-      lifetimePnL: agentUser.lifetimePnL.toString(),
+      lifetimePnL: (agentUser.lifetimePnL ?? 0).toString(),
       walletAddress: agentUser.walletAddress,
       onChainRegistered: agentUser.onChainRegistered,
       createdAt: agentUser.createdAt.toISOString(),
@@ -261,43 +261,54 @@ export const GET = withErrorHandling(async function GET(req: NextRequest) {
 
   const agents = await agentService.listUserAgents(user.id, filters);
 
-  const agentsWithStats = await Promise.all(
-    agents.map(async (agent) => {
-      const [performance, config] = await Promise.all([
-        agentService.getPerformance(agent.id),
-        getAgentConfig(agent.id),
-      ]);
-      const tradingEnabled = isAutonomousTradingEnabled(config);
-      return {
-        id: agent.id,
-        username: agent.username,
-        name: agent.displayName,
-        description: agent.bio,
-        profileImageUrl: agent.profileImageUrl,
-        virtualBalance: Number(agent.virtualBalance ?? 0),
-        autonomousEnabled: tradingEnabled,
-        autonomousTrading: tradingEnabled,
-        autonomousPosting: config?.autonomousPosting ?? false,
-        autonomousCommenting: config?.autonomousCommenting ?? false,
-        autonomousDMs: config?.autonomousDMs ?? false,
-        autonomousGroupChats: config?.autonomousGroupChats ?? false,
-        modelTier: config?.modelTier ?? 'lite',
-        status: config?.status ?? 'idle',
-        isActive: config?.status === 'active',
-        lifetimePnL: agent.lifetimePnL.toString(),
-        totalTrades: performance.totalTrades,
-        profitableTrades: performance.profitableTrades,
-        winRate: performance.winRate,
-        lastTickAt: config?.lastTickAt?.toISOString(),
-        lastChatAt: config?.lastChatAt?.toISOString(),
-        walletAddress: agent.walletAddress,
-        onChainRegistered: agent.onChainRegistered!,
-        agent0TokenId: agent.agent0TokenId,
-        createdAt: agent.createdAt.toISOString(),
-        updatedAt: agent.updatedAt.toISOString(),
-      };
-    })
-  );
+  const agentsWithStats = (
+    await Promise.all(
+      agents.map(async (agent) => {
+        try {
+          const [performance, config] = await Promise.all([
+            agentService.getPerformance(agent.id),
+            getAgentConfig(agent.id),
+          ]);
+          const tradingEnabled = isAutonomousTradingEnabled(config);
+          return {
+            id: agent.id,
+            username: agent.username,
+            name: agent.displayName,
+            description: agent.bio,
+            profileImageUrl: agent.profileImageUrl,
+            virtualBalance: Number(agent.virtualBalance ?? 0),
+            autonomousEnabled: tradingEnabled,
+            autonomousTrading: tradingEnabled,
+            autonomousPosting: config?.autonomousPosting ?? false,
+            autonomousCommenting: config?.autonomousCommenting ?? false,
+            autonomousDMs: config?.autonomousDMs ?? false,
+            autonomousGroupChats: config?.autonomousGroupChats ?? false,
+            modelTier: config?.modelTier ?? 'lite',
+            status: config?.status ?? 'idle',
+            isActive: config?.status === 'active',
+            lifetimePnL: (agent.lifetimePnL ?? 0).toString(),
+            totalTrades: performance.totalTrades,
+            profitableTrades: performance.profitableTrades,
+            winRate: performance.winRate,
+            lastTickAt: config?.lastTickAt?.toISOString(),
+            lastChatAt: config?.lastChatAt?.toISOString(),
+            walletAddress: agent.walletAddress,
+            onChainRegistered: agent.onChainRegistered ?? false,
+            agent0TokenId: agent.agent0TokenId,
+            createdAt: agent.createdAt.toISOString(),
+            updatedAt: agent.updatedAt.toISOString(),
+          };
+        } catch (err) {
+          logger.error(
+            `Failed to fetch stats for agent ${agent.id}: ${err instanceof Error ? err.message : String(err)}`,
+            undefined,
+            'AgentsAPI'
+          );
+          return null;
+        }
+      })
+    )
+  ).filter((a) => a !== null);
 
   return NextResponse.json({
     success: true,
