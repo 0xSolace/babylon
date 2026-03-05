@@ -1273,11 +1273,13 @@ export const AdminTrainingStatusResponse = z
   })
   .meta({ id: 'AdminTrainingStatusResponse' });
 
-export const AdminTrainingTriggerGetResponse = z.record(z.string(), z.unknown()).meta({
-  id: 'AdminTrainingTriggerGetResponse',
-  description:
-    'Training readiness check result from automationPipeline.checkTrainingReadiness()',
-});
+export const AdminTrainingTriggerGetResponse = z
+  .record(z.string(), z.unknown())
+  .meta({
+    id: 'AdminTrainingTriggerGetResponse',
+    description:
+      'Training readiness check result from automationPipeline.checkTrainingReadiness()',
+  });
 
 export const AdminTrainingTriggerPostResponse = z
   .record(z.string(), z.unknown())
@@ -1287,15 +1289,19 @@ export const AdminTrainingTriggerPostResponse = z
       'Training trigger result from automationPipeline.triggerTraining()',
   });
 
-export const AdminTrainingDeployResponse = z.record(z.string(), z.unknown()).meta({
-  id: 'AdminTrainingDeployResponse',
-  description: 'Deployment result from modelDeployer.deploy()',
-});
+export const AdminTrainingDeployResponse = z
+  .record(z.string(), z.unknown())
+  .meta({
+    id: 'AdminTrainingDeployResponse',
+    description: 'Deployment result from modelDeployer.deploy()',
+  });
 
-export const AdminTrainingRollbackResponse = z.record(z.string(), z.unknown()).meta({
-  id: 'AdminTrainingRollbackResponse',
-  description: 'Rollback result from modelDeployer.rollback()',
-});
+export const AdminTrainingRollbackResponse = z
+  .record(z.string(), z.unknown())
+  .meta({
+    id: 'AdminTrainingRollbackResponse',
+    description: 'Rollback result from modelDeployer.rollback()',
+  });
 
 export const AdminTrainingBenchmarkPostResponse = z
   .object({
@@ -2358,7 +2364,10 @@ export const AdminCreateNPCTradeBody = z.object({
 });
 
 export const AdminCreateTradeBody = z
-  .discriminatedUnion('type', [AdminCreateBalanceTradeBody, AdminCreateNPCTradeBody])
+  .discriminatedUnion('type', [
+    AdminCreateBalanceTradeBody,
+    AdminCreateNPCTradeBody,
+  ])
   .meta({ id: 'AdminCreateTradeBody' });
 
 // ===========================================================================
@@ -2368,4 +2377,3 @@ export const AdminCreateTradeBody = z
 export const AdminSuccessMessage = z
   .object({ success: z.literal(true), message: z.string() })
   .meta({ id: 'AdminSuccessMessage' });
-

@@ -1,9 +1,6 @@
 'use client';
 
-import {
-  getChatHistory,
-  useSendAgentChatMessage,
-} from '@babylon/api-hooks';
+import { getChatHistory, useSendAgentChatMessage } from '@babylon/api-hooks';
 import { BABYLON_POINTS_SYMBOL, logger } from '@babylon/shared';
 import { Wallet } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';

@@ -83,7 +83,11 @@ export default function PostPage({ params }: PostPageProps) {
     } | null;
   };
 
-  const { data: postResponse, isLoading, error: queryError } = useGetPostById(postId);
+  const {
+    data: postResponse,
+    isLoading,
+    error: queryError,
+  } = useGetPostById(postId);
 
   // Transform the API response into the expected shape
   const [post, setPost] = useState<ExtendedPostData | null>(null);
@@ -96,7 +100,10 @@ export default function PostPage({ params }: PostPageProps) {
 
     // Access the raw response data which may have extra fields beyond the generated type
     const rawData = postResponse as unknown as Record<string, unknown>;
-    const postData = (rawData.data || rawData.post || rawData) as Record<string, unknown>;
+    const postData = (rawData.data || rawData.post || rawData) as Record<
+      string,
+      unknown
+    >;
 
     // If this is an article-type post, redirect to /article/[id]
     if (postData.type === 'article' && postData.fullContent) {
@@ -111,14 +118,27 @@ export default function PostPage({ params }: PostPageProps) {
       fullContent: (postData.fullContent as string) || null,
       articleTitle: (postData.articleTitle as string) || null,
       byline: (postData.byline as string) || null,
-      biasScore: postData.biasScore !== undefined ? (postData.biasScore as number) : null,
+      biasScore:
+        postData.biasScore !== undefined
+          ? (postData.biasScore as number)
+          : null,
       sentiment: (postData.sentiment as string) || null,
       slant: (postData.slant as string) || null,
       category: (postData.category as string) || null,
       authorId: postData.authorId as string,
-      authorName: postData.authorName as string || (postData.author as Record<string, unknown>)?.displayName as string || '',
-      authorUsername: (postData.authorUsername as string) || (postData.author as Record<string, unknown>)?.username as string || null,
-      authorProfileImageUrl: (postData.authorProfileImageUrl as string) || (postData.author as Record<string, unknown>)?.profileImageUrl as string || null,
+      authorName:
+        (postData.authorName as string) ||
+        ((postData.author as Record<string, unknown>)?.displayName as string) ||
+        '',
+      authorUsername:
+        (postData.authorUsername as string) ||
+        ((postData.author as Record<string, unknown>)?.username as string) ||
+        null,
+      authorProfileImageUrl:
+        (postData.authorProfileImageUrl as string) ||
+        ((postData.author as Record<string, unknown>)
+          ?.profileImageUrl as string) ||
+        null,
       timestamp: (postData.timestamp || postData.createdAt) as string,
       likeCount: (postData.likeCount as number) ?? 0,
       commentCount: (postData.commentCount as number) ?? 0,
@@ -129,7 +149,8 @@ export default function PostPage({ params }: PostPageProps) {
       isQuote: (postData.isQuote as boolean) || false,
       quoteComment: (postData.quoteComment as string) || null,
       originalPostId: (postData.originalPostId as string) || null,
-      originalPost: (postData.originalPost as ExtendedPostData['originalPost']) || null,
+      originalPost:
+        (postData.originalPost as ExtendedPostData['originalPost']) || null,
     };
 
     setPost(mapped);

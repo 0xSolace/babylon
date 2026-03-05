@@ -200,8 +200,12 @@ export const AddGroupMemberBody = z
 export const AddGroupMemberResponse = z
   .object({
     success: z.literal(true),
-    added: z.boolean().meta({ description: 'Whether the user was directly added (agents/NPCs)' }),
-    invited: z.boolean().meta({ description: 'Whether an invite was sent (human users)' }),
+    added: z.boolean().meta({
+      description: 'Whether the user was directly added (agents/NPCs)',
+    }),
+    invited: z
+      .boolean()
+      .meta({ description: 'Whether an invite was sent (human users)' }),
   })
   .meta({ id: 'AddGroupMemberResponse' });
 

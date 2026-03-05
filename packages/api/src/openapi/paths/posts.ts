@@ -1,6 +1,10 @@
 import { z } from 'zod';
 import type { ZodOpenApiPathsObject } from 'zod-openapi';
-import { CreatePostBody, FeedPost, ListPostsResponse } from '../../schemas/posts';
+import {
+  CreatePostBody,
+  FeedPost,
+  ListPostsResponse,
+} from '../../schemas/posts';
 
 export const postPaths: ZodOpenApiPathsObject = {
   '/api/posts': {

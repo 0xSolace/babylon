@@ -18,6 +18,7 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
+import { AdminCreateNftCollectionGroupBody } from '@babylon/api/schemas';
 import {
   and,
   chatParticipants,
@@ -30,7 +31,6 @@ import {
   sql,
 } from '@babylon/db';
 import { generateSnowflakeId, logger } from '@babylon/shared';
-import { AdminCreateNftCollectionGroupBody } from '@babylon/api/schemas';
 import type { NextRequest } from 'next/server';
 
 const CreateNftCollectionGroupSchema = AdminCreateNftCollectionGroupBody;

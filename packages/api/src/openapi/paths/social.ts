@@ -1,24 +1,24 @@
 import { z } from 'zod';
 import type { ZodOpenApiPathsObject } from 'zod-openapi';
 import {
-  CommentAuthor,
+  AcceptInviteResponse,
+  AddGroupMemberBody,
+  AddGroupMemberResponse,
   Comment,
-  PostAuthor,
-  PostDetail,
-  Notification,
+  CommentAuthor,
+  DeclineInviteResponse,
+  DemoteAdminResponse,
   Group,
   GroupDetail,
   GroupInvite,
-  inviteIdPath,
   groupIdPath,
-  AcceptInviteResponse,
-  DeclineInviteResponse,
-  AddGroupMemberBody,
-  AddGroupMemberResponse,
-  RemoveGroupMemberResponse,
+  inviteIdPath,
+  Notification,
+  PostAuthor,
+  PostDetail,
   PromoteAdminBody,
   PromoteAdminResponse,
-  DemoteAdminResponse,
+  RemoveGroupMemberResponse,
 } from '../../schemas/social';
 
 export const socialPaths: ZodOpenApiPathsObject = {
@@ -705,8 +705,7 @@ export const socialPaths: ZodOpenApiPathsObject = {
       operationId: 'promoteGroupAdmin',
       tags: ['Groups'],
       summary: 'Promote member to admin',
-      description:
-        'Promotes a group member to admin role. Admin/owner only.',
+      description: 'Promotes a group member to admin role. Admin/owner only.',
       security: [{ PrivyAuth: [] }],
       requestParams: { path: groupIdPath },
       requestBody: {

@@ -12,6 +12,7 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
+import { AdminRoleRequestBody } from '@babylon/api/schemas';
 import {
   ADMIN_PERMISSIONS,
   ADMIN_ROLES,
@@ -28,7 +29,6 @@ import {
   users,
 } from '@babylon/db';
 import { logger } from '@babylon/shared';
-import { AdminRoleRequestBody } from '@babylon/api/schemas';
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';
 

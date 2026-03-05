@@ -1,12 +1,12 @@
 import { z } from 'zod';
 import type { ZodOpenApiPathsObject } from 'zod-openapi';
 import {
-  agentIdParam,
-  AgentCard,
   AgentActivityResponse,
+  AgentCard,
   AgentGoal,
   AgentLogsResponse,
   AllAgentsActivityResponse,
+  agentIdParam,
   ChatHistoryResponse,
   ChatSendBody,
   ChatSendResponse,

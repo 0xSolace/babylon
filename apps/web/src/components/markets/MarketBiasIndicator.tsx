@@ -27,7 +27,10 @@
  */
 'use client';
 
-import { getGetActiveMarketBiasesQueryKey, useGetActiveMarketBiases } from '@babylon/api-hooks';
+import {
+  getGetActiveMarketBiasesQueryKey,
+  useGetActiveMarketBiases,
+} from '@babylon/api-hooks';
 import { cn } from '@babylon/shared';
 import { Activity, Clock, TrendingDown, TrendingUp } from 'lucide-react';
 
@@ -156,7 +159,9 @@ export function MarketBiasIndicator({
                     {bias.adjustment >= 0 ? '+' : ''}
                     {(bias.adjustment * 100).toFixed(1)}%
                   </div>
-                  <div className="text-muted-foreground text-xs">Adjustment</div>
+                  <div className="text-muted-foreground text-xs">
+                    Adjustment
+                  </div>
                 </div>
               </div>
             </div>

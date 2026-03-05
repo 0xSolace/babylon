@@ -6,7 +6,11 @@
 
 'use client';
 
-import { deleteImage, submitGameFeedback, uploadImage } from '@babylon/api-hooks';
+import {
+  deleteImage,
+  submitGameFeedback,
+  uploadImage,
+} from '@babylon/api-hooks';
 import { cn, logger, parseJsonString } from '@babylon/shared';
 import { Loader2, Send, X } from 'lucide-react';
 import { useEffect, useRef, useState, useTransition } from 'react';

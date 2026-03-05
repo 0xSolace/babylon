@@ -68,12 +68,11 @@ export function PlayerStatsModal({
   });
 
   const profile = (profileData?.user as UserProfile | null) ?? null;
-  const error =
-    queryError
-      ? 'Failed to fetch profile'
-      : isOpen && !loading && profileData && !profileData.user
-        ? 'User not found'
-        : null;
+  const error = queryError
+    ? 'Failed to fetch profile'
+    : isOpen && !loading && profileData && !profileData.user
+      ? 'User not found'
+      : null;
 
   if (!isOpen) return null;
 

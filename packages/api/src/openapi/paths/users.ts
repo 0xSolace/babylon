@@ -1,22 +1,22 @@
 import { z } from 'zod';
 import type { ZodOpenApiPathsObject } from 'zod-openapi';
 import {
-  UserBalanceResponse,
-  UserProfile,
-  UserPublicProfile,
-  SearchUserResult,
-  FollowUser,
-  FollowTarget,
   Activity,
-  UserPost,
   ApiKey,
   BlockRecord,
-  MuteRecord,
   FavoriteProfile,
   FavoriteTarget,
+  FollowTarget,
+  FollowUser,
+  MuteRecord,
   PointsHistoryResponse,
-  userIdPath,
   profileIdPath,
+  SearchUserResult,
+  UserBalanceResponse,
+  UserPost,
+  UserProfile,
+  UserPublicProfile,
+  userIdPath,
 } from '../../schemas/users';
 
 // ---------------------------------------------------------------------------
@@ -60,7 +60,7 @@ export const userPaths: ZodOpenApiPathsObject = {
       tags: ['Users'],
       summary: 'Get user points history',
       description:
-        'Returns the user\'s points transaction history including reputation points and purchase transactions. Owner only.',
+        "Returns the user's points transaction history including reputation points and purchase transactions. Owner only.",
       security: [{ PrivyAuth: [] }],
       requestParams: { path: userIdPath },
       responses: {

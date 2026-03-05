@@ -3,10 +3,10 @@ import type { ZodOpenApiPathsObject } from 'zod-openapi';
 import {
   Chat,
   ChatChannelMessage as ChatMessage,
-  ChatPagination as Pagination,
   ChatParticipant,
   DMChat,
   MessageQuality,
+  ChatPagination as Pagination,
 } from '../../schemas/chats';
 
 export const chatPaths: ZodOpenApiPathsObject = {

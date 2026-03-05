@@ -123,11 +123,13 @@ export function useChatPage() {
         gameChats = gameData.chats || [];
       }
 
-      const combined = ([
-        ...(personalData.groupChats || []),
-        ...(personalData.directChats || []),
-        ...gameChats,
-      ] as Chat[]).sort((a, b) => {
+      const combined = (
+        [
+          ...(personalData.groupChats || []),
+          ...(personalData.directChats || []),
+          ...gameChats,
+        ] as Chat[]
+      ).sort((a, b) => {
         const aTime = a.lastMessage?.createdAt || a.updatedAt;
         const bTime = b.lastMessage?.createdAt || b.updatedAt;
         return new Date(bTime).getTime() - new Date(aTime).getTime();
@@ -173,7 +175,10 @@ export function useChatPage() {
 
       try {
         // getChatById uses orvalFetch which handles auth automatically
-        const data = await getChatById(chatId) as unknown as Record<string, unknown>;
+        const data = (await getChatById(chatId)) as unknown as Record<
+          string,
+          unknown
+        >;
         setChatDetails({
           ...data,
           chat: data.chat || null,
@@ -199,11 +204,13 @@ export function useChatPage() {
 
     try {
       // sendChatMessage uses orvalFetch which handles auth automatically
-      const data = await sendChatMessage(selectedChatId, {
+      const data = (await sendChatMessage(selectedChatId, {
         content: messageInput.trim(),
-      }) as unknown as Record<string, unknown>;
+      })) as unknown as Record<string, unknown>;
 
-      const warnings = Array.isArray(data?.warnings) ? data.warnings as string[] : [];
+      const warnings = Array.isArray(data?.warnings)
+        ? (data.warnings as string[])
+        : [];
       if (warnings.length > 0) {
         setSendWarning(warnings.join('. '));
         setTimeout(() => setSendWarning(null), 5000);
@@ -236,13 +243,7 @@ export function useChatPage() {
       setSendError(message);
     }
     setSending(false);
-  }, [
-    selectedChatId,
-    messageInput,
-    sending,
-    addMessage,
-    loadChats,
-  ]);
+  }, [selectedChatId, messageInput, sending, addMessage, loadChats]);
 
   // Leave chat
   const handleLeaveChat = useCallback(async () => {

@@ -30,7 +30,8 @@ import type { NextRequest } from 'next/server';
 export const POST = withErrorHandling(async (request: NextRequest) => {
   const user = await authenticate(request);
   const body = await request.json();
-  const { notificationIds, type, markAll } = MarkNotificationsReadSchema.parse(body);
+  const { notificationIds, type, markAll } =
+    MarkNotificationsReadSchema.parse(body);
 
   if (markAll) {
     // Mark all notifications as read

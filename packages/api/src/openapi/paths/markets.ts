@@ -2,27 +2,27 @@ import { z } from 'zod';
 import type { ZodOpenApiPathsObject } from 'zod-openapi';
 
 import {
-  PredictionMarket,
-  PredictionMarketDetail,
-  PredictionPricePoint,
-  PerpPricePoint,
-  PredictionTrade,
-  PerpTrade,
-  PerpMarket,
-  MarketState,
-  FeeBreakdown,
-  PerpTradeResult,
-  PerpPosition,
-  PredictionPosition,
   Bias,
-  PredictionBuyBody,
-  PredictionSellBody,
-  PerpOpenBody,
-  PerpCloseBody,
-  OnChainBuyBody,
-  PerpTuningBody,
   BiasConfigBody,
   BiasTuneBody,
+  FeeBreakdown,
+  MarketState,
+  OnChainBuyBody,
+  PerpCloseBody,
+  PerpMarket,
+  PerpOpenBody,
+  PerpPosition,
+  PerpPricePoint,
+  PerpTrade,
+  PerpTradeResult,
+  PerpTuningBody,
+  PredictionBuyBody,
+  PredictionMarket,
+  PredictionMarketDetail,
+  PredictionPosition,
+  PredictionPricePoint,
+  PredictionSellBody,
+  PredictionTrade,
 } from '../../schemas/markets';
 
 // ---------------------------------------------------------------------------
@@ -608,8 +608,7 @@ export const marketPaths: ZodOpenApiPathsObject = {
       operationId: 'configureMarketBias',
       tags: ['Markets'],
       summary: 'Configure market biases',
-      description:
-        'Set, remove, or bulk-set market biases for entities.',
+      description: 'Set, remove, or bulk-set market biases for entities.',
       security: [{ PrivyAuth: [] }],
       requestBody: {
         content: {

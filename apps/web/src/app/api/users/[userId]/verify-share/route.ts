@@ -33,11 +33,7 @@ import {
 } from '@babylon/api';
 import { VerifyShareBody } from '@babylon/api/schemas';
 import { db, eq, shareActions, users } from '@babylon/db';
-import {
-  logger,
-  POINTS,
-  UserIdParamSchema,
-} from '@babylon/shared';
+import { logger, POINTS, UserIdParamSchema } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 
 const SUPPORTED_TWITTER_HOSTS = new Set([

@@ -37,7 +37,11 @@ export default function ArticlePage({ params }: ArticlePageProps) {
   const { id: articleId } = use(params);
   const router = useRouter();
 
-  const { data: postResponse, isLoading, error: queryError } = useGetPostById(articleId);
+  const {
+    data: postResponse,
+    isLoading,
+    error: queryError,
+  } = useGetPostById(articleId);
 
   const [article, setArticle] = useState<ArticlePost | null>(null);
 
@@ -49,7 +53,10 @@ export default function ArticlePage({ params }: ArticlePageProps) {
 
     // Access the raw response data which may have extra fields beyond the generated type
     const rawData = postResponse as unknown as Record<string, unknown>;
-    const articleData = (rawData.data || rawData.post || rawData) as Record<string, unknown>;
+    const articleData = (rawData.data || rawData.post || rawData) as Record<
+      string,
+      unknown
+    >;
 
     // Verify it's actually an article
     if (articleData.type !== 'article') {
@@ -64,15 +71,29 @@ export default function ArticlePage({ params }: ArticlePageProps) {
       fullContent: (articleData.fullContent as string) || null,
       articleTitle: (articleData.articleTitle as string) || null,
       byline: (articleData.byline as string) || null,
-      biasScore: articleData.biasScore !== undefined ? (articleData.biasScore as number) : null,
+      biasScore:
+        articleData.biasScore !== undefined
+          ? (articleData.biasScore as number)
+          : null,
       sentiment: (articleData.sentiment as string) || null,
       slant: (articleData.slant as string) || null,
       category: (articleData.category as string) || null,
       imageUrl: (articleData.imageUrl as string) || null,
       authorId: articleData.authorId as string,
-      authorName: (articleData.authorName as string) || (articleData.author as Record<string, unknown>)?.displayName as string || '',
-      authorUsername: (articleData.authorUsername as string) || (articleData.author as Record<string, unknown>)?.username as string || null,
-      authorProfileImageUrl: (articleData.authorProfileImageUrl as string) || (articleData.author as Record<string, unknown>)?.profileImageUrl as string || null,
+      authorName:
+        (articleData.authorName as string) ||
+        ((articleData.author as Record<string, unknown>)
+          ?.displayName as string) ||
+        '',
+      authorUsername:
+        (articleData.authorUsername as string) ||
+        ((articleData.author as Record<string, unknown>)?.username as string) ||
+        null,
+      authorProfileImageUrl:
+        (articleData.authorProfileImageUrl as string) ||
+        ((articleData.author as Record<string, unknown>)
+          ?.profileImageUrl as string) ||
+        null,
       timestamp: (articleData.timestamp || articleData.createdAt) as string,
     });
   }, [postResponse, articleId, router]);

@@ -491,22 +491,19 @@ export default function TeamChatPage() {
   );
 
   // Handle sidebar "Settings" - open edit modal
-  const handleViewSettings = useCallback(
-    async (agentId: string) => {
-      setEditingAgentId(agentId);
+  const handleViewSettings = useCallback(async (agentId: string) => {
+    setEditingAgentId(agentId);
 
-      try {
-        const data = await getAgent(agentId);
-        setEditingAgentData(
-          data.agent as unknown as NonNullable<typeof editingAgentData>
-        );
-      } catch {
-        toast.error('Failed to fetch agent details');
-        setEditingAgentId(null);
-      }
-    },
-    []
-  );
+    try {
+      const data = await getAgent(agentId);
+      setEditingAgentData(
+        data.agent as unknown as NonNullable<typeof editingAgentData>
+      );
+    } catch {
+      toast.error('Failed to fetch agent details');
+      setEditingAgentId(null);
+    }
+  }, []);
 
   // Close a right sidebar tab - auto-closes sidebar when last tab is closed
   const closeRightTab = useCallback((tabId: string) => {

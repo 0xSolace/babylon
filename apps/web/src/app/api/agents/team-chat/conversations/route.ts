@@ -44,7 +44,6 @@ export const GET = withErrorHandling(async (req: NextRequest) => {
 // POST: Create new conversation
 // =============================================================================
 
-
 export const POST = withErrorHandling(async (req: NextRequest) => {
   const user = await authenticateUser(req);
 

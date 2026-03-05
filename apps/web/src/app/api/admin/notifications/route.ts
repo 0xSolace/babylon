@@ -29,9 +29,9 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
+import { AdminCreateNotificationBody } from '@babylon/api/schemas';
 import { db } from '@babylon/db';
 import { logger } from '@babylon/shared';
-import { AdminCreateNotificationBody } from '@babylon/api/schemas';
 import type { NextRequest } from 'next/server';
 
 const CreateNotificationSchema = AdminCreateNotificationBody;

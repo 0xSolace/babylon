@@ -200,8 +200,7 @@ export function TradingProfile({
       // Process breakdown
       let breakdownData: PortfolioBreakdownSnapshot | null = null;
       if (isOwner && breakdownRes) {
-        breakdownData =
-          breakdownRes as unknown as PortfolioBreakdownSnapshot;
+        breakdownData = breakdownRes as unknown as PortfolioBreakdownSnapshot;
       }
 
       // Check if aborted after async operations

@@ -3,8 +3,8 @@ import type { ZodOpenApiPathsObject } from 'zod-openapi';
 import {
   AppealBody,
   BlockEntry,
-  ModerationPagination as Pagination,
   MuteEntry,
+  ModerationPagination as Pagination,
   Report,
 } from '../../schemas/moderation';
 

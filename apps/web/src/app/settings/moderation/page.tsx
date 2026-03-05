@@ -6,7 +6,14 @@
 
 'use client';
 
-import { getListBlocksQueryKey, getListMutesQueryKey, useBlockUser, useListBlocks, useListMutes, useMuteUser } from '@babylon/api-hooks';
+import {
+  getListBlocksQueryKey,
+  getListMutesQueryKey,
+  useBlockUser,
+  useListBlocks,
+  useListMutes,
+  useMuteUser,
+} from '@babylon/api-hooks';
 import { cn } from '@babylon/shared';
 import { Ban, Trash2, UserX, VolumeX } from 'lucide-react';
 import { useState } from 'react';

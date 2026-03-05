@@ -32,9 +32,9 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
+import { AdminTestDmMessagesBody } from '@babylon/api/schemas';
 import { db } from '@babylon/db';
 import { generateSnowflakeId, logger } from '@babylon/shared';
-import { AdminTestDmMessagesBody } from '@babylon/api/schemas';
 import type { NextRequest } from 'next/server';
 
 const TestDMMessagesSchema = AdminTestDmMessagesBody;

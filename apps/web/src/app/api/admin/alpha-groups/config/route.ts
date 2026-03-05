@@ -16,13 +16,13 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
+import { AdminAlphaGroupConfigUpdateBody } from '@babylon/api/schemas';
 import {
   ALPHA_GROUP_CONFIG,
   DOMAIN_FOCUS_WEIGHTS,
   TIER_CONFIG,
 } from '@babylon/engine';
 import { logger } from '@babylon/shared';
-import { AdminAlphaGroupConfigUpdateBody } from '@babylon/api/schemas';
 import type { NextRequest } from 'next/server';
 
 /**

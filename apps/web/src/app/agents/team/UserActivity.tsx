@@ -387,7 +387,8 @@ export function UserActivity({ userId, className }: UserActivityProps) {
     error,
     refetch,
   } = useGetUserActivity(userId, { limit: 50 });
-  const activities = (activityData?.activities ?? []) as unknown as UserActivityItem[];
+  const activities = (activityData?.activities ??
+    []) as unknown as UserActivityItem[];
 
   return (
     <div className={cn('flex flex-col', className)}>

@@ -29,12 +29,12 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
+import { AppealBody } from '@babylon/api/schemas';
 import type { JsonValue } from '@babylon/db';
 import { db } from '@babylon/db';
 import { WalletService } from '@babylon/engine';
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
-import { AppealBody } from '@babylon/api/schemas';
 import { type Address, createPublicClient, http } from 'viem';
 import { baseSepolia } from 'viem/chains';
 

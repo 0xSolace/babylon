@@ -143,7 +143,12 @@ export function LinkSocialAccountsModal({
     });
 
     // Send authentication data to backend for verification and linking
-    let data: { success?: boolean; error?: string; pointsAwarded?: number; newTotal?: number };
+    let data: {
+      success?: boolean;
+      error?: string;
+      pointsAwarded?: number;
+      newTotal?: number;
+    };
     let statusCode = 200;
     try {
       data = (await farcasterCallback({
@@ -158,7 +163,10 @@ export function LinkSocialAccountsModal({
     } catch (e) {
       const err = e as { status?: number; message?: string };
       statusCode = err.status ?? 500;
-      data = { success: false, error: err.message ?? 'Failed to link Farcaster account' };
+      data = {
+        success: false,
+        error: err.message ?? 'Failed to link Farcaster account',
+      };
     }
 
     if (data.success) {

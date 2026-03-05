@@ -25,10 +25,10 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
+import { AdminLoadTestBody } from '@babylon/api/schemas';
 import { logger } from '@babylon/shared';
 import type { LoadTestResult } from '@babylon/testing';
 import { LoadTestSimulator, TEST_SCENARIOS } from '@babylon/testing';
-import { AdminLoadTestBody } from '@babylon/api/schemas';
 import type { NextRequest } from 'next/server';
 
 const LoadTestRequestSchema = AdminLoadTestBody;

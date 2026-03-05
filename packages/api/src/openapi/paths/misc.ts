@@ -2,15 +2,15 @@ import { z } from 'zod';
 import type { ZodOpenApiPathsObject } from 'zod-openapi';
 
 import {
-  TradeRecord,
-  LeaderboardEntry,
-  Organization,
   Actor,
   ActorStats,
-  RegistryEntity,
-  Game,
   AgentTemplate,
+  Game,
+  LeaderboardEntry,
+  Organization,
+  RegistryEntity,
   ReputationBreakdown,
+  TradeRecord,
 } from '../../schemas/misc';
 
 export const miscPaths: ZodOpenApiPathsObject = {
@@ -499,7 +499,9 @@ export const miscPaths: ZodOpenApiPathsObject = {
           'application/json': {
             schema: z
               .object({
-                url: z.string().meta({ description: 'URL of the image to delete' }),
+                url: z
+                  .string()
+                  .meta({ description: 'URL of the image to delete' }),
               })
               .meta({ id: 'DeleteImageBody' }),
           },
@@ -985,7 +987,8 @@ export const miscPaths: ZodOpenApiPathsObject = {
       operationId: 'farcasterCallback',
       tags: ['Auth'],
       summary: 'Link Farcaster account',
-      description: 'Verifies SIWF signature and links Farcaster account to the user.',
+      description:
+        'Verifies SIWF signature and links Farcaster account to the user.',
       requestBody: {
         required: true,
         content: {
@@ -998,7 +1001,9 @@ export const miscPaths: ZodOpenApiPathsObject = {
                 username: z.string(),
                 displayName: z.string().optional(),
                 pfpUrl: z.string().optional(),
-                state: z.string().meta({ description: 'Format: userId|timestamp|random' }),
+                state: z
+                  .string()
+                  .meta({ description: 'Format: userId|timestamp|random' }),
               })
               .meta({ id: 'FarcasterCallbackBody' }),
           },

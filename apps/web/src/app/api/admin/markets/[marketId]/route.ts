@@ -19,6 +19,7 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
+import { AdminMarketActionBody } from '@babylon/api/schemas';
 import {
   PredictionDbAdapter,
   PredictionMarketService,
@@ -39,7 +40,6 @@ import {
   WalletService,
 } from '@babylon/engine';
 import { logger } from '@babylon/shared';
-import { AdminMarketActionBody } from '@babylon/api/schemas';
 import type { NextRequest } from 'next/server';
 
 /**
