@@ -1,7 +1,7 @@
 'use client';
 
-import { disconnectTwitter } from '@babylon/api-hooks';
-import { cn, logger } from '@babylon/shared';
+import { disconnectTwitter, farcasterCallback } from '@babylon/api-hooks';
+import { cn, logger, signInWithFarcaster } from '@babylon/shared';
 import { useLinkAccount, usePrivy } from '@privy-io/react-auth';
 import { Check, ExternalLink, Mail, Shield, X as XIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -133,10 +133,67 @@ export function LinkSocialAccountsModal({
     }
   };
 
-  const handleFarcasterAuth = () => {
+  const handleFarcasterAuth = async () => {
     if (!user?.id) return;
     setLinking('farcaster');
-    linkFarcaster();
+
+    // Use the proper SIWF protocol via relay.farcaster.xyz
+    const result = await signInWithFarcaster({
+      userId: user.id,
+    });
+
+    // Send authentication data to backend for verification and linking
+    let data: { success?: boolean; error?: string; pointsAwarded?: number; newTotal?: number };
+    let statusCode = 200;
+    try {
+      data = (await farcasterCallback({
+        message: result.message,
+        signature: result.signature,
+        fid: result.fid,
+        username: result.username,
+        displayName: result.displayName,
+        pfpUrl: result.pfpUrl,
+        state: result.state,
+      })) as unknown as typeof data;
+    } catch (e) {
+      const err = e as { status?: number; message?: string };
+      statusCode = err.status ?? 500;
+      data = { success: false, error: err.message ?? 'Failed to link Farcaster account' };
+    }
+
+    if (data.success) {
+      setUser({
+        ...user,
+        hasFarcaster: true,
+        farcasterUsername: result.username,
+        reputationPoints: data.newTotal || user.reputationPoints,
+      });
+
+      // Dispatch event to notify other components (like UserMenu) to refresh
+      window.dispatchEvent(new CustomEvent('rewards-updated'));
+
+      if (data.pointsAwarded && data.pointsAwarded > 0) {
+        toast.success(
+          `Farcaster linked! +${data.pointsAwarded} points awarded`
+        );
+      } else {
+        toast.success('Farcaster account linked successfully!');
+      }
+
+      onClose();
+    } else {
+      const errorMessage = data.error || 'Failed to link Farcaster account';
+      if (statusCode === 409) {
+        toast.error(
+          errorMessage.includes('already linked')
+            ? errorMessage
+            : 'This Farcaster account is already linked to another user'
+        );
+      } else {
+        toast.error(errorMessage);
+      }
+    }
+    setLinking(null);
   };
 
   return (

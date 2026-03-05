@@ -4,19 +4,11 @@ import {
   type RealtimeChannel,
   withErrorHandling,
 } from '@babylon/api';
+import { RealtimeTokenRequestSchema } from '@babylon/api/schemas';
 import { and, db, eq, inArray, users } from '@babylon/db';
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
-import { z } from 'zod';
-
-const BodySchema = z.object({
-  channels: z.array(z.string()).optional(),
-  chatIds: z.array(z.string()).optional(),
-  agentIds: z.array(z.string()).optional(),
-  includeNotifications: z.coerce.boolean().optional(),
-  ttlSeconds: z.number().int().positive().max(3600).optional(),
-});
 
 const PUBLIC_CHANNELS: RealtimeChannel[] = [
   'feed',
@@ -63,7 +55,7 @@ export const POST = withErrorHandling(async function POST(
     agentIds = [],
     includeNotifications = true,
     ttlSeconds,
-  } = BodySchema.parse(body);
+  } = RealtimeTokenRequestSchema.parse(body);
 
   const requestedChannels = channels.filter(Boolean) as RealtimeChannel[];
   const baseChannels = [...PUBLIC_CHANNELS];

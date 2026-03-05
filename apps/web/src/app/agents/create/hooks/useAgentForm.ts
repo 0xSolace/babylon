@@ -1,7 +1,10 @@
 import type { AgentTemplate } from '@babylon/agents/client';
 import type { GenerateFieldBody } from '@babylon/api-hooks';
-import { generateAgentField } from '@babylon/api-hooks';
-import { logger } from '@babylon/shared';
+import {
+  generateAgentField,
+  getAgentTemplate,
+  listAgentTemplates,
+} from '@babylon/api-hooks';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { createNameMatchRegex, generateAgentName } from '@/utils/nameGenerator';
@@ -87,18 +90,9 @@ export function useAgentForm(): UseAgentFormResult {
       localStorage.removeItem(STORAGE_KEY);
 
       // Load random template
-      const indexResponse = await fetch('/api/agent-templates');
-      if (!indexResponse.ok) {
-        logger.error(
-          'Failed to load template index',
-          undefined,
-          'useAgentForm'
-        );
-        setIsInitialized(true);
-        return;
-      }
-
-      const index = (await indexResponse.json()) as { templates: string[] };
+      const index = (await listAgentTemplates()) as unknown as {
+        templates: string[];
+      };
       if (!index.templates || index.templates.length === 0) {
         setIsInitialized(true);
         return;
@@ -106,16 +100,9 @@ export function useAgentForm(): UseAgentFormResult {
 
       const randomTemplate =
         index.templates[Math.floor(Math.random() * index.templates.length)]!;
-      const templateResponse = await fetch(
-        `/api/agent-templates/${randomTemplate}`
-      );
-
-      if (!templateResponse.ok) {
-        setIsInitialized(true);
-        return;
-      }
-
-      const template = (await templateResponse.json()) as AgentTemplate;
+      const template = (await getAgentTemplate(
+        randomTemplate
+      )) as unknown as AgentTemplate;
 
       // Random images
       const randomPfp = Math.floor(Math.random() * TOTAL_PROFILE_PICTURES) + 1;

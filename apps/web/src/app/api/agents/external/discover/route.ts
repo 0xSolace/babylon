@@ -16,6 +16,7 @@ import {
   RATE_LIMIT_CONFIGS,
   withErrorHandling,
 } from '@babylon/api';
+import { ExternalAgentDiscoverBody } from '@babylon/api/schemas';
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
@@ -46,19 +47,7 @@ const DiscoveryQuerySchema = z.object({
   offset: z.coerce.number().min(0).optional().default(0),
 });
 
-// Body validation for POST-based discovery
-const DiscoveryBodySchema = z.object({
-  types: z.array(z.nativeEnum(AgentType)).optional(),
-  statuses: z.array(z.nativeEnum(AgentStatus)).optional(),
-  minTrustLevel: z.coerce.number().min(0).max(4).optional(),
-  requiredCapabilities: z.array(z.string()).optional(),
-  requiredSkills: z.array(z.string()).optional(),
-  requiredDomains: z.array(z.string()).optional(),
-  matchMode: z.enum(['all', 'any']).optional(),
-  search: z.string().optional(),
-  limit: z.coerce.number().int().min(1).max(100).optional().default(20),
-  offset: z.coerce.number().int().min(0).optional().default(0),
-});
+// Body validation for POST-based discovery (uses shared schema from @babylon/api/schemas)
 
 /**
  * Authenticate the request using API key from Authorization header
@@ -319,7 +308,7 @@ export const POST = withErrorHandling(async function POST(req: NextRequest) {
     );
   }
 
-  const validatedBodyResult = DiscoveryBodySchema.safeParse(body);
+  const validatedBodyResult = ExternalAgentDiscoverBody.safeParse(body);
   if (!validatedBodyResult.success) {
     return NextResponse.json(
       {
