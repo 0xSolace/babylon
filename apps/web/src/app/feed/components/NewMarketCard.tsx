@@ -1,33 +1,42 @@
 'use client';
 
-import { ArrowRight } from 'lucide-react';
+import { CheckCircle, ExternalLink, XCircle } from 'lucide-react';
 import Link from 'next/link';
-import { useMemo } from 'react';
+import { useRouter } from 'next/navigation';
+import { useEffect, useRef, useState } from 'react';
 import type { NarrativeStory } from '@/app/feed/types/narrative';
+import { InteractionBar } from '@/components/interactions/InteractionBar';
+import { PredictionProbabilityChart } from '@/components/markets/PredictionProbabilityChart';
+import { PredictionTradingModal } from '@/components/markets/PredictionTradingModal';
+import { usePredictionHistory } from '@/hooks/usePredictionHistory';
+import type { MarketTimeRange, PredictionMarket } from '@/types/markets';
 
 interface NewMarketCardProps {
   story: NarrativeStory;
+  /**
+   * When true, the card is rendered inline below a PostCard inside an existing
+   * bordered list item. Uses border-t (top separator) instead of border-b so
+   * the outer wrapper's border-b acts as the item divider and we don't produce
+   * a double bottom border.
+   */
+  embedded?: boolean;
 }
+
+type TradeSide = 'YES' | 'NO';
 
 function formatCountdown(isoDate: string): string {
   const parsed = new Date(isoDate);
   if (isNaN(parsed.getTime())) return '';
   const ms = parsed.getTime() - Date.now();
   if (ms <= 0) return 'Closing soon';
-  const hours = Math.floor(ms / (1000 * 60 * 60));
+  const totalMinutes = Math.floor(ms / (1000 * 60));
+  if (totalMinutes < 60) return `${totalMinutes}m left`;
+  const hours = Math.floor(totalMinutes / 60);
   if (hours < 24) return `${hours}h left`;
   const days = Math.floor(hours / 24);
   return `${days}d left`;
 }
 
-/**
- * Compute YES/NO percentage values from AMM share counts.
- *
- * When total shares = 0 (brand-new market, no trades yet) the AMM opens at
- * exact parity, so we return 50/50. This matches calculateSharePercentages()
- * in apps/web/src/app/markets/_lib/formatters.ts which also returns 50/50
- * for zero shares. As trades accumulate the percentages will diverge from 50.
- */
 function computePercentages(
   yesShares: number,
   noShares: number
@@ -39,107 +48,250 @@ function computePercentages(
 }
 
 /**
- * Inline prediction market discovery card for the Stories and Latest feeds.
- * All data comes from the API — question text, resolution date, market UUID,
- * and live share counts. Deep-links to /markets/predictions/[marketId] when
- * a market UUID is available; falls back to the predictions list otherwise.
+ * Prediction probability chart for market cards in the feed.
+ *
+ * Uses the same PredictionProbabilityChart as the markets terminal so the
+ * visual language is consistent. Lazy-loads history via IntersectionObserver
+ * to prevent 429 cascades, and passes seed data from the market's live share
+ * counts so brand-new markets (no API history yet) show a flat line at the
+ * current probability instead of a black placeholder.
  */
-export function NewMarketCard({ story }: NewMarketCardProps) {
-  const countdown = useMemo(
-    () => (story.resolutionDate ? formatCountdown(story.resolutionDate) : null),
-    [story.resolutionDate]
+function MarketChart({
+  marketId,
+  yesShares,
+  noShares,
+}: {
+  marketId: string;
+  yesShares: number;
+  noShares: number;
+}) {
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const [inView, setInView] = useState(false);
+  const [timeRange, setTimeRange] = useState<MarketTimeRange>('1H');
+
+  useEffect(() => {
+    const el = wrapperRef.current;
+    if (!el) return;
+    const io = new IntersectionObserver(
+      ([entry]) => {
+        if (entry?.isIntersecting) {
+          setInView(true);
+          io.disconnect();
+        }
+      },
+      { rootMargin: '150px' }
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+
+  const { history } = usePredictionHistory(inView ? marketId : '', {
+    limit: 200,
+    range: timeRange,
+    // Seed ensures brand-new markets (no API history) show a flat probability
+    // line rather than a black placeholder — same pattern as the terminal.
+    seed: { yesShares, noShares },
+  });
+
+  return (
+    // Constrain height so PredictionProbabilityChart (height="fill") fits
+    // the feed card without the 400px overflow from height="fixed".
+    // The terminal uses the same fill+constrained-parent pattern.
+    <div ref={wrapperRef} className="h-[160px] w-full">
+      {inView ? (
+        <PredictionProbabilityChart
+          data={history}
+          marketId={marketId}
+          timeRange={timeRange}
+          onTimeRangeChange={setTimeRange}
+          showHeader={false}
+          height="fill"
+        />
+      ) : (
+        <div className="h-full w-full animate-pulse rounded bg-muted/40" />
+      )}
+    </div>
+  );
+}
+
+/**
+ * Inline prediction market card for the Stories and Latest feeds.
+ *
+ * Mirrors the pattern used in the markets page (PredictionMarketCard +
+ * PredictionTradingModal) so users can trade directly from the feed without
+ * navigating away. Falls back to navigation links when no marketId is available.
+ */
+export function NewMarketCard({ story, embedded = false }: NewMarketCardProps) {
+  const router = useRouter();
+  const [tradeSide, setTradeSide] = useState<TradeSide | null>(null);
+
+  const countdown = story.resolutionDate
+    ? formatCountdown(story.resolutionDate)
+    : null;
+
+  const { yesPercent, noPercent } = computePercentages(
+    story.yesShares ?? 0,
+    story.noShares ?? 0
   );
 
-  const { yesPercent, noPercent } = useMemo(
-    () => computePercentages(story.yesShares ?? 0, story.noShares ?? 0),
-    [story.yesShares, story.noShares]
-  );
+  // Build a minimal PredictionMarket object from the story data — same
+  // pattern as toPredictionMarket() in agents/team/panels/PredictionsPanel.tsx
+  const market: PredictionMarket | null = story.marketId
+    ? {
+        id: story.marketId,
+        text: story.storyTitle,
+        status: 'active',
+        scenario: 0,
+        yesShares: story.yesShares ?? 0,
+        noShares: story.noShares ?? 0,
+        resolutionDate: story.resolutionDate,
+        endDate: story.resolutionDate,
+      }
+    : null;
 
-  // Deep-link to the individual market when we have its UUID;
-  // fall back to the predictions list if the market hasn't been matched.
-  const marketBase = story.marketId
+  const viewHref = story.marketId
     ? `/markets/predictions/${encodeURIComponent(story.marketId)}`
     : '/markets?tab=predictions';
 
-  // Pre-select the trade direction on the destination page
-  const tradeYesHref = `${marketBase}${story.marketId ? '?side=yes' : '&side=yes'}`;
-  const tradeNoHref = `${marketBase}${story.marketId ? '?side=no' : '&side=no'}`;
-  const viewHref = marketBase;
-
   return (
-    <div className="border-border border-b px-4 py-4">
-      {/* Meta row */}
-      <div className="mb-2 flex items-center gap-2 text-muted-foreground text-xs">
-        <span className="font-medium text-foreground/70">
+    <div className={`border-border px-4 py-4 ${embedded ? 'border-t' : 'border-b'}`}>
+      {/* Header row: label + countdown */}
+      <div className="mb-2 flex items-center justify-between">
+        <span className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
           Prediction Market
         </span>
         {countdown && (
-          <>
-            <span>·</span>
-            <span>{countdown}</span>
-          </>
+          <span className="text-muted-foreground text-xs">{countdown}</span>
         )}
       </div>
 
-      {/* Question */}
-      <p className="mb-4 font-semibold text-foreground text-sm leading-snug">
+      {/* Market question */}
+      <p className="mb-3 font-semibold text-foreground text-sm leading-snug">
         {story.storyTitle}
       </p>
 
-      {/* YES / NO probability bars — sourced from live market share counts */}
-      <div className="mb-4 space-y-1.5">
+      {/* Probability chart — only rendered when marketId is available */}
+      {story.marketId && (
+        <div className="mb-3 overflow-hidden rounded-md border border-border bg-muted/20">
+          <MarketChart
+            marketId={story.marketId}
+            yesShares={story.yesShares ?? 0}
+            noShares={story.noShares ?? 0}
+          />
+        </div>
+      )}
+
+      {/* YES / NO probability bars */}
+      <div className="mb-4 space-y-2">
         <div className="flex items-center gap-2">
-          <span className="w-8 text-right font-medium text-green-600 text-xs">
-            YES
+          <span className="w-12 shrink-0 text-right font-semibold text-green-500 text-xs">
+            {yesPercent}%
           </span>
           <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
             <div
-              className="h-full rounded-full bg-green-500"
+              className="h-full rounded-full bg-green-500 transition-all duration-500"
               style={{ width: `${yesPercent}%` }}
             />
           </div>
-          <span className="w-8 text-muted-foreground text-xs">
-            {yesPercent}%
+          <span className="w-7 shrink-0 font-medium text-muted-foreground text-xs">
+            YES
           </span>
         </div>
         <div className="flex items-center gap-2">
-          <span className="w-8 text-right font-medium text-red-500 text-xs">
-            NO
+          <span className="w-12 shrink-0 text-right font-semibold text-red-500 text-xs">
+            {noPercent}%
           </span>
           <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
             <div
-              className="h-full rounded-full bg-red-500"
+              className="h-full rounded-full bg-red-500 transition-all duration-500"
               style={{ width: `${noPercent}%` }}
             />
           </div>
-          <span className="w-8 text-muted-foreground text-xs">
-            {noPercent}%
+          <span className="w-7 shrink-0 font-medium text-muted-foreground text-xs">
+            NO
           </span>
         </div>
       </div>
 
-      {/* Actions */}
+      {/* Trade buttons — same pattern as agents/team/panels/PredictionsPanel.tsx */}
       <div className="flex items-center gap-2">
-        <Link
-          href={tradeYesHref}
-          className="inline-flex items-center rounded-md border border-green-600 px-3 py-1.5 font-semibold text-green-600 text-sm transition-colors hover:bg-green-600/10"
-        >
-          Trade YES
-        </Link>
-        <Link
-          href={tradeNoHref}
-          className="inline-flex items-center rounded-md border border-red-500 px-3 py-1.5 font-semibold text-red-500 text-sm transition-colors hover:bg-red-500/10"
-        >
-          Trade NO
-        </Link>
+        {market ? (
+          <>
+            <button
+              type="button"
+              onClick={() => setTradeSide('YES')}
+              className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-green-600 py-2.5 font-bold text-sm text-white transition-colors hover:bg-green-700 active:scale-95"
+            >
+              <CheckCircle size={15} />
+              BUY YES
+            </button>
+            <button
+              type="button"
+              onClick={() => setTradeSide('NO')}
+              className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-red-600 py-2.5 font-bold text-sm text-white transition-colors hover:bg-red-700 active:scale-95"
+            >
+              <XCircle size={15} />
+              BUY NO
+            </button>
+          </>
+        ) : (
+          // Fallback when marketId is unknown — navigate to markets list
+          <>
+            <Link
+              href={`/markets?tab=predictions&side=yes`}
+              className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-green-600 py-2.5 font-bold text-sm text-white transition-colors hover:bg-green-700"
+            >
+              BUY YES
+            </Link>
+            <Link
+              href={`/markets?tab=predictions&side=no`}
+              className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-red-600 py-2.5 font-bold text-sm text-white transition-colors hover:bg-red-700"
+            >
+              BUY NO
+            </Link>
+          </>
+        )}
         <Link
           href={viewHref}
-          className="ml-auto inline-flex items-center gap-1 text-muted-foreground text-sm transition-colors hover:text-foreground"
+          className="inline-flex items-center gap-1 px-2 py-2.5 text-muted-foreground text-sm transition-colors hover:text-foreground"
+          aria-label="View full market"
         >
-          View market
-          <ArrowRight className="h-3.5 w-3.5" />
+          <ExternalLink size={15} />
         </Link>
       </div>
+
+      {/* Social interaction bar — anchored to the NPC post ID so the card
+          is likeable, commentable, and shareable like any regular post.
+          Only rendered when anchorPostId is available. */}
+      {story.anchorPostId && (
+        <div
+          className="mt-3 border-border border-t pt-1"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <InteractionBar
+            postId={story.anchorPostId}
+            initialInteractions={{
+              postId: story.anchorPostId,
+              likeCount: 0,
+              commentCount: 0,
+              shareCount: 0,
+              isLiked: false,
+              isShared: false,
+            }}
+            onCommentClick={() => router.push(`/post/${story.anchorPostId}`)}
+          />
+        </div>
+      )}
+
+      {/* PredictionTradingModal — same pattern as agents panel */}
+      {market && tradeSide && (
+        <PredictionTradingModal
+          question={market}
+          isOpen={!!tradeSide}
+          onClose={() => setTradeSide(null)}
+          defaultSide={tradeSide}
+        />
+      )}
     </div>
   );
 }

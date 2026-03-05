@@ -162,6 +162,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
           category: posts.category,
           imageUrl: posts.imageUrl,
           relatedQuestion: posts.relatedQuestion,
+          originalPostId: posts.originalPostId,
         })
         .from(posts)
         .where(
@@ -252,6 +253,70 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
         .where(inArray(users.id, authorIds));
       const userMap = new Map(authorUsers.map((u) => [u.id, u]));
 
+      // Fetch original posts for reposts so their content can be displayed
+      // the same way as the main feed. Simple reposts have content: ""; quote
+      // posts put the quote text in content and the original in originalPostId.
+      const repostOriginalIds = [
+        ...new Set(
+          recentPosts
+            .filter((p) => p.originalPostId)
+            .map((p) => p.originalPostId as string)
+        ),
+      ];
+      const originalPostMap = new Map<
+        string,
+        {
+          id: string;
+          content: string;
+          authorId: string;
+          timestamp: Date;
+          profileImageUrl: string | null;
+          username: string | null;
+          displayName: string | null;
+        }
+      >();
+      if (repostOriginalIds.length > 0) {
+        const originalRows = await db
+          .select({
+            id: posts.id,
+            content: posts.content,
+            authorId: posts.authorId,
+            timestamp: posts.timestamp,
+          })
+          .from(posts)
+          .where(inArray(posts.id, repostOriginalIds));
+        const originalAuthorIds = [
+          ...new Set(originalRows.map((r) => r.authorId)),
+        ];
+        const originalAuthorUsers =
+          originalAuthorIds.length > 0
+            ? await db
+                .select({
+                  id: users.id,
+                  username: users.username,
+                  displayName: users.displayName,
+                  profileImageUrl: users.profileImageUrl,
+                })
+                .from(users)
+                .where(inArray(users.id, originalAuthorIds))
+            : [];
+        const originalUserMap = new Map(
+          originalAuthorUsers.map((u) => [u.id, u])
+        );
+        for (const r of originalRows) {
+          const u = originalUserMap.get(r.authorId);
+          originalPostMap.set(r.id, {
+            id: r.id,
+            content: r.content,
+            authorId: r.authorId,
+            timestamp: r.timestamp,
+            profileImageUrl: u?.profileImageUrl ?? null,
+            username: u?.username ?? null,
+            displayName: u?.displayName ?? null,
+          });
+        }
+      }
+
       // Resolve question metadata (title, status, arcState) via posts.relatedQuestion → questions.questionNumber
       // LEFT JOIN arcStates to get narrative state in one round-trip.
       const questionNumbers = [
@@ -305,19 +370,93 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
 
         const authorUser = userMap.get(post.authorId);
         const actorRecord = StaticDataRegistry.getActor(post.authorId);
+        // Organizations are indexed separately from individual actors; check
+        // both so org-authored posts get the correct image (/images/organizations/)
+        // and route to /orgs/{id} rather than the broken /u/id/ fallback.
+        const orgRecord = actorRecord
+          ? null
+          : StaticDataRegistry.getOrganization(post.authorId);
         let authorName = post.authorId;
         let authorUsername: string | null = null;
         let authorProfileImageUrl: string | null = null;
+
+        // Derive author type for slot-pattern classification in the frontend.
+        const authorType: 'actor' | 'news' | 'user' = actorRecord
+          ? 'actor'
+          : orgRecord
+            ? 'news'
+            : 'user';
+
+        // Filter NPC org "NEW MARKET:" announcements — these are system-generated
+        // posts that duplicate the NewMarketCard component. The card is the
+        // canonical feed surface; the text post adds noise. We still capture the
+        // post ID below so the card's InteractionBar can anchor to it.
+        if (
+          orgRecord &&
+          post.content.trimStart().toUpperCase().startsWith('NEW MARKET:')
+        ) {
+          continue;
+        }
 
         if (actorRecord) {
           authorName = actorRecord.name;
           authorUsername = actorRecord.username ?? actorRecord.id;
           authorProfileImageUrl = actorRecord.profileImageUrl ?? null;
+        } else if (orgRecord) {
+          // Use org ID as the username so PostCard links to /profile/{orgId}
+          // which /profile/[id].tsx redirects to /orgs/{orgId}.
+          authorName = orgRecord.name;
+          authorUsername = orgRecord.id;
+          authorProfileImageUrl = orgRecord.imageUrl ?? null;
         } else if (authorUser) {
           authorName =
             authorUser.displayName ?? authorUser.username ?? post.authorId;
           authorUsername = authorUser.username;
           authorProfileImageUrl = authorUser.profileImageUrl;
+        }
+
+        // Build repost metadata the same way the main feed does so PostCard
+        // can render repost cards with the original post's content.
+        const isRepost = post.type === 'repost';
+        const isQuote = isRepost && post.content !== '';
+        const originalPostData = post.originalPostId
+          ? (originalPostMap.get(post.originalPostId) ?? null)
+          : null;
+        let originalPost: NarrativePost['originalPost'] = null;
+        if (originalPostData) {
+          const origActor = StaticDataRegistry.getActor(
+            originalPostData.authorId
+          );
+          const origOrg = origActor
+            ? null
+            : StaticDataRegistry.getOrganization(originalPostData.authorId);
+          const origAuthorName =
+            origActor?.name ??
+            origOrg?.name ??
+            originalPostData.displayName ??
+            originalPostData.username ??
+            originalPostData.authorId;
+          originalPost = {
+            id: originalPostData.id,
+            content: originalPostData.content,
+            authorId: originalPostData.authorId,
+            authorName: origAuthorName,
+            authorUsername:
+              origActor?.username ??
+              origOrg?.id ??
+              originalPostData.username ??
+              null,
+            authorProfileImageUrl:
+              origActor?.profileImageUrl ??
+              origOrg?.imageUrl ??
+              originalPostData.profileImageUrl ??
+              null,
+            timestamp: toISOStringStrict(
+              originalPostData.timestamp,
+              'timestamp',
+              originalPostData.id
+            ),
+          };
         }
 
         const narrativePost: NarrativePost = {
@@ -339,6 +478,12 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
           isLiked: false,
           isShared: false,
           relatedQuestion: post.relatedQuestion ?? null,
+          authorType,
+          isRepost,
+          isQuote,
+          quoteComment: isQuote ? post.content : null,
+          originalPostId: post.originalPostId ?? null,
+          originalPost,
         };
 
         const storyKey =
@@ -452,6 +597,35 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
         });
       }
 
+      // Resolve marketId for question-backed stories so the frontend can render
+      // a live probability chart (PredictionSparkline) on each post card.
+      // Same text-based join used for new market cards; this fetches only
+      // existing stories (not new markets which already have marketId set).
+      const storyQuestionNumbers = stories
+        .filter((s) => !s.isNewMarket && s.questionNumber !== null)
+        .map((s) => s.questionNumber as number);
+      if (storyQuestionNumbers.length > 0) {
+        const marketRows = await db
+          .select({
+            questionNumber: questions.questionNumber,
+            marketId: markets.id,
+          })
+          .from(questions)
+          .innerJoin(
+            markets,
+            sql`lower(trim(${markets.question})) = lower(trim(${questions.text}))`
+          )
+          .where(inArray(questions.questionNumber, storyQuestionNumbers));
+        const questionToMarket = new Map(
+          marketRows.map((r) => [r.questionNumber, r.marketId])
+        );
+        for (const story of stories) {
+          if (!story.isNewMarket && story.questionNumber !== null) {
+            story.marketId = questionToMarket.get(story.questionNumber) ?? null;
+          }
+        }
+      }
+
       // Sort all stories — question stories AND standalone posts — by score DESC.
       // Active question stories naturally float above standalone posts because
       // the arc state and resolution proximity multipliers boost their score.
@@ -536,6 +710,13 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
           marketId: q.marketId ?? null,
           yesShares: Number(q.yesShares ?? 0),
           noShares: Number(q.noShares ?? 0),
+          // Anchor the InteractionBar on NewMarketCard to the first NPC post
+          // about this question. Those posts are filtered from the feed body
+          // (they duplicate the card), but their IDs let the card be likeable,
+          // commentable, and shareable like any other post.
+          anchorPostId:
+            recentPosts.find((p) => p.relatedQuestion === q.questionNumber)
+              ?.id ?? null,
         });
       }
 
