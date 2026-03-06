@@ -13,7 +13,12 @@
  */
 'use client';
 
-import { adminGetFeedback, adminRetryFeedbackSync } from '@babylon/api-hooks';
+import {
+  type AdminFeedbackResponse,
+  type AdminFeedbackResponseFeedbackItem,
+  adminGetFeedback,
+  adminRetryFeedbackSync,
+} from '@babylon/api-hooks';
 import {
   cn,
   FEEDBACK_TYPE_CONFIG,
@@ -37,48 +42,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { Avatar } from '@/components/shared/Avatar';
 import { Skeleton } from '@/components/shared/Skeleton';
 
-/**
- * Feedback item structure from API
- */
-interface FeedbackItem {
-  id: string;
-  feedbackType: string;
-  description: string | null;
-  score: number;
-  rating: number | null;
-  stepsToReproduce: string | null;
-  screenshotUrl: string | null;
-  linearIssue: {
-    id: string;
-    identifier: string | null;
-    url: string | null;
-  } | null;
-  createdAt: string;
-  user: {
-    id: string;
-    username: string | null;
-    displayName: string | null;
-    profileImageUrl: string | null;
-    email: string | null;
-  } | null;
-}
-
-/**
- * API response structure
- */
-interface FeedbackResponse {
-  feedback: FeedbackItem[];
-  pagination: {
-    total: number;
-    limit: number;
-    offset: number;
-    hasMore: boolean;
-  };
-  stats: {
-    total: number;
-    byType: Record<string, number>;
-  };
-}
+type FeedbackItem = AdminFeedbackResponseFeedbackItem;
+type FeedbackResponse = AdminFeedbackResponse;
 
 /**
  * Filter types

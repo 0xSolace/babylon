@@ -67,7 +67,7 @@ export const orvalFetch = async <T>(
   }
 
   if ([204, 205, 304].includes(response.status) || !response.body) {
-    return {} as T;
+    return undefined as T;
   }
 
   return response.json() as Promise<T>;

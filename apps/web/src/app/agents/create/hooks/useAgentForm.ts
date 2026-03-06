@@ -90,16 +90,19 @@ export function useAgentForm(): UseAgentFormResult {
       localStorage.removeItem(STORAGE_KEY);
 
       // Load random template
-      const index = (await listAgentTemplates()) as unknown as {
-        templates: string[];
-      };
-      if (!index.templates || index.templates.length === 0) {
+      // The OpenAPI-generated return type differs from the actual response shape
+      // (route returns @babylon/agents AgentTemplate, not the OpenAPI model).
+      // Use the agents-package type which matches the real API response.
+      const index = await listAgentTemplates();
+      const templateIds = (index as unknown as { templates: string[] })
+        .templates;
+      if (!templateIds || templateIds.length === 0) {
         setIsInitialized(true);
         return;
       }
 
       const randomTemplate =
-        index.templates[Math.floor(Math.random() * index.templates.length)]!;
+        templateIds[Math.floor(Math.random() * templateIds.length)]!;
       const template = (await getAgentTemplate(
         randomTemplate
       )) as unknown as AgentTemplate;
