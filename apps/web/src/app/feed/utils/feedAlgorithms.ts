@@ -49,8 +49,15 @@ export function flattenStories(stories: NarrativeStory[]): FlatItem[] {
 
   // Separate market cards from post-stories so market cards can be
   // injected at controlled intervals rather than all before the first post.
-  const pendingMarkets = stories.filter((s) => s.isNewMarket);
-  const postStories = stories.filter((s) => !s.isNewMarket);
+  // Deduplicate by storyKey to prevent duplicate React keys downstream.
+  const seen = new Set<string>();
+  const deduped = stories.filter((s) => {
+    if (seen.has(s.storyKey)) return false;
+    seen.add(s.storyKey);
+    return true;
+  });
+  const pendingMarkets = deduped.filter((s) => s.isNewMarket);
+  const postStories = deduped.filter((s) => !s.isNewMarket);
 
   if (postStories.length === 0) {
     // No posts at all — just emit the market cards in score order
