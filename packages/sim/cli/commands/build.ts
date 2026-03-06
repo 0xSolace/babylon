@@ -137,20 +137,30 @@ ${systemRegistrations.join('\n')}
 
 await engine.boot();
 
-let running = true;
-const cleanup = async () => {
-  running = false;
+const once = process.env.SIM_ONCE === '1' || process.argv.includes('--once');
+
+if (once) {
+  const start = Date.now();
+  const metrics = await engine.tick();
+  console.log(JSON.stringify({ ok: true, durationMs: Date.now() - start, metrics }, null, 2));
   await engine.shutdown();
   process.exit(0);
-};
-process.once('SIGINT', cleanup);
-process.once('SIGTERM', cleanup);
+} else {
+  let running = true;
+  const cleanup = async () => {
+    running = false;
+    await engine.shutdown();
+    process.exit(0);
+  };
+  process.once('SIGINT', cleanup);
+  process.once('SIGTERM', cleanup);
 
-const intervalMs = Math.max(1000, Number(process.env.TICK_INTERVAL_MS) || 60000);
+  const intervalMs = Math.max(1000, Number(process.env.TICK_INTERVAL_MS) || 60000);
 
-while (running) {
-  await engine.tick();
-  if (running) await new Promise(r => setTimeout(r, intervalMs));
+  while (running) {
+    await engine.tick();
+    if (running) await new Promise(r => setTimeout(r, intervalMs));
+  }
 }
 `;
 

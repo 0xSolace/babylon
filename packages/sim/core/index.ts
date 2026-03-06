@@ -11,7 +11,10 @@ export type {
   BabylonSharedData,
 } from './augments';
 // Bridge (legacy)
-export { createLegacyGameTickSystem } from './bridge/legacy-game-tick';
+export {
+  createLegacyGameTickSystem,
+  type LegacyBridgeOptions,
+} from './bridge/legacy-game-tick';
 // Composables (unctx)
 export {
   tryUseTick,
