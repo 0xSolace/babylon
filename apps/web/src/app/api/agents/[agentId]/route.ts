@@ -88,6 +88,7 @@ import {
   isAutonomousTradingEnabled,
 } from '@babylon/agents';
 import { authenticateUser, withErrorHandling } from '@babylon/api';
+import { UpdateAgentBody } from '@babylon/api/schemas';
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
@@ -203,7 +204,7 @@ export const PUT = withErrorHandling(async function PUT(
 ) {
   const user = await authenticateUser(req);
   const { agentId } = await params;
-  const body = (await req.json()) as Record<string, unknown>;
+  const body = UpdateAgentBody.parse(await req.json());
 
   const {
     name,
@@ -231,13 +232,9 @@ export const PUT = withErrorHandling(async function PUT(
   if (coverImageUrl !== undefined) updates.coverImageUrl = coverImageUrl;
   if (system !== undefined) updates.system = system;
   if (bio !== undefined) {
-    if (Array.isArray(bio)) {
-      updates.bio = bio;
-    } else if (bio !== null && typeof bio === 'string') {
-      updates.bio = bio.split('\n').filter((b: string) => b.trim());
-    } else {
-      updates.bio = [];
-    }
+    updates.bio = Array.isArray(bio)
+      ? bio
+      : bio.split('\n').filter((b) => b.trim());
   }
   if (personality !== undefined) updates.personality = personality;
   if (tradingStrategy !== undefined) updates.tradingStrategy = tradingStrategy;

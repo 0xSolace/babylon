@@ -10,12 +10,17 @@ export interface UpdateAgentBody {
   name?: string;
   description?: string;
   profileImageUrl?: string;
+  coverImageUrl?: string;
   system?: string;
-  bio?: string[];
+  bio?: string[] | string;
   personality?: string;
   tradingStrategy?: string;
   modelTier?: string;
+  isActive?: boolean;
   autonomousEnabled?: boolean;
   autonomousPosting?: boolean;
+  autonomousCommenting?: boolean;
+  autonomousDMs?: boolean;
+  autonomousGroupChats?: boolean;
   a2aEnabled?: boolean;
 }

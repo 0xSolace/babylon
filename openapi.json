@@ -11640,14 +11640,24 @@
           "profileImageUrl": {
             "type": "string"
           },
+          "coverImageUrl": {
+            "type": "string"
+          },
           "system": {
             "type": "string"
           },
           "bio": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
+            "anyOf": [
+              {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              {
+                "type": "string"
+              }
+            ]
           },
           "personality": {
             "type": "string"
@@ -11658,10 +11668,22 @@
           "modelTier": {
             "type": "string"
           },
+          "isActive": {
+            "type": "boolean"
+          },
           "autonomousEnabled": {
             "type": "boolean"
           },
           "autonomousPosting": {
+            "type": "boolean"
+          },
+          "autonomousCommenting": {
+            "type": "boolean"
+          },
+          "autonomousDMs": {
+            "type": "boolean"
+          },
+          "autonomousGroupChats": {
             "type": "boolean"
           },
           "a2aEnabled": {
