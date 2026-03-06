@@ -44,6 +44,11 @@ export class BabylonEngine extends Hookable<RuntimeHooks> {
         'Cannot add systems after boot(). Register all systems before calling boot().'
       );
     }
+    if (!/^[a-z0-9][a-z0-9._-]*$/i.test(system.id)) {
+      throw new FrameworkError(
+        `Invalid system ID "${system.id}". IDs must be alphanumeric with dots, hyphens, or underscores.`
+      );
+    }
     this.systems.push(system);
     return this;
   }

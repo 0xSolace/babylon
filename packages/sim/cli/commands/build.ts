@@ -113,31 +113,40 @@ function tryInstantiate(ctor: Function): BabylonSystemLike | null {
   } catch { return null; }
 }
 
+function useIfEnabled(sys: BabylonSystemLike): void {
+  if (_disabled.has(sys.id)) {
+    console.warn(\`System "\${sys.id}" disabled by config\`);
+    return;
+  }
+  engine.use(sys);
+}
+
 function registerScanned(mod: Record<string, unknown>): void {
   const candidate = mod.default ?? mod;
   if (isBabylonSystem(candidate)) {
-    engine.use(candidate);
+    useIfEnabled(candidate);
     return;
   }
   if (typeof candidate === 'function') {
     const inst = tryInstantiate(candidate);
-    if (inst) { engine.use(inst); return; }
+    if (inst) { useIfEnabled(inst); return; }
   }
   for (const val of Object.values(mod)) {
-    if (isBabylonSystem(val)) { engine.use(val); continue; }
+    if (isBabylonSystem(val)) { useIfEnabled(val); continue; }
     if (typeof val === 'function') {
       const inst = tryInstantiate(val);
-      if (inst) { engine.use(inst); }
+      if (inst) { useIfEnabled(inst); }
     }
   }
 }
 
 const { config: runtimeConfig } = await loadBabylonConfig();
-const { systemsDir: _a, disabledSystems: _b, systemPhases: _c, dev: _d, ...engineKeys } = runtimeConfig;
+const { systemsDir: _a, disabledSystems, systemPhases: _c, migratedSubsystems: _d, dev: _e, ...engineKeys } = runtimeConfig;
 const engine = new BabylonEngine({
   config: { budgetMs: runtimeConfig.budgetMs ?? 60_000, ...engineKeys },
 });
 
+const _disabled = new Set(disabledSystems ?? []);
 ${systemRegistrations.join('\n')}
 
 await engine.boot();
