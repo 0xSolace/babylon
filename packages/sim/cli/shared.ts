@@ -28,8 +28,15 @@ export async function buildEngine(
   rootDir: string,
   includeLegacy: boolean
 ): Promise<BabylonEngine> {
+  const {
+    systemsDir: _systemsDir,
+    disabledSystems: _disabledSystems,
+    systemPhases: _systemPhases,
+    dev: _dev,
+    ...customKeys
+  } = config;
   const engine = new BabylonEngine({
-    config: { budgetMs: config.budgetMs ?? 60_000 },
+    config: { budgetMs: config.budgetMs ?? 60_000, ...customKeys },
   });
 
   if (includeLegacy) {

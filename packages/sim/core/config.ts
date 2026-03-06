@@ -7,7 +7,10 @@
 
 import { execSync } from 'node:child_process';
 import { type ConfigWatcher, loadConfig, watchConfig } from 'c12';
+import type { BabylonConfig } from './augments';
 import type { TickPhase } from './types';
+
+type IsEmpty<T> = keyof T extends never ? true : false;
 
 let _repoRoot: string | undefined | null = null;
 
@@ -25,7 +28,7 @@ function findRepoRoot(from?: string): string | undefined {
   return _repoRoot;
 }
 
-export interface BabylonRuntimeConfig {
+interface BabylonRuntimeConfigBase {
   /** Directory to scan for systems (relative to rootDir) */
   systemsDir?: string;
 
@@ -45,10 +48,12 @@ export interface BabylonRuntimeConfig {
     /** Auto-restart on config change */
     watchConfig?: boolean;
   };
-
-  /** Escape hatch — any additional keys the user wants to pass through */
-  [key: string]: unknown;
 }
+
+export type BabylonRuntimeConfig = BabylonRuntimeConfigBase &
+  (IsEmpty<BabylonConfig> extends true
+    ? { [key: string]: unknown }
+    : BabylonConfig & { [key: string]: unknown });
 
 export const defaultConfig: BabylonRuntimeConfig = {
   systemsDir: './systems',

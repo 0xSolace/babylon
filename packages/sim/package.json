@@ -18,7 +18,7 @@
   },
   "scripts": {
     "build": "bun run cli/index.ts build",
-    "dev": "bun run cli/index.ts dev --legacy",
+    "dev": "bun run cli/index.ts dev",
     "document": "bun run cli/index.ts document",
     "info": "bun run cli/index.ts info",
     "tick": "bun run cli/index.ts tick",

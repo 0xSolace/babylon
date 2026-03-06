@@ -78,8 +78,10 @@ export default defineCommand({
       (_, i) => `  registerScanned(_sys${i});`
     );
 
-    // Sanitize config values for code generation
-    const budgetMs = Math.max(0, Math.floor(Number(config.budgetMs) || 60_000));
+    const configPath = relative(
+      outDir,
+      resolve(rootDir, 'core/config.ts')
+    ).replace(/\\/g, '/');
 
     const entrySource = `#!/usr/bin/env bun
 /**
@@ -88,6 +90,7 @@ export default defineCommand({
  */
 
 import { BabylonEngine } from '${enginePath}';
+import { loadBabylonConfig } from '${configPath}';
 
 ${systemImports.join('\n')}
 
@@ -124,8 +127,10 @@ function registerScanned(mod: Record<string, unknown>): void {
   }
 }
 
+const { config: runtimeConfig } = await loadBabylonConfig();
+const { systemsDir: _a, disabledSystems: _b, systemPhases: _c, dev: _d, ...engineKeys } = runtimeConfig;
 const engine = new BabylonEngine({
-  config: { budgetMs: ${budgetMs} },
+  config: { budgetMs: runtimeConfig.budgetMs ?? 60_000, ...engineKeys },
 });
 
 ${systemRegistrations.join('\n')}
@@ -221,7 +226,7 @@ while (running) {
           ) ?? null,
       })),
       config: {
-        budgetMs,
+        budgetMs: config.budgetMs ?? 60_000,
         systemsDir: config.systemsDir ?? './systems',
       },
     };
@@ -233,5 +238,6 @@ while (running) {
     consola.info(
       `  Run with: bun ${relative(rootDir, resolve(outDir, 'server.js'))}`
     );
+    process.exit(0);
   },
 });

@@ -3,6 +3,13 @@
  */
 
 export type { PromptDefinition } from '@babylon/engine/prompts/define-prompt';
+// Augmentation interfaces (declare module '@babylon/sim' { ... })
+export type {
+  BabylonConfig,
+  BabylonHooks,
+  BabylonServices,
+  BabylonSharedData,
+} from './augments';
 // Bridge (legacy)
 export { createLegacyGameTickSystem } from './bridge/legacy-game-tick';
 // Composables (unctx)

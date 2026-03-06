@@ -6,6 +6,18 @@
 import type { DrizzleClient } from '@babylon/db';
 import type { PromptDefinition } from '@babylon/engine/prompts/define-prompt';
 import type { Logger } from '@babylon/shared';
+import type {
+  BabylonConfig,
+  BabylonHooks,
+  BabylonServices,
+  BabylonSharedData,
+} from './augments';
+
+// ---------------------------------------------------------------------------
+// Utility: check if an interface has been augmented (has at least one key)
+// ---------------------------------------------------------------------------
+
+type IsEmpty<T> = keyof T extends never ? true : false;
 
 // ---------------------------------------------------------------------------
 // TickPhase — maps to real game-tick.ts section ordering
@@ -35,15 +47,38 @@ export interface SystemTickResult {
 }
 
 // ---------------------------------------------------------------------------
-// Service container
+// Service container — typed when BabylonServices is augmented
 // ---------------------------------------------------------------------------
 
-export interface ServiceContainer {
+/** Typed overloads when BabylonServices has been augmented. */
+interface TypedServiceContainer {
+  register<K extends keyof BabylonServices>(
+    token: K,
+    instance: BabylonServices[K]
+  ): void;
+  register<T>(token: string, instance: T): void;
+
+  get<K extends keyof BabylonServices>(token: K): BabylonServices[K];
+  get<T>(token: string): T;
+
+  has(token: string): boolean;
+  has(token: keyof BabylonServices): boolean;
+
+  tokens(): string[];
+}
+
+/** Untyped fallback when BabylonServices is empty. */
+interface UntypedServiceContainer {
   register<T>(token: string, instance: T): void;
   get<T>(token: string): T;
   has(token: string): boolean;
   tokens(): string[];
 }
+
+export type ServiceContainer =
+  IsEmpty<BabylonServices> extends true
+    ? UntypedServiceContainer
+    : TypedServiceContainer;
 
 // ---------------------------------------------------------------------------
 // Tick metrics
@@ -59,23 +94,47 @@ export interface TickMetrics {
 }
 
 // ---------------------------------------------------------------------------
-// Tick shared data
+// Tick shared data — typed when BabylonSharedData is augmented
 // ---------------------------------------------------------------------------
 
-export interface TickSharedData {
+/** Typed overloads when BabylonSharedData has been augmented. */
+interface TypedTickSharedData {
+  get<K extends keyof BabylonSharedData>(
+    key: K
+  ): BabylonSharedData[K] | undefined;
+  get<T>(key: string): T | undefined;
+
+  set<K extends keyof BabylonSharedData>(
+    key: K,
+    value: BabylonSharedData[K]
+  ): void;
+  set(key: string, value: unknown): void;
+
+  has(key: string): boolean;
+  has(key: keyof BabylonSharedData): boolean;
+}
+
+/** Untyped fallback when BabylonSharedData is empty. */
+interface UntypedTickSharedData {
   get<T>(key: string): T | undefined;
   set(key: string, value: unknown): void;
   has(key: string): boolean;
 }
 
+export type TickSharedData =
+  IsEmpty<BabylonSharedData> extends true
+    ? UntypedTickSharedData
+    : TypedTickSharedData;
+
 // ---------------------------------------------------------------------------
-// Engine config
+// Engine config — typed when BabylonConfig is augmented
 // ---------------------------------------------------------------------------
 
-export interface EngineConfig {
+export type EngineConfig = {
   budgetMs: number;
-  [key: string]: unknown;
-}
+} & (IsEmpty<BabylonConfig> extends true
+  ? { [key: string]: unknown }
+  : BabylonConfig & { [key: string]: unknown });
 
 // ---------------------------------------------------------------------------
 // LLM orchestrator
@@ -154,7 +213,7 @@ export interface BabylonSystem {
 // Runtime hooks — lifecycle events emitted by BabylonEngine
 // ---------------------------------------------------------------------------
 
-export interface RuntimeHooks {
+export type RuntimeHooks = {
   /** Called after the engine has booted and all systems are registered. */
   'engine:boot': (ctx: EngineContext) => void | Promise<void>;
   /** Called before the engine shuts down. */
@@ -182,4 +241,4 @@ export interface RuntimeHooks {
     error: Error,
     ctx: TickContext
   ) => void | Promise<void>;
-}
+} & (IsEmpty<BabylonHooks> extends true ? Record<string, never> : BabylonHooks);
