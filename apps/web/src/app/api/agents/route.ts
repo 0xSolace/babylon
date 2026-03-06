@@ -160,7 +160,11 @@ import {
   getAgentConfig,
   isAutonomousTradingEnabled,
 } from '@babylon/agents';
-import { authenticateUser, withErrorHandling } from '@babylon/api';
+import {
+  authenticateUser,
+  checkProgress,
+  withErrorHandling,
+} from '@babylon/api';
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
@@ -224,6 +228,8 @@ export const POST = withErrorHandling(async function POST(req: NextRequest) {
 
   // Get agent config for the response
   const config = await getAgentConfig(agentUser.id);
+
+  void checkProgress(user.userId, { type: 'agent_created' });
 
   return NextResponse.json({
     success: true,

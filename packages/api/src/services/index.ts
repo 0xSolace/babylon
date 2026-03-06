@@ -7,6 +7,7 @@
  * Infrastructure and API-related services for user management, notifications, and system operations.
  */
 
+export * from './achievement-service';
 // Claude LLM Service
 export * from './claude-service';
 export * from './cron-relay-service';

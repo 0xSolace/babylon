@@ -18,6 +18,7 @@ import {
 import {
   authenticateUser,
   broadcastChatMessage,
+  checkProgress,
   withErrorHandling,
 } from '@babylon/api';
 import { db, eq, messages, userAgentConfigs, users } from '@babylon/db';
@@ -906,6 +907,8 @@ export const POST = withErrorHandling(
         'AgentChat'
       );
     });
+
+    void checkProgress(user.userId, { type: 'agent_message_sent' });
 
     return NextResponse.json({
       success: true,

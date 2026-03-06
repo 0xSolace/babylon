@@ -2,6 +2,7 @@
 // This is the Drizzle schema
 
 // Tables and Relations
+export * from './achievements';
 export * from './actor-state';
 export * from './actors';
 export * from './admin';
