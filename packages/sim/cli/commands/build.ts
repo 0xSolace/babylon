@@ -96,7 +96,7 @@ ${systemImports.join('\n')}
 
 interface BabylonSystemLike {
   id: string;
-  onTick: Function;
+  onTick: (...args: unknown[]) => unknown;
   [key: string]: unknown;
 }
 

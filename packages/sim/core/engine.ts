@@ -303,8 +303,9 @@ export class BabylonEngine extends Hookable<RuntimeHooks> {
 
     const sorted: BabylonSystem[] = [];
     const sortedIds = new Set<string>();
-    while (queue.length > 0) {
-      const id = queue.shift()!;
+    let qi = 0;
+    while (qi < queue.length) {
+      const id = queue[qi++]!;
       sorted.push(idToSys.get(id)!);
       sortedIds.add(id);
       for (const neighbor of adj.get(id)!) {
