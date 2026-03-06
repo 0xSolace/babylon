@@ -94,35 +94,40 @@ import { loadBabylonConfig } from '${configPath}';
 
 ${systemImports.join('\n')}
 
-function isBabylonSystem(obj: unknown): boolean {
+interface BabylonSystemLike {
+  id: string;
+  onTick: Function;
+  [key: string]: unknown;
+}
+
+function isBabylonSystem(obj: unknown): obj is BabylonSystemLike {
   if (!obj || typeof obj !== 'object') return false;
   const m = obj as Record<string, unknown>;
   return typeof m.id === 'string' && typeof m.onTick === 'function';
 }
 
+function tryInstantiate(ctor: Function): BabylonSystemLike | null {
+  try {
+    const inst = new (ctor as new () => unknown)();
+    return isBabylonSystem(inst) ? inst : null;
+  } catch { return null; }
+}
+
 function registerScanned(mod: Record<string, unknown>): void {
   const candidate = mod.default ?? mod;
   if (isBabylonSystem(candidate)) {
-    engine.use(candidate as any);
+    engine.use(candidate);
     return;
   }
   if (typeof candidate === 'function') {
-    try {
-      const inst = new (candidate as any)();
-      if (isBabylonSystem(inst)) { engine.use(inst); return; }
-    } catch (e) {
-      console.warn('Failed to instantiate system candidate:', e);
-    }
+    const inst = tryInstantiate(candidate);
+    if (inst) { engine.use(inst); return; }
   }
   for (const val of Object.values(mod)) {
-    if (isBabylonSystem(val)) { engine.use(val as any); continue; }
+    if (isBabylonSystem(val)) { engine.use(val); continue; }
     if (typeof val === 'function') {
-      try {
-        const inst = new (val as any)();
-        if (isBabylonSystem(inst)) { engine.use(inst); }
-      } catch (e) {
-        console.warn('Failed to instantiate system candidate:', e);
-      }
+      const inst = tryInstantiate(val);
+      if (inst) { engine.use(inst); }
     }
   }
 }

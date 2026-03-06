@@ -29,6 +29,9 @@
     "docker:run": "docker run --rm babylon-sim",
     "docker:once": "docker run --rm -e SIM_ONCE=1 babylon-sim"
   },
+  "engines": {
+    "bun": ">=1.3.0"
+  },
   "dependencies": {
     "@babylon/shared": "workspace:*",
     "@babylon/db": "workspace:*",

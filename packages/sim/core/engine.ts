@@ -188,6 +188,12 @@ export class BabylonEngine extends Hookable<RuntimeHooks> {
     interval: { every?: number; everyMs?: number },
     ctx: TickContext
   ): boolean {
+    if (interval.every === undefined && interval.everyMs === undefined) {
+      ctx.metrics.addWarning(
+        `Interval "${intervalName}" of system "${systemId}" has neither every nor everyMs, skipping`
+      );
+      return false;
+    }
     if (interval.every !== undefined) {
       if (interval.every < 1) {
         ctx.metrics.addWarning(
