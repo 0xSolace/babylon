@@ -17,12 +17,12 @@ import {
   FrameworkError,
   SystemNotFoundError,
 } from './errors';
-import type {
-  BabylonSystem,
-  EngineContext,
-  RuntimeHooks,
-  SystemTickResult,
-  TickContext,
+import {
+  type BabylonSystem,
+  type EngineContext,
+  type RuntimeHooks,
+  type SystemTickResult,
+  type TickContext,
   TickPhase,
 } from './types';
 
@@ -139,7 +139,8 @@ export class BabylonEngine extends Hookable<RuntimeHooks> {
     sys: BabylonSystem,
     ctx: TickContext
   ): Promise<void> {
-    const alwaysRun = sys.phase === 800 || sys.skipDeadlineCheck === true;
+    const alwaysRun =
+      sys.phase === TickPhase.Finalize || sys.skipDeadlineCheck === true;
 
     if (!alwaysRun && ctx.isPastDeadline()) {
       ctx.metrics.addWarning(`Skipped system "${sys.id}" — past deadline`);

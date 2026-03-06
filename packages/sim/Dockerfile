@@ -63,7 +63,7 @@ WORKDIR /app/packages/sim
 
 # The 9MB bundle has everything inlined except externalized deps.
 # c12 is needed at runtime for config loading (loadBabylonConfig).
-RUN bun add --no-save node-fetch-native c12 2>/dev/null; true
+RUN bun add --no-save node-fetch-native c12 || echo "Warning: optional runtime deps not installed"
 
 # Build output (self-contained bundle)
 COPY --from=build /app/packages/sim/.output ./.output
