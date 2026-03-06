@@ -24,7 +24,10 @@
     "tick": "bun run cli/index.ts tick",
     "test": "bun test",
     "lint": "biome lint .",
-    "typecheck": "tsc -b ."
+    "typecheck": "tsc -b .",
+    "docker:build": "docker build -f Dockerfile -t babylon-sim ../..",
+    "docker:run": "docker run --rm babylon-sim",
+    "docker:once": "docker run --rm -e SIM_ONCE=1 babylon-sim"
   },
   "dependencies": {
     "@babylon/shared": "workspace:*",
