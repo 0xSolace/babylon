@@ -1,11 +1,7 @@
 'use client';
 
 import { adminListEscrows, adminRefundEscrow } from '@babylon/api-hooks';
-import {
-  cn,
-  formatCurrency as formatCurrencyShared,
-  logger,
-} from '@babylon/shared';
+import { cn, logger } from '@babylon/shared';
 import {
   AlertCircle,
   ArrowLeftRight,

@@ -7,7 +7,6 @@ import { Check, ExternalLink, Mail, Shield, X as XIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { isLinkEmailFlowCancellationError } from '@/components/profile/link-email-utils';
-import { getAuthToken } from '@/lib/auth';
 import { useAuthStore } from '@/stores/authStore';
 
 /**
@@ -57,7 +56,7 @@ export function LinkSocialAccountsModal({
   // user.email may be unverified (e.g. imported from a previous auth method).
   const privyEmail = privyUser?.email?.address?.trim() || null;
 
-  const { linkEmail, linkFarcaster } = useLinkAccount({
+  const { linkEmail } = useLinkAccount({
     onSuccess: ({ linkedAccount }) => {
       setLinking(null);
       const linkedType = String(linkedAccount.type);

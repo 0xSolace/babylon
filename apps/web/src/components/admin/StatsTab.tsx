@@ -1,7 +1,7 @@
 'use client';
 
 import { adminGetFees, adminGetStats, getTokenStats } from '@babylon/api-hooks';
-import { cn, formatCompactCurrency } from '@babylon/shared';
+import { cn } from '@babylon/shared';
 import {
   Activity,
   Award,

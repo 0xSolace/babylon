@@ -5,7 +5,7 @@ import {
   adminBanUser,
   adminGetUsers,
 } from '@babylon/api-hooks';
-import { cn, formatCompactCurrency } from '@babylon/shared';
+import { cn } from '@babylon/shared';
 import {
   Ban,
   CheckCircle,

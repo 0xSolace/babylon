@@ -1,7 +1,7 @@
 'use client';
 
 import { getMarketWidgets } from '@babylon/api-hooks';
-import { BABYLON_POINTS_SYMBOL, cn } from '@babylon/shared';
+import { BABYLON_POINTS_SYMBOL, cn, logger } from '@babylon/shared';
 import { TrendingDown, TrendingUp } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -60,7 +60,7 @@ export function MarketsPanel() {
       const data = await getMarketWidgets();
       setMarkets((data.markets as Market[]) || []);
     } catch (err) {
-      console.error('Failed to fetch markets:', err);
+      logger.error('Failed to fetch markets', { err }, 'MarketsPanel');
       setMarkets([]);
     }
     setPredictionsLoading(false);

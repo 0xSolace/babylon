@@ -1,10 +1,6 @@
 'use client';
 
-import {
-  getChatById,
-  listChats,
-  sendChatMessage,
-} from '@babylon/api-hooks';
+import { getChatById, listChats, sendChatMessage } from '@babylon/api-hooks';
 import { logger } from '@babylon/shared';
 import { usePrivy } from '@privy-io/react-auth';
 import { useRouter } from 'next/navigation';

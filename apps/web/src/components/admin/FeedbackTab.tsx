@@ -184,7 +184,11 @@ export function FeedbackTab() {
       } catch (err) {
         const message =
           err instanceof Error ? err.message : 'Failed to load feedback';
-        logger.error('Failed to fetch feedback', { error: message }, 'FeedbackTab');
+        logger.error(
+          'Failed to fetch feedback',
+          { error: message },
+          'FeedbackTab'
+        );
         setError(message);
       } finally {
         setLoading(false);

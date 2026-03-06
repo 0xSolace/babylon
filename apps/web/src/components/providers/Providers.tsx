@@ -3,6 +3,7 @@
 import { logger, privyConfig } from '@babylon/shared';
 import { type PrivyClientConfig, PrivyProvider } from '@privy-io/react-auth';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
 import { useTheme } from 'next-themes';
 import { Fragment, Suspense, useEffect, useRef, useState } from 'react';
 import { PostHogErrorBoundary } from '@/components/analytics/PostHogErrorBoundary';
@@ -279,6 +280,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
                   <div className="min-h-dvh bg-sidebar md:min-h-screen" />
                 )}
               </WidgetRefreshProvider>
+              {process.env.NODE_ENV === 'development' && (
+                <ReactQueryDevtools initialIsOpen={false} />
+              )}
             </QueryClientProvider>
           </FontSizeProvider>
         </ThemeProvider>
@@ -333,6 +337,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
                       </TelegramMiniAppProvider>
                     </FarcasterMiniAppProvider>
                   </ThemedPrivyProvider>
+                  {process.env.NODE_ENV === 'development' && (
+                    <ReactQueryDevtools initialIsOpen={false} />
+                  )}
                 </QueryClientProvider>
               </FontSizeProvider>
             </ThemeProvider>
