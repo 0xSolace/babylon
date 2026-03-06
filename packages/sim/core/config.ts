@@ -41,6 +41,13 @@ interface BabylonRuntimeConfigBase {
   /** Systems to disable by id */
   disabledSystems?: string[];
 
+  /**
+   * Legacy subsystem IDs that have been migrated to new sim systems.
+   * These are passed to executeGameTick() as a skip set so the old
+   * code doesn't run them. Only relevant when using --legacy.
+   */
+  migratedSubsystems?: string[];
+
   /** Dev server options */
   dev?: {
     /** Watch for system file changes */

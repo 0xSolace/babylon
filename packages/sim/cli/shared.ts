@@ -32,6 +32,7 @@ export async function buildEngine(
     systemsDir: _systemsDir,
     disabledSystems: _disabledSystems,
     systemPhases: _systemPhases,
+    migratedSubsystems: _migratedSubsystems,
     dev: _dev,
     ...customKeys
   } = config;
@@ -43,7 +44,11 @@ export async function buildEngine(
     const { createLegacyGameTickSystem } = await import(
       '../core/bridge/legacy-game-tick'
     );
-    engine.use(createLegacyGameTickSystem());
+    engine.use(
+      createLegacyGameTickSystem({
+        skip: config.migratedSubsystems,
+      })
+    );
   }
 
   const { systems } = await scanSystems(

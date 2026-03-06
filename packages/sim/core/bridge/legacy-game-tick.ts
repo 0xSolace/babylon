@@ -10,7 +10,15 @@ import { type ExecuteGameTickResult, executeGameTick } from '@babylon/engine';
 import { defineSystem } from '../system';
 import { TickPhase } from '../types';
 
-export function createLegacyGameTickSystem(skipContentGeneration = false) {
+export interface LegacyBridgeOptions {
+  skipContentGeneration?: boolean;
+  /** Subsystem IDs to skip — these are handled by new sim systems. */
+  skip?: string[];
+}
+
+export function createLegacyGameTickSystem(options: LegacyBridgeOptions = {}) {
+  const skipSet = new Set(options.skip ?? []);
+
   return defineSystem({
     id: 'legacy-game-tick',
     name: 'Legacy Game Tick',
@@ -19,7 +27,8 @@ export function createLegacyGameTickSystem(skipContentGeneration = false) {
 
     async onTick() {
       const r: ExecuteGameTickResult = await executeGameTick(
-        skipContentGeneration
+        options.skipContentGeneration ?? false,
+        skipSet
       );
 
       const metrics: Record<string, number | string | boolean> = {
