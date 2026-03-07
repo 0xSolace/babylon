@@ -126,6 +126,7 @@ import {
 } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { trackServerEvent } from '@/lib/posthog/server';
+import { getOtherDmParticipantId } from '../../_lib/dm-chat-id';
 
 /**
  * POST /api/chats/[id]/message
@@ -182,25 +183,12 @@ export const POST = withErrorHandling(
 
     // If chat doesn't exist and it's a DM format, create it automatically
     if (!chat && chatId.startsWith('dm-')) {
-      // Extract user IDs from DM chat ID format: dm-{id1}-{id2}
-      const dmPrefix = 'dm-';
-      const idsString = chatId.substring(dmPrefix.length);
-      const participantIds = idsString.split('-');
+      const otherUserId = getOtherDmParticipantId(chatId, user.userId);
 
-      // Verify the current user is one of the participants
-      if (!participantIds.includes(user.userId)) {
+      if (!otherUserId) {
         throw new BusinessLogicError(
           'Invalid DM chat participants',
           'INVALID_DM_PARTICIPANTS'
-        );
-      }
-
-      // Get the other participant ID
-      const otherUserId = participantIds.find((id) => id !== user.userId);
-      if (!otherUserId) {
-        throw new BusinessLogicError(
-          'Invalid DM chat format',
-          'INVALID_DM_FORMAT'
         );
       }
 

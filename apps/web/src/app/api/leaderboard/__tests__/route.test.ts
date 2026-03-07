@@ -1,14 +1,17 @@
 import { beforeEach, describe, expect, it, mock } from 'bun:test';
 
 const mockGetCache = mock();
+const mockFindUserByIdentifier = mock();
 const mockOptionalAuth = mock();
 const mockGetWalletLeaderboard = mock();
 const mockGetTeamLeaderboard = mock();
 const mockGetUserPosition = mock();
 const mockSetCache = mock();
 const mockLoggerInfo = mock();
+const mockLoggerWarn = mock();
 
 mock.module('@babylon/api', () => ({
+  findUserByIdentifier: mockFindUserByIdentifier,
   getCache: mockGetCache,
   optionalAuth: mockOptionalAuth,
   PointsService: {
@@ -43,6 +46,7 @@ mock.module('@babylon/shared', () => ({
   },
   logger: {
     info: mockLoggerInfo,
+    warn: mockLoggerWarn,
   },
 }));
 
@@ -80,14 +84,17 @@ function createRequest(url: string): {
 describe('GET /api/leaderboard', () => {
   beforeEach(() => {
     mockGetCache.mockReset();
+    mockFindUserByIdentifier.mockReset();
     mockOptionalAuth.mockReset();
     mockGetWalletLeaderboard.mockReset();
     mockGetTeamLeaderboard.mockReset();
     mockGetUserPosition.mockReset();
     mockSetCache.mockReset();
     mockLoggerInfo.mockReset();
+    mockLoggerWarn.mockReset();
 
     mockGetCache.mockResolvedValue(leaderboardData);
+    mockFindUserByIdentifier.mockResolvedValue(null);
     mockGetWalletLeaderboard.mockResolvedValue(leaderboardData);
     mockGetTeamLeaderboard.mockResolvedValue(leaderboardData);
     mockGetUserPosition.mockResolvedValue({
@@ -137,5 +144,39 @@ describe('GET /api/leaderboard', () => {
     expect(response.headers.get('Cache-Control')).toContain(
       'public, s-maxage='
     );
+  });
+
+  it('resolves query userId through identifier lookup before computing currentUser', async () => {
+    mockOptionalAuth.mockResolvedValue(null);
+    mockFindUserByIdentifier.mockResolvedValue({ id: 'db-user-2' });
+
+    await GET(
+      createRequest(
+        'https://example.com/api/leaderboard?type=team&userId=alice'
+      )
+    );
+
+    expect(mockFindUserByIdentifier).toHaveBeenCalledWith('alice', {
+      id: true,
+    });
+    expect(mockGetUserPosition).toHaveBeenCalledWith('db-user-2', 'team', 100);
+  });
+
+  it('returns currentUser=null instead of failing when position lookup throws', async () => {
+    mockOptionalAuth.mockResolvedValue({
+      userId: 'privy-user',
+      isAgent: false,
+    });
+    mockGetUserPosition.mockRejectedValueOnce(
+      new Error('broken leaderboard sql')
+    );
+
+    const response = (await GET(
+      createRequest('https://example.com/api/leaderboard?type=team')
+    )) as Response;
+    const body = await response.json();
+
+    expect(response.status).toBe(200);
+    expect(body.currentUser).toBeNull();
   });
 });

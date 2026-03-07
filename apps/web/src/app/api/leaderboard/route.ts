@@ -43,6 +43,7 @@
  */
 
 import {
+  findUserByIdentifier,
   getCache,
   optionalAuth,
   PointsService,
@@ -83,7 +84,12 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
 
   const { page, pageSize, type, userId } = validationResult.data;
   const leaderboardType = type ?? 'wallet';
-  const effectiveUserId = userId ?? authUser?.dbUserId ?? authUser?.userId;
+  let effectiveUserId = authUser?.dbUserId ?? authUser?.userId;
+
+  if (userId) {
+    const resolvedUser = await findUserByIdentifier(userId, { id: true });
+    effectiveUserId = resolvedUser?.id ?? userId;
+  }
 
   const cacheKey = `${leaderboardType}-${page}-${pageSize}`;
 
@@ -116,11 +122,24 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   let currentUser: Awaited<ReturnType<typeof PointsService.getUserPosition>> =
     null;
   if (effectiveUserId) {
-    currentUser = await PointsService.getUserPosition(
-      effectiveUserId,
-      leaderboardType,
-      pageSize
-    );
+    try {
+      currentUser = await PointsService.getUserPosition(
+        effectiveUserId,
+        leaderboardType,
+        pageSize
+      );
+    } catch (error) {
+      logger.warn(
+        'Failed to compute leaderboard currentUser; returning null',
+        {
+          effectiveUserId,
+          leaderboardType,
+          pageSize,
+          error: error instanceof Error ? error.message : String(error),
+        },
+        'GET /api/leaderboard'
+      );
+    }
   }
 
   logger.info(
