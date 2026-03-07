@@ -52,3 +52,4 @@ export {
 } from './resource-locks';
 export * from './sentry-webhook-inbox-service';
 export * from './waitlist-service';
+export * from './whitelist-service';

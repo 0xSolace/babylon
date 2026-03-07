@@ -66,6 +66,7 @@
 
 import {
   authenticate,
+  getEffectiveWhitelistLeaderboardThreshold,
   getCache,
   setCache,
   successResponse,
@@ -120,6 +121,7 @@ type PositionResponse = {
   invitedCount?: number;
   qualifiedCount?: number;
   totalReferralPoints?: number;
+  whitelistRankThreshold?: number;
 };
 
 const CACHE_KEY_NAMESPACE = 'waitlist:position';
@@ -156,6 +158,8 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   );
 
   const position = await WaitlistService.getWaitlistPosition(userId);
+  const whitelistRankThreshold =
+    await getEffectiveWhitelistLeaderboardThreshold();
 
   // If user doesn't exist or isn't on waitlist, return null gracefully
   // This handles new Privy users who haven't completed signup yet
@@ -283,6 +287,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     invitedCount: invitedUsers.length,
     qualifiedCount: qualifiedUsers.length,
     totalReferralPoints: position.invitePoints, // Total points from referrals
+    whitelistRankThreshold,
   };
 
   if (CACHE_TTL_MS > 0) {

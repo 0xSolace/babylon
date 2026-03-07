@@ -25,6 +25,7 @@ import { toast } from 'sonner';
 import { LinkSocialAccountsModal } from '@/components/profile/LinkSocialAccountsModal';
 import { Avatar } from '@/components/shared/Avatar';
 import {
+  getWaitlistHeaderCopy,
   getPrimaryAccessLabel,
   type NftAccessState,
   shouldAutoRedirectWhitelistedUser,
@@ -86,6 +87,7 @@ interface WaitlistData {
   totalReferralPoints?: number; // Total points from referrals
   invitedUsers?: ReferralUser[]; // Pending users list
   qualifiedUsers?: ReferralUser[]; // Qualified users list
+  whitelistRankThreshold?: number;
 }
 
 /**
@@ -1336,6 +1338,11 @@ export function ComingSoon() {
   const canClaimNft =
     nftEligibility?.eligible === true && nftEligibility.hasMinted === false;
   const hasNft = Boolean(nftAccess?.hasAccess) && !canClaimNft;
+  const hasPrimaryAccess = canClaimNft || hasNft;
+  const headerCopy = getWaitlistHeaderCopy(
+    hasPrimaryAccess,
+    waitlistData?.whitelistRankThreshold
+  );
 
   useEffect(() => {
     if (
@@ -2484,22 +2491,16 @@ export function ComingSoon() {
                 </div>
                 <div>
                   <h1 className="font-bold text-2xl text-foreground tracking-tight sm:text-3xl md:text-4xl">
-                    {canClaimNft || hasNft
-                      ? 'Click play to access the game'
-                      : 'Leaderboard'}
+                    {headerCopy.title}
                   </h1>
                   <p className="mt-1 text-muted-foreground text-sm">
-                    {canClaimNft || hasNft
-                      ? 'Welcome to Babylon'
-                      : waitlistData?.totalCount
-                        ? `Top ${waitlistData.totalCount}`
-                        : ''}
+                    {headerCopy.subtitle}
                   </p>
                 </div>
               </div>
 
               <div className="flex shrink-0 items-center gap-3">
-                {(canClaimNft || hasNft) && (
+                {hasPrimaryAccess && (
                   <a
                     href={`${appBaseUrl}${canClaimNft ? '/nft' : '/feed'}`}
                     className="flex min-h-[48px] items-center gap-2 rounded-lg border border-primary/30 bg-primary/10 px-4 py-2 font-semibold text-primary backdrop-blur-sm transition-all duration-200 hover:bg-primary/15"
@@ -2590,20 +2591,21 @@ export function ComingSoon() {
           </div>
 
           {/* Email Collection — prominent section */}
-          {!(canClaimNft || hasNft) && !emailSaved && (
+          {!hasPrimaryAccess && !emailSaved && (
             <div className="mb-8 rounded-xl border border-primary/30 bg-primary/5 p-5 backdrop-blur-sm sm:p-6">
               <div className="mb-3 flex items-center gap-2">
                 <Mail className="h-5 w-5 text-primary" />
                 <h3 className="font-bold text-base text-foreground">
-                  Email Required
+                  Get notified by email
                 </h3>
                 <span className="rounded-full bg-primary/15 px-2 py-0.5 font-semibold text-primary text-xs">
                   +{POINTS.EMAIL_SUBMIT} pts
                 </span>
               </div>
               <p className="mb-4 text-muted-foreground text-sm">
-                We will notify you by email when you get whitelisted. We are
-                whitelisting new people every day, so stay patient.
+                We are whitelisting new people every day, so stay patient. If
+                you provide your email, we will notify you when you get
+                whitelisted.
               </p>
               <div className="flex items-center gap-2">
                 <input
@@ -2630,7 +2632,7 @@ export function ComingSoon() {
               </div>
             </div>
           )}
-          {!(canClaimNft || hasNft) && emailSaved && (
+          {!hasPrimaryAccess && emailSaved && (
             <div className="mb-8 rounded-xl border border-green-500/30 bg-green-500/5 p-5 backdrop-blur-sm sm:p-6">
               <div className="mb-3 flex items-center gap-2">
                 <Mail className="h-5 w-5 text-green-500" />
