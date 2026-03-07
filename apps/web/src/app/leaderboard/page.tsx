@@ -11,6 +11,12 @@ import {
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
+import {
+  fetchLeaderboardData,
+  type LeaderboardData,
+  type LeaderboardUser,
+  isAbortError,
+} from '@/app/leaderboard/fetchLeaderboardData';
 import { FollowButton } from '@/components/interactions/FollowButton';
 import type { SelectedUser } from '@/components/leaderboard/LeaderboardWidgetSidebar';
 import { OnChainBadge } from '@/components/profile/OnChainBadge';
@@ -33,44 +39,6 @@ const LeaderboardWidgetSidebar = dynamic(
   }
 );
 
-interface LeaderboardUser {
-  id: string;
-  username: string | null;
-  displayName: string | null;
-  profileImageUrl: string | null;
-  totalPoints: number;
-  balance: number;
-  lifetimePnL: number;
-  createdAt: Date;
-  rank: number;
-  isAgent?: boolean;
-  managedBy?: string | null;
-  onChainRegistered?: boolean;
-  nftTokenId?: number | null;
-  teamTotalPoints?: number;
-  agentCount?: number;
-  userPoints?: number;
-  agentPoints?: number;
-}
-
-interface CurrentUserPosition {
-  rank: number;
-  page: number;
-  entry: LeaderboardUser;
-}
-
-interface LeaderboardData {
-  leaderboard: LeaderboardUser[];
-  pagination: {
-    page: number;
-    pageSize: number;
-    totalCount: number;
-    totalPages: number;
-  };
-  leaderboardType: LeaderboardTab;
-  currentUser: CurrentUserPosition | null;
-}
-
 export default function LeaderboardPage() {
   const { authenticated, user } = useAuth();
   const [leaderboardData, setLeaderboardData] =
@@ -83,32 +51,39 @@ export default function LeaderboardPage() {
   const scrollToUserRef = useRef(false);
 
   const pageSize = 100;
+  const authenticatedUserId = authenticated ? user?.id : undefined;
 
   useEffect(() => {
-    async function fetchLeaderboard() {
+    const controller = new AbortController();
+
+    async function loadLeaderboard() {
       setLoading(true);
       setError(null);
 
-      let url = `/api/leaderboard?type=${selectedTab}&page=${currentPage}&pageSize=${pageSize}`;
-      if (authenticated && user) {
-        url += `&userId=${user.id}`;
-      }
+      try {
+        const data = await fetchLeaderboardData({
+          currentPage,
+          pageSize,
+          selectedTab,
+          userId: authenticatedUserId,
+          signal: controller.signal,
+        });
 
-      const response = await fetch(url);
-
-      if (!response.ok) {
+        if (controller.signal.aborted) return;
+        setLeaderboardData(data);
+      } catch (error) {
+        if (isAbortError(error)) return;
         setError('Failed to fetch leaderboard');
-        setLoading(false);
-        return;
+      } finally {
+        if (!controller.signal.aborted) {
+          setLoading(false);
+        }
       }
-
-      const data = await response.json();
-      setLeaderboardData(data);
-      setLoading(false);
     }
 
-    fetchLeaderboard();
-  }, [currentPage, selectedTab, authenticated, user]);
+    void loadLeaderboard();
+    return () => controller.abort();
+  }, [currentPage, selectedTab, authenticatedUserId]);
 
   useEffect(() => {
     if (scrollToUserRef.current && !loading) {
