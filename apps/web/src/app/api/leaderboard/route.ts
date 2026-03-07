@@ -44,6 +44,7 @@
 
 import {
   getCache,
+  optionalAuth,
   PointsService,
   setCache,
   successResponse,
@@ -71,6 +72,7 @@ type TeamLeaderboardResult = Awaited<
 type CachedLeaderboardData = WalletLeaderboardResult | TeamLeaderboardResult;
 
 export const GET = withErrorHandling(async (request: NextRequest) => {
+  const authUser = await optionalAuth(request);
   const { searchParams } = new URL(request.url);
   const queryParams = Object.fromEntries(searchParams.entries());
   const validationResult = LeaderboardQuerySchema.safeParse(queryParams);
@@ -81,6 +83,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
 
   const { page, pageSize, type, userId } = validationResult.data;
   const leaderboardType = type ?? 'wallet';
+  const effectiveUserId = userId ?? authUser?.dbUserId ?? authUser?.userId;
 
   const cacheKey = `${leaderboardType}-${page}-${pageSize}`;
 
@@ -112,9 +115,9 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
 
   let currentUser: Awaited<ReturnType<typeof PointsService.getUserPosition>> =
     null;
-  if (userId) {
+  if (effectiveUserId) {
     currentUser = await PointsService.getUserPosition(
-      userId,
+      effectiveUserId,
       leaderboardType,
       pageSize
     );
@@ -128,7 +131,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       leaderboardType,
       totalCount: leaderboardData.totalCount,
       cacheHit,
-      hasUserId: !!userId,
+      hasUserId: !!effectiveUserId,
     },
     'GET /api/leaderboard'
   );
@@ -148,7 +151,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     200,
     {
       'x-cache': cacheHit ? 'leaderboard-hit' : 'leaderboard-miss',
-      'Cache-Control': userId
+      'Cache-Control': effectiveUserId
         ? 'private, no-store'
         : `public, s-maxage=${CACHE_TTL_SECONDS}, stale-while-revalidate=${STALE_SECONDS}`,
       Vary: 'Accept-Encoding',

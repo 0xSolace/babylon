@@ -247,8 +247,19 @@ export async function authenticate(
     }
   }
 
-  // If we get here, all tokens failed verification
-  throw lastError ?? new AuthenticationError('Token verification failed');
+  // If we get here, all tokens failed verification.
+  // Always normalize verification failures to AuthenticationError so malformed
+  // or garbage JWTs produce a clean 401 instead of bubbling a provider error as 500.
+  if (lastError instanceof AuthenticationError) {
+    throw lastError;
+  }
+
+  throw new AuthenticationError(
+    'Invalid authentication token. Please sign in again.',
+    {
+      reason: lastError instanceof Error ? lastError.message : 'unknown',
+    }
+  );
 }
 
 /**
