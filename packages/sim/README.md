@@ -278,10 +278,10 @@ This lets you run the old tick alongside new systems during migration. The bridg
 ## Testing
 
 ```bash
-bun test
+bun test tests/*.test.ts
 ```
 
-104 tests across 13 files covering the engine, composables, hooks, context, metrics, service container, error types, config, scanner, edge cases, and full integration scenarios. Tests use mock dependencies and do not require a database or API keys.
+Tests cover the engine, composables, hooks, context, metrics, service container, error types, config, scanner, edge cases, and full integration scenarios. Tests use mock dependencies and do not require a database or API keys.
 
 ## Architecture notes
 

@@ -96,6 +96,8 @@ ${systemImports.join('\n')}
 
 interface BabylonSystemLike {
   id: string;
+  name: string;
+  phase: number;
   onTick: (...args: unknown[]) => unknown;
   [key: string]: unknown;
 }
@@ -103,7 +105,12 @@ interface BabylonSystemLike {
 function isBabylonSystem(obj: unknown): obj is BabylonSystemLike {
   if (!obj || typeof obj !== 'object') return false;
   const m = obj as Record<string, unknown>;
-  return typeof m.id === 'string' && typeof m.onTick === 'function';
+  return (
+    typeof m.id === 'string' &&
+    typeof m.name === 'string' &&
+    typeof m.phase === 'number' &&
+    typeof m.onTick === 'function'
+  );
 }
 
 function tryInstantiate(ctor: Function): BabylonSystemLike | null {
@@ -117,6 +124,20 @@ function useIfEnabled(sys: BabylonSystemLike): void {
   if (_disabled.has(sys.id)) {
     console.warn(\`System "\${sys.id}" disabled by config\`);
     return;
+  }
+  const override = _phaseOverrides[sys.id];
+  if (typeof override === 'number' && sys.phase !== override) {
+    try {
+      (sys as { phase: number }).phase = override;
+    } catch {
+      // Fallback: keep original instance behavior and only override phase for ordering.
+      const original = sys;
+      sys = {
+        ...original,
+        phase: override,
+        onTick: (...args) => original.onTick(...args),
+      };
+    }
   }
   engine.use(sys);
 }
@@ -141,12 +162,13 @@ function registerScanned(mod: Record<string, unknown>): void {
 }
 
 const { config: runtimeConfig } = await loadBabylonConfig();
-const { systemsDir: _a, disabledSystems, systemPhases: _c, migratedSubsystems: _d, dev: _e, ...engineKeys } = runtimeConfig;
+const { systemsDir: _a, disabledSystems, systemPhases, migratedSubsystems: _b, dev: _c, ...engineKeys } = runtimeConfig;
 const engine = new BabylonEngine({
   config: { budgetMs: runtimeConfig.budgetMs ?? 60_000, ...engineKeys },
 });
 
 const _disabled = new Set(disabledSystems ?? []);
+const _phaseOverrides: Record<string, unknown> = systemPhases ?? {};
 ${systemRegistrations.join('\n')}
 
 await engine.boot();

@@ -22,7 +22,7 @@
     "document": "bun run cli/index.ts document",
     "info": "bun run cli/index.ts info",
     "tick": "bun run cli/index.ts tick",
-    "test": "bun test",
+    "test": "bun test tests/*.test.ts",
     "lint": "biome lint .",
     "typecheck": "tsc -b .",
     "docker:build": "docker build -f Dockerfile -t babylon-sim ../..",
