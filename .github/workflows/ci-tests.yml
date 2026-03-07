@@ -93,10 +93,10 @@ jobs:
       - name: Generate API hooks
         run: bun run generate:api
 
-      - name: Verify no OpenAPI spec drift
+      - name: Verify no API codegen drift
         run: |
-          git diff --exit-code openapi.json || {
-            echo "::error::OpenAPI spec is out of date. Run 'bun run generate:api' and commit the changes."
+          git diff --exit-code -- openapi.json packages/api-hooks/src/generated packages/api-hooks/src/index.ts || {
+            echo "::error::API codegen artifacts are out of date. Run 'bun run generate:api' and commit the changes."
             exit 1
           }
 
