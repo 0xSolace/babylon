@@ -23,6 +23,9 @@ export { schema };
 export type { DrizzleClient, JsonValue, SQLValue } from './client';
 export { TableRepository } from './client';
 // Database runtime (connection management, `db`, JSON mode)
+// We use both "export *" and explicit import-then-export for the same symbols.
+// This dual approach is necessary because some runtimes (particularly Bun in CI)
+// don't reliably resolve symbols from barrel files with only "export *".
 export * from './db';
 
 // Import-then-export so runtimes (e.g. Bun in CI) resolve these reliably from the barrel
