@@ -32,14 +32,31 @@ import { dirname, join } from 'node:path';
 
 const ROOT = join(import.meta.dir, '..');
 const A2A_AGENT_CARD = join(ROOT, 'packages/a2a/src/babylon-agent-card.ts');
-const A2A_EXECUTOR = join(ROOT, 'packages/a2a/src/executors/babylon-executor.ts');
+const A2A_EXECUTOR = join(
+  ROOT,
+  'packages/a2a/src/executors/babylon-executor.ts'
+);
 const MCP_SERVER = join(ROOT, 'packages/mcp/src/server/mcp-server.ts');
 const DEFAULT_OUTPUT = join(ROOT, 'docs/skills.md');
 
 // --- Parse A2A agent card: extract skills (id, name, description, tags, examples) ---
 // WHY: Agent card is the source of truth for skill names and descriptions; we avoid duplicating them.
-function parseAgentCardSkills(content: string): Array<{ id: string; name: string; description: string; tags: string[]; examples: string[] }> {
-  const skills: Array<{ id: string; name: string; description: string; tags: string[]; examples: string[] }> = [];
+function parseAgentCardSkills(
+  content: string
+): Array<{
+  id: string;
+  name: string;
+  description: string;
+  tags: string[];
+  examples: string[];
+}> {
+  const skills: Array<{
+    id: string;
+    name: string;
+    description: string;
+    tags: string[];
+    examples: string[];
+  }> = [];
   const skillsStart = content.indexOf('skills: [');
   if (skillsStart === -1) return skills;
   const block = content.slice(skillsStart);
@@ -47,11 +64,17 @@ function parseAgentCardSkills(content: string): Array<{ id: string; name: string
   const idPattern = /id:\s*'([^']+)'/g;
   const indices: { id: string; start: number }[] = [];
   let m: RegExpExecArray | null;
-  while ((m = idPattern.exec(block)) !== null) indices.push({ id: m[1], start: m.index });
+  while ((m = idPattern.exec(block)) !== null)
+    indices.push({ id: m[1], start: m.index });
   const blocks: { id: string; raw: string }[] = [];
   for (let i = 0; i < indices.length; i++) {
-    const end = i + 1 < indices.length ? indices[i + 1].start : block.indexOf('\n  ],');
-    const raw = (end !== -1 ? block.slice(indices[i].start, end) : block.slice(indices[i].start)).trim();
+    const end =
+      i + 1 < indices.length ? indices[i + 1].start : block.indexOf('\n  ],');
+    const raw = (
+      end !== -1
+        ? block.slice(indices[i].start, end)
+        : block.slice(indices[i].start)
+    ).trim();
     blocks.push({ id: indices[i].id, raw });
   }
 
@@ -64,12 +87,19 @@ function parseAgentCardSkills(content: string): Array<{ id: string; name: string
     const name = nameRe.exec(blk)?.[1] ?? '';
     const description = descRe.exec(blk)?.[1]?.replace(/\\'/g, "'") ?? '';
     const tagsMatch = tagsRe.exec(blk)?.[1];
-    const tags = tagsMatch ? tagsMatch.split(',').map((s) => s.trim().replace(/^'|'$/g, '')) : [];
+    const tags = tagsMatch
+      ? tagsMatch.split(',').map((s) => s.trim().replace(/^'|'$/g, ''))
+      : [];
     const examplesMatch = examplesRe.exec(blk)?.[1];
     const examples = examplesMatch
       ? examplesMatch
           .split(/,\s*\n/)
-          .map((s) => s.trim().replace(/^\s*'|'\s*$/g, '').replace(/\\'/g, "'"))
+          .map((s) =>
+            s
+              .trim()
+              .replace(/^\s*'|'\s*$/g, '')
+              .replace(/\\'/g, "'")
+          )
           .filter(Boolean)
       : [];
     skills.push({ id, name, description, tags, examples });
@@ -104,7 +134,10 @@ function groupOperationsByPrefix(ops: string[]): Map<string, string[]> {
 
 // --- Map each A2A operation to exactly one skill id (for the skills table) ---
 // WHY: Agent card has 12 skills but executor has 76 ops; we map ops to skills so the table is readable and accurate.
-function getOperationsForSkill(skillId: string, operations: string[]): string[] {
+function getOperationsForSkill(
+  skillId: string,
+  operations: string[]
+): string[] {
   const escrowOps = new Set([
     'moderation.create_escrow_payment',
     'moderation.verify_escrow_payment',
@@ -144,15 +177,17 @@ function getOperationsForSkill(skillId: string, operations: string[]): string[] 
     'social-feed': (op) => op.startsWith('social.'),
     'prediction-markets': (op) => predMarketOps.has(op),
     'perpetual-futures': (op) => perpOps.has(op),
-    'user-social-graph': (op) => op.startsWith('users.') || moderationOnlyOps.has(op),
+    'user-social-graph': (op) =>
+      op.startsWith('users.') || moderationOnlyOps.has(op),
     'messaging-chats': (op) => op.startsWith('messaging.'),
-    'notifications': (op) => op.startsWith('notifications.'),
+    notifications: (op) => op.startsWith('notifications.'),
     'stats-discovery': (op) => op.startsWith('stats.'),
-    'portfolio-balance': (op) => op.startsWith('portfolio.') || op.startsWith('points.'),
-    'moderation': (op) => moderationOnlyOps.has(op),
+    'portfolio-balance': (op) =>
+      op.startsWith('portfolio.') || op.startsWith('points.'),
+    moderation: (op) => moderationOnlyOps.has(op),
     'moderation-escrow': (op) => escrowOps.has(op),
-    'favorites': (op) => op.startsWith('favorites.'),
-    'payments': (op) => op.startsWith('payments.'),
+    favorites: (op) => op.startsWith('favorites.'),
+    payments: (op) => op.startsWith('payments.'),
   };
   const pred = skillToFilter[skillId];
   if (!pred) return [];
@@ -161,15 +196,21 @@ function getOperationsForSkill(skillId: string, operations: string[]): string[] 
 
 // --- Parse MCP server: extract tool name + description ---
 // WHY: MCP tool list is the source of truth; parsing the server file avoids importing @babylon/mcp (and its heavy deps) in this script.
-function parseMCPTools(content: string): Array<{ name: string; description: string }> {
+function parseMCPTools(
+  content: string
+): Array<{ name: string; description: string }> {
   const tools: Array<{ name: string; description: string }> = [];
   const toolsStart = content.indexOf('return [');
   if (toolsStart === -1) return tools;
   const slice = content.slice(toolsStart);
-  const re = /{\s*name:\s*'([^']+)',\s*description:\s*(?:\n\s*'((?:[^'\\]|\\.)*)'|'([^']+)')/g;
+  const re =
+    /{\s*name:\s*'([^']+)',\s*description:\s*(?:\n\s*'((?:[^'\\]|\\.)*)'|'([^']+)')/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(slice)) !== null) {
-    const desc = (m[2] ?? m[3] ?? '').replace(/\\'/g, "'").replace(/\s+/g, ' ').trim();
+    const desc = (m[2] ?? m[3] ?? '')
+      .replace(/\\'/g, "'")
+      .replace(/\s+/g, ' ')
+      .trim();
     tools.push({ name: m[1], description: desc });
   }
   return tools;
@@ -193,7 +234,9 @@ function buildMarkdown(
   );
   if (!opts.skipGeneratedNotice) {
     lines.push('');
-    lines.push('**This file is auto-generated.** Run `bun run scripts/generate-skills-md.ts` to regenerate.');
+    lines.push(
+      '**This file is auto-generated.** Run `bun run scripts/generate-skills-md.ts` to regenerate.'
+    );
   }
   lines.push('');
   lines.push('---');
@@ -212,7 +255,9 @@ function buildMarkdown(
   lines.push('## Authentication');
   lines.push('');
   lines.push('- **Header:** `X-Babylon-Api-Key: <key>`');
-  lines.push('- **Keys:** Server key (`BABYLON_A2A_API_KEY`) or per-user API keys.');
+  lines.push(
+    '- **Keys:** Server key (`BABYLON_A2A_API_KEY`) or per-user API keys.'
+  );
   lines.push('');
   lines.push('---');
   lines.push('');
@@ -224,16 +269,26 @@ function buildMarkdown(
   lines.push('');
   lines.push('| Method | URL | Description |');
   lines.push('|--------|-----|-------------|');
-  lines.push('| **GET** | `{baseUrl}/api/a2a` | Service info and Babylon agent card. |');
-  lines.push('| **POST** | `{baseUrl}/api/a2a` | Global A2A: message/send, tasks/*. |');
-  lines.push('| **GET** | `{baseUrl}/api/agents/{agentId}/.well-known/agent-card` | Per-agent public agent card. |');
-  lines.push('| **GET** | `{baseUrl}/api/agents/{agentId}/a2a` | Per-agent A2A capabilities. |');
-  lines.push('| **POST** | `{baseUrl}/api/agents/{agentId}/a2a` | Per-agent A2A (same methods). |');
+  lines.push(
+    '| **GET** | `{baseUrl}/api/a2a` | Service info and Babylon agent card. |'
+  );
+  lines.push(
+    '| **POST** | `{baseUrl}/api/a2a` | Global A2A: message/send, tasks/*. |'
+  );
+  lines.push(
+    '| **GET** | `{baseUrl}/api/agents/{agentId}/.well-known/agent-card` | Per-agent public agent card. |'
+  );
+  lines.push(
+    '| **GET** | `{baseUrl}/api/agents/{agentId}/a2a` | Per-agent A2A capabilities. |'
+  );
+  lines.push(
+    '| **POST** | `{baseUrl}/api/agents/{agentId}/a2a` | Per-agent A2A (same methods). |'
+  );
   lines.push('');
   lines.push('### A2A skills and operations');
   lines.push('');
   lines.push(
-    'Operations are sent inside `message/send` with a message part: `{ kind: \'data\', data: { operation: \'<operation>\', params: { ... } } }`.'
+    "Operations are sent inside `message/send` with a message part: `{ kind: 'data', data: { operation: '<operation>', params: { ... } } }`."
   );
   lines.push('');
   lines.push('| Skill ID | Name | Operations |');
@@ -241,7 +296,9 @@ function buildMarkdown(
 
   for (const skill of skills) {
     const ops = getOperationsForSkill(skill.id, operations);
-    lines.push(`| **${skill.id}** | **${skill.name}** | ${ops.length ? ops.join(', ') : '—'} |`);
+    lines.push(
+      `| **${skill.id}** | **${skill.name}** | ${ops.length ? ops.join(', ') : '—'} |`
+    );
   }
 
   lines.push('');
@@ -260,15 +317,22 @@ function buildMarkdown(
   lines.push('');
   lines.push('| Method | URL | Description |');
   lines.push('|--------|-----|-------------|');
-  lines.push('| **GET** | `{baseUrl}/api/mcp` | Server info and capabilities. |');
-  lines.push('| **POST** | `{baseUrl}/api/mcp` | JSON-RPC: `tools/list`, `tools/call`. |');
+  lines.push(
+    '| **GET** | `{baseUrl}/api/mcp` | Server info and capabilities. |'
+  );
+  lines.push(
+    '| **POST** | `{baseUrl}/api/mcp` | JSON-RPC: `tools/list`, `tools/call`. |'
+  );
   lines.push('');
   lines.push('### MCP tools');
   lines.push('');
   lines.push('| Tool | Description |');
   lines.push('|------|-------------|');
   for (const t of mcpTools) {
-    const desc = t.description.length > 80 ? t.description.slice(0, 77) + '...' : t.description;
+    const desc =
+      t.description.length > 80
+        ? t.description.slice(0, 77) + '...'
+        : t.description;
     lines.push(`| \`${t.name}\` | ${desc} |`);
   }
   lines.push('');
@@ -312,7 +376,14 @@ function buildClawJson(): string {
       license: 'MIT',
       permissions: ['network'],
       entry: 'SKILL.md',
-      tags: ['babylon', 'trading', 'prediction-markets', 'a2a', 'mcp', 'social'],
+      tags: [
+        'babylon',
+        'trading',
+        'prediction-markets',
+        'a2a',
+        'mcp',
+        'social',
+      ],
       models: ['claude-*', 'gpt-*', 'gemini-*'],
       minOpenClawVersion: '0.8.0',
     },
@@ -326,7 +397,11 @@ function main() {
   const outArg = args.indexOf('--output');
   const packageMode = args.includes('--package');
   const outputPath =
-    outArg !== -1 && args[outArg + 1] ? args[outArg + 1] : packageMode ? join(ROOT, 'skills') : DEFAULT_OUTPUT;
+    outArg !== -1 && args[outArg + 1]
+      ? args[outArg + 1]
+      : packageMode
+        ? join(ROOT, 'skills')
+        : DEFAULT_OUTPUT;
 
   const agentCardContent = readFileSync(A2A_AGENT_CARD, 'utf-8');
   const executorContent = readFileSync(A2A_EXECUTOR, 'utf-8');
@@ -359,7 +434,9 @@ function main() {
     const outDir = dirname(outputPath);
     if (outDir !== '.') mkdirSync(outDir, { recursive: true });
     writeFileSync(outputPath, mdBody, 'utf-8');
-    console.log(`Wrote ${outputPath} (${skills.length} A2A skills, ${operations.length} operations, ${mcpTools.length} MCP tools).`);
+    console.log(
+      `Wrote ${outputPath} (${skills.length} A2A skills, ${operations.length} operations, ${mcpTools.length} MCP tools).`
+    );
   }
 }
 

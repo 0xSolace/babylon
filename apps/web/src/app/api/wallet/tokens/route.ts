@@ -38,9 +38,7 @@ import {
 
 import { walletOptionsResponse } from '../_cors';
 
-export function OPTIONS() {
-  return walletOptionsResponse();
-}
+export const OPTIONS = withErrorHandling(async () => walletOptionsResponse());
 
 const publicClient = createPublicClient({
   chain: CHAIN,

@@ -14,6 +14,12 @@
 import { logger } from '@babylon/shared';
 import { createHash } from 'crypto';
 
+// Safe debug log: some unit tests mock @babylon/shared with a logger that has no .debug
+const debugLog =
+  typeof logger.debug === 'function'
+    ? logger.debug.bind(logger)
+    : (_msg: string, _data?: unknown, _ctx?: string) => {};
+
 // =============================================================================
 // Duplicate detection (in-memory)
 // =============================================================================
@@ -95,7 +101,7 @@ export function checkDuplicate(
 
   recentRecords.push({ contentHash, timestamp: now });
 
-  logger.debug(
+  debugLog(
     'Content uniqueness check passed',
     { userId, actionType: config.actionType, contentHash },
     'DuplicateDetector'
@@ -375,7 +381,7 @@ function checkRateLimitMemory(
 
   const remaining = config.maxRequests - record.recentActions.length;
 
-  logger.debug(
+  debugLog(
     'Rate limit check passed (memory)',
     {
       userId,

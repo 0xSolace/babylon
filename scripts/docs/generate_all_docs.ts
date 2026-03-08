@@ -77,7 +77,9 @@ async function main() {
 
   // Run skills generator so A2A/MCP docs stay in sync with code (see script WHY in generate-skills-md.ts).
   console.log('');
-  console.log('→ Running skills generator (docs/skills.md + skills/babylon/)...');
+  console.log(
+    '→ Running skills generator (docs/skills.md + skills/babylon/)...'
+  );
   const skillsScript = join(rootDir, 'scripts/generate-skills-md.ts');
   const skillsMd = Bun.spawn(['bun', 'run', skillsScript], {
     cwd: rootDir,

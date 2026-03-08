@@ -18,14 +18,21 @@ const mockValidateUserApiKey = mock(async (apiKey: string) => {
   return null;
 });
 
-// Mock @babylon/api BEFORE importing @babylon/a2a (which re-exports from @babylon/api)
+// Mock @babylon/api BEFORE importing @babylon/a2a (which re-exports from @babylon/api).
+// Must provide every named export that @babylon/a2a transitively imports.
 mock.module('@babylon/api', () => ({
-  // Provide mock implementations for everything @babylon/a2a needs
   validateUserApiKey: mockValidateUserApiKey,
   clearApiKeyCache: () => {},
   getApiKeyCacheStats: () => ({ size: 0, hits: 0, misses: 0 }),
   invalidateCachedKey: () => {},
   invalidateCachedKeysForUser: () => {},
+  checkRateLimitAsync: async () => ({ allowed: true }),
+  RATE_LIMIT_CONFIGS: { A2A_REQUEST: { maxRequests: 100, windowMs: 60000, actionType: 'a2a_request' } },
+  withErrorHandling: (handler: (req: unknown) => Promise<unknown>) => handler,
+  getCache: async () => null,
+  setCache: async () => {},
+  getRedisClient: () => null,
+  isRedisAvailable: () => false,
 }));
 
 // Dynamic import AFTER mock is set up

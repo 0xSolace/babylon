@@ -761,7 +761,7 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
         totalParseRetries++;
         logger.warn(
           `[Coordinator] Failed to parse decision (attempt ${attempt})`,
-          { preview: response.substring(0, 200) },
+          { preview: response != null ? String(response).substring(0, 200) : '(no response)' },
           'CoordinatorChat'
         );
       }
@@ -1041,7 +1041,12 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
       totalParseRetries++;
       logger.warn(
         `[Coordinator] Failed to parse summary (attempt ${attempt})`,
-        { preview: summaryResponse.substring(0, 200) },
+        {
+          preview:
+            summaryResponse != null
+              ? String(summaryResponse).substring(0, 200)
+              : '(no response)',
+        },
         'CoordinatorChat'
       );
     }

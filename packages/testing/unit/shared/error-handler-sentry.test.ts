@@ -36,7 +36,9 @@ describe('withErrorHandling + default Sentry capture', () => {
 
     mock.module('@babylon/shared', () => ({
       logger: {
+        debug: () => {},
         error: () => {},
+        info: () => {},
         warn: () => {},
       },
     }));
