@@ -4,12 +4,43 @@ import { useAuth } from '@/hooks/useAuth';
 
 const FLUSH_DELAY_MS = 750;
 const MAX_BATCH_SIZE = 20;
+const MAX_RETRY_ATTEMPTS = 3;
+
+interface QueuedFeedEvent {
+  payload: FeedEventPayload;
+  attempts: number;
+}
 
 export function useFeedEventTracker() {
   const { authenticated, getAccessToken } = useAuth();
-  const queueRef = useRef<FeedEventPayload[]>([]);
+  const queueRef = useRef<QueuedFeedEvent[]>([]);
   const flushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isFlushingRef = useRef(false);
+
+  const requeueBatch = useCallback(
+    (batch: QueuedFeedEvent[], reason: string) => {
+      const retryable = batch
+        .map((item) => ({
+          ...item,
+          attempts: item.attempts + 1,
+        }))
+        .filter((item) => item.attempts <= MAX_RETRY_ATTEMPTS);
+
+      const droppedCount = batch.length - retryable.length;
+      if (droppedCount > 0) {
+        logger.warn(
+          'Dropped feed events after exceeding retry limit',
+          { droppedCount, reason, maxAttempts: MAX_RETRY_ATTEMPTS },
+          'useFeedEventTracker'
+        );
+      }
+
+      if (retryable.length > 0) {
+        queueRef.current.unshift(...retryable);
+      }
+    },
+    []
+  );
 
   const flush = useCallback(async () => {
     if (!authenticated || isFlushingRef.current || queueRef.current.length === 0) {
@@ -22,7 +53,7 @@ export function useFeedEventTracker() {
     try {
       const token = await getAccessToken();
       if (!token) {
-        queueRef.current.unshift(...batch);
+        requeueBatch(batch, 'missing_token');
         return;
       }
 
@@ -32,15 +63,23 @@ export function useFeedEventTracker() {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ events: batch }),
+        body: JSON.stringify({ events: batch.map((item) => item.payload) }),
         keepalive: true,
       });
 
       if (!response.ok) {
-        queueRef.current.unshift(...batch);
+        if (response.status === 429 || response.status >= 500) {
+          requeueBatch(batch, `http_${response.status}`);
+        } else {
+          logger.warn(
+            'Dropped non-retryable feed events batch',
+            { status: response.status, batchSize: batch.length },
+            'useFeedEventTracker'
+          );
+        }
       }
     } catch (error) {
-      queueRef.current.unshift(...batch);
+      requeueBatch(batch, 'network_error');
       logger.warn(
         'Failed to flush feed events',
         { error, batchSize: batch.length },
@@ -56,7 +95,7 @@ export function useFeedEventTracker() {
         flushTimerRef.current = null;
       }
     }
-  }, [authenticated, getAccessToken]);
+  }, [authenticated, getAccessToken, requeueBatch]);
 
   const scheduleFlush = useCallback(() => {
     if (flushTimerRef.current) return;
@@ -69,7 +108,7 @@ export function useFeedEventTracker() {
   const trackEvent = useCallback(
     (event: FeedEventPayload) => {
       if (!authenticated) return;
-      queueRef.current.push(event);
+      queueRef.current.push({ payload: event, attempts: 0 });
       if (queueRef.current.length >= MAX_BATCH_SIZE) {
         if (flushTimerRef.current) {
           clearTimeout(flushTimerRef.current);
