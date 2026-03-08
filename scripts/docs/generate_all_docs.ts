@@ -76,9 +76,10 @@ async function main() {
   }
 
   // Run skills generator so A2A/MCP docs stay in sync with code (see script WHY in generate-skills-md.ts).
+  // Markdown and package write to different files, so run in parallel.
   console.log('');
   console.log(
-    '→ Running skills generator (docs/skills.md + skills/babylon/)...'
+    '→ Running skills generator (docs/skills.md + skills/babylon/) in parallel...'
   );
   const skillsScript = join(rootDir, 'scripts/generate-skills-md.ts');
   const skillsMd = Bun.spawn(['bun', 'run', skillsScript], {
@@ -86,16 +87,20 @@ async function main() {
     stdout: 'inherit',
     stderr: 'inherit',
   });
-  if ((await skillsMd.exited) !== 0) {
-    console.error('Skills generator (markdown) failed.');
-    process.exit(1);
-  }
   const skillsPkg = Bun.spawn(['bun', 'run', skillsScript, '--package'], {
     cwd: rootDir,
     stdout: 'inherit',
     stderr: 'inherit',
   });
-  if ((await skillsPkg.exited) !== 0) {
+  const [codeMd, codePkg] = await Promise.all([
+    skillsMd.exited,
+    skillsPkg.exited,
+  ]);
+  if (codeMd !== 0) {
+    console.error('Skills generator (markdown) failed.');
+    process.exit(1);
+  }
+  if (codePkg !== 0) {
     console.error('Skills generator (package) failed.');
     process.exit(1);
   }

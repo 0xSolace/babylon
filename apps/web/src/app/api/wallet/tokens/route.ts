@@ -38,6 +38,7 @@ import {
 
 import { walletOptionsResponse } from '../_cors';
 
+// OPTIONS wrapped for consistency: same error/Sentry path as GET/POST; overhead negligible.
 export const OPTIONS = withErrorHandling(async () => walletOptionsResponse());
 
 const publicClient = createPublicClient({

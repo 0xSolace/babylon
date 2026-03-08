@@ -7,6 +7,9 @@
  * which means mock.module('@babylon/shared', ...) in file A replaces
  * the real module for file B too. This script works around that by
  * spawning a separate `bun test <file>` for each test file.
+ *
+ * Runs up to CONCURRENCY files at a time to speed up large suites while
+ * keeping process isolation.
  */
 
 import { readdirSync } from 'node:fs';
@@ -15,6 +18,7 @@ import { join, relative } from 'node:path';
 const ROOT = import.meta.dir.replace('/scripts', '');
 const TEST_DIR = join(ROOT, 'packages/testing/unit');
 const PRELOAD = join(ROOT, 'packages/testing/unit/preload.ts');
+const CONCURRENCY = 4;
 
 function collectTestFiles(dir: string): string[] {
   const files: string[] = [];
@@ -32,48 +36,58 @@ function collectTestFiles(dir: string): string[] {
   return files.sort();
 }
 
+async function runOne(
+  file: string
+): Promise<{ rel: string; exitCode: number; stdout: string; stderr: string }> {
+  const rel = relative(ROOT, file);
+  const proc = Bun.spawn(['bun', 'test', file, '--preload', PRELOAD], {
+    cwd: ROOT,
+    stdout: 'pipe',
+    stderr: 'pipe',
+  });
+  const exitCode = await proc.exited;
+  const stdout = await new Response(proc.stdout).text();
+  const stderr = await new Response(proc.stderr).text();
+  return { rel, exitCode, stdout, stderr };
+}
+
 async function main() {
   const testFiles = collectTestFiles(TEST_DIR);
   console.log(
-    `Running ${testFiles.length} test files in isolated subprocesses...\n`
+    `Running ${testFiles.length} test files in isolated subprocesses (concurrency ${CONCURRENCY})...\n`
   );
 
   let passed = 0;
   let failed = 0;
   const failures: string[] = [];
 
-  for (const file of testFiles) {
-    const rel = relative(ROOT, file);
-    const proc = Bun.spawn(['bun', 'test', file, '--preload', PRELOAD], {
-      cwd: ROOT,
-      stdout: 'pipe',
-      stderr: 'pipe',
-    });
+  for (let i = 0; i < testFiles.length; i += CONCURRENCY) {
+    const chunk = testFiles.slice(i, i + CONCURRENCY);
+    const results = await Promise.all(chunk.map(runOne));
 
-    const exitCode = await proc.exited;
-    const stdout = await new Response(proc.stdout).text();
-    const stderr = await new Response(proc.stderr).text();
-
-    if (exitCode === 0) {
-      const match = stdout.match(/(\d+) pass/);
-      const count = match ? match[1] : '?';
-      console.log(`  ✓ ${rel} (${count} pass)`);
-      passed++;
-    } else {
-      console.log(`  ✗ ${rel}`);
-      // Print just the failure lines
-      const failLines = (stdout + stderr)
-        .split('\n')
-        .filter(
-          (l) =>
-            l.includes('(fail)') || l.includes('error:') || l.includes('Error:')
-        )
-        .slice(0, 8);
-      for (const line of failLines) {
-        console.log(`    ${line.trim()}`);
+    for (const { rel, exitCode, stdout, stderr } of results) {
+      if (exitCode === 0) {
+        const match = stdout.match(/(\d+) pass/);
+        const count = match ? match[1] : '?';
+        console.log(`  ✓ ${rel} (${count} pass)`);
+        passed++;
+      } else {
+        console.log(`  ✗ ${rel}`);
+        const failLines = (stdout + stderr)
+          .split('\n')
+          .filter(
+            (l) =>
+              l.includes('(fail)') ||
+              l.includes('error:') ||
+              l.includes('Error:')
+          )
+          .slice(0, 8);
+        for (const line of failLines) {
+          console.log(`    ${line.trim()}`);
+        }
+        failed++;
+        failures.push(rel);
       }
-      failed++;
-      failures.push(rel);
     }
   }
 

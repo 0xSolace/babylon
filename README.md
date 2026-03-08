@@ -149,6 +149,8 @@ bun run test:e2e           # E2E tests
 bun run contracts:test     # Smart contracts
 ```
 
+To skip chain-dependent tests (e.g. in CI when Hardhat/localnet is not available), set `SKIP_CHAIN_TESTS=1`.
+
 ---
 
 ## 🚢 Deploy to Vercel

@@ -365,28 +365,30 @@ metadata:
 }
 
 function buildClawJson(): string {
-  return JSON.stringify(
-    {
-      name: SKILL_NAME,
-      version: '1.0.0',
-      description: SKILL_DESCRIPTION,
-      author: 'odilitime',
-      license: 'MIT',
-      permissions: ['network'],
-      entry: 'SKILL.md',
-      tags: [
-        'babylon',
-        'trading',
-        'prediction-markets',
-        'a2a',
-        'mcp',
-        'social',
-      ],
-      models: ['claude-*', 'gpt-*', 'gemini-*'],
-      minOpenClawVersion: '0.8.0',
-    },
-    null,
-    2
+  return (
+    JSON.stringify(
+      {
+        name: SKILL_NAME,
+        version: '1.0.0',
+        description: SKILL_DESCRIPTION,
+        author: 'odilitime',
+        license: 'MIT',
+        permissions: ['network'],
+        entry: 'SKILL.md',
+        tags: [
+          'babylon',
+          'trading',
+          'prediction-markets',
+          'a2a',
+          'mcp',
+          'social',
+        ],
+        models: ['claude-*', 'gpt-*', 'gemini-*'],
+        minOpenClawVersion: '0.8.0',
+      },
+      null,
+      2
+    ) + '\n'
   );
 }
 
@@ -422,7 +424,7 @@ function main() {
     writeFileSync(join(skillDir, 'claw.json'), buildClawJson(), 'utf-8');
     writeFileSync(
       join(skillDir, 'README.md'),
-      `# Babylon Agent Skill\n\n${SKILL_DESCRIPTION}\n\nSee SKILL.md for full A2A/MCP reference.\n`,
+      `# Babylon Agent Skill\n\n${SKILL_DESCRIPTION}\n\n**This package is auto-generated.** Regenerate with \`bun run skills:package\`.\n\nSee SKILL.md for full A2A/MCP reference.\n`,
       'utf-8'
     );
     console.log(

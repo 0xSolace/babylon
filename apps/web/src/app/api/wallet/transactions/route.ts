@@ -48,6 +48,7 @@ const MAX_RECORDS_PER_SOURCE = 500;
 
 import { walletOptionsResponse } from '../_cors';
 
+// OPTIONS wrapped for consistency: same error/Sentry path as GET/POST; overhead negligible.
 export const OPTIONS = withErrorHandling(async () => walletOptionsResponse());
 
 export const GET = withErrorHandling(async (request: NextRequest) => {
