@@ -5,9 +5,11 @@ const insertMock = mock(() => ({
   values: mock(() => Promise.resolve()),
 }));
 const generateSnowflakeIdMock = mock(() => Promise.resolve('evt-1'));
+const applyRateLimitMock = mock(() => ({ allowed: true, retryAfter: 0 }));
 
 mock.module('@babylon/api', () => ({
   addPublicReadHeaders: () => {},
+  applyRateLimit: applyRateLimitMock,
   authenticate: () =>
     Promise.resolve({
       userId: 'privy-user-1',
@@ -23,6 +25,9 @@ mock.module('@babylon/api', () => ({
       user: null,
       rateLimitInfo: null,
     }),
+  RATE_LIMIT_CONFIGS: {
+    FEED_EVENT_BATCH: { maxRequests: 120, windowMs: 60000, actionType: 'feed_event_batch' },
+  },
   successResponse: (data: unknown) =>
     new Response(JSON.stringify(data), {
       headers: { 'Content-Type': 'application/json' },
@@ -47,6 +52,7 @@ const { POST } = await import('./route');
 beforeEach(() => {
   insertMock.mockClear();
   generateSnowflakeIdMock.mockClear();
+  applyRateLimitMock.mockClear();
 });
 
 describe('POST /api/feed/events', () => {
@@ -87,5 +93,32 @@ describe('POST /api/feed/events', () => {
     expect(generateSnowflakeIdMock).toHaveBeenCalledTimes(2);
     expect(payload.success).toBe(true);
     expect(payload.accepted).toBe(2);
+  });
+
+  it('returns 429 when the user exceeds the feed event batch limit', async () => {
+    applyRateLimitMock.mockReturnValueOnce({ allowed: false, retryAfter: 30 });
+
+    const request = {
+      json: () =>
+        Promise.resolve({
+          events: [
+            {
+              actionType: 'impression',
+              surface: 'for_you',
+              itemId: 'post-1',
+              itemType: 'post',
+            },
+          ],
+        }),
+    } as unknown as NextRequest;
+
+    const response = await POST(request);
+    const payload = await response.json();
+
+    expect(response.status).toBe(429);
+    expect(insertMock).not.toHaveBeenCalled();
+    expect(payload.success).toBe(false);
+    expect(payload.error).toBe('Rate limit exceeded');
+    expect(payload.retryAfter).toBe(30);
   });
 });

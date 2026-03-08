@@ -994,9 +994,19 @@ export async function buildForYouFeed(userId?: string | null) {
     }));
     const leadPost = leadPosts[0] ?? null;
     const primaryAuthorId = leadPost?.authorId ?? story.primaryAuthorId ?? null;
-    const newest =
-      leadPost?.timestamp ?? story.resolutionDate ?? baseResult.generatedAt;
-    const newestDate = new Date(newest);
+    let newestDate: Date;
+    if (leadPost?.timestamp) {
+      newestDate = new Date(leadPost.timestamp);
+    } else if (story.isNewMarket) {
+      newestDate = new Date(baseResult.generatedAt);
+    } else if (story.resolutionDate) {
+      const resolutionDate = new Date(story.resolutionDate);
+      const generatedAtDate = new Date(baseResult.generatedAt);
+      newestDate =
+        resolutionDate > generatedAtDate ? generatedAtDate : resolutionDate;
+    } else {
+      newestDate = new Date(baseResult.generatedAt);
+    }
     const engagementTotal = enrichedPosts.reduce(
       (sum, post) =>
         sum + post.likeCount + post.commentCount * 2 + post.shareCount * 3,

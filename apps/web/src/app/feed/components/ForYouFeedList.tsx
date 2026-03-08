@@ -111,9 +111,15 @@ export function ForYouFeedList({ stories }: ForYouFeedListProps) {
     itemRefs.current.delete(storyKey);
   }, []);
 
-  if (visibleItems.length === 0) return null;
-
   useEffect(() => {
+    if (visibleItems.length === 0) {
+      for (const timer of dwellTimersRef.current.values()) {
+        clearTimeout(timer);
+      }
+      dwellTimersRef.current.clear();
+      return;
+    }
+
     const observer = new IntersectionObserver(
       (entries) => {
         for (const entry of entries) {
@@ -163,6 +169,8 @@ export function ForYouFeedList({ stories }: ForYouFeedListProps) {
       dwellTimersRef.current.clear();
     };
   }, [trackStoryEvent, visibleItems]);
+
+  if (visibleItems.length === 0) return null;
 
   return (
     <div className="w-full">
