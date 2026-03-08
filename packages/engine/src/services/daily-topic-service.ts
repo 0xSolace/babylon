@@ -451,7 +451,9 @@ export class DailyTopicService {
       .returning();
 
     if (!topic) {
-      throw new Error(`Failed to store daily topic for ${input.date.toISOString()}`);
+      throw new Error(
+        `Failed to store daily topic for ${input.date.toISOString()}`
+      );
     }
 
     logger.info(
