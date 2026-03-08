@@ -462,7 +462,9 @@ describe('POST /api/agents/team-chat/coordinator', () => {
 
     it('calls broadcastChatMessage with teamChatId and response content', async () => {
       setupSuccessfulRun();
-      await POST(createRequest({ content: 'what is TSLAI?', teamChatId: TEAM_CHAT_ID }));
+      await POST(
+        createRequest({ content: 'what is TSLAI?', teamChatId: TEAM_CHAT_ID })
+      );
 
       expect(mockBroadcastChatMessage).toHaveBeenCalledTimes(1);
       const [calledChatId, calledMsg] = mockBroadcastChatMessage.mock.calls[0]!;
@@ -472,7 +474,9 @@ describe('POST /api/agents/team-chat/coordinator', () => {
 
     it('broadcast message has chatId, content, and ISO createdAt', async () => {
       setupSuccessfulRun();
-      await POST(createRequest({ content: 'what is TSLAI?', teamChatId: TEAM_CHAT_ID }));
+      await POST(
+        createRequest({ content: 'what is TSLAI?', teamChatId: TEAM_CHAT_ID })
+      );
 
       const [, msg] = mockBroadcastChatMessage.mock.calls[0]!;
       expect(msg.chatId).toBe(TEAM_CHAT_ID);

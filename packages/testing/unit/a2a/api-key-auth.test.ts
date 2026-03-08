@@ -27,7 +27,13 @@ mock.module('@babylon/api', () => ({
   invalidateCachedKey: () => {},
   invalidateCachedKeysForUser: () => {},
   checkRateLimitAsync: async () => ({ allowed: true }),
-  RATE_LIMIT_CONFIGS: { A2A_REQUEST: { maxRequests: 100, windowMs: 60000, actionType: 'a2a_request' } },
+  RATE_LIMIT_CONFIGS: {
+    A2A_REQUEST: {
+      maxRequests: 100,
+      windowMs: 60000,
+      actionType: 'a2a_request',
+    },
+  },
   withErrorHandling: (handler: (req: unknown) => Promise<unknown>) => handler,
   getCache: async () => null,
   setCache: async () => {},

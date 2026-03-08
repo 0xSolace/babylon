@@ -41,9 +41,7 @@ const DEFAULT_OUTPUT = join(ROOT, 'docs/skills.md');
 
 // --- Parse A2A agent card: extract skills (id, name, description, tags, examples) ---
 // WHY: Agent card is the source of truth for skill names and descriptions; we avoid duplicating them.
-function parseAgentCardSkills(
-  content: string
-): Array<{
+function parseAgentCardSkills(content: string): Array<{
   id: string;
   name: string;
   description: string;
