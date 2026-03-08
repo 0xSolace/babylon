@@ -13,9 +13,9 @@
  */
 
 import { readdirSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { join, relative, resolve } from 'node:path';
 
-const ROOT = import.meta.dir.replace('/scripts', '');
+const ROOT = resolve(import.meta.dir, '..');
 const TEST_DIR = join(ROOT, 'packages/testing/unit');
 const PRELOAD = join(ROOT, 'packages/testing/unit/preload.ts');
 const CONCURRENCY = 4;
@@ -99,4 +99,7 @@ async function main() {
   }
 }
 
-main();
+main().catch((err) => {
+  console.error('Error running isolated unit tests:', err);
+  process.exit(1);
+});
