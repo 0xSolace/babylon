@@ -1,13 +1,12 @@
 'use client';
 
-import { cn } from '@babylon/shared';
+import { cn, logger } from '@babylon/shared';
 import { usePrivy } from '@privy-io/react-auth';
 import {
   Crown,
   Loader2,
   LogOut,
   Search,
-  Settings,
   Shield,
   Trash2,
   UserMinus,
@@ -168,7 +167,11 @@ export function GroupManagementModal({
         setGroupNameDraft(data.group?.name || '');
         setIsEditingGroupName(false);
       } catch (err) {
-        console.error('Failed to load group details:', err);
+        logger.error(
+          'Failed to load group details',
+          err instanceof Error ? err : { error: err },
+          'GroupManagementModal'
+        );
         setError('Failed to load group details. Please try again.');
       } finally {
         setLoading(false);
@@ -239,7 +242,11 @@ export function GroupManagementModal({
       setIsEditingGroupName(false);
       onGroupUpdated?.();
     } catch (err) {
-      console.error('Failed to update group name:', err);
+      logger.error(
+        'Failed to update group name',
+        err instanceof Error ? err : { error: err },
+        'GroupManagementModal'
+      );
       setError('Network error. Please try again.');
     } finally {
       setActionLoading(null);
@@ -294,7 +301,11 @@ export function GroupManagementModal({
           setSearchResults([]);
         }
       } catch (error) {
-        console.error('Member search failed:', error);
+        logger.error(
+          'Member search failed',
+          error instanceof Error ? error : { error },
+          'GroupManagementModal'
+        );
         setSearchResults([]);
       } finally {
         setSearching(false);
@@ -352,7 +363,11 @@ export function GroupManagementModal({
       setSearchResults([]);
       onGroupUpdated?.();
     } catch (err) {
-      console.error('Failed to add member:', err);
+      logger.error(
+        'Failed to add member',
+        err instanceof Error ? err : { error: err },
+        'GroupManagementModal'
+      );
       setError('Network error. Please try again.');
     } finally {
       setActionLoading(null);
@@ -578,13 +593,16 @@ export function GroupManagementModal({
           onClick={(e) => e.stopPropagation()}
         >
           {/* Header */}
-          <div className="flex shrink-0 items-start justify-between border-border border-b p-6">
-            <div className="flex items-center gap-2">
-              <Settings className="h-5 w-5 text-primary" />
-              <h2 className="font-bold text-xl">
+          <div className="flex shrink-0 items-start justify-between border-border border-b px-6 py-4">
+            <div className="min-w-0 flex-1">
+              <h2 className="truncate font-bold text-xl">
                 {groupDetails?.name || 'Group Settings'}
               </h2>
-              {groupDetails && <GroupTypeBadge type={groupDetails.type} />}
+              {groupDetails && (
+                <div className="mt-1">
+                  <GroupTypeBadge type={groupDetails.type} />
+                </div>
+              )}
             </div>
             <button
               onClick={handleClose}
@@ -596,7 +614,7 @@ export function GroupManagementModal({
           </div>
 
           {/* Content */}
-          <div className="min-h-0 flex-1 overflow-y-auto p-6">
+          <div className="min-h-0 flex-1 overflow-y-auto px-6 pt-4 pb-6">
             {error && (
               <div className="mb-4 rounded-lg border border-red-500/20 bg-red-500/10 p-3">
                 <p className="text-red-500 text-sm">{error}</p>
@@ -719,9 +737,7 @@ export function GroupManagementModal({
                         className="mt-2 w-full rounded-lg border border-border bg-background px-3 py-2 text-sm transition-colors focus:border-primary focus:outline-none"
                       />
                     ) : (
-                      <p className="mt-2 truncate text-sm">
-                        {groupDetails.name}
-                      </p>
+                      <p className="truncate text-sm">{groupDetails.name}</p>
                     )}
                   </div>
                 )}

@@ -46,7 +46,6 @@ import {
   logger,
   PERP_MARKET_CONFIG,
   PREDICTION_MARKET_ABI,
-  REPUTATION_SYSTEM_BASE_SEPOLIA,
 } from '@babylon/shared';
 import { BabylonLLMClient } from './llm/openai-client';
 import { MarketDecisionEngine } from './MarketDecisionEngine';
@@ -62,6 +61,7 @@ import {
   createArcState,
   createParodyHeadlineGenerator,
   DistributedLockService,
+  dailyTopicService,
   generateArcPulseEventsIfNeeded,
   generateEvents,
   getOracleService,
@@ -75,9 +75,9 @@ import {
   rssFeedService,
   StaticDataRegistry,
   syncReputationIfAvailable,
-  TokenStatsService,
   TradeExecutionService,
   timeframeArcProcessor,
+  tokenStatsService,
   WalletService,
   worldFactsGenerator,
 } from './services';
@@ -137,6 +137,7 @@ export interface GameTickResult {
     newHeadlines: number;
     parodiesGenerated: number;
     headlinesCleaned: number;
+    dailyTopic?: string | null;
     worldFactsGenerated: number;
     worldFactsArchived: number;
   };
@@ -182,7 +183,7 @@ export async function executeGameTick(
   const deadline = startedAt + budgetMs;
 
   // Start token usage collection for this tick
-  const tokenStatsTickId = TokenStatsService.startTick(`tick-${startedAt}`);
+  const tokenStatsTickId = tokenStatsService.startTick(`tick-${startedAt}`);
 
   logger.info(
     'Executing game tick',
@@ -902,7 +903,7 @@ export async function executeGameTick(
   }
 
   // End token stats collection and store in database
-  const tickTokenStatsData = TokenStatsService.endTick();
+  const tickTokenStatsData = tokenStatsService.endTick();
   if (tickTokenStatsData) {
     // Calculate estimated cost from per-model usage
     let estimatedCostUSD = 0;
@@ -1512,19 +1513,11 @@ export async function resolveQuestionPayouts(
     );
   }
 
-  // Check if on-chain reputation updates are configured (requires deployer key)
-  if (process.env.DEPLOYER_PRIVATE_KEY && REPUTATION_SYSTEM_BASE_SEPOLIA) {
-    await ReputationService.updateReputationForResolvedMarket({
-      marketId: marketId,
-      outcome: winningSide,
-    });
-  } else {
-    logger.debug(
-      'Skipping reputation update - DEPLOYER_PRIVATE_KEY not configured',
-      { marketId: marketId },
-      'GameTick'
-    );
-  }
+  // Update reputation in database (no longer requires deployer key or on-chain calls)
+  await ReputationService.updateReputationForResolvedMarket({
+    marketId: marketId,
+    outcome: winningSide,
+  });
 
   // Resolve market on-chain if onChainMarketId exists
   let onChainResolutionTxHash: string | null = null;
@@ -2124,6 +2117,7 @@ export async function updateWorldFactsIfNeeded(): Promise<{
     newHeadlines: number;
     parodiesGenerated: number;
     headlinesCleaned: number;
+    dailyTopic?: string | null;
     worldFactsGenerated: number;
     worldFactsArchived: number;
   };
@@ -2227,6 +2221,9 @@ export async function updateWorldFactsIfNeeded(): Promise<{
       >
     > = [];
     let cleaned = 0;
+    let dailyTopic: Awaited<
+      ReturnType<typeof dailyTopicService.ensureTopicForDate>
+    > = null;
 
     try {
       // Step 1: Fetch all RSS feeds
@@ -2257,6 +2254,16 @@ export async function updateWorldFactsIfNeeded(): Promise<{
       logger.info(
         `Cleaned up ${cleaned} old headlines`,
         { count: cleaned },
+        'GameTick'
+      );
+
+      dailyTopic = await dailyTopicService.ensureTopicForDate(new Date());
+      logger.info(
+        'Daily topic ready',
+        {
+          topicKey: dailyTopic?.topicKey ?? null,
+          topicLabel: dailyTopic?.topicLabel ?? null,
+        },
         'GameTick'
       );
     } catch (error) {
@@ -2336,6 +2343,7 @@ export async function updateWorldFactsIfNeeded(): Promise<{
         newHeadlines: feedResult.stored,
         parodiesGenerated: parodies.length,
         headlinesCleaned: cleaned,
+        dailyTopic: dailyTopic?.topicLabel ?? null,
         worldFactsGenerated: factsResult.generated,
         worldFactsArchived: factsResult.archived,
       },
@@ -2349,6 +2357,7 @@ export async function updateWorldFactsIfNeeded(): Promise<{
         newHeadlines: feedResult.stored,
         parodiesGenerated: parodies.length,
         headlinesCleaned: cleaned,
+        dailyTopic: dailyTopic?.topicLabel ?? null,
         worldFactsGenerated: factsResult.generated,
         worldFactsArchived: factsResult.archived,
       },

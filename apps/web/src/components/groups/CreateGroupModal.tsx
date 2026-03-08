@@ -1,6 +1,6 @@
 'use client';
 
-import { cn, GROUP_CONFIG, getCurrentChainId } from '@babylon/shared';
+import { cn, GROUP_CONFIG, getCurrentChainId, logger } from '@babylon/shared';
 import { usePrivy } from '@privy-io/react-auth';
 import { Check, Loader2, Search, Shield, Users, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -122,7 +122,11 @@ export function CreateGroupModal({
           setSearchResults([]);
         }
       } catch (error) {
-        console.error('Member search failed:', error);
+        logger.error(
+          'Member search failed',
+          error instanceof Error ? error : { error },
+          'CreateGroupModal'
+        );
         setSearchResults([]);
       } finally {
         setSearching(false);
@@ -211,7 +215,11 @@ export function CreateGroupModal({
       onGroupCreated(data.group.id, data.group.chatId);
       onClose();
     } catch (err) {
-      console.error('Failed to create group:', err);
+      logger.error(
+        'Failed to create group',
+        err instanceof Error ? err : { error: err },
+        'CreateGroupModal'
+      );
       setError('Network error. Please try again.');
     } finally {
       setCreating(false);
@@ -266,12 +274,19 @@ export function CreateGroupModal({
           <div className="space-y-4">
             {/* Group Name (Optional) */}
             <div>
-              <label className="mb-2 block font-medium text-sm">
-                Group Name{' '}
-                <span className="font-normal text-muted-foreground text-xs">
-                  (Optional)
-                </span>
-              </label>
+              <div className="mb-2 flex items-baseline justify-between">
+                <label className="font-medium text-sm">
+                  Group Name{' '}
+                  <span className="font-normal text-muted-foreground text-xs">
+                    (Optional)
+                  </span>
+                </label>
+                {groupName && (
+                  <span className="text-muted-foreground text-xs">
+                    {groupName.length}/100
+                  </span>
+                )}
+              </div>
               <input
                 id="groupName"
                 type="text"
@@ -282,11 +297,6 @@ export function CreateGroupModal({
                 className="w-full rounded-lg border border-border bg-sidebar px-4 py-3 transition-colors focus:border-primary focus:outline-none"
                 disabled={creating}
               />
-              {groupName && (
-                <p className="mt-1 text-muted-foreground text-xs">
-                  {groupName.length}/100 characters
-                </p>
-              )}
             </div>
 
             {/* Selected Members */}
@@ -562,22 +572,15 @@ export function CreateGroupModal({
             </div>
           )}
 
-          {/* Action Buttons */}
-          <div className="mt-6 flex gap-3">
-            <button
-              onClick={handleClose}
-              className="flex-1 rounded-lg border border-border bg-sidebar px-4 py-3 transition-colors hover:bg-accent"
-              disabled={creating}
-            >
-              Cancel
-            </button>
+          {/* Action Button */}
+          <div className="mt-6">
             <button
               onClick={handleCreateGroup}
               disabled={
                 creating || (selectedMembers.length === 0 && !groupName.trim())
               }
               className={cn(
-                'flex-1 rounded-lg px-4 py-3 font-medium transition-colors',
+                'w-full rounded-lg px-4 py-3 font-medium transition-colors',
                 'bg-primary text-primary-foreground hover:bg-primary/90',
                 'disabled:cursor-not-allowed disabled:opacity-50'
               )}

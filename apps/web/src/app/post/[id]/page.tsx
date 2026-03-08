@@ -200,12 +200,12 @@ export default function PostPage({ params }: PostPageProps) {
         noPadding
         className="!overflow-visible flex w-full flex-col"
       >
-        <div className="relative flex min-h-screen flex-1">
+        <div className="relative flex min-h-dvh flex-1 md:min-h-screen">
           {/* Desktop loading */}
           <div className="hidden min-w-0 flex-1 flex-col border-border lg:flex lg:border-r lg:border-l">
             <div className="flex-1 bg-background">
               <div className="w-full lg:mx-auto lg:max-w-[700px]">
-                <div className="space-y-4 px-4 py-6">
+                <div className="space-y-4 sm:px-4 sm:py-6">
                   <Skeleton className="h-8 w-3/4" />
                   <Skeleton className="h-64 w-full" />
                   <Skeleton className="h-32 w-full" />
@@ -216,7 +216,7 @@ export default function PostPage({ params }: PostPageProps) {
           <WidgetSidebar showLatestNews={false} showMarkets={false} />
           {/* Mobile loading */}
           <div className="flex flex-1 flex-col lg:hidden">
-            <div className="space-y-4 px-4 py-6">
+            <div className="space-y-4 sm:px-4 sm:py-6">
               <Skeleton className="h-8 w-3/4" />
               <Skeleton className="h-64 w-full" />
               <Skeleton className="h-32 w-full" />
@@ -233,7 +233,7 @@ export default function PostPage({ params }: PostPageProps) {
         noPadding
         className="!overflow-visible flex w-full flex-col"
       >
-        <div className="relative flex min-h-screen flex-1">
+        <div className="relative flex min-h-dvh flex-1 md:min-h-screen">
           {/* Desktop error */}
           <div className="hidden min-w-0 flex-1 flex-col border-border lg:flex lg:border-r lg:border-l">
             <div className="flex flex-1 flex-col items-center justify-center bg-background">
@@ -274,7 +274,7 @@ export default function PostPage({ params }: PostPageProps) {
 
   return (
     <PageContainer noPadding className="!overflow-visible flex w-full flex-col">
-      <div className="relative flex min-h-screen flex-1">
+      <div className="relative flex min-h-dvh flex-1 md:min-h-screen">
         {/* Desktop: Post content area */}
         <div className="hidden min-w-0 flex-1 flex-col border-border lg:flex lg:border-r lg:border-l">
           {/* Desktop: Top bar with back button */}

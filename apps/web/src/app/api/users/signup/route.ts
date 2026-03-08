@@ -102,6 +102,7 @@ import {
 } from '@babylon/api';
 import {
   and,
+  balanceTransactions,
   db,
   eq,
   follows,
@@ -298,10 +299,20 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
           );
         }
 
+        const normalizedProfileEmail =
+          parsedProfile.email?.trim().toLowerCase() || null;
+        const profileEmailVerified = normalizedProfileEmail
+          ? adminEmailResult.allVerifiedEmails.some(
+              (verifiedEmail) =>
+                verifiedEmail.toLowerCase() === normalizedProfileEmail
+            )
+          : false;
+
         const baseUserData: Partial<typeof users.$inferInsert> = {
           username: parsedProfile.username,
           displayName: parsedProfile.displayName,
-          email: parsedProfile.email || null,
+          email: normalizedProfileEmail,
+          emailVerified: profileEmailVerified,
           bio: parsedProfile.bio ?? '',
           profileImageUrl: parsedProfile.profileImageUrl ?? null,
           coverImageUrl: parsedProfile.coverImageUrl ?? null,
@@ -505,6 +516,53 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
 
   // Generate referral code for new user (ensures they can refer others immediately)
   await getOrCreateReferralCode(result.user.id);
+
+  // Award welcome bonus at profile completion (idempotent, transaction-safe)
+  const userId = result.user.id;
+  const welcomeBonus = POINTS.INITIAL_SIGNUP;
+  await withTransaction(async (tx) => {
+    const [hasWelcomeBonus] = await tx
+      .select({ id: balanceTransactions.id })
+      .from(balanceTransactions)
+      .where(
+        and(
+          eq(balanceTransactions.userId, userId),
+          eq(balanceTransactions.description, 'Welcome bonus - initial signup')
+        )
+      )
+      .limit(1);
+
+    if (hasWelcomeBonus) return;
+
+    const [updated] = await tx
+      .update(users)
+      .set({
+        virtualBalance: sql`(${users.virtualBalance})::numeric + ${welcomeBonus}`,
+        totalDeposited: sql`(${users.totalDeposited})::numeric + ${welcomeBonus}`,
+      })
+      .where(eq(users.id, userId))
+      .returning({ virtualBalance: users.virtualBalance });
+
+    const balAfter = Number(updated?.virtualBalance ?? String(welcomeBonus));
+    const balBefore = balAfter - welcomeBonus;
+
+    await tx.insert(balanceTransactions).values({
+      id: await generateSnowflakeId(),
+      userId,
+      type: 'deposit',
+      amount: String(welcomeBonus),
+      balanceBefore: String(balBefore),
+      balanceAfter: String(balAfter),
+      description: 'Welcome bonus - initial signup',
+      createdAt: new Date(),
+    });
+
+    logger.info(
+      `Awarded ${welcomeBonus}-pt welcome bonus at profile completion`,
+      { userId, amount: welcomeBonus },
+      'POST /api/users/signup'
+    );
+  });
 
   // Award points for social account linking
   const pointsAwarded = {
@@ -727,8 +785,12 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
           trackServerEvent(result.user.id, 'alpha_group_assignment.success', {
             groupsAssigned: assignmentResult.groupsAssigned,
             assignments: assignmentResult.assignments.map((a) => a.npcName),
-          }).catch(() => {
-            /* ignore tracking errors */
+          }).catch((err) => {
+            logger.debug(
+              'Tracking event failed',
+              { error: err, event: 'alpha_group_assignment.success' },
+              'POST /api/users/signup'
+            );
           });
         }
         if (assignmentResult.errors.length > 0) {
@@ -748,8 +810,12 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
               groupsAssigned: assignmentResult.groupsAssigned,
               errorCount: assignmentResult.errors.length,
             }
-          ).catch(() => {
-            /* ignore tracking errors */
+          ).catch((err) => {
+            logger.debug(
+              'Tracking event failed',
+              { error: err, event: 'alpha_group_assignment.partial_failure' },
+              'POST /api/users/signup'
+            );
           });
         }
       })
@@ -763,8 +829,12 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
         // Track failures for monitoring and alerting
         trackServerEvent(result.user.id, 'alpha_group_assignment.failure', {
           error: String(error),
-        }).catch(() => {
-          /* ignore tracking errors */
+        }).catch((err) => {
+          logger.debug(
+            'Tracking event failed',
+            { error: err, event: 'alpha_group_assignment.failure' },
+            'POST /api/users/signup'
+          );
         });
       });
   }

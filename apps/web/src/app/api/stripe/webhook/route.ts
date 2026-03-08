@@ -41,7 +41,7 @@
  * - charge.refunded: Deduct points (Phase 2)
  */
 
-import { PointsService } from '@babylon/api';
+import { PointsService, withErrorHandling } from '@babylon/api';
 import { and, balanceTransactions, db, eq } from '@babylon/db';
 import { logger } from '@babylon/shared';
 import { NextResponse } from 'next/server';
@@ -67,7 +67,7 @@ interface WebhookHandlerResult {
  * - Return 200 for events we intentionally skip (non-points purchases, etc.)
  * - Return 500 for unexpected errors so Stripe will retry
  */
-export async function POST(req: Request) {
+export const POST = withErrorHandling(async function POST(req: Request) {
   const body = await req.text();
   const signature = req.headers.get('stripe-signature');
 
@@ -106,6 +106,26 @@ export async function POST(req: Request) {
     { eventId: event.id, type: event.type },
     'StripeWebhook'
   );
+
+  // Filter events by app metadata — only process events belonging to this app (babylon).
+  // Events without metadata.app are allowed through for backward compatibility with
+  // resources created before this tagging was added.
+  const eventObject = event.data.object as unknown as Record<string, unknown>;
+  const appMetadata =
+    (eventObject?.metadata as Record<string, string> | undefined)?.app ??
+    (
+      (eventObject?.subscription_details as Record<string, unknown> | undefined)
+        ?.metadata as Record<string, string> | undefined
+    )?.app;
+
+  if (appMetadata && appMetadata !== 'babylon') {
+    logger.info(
+      `Ignoring Stripe event for different app: ${appMetadata}`,
+      { eventId: event.id, type: event.type, app: appMetadata },
+      'StripeWebhook'
+    );
+    return NextResponse.json({ received: true, ignored: true });
+  }
 
   // Handle events - each handler returns a result indicating success/failure
   let result: WebhookHandlerResult = { success: true };
@@ -201,7 +221,7 @@ export async function POST(req: Request) {
   }
 
   return NextResponse.json({ received: true });
-}
+});
 
 /**
  * Handle successful checkout session completion

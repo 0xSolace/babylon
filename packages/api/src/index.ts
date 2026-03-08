@@ -81,14 +81,17 @@ export {
   getCacheStats,
   invalidateCache,
   invalidateCachePattern,
+  narrativeEnrichmentKey,
   setCache,
   warmCache,
 } from './cache';
 // Cron Authentication
 export {
+  type CronHandler,
   cronUnauthorizedResponse,
   requireCronAuth,
   verifyCronAuth,
+  withCronAuth,
 } from './cron-auth';
 // Development credentials (for local testing)
 export {
@@ -100,6 +103,12 @@ export {
   isValidDevAdminToken,
   logDevCredentials,
 } from './dev-credentials';
+// Env helpers (server-only)
+export {
+  getNotificationEmailFromEnv,
+  getPrivyAppIdFromEnv,
+  getTrimmedEnv,
+} from './env';
 // Error Handler (Next.js specific)
 export {
   asyncHandler,
@@ -107,6 +116,7 @@ export {
   errorHandler,
   errorResponse,
   type RouteContext,
+  setDefaultErrorCapture,
   successResponse,
   withErrorHandling,
 } from './error-handler';
@@ -237,7 +247,10 @@ export {
   type PrivyApiDiagnostics,
   redactJwtLikeTokens,
 } from './services/privy/error-diagnostics';
-export { sendSponsoredEvmTransaction } from './services/privy/evm-send-transaction';
+export {
+  safeDecodeJwtPayload,
+  sendSponsoredEvmTransaction,
+} from './services/privy/evm-send-transaction';
 export { ensureOfflineWalletReady } from './services/privy/offline-wallet-provisioning';
 // Privy (embedded wallet server-side helpers)
 export {
@@ -310,3 +323,8 @@ export {
   validateUserApiKey,
   verifyApiKey,
 } from './utils';
+// Wallet auth utilities
+export {
+  requireFreshToken,
+  type TokenFreshnessResult,
+} from './wallet-auth';

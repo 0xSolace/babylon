@@ -8,7 +8,16 @@
  * This eliminates double LLM calls and makes execution faster.
  */
 
-import { actorState, chats, db, eq, users } from '@babylon/db';
+import {
+  actorState,
+  agentLogs,
+  and,
+  chats,
+  db,
+  desc,
+  eq,
+  users,
+} from '@babylon/db';
 import { StaticDataRegistry, WalletService } from '@babylon/engine';
 import type { IAgentRuntime } from '@elizaos/core';
 import { callGroqDirect } from '../llm/direct-groq';
@@ -18,14 +27,15 @@ import { getAgentConfig, getAutonomousFeatures } from '../shared/agent-config';
 import { logger } from '../shared/logger';
 import {
   executeDirectComment,
+  executeDirectFollow,
   executeDirectLike,
   executeDirectMessage,
   executeDirectPost,
   executeDirectRepost,
   executeDirectTrade,
+  executeDirectUnfollow,
 } from './DirectExecutors';
 import { topicDiversityService } from './TopicDiversityService';
-
 import {
   Actions,
   type ActionTraceResult,
@@ -35,6 +45,7 @@ import {
   getRequiredFeature,
   type MultiStepDecision,
 } from './templates/multi-step-decision';
+import { trackAgentTradeExecuted } from './track-agent-trade';
 
 // Import utilities
 import {
@@ -207,6 +218,9 @@ export class MultiStepExecutor {
       }
     }
 
+    const contextRefreshSummary =
+      await this.getLatestContextRefreshSummary(agentUserId);
+
     // Main iteration loop
     for (let iteration = 1; iteration <= this.maxIterations; iteration++) {
       const iterationStartTime = Date.now();
@@ -232,7 +246,8 @@ export class MultiStepExecutor {
       const context = await this.gatherContext(
         agentUserId,
         effectiveFeatures,
-        isNpc
+        isNpc,
+        contextRefreshSummary
       );
       iterationTimings.gatherContext = Date.now() - contextStartTime;
 
@@ -312,7 +327,8 @@ export class MultiStepExecutor {
         effectiveFeatures,
         runtime,
         isNpc,
-        { prompt, completion: rawResponse, thought: decision.thought }
+        { prompt, completion: rawResponse, thought: decision.thought },
+        agent?.managedBy ?? agentUserId
       );
       iterationTimings.actionExecution = Date.now() - actionStartTime;
       iterationTimings.total = Date.now() - iterationStartTime;
@@ -360,7 +376,8 @@ export class MultiStepExecutor {
   private async gatherContext(
     agentUserId: string,
     enabledFeatures: string[],
-    isNpc: boolean
+    isNpc: boolean,
+    contextRefreshSummary?: string
   ): Promise<AgentTickContext> {
     const contextStartTime = Date.now();
     const timings: Record<string, number> = {};
@@ -522,6 +539,7 @@ export class MultiStepExecutor {
           pendingChatMessagesRaw: pendingChatMessagesRaw.length,
           groupChats: agentGroupChats.length,
           ownPosts: agentOwnPosts.length,
+          hasContextRefreshSummary: Boolean(contextRefreshSummary),
         },
       },
       'MultiStepExecutor'
@@ -546,6 +564,7 @@ export class MultiStepExecutor {
       postStyle: assignment?.postStyle,
       agentOwnPosts,
       creator,
+      contextRefreshSummary,
     };
   }
 
@@ -559,6 +578,46 @@ export class MultiStepExecutor {
     const start = Date.now();
     const data = await operation();
     return { data, duration: Date.now() - start };
+  }
+
+  private async getLatestContextRefreshSummary(
+    agentUserId: string
+  ): Promise<string | undefined> {
+    const recentSystemLogs = await db
+      .select({
+        createdAt: agentLogs.createdAt,
+        metadata: agentLogs.metadata,
+      })
+      .from(agentLogs)
+      .where(
+        and(
+          eq(agentLogs.agentUserId, agentUserId),
+          eq(agentLogs.type, 'system')
+        )
+      )
+      .orderBy(desc(agentLogs.createdAt))
+      .limit(10);
+
+    for (const log of recentSystemLogs) {
+      const metadata =
+        log.metadata && typeof log.metadata === 'object' ? log.metadata : null;
+      const event =
+        metadata && 'event' in metadata ? metadata.event : undefined;
+      const summary =
+        metadata && 'summary' in metadata ? metadata.summary : undefined;
+
+      if (event !== 'context_refresh' || typeof summary !== 'string') {
+        continue;
+      }
+
+      if (!(log.createdAt instanceof Date)) {
+        return summary;
+      }
+
+      return `${summary} [recorded ${log.createdAt.toISOString()}]`;
+    }
+
+    return undefined;
   }
 
   private getActionabilitySummary(context: AgentTickContext): {
@@ -676,7 +735,8 @@ export class MultiStepExecutor {
     enabledFeatures: string[],
     _runtime: IAgentRuntime,
     isNpc: boolean,
-    logContext?: { prompt: string; completion: string; thought: string }
+    logContext?: { prompt: string; completion: string; thought: string },
+    ownerId: string = agentUserId
   ): Promise<ActionTraceResult> {
     const normalizedAction = action.toUpperCase();
 
@@ -706,7 +766,7 @@ export class MultiStepExecutor {
 
     switch (normalizedAction) {
       case Actions.TRADE:
-        return this.executeTrade(agentUserId, parameters);
+        return this.executeTrade(agentUserId, parameters, ownerId);
 
       case Actions.POST:
         return this.executePost(agentUserId, parameters, isNpc, logContext);
@@ -719,6 +779,12 @@ export class MultiStepExecutor {
 
       case Actions.REPOST:
         return this.executeRepost(agentUserId, parameters);
+
+      case Actions.FOLLOW:
+        return this.executeFollow(agentUserId, parameters);
+
+      case Actions.UNFOLLOW:
+        return this.executeUnfollow(agentUserId, parameters);
 
       case Actions.REPLY_COMMENT:
         return this.executeReplyComment(agentUserId, parameters, logContext);
@@ -771,7 +837,8 @@ export class MultiStepExecutor {
 
   private async executeTrade(
     agentUserId: string,
-    parameters: Record<string, unknown>
+    parameters: Record<string, unknown>,
+    ownerId: string = agentUserId
   ): Promise<ActionTraceResult> {
     const marketType = parameters.marketType as 'prediction' | 'perp';
     const marketId = parameters.marketId as string;
@@ -805,6 +872,19 @@ export class MultiStepExecutor {
       amount,
       reasoning,
     });
+
+    if (tradeResult.success) {
+      trackAgentTradeExecuted(agentUserId, {
+        agent_id: agentUserId,
+        market_type: marketType || 'prediction',
+        action: side,
+        market_id: tradeResult.marketId,
+        ticker: tradeResult.ticker,
+        side: tradeResult.side,
+        amount,
+        owner_id: ownerId,
+      });
+    }
 
     return {
       actionType: Actions.TRADE,
@@ -1054,6 +1134,124 @@ export class MultiStepExecutor {
         repostId: repostResult.repostId,
         quotePostId: repostResult.quotePostId,
         error: repostResult.error,
+      },
+      parameters,
+      timestamp: Date.now(),
+    };
+  }
+
+  private async executeFollow(
+    agentUserId: string,
+    parameters: Record<string, unknown>
+  ): Promise<ActionTraceResult> {
+    const targetUserId = (parameters.userId ||
+      parameters.targetUserId) as string;
+
+    if (!targetUserId) {
+      return {
+        actionType: Actions.FOLLOW,
+        success: false,
+        summary: 'Missing required parameter (userId)',
+        error: 'Invalid parameters',
+        parameters,
+        timestamp: Date.now(),
+      };
+    }
+
+    const followResult = await executeDirectFollow({
+      agentUserId,
+      targetUserId,
+    });
+
+    await agentService.createLog(agentUserId, {
+      type: 'follow',
+      level: followResult.success ? 'info' : 'warn',
+      message: followResult.success
+        ? followResult.followed
+          ? `Now following ${targetUserId}`
+          : `Already following ${targetUserId}`
+        : `Follow failed: ${followResult.error}`,
+      metadata: {
+        targetUserId,
+        success: followResult.success,
+        followed: followResult.followed ?? false,
+        alreadyFollowing: followResult.alreadyFollowing ?? false,
+        error: followResult.error ?? null,
+      },
+    });
+
+    return {
+      actionType: Actions.FOLLOW,
+      success: followResult.success,
+      summary: followResult.success
+        ? followResult.followed
+          ? `Now following ${targetUserId}`
+          : `Already following ${targetUserId}`
+        : `Follow failed: ${followResult.error}`,
+      result: {
+        success: followResult.success,
+        followed: followResult.followed,
+        alreadyFollowing: followResult.alreadyFollowing,
+        error: followResult.error,
+      },
+      parameters,
+      timestamp: Date.now(),
+    };
+  }
+
+  private async executeUnfollow(
+    agentUserId: string,
+    parameters: Record<string, unknown>
+  ): Promise<ActionTraceResult> {
+    const targetUserId = (parameters.userId ||
+      parameters.targetUserId) as string;
+
+    if (!targetUserId) {
+      return {
+        actionType: Actions.UNFOLLOW,
+        success: false,
+        summary: 'Missing required parameter (userId)',
+        error: 'Invalid parameters',
+        parameters,
+        timestamp: Date.now(),
+      };
+    }
+
+    const unfollowResult = await executeDirectUnfollow({
+      agentUserId,
+      targetUserId,
+    });
+
+    await agentService.createLog(agentUserId, {
+      type: 'follow',
+      level: unfollowResult.success ? 'info' : 'warn',
+      message: unfollowResult.success
+        ? unfollowResult.unfollowed
+          ? `Unfollowed ${targetUserId}`
+          : `Was not following ${targetUserId}`
+        : `Unfollow failed: ${unfollowResult.error}`,
+      metadata: {
+        targetUserId,
+        success: unfollowResult.success,
+        unfollowed: unfollowResult.unfollowed ?? false,
+        wasFollowing: unfollowResult.wasFollowing ?? false,
+        error: unfollowResult.error ?? null,
+      },
+    });
+
+    return {
+      actionType: Actions.UNFOLLOW,
+      success: unfollowResult.success,
+      summary: unfollowResult.success
+        ? unfollowResult.unfollowed
+          ? `Unfollowed ${targetUserId}`
+          : `Was not following ${targetUserId}`
+        : `Unfollow failed: ${unfollowResult.error}`,
+      result: {
+        success: unfollowResult.success,
+        unfollowed: unfollowResult.unfollowed,
+        wasFollowing: unfollowResult.wasFollowing,
+        error: unfollowResult.error,
       },
       parameters,
       timestamp: Date.now(),
@@ -1411,6 +1609,8 @@ export class MultiStepExecutor {
           break;
         case Actions.LIKE:
         case Actions.REPOST:
+        case Actions.FOLLOW:
+        case Actions.UNFOLLOW:
           counts.engagements++;
           break;
       }

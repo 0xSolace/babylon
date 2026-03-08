@@ -1,6 +1,6 @@
 'use client';
 
-import { cn } from '@babylon/shared';
+import { cn, logger } from '@babylon/shared';
 import { Bell } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
@@ -101,9 +101,10 @@ export default function NotificationsPage() {
         setNotifications(data.notifications || []);
         setUnreadCount(data.unreadCount || 0);
       } else {
-        console.error(
-          'Failed to fetch notifications:',
-          notifResponse.statusText
+        logger.error(
+          'Failed to fetch notifications',
+          { statusText: notifResponse.statusText },
+          'NotificationsPage'
         );
         if (!silent) {
           toast.error('Failed to refresh notifications');
@@ -185,9 +186,10 @@ export default function NotificationsPage() {
       });
 
       if (!response.ok) {
-        console.error(
-          'Failed to mark notification as read:',
-          response.statusText
+        logger.error(
+          'Failed to mark notification as read',
+          { statusText: response.statusText },
+          'NotificationsPage'
         );
         // Revert optimistic update on error
         setNotifications((prev) =>
@@ -408,7 +410,7 @@ export default function NotificationsPage() {
                 <div className="space-y-0">
                   {/* Group Invites Section */}
                   {groupInvites.length > 0 && (
-                    <div className="space-y-3 px-4 py-4 lg:px-6">
+                    <div className="space-y-3 sm:px-4 sm:py-4 lg:px-6">
                       <h3 className="font-semibold text-muted-foreground text-sm">
                         Pending Group Invites
                       </h3>
@@ -452,10 +454,10 @@ export default function NotificationsPage() {
                         !notification.read && 'bg-primary/5'
                       )}
                     >
-                      <div className="flex items-start gap-3">
+                      <div className="flex items-center gap-3">
                         {/* Unread Indicator */}
                         {!notification.read && (
-                          <div className="mt-2 h-2 w-2 shrink-0 rounded-full bg-primary" />
+                          <div className="h-2 w-2 shrink-0 rounded-full bg-primary" />
                         )}
 
                         {/* Actor Avatar */}
@@ -491,12 +493,11 @@ export default function NotificationsPage() {
                                 </p>
                               ) : (
                                 <p className="text-foreground leading-relaxed">
-                                  <span className="font-semibold">
+                                  <span className="block font-semibold md:inline">
                                     {notification.actor?.displayName ||
                                       'Someone'}
                                   </span>{' '}
                                   <span className="text-muted-foreground">
-                                    {getNotificationIcon(notification.type)}{' '}
                                     {notification.message
                                       .replace(
                                         notification.actor?.displayName || '',

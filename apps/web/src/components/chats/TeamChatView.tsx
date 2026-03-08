@@ -2,6 +2,7 @@
 
 import { cn, type MessageTag } from '@babylon/shared';
 import {
+  ArrowDown,
   Brain,
   MessageCircle,
   PanelLeft,
@@ -15,7 +16,11 @@ import { FeedbackMessages } from './FeedbackMessages';
 import type { MentionableAgent } from './MentionAutocomplete';
 import { MessageInput } from './MessageInput';
 import { MessageList } from './MessageList';
-import type { ChatDetails } from './types';
+import {
+  getDistanceFromBottom,
+  shouldShowScrollToLatest,
+} from './scroll-utils';
+import type { ChatDetails, Message, ReplyToMessage } from './types';
 
 /** Typing user info */
 interface TypingUserInfo {
@@ -162,6 +167,14 @@ interface TeamChatViewProps {
   agentIds?: ReadonlySet<string>;
   /** Callback to open agent settings modal */
   onViewSettings?: (agentId: string) => void;
+  /** Called when the message input is focused (e.g. to scroll to bottom on mobile keyboard open) */
+  onInputFocus?: () => void;
+  /** Message being replied to */
+  replyToMessage?: ReplyToMessage | null;
+  /** Called when user initiates reply to a message */
+  onReply?: (message: Message) => void;
+  /** Called when user dismisses the reply */
+  onDismissReply?: () => void;
 }
 
 /**
@@ -199,8 +212,56 @@ export function TeamChatView({
   onToggleReaction,
   agentIds,
   onViewSettings,
+  onInputFocus,
+  replyToMessage,
+  onReply,
+  onDismissReply,
 }: TeamChatViewProps) {
   const compact = density === 'compact';
+  const messagesContainerRef = React.useRef<HTMLDivElement | null>(null);
+  const [showScrollToLatest, setShowScrollToLatest] = React.useState(false);
+
+  const updateScrollToLatestVisibility = React.useCallback(
+    (container: HTMLDivElement) => {
+      const distanceFromBottom = getDistanceFromBottom(
+        container.scrollTop,
+        container.scrollHeight,
+        container.clientHeight
+      );
+      setShowScrollToLatest(shouldShowScrollToLatest(distanceFromBottom));
+    },
+    []
+  );
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: chatDetails?.chat?.id, chatDetails?.messages?.length, and loading are intentional trigger deps — they re-run the effect on conversation switch / new message arrival even though they aren't referenced inside the callback body.
+  React.useEffect(() => {
+    const container = messagesContainerRef.current;
+    if (!container) {
+      setShowScrollToLatest(false);
+      return;
+    }
+    updateScrollToLatestVisibility(container);
+  }, [
+    chatDetails?.chat?.id,
+    chatDetails?.messages?.length,
+    loading,
+    updateScrollToLatestVisibility,
+  ]);
+
+  const handleScrollToLatest = React.useCallback(() => {
+    const container = messagesContainerRef.current;
+    if (container) {
+      container.scrollTo({
+        top: container.scrollHeight,
+        behavior: 'smooth',
+      });
+      setShowScrollToLatest(false);
+      return;
+    }
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    setShowScrollToLatest(false);
+  }, [messagesEndRef]);
+
   // Empty state when no chat selected
   if (!chatDetails) {
     return (
@@ -283,36 +344,62 @@ export function TeamChatView({
         </div>
       )}
 
-      {/* Messages - Scrollable */}
-      <div
-        data-chat-messages-container
-        className={cn(
-          'relative min-h-0 min-w-0 flex-1 overflow-y-auto overflow-x-hidden',
-          compact ? 'space-y-2 px-3 py-2' : 'space-y-4 px-4 py-3'
+      {/* Messages - Scrollable + jump-to-latest overlay */}
+      {/*
+       * The outer div is `relative` so the jump button can be absolutely
+       * positioned against the VISIBLE viewport of the chat area, not the
+       * scroll content area.  The inner div owns overflow-y-auto; absolute
+       * children of a scrolling container are anchored to the full content
+       * height, so the button would be invisible when scrolled up.
+       */}
+      <div className="relative flex min-h-0 flex-1 flex-col">
+        <div
+          data-chat-messages-container
+          ref={messagesContainerRef}
+          className={cn(
+            'flex-1 overflow-y-auto overflow-x-hidden',
+            compact ? 'space-y-2 px-3 py-2' : 'space-y-4 px-4 py-3'
+          )}
+          onScroll={(e) => {
+            onScroll?.(e.currentTarget);
+            updateScrollToLatestVisibility(e.currentTarget);
+          }}
+        >
+          <MessageList
+            messages={chatDetails.messages || []}
+            participants={chatDetails.participants || []}
+            currentUserId={currentUserId}
+            loading={loading}
+            isLoadingMore={isLoadingMore}
+            hasMore={hasMore}
+            authenticated={authenticated}
+            topSentinelRef={topSentinelRef}
+            messagesEndRef={messagesEndRef}
+            density={density}
+            onTagClick={onTagClick}
+            onToggleReaction={onToggleReaction}
+            compactActions
+            agentIds={agentIds}
+            onViewSettings={onViewSettings}
+            onReply={onReply}
+          />
+        </div>
+
+        {showScrollToLatest && (
+          <button
+            type="button"
+            onClick={handleScrollToLatest}
+            className="absolute right-4 bottom-4 z-20 rounded-full border border-border bg-background/95 p-2 text-muted-foreground shadow-sm backdrop-blur transition-colors hover:text-foreground"
+            aria-label="Jump to latest message"
+            title="Jump to latest message"
+          >
+            <ArrowDown className="h-4 w-4" />
+          </button>
         )}
-        onScroll={(e) => onScroll?.(e.currentTarget)}
-      >
-        <MessageList
-          messages={chatDetails.messages || []}
-          participants={chatDetails.participants || []}
-          currentUserId={currentUserId}
-          loading={loading}
-          isLoadingMore={isLoadingMore}
-          hasMore={hasMore}
-          authenticated={authenticated}
-          topSentinelRef={topSentinelRef}
-          messagesEndRef={messagesEndRef}
-          density={density}
-          onTagClick={onTagClick}
-          onToggleReaction={onToggleReaction}
-          compactActions
-          agentIds={agentIds}
-          onViewSettings={onViewSettings}
-        />
       </div>
 
       {/* Footer - Fixed */}
-      <div className="shrink-0">
+      <div className="shrink-0 pb-safe lg:pb-0">
         {/* Thinking Indicator - shown when agents are processing complex queries */}
         {thinkingAgents.length > 0 && (
           <ThinkingIndicator
@@ -341,6 +428,9 @@ export function TeamChatView({
           density={density}
           placeholder="Message your team — @ to mention agents"
           mentionableMembers={agents}
+          onInputFocus={onInputFocus}
+          replyToMessage={replyToMessage}
+          onDismissReply={onDismissReply}
         />
       </div>
     </div>

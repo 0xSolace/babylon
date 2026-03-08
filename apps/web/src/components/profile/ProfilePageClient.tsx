@@ -8,6 +8,7 @@ import {
   type FeedPost,
   getBannerImageUrl,
   isUsername,
+  logger,
   type Organization,
   POST_TYPES,
 } from '@babylon/shared';
@@ -659,8 +660,11 @@ export function ProfilePageClient({
         }
       } catch (error) {
         if (error instanceof Error && error.name !== 'AbortError') {
-          // eslint-disable-next-line no-console
-          console.error('Failed to fetch replies:', error);
+          logger.error(
+            'Failed to fetch replies',
+            error instanceof Error ? error : { error },
+            'ProfilePageClient'
+          );
         }
       } finally {
         setLoadingReplies(false);
@@ -786,7 +790,7 @@ export function ProfilePageClient({
     }
 
     return (
-      <PageContainer noPadding className="min-h-screen">
+      <PageContainer noPadding className="min-h-dvh md:min-h-screen">
         <div className="flex flex-1 overflow-hidden">
           <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
             <div className="flex-1 overflow-y-auto">
@@ -1107,7 +1111,7 @@ export function ProfilePageClient({
                 </div>
               </div>
 
-              <div className="space-y-2 px-4 py-4">
+              <div className="sm:px-4 sm:py-4">
                 {tab === 'trades' ? (
                   <TradesFeed userId={actorInfo.id} />
                 ) : tab === 'replies' ? (
@@ -1146,7 +1150,7 @@ export function ProfilePageClient({
                     }
                   />
                 ) : (
-                  <div className="space-y-3">
+                  <div>
                     {filteredPosts.map((item, i) => {
                       const postData = {
                         id: item.post.id,

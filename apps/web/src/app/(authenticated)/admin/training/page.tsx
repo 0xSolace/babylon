@@ -29,6 +29,7 @@
 
 'use client';
 
+import { logger } from '@babylon/shared';
 import {
   AlertCircle,
   Cpu,
@@ -130,7 +131,11 @@ export default function TrainingDashboard() {
     const res = await fetch('/api/admin/training/status');
 
     if (!res.ok) {
-      console.error('Failed to load status: Failed to load training status');
+      logger.error(
+        'Failed to load training status',
+        undefined,
+        'TrainingAdmin'
+      );
       setLoading(false);
       return;
     }
@@ -175,7 +180,7 @@ export default function TrainingDashboard() {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
+      <div className="flex min-h-dvh items-center justify-center md:min-h-screen">
         <Loader2 className="h-8 w-8 animate-spin" />
       </div>
     );

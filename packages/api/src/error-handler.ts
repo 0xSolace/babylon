@@ -61,6 +61,29 @@ function serializeErrorCause(cause: unknown): Record<string, JsonValue> | null {
   return { message: String(cause) };
 }
 
+const SENSITIVE_CONTEXT_KEY_PATTERN =
+  /(token|secret|password|authorization|cookie|jwt|api[-_]?key|signature|session|credential|wallet|private[-_]?key)/i;
+
+/**
+ * Shallow-sanitizes a BabylonError context object before sending to Sentry.
+ * Redacts values whose key matches sensitive patterns; preserves safe primitives.
+ */
+function sanitizeErrorContext(
+  ctx: Record<string, JsonValue>
+): Record<string, JsonValue> {
+  const out: Record<string, JsonValue> = {};
+  for (const [key, value] of Object.entries(ctx)) {
+    if (SENSITIVE_CONTEXT_KEY_PATTERN.test(key)) {
+      out[key] = '[REDACTED]';
+    } else if (typeof value === 'string' && value.length > 200) {
+      out[key] = `[string:${value.length}]`;
+    } else {
+      out[key] = value;
+    }
+  }
+  return out;
+}
+
 /**
  * Options for error tracking and logging
  */
@@ -78,6 +101,35 @@ export interface ErrorHandlerOptions {
    * Function to capture errors in error tracking (e.g., Sentry)
    */
   captureError?: (error: Error, context: Record<string, JsonValue>) => void;
+}
+
+let defaultErrorCapture: ErrorHandlerOptions['captureError'];
+
+/**
+ * Sets a global default error capture callback used by withErrorHandling.
+ * Route-level options.captureError still takes precedence when provided.
+ */
+export function setDefaultErrorCapture(
+  captureError?: ErrorHandlerOptions['captureError']
+): void {
+  defaultErrorCapture = captureError;
+}
+
+function resolveErrorHandlerOptions(
+  options?: ErrorHandlerOptions
+): ErrorHandlerOptions | undefined {
+  if (options?.captureError) {
+    return options;
+  }
+
+  if (!defaultErrorCapture) {
+    return options;
+  }
+
+  return {
+    ...options,
+    captureError: defaultErrorCapture,
+  };
 }
 
 /**
@@ -102,6 +154,22 @@ export function errorHandler(
       error: String(error),
       ...errorContext,
     });
+
+    // Best-effort capture for non-Error thrown values (rare, but can happen).
+    if (options?.captureError) {
+      const normalized = new Error(String(error));
+      normalized.name = 'NonErrorThrown';
+      options.captureError(normalized, {
+        request: {
+          url: request.url,
+          method: request.method,
+          headers: sanitizeHeaders(request.headers),
+        },
+        error: {
+          message: String(error),
+        },
+      });
+    }
 
     return NextResponse.json(
       {
@@ -170,8 +238,43 @@ export function errorHandler(
     );
   }
 
+  const userId = request.headers.get('x-user-id') || null;
+
   // Handle legacy/simple API errors used by many routes
   if (error instanceof ApiError) {
+    if (error.statusCode >= 500) {
+      logger.error('ApiError (5xx)', {
+        error: error.message,
+        code: error.code,
+        statusCode: error.statusCode,
+        ...errorContext,
+      });
+
+      if (options?.captureError) {
+        try {
+          options.captureError(error, {
+            request: {
+              url: new URL(request.url).pathname,
+              method: request.method,
+              headers: sanitizeHeaders(request.headers),
+            },
+            ...(userId ? { user: { id: userId } } : {}),
+          });
+        } catch (captureErr) {
+          logger.warn('Error capture callback threw for ApiError', {
+            error: String(captureErr),
+          });
+        }
+      }
+    } else {
+      logger.warn('ApiError (4xx)', {
+        error: error.message,
+        code: error.code,
+        statusCode: error.statusCode,
+        ...errorContext,
+      });
+    }
+
     const errorData: Record<string, JsonValue> = { error: error.message };
 
     if (process.env.NODE_ENV === 'development') {
@@ -214,7 +317,6 @@ export function errorHandler(
 
   // Track error with analytics (async, don't await to avoid slowing down response)
   // Skip tracking authentication errors, validation errors, and 4xx client errors as they're expected behavior
-  const userId = request.headers.get('x-user-id') || null;
   const isClientError =
     error instanceof BabylonError &&
     error.statusCode >= 400 &&
@@ -232,23 +334,21 @@ export function errorHandler(
   }
 
   // Capture error in error tracking (only for server errors, not client errors like validation)
-  // Skip capturing validation errors, authentication errors, and known operational errors
+  // ZodError and AuthenticationError are excluded via early returns above.
+  // BabylonError operational 4xx (e.g. ValidationError, BadRequestError) are excluded here.
   const shouldCaptureInErrorTracking =
     options?.captureError &&
     error instanceof Error &&
-    !(error instanceof ZodError) &&
     !(
       error instanceof BabylonError &&
       error.isOperational &&
       error.statusCode < 500
-    ) &&
-    !isAuthenticationError(error) &&
-    error.name !== 'ValidationError';
+    );
 
   if (shouldCaptureInErrorTracking && options.captureError) {
     const context: Record<string, JsonValue> = {
       request: {
-        url: request.url,
+        url: new URL(request.url).pathname,
         method: request.method,
         headers: sanitizeHeaders(request.headers),
       },
@@ -257,9 +357,18 @@ export function errorHandler(
       context.user = { id: userId };
     }
     if (error instanceof BabylonError && error.context) {
-      context.error = { context: error.context, code: error.code };
+      context.error = {
+        context: sanitizeErrorContext(error.context),
+        code: error.code,
+      };
     }
-    options.captureError(error, context);
+    try {
+      options.captureError(error, context);
+    } catch (captureErr) {
+      logger.warn('Error capture callback threw', {
+        error: String(captureErr),
+      });
+    }
   }
 
   // Handle Babylon errors (our custom errors)
@@ -429,36 +538,33 @@ export interface RouteContext {
  */
 // Overload 1: Handler without context (for routes without dynamic params)
 export function withErrorHandling(
-  handler: (req: NextRequest) => Promise<NextResponse> | NextResponse,
+  handler: (req: NextRequest) => Promise<Response> | Response,
   options?: ErrorHandlerOptions
-): (req: NextRequest) => Promise<NextResponse>;
+): (req: NextRequest) => Promise<Response>;
 
 // Overload 2: Handler with context (for routes with dynamic params)
 export function withErrorHandling<TContext extends RouteContext = RouteContext>(
   handler: (
     req: NextRequest,
     context: TContext
-  ) => Promise<NextResponse> | NextResponse,
+  ) => Promise<Response> | Response,
   options?: ErrorHandlerOptions
-): (req: NextRequest, context: TContext) => Promise<NextResponse>;
+): (req: NextRequest, context: TContext) => Promise<Response>;
 
 // Implementation
 export function withErrorHandling<TContext extends RouteContext = RouteContext>(
   handler: (
     req: NextRequest,
     context?: TContext
-  ) => Promise<NextResponse> | NextResponse,
+  ) => Promise<Response> | Response,
   options?: ErrorHandlerOptions
-): (req: NextRequest, context?: TContext) => Promise<NextResponse> {
-  return async (
-    req: NextRequest,
-    context?: TContext
-  ): Promise<NextResponse> => {
+): (req: NextRequest, context?: TContext) => Promise<Response> {
+  return async (req: NextRequest, context?: TContext): Promise<Response> => {
     try {
       const response = await handler(req, context!);
       return response;
     } catch (error) {
-      return errorHandler(error, req, options);
+      return errorHandler(error, req, resolveErrorHandlerOptions(options));
     }
   };
 }
@@ -469,9 +575,10 @@ export function withErrorHandling<TContext extends RouteContext = RouteContext>(
  */
 export function asyncHandler<TContext extends RouteContext = RouteContext>(
   setup?: () => Promise<void>,
-  handler?: (req: NextRequest, context?: TContext) => Promise<NextResponse>,
-  teardown?: () => Promise<void>
-): (req: NextRequest, context?: TContext) => Promise<NextResponse> {
+  handler?: (req: NextRequest, context?: TContext) => Promise<Response>,
+  teardown?: () => Promise<void>,
+  options?: ErrorHandlerOptions
+): (req: NextRequest, context?: TContext) => Promise<Response> {
   return async (req: NextRequest, context?: TContext) => {
     try {
       if (setup) {
@@ -488,7 +595,7 @@ export function asyncHandler<TContext extends RouteContext = RouteContext>(
       }
       return result;
     } catch (error) {
-      return errorHandler(error, req);
+      return errorHandler(error, req, resolveErrorHandlerOptions(options));
     }
   };
 }

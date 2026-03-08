@@ -1,8 +1,9 @@
 'use client';
 
-import { cn, logger } from '@babylon/shared';
+import { cn, logger, POINTS } from '@babylon/shared';
 import {
   AlertCircle,
+  Bell,
   Camera,
   CheckCircle2,
   Key,
@@ -11,6 +12,7 @@ import {
   Moon,
   Palette,
   Receipt,
+  RefreshCw,
   Save,
   Shield,
   Sun,
@@ -31,6 +33,7 @@ import { Skeleton } from '@/components/shared/Skeleton';
 import { Switch } from '@/components/ui/switch';
 import { useAuth } from '@/hooks/useAuth';
 import { useAuthStore } from '@/stores/authStore';
+import { apiFetch } from '@/utils/api-fetch';
 import { uploadImage, validateImageFile } from '@/utils/upload-image';
 
 /**
@@ -91,6 +94,10 @@ export default function SettingsPage() {
   const [saved, setSaved] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [showLinkAccountsModal, setShowLinkAccountsModal] = useState(false);
+  const [isRegisteringOnchain, setIsRegisteringOnchain] = useState(false);
+  const [registerOnchainError, setRegisterOnchainError] = useState<
+    string | null
+  >(null);
 
   // Profile settings state
   const [displayName, setDisplayName] = useState(user?.displayName || '');
@@ -113,6 +120,20 @@ export default function SettingsPage() {
     farcaster: user?.showFarcasterPublic ?? true,
     wallet: user?.showWalletPublic ?? true,
   });
+  const [emailNotificationPreferences, setEmailNotificationPreferences] =
+    useState<{
+      enabled: boolean;
+      realtime: boolean;
+      dailySummary: boolean;
+      weeklySummary: boolean;
+      monthlySummary: boolean;
+    }>({
+      enabled: user?.emailNotificationsEnabled ?? false,
+      realtime: user?.emailNotificationsRealtime ?? true,
+      dailySummary: user?.emailNotificationsDailySummary ?? true,
+      weeklySummary: user?.emailNotificationsWeeklySummary ?? true,
+      monthlySummary: user?.emailNotificationsMonthlySummary ?? true,
+    });
 
   // Theme settings - connected to next-themes
   const { theme, setTheme } = useTheme();
@@ -187,6 +208,13 @@ export default function SettingsPage() {
       farcaster: user?.showFarcasterPublic ?? true,
       wallet: user?.showWalletPublic ?? true,
     });
+    setEmailNotificationPreferences({
+      enabled: user?.emailNotificationsEnabled ?? false,
+      realtime: user?.emailNotificationsRealtime ?? true,
+      dailySummary: user?.emailNotificationsDailySummary ?? true,
+      weeklySummary: user?.emailNotificationsWeeklySummary ?? true,
+      monthlySummary: user?.emailNotificationsMonthlySummary ?? true,
+    });
   }, [
     user?.displayName,
     user?.username,
@@ -194,6 +222,11 @@ export default function SettingsPage() {
     user?.showTwitterPublic,
     user?.showFarcasterPublic,
     user?.showWalletPublic,
+    user?.emailNotificationsEnabled,
+    user?.emailNotificationsRealtime,
+    user?.emailNotificationsDailySummary,
+    user?.emailNotificationsWeeklySummary,
+    user?.emailNotificationsMonthlySummary,
   ]);
 
   const currentProfileImageUrl =
@@ -267,6 +300,127 @@ export default function SettingsPage() {
         payload.visibility.farcaster ?? user.showFarcasterPublic,
       showWalletPublic: payload.visibility.wallet ?? user.showWalletPublic,
     });
+  };
+
+  const updateEmailNotificationPreferences = async (
+    patch: Partial<{
+      enabled: boolean;
+      realtime: boolean;
+      dailySummary: boolean;
+      weeklySummary: boolean;
+      monthlySummary: boolean;
+    }>
+  ) => {
+    if (!user?.id) return;
+
+    const token = await getAccessToken();
+    const headers: HeadersInit = {
+      'Content-Type': 'application/json',
+    };
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
+
+    const response = await fetch(
+      `/api/users/${encodeURIComponent(user.id)}/notification-email-preferences`,
+      {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(patch),
+      }
+    );
+
+    const payload = (await response.json().catch(() => ({}))) as {
+      preferences?: {
+        enabled?: boolean;
+        realtime?: boolean;
+        dailySummary?: boolean;
+        weeklySummary?: boolean;
+        monthlySummary?: boolean;
+      };
+      email?: string | null;
+      emailVerified?: boolean;
+      error?: { message?: string } | string;
+    };
+
+    if (!response.ok || !payload.preferences) {
+      const fallbackMessage =
+        typeof payload.error === 'string'
+          ? payload.error
+          : payload.error?.message;
+      setErrorMessage(
+        fallbackMessage || 'Unable to update notification email preferences.'
+      );
+      return;
+    }
+
+    setEmailNotificationPreferences({
+      enabled:
+        payload.preferences.enabled ?? emailNotificationPreferences.enabled,
+      realtime:
+        payload.preferences.realtime ?? emailNotificationPreferences.realtime,
+      dailySummary:
+        payload.preferences.dailySummary ??
+        emailNotificationPreferences.dailySummary,
+      weeklySummary:
+        payload.preferences.weeklySummary ??
+        emailNotificationPreferences.weeklySummary,
+      monthlySummary:
+        payload.preferences.monthlySummary ??
+        emailNotificationPreferences.monthlySummary,
+    });
+    setErrorMessage(null);
+
+    setUser({
+      ...user,
+      email: payload.email ?? user.email,
+      emailVerified: payload.emailVerified ?? user.emailVerified,
+      emailNotificationsEnabled:
+        payload.preferences.enabled ?? user.emailNotificationsEnabled,
+      emailNotificationsRealtime:
+        payload.preferences.realtime ?? user.emailNotificationsRealtime,
+      emailNotificationsDailySummary:
+        payload.preferences.dailySummary ?? user.emailNotificationsDailySummary,
+      emailNotificationsWeeklySummary:
+        payload.preferences.weeklySummary ??
+        user.emailNotificationsWeeklySummary,
+      emailNotificationsMonthlySummary:
+        payload.preferences.monthlySummary ??
+        user.emailNotificationsMonthlySummary,
+    });
+  };
+
+  const handleRegisterOnchain = async () => {
+    setIsRegisteringOnchain(true);
+    setRegisterOnchainError(null);
+    try {
+      const response = await apiFetch('/api/users/register-onchain', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({}),
+      });
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data?.error || 'Registration failed');
+      }
+      if (user && data.user) {
+        setUser({
+          ...user,
+          onChainRegistered: data.user.onChainRegistered ?? true,
+          agent0TokenId: data.user.agent0TokenId ?? undefined,
+          virtualBalance: data.user.virtualBalance
+            ? Number(data.user.virtualBalance)
+            : user.virtualBalance,
+        });
+      }
+      await refresh();
+    } catch (err) {
+      setRegisterOnchainError(
+        err instanceof Error ? err.message : 'Registration failed'
+      );
+    } finally {
+      setIsRegisteringOnchain(false);
+    }
   };
 
   const handleSave = async () => {
@@ -394,7 +548,7 @@ export default function SettingsPage() {
 
   if (!ready) {
     return (
-      <PageContainer noPadding className="flex w-full flex-col">
+      <PageContainer noPadding className="flex w-full flex-col pt-14 md:pt-0">
         <div className="flex min-w-0 flex-1 flex-col border-border lg:border-r lg:border-l">
           {/* Header skeleton */}
           <div className="sticky top-0 z-10 flex-shrink-0 bg-background/95 backdrop-blur-sm">
@@ -433,7 +587,7 @@ export default function SettingsPage() {
 
   if (!authenticated) {
     return (
-      <PageContainer noPadding className="flex w-full flex-col">
+      <PageContainer noPadding className="flex w-full flex-col pt-14 md:pt-0">
         <div className="flex min-w-0 flex-1 flex-col border-border lg:border-r lg:border-l">
           <div className="sticky top-0 z-10 flex-shrink-0 bg-background/95 backdrop-blur-sm">
             <div className="mx-auto w-full max-w-4xl px-4 py-3 md:px-6">
@@ -452,7 +606,7 @@ export default function SettingsPage() {
   }
 
   return (
-    <PageContainer noPadding className="flex w-full flex-col">
+    <PageContainer noPadding className="flex w-full flex-col pt-14 md:pt-0">
       <div className="flex min-w-0 flex-1 flex-col border-border lg:border-r lg:border-l">
         {/* Sticky Header + Tab Navigation */}
         <div className="sticky top-0 z-10 flex-shrink-0 bg-background/95 backdrop-blur-sm">
@@ -483,18 +637,18 @@ export default function SettingsPage() {
           </div>
         </div>
 
-        <div className="mx-auto w-full max-w-4xl px-4 pb-24 md:px-6">
+        <div className="mx-auto w-full max-w-4xl px-4 pb-8 md:px-6 md:pb-24">
           {/* Tab Content */}
           <div className="pt-6">
             {activeTab === 'profile' && (
-              <div className="rounded-lg border border-border p-5">
+              <div>
                 <div className="space-y-5">
                   <div className="space-y-3">
                     <div className="flex items-center justify-between gap-3">
                       <div>
                         <div className="font-semibold text-sm">Profile</div>
                         <div className="text-muted-foreground text-xs">
-                          Update your public info and images.
+                          Update your public info, images, and social accounts.
                         </div>
                       </div>
                       <button
@@ -503,7 +657,7 @@ export default function SettingsPage() {
                         className="flex min-h-[44px] items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm transition-colors hover:bg-muted/30"
                       >
                         <LinkIcon className="h-4 w-4" />
-                        Link accounts
+                        Manage social accounts
                       </button>
                     </div>
 
@@ -701,6 +855,194 @@ export default function SettingsPage() {
                         />
                       </div>
                     </div>
+                  </div>
+
+                  <div className="rounded-lg border border-border p-4">
+                    <div className="mb-1 flex items-center gap-2 font-semibold text-sm">
+                      <Bell className="h-4 w-4" />
+                      Notification Emails
+                    </div>
+                    <div className="text-muted-foreground text-xs">
+                      Choose which notifications you receive by email.
+                    </div>
+                    <div className="mt-2 text-muted-foreground text-xs">
+                      {user?.email ? (
+                        <>
+                          Email:{' '}
+                          <span className="font-medium">{user.email}</span> (
+                          {user.emailVerified ? 'verified' : 'unverified'})
+                        </>
+                      ) : (
+                        <div className="space-y-2">
+                          <p>
+                            No email linked yet. Enabling email notifications
+                            requires a verified email in Privy.
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => setShowLinkAccountsModal(true)}
+                            className="inline-flex min-h-[36px] items-center gap-1 rounded-md border border-border px-2.5 py-1.5 font-medium text-xs transition-colors hover:bg-muted/30"
+                          >
+                            <LinkIcon className="h-3.5 w-3.5" />
+                            <span>Link my email to Privy</span>
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                    <div className="mt-4 space-y-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="font-medium text-sm">
+                            Enable notification emails
+                          </div>
+                          <div className="truncate text-muted-foreground text-xs">
+                            Master toggle for all email notifications.
+                          </div>
+                        </div>
+                        <Switch
+                          checked={emailNotificationPreferences.enabled}
+                          onCheckedChange={(checked) =>
+                            void updateEmailNotificationPreferences({
+                              enabled: checked,
+                            })
+                          }
+                        />
+                      </div>
+
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="font-medium text-sm">Real-time</div>
+                          <div className="truncate text-muted-foreground text-xs">
+                            Immediate event-based notifications.
+                          </div>
+                        </div>
+                        <Switch
+                          checked={emailNotificationPreferences.realtime}
+                          onCheckedChange={(checked) =>
+                            void updateEmailNotificationPreferences({
+                              realtime: checked,
+                            })
+                          }
+                          disabled={!emailNotificationPreferences.enabled}
+                        />
+                      </div>
+
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="font-medium text-sm">
+                            Daily summary
+                          </div>
+                          <div className="truncate text-muted-foreground text-xs">
+                            One summary email per day.
+                          </div>
+                        </div>
+                        <Switch
+                          checked={emailNotificationPreferences.dailySummary}
+                          onCheckedChange={(checked) =>
+                            void updateEmailNotificationPreferences({
+                              dailySummary: checked,
+                            })
+                          }
+                          disabled={!emailNotificationPreferences.enabled}
+                        />
+                      </div>
+
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="font-medium text-sm">
+                            Weekly summary
+                          </div>
+                          <div className="truncate text-muted-foreground text-xs">
+                            One summary email per week.
+                          </div>
+                        </div>
+                        <Switch
+                          checked={emailNotificationPreferences.weeklySummary}
+                          onCheckedChange={(checked) =>
+                            void updateEmailNotificationPreferences({
+                              weeklySummary: checked,
+                            })
+                          }
+                          disabled={!emailNotificationPreferences.enabled}
+                        />
+                      </div>
+
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="font-medium text-sm">
+                            Monthly summary
+                          </div>
+                          <div className="truncate text-muted-foreground text-xs">
+                            One summary email per month.
+                          </div>
+                        </div>
+                        <Switch
+                          checked={emailNotificationPreferences.monthlySummary}
+                          onCheckedChange={(checked) =>
+                            void updateEmailNotificationPreferences({
+                              monthlySummary: checked,
+                            })
+                          }
+                          disabled={!emailNotificationPreferences.enabled}
+                        />
+                      </div>
+                    </div>
+                    <div className="mt-3 text-muted-foreground text-xs">
+                      All notification emails include an unsubscribe link.
+                    </div>
+                  </div>
+
+                  {/* On-Chain Registration */}
+                  <div className="space-y-3 border-border border-t pt-5">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <div className="font-semibold text-sm">
+                          On-Chain Identity
+                        </div>
+                        <div className="text-muted-foreground text-xs">
+                          {user?.onChainRegistered
+                            ? 'Verified on Ethereum via ERC-8004'
+                            : 'Register your identity on the Ethereum blockchain'}
+                        </div>
+                      </div>
+                      {user?.onChainRegistered ? (
+                        <div className="flex items-center gap-2 rounded-lg border border-green-500/20 bg-green-500/10 px-3 py-2">
+                          <Shield className="h-4 w-4 text-green-500" />
+                          <span className="font-medium text-green-600 text-sm">
+                            Verified
+                          </span>
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={handleRegisterOnchain}
+                          disabled={isRegisteringOnchain}
+                          className="flex min-h-[44px] items-center gap-2 rounded-lg border border-border bg-[#0066FF] px-4 py-2 font-medium text-sm text-white transition-colors hover:bg-[#0055DD] disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          {isRegisteringOnchain ? (
+                            <>
+                              <RefreshCw className="h-4 w-4 animate-spin" />
+                              Registering...
+                            </>
+                          ) : (
+                            <>
+                              <Shield className="h-4 w-4" />
+                              Register (costs {POINTS.ONCHAIN_REGISTRATION} pts)
+                            </>
+                          )}
+                        </button>
+                      )}
+                    </div>
+                    {registerOnchainError && (
+                      <p className="text-red-500 text-xs">
+                        {registerOnchainError}
+                      </p>
+                    )}
+                    {user?.agent0TokenId && (
+                      <p className="font-mono text-muted-foreground text-xs">
+                        Token ID: {user.agent0TokenId}
+                      </p>
+                    )}
                   </div>
                 </div>
 

@@ -16,6 +16,8 @@ import {
   type MentionableAgent,
   useMentionAutocomplete,
 } from './MentionAutocomplete';
+import { ReplyPreview } from './ReplyPreview';
+import type { ReplyToMessage } from './types';
 
 const MAX_TEXTAREA_HEIGHT = 160;
 
@@ -187,6 +189,12 @@ export interface MessageInputProps {
   placeholder?: string;
   /** Mentionable members - when provided, enables @mention autocomplete */
   mentionableMembers?: MentionableAgent[];
+  /** Called when the input is focused (e.g. to scroll chat to bottom on mobile keyboard open) */
+  onInputFocus?: () => void;
+  /** Message being replied to — shows reply preview above input */
+  replyToMessage?: ReplyToMessage | null;
+  /** Called when reply is dismissed */
+  onDismissReply?: () => void;
 }
 
 /**
@@ -205,6 +213,9 @@ export function MessageInput({
   disabled = false,
   placeholder,
   mentionableMembers,
+  onInputFocus,
+  replyToMessage,
+  onDismissReply,
 }: MessageInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -498,6 +509,13 @@ export function MessageInput({
   const hasContent = value.trim().length > 0;
   const canSend = hasContent && !sending && !disabled;
 
+  // Auto-focus textarea when reply is set
+  useEffect(() => {
+    if (replyToMessage) {
+      textareaRef.current?.focus();
+    }
+  }, [replyToMessage]);
+
   if (!authenticated) {
     return (
       <div className={cn('bg-background', compact ? 'px-3 py-2' : 'px-4 py-3')}>
@@ -512,11 +530,22 @@ export function MessageInput({
   }
 
   return (
-    <div ref={containerRef} className={cn(compact ? 'p-3' : 'p-4')}>
+    <div
+      ref={containerRef}
+      className={cn(compact ? 'px-3 pt-0 pb-3' : 'px-4 pt-0 pb-4')}
+    >
+      {/* Reply preview banner */}
+      {replyToMessage && onDismissReply && (
+        <ReplyPreview
+          replyToMessage={replyToMessage}
+          onDismiss={onDismissReply}
+          density={density}
+        />
+      )}
       {/* Composer shell */}
       <div
         className={cn(
-          'relative flex items-center gap-2 rounded-xl border border-border px-3 py-2 transition-shadow duration-200',
+          'relative flex items-end gap-2 rounded-xl border border-border pr-1 pb-1 pl-3 transition-shadow duration-200',
           'focus-within:border-primary/50 focus-within:ring-2 focus-within:ring-primary/30',
           isFocused && 'shadow-sm',
           (sending || disabled) && 'opacity-60'
@@ -541,10 +570,10 @@ export function MessageInput({
               <div
                 ref={highlightRef}
                 className={cn(
-                  'pointer-events-none absolute inset-0 overflow-hidden whitespace-pre-wrap break-words py-[5px]',
+                  'wrap-break-word pointer-events-none absolute inset-0 overflow-hidden whitespace-pre-wrap pt-2',
                   compact
-                    ? 'text-sm leading-[22px] md:text-xs'
-                    : 'text-sm leading-[22px]',
+                    ? 'text-sm leading-5.5 md:text-xs'
+                    : 'text-sm leading-5.5',
                   'text-foreground'
                 )}
                 aria-hidden="true"
@@ -561,7 +590,10 @@ export function MessageInput({
                 onKeyDown={handleKeyDown}
                 onScroll={handleScroll}
                 onSelect={handleSelect}
-                onFocus={() => setIsFocused(true)}
+                onFocus={() => {
+                  setIsFocused(true);
+                  onInputFocus?.();
+                }}
                 onBlur={() => setIsFocused(false)}
                 aria-label="Message input, use @ to mention members"
                 placeholder={placeholderText}
@@ -572,10 +604,10 @@ export function MessageInput({
                 autoCorrect="off"
                 autoCapitalize="off"
                 className={cn(
-                  'relative z-10 max-h-40 w-full resize-none overflow-y-auto bg-transparent py-[5px]',
+                  'relative z-10 max-h-40 w-full resize-none overflow-y-auto bg-transparent pt-2',
                   compact
-                    ? 'min-h-[32px] text-sm leading-[22px] md:text-xs'
-                    : 'min-h-[32px] text-sm leading-[22px]',
+                    ? 'min-h-8 text-sm leading-5.5 md:text-xs'
+                    : 'min-h-8 text-sm leading-5.5',
                   'text-transparent caret-foreground placeholder:text-muted-foreground/40',
                   'outline-none',
                   'disabled:cursor-not-allowed'
@@ -588,16 +620,19 @@ export function MessageInput({
               value={value}
               onChange={handleChange}
               onKeyDown={handleKeyDown}
-              onFocus={() => setIsFocused(true)}
+              onFocus={() => {
+                setIsFocused(true);
+                onInputFocus?.();
+              }}
               onBlur={() => setIsFocused(false)}
               placeholder={placeholderText}
               disabled={sending || disabled}
               rows={1}
               className={cn(
-                'max-h-40 w-full resize-none overflow-y-auto bg-transparent py-[5px]',
+                'max-h-40 w-full resize-none overflow-y-auto bg-transparent pt-2',
                 compact
-                  ? 'min-h-[32px] text-sm leading-[22px] md:text-xs'
-                  : 'min-h-[32px] text-sm leading-[22px]',
+                  ? 'min-h-8 text-sm leading-5.5 md:text-xs'
+                  : 'min-h-8 text-sm leading-5.5',
                 'text-foreground placeholder:text-muted-foreground/40',
                 'outline-none',
                 'disabled:cursor-not-allowed'
@@ -612,7 +647,7 @@ export function MessageInput({
           onClick={onSend}
           disabled={!canSend}
           className={cn(
-            'flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-all duration-150',
+            'flex size-8.5 shrink-0 items-center justify-center rounded-lg transition-all duration-150',
             canSend
               ? 'bg-primary text-primary-foreground hover:bg-primary/90 active:scale-95'
               : 'text-muted-foreground'

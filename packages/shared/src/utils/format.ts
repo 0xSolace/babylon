@@ -225,7 +225,7 @@ export function formatCurrency(
   const useThousandsSeparator =
     typeof options === 'object' && options.useThousandsSeparator;
 
-  // Handle negative numbers: sign before symbol (e.g. -ƀ100.00)
+  // Handle negative numbers: sign before symbol for readability (-ƀ100.00)
   const isNegative = amount < 0;
   const absoluteAmount = Math.abs(amount);
   const sign = isNegative ? '-' : '';

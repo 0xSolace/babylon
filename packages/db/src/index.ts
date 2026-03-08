@@ -24,6 +24,7 @@ export type { DrizzleClient, JsonValue, SQLValue } from './client';
 export { TableRepository } from './client';
 // Database runtime (connection management, `db`, JSON mode)
 export * from './db';
+
 // Import-then-export so runtimes (e.g. Bun in CI) resolve these reliably from the barrel
 import {
   asPublic,
@@ -33,7 +34,14 @@ import {
   getJsonStoragePath,
   getStorageMode,
 } from './db';
-export { asPublic, asSystem, asUser, getJsonState, getJsonStoragePath, getStorageMode };
+export {
+  asPublic,
+  asSystem,
+  asUser,
+  getJsonState,
+  getJsonStoragePath,
+  getStorageMode,
+};
 /**
  * Re-export unique relation types from model-types.
  *
@@ -101,11 +109,10 @@ export {
   sql,
   sum,
 } from 'drizzle-orm';
+
 // Re-export database service (import-then-export for reliable resolution in Bun/CI)
-import {
-  DatabaseService,
-  getDbInstance,
-} from './database-service';
+import { DatabaseService, getDbInstance } from './database-service';
+
 export type { FeedPost } from './database-service';
 export { DatabaseService, getDbInstance };
 // Re-export query helpers

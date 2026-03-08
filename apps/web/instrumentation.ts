@@ -26,10 +26,19 @@ export async function register() {
     const {
       setPointsService,
       setNotificationService,
+      setDefaultErrorCapture,
       PointsService,
       createNotification,
       logDevCredentials,
     } = await import('@babylon/api');
+    const { createSentryApiRouteCapture } = await import(
+      './src/lib/sentry/api-route-capture'
+    );
+
+    // Route-level captureError options still override this default.
+    setDefaultErrorCapture(
+      sentryDisabled ? undefined : createSentryApiRouteCapture()
+    );
 
     // Log development credentials at startup (only in dev mode)
     // This makes it easy for developers to authenticate with admin APIs
@@ -81,6 +90,11 @@ export async function register() {
   // Initialize Sentry for server-side (Node.js runtime)
   if (!sentryDisabled && process.env.NEXT_RUNTIME === 'nodejs') {
     await import('./sentry.server.config');
+  }
+
+  // Initialize Sentry for Edge Runtime (middleware, edge route handlers)
+  if (!sentryDisabled && process.env.NEXT_RUNTIME === 'edge') {
+    await import('./sentry.edge.config');
   }
 
   // Register reputation sync service if agents package is available

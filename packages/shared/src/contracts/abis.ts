@@ -1,13 +1,16 @@
 /**
  * Contract ABIs for ERC-8004 and Prediction Market interactions
  *
- * These ABIs are shared across the Babylon codebase for interacting with
- * on-chain contracts. ERC-8004 operations should primarily use the Agent0 SDK
- * (@babylon/agents/agent0), but these ABIs are available for direct contract
- * interactions when needed.
+ * IMPORTANT: On-chain identity registration now uses Agent0 SDK exclusively
+ * (canonical ERC-8004 on Ethereum mainnet). The Identity Registry ABI below
+ * is retained for backward compatibility (reading existing registrations on
+ * Base Sepolia) but should NOT be used for new registrations.
+ *
+ * @see https://eips.ethereum.org/EIPS/eip-8004
  */
 
-// ERC-8004 Identity Registry ABI
+// ERC-8004 Identity Registry ABI (Babylon custom extension on Base Sepolia)
+// @deprecated New registrations use Agent0 SDK. This ABI is kept for reading legacy data.
 export const IDENTITY_REGISTRY_ABI = [
   // ERC-721 standard functions
   'function balanceOf(address owner) external view returns (uint256)',
@@ -43,7 +46,8 @@ export const IDENTITY_REGISTRY_ABI = [
   'event Agent0Unlinked(uint256 indexed tokenId)',
 ] as const;
 
-// ERC-8004 Reputation System ABI
+// ERC-8004 Reputation System ABI (Base Sepolia)
+// @deprecated Game reputation is now tracked in the database. This ABI is kept for reading legacy data.
 export const REPUTATION_SYSTEM_ABI = [
   // Reputation queries
   'function getReputation(uint256 _tokenId) external view returns (uint256 totalBets, uint256 winningBets, uint256 totalVolume, uint256 profitLoss, uint256 accuracyScore, uint256 trustScore, bool isBanned)',
@@ -399,4 +403,19 @@ export const PRICE_STORAGE_FACET_ABI = [
   'event PricesBatchUpdated(bytes32[] marketIds, uint256 tick, uint256 timestamp)',
   'event PriceBatchSubmitted(bytes32 indexed marketId, uint256 startTick, uint256 endTick, bytes32 merkleRoot)',
   'event AuthorizedUpdaterSet(bytes32 indexed marketId, address indexed updater, bool authorized)',
+] as const;
+
+// Minimal ERC-20 ABI for balance reads and transfers
+export const ERC20_ABI = [
+  'function balanceOf(address owner) view returns (uint256)',
+  'function transfer(address to, uint256 value) returns (bool)',
+  'function decimals() view returns (uint8)',
+  'function symbol() view returns (string)',
+  'function name() view returns (string)',
+] as const;
+
+// ERC-721 transfer ABI (for NFT sends in Phase 4)
+export const ERC721_TRANSFER_ABI = [
+  'function safeTransferFrom(address from, address to, uint256 tokenId)',
+  'function ownerOf(uint256 tokenId) view returns (address)',
 ] as const;

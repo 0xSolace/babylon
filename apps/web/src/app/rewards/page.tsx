@@ -4,6 +4,7 @@ import {
   getProfileUrl,
   getReferralShareText,
   getReferralUrl,
+  logger,
   POINTS,
 } from '@babylon/shared';
 import {
@@ -12,10 +13,9 @@ import {
   Copy,
   ExternalLink,
   Gift,
-  Link as LinkIcon,
   Share2,
+  Shield,
   TrendingUp,
-  Twitter,
   UserPlus,
   Users,
   Wallet,
@@ -24,7 +24,6 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { DailyStreakCard } from '@/components/daily-login';
-import { LinkSocialAccountsModal } from '@/components/profile/LinkSocialAccountsModal';
 import { RewardsSkeleton } from '@/components/rewards/RewardsSkeleton';
 import { Avatar } from '@/components/shared/Avatar';
 import { ExternalShareButton } from '@/components/shared/ExternalShareButton';
@@ -33,6 +32,7 @@ import { Separator } from '@/components/shared/Separator';
 import { ShareEarnModal } from '@/components/shared/ShareEarnModal';
 import { useAuth } from '@/hooks/useAuth';
 import { useAuthStore } from '@/stores/authStore';
+import { buildRewardTasks, type RewardTaskDefinition } from './reward-tasks';
 
 interface ReferredUser {
   id: string;
@@ -73,6 +73,7 @@ interface ReferralData {
     farcasterUsername: string | null;
     twitterUsername: string | null;
     walletAddress: string | null;
+    onChainRegistered: boolean;
   };
   stats: ReferralStats;
   referredUsers: ReferredUser[];
@@ -96,7 +97,6 @@ export default function RewardsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [copiedUrl, setCopiedUrl] = useState(false);
-  const [showLinkSocialModal, setShowLinkSocialModal] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
   const [livePortfolio, setLivePortfolio] = useState<{
     totalPoints: number;
@@ -146,7 +146,7 @@ export default function RewardsPage() {
 
     const token = await getAccessToken();
     if (!token) {
-      console.error('Failed to get access token');
+      logger.error('Failed to get access token', undefined, 'RewardsPage');
       setError('Authentication required');
       setLoading(false);
       return;
@@ -234,80 +234,72 @@ export default function RewardsPage() {
     return total;
   };
 
-  const rewardTasks = referralData
-    ? [
-        {
-          id: 'profile',
-          title: 'Complete Profile',
-          description: (() => {
-            if (referralData.user.pointsAwardedForProfile) {
-              return 'Username, image, and bio complete! ✓';
-            }
-            const missing = [];
-            if (!referralData.user.username) missing.push('username');
-            if (!referralData.user.profileImageUrl) missing.push('image');
-            if (!referralData.user.bio || referralData.user.bio.length < 50)
-              missing.push('bio (50+ chars)');
-            return `Set ${missing.join(', ')}`;
-          })(),
-          points: POINTS.PROFILE_COMPLETION,
-          completed: referralData.user.pointsAwardedForProfile,
-          action: 'profile-settings',
-          icon: UserPlus,
-          color: 'text-purple-500',
-        },
-        {
-          id: 'twitter',
-          title: 'Link X Account',
-          description: referralData.user.twitterUsername
-            ? `@${referralData.user.twitterUsername}`
-            : 'Connect your X account',
-          points: POINTS.TWITTER_LINK,
-          completed: referralData.user.pointsAwardedForTwitter,
-          action: 'link-social',
-          icon: Twitter,
-          color: 'text-blue-400',
-        },
-        {
-          id: 'farcaster',
-          title: 'Link Farcaster',
-          description: referralData.user.farcasterUsername
-            ? `@${referralData.user.farcasterUsername}`
-            : 'Connect Farcaster account',
-          points: POINTS.FARCASTER_LINK,
-          completed: referralData.user.pointsAwardedForFarcaster,
-          action: 'link-social',
-          icon: LinkIcon,
-          color: 'text-purple-400',
-        },
-        {
-          id: 'wallet',
-          title: 'Connect Wallet',
-          description: referralData.user.walletAddress
-            ? `${referralData.user.walletAddress.slice(0, 6)}...${referralData.user.walletAddress.slice(-4)}`
-            : 'Link your wallet',
-          points: POINTS.WALLET_CONNECT,
-          completed: referralData.user.pointsAwardedForWallet,
-          action: 'wallet-connect',
-          icon: Wallet,
-          color: 'text-orange-500',
-        },
-      ]
-    : [];
+  const rewardTasks = buildRewardTasks(referralData?.user ?? null);
 
-  const handleTaskClick = (_taskId: string, action: string) => {
-    if (action === 'link-social') {
-      setShowLinkSocialModal(true);
-    } else if (action === 'profile-settings') {
+  const rewardTaskVisuals: Record<
+    RewardTaskDefinition['id'],
+    { icon: typeof UserPlus; color: string }
+  > = {
+    profile: {
+      icon: UserPlus,
+      color: 'text-purple-500',
+    },
+    wallet: {
+      icon: Wallet,
+      color: 'text-orange-500',
+    },
+    'onchain-registration': {
+      icon: Shield,
+      color: 'text-emerald-500',
+    },
+  };
+
+  const [registeringOnchain, setRegisteringOnchain] = useState(false);
+
+  const handleTaskClick = async (_taskId: string, action: string) => {
+    if (action === 'profile-settings') {
       window.location.href = '/settings';
     } else if (action === 'wallet-connect') {
-      // Trigger Privy login modal for wallet connection
       if (authenticated) {
-        // If already authenticated, redirect to settings to connect wallet
         window.location.href = '/settings';
       } else {
-        // Trigger login modal
         login();
+      }
+    } else if (action === 'register-onchain') {
+      if (registeringOnchain) return;
+      setRegisteringOnchain(true);
+      try {
+        const token = await getAccessToken();
+        if (!token) {
+          toast.error('Authentication required');
+          return;
+        }
+        const res = await fetch('/api/users/register-onchain', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({}),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          toast.error(data.error || 'Registration failed');
+          return;
+        }
+        if (data.onchain?.alreadyRegistered) {
+          toast.info('Already registered on-chain');
+        } else {
+          toast.success('On-chain registration complete!');
+        }
+        window.dispatchEvent(new CustomEvent('rewards-updated'));
+        refresh();
+        fetchReferralData();
+        fetchPortfolio();
+      } catch {
+        toast.error('On-chain registration failed. Please try again.');
+      } finally {
+        setRegisteringOnchain(false);
       }
     }
   };
@@ -341,6 +333,16 @@ export default function RewardsPage() {
               </h1>
               <p className="text-muted-foreground">
                 Complete tasks and invite friends to earn points
+              </p>
+              <p className="mt-1 text-muted-foreground text-sm">
+                Manage X and Farcaster connections in{' '}
+                <a
+                  href="/settings?tab=profile"
+                  className="text-primary hover:underline"
+                >
+                  Profile settings
+                </a>
+                .
               </p>
             </div>
 
@@ -440,18 +442,21 @@ export default function RewardsPage() {
 
               <div className="grid gap-3">
                 {rewardTasks.map((task) => {
-                  const Icon = task.icon;
+                  const { icon: Icon, color } = rewardTaskVisuals[task.id];
                   return (
                     <button
                       key={task.id}
                       onClick={() => handleTaskClick(task.id, task.action)}
+                      disabled={
+                        task.action === 'register-onchain' && registeringOnchain
+                      }
                       className={`flex w-full items-center gap-4 rounded-lg border p-4 text-left transition-all ${
                         task.completed
                           ? 'border-green-500/30 bg-green-500/10'
-                          : 'cursor-pointer border-border hover:bg-muted/50'
+                          : 'cursor-pointer border-border hover:bg-muted/50 disabled:cursor-wait disabled:opacity-60'
                       }`}
                     >
-                      <div className={`shrink-0 ${task.color}`}>
+                      <div className={`shrink-0 ${color}`}>
                         <Icon className="h-6 w-6" />
                       </div>
                       <div className="min-w-0 flex-1">
@@ -469,13 +474,22 @@ export default function RewardsPage() {
                       </div>
                       <div className="shrink-0 text-right">
                         <div
-                          className={`font-bold text-sm ${task.completed ? 'text-green-500' : 'text-yellow-500'}`}
+                          className={`font-bold text-sm ${
+                            task.completed
+                              ? 'text-green-500'
+                              : task.points < 0
+                                ? 'text-amber-500'
+                                : 'text-yellow-500'
+                          }`}
                         >
-                          {task.completed ? '✓ ' : '+'}
-                          {task.points}
+                          {task.completed
+                            ? `✓ ${Math.abs(task.points)}`
+                            : task.points < 0
+                              ? `${task.points}`
+                              : `+${task.points}`}
                         </div>
                         <div className="text-muted-foreground text-xs">
-                          points
+                          {task.points < 0 ? 'cost' : 'points'}
                         </div>
                       </div>
                     </button>
@@ -661,23 +675,20 @@ export default function RewardsPage() {
               <p className="text-muted-foreground">
                 Complete tasks and invite friends to earn points
               </p>
+              <p className="mt-1 text-muted-foreground text-sm">
+                Manage X and Farcaster connections in{' '}
+                <a
+                  href="/settings?tab=profile"
+                  className="text-primary hover:underline"
+                >
+                  Profile settings
+                </a>
+                .
+              </p>
             </div>
 
             {/* Stats Row */}
-            <div className="grid grid-cols-3 gap-2 sm:gap-3">
-              {/* Total Earned */}
-              <div className="rounded-lg border border-border p-3">
-                <div className="mb-1 flex items-center gap-1">
-                  <Award className="h-4 w-4 text-yellow-500" />
-                  <h2 className="font-medium text-muted-foreground text-xs">
-                    Earned
-                  </h2>
-                </div>
-                <div className="font-bold text-2xl text-yellow-500">
-                  {calculateTotalEarned().toLocaleString()}
-                </div>
-              </div>
-
+            <div className="space-y-2 sm:grid sm:grid-cols-3 sm:gap-3 sm:space-y-0">
               {/* Total Points */}
               <div className="rounded-lg border border-border p-3">
                 <div className="mb-1 flex items-center gap-1">
@@ -693,55 +704,70 @@ export default function RewardsPage() {
                 </div>
               </div>
 
-              {/* Total Referrals */}
-              <div className="rounded-lg border border-border p-3">
-                <div className="mb-1 flex items-center gap-1">
-                  <Users className="h-4 w-4 text-primary" />
-                  <h2 className="font-medium text-muted-foreground text-xs">
-                    Referrals
-                  </h2>
+              <div className="grid grid-cols-2 gap-2 sm:contents">
+                {/* Total Earned */}
+                <div className="rounded-lg border border-border p-3">
+                  <div className="mb-1 flex items-center gap-1">
+                    <Award className="h-4 w-4 text-yellow-500" />
+                    <h2 className="font-medium text-muted-foreground text-xs">
+                      Earned
+                    </h2>
+                  </div>
+                  <div className="font-bold text-2xl text-yellow-500">
+                    {calculateTotalEarned().toLocaleString()}
+                  </div>
                 </div>
-                <div className="font-bold text-2xl text-foreground">
-                  {referralData.stats.totalReferrals}
+
+                {/* Total Referrals */}
+                <div className="rounded-lg border border-border p-3">
+                  <div className="mb-1 flex items-center gap-1">
+                    <Users className="h-4 w-4 text-primary" />
+                    <h2 className="font-medium text-muted-foreground text-xs">
+                      Referrals
+                    </h2>
+                  </div>
+                  <div className="font-bold text-2xl text-foreground">
+                    {referralData.stats.totalReferrals}
+                  </div>
+                  {referralData.stats.weeklyReferralCount !== undefined &&
+                    referralData.stats.weeklyLimit !== undefined && (
+                      <div className="mt-1.5 border-border border-t pt-1.5">
+                        <div className="mb-0.5 flex items-center justify-between text-xs">
+                          <span className="text-muted-foreground">Week</span>
+                          <span
+                            className={`font-semibold ${
+                              referralData.stats.weeklyReferralCount >=
+                              referralData.stats.weeklyLimit
+                                ? 'text-red-500'
+                                : referralData.stats.weeklyReferralCount >=
+                                    referralData.stats.weeklyLimit * 0.8
+                                  ? 'text-yellow-500'
+                                  : 'text-foreground'
+                            }`}
+                          >
+                            {referralData.stats.weeklyReferralCount}/
+                            {referralData.stats.weeklyLimit}
+                          </span>
+                        </div>
+                        <div className="h-1 w-full rounded-full bg-background">
+                          <div
+                            className={`h-1 rounded-full transition-all ${
+                              referralData.stats.weeklyReferralCount >=
+                              referralData.stats.weeklyLimit
+                                ? 'bg-red-500'
+                                : referralData.stats.weeklyReferralCount >=
+                                    referralData.stats.weeklyLimit * 0.8
+                                  ? 'bg-yellow-500'
+                                  : 'bg-primary'
+                            }`}
+                            style={{
+                              width: `${Math.min(100, (referralData.stats.weeklyReferralCount / referralData.stats.weeklyLimit) * 100)}%`,
+                            }}
+                          />
+                        </div>
+                      </div>
+                    )}
                 </div>
-                {referralData.stats.weeklyReferralCount !== undefined &&
-                  referralData.stats.weeklyLimit !== undefined && (
-                    <div className="mt-1.5 border-border border-t pt-1.5">
-                      <div className="mb-0.5 flex items-center justify-between text-xs">
-                        <span className="text-muted-foreground">Week</span>
-                        <span
-                          className={`font-semibold ${
-                            referralData.stats.weeklyReferralCount >=
-                            referralData.stats.weeklyLimit
-                              ? 'text-red-500'
-                              : referralData.stats.weeklyReferralCount >=
-                                  referralData.stats.weeklyLimit * 0.8
-                                ? 'text-yellow-500'
-                                : 'text-foreground'
-                          }`}
-                        >
-                          {referralData.stats.weeklyReferralCount}/
-                          {referralData.stats.weeklyLimit}
-                        </span>
-                      </div>
-                      <div className="h-1 w-full rounded-full bg-background">
-                        <div
-                          className={`h-1 rounded-full transition-all ${
-                            referralData.stats.weeklyReferralCount >=
-                            referralData.stats.weeklyLimit
-                              ? 'bg-red-500'
-                              : referralData.stats.weeklyReferralCount >=
-                                  referralData.stats.weeklyLimit * 0.8
-                                ? 'bg-yellow-500'
-                                : 'bg-primary'
-                          }`}
-                          style={{
-                            width: `${Math.min(100, (referralData.stats.weeklyReferralCount / referralData.stats.weeklyLimit) * 100)}%`,
-                          }}
-                        />
-                      </div>
-                    </div>
-                  )}
               </div>
             </div>
 
@@ -757,18 +783,21 @@ export default function RewardsPage() {
 
               <div className="space-y-2">
                 {rewardTasks.map((task) => {
-                  const Icon = task.icon;
+                  const { icon: Icon, color } = rewardTaskVisuals[task.id];
                   return (
                     <button
                       key={task.id}
                       onClick={() => handleTaskClick(task.id, task.action)}
+                      disabled={
+                        task.action === 'register-onchain' && registeringOnchain
+                      }
                       className={`flex w-full items-center gap-3 rounded-lg border p-3 text-left transition-all ${
                         task.completed
                           ? 'border-green-500/30 bg-green-500/10'
-                          : 'cursor-pointer border-border hover:bg-muted/50'
+                          : 'cursor-pointer border-border hover:bg-muted/50 disabled:cursor-wait disabled:opacity-60'
                       }`}
                     >
-                      <div className={`shrink-0 ${task.color}`}>
+                      <div className={`shrink-0 ${color}`}>
                         <Icon className="h-5 w-5" />
                       </div>
                       <div className="min-w-0 flex-1">
@@ -789,11 +818,16 @@ export default function RewardsPage() {
                           className={
                             task.completed
                               ? 'text-green-500'
-                              : 'text-yellow-500'
+                              : task.points < 0
+                                ? 'text-amber-500'
+                                : 'text-yellow-500'
                           }
                         >
-                          {task.completed ? '✓' : '+'}
-                          {task.points}
+                          {task.completed
+                            ? `✓ ${Math.abs(task.points)}`
+                            : task.points < 0
+                              ? `${task.points}`
+                              : `+${task.points}`}
                         </span>
                       </div>
                     </button>
@@ -824,8 +858,6 @@ export default function RewardsPage() {
                 </button>
               </div>
             </div>
-
-            <Separator />
 
             {/* Referral Link */}
             <div className="rounded-lg border border-border p-4">
@@ -958,18 +990,6 @@ export default function RewardsPage() {
           </div>
         </div>
       )}
-
-      {/* Link Social Accounts Modal */}
-      <LinkSocialAccountsModal
-        isOpen={showLinkSocialModal}
-        onClose={() => {
-          setShowLinkSocialModal(false);
-          // Refresh data to update the UI
-          if (user?.id && authenticated) {
-            fetchReferralData();
-          }
-        }}
-      />
 
       {/* Share & Earn Modal */}
       <ShareEarnModal

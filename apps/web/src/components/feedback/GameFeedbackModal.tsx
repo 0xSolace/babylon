@@ -6,7 +6,7 @@
 
 'use client';
 
-import { cn, parseJsonString } from '@babylon/shared';
+import { cn, logger, parseJsonString } from '@babylon/shared';
 import { Loader2, Send, X } from 'lucide-react';
 import { useEffect, useRef, useState, useTransition } from 'react';
 import { toast } from 'sonner';
@@ -263,7 +263,11 @@ export function GameFeedbackModal({ isOpen, onClose }: GameFeedbackModalProps) {
           body: JSON.stringify({ url }),
         }).catch((error) => {
           // Log for observability but don't block user flow
-          console.warn('Failed to cleanup orphaned screenshot:', url, error);
+          logger.warn(
+            'Failed to cleanup orphaned screenshot',
+            { url, error },
+            'GameFeedbackModal'
+          );
         });
       };
 
@@ -373,9 +377,6 @@ export function GameFeedbackModal({ isOpen, onClose }: GameFeedbackModalProps) {
         <div className="flex shrink-0 items-start justify-between border-border border-b p-4 md:p-6">
           <div>
             <h2 className="font-bold text-foreground text-xl">Game Feedback</h2>
-            <p className="mt-1 text-muted-foreground text-sm">
-              Help us improve the game
-            </p>
           </div>
           <button
             type="button"
@@ -447,49 +448,33 @@ export function GameFeedbackModal({ isOpen, onClose }: GameFeedbackModalProps) {
         {/* Action Buttons - Fixed footer */}
         {feedbackType && (
           <div className="shrink-0 border-border border-t bg-background p-4 md:p-6">
-            <div className="flex items-center gap-3">
-              <button
-                type="button"
-                onClick={handleSubmit}
-                disabled={
-                  isSubmitting || (retryAfter !== null && retryAfter > 0)
-                }
-                className={cn(
-                  'flex flex-1 items-center justify-center gap-2 rounded-lg px-4 py-3 font-semibold transition-colors',
-                  'bg-[#1c9cf0] text-primary-foreground hover:bg-[#1c9cf0]/90',
-                  'disabled:cursor-not-allowed disabled:opacity-50'
-                )}
-              >
-                {isSubmitting ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    <span>Submitting...</span>
-                  </>
-                ) : retryAfter !== null && retryAfter > 0 ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    <span>Rate limited. Retry in {retryAfter}s</span>
-                  </>
-                ) : (
-                  <>
-                    <Send className="h-4 w-4" />
-                    <span>Submit Feedback</span>
-                  </>
-                )}
-              </button>
-              <button
-                type="button"
-                onClick={handleClose}
-                disabled={isSubmitting}
-                className={cn(
-                  'rounded-lg px-4 py-3 font-semibold transition-colors',
-                  'bg-muted text-foreground hover:bg-muted/70',
-                  'disabled:cursor-not-allowed disabled:opacity-50'
-                )}
-              >
-                Cancel
-              </button>
-            </div>
+            <button
+              type="button"
+              onClick={handleSubmit}
+              disabled={isSubmitting || (retryAfter !== null && retryAfter > 0)}
+              className={cn(
+                'flex w-full items-center justify-center gap-2 rounded-lg px-4 py-3 font-semibold transition-colors',
+                'bg-[#1c9cf0] text-primary-foreground hover:bg-[#1c9cf0]/90',
+                'disabled:cursor-not-allowed disabled:opacity-50'
+              )}
+            >
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span>Submitting...</span>
+                </>
+              ) : retryAfter !== null && retryAfter > 0 ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span>Rate limited. Retry in {retryAfter}s</span>
+                </>
+              ) : (
+                <>
+                  <Send className="h-4 w-4" />
+                  <span>Submit Feedback</span>
+                </>
+              )}
+            </button>
           </div>
         )}
       </div>
