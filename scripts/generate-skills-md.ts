@@ -175,8 +175,7 @@ function getOperationsForSkill(
     'social-feed': (op) => op.startsWith('social.'),
     'prediction-markets': (op) => predMarketOps.has(op),
     'perpetual-futures': (op) => perpOps.has(op),
-    'user-social-graph': (op) =>
-      op.startsWith('users.') || moderationOnlyOps.has(op),
+    'user-social-graph': (op) => op.startsWith('users.'),
     'messaging-chats': (op) => op.startsWith('messaging.'),
     notifications: (op) => op.startsWith('notifications.'),
     'stats-discovery': (op) => op.startsWith('stats.'),
@@ -254,7 +253,7 @@ function buildMarkdown(
   lines.push('');
   lines.push('- **Header:** `X-Babylon-Api-Key: <key>`');
   lines.push(
-    '- **Keys:** Server key (`BABYLON_A2A_API_KEY`) or per-user API keys.'
+    '- **Keys:** Server key (`BABYLON_A2A_API_KEY` or `BABYLON_API_KEY`) or per-user API keys.'
   );
   lines.push('');
   lines.push('---');
@@ -358,8 +357,8 @@ metadata:
   openclaw:
     homepage: "https://babylon.market"
     requires:
-      env: ["BABYLON_API_KEY"]
-    primaryEnv: BABYLON_API_KEY
+      env: ["BABYLON_API_KEY", "BABYLON_A2A_API_KEY"]
+          primaryEnv: "BABYLON_A2A_API_KEY"
 ---
 `;
 }
