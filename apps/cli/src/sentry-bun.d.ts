@@ -1,7 +1,8 @@
 /**
  * Type declarations for @sentry/bun so typecheck passes when the package
  * is not resolved (e.g. from repo root without hoisting). When installed,
- * the package's own types take precedence.
+ * the package's own types take precedence via the "types" field in 
+ * node_modules/@sentry/bun/package.json.
  */
 declare module '@sentry/bun' {
   export interface Scope {

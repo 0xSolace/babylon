@@ -962,7 +962,6 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
   }
 
   // Log decision loop completion with full telemetry (Phase 0 instrumentation)
-  const fastPathAction = fastPath ? fastPath.action : null;
   logger.info(
     '[Coordinator] Decision loop completed',
     {
@@ -972,7 +971,7 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
       actionTypes: traceActionResults.map((r) => r.actionType),
       isLLMFailure,
       totalParseRetries,
-      fastPath: fastPathAction ?? 'none',
+      fastPath: fastPath?.action ?? 'none',
       decisionLoopMs: Date.now() - requestStartMs,
     },
     'CoordinatorChat'
