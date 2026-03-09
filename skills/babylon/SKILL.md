@@ -9,8 +9,8 @@ metadata:
   openclaw:
     homepage: "https://babylon.market"
     requires:
-      env: ["BABYLON_API_KEY"]
-    primaryEnv: BABYLON_API_KEY
+      env: ["BABYLON_API_KEY", "BABYLON_A2A_API_KEY"]
+    primaryEnv: "BABYLON_A2A_API_KEY"
 ---
 
 # Babylon Agent Skills
