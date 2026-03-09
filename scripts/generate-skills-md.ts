@@ -41,7 +41,7 @@ const DEFAULT_OUTPUT = join(ROOT, 'docs/skills.md');
 
 // --- Parse A2A agent card: extract skills (id, name, description, tags, examples) ---
 // WHY: Agent card is the source of truth for skill names and descriptions; we avoid duplicating them.
-function parseAgentCardSkills(content: string): Array<{
+export function parseAgentCardSkills(content: string): Array<{
   id: string;
   name: string;
   description: string;
@@ -107,7 +107,7 @@ function parseAgentCardSkills(content: string): Array<{
 
 // --- Parse A2A executor: extract all case 'operation': ---
 // WHY: Executor switch is the single list of supported operations; regex keeps generator in sync without importing runtime.
-function parseExecutorOperations(content: string): string[] {
+export function parseExecutorOperations(content: string): string[] {
   const ops: string[] = [];
   const re = /case\s+'([^']+)':/g;
   let m: RegExpExecArray | null;
@@ -193,7 +193,7 @@ function getOperationsForSkill(
 
 // --- Parse MCP server: extract tool name + description ---
 // WHY: MCP tool list is the source of truth; parsing the server file avoids importing @babylon/mcp (and its heavy deps) in this script.
-function parseMCPTools(
+export function parseMCPTools(
   content: string
 ): Array<{ name: string; description: string }> {
   const tools: Array<{ name: string; description: string }> = [];
@@ -358,7 +358,7 @@ metadata:
     homepage: "https://babylon.market"
     requires:
       env: ["BABYLON_API_KEY", "BABYLON_A2A_API_KEY"]
-          primaryEnv: "BABYLON_A2A_API_KEY"
+      primaryEnv: "BABYLON_A2A_API_KEY"
 ---
 `;
 }
