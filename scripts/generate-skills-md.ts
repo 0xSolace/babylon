@@ -215,7 +215,7 @@ export function parseMCPTools(
 
 // --- Build markdown ---
 // WHY: One body is reused for docs/skills.md and for SKILL.md (package); frontmatter is added only in package mode.
-function buildMarkdown(
+export function generateSkillsMarkdown(
   skills: ReturnType<typeof parseAgentCardSkills>,
   operations: string[],
   byPrefix: Map<string, string[]>,
@@ -411,7 +411,7 @@ function main() {
   const byPrefix = groupOperationsByPrefix(operations);
   const mcpTools = parseMCPTools(mcpContent);
 
-  const mdBody = buildMarkdown(skills, operations, byPrefix, mcpTools, {
+  const mdBody = generateSkillsMarkdown(skills, operations, byPrefix, mcpTools, {
     skipGeneratedNotice: packageMode,
   });
 
