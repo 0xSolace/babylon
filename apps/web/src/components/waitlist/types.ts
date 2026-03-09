@@ -30,6 +30,7 @@ export interface WaitlistData {
   totalReferralPoints?: number;
   invitedUsers?: ReferralUser[];
   qualifiedUsers?: ReferralUser[];
+  whitelistRankThreshold?: number;
 }
 
 /**
