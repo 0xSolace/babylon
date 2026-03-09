@@ -2,7 +2,7 @@
 
 Agent skill reference for [Babylon](https://babylon.market): A2A and MCP endpoints, skills, and operations. Use when configuring agents to interact with Babylon (Cursor, Claude Code, and other [AgentSkills](https://agentskills.io)-compatible tools).
 
-**This file is auto-generated.** Run `bun run scripts/generate-skills-md.ts` to regenerate.
+**This file is auto-generated.** Run `bun run scripts/generate-skills-md.ts` to regenerate after modifying A2A skills, executor operations, or MCP tools.
 
 ---
 
