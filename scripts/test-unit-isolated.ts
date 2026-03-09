@@ -95,6 +95,7 @@ async function main() {
   if (failures.length > 0) {
     console.log('\nFailed files:');
     for (const f of failures) console.log(`  - ${f}`);
+    // Note: exits with code 1 to clearly indicate test failures after logging results
     process.exit(1);
   }
 }
