@@ -20,7 +20,7 @@ const TEST_DIR = join(ROOT, 'packages/testing/unit');
 const PRELOAD = join(ROOT, 'packages/testing/unit/preload.ts');
 const CONCURRENCY = 4;
 
-function collectTestFiles(dir: string): string[] {
+export function collectTestFiles(dir: string): string[] {
   const files: string[] = [];
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     const full = join(dir, entry.name);
