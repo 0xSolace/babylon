@@ -13,9 +13,9 @@ import Link from 'next/link';
 import { useEffect, useRef, useState } from 'react';
 import {
   fetchLeaderboardData,
+  isAbortError,
   type LeaderboardData,
   type LeaderboardUser,
-  isAbortError,
 } from '@/app/leaderboard/fetchLeaderboardData';
 import { FollowButton } from '@/components/interactions/FollowButton';
 import type { SelectedUser } from '@/components/leaderboard/LeaderboardWidgetSidebar';

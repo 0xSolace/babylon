@@ -284,95 +284,83 @@ class CachedDatabaseService {
     comments: number;
     reactions: number;
     posts: number;
-  } | null> {
+  }> {
     const cacheKey = userId;
 
-    try {
-      return await getCacheOrFetch(
-        cacheKey,
-        async () => {
-          // Execute all count queries in parallel for minimum latency
-          const [
-            followersResult,
-            followingResult,
-            actorFollowsResult,
-            positionsResult,
-            commentsResult,
-            reactionsResult,
-            postCountResult,
-          ] = await Promise.all([
-            // Count followers (users following this user)
-            db
-              .select({ count: count() })
-              .from(follows)
-              .where(eq(follows.followingId, userId)),
+    return getCacheOrFetch(
+      cacheKey,
+      async () => {
+        // Execute all count queries in parallel for minimum latency
+        const [
+          followersResult,
+          followingResult,
+          actorFollowsResult,
+          positionsResult,
+          commentsResult,
+          reactionsResult,
+          postCountResult,
+        ] = await Promise.all([
+          // Count followers (users following this user)
+          db
+            .select({ count: count() })
+            .from(follows)
+            .where(eq(follows.followingId, userId)),
 
-            // Count following (users this user follows)
-            db
-              .select({ count: count() })
-              .from(follows)
-              .where(eq(follows.followerId, userId)),
+          // Count following (users this user follows)
+          db
+            .select({ count: count() })
+            .from(follows)
+            .where(eq(follows.followerId, userId)),
 
-            // Count actor follows
-            db
-              .select({ count: count() })
-              .from(userActorFollows)
-              .where(eq(userActorFollows.userId, userId)),
+          // Count actor follows
+          db
+            .select({ count: count() })
+            .from(userActorFollows)
+            .where(eq(userActorFollows.userId, userId)),
 
-            // Count positions
-            db
-              .select({ count: count() })
-              .from(positions)
-              .where(eq(positions.userId, userId)),
+          // Count positions
+          db
+            .select({ count: count() })
+            .from(positions)
+            .where(eq(positions.userId, userId)),
 
-            // Count comments
-            db
-              .select({ count: count() })
-              .from(comments)
-              .where(eq(comments.authorId, userId)),
+          // Count comments
+          db
+            .select({ count: count() })
+            .from(comments)
+            .where(eq(comments.authorId, userId)),
 
-            // Count reactions
-            db
-              .select({ count: count() })
-              .from(reactions)
-              .where(eq(reactions.userId, userId)),
+          // Count reactions
+          db
+            .select({ count: count() })
+            .from(reactions)
+            .where(eq(reactions.userId, userId)),
 
-            // Count posts
-            db
-              .select({ count: count() })
-              .from(posts)
-              .where(eq(posts.authorId, userId)),
-          ]);
+          // Count posts
+          db
+            .select({ count: count() })
+            .from(posts)
+            .where(eq(posts.authorId, userId)),
+        ]);
 
-          const followers = Number(followersResult[0]?.count ?? 0);
-          const following = Number(followingResult[0]?.count ?? 0);
-          const actorFollows = Number(actorFollowsResult[0]?.count ?? 0);
+        const followers = Number(followersResult[0]?.count ?? 0);
+        const following = Number(followingResult[0]?.count ?? 0);
+        const actorFollows = Number(actorFollowsResult[0]?.count ?? 0);
 
-          return {
-            followers,
-            following: following + actorFollows,
-            positions: Number(positionsResult[0]?.count ?? 0),
-            comments: Number(commentsResult[0]?.count ?? 0),
-            reactions: Number(reactionsResult[0]?.count ?? 0),
-            posts: Number(postCountResult[0]?.count ?? 0),
-          };
-        },
-        {
-          namespace: 'user:profile:stats',
-          ttl: 60, // Cache for 1 minute
-        }
-      );
-    } catch (error) {
-      logger.error(
-        'Failed to fetch cached user profile stats',
-        {
-          userId,
-          error: error instanceof Error ? error.message : String(error),
-        },
-        'CachedDatabaseService'
-      );
-      return null;
-    }
+        return {
+          followers,
+          following: following + actorFollows,
+          positions: Number(positionsResult[0]?.count ?? 0),
+          comments: Number(commentsResult[0]?.count ?? 0),
+          reactions: Number(reactionsResult[0]?.count ?? 0),
+          posts: Number(postCountResult[0]?.count ?? 0),
+        };
+      },
+      {
+        namespace: 'user:profile:stats',
+        ttl: 60, // Cache for 1 minute
+      }
+    );
   }
 
   /**

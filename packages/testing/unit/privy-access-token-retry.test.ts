@@ -42,7 +42,9 @@ describe('privy access token retry', () => {
 
   it('classifies network-shaped Privy errors as retryable', () => {
     expect(
-      isRetryablePrivyAccessTokenError(new Error('Load failed while refreshing session'))
+      isRetryablePrivyAccessTokenError(
+        new Error('Load failed while refreshing session')
+      )
     ).toBe(true);
     expect(
       isRetryablePrivyAccessTokenError(new Error('Invalid JWT token'))

@@ -12,7 +12,8 @@ mock.module('@babylon/api', () => ({
   addPublicReadHeaders: () => {},
   publicRateLimit: mockPublicRateLimit,
   successResponse: (data: unknown) => data,
-  withErrorHandling: (handler: (request: Request) => Promise<unknown>) => handler,
+  withErrorHandling: (handler: (request: Request) => Promise<unknown>) =>
+    handler,
 }));
 
 mock.module('@babylon/core/markets/prediction', () => ({

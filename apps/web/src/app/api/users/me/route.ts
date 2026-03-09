@@ -471,7 +471,7 @@ function buildUserResponse(
     createdAt: dbUser.createdAt.toISOString(),
     updatedAt: dbUser.updatedAt.toISOString(),
     gameGuideCompletedAt: dbUser.gameGuideCompletedAt?.toISOString() ?? null,
-    stats: stats || undefined,
+    stats,
   };
 }
 

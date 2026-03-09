@@ -45,22 +45,36 @@ describe('getOptionalProfileStats', () => {
     expect(mockLogger.error).not.toHaveBeenCalled();
   });
 
-  it('returns undefined and warns when stats are unavailable', async () => {
+  it('returns zero fallback and warns when stats are unavailable', async () => {
     mockGetUserProfileStats.mockResolvedValue(null);
 
     const result = await getOptionalProfileStats('user-1', 'ProfileRoute');
 
-    expect(result).toBeUndefined();
+    expect(result).toEqual({
+      positions: 0,
+      comments: 0,
+      reactions: 0,
+      followers: 0,
+      following: 0,
+      posts: 0,
+    });
     expect(mockLogger.warn).toHaveBeenCalledTimes(1);
     expect(mockLogger.error).not.toHaveBeenCalled();
   });
 
-  it('returns undefined and logs when stats fetching throws', async () => {
+  it('returns zero fallback and logs when stats fetching throws', async () => {
     mockGetUserProfileStats.mockRejectedValue(new Error('redis unavailable'));
 
     const result = await getOptionalProfileStats('user-1', 'ProfileRoute');
 
-    expect(result).toBeUndefined();
+    expect(result).toEqual({
+      positions: 0,
+      comments: 0,
+      reactions: 0,
+      followers: 0,
+      following: 0,
+      posts: 0,
+    });
     expect(mockLogger.error).toHaveBeenCalledTimes(1);
   });
 });

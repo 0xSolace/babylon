@@ -59,8 +59,7 @@ export async function getPrivyAccessTokenWithRetry(
     try {
       return await getAccessToken();
     } catch (error) {
-      lastError =
-        error instanceof Error ? error : new Error(String(error));
+      lastError = error instanceof Error ? error : new Error(String(error));
 
       if (
         !isRetryablePrivyAccessTokenError(error) ||
