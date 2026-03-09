@@ -143,6 +143,7 @@
 
 import {
   authenticate,
+  authenticateWithDbUser,
   ConflictError,
   cachedDb,
   ensureOfflineWalletReady,
@@ -167,6 +168,7 @@ import {
   type PrivyIdentitySnapshot,
   shouldSyncMissingPrivyIdentity,
 } from '@/lib/auth/privyIdentitySync';
+import { POST as updateProfilePOST } from '../[userId]/update-profile/route';
 
 type PrivyUserWithWallets = PrivyUser &
   PrivyUserWithEmails &
@@ -1146,3 +1148,17 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     user: responseUser,
   });
 });
+
+const updateCurrentUserProfile = withErrorHandling(
+  async (request: NextRequest) => {
+    const authUser = await authenticateWithDbUser(request);
+
+    return updateProfilePOST(request, {
+      params: Promise.resolve({ userId: authUser.dbUserId }),
+    });
+  }
+);
+
+export const POST = updateCurrentUserProfile;
+export const PUT = updateCurrentUserProfile;
+export const PATCH = updateCurrentUserProfile;

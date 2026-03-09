@@ -43,7 +43,9 @@
  */
 
 import {
+  findUserByIdentifier,
   getCache,
+  optionalAuth,
   PointsService,
   setCache,
   successResponse,
@@ -71,6 +73,7 @@ type TeamLeaderboardResult = Awaited<
 type CachedLeaderboardData = WalletLeaderboardResult | TeamLeaderboardResult;
 
 export const GET = withErrorHandling(async (request: NextRequest) => {
+  const authUser = await optionalAuth(request);
   const { searchParams } = new URL(request.url);
   const queryParams = Object.fromEntries(searchParams.entries());
   const validationResult = LeaderboardQuerySchema.safeParse(queryParams);
@@ -81,6 +84,12 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
 
   const { page, pageSize, type, userId } = validationResult.data;
   const leaderboardType = type ?? 'wallet';
+  let effectiveUserId = authUser?.dbUserId ?? authUser?.userId;
+
+  if (userId) {
+    const resolvedUser = await findUserByIdentifier(userId, { id: true });
+    effectiveUserId = resolvedUser?.id ?? userId;
+  }
 
   const cacheKey = `${leaderboardType}-${page}-${pageSize}`;
 
@@ -112,12 +121,25 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
 
   let currentUser: Awaited<ReturnType<typeof PointsService.getUserPosition>> =
     null;
-  if (userId) {
-    currentUser = await PointsService.getUserPosition(
-      userId,
-      leaderboardType,
-      pageSize
-    );
+  if (effectiveUserId) {
+    try {
+      currentUser = await PointsService.getUserPosition(
+        effectiveUserId,
+        leaderboardType,
+        pageSize
+      );
+    } catch (error) {
+      logger.warn(
+        'Failed to compute leaderboard currentUser; returning null',
+        {
+          effectiveUserId,
+          leaderboardType,
+          pageSize,
+          error: error instanceof Error ? error.message : String(error),
+        },
+        'GET /api/leaderboard'
+      );
+    }
   }
 
   logger.info(
@@ -128,7 +150,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       leaderboardType,
       totalCount: leaderboardData.totalCount,
       cacheHit,
-      hasUserId: !!userId,
+      hasUserId: !!effectiveUserId,
     },
     'GET /api/leaderboard'
   );
@@ -148,7 +170,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     200,
     {
       'x-cache': cacheHit ? 'leaderboard-hit' : 'leaderboard-miss',
-      'Cache-Control': userId
+      'Cache-Control': effectiveUserId
         ? 'private, no-store'
         : `public, s-maxage=${CACHE_TTL_SECONDS}, stale-while-revalidate=${STALE_SECONDS}`,
       Vary: 'Accept-Encoding',

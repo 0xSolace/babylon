@@ -27,10 +27,16 @@
  *               properties:
  *                 pendingDMs:
  *                   type: integer
+ *                   description: Combined DM/chat badge count for backwards compatibility
+ *                 pendingDMRequests:
+ *                   type: integer
  *                   description: Number of pending DM requests
+ *                 unreadMessages:
+ *                   type: integer
+ *                   description: Number of unread chat notifications
  *                 hasNewMessages:
  *                   type: boolean
- *                   description: Whether there are new messages in last 24h
+ *                   description: Whether there are unread chat notifications
  *       401:
  *         description: Unauthorized
  *
@@ -55,52 +61,37 @@ import type { NextRequest } from 'next/server';
  * Get counts of pending DMs and unread messages
  *
  * Returns:
- * - pendingDMs: Number of DM requests from anons awaiting acceptance
- * - hasNewMessages: Boolean indicating if there are any new messages
+ * - pendingDMs: Combined chat badge count (legacy field)
+ * - pendingDMRequests: Number of DM requests from anons awaiting acceptance
+ * - unreadMessages: Number of unread chat notifications
+ * - hasNewMessages: Boolean indicating if there are any unread chat notifications
  */
 export const GET = withErrorHandling(async (request: NextRequest) => {
   const user = await authenticate(request);
 
   const counts = await asUser(user, async (db) => {
-    let pendingDMCount = 0;
-    pendingDMCount = await db.dmAcceptance.count({
+    const pendingDMCount = await db.dmAcceptance.count({
       where: {
         userId: user.userId,
         status: 'pending',
       },
     });
 
-    const chatsWithParticipation = await db.chatParticipant.findMany({
+    const unreadMessageCount = await db.notification.count({
       where: {
         userId: user.userId,
-      },
-      select: {
-        chatId: true,
+        read: false,
+        chatId: {
+          not: null,
+        },
       },
     });
 
-    const chatIds = chatsWithParticipation.map((cp) => cp.chatId);
-
-    let recentMessageCount = 0;
-    if (chatIds.length > 0) {
-      recentMessageCount = await db.message.count({
-        where: {
-          chatId: {
-            in: chatIds,
-          },
-          senderId: {
-            not: user.userId,
-          },
-          createdAt: {
-            gte: new Date(Date.now() - 24 * 60 * 60 * 1000),
-          },
-        },
-      });
-    }
-
     return {
-      pendingDMs: pendingDMCount,
-      hasNewMessages: recentMessageCount > 0,
+      pendingDMs: pendingDMCount + unreadMessageCount,
+      pendingDMRequests: pendingDMCount,
+      unreadMessages: unreadMessageCount,
+      hasNewMessages: unreadMessageCount > 0,
     };
   });
 
