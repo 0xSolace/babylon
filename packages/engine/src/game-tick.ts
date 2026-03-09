@@ -1484,6 +1484,8 @@ export async function resolveQuestionPayouts(
       .set({
         status: 'resolved',
         resolvedOutcome: winningSide,
+        resolutionReviewedAt: resolutionTimestamp,
+        resolutionReviewedBy: 'system',
         updatedAt: resolutionTimestamp,
       })
       .where(eq(questionsSchema.id, question.id));
@@ -2371,6 +2373,8 @@ const marketVolatilityState = new Map<
   }
 >();
 
+const MIN_MARKET_VOLATILITY = 0.005;
+
 /**
  * Simulates natural market volatility for all perp markets.
  *
@@ -2450,7 +2454,7 @@ export async function simulateMarketVolatility(options?: {
       let state = marketVolatilityState.get(market.ticker);
       if (!state) {
         state = {
-          recentVolatility: 0.003, // Start with 0.3% base volatility
+          recentVolatility: MIN_MARKET_VOLATILITY,
           momentum: 0,
           lastMove: 0,
         };
@@ -2472,8 +2476,10 @@ export async function simulateMarketVolatility(options?: {
       state.lastMove = move;
       state.momentum = move * 0.3; // 30% momentum carries forward
       // Volatility clustering: if big move, stay volatile
-      state.recentVolatility =
-        state.recentVolatility * 0.8 + Math.abs(move) * 0.2;
+      state.recentVolatility = Math.max(
+        MIN_MARKET_VOLATILITY,
+        state.recentVolatility * 0.8 + Math.abs(move) * 0.2
+      );
 
       // Only update if price changed meaningfully (> 0.01%)
       if (Math.abs(clampedPrice - currentPrice) / currentPrice > 0.0001) {
