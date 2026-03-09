@@ -140,9 +140,7 @@ mock.module('../services/whitelist-email-service', () => ({
 }));
 
 const { autoWhitelistCurrentTopN, normalizeWhitelistLeaderboardThreshold } =
-  await import(
-  '../services/whitelist-service'
-  );
+  await import('../services/whitelist-service');
 
 describe('autoWhitelistCurrentTopN → whitelist welcome emails', () => {
   beforeEach(() => {

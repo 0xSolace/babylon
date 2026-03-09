@@ -25,8 +25,8 @@ import { toast } from 'sonner';
 import { LinkSocialAccountsModal } from '@/components/profile/LinkSocialAccountsModal';
 import { Avatar } from '@/components/shared/Avatar';
 import {
-  getWaitlistHeaderCopy,
   getPrimaryAccessLabel,
+  getWaitlistHeaderCopy,
   type NftAccessState,
   shouldAutoRedirectWhitelistedUser,
 } from '@/components/shared/comingSoonAccess';

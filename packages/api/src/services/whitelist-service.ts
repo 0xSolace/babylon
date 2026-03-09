@@ -157,6 +157,9 @@ export async function checkWhitelistAccess(
     .where(eq(whitelist.userId, userId))
     .limit(1);
 
+  // A revoked entry is a hard block — even if the user would currently qualify
+  // via the leaderboard threshold, an admin revocation is intentionally permanent
+  // until the row is deleted or un-revoked.
   if (entry?.revokedAt) {
     return { allowed: false, source: null };
   }

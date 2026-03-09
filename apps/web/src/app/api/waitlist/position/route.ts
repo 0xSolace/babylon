@@ -66,8 +66,8 @@
 
 import {
   authenticate,
-  getEffectiveWhitelistLeaderboardThreshold,
   getCache,
+  getEffectiveWhitelistLeaderboardThreshold,
   setCache,
   successResponse,
   WaitlistService,
@@ -158,8 +158,6 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   );
 
   const position = await WaitlistService.getWaitlistPosition(userId);
-  const whitelistRankThreshold =
-    await getEffectiveWhitelistLeaderboardThreshold();
 
   // If user doesn't exist or isn't on waitlist, return null gracefully
   // This handles new Privy users who haven't completed signup yet
@@ -259,6 +257,9 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       completedAt: r.completedAt?.toISOString() ?? new Date().toISOString(),
       status: 'qualified' as const,
     }));
+
+  const whitelistRankThreshold =
+    await getEffectiveWhitelistLeaderboardThreshold();
 
   const responseBody: PositionResponse = {
     // IMPORTANT: Return leaderboardRank as "position" for UI compatibility

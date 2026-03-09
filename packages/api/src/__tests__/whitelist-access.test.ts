@@ -20,26 +20,22 @@ const usersTable = {
   isAgent: 'isAgent',
 };
 
-let mockWhitelistEntry:
-  | {
-      source: 'leaderboard' | 'admin_manual' | 'snapshot_first_100';
-      revokedAt: Date | null;
-    }
-  | null = null;
+let mockWhitelistEntry: {
+  source: 'leaderboard' | 'admin_manual' | 'snapshot_first_100';
+  revokedAt: Date | null;
+} | null = null;
 let mockWhitelistConfigRow: { leaderboardRankThreshold: number | null } | null =
   {
     leaderboardRankThreshold: 25_000,
   };
-let mockUserRow:
-  | {
-      id: string;
-      reputationPoints: number;
-      invitePoints: number;
-      createdAt: Date;
-      isActor: boolean;
-      isAgent: boolean;
-    }
-  | null = null;
+let mockUserRow: {
+  id: string;
+  reputationPoints: number;
+  invitePoints: number;
+  createdAt: Date;
+  isActor: boolean;
+  isAgent: boolean;
+} | null = null;
 let mockUsersAheadCount = 0;
 
 const mockDbSelect = mock((fields?: unknown) => ({
@@ -47,7 +43,8 @@ const mockDbSelect = mock((fields?: unknown) => ({
     if (table === whitelistTable) {
       return {
         where: () => ({
-          limit: () => Promise.resolve(mockWhitelistEntry ? [mockWhitelistEntry] : []),
+          limit: () =>
+            Promise.resolve(mockWhitelistEntry ? [mockWhitelistEntry] : []),
         }),
       };
     }
@@ -248,5 +245,13 @@ describe('whitelist access resolution', () => {
     };
 
     await expect(isUserWhitelistedByLeaderboard('user-1')).resolves.toBe(false);
+  });
+
+  it('returns false when the user does not exist in the users table', async () => {
+    mockUserRow = null;
+
+    await expect(isUserWhitelistedByLeaderboard('nonexistent')).resolves.toBe(
+      false
+    );
   });
 });
