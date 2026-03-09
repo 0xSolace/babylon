@@ -3,6 +3,7 @@
  *
  * @route GET /api/notifications - Get user notifications
  * @route PATCH /api/notifications - Mark notifications as read
+ * @route DELETE /api/notifications - Clear notifications
  * @access Authenticated
  *
  * @description
@@ -78,6 +79,18 @@
  *     responses:
  *       200:
  *         description: Notifications marked as read
+ *       401:
+ *         description: Unauthorized
+ *   delete:
+ *     tags:
+ *       - Notifications
+ *     summary: Clear notifications
+ *     description: Deletes specific notifications or clears all notifications for the authenticated user.
+ *     security:
+ *       - PrivyAuth: []
+ *     responses:
+ *       200:
+ *         description: Notifications cleared
  *       401:
  *         description: Unauthorized
  *
@@ -195,6 +208,19 @@ import {
   NotificationsQuerySchema,
 } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
+import { z } from 'zod';
+
+const ClearNotificationsSchema = z
+  .object({
+    notificationIds: z.array(z.string().min(1)).optional(),
+    clearAll: z.boolean().optional(),
+  })
+  .refine(
+    (value) => value.clearAll === true || value.notificationIds !== undefined,
+    {
+      message: 'Provide notificationIds or clearAll=true',
+    }
+  );
 
 /**
  * GET /api/notifications - Get user notifications
@@ -449,4 +475,61 @@ export const PATCH = withErrorHandling(async (request: NextRequest) => {
   throw new InternalServerError(
     'Invalid request: provide notificationIds array or markAllAsRead=true'
   );
+});
+
+/**
+ * DELETE /api/notifications - Clear notifications
+ */
+export const DELETE = withErrorHandling(async (request: NextRequest) => {
+  const authUser = await authenticate(request);
+  const rawBody = await request.text();
+  const body = rawBody.trim().length > 0 ? JSON.parse(rawBody) : {};
+  const { notificationIds, clearAll } = ClearNotificationsSchema.parse(body);
+
+  if (clearAll) {
+    await db
+      .delete(notifications)
+      .where(eq(notifications.userId, authUser.userId));
+
+    await invalidateCachePattern(`notifications:${authUser.userId}:*`, {
+      namespace: CACHE_KEYS.USER,
+    });
+
+    logger.info(
+      'All notifications cleared',
+      { userId: authUser.userId },
+      'DELETE /api/notifications'
+    );
+
+    return successResponse({
+      success: true,
+      message: 'All notifications cleared',
+    });
+  }
+
+  const idsToDelete = notificationIds ?? [];
+
+  await db
+    .delete(notifications)
+    .where(
+      and(
+        inArray(notifications.id, idsToDelete),
+        eq(notifications.userId, authUser.userId)
+      )
+    );
+
+  await invalidateCachePattern(`notifications:${authUser.userId}:*`, {
+    namespace: CACHE_KEYS.USER,
+  });
+
+  logger.info(
+    'Notifications cleared',
+    { userId: authUser.userId, count: idsToDelete.length },
+    'DELETE /api/notifications'
+  );
+
+  return successResponse({
+    success: true,
+    message: 'Notifications cleared',
+  });
 });

@@ -246,6 +246,8 @@ export const POST = withErrorHandling(
           .set({
             status: 'resolved',
             resolvedOutcome: resolution,
+            resolutionReviewedAt: resolvedAt,
+            resolutionReviewedBy: admin.userId,
             updatedAt: resolvedAt,
           })
           .where(eq(questions.id, marketId));

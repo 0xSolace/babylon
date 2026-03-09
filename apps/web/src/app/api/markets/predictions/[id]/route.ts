@@ -26,6 +26,7 @@ import {
 } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';
+import { getPublicResolutionAudit } from '../_resolution-audit';
 
 type UserPositionSnapshot = {
   id: string;
@@ -214,6 +215,8 @@ export const GET = withErrorHandling(
       Number(balanceTradeCountRows[0]?.count ?? 0) +
       Number(npcTradeCountRows[0]?.count ?? 0);
 
+    const resolutionAudit = await getPublicResolutionAudit(marketId);
+
     const payload = {
       id: market.id,
       text: market.question,
@@ -236,6 +239,7 @@ export const GET = withErrorHandling(
       oracleRevealTxHash: market.oracleRevealTxHash ?? null,
       resolutionProofUrl: market.resolutionProofUrl ?? null,
       resolutionDescription: market.resolutionDescription ?? null,
+      resolutionAudit,
     };
 
     logger.info(
