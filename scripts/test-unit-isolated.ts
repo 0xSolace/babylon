@@ -18,7 +18,8 @@ import { join, relative, resolve } from 'node:path';
 const ROOT = resolve(import.meta.dir, '..');
 const TEST_DIR = join(ROOT, 'packages/testing/unit');
 const PRELOAD = join(ROOT, 'packages/testing/unit/preload.ts');
-const CONCURRENCY = 4;
+// Make concurrency configurable via env var, with a sensible default
+const CONCURRENCY = Number(process.env.TEST_CONCURRENCY) || 4;
 
 export function collectTestFiles(dir: string): string[] {
   const files: string[] = [];
