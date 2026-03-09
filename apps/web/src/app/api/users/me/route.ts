@@ -145,7 +145,6 @@ import {
   authenticate,
   authenticateWithDbUser,
   ConflictError,
-  cachedDb,
   ensureOfflineWalletReady,
   getPrivyClient,
   InternalServerError,
@@ -169,6 +168,7 @@ import {
   shouldSyncMissingPrivyIdentity,
 } from '@/lib/auth/privyIdentitySync';
 import { POST as updateProfilePOST } from '../[userId]/update-profile/route';
+import { getOptionalProfileStats } from '@/lib/users/profile-stats';
 
 type PrivyUserWithWallets = PrivyUser &
   PrivyUserWithEmails &
@@ -420,7 +420,7 @@ async function awardPointsForNewPrivyIdentityLinks(
 
 function buildUserResponse(
   dbUser: UserSelectResult,
-  stats: Awaited<ReturnType<typeof cachedDb.getUserProfileStats>> | null
+  stats: Awaited<ReturnType<typeof getOptionalProfileStats>>
 ) {
   return {
     id: dbUser.id,
@@ -471,7 +471,7 @@ function buildUserResponse(
     createdAt: dbUser.createdAt.toISOString(),
     updatedAt: dbUser.updatedAt.toISOString(),
     gameGuideCompletedAt: dbUser.gameGuideCompletedAt?.toISOString() ?? null,
-    stats: stats || undefined,
+    stats,
   };
 }
 
@@ -773,7 +773,10 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       }
 
       // Get cached profile stats for the linked user
-      const stats = await cachedDb.getUserProfileStats(linkedUser.id);
+      const stats = await getOptionalProfileStats(
+        linkedUser.id,
+        'GET /api/users/me'
+      );
 
       const responseUser = buildUserResponse(linkedUser, stats);
 
@@ -1120,7 +1123,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   }
 
   // Get cached profile stats
-  const stats = await cachedDb.getUserProfileStats(dbUser.id);
+  const stats = await getOptionalProfileStats(dbUser.id, 'GET /api/users/me');
 
   const responseUser = buildUserResponse(dbUser, stats);
 
