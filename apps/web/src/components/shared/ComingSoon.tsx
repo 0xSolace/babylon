@@ -62,8 +62,8 @@ function getAppBaseUrl(): string {
  * Waitlist data structure containing user position and points information.
  */
 interface WaitlistData {
-  position: number; // Leaderboard rank (dynamic)
-  leaderboardRank: number; // Same as position
+  position: number; // Current rank shown to the user
+  leaderboardRank: number; // Dynamic rank based on points
   waitlistPosition: number; // Historical signup order
   totalAhead: number;
   totalCount: number;
@@ -2711,13 +2711,16 @@ export function ComingSoon() {
                 {/* Position Card */}
                 <div className="rounded-xl border border-primary/10 bg-primary/5 p-4 backdrop-blur-sm transition-colors hover:bg-primary/10 sm:p-5">
                   <div className="mb-2 text-muted-foreground text-sm">
-                    Position
+                    Current Rank
                   </div>
                   <div className="mb-1 whitespace-nowrap font-bold text-lg text-primary sm:text-xl md:text-2xl">
                     #{waitlistData.position}
                   </div>
                   <div className="text-muted-foreground text-sm">
                     Top {waitlistData.percentile}%
+                  </div>
+                  <div className="text-muted-foreground/80 text-xs">
+                    Signup order #{waitlistData.waitlistPosition}
                   </div>
                 </div>
 

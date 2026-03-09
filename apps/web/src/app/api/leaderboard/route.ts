@@ -49,8 +49,9 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import { LeaderboardQuerySchema, logger } from '@babylon/shared';
+import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
+import { parseLeaderboardQuery } from './query';
 
 const CACHE_KEY_NAMESPACE = 'leaderboard';
 const CACHE_TTL_MS = (() => {
@@ -72,14 +73,7 @@ type CachedLeaderboardData = WalletLeaderboardResult | TeamLeaderboardResult;
 
 export const GET = withErrorHandling(async (request: NextRequest) => {
   const { searchParams } = new URL(request.url);
-  const queryParams = Object.fromEntries(searchParams.entries());
-  const validationResult = LeaderboardQuerySchema.safeParse(queryParams);
-
-  if (!validationResult.success) {
-    throw validationResult.error;
-  }
-
-  const { page, pageSize, type, userId } = validationResult.data;
+  const { page, pageSize, type, userId } = parseLeaderboardQuery(searchParams);
   const leaderboardType = type ?? 'wallet';
 
   const cacheKey = `${leaderboardType}-${page}-${pageSize}`;

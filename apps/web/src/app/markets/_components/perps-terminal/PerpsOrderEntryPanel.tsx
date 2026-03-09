@@ -399,7 +399,7 @@ export function PerpsOrderEntryPanel({
           <div>
             <div className="mb-1 flex items-center justify-between">
               <label className="font-medium text-muted-foreground text-xs">
-                Size (USD)
+                Notional Size (USD)
               </label>
               <span className="text-muted-foreground text-xs">
                 Min {BABYLON_POINTS_SYMBOL}
