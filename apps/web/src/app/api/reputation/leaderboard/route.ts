@@ -42,6 +42,13 @@
  *           minimum: 0
  *           default: 5
  *         description: Minimum games/trades threshold
+ *       - in: query
+ *         name: timeRange
+ *         schema:
+ *           type: string
+ *           enum: [all, daily, weekly, monthly]
+ *           default: all
+ *         description: Filter leaderboard entries by recent activity window
  *     responses:
  *       200:
  *         description: Reputation leaderboard
@@ -80,6 +87,8 @@
  *                       type: integer
  *                     minGames:
  *                       type: integer
+ *                     timeRange:
+ *                       type: string
  *
  * @example
  * ```typescript
@@ -110,20 +119,22 @@ import {
 import { getReputationLeaderboard } from '@babylon/engine';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
+import {
+  getReputationActivityCutoff,
+  parseReputationLeaderboardQuery,
+} from './query';
 
 export const GET = withErrorHandling(async function GET(request: NextRequest) {
   const { error, rateLimitInfo } = await publicRateLimit(request);
   if (error) return error;
 
   const { searchParams } = new URL(request.url);
-
-  const limitParam = searchParams.get('limit');
-  const minGamesParam = searchParams.get('minGames');
-
-  const limit = limitParam ? Number.parseInt(limitParam, 10) : 100;
-  const minGames = minGamesParam ? Number.parseInt(minGamesParam, 10) : 5;
-
-  const leaderboard = await getReputationLeaderboard(limit, minGames);
+  const { limit, minGames, timeRange } =
+    parseReputationLeaderboardQuery(searchParams);
+  const activeSince = getReputationActivityCutoff(timeRange);
+  const leaderboard = await getReputationLeaderboard(limit, minGames, {
+    activeSince,
+  });
 
   const res = NextResponse.json({
     success: true,
@@ -132,6 +143,8 @@ export const GET = withErrorHandling(async function GET(request: NextRequest) {
       count: leaderboard.length,
       limit,
       minGames,
+      timeRange,
+      activitySince: activeSince?.toISOString() ?? null,
     },
   });
   if (rateLimitInfo) addPublicReadHeaders(res, rateLimitInfo);

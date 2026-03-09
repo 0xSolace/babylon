@@ -145,7 +145,8 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     return res;
   }
 
-  const searchTerm = query.trim().toLowerCase();
+  const rawSearchTerm = query.trim();
+  const searchTerm = rawSearchTerm.toLowerCase();
 
   // Get blocked/muted users to exclude from search
   const [blockedIds, mutedIds, blockedByIds] = await Promise.all([
@@ -159,60 +160,123 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   // Search for users (excluding the current user, NPCs, and blocked/muted users)
   // Optionally include AI agents if includeAgents=true
   const users = await asUser(user, async (db) => {
-    return await db.user.findMany({
+    const baseFilters = [
+      {
+        id: {
+          not: user.userId,
+        },
+      },
+      ...(excludedUserIds.length > 0
+        ? [{ id: { notIn: excludedUserIds } }]
+        : []),
+      {
+        isActor: false,
+      },
+      ...(includeAgents ? [] : [{ isAgent: false }]),
+      {
+        isBanned: false,
+      },
+    ];
+
+    const select = {
+      id: true,
+      displayName: true,
+      username: true,
+      profileImageUrl: true,
+      bio: true,
+      ...(includeAgents && { isAgent: true }),
+    };
+
+    const exactMatches = await db.user.findMany({
       where: {
         AND: [
+          ...baseFilters,
           {
-            OR: [
-              {
-                username: {
-                  contains: searchTerm,
-                  mode: 'insensitive',
-                },
-              },
-              {
-                displayName: {
-                  contains: searchTerm,
-                  mode: 'insensitive',
-                },
-              },
-            ],
-          },
-          {
-            id: {
-              not: user.userId, // Exclude current user
-            },
-          },
-          // Conditionally exclude blocked/muted users only if the array is not empty
-          ...(excludedUserIds.length > 0
-            ? [{ id: { notIn: excludedUserIds } }]
-            : []),
-          {
-            isActor: false, // Always exclude NPCs (use /api/agents/search for those)
-          },
-          // Exclude agents unless includeAgents is true
-          ...(includeAgents ? [] : [{ isAgent: false }]),
-          {
-            isBanned: false, // Exclude banned users
+            username: searchTerm,
           },
         ],
       },
-      select: {
-        id: true,
-        displayName: true,
-        username: true,
-        profileImageUrl: true,
-        bio: true,
-        // Include isAgent when agents are included to distinguish them from humans
-        ...(includeAgents && { isAgent: true }),
-      },
-      take: 20, // Limit results
-      orderBy: [
-        {
-          username: 'asc',
-        },
-      ],
+      select,
+      take: 5,
     });
+
+    const seenIds = new Set(exactMatches.map((entry) => entry.id));
+    const remainingAfterExact = 20 - exactMatches.length;
+
+    const prefixMatches =
+      remainingAfterExact > 0
+        ? await db.user.findMany({
+            where: {
+              AND: [
+                ...baseFilters,
+                ...(seenIds.size > 0 ? [{ id: { notIn: [...seenIds] } }] : []),
+                {
+                  OR: [
+                    {
+                      username: {
+                        startsWith: searchTerm,
+                      },
+                    },
+                    {
+                      displayName: {
+                        startsWith: rawSearchTerm,
+                        mode: 'insensitive',
+                      },
+                    },
+                  ],
+                },
+              ],
+            },
+            select,
+            take: remainingAfterExact,
+            orderBy: [
+              {
+                username: 'asc',
+              },
+            ],
+          })
+        : [];
+
+    prefixMatches.forEach((entry) => seenIds.add(entry.id));
+    const remainingAfterPrefix =
+      20 - exactMatches.length - prefixMatches.length;
+
+    const fallbackMatches =
+      remainingAfterPrefix > 0
+        ? await db.user.findMany({
+            where: {
+              AND: [
+                ...baseFilters,
+                ...(seenIds.size > 0 ? [{ id: { notIn: [...seenIds] } }] : []),
+                {
+                  OR: [
+                    {
+                      username: {
+                        contains: searchTerm,
+                        mode: 'insensitive',
+                      },
+                    },
+                    {
+                      displayName: {
+                        contains: rawSearchTerm,
+                        mode: 'insensitive',
+                      },
+                    },
+                  ],
+                },
+              ],
+            },
+            select,
+            take: remainingAfterPrefix,
+            orderBy: [
+              {
+                username: 'asc',
+              },
+            ],
+          })
+        : [];
+
+    return [...exactMatches, ...prefixMatches, ...fallbackMatches];
   });
 
   logger.info(

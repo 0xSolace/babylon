@@ -114,7 +114,6 @@
 
 import {
   addPublicReadHeaders,
-  cachedDb,
   findUserByIdentifier,
   publicRateLimit,
   successResponse,
@@ -122,6 +121,7 @@ import {
 } from '@babylon/api';
 import { logger, UserIdParamSchema } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
+import { getOptionalProfileStats } from '@/lib/users/profile-stats';
 
 /**
  * GET Handler for User Profile
@@ -217,11 +217,14 @@ export const GET = withErrorHandling(
     }
 
     // Get cached profile stats (followers, following, posts, etc.)
-    const stats = await cachedDb.getUserProfileStats(dbUser.id);
+    const stats = await getOptionalProfileStats(
+      dbUser.id,
+      'GET /api/users/[userId]/profile'
+    );
 
     logger.info(
       'User profile fetched successfully',
-      { userId, stats },
+      { userId, statsAvailable: Boolean(stats) },
       'GET /api/users/[userId]/profile'
     );
 
@@ -258,14 +261,7 @@ export const GET = withErrorHandling(
         twitterUsername: dbUser.twitterUsername,
         usernameChangedAt: dbUser.usernameChangedAt?.toISOString() || null,
         createdAt: dbUser.createdAt.toISOString(),
-        stats: stats || {
-          positions: 0,
-          comments: 0,
-          reactions: 0,
-          followers: 0,
-          following: 0,
-          posts: 0,
-        },
+        stats,
       },
     });
     if (rateLimitInfo) addPublicReadHeaders(res, rateLimitInfo);

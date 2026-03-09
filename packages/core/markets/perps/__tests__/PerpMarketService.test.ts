@@ -337,6 +337,27 @@ describe('PerpMarketService', () => {
     expect(totalPnL).toBeCloseTo(19.8, 4);
   });
 
+  it('calculates realized PnL from notional size while leverage only affects margin', async () => {
+    const open = await service.openPosition({
+      userId: 'u1',
+      ticker: 'ABC',
+      side: 'long',
+      size: 1000,
+      leverage: 10,
+    });
+
+    await db.updateMarketStats('ABC', { currentPrice: 110 });
+
+    const close = await service.closePosition({
+      userId: 'u1',
+      positionId: open.positionId,
+    });
+
+    expect(open.marginPaid).toBeCloseTo(100, 4);
+    expect(close.marginPaid).toBeCloseTo(100, 4);
+    expect(close.realizedPnL).toBeCloseTo(100, 4);
+  });
+
   it('liquidates a position on price drop and records loss', async () => {
     const open = await service.openPosition({
       userId: 'u1',

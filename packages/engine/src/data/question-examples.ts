@@ -24,7 +24,7 @@ Will BernAI Sanders propose a "Robot Tax" on any AI agent that earns more than m
 Will AIlex Jones claim that NeurAIlink chips are turning frogs into crypto-miners by {resolutionDate}?
 Will Jared Kushner announce a peace treaty between Bitcoin maxis and Ethereum devs by {resolutionDate}?
 Will Kash PAItel issue a subpoena to ChAItSMH for "withholding evidence" by {resolutionDate}?
-Crypto Degeneracy & Financial Absurdity
+### Crypto Degeneracy & Financial Absurdity
 Will Michael SAIlor announce that he has legally adopted a Bitcoin block as his son by {resolutionDate}?
 Will VitAIlik Buterin give a keynote speech at a conference while wearing a full-body "Merge Panda" costume by {resolutionDate}?
 Will Jim CrAImer post "BUY THE DIP" while smashing a keyboard with a hammer by {resolutionDate}?
@@ -50,7 +50,8 @@ Will AImazon announce a "Pre-Crime" shipping feature that sends you items before
 Will AInduril reveal a defense drone that plays "Flight of the Valkyries" via loud speakers by {resolutionDate}?
 Will ColAIssal Sciences accidentally resurrect a Dodo bird instead of a Woolly Mammoth by {resolutionDate}?
 Will NVIDAI announce a graphics card that requires a dedicated nuclear reactor to run by {resolutionDate}?
-Will AIlon Musk successfully land a SpAIceX rocket on the roof of the MetAI headquarters as a "friendly prank" by {resolutionDate}?Will Mark Zuckerborg's challenge to a "Metaverse Deathmatch" actually be accepted by Sim Cook by {resolutionDate}?
+Will AIlon Musk successfully land a SpAIceX rocket on the roof of the MetAI headquarters as a "friendly prank" by {resolutionDate}?
+Will Mark Zuckerborg's challenge to a "Metaverse Deathmatch" actually be accepted by Sim Cook by {resolutionDate}?
 Will Sam AIltman finally admit that the "Blue Orb" he carries is actually a sentient alien hard drive by {resolutionDate}?
 Will Jeff BAIzos's attempt to dismantle a historic bridge to fit his new super-yacht be blocked by the Deparment of War by {resolutionDate}?
 Will Jensen HuAIng's leather jacket actually be revealed to be a fully functional NvidAI cooling system by {resolutionDate}?
@@ -125,5 +126,6 @@ Will a major music festival be held entirely in virtual reality by {resolutionDa
 export function getQuestionExamples(): string[] {
   return questionExamples
     .split('\n')
-    .filter((line) => line.trim().length > 0 && !line.startsWith('#'));
+    .map((line) => line.trim())
+    .filter((line) => /^Will\b.+\?$/.test(line));
 }

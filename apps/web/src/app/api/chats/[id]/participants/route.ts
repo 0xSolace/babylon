@@ -136,6 +136,38 @@ import { asSystem, asUser } from '@babylon/db';
 import { generateSnowflakeId, logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 
+async function loadChatWithParticipants(
+  user: Awaited<ReturnType<typeof authenticate>>,
+  chatId: string
+) {
+  return asUser(user, async (db) => {
+    const [chat, participants] = await Promise.all([
+      db.chat.findUnique({
+        where: { id: chatId },
+      }),
+      db.chatParticipant.findMany({
+        where: { chatId },
+        select: {
+          id: true,
+          chatId: true,
+          userId: true,
+          joinedAt: true,
+          isActive: true,
+        },
+      }),
+    ]);
+
+    if (!chat) {
+      throw new NotFoundError('Chat', chatId);
+    }
+
+    return {
+      ...chat,
+      participants,
+    };
+  });
+}
+
 /**
  * POST /api/chats/[id]/participants
  * Add users to a group chat
@@ -166,56 +198,31 @@ export const POST = withErrorHandling(
     }
 
     // Check if chat exists and user is a participant
-    const chat = await asUser(user, async (db) => {
-      const chat = await db.chat.findUnique({
-        where: { id: chatId },
-        include: {
-          participants: true,
-        },
-      });
+    const chat = await loadChatWithParticipants(user, chatId);
 
-      if (!chat) {
-        throw new NotFoundError('Chat', chatId);
-      }
+    const isParticipant = (chat.participants || []).some(
+      (p) => p.userId === user.userId
+    );
 
-      type ChatWithParticipants = typeof chat & {
-        participants?: Array<{
-          id: string;
-          chatId: string;
-          userId: string;
-          joinedAt: Date;
-          isActive: boolean;
-        }>;
-      };
-      const chatWithParticipants = chat as ChatWithParticipants;
-
-      // Check if user is a participant
-      const isParticipant = (chatWithParticipants.participants || []).some(
-        (p) => p.userId === user.userId
+    if (!isParticipant) {
+      throw new BusinessLogicError(
+        'You must be a participant to invite others',
+        'NOT_PARTICIPANT'
       );
+    }
 
-      if (!isParticipant) {
-        throw new BusinessLogicError(
-          'You must be a participant to invite others',
-          'NOT_PARTICIPANT'
-        );
-      }
-
-      // If it's a DM, convert to group chat
-      if (!chat.isGroup) {
-        // Update chat to be a group chat
+    if (!chat.isGroup) {
+      await asUser(user, async (db) => {
         await db.chat.update({
           where: { id: chatId },
           data: {
             isGroup: true,
-            name: 'Group Chat', // Default name, can be updated later
+            name: 'Group Chat',
             updatedAt: new Date(),
           },
         });
-      }
-
-      return chat;
-    });
+      });
+    }
 
     // Verify NFT ownership for NFT-gated chats
     if (chat.nftGated && chat.requiredNftContractAddress) {
@@ -285,15 +292,9 @@ export const POST = withErrorHandling(
       }
 
       // Filter out users already in the chat
-      type ChatWithParticipants = typeof chat & {
-        participants?: Array<{
-          userId: string;
-        }>;
-      };
-      const chatWithParticipants = chat as ChatWithParticipants;
-      const existingParticipantIds = (
-        chatWithParticipants.participants || []
-      ).map((p) => p.userId);
+      const existingParticipantIds = (chat.participants || []).map(
+        (p) => p.userId
+      );
       const newUsers = usersToAdd.filter(
         (u) => !existingParticipantIds.includes(u.id)
       );
@@ -401,42 +402,21 @@ export const GET = withErrorHandling(
     await requireNftChatAccess(user, chatId);
 
     // Get chat participants
+    const chat = await loadChatWithParticipants(user, chatId);
+    const isParticipant = (chat.participants || []).some(
+      (p) => p.userId === user.userId
+    );
+
+    if (!isParticipant) {
+      throw new BusinessLogicError(
+        'You must be a participant to view participants',
+        'NOT_PARTICIPANT'
+      );
+    }
+
+    const userIds = (chat.participants || []).map((p) => p.userId);
     const participants = await asUser(user, async (db) => {
-      const chat = await db.chat.findUnique({
-        where: { id: chatId },
-        include: {
-          participants: true,
-        },
-      });
-
-      if (!chat) {
-        throw new NotFoundError('Chat', chatId);
-      }
-
-      type ChatWithParticipants = typeof chat & {
-        participants?: Array<{
-          userId: string;
-        }>;
-      };
-      const chatWithParticipants = chat as ChatWithParticipants;
-
-      // Check if user is a participant
-      const isParticipant = (chatWithParticipants.participants || []).some(
-        (p) => p.userId === user.userId
-      );
-
-      if (!isParticipant) {
-        throw new BusinessLogicError(
-          'You must be a participant to view participants',
-          'NOT_PARTICIPANT'
-        );
-      }
-
-      // Get user details for all participants
-      const userIds = (chatWithParticipants.participants || []).map(
-        (p) => p.userId
-      );
-      const users = await db.user.findMany({
+      return db.user.findMany({
         where: {
           id: { in: userIds },
         },
@@ -447,8 +427,6 @@ export const GET = withErrorHandling(
           profileImageUrl: true,
         },
       });
-
-      return users;
     });
 
     logger.info(

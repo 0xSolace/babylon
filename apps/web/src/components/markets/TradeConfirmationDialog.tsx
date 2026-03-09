@@ -223,7 +223,7 @@ export function TradeConfirmationDialog({
               <span className="font-medium">${tradeDetails.ticker}</span>
             </div>
             <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Position Size</span>
+              <span className="text-muted-foreground">Notional Size</span>
               <span className="font-medium">
                 {formatPrice(tradeDetails.size)}
               </span>
@@ -295,7 +295,7 @@ export function TradeConfirmationDialog({
               <span className="font-medium">${tradeDetails.ticker}</span>
             </div>
             <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Position Size</span>
+              <span className="text-muted-foreground">Notional Size</span>
               <span className="font-medium">
                 {formatPrice(tradeDetails.size)}
               </span>

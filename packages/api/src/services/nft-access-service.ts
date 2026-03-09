@@ -4,7 +4,7 @@ import {
   hasOnchainNftAccess,
   NftIndexerUnavailableError,
 } from './nft-indexer-service';
-import { isUserWhitelisted } from './whitelist-service';
+import { checkWhitelistAccess } from './whitelist-service';
 
 export type NftAccessReason = 'snapshot_2025' | 'whitelist' | 'holder' | 'none';
 
@@ -18,8 +18,8 @@ async function hasSnapshot2025Access(dbUserId: string): Promise<boolean> {
 }
 
 /**
- * Check if a user is whitelisted, with graceful fallback if the Whitelist
- * table doesn't exist yet (safe for rolling deployments).
+ * Check if a user has whitelist-based access, with graceful fallback if the
+ * whitelist tables don't exist yet (safe for rolling deployments).
  *
  * Only swallows "relation does not exist" errors (PG code 42P01).
  * All other errors are logged and re-thrown so they surface in production.
@@ -29,7 +29,8 @@ async function isWhitelistOverride(
 ): Promise<boolean> {
   if (!dbUserId) return false;
   try {
-    return await isUserWhitelisted(dbUserId);
+    const access = await checkWhitelistAccess(dbUserId);
+    return access.allowed;
   } catch (error: unknown) {
     // PostgreSQL "undefined_table" — table doesn't exist yet during rolling deploy.
     const pgCode =
@@ -51,7 +52,7 @@ async function isWhitelistOverride(
 /**
  * Returns true if the user has gated access via:
  * - Snapshot 2025 allowlist (Top 100 end-of-2025): permanent access + can mint.
- * - Whitelist: permanent access when a user has reached the Top 100 at least once.
+ * - Whitelist: active whitelist entry or current leaderboard threshold access.
  * - Holder: access while currently holding at least one NFT.
  *
  * Holder access is indexer-based and fail-closed: if the indexer is unavailable,
@@ -61,7 +62,7 @@ export async function hasNftAccess(dbUserId: string): Promise<boolean> {
   // Snapshot 2025 always has access (independent of holding).
   if (await hasSnapshot2025Access(dbUserId)) return true;
 
-  // Whitelist is permanent access.
+  // Whitelist-based access includes direct entries and the current Top N rule.
   if (await isWhitelistOverride(dbUserId)) return true;
 
   const [dbUser] = await db

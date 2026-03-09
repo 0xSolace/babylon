@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'bun:test';
 import {
+  formatWhitelistRankThreshold,
   getPrimaryAccessLabel,
+  getWaitlistHeaderCopy,
   type NftAccessState,
   shouldAutoRedirectWhitelistedUser,
 } from './comingSoonAccess';
@@ -51,6 +53,33 @@ describe('comingSoonAccess', () => {
 
     it('returns play label when NFT cannot be claimed', () => {
       expect(getPrimaryAccessLabel(false)).toBe('Play');
+    });
+  });
+
+  describe('formatWhitelistRankThreshold', () => {
+    it('formats the whitelist threshold for the waitlist header', () => {
+      expect(formatWhitelistRankThreshold(25000)).toBe('Top 25,000');
+    });
+
+    it('returns an empty string for missing thresholds', () => {
+      expect(formatWhitelistRankThreshold(null)).toBe('');
+      expect(formatWhitelistRankThreshold(undefined)).toBe('');
+    });
+  });
+
+  describe('getWaitlistHeaderCopy', () => {
+    it('returns access copy for whitelisted users', () => {
+      expect(getWaitlistHeaderCopy(true, 25000)).toEqual({
+        title: 'Click play to access the game',
+        subtitle: 'Welcome to Babylon',
+      });
+    });
+
+    it('returns leaderboard copy with the configured whitelist threshold', () => {
+      expect(getWaitlistHeaderCopy(false, 25000)).toEqual({
+        title: 'Leaderboard',
+        subtitle: 'Top 25,000',
+      });
     });
   });
 });

@@ -21,3 +21,30 @@ export function shouldAutoRedirectWhitelistedUser(
 export function getPrimaryAccessLabel(canClaimNft: boolean): string {
   return canClaimNft ? 'Claim your NFT' : 'Play';
 }
+
+export function formatWhitelistRankThreshold(
+  threshold: number | null | undefined
+): string {
+  if (!threshold || threshold < 1) return '';
+  return `Top ${threshold.toLocaleString('en-US')}`;
+}
+
+export function getWaitlistHeaderCopy(
+  hasPrimaryAccess: boolean,
+  whitelistRankThreshold: number | null | undefined
+): {
+  title: string;
+  subtitle: string;
+} {
+  if (hasPrimaryAccess) {
+    return {
+      title: 'Click play to access the game',
+      subtitle: 'Welcome to Babylon',
+    };
+  }
+
+  return {
+    title: 'Leaderboard',
+    subtitle: formatWhitelistRankThreshold(whitelistRankThreshold),
+  };
+}

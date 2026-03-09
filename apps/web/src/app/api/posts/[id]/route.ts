@@ -89,6 +89,7 @@ import {
 import { gameService, StaticDataRegistry } from '@babylon/engine';
 import { logger, PostIdParamSchema } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
+import { POST as likePost } from './like/route';
 
 /**
  * GET /api/posts/[id]
@@ -751,6 +752,9 @@ export const GET = withErrorHandling(
     );
   }
 );
+
+// Backwards-compatible alias for clients that POST to the post resource to like it.
+export const POST = likePost;
 
 /**
  * DELETE /api/posts/[id]
