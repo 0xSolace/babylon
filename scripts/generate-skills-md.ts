@@ -232,7 +232,7 @@ export function generateSkillsMarkdown(
   if (!opts.skipGeneratedNotice) {
     lines.push('');
     lines.push(
-      '**This file is auto-generated.** Run `bun run scripts/generate-skills-md.ts` to regenerate.'
+      '**This file is auto-generated.** Run `bun run skills:generate` to regenerate after modifying A2A skills, executor operations, or MCP tools.'
     );
   }
   lines.push('');
@@ -358,7 +358,7 @@ metadata:
     homepage: "https://babylon.market"
     requires:
       env: ["BABYLON_API_KEY", "BABYLON_A2A_API_KEY"]
-      primaryEnv: "BABYLON_A2A_API_KEY"
+    primaryEnv: "BABYLON_A2A_API_KEY"
 ---
 `;
 }
@@ -439,4 +439,6 @@ function main() {
   }
 }
 
-main();
+if (import.meta.main) {
+  main();
+}

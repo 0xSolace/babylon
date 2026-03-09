@@ -1121,7 +1121,7 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
       actionTypes: traceActionResults.map((r) => r.actionType),
       isLLMFailure,
       totalParseRetries,
-      fastPath: fastPathAction ?? 'none',
+      fastPath: fastPath?.action ?? 'none',
       totalDurationMs,
     },
     'CoordinatorChat'
@@ -1136,6 +1136,6 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
     type: MessageTypeEnum.COORDINATOR,
     isLLMFailure,
     metadata, // Include tags in response for immediate UI update
-    ...(fastPathAction ? { fastPath: fastPathAction } : {}),
+    ...(fastPath?.action ? { fastPath: fastPath.action } : {}),
   });
 });

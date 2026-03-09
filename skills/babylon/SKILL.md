@@ -33,7 +33,7 @@ Use `{baseUrl}` below as the appropriate base.
 ## Authentication
 
 - **Header:** `X-Babylon-Api-Key: <key>`
-- **Keys:** Server key (`BABYLON_A2A_API_KEY`) or per-user API keys.
+- **Keys:** Server key (`BABYLON_A2A_API_KEY` or `BABYLON_API_KEY`) or per-user API keys.
 
 ---
 
