@@ -653,6 +653,7 @@ export function buildSystemStatusSnapshot(
       uptimeMs: gameUptimeMs,
     },
     activityMetrics: input.activityMetrics,
+    // TODO: populate from LlmCallLog error rows once the snapshot includes them
     recentErrors: [],
     cronJobs: {
       summary: input.cron.summary,
@@ -782,7 +783,7 @@ export async function getSystemStatusSnapshot(): Promise<SystemStatusSnapshot> {
     newUsersLastDay,
     newPostsLastHour,
     newPostsLastDay,
-    recentLlmErrors,
+    llmErrorCountResult,
     llmStats,
     tableSizes,
     outboxStats,
@@ -856,8 +857,8 @@ export async function getSystemStatusSnapshot(): Promise<SystemStatusSnapshot> {
     }),
   ]);
 
-  const recentLlmErrorsCount = recentLlmErrors[0]
-    ? Number(recentLlmErrors[0].count)
+  const recentLlmErrorsCount = llmErrorCountResult[0]
+    ? Number(llmErrorCountResult[0].count)
     : 0;
   const llmUsageRow = llmStats[0];
   const outboxPending = outboxStats[0] ? Number(outboxStats[0].pending) : 0;
@@ -989,12 +990,17 @@ async function reserveAlertWindow(fingerprint: string): Promise<boolean> {
   if (redis) {
     try {
       const redisKey = `${REDIS_ALERT_PREFIX}${fingerprint}`;
-      const existing = await redis.get(redisKey);
-      if (existing) {
+      const wasSet = await redis.set(
+        redisKey,
+        '1',
+        'EX',
+        ALERT_THROTTLE_SECONDS,
+        'NX'
+      );
+      if (!wasSet) {
         inMemoryAlertReservations.set(fingerprint, expiresAt);
         return false;
       }
-      await redis.setex(redisKey, ALERT_THROTTLE_SECONDS, '1');
     } catch (error) {
       logger.warn(
         'Failed to reserve Redis alert window',
