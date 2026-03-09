@@ -63,6 +63,7 @@ async function main() {
 
   for (let i = 0; i < testFiles.length; i += CONCURRENCY) {
     const chunk = testFiles.slice(i, i + CONCURRENCY);
+    // Note: using Promise.all for parallel execution, expecting runOne to handle failures internally
     const results = await Promise.all(chunk.map(runOne));
 
     for (const { rel, exitCode, stdout, stderr } of results) {
