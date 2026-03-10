@@ -414,6 +414,12 @@ function main() {
   const byPrefix = groupOperationsByPrefix(operations);
   const mcpTools = parseMCPTools(mcpContent);
 
+  // Validate expected minimum counts
+  if (skills.length === 0) {
+    console.error('Warning: No skills found in agent card - verify format');
+    process.exit(1);
+  }
+
   const mdBody = generateSkillsMarkdown(skills, operations, byPrefix, mcpTools, {
     skipGeneratedNotice: packageMode,
   });
