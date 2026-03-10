@@ -64,8 +64,11 @@ async function main() {
 
   for (let i = 0; i < testFiles.length; i += CONCURRENCY) {
     const chunk = testFiles.slice(i, i + CONCURRENCY);
-    // Note: using Promise.all for parallel execution, expecting runOne to handle failures internally
-    const results = await Promise.all(chunk.map(runOne));
+    // Note: using Promise.allSettled for parallel execution, ensuring one test failure doesn't prevent others from running
+    const settled = await Promise.allSettled(chunk.map(runOne));
+    const results = settled.map(result => 
+      result.status === 'fulfilled' ? result.value : 
+      { rel: 'unknown', exitCode: 1, stdout: '', stderr: `Test failed to execute: ${result.reason}` });
 
     for (const { rel, exitCode, stdout, stderr } of results) {
       if (exitCode === 0) {
