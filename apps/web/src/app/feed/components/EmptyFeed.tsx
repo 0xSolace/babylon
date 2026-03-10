@@ -1,14 +1,9 @@
 'use client';
 
-import { Compass, Clock, FileText, Flame, Users } from 'lucide-react';
+import { Clock, Compass, FileText, Flame, Users } from 'lucide-react';
 import { EmptyState } from '@/components/shared/EmptyState';
 
-type EmptyFeedVariant =
-  | 'latest'
-  | 'hot'
-  | 'forYou'
-  | 'following'
-  | 'default';
+type EmptyFeedVariant = 'latest' | 'hot' | 'forYou' | 'following' | 'default';
 
 interface EmptyFeedProps {
   variant: EmptyFeedVariant;

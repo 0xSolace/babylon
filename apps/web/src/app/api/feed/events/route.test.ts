@@ -26,7 +26,11 @@ mock.module('@babylon/api', () => ({
       rateLimitInfo: null,
     }),
   RATE_LIMIT_CONFIGS: {
-    FEED_EVENT_BATCH: { maxRequests: 120, windowMs: 60000, actionType: 'feed_event_batch' },
+    FEED_EVENT_BATCH: {
+      maxRequests: 120,
+      windowMs: 60000,
+      actionType: 'feed_event_batch',
+    },
   },
   successResponse: (data: unknown) =>
     new Response(JSON.stringify(data), {

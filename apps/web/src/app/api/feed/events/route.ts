@@ -7,10 +7,7 @@ import {
   withErrorHandling,
 } from '@babylon/api';
 import { db, feedEvents } from '@babylon/db';
-import {
-  type FeedEventPayload,
-  generateSnowflakeId,
-} from '@babylon/shared';
+import { type FeedEventPayload, generateSnowflakeId } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';
 
@@ -50,7 +47,10 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
       ? `${authUser.walletAddress.slice(0, 6)}...${authUser.walletAddress.slice(-4)}`
       : 'Anonymous',
   });
-  const rateLimit = applyRateLimit(user.id, RATE_LIMIT_CONFIGS.FEED_EVENT_BATCH);
+  const rateLimit = applyRateLimit(
+    user.id,
+    RATE_LIMIT_CONFIGS.FEED_EVENT_BATCH
+  );
   if (!rateLimit.allowed) {
     return new Response(
       JSON.stringify({

@@ -1,5 +1,5 @@
-export { useFeedPosts } from './useFeedPosts';
 export { useFeedEventTracker } from './useFeedEventTracker';
+export { useFeedPosts } from './useFeedPosts';
 export { useFollowingPosts } from './useFollowingPosts';
 export { useForYouFeed } from './useForYouFeed';
 export { useHotPosts } from './useHotPosts';

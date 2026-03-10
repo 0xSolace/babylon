@@ -24,7 +24,11 @@ import {
   userActorFollows,
   users,
 } from '@babylon/db';
-import { StaticDataRegistry, dailyTopicService, deriveTopicFromText } from '@babylon/engine';
+import {
+  dailyTopicService,
+  deriveTopicFromText,
+  StaticDataRegistry,
+} from '@babylon/engine';
 import type {
   ArcStateType,
   FeedEventAction,
@@ -103,10 +107,14 @@ function toISOStringStrict(
 ): string {
   if (!date) return fallback.toISOString();
   if (date instanceof Date) {
-    return Number.isNaN(date.getTime()) ? fallback.toISOString() : date.toISOString();
+    return Number.isNaN(date.getTime())
+      ? fallback.toISOString()
+      : date.toISOString();
   }
   const parsed = new Date(date);
-  return Number.isNaN(parsed.getTime()) ? fallback.toISOString() : parsed.toISOString();
+  return Number.isNaN(parsed.getTime())
+    ? fallback.toISOString()
+    : parsed.toISOString();
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -173,14 +181,35 @@ function aggregateFeedEvents(events: FeedEventRow[]): EventAggregates {
     const decay = Math.exp((-Math.LN2 * ageDays) / 7);
     const weight = getActionWeight(event.actionType) * decay;
     const dwellBoost =
-      event.dwellMs && event.dwellMs >= 2000 ? Math.min(event.dwellMs / 5000, 1) * 0.25 : 0;
+      event.dwellMs && event.dwellMs >= 2000
+        ? Math.min(event.dwellMs / 5000, 1) * 0.25
+        : 0;
 
-    incrementScore(aggregates.authorAffinity, event.authorId, Math.max(weight, 0));
-    incrementScore(aggregates.clusterAffinity, event.clusterId, Math.max(weight, 0));
-    incrementScore(aggregates.topicAffinity, event.topicKey, Math.max(weight, 0));
-    incrementScore(aggregates.marketAffinity, event.marketId, Math.max(weight, 0));
+    incrementScore(
+      aggregates.authorAffinity,
+      event.authorId,
+      Math.max(weight, 0)
+    );
+    incrementScore(
+      aggregates.clusterAffinity,
+      event.clusterId,
+      Math.max(weight, 0)
+    );
+    incrementScore(
+      aggregates.topicAffinity,
+      event.topicKey,
+      Math.max(weight, 0)
+    );
+    incrementScore(
+      aggregates.marketAffinity,
+      event.marketId,
+      Math.max(weight, 0)
+    );
 
-    if (event.actionType === 'impression' || event.actionType === 'visible_2s') {
+    if (
+      event.actionType === 'impression' ||
+      event.actionType === 'visible_2s'
+    ) {
       incrementScore(aggregates.authorExposure, event.authorId, decay);
       incrementScore(
         aggregates.clusterExposure,
@@ -199,7 +228,11 @@ function aggregateFeedEvents(events: FeedEventRow[]): EventAggregates {
       event.actionType === 'follow' ||
       event.actionType === 'trade_after_view'
     ) {
-      incrementScore(aggregates.authorSatisfaction, event.authorId, decay + dwellBoost);
+      incrementScore(
+        aggregates.authorSatisfaction,
+        event.authorId,
+        decay + dwellBoost
+      );
       incrementScore(
         aggregates.clusterSatisfaction,
         event.clusterId,
@@ -216,7 +249,10 @@ function aggregateFeedEvents(events: FeedEventRow[]): EventAggregates {
   return aggregates;
 }
 
-function getAffinityScore(map: Map<string, number>, key: string | null | undefined) {
+function getAffinityScore(
+  map: Map<string, number>,
+  key: string | null | undefined
+) {
   if (!key) return 0;
   return clamp(map.get(key) ?? 0, 0, 2.5);
 }
@@ -234,9 +270,10 @@ function getFatiguePenalty(
   return clamp(exposure * 0.24 - satisfaction * 0.16 + hide * 0.7, 0, 2.5);
 }
 
-function buildTopicMetadata(
-  story: NarrativeStory
-): { topicKey: string | null; topicLabel: string | null } {
+function buildTopicMetadata(story: NarrativeStory): {
+  topicKey: string | null;
+  topicLabel: string | null;
+} {
   if (story.topicKey || story.topicLabel) {
     return {
       topicKey: story.topicKey ?? null,
@@ -446,7 +483,9 @@ async function loadBaseCandidates(): Promise<BaseForYouResult> {
       .from(posts)
       .where(inArray(posts.id, repostOriginalIds));
 
-    const originalAuthorIds = [...new Set(originalRows.map((row) => row.authorId))];
+    const originalAuthorIds = [
+      ...new Set(originalRows.map((row) => row.authorId)),
+    ];
     const originalAuthorUsers =
       originalAuthorIds.length > 0
         ? await db
@@ -481,7 +520,9 @@ async function loadBaseCandidates(): Promise<BaseForYouResult> {
     ...new Set(
       recentPosts
         .map((post) => post.relatedQuestion)
-        .filter((questionNumber): questionNumber is number => questionNumber !== null)
+        .filter(
+          (questionNumber): questionNumber is number => questionNumber !== null
+        )
     ),
   ];
 
@@ -540,16 +581,14 @@ async function loadBaseCandidates(): Promise<BaseForYouResult> {
         ? 'news'
         : 'user';
 
-    const authorName = actorRecord?.name ??
+    const authorName =
+      actorRecord?.name ??
       orgRecord?.name ??
       authorUser?.displayName ??
       authorUser?.username ??
       post.authorId;
     const authorUsername =
-      actorRecord?.username ??
-      orgRecord?.id ??
-      authorUser?.username ??
-      null;
+      actorRecord?.username ?? orgRecord?.id ?? authorUser?.username ?? null;
     const authorProfileImageUrl =
       actorRecord?.profileImageUrl ??
       orgRecord?.imageUrl ??
@@ -641,12 +680,18 @@ async function loadBaseCandidates(): Promise<BaseForYouResult> {
     );
 
     const newestTimestamp = new Date(storyPosts[0]!.timestamp);
-    const totalLikes = storyPosts.reduce((sum, post) => sum + post.likeCount, 0);
+    const totalLikes = storyPosts.reduce(
+      (sum, post) => sum + post.likeCount,
+      0
+    );
     const totalComments = storyPosts.reduce(
       (sum, post) => sum + post.commentCount,
       0
     );
-    const totalShares = storyPosts.reduce((sum, post) => sum + post.shareCount, 0);
+    const totalShares = storyPosts.reduce(
+      (sum, post) => sum + post.shareCount,
+      0
+    );
     const questionNumber =
       storyKey === GENERAL_STORY_KEY ? null : Number.parseInt(storyKey, 10);
     const meta =
@@ -666,7 +711,9 @@ async function loadBaseCandidates(): Promise<BaseForYouResult> {
       ? calculateResolutionBoost(meta.resolutionDate)
       : 1;
     const storyScoreValue =
-      baseScore * calculateArcStateMultiplier(meta?.arcState ?? null) * resolutionBoost;
+      baseScore *
+      calculateArcStateMultiplier(meta?.arcState ?? null) *
+      resolutionBoost;
 
     const storyTitle =
       meta?.title ??
@@ -766,7 +813,9 @@ async function loadBaseCandidates(): Promise<BaseForYouResult> {
   const existingQuestionNumbers = new Set(
     stories
       .map((story) => story.questionNumber)
-      .filter((questionNumber): questionNumber is number => questionNumber !== null)
+      .filter(
+        (questionNumber): questionNumber is number => questionNumber !== null
+      )
   );
 
   const newMarketQuestions = await db
@@ -799,7 +848,9 @@ async function loadBaseCandidates(): Promise<BaseForYouResult> {
         not(
           inArray(
             questions.questionNumber,
-            existingQuestionNumbers.size > 0 ? [...existingQuestionNumbers] : [-1]
+            existingQuestionNumbers.size > 0
+              ? [...existingQuestionNumbers]
+              : [-1]
           )
         )
       )
@@ -831,8 +882,9 @@ async function loadBaseCandidates(): Promise<BaseForYouResult> {
       yesShares: Number(question.yesShares ?? 0),
       noShares: Number(question.noShares ?? 0),
       anchorPostId:
-        recentPosts.find((post) => post.relatedQuestion === question.questionNumber)?.id ??
-        null,
+        recentPosts.find(
+          (post) => post.relatedQuestion === question.questionNumber
+        )?.id ?? null,
       topicKey: question.topicKey ?? null,
       topicLabel: question.topicLabel ?? null,
       itemType: 'market',
@@ -849,7 +901,9 @@ async function loadBaseCandidates(): Promise<BaseForYouResult> {
   };
 }
 
-async function loadFeedEventAggregates(userId: string): Promise<EventAggregates> {
+async function loadFeedEventAggregates(
+  userId: string
+): Promise<EventAggregates> {
   const eventCutoff = new Date(Date.now() - FEED_EVENT_WINDOW_MS);
   const rows = await db
     .select({
@@ -896,72 +950,82 @@ export async function buildForYouFeed(userId?: string | null) {
     { namespace: 'feed', ttl: BASE_CACHE_TTL_S }
   );
 
-  const [followedUsers, followedActors, userLikes, userShares, userPositions, eventAggregates]:
-    [
-      FollowRow[],
-      FollowRow[],
-      Array<{ postId: string | null }>,
-      Array<{ postId: string }>,
-      Array<{ questionId: number | null }>,
-      EventAggregates
-    ] = userId
+  const [
+    followedUsers,
+    followedActors,
+    userLikes,
+    userShares,
+    userPositions,
+    eventAggregates,
+  ]: [
+    FollowRow[],
+    FollowRow[],
+    Array<{ postId: string | null }>,
+    Array<{ postId: string }>,
+    Array<{ questionId: number | null }>,
+    EventAggregates,
+  ] = userId
     ? await getCacheOrFetch(
         `feed:for-you:enrichment:${userId}`,
-        () => Promise.all([
-          db
-            .select({ id: follows.followingId })
-            .from(follows)
-            .where(eq(follows.followerId, userId)),
-          db
-            .select({ id: userActorFollows.actorId })
-            .from(userActorFollows)
-            .where(eq(userActorFollows.userId, userId)),
-          baseResult.postIds.length > 0
-            ? db
-                .select({ postId: reactions.postId })
-                .from(reactions)
+        () =>
+          Promise.all([
+            db
+              .select({ id: follows.followingId })
+              .from(follows)
+              .where(eq(follows.followerId, userId)),
+            db
+              .select({ id: userActorFollows.actorId })
+              .from(userActorFollows)
+              .where(eq(userActorFollows.userId, userId)),
+            baseResult.postIds.length > 0
+              ? db
+                  .select({ postId: reactions.postId })
+                  .from(reactions)
+                  .where(
+                    and(
+                      inArray(reactions.postId, baseResult.postIds),
+                      eq(reactions.userId, userId),
+                      eq(reactions.type, 'like')
+                    )
+                  )
+              : Promise.resolve([]),
+            baseResult.postIds.length > 0
+              ? db
+                  .select({ postId: shares.postId })
+                  .from(shares)
+                  .where(
+                    and(
+                      inArray(shares.postId, baseResult.postIds),
+                      eq(shares.userId, userId)
+                    )
+                  )
+              : Promise.resolve([]),
+            (() => {
+              const questionNumbers = baseResult.stories
+                .map((story) => story.questionNumber)
+                .filter(
+                  (questionNumber): questionNumber is number =>
+                    questionNumber !== null
+                );
+
+              if (questionNumbers.length === 0) {
+                return Promise.resolve([]);
+              }
+
+              return db
+                .select({ questionId: positions.questionId })
+                .from(positions)
                 .where(
                   and(
-                    inArray(reactions.postId, baseResult.postIds),
-                    eq(reactions.userId, userId),
-                    eq(reactions.type, 'like')
+                    eq(positions.userId, userId),
+                    eq(positions.status, 'active'),
+                    isNotNull(positions.questionId),
+                    inArray(positions.questionId, questionNumbers)
                   )
-                )
-            : Promise.resolve([]),
-          baseResult.postIds.length > 0
-            ? db
-                .select({ postId: shares.postId })
-                .from(shares)
-                .where(
-                  and(
-                    inArray(shares.postId, baseResult.postIds),
-                    eq(shares.userId, userId)
-                  )
-                )
-            : Promise.resolve([]),
-          (() => {
-            const questionNumbers = baseResult.stories
-              .map((story) => story.questionNumber)
-              .filter((questionNumber): questionNumber is number => questionNumber !== null);
-
-            if (questionNumbers.length === 0) {
-              return Promise.resolve([]);
-            }
-
-            return db
-              .select({ questionId: positions.questionId })
-              .from(positions)
-              .where(
-                and(
-                  eq(positions.userId, userId),
-                  eq(positions.status, 'active'),
-                  isNotNull(positions.questionId),
-                  inArray(positions.questionId, questionNumbers)
-                )
-              );
-          })(),
-          loadFeedEventAggregates(userId),
-        ]),
+                );
+            })(),
+            loadFeedEventAggregates(userId),
+          ]),
         { namespace: 'feed', ttl: USER_ENRICHMENT_TTL_S }
       )
     : [[], [], [], [], [], aggregateFeedEvents([])];
@@ -985,13 +1049,15 @@ export async function buildForYouFeed(userId?: string | null) {
   const rescoredStories = baseResult.stories.map((story) => {
     const clusterId = story.clusterId ?? story.marketId ?? story.storyKey;
     const topic = buildTopicMetadata(story);
-    const leadPosts = pickLeadPosts(story, followedAuthorIds, eventAggregates).map(
-      (post) => ({
-        ...post,
-        isLiked: likedSet.has(post.id),
-        isShared: sharedSet.has(post.id),
-      })
-    );
+    const leadPosts = pickLeadPosts(
+      story,
+      followedAuthorIds,
+      eventAggregates
+    ).map((post) => ({
+      ...post,
+      isLiked: likedSet.has(post.id),
+      isShared: sharedSet.has(post.id),
+    }));
     const enrichedPosts = story.posts.map((post) => ({
       ...post,
       isLiked: likedSet.has(post.id),
@@ -1017,7 +1083,8 @@ export async function buildForYouFeed(userId?: string | null) {
         sum + post.likeCount + post.commentCount * 2 + post.shareCount * 3,
       0
     );
-    const uniqueAuthors = new Set(enrichedPosts.map((post) => post.authorId)).size;
+    const uniqueAuthors = new Set(enrichedPosts.map((post) => post.authorId))
+      .size;
     const totalComments = enrichedPosts.reduce(
       (sum, post) => sum + post.commentCount,
       0
@@ -1040,9 +1107,7 @@ export async function buildForYouFeed(userId?: string | null) {
       story.marketId ?? null
     );
     const isCarryover = Boolean(
-      currentTopic &&
-        topic.topicKey &&
-        topic.topicKey !== currentTopic.topicKey
+      currentTopic && topic.topicKey && topic.topicKey !== currentTopic.topicKey
     );
     const topicMatchScore =
       currentTopic && topic.topicKey === currentTopic.topicKey
@@ -1077,7 +1142,8 @@ export async function buildForYouFeed(userId?: string | null) {
       (hasUserPosition ? 0.15 : 0);
     const freshnessScore = calculateFreshnessScore(newestDate);
     const retentionScore = clamp(
-      getAffinityScore(eventAggregates.authorSatisfaction, primaryAuthorId) * 0.4 +
+      getAffinityScore(eventAggregates.authorSatisfaction, primaryAuthorId) *
+        0.4 +
         getAffinityScore(eventAggregates.clusterSatisfaction, clusterId) * 0.6,
       0,
       2
@@ -1088,7 +1154,8 @@ export async function buildForYouFeed(userId?: string | null) {
         eventAggregates.authorSatisfaction,
         eventAggregates.authorHide,
         primaryAuthorId
-      ) * 0.6 +
+      ) *
+        0.6 +
         getFatiguePenalty(
           eventAggregates.clusterExposure,
           eventAggregates.clusterSatisfaction,
@@ -1154,8 +1221,7 @@ export async function buildForYouFeed(userId?: string | null) {
   const rankedStories = diversifyForYouStories(
     rescoredStories.sort(
       (a, b) =>
-        (b.finalRankScore ?? b.storyScore) -
-        (a.finalRankScore ?? a.storyScore)
+        (b.finalRankScore ?? b.storyScore) - (a.finalRankScore ?? a.storyScore)
     )
   );
 

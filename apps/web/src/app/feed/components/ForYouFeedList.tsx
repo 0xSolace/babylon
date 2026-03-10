@@ -3,11 +3,11 @@
 import type { FeedEventAction, NarrativeStory } from '@babylon/shared';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useFeedEventTracker } from '@/app/feed/hooks';
 import {
   toArticleCardData,
   toPostCardData,
 } from '@/app/feed/utils/postMappers';
-import { useFeedEventTracker } from '@/app/feed/hooks';
 import { ArticleCard } from '@/components/articles/ArticleCard';
 import { PostCard } from '@/components/posts/PostCard';
 import { NewMarketCard } from './NewMarketCard';
@@ -29,7 +29,9 @@ export function ForYouFeedList({ stories }: ForYouFeedListProps) {
   const itemRefs = useRef(new Map<string, HTMLDivElement | null>());
   const impressionSentRef = useRef(new Set<string>());
   const visibleSentRef = useRef(new Set<string>());
-  const dwellTimersRef = useRef(new Map<string, ReturnType<typeof setTimeout>>());
+  const dwellTimersRef = useRef(
+    new Map<string, ReturnType<typeof setTimeout>>()
+  );
 
   useEffect(() => {
     if (prevStoriesRef.current === stories) return;
@@ -73,7 +75,9 @@ export function ForYouFeedList({ stories }: ForYouFeedListProps) {
     ) => ({
       actionType,
       surface: 'for_you' as const,
-      itemId: story.isNewMarket ? story.marketId ?? story.storyKey : story.posts[0]?.id ?? story.storyKey,
+      itemId: story.isNewMarket
+        ? (story.marketId ?? story.storyKey)
+        : (story.posts[0]?.id ?? story.storyKey),
       itemType:
         story.itemType ??
         (story.isNewMarket
@@ -81,7 +85,11 @@ export function ForYouFeedList({ stories }: ForYouFeedListProps) {
           : story.posts[0]?.type === 'article'
             ? 'article'
             : 'post'),
-      clusterId: story.clusterId ?? story.rootMarketId ?? story.marketId ?? story.storyKey,
+      clusterId:
+        story.clusterId ??
+        story.rootMarketId ??
+        story.marketId ??
+        story.storyKey,
       marketId: story.marketId ?? story.rootMarketId ?? null,
       topicKey: story.topicKey ?? null,
       authorId: story.primaryAuthorId ?? story.posts[0]?.authorId ?? null,
@@ -103,13 +111,16 @@ export function ForYouFeedList({ stories }: ForYouFeedListProps) {
     [buildEventPayload, trackEvent]
   );
 
-  const setItemRef = useCallback((storyKey: string, node: HTMLDivElement | null) => {
-    if (node) {
-      itemRefs.current.set(storyKey, node);
-      return;
-    }
-    itemRefs.current.delete(storyKey);
-  }, []);
+  const setItemRef = useCallback(
+    (storyKey: string, node: HTMLDivElement | null) => {
+      if (node) {
+        itemRefs.current.set(storyKey, node);
+        return;
+      }
+      itemRefs.current.delete(storyKey);
+    },
+    []
+  );
 
   useEffect(() => {
     if (visibleItems.length === 0) {
@@ -125,7 +136,9 @@ export function ForYouFeedList({ stories }: ForYouFeedListProps) {
         for (const entry of entries) {
           const storyKey = entry.target.getAttribute('data-story-key');
           if (!storyKey) continue;
-          const storyIndex = visibleItems.findIndex((item) => item.storyKey === storyKey);
+          const storyIndex = visibleItems.findIndex(
+            (item) => item.storyKey === storyKey
+          );
           if (storyIndex === -1) continue;
           const story = visibleItems[storyIndex];
           if (!story) continue;
@@ -136,11 +149,19 @@ export function ForYouFeedList({ stories }: ForYouFeedListProps) {
               trackStoryEvent(story, storyIndex, 'impression');
             }
 
-            if (!visibleSentRef.current.has(storyKey) && !dwellTimersRef.current.has(storyKey)) {
+            if (
+              !visibleSentRef.current.has(storyKey) &&
+              !dwellTimersRef.current.has(storyKey)
+            ) {
               const timer = setTimeout(() => {
                 visibleSentRef.current.add(storyKey);
                 dwellTimersRef.current.delete(storyKey);
-                trackStoryEvent(story, storyIndex, 'visible_2s', VISIBLE_DWELL_MS);
+                trackStoryEvent(
+                  story,
+                  storyIndex,
+                  'visible_2s',
+                  VISIBLE_DWELL_MS
+                );
               }, VISIBLE_DWELL_MS);
               dwellTimersRef.current.set(storyKey, timer);
             }
@@ -184,7 +205,9 @@ export function ForYouFeedList({ stories }: ForYouFeedListProps) {
             >
               <NewMarketCard
                 story={story}
-                onOpenMarket={() => trackStoryEvent(story, index, 'open_market')}
+                onOpenMarket={() =>
+                  trackStoryEvent(story, index, 'open_market')
+                }
                 onTradeComplete={() =>
                   trackStoryEvent(story, index, 'trade_after_view')
                 }

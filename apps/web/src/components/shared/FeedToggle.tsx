@@ -24,9 +24,7 @@ export function FeedToggle({ activeTab, onTabChange }: FeedToggleProps) {
         onClick={() => onTabChange('forYou')}
         className={cn(
           'relative flex-1 py-3.5 font-semibold transition-all hover:bg-muted/20',
-          activeTab === 'forYou'
-            ? 'text-foreground'
-            : 'text-muted-foreground'
+          activeTab === 'forYou' ? 'text-foreground' : 'text-muted-foreground'
         )}
       >
         For You

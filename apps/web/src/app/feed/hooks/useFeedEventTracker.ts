@@ -1,4 +1,4 @@
-import { logger, type FeedEventPayload } from '@babylon/shared';
+import { type FeedEventPayload, logger } from '@babylon/shared';
 import { useCallback, useEffect, useRef } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -43,7 +43,11 @@ export function useFeedEventTracker() {
   );
 
   const flush = useCallback(async () => {
-    if (!authenticated || isFlushingRef.current || queueRef.current.length === 0) {
+    if (
+      !authenticated ||
+      isFlushingRef.current ||
+      queueRef.current.length === 0
+    ) {
       return;
     }
 

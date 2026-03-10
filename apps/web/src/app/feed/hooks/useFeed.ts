@@ -101,11 +101,7 @@ export function useFeed(
         } else {
           const errorText = await response.text().catch(() => null);
           const msg = `Failed to fetch ${feedName} feed: ${response.status}`;
-          logger.error(
-            msg,
-            { status: response.status, errorText },
-            logContext
-          );
+          logger.error(msg, { status: response.status, errorText }, logContext);
           if (isInitial || storiesRef.current.length === 0) {
             setError(msg);
           }
@@ -124,13 +120,14 @@ export function useFeed(
         }
       }
     },
-    // requiresAuth is stable config — include authenticated/getAccessToken
-    // only when auth is needed so the narrative hook avoids re-renders on
-    // auth state changes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    requiresAuth
-      ? [authenticated, getAccessToken, endpoint, feedName, logContext]
-      : [endpoint, feedName, logContext]
+    [
+      authenticated,
+      getAccessToken,
+      endpoint,
+      feedName,
+      logContext,
+      requiresAuth,
+    ]
   );
 
   const refresh = useCallback(async () => {

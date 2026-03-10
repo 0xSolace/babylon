@@ -5,7 +5,10 @@ const mockBuildForYouFeed = mock();
 const mockPublicRateLimit = mock();
 
 mock.module('@babylon/api', () => ({
-  addPublicReadHeaders: (response: Response, rateLimitInfo: { limit: number }) => {
+  addPublicReadHeaders: (
+    response: Response,
+    rateLimitInfo: { limit: number }
+  ) => {
     response.headers.set('Cache-Control', 'public, max-age=30');
     response.headers.set('X-RateLimit-Limit', String(rateLimitInfo.limit));
   },
