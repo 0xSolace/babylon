@@ -334,9 +334,13 @@ export const POST = withErrorHandling(
       }),
     };
 
+    const sanitizedUpdateData = Object.fromEntries(
+      Object.entries(updateData).filter(([, value]) => value !== undefined)
+    ) as Partial<typeof users.$inferInsert>;
+
     const [updatedUser] = await db
       .update(users)
-      .set(updateData)
+      .set(sanitizedUpdateData)
       .where(eq(users.id, canonicalUserId))
       .returning({
         id: users.id,
