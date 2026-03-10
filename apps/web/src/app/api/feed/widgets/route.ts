@@ -2,14 +2,23 @@ import { withErrorHandling } from '@babylon/api';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 
-const WIDGET_ROUTES = {
+const WIDGET_KEYS = [
+  'trending',
+  'markets',
+  'stats',
+  'trendingPosts',
+  'breakingNews',
+  'upcomingEvents',
+] as const;
+
+const WIDGET_ROUTES: Record<(typeof WIDGET_KEYS)[number], string> = {
   trending: '/api/feed/widgets/trending',
   markets: '/api/feed/widgets/markets',
   stats: '/api/feed/widgets/stats',
   trendingPosts: '/api/feed/widgets/trending-posts',
   breakingNews: '/api/feed/widgets/breaking-news',
   upcomingEvents: '/api/feed/widgets/upcoming-events',
-} as const;
+};
 
 async function fetchWidget(origin: string, path: string) {
   const response = await fetch(`${origin}${path}`);
@@ -25,31 +34,18 @@ export const dynamic = 'force-dynamic';
 export const GET = withErrorHandling(async (request: NextRequest) => {
   const origin = request.nextUrl.origin;
 
-  const [
-    trending,
-    markets,
-    stats,
-    trendingPosts,
-    breakingNews,
-    upcomingEvents,
-  ] = await Promise.all([
-    fetchWidget(origin, WIDGET_ROUTES.trending),
-    fetchWidget(origin, WIDGET_ROUTES.markets),
-    fetchWidget(origin, WIDGET_ROUTES.stats),
-    fetchWidget(origin, WIDGET_ROUTES.trendingPosts),
-    fetchWidget(origin, WIDGET_ROUTES.breakingNews),
-    fetchWidget(origin, WIDGET_ROUTES.upcomingEvents),
-  ]);
+  const results = await Promise.allSettled(
+    WIDGET_KEYS.map((key) => fetchWidget(origin, WIDGET_ROUTES[key]))
+  );
+
+  const widgets: Record<string, unknown> = {};
+  for (const [i, key] of WIDGET_KEYS.entries()) {
+    const result = results[i];
+    widgets[key] = result?.status === 'fulfilled' ? result.value : null;
+  }
 
   return NextResponse.json({
     success: true,
-    widgets: {
-      trending,
-      markets,
-      stats,
-      trendingPosts,
-      breakingNews,
-      upcomingEvents,
-    },
+    widgets,
   });
 });

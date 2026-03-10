@@ -63,11 +63,7 @@ import {
   hasBlocked,
   markets,
   perpMarketSnapshots,
-  positions,
-  questions,
-  timeframedMarkets,
   users,
-  withTransaction,
 } from '@babylon/db';
 import {
   createPerpPriceImpactPort,
@@ -2723,6 +2719,9 @@ export async function executeGetSystemStats(
 
 /**
  * Execute resolve_market tool
+ *
+ * Uses PredictionMarketService.resolve() to ensure winners are paid out,
+ * PnL is recorded, liquidity is updated, and resolution events are emitted.
  */
 export async function executeResolveMarket(
   agent: AuthenticatedAgent,
@@ -2751,48 +2750,15 @@ export async function executeResolveMarket(
     throw new Error('Market already resolved');
   }
 
-  const resolvedAt = new Date();
-  await withTransaction(async (tx) => {
-    await tx
-      .update(markets)
-      .set({
-        resolved: true,
-        resolution: args.resolution,
-        resolutionDescription:
-          args.reason ||
-          `Resolved by admin as ${args.resolution ? 'YES' : 'NO'}`,
-        updatedAt: resolvedAt,
-      })
-      .where(eq(markets.id, args.marketId));
+  const winningSide = args.resolution ? 'yes' : 'no';
 
-    await tx
-      .update(positions)
-      .set({
-        status: 'resolved',
-        outcome: args.resolution,
-        resolvedAt,
-        updatedAt: resolvedAt,
-      })
-      .where(eq(positions.marketId, args.marketId));
-
-    await tx
-      .update(questions)
-      .set({
-        status: 'resolved',
-        resolvedOutcome: args.resolution,
-        updatedAt: resolvedAt,
-      })
-      .where(eq(questions.id, args.marketId));
-
-    await tx
-      .update(timeframedMarkets)
-      .set({
-        isActive: false,
-        isResolved: true,
-        resolvedAt,
-        updatedAt: resolvedAt,
-      })
-      .where(eq(timeframedMarkets.questionId, args.marketId));
+  const service = buildPredictionService(args.marketId);
+  await service.resolve({
+    marketId: args.marketId,
+    winningSide,
+    resolutionDescription:
+      args.reason ||
+      `Resolved by admin as ${args.resolution ? 'YES' : 'NO'}`,
   });
 
   await logAdminModify({
