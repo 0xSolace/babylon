@@ -193,9 +193,12 @@ export function LikeButton({
     setIsAnimating(true);
     setTimeout(() => setIsAnimating(false), 300);
 
+    // If already liked, changing reaction type doesn't toggle the like state
+    if (isLiked) return;
+
     if (targetType === 'post') {
       await toggleLike(targetId);
-      onLikeChange?.(!isLiked);
+      onLikeChange?.(true);
     } else {
       await toggleCommentLike(targetId);
     }

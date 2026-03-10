@@ -51,6 +51,7 @@ const FEED_POST_WINDOW_MS = 24 * 60 * 60 * 1000;
 const NEW_MARKET_WINDOW_MS = 24 * 60 * 60 * 1000;
 const FEED_EVENT_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
 const BASE_CACHE_TTL_S = 60;
+const USER_ENRICHMENT_TTL_S = 30;
 const GENERAL_STORY_KEY = '__general__';
 
 interface BaseForYouResult {
@@ -904,61 +905,65 @@ export async function buildForYouFeed(userId?: string | null) {
       Array<{ questionId: number | null }>,
       EventAggregates
     ] = userId
-    ? await Promise.all([
-        db
-          .select({ id: follows.followingId })
-          .from(follows)
-          .where(eq(follows.followerId, userId)),
-        db
-          .select({ id: userActorFollows.actorId })
-          .from(userActorFollows)
-          .where(eq(userActorFollows.userId, userId)),
-        baseResult.postIds.length > 0
-          ? db
-              .select({ postId: reactions.postId })
-              .from(reactions)
+    ? await getCacheOrFetch(
+        `feed:for-you:enrichment:${userId}`,
+        () => Promise.all([
+          db
+            .select({ id: follows.followingId })
+            .from(follows)
+            .where(eq(follows.followerId, userId)),
+          db
+            .select({ id: userActorFollows.actorId })
+            .from(userActorFollows)
+            .where(eq(userActorFollows.userId, userId)),
+          baseResult.postIds.length > 0
+            ? db
+                .select({ postId: reactions.postId })
+                .from(reactions)
+                .where(
+                  and(
+                    inArray(reactions.postId, baseResult.postIds),
+                    eq(reactions.userId, userId),
+                    eq(reactions.type, 'like')
+                  )
+                )
+            : Promise.resolve([]),
+          baseResult.postIds.length > 0
+            ? db
+                .select({ postId: shares.postId })
+                .from(shares)
+                .where(
+                  and(
+                    inArray(shares.postId, baseResult.postIds),
+                    eq(shares.userId, userId)
+                  )
+                )
+            : Promise.resolve([]),
+          (() => {
+            const questionNumbers = baseResult.stories
+              .map((story) => story.questionNumber)
+              .filter((questionNumber): questionNumber is number => questionNumber !== null);
+
+            if (questionNumbers.length === 0) {
+              return Promise.resolve([]);
+            }
+
+            return db
+              .select({ questionId: positions.questionId })
+              .from(positions)
               .where(
                 and(
-                  inArray(reactions.postId, baseResult.postIds),
-                  eq(reactions.userId, userId),
-                  eq(reactions.type, 'like')
+                  eq(positions.userId, userId),
+                  eq(positions.status, 'active'),
+                  isNotNull(positions.questionId),
+                  inArray(positions.questionId, questionNumbers)
                 )
-              )
-          : Promise.resolve([]),
-        baseResult.postIds.length > 0
-          ? db
-              .select({ postId: shares.postId })
-              .from(shares)
-              .where(
-                and(
-                  inArray(shares.postId, baseResult.postIds),
-                  eq(shares.userId, userId)
-                )
-              )
-          : Promise.resolve([]),
-        (() => {
-          const questionNumbers = baseResult.stories
-            .map((story) => story.questionNumber)
-            .filter((questionNumber): questionNumber is number => questionNumber !== null);
-
-          if (questionNumbers.length === 0) {
-            return Promise.resolve([]);
-          }
-
-          return db
-            .select({ questionId: positions.questionId })
-            .from(positions)
-            .where(
-              and(
-                eq(positions.userId, userId),
-                eq(positions.status, 'active'),
-                isNotNull(positions.questionId),
-                inArray(positions.questionId, questionNumbers)
-              )
-            );
-        })(),
-        loadFeedEventAggregates(userId),
-      ])
+              );
+          })(),
+          loadFeedEventAggregates(userId),
+        ]),
+        { namespace: 'feed', ttl: USER_ENRICHMENT_TTL_S }
+      )
     : [[], [], [], [], [], aggregateFeedEvents([])];
 
   const followedAuthorIds = new Set<string>([

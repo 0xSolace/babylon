@@ -24,7 +24,7 @@ export function useFeedEventTracker() {
           ...item,
           attempts: item.attempts + 1,
         }))
-        .filter((item) => item.attempts <= MAX_RETRY_ATTEMPTS);
+        .filter((item) => item.attempts < MAX_RETRY_ATTEMPTS);
 
       const droppedCount = batch.length - retryable.length;
       if (droppedCount > 0) {
