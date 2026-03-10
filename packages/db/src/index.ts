@@ -23,9 +23,14 @@ export { schema };
 export type { DrizzleClient, JsonValue, SQLValue } from './client';
 export { TableRepository } from './client';
 // Database runtime (connection management, `db`, JSON mode)
+// We use both "export *" and explicit import-then-export for the same symbols.
+// This dual approach is necessary because some runtimes (particularly Bun in CI)
+// don't reliably resolve symbols from barrel files with only "export *".
+// See: https://github.com/oven-sh/bun/issues/4552 (barrel file re-export issues)
 export * from './db';
-// Explicit re-export so runtimes (e.g. Bun in CI) resolve these reliably from the barrel
-export {
+
+// Import-then-export so runtimes (e.g. Bun in CI) resolve these reliably from the barrel
+import {
   asPublic,
   asSystem,
   asUser,
@@ -33,6 +38,14 @@ export {
   getJsonStoragePath,
   getStorageMode,
 } from './db';
+export {
+  asPublic,
+  asSystem,
+  asUser,
+  getJsonState,
+  getJsonStoragePath,
+  getStorageMode,
+};
 /**
  * Re-export unique relation types from model-types.
  *
@@ -100,12 +113,12 @@ export {
   sql,
   sum,
 } from 'drizzle-orm';
-// Re-export database service
-export {
-  DatabaseService,
-  type FeedPost,
-  getDbInstance,
-} from './database-service';
+
+// Re-export database service (import-then-export for reliable resolution in Bun/CI)
+import { DatabaseService, getDbInstance } from './database-service';
+
+export type { FeedPost } from './database-service';
+export { DatabaseService, getDbInstance };
 // Re-export query helpers
 export {
   $connect,

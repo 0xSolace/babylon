@@ -296,15 +296,28 @@ export const POST = withErrorHandling(
           );
         }
 
-        // Check if users have blocked each other
+        // Check if the other participant is an NPC or has blocked the user
         const otherParticipant = chatParticipantsList.find(
           (p) => p.userId !== user.userId
         );
         if (otherParticipant) {
-          const [isBlocked, hasBlockedMe] = await Promise.all([
+          const [otherUser, isBlocked, hasBlockedMe] = await Promise.all([
+            db
+              .select({ isActor: users.isActor })
+              .from(users)
+              .where(eq(users.id, otherParticipant.userId))
+              .limit(1)
+              .then((rows) => rows[0] ?? null),
             hasBlocked(user.userId, otherParticipant.userId),
             hasBlocked(otherParticipant.userId, user.userId),
           ]);
+
+          if (otherUser?.isActor) {
+            throw new BusinessLogicError(
+              'Cannot send direct messages to NPC actors. Use group chats to interact with NPCs.',
+              'CANNOT_DM_ACTOR'
+            );
+          }
 
           if (isBlocked || hasBlockedMe) {
             throw new BusinessLogicError(
