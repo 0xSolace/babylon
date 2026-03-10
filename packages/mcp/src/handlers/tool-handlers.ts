@@ -41,6 +41,7 @@ import {
   checkRateLimitAsync,
   getCache,
   isRedisAvailable,
+  logAdminModify,
   RATE_LIMIT_CONFIGS,
   RateLimitError,
   setCache,
@@ -54,8 +55,13 @@ import {
   and,
   db,
   eq,
+  getBlockedByUserIds,
+  getBlockedUserIds,
+  getMutedUserIds,
   groupMembers,
   groups,
+  hasBlocked,
+  markets,
   perpMarketSnapshots,
   users,
 } from '@babylon/db';
@@ -490,8 +496,12 @@ import type {
   GetOrganizationsResult,
   GetPerpetualsArgs,
   GetPerpetualsResult,
+  GetPortfolioArgs,
+  GetPortfolioResult,
   GetPositionsArgs,
   GetPositionsResult,
+  GetPostArgs,
+  GetPostResult,
   GetPostsByTagArgs,
   GetPostsByTagResult,
   GetReferralCodeArgs,
@@ -549,6 +559,10 @@ import type {
   ReportPostResult,
   ReportUserArgs,
   ReportUserResult,
+  ResolveMarketArgs,
+  ResolveMarketResult,
+  SearchAgentsArgs,
+  SearchAgentsResult,
   SearchUsersArgs,
   SearchUsersResult,
   SellSharesArgs,
@@ -610,7 +624,9 @@ import {
   validateGetNotificationsArgs,
   validateGetOrganizationsArgs,
   validateGetPerpetualsArgs,
+  validateGetPortfolioArgs,
   validateGetPositionsArgs,
+  validateGetPostArgs,
   validateGetPostsByTagArgs,
   validateGetReferralCodeArgs,
   validateGetReferralStatsArgs,
@@ -639,6 +655,8 @@ import {
   validateRefundEscrowPaymentArgs,
   validateReportPostArgs,
   validateReportUserArgs,
+  validateResolveMarketArgs,
+  validateSearchAgentsArgs,
   validateSearchUsersArgs,
   validateSellSharesArgs,
   validateSendMessageArgs,
@@ -1421,19 +1439,35 @@ export async function executeGetTradeHistory(
 // ============================================================================
 
 /**
+ * Execute get_post tool
+ */
+export async function executeGetPost(
+  _agent: AuthenticatedAgent,
+  args: GetPostArgs
+): Promise<GetPostResult> {
+  const apiBaseUrl = getAPIBaseUrl();
+  return safeFetchRequired<GetPostResult>(
+    new URL(`${apiBaseUrl}/api/posts/${args.postId}`)
+  );
+}
+
+/**
  * Execute create_post tool
  */
 export async function executeCreatePost(
   agent: AuthenticatedAgent,
   args: CreatePostArgs
 ): Promise<CreatePostResult> {
+  await checkMcpRateLimit(agent.userId, 'post');
+
   const postId = await generateSnowflakeId();
   const post = await db.post.create({
     data: {
       id: postId,
-      content: args.content,
+      content: args.content.trim(),
       authorId: agent.userId,
       type: args.type || 'post',
+      imageUrl: args.mediaUrl ?? null,
       timestamp: new Date(),
     },
   });
@@ -1441,6 +1475,7 @@ export async function executeCreatePost(
     success: true,
     postId: post.id,
     content: post.content,
+    mediaUrl: post.imageUrl ?? null,
   };
 }
 
@@ -1915,6 +1950,62 @@ export async function executeSearchUsers(
 }
 
 /**
+ * Execute search_agents tool
+ */
+export async function executeSearchAgents(
+  agent: AuthenticatedAgent,
+  args: SearchAgentsArgs
+): Promise<SearchAgentsResult> {
+  const [blockedIds, mutedIds, blockedByIds] = await Promise.all([
+    getBlockedUserIds(agent.userId),
+    getMutedUserIds(agent.userId),
+    getBlockedByUserIds(agent.userId),
+  ]);
+
+  const excludedUserIds = [...blockedIds, ...mutedIds, ...blockedByIds];
+
+  const agentsList = await db.user.findMany({
+    where: {
+      AND: [
+        {
+          OR: [
+            { username: { contains: args.query, mode: 'insensitive' } },
+            { displayName: { contains: args.query, mode: 'insensitive' } },
+          ],
+        },
+        { id: { not: agent.userId } },
+        ...(excludedUserIds.length > 0
+          ? [{ id: { notIn: excludedUserIds } }]
+          : []),
+        { OR: [{ isAgent: true }, { isActor: true }] },
+        { isBanned: false },
+      ],
+    },
+    select: {
+      id: true,
+      displayName: true,
+      username: true,
+      profileImageUrl: true,
+      bio: true,
+      isActor: true,
+    },
+    take: args.limit || 20,
+    orderBy: [{ username: 'asc' }],
+  });
+
+  return {
+    agents: agentsList.map((entry) => ({
+      id: entry.id,
+      username: entry.username,
+      displayName: entry.displayName,
+      profileImageUrl: entry.profileImageUrl,
+      bio: entry.bio,
+      type: entry.isActor ? 'npc' : 'agent',
+    })),
+  };
+}
+
+/**
  * Execute get_user_wallet tool
  */
 export async function executeGetUserWallet(
@@ -2037,9 +2128,31 @@ export async function executeGetChats(
  * Execute get_chat_messages tool
  */
 export async function executeGetChatMessages(
-  _agent: AuthenticatedAgent,
+  agent: AuthenticatedAgent,
   args: GetChatMessagesArgs
 ): Promise<GetChatMessagesResult> {
+  const chat = await db.chat.findUnique({
+    where: { id: args.chatId },
+    select: { id: true },
+  });
+
+  if (!chat) {
+    throw new Error('Chat not found');
+  }
+
+  const membership = await db.chatParticipant.findFirst({
+    where: {
+      chatId: args.chatId,
+      userId: agent.userId,
+      isActive: true,
+    },
+    select: { id: true },
+  });
+
+  if (!membership) {
+    throw new Error('Unauthorized: You do not have access to this chat');
+  }
+
   const messagesList = await db.message.findMany({
     where: { chatId: args.chatId },
     orderBy: { createdAt: 'desc' },
@@ -2064,6 +2177,57 @@ export async function executeSendMessage(
   agent: AuthenticatedAgent,
   args: SendMessageArgs
 ): Promise<SendMessageResult> {
+  const chat = await db.chat.findUnique({
+    where: { id: args.chatId },
+    select: { id: true, isGroup: true },
+  });
+
+  if (!chat) {
+    throw new Error('Chat not found');
+  }
+
+  const participants = await db.chatParticipant.findMany({
+    where: {
+      chatId: args.chatId,
+      isActive: true,
+    },
+    select: { userId: true },
+  });
+
+  const isParticipant = participants.some((p) => p.userId === agent.userId);
+  if (!isParticipant) {
+    throw new Error('Unauthorized: You do not have access to this chat');
+  }
+
+  if (!chat.isGroup) {
+    const otherParticipantId = participants
+      .map((participant) => participant.userId)
+      .find((userId) => userId !== agent.userId);
+
+    if (!otherParticipantId) {
+      throw new Error('Invalid direct message chat');
+    }
+
+    const [otherUser, isBlocked, hasBlockedMe] = await Promise.all([
+      db.user.findUnique({
+        where: { id: otherParticipantId },
+        select: { isActor: true },
+      }),
+      hasBlocked(agent.userId, otherParticipantId),
+      hasBlocked(otherParticipantId, agent.userId),
+    ]);
+
+    if (otherUser?.isActor) {
+      throw new Error(
+        'Cannot send direct messages to NPC actors. Use group chats instead.'
+      );
+    }
+
+    if (isBlocked || hasBlockedMe) {
+      throw new Error('Cannot send messages to this user');
+    }
+  }
+
   const messageId = await generateSnowflakeId();
   const message = await db.message.create({
     data: {
@@ -2264,6 +2428,38 @@ export async function executeMarkNotificationsRead(
   return {
     success: true,
     markedCount: args.notificationIds.length,
+  };
+}
+
+/**
+ * Execute get_portfolio tool
+ */
+export async function executeGetPortfolio(
+  agent: AuthenticatedAgent,
+  _args: GetPortfolioArgs
+): Promise<GetPortfolioResult> {
+  const apiBaseUrl = getAPIBaseUrl();
+  const [user, portfolio] = await Promise.all([
+    db.user.findUnique({
+      where: { id: agent.userId },
+      select: {
+        virtualBalance: true,
+        lifetimePnL: true,
+      },
+    }),
+    safeFetchRequired<StringRecord<JsonValue>>(
+      new URL(`${apiBaseUrl}/api/markets/positions/${agent.userId}`)
+    ),
+  ]);
+
+  if (!user) {
+    throw new Error('User not found');
+  }
+
+  return {
+    balance: user.virtualBalance.toString(),
+    lifetimePnL: user.lifetimePnL.toString(),
+    ...portfolio,
   };
 }
 
@@ -2492,12 +2688,10 @@ export async function executeGetLeaderboard(
   args: GetLeaderboardArgs
 ): Promise<GetLeaderboardResult> {
   const apiBaseUrl = getAPIBaseUrl();
-  const url = new URL(`${apiBaseUrl}/leaderboard`);
+  const url = new URL(`${apiBaseUrl}/api/leaderboard`);
   if (args.page) url.searchParams.set('page', args.page.toString());
   if (args.pageSize) url.searchParams.set('pageSize', args.pageSize.toString());
-  if (args.pointsType) url.searchParams.set('pointsType', args.pointsType);
-  if (args.minPoints)
-    url.searchParams.set('minPoints', args.minPoints.toString());
+  url.searchParams.set('type', args.type || 'wallet');
   return safeFetchRequired<GetLeaderboardResult>(url);
 }
 
@@ -2520,6 +2714,70 @@ export async function executeGetSystemStats(
     posts: postCount,
     markets: marketCount,
     activeMarkets: activeMarketCount,
+  };
+}
+
+/**
+ * Execute resolve_market tool
+ *
+ * Uses PredictionMarketService.resolve() to ensure winners are paid out,
+ * PnL is recorded, liquidity is updated, and resolution events are emitted.
+ */
+export async function executeResolveMarket(
+  agent: AuthenticatedAgent,
+  args: ResolveMarketArgs
+): Promise<ResolveMarketResult> {
+  const adminUser = await db.user.findUnique({
+    where: { id: agent.userId },
+    select: { isAdmin: true },
+  });
+
+  if (!adminUser?.isAdmin) {
+    throw new Error('Unauthorized: Admin privileges are required');
+  }
+
+  const [market] = await db
+    .select()
+    .from(markets)
+    .where(eq(markets.id, args.marketId))
+    .limit(1);
+
+  if (!market) {
+    throw new Error('Market not found');
+  }
+
+  if (market.resolved) {
+    throw new Error('Market already resolved');
+  }
+
+  const winningSide = args.resolution ? 'yes' : 'no';
+
+  const service = buildPredictionService(args.marketId);
+  await service.resolve({
+    marketId: args.marketId,
+    winningSide,
+    resolutionDescription:
+      args.reason ||
+      `Resolved by admin as ${args.resolution ? 'YES' : 'NO'}`,
+  });
+
+  await logAdminModify({
+    adminId: agent.userId,
+    resourceType: 'market',
+    resourceId: args.marketId,
+    previousValue: { resolved: false },
+    newValue: {
+      resolved: true,
+      resolution: args.resolution,
+      reason: args.reason ?? null,
+    },
+    metadata: { action: 'resolve', question: market.question },
+  });
+
+  return {
+    success: true,
+    marketId: args.marketId,
+    resolution: args.resolution,
   };
 }
 
@@ -3528,6 +3786,10 @@ export async function executeTool(
       return await executeGetTradeHistory(agent, validatedArgs);
     }
     // Social Features
+    case 'get_post': {
+      const validatedArgs = validateGetPostArgs(args);
+      return await executeGetPost(agent, validatedArgs);
+    }
     case 'create_post': {
       const validatedArgs = validateCreatePostArgs(args);
       return await executeCreatePost(agent, validatedArgs);
@@ -3597,6 +3859,10 @@ export async function executeTool(
       const validatedArgs = validateSearchUsersArgs(args);
       return await executeSearchUsers(agent, validatedArgs);
     }
+    case 'search_agents': {
+      const validatedArgs = validateSearchAgentsArgs(args);
+      return await executeSearchAgents(agent, validatedArgs);
+    }
     case 'get_user_wallet': {
       const validatedArgs = validateGetUserWalletArgs(args);
       return await executeGetUserWallet(agent, validatedArgs);
@@ -3639,6 +3905,10 @@ export async function executeTool(
       const validatedArgs = validateMarkNotificationsReadArgs(args);
       return await executeMarkNotificationsRead(agent, validatedArgs);
     }
+    case 'get_portfolio': {
+      validateGetPortfolioArgs(args);
+      return await executeGetPortfolio(agent, {} as GetPortfolioArgs);
+    }
     case 'get_group_invites': {
       validateGetGroupInvitesArgs(args);
       return await executeGetGroupInvites(agent, {} as GetGroupInvitesArgs);
@@ -3659,6 +3929,10 @@ export async function executeTool(
     case 'get_system_stats': {
       validateGetSystemStatsArgs(args);
       return await executeGetSystemStats(agent, {} as GetSystemStatsArgs);
+    }
+    case 'resolve_market': {
+      const validatedArgs = validateResolveMarketArgs(args);
+      return await executeResolveMarket(agent, validatedArgs);
     }
     // Referrals & Rewards
     case 'get_referral_code': {
