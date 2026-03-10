@@ -764,7 +764,9 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
           {
             preview:
               response != null
-                ? String(response).substring(0, 200)
+                ? (typeof response === 'object' 
+                   ? JSON.stringify(response).substring(0, 200) 
+                   : String(response).substring(0, 200))
                 : '(no response)',
           },
           'CoordinatorChat'
