@@ -34,17 +34,51 @@
  *             schema:
  *               type: object
  *               properties:
+ *                 success:
+ *                   type: boolean
  *                 leaderboard:
  *                   type: array
  *                   items:
  *                     type: object
  *                     properties:
+ *                       rank:
+ *                         type: integer
  *                       actorId:
  *                         type: string
- *                       totalValue:
- *                         type: number
- *                       pnl:
- *                         type: number
+ *                       actorName:
+ *                         type: string
+ *                       personality:
+ *                         type: string
+ *                         nullable: true
+ *                       profileImageUrl:
+ *                         type: string
+ *                         nullable: true
+ *                       poolId:
+ *                         type: string
+ *                       performance:
+ *                         type: object
+ *                         properties:
+ *                           totalValue:
+ *                             type: number
+ *                           roi:
+ *                             type: number
+ *                           realizedPnL:
+ *                             type: number
+ *                           unrealizedPnL:
+ *                             type: number
+ *                           positionCount:
+ *                             type: integer
+ *                           utilization:
+ *                             type: number
+ *                 metadata:
+ *                   type: object
+ *                   properties:
+ *                     count:
+ *                       type: integer
+ *                     limit:
+ *                       type: integer
+ *                     minValue:
+ *                       type: number
  *
  * @example
  * ```typescript
@@ -58,44 +92,182 @@ import {
   publicRateLimit,
   withErrorHandling,
 } from '@babylon/api';
-import { db, eq, npcTrades, poolPositions, pools, sql } from '@babylon/db';
+import {
+  actorState,
+  db,
+  eq,
+  inArray,
+  perpPositions,
+  poolPositions,
+  pools,
+} from '@babylon/db';
 import { NPCInvestmentManager, StaticDataRegistry } from '@babylon/engine';
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 
-/** Aggregate trade/position stats for a pool. */
-async function getPoolTradeStats(poolId: string, npcActorId: string) {
-  // Count trades from NPCTrade table
-  const [tradeStats] = await db
-    .select({ count: sql<number>`count(*)::int` })
-    .from(npcTrades)
-    .where(eq(npcTrades.npcActorId, npcActorId));
+type LeaderboardMetrics = Awaited<
+  ReturnType<typeof NPCInvestmentManager.getPortfolioMetrics>
+>;
 
-  // Count closed positions with positive realized PnL (wins) vs total closed
-  const [positionStats] = await db
-    .select({
-      closed: sql<number>`count(*) filter (where ${poolPositions.closedAt} is not null)::int`,
-      wins: sql<number>`count(*) filter (where ${poolPositions.closedAt} is not null and ${poolPositions.realizedPnL} > 0)::int`,
-      totalRealizedPnL: sql<number>`coalesce(sum(${poolPositions.realizedPnL}) filter (where ${poolPositions.closedAt} is not null), 0)`,
-      openCount: sql<number>`count(*) filter (where ${poolPositions.closedAt} is null)::int`,
-      openUnrealizedPnL: sql<number>`coalesce(sum(${poolPositions.unrealizedPnL}) filter (where ${poolPositions.closedAt} is null), 0)`,
-    })
-    .from(poolPositions)
-    .where(eq(poolPositions.poolId, poolId));
+type LeaderboardFallbackMetrics = Pick<
+  LeaderboardMetrics,
+  | 'availableBalance'
+  | 'unrealizedPnL'
+  | 'realizedPnL'
+  | 'positionCount'
+  | 'utilization'
+  | 'totalValue'
+>;
 
-  return {
-    tradeCount: tradeStats?.count ?? 0,
-    closedPositions: positionStats?.closed ?? 0,
-    wins: positionStats?.wins ?? 0,
-    winRate:
-      (positionStats?.closed ?? 0) > 0
-        ? ((positionStats?.wins ?? 0) / positionStats!.closed) * 100
-        : 0,
-    totalRealizedPnL: positionStats?.totalRealizedPnL ?? 0,
-    openPositionCount: positionStats?.openCount ?? 0,
-    openUnrealizedPnL: positionStats?.openUnrealizedPnL ?? 0,
+type FallbackPositionRow = {
+  id: string;
+  poolId: string;
+  marketType: string;
+  size: number | null;
+  leverage: number | null;
+  unrealizedPnL: number | null;
+  realizedPnL: number | null;
+  closedAt: Date | null;
+};
+
+type FallbackPerpRow = {
+  id: string;
+  userId: string;
+  size: number | null;
+  leverage: number | null;
+  unrealizedPnL: number | null;
+  realizedPnL: number | null;
+  closedAt: Date | null;
+};
+
+function getEffectiveLeverage(leverage: number | null | undefined): number {
+  return Number.isFinite(leverage) && Number(leverage) > 0
+    ? Number(leverage)
+    : 1;
+}
+
+function getPositionExposure(
+  size: number | null | undefined,
+  leverage?: number | null
+): number {
+  const numericSize = Number(size ?? 0);
+  if (!Number.isFinite(numericSize)) return 0;
+
+  if (leverage === undefined) {
+    return Math.abs(numericSize);
+  }
+
+  return Math.abs(numericSize / getEffectiveLeverage(leverage));
+}
+
+function buildFallbackMetricsByPool(
+  activePools: Array<typeof pools.$inferSelect>,
+  balances: Array<{ id: string; tradingBalance: string | null }>,
+  positionRows: FallbackPositionRow[],
+  perpRows: FallbackPerpRow[]
+): Map<string, LeaderboardFallbackMetrics> {
+  const balanceByPoolId = new Map(
+    balances.map(({ id, tradingBalance }) => [
+      id,
+      Number.parseFloat(tradingBalance ?? '0'),
+    ])
+  );
+
+  const perpIdsByPool = new Map<string, Set<string>>();
+  for (const perp of perpRows) {
+    const ids = perpIdsByPool.get(perp.userId) ?? new Set<string>();
+    ids.add(perp.id);
+    perpIdsByPool.set(perp.userId, ids);
+  }
+
+  const metricsByPool = new Map<
+    string,
+    {
+      availableBalance: number;
+      totalInvested: number;
+      unrealizedPnL: number;
+      realizedPnL: number;
+      positionCount: number;
+    }
+  >();
+
+  const ensureMetrics = (poolId: string) => {
+    const existing = metricsByPool.get(poolId);
+    if (existing) return existing;
+
+    const created = {
+      availableBalance: balanceByPoolId.get(poolId) ?? 0,
+      totalInvested: 0,
+      unrealizedPnL: 0,
+      realizedPnL: 0,
+      positionCount: 0,
+    };
+    metricsByPool.set(poolId, created);
+    return created;
   };
+
+  for (const position of positionRows) {
+    if (
+      position.marketType === 'perp' &&
+      perpIdsByPool.get(position.poolId)?.has(position.id)
+    ) {
+      continue;
+    }
+
+    const metrics = ensureMetrics(position.poolId);
+    const isOpen = position.closedAt === null;
+
+    if (isOpen) {
+      metrics.totalInvested +=
+        position.marketType === 'perp'
+          ? getPositionExposure(position.size, position.leverage)
+          : getPositionExposure(position.size);
+      metrics.unrealizedPnL += Number(position.unrealizedPnL ?? 0);
+      metrics.positionCount += 1;
+      continue;
+    }
+
+    metrics.realizedPnL += Number(position.realizedPnL ?? 0);
+  }
+
+  for (const perp of perpRows) {
+    const metrics = ensureMetrics(perp.userId);
+    const isOpen = perp.closedAt === null;
+
+    if (isOpen) {
+      metrics.totalInvested += getPositionExposure(perp.size, perp.leverage);
+      metrics.unrealizedPnL += Number(perp.unrealizedPnL ?? 0);
+      metrics.positionCount += 1;
+      continue;
+    }
+
+    metrics.realizedPnL += Number(perp.realizedPnL ?? 0);
+  }
+
+  return new Map(
+    activePools.map((pool) => {
+      const metrics = ensureMetrics(pool.id);
+      const totalValue =
+        metrics.availableBalance +
+        metrics.totalInvested +
+        metrics.unrealizedPnL;
+      const utilization =
+        totalValue > 0 ? (metrics.totalInvested / totalValue) * 100 : 0;
+
+      return [
+        pool.id,
+        {
+          availableBalance: metrics.availableBalance,
+          unrealizedPnL: metrics.unrealizedPnL,
+          realizedPnL: metrics.realizedPnL,
+          positionCount: metrics.positionCount,
+          utilization,
+          totalValue,
+        },
+      ];
+    })
+  );
 }
 
 export const GET = withErrorHandling(async function GET(request: NextRequest) {
@@ -115,88 +287,100 @@ export const GET = withErrorHandling(async function GET(request: NextRequest) {
     .from(pools)
     .where(eq(pools.isActive, true));
 
+  const activePoolIds = activePools.map((pool) => pool.id);
+
+  const [fallbackBalances, fallbackPositionRows, fallbackPerpRows] =
+    activePoolIds.length === 0
+      ? [[], [], []]
+      : await Promise.all([
+          db
+            .select({
+              id: actorState.id,
+              tradingBalance: actorState.tradingBalance,
+            })
+            .from(actorState)
+            .where(inArray(actorState.id, activePoolIds)),
+          db
+            .select({
+              id: poolPositions.id,
+              poolId: poolPositions.poolId,
+              marketType: poolPositions.marketType,
+              size: poolPositions.size,
+              leverage: poolPositions.leverage,
+              unrealizedPnL: poolPositions.unrealizedPnL,
+              realizedPnL: poolPositions.realizedPnL,
+              closedAt: poolPositions.closedAt,
+            })
+            .from(poolPositions)
+            .where(inArray(poolPositions.poolId, activePoolIds)),
+          db
+            .select({
+              id: perpPositions.id,
+              userId: perpPositions.userId,
+              size: perpPositions.size,
+              leverage: perpPositions.leverage,
+              unrealizedPnL: perpPositions.unrealizedPnL,
+              realizedPnL: perpPositions.realizedPnL,
+              closedAt: perpPositions.closedAt,
+            })
+            .from(perpPositions)
+            .where(inArray(perpPositions.userId, activePoolIds)),
+        ]);
+
+  const fallbackMetricsByPool = buildFallbackMetricsByPool(
+    activePools,
+    fallbackBalances,
+    fallbackPositionRows,
+    fallbackPerpRows
+  );
+
   const leaderboardRows = await Promise.all(
     activePools.map(async (pool) => {
-      // Try live portfolio metrics first; fall back to Pool-level columns
-      let liveMetrics: Awaited<
-        ReturnType<typeof NPCInvestmentManager.getPortfolioMetrics>
-      > | null = null;
+      const fallbackMetrics = fallbackMetricsByPool.get(pool.id);
+
       try {
-        liveMetrics = await NPCInvestmentManager.getPortfolioMetrics(pool.id);
-      } catch (err) {
-        logger.warn(
-          'Live portfolio metrics unavailable, using pool-level data',
-          {
+        const metrics = await NPCInvestmentManager.getPortfolioMetrics(pool.id);
+        const effectiveMetrics =
+          metrics.totalValue > 0 || !fallbackMetrics
+            ? metrics
+            : fallbackMetrics;
+
+        return { pool, metrics: effectiveMetrics };
+      } catch (error) {
+        if (!fallbackMetrics) {
+          logger.warn('Skipping NPC performance row due to metrics failure', {
             poolId: pool.id,
             actorId: pool.npcActorId,
-            error: err instanceof Error ? err.message : String(err),
-          },
-          'GET /api/npc/performance/leaderboard'
-        );
+            error: error instanceof Error ? error.message : String(error),
+          });
+          return null;
+        }
+
+        logger.warn('Using batched fallback NPC performance metrics', {
+          poolId: pool.id,
+          actorId: pool.npcActorId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+
+        return { pool, metrics: fallbackMetrics };
       }
-
-      // Pool-level fallback values
-      const poolTotalValue = Number.parseFloat(
-        pool.totalValue?.toString() || '0'
-      );
-      const poolLifetimePnL = Number.parseFloat(
-        pool.lifetimePnL?.toString() || '0'
-      );
-
-      // Aggregate trade/position stats directly from DB
-      const tradeStats = await getPoolTradeStats(pool.id, pool.npcActorId);
-
-      // Prefer live metrics when available and non-zero; otherwise use pool columns
-      const totalValue =
-        liveMetrics && liveMetrics.totalValue > 0
-          ? liveMetrics.totalValue
-          : poolTotalValue;
-      const realizedPnL =
-        tradeStats.totalRealizedPnL !== 0
-          ? tradeStats.totalRealizedPnL
-          : (liveMetrics?.realizedPnL ?? poolLifetimePnL);
-      const unrealizedPnL =
-        tradeStats.openUnrealizedPnL !== 0
-          ? tradeStats.openUnrealizedPnL
-          : (liveMetrics?.unrealizedPnL ?? 0);
-      const positionCount =
-        tradeStats.openPositionCount > 0
-          ? tradeStats.openPositionCount
-          : (liveMetrics?.positionCount ?? 0);
-      const utilization = liveMetrics?.utilization ?? 0;
-
-      return {
-        pool,
-        totalValue,
-        realizedPnL,
-        unrealizedPnL,
-        positionCount,
-        utilization,
-        tradeStats,
-      };
     })
   );
 
   const leaderboard = leaderboardRows
-    .filter((row) => row.totalValue >= minValue)
-    .sort((a, b) => b.totalValue - a.totalValue)
+    .filter(
+      (row): row is NonNullable<(typeof leaderboardRows)[number]> =>
+        row !== null && row.metrics.totalValue >= minValue
+    )
+    .sort((a, b) => b.metrics.totalValue - a.metrics.totalValue)
     .slice(0, limit)
-    .map((row, index) => {
-      const {
-        pool,
-        totalValue,
-        realizedPnL,
-        unrealizedPnL,
-        positionCount,
-        utilization,
-        tradeStats,
-      } = row;
+    .map(({ pool, metrics }, index) => {
       const initialValue = Number.parseFloat(
         pool.totalDeposits?.toString() || '0'
       );
       const roi =
         initialValue > 0
-          ? ((totalValue - initialValue) / initialValue) * 100
+          ? ((metrics.totalValue - initialValue) / initialValue) * 100
           : 0;
       const actor = StaticDataRegistry.getActor(pool.npcActorId);
 
@@ -208,14 +392,12 @@ export const GET = withErrorHandling(async function GET(request: NextRequest) {
         profileImageUrl: actor?.profileImageUrl || null,
         poolId: pool.id,
         performance: {
-          totalValue: Math.round(totalValue),
+          totalValue: Math.round(metrics.totalValue),
           roi: Number.parseFloat(roi.toFixed(2)),
-          realizedPnL: Math.round(realizedPnL),
-          unrealizedPnL: Math.round(unrealizedPnL),
-          positionCount,
-          utilization: Number.parseFloat(utilization.toFixed(1)),
-          tradeCount: tradeStats.tradeCount,
-          winRate: Number.parseFloat(tradeStats.winRate.toFixed(1)),
+          realizedPnL: Math.round(metrics.realizedPnL),
+          unrealizedPnL: Math.round(metrics.unrealizedPnL),
+          positionCount: metrics.positionCount,
+          utilization: Number.parseFloat(metrics.utilization.toFixed(1)),
         },
       };
     });
