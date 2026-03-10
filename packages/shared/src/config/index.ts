@@ -80,6 +80,7 @@ export function getCurrentChainId(): number {
 
   // Default to local for development, Base Sepolia for test and production build
   // (Base mainnet 8453 not default until contracts are deployed; set NEXT_PUBLIC_CHAIN_ID=8453 when ready)
+  // Note: defaults to Sepolia in production if no env var, ensuring compatibility with test nets.
   if (process.env.NODE_ENV === 'production') return 84532;
   if (process.env.NODE_ENV === 'test') return 84532;
   return 31337;
