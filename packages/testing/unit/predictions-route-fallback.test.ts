@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, mock } from 'bun:test';
+import { NextRequest } from 'next/server';
 
 const mockPublicRateLimit = mock();
 const mockListMarkets = mock();
@@ -109,15 +110,17 @@ describe('GET /api/markets/predictions', () => {
   it('returns markets even when user position enrichment fails', async () => {
     mockListUserPositions.mockRejectedValue(new Error('permission denied'));
 
-    const result = await GET({
-      url: 'https://example.com/api/markets/predictions?userId=user-1',
-    } as Request);
+    const result = (await GET(
+      new NextRequest(
+        'https://example.com/api/markets/predictions?userId=user-1'
+      )
+    )) as unknown as { success: boolean; count: number; questions?: Array<{ userPositions?: unknown[] }> };
 
     expect(result).toMatchObject({
       success: true,
       count: 1,
     });
-    expect(result.questions[0]?.userPositions).toEqual([]);
+    expect(result.questions?.[0]?.userPositions).toEqual([]);
     expect(mockLogger.error).toHaveBeenCalledTimes(1);
   });
 });

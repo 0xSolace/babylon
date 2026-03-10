@@ -28,7 +28,7 @@ describe('fetchLeaderboardData', () => {
           { status: 200 }
         )
       );
-    globalThis.fetch = fetchMock as typeof fetch;
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
 
     const result = await fetchLeaderboardData({
       currentPage: 1,
@@ -46,7 +46,7 @@ describe('fetchLeaderboardData', () => {
     const fetchMock = mock().mockResolvedValue(
       new Response('{}', { status: 403 })
     );
-    globalThis.fetch = fetchMock as typeof fetch;
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
 
     await expect(
       fetchLeaderboardData({
@@ -78,7 +78,7 @@ describe('fetchLeaderboardData', () => {
         { status: 200 }
       )
     );
-    globalThis.fetch = fetchMock as typeof fetch;
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
 
     await fetchLeaderboardData({
       currentPage: 1,
