@@ -72,6 +72,7 @@ mock.module('@babylon/engine', () => ({
   StaticDataRegistry: {
     getActor: () => null,
   },
+  getStorageMode: () => 'postgres' as const,
 }));
 
 // Mock the internal AgentWalletService module (not the whole @babylon/agents package)

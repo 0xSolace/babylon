@@ -4,6 +4,10 @@
  * Defines the agent card for Babylon's A2A protocol implementation.
  * Compliant with A2A Protocol v0.3.0 and @a2a-js/sdk specifications.
  *
+ * WHY single source: This object is the canonical list of skills and metadata; the skills
+ * generator (scripts/generate-skills-md.ts) parses it to produce docs/skills.md and
+ * skills/babylon/, so we don't maintain two copies of skill names and descriptions.
+ *
  * @public
  */
 
