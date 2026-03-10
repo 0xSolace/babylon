@@ -141,6 +141,36 @@ describe('authenticate middleware', () => {
     expect(mockVerifyAuthToken).toHaveBeenCalledWith('privy-token');
   });
 
+  it('throws AuthenticationError when getPrivyClient fails', async () => {
+    // Simulate getPrivyClient failure by clearing env vars and resetting singleton.
+    // We need to re-import the module to get a fresh singleton.
+    const savedAppId = process.env.NEXT_PUBLIC_PRIVY_APP_ID;
+    const savedSecret = process.env.PRIVY_APP_SECRET;
+    delete process.env.NEXT_PUBLIC_PRIVY_APP_ID;
+    delete process.env.PRIVY_APP_SECRET;
+
+    // Force a fresh module load to reset the privyClient singleton
+    const freshModule = await import('../auth-middleware');
+
+    mockVerifyAgentSession.mockReturnValueOnce(null);
+
+    const request = createRequest('some-token', '/api/users/me');
+
+    try {
+      await freshModule.authenticate(request);
+      expect.unreachable('Should have thrown');
+    } catch (error) {
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toBe(
+        'Authentication service unavailable. Please try again later.'
+      );
+      expect((error as { code: string }).code).toBe('AUTH_FAILED');
+    } finally {
+      process.env.NEXT_PUBLIC_PRIVY_APP_ID = savedAppId;
+      process.env.PRIVY_APP_SECRET = savedSecret;
+    }
+  });
+
   it('falls back to privy claims when agent session missing and db user absent', async () => {
     mockVerifyAgentSession.mockReturnValueOnce(null);
     mockVerifyAuthToken.mockResolvedValueOnce({ userId: 'privy-user' });
