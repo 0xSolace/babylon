@@ -13,14 +13,14 @@
  * @module /api/activity/heartbeat
  */
 
-import { withErrorHandling } from '@babylon/api';
+import { checkProgress, withErrorHandling } from '@babylon/api';
 import {
   db,
   generateSnowflakeId,
   userActivityLogs,
   userSessions,
 } from '@babylon/db';
-import { logger } from '@babylon/shared';
+import { logger, PATH_TO_ACTIVITY_TYPE } from '@babylon/shared';
 import { and, eq, inArray, isNull, lt, sql } from 'drizzle-orm';
 import { cookies } from 'next/headers';
 import type { NextRequest } from 'next/server';
@@ -253,6 +253,37 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
         activityDate,
       })
       .onConflictDoNothing();
+
+    // Track page visit for achievements (e.g., open_terminal, open_agents)
+    const lastPath = body.lastPath;
+    if (lastPath) {
+      // Match exact path or strip dynamic segments for base path
+      const basePath = `/${lastPath.split('/').filter(Boolean)[0] ?? ''}`;
+      const isMarketDetail =
+        lastPath.startsWith('/markets/predictions/') ||
+        lastPath.startsWith('/markets/perps/');
+      const pageActivityType =
+        PATH_TO_ACTIVITY_TYPE[lastPath] ??
+        PATH_TO_ACTIVITY_TYPE[basePath] ??
+        (isMarketDetail ? ('open_market_detail' as const) : undefined);
+      if (pageActivityType) {
+        const pageLogId = await generateSnowflakeId();
+        await db
+          .insert(userActivityLogs)
+          .values({
+            id: pageLogId,
+            userId: validUserId,
+            activityType: pageActivityType,
+            activityDate,
+          })
+          .onConflictDoNothing();
+
+        void checkProgress(validUserId, {
+          type: 'page_visited',
+          activityType: pageActivityType,
+        });
+      }
+    }
   } catch (error) {
     const causeCode = (error as { cause?: { code?: string } } | null)?.cause
       ?.code;
