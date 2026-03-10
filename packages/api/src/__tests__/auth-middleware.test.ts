@@ -120,6 +120,27 @@ describe('authenticate middleware', () => {
     expect(mockVerifyAuthToken).not.toHaveBeenCalled();
   });
 
+  it('falls through to Privy auth when verifyAgentSession throws', async () => {
+    mockVerifyAgentSession.mockRejectedValueOnce(
+      new Error('Redis connection refused')
+    );
+    mockVerifyAuthToken.mockResolvedValueOnce({ userId: 'privy-user' });
+
+    usersRows = [{ id: 'db-user-id', walletAddress: '0xabc', isAdmin: false }];
+
+    const request = createRequest('privy-token', '/api/users/me');
+    const result = await authenticate(request);
+
+    expect(result).toMatchObject({
+      userId: 'db-user-id',
+      dbUserId: 'db-user-id',
+      privyId: 'privy-user',
+      isAgent: false,
+    });
+    // Privy was used as fallback
+    expect(mockVerifyAuthToken).toHaveBeenCalledWith('privy-token');
+  });
+
   it('falls back to privy claims when agent session missing and db user absent', async () => {
     mockVerifyAgentSession.mockReturnValueOnce(null);
     mockVerifyAuthToken.mockResolvedValueOnce({ userId: 'privy-user' });
