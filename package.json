@@ -37,7 +37,7 @@
     "validate:all": "bun run typecheck && bun run lint",
     "test": "bun run test:unit && bun run test:integration",
     "test:unit": "bun run scripts/test-unit-isolated.ts",
-    "test:unit:fast": "bun test packages/testing/unit/ --preload ./packages/testing/unit/preload.ts",
+    "test:unit:fast": "bun test packages/testing/unit/ scripts/ --preload ./packages/testing/unit/preload.ts",
     "test:integration": "bun test packages/testing/integration/ --preload ./packages/testing/integration/preload.ts",
     "test:ci": "bash scripts/ci/run-all-tests.sh",
     "test:e2e": "cd packages/testing && playwright test e2e",

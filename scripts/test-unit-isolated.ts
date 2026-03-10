@@ -16,7 +16,7 @@ import { readdirSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 
 const ROOT = resolve(import.meta.dir, '..');
-const TEST_DIR = join(ROOT, 'packages/testing/unit');
+const TEST_DIRS = [join(ROOT, 'packages/testing/unit'), join(ROOT, 'scripts')];
 const PRELOAD = join(ROOT, 'packages/testing/unit/preload.ts');
 // Make concurrency configurable via env var, with a sensible default
 const CONCURRENCY = Number(process.env.TEST_CONCURRENCY) || 4;
@@ -53,7 +53,7 @@ async function runOne(
 }
 
 async function main() {
-  const testFiles = collectTestFiles(TEST_DIR);
+  const testFiles = TEST_DIRS.flatMap(collectTestFiles).sort();
   console.log(
     `Running ${testFiles.length} test files in isolated subprocesses (concurrency ${CONCURRENCY})...\n`
   );
@@ -105,7 +105,9 @@ async function main() {
   }
 }
 
-main().catch((err) => {
-  console.error('Error running isolated unit tests:', err);
-  process.exit(1);
-});
+if (import.meta.main) {
+  main().catch((err) => {
+    console.error('Error running isolated unit tests:', err);
+    process.exit(1);
+  });
+}
