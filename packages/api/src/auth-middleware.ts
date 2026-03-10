@@ -400,12 +400,17 @@ export async function optionalAuthFromHeaders(
 
   const token = authHeader.substring(7);
 
-  const agentSession = await verifyAgentSession(token);
-  if (agentSession) {
-    return {
-      userId: agentSession.agentId,
-      isAgent: true,
-    };
+  // Wrap in try-catch so store errors (e.g. Redis) return null instead of 500
+  try {
+    const agentSession = await verifyAgentSession(token);
+    if (agentSession) {
+      return {
+        userId: agentSession.agentId,
+        isAgent: true,
+      };
+    }
+  } catch {
+    // Agent session lookup failed (e.g. Redis down) — fall through to Privy auth
   }
 
   // Try Privy authentication - return null on failure (optional auth)
