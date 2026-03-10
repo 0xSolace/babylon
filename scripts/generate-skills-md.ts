@@ -370,7 +370,7 @@ function buildClawJson(): string {
         name: SKILL_NAME,
         version: '1.0.0',
         description: SKILL_DESCRIPTION,
-        author: 'odilitime',
+        author: 'babylon',
         license: 'MIT',
         permissions: ['network'],
         entry: 'SKILL.md',
