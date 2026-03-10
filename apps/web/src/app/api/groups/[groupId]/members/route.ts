@@ -38,6 +38,101 @@ const AddMemberSchema = z.object({
 });
 
 /**
+ * GET /api/groups/[groupId]/members
+ * List active group members for an authenticated member.
+ */
+export const GET = withErrorHandling(
+  async (
+    request: NextRequest,
+    { params }: { params: Promise<{ groupId: string }> }
+  ) => {
+    const user = await authenticate(request);
+    const { groupId } = await params;
+
+    const groupMembersList = await asUser(user, async (db) => {
+      const group = await db.group.findUnique({
+        where: { id: groupId },
+        select: { id: true },
+      });
+
+      if (!group) {
+        throw new ApiError('Group not found', 404);
+      }
+
+      const members = await db.groupMember.findMany({
+        where: {
+          groupId,
+          isActive: true,
+        },
+        orderBy: {
+          joinedAt: 'asc',
+        },
+      });
+
+      const requesterMembership = members.find(
+        (member) => member.userId === user.userId
+      );
+      if (!requesterMembership) {
+        throw new ApiError('You are not a member of this group', 403);
+      }
+
+      const memberIds = members.map((member) => member.userId);
+      const memberUsers =
+        memberIds.length > 0
+          ? await db.user.findMany({
+              where: {
+                id: { in: memberIds },
+              },
+              select: {
+                id: true,
+                displayName: true,
+                username: true,
+                profileImageUrl: true,
+                isActor: true,
+                isAgent: true,
+              },
+            })
+          : [];
+      const memberUserMap = new Map(
+        memberUsers.map((memberUser) => [memberUser.id, memberUser])
+      );
+
+      return members.map((member) => {
+        const memberUser = memberUserMap.get(member.userId);
+        const memberType = memberUser?.isActor
+          ? 'npc'
+          : memberUser?.isAgent
+            ? 'agent'
+            : 'user';
+
+        return {
+          id: member.userId,
+          displayName: memberUser?.displayName ?? null,
+          username: memberUser?.username ?? null,
+          profileImageUrl: memberUser?.profileImageUrl ?? null,
+          memberType,
+          role: member.role,
+          isAdmin: member.role === 'admin' || member.role === 'owner',
+          isOwner: member.role === 'owner',
+          joinedAt: member.joinedAt,
+        };
+      });
+    });
+
+    logger.info(
+      'Group members retrieved',
+      { userId: user.userId, groupId, count: groupMembersList.length },
+      'GET /api/groups/:groupId/members'
+    );
+
+    return successResponse({
+      groupId,
+      members: groupMembersList,
+    });
+  }
+);
+
+/**
  * POST /api/groups/[groupId]/members
  * Add a member to the group (admin only)
  *

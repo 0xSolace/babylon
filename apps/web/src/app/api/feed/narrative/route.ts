@@ -370,14 +370,44 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
 
         const authorUser = userMap.get(post.authorId);
         const actorRecord = StaticDataRegistry.getActor(post.authorId);
+        // Organizations are indexed separately from individual actors; check
+        // both so org-authored posts get the correct image (/images/organizations/)
+        // and route to /orgs/{id} rather than the broken /u/id/ fallback.
+        const orgRecord = actorRecord
+          ? null
+          : StaticDataRegistry.getOrganization(post.authorId);
         let authorName = post.authorId;
         let authorUsername: string | null = null;
         let authorProfileImageUrl: string | null = null;
+
+        // Derive author type for slot-pattern classification in the frontend.
+        const authorType: 'actor' | 'news' | 'user' = actorRecord
+          ? 'actor'
+          : orgRecord
+            ? 'news'
+            : 'user';
+
+        // Filter NPC org "NEW MARKET:" announcements — these are system-generated
+        // posts that duplicate the NewMarketCard component. The card is the
+        // canonical feed surface; the text post adds noise. We still capture the
+        // post ID below so the card's InteractionBar can anchor to it.
+        if (
+          orgRecord &&
+          post.content.trimStart().toUpperCase().startsWith('NEW MARKET:')
+        ) {
+          continue;
+        }
 
         if (actorRecord) {
           authorName = actorRecord.name;
           authorUsername = actorRecord.username ?? actorRecord.id;
           authorProfileImageUrl = actorRecord.profileImageUrl ?? null;
+        } else if (orgRecord) {
+          // Use org ID as the username so PostCard links to /profile/{orgId}
+          // which /profile/[id].tsx redirects to /orgs/{orgId}.
+          authorName = orgRecord.name;
+          authorUsername = orgRecord.id;
+          authorProfileImageUrl = orgRecord.imageUrl ?? null;
         } else if (authorUser) {
           authorName =
             authorUser.displayName ?? authorUser.username ?? post.authorId;
@@ -397,8 +427,12 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
           const origActor = StaticDataRegistry.getActor(
             originalPostData.authorId
           );
+          const origOrg = origActor
+            ? null
+            : StaticDataRegistry.getOrganization(originalPostData.authorId);
           const origAuthorName =
             origActor?.name ??
+            origOrg?.name ??
             originalPostData.displayName ??
             originalPostData.username ??
             originalPostData.authorId;
@@ -408,9 +442,13 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
             authorId: originalPostData.authorId,
             authorName: origAuthorName,
             authorUsername:
-              origActor?.username ?? originalPostData.username ?? null,
+              origActor?.username ??
+              origOrg?.id ??
+              originalPostData.username ??
+              null,
             authorProfileImageUrl:
               origActor?.profileImageUrl ??
+              origOrg?.imageUrl ??
               originalPostData.profileImageUrl ??
               null,
             timestamp: toISOStringStrict(
@@ -440,6 +478,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
           isLiked: false,
           isShared: false,
           relatedQuestion: post.relatedQuestion ?? null,
+          authorType,
           isRepost,
           isQuote,
           quoteComment: isQuote ? post.content : null,
@@ -671,6 +710,13 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
           marketId: q.marketId ?? null,
           yesShares: Number(q.yesShares ?? 0),
           noShares: Number(q.noShares ?? 0),
+          // Anchor the InteractionBar on NewMarketCard to the first NPC post
+          // about this question. Those posts are filtered from the feed body
+          // (they duplicate the card), but their IDs let the card be likeable,
+          // commentable, and shareable like any other post.
+          anchorPostId:
+            recentPosts.find((p) => p.relatedQuestion === q.questionNumber)
+              ?.id ?? null,
         });
       }
 

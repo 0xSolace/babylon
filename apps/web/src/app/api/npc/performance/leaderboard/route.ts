@@ -58,18 +58,9 @@ import {
   publicRateLimit,
   withErrorHandling,
 } from '@babylon/api';
-import {
-  and,
-  db,
-  desc,
-  eq,
-  gte,
-  inArray,
-  isNull,
-  poolPositions,
-  pools,
-} from '@babylon/db';
-import { StaticDataRegistry } from '@babylon/engine';
+import { db, eq, pools } from '@babylon/db';
+import { NPCInvestmentManager, StaticDataRegistry } from '@babylon/engine';
+import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 
@@ -85,94 +76,65 @@ export const GET = withErrorHandling(async function GET(request: NextRequest) {
   const limit = limitParam ? Number.parseInt(limitParam, 10) : 50;
   const minValue = minValueParam ? Number.parseFloat(minValueParam) : 0;
 
-  // Fetch pools with filter
-  const poolsList = await db
+  const activePools = await db
     .select()
     .from(pools)
-    .where(
-      and(eq(pools.isActive, true), gte(pools.totalValue, String(minValue)))
-    )
-    .orderBy(desc(pools.totalValue))
-    .limit(limit);
+    .where(eq(pools.isActive, true));
 
-  const actorIds = poolsList.map((p) => p.npcActorId);
-  const actorsMap = new Map(
-    actorIds
-      .map((id) => StaticDataRegistry.getActor(id))
-      .filter((a): a is NonNullable<typeof a> => a !== null)
-      .map((a) => [
-        a.id,
-        {
-          id: a.id,
-          name: a.name,
-          profileImageUrl: a.profileImageUrl,
-          personality: a.personality,
-        },
-      ])
+  const leaderboardRows = await Promise.all(
+    activePools.map(async (pool) => {
+      try {
+        const metrics = await NPCInvestmentManager.getPortfolioMetrics(pool.id);
+        return { pool, metrics };
+      } catch (error) {
+        logger.warn(
+          'Skipping NPC performance row due to metrics failure',
+          {
+            poolId: pool.id,
+            actorId: pool.npcActorId,
+            error: error instanceof Error ? error.message : String(error),
+          },
+          'GET /api/npc/performance/leaderboard'
+        );
+        return null;
+      }
+    })
   );
 
-  // Fetch open positions for all pools
-  const poolIds = poolsList.map((p) => p.id);
-  const positionsList =
-    poolIds.length > 0
-      ? await db
-          .select({
-            poolId: poolPositions.poolId,
-            unrealizedPnL: poolPositions.unrealizedPnL,
-          })
-          .from(poolPositions)
-          .where(
-            and(
-              inArray(poolPositions.poolId, poolIds),
-              isNull(poolPositions.closedAt)
-            )
-          )
-      : [];
-  const positionsByPool = new Map<string, typeof positionsList>();
-  for (const pos of positionsList) {
-    const existing = positionsByPool.get(pos.poolId) || [];
-    existing.push(pos);
-    positionsByPool.set(pos.poolId, existing);
-  }
+  const leaderboard = leaderboardRows
+    .filter(
+      (row): row is NonNullable<(typeof leaderboardRows)[number]> =>
+        row !== null && row.metrics.totalValue >= minValue
+    )
+    .sort((a, b) => b.metrics.totalValue - a.metrics.totalValue)
+    .slice(0, limit)
+    .map(({ pool, metrics }, index) => {
+      const initialValue = Number.parseFloat(
+        pool.totalDeposits?.toString() || '0'
+      );
+      const roi =
+        initialValue > 0
+          ? ((metrics.totalValue - initialValue) / initialValue) * 100
+          : 0;
+      const actor = StaticDataRegistry.getActor(pool.npcActorId);
 
-  const leaderboard = poolsList.map((pool, index) => {
-    const totalValue = Number.parseFloat(pool.totalValue?.toString() || '0');
-    const availableBalance = Number.parseFloat(
-      pool.availableBalance?.toString() || '0'
-    );
-    const initialValue = Number.parseFloat(
-      pool.totalDeposits?.toString() || '0'
-    );
-
-    const poolPositionsList = positionsByPool.get(pool.id) || [];
-    const unrealizedPnL = poolPositionsList.reduce((sum: number, pos) => {
-      return sum + Number.parseFloat(pos.unrealizedPnL?.toString() || '0');
-    }, 0);
-
-    const roi =
-      initialValue > 0 ? ((totalValue - initialValue) / initialValue) * 100 : 0;
-
-    const invested = totalValue - availableBalance;
-    const utilization = totalValue > 0 ? (invested / totalValue) * 100 : 0;
-
-    const actor = actorsMap.get(pool.npcActorId);
-
-    return {
-      rank: index + 1,
-      actorId: actor?.id || pool.npcActorId,
-      actorName: actor?.name || 'Unknown',
-      personality: actor?.personality || null,
-      profileImageUrl: actor?.profileImageUrl || null,
-      poolId: pool.id,
-      performance: {
-        totalValue: Math.round(totalValue),
-        roi: Number.parseFloat(roi.toFixed(2)),
-        unrealizedPnL: Math.round(unrealizedPnL),
-        positionCount: poolPositionsList.length,
-        utilization: Number.parseFloat(utilization.toFixed(1)),
-      },
-    };
-  });
+      return {
+        rank: index + 1,
+        actorId: actor?.id || pool.npcActorId,
+        actorName: actor?.name || 'Unknown',
+        personality: actor?.personality || null,
+        profileImageUrl: actor?.profileImageUrl || null,
+        poolId: pool.id,
+        performance: {
+          totalValue: Math.round(metrics.totalValue),
+          roi: Number.parseFloat(roi.toFixed(2)),
+          realizedPnL: Math.round(metrics.realizedPnL),
+          unrealizedPnL: Math.round(metrics.unrealizedPnL),
+          positionCount: metrics.positionCount,
+          utilization: Number.parseFloat(metrics.utilization.toFixed(1)),
+        },
+      };
+    });
 
   const res = NextResponse.json({
     success: true,

@@ -42,7 +42,9 @@ import type {
   GetNotificationsArgs,
   GetOrganizationsArgs,
   GetPerpetualsArgs,
+  GetPortfolioArgs,
   GetPositionsArgs,
+  GetPostArgs,
   GetPostsByTagArgs,
   GetReferralCodeArgs,
   GetReferralStatsArgs,
@@ -71,6 +73,8 @@ import type {
   RefundEscrowPaymentArgs,
   ReportPostArgs,
   ReportUserArgs,
+  ResolveMarketArgs,
+  SearchAgentsArgs,
   SearchUsersArgs,
   SellSharesArgs,
   SendMessageArgs,
@@ -185,9 +189,14 @@ const GetTradeHistoryArgsSchema = z.object({
 }) satisfies z.ZodType<GetTradeHistoryArgs>;
 
 // Social Features - Validation Schemas
+const GetPostArgsSchema = z.object({
+  postId: z.string().min(1),
+}) satisfies z.ZodType<GetPostArgs>;
+
 const CreatePostArgsSchema = z.object({
   content: z.string().min(1).max(5000),
   type: z.enum(['post', 'article']).optional().default('post'),
+  mediaUrl: z.string().url().optional(),
 }) satisfies z.ZodType<CreatePostArgs>;
 
 const DeletePostArgsSchema = z.object({
@@ -266,6 +275,11 @@ const SearchUsersArgsSchema = z.object({
   limit: z.number().int().positive().optional().default(20),
 }) satisfies z.ZodType<SearchUsersArgs>;
 
+const SearchAgentsArgsSchema = z.object({
+  query: z.string().min(1),
+  limit: z.number().int().positive().optional().default(20),
+}) satisfies z.ZodType<SearchAgentsArgs>;
+
 const GetUserWalletArgsSchema = z.object({
   userId: z.string().min(1),
 }) satisfies z.ZodType<GetUserWalletArgs>;
@@ -313,6 +327,10 @@ const MarkNotificationsReadArgsSchema = z.object({
   notificationIds: z.array(z.string().min(1)),
 }) satisfies z.ZodType<MarkNotificationsReadArgs>;
 
+const GetPortfolioArgsSchema = z.object(
+  {}
+) satisfies z.ZodType<GetPortfolioArgs>;
+
 const GetGroupInvitesArgsSchema = z.object(
   {}
 ) satisfies z.ZodType<GetGroupInvitesArgs>;
@@ -329,13 +347,20 @@ const DeclineGroupInviteArgsSchema = z.object({
 const GetLeaderboardArgsSchema = z.object({
   page: z.number().int().positive().optional().default(1),
   pageSize: z.number().int().positive().optional().default(100),
-  pointsType: z.enum(['all', 'earned', 'referral']).optional().default('all'),
+  type: z.enum(['wallet', 'team']).optional().default('wallet'),
+  pointsType: z.enum(['all', 'earned', 'referral']).optional(),
   minPoints: z.number().nonnegative().optional().default(0),
 }) satisfies z.ZodType<GetLeaderboardArgs>;
 
 const GetSystemStatsArgsSchema = z.object(
   {}
 ) satisfies z.ZodType<GetSystemStatsArgs>;
+
+const ResolveMarketArgsSchema = z.object({
+  marketId: z.string().min(1),
+  resolution: z.boolean(),
+  reason: z.string().max(500).optional(),
+}) satisfies z.ZodType<ResolveMarketArgs>;
 
 // Referrals & Rewards - Validation Schemas
 const GetReferralCodeArgsSchema = z.object(
@@ -522,6 +547,10 @@ export function validateGetTradeHistoryArgs(
 }
 
 // Validation Functions - Social Features
+export function validateGetPostArgs(args: unknown): GetPostArgs {
+  return GetPostArgsSchema.parse(args);
+}
+
 export function validateCreatePostArgs(args: unknown): CreatePostArgs {
   return CreatePostArgsSchema.parse(args);
 }
@@ -591,6 +620,10 @@ export function validateSearchUsersArgs(args: unknown): SearchUsersArgs {
   return SearchUsersArgsSchema.parse(args);
 }
 
+export function validateSearchAgentsArgs(args: unknown): SearchAgentsArgs {
+  return SearchAgentsArgsSchema.parse(args);
+}
+
 export function validateGetUserWalletArgs(args: unknown): GetUserWalletArgs {
   return GetUserWalletArgsSchema.parse(args);
 }
@@ -639,6 +672,10 @@ export function validateMarkNotificationsReadArgs(
   return MarkNotificationsReadArgsSchema.parse(args);
 }
 
+export function validateGetPortfolioArgs(args: unknown): GetPortfolioArgs {
+  return GetPortfolioArgsSchema.parse(args);
+}
+
 export function validateGetGroupInvitesArgs(
   args: unknown
 ): GetGroupInvitesArgs {
@@ -664,6 +701,10 @@ export function validateGetLeaderboardArgs(args: unknown): GetLeaderboardArgs {
 
 export function validateGetSystemStatsArgs(args: unknown): GetSystemStatsArgs {
   return GetSystemStatsArgsSchema.parse(args);
+}
+
+export function validateResolveMarketArgs(args: unknown): ResolveMarketArgs {
+  return ResolveMarketArgsSchema.parse(args);
 }
 
 // Validation Functions - Referrals & Rewards

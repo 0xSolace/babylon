@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it, mock } from 'bun:test';
 
 const mockSendWhitelistWelcomeEmailsToUsers = mock(() => Promise.resolve());
-const mockGetLeaderboard = mock();
 
 const whitelistTable = {
   id: 'id',
@@ -20,6 +19,8 @@ const nftSnapshotTable = { userId: 'userId' };
 const usersTable = {
   id: 'id',
   reputationPoints: 'reputationPoints',
+  invitePoints: 'invitePoints',
+  createdAt: 'createdAt',
   isActor: 'isActor',
   isAgent: 'isAgent',
 };
@@ -33,7 +34,7 @@ let mockSnapshotRows: Array<{ userId: string }> = [];
 let mockExistingRows: Array<{ userId: string; revokedAt: Date | null }> = [];
 let mockInsertedRows: Array<{ userId: string }> = [];
 
-const mockDbSelect = mock(() => ({
+const mockDbSelect = mock((fields?: unknown) => ({
   from: (table: unknown) => {
     if (table === whitelistConfigTable) {
       return {
@@ -60,7 +61,12 @@ const mockDbSelect = mock(() => ({
 
     if (table === usersTable) {
       return {
-        where: () => ({ limit: () => Promise.resolve([]) }),
+        where: () => ({
+          orderBy: () => ({
+            limit: () => Promise.resolve(mockTopUsers),
+          }),
+          limit: () => Promise.resolve([]),
+        }),
       };
     }
 
@@ -87,10 +93,14 @@ mock.module('@babylon/db', () => ({
     insert: mockDbInsert,
   },
   and: (...args: unknown[]) => args,
+  asc: (col: unknown) => col,
   desc: (col: unknown) => col,
   eq: (a: unknown, b: unknown) => [a, b],
+  gt: (a: unknown, b: unknown) => [a, b],
   inArray: (a: unknown, b: unknown) => [a, b],
   isNull: (a: unknown) => a,
+  lt: (a: unknown, b: unknown) => [a, b],
+  or: (...args: unknown[]) => args,
   sql: (strings: TemplateStringsArray, ...values: unknown[]) => ({
     strings,
     values,
@@ -121,9 +131,7 @@ mock.module('nanoid', () => ({
 }));
 
 mock.module('../services/points-service', () => ({
-  PointsService: {
-    getLeaderboard: mockGetLeaderboard,
-  },
+  PointsService: {},
 }));
 
 mock.module('../services/whitelist-email-service', () => ({
@@ -131,15 +139,13 @@ mock.module('../services/whitelist-email-service', () => ({
   sendWhitelistWelcomeEmailsToUsers: mockSendWhitelistWelcomeEmailsToUsers,
 }));
 
-const { autoWhitelistCurrentTopN } = await import(
-  '../services/whitelist-service'
-);
+const { autoWhitelistCurrentTopN, normalizeWhitelistLeaderboardThreshold } =
+  await import('../services/whitelist-service');
 
 describe('autoWhitelistCurrentTopN → whitelist welcome emails', () => {
   beforeEach(() => {
     mockDbSelect.mockClear();
     mockDbInsert.mockClear();
-    mockGetLeaderboard.mockClear();
     mockSendWhitelistWelcomeEmailsToUsers.mockClear();
 
     mockWhitelistConfigRow = { leaderboardRankThreshold: 100 };
@@ -147,8 +153,6 @@ describe('autoWhitelistCurrentTopN → whitelist welcome emails', () => {
     mockSnapshotRows = [];
     mockExistingRows = [];
     mockInsertedRows = [{ userId: 'user-1' }, { userId: 'user-2' }];
-
-    mockGetLeaderboard.mockResolvedValue({ users: mockTopUsers });
   });
 
   it('sends whitelist welcome emails for users inserted by leaderboard cron', async () => {
@@ -164,12 +168,34 @@ describe('autoWhitelistCurrentTopN → whitelist welcome emails', () => {
 
   it('does not send whitelist welcome emails when leaderboard is empty', async () => {
     mockTopUsers = [];
-    mockGetLeaderboard.mockResolvedValue({ users: mockTopUsers });
 
     const result = await autoWhitelistCurrentTopN();
 
     expect(result.totalInTopN).toBe(0);
     expect(result.inserted).toBe(0);
     expect(mockSendWhitelistWelcomeEmailsToUsers).toHaveBeenCalledTimes(0);
+  });
+
+  it('caps the effective whitelist threshold at 25,000', async () => {
+    mockWhitelistConfigRow = { leaderboardRankThreshold: 99_999 };
+    mockTopUsers = [];
+
+    const result = await autoWhitelistCurrentTopN();
+
+    expect(result.topN).toBe(25_000);
+  });
+});
+
+describe('normalizeWhitelistLeaderboardThreshold', () => {
+  it('falls back to the default threshold for invalid values', () => {
+    expect(normalizeWhitelistLeaderboardThreshold(null)).toBe(100);
+    expect(normalizeWhitelistLeaderboardThreshold(undefined)).toBe(100);
+    expect(normalizeWhitelistLeaderboardThreshold(0)).toBe(100);
+    expect(normalizeWhitelistLeaderboardThreshold(-5)).toBe(100);
+  });
+
+  it('truncates and caps the threshold at 25,000', () => {
+    expect(normalizeWhitelistLeaderboardThreshold(25_000.9)).toBe(25_000);
+    expect(normalizeWhitelistLeaderboardThreshold(40_000)).toBe(25_000);
   });
 });

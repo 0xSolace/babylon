@@ -5,6 +5,10 @@
  */
 
 import { describe, expect, test } from 'bun:test';
+import {
+  getOtherDmParticipantId,
+  isUserInDmChatId,
+} from '../../../apps/web/src/app/api/chats/_lib/dm-chat-id';
 
 describe('DM Chat ID Generation', () => {
   function generateDMChatId(userId1: string, userId2: string): string {
@@ -42,6 +46,40 @@ describe('DM Chat ID Generation', () => {
 
     const chatId = generateDMChatId(did1, did2);
     expect(chatId.length).toBeGreaterThan(3);
+  });
+});
+
+describe('DM Chat ID Parsing', () => {
+  test('extracts the other participant when current user appears first', () => {
+    const currentUserId = '123456789012345678';
+    const actorId = 'kash-patrol';
+
+    expect(
+      getOtherDmParticipantId(`dm-${currentUserId}-${actorId}`, currentUserId)
+    ).toBe(actorId);
+  });
+
+  test('extracts the other participant when current user appears last', () => {
+    const currentUserId = '123456789012345678';
+    const actorId = 'kash-patrol';
+
+    expect(
+      getOtherDmParticipantId(`dm-${actorId}-${currentUserId}`, currentUserId)
+    ).toBe(actorId);
+  });
+
+  test('handles hyphenated identifiers without splitting them incorrectly', () => {
+    const currentUserId = '550e8400-e29b-41d4-a716-446655440000';
+    const otherUserId = '6ba7b810-9dad-11d1-80b4-00c04fd430c8';
+    const chatId = `dm-${currentUserId}-${otherUserId}`;
+
+    expect(getOtherDmParticipantId(chatId, currentUserId)).toBe(otherUserId);
+    expect(isUserInDmChatId(chatId, currentUserId)).toBe(true);
+  });
+
+  test('rejects DM chat IDs that do not include the current user', () => {
+    expect(isUserInDmChatId('dm-user-a-user-b', 'user-c')).toBe(false);
+    expect(getOtherDmParticipantId('dm-user-a-user-b', 'user-c')).toBeNull();
   });
 });
 
