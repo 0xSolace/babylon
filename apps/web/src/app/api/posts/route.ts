@@ -232,13 +232,16 @@ import {
   broadcastToChannel,
   cachedDb,
   checkRateLimitAndDuplicates,
+  checkRateLimitAsync,
   DUPLICATE_DETECTION_CONFIGS,
   ensureUserForAuth,
   getCacheOrFetch,
+  getHashedClientIp,
   invalidateCache,
   notifyMention,
   publicRateLimit,
   RATE_LIMIT_CONFIGS,
+  rateLimitError,
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
@@ -1347,14 +1350,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
   const authUser = await authenticate(request);
 
   const body = (await request.json()) as { content: string };
-  const { content } = body;
-
-  checkRateLimitAndDuplicates(
-    authUser.userId,
-    content,
-    RATE_LIMIT_CONFIGS.CREATE_POST,
-    DUPLICATE_DETECTION_CONFIGS.POST
-  );
+  const normalizedContent = body.content.trim();
 
   const fallbackDisplayName = authUser.walletAddress
     ? `${authUser.walletAddress.slice(0, 6)}...${authUser.walletAddress.slice(-4)}`
@@ -1364,13 +1360,33 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     displayName: fallbackDisplayName,
   });
   const canonicalUserId = canonicalUser.id;
+  const rateLimitResponse = checkRateLimitAndDuplicates(
+    canonicalUserId,
+    normalizedContent,
+    RATE_LIMIT_CONFIGS.CREATE_POST,
+    DUPLICATE_DETECTION_CONFIGS.POST
+  );
+  if (rateLimitResponse) {
+    return rateLimitResponse;
+  }
+
+  const clientIpHash = getHashedClientIp(request.headers);
+  if (clientIpHash) {
+    const ipRateLimit = await checkRateLimitAsync(
+      `post-ip:${clientIpHash}`,
+      RATE_LIMIT_CONFIGS.CREATE_POST
+    );
+    if (!ipRateLimit.allowed) {
+      return rateLimitError(ipRateLimit.retryAfter);
+    }
+  }
 
   const postId = await generateSnowflakeId();
   const [post] = await db
     .insert(posts)
     .values({
       id: postId,
-      content: content.trim(),
+      content: normalizedContent,
       authorId: canonicalUserId,
       timestamp: new Date(),
     })
@@ -1426,7 +1442,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     'POST /api/posts'
   );
 
-  const mentions = content.match(/@(\w+)/g) || [];
+  const mentions = normalizedContent.match(/@(\w+)/g) || [];
   const usernames = [...new Set(mentions.map((m: string) => m.substring(1)))];
 
   const mentionedUsers =
@@ -1500,13 +1516,13 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
 
   trackServerEvent(canonicalUserId, 'post_created', {
     postId: post.id,
-    contentLength: content.trim().length,
+    contentLength: normalizedContent.length,
     hasUsername: Boolean(canonicalUser.username),
   });
 
   // Generate and store tags asynchronously (don't block response)
   // This allows posts to be tagged for trending without slowing down the API
-  void generateTagsFromPost(content.trim())
+  void generateTagsFromPost(normalizedContent)
     .then((generatedTags: GeneratedTag[]) => {
       if (generatedTags.length > 0) {
         return storeTagsForPost(post.id, generatedTags).then(() => {

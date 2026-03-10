@@ -176,6 +176,24 @@ describe('authenticate middleware', () => {
     }
   });
 
+  it('normalizes malformed token verification failures to AuthenticationError', async () => {
+    mockVerifyAgentSession.mockReturnValueOnce(null);
+    mockVerifyAuthToken.mockRejectedValueOnce(new Error('jwt malformed'));
+
+    const request = createRequest('garbage-token', '/api/users/me');
+
+    try {
+      await authenticate(request);
+      expect.unreachable('Should have thrown');
+    } catch (error) {
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).message).toBe(
+        'Invalid authentication token. Please sign in again.'
+      );
+      expect((error as { code: string }).code).toBe('AUTH_FAILED');
+    }
+  });
+
   it('enforces NFT gating when enabled for non-allowlisted API paths', async () => {
     process.env.NFT_GATING_ENABLED = 'true';
 

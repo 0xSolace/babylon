@@ -1219,6 +1219,12 @@ TOPIC DIVERSITY (CRITICAL):
 - Mix question types: product launches, price targets, announcements, partnerships
 - NO two questions about the same actor or company in this batch
 
+STYLE VARIETY (CRITICAL):
+- Do NOT repeat the same sentence scaffold across the batch
+- Mix lead structures: person-led, company-led, metric-led, product/event-led, regulator/media-led
+- If two questions begin with the same named subject or same verb phrase, rewrite one
+- Avoid repetitive filler patterns such as "announce X by Y", "ban X in Y labs", or "launch X within Y"
+
 OUTCOME BALANCE:
 - Aim for 40-60% yes/no split in expectedOutcome
 - Not all questions should resolve the same way

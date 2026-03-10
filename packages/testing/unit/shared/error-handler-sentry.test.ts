@@ -2,6 +2,7 @@ import {
   afterAll,
   afterEach,
   beforeAll,
+  beforeEach,
   describe,
   expect,
   it,
@@ -76,9 +77,16 @@ describe('withErrorHandling + default Sentry capture', () => {
     ({ AuthenticationError, BadRequestError, ValidationError } = await import(
       '../../../api/src/errors'
     ));
-    ({ setDefaultErrorCapture, withErrorHandling } = await import(
-      '../../../api/src/error-handler'
-    ));
+  });
+
+  beforeEach(async () => {
+    // Load a fresh module instance so this suite is immune to cross-file mock.module
+    // overrides of @babylon/api exports (including withErrorHandling).
+    const freshModule = (await import(
+      `../../../api/src/error-handler.ts?isolation=${Date.now()}-${Math.random()}`
+    )) as ErrorHandlerModule;
+    setDefaultErrorCapture = freshModule.setDefaultErrorCapture;
+    withErrorHandling = freshModule.withErrorHandling;
   });
 
   afterEach(() => {

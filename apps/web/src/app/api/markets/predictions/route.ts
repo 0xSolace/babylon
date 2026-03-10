@@ -98,71 +98,86 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   // User positions if requested
   const userPositionsMap = new Map<string, UserPositionSnapshot[]>();
   if (userId && authUser?.userId === userId) {
-    const positions = await service.listUserPositions(userId);
-    for (const p of positions) {
-      // Skip positions with no/negligible shares (already closed or too small to sell)
-      // Match the Zod minimum of 0.01 shares for selling
-      if (p.shares < 0.01) continue;
-      const market = marketMap.get(p.marketId);
-      if (!market) continue; // Skip positions for non-existent markets
+    try {
+      const positions = await service.listUserPositions(userId);
+      for (const p of positions) {
+        // Skip positions with no/negligible shares (already closed or too small to sell)
+        // Match the Zod minimum of 0.01 shares for selling
+        if (p.shares < 0.01) continue;
+        const market = marketMap.get(p.marketId);
+        if (!market) continue; // Skip positions for non-existent markets
 
-      const yesShares = market.yesShares;
-      const noShares = market.noShares;
-      const shares = p.shares;
-      const sideKey = p.side;
+        const yesShares = market.yesShares;
+        const noShares = market.noShares;
+        const shares = p.shares;
+        const sideKey = p.side;
 
-      // Calculate current value with error handling for edge cases
-      let currentValue: number;
-      let currentProbability: number;
-      try {
-        const pricePreview = PredictionPricing.calculateSellWithFees(
-          yesShares,
-          noShares,
-          sideKey,
+        // Calculate current value with error handling for edge cases
+        let currentValue: number;
+        let currentProbability: number;
+        try {
+          const pricePreview = PredictionPricing.calculateSellWithFees(
+            yesShares,
+            noShares,
+            sideKey,
+            shares,
+            FEE_CONFIG.TRADING_FEE_RATE
+          );
+          currentValue = pricePreview.netProceeds ?? pricePreview.totalCost;
+          currentProbability = PredictionPricing.getCurrentPrice(
+            yesShares,
+            noShares,
+            sideKey
+          );
+        } catch {
+          // If sell calculation fails (e.g., insufficient liquidity), use probability-based estimate
+          currentProbability = PredictionPricing.getCurrentPrice(
+            yesShares,
+            noShares,
+            sideKey
+          );
+          // Approximate net proceeds using the spot probability and fee rate.
+          currentValue =
+            shares * currentProbability * (1 - FEE_CONFIG.TRADING_FEE_RATE);
+        }
+
+        // avgPrice is based on net buy amount (after fees), so gross-up cost basis.
+        const costBasisNet = shares * p.avgPrice;
+        const costBasis =
+          FEE_CONFIG.TRADING_FEE_RATE > 0 && FEE_CONFIG.TRADING_FEE_RATE < 1
+            ? costBasisNet / (1 - FEE_CONFIG.TRADING_FEE_RATE)
+            : costBasisNet;
+        const positionSnapshot: UserPositionSnapshot = {
+          id: p.id,
+          marketId: p.marketId,
+          side: p.side === 'yes' ? 'YES' : 'NO',
           shares,
-          FEE_CONFIG.TRADING_FEE_RATE
-        );
-        currentValue = pricePreview.netProceeds ?? pricePreview.totalCost;
-        currentProbability = PredictionPricing.getCurrentPrice(
-          yesShares,
-          noShares,
-          sideKey
-        );
-      } catch {
-        // If sell calculation fails (e.g., insufficient liquidity), use probability-based estimate
-        currentProbability = PredictionPricing.getCurrentPrice(
-          yesShares,
-          noShares,
-          sideKey
-        );
-        // Approximate net proceeds using the spot probability and fee rate.
-        currentValue =
-          shares * currentProbability * (1 - FEE_CONFIG.TRADING_FEE_RATE);
+          avgPrice: p.avgPrice,
+          currentPrice: shares > 0 ? currentValue / shares : 0,
+          currentProbability,
+          currentValue,
+          costBasis,
+          unrealizedPnL: currentValue - costBasis,
+          maxPayout: shares * (1 + p.avgPrice),
+          resolved: market?.resolved ?? false,
+          resolution: market?.resolution ?? null,
+        };
+        const existing = userPositionsMap.get(p.marketId) ?? [];
+        userPositionsMap.set(p.marketId, [...existing, positionSnapshot]);
       }
-
-      // avgPrice is based on net buy amount (after fees), so gross-up cost basis.
-      const costBasisNet = shares * p.avgPrice;
-      const costBasis =
-        FEE_CONFIG.TRADING_FEE_RATE > 0 && FEE_CONFIG.TRADING_FEE_RATE < 1
-          ? costBasisNet / (1 - FEE_CONFIG.TRADING_FEE_RATE)
-          : costBasisNet;
-      const positionSnapshot: UserPositionSnapshot = {
-        id: p.id,
-        marketId: p.marketId,
-        side: p.side === 'yes' ? 'YES' : 'NO',
-        shares,
-        avgPrice: p.avgPrice,
-        currentPrice: shares > 0 ? currentValue / shares : 0,
-        currentProbability,
-        currentValue,
-        costBasis,
-        unrealizedPnL: currentValue - costBasis,
-        maxPayout: shares * (1 + p.avgPrice),
-        resolved: market?.resolved ?? false,
-        resolution: market?.resolution ?? null,
-      };
-      const existing = userPositionsMap.get(p.marketId) ?? [];
-      userPositionsMap.set(p.marketId, [...existing, positionSnapshot]);
+    } catch (error) {
+      logger.error(
+        'Failed to fetch prediction market positions; returning public markets without positions',
+        {
+          requestedUserId: userId,
+          authenticatedUserId: authUser.userId,
+          dbUserId: authUser.dbUserId ?? null,
+          privyId: authUser.privyId ?? null,
+          url: request.url,
+          error: error instanceof Error ? error.message : String(error),
+        },
+        'GET /api/markets/predictions'
+      );
     }
   }
 

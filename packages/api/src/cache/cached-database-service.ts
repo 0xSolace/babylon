@@ -277,7 +277,14 @@ class CachedDatabaseService {
    * count queries simultaneously, reducing latency by ~70% compared to
    * sequential execution. Combined with 1-minute caching.
    */
-  async getUserProfileStats(userId: string) {
+  async getUserProfileStats(userId: string): Promise<{
+    followers: number;
+    following: number;
+    positions: number;
+    comments: number;
+    reactions: number;
+    posts: number;
+  }> {
     const cacheKey = userId;
 
     return getCacheOrFetch(

@@ -275,6 +275,17 @@ export function getAvailableTools(): MCPTool[] {
     },
     // Social Features
     {
+      name: 'get_post',
+      description: 'Get a single post by ID',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          postId: { type: 'string', description: 'Post ID' },
+        },
+        required: ['postId'],
+      },
+    },
+    {
       name: 'create_post',
       description: 'Create a new post',
       inputSchema: {
@@ -289,6 +300,10 @@ export function getAvailableTools(): MCPTool[] {
             enum: ['post', 'article'],
             description: 'Post type',
             default: 'post',
+          },
+          mediaUrl: {
+            type: 'string',
+            description: 'Optional media URL for the post image/attachment',
           },
         },
         required: ['content'],
@@ -491,6 +506,18 @@ export function getAvailableTools(): MCPTool[] {
       },
     },
     {
+      name: 'search_agents',
+      description: 'Search for agents and NPCs',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          query: { type: 'string', description: 'Search query' },
+          limit: { type: 'number', description: 'Number of results to return' },
+        },
+        required: ['query'],
+      },
+    },
+    {
       name: 'get_user_wallet',
       description: 'Get user wallet information',
       inputSchema: {
@@ -630,6 +657,14 @@ export function getAvailableTools(): MCPTool[] {
       },
     },
     {
+      name: 'get_portfolio',
+      description: 'Get your balance, positions, and portfolio snapshot',
+      inputSchema: {
+        type: 'object',
+        properties: {},
+      },
+    },
+    {
       name: 'get_group_invites',
       description: 'Get group invites',
       inputSchema: {
@@ -668,10 +703,17 @@ export function getAvailableTools(): MCPTool[] {
         properties: {
           page: { type: 'number', description: 'Page number' },
           pageSize: { type: 'number', description: 'Page size' },
+          type: {
+            type: 'string',
+            enum: ['wallet', 'team'],
+            description: 'Leaderboard type',
+            default: 'wallet',
+          },
           pointsType: {
             type: 'string',
             enum: ['all', 'earned', 'referral'],
-            description: 'Points type filter',
+            description:
+              'Deprecated points filter kept for backward compatibility',
           },
           minPoints: { type: 'number', description: 'Minimum points' },
         },
@@ -683,6 +725,25 @@ export function getAvailableTools(): MCPTool[] {
       inputSchema: {
         type: 'object',
         properties: {},
+      },
+    },
+    {
+      name: 'resolve_market',
+      description: 'Resolve a prediction market (admin only)',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          marketId: { type: 'string', description: 'Market ID' },
+          resolution: {
+            type: 'boolean',
+            description: 'Resolution outcome: true for YES, false for NO',
+          },
+          reason: {
+            type: 'string',
+            description: 'Optional resolution reason shown in the audit trail',
+          },
+        },
+        required: ['marketId', 'resolution'],
       },
     },
     // Referrals & Rewards
