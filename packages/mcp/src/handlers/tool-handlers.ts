@@ -1447,7 +1447,7 @@ export async function executeGetPost(
 ): Promise<GetPostResult> {
   const apiBaseUrl = getAPIBaseUrl();
   return safeFetchRequired<GetPostResult>(
-    new URL(`${apiBaseUrl}/api/posts/${args.postId}`)
+    new URL(`${apiBaseUrl}/posts/${args.postId}`)
   );
 }
 
