@@ -1,12 +1,18 @@
-import { beforeEach, describe, expect, it, mock } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, it, mock } from 'bun:test';
 import {
   fetchLeaderboardData,
   LeaderboardFetchError,
 } from '../../../apps/web/src/app/leaderboard/fetchLeaderboardData';
 
 describe('fetchLeaderboardData', () => {
+  const originalFetch = globalThis.fetch;
+
   beforeEach(() => {
-    mock.restore();
+    globalThis.fetch = originalFetch;
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
   });
 
   it('retries transient network errors and eventually succeeds', async () => {
