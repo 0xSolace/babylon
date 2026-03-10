@@ -17,6 +17,8 @@ interface VolatilityState {
   lastMove: number;
 }
 
+const MIN_MARKET_VOLATILITY = 0.005;
+
 function generateVolatilityMove(
   state: VolatilityState,
   initialPrice: number,
@@ -64,7 +66,7 @@ function generateVolatilityMove(
 describe('Market Volatility Simulation', () => {
   describe('generateVolatilityMove', () => {
     const defaultState: VolatilityState = {
-      recentVolatility: 0.003,
+      recentVolatility: MIN_MARKET_VOLATILITY,
       momentum: 0,
       lastMove: 0,
     };
@@ -103,7 +105,7 @@ describe('Market Volatility Simulation', () => {
 
     test('respects momentum', () => {
       const upMomentum: VolatilityState = {
-        recentVolatility: 0.003,
+        recentVolatility: MIN_MARKET_VOLATILITY,
         momentum: 0.005, // Strong upward momentum
         lastMove: 0.005,
       };
@@ -175,7 +177,7 @@ describe('Market Volatility Simulation', () => {
       const initialPrice = 100;
       let currentPrice = 100;
       const state: VolatilityState = {
-        recentVolatility: 0.003,
+        recentVolatility: MIN_MARKET_VOLATILITY,
         momentum: 0,
         lastMove: 0,
       };
@@ -188,8 +190,10 @@ describe('Market Volatility Simulation', () => {
         // Update state
         state.lastMove = move;
         state.momentum = move * 0.3;
-        state.recentVolatility =
-          state.recentVolatility * 0.8 + Math.abs(move) * 0.2;
+        state.recentVolatility = Math.max(
+          MIN_MARKET_VOLATILITY,
+          state.recentVolatility * 0.8 + Math.abs(move) * 0.2
+        );
       }
 
       // Price should still be reasonable (not at extremes)
@@ -199,7 +203,7 @@ describe('Market Volatility Simulation', () => {
 
     test('volatility clustering occurs', () => {
       const state: VolatilityState = {
-        recentVolatility: 0.003,
+        recentVolatility: MIN_MARKET_VOLATILITY,
         momentum: 0,
         lastMove: 0,
       };
@@ -210,8 +214,10 @@ describe('Market Volatility Simulation', () => {
         const move = generateVolatilityMove(state, 100, 100);
         state.lastMove = move;
         state.momentum = move * 0.3;
-        state.recentVolatility =
-          state.recentVolatility * 0.8 + Math.abs(move) * 0.2;
+        state.recentVolatility = Math.max(
+          MIN_MARKET_VOLATILITY,
+          state.recentVolatility * 0.8 + Math.abs(move) * 0.2
+        );
         volatilities.push(state.recentVolatility);
       }
 
@@ -227,7 +233,11 @@ describe('Market Volatility Simulation', () => {
       const moves: number[] = [];
       for (let i = 0; i < 10000; i++) {
         const move = generateVolatilityMove(
-          { recentVolatility: 0.003, momentum: 0, lastMove: 0 },
+          {
+            recentVolatility: MIN_MARKET_VOLATILITY,
+            momentum: 0,
+            lastMove: 0,
+          },
           100,
           100
         );
@@ -247,6 +257,28 @@ describe('Market Volatility Simulation', () => {
       // Should follow roughly: many small, fewer medium, few large
       expect(tiny + small).toBeGreaterThan(medium + large);
       expect(medium).toBeGreaterThan(large);
+    });
+
+    test('volatility floor prevents the market from going flat', () => {
+      const state: VolatilityState = {
+        recentVolatility: MIN_MARKET_VOLATILITY,
+        momentum: 0,
+        lastMove: 0,
+      };
+
+      for (let i = 0; i < 500; i++) {
+        const move = generateVolatilityMove(state, 100, 100);
+        state.lastMove = move;
+        state.momentum = move * 0.3;
+        state.recentVolatility = Math.max(
+          MIN_MARKET_VOLATILITY,
+          state.recentVolatility * 0.8 + Math.abs(move) * 0.2
+        );
+      }
+
+      expect(state.recentVolatility).toBeGreaterThanOrEqual(
+        MIN_MARKET_VOLATILITY
+      );
     });
   });
 });

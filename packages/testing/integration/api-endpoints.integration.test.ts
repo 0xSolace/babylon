@@ -163,6 +163,12 @@ describe('API Endpoints - Complete Coverage', () => {
       const res = await get('/api/markets/bias/active');
       expect(res.status).toBeLessThan(500);
     });
+
+    test('GET /api/markets/predictions/[id]/resolution', async () => {
+      if (!serverAvailable) return;
+      const res = await get('/api/markets/predictions/nonexistent/resolution');
+      expect(res.status).toBe(404);
+    });
   });
 
   // ============================================
@@ -190,6 +196,12 @@ describe('API Endpoints - Complete Coverage', () => {
     test('GET /api/users/export-data - requires auth', async () => {
       if (!serverAvailable) return;
       const res = await get('/api/users/export-data');
+      expect(res.status).toBe(401);
+    });
+
+    test('GET /api/users/[userId]/notification-email-preferences - requires auth', async () => {
+      if (!serverAvailable) return;
+      const res = await get('/api/users/me/notification-email-preferences');
       expect(res.status).toBe(401);
     });
 
@@ -286,6 +298,16 @@ describe('API Endpoints - Complete Coverage', () => {
     test('POST /api/notifications/mark-read - requires auth', async () => {
       if (!serverAvailable) return;
       const res = await post('/api/notifications/mark-read', {});
+      expect(res.status).toBe(401);
+    });
+
+    test('DELETE /api/notifications - requires auth', async () => {
+      if (!serverAvailable) return;
+      const res = await fetch(`${BASE_URL}/api/notifications`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ clearAll: true }),
+      });
       expect(res.status).toBe(401);
     });
   });
