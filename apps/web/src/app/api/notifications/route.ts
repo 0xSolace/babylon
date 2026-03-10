@@ -212,7 +212,7 @@ import { z } from 'zod';
 
 const ClearNotificationsSchema = z
   .object({
-    notificationIds: z.array(z.string().min(1)).optional(),
+    notificationIds: z.array(z.string().min(1)).min(1).optional(),
     clearAll: z.boolean().optional(),
   })
   .refine(
@@ -483,7 +483,14 @@ export const PATCH = withErrorHandling(async (request: NextRequest) => {
 export const DELETE = withErrorHandling(async (request: NextRequest) => {
   const authUser = await authenticate(request);
   const rawBody = await request.text();
-  const body = rawBody.trim().length > 0 ? JSON.parse(rawBody) : {};
+  let body: unknown = {};
+  if (rawBody.trim().length > 0) {
+    try {
+      body = JSON.parse(rawBody);
+    } catch {
+      return successResponse({ error: 'Invalid JSON body' }, 400);
+    }
+  }
   const { notificationIds, clearAll } = ClearNotificationsSchema.parse(body);
 
   if (clearAll) {
