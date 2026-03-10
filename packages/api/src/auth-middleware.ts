@@ -19,6 +19,7 @@ import { getPrivyAppIdFromEnv, getTrimmedEnv } from './env';
 import {
   AuthenticationError,
   AuthorizationError,
+  ServiceUnavailableError,
   isAuthenticationError,
 } from './errors';
 import { hasNftAccessForAuthUser } from './services/nft-access-service';
@@ -32,6 +33,11 @@ export { AuthenticationError, isAuthenticationError };
 
 // Lazy initialization of Privy client to prevent build-time errors
 let privyClient: PrivyClient | null = null;
+
+/** @internal Reset singleton for testing only */
+export function _resetPrivyClientForTesting(): void {
+  privyClient = null;
+}
 
 export function getPrivyClient(): PrivyClient {
   if (!privyClient) {
@@ -163,7 +169,7 @@ export async function authenticate(
   try {
     privy = getPrivyClient();
   } catch {
-    throw new AuthenticationError(
+    throw new ServiceUnavailableError(
       'Authentication service unavailable. Please try again later.'
     );
   }

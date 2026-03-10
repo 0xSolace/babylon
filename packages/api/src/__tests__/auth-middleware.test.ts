@@ -58,7 +58,7 @@ mock.module('@privy-io/server-auth', () => ({
 }));
 
 // Import after mocks are set up
-import { authenticate } from '../auth-middleware';
+import { authenticate, _resetPrivyClientForTesting } from '../auth-middleware';
 
 let usersRows: Array<{ id: string; walletAddress: string; isAdmin?: boolean }> =
   [];
@@ -141,33 +141,34 @@ describe('authenticate middleware', () => {
     expect(mockVerifyAuthToken).toHaveBeenCalledWith('privy-token');
   });
 
-  it('throws AuthenticationError when getPrivyClient fails', async () => {
-    // Simulate getPrivyClient failure by clearing env vars and resetting singleton.
-    // We need to re-import the module to get a fresh singleton.
+  it('throws ServiceUnavailableError when getPrivyClient fails', async () => {
     const savedAppId = process.env.NEXT_PUBLIC_PRIVY_APP_ID;
     const savedSecret = process.env.PRIVY_APP_SECRET;
     delete process.env.NEXT_PUBLIC_PRIVY_APP_ID;
     delete process.env.PRIVY_APP_SECRET;
 
-    // Force a fresh module load to reset the privyClient singleton
-    const freshModule = await import('../auth-middleware');
+    // Reset the lazy singleton so getPrivyClient re-reads env vars
+    _resetPrivyClientForTesting();
 
     mockVerifyAgentSession.mockReturnValueOnce(null);
 
     const request = createRequest('some-token', '/api/users/me');
 
     try {
-      await freshModule.authenticate(request);
+      await authenticate(request);
       expect.unreachable('Should have thrown');
     } catch (error) {
       expect(error).toBeInstanceOf(Error);
       expect((error as Error).message).toBe(
         'Authentication service unavailable. Please try again later.'
       );
-      expect((error as { code: string }).code).toBe('AUTH_FAILED');
+      expect((error as { code: string }).code).toBe('SERVICE_UNAVAILABLE');
+      expect((error as { statusCode: number }).statusCode).toBe(503);
     } finally {
       process.env.NEXT_PUBLIC_PRIVY_APP_ID = savedAppId;
       process.env.PRIVY_APP_SECRET = savedSecret;
+      // Re-reset so subsequent tests get a fresh client with correct env
+      _resetPrivyClientForTesting();
     }
   });
 
