@@ -66,13 +66,16 @@ export function parseAgentCardSkills(content: string): Array<{
     indices.push({ id: m[1], start: m.index });
   const blocks: { id: string; raw: string }[] = [];
   for (let i = 0; i < indices.length; i++) {
-    const end =
-      i + 1 < indices.length ? indices[i + 1].start : block.indexOf('\n  ],');
-    const raw = (
-      end !== -1
-        ? block.slice(indices[i].start, end)
-        : block.slice(indices[i].start)
-    ).trim();
+    // Find the end of this skill block: either the start of next skill or end of skills array
+    let end = i + 1 < indices.length ? indices[i + 1].start : block.indexOf('\n  ],');
+    // Handle case where the closing array pattern isn't found
+    if (end === -1) {
+      end = block.indexOf('\n];'); // Try alternate closing pattern
+      if (end === -1) {
+        end = block.length; // Fallback to end of string if no closing pattern found
+      }
+    }
+    const raw = block.slice(indices[i].start, end).trim();
     blocks.push({ id: indices[i].id, raw });
   }
 
