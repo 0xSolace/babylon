@@ -1461,13 +1461,14 @@ export async function executeCreatePost(
   await checkMcpRateLimit(agent.userId, 'post');
 
   const postId = await generateSnowflakeId();
+  const mediaUrl = args.mediaUrl ?? null;
   const post = await db.post.create({
     data: {
       id: postId,
       content: args.content.trim(),
       authorId: agent.userId,
       type: args.type || 'post',
-      imageUrl: args.mediaUrl ?? null,
+      imageUrl: mediaUrl,
       timestamp: new Date(),
     },
   });
@@ -1475,7 +1476,7 @@ export async function executeCreatePost(
     success: true,
     postId: post.id,
     content: post.content,
-    mediaUrl: post.imageUrl ?? null,
+    mediaUrl,
   };
 }
 
