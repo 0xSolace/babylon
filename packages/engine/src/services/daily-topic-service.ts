@@ -4,7 +4,7 @@ import {
   dailyTopics,
   db,
   desc,
-  // eq, // Commented out the eq import as per the feedback
+  eq,
   generateSnowflakeId,
   gte,
   parodyHeadlines,
