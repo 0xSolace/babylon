@@ -761,7 +761,14 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
         totalParseRetries++;
         logger.warn(
           `[Coordinator] Failed to parse decision (attempt ${attempt})`,
-          { preview: response?.substring(0, 200) ?? 'null response' },
+          {
+            preview:
+              response != null
+                ? typeof response === 'object'
+                  ? JSON.stringify(response).substring(0, 200)
+                  : String(response).substring(0, 200)
+                : '(no response)',
+          },
           'CoordinatorChat'
         );
       }
@@ -957,7 +964,6 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
   }
 
   // Log decision loop completion with full telemetry (Phase 0 instrumentation)
-  const fastPathAction = fastPath ? fastPath.action : null;
   logger.info(
     '[Coordinator] Decision loop completed',
     {
@@ -967,7 +973,7 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
       actionTypes: traceActionResults.map((r) => r.actionType),
       isLLMFailure,
       totalParseRetries,
-      fastPath: fastPathAction ?? 'none',
+      fastPath: fastPath?.action ?? 'none',
       decisionLoopMs: Date.now() - requestStartMs,
     },
     'CoordinatorChat'
@@ -1041,7 +1047,12 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
       totalParseRetries++;
       logger.warn(
         `[Coordinator] Failed to parse summary (attempt ${attempt})`,
-        { preview: summaryResponse?.substring(0, 200) ?? 'null response' },
+        {
+          preview:
+            summaryResponse != null
+              ? String(summaryResponse).substring(0, 200)
+              : '(no response)',
+        },
         'CoordinatorChat'
       );
     }
@@ -1112,7 +1123,7 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
       actionTypes: traceActionResults.map((r) => r.actionType),
       isLLMFailure,
       totalParseRetries,
-      fastPath: fastPathAction ?? 'none',
+      fastPath: fastPath?.action ?? 'none',
       totalDurationMs,
     },
     'CoordinatorChat'
@@ -1127,6 +1138,6 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
     type: MessageTypeEnum.COORDINATOR,
     isLLMFailure,
     metadata, // Include tags in response for immediate UI update
-    ...(fastPathAction ? { fastPath: fastPathAction } : {}),
+    ...(fastPath?.action ? { fastPath: fastPath.action } : {}),
   });
 });

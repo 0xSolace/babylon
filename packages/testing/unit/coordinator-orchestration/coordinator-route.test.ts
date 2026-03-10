@@ -182,9 +182,10 @@ function setupSuccessfulRun() {
   mockCheckUserInput.mockReturnValue({ safe: true });
   mockCheckRateLimitAsync.mockResolvedValue({ allowed: true });
   mockValidateTeamChatOwnership.mockResolvedValue(true);
+  // First call = decision (no action, finish); any further calls (e.g. summary, retries) = summary text
   mockUseModel
     .mockResolvedValueOnce(DECISION_NO_ACTION)
-    .mockResolvedValueOnce(SUMMARY_HERE_IS_YOUR_ANSWER);
+    .mockResolvedValue(SUMMARY_HERE_IS_YOUR_ANSWER);
 }
 
 // ─── Reset between tests ──────────────────────────────────────────────────────
@@ -430,7 +431,7 @@ describe('POST /api/agents/team-chat/coordinator', () => {
     it('response body contains success=true and coordinator text', async () => {
       setupSuccessfulRun();
       const response = await POST(
-        createRequest({ content: 'help with this', teamChatId: TEAM_CHAT_ID })
+        createRequest({ content: 'what is TSLAI?', teamChatId: TEAM_CHAT_ID })
       );
       const body = await response.json();
 
@@ -475,7 +476,7 @@ describe('POST /api/agents/team-chat/coordinator', () => {
     it('calls broadcastChatMessage with teamChatId and response content', async () => {
       setupSuccessfulRun();
       await POST(
-        createRequest({ content: 'help with this', teamChatId: TEAM_CHAT_ID })
+        createRequest({ content: 'what is TSLAI?', teamChatId: TEAM_CHAT_ID })
       );
 
       expect(mockBroadcastChatMessage).toHaveBeenCalledTimes(1);
@@ -486,7 +487,9 @@ describe('POST /api/agents/team-chat/coordinator', () => {
 
     it('broadcast message has chatId, content, and ISO createdAt', async () => {
       setupSuccessfulRun();
-      await POST(createRequest({ content: 'test', teamChatId: TEAM_CHAT_ID }));
+      await POST(
+        createRequest({ content: 'what is TSLAI?', teamChatId: TEAM_CHAT_ID })
+      );
 
       const [, msg] = mockBroadcastChatMessage.mock.calls[0]!;
       expect(msg.chatId).toBe(TEAM_CHAT_ID);
