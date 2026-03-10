@@ -118,6 +118,7 @@ describe('Format Utilities', () => {
 
   describe('formatCurrency', () => {
     it('should format with default 2 decimal places', () => {
+      // Note: formats currency with locale-specific symbol and default two decimal places for clarity.
       expect(formatCurrency(123.456)).toBe('ƀ123.46');
       expect(formatCurrency(100)).toBe('ƀ100.00');
     });
