@@ -144,17 +144,29 @@ export async function authenticate(
   }
 
   // Try agent session authentication first (faster)
-  const agentSession = await verifyAgentSession(token);
-  if (agentSession) {
-    return {
-      userId: agentSession.agentId,
-      privyId: agentSession.agentId,
-      isAgent: true,
-    };
+  // Wrap in try-catch so store errors (e.g. Redis) don't leak as 500
+  try {
+    const agentSession = await verifyAgentSession(token);
+    if (agentSession) {
+      return {
+        userId: agentSession.agentId,
+        privyId: agentSession.agentId,
+        isAgent: true,
+      };
+    }
+  } catch {
+    // Agent session lookup failed (e.g. Redis down) — fall through to Privy auth
   }
 
   // Try Privy authentication
-  const privy = getPrivyClient();
+  let privy: PrivyClient;
+  try {
+    privy = getPrivyClient();
+  } catch {
+    throw new AuthenticationError(
+      'Authentication service unavailable. Please try again later.'
+    );
+  }
 
   // Get the Authorization header token as a potential fallback
   const authHeaderToken = authHeader?.startsWith('Bearer ')
