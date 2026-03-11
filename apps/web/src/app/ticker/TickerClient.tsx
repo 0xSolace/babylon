@@ -138,6 +138,8 @@ function PredictionArcMeter({
         viewBox="0 0 100 60"
         className="absolute inset-0 block"
         style={{ width: size, height: h }}
+        role="img"
+        aria-label={`Prediction meter: ${Math.round(pct)}% yes`}
       >
         {/* Track: full semi-circle */}
         <path
@@ -260,15 +262,16 @@ export function TickerClient() {
           animation: `ticker-scroll ${duration}s linear infinite`,
         }}
       >
-        {[...items, ...items].map((item) => {
+        {[...items, ...items].map((item, index) => {
           const textColor =
             item.type === 'perp'
               ? perpTextColor(item.changePercent24h, isDark) || fg
               : fg;
           const isPrediction = item.type === 'prediction' && item.yesPercent != null;
+          const uniqueKey = index < items.length ? item.key : `${item.key}-dup`;
           return (
             <span
-              key={item.key}
+              key={uniqueKey}
               className="flex shrink-0 items-center gap-2 whitespace-nowrap text-sm"
             >
               <span
