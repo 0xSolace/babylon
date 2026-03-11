@@ -7,9 +7,9 @@
  * Waitlist data structure containing user position and points information.
  */
 export interface WaitlistData {
-  position: number;
-  leaderboardRank: number;
-  waitlistPosition: number;
+  position: number; // Current rank shown to the user
+  leaderboardRank: number; // Dynamic rank based on points
+  waitlistPosition: number; // Historical signup order
   totalAhead: number;
   totalCount: number;
   percentile: number;
@@ -30,6 +30,7 @@ export interface WaitlistData {
   totalReferralPoints?: number;
   invitedUsers?: ReferralUser[];
   qualifiedUsers?: ReferralUser[];
+  whitelistRankThreshold?: number;
 }
 
 /**

@@ -7,6 +7,7 @@ import {
   useWallets,
 } from '@privy-io/react-auth';
 import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { getPrivyAccessTokenWithRetry } from '@/lib/auth/privyAccessToken';
 import { type User, useAuthStore } from '@/stores/authStore';
 import { apiFetch } from '@/utils/api-fetch';
 
@@ -93,7 +94,7 @@ export function useAuth(): UseAuthReturn {
     user: privyUser,
     login,
     logout,
-    getAccessToken,
+    getAccessToken: getPrivyAccessToken,
   } = usePrivy();
   const { wallets } = useWallets();
   const {
@@ -136,6 +137,33 @@ export function useAuth(): UseAuthReturn {
 
   // Use a ref to track if we've already cleared auth to prevent re-triggering
   const hasClearedAuthRef = useRef(false);
+
+  const getAccessToken = useCallback(async (): Promise<string | null> => {
+    try {
+      return await getPrivyAccessTokenWithRetry(getPrivyAccessToken, {
+        onRetry: (attempt, error, delayMs) => {
+          logger.warn(
+            'Privy access token refresh failed; retrying',
+            {
+              attempt,
+              delayMs,
+              error: error.message,
+            },
+            'useAuth'
+          );
+        },
+      });
+    } catch (error) {
+      logger.warn(
+        'Privy access token refresh failed after retries',
+        {
+          error: error instanceof Error ? error.message : String(error),
+        },
+        'useAuth'
+      );
+      return null;
+    }
+  }, [getPrivyAccessToken]);
 
   const persistAccessToken = useCallback(async (): Promise<string | null> => {
     if (!authenticated) {

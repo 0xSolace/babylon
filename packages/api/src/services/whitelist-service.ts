@@ -1,11 +1,15 @@
 import {
   and,
+  asc,
   db,
   desc,
   eq,
+  gt,
   inArray,
   isNull,
+  lt,
   nftSnapshot,
+  or,
   sql,
   users,
   whitelist,
@@ -14,7 +18,6 @@ import {
 import { UserAlphaGroupAssignmentService } from '@babylon/engine';
 import { logger } from '@babylon/shared';
 import { nanoid } from 'nanoid';
-import { PointsService } from './points-service';
 import {
   sendWhitelistWelcomeEmailsToUsers,
   sendWhitelistWelcomeEmailToUser,
@@ -42,6 +45,24 @@ interface UpdateWhitelistConfigParams {
   updatedBy?: string;
 }
 
+export const DEFAULT_WHITELIST_LEADERBOARD_THRESHOLD = 100;
+export const MAX_WHITELIST_LEADERBOARD_THRESHOLD = 25_000;
+
+export function normalizeWhitelistLeaderboardThreshold(
+  value: number | null | undefined
+): number {
+  if (!Number.isFinite(value) || value === undefined || value === null) {
+    return DEFAULT_WHITELIST_LEADERBOARD_THRESHOLD;
+  }
+
+  const normalized = Math.trunc(value);
+  if (normalized < 1) {
+    return DEFAULT_WHITELIST_LEADERBOARD_THRESHOLD;
+  }
+
+  return Math.min(normalized, MAX_WHITELIST_LEADERBOARD_THRESHOLD);
+}
+
 // ---------------------------------------------------------------------------
 // Access checks
 // ---------------------------------------------------------------------------
@@ -63,60 +84,94 @@ export async function isUserWhitelisted(userId: string): Promise<boolean> {
  * Check if a user qualifies for whitelist access via the leaderboard
  * rank threshold configured in WhitelistConfig.
  *
- * Computes the user's rank on-the-fly by counting users with higher
- * reputation points. Returns false if the threshold is disabled (null).
+ * Computes the user's exact rank on-the-fly using the same ordering as the
+ * whitelist cron. Returns false if the user cannot be ranked.
  */
 export async function isUserWhitelistedByLeaderboard(
   userId: string
 ): Promise<boolean> {
-  const config = await getWhitelistConfig();
-  if (!config?.leaderboardRankThreshold) return false;
-
-  const threshold = config.leaderboardRankThreshold;
-
-  // Get the user's reputation points
+  const threshold = await getEffectiveWhitelistLeaderboardThreshold();
   const [user] = await db
-    .select({ reputationPoints: users.reputationPoints })
+    .select({
+      id: users.id,
+      reputationPoints: users.reputationPoints,
+      invitePoints: users.invitePoints,
+      createdAt: users.createdAt,
+      isActor: users.isActor,
+      isAgent: users.isAgent,
+    })
     .from(users)
     .where(eq(users.id, userId))
     .limit(1);
 
-  if (!user) return false;
+  if (!user || user.isActor || user.isAgent || !user.createdAt) {
+    return false;
+  }
 
-  // Count how many non-actor, non-agent users have strictly more points
+  // Count how many non-actor, non-agent users are strictly ahead using a stable
+  // tiebreaker chain so the threshold matches the cron selection.
   const [result] = await db
-    .select({ rank: sql<number>`count(*) + 1` })
+    .select({ count: sql<number>`count(*)` })
     .from(users)
     .where(
       and(
-        sql`${users.reputationPoints} > ${user.reputationPoints}`,
         eq(users.isActor, false),
-        eq(users.isAgent, false)
+        eq(users.isAgent, false),
+        or(
+          gt(users.reputationPoints, user.reputationPoints),
+          and(
+            eq(users.reputationPoints, user.reputationPoints),
+            gt(users.invitePoints, user.invitePoints)
+          ),
+          and(
+            eq(users.reputationPoints, user.reputationPoints),
+            eq(users.invitePoints, user.invitePoints),
+            lt(users.createdAt, user.createdAt)
+          ),
+          and(
+            eq(users.reputationPoints, user.reputationPoints),
+            eq(users.invitePoints, user.invitePoints),
+            eq(users.createdAt, user.createdAt),
+            lt(users.id, user.id)
+          )
+        )
       )
     );
 
-  const rank = Number(result?.rank ?? 0);
+  const rank = Number(result?.count ?? 0) + 1;
   return rank <= threshold;
 }
 
 /**
- * Combined whitelist access check: direct whitelist entry OR leaderboard rank.
+ * Combined whitelist access check:
+ * - active whitelist entry => allow
+ * - revoked whitelist entry => deny
+ * - no entry => fall back to leaderboard threshold
  */
 export async function checkWhitelistAccess(
   userId: string
 ): Promise<{ allowed: boolean; source: string | null }> {
-  // 1. Check direct whitelist entry first (fast)
-  const [directEntry] = await db
-    .select({ source: whitelist.source })
+  const [entry] = await db
+    .select({ source: whitelist.source, revokedAt: whitelist.revokedAt })
     .from(whitelist)
-    .where(and(eq(whitelist.userId, userId), isNull(whitelist.revokedAt)))
+    .where(eq(whitelist.userId, userId))
     .limit(1);
 
-  if (directEntry) return { allowed: true, source: directEntry.source };
+  // A revoked entry is a hard block — even if the user would currently qualify
+  // via the leaderboard threshold, an admin revocation is intentionally permanent
+  // until the row is deleted or un-revoked.
+  if (entry?.revokedAt) {
+    return { allowed: false, source: null };
+  }
 
-  // 2. Check leaderboard rank threshold
+  if (entry) {
+    return { allowed: true, source: entry.source };
+  }
+
   const leaderboardAllowed = await isUserWhitelistedByLeaderboard(userId);
-  if (leaderboardAllowed) return { allowed: true, source: 'leaderboard' };
+  if (leaderboardAllowed) {
+    return { allowed: true, source: 'leaderboard' };
+  }
 
   return { allowed: false, source: null };
 }
@@ -344,6 +399,13 @@ export async function getWhitelistConfig() {
   return config ?? null;
 }
 
+export async function getEffectiveWhitelistLeaderboardThreshold(): Promise<number> {
+  const config = await getWhitelistConfig();
+  return normalizeWhitelistLeaderboardThreshold(
+    config?.leaderboardRankThreshold
+  );
+}
+
 /**
  * Upsert the whitelist configuration.
  */
@@ -382,14 +444,9 @@ export async function updateWhitelistConfig({
  * Resolve the cron auto-whitelist Top N from the WhitelistConfig table.
  *
  * We reuse `leaderboardRankThreshold` as the Top N knob for the daily cron.
- * If unset/null/invalid, default to 100.
  */
 async function getAutoWhitelistTopN(): Promise<number> {
-  const config = await getWhitelistConfig();
-  const raw = config?.leaderboardRankThreshold ?? null;
-  if (raw === null) return 100;
-  if (!Number.isFinite(raw) || raw < 1) return 100;
-  return Math.min(raw, 10_000);
+  return getEffectiveWhitelistLeaderboardThreshold();
 }
 
 /**
@@ -407,14 +464,18 @@ export async function autoWhitelistCurrentTopN(): Promise<{
   skippedRevoked: number;
 }> {
   const topN = await getAutoWhitelistTopN();
-
-  const { users: topUsers } = await PointsService.getLeaderboard(
-    1,
-    topN,
-    0,
-    'all'
-  );
-  const userIds = topUsers.map((u) => u.id);
+  const topUsers = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(and(eq(users.isActor, false), eq(users.isAgent, false)))
+    .orderBy(
+      desc(users.reputationPoints),
+      desc(users.invitePoints),
+      asc(users.createdAt),
+      asc(users.id)
+    )
+    .limit(topN);
+  const userIds = topUsers.map((user) => user.id);
 
   if (userIds.length === 0) {
     return {

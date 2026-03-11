@@ -2,7 +2,11 @@
  * Contract Test Setup Utility
  *
  * Shared utilities for ensuring Hardhat is running and contracts are deployed
- * for integration tests
+ * for integration tests.
+ *
+ * Set SKIP_CHAIN_TESTS=1 (or "true") to disable chain-dependent tests (e.g. in CI
+ * when no Hardhat/localnet is available). When set, ensureContractsReady() returns
+ * false immediately and tests that rely on it will skip.
  */
 
 import { isContractDeployed, loadDeployment } from '@babylon/contracts';
@@ -13,6 +17,12 @@ import { existsSync, readFileSync } from 'fs';
 import { join } from 'path';
 
 const HARDHAT_RPC_URL = process.env.HARDHAT_RPC_URL || 'http://localhost:8545';
+
+/** True when chain-dependent tests should be skipped (e.g. SKIP_CHAIN_TESTS=1 in CI). */
+export function skipChainTests(): boolean {
+  const v = process.env.SKIP_CHAIN_TESTS;
+  return v === '1' || v === 'true' || v === 'yes';
+}
 
 /**
  * Load environment variables from .env.local file
@@ -146,6 +156,7 @@ export async function deployContracts(): Promise<boolean> {
  * Returns true if everything is ready, false otherwise
  */
 export async function ensureContractsReady(): Promise<boolean> {
+  if (skipChainTests()) return false;
   // Step 1: Ensure Hardhat is running
   const hardhatRunning = await ensureHardhatRunning();
   if (!hardhatRunning) {

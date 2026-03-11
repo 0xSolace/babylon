@@ -283,7 +283,7 @@ export function PerpTradingModal({
           <div className="mb-6 space-y-4 rounded bg-muted p-4">
             <div className="flex items-center justify-between">
               <label className="font-medium text-muted-foreground text-sm">
-                Position Size (PTS)
+                Notional Size (USD)
               </label>
               <input
                 type="number"

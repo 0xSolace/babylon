@@ -89,6 +89,12 @@ mock.module('@babylon/db', () => ({
 
 mock.module('@babylon/shared', () => ({
   generateSnowflakeId: mock(async () => 'snowflake-alert-api'),
+  logger: {
+    debug: () => {},
+    info: () => {},
+    warn: () => {},
+    error: () => {},
+  },
 }));
 
 // ─── Import after mocks ──────────────────────────────────────────────────────

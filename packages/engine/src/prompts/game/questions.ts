@@ -83,6 +83,12 @@ Instead of multiple "Will X announce Y?" questions, vary:
 - "Will MSDNC break exclusive on leaked documents?"
 - "Will The Fud intervene in the market?"
 
+ANTI-TEMPLATE RULES:
+- Never reuse the same sentence scaffold across the batch.
+- Vary lead structures across the batch: person-led, company-led, metric-led, regulator/media-led, and product/event-led.
+- If two questions start with the same named subject or same verb phrase, rewrite one.
+- Avoid repetitive filler patterns such as "announce X by Y", "ban X in Y labs", or "launch X within Y" appearing multiple times in one batch.
+
 BUILDING ON RESOLVED QUESTIONS:
 If "Will AIlon announce X?" resolved YES, good follow-ups:
 - "Will AIlon's X launch on schedule?"
