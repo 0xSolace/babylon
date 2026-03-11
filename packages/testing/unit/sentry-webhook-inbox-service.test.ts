@@ -48,7 +48,10 @@ describe('ingestSentryWebhook signature compatibility', () => {
 
     mock.module('@babylon/shared', () => ({
       logger: {
+        debug: () => {},
         info: () => {},
+        warn: () => {},
+        error: () => {},
       },
     }));
 

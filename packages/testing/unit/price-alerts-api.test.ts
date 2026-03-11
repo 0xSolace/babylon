@@ -90,10 +90,10 @@ mock.module('@babylon/db', () => ({
 mock.module('@babylon/shared', () => ({
   generateSnowflakeId: mock(async () => 'snowflake-alert-api'),
   logger: {
-    error: () => {},
-    warn: () => {},
-    info: () => {},
     debug: () => {},
+    info: () => {},
+    warn: () => {},
+    error: () => {},
   },
 }));
 
