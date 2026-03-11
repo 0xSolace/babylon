@@ -16,6 +16,23 @@ export const sentryWebhookInboxStatusEnum = pgEnum('SentryWebhookInboxStatus', [
   'dead',
 ]);
 
+export const sentryIncidentRunStatusEnum = pgEnum('SentryIncidentRunStatus', [
+  'running',
+  'completed',
+  'failed',
+  'suppressed',
+]);
+
+export const sentryIncidentRunDecisionEnum = pgEnum(
+  'SentryIncidentRunDecision',
+  ['pending', 'skip_linear', 'reuse_linear', 'create_linear', 'process_issue']
+);
+
+export const sentryIncidentAlertOutboxStatusEnum = pgEnum(
+  'SentryIncidentAlertOutboxStatus',
+  ['pending', 'processing', 'sent', 'failed', 'dead']
+);
+
 // Onboarding Status
 export const onboardingStatusEnum = pgEnum('OnboardingStatus', [
   'PENDING_PROFILE',
