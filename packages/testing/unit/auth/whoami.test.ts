@@ -55,6 +55,8 @@ describe('/api/auth/whoami endpoint', () => {
   beforeAll(async () => {
     mock.module('@babylon/api', () => ({
       validateUserApiKey: mockValidateUserApiKey,
+      withErrorHandling: (handler: (req: unknown) => Promise<unknown>) =>
+        handler,
     }));
 
     mock.module('@babylon/db', () => ({

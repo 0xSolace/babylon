@@ -316,6 +316,34 @@
       "when": 1772718287000,
       "tag": "0045_add_sentry_webhook_inbox",
       "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1773187500000,
+      "tag": "0045_add_message_reply_to",
+      "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "7",
+      "when": 1773187500001,
+      "tag": "0045_add_daily_topics",
+      "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1773139200000,
+      "tag": "0046_add_sentry_incident_runs",
+      "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1773225600000,
+      "tag": "0047_add_sentry_incident_alerts",
+      "breakpoints": true
     }
   ]
 }
