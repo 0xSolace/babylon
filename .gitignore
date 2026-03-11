@@ -115,6 +115,7 @@ scripts/cleanup-excess-markets.ts
 
 # Continuous Claude cache (local only)
 .claude/cache/
+.claude/worktrees/
 .claude/tsc-cache/
 .claudekit/
 .env.hook-test
@@ -140,3 +141,5 @@ scripts/cleanup-excess-markets.ts
 /opencode.json
 /opencode.json.bak
 # END Ruler Generated Files
+# prr state file (auto-generated)
+.pr-resolver-state.json

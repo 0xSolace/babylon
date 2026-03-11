@@ -23,7 +23,6 @@ describe('Rate Limiting (Shared)', () => {
   });
 
   describe('User Rate Limiter', () => {
-    // Use unique prefix to avoid cross-file state when tests run in parallel
     const uid = (n: number) => `rate-limiting-test-user-${n}`;
 
     it('should allow requests within rate limit', () => {
@@ -31,8 +30,6 @@ describe('Rate Limiting (Shared)', () => {
       const config = RATE_LIMIT_CONFIGS.CREATE_POST;
 
       const result1 = checkRateLimit(userId, config);
-      // When suite runs in parallel, other tests may mock @babylon/api and replace checkRateLimit
-      if (result1?.allowed === undefined) return;
       expect(result1.allowed).toBe(true);
       expect(result1.remaining).toBe(2);
 
@@ -45,14 +42,11 @@ describe('Rate Limiting (Shared)', () => {
       const userId = uid(2);
       const config = RATE_LIMIT_CONFIGS.CREATE_POST;
 
-      // Use up all 3 requests
       checkRateLimit(userId, config);
       checkRateLimit(userId, config);
       checkRateLimit(userId, config);
 
-      // Fourth request should be blocked
       const result = checkRateLimit(userId, config);
-      if (result?.allowed === undefined) return;
       expect(result.allowed).toBe(false);
       expect(result.retryAfter).toBeGreaterThan(0);
     });
@@ -62,13 +56,10 @@ describe('Rate Limiting (Shared)', () => {
       const user2 = uid(4);
       const config = RATE_LIMIT_CONFIGS.CREATE_POST;
 
-      // User 1 uses 2 requests
       checkRateLimit(user1, config);
       checkRateLimit(user1, config);
 
-      // User 2 should have full quota
       const result = checkRateLimit(user2, config);
-      if (result?.allowed === undefined) return;
       expect(result.allowed).toBe(true);
       expect(result.remaining).toBe(2);
     });
@@ -78,8 +69,7 @@ describe('Rate Limiting (Shared)', () => {
       const config = RATE_LIMIT_CONFIGS.CREATE_POST;
 
       checkRateLimit(userId, config);
-      const second = checkRateLimit(userId, config);
-      if (second?.allowed === undefined) return;
+      checkRateLimit(userId, config);
 
       const status = await getRateLimitStatus(userId, config);
       expect(status.count).toBe(2);
@@ -126,7 +116,7 @@ describe('Rate Limiting (Shared)', () => {
     it('should normalize content for duplicate detection', () => {
       const userId = 'shared-test-user-8';
       const content1 = 'Same Content';
-      const content2 = '  same content  '; // Different case and whitespace
+      const content2 = '  same content  ';
 
       checkDuplicate(userId, content1, DUPLICATE_DETECTION_CONFIGS.POST);
       const result = checkDuplicate(
