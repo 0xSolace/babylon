@@ -109,6 +109,26 @@ import { logger, UpdateUserSchema, UserIdParamSchema } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { trackServerEvent } from '@/lib/posthog/server';
 
+const userProfileSelection = {
+  id: users.id,
+  username: users.username,
+  displayName: users.displayName,
+  bio: users.bio,
+  profileImageUrl: users.profileImageUrl,
+  coverImageUrl: users.coverImageUrl,
+  profileComplete: users.profileComplete,
+  hasUsername: users.hasUsername,
+  hasBio: users.hasBio,
+  hasProfileImage: users.hasProfileImage,
+  reputationPoints: users.reputationPoints,
+  referralCount: users.referralCount,
+  referralCode: users.referralCode,
+  usernameChangedAt: users.usernameChangedAt,
+  onChainRegistered: users.onChainRegistered,
+  nftTokenId: users.nftTokenId,
+  profileChainSyncNeeded: users.profileChainSyncNeeded,
+};
+
 /**
  * POST /api/users/[userId]/update-profile
  * Update user profile information
@@ -338,29 +358,19 @@ export const POST = withErrorHandling(
       Object.entries(updateData).filter(([, value]) => value !== undefined)
     ) as Partial<typeof users.$inferInsert>;
 
-    const [updatedUser] = await db
-      .update(users)
-      .set(sanitizedUpdateData)
-      .where(eq(users.id, canonicalUserId))
-      .returning({
-        id: users.id,
-        username: users.username,
-        displayName: users.displayName,
-        bio: users.bio,
-        profileImageUrl: users.profileImageUrl,
-        coverImageUrl: users.coverImageUrl,
-        profileComplete: users.profileComplete,
-        hasUsername: users.hasUsername,
-        hasBio: users.hasBio,
-        hasProfileImage: users.hasProfileImage,
-        reputationPoints: users.reputationPoints,
-        referralCount: users.referralCount,
-        referralCode: users.referralCode,
-        usernameChangedAt: users.usernameChangedAt,
-        onChainRegistered: users.onChainRegistered,
-        nftTokenId: users.nftTokenId,
-        profileChainSyncNeeded: users.profileChainSyncNeeded,
-      });
+    const hasSanitizedUpdates = Object.keys(sanitizedUpdateData).length > 0;
+
+    const [updatedUser] = hasSanitizedUpdates
+      ? await db
+          .update(users)
+          .set(sanitizedUpdateData)
+          .where(eq(users.id, canonicalUserId))
+          .returning(userProfileSelection)
+      : await db
+          .select(userProfileSelection)
+          .from(users)
+          .where(eq(users.id, canonicalUserId))
+          .limit(1);
 
     // Award points for profile milestones
     const pointsAwarded: { reason: string; amount: number }[] = [];
