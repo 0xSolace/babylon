@@ -1,9 +1,9 @@
 /**
  * Type declarations for @sentry/bun so typecheck passes when the package
  * is not resolved (e.g. from repo root without hoisting). When installed,
- * the package's own types take precedence via the "types" field in 
+ * the package's own types take precedence via the "types" field in
  * node_modules/@sentry/bun/package.json.
- * 
+ *
  * TODO: Consider replacing with @types/sentry__bun package or contributing
  * these types upstream to DefinitelyTyped or Sentry's own repository.
  */
