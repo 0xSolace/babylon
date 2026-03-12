@@ -1,7 +1,15 @@
 'use client';
 
 import { POINTS } from '@babylon/shared';
-import { Clock, Flame, Target, Trophy, Zap } from 'lucide-react';
+import {
+  Calendar,
+  CheckCircle2,
+  Clock,
+  Flame,
+  Target,
+  Trophy,
+  Zap,
+} from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -44,12 +52,11 @@ function formatCountdown(resetsAt: string): string {
   const diff = new Date(resetsAt).getTime() - Date.now();
   if (diff <= 0) return 'Resetting...';
   const hours = Math.floor(diff / (1000 * 60 * 60));
-  const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-  if (hours > 24) {
+  if (hours >= 24) {
     const days = Math.floor(hours / 24);
-    return `${days}d ${hours % 24}h`;
+    return `${days}d remaining`;
   }
-  return `${hours}h ${minutes}m`;
+  return `${hours}h remaining`;
 }
 
 function ChallengeItem({ challenge }: { challenge: ChallengeWithProgress }) {
@@ -61,39 +68,47 @@ function ChallengeItem({ challenge }: { challenge: ChallengeWithProgress }) {
 
   return (
     <div
-      className={`rounded-lg border p-3 transition-all ${
+      className={`rounded-lg border p-4 transition-all ${
         challenge.completed
-          ? 'border-green-500/30 bg-green-500/5'
+          ? 'border-green-500/20 bg-green-500/5'
           : 'border-border'
       }`}
     >
       <div className="flex items-start gap-3">
-        <div
-          className={`mt-0.5 shrink-0 ${challenge.completed ? 'text-green-500' : 'text-muted-foreground'}`}
-        >
-          <Icon className="h-4 w-4" />
+        <div className="mt-0.5 shrink-0">
+          {challenge.completed ? (
+            <CheckCircle2 className="h-5 w-5 text-green-500" />
+          ) : (
+            <Icon className="h-5 w-5 text-muted-foreground" />
+          )}
         </div>
         <div className="min-w-0 flex-1">
           <div className="flex items-center justify-between gap-2">
             <h4
-              className={`font-medium text-sm ${challenge.completed ? 'text-green-500' : 'text-foreground'}`}
+              className={`font-semibold text-sm ${
+                challenge.completed
+                  ? 'text-green-600 dark:text-green-400'
+                  : 'text-foreground'
+              }`}
             >
               {challenge.name}
             </h4>
             <span
-              className={`shrink-0 font-bold text-xs ${challenge.completed ? 'text-green-500' : 'text-yellow-500'}`}
+              className={`shrink-0 font-bold text-sm ${
+                challenge.completed ? 'text-green-500' : 'text-green-600'
+              }`}
             >
-              {challenge.completed ? '  Done' : `+${challenge.pointsReward}`}
+              +{challenge.pointsReward}
             </span>
           </div>
           <p className="mt-0.5 text-muted-foreground text-xs">
             {challenge.description}
           </p>
-          {!challenge.completed && (
+          {!challenge.completed && challenge.threshold > 1 && (
             <div className="mt-2">
               <div className="mb-1 flex items-center justify-between text-xs">
                 <span className="text-muted-foreground">
-                  {challenge.progress}/{challenge.threshold}
+                  {challenge.progress} / {challenge.threshold}
                 </span>
                 <span className="text-muted-foreground">
                   {Math.round(progressPct)}%
@@ -109,6 +124,50 @@ function ChallengeItem({ challenge }: { challenge: ChallengeWithProgress }) {
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+/** Dot progress indicator (e.g., "Complete all 3 (1/3)" with filled/empty dots) */
+function DotProgress({
+  completed,
+  total,
+  bonus,
+  allDone,
+}: {
+  completed: number;
+  total: number;
+  bonus: number;
+  allDone: boolean;
+}) {
+  return (
+    <div
+      className={`flex items-center justify-between rounded-lg border p-3 ${
+        allDone ? 'border-green-500/20 bg-green-500/5' : 'border-border'
+      }`}
+    >
+      <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1">
+          {Array.from({ length: total }).map((_, i) => (
+            <div
+              key={i}
+              className={`h-2 w-2 rounded-full ${
+                i < completed ? 'bg-primary' : 'bg-muted-foreground/30'
+              }`}
+            />
+          ))}
+        </div>
+        <span className="text-muted-foreground text-xs">
+          Complete all {total} ({completed}/{total})
+        </span>
+      </div>
+      <span
+        className={`font-medium text-xs ${
+          allDone ? 'text-green-500' : 'text-muted-foreground'
+        }`}
+      >
+        +{bonus} bonus
+      </span>
     </div>
   );
 }
@@ -159,7 +218,7 @@ export function ChallengesPanel() {
 
   if (loading) {
     return (
-      <div className="rounded-lg border border-border p-4">
+      <div className="space-y-4">
         <div className="mb-3 h-5 w-32 animate-pulse rounded bg-muted" />
         <div className="space-y-3">
           {[1, 2, 3].map((i) => (
@@ -175,75 +234,68 @@ export function ChallengesPanel() {
 
   if (!data) return null;
 
+  const dailyCompleted = data.daily.challenges.filter(
+    (c) => c.completed
+  ).length;
+  const weeklyCompleted = data.weekly.challenges.filter(
+    (c) => c.completed
+  ).length;
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       {/* Daily Challenges */}
-      <div className="rounded-lg border border-border p-4">
+      <div>
         <div className="mb-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Zap className="h-5 w-5 text-yellow-500" />
+            <Clock className="h-4 w-4 text-muted-foreground" />
             <h2 className="font-bold text-base text-foreground">
               Daily Challenges
             </h2>
           </div>
-          <div className="flex items-center gap-1 text-muted-foreground text-xs">
-            <Clock className="h-3.5 w-3.5" />
+          <span className="text-muted-foreground text-xs">
             {countdown.daily}
-          </div>
+          </span>
         </div>
 
         <div className="space-y-2">
           {data.daily.challenges.map((c) => (
             <ChallengeItem key={c.id} challenge={c} />
           ))}
-        </div>
 
-        {/* All-complete bonus */}
-        <div
-          className={`mt-3 rounded-lg border border-dashed p-2 text-center text-xs ${
-            data.daily.allCompleted
-              ? 'border-green-500/30 bg-green-500/5 text-green-500'
-              : 'border-border text-muted-foreground'
-          }`}
-        >
-          {data.daily.allCompleted
-            ? `All 3 complete! +${POINTS.CHALLENGE_DAILY_ALL_BONUS} bonus earned`
-            : `Complete all 3 for +${POINTS.CHALLENGE_DAILY_ALL_BONUS} bonus`}
+          <DotProgress
+            completed={dailyCompleted}
+            total={3}
+            bonus={POINTS.CHALLENGE_DAILY_ALL_BONUS}
+            allDone={data.daily.allCompleted}
+          />
         </div>
       </div>
 
       {/* Weekly Challenges */}
-      <div className="rounded-lg border border-border p-4">
+      <div>
         <div className="mb-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Trophy className="h-5 w-5 text-purple-500" />
+            <Calendar className="h-4 w-4 text-muted-foreground" />
             <h2 className="font-bold text-base text-foreground">
               Weekly Challenges
             </h2>
           </div>
-          <div className="flex items-center gap-1 text-muted-foreground text-xs">
-            <Clock className="h-3.5 w-3.5" />
+          <span className="text-muted-foreground text-xs">
             {countdown.weekly}
-          </div>
+          </span>
         </div>
 
         <div className="space-y-2">
           {data.weekly.challenges.map((c) => (
             <ChallengeItem key={c.id} challenge={c} />
           ))}
-        </div>
 
-        {/* All-complete bonus */}
-        <div
-          className={`mt-3 rounded-lg border border-dashed p-2 text-center text-xs ${
-            data.weekly.allCompleted
-              ? 'border-green-500/30 bg-green-500/5 text-green-500'
-              : 'border-border text-muted-foreground'
-          }`}
-        >
-          {data.weekly.allCompleted
-            ? `Both complete! +${POINTS.CHALLENGE_WEEKLY_ALL_BONUS} bonus earned`
-            : `Complete both for +${POINTS.CHALLENGE_WEEKLY_ALL_BONUS} bonus`}
+          <DotProgress
+            completed={weeklyCompleted}
+            total={2}
+            bonus={POINTS.CHALLENGE_WEEKLY_ALL_BONUS}
+            allDone={data.weekly.allCompleted}
+          />
         </div>
       </div>
     </div>

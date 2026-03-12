@@ -23,7 +23,11 @@ import {
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { AchievementsGrid, ChallengesPanel } from '@/components/achievements';
+import {
+  AchievementPreview,
+  AchievementsGrid,
+  ChallengesPanel,
+} from '@/components/achievements';
 import { DailyStreakCard } from '@/components/daily-login';
 import { RewardsSkeleton } from '@/components/rewards/RewardsSkeleton';
 import { Avatar } from '@/components/shared/Avatar';
@@ -79,6 +83,45 @@ interface ReferralData {
   stats: ReferralStats;
   referredUsers: ReferredUser[];
   referralUrl: string | null;
+}
+
+const REWARD_TABS = ['Overview', 'Achievements', 'Challenges'] as const;
+type RewardTab = (typeof REWARD_TABS)[number];
+
+function AchievementTabs() {
+  const [activeTab, setActiveTab] = useState<RewardTab>('Overview');
+
+  return (
+    <div>
+      {/* Tab bar */}
+      <div className="mb-4 flex border-border border-b">
+        {REWARD_TABS.map((tab) => (
+          <button
+            key={tab}
+            onClick={() => setActiveTab(tab)}
+            className={`flex-1 py-2.5 font-medium text-sm transition-colors ${
+              activeTab === tab
+                ? 'border-primary border-b-2 text-primary'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            {tab}
+          </button>
+        ))}
+      </div>
+
+      {/* Tab content */}
+      {activeTab === 'Overview' && (
+        <div className="space-y-4">
+          <DailyStreakCard />
+          <ChallengesPanel />
+          <AchievementPreview onViewAll={() => setActiveTab('Achievements')} />
+        </div>
+      )}
+      {activeTab === 'Achievements' && <AchievementsGrid />}
+      {activeTab === 'Challenges' && <ChallengesPanel />}
+    </div>
+  );
 }
 
 export default function RewardsPage() {
@@ -429,14 +472,8 @@ export default function RewardsPage() {
               </div>
             </div>
 
-            {/* Daily Rewards */}
-            <DailyStreakCard />
-
-            {/* Challenges */}
-            <ChallengesPanel />
-
-            {/* Achievements */}
-            <AchievementsGrid />
+            {/* Achievement Tabs */}
+            <AchievementTabs />
 
             {/* Reward Tasks */}
             <div className="rounded-lg border border-border p-4">
@@ -778,14 +815,8 @@ export default function RewardsPage() {
               </div>
             </div>
 
-            {/* Daily Rewards */}
-            <DailyStreakCard />
-
-            {/* Challenges */}
-            <ChallengesPanel />
-
-            {/* Achievements */}
-            <AchievementsGrid />
+            {/* Achievement Tabs */}
+            <AchievementTabs />
 
             {/* Reward Tasks */}
             <div className="space-y-3">
