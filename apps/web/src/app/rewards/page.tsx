@@ -30,6 +30,10 @@ import {
 } from '@/components/achievements';
 import { DailyStreakCard } from '@/components/daily-login';
 import { RewardsSkeleton } from '@/components/rewards/RewardsSkeleton';
+import { AchievementsTab } from '@/components/rewards/rewards/achievements-tab';
+import { ChallengesTab } from '@/components/rewards/rewards/challenges-tab';
+import { OverviewTab } from '@/components/rewards/rewards/overview-tab';
+import { TabNavigation } from '@/components/rewards/rewards/tab-navigation';
 import { Avatar } from '@/components/shared/Avatar';
 import { ExternalShareButton } from '@/components/shared/ExternalShareButton';
 import { PageContainer } from '@/components/shared/PageContainer';
@@ -87,6 +91,8 @@ interface ReferralData {
 
 const REWARD_TABS = ['Overview', 'Achievements', 'Challenges'] as const;
 type RewardTab = (typeof REWARD_TABS)[number];
+
+type Tab = 'overview' | 'achievements' | 'challenges';
 
 function AchievementTabs() {
   const [activeTab, setActiveTab] = useState<RewardTab>('Overview');
@@ -348,6 +354,36 @@ export default function RewardsPage() {
     }
   };
 
+  const [activeTab, setActiveTab] = useState<Tab>('overview');
+
+  const handleClaim = async (): Promise<boolean> => {
+    if (!authenticated) return false;
+    const token = await getAccessToken();
+    if (!token) return false;
+    const res = await fetch('/api/users/daily-login', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (res.ok) {
+      const data = await res.json();
+      const result = data.data ?? data;
+      toast.success(
+        `+${result.totalAwarded} points! Streak: ${result.streak} days`
+      );
+      window.dispatchEvent(new CustomEvent('rewards-updated'));
+      refresh();
+      fetchPortfolio();
+      return true;
+    }
+    const errData = await res.json().catch(() => null);
+    toast.error(errData?.error ?? 'Failed to claim daily reward');
+    return false;
+  };
+
+  const handleViewAchievements = () => {
+    setActiveTab('achievements');
+  };
+
   return (
     <PageContainer noPadding className="flex flex-col">
       {/* Auth required — handled by redirect effect above */}
@@ -366,7 +402,7 @@ export default function RewardsPage() {
       )}
 
       {/* Rewards Content - Desktop */}
-      {authenticated && !loading && !error && referralData && (
+      {false && (
         <div className="hidden flex-1 overflow-hidden xl:flex">
           {/* Main Content Column */}
           <div className="min-w-0 flex-1 space-y-4 overflow-y-auto overflow-x-hidden border-border p-4 sm:p-6 lg:border-l">
@@ -463,7 +499,12 @@ export default function RewardsPage() {
                                 : 'bg-primary'
                           }`}
                           style={{
-                            width: `${Math.min(100, (referralData.stats.weeklyReferralCount / referralData.stats.weeklyLimit) * 100)}%`,
+                            width: `${Math.min(
+                              100,
+                              (referralData.stats.weeklyReferralCount /
+                                referralData.stats.weeklyLimit) *
+                                100
+                            )}%`,
                           }}
                         />
                       </div>
@@ -708,7 +749,7 @@ export default function RewardsPage() {
       )}
 
       {/* Mobile/Tablet View */}
-      {authenticated && !loading && !error && referralData && (
+      {false && (
         <div className="flex w-full flex-1 flex-col overflow-y-auto border-border lg:border-l xl:hidden">
           <div className="w-full space-y-4 px-4 py-4 sm:space-y-6 sm:px-6 sm:py-6">
             {/* Header */}
@@ -805,7 +846,12 @@ export default function RewardsPage() {
                                   : 'bg-primary'
                             }`}
                             style={{
-                              width: `${Math.min(100, (referralData.stats.weeklyReferralCount / referralData.stats.weeklyLimit) * 100)}%`,
+                              width: `${Math.min(
+                                100,
+                                (referralData.stats.weeklyReferralCount /
+                                  referralData.stats.weeklyLimit) *
+                                  100
+                              )}%`,
                             }}
                           />
                         </div>
@@ -1035,14 +1081,26 @@ export default function RewardsPage() {
         </div>
       )}
 
-      {/* Share & Earn Modal */}
-      <ShareEarnModal
-        isOpen={showShareModal}
-        onClose={() => setShowShareModal(false)}
-        contentType="profile"
-        contentId={user?.id || ''}
-        text="Check out my Babylon profile! 🎮"
-      />
+      <div className="w-full">
+        <TabNavigation activeTab={activeTab} onTabChange={setActiveTab} />
+
+        <div className="p-4">
+          {activeTab === 'overview' && <OverviewTab onClaim={handleClaim} />}
+          {activeTab === 'achievements' && <AchievementsTab />}
+          {activeTab === 'challenges' && (
+            <ChallengesTab onViewAchievements={handleViewAchievements} />
+          )}
+        </div>
+
+        {/* Share & Earn Modal */}
+        <ShareEarnModal
+          isOpen={showShareModal}
+          onClose={() => setShowShareModal(false)}
+          contentType="profile"
+          contentId={user?.id || ''}
+          text="Check out my Babylon profile! 🎮"
+        />
+      </div>
     </PageContainer>
   );
 }
