@@ -83,6 +83,70 @@ describe('migrateAuthStoreState', () => {
     });
   });
 
+  test('migrates version 0 payloads (no version ever set)', () => {
+    const migrated = migrateAuthStoreState(
+      {
+        user: {
+          id: 'did:privy:test-user',
+          displayName: 'Test User',
+        },
+        wallet: {
+          address: '0xabc',
+          chainId: 'eip155:1',
+        },
+        needsOnboarding: true,
+      },
+      0
+    );
+
+    expect(migrated).toEqual({
+      user: {
+        id: 'did:privy:test-user',
+        displayName: 'Test User',
+      },
+      wallet: {
+        address: '0xabc',
+        chainId: 'eip155:1',
+      },
+      loadedUserId: null,
+      isLoadingProfile: false,
+      needsOnboarding: true,
+      needsOnchain: false,
+    });
+  });
+
+  test('returns null for user missing required displayName', () => {
+    const migrated = migrateAuthStoreState(
+      {
+        user: { id: 'did:privy:test-user' },
+        wallet: { address: '0x123', chainId: 'eip155:8453' },
+      },
+      1
+    );
+
+    expect(migrated.user).toBeNull();
+    expect(migrated.wallet).toEqual({
+      address: '0x123',
+      chainId: 'eip155:8453',
+    });
+  });
+
+  test('returns null for wallet missing required chainId', () => {
+    const migrated = migrateAuthStoreState(
+      {
+        user: { id: 'did:privy:test-user', displayName: 'Test' },
+        wallet: { address: '0x123' },
+      },
+      1
+    );
+
+    expect(migrated.user).toEqual({
+      id: 'did:privy:test-user',
+      displayName: 'Test',
+    });
+    expect(migrated.wallet).toBeNull();
+  });
+
   test('drops unsupported future-version payloads instead of hydrating unknown state', () => {
     const migrated = migrateAuthStoreState(
       {
