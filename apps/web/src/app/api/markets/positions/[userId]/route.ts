@@ -426,6 +426,7 @@ export const GET = withErrorHandling(
               resolved: market.resolved,
               resolution: market.resolution,
               status: p.status as string,
+              createdAt: p.createdAt?.toISOString() ?? null,
               // Agent position metadata
               isAgentPosition: p.isAgentPosition,
               agentId: p.agentId ?? null,

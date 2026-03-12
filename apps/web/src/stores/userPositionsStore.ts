@@ -125,6 +125,7 @@ interface ApiPredictionPositionPayload {
   resolved?: boolean;
   resolution?: boolean | null;
   status?: string;
+  createdAt?: string;
   // Agent position metadata
   isAgentPosition?: boolean;
   agentId?: string | null;
@@ -186,6 +187,7 @@ function normalizePredictionPosition(
     resolved: raw.resolved ?? false,
     resolution: raw.resolution ?? null,
     status: raw.status,
+    createdAt: raw.createdAt ?? undefined,
     // Agent position metadata
     isAgentPosition: raw.isAgentPosition ?? false,
     agentId: raw.agentId ?? undefined,
