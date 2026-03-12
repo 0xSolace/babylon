@@ -20,6 +20,10 @@ interface NewMarketCardProps {
    * a double bottom border.
    */
   embedded?: boolean;
+  onOpenMarket?: () => void;
+  onTradeComplete?: () => void;
+  onLikeChange?: (isLiked: boolean) => void;
+  onShareChange?: (isShared: boolean) => void;
 }
 
 type TradeSide = 'YES' | 'NO';
@@ -115,13 +119,20 @@ function MarketChart({
 }
 
 /**
- * Inline prediction market card for the Stories and Latest feeds.
+ * Inline prediction market card for the For You and Latest feeds.
  *
  * Mirrors the pattern used in the markets page (PredictionMarketCard +
  * PredictionTradingModal) so users can trade directly from the feed without
  * navigating away. Falls back to navigation links when no marketId is available.
  */
-export function NewMarketCard({ story, embedded = false }: NewMarketCardProps) {
+export function NewMarketCard({
+  story,
+  embedded = false,
+  onOpenMarket,
+  onTradeComplete,
+  onLikeChange,
+  onShareChange,
+}: NewMarketCardProps) {
   const router = useRouter();
   const [tradeSide, setTradeSide] = useState<TradeSide | null>(null);
 
@@ -221,7 +232,10 @@ export function NewMarketCard({ story, embedded = false }: NewMarketCardProps) {
           <>
             <button
               type="button"
-              onClick={() => setTradeSide('YES')}
+              onClick={() => {
+                onOpenMarket?.();
+                setTradeSide('YES');
+              }}
               className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-green-600 py-2.5 font-bold text-sm text-white transition-colors hover:bg-green-700 active:scale-95"
             >
               <CheckCircle size={15} />
@@ -229,7 +243,10 @@ export function NewMarketCard({ story, embedded = false }: NewMarketCardProps) {
             </button>
             <button
               type="button"
-              onClick={() => setTradeSide('NO')}
+              onClick={() => {
+                onOpenMarket?.();
+                setTradeSide('NO');
+              }}
               className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-red-600 py-2.5 font-bold text-sm text-white transition-colors hover:bg-red-700 active:scale-95"
             >
               <XCircle size={15} />
@@ -241,12 +258,14 @@ export function NewMarketCard({ story, embedded = false }: NewMarketCardProps) {
           <>
             <Link
               href={`/markets?tab=predictions&side=yes`}
+              onClick={() => onOpenMarket?.()}
               className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-green-600 py-2.5 font-bold text-sm text-white transition-colors hover:bg-green-700"
             >
               BUY YES
             </Link>
             <Link
               href={`/markets?tab=predictions&side=no`}
+              onClick={() => onOpenMarket?.()}
               className="flex flex-1 items-center justify-center gap-1.5 rounded-lg bg-red-600 py-2.5 font-bold text-sm text-white transition-colors hover:bg-red-700"
             >
               BUY NO
@@ -255,6 +274,7 @@ export function NewMarketCard({ story, embedded = false }: NewMarketCardProps) {
         )}
         <Link
           href={viewHref}
+          onClick={() => onOpenMarket?.()}
           className="inline-flex items-center gap-1 px-2 py-2.5 text-muted-foreground text-sm transition-colors hover:text-foreground"
           aria-label="View full market"
         >
@@ -272,15 +292,22 @@ export function NewMarketCard({ story, embedded = false }: NewMarketCardProps) {
         >
           <InteractionBar
             postId={story.anchorPostId}
-            initialInteractions={{
-              postId: story.anchorPostId,
-              likeCount: 0,
-              commentCount: 0,
-              shareCount: 0,
-              isLiked: false,
-              isShared: false,
-            }}
+            initialInteractions={(() => {
+              const anchorPost = story.posts.find(
+                (p) => p.id === story.anchorPostId
+              );
+              return {
+                postId: story.anchorPostId,
+                likeCount: anchorPost?.likeCount ?? 0,
+                commentCount: anchorPost?.commentCount ?? 0,
+                shareCount: anchorPost?.shareCount ?? 0,
+                isLiked: anchorPost?.isLiked ?? false,
+                isShared: anchorPost?.isShared ?? false,
+              };
+            })()}
             onCommentClick={() => router.push(`/post/${story.anchorPostId}`)}
+            onLikeChange={onLikeChange}
+            onShareChange={onShareChange}
           />
         </div>
       )}
@@ -292,6 +319,7 @@ export function NewMarketCard({ story, embedded = false }: NewMarketCardProps) {
           isOpen={!!tradeSide}
           onClose={() => setTradeSide(null)}
           defaultSide={tradeSide}
+          onSuccess={onTradeComplete}
         />
       )}
     </div>

@@ -11,14 +11,9 @@ import { MessageTypeEnum } from '@babylon/shared';
 
 describe('MessageTypeEnum Sync', () => {
   it('should have MessageTypeEnum values match database enum values', () => {
-    // Extract enum values from the database pgEnum
-    // messageTypeEnum is a pgEnum with values: ['user', 'system']
     const dbEnumValues = messageTypeEnum.enumValues;
-
-    // Extract values from MessageTypeEnum object
     const sharedEnumValues = Object.values(MessageTypeEnum);
 
-    // Sort both arrays for comparison
     const sortedDbValues = [...dbEnumValues].sort();
     const sortedSharedValues = [...sharedEnumValues].sort();
 

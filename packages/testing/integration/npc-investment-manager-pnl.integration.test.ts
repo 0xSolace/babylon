@@ -375,4 +375,52 @@ describe('NPCInvestmentManager - Realized PnL Calculation', () => {
       .delete(poolPositions)
       .where(eq(poolPositions.poolId, TEST_ACTOR_ID));
   });
+
+  test('should dedupe legacy pool perp rows when perp positions exist', async () => {
+    const sharedId = await generateSnowflakeId();
+
+    await db.insert(poolPositions).values({
+      id: sharedId,
+      poolId: TEST_ACTOR_ID,
+      marketType: 'perp',
+      ticker: 'ACME',
+      side: 'long',
+      entryPrice: 100,
+      currentPrice: 120,
+      size: 400,
+      leverage: 2,
+      liquidationPrice: 50,
+      unrealizedPnL: 80,
+      realizedPnL: null,
+      openedAt: new Date(Date.now() - 3600000),
+      closedAt: null,
+      updatedAt: new Date(),
+    });
+
+    await db.insert(perpPositions).values({
+      id: sharedId,
+      userId: TEST_ACTOR_ID,
+      organizationId: 'org-dedupe',
+      ticker: 'ACME',
+      side: 'long',
+      entryPrice: 100,
+      currentPrice: 120,
+      size: 400,
+      leverage: 2,
+      liquidationPrice: 50,
+      unrealizedPnL: 80,
+      unrealizedPnLPercent: 20,
+      realizedPnL: null,
+      openedAt: new Date(Date.now() - 3600000),
+      closedAt: null,
+      lastUpdated: new Date(),
+    });
+
+    const metrics =
+      await NPCInvestmentManager.getPortfolioMetrics(TEST_ACTOR_ID);
+
+    expect(metrics.positionCount).toBe(1);
+    expect(metrics.unrealizedPnL).toBe(80);
+    expect(metrics.totalValue).toBe(INITIAL_BALANCE + 200 + 80);
+  });
 });

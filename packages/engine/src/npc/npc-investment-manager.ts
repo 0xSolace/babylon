@@ -29,6 +29,7 @@ import type {
   TradingExecutionResult,
 } from '../types/market-decisions';
 import { formatError } from '../utils/error-utils';
+import { getPositionExposure } from './portfolio-metrics';
 
 export interface PortfolioPosition {
   id: string;
@@ -169,22 +170,14 @@ export class NPCInvestmentManager {
 
     // Calculate total invested capital (pool positions only)
     const poolInvested = positions.reduce((sum, pos) => {
-      const size = Number.parseFloat(pos.size?.toString() || '0');
       if (pos.marketType === 'perp') {
-        const leverage = Number.parseFloat(pos.leverage?.toString() || '1');
-        const effectiveLeverage =
-          Number.isFinite(leverage) && leverage > 0 ? leverage : 1;
-        return sum + Math.abs(size / effectiveLeverage);
+        return sum + getPositionExposure(pos.size, pos.leverage);
       }
-      return sum + Math.abs(size);
+      return sum + getPositionExposure(pos.size);
     }, 0);
 
     const perpInvested = openPerpPositions.reduce((sum, pos) => {
-      const size = Number.parseFloat(pos.size?.toString() || '0');
-      const leverage = Number.parseFloat(pos.leverage?.toString() || '1');
-      const effectiveLeverage =
-        Number.isFinite(leverage) && leverage > 0 ? leverage : 1;
-      return sum + Math.abs(size / effectiveLeverage);
+      return sum + getPositionExposure(pos.size, pos.leverage);
     }, 0);
 
     const totalInvested = poolInvested + perpInvested;

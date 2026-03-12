@@ -306,7 +306,7 @@ describe('dispatchAgentChat', () => {
       const result = await dispatchAgentChat(BASE_PARAMS);
 
       expect(result.success).toBe(false);
-      expect(result.error).toContain('Agent not found');
+      expect(result.error).toContain(`Agent "${AGENT_ID}" not found`);
       expect(mockGetRuntime).not.toHaveBeenCalled();
       expect(mockDbInsert).not.toHaveBeenCalled();
     });
@@ -348,6 +348,124 @@ describe('dispatchAgentChat', () => {
       // Auth errors map to permission message, not raw internal message
       expect(result.success).toBe(false);
       expect(result.error).toBeDefined();
+    });
+
+    it('resolves normalized agent names for a single matching owner agent', async () => {
+      const resolvedAgent = {
+        ...MOCK_AGENT_WITH_CONFIG,
+        username: 'larrydavid',
+        displayName: 'Larry David',
+      };
+      mockGetAgentWithConfig
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(resolvedAgent);
+      mockListUserAgents.mockResolvedValue([resolvedAgent]);
+      mockUseModel
+        .mockResolvedValueOnce('DECISION_RESP')
+        .mockResolvedValueOnce('SUMMARY_RESP');
+      mockParseKeyValueXml
+        .mockReturnValueOnce({
+          thought: 'done',
+          action: '',
+          parameters: {},
+          isFinish: 'true',
+        })
+        .mockReturnValueOnce({
+          thought: 'summarizing',
+          text: 'Resolved the agent correctly.',
+        });
+
+      const result = await dispatchAgentChat({
+        ...BASE_PARAMS,
+        agentId: 'larry david',
+      });
+
+      expect(result.success).toBe(true);
+      expect(mockGetAgentWithConfig).toHaveBeenNthCalledWith(1, 'larry david', OWNER_ID);
+      expect(mockGetAgentWithConfig).toHaveBeenNthCalledWith(2, AGENT_ID, OWNER_ID);
+    });
+
+    it('uses single-agent fallback only for generic references like "my agent"', async () => {
+      const resolvedAgent = {
+        ...MOCK_AGENT_WITH_CONFIG,
+        username: 'larrydavid',
+        displayName: 'Larry David',
+      };
+      mockGetAgentWithConfig
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(resolvedAgent);
+      mockListUserAgents.mockResolvedValue([resolvedAgent]);
+      mockUseModel
+        .mockResolvedValueOnce('DECISION_RESP')
+        .mockResolvedValueOnce('SUMMARY_RESP');
+      mockParseKeyValueXml
+        .mockReturnValueOnce({
+          thought: 'done',
+          action: '',
+          parameters: {},
+          isFinish: 'true',
+        })
+        .mockReturnValueOnce({
+          thought: 'summarizing',
+          text: 'Single agent fallback worked.',
+        });
+
+      const result = await dispatchAgentChat({
+        ...BASE_PARAMS,
+        agentId: 'my agent',
+      });
+
+      expect(result.success).toBe(true);
+      expect(mockGetAgentWithConfig).toHaveBeenNthCalledWith(2, AGENT_ID, OWNER_ID);
+    });
+
+    it('does not dispatch to the only agent when the requested name is unknown', async () => {
+      const resolvedAgent = {
+        ...MOCK_AGENT_WITH_CONFIG,
+        username: 'larrydavid',
+        displayName: 'Larry David',
+      };
+      mockGetAgentWithConfig.mockResolvedValue(null);
+      mockListUserAgents.mockResolvedValue([resolvedAgent]);
+
+      const result = await dispatchAgentChat({
+        ...BASE_PARAMS,
+        agentId: 'unknownbot',
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('Agent "unknownbot" not found');
+      expect(result.error).toContain('@larrydavid');
+      expect(mockGetAgentWithConfig).toHaveBeenCalledTimes(1);
+      expect(mockGetRuntime).not.toHaveBeenCalled();
+    });
+
+    it('fails ambiguous partial matches instead of picking the first agent arbitrarily', async () => {
+      mockGetAgentWithConfig.mockResolvedValue(null);
+      mockListUserAgents.mockResolvedValue([
+        {
+          ...MOCK_AGENT_WITH_CONFIG,
+          id: 'agent-1',
+          username: 'larrydavid',
+          displayName: 'Larry David',
+        },
+        {
+          ...MOCK_AGENT_WITH_CONFIG,
+          id: 'agent-2',
+          username: 'larrytrades',
+          displayName: 'Larry Trades',
+        },
+      ]);
+
+      const result = await dispatchAgentChat({
+        ...BASE_PARAMS,
+        agentId: 'larry',
+      });
+
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('Agent "larry" not found');
+      expect(mockGetAgentWithConfig).toHaveBeenCalledTimes(1);
+      expect(mockGetRuntime).not.toHaveBeenCalled();
     });
   });
 

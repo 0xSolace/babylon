@@ -41,8 +41,7 @@
       "@babylon/training/*": ["../training/src/*"],
       "@babylon/web/*": ["../../apps/web/*"],
       "@babylon/testing": ["./src/index.ts"],
-      "@babylon/testing/*": ["./*"],
-      "@babylon/web/*": ["../../apps/web/*"]
+      "@babylon/testing/*": ["./*"]
     }
   },
   "include": [
