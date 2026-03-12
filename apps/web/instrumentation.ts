@@ -122,8 +122,11 @@ export async function register() {
     process.env.NEXT_RUNTIME === 'nodejs' &&
     process.env.NODE_ENV === 'production' // Only in production to avoid blocking dev
   ) {
-    const { registerBabylonGame } = await import('@babylon/agents');
+    const { registerBabylonGame, registerBabylonOnSolana } = await import(
+      '@babylon/agents'
+    );
     await registerBabylonGame();
+    await registerBabylonOnSolana();
   }
 }
 

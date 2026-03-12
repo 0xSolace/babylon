@@ -15,12 +15,11 @@
 
 import { getAgent0SDK } from '@babylon/agents';
 import { getContractAddresses, getRpcUrl } from '@babylon/contracts';
-import { and, db, eq, follows, referrals, sql, users } from '@babylon/db';
+import { and, db, eq, sql, users } from '@babylon/db';
 import type {
   AgentCapabilities,
   AuthenticatedUser,
   JsonValue,
-  PointsReason,
   StringRecord,
 } from '@babylon/shared';
 import {
@@ -30,7 +29,6 @@ import {
   InternalServerError,
   identityRegistryAbi,
   logger,
-  POINTS,
   ValidationError,
 } from '@babylon/shared';
 import {
@@ -41,6 +39,7 @@ import {
   http,
 } from 'viem';
 import { baseSepolia, foundry, mainnet } from 'viem/chains';
+import { finalizeSuccessfulOnchainOnboarding } from './onchain-onboarding-service';
 
 function resolveViemChain(chainId: number): Chain {
   switch (chainId) {
@@ -56,69 +55,6 @@ function resolveViemChain(chainId: number): Chain {
         'UNSUPPORTED_CHAIN'
       );
   }
-}
-
-import { notifyNewAccount } from './notification-service';
-import { PointsService } from './points-service';
-import { getOrCreateReferralCode } from './referral-service';
-
-type OnboardingServices = {
-  notifyNewAccount: (userId: string) => Promise<void>;
-  pointsService: {
-    awardReferralSignup: (
-      referrerId: string,
-      referredUserId: string
-    ) => Promise<{
-      success: boolean;
-      pointsAwarded: number;
-      error?: string;
-    }>;
-    awardPoints: (
-      userId: string,
-      amount: number,
-      reason: PointsReason,
-      metadata?: StringRecord<JsonValue>
-    ) => Promise<{
-      success: boolean;
-      pointsAwarded: number;
-      newTotal: number;
-    }>;
-  };
-  getOrCreateReferralCode: (userId: string) => Promise<string>;
-};
-
-let onboardingServicesInstance: OnboardingServices | null = null;
-let onboardingServicesFallbackLogged = false;
-
-export function setOnboardingServices(services: OnboardingServices): void {
-  onboardingServicesInstance = services;
-}
-
-function getOnboardingServices(): OnboardingServices {
-  if (onboardingServicesInstance) {
-    return onboardingServicesInstance;
-  }
-
-  if (!onboardingServicesFallbackLogged) {
-    logger.warn(
-      'OnboardingServices not explicitly initialized, using default service bindings',
-      undefined,
-      'OnboardingOnchain'
-    );
-    onboardingServicesFallbackLogged = true;
-  }
-
-  const fallback: OnboardingServices = {
-    notifyNewAccount,
-    pointsService: {
-      awardReferralSignup: PointsService.awardReferralSignup,
-      awardPoints: PointsService.awardPoints,
-    },
-    getOrCreateReferralCode,
-  };
-  onboardingServicesInstance = fallback;
-
-  return fallback;
 }
 
 const contracts = getContractAddresses();
@@ -139,10 +75,13 @@ export interface OnchainRegistrationInput {
 export interface OnchainRegistrationResult {
   message: string;
   tokenId?: number;
+  assetId?: string;
+  metadataUri?: string;
   txHash?: string;
   pointsAwarded?: number;
   alreadyRegistered: boolean;
   userId: string;
+  network?: 'ethereum' | 'solana';
 }
 
 /**
@@ -516,124 +455,11 @@ export async function processOnchainRegistration({
     );
   }
 
-  // Generate referral code
-  const services = getOnboardingServices();
-  await services.getOrCreateReferralCode(dbUser.id);
-
-  await services.notifyNewAccount(dbUser.id);
-
-  // Process referrals
-  if (referrerId) {
-    const referralResult = await services.pointsService.awardReferralSignup(
-      referrerId,
-      dbUser.id
-    );
-
-    if (referralResult.success) {
-      const refereeBonus = await services.pointsService.awardPoints(
-        dbUser.id,
-        POINTS.REFERRAL_BONUS,
-        'referral_bonus',
-        { referrerId }
-      );
-
-      if (referralCode) {
-        const [existingReferral] = await db
-          .select({ id: referrals.id })
-          .from(referrals)
-          .where(
-            and(
-              eq(referrals.referralCode, referralCode),
-              eq(referrals.referredUserId, dbUser.id)
-            )
-          )
-          .limit(1);
-
-        if (existingReferral) {
-          await db
-            .update(referrals)
-            .set({ status: 'completed', completedAt: new Date() })
-            .where(eq(referrals.id, existingReferral.id));
-        } else {
-          await db.insert(referrals).values({
-            id: await generateSnowflakeId(),
-            referrerId,
-            referralCode,
-            referredUserId: dbUser.id,
-            status: 'completed',
-            completedAt: new Date(),
-            createdAt: new Date(),
-          });
-        }
-      }
-
-      const [existingFollow] = await db
-        .select({ id: follows.id })
-        .from(follows)
-        .where(
-          and(
-            eq(follows.followerId, dbUser.id),
-            eq(follows.followingId, referrerId)
-          )
-        )
-        .limit(1);
-
-      if (!existingFollow) {
-        await db.insert(follows).values({
-          id: await generateSnowflakeId(),
-          followerId: dbUser.id,
-          followingId: referrerId,
-          createdAt: new Date(),
-        });
-      }
-
-      logger.info(
-        'Referral processed successfully',
-        {
-          referrerId,
-          referredUserId: dbUser.id,
-          referrerPoints: referralResult.pointsAwarded,
-          refereeBonus: refereeBonus.pointsAwarded,
-        },
-        'OnboardingOnchain'
-      );
-    } else {
-      if (referralCode) {
-        const [existingRejectedReferral] = await db
-          .select({ id: referrals.id })
-          .from(referrals)
-          .where(
-            and(
-              eq(referrals.referralCode, referralCode),
-              eq(referrals.referredUserId, dbUser.id)
-            )
-          )
-          .limit(1);
-
-        if (existingRejectedReferral) {
-          await db
-            .update(referrals)
-            .set({ status: 'rejected' })
-            .where(eq(referrals.id, existingRejectedReferral.id));
-        } else {
-          await db.insert(referrals).values({
-            id: await generateSnowflakeId(),
-            referrerId,
-            referralCode,
-            referredUserId: dbUser.id,
-            status: 'rejected',
-            createdAt: new Date(),
-          });
-        }
-      }
-
-      logger.warn(
-        'Referral blocked during registration',
-        { referrerId, referredUserId: dbUser.id, error: referralResult.error },
-        'OnboardingOnchain'
-      );
-    }
-  }
+  await finalizeSuccessfulOnchainOnboarding({
+    userId: dbUser.id,
+    referrerId,
+    referralCode,
+  });
 
   return {
     message: `Successfully registered ${user.isAgent ? 'agent' : 'user'} on-chain via Agent0`,

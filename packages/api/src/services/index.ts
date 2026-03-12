@@ -34,6 +34,7 @@ export * from './nft-verification-service';
 export * from './notification-email-service';
 export * from './notification-service';
 // Onchain Service
+export * from './onchain-onboarding-service';
 export * from './onchain-service';
 // Org Coordination Service (Cross-NPC messaging coordination)
 export * from './org-coordination-service';
@@ -51,6 +52,7 @@ export {
   withQuestionLock,
 } from './resource-locks';
 export * from './sentry-webhook-inbox-service';
+export * from './solana-onchain-service';
 export * from './system-status-service';
 export * from './waitlist-service';
 export * from './whitelist-service';

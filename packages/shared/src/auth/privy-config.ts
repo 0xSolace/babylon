@@ -22,6 +22,9 @@ type BabylonPrivyConfig = Omit<
     ethereum?: {
       createOnLogin?: 'all-users' | 'users-without-wallets' | 'off';
     };
+    solana?: {
+      createOnLogin?: 'all-users' | 'users-without-wallets' | 'off';
+    };
   };
   externalWallets?: {
     solana?: { connectors?: SolanaConnectors };
@@ -65,6 +68,7 @@ const loginMethodsAndOrder: NonNullable<
 
 const embeddedWallets: NonNullable<BabylonPrivyConfig['embeddedWallets']> = {
   ethereum: { createOnLogin: 'users-without-wallets' },
+  solana: { createOnLogin: 'users-without-wallets' },
 };
 
 const externalWallets: BabylonPrivyConfig['externalWallets'] = (() => {

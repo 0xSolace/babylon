@@ -157,6 +157,7 @@ export const CompleteOnboardingSchema = z.object({
  * On-chain registration schema
  */
 export const OnChainRegistrationSchema = z.object({
+  network: z.enum(['ethereum', 'solana']).optional(),
   walletAddress: WalletAddressSchema.optional(),
   username: z.string().min(1).max(50).optional(),
   displayName: z.string().min(1).max(100).optional(),
@@ -214,6 +215,7 @@ export const UpdateWalletSchema = z.object({
 export const UserResponseSchema = z.object({
   id: SnowflakeIdSchema,
   walletAddress: WalletAddressSchema.nullable(),
+  solanaWalletAddress: z.string().nullable().optional(),
   username: z.string().nullable(),
   displayName: z.string().nullable(),
   bio: z.string().nullable(),
@@ -224,7 +226,10 @@ export const UserResponseSchema = z.object({
   virtualBalance: z.string(), // Decimal as string
   lifetimePnL: z.string(), // Decimal as string
   onChainRegistered: z.boolean(),
+  solanaRegistered: z.boolean().optional(),
   nftTokenId: z.number().nullable(),
+  agent0TokenId: z.number().nullable().optional(),
+  solanaRegistryAssetId: z.string().nullable().optional(),
   profileComplete: z.boolean(),
   hasFarcaster: z.boolean(),
   hasTwitter: z.boolean(),

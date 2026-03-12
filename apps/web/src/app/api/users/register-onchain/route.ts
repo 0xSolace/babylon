@@ -14,9 +14,12 @@ import {
   authenticate,
   BusinessLogicError,
   ensureOfflineWalletReady,
+  ensureSolanaWalletReady,
+  finalizeSuccessfulOnchainOnboarding,
   processOnchainRegistration,
   RATE_LIMIT_CONFIGS,
   rateLimitError,
+  registerExistingIdentityOnSolana,
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
@@ -26,6 +29,7 @@ import type { NextRequest } from 'next/server';
 
 interface RegisterOnchainRequestBody {
   referralCode?: string | null;
+  network?: 'ethereum' | 'solana' | null;
 }
 
 export const POST = withErrorHandling(async (request: NextRequest) => {
@@ -46,6 +50,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     typeof body.referralCode === 'string'
       ? body.referralCode.trim() || null
       : null;
+  const network = body.network === 'solana' ? 'solana' : 'ethereum';
 
   const [dbUser] = await db
     .select({
@@ -58,8 +63,13 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
       coverImageUrl: users.coverImageUrl,
       privyWalletId: users.privyWalletId,
       walletAddress: users.walletAddress,
+      privySolanaWalletId: users.privySolanaWalletId,
+      solanaWalletAddress: users.solanaWalletAddress,
       onChainRegistered: users.onChainRegistered,
       agent0TokenId: users.agent0TokenId,
+      solanaRegistered: users.solanaRegistered,
+      solanaRegistryAssetId: users.solanaRegistryAssetId,
+      referredBy: users.referredBy,
       virtualBalance: users.virtualBalance,
       profileComplete: users.profileComplete,
     })
@@ -81,22 +91,36 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     );
   }
 
-  if (dbUser.onChainRegistered && dbUser.agent0TokenId) {
+  const alreadyRegistered =
+    network === 'solana'
+      ? dbUser.solanaRegistered && dbUser.solanaRegistryAssetId
+      : dbUser.onChainRegistered && dbUser.agent0TokenId;
+
+  if (alreadyRegistered) {
     return successResponse(
       {
         onchain: {
-          message: 'Already registered on-chain',
+          message:
+            network === 'solana'
+              ? 'Already registered on Solana'
+              : 'Already registered on-chain',
           alreadyRegistered: true,
-          tokenId: dbUser.agent0TokenId,
+          ...(network === 'solana'
+            ? { assetId: dbUser.solanaRegistryAssetId }
+            : { tokenId: dbUser.agent0TokenId }),
           userId: canonicalUserId,
+          network,
         },
         user: {
           id: dbUser.id,
           username: dbUser.username,
           displayName: dbUser.displayName,
           walletAddress: dbUser.walletAddress,
+          solanaWalletAddress: dbUser.solanaWalletAddress,
           onChainRegistered: dbUser.onChainRegistered,
           agent0TokenId: dbUser.agent0TokenId,
+          solanaRegistered: dbUser.solanaRegistered,
+          solanaRegistryAssetId: dbUser.solanaRegistryAssetId,
           virtualBalance: dbUser.virtualBalance,
         },
         cost: 0,
@@ -107,16 +131,24 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
 
   const cost = POINTS.ONCHAIN_REGISTRATION;
 
-  const agent0Configured =
-    process.env.AGENT0_RPC_URL &&
-    process.env.AGENT0_PRIVATE_KEY &&
-    process.env.PINATA_JWT &&
-    process.env.BABYLON_GAME_WALLET_ADDRESS;
+  const registrationConfigured =
+    network === 'solana'
+      ? process.env.SOLANA_REGISTRY_ENABLED === 'true'
+      : Boolean(
+          process.env.AGENT0_RPC_URL &&
+            process.env.AGENT0_PRIVATE_KEY &&
+            process.env.PINATA_JWT &&
+            process.env.BABYLON_GAME_WALLET_ADDRESS
+        );
 
-  if (!agent0Configured) {
+  if (!registrationConfigured) {
     throw new BusinessLogicError(
-      'On-chain registration is currently unavailable. Please try again later.',
-      'REGISTRATION_UNAVAILABLE'
+      network === 'solana'
+        ? 'Solana registration is currently unavailable. Please try again later.'
+        : 'On-chain registration is currently unavailable. Please try again later.',
+      network === 'solana'
+        ? 'SOLANA_REGISTRATION_UNAVAILABLE'
+        : 'REGISTRATION_UNAVAILABLE'
     );
   }
 
@@ -154,7 +186,10 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     amount: String(cost),
     balanceBefore: String(balanceBeforeDeduct),
     balanceAfter: String(balanceAfterDeduct),
-    description: 'On-chain ERC-8004 registration',
+    description:
+      network === 'solana'
+        ? 'Solana Agent Registry registration'
+        : 'On-chain ERC-8004 registration',
     createdAt: new Date(),
   });
 
@@ -165,37 +200,82 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
   );
 
   try {
-    const offlineWallet = await ensureOfflineWalletReady({
-      privyId: dbUser.privyId ?? privyId,
-    });
-    const walletAddress = offlineWallet.walletAddress.toLowerCase();
+    const onchainResult =
+      network === 'solana'
+        ? await (async () => {
+            const solanaWallet = await ensureSolanaWalletReady({
+              privyId: dbUser.privyId ?? privyId,
+            });
 
-    if (
-      dbUser.privyWalletId !== offlineWallet.privyWalletId ||
-      dbUser.walletAddress?.toLowerCase() !== walletAddress
-    ) {
-      await db
-        .update(users)
-        .set({
-          privyWalletId: offlineWallet.privyWalletId,
-          walletAddress,
-          offlineWalletReady: true,
-          offlineWalletReadyAt: new Date(),
-          updatedAt: new Date(),
-        })
-        .where(eq(users.id, canonicalUserId));
-    }
+            if (
+              dbUser.privySolanaWalletId !== solanaWallet.privyWalletId ||
+              dbUser.solanaWalletAddress !== solanaWallet.walletAddress
+            ) {
+              await db
+                .update(users)
+                .set({
+                  privySolanaWalletId: solanaWallet.privyWalletId,
+                  solanaWalletAddress: solanaWallet.walletAddress,
+                  solanaOfflineWalletReady: true,
+                  solanaOfflineWalletReadyAt: new Date(),
+                  updatedAt: new Date(),
+                })
+                .where(eq(users.id, canonicalUserId));
+            }
 
-    const onchainResult = await processOnchainRegistration({
-      user: authUser,
-      walletAddress,
-      username: dbUser.username,
-      displayName: dbUser.displayName,
-      bio: dbUser.bio ?? undefined,
-      profileImageUrl: dbUser.profileImageUrl ?? undefined,
-      coverImageUrl: dbUser.coverImageUrl ?? undefined,
-      referralCode,
-    });
+            const result = await registerExistingIdentityOnSolana({
+              userId: canonicalUserId,
+              privyId: dbUser.privyId ?? privyId,
+              privyWalletId: solanaWallet.privyWalletId,
+              solanaWalletAddress: solanaWallet.walletAddress,
+              username: dbUser.username,
+              displayName: dbUser.displayName,
+              bio: dbUser.bio ?? undefined,
+              profileImageUrl: dbUser.profileImageUrl ?? undefined,
+              entityType: 'user',
+            });
+
+            await finalizeSuccessfulOnchainOnboarding({
+              userId: canonicalUserId,
+              referralCode,
+              referrerId: dbUser.referredBy ?? null,
+            });
+
+            return result;
+          })()
+        : await (async () => {
+            const offlineWallet = await ensureOfflineWalletReady({
+              privyId: dbUser.privyId ?? privyId,
+            });
+            const walletAddress = offlineWallet.walletAddress.toLowerCase();
+
+            if (
+              dbUser.privyWalletId !== offlineWallet.privyWalletId ||
+              dbUser.walletAddress?.toLowerCase() !== walletAddress
+            ) {
+              await db
+                .update(users)
+                .set({
+                  privyWalletId: offlineWallet.privyWalletId,
+                  walletAddress,
+                  offlineWalletReady: true,
+                  offlineWalletReadyAt: new Date(),
+                  updatedAt: new Date(),
+                })
+                .where(eq(users.id, canonicalUserId));
+            }
+
+            return processOnchainRegistration({
+              user: authUser,
+              walletAddress,
+              username: dbUser.username,
+              displayName: dbUser.displayName,
+              bio: dbUser.bio ?? undefined,
+              profileImageUrl: dbUser.profileImageUrl ?? undefined,
+              coverImageUrl: dbUser.coverImageUrl ?? undefined,
+              referralCode,
+            });
+          })();
 
     const [refreshedUser] = await db
       .select({
@@ -203,8 +283,11 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
         username: users.username,
         displayName: users.displayName,
         walletAddress: users.walletAddress,
+        solanaWalletAddress: users.solanaWalletAddress,
         onChainRegistered: users.onChainRegistered,
         agent0TokenId: users.agent0TokenId,
+        solanaRegistered: users.solanaRegistered,
+        solanaRegistryAssetId: users.solanaRegistryAssetId,
         virtualBalance: users.virtualBalance,
         reputationPoints: users.reputationPoints,
       })
@@ -216,7 +299,16 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
       'User completed opt-in on-chain registration',
       {
         userId: canonicalUserId,
-        agent0TokenId: onchainResult.tokenId,
+        network,
+        ...(network === 'solana'
+          ? {
+              assetId:
+                'assetId' in onchainResult ? onchainResult.assetId : undefined,
+            }
+          : {
+              agent0TokenId:
+                'tokenId' in onchainResult ? onchainResult.tokenId : undefined,
+            }),
         cost,
       },
       'POST /api/users/register-onchain'

@@ -78,11 +78,13 @@ import { getAgent0SDK, syncAfterAgent0Registration } from '@babylon/agents';
 import {
   AuthorizationError,
   authenticate,
+  ensureSolanaWalletReady,
   InternalServerError,
+  registerExistingIdentityOnSolana,
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import { asUser } from '@babylon/db';
+import { asUser, db, eq, users } from '@babylon/db';
 import {
   AgentOnboardSchema,
   generateSnowflakeId,
@@ -109,7 +111,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
 
   // Parse and validate request body
   const body = await request.json();
-  const { agentName, endpoint } = AgentOnboardSchema.parse(body);
+  const { agentName, endpoint, network } = AgentOnboardSchema.parse(body);
 
   // Check if agent exists in database (use upsert to avoid race conditions) with RLS
   // Note: Agents are registered via Agent0 SDK on Ethereum mainnet
@@ -156,6 +158,55 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
 
     return userWithFields;
   });
+
+  if (network === 'solana') {
+    const solanaWallet = await ensureSolanaWalletReady({
+      privyId: agentId,
+    });
+
+    await db
+      .update(users)
+      .set({
+        privySolanaWalletId: solanaWallet.privyWalletId,
+        solanaWalletAddress: solanaWallet.walletAddress,
+        solanaOfflineWalletReady: true,
+        solanaOfflineWalletReadyAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(users.id, dbUser.id));
+
+    const registration = await registerExistingIdentityOnSolana({
+      userId: dbUser.id,
+      privyId: agentId,
+      privyWalletId: solanaWallet.privyWalletId,
+      solanaWalletAddress: solanaWallet.walletAddress,
+      username: dbUser.username,
+      displayName: dbUser.displayName,
+      bio: dbUser.bio,
+      endpoint: endpoint ?? null,
+      entityType: 'agent',
+    });
+
+    logger.info(
+      'Agent onboarded successfully on Solana',
+      {
+        agentId,
+        assetId: registration.assetId,
+        txHash: registration.txHash,
+      },
+      'POST /api/agents/onboard'
+    );
+
+    return successResponse({
+      message: 'Successfully registered agent on the Solana Agent Registry',
+      agentId,
+      network: 'solana',
+      solanaAssetId: registration.assetId,
+      solanaMetadataUri: registration.metadataUri,
+      txHash: registration.txHash,
+      registered: true,
+    });
+  }
 
   // Register with Agent0 SDK and publish to IPFS (if enabled)
   let agent0MetadataCID: string | null = null;

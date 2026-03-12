@@ -38,6 +38,7 @@ export const AgentDiscoveryQuerySchema = z.object({
 export const AgentOnboardSchema = z.object({
   agentName: createTrimmedStringSchema(1, 100),
   endpoint: URLSchema.optional(),
+  network: z.enum(['ethereum', 'solana']).optional().default('ethereum'),
 });
 
 /**

@@ -100,6 +100,14 @@ export const users = pgTable(
     offlineWalletReady: boolean('offlineWalletReady').notNull().default(false),
     offlineWalletReadyAt: timestamp('offlineWalletReadyAt', { mode: 'date' }),
     walletAddress: text('walletAddress').unique(),
+    privySolanaWalletId: text('privySolanaWalletId'),
+    solanaOfflineWalletReady: boolean('solanaOfflineWalletReady')
+      .notNull()
+      .default(false),
+    solanaOfflineWalletReadyAt: timestamp('solanaOfflineWalletReadyAt', {
+      mode: 'date',
+    }),
+    solanaWalletAddress: text('solanaWalletAddress').unique(),
     username: text('username').unique(),
     displayName: text('displayName'),
     bio: text('bio'),
@@ -197,6 +205,11 @@ export const users = pgTable(
     agent0RegisteredAt: timestamp('agent0RegisteredAt', { mode: 'date' }),
     agent0TokenId: integer('agent0TokenId'),
     agent0TrustScore: doublePrecision('agent0TrustScore'),
+    solanaRegistered: boolean('solanaRegistered').notNull().default(false),
+    solanaRegistryAssetId: text('solanaRegistryAssetId'),
+    solanaMetadataUri: text('solanaMetadataUri'),
+    solanaRegistrationTxHash: text('solanaRegistrationTxHash'),
+    solanaRegisteredAt: timestamp('solanaRegisteredAt', { mode: 'date' }),
     bannedAt: timestamp('bannedAt', { mode: 'date' }),
     bannedBy: text('bannedBy'),
     bannedReason: text('bannedReason'),

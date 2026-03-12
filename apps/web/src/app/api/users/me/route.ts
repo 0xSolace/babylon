@@ -146,11 +146,13 @@ import {
   authenticateWithDbUser,
   ConflictError,
   ensureOfflineWalletReady,
+  ensureSolanaWalletReady,
   getPrivyClient,
   InternalServerError,
   PointsService,
   type PrivyUserWalletsLite,
   pickEmbeddedEvmWallet,
+  pickEmbeddedSolanaWallet,
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
@@ -180,12 +182,16 @@ const userSelectFields = {
   privyWalletId: users.privyWalletId,
   offlineWalletReady: users.offlineWalletReady,
   offlineWalletReadyAt: users.offlineWalletReadyAt,
+  privySolanaWalletId: users.privySolanaWalletId,
+  solanaOfflineWalletReady: users.solanaOfflineWalletReady,
+  solanaOfflineWalletReadyAt: users.solanaOfflineWalletReadyAt,
   username: users.username,
   displayName: users.displayName,
   bio: users.bio,
   profileImageUrl: users.profileImageUrl,
   coverImageUrl: users.coverImageUrl,
   walletAddress: users.walletAddress,
+  solanaWalletAddress: users.solanaWalletAddress,
   email: users.email, // For displaying pending referrals
   emailVerified: users.emailVerified,
   emailNotificationsEnabled: users.emailNotificationsEnabled,
@@ -200,6 +206,8 @@ const userSelectFields = {
   onChainRegistered: users.onChainRegistered,
   nftTokenId: users.nftTokenId,
   agent0TokenId: users.agent0TokenId,
+  solanaRegistered: users.solanaRegistered,
+  solanaRegistryAssetId: users.solanaRegistryAssetId,
   referralCode: users.referralCode,
   referredBy: users.referredBy,
   reputationPoints: users.reputationPoints,
@@ -233,12 +241,16 @@ type UserSelectResult = {
   privyWalletId: string | null;
   offlineWalletReady: boolean;
   offlineWalletReadyAt: Date | null;
+  privySolanaWalletId: string | null;
+  solanaOfflineWalletReady: boolean;
+  solanaOfflineWalletReadyAt: Date | null;
   username: string | null;
   displayName: string | null;
   bio: string | null;
   profileImageUrl: string | null;
   coverImageUrl: string | null;
   walletAddress: string | null;
+  solanaWalletAddress: string | null;
   email: string | null;
   emailVerified: boolean;
   emailNotificationsEnabled: boolean;
@@ -253,6 +265,8 @@ type UserSelectResult = {
   onChainRegistered: boolean;
   nftTokenId: number | null;
   agent0TokenId: number | null;
+  solanaRegistered: boolean;
+  solanaRegistryAssetId: string | null;
   referralCode: string | null;
   referredBy: string | null;
   reputationPoints: number;
@@ -428,12 +442,17 @@ function buildUserResponse(
     privyWalletId: dbUser.privyWalletId,
     offlineWalletReady: dbUser.offlineWalletReady,
     offlineWalletReadyAt: dbUser.offlineWalletReadyAt?.toISOString() ?? null,
+    privySolanaWalletId: dbUser.privySolanaWalletId,
+    solanaOfflineWalletReady: dbUser.solanaOfflineWalletReady,
+    solanaOfflineWalletReadyAt:
+      dbUser.solanaOfflineWalletReadyAt?.toISOString() ?? null,
     username: dbUser.username,
     displayName: dbUser.displayName,
     bio: dbUser.bio,
     profileImageUrl: dbUser.profileImageUrl,
     coverImageUrl: dbUser.coverImageUrl,
     walletAddress: dbUser.walletAddress,
+    solanaWalletAddress: dbUser.solanaWalletAddress,
     email: dbUser.email,
     emailVerified: dbUser.emailVerified,
     emailNotificationsEnabled: dbUser.emailNotificationsEnabled,
@@ -448,6 +467,8 @@ function buildUserResponse(
     onChainRegistered: dbUser.onChainRegistered,
     nftTokenId: dbUser.nftTokenId,
     agent0TokenId: dbUser.agent0TokenId,
+    solanaRegistered: dbUser.solanaRegistered,
+    solanaRegistryAssetId: dbUser.solanaRegistryAssetId,
     referralCode: dbUser.referralCode,
     referredBy: dbUser.referredBy,
     reputationPoints: dbUser.reputationPoints,
@@ -590,6 +611,8 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     let twitterId: string | null = null;
     let embeddedWalletAddress: string | null = null;
     let embeddedWalletId: string | null = null;
+    let embeddedSolanaWalletAddress: string | null = null;
+    let embeddedSolanaWalletId: string | null = null;
 
     const privyClient = getPrivyClient();
     const privyUser = (await privyClient.getUser(
@@ -622,6 +645,12 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       authUser.walletAddress = embeddedWalletAddress;
     }
 
+    const embeddedSolana = pickEmbeddedSolanaWallet(privyUser);
+    if (embeddedSolana) {
+      embeddedSolanaWalletId = embeddedSolana.walletId;
+      embeddedSolanaWalletAddress = embeddedSolana.address;
+    }
+
     logger.info(
       'Fetched Privy user data for new user',
       {
@@ -630,6 +659,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
         hasFarcaster: !!farcasterUsername,
         hasTwitter: !!twitterUsername,
         hasEmbeddedWallet: !!embeddedWalletAddress,
+        hasEmbeddedSolanaWallet: !!embeddedSolanaWalletAddress,
       },
       'GET /api/users/me'
     );
@@ -888,6 +918,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     );
 
     const dbWalletAddress = embeddedWalletAddress?.toLowerCase() ?? null;
+    const dbSolanaWalletAddress = embeddedSolanaWalletAddress ?? null;
 
     // Check if user should be auto-promoted to admin based on email domain
     // SECURITY: Requires email verification (Privy emails are verified by design)
@@ -914,6 +945,8 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
         privyId,
         privyWalletId: embeddedWalletId,
         walletAddress: dbWalletAddress,
+        privySolanaWalletId: embeddedSolanaWalletId,
+        solanaWalletAddress: dbSolanaWalletAddress,
         referredBy: resolvedReferrerId,
         email,
         farcasterUsername,
@@ -997,6 +1030,10 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     !dbUser.privyWalletId ||
     !dbUser.offlineWalletReady ||
     shouldResyncWallet;
+  const shouldEnsureSolanaWallet =
+    !dbUser.solanaWalletAddress ||
+    !dbUser.privySolanaWalletId ||
+    !dbUser.solanaOfflineWalletReady;
 
   if (shouldEnsureOfflineWallet) {
     try {
@@ -1041,6 +1078,36 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
           hasPrivyWalletId: !!dbUser.privyWalletId,
           hasWalletAddress: !!dbUser.walletAddress,
           shouldResyncWallet,
+          error: error instanceof Error ? error.message : String(error),
+        },
+        'GET /api/users/me'
+      );
+    }
+  }
+
+  if (shouldEnsureSolanaWallet) {
+    try {
+      const solanaWallet = await ensureSolanaWalletReady({ privyId });
+      const [updated] = await db
+        .update(users)
+        .set({
+          privySolanaWalletId: solanaWallet.privyWalletId,
+          solanaWalletAddress: solanaWallet.walletAddress,
+          solanaOfflineWalletReady: true,
+          solanaOfflineWalletReadyAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .where(eq(users.id, dbUser.id))
+        .returning(userSelectFields);
+      if (updated) dbUser = updated;
+    } catch (error) {
+      logger.warn(
+        'Solana wallet provisioning failed during profile fetch; returning profile without blocking',
+        {
+          userId: dbUser.id,
+          privyId,
+          hasPrivySolanaWalletId: !!dbUser.privySolanaWalletId,
+          hasSolanaWalletAddress: !!dbUser.solanaWalletAddress,
           error: error instanceof Error ? error.message : String(error),
         },
         'GET /api/users/me'

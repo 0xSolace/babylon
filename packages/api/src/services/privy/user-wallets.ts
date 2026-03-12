@@ -10,16 +10,21 @@ export type PrivyWalletLite = {
   type?: string | null;
 };
 
+export type PrivyWalletChainType = 'ethereum' | 'solana';
+
 export type PrivyUserWalletsLite = {
   wallet?: PrivyWalletLite | null;
   linkedAccounts?: PrivyWalletLite[] | null;
   linked_accounts?: PrivyWalletLite[] | null;
 };
 
-function isEthereumWallet(wallet: PrivyWalletLite): boolean {
+function matchesWalletChain(
+  wallet: PrivyWalletLite,
+  chainType: PrivyWalletChainType
+): boolean {
   const chain = wallet.chainType ?? wallet.chain_type ?? null;
-  if (chain && chain !== 'ethereum') return false;
-  return true;
+  if (chain && chain !== chainType) return false;
+  return chainType === 'ethereum' ? true : chain === 'solana';
 }
 
 function isPrivyEmbeddedClientMarker(value: string | null): boolean {
@@ -47,9 +52,17 @@ export function pickEmbeddedEvmWallet(
   return wallets.length > 0 ? wallets[0]! : null;
 }
 
-export function listEmbeddedEvmWallets(
+export function pickEmbeddedSolanaWallet(
   user: PrivyUserWalletsLite
-): Array<{ walletId: string; address: Address }> {
+): { walletId: string; address: string } | null {
+  const wallets = listEmbeddedSolanaWallets(user);
+  return wallets.length > 0 ? wallets[0]! : null;
+}
+
+function listEmbeddedWallets(
+  user: PrivyUserWalletsLite,
+  chainType: PrivyWalletChainType
+): Array<{ walletId: string; address: string }> {
   const candidates: Array<{
     wallet: PrivyWalletLite;
     source: 'primary' | 'linked';
@@ -64,13 +77,13 @@ export function listEmbeddedEvmWallets(
       candidates.push({ wallet: acc, source: 'linked' });
   }
 
-  const wallets: Array<{ walletId: string; address: Address }> = [];
+  const wallets: Array<{ walletId: string; address: string }> = [];
   const seen = new Set<string>();
 
   for (const { wallet, source } of candidates) {
     if (!wallet?.id || typeof wallet.id !== 'string') continue;
     if (!wallet.address || typeof wallet.address !== 'string') continue;
-    if (!isEthereumWallet(wallet)) continue;
+    if (!matchesWalletChain(wallet, chainType)) continue;
     if (source === 'linked') {
       // For linked accounts, only accept explicit 'privy' client markers.
       if (
@@ -85,9 +98,27 @@ export function listEmbeddedEvmWallets(
     seen.add(wallet.id);
     wallets.push({
       walletId: wallet.id,
-      address: wallet.address.toLowerCase() as Address,
+      address:
+        chainType === 'ethereum'
+          ? wallet.address.toLowerCase()
+          : wallet.address,
     });
   }
 
   return wallets;
+}
+
+export function listEmbeddedEvmWallets(
+  user: PrivyUserWalletsLite
+): Array<{ walletId: string; address: Address }> {
+  return listEmbeddedWallets(user, 'ethereum').map((wallet) => ({
+    walletId: wallet.walletId,
+    address: wallet.address as Address,
+  }));
+}
+
+export function listEmbeddedSolanaWallets(
+  user: PrivyUserWalletsLite
+): Array<{ walletId: string; address: string }> {
+  return listEmbeddedWallets(user, 'solana');
 }

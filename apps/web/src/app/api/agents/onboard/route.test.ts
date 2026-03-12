@@ -20,6 +20,8 @@ const mockAsUser = mock();
 const mockGetAgent0SDK = mock();
 const mockSyncAfterAgent0Registration = mock();
 const mockGenerateSnowflakeId = mock();
+const mockEnsureSolanaWalletReady = mock();
+const mockRegisterExistingIdentityOnSolana = mock();
 
 // Mock logger to avoid noise in test output
 const mockLogger = {
@@ -32,6 +34,10 @@ const mockLogger = {
 // Mock AgentOnboardSchema
 const mockParse = mock();
 const mockAgentOnboardSchema = { parse: mockParse };
+const dbModulePath = new URL(
+  '../../../../../../../packages/db/src/index.ts',
+  import.meta.url
+).pathname;
 
 mock.module('@babylon/agents', () => ({
   getAgent0SDK: mockGetAgent0SDK,
@@ -40,6 +46,8 @@ mock.module('@babylon/agents', () => ({
 
 mock.module('@babylon/api', () => ({
   authenticate: mockAuthenticate,
+  ensureSolanaWalletReady: mockEnsureSolanaWalletReady,
+  registerExistingIdentityOnSolana: mockRegisterExistingIdentityOnSolana,
   AuthorizationError: class AuthorizationError extends Error {
     constructor(
       message: string,
@@ -58,9 +66,23 @@ mock.module('@babylon/api', () => ({
     handler,
 }));
 
-mock.module('@babylon/db', () => ({
+const dbModuleMock = () => ({
   asUser: mockAsUser,
-}));
+  db: {
+    update: () => ({
+      set: () => ({
+        where: async () => undefined,
+      }),
+    }),
+  },
+  eq: (...args: unknown[]) => args,
+  users: {
+    id: 'id',
+  },
+});
+
+mock.module('@babylon/db', dbModuleMock);
+mock.module(dbModulePath, dbModuleMock);
 
 mock.module('@babylon/shared', () => ({
   AgentOnboardSchema: mockAgentOnboardSchema,
@@ -113,6 +135,8 @@ describe('POST /api/agents/onboard', () => {
     mockGetAgent0SDK.mockReset();
     mockSyncAfterAgent0Registration.mockReset();
     mockGenerateSnowflakeId.mockReset();
+    mockEnsureSolanaWalletReady.mockReset();
+    mockRegisterExistingIdentityOnSolana.mockReset();
     mockParse.mockReset();
     mockLogger.info.mockReset();
 
