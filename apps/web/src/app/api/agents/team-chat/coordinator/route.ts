@@ -68,9 +68,7 @@ export const maxDuration = 120;
  * Verified against: @elizaos/core processActions (line ~48919) and
  * composeState (line ~49200) in node_modules/@elizaos/core/dist/node/index.node.js
  */
-function getRuntimeStateCache(
-  runtime: unknown
-):
+function getRuntimeStateCache(runtime: unknown):
   | Map<
       string,
       {

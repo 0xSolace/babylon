@@ -1,0 +1,357 @@
+'use client';
+
+import type { PerpPositionFromAPI, PredictionPosition } from '@babylon/shared';
+import { BABYLON_POINTS_SYMBOL, cn, logger } from '@babylon/shared';
+import {
+  ChevronDown,
+  ChevronUp,
+  TrendingDown,
+  TrendingUp,
+  Wallet,
+} from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { useCallback, useEffect, useState } from 'react';
+import { PositionDetailModal } from '@/components/profile/PositionDetailModal';
+import { Skeleton } from '@/components/shared/Skeleton';
+import { useWidgetRefresh } from '@/contexts/WidgetRefreshContext';
+import { useAuth } from '@/hooks/useAuth';
+import { useWidgetCacheStore } from '@/stores/widgetCacheStore';
+
+const PREVIEW_COUNT = 3;
+
+const formatPoints = (points: number) =>
+  points.toLocaleString('en-US', { maximumFractionDigits: 0 });
+
+const formatPercent = (value: number) =>
+  `${value >= 0 ? '+' : ''}${value.toFixed(1)}%`;
+
+const formatPrice = (price: number) =>
+  `${BABYLON_POINTS_SYMBOL}${price.toFixed(2)}`;
+
+function toNumber(value: unknown, fallback = 0): number {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string') {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : fallback;
+  }
+  return fallback;
+}
+
+/** Unified position item for sorting by timestamp */
+interface PositionItem {
+  type: 'perp' | 'prediction';
+  data: PerpPositionFromAPI | PredictionPosition;
+  openedAt: string; // ISO timestamp for sorting
+}
+
+function buildSortedPositions(
+  perps: PerpPositionFromAPI[],
+  predictions: PredictionPosition[]
+): PositionItem[] {
+  const items: PositionItem[] = [
+    ...perps.map((p) => ({
+      type: 'perp' as const,
+      data: p,
+      openedAt: p.openedAt,
+    })),
+    ...predictions
+      .filter((p) => !p.resolved)
+      .map((p) => ({
+        type: 'prediction' as const,
+        data: p,
+        openedAt: p.createdAt ?? new Date(0).toISOString(),
+      })),
+  ];
+  items.sort(
+    (a, b) => new Date(b.openedAt).getTime() - new Date(a.openedAt).getTime()
+  );
+  return items;
+}
+
+export function PositionsPreviewPanel() {
+  const router = useRouter();
+  const { user } = useAuth();
+  const userId = user?.id;
+
+  const [predictions, setPredictions] = useState<PredictionPosition[]>([]);
+  const [perps, setPerps] = useState<PerpPositionFromAPI[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [expanded, setExpanded] = useState(false);
+
+  // Modal state
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalType, setModalType] = useState<'prediction' | 'perp'>(
+    'prediction'
+  );
+  const [selectedPosition, setSelectedPosition] = useState<
+    PredictionPosition | PerpPositionFromAPI | null
+  >(null);
+
+  const { getPositionsPreview, setPositionsPreview } = useWidgetCacheStore();
+  const { registerRefresh, unregisterRefresh } = useWidgetRefresh();
+
+  const fetchPositions = useCallback(
+    async (skipCache = false) => {
+      if (!userId) return;
+
+      if (!skipCache) {
+        const cached = getPositionsPreview(userId);
+        if (cached) {
+          setPredictions(cached.predictions);
+          setPerps(cached.perps);
+          setLoading(false);
+          return;
+        }
+      }
+
+      try {
+        const response = await fetch(
+          `/api/markets/positions/${encodeURIComponent(userId)}`
+        );
+        if (!response.ok) {
+          logger.error(
+            'Failed to fetch positions for preview',
+            { status: response.status },
+            'PositionsPreviewPanel'
+          );
+          setLoading(false);
+          return;
+        }
+
+        const data = await response.json();
+        const fetchedPerps: PerpPositionFromAPI[] = (
+          data?.perpetuals?.positions ?? []
+        ).map((p: Record<string, unknown>) => ({
+          id: p.id as string,
+          ticker: p.ticker as string,
+          side: p.side as 'long' | 'short',
+          entryPrice: toNumber(p.entryPrice),
+          currentPrice: toNumber(p.currentPrice),
+          size: toNumber(p.size),
+          leverage: toNumber(p.leverage),
+          unrealizedPnL: toNumber(p.unrealizedPnL),
+          unrealizedPnLPercent: toNumber(p.unrealizedPnLPercent),
+          liquidationPrice: toNumber(p.liquidationPrice),
+          fundingPaid: toNumber(p.fundingPaid),
+          openedAt: p.openedAt as string,
+        }));
+
+        const fetchedPredictions: PredictionPosition[] = (
+          data?.predictions?.positions ?? []
+        ).map((p: Record<string, unknown>) => ({
+          id: p.id as string,
+          marketId: p.marketId as string,
+          question: p.question as string,
+          side: p.side as 'YES' | 'NO',
+          shares: toNumber(p.shares),
+          avgPrice: toNumber(p.avgPrice),
+          currentPrice: toNumber(p.currentPrice),
+          currentProbability: toNumber(p.currentProbability),
+          currentValue: toNumber(p.currentValue),
+          costBasis: toNumber(p.costBasis),
+          unrealizedPnL: toNumber(p.unrealizedPnL),
+          resolved: p.resolved as boolean,
+          resolution: p.resolution as boolean | null | undefined,
+          status: p.status as string | undefined,
+          createdAt: p.createdAt as string | undefined,
+        }));
+
+        setPredictions(fetchedPredictions);
+        setPerps(fetchedPerps);
+        setPositionsPreview(userId, {
+          predictions: fetchedPredictions,
+          perps: fetchedPerps,
+        });
+      } catch (err) {
+        logger.error(
+          'Error fetching positions preview',
+          err instanceof Error ? err : { error: err },
+          'PositionsPreviewPanel'
+        );
+      } finally {
+        setLoading(false);
+      }
+    },
+    [userId, getPositionsPreview, setPositionsPreview]
+  );
+
+  useEffect(() => {
+    if (!userId) {
+      setLoading(false);
+      return;
+    }
+    fetchPositions();
+
+    const interval = setInterval(() => fetchPositions(true), 30000);
+    return () => clearInterval(interval);
+  }, [userId, fetchPositions]);
+
+  // Register with WidgetRefreshContext for pull-to-refresh
+  useEffect(() => {
+    const refresh = () => fetchPositions(true);
+    registerRefresh('positions-preview', refresh);
+    return () => unregisterRefresh('positions-preview');
+  }, [registerRefresh, unregisterRefresh, fetchPositions]);
+
+  const sortedPositions = buildSortedPositions(perps, predictions);
+
+  // Don't render if not authenticated or no positions
+  if (!userId || (!loading && sortedPositions.length === 0)) {
+    return null;
+  }
+
+  const displayPositions = expanded
+    ? sortedPositions
+    : sortedPositions.slice(0, PREVIEW_COUNT);
+  const hasMore = sortedPositions.length > PREVIEW_COUNT;
+
+  const handlePositionClick = (item: PositionItem) => {
+    setSelectedPosition(item.data);
+    setModalType(item.type);
+    setModalOpen(true);
+  };
+
+  return (
+    <div className="flex flex-col">
+      <div className="mb-3 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Wallet className="h-4 w-4 text-primary" />
+          <h2 className="font-bold text-foreground text-lg">Open Positions</h2>
+        </div>
+        {hasMore && (
+          <button
+            onClick={() => setExpanded(!expanded)}
+            className="flex items-center gap-1 text-muted-foreground text-xs transition-colors hover:text-foreground"
+          >
+            {expanded ? (
+              <>
+                Show less
+                <ChevronUp className="h-3 w-3" />
+              </>
+            ) : (
+              <>
+                See more
+                <ChevronDown className="h-3 w-3" />
+              </>
+            )}
+          </button>
+        )}
+      </div>
+
+      {loading ? (
+        <div className="space-y-2">
+          <Skeleton className="h-14 w-full" />
+          <Skeleton className="h-14 w-full" />
+          <Skeleton className="h-14 w-full" />
+        </div>
+      ) : (
+        <>
+          <div className="space-y-1">
+            {displayPositions.map((item) => {
+              if (item.type === 'perp') {
+                const perp = item.data as PerpPositionFromAPI;
+                return (
+                  <button
+                    key={`perp-${perp.id}`}
+                    onClick={() => handlePositionClick(item)}
+                    className="-mx-2 w-[calc(100%+16px)] rounded-lg px-2 py-2 text-left transition-colors hover:bg-muted/30"
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-medium text-foreground text-sm">
+                        {perp.ticker}
+                      </span>
+                      <span
+                        className={cn(
+                          'text-xs',
+                          perp.side === 'long'
+                            ? 'text-green-500'
+                            : 'text-red-500'
+                        )}
+                      >
+                        {perp.side === 'long' ? 'Long' : 'Short'}
+                      </span>
+                      {perp.unrealizedPnLPercent >= 0 ? (
+                        <TrendingUp className="h-3 w-3 text-green-500" />
+                      ) : (
+                        <TrendingDown className="h-3 w-3 text-red-500" />
+                      )}
+                    </div>
+                    <div className="mt-0.5 flex items-center justify-between">
+                      <span className="text-muted-foreground text-xs">
+                        {formatPoints(perp.size)} pts @{' '}
+                        {formatPrice(perp.entryPrice)}
+                      </span>
+                      <span
+                        className={cn(
+                          'font-medium text-xs',
+                          perp.unrealizedPnL >= 0
+                            ? 'text-green-500'
+                            : 'text-red-500'
+                        )}
+                      >
+                        {formatPoints(perp.unrealizedPnL)} pts (
+                        {formatPercent(perp.unrealizedPnLPercent)})
+                      </span>
+                    </div>
+                  </button>
+                );
+              }
+
+              const pred = item.data as PredictionPosition;
+              const pnlPct =
+                pred.avgPrice > 0
+                  ? ((pred.currentPrice - pred.avgPrice) / pred.avgPrice) * 100
+                  : 0;
+              return (
+                <button
+                  key={`pred-${pred.id}`}
+                  onClick={() => handlePositionClick(item)}
+                  className="-mx-2 w-[calc(100%+16px)] rounded-lg px-2 py-2 text-left transition-colors hover:bg-muted/30"
+                >
+                  <div className="truncate font-medium text-foreground text-sm">
+                    {pred.question}
+                  </div>
+                  <div className="mt-0.5 flex items-center justify-between">
+                    <span className="text-muted-foreground text-xs">
+                      {pred.shares} shares {pred.side} @{' '}
+                      {formatPrice(pred.avgPrice)}
+                    </span>
+                    <span
+                      className={cn(
+                        'font-medium text-xs',
+                        pnlPct >= 0 ? 'text-green-500' : 'text-red-500'
+                      )}
+                    >
+                      {formatPercent(pnlPct)}
+                    </span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+
+          <button
+            onClick={() => router.push('/markets')}
+            className="mt-3 w-full rounded-lg border border-border py-2 text-center text-muted-foreground text-sm transition-colors hover:bg-muted/30 hover:text-foreground"
+          >
+            View Positions
+          </button>
+        </>
+      )}
+
+      <PositionDetailModal
+        isOpen={modalOpen}
+        onClose={() => {
+          setModalOpen(false);
+          setSelectedPosition(null);
+        }}
+        type={modalType}
+        data={selectedPosition}
+        userId={userId}
+        onSuccess={() => {
+          void fetchPositions(true);
+        }}
+      />
+    </div>
+  );
+}

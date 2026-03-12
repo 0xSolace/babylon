@@ -167,8 +167,8 @@ import {
   type PrivyIdentitySnapshot,
   shouldSyncMissingPrivyIdentity,
 } from '@/lib/auth/privyIdentitySync';
-import { POST as updateProfilePOST } from '../[userId]/update-profile/route';
 import { getOptionalProfileStats } from '@/lib/users/profile-stats';
+import { POST as updateProfilePOST } from '../[userId]/update-profile/route';
 
 type PrivyUserWithWallets = PrivyUser &
   PrivyUserWithEmails &
