@@ -1,34 +1,29 @@
 'use client';
 
-import { Moon, Sun } from 'lucide-react';
 import { useTheme } from 'next-themes';
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 
 /**
- * Floating theme toggle button visible only in development environment.
- * Renders in the bottom-right corner for quick theme switching during dev.
+ * Dev-only keyboard shortcut to toggle theme.
+ * Press Alt+Shift+T to switch between light and dark mode.
+ * Renders nothing — purely a side-effect hook.
  */
 export function DevThemeToggle() {
   const { resolvedTheme, setTheme } = useTheme();
-  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    setMounted(true);
-  }, []);
+    if (process.env.NODE_ENV !== 'development') return;
 
-  if (process.env.NODE_ENV !== 'development') return null;
-  if (!mounted) return null;
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.altKey && e.shiftKey && e.key === 'T') {
+        e.preventDefault();
+        setTheme(resolvedTheme === 'dark' ? 'light' : 'dark');
+      }
+    }
 
-  const isDark = resolvedTheme === 'dark';
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [resolvedTheme, setTheme]);
 
-  return (
-    <button
-      type="button"
-      onClick={() => setTheme(isDark ? 'light' : 'dark')}
-      className="fixed right-4 bottom-4 z-[9999] flex h-10 w-10 items-center justify-center rounded-full border border-border bg-background shadow-lg transition-colors hover:bg-muted"
-      title={`Switch to ${isDark ? 'light' : 'dark'} mode`}
-    >
-      {isDark ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
-    </button>
-  );
+  return null;
 }
