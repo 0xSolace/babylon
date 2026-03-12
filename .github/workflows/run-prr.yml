@@ -16,6 +16,9 @@ concurrency:
 
 jobs:
   prr:
+    permissions:
+      contents: write
+      pull-requests: write
     if: |
       github.event_name == 'workflow_dispatch' ||
       (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false && (
