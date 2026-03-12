@@ -36,6 +36,8 @@ export interface LeaderboardData {
   };
   leaderboardType: LeaderboardTab;
   currentUser: CurrentUserPosition | null;
+  followingUserIds: string[];
+  followingUserIdsResolved: boolean;
 }
 
 export class LeaderboardFetchError extends Error {
@@ -53,6 +55,7 @@ export type FetchLeaderboardOptions = {
   pageSize: number;
   selectedTab: LeaderboardTab;
   userId?: string;
+  authToken?: string | null;
   signal?: AbortSignal;
   retryDelayMs?: number;
   retries?: number;
@@ -137,6 +140,7 @@ export async function fetchLeaderboardData({
   pageSize,
   selectedTab,
   userId,
+  authToken,
   signal,
   retryDelayMs = 1000,
   retries = 2,
@@ -148,9 +152,13 @@ export async function fetchLeaderboardData({
     userId,
   });
 
+  const headers: HeadersInit | undefined = authToken
+    ? { Authorization: `Bearer ${authToken}` }
+    : undefined;
+
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
-      const response = await fetch(url, { signal });
+      const response = await fetch(url, { signal, headers });
 
       if (!response.ok) {
         throw new LeaderboardFetchError(
