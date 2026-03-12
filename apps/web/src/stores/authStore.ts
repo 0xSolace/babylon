@@ -107,6 +107,8 @@ type PersistedAuthState = Pick<
   | 'needsOnchain'
 >;
 
+const CURRENT_AUTH_STORE_VERSION = 2;
+
 function createInitialAuthState(): PersistedAuthState {
   return {
     user: null,
@@ -144,7 +146,13 @@ export function migrateAuthStoreState(
 ): PersistedAuthState {
   const initialState = createInitialAuthState();
 
-  if (version > 1 || !isRecord(persistedState)) {
+  if (!isRecord(persistedState)) {
+    return initialState;
+  }
+
+  // Migrate only legacy payloads written before the current v2 schema.
+  // Unknown future versions should fall back to the initial state instead.
+  if (version !== 0 && version !== 1) {
     return initialState;
   }
 
@@ -178,7 +186,9 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: 'babylon-auth',
-      version: 2, // Increment this to invalidate old cached data
+      // Bumping this triggers migrateAuthStoreState. Update the accepted
+      // legacy versions above when the persisted schema changes again.
+      version: CURRENT_AUTH_STORE_VERSION,
       migrate: migrateAuthStoreState,
     }
   )

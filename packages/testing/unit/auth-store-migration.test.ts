@@ -35,6 +35,37 @@ beforeEach(() => {
 });
 
 describe('migrateAuthStoreState', () => {
+  test('migrates version 0 auth payloads with the same legacy fallback path', () => {
+    const migrated = migrateAuthStoreState(
+      {
+        user: {
+          id: 'did:privy:test-user',
+          displayName: 'Test User',
+        },
+        wallet: {
+          address: '0x123',
+          chainId: 'eip155:8453',
+        },
+      },
+      0
+    );
+
+    expect(migrated).toEqual({
+      user: {
+        id: 'did:privy:test-user',
+        displayName: 'Test User',
+      },
+      wallet: {
+        address: '0x123',
+        chainId: 'eip155:8453',
+      },
+      loadedUserId: null,
+      isLoadingProfile: false,
+      needsOnboarding: false,
+      needsOnchain: false,
+    });
+  });
+
   test('migrates persisted auth data from legacy versions without keeping loading state', () => {
     const migrated = migrateAuthStoreState(
       {
@@ -115,7 +146,7 @@ describe('migrateAuthStoreState', () => {
     });
   });
 
-  test('returns null for user missing required displayName', () => {
+  test('drops partial user objects that do not satisfy the persisted user guard', () => {
     const migrated = migrateAuthStoreState(
       {
         user: { id: 'did:privy:test-user' },
@@ -131,7 +162,7 @@ describe('migrateAuthStoreState', () => {
     });
   });
 
-  test('returns null for wallet missing required chainId', () => {
+  test('drops partial wallet objects that do not satisfy the persisted wallet guard', () => {
     const migrated = migrateAuthStoreState(
       {
         user: { id: 'did:privy:test-user', displayName: 'Test' },
