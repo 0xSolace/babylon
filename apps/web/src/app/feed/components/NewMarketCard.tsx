@@ -22,6 +22,8 @@ interface NewMarketCardProps {
   embedded?: boolean;
   onOpenMarket?: () => void;
   onTradeComplete?: () => void;
+  onLikeChange?: (isLiked: boolean) => void;
+  onShareChange?: (isShared: boolean) => void;
 }
 
 type TradeSide = 'YES' | 'NO';
@@ -128,6 +130,8 @@ export function NewMarketCard({
   embedded = false,
   onOpenMarket,
   onTradeComplete,
+  onLikeChange,
+  onShareChange,
 }: NewMarketCardProps) {
   const router = useRouter();
   const [tradeSide, setTradeSide] = useState<TradeSide | null>(null);
@@ -288,15 +292,22 @@ export function NewMarketCard({
         >
           <InteractionBar
             postId={story.anchorPostId}
-            initialInteractions={{
-              postId: story.anchorPostId,
-              likeCount: 0,
-              commentCount: 0,
-              shareCount: 0,
-              isLiked: false,
-              isShared: false,
-            }}
+            initialInteractions={(() => {
+              const anchorPost = story.posts.find(
+                (p) => p.id === story.anchorPostId
+              );
+              return {
+                postId: story.anchorPostId,
+                likeCount: anchorPost?.likeCount ?? 0,
+                commentCount: anchorPost?.commentCount ?? 0,
+                shareCount: anchorPost?.shareCount ?? 0,
+                isLiked: anchorPost?.isLiked ?? false,
+                isShared: anchorPost?.isShared ?? false,
+              };
+            })()}
             onCommentClick={() => router.push(`/post/${story.anchorPostId}`)}
+            onLikeChange={onLikeChange}
+            onShareChange={onShareChange}
           />
         </div>
       )}

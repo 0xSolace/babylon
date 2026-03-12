@@ -674,6 +674,10 @@ async function loadBaseCandidates(): Promise<BaseForYouResult> {
   const stories: NarrativeStory[] = [];
 
   for (const [storyKey, storyPosts] of storyPostMap) {
+    // General posts are handled separately as standalone cards below —
+    // skip here to avoid duplicate content in the feed.
+    if (storyKey === GENERAL_STORY_KEY) continue;
+
     storyPosts.sort(
       (a, b) =>
         new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
@@ -692,10 +696,8 @@ async function loadBaseCandidates(): Promise<BaseForYouResult> {
       (sum, post) => sum + post.shareCount,
       0
     );
-    const questionNumber =
-      storyKey === GENERAL_STORY_KEY ? null : Number.parseInt(storyKey, 10);
-    const meta =
-      questionNumber !== null ? questionMetaMap.get(questionNumber) : null;
+    const questionNumber = Number.parseInt(storyKey, 10);
+    const meta = questionMetaMap.get(questionNumber);
 
     if (meta?.status === 'resolved') continue;
     if (meta?.resolutionDate && meta.resolutionDate <= now) continue;
@@ -715,9 +717,7 @@ async function loadBaseCandidates(): Promise<BaseForYouResult> {
       calculateArcStateMultiplier(meta?.arcState ?? null) *
       resolutionBoost;
 
-    const storyTitle =
-      meta?.title ??
-      (questionNumber !== null ? `Story #${questionNumber}` : 'General');
+    const storyTitle = meta?.title ?? `Story #${questionNumber}`;
 
     stories.push({
       storyKey,

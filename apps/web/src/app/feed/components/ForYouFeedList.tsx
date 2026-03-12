@@ -211,6 +211,12 @@ export function ForYouFeedList({ stories }: ForYouFeedListProps) {
                 onTradeComplete={() =>
                   trackStoryEvent(story, index, 'trade_after_view')
                 }
+                onLikeChange={(isLiked) => {
+                  if (isLiked) trackStoryEvent(story, index, 'like');
+                }}
+                onShareChange={(isShared) => {
+                  if (isShared) trackStoryEvent(story, index, 'share');
+                }}
               />
             </div>
           );
