@@ -79,79 +79,68 @@ interface RewardsWidgetProps {
   userId: string;
 }
 
-/**
- * Global fetch tracking to prevent duplicate calls.
- */
-let rewardsWidgetFetchInFlight = false;
-let rewardsWidgetIntervalId: ReturnType<typeof setInterval> | null = null;
+const REFRESH_INTERVAL_MS = 30_000;
 
 export function RewardsWidget({ userId }: RewardsWidgetProps) {
   const [data, setData] = useState<ReferralWidgetData | null>(null);
   const [loading, setLoading] = useState(true);
-  const lastFetchedUserIdRef = useRef<string | null>(null);
+  const fetchInFlightRef = useRef(false);
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (!userId) return;
 
-    // Don't refetch if userId hasn't changed
-    if (lastFetchedUserIdRef.current === userId) {
-      return;
-    }
-
     const fetchData = async () => {
-      if (!userId) return;
-
-      // Prevent duplicate fetches globally
-      if (rewardsWidgetFetchInFlight) return;
-      rewardsWidgetFetchInFlight = true;
+      if (fetchInFlightRef.current) return;
+      fetchInFlightRef.current = true;
 
       setLoading(true);
 
-      const token = getAuthToken();
-      if (!token) {
-        setLoading(false);
-        rewardsWidgetFetchInFlight = false;
-        return;
-      }
-
-      const response = await fetch(
-        `/api/users/${encodeURIComponent(userId)}/referrals`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
+      try {
+        const token = getAuthToken();
+        if (!token) {
+          setLoading(false);
+          return;
         }
-      );
 
-      if (!response.ok) {
-        setLoading(false);
-        rewardsWidgetFetchInFlight = false;
-        throw new Error('Failed to fetch referral data');
+        const response = await fetch(
+          `/api/users/${encodeURIComponent(userId)}/referrals`,
+          {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          }
+        );
+
+        if (!response.ok) {
+          setLoading(false);
+          return;
+        }
+
+        const result = await response.json();
+        if (isMountedRef.current) {
+          setData(result);
+          setLoading(false);
+        }
+      } finally {
+        fetchInFlightRef.current = false;
       }
-
-      const result = await response.json();
-      setData(result);
-      setLoading(false);
-      lastFetchedUserIdRef.current = userId;
-      rewardsWidgetFetchInFlight = false;
     };
-
-    // Clear any existing interval
-    if (rewardsWidgetIntervalId) {
-      clearInterval(rewardsWidgetIntervalId);
-      rewardsWidgetIntervalId = null;
-    }
 
     fetchData();
 
-    // Refresh every 30 seconds
-    rewardsWidgetIntervalId = setInterval(fetchData, 30000);
+    const intervalId = setInterval(fetchData, REFRESH_INTERVAL_MS);
 
     return () => {
-      if (rewardsWidgetIntervalId) {
-        clearInterval(rewardsWidgetIntervalId);
-        rewardsWidgetIntervalId = null;
-      }
+      clearInterval(intervalId);
     };
   }, [userId]);
 
