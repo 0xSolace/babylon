@@ -8,6 +8,8 @@ import {
   mock,
 } from 'bun:test';
 import { NextRequest } from 'next/server';
+import * as actualDbModule from '../../db/src/index';
+import * as actualSharedModule from '../../shared/src/index';
 
 const mockAuthenticate = mock(async () => ({ userId: 'user-123' }));
 const mockRequireUserByIdentifier = mock(async () => ({ id: 'user-123' }));
@@ -107,10 +109,9 @@ describe('/api/users/[userId]/update-profile empty update behavior', () => {
       ) => handler,
     }));
 
-    mock.module('@babylon/db', async () => {
-      const actual = await import('@babylon/db');
+    mock.module('@babylon/db', () => {
       return {
-        ...actual,
+        ...actualDbModule,
         db: {
           select: () => ({
             from: () => ({
@@ -124,10 +125,9 @@ describe('/api/users/[userId]/update-profile empty update behavior', () => {
       };
     });
 
-    mock.module('@babylon/shared', async () => {
-      const actual = await import('@babylon/shared');
+    mock.module('@babylon/shared', () => {
       return {
-        ...actual,
+        ...actualSharedModule,
         logger: {
           info: () => {},
           warn: () => {},
@@ -162,7 +162,7 @@ describe('/api/users/[userId]/update-profile empty update behavior', () => {
     mock.restore();
   });
 
-  it('skips db.update when sanitized update data is empty', async () => {
+  it('returns the current profile without logging a no-op update', async () => {
     const response = await POST(createRequest({}), {
       params: Promise.resolve({ userId: 'user-123' }),
     });
@@ -172,19 +172,15 @@ describe('/api/users/[userId]/update-profile empty update behavior', () => {
     expect(updateMock).not.toHaveBeenCalled();
     expect(body.user.username).toBe('existing-user');
     expect(body.user.displayName).toBe('Existing User');
-    expect(mockLogProfileUpdate).toHaveBeenCalledWith(
-      'user-123',
-      [],
-      false,
-      undefined
-    );
+    expect(mockLogProfileUpdate).not.toHaveBeenCalled();
+    expect(mockTrackServerEvent).not.toHaveBeenCalled();
+    expect(mockAwardProfileCompletion).not.toHaveBeenCalled();
   });
 
-  it('omits undefined fields and only updates defined values', async () => {
+  it('omits undefined-derived fields and only updates defined values', async () => {
     const response = await POST(
       createRequest({
         displayName: '  Updated Name  ',
-        bio: undefined,
       }),
       {
         params: Promise.resolve({ userId: 'user-123' }),
@@ -199,5 +195,11 @@ describe('/api/users/[userId]/update-profile empty update behavior', () => {
       displayName: 'Updated Name',
     });
     expect(body.user.displayName).toBe('Updated Name');
+    expect(mockLogProfileUpdate).toHaveBeenCalledWith(
+      'user-123',
+      ['displayName'],
+      false,
+      undefined
+    );
   });
 });

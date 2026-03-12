@@ -360,17 +360,26 @@ export const POST = withErrorHandling(
 
     const hasSanitizedUpdates = Object.keys(sanitizedUpdateData).length > 0;
 
-    const [updatedUser] = hasSanitizedUpdates
-      ? await db
-          .update(users)
-          .set(sanitizedUpdateData)
-          .where(eq(users.id, canonicalUserId))
-          .returning(userProfileSelection)
-      : await db
-          .select(userProfileSelection)
-          .from(users)
-          .where(eq(users.id, canonicalUserId))
-          .limit(1);
+    if (!hasSanitizedUpdates) {
+      const [existingUser] = await db
+        .select(userProfileSelection)
+        .from(users)
+        .where(eq(users.id, canonicalUserId))
+        .limit(1);
+
+      return successResponse({
+        user: existingUser,
+        message: 'Profile updated successfully',
+        pointsAwarded: [],
+        onchain: null,
+      });
+    }
+
+    const [updatedUser] = await db
+      .update(users)
+      .set(sanitizedUpdateData)
+      .where(eq(users.id, canonicalUserId))
+      .returning(userProfileSelection);
 
     // Award points for profile milestones
     const pointsAwarded: { reason: string; amount: number }[] = [];
