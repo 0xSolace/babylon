@@ -32,7 +32,7 @@ interface WidgetSidebarProps {
  * @returns Widget sidebar element (hidden on screens < XL)
  */
 export function WidgetSidebar({
-  showPositions = true,
+  showPositions = false,
   showLatestNews = true,
   showTrending = true,
   showMarkets = true,

@@ -90,6 +90,31 @@ export function PositionsPreviewPanel() {
   const { getPositionsPreview, setPositionsPreview } = useWidgetCacheStore();
   const { registerRefresh, unregisterRefresh } = useWidgetRefresh();
 
+  useEffect(() => {
+    setExpanded(false);
+    setModalOpen(false);
+    setSelectedPosition(null);
+
+    if (!userId) {
+      setPredictions([]);
+      setPerps([]);
+      setLoading(false);
+      return;
+    }
+
+    const cached = getPositionsPreview(userId);
+    if (cached) {
+      setPredictions(cached.predictions);
+      setPerps(cached.perps);
+      setLoading(false);
+      return;
+    }
+
+    setPredictions([]);
+    setPerps([]);
+    setLoading(true);
+  }, [userId, getPositionsPreview]);
+
   const fetchPositions = useCallback(
     async (skipCache = false) => {
       if (!userId) return;
