@@ -157,11 +157,7 @@ export function WidgetSidebar({
           />
         </div>
 
-        {showPortfolio && (
-          <div className="flex-shrink-0">
-            <PortfolioWidget />
-          </div>
-        )}
+        {showPortfolio && <PortfolioWidget />}
 
         {showPositions && (
           <div className="flex-shrink-0">

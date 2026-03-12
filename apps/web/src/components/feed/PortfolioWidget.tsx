@@ -42,37 +42,42 @@ function PnLValue({ value }: { value: number }) {
 export function PortfolioWidget() {
   const router = useRouter();
   const { user, authenticated } = useAuth();
+  const userId = authenticated ? (user?.id ?? null) : null;
   const {
     data: portfolioData,
     loading: portfolioLoading,
     refresh: refreshPortfolio,
   } = usePortfolioPnL();
-  const { balance, lifetimePnL } = useWalletBalance(user?.id);
-  const { getPortfolioWidget, setPortfolioWidget } = useWidgetCacheStore();
+  const { balance, lifetimePnL } = useWalletBalance(userId);
+  const getPortfolioWidget = useWidgetCacheStore(
+    (state) => state.getPortfolioWidget
+  );
+  const setPortfolioWidget = useWidgetCacheStore(
+    (state) => state.setPortfolioWidget
+  );
   const { registerRefresh, unregisterRefresh } = useWidgetRefresh();
 
   const [cachedData, setCachedData] =
     useState<PortfolioBreakdownSnapshot | null>(null);
 
   // Enable balance polling every 15s
-  useWalletBalancePolling(user?.id);
+  useWalletBalancePolling(userId);
 
-  // Use cached data on mount only — intentionally omitting getPortfolioWidget
-  // to avoid re-running on every render (Zustand selector creates new refs).
-  // biome-ignore lint/correctness/useExhaustiveDependencies: mount-only effect
   useEffect(() => {
-    const cached = getPortfolioWidget();
-    if (cached) {
-      setCachedData(cached);
+    if (!userId) {
+      setCachedData(null);
+      return;
     }
-  }, []);
+
+    setCachedData(getPortfolioWidget(userId));
+  }, [userId, getPortfolioWidget]);
 
   useEffect(() => {
-    if (portfolioData) {
-      setPortfolioWidget(portfolioData);
+    if (portfolioData && userId) {
+      setPortfolioWidget(userId, portfolioData);
       setCachedData(portfolioData);
     }
-  }, [portfolioData, setPortfolioWidget]);
+  }, [portfolioData, setPortfolioWidget, userId]);
 
   // Register with widget refresh context
   const handleRefresh = useCallback(() => {
@@ -91,11 +96,11 @@ export function PortfolioWidget() {
   const data = portfolioData ?? cachedData;
   const loading = portfolioLoading && !data;
 
-  const handleViewProfile = () => {
+  const handleViewProfile = useCallback(() => {
     if (user) {
       router.push(getProfileUrl(user.id, user.username));
     }
-  };
+  }, [router, user]);
 
   return (
     <div className="flex flex-col">
