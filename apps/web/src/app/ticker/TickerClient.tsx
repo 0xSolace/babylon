@@ -126,7 +126,7 @@ function PredictionArcMeter({
         : 'rgb(22, 163, 74)' // green
       : isDark
         ? 'rgb(234, 88, 12)'
-        : 'rgb(234, 88, 12)'; // orange/red below 50%
+        : 'rgb(194, 65, 12)'; // orange-600 / orange-700 below 50%
 
   const h = (size * 60) / 100;
   return (
