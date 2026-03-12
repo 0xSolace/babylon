@@ -25,7 +25,7 @@
  *         name: limit
  *         schema:
  *           type: integer
- *         description: Maximum results to return
+ *         description: Maximum results to return (capped at 100)
  *     responses:
  *       200:
  *         description: Leaderboard retrieved successfully
@@ -279,7 +279,10 @@ export const GET = withErrorHandling(async function GET(request: NextRequest) {
   const limitParam = searchParams.get('limit');
   const minValueParam = searchParams.get('minValue');
 
-  const limit = limitParam ? Number.parseInt(limitParam, 10) : 50;
+  const limit = Math.min(
+    limitParam ? Number.parseInt(limitParam, 10) : 50,
+    100
+  );
   const minValue = minValueParam ? Number.parseFloat(minValueParam) : 0;
 
   const activePools = await db
@@ -289,65 +292,72 @@ export const GET = withErrorHandling(async function GET(request: NextRequest) {
 
   const activePoolIds = activePools.map((pool) => pool.id);
 
-  const [fallbackBalances, fallbackPositionRows, fallbackPerpRows] =
-    activePoolIds.length === 0
-      ? [[], [], []]
-      : await Promise.all([
-          db
-            .select({
-              id: actorState.id,
-              tradingBalance: actorState.tradingBalance,
-            })
-            .from(actorState)
-            .where(inArray(actorState.id, activePoolIds)),
-          db
-            .select({
-              id: poolPositions.id,
-              poolId: poolPositions.poolId,
-              marketType: poolPositions.marketType,
-              size: poolPositions.size,
-              leverage: poolPositions.leverage,
-              unrealizedPnL: poolPositions.unrealizedPnL,
-              realizedPnL: poolPositions.realizedPnL,
-              closedAt: poolPositions.closedAt,
-            })
-            .from(poolPositions)
-            .where(inArray(poolPositions.poolId, activePoolIds)),
-          db
-            .select({
-              id: perpPositions.id,
-              userId: perpPositions.userId,
-              size: perpPositions.size,
-              leverage: perpPositions.leverage,
-              unrealizedPnL: perpPositions.unrealizedPnL,
-              realizedPnL: perpPositions.realizedPnL,
-              closedAt: perpPositions.closedAt,
-            })
-            .from(perpPositions)
-            .where(inArray(perpPositions.userId, activePoolIds)),
-        ]);
+  // Fetch fallback data upfront so we can serve metrics even when
+  // getPortfolioMetrics() throws (e.g. missing actorState rows).
+  // NOTE: buildFallbackMetricsByPool mirrors the calculation logic in
+  // NPCInvestmentManager.getPortfolioMetrics — keep them in sync.
+  let fallbackMetricsByPool: Map<string, LeaderboardFallbackMetrics> | null =
+    null;
 
-  const fallbackMetricsByPool = buildFallbackMetricsByPool(
-    activePools,
-    fallbackBalances,
-    fallbackPositionRows,
-    fallbackPerpRows
-  );
+  const loadFallbackMetrics = async () => {
+    if (fallbackMetricsByPool) return fallbackMetricsByPool;
+    if (activePoolIds.length === 0) {
+      fallbackMetricsByPool = new Map();
+      return fallbackMetricsByPool;
+    }
+
+    const [balances, positionRows, perpRows] = await Promise.all([
+      db
+        .select({
+          id: actorState.id,
+          tradingBalance: actorState.tradingBalance,
+        })
+        .from(actorState)
+        .where(inArray(actorState.id, activePoolIds)),
+      db
+        .select({
+          id: poolPositions.id,
+          poolId: poolPositions.poolId,
+          marketType: poolPositions.marketType,
+          size: poolPositions.size,
+          leverage: poolPositions.leverage,
+          unrealizedPnL: poolPositions.unrealizedPnL,
+          realizedPnL: poolPositions.realizedPnL,
+          closedAt: poolPositions.closedAt,
+        })
+        .from(poolPositions)
+        .where(inArray(poolPositions.poolId, activePoolIds)),
+      db
+        .select({
+          id: perpPositions.id,
+          userId: perpPositions.userId,
+          size: perpPositions.size,
+          leverage: perpPositions.leverage,
+          unrealizedPnL: perpPositions.unrealizedPnL,
+          realizedPnL: perpPositions.realizedPnL,
+          closedAt: perpPositions.closedAt,
+        })
+        .from(perpPositions)
+        .where(inArray(perpPositions.userId, activePoolIds)),
+    ]);
+
+    fallbackMetricsByPool = buildFallbackMetricsByPool(
+      activePools,
+      balances,
+      positionRows,
+      perpRows
+    );
+    return fallbackMetricsByPool;
+  };
 
   const leaderboardRows = await Promise.all(
     activePools.map(async (pool) => {
-      const fallbackMetrics = fallbackMetricsByPool.get(pool.id);
-
       try {
         const metrics = await NPCInvestmentManager.getPortfolioMetrics(pool.id);
-        const effectiveMetrics =
-          metrics.totalValue > 0 || !fallbackMetrics
-            ? metrics
-            : fallbackMetrics;
-
-        return { pool, metrics: effectiveMetrics };
+        return { pool, metrics };
       } catch (error) {
-        if (!fallbackMetrics) {
+        const fallback = (await loadFallbackMetrics()).get(pool.id);
+        if (!fallback) {
           logger.warn('Skipping NPC performance row due to metrics failure', {
             poolId: pool.id,
             actorId: pool.npcActorId,
@@ -362,7 +372,7 @@ export const GET = withErrorHandling(async function GET(request: NextRequest) {
           error: error instanceof Error ? error.message : String(error),
         });
 
-        return { pool, metrics: fallbackMetrics };
+        return { pool, metrics: fallback };
       }
     })
   );
