@@ -59,10 +59,10 @@ mock.module('@privy-io/server-auth', () => ({
 
 // Import after mocks are set up
 import {
+  _resetPrivyClientForTesting,
   authenticate,
   optionalAuth,
   optionalAuthFromHeaders,
-  _resetPrivyClientForTesting,
 } from '../auth-middleware';
 
 let usersRows: Array<{ id: string; walletAddress: string; isAdmin?: boolean }> =
