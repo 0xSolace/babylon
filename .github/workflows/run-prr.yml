@@ -18,7 +18,7 @@ jobs:
   prr:
     if: |
       github.event_name == 'workflow_dispatch' ||
-      (github.event_name == 'pull_request' && (
+      (github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork == false && (
         (github.event.action == 'labeled' && github.event.label.name == 'run-prr') ||
         (github.event.action == 'review_requested' && (
           (vars.PRR_REVIEWER_USER_LOGIN && vars.PRR_REVIEWER_USER_LOGIN != '' && github.event.requested_reviewer && github.event.requested_reviewer.login == vars.PRR_REVIEWER_USER_LOGIN) ||
