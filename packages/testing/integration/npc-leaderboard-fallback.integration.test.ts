@@ -23,13 +23,13 @@ import {
   perpPositions,
   poolPositions,
 } from '@babylon/db';
-import { NPCInvestmentManager } from '@babylon/engine';
-import { generateSnowflakeId } from '@babylon/shared';
 import {
   buildFallbackMetricsByPool,
   type FallbackPerpRow,
   type FallbackPositionRow,
-} from '../../../apps/web/src/app/api/npc/performance/leaderboard/route';
+  NPCInvestmentManager,
+} from '@babylon/engine';
+import { generateSnowflakeId } from '@babylon/shared';
 
 describe('NPC Leaderboard Fallback Metrics', () => {
   const TEST_POOL_ID = 'test-fallback-pool-' + Date.now();

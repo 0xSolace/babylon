@@ -17,6 +17,15 @@ export {
 } from './npc-portfolio-strategy';
 
 export {
+  buildFallbackMetricsByPool,
+  getEffectiveLeverage,
+  getPositionExposure,
+  type FallbackPerpRow,
+  type FallbackPositionRow,
+  type PoolMetrics,
+} from './portfolio-metrics';
+
+export {
   formatTradingStrategyBias,
   getNpcTradingStrategy,
   TRADING_STRATEGIES,
