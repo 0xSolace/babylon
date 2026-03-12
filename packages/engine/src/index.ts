@@ -188,6 +188,7 @@ export {
 export {
   NPCInvestmentManager,
   type PortfolioMetrics,
+  type PortfolioMetricsInput,
   type PortfolioPosition,
   type RebalanceAction,
 } from './npc/npc-investment-manager';
