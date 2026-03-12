@@ -120,7 +120,7 @@ type LeaderboardFallbackMetrics = Pick<
   | 'totalValue'
 >;
 
-type FallbackPositionRow = {
+export type FallbackPositionRow = {
   id: string;
   poolId: string;
   marketType: string;
@@ -131,7 +131,7 @@ type FallbackPositionRow = {
   closedAt: Date | null;
 };
 
-type FallbackPerpRow = {
+export type FallbackPerpRow = {
   id: string;
   userId: string;
   size: number | null;
@@ -141,13 +141,15 @@ type FallbackPerpRow = {
   closedAt: Date | null;
 };
 
-function getEffectiveLeverage(leverage: number | null | undefined): number {
+export function getEffectiveLeverage(
+  leverage: number | null | undefined
+): number {
   return Number.isFinite(leverage) && Number(leverage) > 0
     ? Number(leverage)
     : 1;
 }
 
-function getPositionExposure(
+export function getPositionExposure(
   size: number | null | undefined,
   leverage?: number | null
 ): number {
@@ -161,7 +163,7 @@ function getPositionExposure(
   return Math.abs(numericSize / getEffectiveLeverage(leverage));
 }
 
-function buildFallbackMetricsByPool(
+export function buildFallbackMetricsByPool(
   activePools: Array<typeof pools.$inferSelect>,
   balances: Array<{ id: string; tradingBalance: string | null }>,
   positionRows: FallbackPositionRow[],
