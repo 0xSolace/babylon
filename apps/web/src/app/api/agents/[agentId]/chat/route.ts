@@ -619,7 +619,7 @@ export const POST = withErrorHandling(
               : null;
         }
 
-        const success = actionResult?.success ?? true;
+        const success = actionResult?.success ?? false;
 
         traceActionResults.push({
           actionType: action,

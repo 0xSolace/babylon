@@ -26,6 +26,7 @@ import { agentRuntimeManager, teamChatService } from '@babylon/agents';
 import {
   authenticateUser,
   broadcastChatMessage,
+  broadcastThinkingIndicator,
   checkRateLimitAsync,
   RATE_LIMIT_CONFIGS,
   withErrorHandling,
@@ -208,21 +209,41 @@ No actions taken yet.
 
 # Decision Guide
 
-## Single-Agent Tasks
-**Use DISPATCH_TO_AGENT** when the user wants one agent to execute a trade, post, comment, or any action.
+## MANDATORY: Agent Dispatch Rules
+**You MUST use DISPATCH_TO_AGENT** whenever the user wants ANY action performed by an agent.
+You are a DISPATCHER — you NEVER execute agent work yourself and you NEVER tell the user to do it.
+If the user has exactly 1 agent and asks for ANY action, dispatch to that agent automatically.
+If no agents exist in the team, tell the user to create one at /agents.
+
+**Always dispatch when the user says any of these (or similar):**
+  - "tell my agent to..." / "ask my agent to..." / "have my agent..."
+  - "make agent X..." / "get agent X to..." / "command agent X..."
+  - "buy/sell/trade/open/close..." (trading intent = agent action)
+  - "post about..." / "comment on..." / "write about..." (content intent = agent action)
+  - Any instruction that requires an agent to act on the user's behalf
+
+**How to dispatch:**
   - Select the agent using their [id: ...] from the Team Members list above
   - Write the command clearly as the exact instruction for the agent
-  - If no agents exist in the team, skip this action and tell the user to create one at /agents
+  - Parameters: {"agentId": "the-agent-id", "command": "clear instruction for the agent"}
+
+**Dispatch examples:**
+  - User: "tell my agent to post about crypto" → action: DISPATCH_TO_AGENT, command: "post about crypto"
+  - User: "buy TSLAI" → action: DISPATCH_TO_AGENT, command: "buy TSLAI"
+  - User: "have alice open a 2x long on NVDAI for $50" → action: DISPATCH_TO_AGENT to alice, command: "open a 2x long on NVDAI for $50"
+  - User: "ask bob what he thinks" → action: DISPATCH_TO_AGENT to bob, command: "share your thoughts on the current market"
 ${orchestrationSection}
-## Information Queries
+## Information Queries (no agent needed)
 **Use a data-fetch action** (CHECK_PERPS, CHECK_PREDICTIONS, CHECK_USER_PNL, etc.) when you need information to answer the user's question.
+Only use these for read-only queries where the user wants data, NOT when they want an agent to act.
 
-## Skip Actions
-**Skip all actions (set action to "" and isFinish to true)** when:
-  - The question is conversational or you already have the data needed
+## Skip Actions (no action needed)
+**Set action to "" and isFinish to true ONLY when:**
+  - The question is purely conversational ("what is Babylon?", "how does this work?")
+  - You already have the data needed from a previous action this turn
   - The user is asking about a previous turn's result — just answer directly
-  - You have already dispatched or fetched what was needed this turn
 
+**NEVER skip when the user wants an action done — ALWAYS dispatch instead.**
 **NEVER repeat the same action with the same parameters.**
 **NEVER include action names or action syntax in a text response — actions are separate from your final reply.**
 
@@ -481,6 +502,7 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
   // return identical data within a single request.
   let lastState: State | null = null;
   let lastDispatchIteration = 0;
+  let dispatchHistoryRefreshedAt = 0;
 
   // The decision template is built once based on agent count (from first composeState).
   // We defer building it until after the first state composition.
@@ -670,11 +692,11 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
         state = await runtime.composeState(elizaMessage, providers, true);
       } else {
         // Subsequent iterations: reuse state, skip redundant DB queries.
-        // Only re-fetch DISPATCH_HISTORY if we dispatched last iteration,
-        // since the agent's response is now in the messages table.
+        // Re-fetch DISPATCH_HISTORY if any dispatch happened since the last
+        // refresh, since agent responses are now visible in the messages table.
         state = lastState!;
 
-        if (lastDispatchIteration === iteration - 1) {
+        if (lastDispatchIteration > dispatchHistoryRefreshedAt) {
           const dispatchProvider = runtime.providers.find(
             (p) => p.name === 'DISPATCH_HISTORY'
           );
@@ -688,6 +710,7 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
               state.values = { ...state.values, ...result.values };
             }
           }
+          dispatchHistoryRefreshedAt = iteration;
         }
       }
 
@@ -744,7 +767,7 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
       for (let attempt = 1; attempt <= MAX_PARSE_RETRIES; attempt++) {
         const response = await runtime.useModel(modelType, {
           prompt: attempt > 1 ? prompt + XML_FORMAT_HINT : prompt,
-          temperature: attempt > 1 ? 0.3 : 0.7,
+          temperature: attempt > 1 ? 0.3 : 0.4,
         });
 
         parsedStep = parseKeyValueXml(response);
@@ -796,6 +819,26 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
         { parameters },
         'CoordinatorChat'
       );
+
+      // Broadcast intermediate status for dispatch actions so the user
+      // sees progress during the 4-8s agent execution window.
+      if (
+        action === 'DISPATCH_TO_AGENT' ||
+        action === 'DISPATCH_TO_AGENTS' ||
+        action === 'RELAY_TO_AGENT'
+      ) {
+        const dispatchLabel =
+          action === 'DISPATCH_TO_AGENTS'
+            ? 'Dispatching to multiple agents...'
+            : 'Dispatching to agent...';
+        broadcastThinkingIndicator(
+          teamChatId,
+          COORDINATOR_SENDER_ID,
+          'Agent commander',
+          true,
+          dispatchLabel
+        ).catch(() => {});
+      }
 
       // Parse parameters with fail-fast validation (no silent fallbacks)
       let actionParams: Record<string, unknown> = {};
@@ -954,6 +997,14 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
         action === 'RELAY_TO_AGENT'
       ) {
         lastDispatchIteration = iteration;
+
+        // Clear the thinking indicator now that dispatch is complete
+        broadcastThinkingIndicator(
+          teamChatId,
+          COORDINATOR_SENDER_ID,
+          'Agent commander',
+          false
+        ).catch(() => {});
       }
 
       // Check if done

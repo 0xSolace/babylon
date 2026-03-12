@@ -11,7 +11,7 @@
  * decision loop is needed to handle dispatch logic.
  */
 const AGENT_ACTION_VERBS =
-  /\b(buy|sell|trade|open|close|post|comment|tell|ask|dispatch|send|create|make|write|reply|share|execute|place|submit|transfer)\b/i;
+  /\b(buy|sell|trade|open|close|post|comment|tell|ask|dispatch|send|create|make|write|reply|share|execute|place|submit|transfer|have|get|command|instruct|order)\b/i;
 
 /** Greeting patterns — canned response, 0 LLM calls */
 const GREETING_PATTERN =
