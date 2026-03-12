@@ -197,7 +197,12 @@ describe('PredictionPricing CPMM', () => {
 
     test('throws when sell proceeds are not finite', () => {
       expect(() => {
-        PredictionPricing.calculateSell(Number.POSITIVE_INFINITY, 500, 'yes', 1);
+        PredictionPricing.calculateSell(
+          Number.POSITIVE_INFINITY,
+          500,
+          'yes',
+          1
+        );
       }).toThrow('Calculated proceeds must be positive');
     });
   });

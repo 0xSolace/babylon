@@ -19,8 +19,8 @@ import { getPrivyAppIdFromEnv, getTrimmedEnv } from './env';
 import {
   AuthenticationError,
   AuthorizationError,
-  ServiceUnavailableError,
   isAuthenticationError,
+  ServiceUnavailableError,
 } from './errors';
 import { hasNftAccessForAuthUser } from './services/nft-access-service';
 
