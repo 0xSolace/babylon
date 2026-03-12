@@ -1321,7 +1321,7 @@ async function checkCompletionBonus(
       : POINTS.CHALLENGE_WEEKLY_ALL_BONUS;
 
   // Record the bonus award
-  await db
+  const [insertedBonus] = await db
     .insert(userChallengeProgress)
     .values({
       id: await generateSnowflakeId(),
@@ -1333,7 +1333,10 @@ async function checkCompletionBonus(
       completedAt: new Date(),
       pointsAwarded: bonus,
     })
-    .onConflictDoNothing();
+    .onConflictDoNothing()
+    .returning({ id: userChallengeProgress.id });
+
+  if (!insertedBonus) return;
 
   await PointsService.awardPoints(userId, bonus, 'challenge_complete', {
     type: `${pool}_all_bonus`,
