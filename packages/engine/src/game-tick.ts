@@ -175,7 +175,8 @@ export interface GameTickResult {
 
 /** Executes a complete game tick (content, markets, questions, system updates). */
 export async function executeGameTick(
-  skipContentGeneration = false
+  skipContentGeneration = false,
+  skip = new Set<string>()
 ): Promise<GameTickResult> {
   const timestamp = new Date();
   const startedAt = Date.now();
@@ -187,7 +188,11 @@ export async function executeGameTick(
 
   logger.info(
     'Executing game tick',
-    { timestamp: timestamp.toISOString(), tokenStatsTickId },
+    {
+      timestamp: timestamp.toISOString(),
+      tokenStatsTickId,
+      ...(skip.size > 0 ? { skippedSubsystems: [...skip] } : {}),
+    },
     'GameTick'
   );
 
