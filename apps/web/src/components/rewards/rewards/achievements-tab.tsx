@@ -2,18 +2,19 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
+import { useSSEChannel } from '@/hooks/useSSE';
+import { useAuthStore } from '@/stores/authStore';
 import { AchievementCard } from './achievement-card';
 import { AchievementsStats } from './achievements-stats';
 
 type TierFilter = 'All' | 'Bronze' | 'Silver' | 'Gold';
 
-interface AchievementFromApi {
+export interface AchievementFromApi {
   id: string;
   name: string;
   description: string;
   category: string;
   tier: 'bronze' | 'silver' | 'gold';
-  iconKey: string;
   pointsReward: number;
   threshold: number;
   progress: number;
@@ -21,13 +22,13 @@ interface AchievementFromApi {
   unlockedAt: string | null;
 }
 
-function mapTier(tier: string): 'Bronze' | 'Silver' | 'Gold' {
+export function mapTier(tier: string): 'Bronze' | 'Silver' | 'Gold' {
   if (tier === 'silver') return 'Silver';
   if (tier === 'gold') return 'Gold';
   return 'Bronze';
 }
 
-function mapStatus(
+export function mapStatus(
   a: AchievementFromApi
 ): 'completed' | 'in-progress' | 'locked' {
   if (a.unlocked) return 'completed';
@@ -37,6 +38,7 @@ function mapStatus(
 
 export function AchievementsTab() {
   const { authenticated, getAccessToken } = useAuth();
+  const { user } = useAuthStore();
   const [achievements, setAchievements] = useState<AchievementFromApi[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeFilter, setActiveFilter] = useState<TierFilter>('All');
@@ -56,7 +58,7 @@ export function AchievementsTab() {
     });
     if (res.ok) {
       const json = await res.json();
-      setAchievements(json.data?.achievements ?? json.achievements ?? []);
+      setAchievements(json.achievements ?? []);
     }
     setLoading(false);
   }, [authenticated, getAccessToken]);
@@ -64,6 +66,21 @@ export function AchievementsTab() {
   useEffect(() => {
     fetchAchievements();
   }, [fetchAchievements]);
+
+  // Re-fetch when SSE notifies of achievement unlock
+  const handleSSE = useCallback(
+    (data: Record<string, unknown>) => {
+      const type = data.type as string;
+      if (type === 'achievement_unlocked') {
+        fetchAchievements();
+      }
+    },
+    [fetchAchievements]
+  );
+
+  const channel =
+    authenticated && user?.id ? (`notifications:${user.id}` as const) : null;
+  useSSEChannel(channel, handleSSE);
 
   const filteredAchievements =
     activeFilter === 'All'

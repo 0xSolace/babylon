@@ -3,6 +3,8 @@
 import { POINTS } from '@babylon/shared';
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
+import { useSSEChannel } from '@/hooks/useSSE';
+import { useAuthStore } from '@/stores/authStore';
 import { AchievementPreview } from './achievement-preview';
 import { BonusCard } from './bonus-card';
 import { ChallengeCard } from './challenge-card';
@@ -13,7 +15,6 @@ interface ChallengeWithProgress {
   name: string;
   description: string;
   category: string;
-  iconKey: string;
   pointsReward: number;
   threshold: number;
   progress: number;
@@ -45,7 +46,7 @@ interface ChallengesTabProps {
   onViewAchievements: () => void;
 }
 
-function formatCountdown(resetsAt: string): string {
+export function formatCountdown(resetsAt: string): string {
   const diff = new Date(resetsAt).getTime() - Date.now();
   if (diff <= 0) return 'Resetting...';
   const hours = Math.floor(diff / (1000 * 60 * 60));
@@ -58,6 +59,7 @@ function formatCountdown(resetsAt: string): string {
 
 export function ChallengesTab({ onViewAchievements }: ChallengesTabProps) {
   const { authenticated, getAccessToken } = useAuth();
+  const { user } = useAuthStore();
   const [challengesData, setChallengesData] = useState<ChallengesData | null>(
     null
   );
@@ -89,13 +91,12 @@ export function ChallengesTab({ onViewAchievements }: ChallengesTabProps) {
 
     if (challengesRes.ok) {
       const json = await challengesRes.json();
-      setChallengesData(json.data ?? json);
+      setChallengesData(json);
     }
 
     if (achievementsRes.ok) {
       const json = await achievementsRes.json();
-      const achievements: AchievementFromApi[] =
-        json.data?.achievements ?? json.achievements ?? [];
+      const achievements: AchievementFromApi[] = json.achievements ?? [];
       setAchievementPreviews(
         achievements.slice(0, 4).map((a) => ({
           id: a.id,
@@ -110,6 +111,25 @@ export function ChallengesTab({ onViewAchievements }: ChallengesTabProps) {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  // Re-fetch when SSE notifies of challenge/achievement completion
+  const handleSSE = useCallback(
+    (data: Record<string, unknown>) => {
+      const type = data.type as string;
+      if (
+        type === 'challenge_completed' ||
+        type === 'challenge_bonus' ||
+        type === 'achievement_unlocked'
+      ) {
+        fetchData();
+      }
+    },
+    [fetchData]
+  );
+
+  const channel =
+    authenticated && user?.id ? (`notifications:${user.id}` as const) : null;
+  useSSEChannel(channel, handleSSE);
 
   // Countdown timer
   useEffect(() => {

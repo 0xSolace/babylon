@@ -3,6 +3,8 @@
 import { POINTS } from '@babylon/shared';
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
+import { useSSEChannel } from '@/hooks/useSSE';
+import { useAuthStore } from '@/stores/authStore';
 import { BonusCard } from './bonus-card';
 import { ChallengeCard } from './challenge-card';
 import { ChallengeSection } from './challenge-section';
@@ -53,6 +55,7 @@ function formatCountdown(resetsAt: string): string {
 
 export function OverviewTab({ onClaim }: OverviewTabProps) {
   const { authenticated, getAccessToken } = useAuth();
+  const { user } = useAuthStore();
   const [streak, setStreak] = useState<StreakInfo | null>(null);
   const [dailyData, setDailyData] = useState<DailyChallengesData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -81,13 +84,12 @@ export function OverviewTab({ onClaim }: OverviewTabProps) {
 
     if (streakRes.ok) {
       const json = await streakRes.json();
-      setStreak(json.data ?? json);
+      setStreak(json);
     }
 
     if (challengesRes.ok) {
       const json = await challengesRes.json();
-      const data = json.data ?? json;
-      setDailyData(data.daily);
+      setDailyData(json.daily);
     }
 
     setLoading(false);
@@ -96,6 +98,21 @@ export function OverviewTab({ onClaim }: OverviewTabProps) {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  // Re-fetch when SSE notifies of challenge completion
+  const handleSSE = useCallback(
+    (data: Record<string, unknown>) => {
+      const type = data.type as string;
+      if (type === 'challenge_completed' || type === 'challenge_bonus') {
+        fetchData();
+      }
+    },
+    [fetchData]
+  );
+
+  const channel =
+    authenticated && user?.id ? (`notifications:${user.id}` as const) : null;
+  useSSEChannel(channel, handleSSE);
 
   // Countdown timer for daily challenges
   useEffect(() => {
