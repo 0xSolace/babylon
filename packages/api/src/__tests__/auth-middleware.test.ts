@@ -58,7 +58,12 @@ mock.module('@privy-io/server-auth', () => ({
 }));
 
 // Import after mocks are set up
-import { authenticate, _resetPrivyClientForTesting } from '../auth-middleware';
+import {
+  authenticate,
+  optionalAuth,
+  optionalAuthFromHeaders,
+  _resetPrivyClientForTesting,
+} from '../auth-middleware';
 
 let usersRows: Array<{ id: string; walletAddress: string; isAdmin?: boolean }> =
   [];
@@ -377,5 +382,139 @@ describe('authenticate middleware', () => {
       dbUserId: 'db-user-id',
       isAdmin: false,
     });
+  });
+});
+
+describe('optionalAuth', () => {
+  beforeEach(() => {
+    mockVerifyAgentSession.mockReset();
+    mockVerifyAuthToken.mockReset();
+    mockSelect.mockReset();
+    process.env.NEXT_PUBLIC_PRIVY_APP_ID = 'test-app';
+    process.env.PRIVY_APP_SECRET = 'test-secret';
+    usersRows = [];
+
+    mockSelect.mockImplementation(() => ({
+      from: (table: unknown) => ({
+        where: () => ({
+          limit: () => {
+            if (table === usersTable) return Promise.resolve(usersRows);
+            return Promise.resolve([]);
+          },
+        }),
+      }),
+    }));
+  });
+
+  it('returns null when verifyAgentSession throws instead of 500', async () => {
+    mockVerifyAgentSession.mockRejectedValueOnce(
+      new Error('Redis connection refused')
+    );
+    mockVerifyAuthToken.mockResolvedValueOnce({ userId: 'privy-user' });
+    usersRows = [{ id: 'db-user-id', walletAddress: '0xabc', isAdmin: false }];
+
+    const request = createRequest('some-token', '/api/posts');
+    const result = await optionalAuth(request);
+
+    // Should fall through to Privy and succeed, not throw 500
+    expect(result).toMatchObject({
+      userId: 'db-user-id',
+      privyId: 'privy-user',
+      isAgent: false,
+    });
+    expect(mockVerifyAuthToken).toHaveBeenCalledWith('some-token');
+  });
+
+  it('returns null when getPrivyClient fails instead of 500', async () => {
+    const savedAppId = process.env.NEXT_PUBLIC_PRIVY_APP_ID;
+    const savedSecret = process.env.PRIVY_APP_SECRET;
+    delete process.env.NEXT_PUBLIC_PRIVY_APP_ID;
+    delete process.env.PRIVY_APP_SECRET;
+    _resetPrivyClientForTesting();
+
+    mockVerifyAgentSession.mockReturnValueOnce(null);
+
+    const request = createRequest('some-token', '/api/posts');
+
+    try {
+      const result = await optionalAuth(request);
+      expect(result).toBeNull();
+    } finally {
+      process.env.NEXT_PUBLIC_PRIVY_APP_ID = savedAppId;
+      process.env.PRIVY_APP_SECRET = savedSecret;
+      _resetPrivyClientForTesting();
+    }
+  });
+
+  it('returns null when no token is provided', async () => {
+    const request = {
+      url: 'https://example.com/api/posts',
+      headers: { get: () => null },
+      cookies: { get: () => undefined },
+    } as unknown as NextRequest;
+
+    const result = await optionalAuth(request);
+    expect(result).toBeNull();
+  });
+});
+
+describe('optionalAuthFromHeaders', () => {
+  beforeEach(() => {
+    mockVerifyAgentSession.mockReset();
+    mockVerifyAuthToken.mockReset();
+    process.env.NEXT_PUBLIC_PRIVY_APP_ID = 'test-app';
+    process.env.PRIVY_APP_SECRET = 'test-secret';
+  });
+
+  const createHeaders = (token?: string): Headers => {
+    const headers = new Headers();
+    if (token) {
+      headers.set('authorization', `Bearer ${token}`);
+    }
+    return headers;
+  };
+
+  it('returns null when verifyAgentSession throws instead of 500', async () => {
+    mockVerifyAgentSession.mockRejectedValueOnce(
+      new Error('Redis connection refused')
+    );
+    mockVerifyAuthToken.mockResolvedValueOnce({ userId: 'privy-user' });
+
+    const headers = createHeaders('some-token');
+    const result = await optionalAuthFromHeaders(headers);
+
+    // Should fall through to Privy and succeed, not throw 500
+    expect(result).toMatchObject({
+      userId: 'privy-user',
+      isAgent: false,
+    });
+    expect(mockVerifyAuthToken).toHaveBeenCalledWith('some-token');
+  });
+
+  it('returns null when getPrivyClient fails instead of 500', async () => {
+    const savedAppId = process.env.NEXT_PUBLIC_PRIVY_APP_ID;
+    const savedSecret = process.env.PRIVY_APP_SECRET;
+    delete process.env.NEXT_PUBLIC_PRIVY_APP_ID;
+    delete process.env.PRIVY_APP_SECRET;
+    _resetPrivyClientForTesting();
+
+    mockVerifyAgentSession.mockReturnValueOnce(null);
+
+    const headers = createHeaders('some-token');
+
+    try {
+      const result = await optionalAuthFromHeaders(headers);
+      expect(result).toBeNull();
+    } finally {
+      process.env.NEXT_PUBLIC_PRIVY_APP_ID = savedAppId;
+      process.env.PRIVY_APP_SECRET = savedSecret;
+      _resetPrivyClientForTesting();
+    }
+  });
+
+  it('returns null when no authorization header is provided', async () => {
+    const headers = createHeaders();
+    const result = await optionalAuthFromHeaders(headers);
+    expect(result).toBeNull();
   });
 });
