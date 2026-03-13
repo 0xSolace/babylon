@@ -47,6 +47,21 @@ export function calculateFreshnessScore(newest: Date): number {
   return Math.exp((-Math.LN2 * ageHours) / 10);
 }
 
+const SCORE_WEIGHTS = {
+  baseScore: 0.24,
+  topicMatch: 0.2,
+  socialAffinity: 0.14,
+  marketRelevance: 0.16,
+  engagementVelocity: 0.1,
+  conversationDepth: 0.06,
+  narrativeUrgency: 0.05,
+  freshness: 0.03,
+  novelty: 0.02,
+  retention: 0.07,
+  exploration: 0.03,
+  fatiguePenalty: 0.18,
+} as const;
+
 export function calculateForYouScore(input: ForYouScoreInput): number {
   const normalizedBase = Math.log1p(Math.max(input.baseScore, 0));
   const retentionScore = input.retentionScore ?? 0;
@@ -54,18 +69,18 @@ export function calculateForYouScore(input: ForYouScoreInput): number {
   const explorationBonus = input.explorationBonus ?? 0;
 
   return (
-    normalizedBase * 0.24 +
-    input.topicMatchScore * 0.2 +
-    input.socialAffinityScore * 0.14 +
-    input.marketRelevanceScore * 0.16 +
-    input.engagementVelocityScore * 0.1 +
-    input.conversationDepthScore * 0.06 +
-    input.narrativeUrgencyScore * 0.05 +
-    input.freshnessScore * 0.03 +
-    input.noveltyScore * 0.02 +
-    retentionScore * 0.07 +
-    explorationBonus * 0.03 -
-    fatiguePenalty * 0.18
+    normalizedBase * SCORE_WEIGHTS.baseScore +
+    input.topicMatchScore * SCORE_WEIGHTS.topicMatch +
+    input.socialAffinityScore * SCORE_WEIGHTS.socialAffinity +
+    input.marketRelevanceScore * SCORE_WEIGHTS.marketRelevance +
+    input.engagementVelocityScore * SCORE_WEIGHTS.engagementVelocity +
+    input.conversationDepthScore * SCORE_WEIGHTS.conversationDepth +
+    input.narrativeUrgencyScore * SCORE_WEIGHTS.narrativeUrgency +
+    input.freshnessScore * SCORE_WEIGHTS.freshness +
+    input.noveltyScore * SCORE_WEIGHTS.novelty +
+    retentionScore * SCORE_WEIGHTS.retention +
+    explorationBonus * SCORE_WEIGHTS.exploration -
+    fatiguePenalty * SCORE_WEIGHTS.fatiguePenalty
   );
 }
 

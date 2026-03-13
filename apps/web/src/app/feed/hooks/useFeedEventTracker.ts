@@ -6,9 +6,12 @@ const FLUSH_DELAY_MS = 750;
 const MAX_BATCH_SIZE = 20;
 const MAX_RETRY_ATTEMPTS = 3;
 
+const MAX_AUTH_RETRIES = 2;
+
 interface QueuedFeedEvent {
   payload: FeedEventPayload;
   attempts: number;
+  authRetries?: number;
 }
 
 export function useFeedEventTracker() {
@@ -77,14 +80,32 @@ export function useFeedEventTracker() {
         } else if (response.status === 401) {
           // Token expired mid-session — re-queue at attempt 0 to try with a fresh token.
           // getAccessToken() will return a refreshed token on the next flush cycle.
-          logger.warn(
-            'Feed events batch rejected with 401 — re-queuing for token refresh',
-            { batchSize: batch.length },
-            'useFeedEventTracker'
+          // Cap auth retries to prevent an infinite loop if token refresh consistently fails.
+          const authRetryable = batch.filter(
+            (item) => (item.authRetries ?? 0) < MAX_AUTH_RETRIES
           );
-          queueRef.current.unshift(
-            ...batch.map((item) => ({ ...item, attempts: 0 }))
-          );
+          const authDropped = batch.length - authRetryable.length;
+          if (authDropped > 0) {
+            logger.warn(
+              'Dropped feed events after exceeding auth retry limit',
+              { authDropped, maxAuthRetries: MAX_AUTH_RETRIES },
+              'useFeedEventTracker'
+            );
+          }
+          if (authRetryable.length > 0) {
+            logger.warn(
+              'Feed events batch rejected with 401 — re-queuing for token refresh',
+              { batchSize: authRetryable.length },
+              'useFeedEventTracker'
+            );
+            queueRef.current.unshift(
+              ...authRetryable.map((item) => ({
+                ...item,
+                attempts: 0,
+                authRetries: (item.authRetries ?? 0) + 1,
+              }))
+            );
+          }
         } else {
           logger.warn(
             'Dropped non-retryable feed events batch',

@@ -3,6 +3,30 @@ import { describe, expect, it } from 'bun:test';
 // The retry boundary: items with attempts < MAX_RETRY_ATTEMPTS (3) are re-queued.
 // Items at attempts >= 3 are dropped.
 const MAX_RETRY_ATTEMPTS = 3;
+// Auth retry cap: prevents infinite loop when token refresh consistently fails.
+const MAX_AUTH_RETRIES = 2;
+
+interface AuthRetryItem {
+  attempts: number;
+  authRetries: number;
+  payload: object;
+}
+
+function applyAuthRetryFilter(
+  batch: Array<{ attempts: number; authRetries?: number; payload: object }>
+): { retryable: AuthRetryItem[]; dropped: typeof batch } {
+  const retryable = batch
+    .filter((item) => (item.authRetries ?? 0) < MAX_AUTH_RETRIES)
+    .map((item) => ({
+      ...item,
+      attempts: 0,
+      authRetries: (item.authRetries ?? 0) + 1,
+    }));
+  const dropped = batch.filter(
+    (item) => (item.authRetries ?? 0) >= MAX_AUTH_RETRIES
+  );
+  return { retryable, dropped };
+}
 
 function applyRetryFilter<T extends { attempts: number }>(
   batch: T[]
@@ -19,6 +43,44 @@ function applyRetryFilter<T extends { attempts: number }>(
   );
   return { retryable, dropped };
 }
+
+describe('useFeedEventTracker auth retry semantics (401 cap)', () => {
+  it('re-queues events on first 401 (authRetries undefined → 1)', () => {
+    const batch = [{ attempts: 0, payload: {}, authRetries: undefined }];
+    const { retryable, dropped } = applyAuthRetryFilter(batch);
+    expect(retryable).toHaveLength(1);
+    expect(retryable[0]).toBeDefined();
+    expect(retryable[0]!.authRetries).toBe(1);
+    expect(retryable[0]!.attempts).toBe(0); // reset for fresh token attempt
+    expect(dropped).toHaveLength(0);
+  });
+
+  it('re-queues events on second 401 (authRetries 1 → 2)', () => {
+    const batch = [{ attempts: 0, payload: {}, authRetries: 1 }];
+    const { retryable, dropped } = applyAuthRetryFilter(batch);
+    expect(retryable).toHaveLength(1);
+    expect(retryable[0]).toBeDefined();
+    expect(retryable[0]!.authRetries).toBe(2);
+    expect(dropped).toHaveLength(0);
+  });
+
+  it('drops events after MAX_AUTH_RETRIES 401s (authRetries 2 → dropped)', () => {
+    const batch = [{ attempts: 0, payload: {}, authRetries: 2 }];
+    const { retryable, dropped } = applyAuthRetryFilter(batch);
+    expect(retryable).toHaveLength(0);
+    expect(dropped).toHaveLength(1);
+  });
+
+  it('handles mixed batch: some retryable, some dropped', () => {
+    const batch = [
+      { attempts: 0, payload: {}, authRetries: 0 },
+      { attempts: 0, payload: {}, authRetries: 2 },
+    ];
+    const { retryable, dropped } = applyAuthRetryFilter(batch);
+    expect(retryable).toHaveLength(1);
+    expect(dropped).toHaveLength(1);
+  });
+});
 
 describe('useFeedEventTracker retry semantics', () => {
   it('re-queues events with attempts 0 (first failure)', () => {
