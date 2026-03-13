@@ -76,24 +76,27 @@ function makeAnchorPost(
 }
 
 describe('isNewMarket story invariants', () => {
+  // diversifyForYouStories ranks by `finalRankScore ?? storyScore`.
+  // MARKET_WINDOW_PENALTY (0.5) is subtracted from a new-market story's
+  // finalRankScore when another new-market story appeared in the previous
+  // MARKET_WINDOW_SIZE positions. narrative.finalRankScore (8.8) must exceed
+  // market2's penalised score (9 - 0.5 = 8.5) for the penalty to flip ordering.
   it('diversifyForYouStories separates consecutive new-market stories', () => {
     const market1 = makeStory('market:1', {
       isNewMarket: true,
-      storyScore: 10,
+      finalRankScore: 10,
       posts: [makeAnchorPost('anchor-1')],
       anchorPostId: 'anchor-1',
     });
     const market2 = makeStory('market:2', {
       isNewMarket: true,
-      storyScore: 9,
+      finalRankScore: 9,
       posts: [makeAnchorPost('anchor-2')],
       anchorPostId: 'anchor-2',
     });
-    // narrative score (8.8) must exceed market2's penalised score (9 - 0.5 = 8.5)
-    // so the window penalty is sufficient to push market2 below narrative
     const narrative = makeStory('story:1', {
       isNewMarket: false,
-      storyScore: 8.8,
+      finalRankScore: 8.8,
     });
 
     const input = [market1, market2, narrative];
@@ -106,15 +109,17 @@ describe('isNewMarket story invariants', () => {
     expect(marketIndices[1] - marketIndices[0]).toBeGreaterThan(1);
   });
 
-  it('anchor post is findable by anchorPostId on a new-market story', () => {
+  it('diversifyForYouStories preserves anchor post data on new-market stories', () => {
     const anchorPost = makeAnchorPost('anchor-1', { likeCount: 7 });
-    const story = makeStory('market:42', {
+    const market = makeStory('market:42', {
       isNewMarket: true,
+      finalRankScore: 5,
       anchorPostId: 'anchor-1',
       posts: [anchorPost],
     });
 
-    const found = story.posts.find((p) => p.id === story.anchorPostId);
+    const [result] = diversifyForYouStories([market]);
+    const found = result?.posts.find((p) => p.id === result.anchorPostId);
     expect(found).toBeDefined();
     expect(found?.likeCount).toBe(7);
   });
