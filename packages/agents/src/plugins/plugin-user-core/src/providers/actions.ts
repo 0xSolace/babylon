@@ -25,7 +25,7 @@ interface ActionParameter {
 /**
  * Formats actions with their parameter schemas for tool calling.
  */
-function formatActionsWithParams(actions: Action[]): string {
+export function formatActionsWithParams(actions: Action[]): string {
   return actions
     .map((action: Action) => {
       let formatted = `## ${action.name}\n${action.description}`;
