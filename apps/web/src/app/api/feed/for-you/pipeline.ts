@@ -1010,10 +1010,16 @@ export async function buildForYouFeed(userId?: string | null) {
   ] = userId
     ? await (async () => {
         try {
-          return await getCacheOrFetch(
+          const enrichmentStart = Date.now();
+          const enrichmentResult = await getCacheOrFetch(
             `feed:for-you:enrichment:${userId}`,
-            () =>
-              Promise.all([
+            () => {
+              logger.info(
+                'For You enrichment cache miss — fetching from DB',
+                { userId },
+                'ForYouPipeline'
+              );
+              return Promise.all([
                 db
                   .select({ id: follows.followingId })
                   .from(follows)
@@ -1070,9 +1076,16 @@ export async function buildForYouFeed(userId?: string | null) {
                     );
                 })(),
                 loadFeedEventAggregates(userId),
-              ]),
+              ]);
+            },
             { namespace: 'feed', ttl: USER_ENRICHMENT_TTL_S }
           );
+          logger.info(
+            'For You enrichment resolved',
+            { userId, durationMs: Date.now() - enrichmentStart },
+            'ForYouPipeline'
+          );
+          return enrichmentResult;
         } catch (error) {
           logger.error(
             'For You enrichment fetch failed — serving unranked feed',
