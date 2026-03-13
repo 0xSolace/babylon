@@ -91,16 +91,16 @@ interface FeedEventRow {
 }
 
 interface EventAggregates {
-  authorAffinity: Map<string, number>;
-  clusterAffinity: Map<string, number>;
-  topicAffinity: Map<string, number>;
-  marketAffinity: Map<string, number>;
-  authorExposure: Map<string, number>;
-  clusterExposure: Map<string, number>;
-  authorSatisfaction: Map<string, number>;
-  clusterSatisfaction: Map<string, number>;
-  authorHide: Map<string, number>;
-  clusterHide: Map<string, number>;
+  authorAffinity: Record<string, number>;
+  clusterAffinity: Record<string, number>;
+  topicAffinity: Record<string, number>;
+  marketAffinity: Record<string, number>;
+  authorExposure: Record<string, number>;
+  clusterExposure: Record<string, number>;
+  authorSatisfaction: Record<string, number>;
+  clusterSatisfaction: Record<string, number>;
+  authorHide: Record<string, number>;
+  clusterHide: Record<string, number>;
 }
 
 function toISOStringStrict(
@@ -124,12 +124,12 @@ function clamp(value: number, min: number, max: number): number {
 }
 
 function incrementScore(
-  map: Map<string, number>,
+  map: Record<string, number>,
   key: string | null | undefined,
   value: number
 ) {
   if (!key) return;
-  map.set(key, (map.get(key) ?? 0) + value);
+  map[key] = (map[key] ?? 0) + value;
 }
 
 function getActionWeight(actionType: FeedEventAction): number {
@@ -161,16 +161,16 @@ function getActionWeight(actionType: FeedEventAction): number {
 
 function aggregateFeedEvents(events: FeedEventRow[]): EventAggregates {
   const aggregates: EventAggregates = {
-    authorAffinity: new Map(),
-    clusterAffinity: new Map(),
-    topicAffinity: new Map(),
-    marketAffinity: new Map(),
-    authorExposure: new Map(),
-    clusterExposure: new Map(),
-    authorSatisfaction: new Map(),
-    clusterSatisfaction: new Map(),
-    authorHide: new Map(),
-    clusterHide: new Map(),
+    authorAffinity: {},
+    clusterAffinity: {},
+    topicAffinity: {},
+    marketAffinity: {},
+    authorExposure: {},
+    clusterExposure: {},
+    authorSatisfaction: {},
+    clusterSatisfaction: {},
+    authorHide: {},
+    clusterHide: {},
   };
 
   const now = Date.now();
@@ -252,23 +252,23 @@ function aggregateFeedEvents(events: FeedEventRow[]): EventAggregates {
 }
 
 function getAffinityScore(
-  map: Map<string, number>,
+  map: Record<string, number>,
   key: string | null | undefined
 ) {
   if (!key) return 0;
-  return clamp(map.get(key) ?? 0, 0, 2.5);
+  return clamp(map[key] ?? 0, 0, 2.5);
 }
 
 function getFatiguePenalty(
-  exposureMap: Map<string, number>,
-  satisfactionMap: Map<string, number>,
-  hideMap: Map<string, number>,
+  exposureMap: Record<string, number>,
+  satisfactionMap: Record<string, number>,
+  hideMap: Record<string, number>,
   key: string | null | undefined
 ) {
   if (!key) return 0;
-  const exposure = exposureMap.get(key) ?? 0;
-  const satisfaction = satisfactionMap.get(key) ?? 0;
-  const hide = hideMap.get(key) ?? 0;
+  const exposure = exposureMap[key] ?? 0;
+  const satisfaction = satisfactionMap[key] ?? 0;
+  const hide = hideMap[key] ?? 0;
   return clamp(exposure * 0.24 - satisfaction * 0.16 + hide * 0.7, 0, 2.5);
 }
 
