@@ -188,7 +188,6 @@ export {
 export {
   NPCInvestmentManager,
   type PortfolioMetrics,
-  type PortfolioMetricsInput,
   type PortfolioPosition,
   type RebalanceAction,
 } from './npc/npc-investment-manager';
@@ -205,12 +204,6 @@ export {
   getEffectiveLeverage,
   getPositionExposure,
   type PoolMetrics,
-} from './npc/portfolio-metrics';
-export {
-  buildFallbackMetricsByPool,
-  type FallbackBalanceRow,
-  type FallbackPerpRow,
-  type FallbackPositionRow,
 } from './npc/portfolio-metrics';
 export {
   type ParsedPostMetadata,
