@@ -139,7 +139,7 @@ function formatTraceResults(results: ActionTraceResult[]): string {
  * When the user has <2 agents, multi-agent orchestration docs are excluded
  * to save ~400-500 tokens per decision call.
  */
-function buildCoordinatorDecisionTemplate(agentCount: number): string {
+export function buildCoordinatorDecisionTemplate(agentCount: number): string {
   const orchestrationSection =
     agentCount >= 2
       ? `

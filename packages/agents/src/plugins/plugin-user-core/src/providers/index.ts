@@ -7,9 +7,12 @@
 
 export { coordinatorActionStateProvider } from './action-state';
 // Coordinator-specific providers
-export { coordinatorActionsProvider } from './actions';
+export { coordinatorActionsProvider, formatActionsWithParams } from './actions';
 export { coordinatorAgentActivityProvider } from './agent-activity';
-export { coordinatorContextProvider } from './coordinator-context';
+export {
+  COORDINATOR_CONTEXT_TEXT,
+  coordinatorContextProvider,
+} from './coordinator-context';
 export { coordinatorDispatchHistoryProvider } from './dispatch-history';
 export { coordinatorRecentMessagesProvider } from './recent-messages';
 export { coordinatorTeamMembersProvider } from './team-members';
