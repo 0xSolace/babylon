@@ -11,6 +11,7 @@
 // NPC Services
 // =============================================================================
 
+export * from '../game-master';
 export * from './ActorSocialActions';
 export * from './activity-pattern-service';
 export * from './alpha-group-invite-service';
@@ -19,7 +20,6 @@ export * from './capital-allocation-service';
 export * from './event-reaction-service';
 export * from './following-mechanics';
 export * from './game-onboarding-service';
-export * from '../game-master';
 // Group Chat Service
 export {
   GroupChatService,

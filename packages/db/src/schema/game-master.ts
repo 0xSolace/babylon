@@ -55,12 +55,15 @@ export const gameMasterTargetTypeEnum = pgEnum('game_master_target_type', [
   'system',
 ]);
 
-export const gameMasterDirectiveTypeEnum = pgEnum('game_master_directive_type', [
-  'actor_instruction',
-  'organization_instruction',
-  'article_brief',
-  'market_narrative',
-]);
+export const gameMasterDirectiveTypeEnum = pgEnum(
+  'game_master_directive_type',
+  [
+    'actor_instruction',
+    'organization_instruction',
+    'article_brief',
+    'market_narrative',
+  ]
+);
 
 export const GAME_MASTER_ACTION_TYPES = [
   'SET_DAILY_TOPIC',
@@ -97,7 +100,10 @@ export const gameMasterRuns = pgTable(
   },
   (table) => [
     index('GameMasterRun_gameDay_runType_idx').on(table.gameDay, table.runType),
-    index('GameMasterRun_status_startedAt_idx').on(table.status, table.startedAt),
+    index('GameMasterRun_status_startedAt_idx').on(
+      table.status,
+      table.startedAt
+    ),
     index('GameMasterRun_createdAt_idx').on(table.createdAt),
   ]
 );
@@ -111,7 +117,10 @@ export const gameMasterActions = pgTable(
     authorityLevel: gameMasterAuthorityEnum('authorityLevel').notNull(),
     riskLevel: gameMasterRiskEnum('riskLevel').notNull(),
     targetType: gameMasterTargetTypeEnum('targetType').notNull(),
-    targetIds: jsonb('targetIds').$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+    targetIds: jsonb('targetIds')
+      .$type<string[]>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
     instructionText: text('instructionText').notNull(),
     payload: jsonb('payload').$type<JsonValue>().notNull(),
     status: gameMasterActionStatusEnum('status').notNull().default('queued'),
@@ -130,7 +139,10 @@ export const gameMasterActions = pgTable(
   },
   (table) => [
     index('GameMasterAction_runId_idx').on(table.runId),
-    index('GameMasterAction_status_createdAt_idx').on(table.status, table.createdAt),
+    index('GameMasterAction_status_createdAt_idx').on(
+      table.status,
+      table.createdAt
+    ),
     index('GameMasterAction_requiresApproval_status_idx').on(
       table.requiresApproval,
       table.status
@@ -170,9 +182,12 @@ export const gameMasterDirectives = pgTable(
   ]
 );
 
-export const gameMasterRunsRelations = relations(gameMasterRuns, ({ many }) => ({
-  actions: many(gameMasterActions),
-}));
+export const gameMasterRunsRelations = relations(
+  gameMasterRuns,
+  ({ many }) => ({
+    actions: many(gameMasterActions),
+  })
+);
 
 export const gameMasterActionsRelations = relations(
   gameMasterActions,

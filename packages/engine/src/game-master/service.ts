@@ -3,6 +3,7 @@ import {
   and,
   chats,
   count,
+  type DailyTopicSourceType,
   dailyTopics,
   db,
   desc,
@@ -16,30 +17,38 @@ import {
   gte,
   inArray,
   isNull,
+  type JsonValue,
   messages,
   or,
   posts,
   sql,
-  type JsonValue,
   worldEvents,
-  type DailyTopicSourceType,
 } from '@babylon/db';
 import { generateSnowflakeId, logger } from '@babylon/shared';
+import { DistributedLockService } from '../services/distributed-lock-service';
 import { npcMemoryService } from '../services/npc-memory-service';
 import { broadcastToChannel } from '../services/realtime-broadcaster';
-import { DistributedLockService } from '../services/distributed-lock-service';
-import { GAME_MASTER_CONTROL_CHAT_IDS, GAME_MASTER_DEFAULTS, GAME_MASTER_NAME, GAME_MASTER_SENDER_ID } from './constants';
+import {
+  GAME_MASTER_CONTROL_CHAT_IDS,
+  GAME_MASTER_DEFAULTS,
+  GAME_MASTER_NAME,
+  GAME_MASTER_SENDER_ID,
+} from './constants';
 import { gameMasterPlanner } from './planner';
 import { gameMasterPolicyEngine } from './policy';
 import {
   type GameMasterPlan,
+  type GameMasterRunType,
   type GameMasterTriggerAssessment,
   type GameMasterWorldSnapshot,
-  type GameMasterRunType,
 } from './types';
 
 type GameMasterDirectiveFilter = {
-  directiveType?: 'actor_instruction' | 'organization_instruction' | 'article_brief' | 'market_narrative';
+  directiveType?:
+    | 'actor_instruction'
+    | 'organization_instruction'
+    | 'article_brief'
+    | 'market_narrative';
   targetType?: 'actor' | 'organization' | 'question' | 'world' | 'system';
   targetId?: string;
 };
@@ -150,7 +159,9 @@ export class GameMasterService {
   async setAutoRunPaused(paused: boolean): Promise<void> {
     const key = 'game_master_auto_run_paused_until';
     const now = new Date();
-    const value = paused ? new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString() : null;
+    const value = paused
+      ? new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString()
+      : null;
     const [existing] = await db
       .select({ id: gameConfigs.id })
       .from(gameConfigs)
@@ -200,95 +211,105 @@ export class GameMasterService {
     const hourCutoff = new Date(now.getTime() - 60 * 60 * 1000);
     const today = normalizeDate(now);
 
-    const [topic, recentEvents, recentArticles, recentOrgPosts, relationships, lastRun, lastExecuted, recentActionCountResult] =
-      await Promise.all([
-        db
-          .select({
-            topicKey: dailyTopics.topicKey,
-            topicLabel: dailyTopics.topicLabel,
-            summary: dailyTopics.summary,
-            isLocked: dailyTopics.isLocked,
-          })
-          .from(dailyTopics)
-          .where(eq(dailyTopics.date, today))
-          .limit(1)
-          .then((rows) => rows[0] ?? null),
-        db
-          .select({
-            id: worldEvents.id,
-            eventType: worldEvents.eventType,
-            description: worldEvents.description,
-            actors: worldEvents.actors,
-            relatedQuestion: worldEvents.relatedQuestion,
-            timestamp: worldEvents.timestamp,
-          })
-          .from(worldEvents)
-          .where(gte(worldEvents.timestamp, recentCutoff))
-          .orderBy(desc(worldEvents.timestamp))
-          .limit(8),
-        db
-          .select({
-            id: posts.id,
-            title: posts.articleTitle,
-            authorId: posts.authorId,
-            timestamp: posts.timestamp,
-            relatedQuestion: posts.relatedQuestion,
-          })
-          .from(posts)
-          .where(and(eq(posts.type, 'article'), gte(posts.timestamp, recentCutoff)))
-          .orderBy(desc(posts.timestamp))
-          .limit(8),
-        db
-          .select({
-            id: posts.id,
-            authorId: posts.authorId,
-            timestamp: posts.timestamp,
-          })
-          .from(posts)
-          .where(and(eq(posts.type, 'post'), gte(posts.timestamp, recentCutoff)))
-          .orderBy(desc(posts.timestamp))
-          .limit(16),
-        db
-          .select({
-            id: actorRelationships.id,
-            actor1Id: actorRelationships.actor1Id,
-            actor2Id: actorRelationships.actor2Id,
-            strength: actorRelationships.strength,
-            sentiment: actorRelationships.sentiment,
-            updatedAt: actorRelationships.updatedAt,
-          })
-          .from(actorRelationships)
-          .where(gte(actorRelationships.updatedAt, recentCutoff))
-          .orderBy(desc(actorRelationships.updatedAt))
-          .limit(8),
-        db
-          .select({
-            startedAt: gameMasterRuns.startedAt,
-          })
-          .from(gameMasterRuns)
-          .orderBy(desc(gameMasterRuns.startedAt))
-          .limit(1)
-          .then((rows) => rows[0] ?? null),
-        db
-          .select({
-            executedAt: gameMasterActions.executedAt,
-          })
-          .from(gameMasterActions)
-          .where(eq(gameMasterActions.status, 'executed'))
-          .orderBy(desc(gameMasterActions.executedAt))
-          .limit(1)
-          .then((rows) => rows[0] ?? null),
-        db
-          .select({ count: count() })
-          .from(gameMasterActions)
-          .where(
-            and(
-              eq(gameMasterActions.status, 'executed'),
-              gte(gameMasterActions.executedAt, hourCutoff)
-            )
+    const [
+      topic,
+      recentEvents,
+      recentArticles,
+      recentOrgPosts,
+      relationships,
+      lastRun,
+      lastExecuted,
+      recentActionCountResult,
+    ] = await Promise.all([
+      db
+        .select({
+          topicKey: dailyTopics.topicKey,
+          topicLabel: dailyTopics.topicLabel,
+          summary: dailyTopics.summary,
+          isLocked: dailyTopics.isLocked,
+        })
+        .from(dailyTopics)
+        .where(eq(dailyTopics.date, today))
+        .limit(1)
+        .then((rows) => rows[0] ?? null),
+      db
+        .select({
+          id: worldEvents.id,
+          eventType: worldEvents.eventType,
+          description: worldEvents.description,
+          actors: worldEvents.actors,
+          relatedQuestion: worldEvents.relatedQuestion,
+          timestamp: worldEvents.timestamp,
+        })
+        .from(worldEvents)
+        .where(gte(worldEvents.timestamp, recentCutoff))
+        .orderBy(desc(worldEvents.timestamp))
+        .limit(8),
+      db
+        .select({
+          id: posts.id,
+          title: posts.articleTitle,
+          authorId: posts.authorId,
+          timestamp: posts.timestamp,
+          relatedQuestion: posts.relatedQuestion,
+        })
+        .from(posts)
+        .where(
+          and(eq(posts.type, 'article'), gte(posts.timestamp, recentCutoff))
+        )
+        .orderBy(desc(posts.timestamp))
+        .limit(8),
+      db
+        .select({
+          id: posts.id,
+          authorId: posts.authorId,
+          timestamp: posts.timestamp,
+        })
+        .from(posts)
+        .where(and(eq(posts.type, 'post'), gte(posts.timestamp, recentCutoff)))
+        .orderBy(desc(posts.timestamp))
+        .limit(16),
+      db
+        .select({
+          id: actorRelationships.id,
+          actor1Id: actorRelationships.actor1Id,
+          actor2Id: actorRelationships.actor2Id,
+          strength: actorRelationships.strength,
+          sentiment: actorRelationships.sentiment,
+          updatedAt: actorRelationships.updatedAt,
+        })
+        .from(actorRelationships)
+        .where(gte(actorRelationships.updatedAt, recentCutoff))
+        .orderBy(desc(actorRelationships.updatedAt))
+        .limit(8),
+      db
+        .select({
+          startedAt: gameMasterRuns.startedAt,
+        })
+        .from(gameMasterRuns)
+        .orderBy(desc(gameMasterRuns.startedAt))
+        .limit(1)
+        .then((rows) => rows[0] ?? null),
+      db
+        .select({
+          executedAt: gameMasterActions.executedAt,
+        })
+        .from(gameMasterActions)
+        .where(eq(gameMasterActions.status, 'executed'))
+        .orderBy(desc(gameMasterActions.executedAt))
+        .limit(1)
+        .then((rows) => rows[0] ?? null),
+      db
+        .select({ count: count() })
+        .from(gameMasterActions)
+        .where(
+          and(
+            eq(gameMasterActions.status, 'executed'),
+            gte(gameMasterActions.executedAt, hourCutoff)
           )
-          .then((rows) => rows[0]?.count ?? 0),
-      ]);
+        )
+        .then((rows) => rows[0]?.count ?? 0),
+    ]);
 
     return {
       gameId: game.id,
@@ -359,7 +380,9 @@ export class GameMasterService {
       return {
         runType: 'reactive',
         triggerType: 'fresh_world_event',
-        triggerData: { latestEventId: snapshot.recentWorldEvents[0]?.id ?? null },
+        triggerData: {
+          latestEventId: snapshot.recentWorldEvents[0]?.id ?? null,
+        },
         shouldPlan: true,
       };
     }
@@ -392,7 +415,10 @@ export class GameMasterService {
     });
   }
 
-  private async writeControlMessage(chatId: string, content: string): Promise<void> {
+  private async writeControlMessage(
+    chatId: string,
+    content: string
+  ): Promise<void> {
     await this.ensureControlChat(
       chatId,
       chatId === GAME_MASTER_CONTROL_CHAT_IDS.timeline
@@ -433,7 +459,11 @@ export class GameMasterService {
 
   private async materializeDirective(
     actionId: string,
-    directiveType: 'actor_instruction' | 'organization_instruction' | 'article_brief' | 'market_narrative',
+    directiveType:
+      | 'actor_instruction'
+      | 'organization_instruction'
+      | 'article_brief'
+      | 'market_narrative',
     targetType: 'actor' | 'organization' | 'question' | 'system',
     targetId: string,
     authorityLevel: 'suggest' | 'steer' | 'override',
@@ -490,7 +520,9 @@ export class GameMasterService {
     try {
       switch (record.actionType) {
         case 'INSTRUCT_ACTORS': {
-          const actorIds = ((payload.actorIds as string[]) ?? []).filter(Boolean);
+          const actorIds = ((payload.actorIds as string[]) ?? []).filter(
+            Boolean
+          );
           const promptOverlay = String(payload.promptOverlay ?? '').trim();
           const expiresAt = payload.expiresAt
             ? new Date(String(payload.expiresAt))
@@ -512,7 +544,9 @@ export class GameMasterService {
           break;
         }
         case 'INSTRUCT_ORGANIZATIONS': {
-          const organizationIds = ((payload.organizationIds as string[]) ?? []).filter(Boolean);
+          const organizationIds = (
+            (payload.organizationIds as string[]) ?? []
+          ).filter(Boolean);
           const promptOverlay = String(payload.promptOverlay ?? '').trim();
           const expiresAt = payload.expiresAt
             ? new Date(String(payload.expiresAt))
@@ -554,8 +588,12 @@ export class GameMasterService {
           const expiresAt = payload.expiresAt
             ? new Date(String(payload.expiresAt))
             : endOfUtcDay(now);
-          const questionIds = ((payload.questionIds as string[]) ?? []).filter(Boolean);
-          const organizationIds = ((payload.organizationIds as string[]) ?? []).filter(Boolean);
+          const questionIds = ((payload.questionIds as string[]) ?? []).filter(
+            Boolean
+          );
+          const organizationIds = (
+            (payload.organizationIds as string[]) ?? []
+          ).filter(Boolean);
 
           for (const questionId of questionIds) {
             await this.materializeDirective(
@@ -582,7 +620,8 @@ export class GameMasterService {
               expiresAt
             );
           }
-          executionSummary.targetCount = questionIds.length + organizationIds.length;
+          executionSummary.targetCount =
+            questionIds.length + organizationIds.length;
           break;
         }
         case 'SET_DAILY_TOPIC': {
@@ -675,8 +714,14 @@ export class GameMasterService {
             await db
               .update(actorRelationships)
               .set({
-                sentiment: Math.max(-1, Math.min(1, existing.sentiment + sentimentDelta)),
-                strength: Math.max(0, Math.min(1, existing.strength + strengthDelta)),
+                sentiment: Math.max(
+                  -1,
+                  Math.min(1, existing.sentiment + sentimentDelta)
+                ),
+                strength: Math.max(
+                  0,
+                  Math.min(1, existing.strength + strengthDelta)
+                ),
                 history: note || existing.history,
                 updatedAt: now,
                 lastInteraction: now,
@@ -706,7 +751,9 @@ export class GameMasterService {
           break;
         }
         default:
-          throw new Error(`Unsupported Game Master action: ${record.actionType}`);
+          throw new Error(
+            `Unsupported Game Master action: ${record.actionType}`
+          );
       }
 
       await db
@@ -755,7 +802,7 @@ export class GameMasterService {
       gameDay: snapshot.gameDay,
       runType: trigger.runType,
       triggerType: trigger.triggerType,
-        triggerData: trigger.triggerData as JsonValue,
+      triggerData: trigger.triggerData as JsonValue,
       status: 'running',
       dailyObjective: plan.dailyObjective,
       worldSummary: plan.worldSummary,
@@ -827,7 +874,11 @@ export class GameMasterService {
     return { runId, actionIds };
   }
 
-  private async finalizeRun(runId: string, status: 'completed' | 'failed', error?: string): Promise<void> {
+  private async finalizeRun(
+    runId: string,
+    status: 'completed' | 'failed',
+    error?: string
+  ): Promise<void> {
     const now = new Date();
     await db
       .update(gameMasterRuns)
@@ -884,7 +935,11 @@ export class GameMasterService {
     forcedRunType?: GameMasterRunType;
     triggerType?: string;
     triggerData?: Record<string, unknown>;
-  }): Promise<{ runId: string | null; runType: GameMasterRunType | null; skipped?: string }> {
+  }): Promise<{
+    runId: string | null;
+    runType: GameMasterRunType | null;
+    skipped?: string;
+  }> {
     if (!this.isEnabled()) {
       return { runId: null, runType: null, skipped: 'disabled' };
     }
@@ -911,22 +966,25 @@ export class GameMasterService {
         return { runId: null, runType: null, skipped: 'game_paused' };
       }
 
-      const trigger =
-        options?.forcedRunType
-          ? {
-              runType: options.forcedRunType,
-              triggerType: options.triggerType ?? 'manual',
-              triggerData: options.triggerData ?? {},
-              shouldPlan: true,
-            }
-          : await this.assessTrigger(snapshot);
+      const trigger = options?.forcedRunType
+        ? {
+            runType: options.forcedRunType,
+            triggerType: options.triggerType ?? 'manual',
+            triggerData: options.triggerData ?? {},
+            shouldPlan: true,
+          }
+        : await this.assessTrigger(snapshot);
 
       if (!trigger.shouldPlan) {
         return { runId: null, runType: trigger.runType, skipped: 'no_plan' };
       }
 
       const plan = gameMasterPlanner.plan(snapshot, trigger);
-      const { runId, actionIds } = await this.persistRun(snapshot, trigger, plan);
+      const { runId, actionIds } = await this.persistRun(
+        snapshot,
+        trigger,
+        plan
+      );
       await this.maybeExecuteQueuedActions(actionIds);
       await this.finalizeRun(runId, 'completed');
       await broadcastToChannel('admin:game-master', {
@@ -959,7 +1017,9 @@ export class GameMasterService {
     ];
 
     if (filter.directiveType) {
-      conditions.push(eq(gameMasterDirectives.directiveType, filter.directiveType));
+      conditions.push(
+        eq(gameMasterDirectives.directiveType, filter.directiveType)
+      );
     }
     if (filter.targetType) {
       conditions.push(eq(gameMasterDirectives.targetType, filter.targetType));
@@ -976,7 +1036,10 @@ export class GameMasterService {
   }
 
   async buildPromptOverlay(params: {
-    directiveType: 'actor_instruction' | 'organization_instruction' | 'market_narrative';
+    directiveType:
+      | 'actor_instruction'
+      | 'organization_instruction'
+      | 'market_narrative';
     targetType: 'actor' | 'organization' | 'question';
     targetId: string;
   }): Promise<string> {
@@ -1004,7 +1067,10 @@ export class GameMasterService {
       .filter(Boolean);
 
     if (lines.length === 0) return '';
-    return [`=== GAME MASTER HALLIDAY ===`, ...lines.map((line) => `- ${line}`)].join('\n');
+    return [
+      `=== GAME MASTER HALLIDAY ===`,
+      ...lines.map((line) => `- ${line}`),
+    ].join('\n');
   }
 
   async listQueuedArticleBriefs() {
@@ -1066,69 +1132,68 @@ export class GameMasterService {
       hourlyAutoActionCount,
       pauseUntil,
       autoRunActive,
-    ] =
-      await Promise.all([
-        this.getCurrentGameState(),
-        db
-          .select({
-            id: gameMasterRuns.id,
-            gameDay: gameMasterRuns.gameDay,
-            runType: gameMasterRuns.runType,
-            status: gameMasterRuns.status,
-            triggerType: gameMasterRuns.triggerType,
-            planSummary: gameMasterRuns.planSummary,
-            startedAt: gameMasterRuns.startedAt,
-            completedAt: gameMasterRuns.completedAt,
-          })
-          .from(gameMasterRuns)
-          .orderBy(desc(gameMasterRuns.startedAt))
-          .limit(15),
-        db
-          .select({
-            id: gameMasterActions.id,
-            runId: gameMasterActions.runId,
-            actionType: gameMasterActions.actionType,
-            authorityLevel: gameMasterActions.authorityLevel,
-            riskLevel: gameMasterActions.riskLevel,
-            targetType: gameMasterActions.targetType,
-            instructionText: gameMasterActions.instructionText,
-            status: gameMasterActions.status,
-            requiresApproval: gameMasterActions.requiresApproval,
-            approvalReason: gameMasterActions.approvalReason,
-            createdAt: gameMasterActions.createdAt,
-          })
-          .from(gameMasterActions)
-          .where(
-            inArray(gameMasterActions.status, [
-              'queued',
-              'awaiting_approval',
-              'approved',
-              'failed',
-            ])
-          )
-          .orderBy(desc(gameMasterActions.createdAt))
-          .limit(20),
-        this.listActiveDirectives(),
-        db
-          .select({
-            id: messages.id,
-            chatId: messages.chatId,
-            content: messages.content,
-            createdAt: messages.createdAt,
-          })
-          .from(messages)
-          .where(
-            inArray(messages.chatId, [
-              GAME_MASTER_CONTROL_CHAT_IDS.timeline,
-              GAME_MASTER_CONTROL_CHAT_IDS.actions,
-            ])
-          )
-          .orderBy(desc(messages.createdAt))
-          .limit(20),
-        this.getHourlyAutoActionCount(),
-        this.getPauseUntil(),
-        this.isAutoRunActive(),
-      ]);
+    ] = await Promise.all([
+      this.getCurrentGameState(),
+      db
+        .select({
+          id: gameMasterRuns.id,
+          gameDay: gameMasterRuns.gameDay,
+          runType: gameMasterRuns.runType,
+          status: gameMasterRuns.status,
+          triggerType: gameMasterRuns.triggerType,
+          planSummary: gameMasterRuns.planSummary,
+          startedAt: gameMasterRuns.startedAt,
+          completedAt: gameMasterRuns.completedAt,
+        })
+        .from(gameMasterRuns)
+        .orderBy(desc(gameMasterRuns.startedAt))
+        .limit(15),
+      db
+        .select({
+          id: gameMasterActions.id,
+          runId: gameMasterActions.runId,
+          actionType: gameMasterActions.actionType,
+          authorityLevel: gameMasterActions.authorityLevel,
+          riskLevel: gameMasterActions.riskLevel,
+          targetType: gameMasterActions.targetType,
+          instructionText: gameMasterActions.instructionText,
+          status: gameMasterActions.status,
+          requiresApproval: gameMasterActions.requiresApproval,
+          approvalReason: gameMasterActions.approvalReason,
+          createdAt: gameMasterActions.createdAt,
+        })
+        .from(gameMasterActions)
+        .where(
+          inArray(gameMasterActions.status, [
+            'queued',
+            'awaiting_approval',
+            'approved',
+            'failed',
+          ])
+        )
+        .orderBy(desc(gameMasterActions.createdAt))
+        .limit(20),
+      this.listActiveDirectives(),
+      db
+        .select({
+          id: messages.id,
+          chatId: messages.chatId,
+          content: messages.content,
+          createdAt: messages.createdAt,
+        })
+        .from(messages)
+        .where(
+          inArray(messages.chatId, [
+            GAME_MASTER_CONTROL_CHAT_IDS.timeline,
+            GAME_MASTER_CONTROL_CHAT_IDS.actions,
+          ])
+        )
+        .orderBy(desc(messages.createdAt))
+        .limit(20),
+      this.getHourlyAutoActionCount(),
+      this.getPauseUntil(),
+      this.isAutoRunActive(),
+    ]);
 
     return {
       enabled: this.isEnabled(),

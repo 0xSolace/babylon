@@ -77,28 +77,25 @@ export function GameMasterTab() {
   const [isRefreshing, startRefresh] = useTransition();
   const [isMutating, startMutating] = useTransition();
 
-  const load = useCallback(
-    (withRefresh = false) => {
-      const fetchLogic = async () => {
-        const response = await fetch('/api/admin/game-master');
-        if (!response.ok) {
-          toast.error('Failed to load Game Master dashboard');
-          setLoading(false);
-          return;
-        }
-        const payload = (await response.json()) as GameMasterDashboard;
-        setData(payload);
+  const load = useCallback((withRefresh = false) => {
+    const fetchLogic = async () => {
+      const response = await fetch('/api/admin/game-master');
+      if (!response.ok) {
+        toast.error('Failed to load Game Master dashboard');
         setLoading(false);
-      };
-
-      if (withRefresh) {
-        startRefresh(fetchLogic);
-      } else {
-        void fetchLogic();
+        return;
       }
-    },
-    []
-  );
+      const payload = (await response.json()) as GameMasterDashboard;
+      setData(payload);
+      setLoading(false);
+    };
+
+    if (withRefresh) {
+      startRefresh(fetchLogic);
+    } else {
+      void fetchLogic();
+    }
+  }, []);
 
   useEffect(() => {
     load();
@@ -162,7 +159,11 @@ export function GameMasterTab() {
   }
 
   if (!data) {
-    return <div className="p-8 text-center text-red-500">Failed to load Game Master data.</div>;
+    return (
+      <div className="p-8 text-center text-red-500">
+        Failed to load Game Master data.
+      </div>
+    );
   }
 
   const formatDate = (value: string | null) =>
@@ -193,7 +194,9 @@ export function GameMasterTab() {
             disabled={isRefreshing}
             className="flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm hover:bg-muted"
           >
-            <RefreshCw className={cn('h-4 w-4', isRefreshing && 'animate-spin')} />
+            <RefreshCw
+              className={cn('h-4 w-4', isRefreshing && 'animate-spin')}
+            />
             Refresh
           </button>
           <button
@@ -212,7 +215,9 @@ export function GameMasterTab() {
           </button>
           <button
             onClick={() =>
-              runControl(data.autoRunEnabled ? 'pause_auto_run' : 'resume_auto_run')
+              runControl(
+                data.autoRunEnabled ? 'pause_auto_run' : 'resume_auto_run'
+              )
             }
             disabled={isMutating}
             className="rounded-lg border border-border bg-card px-3 py-2 text-sm hover:bg-muted"
@@ -244,7 +249,11 @@ export function GameMasterTab() {
         <StatusCard
           icon={ShieldAlert}
           label="Pending Approvals"
-          value={data.pendingActions.filter((action) => action.status === 'awaiting_approval').length}
+          value={
+            data.pendingActions.filter(
+              (action) => action.status === 'awaiting_approval'
+            ).length
+          }
           detail={`${data.activeDirectives.length} active directives`}
         />
       </div>
@@ -266,13 +275,17 @@ export function GameMasterTab() {
                       <span className="rounded bg-primary/10 px-2 py-1 text-primary text-xs uppercase">
                         {run.runType}
                       </span>
-                      <span className="font-medium text-sm">Day {run.gameDay}</span>
+                      <span className="font-medium text-sm">
+                        Day {run.gameDay}
+                      </span>
                     </div>
                     <span className="text-muted-foreground text-xs">
                       {formatDate(run.startedAt)}
                     </span>
                   </div>
-                  <p className="mt-2 text-sm">{run.planSummary || 'No summary'}</p>
+                  <p className="mt-2 text-sm">
+                    {run.planSummary || 'No summary'}
+                  </p>
                   <p className="mt-1 text-muted-foreground text-xs">
                     Trigger: {run.triggerType || 'n/a'} · Status: {run.status}
                   </p>
@@ -294,7 +307,7 @@ export function GameMasterTab() {
                   className="rounded-lg border border-border/60 bg-background/50 p-3"
                 >
                   <div className="mb-1 flex items-center justify-between gap-2">
-                    <span className="font-medium text-xs uppercase text-primary">
+                    <span className="font-medium text-primary text-xs uppercase">
                       {message.chatId.replace('gm:', '')}
                     </span>
                     <span className="text-muted-foreground text-xs">
@@ -347,7 +360,9 @@ export function GameMasterTab() {
                     {needsApproval && (
                       <>
                         <button
-                          onClick={() => runActionMutation(action.id, 'approve')}
+                          onClick={() =>
+                            runActionMutation(action.id, 'approve')
+                          }
                           disabled={isMutating}
                           className="flex items-center gap-1 rounded-md bg-green-600 px-3 py-1.5 text-sm text-white"
                         >
@@ -440,5 +455,9 @@ function StatusCard({
 }
 
 function EmptyState({ text }: { text: string }) {
-  return <div className="rounded-lg border border-dashed border-border p-6 text-center text-muted-foreground text-sm">{text}</div>;
+  return (
+    <div className="rounded-lg border border-border border-dashed p-6 text-center text-muted-foreground text-sm">
+      {text}
+    </div>
+  );
 }

@@ -11,7 +11,12 @@ import type { NextRequest } from 'next/server';
 import { z } from 'zod';
 
 const ControlSchema = z.object({
-  action: z.enum(['run_daily', 'run_pulse', 'pause_auto_run', 'resume_auto_run']),
+  action: z.enum([
+    'run_daily',
+    'run_pulse',
+    'pause_auto_run',
+    'resume_auto_run',
+  ]),
 });
 
 export const GET = withErrorHandling(async (request: NextRequest) => {

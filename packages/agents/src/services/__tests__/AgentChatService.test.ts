@@ -381,8 +381,16 @@ describe('dispatchAgentChat', () => {
       });
 
       expect(result.success).toBe(true);
-      expect(mockGetAgentWithConfig).toHaveBeenNthCalledWith(1, 'larry david', OWNER_ID);
-      expect(mockGetAgentWithConfig).toHaveBeenNthCalledWith(2, AGENT_ID, OWNER_ID);
+      expect(mockGetAgentWithConfig).toHaveBeenNthCalledWith(
+        1,
+        'larry david',
+        OWNER_ID
+      );
+      expect(mockGetAgentWithConfig).toHaveBeenNthCalledWith(
+        2,
+        AGENT_ID,
+        OWNER_ID
+      );
     });
 
     it('uses single-agent fallback only for generic references like "my agent"', async () => {
@@ -416,7 +424,11 @@ describe('dispatchAgentChat', () => {
       });
 
       expect(result.success).toBe(true);
-      expect(mockGetAgentWithConfig).toHaveBeenNthCalledWith(2, AGENT_ID, OWNER_ID);
+      expect(mockGetAgentWithConfig).toHaveBeenNthCalledWith(
+        2,
+        AGENT_ID,
+        OWNER_ID
+      );
     });
 
     it('does not dispatch to the only agent when the requested name is unknown', async () => {
