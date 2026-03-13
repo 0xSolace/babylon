@@ -971,7 +971,7 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
             )
             .orderBy(sql`RANDOM()`)
             .limit(createCount)
-            .for('update', { skipLocked: true });
+            .for('update', { of: [timeframedMarkets], skipLocked: true });
 
           // Re-verify sub-market count after acquiring locks to prevent race condition
           // Another concurrent tick may have created sub-markets between our initial count and lock acquisition
