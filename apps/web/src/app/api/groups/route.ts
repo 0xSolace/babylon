@@ -147,6 +147,7 @@
 
 import {
   authenticate,
+  checkProgress,
   notifyGroupMemberAdded,
   notifyUserGroupInvite,
   successResponse,
@@ -539,6 +540,8 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     },
     'POST /api/groups'
   );
+
+  void checkProgress(user.userId, { type: 'group_created' });
 
   return successResponse({
     group: {

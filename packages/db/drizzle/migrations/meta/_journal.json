@@ -372,6 +372,13 @@
       "when": 1773853200000,
       "tag": "0050_add_position_resolved_at_index",
       "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "7",
+      "when": 1772783081423,
+      "tag": "0045_spicy_blindfold",
+      "breakpoints": true
     }
   ]
 }
