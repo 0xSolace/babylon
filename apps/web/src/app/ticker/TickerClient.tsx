@@ -161,7 +161,7 @@ function PredictionArcMeter({
         />
       </svg>
       <span
-        className="relative text-[10px] font-bold tabular-nums leading-none"
+        className="relative font-bold text-[10px] tabular-nums leading-none"
         style={{ color: isDark ? '#fafafa' : '#0a0a0a' }}
       >
         {Math.round(pct)}%
@@ -208,10 +208,7 @@ export function TickerClient() {
   const fg = isDark ? '#fafafa' : '#0a0a0a';
   const muted = isDark ? '#71717a' : '#52525b';
   // One full scroll cycle: speed 0.1 → 600s, 0.5 → 240s, 1 → 120s, 3 → 40s
-  const duration = Math.min(
-    600,
-    Math.max(20, Math.round(120 / speed))
-  );
+  const duration = Math.min(600, Math.max(20, Math.round(120 / speed)));
 
   if (loading && !data) {
     return (
@@ -267,7 +264,8 @@ export function TickerClient() {
             item.type === 'perp'
               ? perpTextColor(item.changePercent24h, isDark) || fg
               : fg;
-          const isPrediction = item.type === 'prediction' && item.yesPercent != null;
+          const isPrediction =
+            item.type === 'prediction' && item.yesPercent != null;
           const uniqueKey = index < items.length ? item.key : `${item.key}-dup`;
           return (
             <span

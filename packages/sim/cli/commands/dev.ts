@@ -15,7 +15,10 @@ import {
 import { buildEngine, parseInterval } from '../shared';
 
 interface SystemsWatcher {
-  on(event: 'all', listener: (event: string, path: string) => void): SystemsWatcher;
+  on(
+    event: 'all',
+    listener: (event: string, path: string) => void
+  ): SystemsWatcher;
   close(): Promise<void>;
 }
 
@@ -103,7 +106,9 @@ export default defineCommand({
       }
 
       if (!existsSync(nextDir)) {
-        consola.info(`No systems directory at ${nextDir} — skipping file watcher`);
+        consola.info(
+          `No systems directory at ${nextDir} — skipping file watcher`
+        );
         return;
       }
 

@@ -4,9 +4,11 @@ import { useEffect, useRef, useState } from 'react';
 import { EntitySearchAutocomplete } from '@/components/explore/EntitySearchAutocomplete';
 import { LatestNewsPanel } from '@/components/feed/LatestNewsPanel';
 import { MarketsPanel } from '@/components/feed/MarketsPanel';
+import { PositionsPreviewPanel } from '@/components/feed/PositionsPreviewPanel';
 import { TrendingPanel } from '@/components/feed/TrendingPanel';
 
 interface WidgetSidebarProps {
+  showPositions?: boolean;
   showLatestNews?: boolean;
   showTrending?: boolean;
   showMarkets?: boolean;
@@ -30,6 +32,7 @@ interface WidgetSidebarProps {
  * @returns Widget sidebar element (hidden on screens < XL)
  */
 export function WidgetSidebar({
+  showPositions = false,
   showLatestNews = true,
   showTrending = true,
   showMarkets = true,
@@ -150,6 +153,12 @@ export function WidgetSidebar({
             searchType="users"
           />
         </div>
+
+        {showPositions && (
+          <div className="flex-shrink-0">
+            <PositionsPreviewPanel />
+          </div>
+        )}
 
         {showLatestNews && (
           <div className="flex-shrink-0">

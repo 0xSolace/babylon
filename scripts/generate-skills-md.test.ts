@@ -27,11 +27,11 @@ describe('generate-skills-md', () => {
 
     const result = parseAgentCardSkills(mockContent);
     expect(result).toHaveLength(1);
-    expect(result[0].id).toBe('test-skill');
-    expect(result[0].name).toBe('Test Skill');
-    expect(result[0].description).toBe('This is a test skill description');
-    expect(result[0].tags).toEqual(['test', 'skill']);
-    expect(result[0].examples).toEqual(['Example 1', 'Example 2']);
+    expect(result[0]?.id).toBe('test-skill');
+    expect(result[0]?.name).toBe('Test Skill');
+    expect(result[0]?.description).toBe('This is a test skill description');
+    expect(result[0]?.tags).toEqual(['test', 'skill']);
+    expect(result[0]?.examples).toEqual(['Example 1', 'Example 2']);
   });
 
   test('parseExecutorOperations', async () => {
@@ -70,10 +70,10 @@ describe('generate-skills-md', () => {
 
     const result = parseMCPTools(mockContent);
     expect(result).toHaveLength(2);
-    expect(result[0].name).toBe('tool1');
-    expect(result[0].description).toBe('Tool 1 description');
-    expect(result[1].name).toBe('tool2');
-    expect(result[1].description).toBe('Tool 2 multiline description');
+    expect(result[0]?.name).toBe('tool1');
+    expect(result[0]?.description).toBe('Tool 1 description');
+    expect(result[1]?.name).toBe('tool2');
+    expect(result[1]?.description).toBe('Tool 2 multiline description');
   });
 
   test('generateSkillsMarkdown', async () => {
