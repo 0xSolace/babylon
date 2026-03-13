@@ -273,7 +273,6 @@ describe('NPC Leaderboard Fallback Metrics', () => {
     expect(fallback.totalValue).toBe(live.totalValue);
     expect(fallback.unrealizedPnL).toBe(live.unrealizedPnL);
     expect(fallback.positionCount).toBe(live.positionCount);
-    // Perp exposure: 600/3 = 200 margin
     expect(fallback.utilization).toBeCloseTo(live.utilization, 2);
   });
 

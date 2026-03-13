@@ -207,6 +207,12 @@ export {
   type PoolMetrics,
 } from './npc/portfolio-metrics';
 export {
+  buildFallbackMetricsByPool,
+  type FallbackBalanceRow,
+  type FallbackPerpRow,
+  type FallbackPositionRow,
+} from './npc/portfolio-metrics';
+export {
   type ParsedPostMetadata,
   type ParseResult,
   parsePostId,

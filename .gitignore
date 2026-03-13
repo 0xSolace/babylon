@@ -8,6 +8,7 @@
 .cursor/skills/
 
 # CLAUDE
+.claude/commands/
 .claude/skills/
 
 # next.js

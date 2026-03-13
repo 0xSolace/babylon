@@ -7,10 +7,6 @@
  * path) and the leaderboard fallback batch path.
  */
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
 export type FallbackPositionRow = {
   id: string;
   poolId: string;
@@ -42,14 +38,6 @@ export interface PoolMetrics {
   totalValue: number;
 }
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-/**
- * Normalise a leverage value: returns the numeric value when it is a
- * positive finite number, otherwise falls back to 1 (unleveraged).
- */
 export function getEffectiveLeverage(
   leverage: number | null | undefined
 ): number {
@@ -58,13 +46,6 @@ export function getEffectiveLeverage(
     : 1;
 }
 
-/**
- * Compute the capital exposure (margin) for a position.
- *
- * - When `leverage` is omitted the position is treated as spot / prediction
- *   and the absolute size is returned.
- * - When `leverage` is provided the size is divided by the effective leverage.
- */
 export function getPositionExposure(
   size: number | null | undefined,
   leverage?: number | null
@@ -79,18 +60,6 @@ export function getPositionExposure(
   return Math.abs(numericSize / getEffectiveLeverage(leverage));
 }
 
-// ---------------------------------------------------------------------------
-// Batch builder
-// ---------------------------------------------------------------------------
-
-/**
- * Build portfolio metrics for every pool in `activePools` from pre-fetched
- * position and balance rows.
- *
- * This uses the exact same calculation logic as the per-pool live path in
- * `NPCInvestmentManager.getPortfolioMetrics` so that live and fallback
- * numbers are always consistent.
- */
 export function buildFallbackMetricsByPool<TPool extends { id: string }>(
   activePools: TPool[],
   balances: Array<{ id: string; tradingBalance: string | null }>,
