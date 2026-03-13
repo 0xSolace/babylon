@@ -304,21 +304,66 @@ export async function dispatchAgentChat(
     };
   }
 
-  // --- Ownership verification (with name/username fallback) ---
+  // --- Ownership verification (with fuzzy name fallback) ---
   let agentWithConfig;
   let resolvedAgentId = agentId;
   try {
     agentWithConfig = await agentService.getAgentWithConfig(agentId, ownerId);
 
-    // Fallback: if not found by ID, try resolving by username or displayName
+    // Fallback: if not found by ID, try resolving by username or displayName.
+    // The LLM often passes a username, display name, or partial name instead of
+    // the UUID. We try progressively fuzzier matching to maximize resolution:
+    //   1. Exact match on username or displayName (case-insensitive)
+    //   2. Normalized match (strip spaces, punctuation)
+    //   3. Partial match (needle contained in name or vice versa)
+    //   4. Single-agent fallback (if only 1 agent, use it regardless of name)
     if (!agentWithConfig) {
       const ownerAgents = await agentService.listUserAgents(ownerId);
-      const needle = agentId.toLowerCase();
-      const match = ownerAgents.find(
+      const needle = agentId.toLowerCase().trim();
+      const needleNormalized = needle.replace(/[\s\-_.]+/g, '');
+
+      // 1. Exact match on username or displayName
+      let match = ownerAgents.find(
         (a) =>
           a.username?.toLowerCase() === needle ||
           a.displayName?.toLowerCase() === needle
       );
+
+      // 2. Normalized match (strip spaces/punctuation for "larry david" vs "larrydavid")
+      if (!match) {
+        match = ownerAgents.find((a) => {
+          const uNorm = a.username?.toLowerCase().replace(/[\s\-_.]+/g, '');
+          const dNorm = a.displayName?.toLowerCase().replace(/[\s\-_.]+/g, '');
+          return uNorm === needleNormalized || dNorm === needleNormalized;
+        });
+      }
+
+      // 3. Partial match (needle contained in name or name contained in needle)
+      if (!match) {
+        match = ownerAgents.find((a) => {
+          const uLower = a.username?.toLowerCase() ?? '';
+          const dLower = a.displayName?.toLowerCase() ?? '';
+          return (
+            (uLower && (uLower.includes(needle) || needle.includes(uLower))) ||
+            (dLower && (dLower.includes(needle) || needle.includes(dLower)))
+          );
+        });
+      }
+
+      // 4. Single-agent fallback: if the user only has one agent, it's unambiguous
+      if (!match && ownerAgents.length === 1) {
+        match = ownerAgents[0];
+        logger.info(
+          '[AgentChatService] Single-agent fallback used',
+          {
+            input: agentId,
+            resolvedId: match!.id,
+            resolvedName: match!.displayName ?? match!.username,
+          },
+          'AgentChatService'
+        );
+      }
+
       if (match) {
         resolvedAgentId = match.id;
         agentWithConfig = await agentService.getAgentWithConfig(
@@ -327,7 +372,21 @@ export async function dispatchAgentChat(
         );
         logger.info(
           '[AgentChatService] Resolved agent by name fallback',
-          { input: agentId, resolvedId: resolvedAgentId },
+          {
+            input: agentId,
+            resolvedId: resolvedAgentId,
+            resolvedName: match.displayName ?? match.username,
+          },
+          'AgentChatService'
+        );
+      } else {
+        // Log available agents for debugging failed resolution
+        const available = ownerAgents.map(
+          (a) => `${a.displayName ?? a.username ?? 'unnamed'} (${a.id})`
+        );
+        logger.warn(
+          '[AgentChatService] Agent resolution failed — no match found',
+          { input: agentId, availableAgents: available },
           'AgentChatService'
         );
       }
@@ -355,13 +414,26 @@ export async function dispatchAgentChat(
   }
 
   if (!agentWithConfig) {
+    // List available agents in the error so the coordinator can retry with correct ID
+    let availableHint = '';
+    try {
+      const ownerAgents = await agentService.listUserAgents(ownerId);
+      if (ownerAgents.length > 0) {
+        const names = ownerAgents
+          .map((a) => `@${a.username ?? a.displayName ?? a.id}`)
+          .join(', ');
+        availableHint = `. Available agents: ${names}`;
+      }
+    } catch {
+      // Best-effort — don't let hint lookup mask the real error
+    }
     return {
       success: false,
       response: '',
       agentId: resolvedAgentId,
       actionsExecuted: 0,
       isLLMFailure: false,
-      error: 'Agent not found',
+      error: `Agent "${agentId}" not found${availableHint}`,
     };
   }
 
@@ -592,7 +664,7 @@ export async function dispatchAgentChat(
             const firstResult = resultsArray[0];
             if (firstResult) {
               actionResult = {
-                success: firstResult.content?.success ?? true,
+                success: firstResult.content?.success ?? false,
                 text:
                   typeof firstResult.content?.text === 'string'
                     ? firstResult.content.text

@@ -582,7 +582,7 @@ export const POST = withErrorHandling(
               const firstResult = resultsArray[0];
               if (firstResult) {
                 actionResult = {
-                  success: firstResult.content?.success ?? true,
+                  success: firstResult.content?.success ?? false,
                   text:
                     typeof firstResult.content?.text === 'string'
                       ? firstResult.content.text

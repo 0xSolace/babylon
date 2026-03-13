@@ -167,6 +167,7 @@ No actions were taken this turn.
 4. Do NOT make up information — only reference data from the Actions You Completed section.
 5. If you dispatched to an agent, include a brief quote or summary of what the agent actually did or said. Use plain @username for mentions.
 6. Keep your response concise and factual.
+7. NEVER tell the user to @mention or tag their agents. The coordinator handles all dispatch routing.
 
 Output ONLY this XML:
 
@@ -470,7 +471,7 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
         }> | null;
         if (resultsArray && resultsArray.length > 0 && resultsArray[0]) {
           fpResultHolder.result = {
-            success: resultsArray[0].content?.success ?? true,
+            success: resultsArray[0].content?.success ?? false,
             text:
               typeof resultsArray[0].content?.text === 'string'
                 ? resultsArray[0].content.text
@@ -812,7 +813,7 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
               const firstResult = resultsArray[0];
               if (firstResult) {
                 resultHolder.result = {
-                  success: firstResult.content?.success ?? true,
+                  success: firstResult.content?.success ?? false,
                   text:
                     typeof firstResult.content?.text === 'string'
                       ? firstResult.content.text
@@ -942,7 +943,7 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
       const summaryResponse = await runtime.useModel(modelType, {
         prompt:
           attempt > 1 ? summaryPrompt + SUMMARY_XML_FORMAT_HINT : summaryPrompt,
-        temperature: attempt > 1 ? 0.3 : 0.7,
+        temperature: attempt > 1 ? 0.3 : 0.4,
       });
 
       const summary = parseKeyValueXml(summaryResponse);
@@ -980,7 +981,7 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
       extractedText ||
       (traceActionResults.length > 0
         ? 'Here is the information you requested.'
-        : "I'm here to help! You can ask me about markets, or @mention your agents to trade.");
+        : "I'm here to help! I can check markets, your portfolio, the feed, or dispatch commands to your agents.");
   }
 
   const responseText = finalResponse ?? "I'm here to help!";
