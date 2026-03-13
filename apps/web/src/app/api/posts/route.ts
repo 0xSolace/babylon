@@ -231,6 +231,7 @@ import {
   authenticate,
   broadcastToChannel,
   cachedDb,
+  checkProgress,
   checkRateLimitAndDuplicates,
   checkRateLimitAsync,
   DUPLICATE_DETECTION_CONFIGS,
@@ -1542,6 +1543,8 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
         'POST /api/posts'
       );
     });
+
+  void checkProgress(authUser.userId, { type: 'post_created' });
 
   return successResponse({
     success: true,

@@ -51,6 +51,7 @@ import {
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
+import { and, db, eq, follows, inArray } from '@babylon/db';
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { parseLeaderboardQuery } from './query';
@@ -136,6 +137,38 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     }
   }
 
+  const authUserId = authUser?.dbUserId ?? authUser?.userId;
+  const canResolveFollowingUserIds =
+    authUserId !== undefined && (!userId || userId === authUserId);
+  let followingUserIdsResolved = false;
+  let followingUserIds: string[] = [];
+
+  if (canResolveFollowingUserIds) {
+    const leaderboardUserIds = leaderboardData.users
+      .map((entry) => entry.id)
+      .filter((id) => id !== authUserId);
+
+    if (leaderboardUserIds.length > 0) {
+      const followedUsers = await db
+        .select({ followingId: follows.followingId })
+        .from(follows)
+        .where(
+          and(
+            eq(follows.followerId, authUserId),
+            inArray(follows.followingId, leaderboardUserIds)
+          )
+        );
+
+      followingUserIds = followedUsers.map((follow) => follow.followingId);
+    }
+
+    followingUserIdsResolved = true;
+  }
+
+  const isPersonalizedResponse = Boolean(
+    effectiveUserId || followingUserIdsResolved
+  );
+
   logger.info(
     'Leaderboard fetched successfully',
     {
@@ -160,11 +193,13 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       },
       leaderboardType,
       currentUser,
+      followingUserIds,
+      followingUserIdsResolved,
     },
     200,
     {
       'x-cache': cacheHit ? 'leaderboard-hit' : 'leaderboard-miss',
-      'Cache-Control': effectiveUserId
+      'Cache-Control': isPersonalizedResponse
         ? 'private, no-store'
         : `public, s-maxage=${CACHE_TTL_SECONDS}, stale-while-revalidate=${STALE_SECONDS}`,
       Vary: 'Accept-Encoding',

@@ -35,7 +35,9 @@ export type NotificationType =
   | 'nft_access_revoked'
   | 'daily_summary'
   | 'weekly_summary'
-  | 'monthly_summary';
+  | 'monthly_summary'
+  | 'achievement_unlocked'
+  | 'challenge_completed';
 
 interface CreateNotificationParams {
   userId: string; // Who receives the notification

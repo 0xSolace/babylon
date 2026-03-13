@@ -40,7 +40,7 @@ interface FollowButtonProps {
 
 export function FollowButton({
   userId,
-  initialFollowing = false,
+  initialFollowing,
   size = 'md',
   variant = 'button',
   className,
@@ -48,13 +48,19 @@ export function FollowButton({
   onFollowerCountChange,
 }: FollowButtonProps) {
   const { authenticated, user } = useAuth();
-  const [isFollowing, setIsFollowing] = useState(initialFollowing);
+  const [isFollowing, setIsFollowing] = useState(initialFollowing ?? false);
   const [isLoading, setIsLoading] = useState(false);
-  const [isChecking, setIsChecking] = useState(true);
+  const [isChecking, setIsChecking] = useState(initialFollowing === undefined);
   const { trackFollow } = useSocialTracking();
 
   // Check follow status on mount
   useEffect(() => {
+    if (initialFollowing !== undefined) {
+      setIsFollowing(initialFollowing);
+      setIsChecking(false);
+      return;
+    }
+
     // Check if viewing own profile (userId could be username or user ID)
     const isOwnProfile =
       user &&
@@ -100,7 +106,7 @@ export function FollowButton({
     };
 
     checkFollowStatus();
-  }, [authenticated, user, userId]);
+  }, [authenticated, initialFollowing, user, userId]);
 
   const handleFollow = async () => {
     if (!authenticated || !user) {
