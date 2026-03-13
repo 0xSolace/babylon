@@ -93,6 +93,7 @@ export {
 } from './EmotionSystem';
 // Feed Generator
 export { FeedGenerator } from './FeedGenerator';
+export * from './game-master';
 // Bias Engine
 export {
   type BiasAdjustment,

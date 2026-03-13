@@ -69,6 +69,7 @@ import { EscrowManagementTab } from '@/components/admin/EscrowManagementTab';
 import { FeedbackTab } from '@/components/admin/FeedbackTab';
 import { FeesTab } from '@/components/admin/FeesTab';
 import { GameControlTab } from '@/components/admin/GameControlTab';
+import { GameMasterTab } from '@/components/admin/GameMasterTab';
 import { GroupsTab } from '@/components/admin/GroupsTab';
 import { GrowthMetricsTab } from '@/components/admin/GrowthMetricsTab';
 import { HumanReviewTab } from '@/components/admin/HumanReviewTab';
@@ -96,6 +97,7 @@ type Tab =
   | 'growth'
   | 'system-health'
   | 'game-control'
+  | 'game-master'
   | 'fees'
   | 'trades'
   | 'markets'
@@ -228,6 +230,7 @@ export default function AdminDashboard() {
       name: 'Game & Markets',
       items: [
         { id: 'game-control' as const, label: 'Game Control', icon: Gamepad2 },
+        { id: 'game-master' as const, label: 'Game Master', icon: Bot },
         { id: 'markets' as const, label: 'Markets', icon: TrendingUp },
         { id: 'fees' as const, label: 'Fees', icon: DollarSign },
         { id: 'trades' as const, label: 'Trades', icon: Activity },
@@ -397,6 +400,7 @@ export default function AdminDashboard() {
         {activeTab === 'growth' && <GrowthMetricsTab />}
         {activeTab === 'system-health' && <SystemHealthTab />}
         {activeTab === 'game-control' && <GameControlTab />}
+        {activeTab === 'game-master' && <GameMasterTab />}
         {activeTab === 'markets' && <MarketOversightTab />}
         {activeTab === 'fees' && <FeesTab />}
         {activeTab === 'trades' && <TradingFeedTab />}

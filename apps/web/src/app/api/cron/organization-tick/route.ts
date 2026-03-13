@@ -48,6 +48,7 @@ import {
 } from '@babylon/db';
 import {
   BabylonLLMClient,
+  gameMasterService,
   getActiveEventsForPosting,
   StaticDataRegistry,
   secureRandom,
@@ -409,7 +410,22 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
             : '';
 
         // Build prompt for organization POST (not article - articles are handled by article-tick)
-        const prompt = buildOrgPostPrompt(org, worldFactsContext, eventContext);
+        const gameMasterOverlay = await gameMasterService.buildPromptOverlay({
+          directiveType: 'organization_instruction',
+          targetType: 'organization',
+          targetId: org.id,
+        });
+        const marketNarrativeOverlay = await gameMasterService.buildPromptOverlay({
+          directiveType: 'market_narrative',
+          targetType: 'organization',
+          targetId: org.id,
+        });
+        const prompt = buildOrgPostPrompt(
+          org,
+          worldFactsContext,
+          eventContext,
+          [gameMasterOverlay, marketNarrativeOverlay].filter(Boolean).join('\n\n')
+        );
 
         // Generate content using LLM
         const rawResponse = await llmClient.generateJSON<
@@ -700,7 +716,8 @@ function selectWeightedOrganizations<
 function buildOrgPostPrompt(
   org: { id: string; name: string; description?: string; type?: string },
   worldFacts: string,
-  eventContext: string
+  eventContext: string,
+  hallidayContext = ''
 ): string {
   const orgStyle = getOrgStyle(org.id);
   const orgType = (org.type || 'media') as OrgType;
@@ -712,6 +729,8 @@ ${org.description ? `About: ${org.description}` : ''}
 ${worldFacts}
 
 ${eventContext}
+
+${hallidayContext}
 
 ${orgStyle}`;
 

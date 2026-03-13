@@ -19,6 +19,7 @@ export * from './capital-allocation-service';
 export * from './event-reaction-service';
 export * from './following-mechanics';
 export * from './game-onboarding-service';
+export * from '../game-master';
 // Group Chat Service
 export {
   GroupChatService,
