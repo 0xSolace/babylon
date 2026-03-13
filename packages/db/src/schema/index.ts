@@ -6,6 +6,8 @@ export * from './actor-state';
 export * from './actors';
 export * from './admin';
 export * from './agents';
+// ElizaOS framework tables (managed here instead of runtime migrations)
+export * from './eliza';
 // Enums
 export * from './enums';
 export * from './markets';
