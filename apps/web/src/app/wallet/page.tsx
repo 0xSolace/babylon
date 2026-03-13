@@ -13,6 +13,7 @@ import { WalletEmptyState } from '@/components/wallet/WalletEmptyState';
 import { WalletHeader } from '@/components/wallet/WalletHeader';
 import { WalletOverview } from '@/components/wallet/WalletOverview';
 import { type WalletTab, WalletTabs } from '@/components/wallet/WalletTabs';
+import { WalletContent } from '@/components/wallet/wallet/wallet-content';
 import { useAuth } from '@/hooks/useAuth';
 import {
   useOnchainNfts,
@@ -24,7 +25,7 @@ import {
 export default function WalletPage() {
   const router = useRouter();
   const { ready, authenticated, embeddedWalletAddress, login } = useAuth();
-  const [activeTab, setActiveTab] = useState<WalletTab>('overview');
+  const [activeTab, setActiveTab] = useState<WalletTab>('portfolio');
   const [receiveOpen, setReceiveOpen] = useState(false);
   const [sendOpen, setSendOpen] = useState(false);
 
@@ -38,7 +39,7 @@ export default function WalletPage() {
     return () => clearTimeout(timer);
   }, [ready, authenticated, router, login]);
 
-  // Fetch data
+  // Fetch on-chain data (only when on-chain tabs are active or for overview)
   const {
     nativeBalance,
     tokens,
@@ -84,12 +85,12 @@ export default function WalletPage() {
     return <WalletPageSkeleton />;
   }
 
-  if (!authenticated || !address) {
+  if (!authenticated) {
     return (
       <div className="flex flex-1 items-center justify-center p-8">
         <WalletEmptyState
           title="Connect your wallet"
-          description="Log in to access your wallet and manage your on-chain assets."
+          description="Log in to access your wallet and manage your assets."
           action={{ label: 'Log In', onClick: login }}
         />
       </div>
@@ -99,75 +100,103 @@ export default function WalletPage() {
   return (
     <div className="flex flex-1 flex-col overflow-y-auto border-border lg:border-l">
       <div className="w-full space-y-4 p-4 sm:p-6">
-        <WalletHeader address={address} />
+        {address && <WalletHeader address={address} />}
 
         <WalletTabs activeTab={activeTab} onTabChange={setActiveTab} />
 
         <div className="pb-8">
-          {activeTab === 'overview' && (
-            <WalletOverview
-              nativeBalance={nativeBalance}
-              tokens={tokens}
-              transactions={transactions}
-              loading={tokensLoading}
-              onNavigateTab={setActiveTab}
-              onSend={() => handleSend()}
-              onReceive={() => setReceiveOpen(true)}
-            />
-          )}
+          {activeTab === 'portfolio' && <WalletContent mode="page" />}
 
-          {activeTab === 'tokens' && (
-            <TokenList
-              nativeBalance={nativeBalance}
-              tokens={tokens}
-              loading={tokensLoading}
-              error={tokensError}
-              onRefresh={refreshTokens}
-              onSend={() => handleSend()}
-              onFund={handleFund}
-            />
-          )}
+          {activeTab === 'overview' &&
+            (address ? (
+              <WalletOverview
+                nativeBalance={nativeBalance}
+                tokens={tokens}
+                transactions={transactions}
+                loading={tokensLoading}
+                onNavigateTab={setActiveTab}
+                onSend={() => handleSend()}
+                onReceive={() => setReceiveOpen(true)}
+              />
+            ) : (
+              <NoWalletMessage />
+            ))}
 
-          {activeTab === 'nfts' && (
-            <NftPortfolio
-              collections={collections}
-              totalCount={nftCount}
-              loading={nftsLoading}
-              error={nftsError}
-              onRefresh={refreshNfts}
-            />
-          )}
+          {activeTab === 'tokens' &&
+            (address ? (
+              <TokenList
+                nativeBalance={nativeBalance}
+                tokens={tokens}
+                loading={tokensLoading}
+                error={tokensError}
+                onRefresh={refreshTokens}
+                onSend={() => handleSend()}
+                onFund={handleFund}
+              />
+            ) : (
+              <NoWalletMessage />
+            ))}
 
-          {activeTab === 'activity' && (
-            <TransactionHistory
-              transactions={transactions}
-              loading={txsLoading}
-              error={txsError}
-              onRefresh={refreshTxs}
-              walletAddress={address}
-            />
-          )}
+          {activeTab === 'nfts' &&
+            (address ? (
+              <NftPortfolio
+                collections={collections}
+                totalCount={nftCount}
+                loading={nftsLoading}
+                error={nftsError}
+                onRefresh={refreshNfts}
+              />
+            ) : (
+              <NoWalletMessage />
+            ))}
+
+          {activeTab === 'activity' &&
+            (address ? (
+              <TransactionHistory
+                transactions={transactions}
+                loading={txsLoading}
+                error={txsError}
+                onRefresh={refreshTxs}
+                walletAddress={address}
+              />
+            ) : (
+              <NoWalletMessage />
+            ))}
         </div>
       </div>
 
-      <ReceiveModal
-        open={receiveOpen}
-        onClose={() => setReceiveOpen(false)}
-        address={address}
-        chainName={CHAIN.name}
-      />
+      {address && (
+        <>
+          <ReceiveModal
+            open={receiveOpen}
+            onClose={() => setReceiveOpen(false)}
+            address={address}
+            chainName={CHAIN.name}
+          />
 
-      <SendModal
-        open={sendOpen}
-        onClose={() => setSendOpen(false)}
-        nativeBalance={nativeBalance}
-        tokens={tokens}
-        senderAddress={address}
-        onSuccess={() => {
-          refreshTokens();
-          refreshTxs();
-        }}
-      />
+          <SendModal
+            open={sendOpen}
+            onClose={() => setSendOpen(false)}
+            nativeBalance={nativeBalance}
+            tokens={tokens}
+            senderAddress={address}
+            onSuccess={() => {
+              refreshTokens();
+              refreshTxs();
+            }}
+          />
+        </>
+      )}
+    </div>
+  );
+}
+
+function NoWalletMessage() {
+  return (
+    <div className="py-8 text-center text-muted-foreground">
+      <p className="text-sm">
+        No embedded wallet detected. On-chain features require a wallet.
+      </p>
     </div>
   );
 }
@@ -186,7 +215,7 @@ function WalletPageSkeleton() {
         </div>
         {/* Tabs skeleton */}
         <div className="flex gap-4 border-border border-b pb-2">
-          {Array.from({ length: 4 }).map((_, i) => (
+          {Array.from({ length: 5 }).map((_, i) => (
             <div key={i} className="h-5 w-16 animate-pulse rounded bg-muted" />
           ))}
         </div>
