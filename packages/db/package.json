@@ -32,6 +32,7 @@
   },
   "dependencies": {
     "@babylon/shared": "workspace:*",
+    "@elizaos/plugin-sql": "^1.6.4",
     "drizzle-orm": "^0.44.7",
     "postgres": "^3.4.7"
   },
