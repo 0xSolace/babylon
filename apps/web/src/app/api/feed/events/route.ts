@@ -2,8 +2,8 @@ import {
   authenticate,
   checkRateLimitAsync,
   ensureUserForAuth,
-  rateLimitError,
   RATE_LIMIT_CONFIGS,
+  rateLimitError,
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
@@ -53,7 +53,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     RATE_LIMIT_CONFIGS.FEED_EVENT_BATCH
   );
   if (!rateLimit.allowed) {
-    return rateLimitError(rateLimit.retryAfter);
+    return rateLimitError(rateLimit.retryAfter ?? 60);
   }
   const body = BodySchema.parse(await request.json());
 
