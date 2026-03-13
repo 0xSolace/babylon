@@ -62,7 +62,7 @@ const GENERAL_STORY_KEY = '__general__';
 interface BaseForYouResult {
   stories: NarrativeStory[];
   postIds: string[];
-  anchorPostById: Map<string, NarrativePost>;
+  anchorPostById: Record<string, NarrativePost>;
   generatedAt: string;
 }
 
@@ -383,7 +383,7 @@ async function loadBaseCandidates(): Promise<BaseForYouResult> {
     return {
       stories: [],
       postIds: [],
-      anchorPostById: new Map(),
+      anchorPostById: {},
       generatedAt: now.toISOString(),
     };
   }
@@ -571,7 +571,7 @@ async function loadBaseCandidates(): Promise<BaseForYouResult> {
   // Map of post ID → NarrativePost for NPC "NEW MARKET:" anchor posts.
   // These posts are excluded from storyPostMap to avoid duplication with
   // the NewMarketCard, but their interaction data is needed for hydration.
-  const anchorPostById = new Map<string, NarrativePost>();
+  const anchorPostById: Record<string, NarrativePost> = {};
 
   const storyPostMap = new Map<string, NarrativePost[]>();
 
@@ -593,7 +593,7 @@ async function loadBaseCandidates(): Promise<BaseForYouResult> {
     ) {
       // Build the NarrativePost here so NewMarketCard can hydrate its InteractionBar,
       // even though this post is excluded from the feed to avoid duplication.
-      anchorPostById.set(post.id, {
+      anchorPostById[post.id] = {
         id: post.id,
         content: post.content,
         fullContent: post.fullContent ?? null,
@@ -618,7 +618,7 @@ async function loadBaseCandidates(): Promise<BaseForYouResult> {
         quoteComment: null,
         originalPostId: null,
         originalPost: null,
-      });
+      };
       continue;
     }
 
@@ -1121,8 +1121,10 @@ export async function buildForYouFeed(userId?: string | null) {
   const sharedSet = new Set(userShares.map((row) => row.postId));
 
   // Build an enriched version of anchor posts for new-market story hydration.
+  // anchorPostById is stored as a plain Record in the cached payload (Maps are
+  // not JSON-serializable), so reconstruct the Map here after the cache read.
   const enrichedAnchorPostById = new Map<string, NarrativePost>(
-    [...baseResult.anchorPostById.entries()].map(([id, post]) => [
+    Object.entries(baseResult.anchorPostById).map(([id, post]) => [
       id,
       {
         ...post,
