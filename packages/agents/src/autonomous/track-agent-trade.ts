@@ -5,7 +5,6 @@
  * Environment properties match apps/web/src/lib/posthog/server.ts for consistent filtering.
  */
 
-import { checkProgress } from '@babylon/api';
 import { PostHog } from 'posthog-node';
 
 let client: PostHog | null = null;
@@ -88,7 +87,4 @@ export function trackAgentTradeExecuted(
   } catch {
     // no-op on error to avoid breaking trade flow
   }
-
-  // Track for achievements (fire-and-forget, uses owner's userId)
-  void checkProgress(properties.owner_id, { type: 'agent_trade_executed' });
 }

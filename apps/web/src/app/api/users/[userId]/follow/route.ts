@@ -88,7 +88,6 @@ import {
   authenticate,
   BusinessLogicError,
   cachedDb,
-  checkProgress,
   checkRateLimitAndDuplicates,
   findUserByIdentifier,
   InternalServerError,
@@ -261,8 +260,6 @@ export const POST = withErrorHandling(
       if (!newFollow) {
         throw new InternalServerError('Failed to create follow record');
       }
-
-      void checkProgress(user.userId, { type: 'follow_created' });
 
       return successResponse(
         {

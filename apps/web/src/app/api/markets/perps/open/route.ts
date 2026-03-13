@@ -1,6 +1,5 @@
 import {
   authenticate,
-  checkProgress,
   checkRateLimitAsync,
   RATE_LIMIT_CONFIGS,
   rateLimitError,
@@ -90,8 +89,6 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
       },
     }
   );
-
-  void checkProgress(user.userId, { type: 'perp_trade', ticker });
 
   return successResponse(
     {

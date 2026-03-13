@@ -48,10 +48,6 @@ export const POINTS = {
   DAILY_LOGIN_MILESTONE_30D: 1500,
   DAILY_LOGIN_MILESTONE_60D: 3000,
   DAILY_LOGIN_MILESTONE_90D: 5000,
-
-  // Achievement & challenge completion bonuses
-  CHALLENGE_DAILY_ALL_BONUS: 40, // Bonus for completing all 3 daily challenges
-  CHALLENGE_WEEKLY_ALL_BONUS: 100, // Bonus for completing both weekly challenges
 } as const;
 
 /**
@@ -101,6 +97,4 @@ export type PointsReason =
   | 'trading_pnl' // Points from trading profit/loss
   | 'daily_login' // Points from daily login streak reward
   | 'onchain_registration' // Points deducted for on-chain ERC-8004 registration
-  | 'email_submit' // Points for providing email address
-  | 'achievement_unlock' // Points from unlocking an achievement
-  | 'challenge_complete'; // Points from completing a challenge (individual or all-bonus)
+  | 'email_submit'; // Points for providing email address

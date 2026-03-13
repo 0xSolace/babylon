@@ -4,7 +4,6 @@
  * Re-exports all constants from the constants module
  */
 
-export * from './achievements';
 export * from './chains';
 export * from './constants';
 export * from './coordinator';

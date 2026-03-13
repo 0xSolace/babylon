@@ -33,7 +33,6 @@
 
 import {
   CACHE_KEYS,
-  checkProgress,
   DEFAULT_TTLS,
   DistributedLockService,
   getCacheOrFetch,
@@ -62,7 +61,6 @@ import {
   type MarketCategory,
   type MarketTimeframe,
   max,
-  positions,
   posts,
   questions,
   sql,
@@ -759,24 +757,6 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
                 // atomically. Avoid duplicate writes here.
                 shouldMarkTimeframedResolved = false;
                 results.marketsResolved++;
-
-                // Track prediction_win for achievements (fire-and-forget)
-                try {
-                  const winners = await db
-                    .select({ userId: positions.userId })
-                    .from(positions)
-                    .where(
-                      and(
-                        eq(positions.marketId, linkedQuestion.id),
-                        eq(positions.outcome, true)
-                      )
-                    );
-                  for (const w of winners) {
-                    void checkProgress(w.userId, { type: 'prediction_win' });
-                  }
-                } catch {
-                  // Non-critical
-                }
               } catch (payoutError) {
                 // Keep the orphan active so the next cron run can retry.
                 shouldMarkTimeframedResolved = false;
@@ -1643,21 +1623,6 @@ async function resolveMarket(
     throw new Error(
       `Payout failed for Q${market.questionNumber}: ${error instanceof Error ? error.message : String(error)}`
     );
-  }
-
-  // Track prediction_win for achievement/challenge progress (fire-and-forget)
-  try {
-    const winners = await db
-      .select({ userId: positions.userId })
-      .from(positions)
-      .where(
-        and(eq(positions.marketId, market.id), eq(positions.outcome, true))
-      );
-    for (const w of winners) {
-      void checkProgress(w.userId, { type: 'prediction_win' });
-    }
-  } catch {
-    // Non-critical — don't block resolution flow
   }
 
   // ==========================================================================

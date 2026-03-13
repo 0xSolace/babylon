@@ -108,7 +108,6 @@ import {
   BusinessLogicError,
   broadcastToChannel,
   cachedDb,
-  checkProgress,
   checkRateLimitAndDuplicates,
   ensureUserForAuth,
   getCanonicalUserId,
@@ -480,8 +479,6 @@ export const POST = withErrorHandling(
       shareCount,
       ...(repostId && { repostId }),
     });
-
-    void checkProgress(canonicalUserId, { type: 'share_created' });
 
     return successResponse(
       {
