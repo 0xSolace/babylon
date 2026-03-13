@@ -35,7 +35,7 @@ const FeedEventSchema = z.object({
   authorId: z.string().max(100).nullable().optional(),
   feedPosition: z.number().int().min(0).max(500).optional(),
   dwellMs: z.number().int().min(0).max(300000).optional(),
-});
+}) satisfies z.ZodType<FeedEventPayload>;
 
 const BodySchema = z.object({
   events: z.array(FeedEventSchema).min(1).max(25),
