@@ -1,165 +1,166 @@
 import { describe, expect, it } from 'bun:test';
 import type { PortfolioBreakdownSnapshot } from '@babylon/engine/client';
-import { BABYLON_POINTS_SYMBOL } from '@babylon/shared';
-import { formatCurrencyDisplay } from '@/lib/format';
+import { BABYLON_POINTS_SYMBOL, formatCurrency } from '@babylon/shared';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { PnLValue, PortfolioWidgetContent } from '../PortfolioWidget';
 
-/**
- * Tests for PortfolioWidget display logic.
- *
- * These tests exercise the real formatCurrencyDisplay formatter and the
- * same conditional rules the component uses, without reimplementing them
- * in local helper functions.
- *
- * Cache store behaviour is tested separately in widgetCacheStore.test.ts.
- */
+const snapshot: PortfolioBreakdownSnapshot = {
+  wallet: 1000,
+  agents: 250,
+  positions: 500,
+  available: 1250,
+  originalAmount: 900,
+  totalAssets: 1750,
+  totalPnL: 850,
+  agentCount: 3,
+  totalPoints: 1750,
+};
 
-// ---------------------------------------------------------------------------
-// PnLValue sign/color logic — mirrors the component's PnLValue subcomponent
-// ---------------------------------------------------------------------------
-
-/**
- * The component determines sign, color, and icon via `value >= 0`.
- * These tests verify the boundary conditions of that check using the
- * same expression.
- */
-function pnlProps(value: number) {
-  const isPositive = value >= 0;
-  return {
-    prefix: isPositive ? '+' : '',
-    formatted: `${isPositive ? '+' : ''}${formatCurrencyDisplay(value)}`,
-    color: isPositive ? 'text-green-500' : 'text-red-500',
-  };
-}
-
-describe('PortfolioWidget', () => {
-  // -----------------------------------------------------------------------
-  // PnLValue rendering
-  // -----------------------------------------------------------------------
-
-  describe('PnLValue sign and color', () => {
-    it('positive value gets + prefix and green color', () => {
-      const p = pnlProps(234.56);
-      expect(p.prefix).toBe('+');
-      expect(p.color).toBe('text-green-500');
-      expect(p.formatted).toContain(BABYLON_POINTS_SYMBOL);
-    });
-
-    it('negative value gets no prefix and red color', () => {
-      const p = pnlProps(-100.5);
-      expect(p.prefix).toBe('');
-      expect(p.color).toBe('text-red-500');
-      expect(p.formatted).toContain(BABYLON_POINTS_SYMBOL);
-    });
-
-    it('zero is treated as positive (green, + prefix)', () => {
-      const p = pnlProps(0);
-      expect(p.prefix).toBe('+');
-      expect(p.color).toBe('text-green-500');
-    });
-
-    it('very large positive value', () => {
-      const p = pnlProps(999999.99);
-      expect(p.prefix).toBe('+');
-      expect(p.color).toBe('text-green-500');
-      expect(p.formatted).toContain('999');
-    });
-
-    it('very small negative value', () => {
-      const p = pnlProps(-0.01);
-      expect(p.prefix).toBe('');
-      expect(p.color).toBe('text-red-500');
-    });
+describe('PnLValue', () => {
+  it('renders positive value with green color and + prefix', () => {
+    const html = renderToStaticMarkup(createElement(PnLValue, { value: 100 }));
+    expect(html).toContain('text-green-500');
+    expect(html).toContain('+');
+    expect(html).toContain(BABYLON_POINTS_SYMBOL);
   });
 
-  // -----------------------------------------------------------------------
-  // Loading state — the component uses `portfolioLoading && !data`
-  // -----------------------------------------------------------------------
-
-  describe('loading state', () => {
-    const loadingState = (portfolioLoading: boolean, data: unknown | null) =>
-      portfolioLoading && !data;
-
-    it('shows loading when fetching and no data available', () => {
-      expect(loadingState(true, null)).toBe(true);
-    });
-
-    it('does not show loading when cached/live data exists even while fetching', () => {
-      expect(loadingState(true, { totalPnL: 0 })).toBe(false);
-    });
-
-    it('does not show loading when not fetching', () => {
-      expect(loadingState(false, null)).toBe(false);
-    });
+  it('renders negative value with red color and no + prefix', () => {
+    const html = renderToStaticMarkup(
+      createElement(PnLValue, { value: -50.25 })
+    );
+    expect(html).toContain('text-red-500');
+    expect(html).not.toMatch(/\+.*50/);
+    expect(html).toContain(BABYLON_POINTS_SYMBOL);
   });
 
-  // -----------------------------------------------------------------------
-  // Data fallback — the component uses `portfolioData ?? cachedData`
-  // -----------------------------------------------------------------------
+  it('renders zero as positive (green)', () => {
+    const html = renderToStaticMarkup(createElement(PnLValue, { value: 0 }));
+    expect(html).toContain('text-green-500');
+    expect(html).toContain('+');
+  });
 
-  describe('data fallback chain', () => {
-    const resolveData = (
-      portfolioData: PortfolioBreakdownSnapshot | null,
-      cachedData: PortfolioBreakdownSnapshot | null
-    ) => portfolioData ?? cachedData;
+  it('renders the formatted currency amount', () => {
+    const html = renderToStaticMarkup(
+      createElement(PnLValue, { value: 1234.56 })
+    );
+    const formatted = formatCurrency(1234.56, {
+      useThousandsSeparator: true,
+    });
+    expect(html).toContain(formatted);
+  });
+});
 
-    const snapshot: PortfolioBreakdownSnapshot = {
-      wallet: 100,
-      agents: 25,
-      positions: 50,
-      available: 125,
-      originalAmount: 90,
-      totalAssets: 175,
-      totalPnL: 85,
-      agentCount: 1,
-      totalPoints: 175,
+describe('PortfolioWidgetContent', () => {
+  it('shows loading skeletons when loading=true', () => {
+    const html = renderToStaticMarkup(
+      createElement(PortfolioWidgetContent, {
+        balance: 0,
+        lifetimePnL: 0,
+        data: null,
+        loading: true,
+      })
+    );
+    expect(html).toContain('animate-pulse');
+    expect(html).toContain('Portfolio');
+    expect(html).not.toContain('Balance');
+  });
+
+  it('renders balance and lifetime P&L when loaded', () => {
+    const html = renderToStaticMarkup(
+      createElement(PortfolioWidgetContent, {
+        balance: 1234.56,
+        lifetimePnL: 234,
+        data: null,
+        loading: false,
+      })
+    );
+    const formatted = formatCurrency(1234.56, {
+      useThousandsSeparator: true,
+    });
+    expect(html).toContain('Balance');
+    expect(html).toContain(formatted);
+    expect(html).toContain('text-green-500'); // positive P&L
+    expect(html).toContain('View Full Portfolio');
+  });
+
+  it('renders agent section when agentCount > 0', () => {
+    const html = renderToStaticMarkup(
+      createElement(PortfolioWidgetContent, {
+        balance: 1000,
+        lifetimePnL: 100,
+        data: snapshot,
+        loading: false,
+      })
+    );
+    expect(html).toContain('Agents (3)');
+    const agentFormatted = formatCurrency(250, {
+      useThousandsSeparator: true,
+    });
+    expect(html).toContain(agentFormatted);
+  });
+
+  it('hides agent section when agentCount is 0', () => {
+    const noAgents: PortfolioBreakdownSnapshot = {
+      ...snapshot,
+      agentCount: 0,
+      agents: 0,
     };
-
-    it('prefers live data over cache', () => {
-      const cached: PortfolioBreakdownSnapshot = { ...snapshot, wallet: 0 };
-      expect(resolveData(snapshot, cached)).toBe(snapshot);
-    });
-
-    it('falls back to cached data when live data is null', () => {
-      expect(resolveData(null, snapshot)).toBe(snapshot);
-    });
-
-    it('returns null when neither source has data', () => {
-      expect(resolveData(null, null)).toBe(null);
-    });
+    const html = renderToStaticMarkup(
+      createElement(PortfolioWidgetContent, {
+        balance: 1000,
+        lifetimePnL: 100,
+        data: noAgents,
+        loading: false,
+      })
+    );
+    expect(html).not.toContain('Agents');
   });
 
-  // -----------------------------------------------------------------------
-  // Conditional section visibility
-  // -----------------------------------------------------------------------
-
-  describe('agent section visibility', () => {
-    it('renders when agentCount > 0', () => {
-      // Component: {data && data.agentCount > 0 && (...)}
-      const data = { agentCount: 3 };
-      expect(data.agentCount > 0).toBe(true);
+  it('renders positions and total assets', () => {
+    const html = renderToStaticMarkup(
+      createElement(PortfolioWidgetContent, {
+        balance: 1000,
+        lifetimePnL: 100,
+        data: snapshot,
+        loading: false,
+      })
+    );
+    expect(html).toContain('Positions');
+    const posFormatted = formatCurrency(500, {
+      useThousandsSeparator: true,
     });
-
-    it('hidden when agentCount is 0', () => {
-      const data = { agentCount: 0 };
-      expect(data.agentCount > 0).toBe(false);
+    const totalFormatted = formatCurrency(1750, {
+      useThousandsSeparator: true,
     });
-
-    it('renders for single agent', () => {
-      const data = { agentCount: 1 };
-      expect(data.agentCount > 0).toBe(true);
-    });
+    expect(html).toContain(posFormatted);
+    expect(html).toContain(`Total ${totalFormatted}`);
   });
 
-  describe('authentication gate', () => {
-    it('widget returns null when not authenticated', () => {
-      // Component: if (!authenticated) return null;
-      const authenticated = false;
-      expect(!authenticated).toBe(true);
-    });
+  it('does not render positions section when data is null', () => {
+    const html = renderToStaticMarkup(
+      createElement(PortfolioWidgetContent, {
+        balance: 500,
+        lifetimePnL: -10,
+        data: null,
+        loading: false,
+      })
+    );
+    expect(html).not.toContain('Positions');
+    expect(html).toContain('Balance');
+    expect(html).toContain('text-red-500'); // negative P&L
+  });
 
-    it('widget renders when authenticated', () => {
-      const authenticated = true;
-      expect(!authenticated).toBe(false);
-    });
+  it('renders View Full Portfolio button with type=button', () => {
+    const html = renderToStaticMarkup(
+      createElement(PortfolioWidgetContent, {
+        balance: 100,
+        lifetimePnL: 0,
+        data: null,
+        loading: false,
+      })
+    );
+    expect(html).toContain('type="button"');
+    expect(html).toContain('View Full Portfolio');
   });
 });
