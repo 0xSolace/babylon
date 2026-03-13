@@ -320,7 +320,16 @@ export async function dispatchAgentChat(
     if (!agentWithConfig) {
       const ownerAgents = await agentService.listUserAgents(ownerId);
       const needle = agentId.toLowerCase().trim();
-      const needleNormalized = needle.replace(/[\s\-_.]+/g, '');
+      const normalizeAgentName = (value: string | null | undefined): string =>
+        value?.toLowerCase().replace(/[\s\-_.]+/g, '') ?? '';
+      const needleNormalized = normalizeAgentName(needle);
+      const isGenericSingleAgentReference = new Set([
+        'agent',
+        'agents',
+        'myagent',
+        'myagents',
+        'theagent',
+      ]).has(needleNormalized);
 
       // 1. Exact match on username or displayName
       let match = ownerAgents.find(
@@ -332,15 +341,16 @@ export async function dispatchAgentChat(
       // 2. Normalized match (strip spaces/punctuation for "larry david" vs "larrydavid")
       if (!match) {
         match = ownerAgents.find((a) => {
-          const uNorm = a.username?.toLowerCase().replace(/[\s\-_.]+/g, '');
-          const dNorm = a.displayName?.toLowerCase().replace(/[\s\-_.]+/g, '');
+          const uNorm = normalizeAgentName(a.username);
+          const dNorm = normalizeAgentName(a.displayName);
           return uNorm === needleNormalized || dNorm === needleNormalized;
         });
       }
 
-      // 3. Partial match (needle contained in name or name contained in needle)
+      // 3. Partial match (needle contained in name or name contained in needle).
+      // Only accept unambiguous matches to avoid dispatching to the wrong agent.
       if (!match) {
-        match = ownerAgents.find((a) => {
+        const partialMatches = ownerAgents.filter((a) => {
           const uLower = a.username?.toLowerCase() ?? '';
           const dLower = a.displayName?.toLowerCase() ?? '';
           return (
@@ -348,10 +358,24 @@ export async function dispatchAgentChat(
             (dLower && (dLower.includes(needle) || needle.includes(dLower)))
           );
         });
+        if (partialMatches.length === 1) {
+          match = partialMatches[0];
+        } else if (partialMatches.length > 1) {
+          logger.warn(
+            '[AgentChatService] Agent resolution failed — ambiguous partial match',
+            {
+              input: agentId,
+              partialMatches: partialMatches.map(
+                (a) => a.displayName ?? a.username ?? a.id
+              ),
+            },
+            'AgentChatService'
+          );
+        }
       }
 
-      // 4. Single-agent fallback: if the user only has one agent, it's unambiguous
-      if (!match && ownerAgents.length === 1) {
+      // 4. Single-agent fallback only for generic references like "my agent".
+      if (!match && ownerAgents.length === 1 && isGenericSingleAgentReference) {
         match = ownerAgents[0];
         logger.info(
           '[AgentChatService] Single-agent fallback used',
