@@ -23,7 +23,7 @@
  * - text falls back to agentId when agentUsername is not set
  * - text uses agentUsername when available
  * - values contains dispatchedCommand, agentResponse, actionsExecuted
- * - NEVER calls the _callback parameter
+ * - Calls _callback with the ActionResult on all paths (success, failure, missing fields)
  */
 
 import { beforeEach, describe, expect, it, mock } from 'bun:test';
@@ -463,7 +463,7 @@ describe('DISPATCH_TO_AGENT handler()', () => {
   // ── _callback contract ──────────────────────────────────────────────────
 
   describe('_callback contract (ElizaOS protocol)', () => {
-    it('NEVER calls the _callback parameter on success', async () => {
+    it('calls _callback with success result on successful dispatch', async () => {
       mockDispatchAgentChat.mockResolvedValue({
         success: true,
         agentId: AGENT_ID,
@@ -484,10 +484,14 @@ describe('DISPATCH_TO_AGENT handler()', () => {
         callbackFn
       );
 
-      expect(callbackFn).not.toHaveBeenCalled();
+      expect(callbackFn).toHaveBeenCalledTimes(1);
+      const callArg = callbackFn.mock.calls[0]![0] as unknown as {
+        content: { success: boolean };
+      };
+      expect(callArg.content.success).toBe(true);
     });
 
-    it('NEVER calls _callback even on missing fields (error path)', async () => {
+    it('calls _callback with failure result on missing fields (error path)', async () => {
       const callbackFn = mock(async () => []);
       const state = buildState({ actionParams: undefined });
 
@@ -499,10 +503,15 @@ describe('DISPATCH_TO_AGENT handler()', () => {
         callbackFn
       );
 
-      expect(callbackFn).not.toHaveBeenCalled();
+      expect(callbackFn).toHaveBeenCalledTimes(1);
+      const callArg = callbackFn.mock.calls[0]![0] as unknown as {
+        content: { success: boolean; text: string };
+      };
+      expect(callArg.content.success).toBe(false);
+      expect(callArg.content.text).toContain('Missing');
     });
 
-    it('NEVER calls _callback when dispatch fails', async () => {
+    it('calls _callback with failure result when dispatch fails', async () => {
       mockDispatchAgentChat.mockResolvedValue({
         success: false,
         error: 'Failed',
@@ -521,7 +530,12 @@ describe('DISPATCH_TO_AGENT handler()', () => {
         callbackFn
       );
 
-      expect(callbackFn).not.toHaveBeenCalled();
+      expect(callbackFn).toHaveBeenCalledTimes(1);
+      const callArg = callbackFn.mock.calls[0]![0] as unknown as {
+        content: { success: boolean; text: string };
+      };
+      expect(callArg.content.success).toBe(false);
+      expect(callArg.content.text).toContain('Failed');
     });
   });
 
