@@ -9,6 +9,10 @@
  * Verbs that indicate the user wants an agent to ACT, not just fetch info.
  * If any of these appear in the message, we must NOT fast-path — the LLM
  * decision loop is needed to handle dispatch logic.
+ *
+ * Full list: buy, sell, trade, open, close, post, comment, tell, ask,
+ * dispatch, send, create, make, write, reply, share, execute, place,
+ * submit, transfer, have, get, command, instruct, order
  */
 const AGENT_ACTION_VERBS =
   /\b(buy|sell|trade|open|close|post|comment|tell|ask|dispatch|send|create|make|write|reply|share|execute|place|submit|transfer|have|get|command|instruct|order)\b/i;
