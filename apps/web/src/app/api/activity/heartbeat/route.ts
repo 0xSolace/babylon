@@ -13,7 +13,7 @@
  * @module /api/activity/heartbeat
  */
 
-import { checkProgress, withErrorHandling } from '@babylon/api';
+import { checkProgress, optionalAuth, withErrorHandling } from '@babylon/api';
 import {
   db,
   generateSnowflakeId,
@@ -22,7 +22,6 @@ import {
 } from '@babylon/db';
 import { logger, PATH_TO_ACTIVITY_TYPE } from '@babylon/shared';
 import { and, eq, inArray, isNull, lt, sql } from 'drizzle-orm';
-import { cookies } from 'next/headers';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 
@@ -54,19 +53,6 @@ function cleanupRateLimitCache(): void {
   }
 }
 
-/**
- * Decode a base64url-encoded string (as used in JWTs).
- * Handles the URL-safe alphabet and missing padding.
- */
-function decodeBase64Url(input: string): string {
-  // Convert base64url to standard base64
-  let base64 = input.replace(/-/g, '+').replace(/_/g, '/');
-  // Add padding if needed
-  const paddingNeeded = (4 - (base64.length % 4)) % 4;
-  base64 += '='.repeat(paddingNeeded);
-  return Buffer.from(base64, 'base64').toString('utf-8');
-}
-
 interface HeartbeatRequest {
   sessionId: string;
   pageViews?: number;
@@ -93,44 +79,16 @@ async function hashIp(ip: string | null): Promise<string | null> {
 }
 
 export const POST = withErrorHandling(async (request: NextRequest) => {
-  // Get user from Privy session
-  // We use cookies directly to avoid full auth overhead for this lightweight endpoint
-  const cookieStore = await cookies();
-  const privyToken = cookieStore.get('privy-token');
+  // Verify auth via Privy JWT — returns null for unauthenticated/invalid tokens
+  const authUser = await optionalAuth(request);
 
-  if (!privyToken?.value) {
+  if (!authUser?.dbUserId) {
     // Silently accept unauthenticated requests to avoid console errors
     // for logged-out users who still have the heartbeat running
     return NextResponse.json({ success: true, reason: 'unauthenticated' });
   }
 
-  // Decode the JWT to get the user ID (we don't verify signature here for speed)
-  // The privy-token is a JWT with the user ID in the sub claim
-  // Note: This is intentionally unverified for performance - the endpoint is non-critical
-  // and a compromised session ID only affects analytics quality, not user data
-  let userId: string | null = null;
-
-  const tokenParts = privyToken.value.split('.');
-  if (tokenParts.length === 3) {
-    const payload = tokenParts[1];
-    if (payload) {
-      // Use base64url decoding (JWTs use URL-safe base64 alphabet)
-      try {
-        const decoded = decodeBase64Url(payload);
-        const parsed = JSON.parse(decoded) as { sub?: string };
-        userId = parsed.sub ?? null;
-      } catch {
-        userId = null;
-      }
-    }
-  }
-
-  if (!userId) {
-    return NextResponse.json({ success: true, reason: 'no_user_id' });
-  }
-
-  // After validation, userId is guaranteed to be string
-  const validUserId: string = userId;
+  const validUserId: string = authUser.dbUserId;
 
   // Parse request body
   const body = (await request.json()) as HeartbeatRequest;

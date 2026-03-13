@@ -1,8 +1,7 @@
 'use client';
 
 import { Award } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
-import { useAuth } from '@/hooks/useAuth';
+import { useEffect, useState } from 'react';
 
 interface Achievement {
   id: string;
@@ -23,37 +22,27 @@ const TIER_COLORS: Record<string, string> = {
  * Compact display of a user's recent achievements for profile pages.
  * Shows up to 5 most recently unlocked achievements as small badges.
  */
-export function RecentAchievements({ userId: _userId }: { userId: string }) {
-  const { authenticated, getAccessToken } = useAuth();
+export function RecentAchievements({ userId }: { userId: string }) {
   const [achievements, setAchievements] = useState<Achievement[]>([]);
 
-  const fetchAchievements = useCallback(async () => {
-    if (!authenticated) return;
-    const token = await getAccessToken();
-    if (!token) return;
-    const res = await fetch('/api/achievements', {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (res.ok) {
-      const json = await res.json();
-      const all: Achievement[] =
-        json.data?.achievements ?? json.achievements ?? [];
-      // Only show unlocked, sorted by most recent
-      const unlocked = all
-        .filter((a) => a.unlockedAt)
-        .sort(
-          (a, b) =>
-            new Date(b.unlockedAt!).getTime() -
-            new Date(a.unlockedAt!).getTime()
-        )
-        .slice(0, 5);
-      setAchievements(unlocked);
-    }
-  }, [authenticated, getAccessToken]);
-
   useEffect(() => {
+    if (!userId) return;
+    let cancelled = false;
+
+    async function fetchAchievements() {
+      const res = await fetch(`/api/users/${userId}/achievements`);
+      if (res.ok && !cancelled) {
+        const json = await res.json();
+        const all: Achievement[] = json.achievements ?? [];
+        setAchievements(all);
+      }
+    }
+
     fetchAchievements();
-  }, [fetchAchievements]);
+    return () => {
+      cancelled = true;
+    };
+  }, [userId]);
 
   if (achievements.length === 0) return null;
 
