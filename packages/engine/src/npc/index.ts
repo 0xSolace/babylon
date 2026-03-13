@@ -18,10 +18,10 @@ export {
 
 export {
   buildFallbackMetricsByPool,
-  getEffectiveLeverage,
-  getPositionExposure,
   type FallbackPerpRow,
   type FallbackPositionRow,
+  getEffectiveLeverage,
+  getPositionExposure,
   type PoolMetrics,
 } from './portfolio-metrics';
 
