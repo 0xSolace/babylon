@@ -117,7 +117,10 @@ describe('POST /api/feed/events', () => {
   });
 
   it('returns 429 when the user exceeds the feed event batch limit', async () => {
-    checkRateLimitAsyncMock.mockResolvedValueOnce({ allowed: false, retryAfter: 30 });
+    checkRateLimitAsyncMock.mockResolvedValueOnce({
+      allowed: false,
+      retryAfter: 30,
+    });
 
     const request = {
       json: () =>
