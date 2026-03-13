@@ -74,6 +74,17 @@ export function useFeedEventTracker() {
       if (!response.ok) {
         if (response.status === 429 || response.status >= 500) {
           requeueBatch(batch, `http_${response.status}`);
+        } else if (response.status === 401) {
+          // Token expired mid-session — re-queue at attempt 0 to try with a fresh token.
+          // getAccessToken() will return a refreshed token on the next flush cycle.
+          logger.warn(
+            'Feed events batch rejected with 401 — re-queuing for token refresh',
+            { batchSize: batch.length },
+            'useFeedEventTracker'
+          );
+          queueRef.current.unshift(
+            ...batch.map((item) => ({ ...item, attempts: 0 }))
+          );
         } else {
           logger.warn(
             'Dropped non-retryable feed events batch',
