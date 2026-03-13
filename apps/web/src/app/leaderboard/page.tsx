@@ -85,7 +85,13 @@ export default function LeaderboardPage() {
 
     void loadLeaderboard();
     return () => controller.abort();
-  }, [currentPage, selectedTab, authenticatedUserId, authenticated, getAccessToken]);
+  }, [
+    currentPage,
+    selectedTab,
+    authenticatedUserId,
+    authenticated,
+    getAccessToken,
+  ]);
 
   useEffect(() => {
     if (scrollToUserRef.current && !loading) {

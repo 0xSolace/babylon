@@ -1,7 +1,11 @@
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
 import type { NextRequest } from 'next/server';
 
-const mockAuthenticate = mock(async () => ({ userId: 'viewer-1' }));
+const mockOptionalAuth = mock(async () => ({
+  userId: 'viewer-1',
+  dbUserId: 'viewer-1',
+}));
+const mockFindUserByIdentifier = mock(async () => ({ id: 'viewer-1' }));
 const mockGetCache = mock(async () => null);
 const mockSetCache = mock(async () => undefined);
 const mockGetWalletLeaderboard = mock(async () => ({
@@ -49,8 +53,19 @@ const mockDbWhere = mock(async () => [{ followingId: 'user-2' }]);
 const mockDbFrom = mock(() => ({ where: mockDbWhere }));
 const mockDbSelect = mock(() => ({ from: mockDbFrom }));
 
+class MockApiError extends Error {
+  status: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+  }
+}
+
 mock.module('@babylon/api', () => ({
-  authenticate: mockAuthenticate,
+  ApiError: MockApiError,
+  findUserByIdentifier: mockFindUserByIdentifier,
+  optionalAuth: mockOptionalAuth,
   getCache: mockGetCache,
   PointsService: {
     getWalletLeaderboard: mockGetWalletLeaderboard,
@@ -109,6 +124,7 @@ mock.module('@babylon/shared', () => ({
   },
   logger: {
     info: mock(() => undefined),
+    warn: mock(() => undefined),
   },
 }));
 
@@ -130,8 +146,13 @@ function makeRequest(
 
 describe('Leaderboard route follow state enrichment', () => {
   beforeEach(() => {
-    mockAuthenticate.mockClear();
-    mockAuthenticate.mockResolvedValue({ userId: 'viewer-1' });
+    mockOptionalAuth.mockClear();
+    mockOptionalAuth.mockResolvedValue({
+      userId: 'viewer-1',
+      dbUserId: 'viewer-1',
+    });
+    mockFindUserByIdentifier.mockClear();
+    mockFindUserByIdentifier.mockResolvedValue({ id: 'viewer-1' });
     mockGetCache.mockClear();
     mockSetCache.mockClear();
     mockGetWalletLeaderboard.mockClear();
@@ -168,6 +189,8 @@ describe('Leaderboard route follow state enrichment', () => {
   });
 
   test('does not expose follow state for a different requested user id', async () => {
+    mockFindUserByIdentifier.mockResolvedValue({ id: 'someone-else' });
+
     const response = await GET(
       makeRequest(
         {
