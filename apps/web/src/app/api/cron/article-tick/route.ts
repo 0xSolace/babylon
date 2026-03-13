@@ -36,6 +36,7 @@ import {
   ArticleGenerator,
   articleRateLimiter,
   BabylonLLMClient,
+  gameMasterService,
   getActiveEventsForPosting,
   hasEventBeenCovered,
   markEventAsCovered,
@@ -396,6 +397,21 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
       );
     }
 
+    const articleBriefs = await gameMasterService.listQueuedArticleBriefs();
+    const hallidayArticleContext = articleBriefs
+      .map((directive) => {
+        const metadata = (directive.metadata ?? {}) as Record<string, unknown>;
+        const headlineAngle =
+          typeof metadata.headlineAngle === 'string'
+            ? metadata.headlineAngle
+            : 'halliday brief';
+        return `Halliday brief: ${headlineAngle}. ${directive.promptOverlay}`;
+      })
+      .join('\n');
+    const combinedWorldFactsContext = hallidayArticleContext
+      ? `${worldFactsContext}\n\n=== GAME MASTER HALLIDAY ===\n${hallidayArticleContext}`
+      : worldFactsContext;
+
     // Create LLM client for article generation
     const llmClient = BabylonLLMClient.forGameTick();
 
@@ -425,7 +441,7 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
             event,
             org,
             actorsList,
-            worldFactsContext,
+            combinedWorldFactsContext,
             gameState,
             llmClient
           );
@@ -462,9 +478,10 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
       const result = await generateBaselineArticle(
         org,
         actorsList,
-        worldFactsContext,
+        combinedWorldFactsContext,
         gameState,
-        llmClient
+        llmClient,
+        articleBriefs[0] ?? null
       );
 
       if (result.status === 'success') {
@@ -601,17 +618,27 @@ async function generateBaselineArticle(
   actorsList: StaticActor[],
   worldFactsContext: string,
   gameState: GameState,
-  llmClient: BabylonLLMClient
+  llmClient: BabylonLLMClient,
+  articleBrief:
+    | {
+        promptOverlay: string;
+        metadata: unknown;
+      }
+    | null
 ): Promise<ArticleGenerationResult> {
+  const briefMetadata = (articleBrief?.metadata ?? {}) as Record<string, unknown>;
   // Pick a random actor to focus on
   const actorIndex = Math.floor(
     secureRandom() * Math.min(10, actorsList.length)
   );
   const actor = actorsList[actorIndex];
 
-  const topic = actor
-    ? `${actor.name} and recent developments`
-    : 'AI industry trends and market movements';
+  const topic =
+    typeof briefMetadata.headlineAngle === 'string'
+      ? briefMetadata.headlineAngle
+      : actor
+        ? `${actor.name} and recent developments`
+        : 'AI industry trends and market movements';
 
   // P0: Pre-check rate limit BEFORE expensive LLM calls to avoid wasting resources
   const { allowed } = await articleRateLimiter.canGenerateArticle();

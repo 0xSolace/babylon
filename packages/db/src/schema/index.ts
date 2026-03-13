@@ -10,6 +10,7 @@ export * from './agents';
 export * from './eliza';
 // Enums
 export * from './enums';
+export * from './game-master';
 export * from './markets';
 export * from './messaging';
 export * from './misc';

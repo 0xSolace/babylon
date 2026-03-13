@@ -68,6 +68,10 @@
       "schedule": "*/5 * * * *"
     },
     {
+      "path": "/api/cron/game-master-tick",
+      "schedule": "*/5 * * * *"
+    },
+    {
       "path": "/api/cron/article-tick",
       "schedule": "*/30 * * * *"
     },

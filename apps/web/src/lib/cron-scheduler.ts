@@ -47,6 +47,11 @@ const ADDITIONAL_CRONS: CronSchedule[] = [
     description: 'Organization tick',
   },
   {
+    path: '/api/cron/game-master-tick',
+    schedule: '*/5 * * * *', // Every 5 minutes
+    description: 'Game Master Halliday pulse',
+  },
+  {
     path: '/api/cron/article-tick',
     schedule: '*/30 * * * *', // Every 30 minutes
     description: 'Article tick',

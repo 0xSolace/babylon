@@ -39,6 +39,8 @@ export const ADMIN_PERMISSIONS = [
   'manage_escrow',
   'view_alpha_groups',
   'manage_alpha_groups',
+  'view_game_master',
+  'manage_game_master',
 ] as const;
 export type AdminPermission = (typeof ADMIN_PERMISSIONS)[number];
 
@@ -62,6 +64,8 @@ export const ROLE_PERMISSIONS: Record<AdminRoleType, AdminPermission[]> = {
     'resolve_reports',
     'view_alpha_groups',
     'manage_alpha_groups',
+    'view_game_master',
+    'manage_game_master',
     // NOTE: manage_game, manage_escrow, manage_admins are SUPER_ADMIN only
   ],
   VIEWER: [
@@ -70,6 +74,7 @@ export const ROLE_PERMISSIONS: Record<AdminRoleType, AdminPermission[]> = {
     'view_trading',
     'view_system',
     'view_alpha_groups',
+    'view_game_master',
   ],
 };
 
