@@ -5,11 +5,28 @@ const insertMock = mock(() => ({
   values: mock(() => Promise.resolve()),
 }));
 const generateSnowflakeIdMock = mock(() => Promise.resolve('evt-1'));
-const applyRateLimitMock = mock(() => ({ allowed: true, retryAfter: 0 }));
+const checkRateLimitAsyncMock = mock(() =>
+  Promise.resolve({ allowed: true, retryAfter: 0 })
+);
 
 mock.module('@babylon/api', () => ({
   addPublicReadHeaders: () => {},
-  applyRateLimit: applyRateLimitMock,
+  checkRateLimitAsync: checkRateLimitAsyncMock,
+  rateLimitError: (retryAfter: number) =>
+    new Response(
+      JSON.stringify({
+        success: false,
+        error: 'Rate limit exceeded',
+        retryAfter,
+      }),
+      {
+        status: 429,
+        headers: {
+          'Content-Type': 'application/json',
+          'Retry-After': String(retryAfter),
+        },
+      }
+    ),
   authenticate: () =>
     Promise.resolve({
       userId: 'privy-user-1',
@@ -56,7 +73,7 @@ const { POST } = await import('./route');
 beforeEach(() => {
   insertMock.mockClear();
   generateSnowflakeIdMock.mockClear();
-  applyRateLimitMock.mockClear();
+  checkRateLimitAsyncMock.mockClear();
 });
 
 describe('POST /api/feed/events', () => {
@@ -100,7 +117,7 @@ describe('POST /api/feed/events', () => {
   });
 
   it('returns 429 when the user exceeds the feed event batch limit', async () => {
-    applyRateLimitMock.mockReturnValueOnce({ allowed: false, retryAfter: 30 });
+    checkRateLimitAsyncMock.mockResolvedValueOnce({ allowed: false, retryAfter: 30 });
 
     const request = {
       json: () =>

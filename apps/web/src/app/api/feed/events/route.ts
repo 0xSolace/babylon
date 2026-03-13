@@ -1,7 +1,8 @@
 import {
-  applyRateLimit,
   authenticate,
+  checkRateLimitAsync,
   ensureUserForAuth,
+  rateLimitError,
   RATE_LIMIT_CONFIGS,
   successResponse,
   withErrorHandling,
@@ -47,25 +48,12 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
       ? `${authUser.walletAddress.slice(0, 6)}...${authUser.walletAddress.slice(-4)}`
       : 'Anonymous',
   });
-  const rateLimit = applyRateLimit(
+  const rateLimit = await checkRateLimitAsync(
     user.id,
     RATE_LIMIT_CONFIGS.FEED_EVENT_BATCH
   );
   if (!rateLimit.allowed) {
-    return new Response(
-      JSON.stringify({
-        success: false,
-        error: 'Rate limit exceeded',
-        retryAfter: rateLimit.retryAfter,
-      }),
-      {
-        status: 429,
-        headers: {
-          'Content-Type': 'application/json',
-          'Retry-After': String(rateLimit.retryAfter),
-        },
-      }
-    );
+    return rateLimitError(rateLimit.retryAfter);
   }
   const body = BodySchema.parse(await request.json());
 
