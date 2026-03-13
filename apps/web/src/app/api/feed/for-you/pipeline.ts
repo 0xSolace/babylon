@@ -35,6 +35,7 @@ import type {
   NarrativePost,
   NarrativeStory,
 } from '@babylon/shared';
+import { logger } from '@babylon/shared';
 import {
   calculateArcStateMultiplier,
   calculateResolutionBoost,
@@ -427,6 +428,13 @@ async function loadBaseCandidates(): Promise<BaseForYouResult> {
   const reactionMap = new Map<string, number>();
   const commentMap = new Map<string, number>();
   const shareMap = new Map<string, number>();
+  if (!Array.isArray(engagementRows)) {
+    logger.warn(
+      'engagementRows DB result was not an array — defaulting to empty, counts will be zeroed',
+      { resultType: typeof engagementRows },
+      'ForYouPipeline'
+    );
+  }
   for (const row of Array.isArray(engagementRows)
     ? (engagementRows as Record<string, unknown>[])
     : []) {
@@ -1000,69 +1008,87 @@ export async function buildForYouFeed(userId?: string | null) {
     Array<{ questionId: number | null }>,
     EventAggregates,
   ] = userId
-    ? await getCacheOrFetch(
-        `feed:for-you:enrichment:${userId}`,
-        () =>
-          Promise.all([
-            db
-              .select({ id: follows.followingId })
-              .from(follows)
-              .where(eq(follows.followerId, userId)),
-            db
-              .select({ id: userActorFollows.actorId })
-              .from(userActorFollows)
-              .where(eq(userActorFollows.userId, userId)),
-            baseResult.postIds.length > 0
-              ? db
-                  .select({ postId: reactions.postId })
-                  .from(reactions)
-                  .where(
-                    and(
-                      inArray(reactions.postId, baseResult.postIds),
-                      eq(reactions.userId, userId),
-                      eq(reactions.type, 'like')
-                    )
-                  )
-              : Promise.resolve([]),
-            baseResult.postIds.length > 0
-              ? db
-                  .select({ postId: shares.postId })
-                  .from(shares)
-                  .where(
-                    and(
-                      inArray(shares.postId, baseResult.postIds),
-                      eq(shares.userId, userId)
-                    )
-                  )
-              : Promise.resolve([]),
-            (() => {
-              const questionNumbers = baseResult.stories
-                .map((story) => story.questionNumber)
-                .filter(
-                  (questionNumber): questionNumber is number =>
-                    questionNumber !== null
-                );
+    ? await (async () => {
+        try {
+          return await getCacheOrFetch(
+            `feed:for-you:enrichment:${userId}`,
+            () =>
+              Promise.all([
+                db
+                  .select({ id: follows.followingId })
+                  .from(follows)
+                  .where(eq(follows.followerId, userId)),
+                db
+                  .select({ id: userActorFollows.actorId })
+                  .from(userActorFollows)
+                  .where(eq(userActorFollows.userId, userId)),
+                baseResult.postIds.length > 0
+                  ? db
+                      .select({ postId: reactions.postId })
+                      .from(reactions)
+                      .where(
+                        and(
+                          inArray(reactions.postId, baseResult.postIds),
+                          eq(reactions.userId, userId),
+                          eq(reactions.type, 'like')
+                        )
+                      )
+                  : Promise.resolve([]),
+                baseResult.postIds.length > 0
+                  ? db
+                      .select({ postId: shares.postId })
+                      .from(shares)
+                      .where(
+                        and(
+                          inArray(shares.postId, baseResult.postIds),
+                          eq(shares.userId, userId)
+                        )
+                      )
+                  : Promise.resolve([]),
+                (() => {
+                  const questionNumbers = baseResult.stories
+                    .map((story) => story.questionNumber)
+                    .filter(
+                      (questionNumber): questionNumber is number =>
+                        questionNumber !== null
+                    );
 
-              if (questionNumbers.length === 0) {
-                return Promise.resolve([]);
-              }
+                  if (questionNumbers.length === 0) {
+                    return Promise.resolve([]);
+                  }
 
-              return db
-                .select({ questionId: positions.questionId })
-                .from(positions)
-                .where(
-                  and(
-                    eq(positions.userId, userId),
-                    eq(positions.status, 'active'),
-                    isNotNull(positions.questionId),
-                    inArray(positions.questionId, questionNumbers)
-                  )
-                );
-            })(),
-            loadFeedEventAggregates(userId),
-          ]),
-        { namespace: 'feed', ttl: USER_ENRICHMENT_TTL_S }
-      )
+                  return db
+                    .select({ questionId: positions.questionId })
+                    .from(positions)
+                    .where(
+                      and(
+                        eq(positions.userId, userId),
+                        eq(positions.status, 'active'),
+                        isNotNull(positions.questionId),
+                        inArray(positions.questionId, questionNumbers)
+                      )
+                    );
+                })(),
+                loadFeedEventAggregates(userId),
+              ]),
+            { namespace: 'feed', ttl: USER_ENRICHMENT_TTL_S }
+          );
+        } catch (error) {
+          logger.error(
+            'For You enrichment fetch failed — serving unranked feed',
+            { userId, error },
+            'ForYouPipeline'
+          );
+          return [[], [], [], [], [], aggregateFeedEvents([])] as [
+            FollowRow[],
+            FollowRow[],
+            Array<{ postId: string | null }>,
+            Array<{ postId: string }>,
+            Array<{ questionId: number | null }>,
+            EventAggregates,
+          ];
+        }
+      })()
     : [[], [], [], [], [], aggregateFeedEvents([])];
 
   const followedAuthorIds = new Set<string>([
