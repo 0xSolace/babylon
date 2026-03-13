@@ -35,14 +35,12 @@
  */
 
 import { createGroq } from '@ai-sdk/groq';
-import {
-  COORDINATOR_CONTEXT_TEXT,
-  formatActionsWithParams,
-  userCorePlugin,
-} from '@babylon/agents';
+import { buildCoordinatorDecisionTemplate } from '@babylon/agents/plugins/plugin-user-core/src/coordinator-decision-template';
+import { userCorePlugin } from '@babylon/agents/plugins/plugin-user-core/src';
+import { formatActionsWithParams } from '@babylon/agents/plugins/plugin-user-core/src/providers/actions';
+import { COORDINATOR_CONTEXT_TEXT } from '@babylon/agents/plugins/plugin-user-core/src/providers/coordinator-context';
 import { parseKeyValueXml } from '@elizaos/core';
 import { generateText } from 'ai';
-import { buildCoordinatorDecisionTemplate } from '../apps/web/src/app/api/agents/team-chat/coordinator/route';
 
 // =============================================================================
 // Configuration
@@ -229,11 +227,12 @@ function renderPrompt(message: string, config: Config): string {
   // Render Handlebars-style template variables
   let rendered = template;
 
-  // Handle {{#if variable}}...{{/if}} blocks
+  // Handle {{#if variable}}...{{else}}...{{/if}} blocks
   rendered = rendered.replace(
     /\{\{#if\s+(\w+)\}\}([\s\S]*?)\{\{\/if\}\}/g,
     (_match, varName: string, content: string) => {
-      return values[varName] ? content : '';
+      const [truthyContent, falsyContent = ''] = content.split('{{else}}');
+      return values[varName] ? truthyContent : falsyContent;
     }
   );
 
@@ -924,8 +923,8 @@ async function main(): Promise<void> {
 
 main()
   .then(() => {
-    // Force exit — @babylon/agents imports trigger Redis/DB connections
-    // that keep the event loop alive. Safe to force-exit since we're a CLI tool.
+    // Force exit in case transitive imports keep handles open.
+    // Safe to force-exit since this is a standalone CLI tool.
     process.exit(0);
   })
   .catch((err) => {

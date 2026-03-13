@@ -22,13 +22,11 @@ export * from './plugin-trajectory-logger/src';
 // Export only the plugin and unique exports to avoid TS2308 ambiguity errors
 export {
   // Coordinator-specific providers (prefixed to avoid conflicts)
-  COORDINATOR_CONTEXT_TEXT,
   checkUserPnlAction,
   coordinatorActionStateProvider,
   coordinatorActionsProvider,
   coordinatorContextProvider,
   coordinatorRecentMessagesProvider,
   coordinatorTeamMembersProvider,
-  formatActionsWithParams,
   userCorePlugin,
 } from './plugin-user-core/src';

@@ -47,12 +47,6 @@ export * from './plugins/plugin-autonomy/src';
 export * from './plugins/plugin-experience/src';
 // Plugin sub-exports for trajectory logging, autonomy, experience
 export * from './plugins/plugin-trajectory-logger/src';
-// User-core: named exports to avoid TS2308 conflicts with plugin-agent-core
-export {
-  COORDINATOR_CONTEXT_TEXT,
-  formatActionsWithParams,
-  userCorePlugin,
-} from './plugins/plugin-user-core/src';
 // Runtime
 export * from './runtime/AgentRuntimeManager';
 // Services
