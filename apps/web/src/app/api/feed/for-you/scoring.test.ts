@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import type { NarrativeStory } from '@babylon/shared';
+import type { NarrativePost, NarrativeStory } from '@babylon/shared';
 import {
   calculateConversationDepthScore,
   calculateForYouScore,
@@ -46,6 +46,74 @@ function makeStory(
     ...overrides,
   };
 }
+
+function makeAnchorPost(id: string, overrides: Partial<NarrativePost> = {}): NarrativePost {
+  return {
+    id,
+    content: 'NEW MARKET: Will BTC reach $100k?',
+    fullContent: null,
+    articleTitle: null,
+    category: null,
+    imageUrl: null,
+    type: 'post',
+    timestamp: new Date().toISOString(),
+    authorId: 'npc-org-1',
+    authorName: 'AIxios',
+    authorUsername: 'aixios',
+    authorProfileImageUrl: null,
+    likeCount: 5,
+    commentCount: 2,
+    shareCount: 1,
+    isLiked: false,
+    isShared: false,
+    relatedQuestion: 42,
+    authorType: 'news',
+    ...overrides,
+  };
+}
+
+describe('isNewMarket story invariants', () => {
+  it('diversifyForYouStories separates consecutive new-market stories', () => {
+    const market1 = makeStory('market:1', {
+      isNewMarket: true,
+      storyScore: 10,
+      posts: [makeAnchorPost('anchor-1')],
+      anchorPostId: 'anchor-1',
+    });
+    const market2 = makeStory('market:2', {
+      isNewMarket: true,
+      storyScore: 9,
+      posts: [makeAnchorPost('anchor-2')],
+      anchorPostId: 'anchor-2',
+    });
+    const narrative = makeStory('story:1', {
+      isNewMarket: false,
+      storyScore: 5,
+    });
+
+    const input = [market1, market2, narrative];
+    const result = diversifyForYouStories(input);
+
+    const marketIndices = result
+      .map((s, i) => (s.isNewMarket ? i : -1))
+      .filter((i) => i !== -1);
+    expect(marketIndices.length).toBe(2);
+    expect(marketIndices[1] - marketIndices[0]).toBeGreaterThan(1);
+  });
+
+  it('anchor post is findable by anchorPostId on a new-market story', () => {
+    const anchorPost = makeAnchorPost('anchor-1', { likeCount: 7 });
+    const story = makeStory('market:42', {
+      isNewMarket: true,
+      anchorPostId: 'anchor-1',
+      posts: [anchorPost],
+    });
+
+    const found = story.posts.find((p) => p.id === story.anchorPostId);
+    expect(found).toBeDefined();
+    expect(found?.likeCount).toBe(7);
+  });
+});
 
 describe('for-you scoring helpers', () => {
   it('rewards fresher items with higher freshness scores', () => {
