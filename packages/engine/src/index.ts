@@ -199,10 +199,10 @@ export {
 // NPC Portfolio Metrics (shared calculation utilities)
 export {
   buildFallbackMetricsByPool,
-  getEffectiveLeverage,
-  getPositionExposure,
   type FallbackPerpRow,
   type FallbackPositionRow,
+  getEffectiveLeverage,
+  getPositionExposure,
   type PoolMetrics,
 } from './npc/portfolio-metrics';
 export {

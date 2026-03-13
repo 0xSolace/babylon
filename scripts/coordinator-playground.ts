@@ -35,8 +35,8 @@
  */
 
 import { createGroq } from '@ai-sdk/groq';
-import { buildCoordinatorDecisionTemplate } from '@babylon/agents/plugins/plugin-user-core/src/coordinator-decision-template';
 import { userCorePlugin } from '@babylon/agents/plugins/plugin-user-core/src';
+import { buildCoordinatorDecisionTemplate } from '@babylon/agents/plugins/plugin-user-core/src/coordinator-decision-template';
 import { formatActionsWithParams } from '@babylon/agents/plugins/plugin-user-core/src/providers/actions';
 import { COORDINATOR_CONTEXT_TEXT } from '@babylon/agents/plugins/plugin-user-core/src/providers/coordinator-context';
 import { parseKeyValueXml } from '@elizaos/core';

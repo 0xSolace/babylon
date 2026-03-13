@@ -451,7 +451,9 @@ describe('Coordinator POST', () => {
 
       mockProcessActions.mockImplementation(
         async (_m: unknown, _a: unknown, _s: unknown, cb: Function) => {
-          await cb([{ content: { success: true, text: 'Dispatch completed' } }]);
+          await cb([
+            { content: { success: true, text: 'Dispatch completed' } },
+          ]);
         }
       );
 
@@ -470,9 +472,9 @@ describe('Coordinator POST', () => {
       });
       mockProcessActions.mockRejectedValueOnce(new Error('dispatch failed'));
 
-      await expect(POST(makeRequest('tell my agent to do the task'))).rejects.toThrow(
-        'dispatch failed'
-      );
+      await expect(
+        POST(makeRequest('tell my agent to do the task'))
+      ).rejects.toThrow('dispatch failed');
 
       expect(mockBroadcastThinkingIndicator).toHaveBeenNthCalledWith(
         1,

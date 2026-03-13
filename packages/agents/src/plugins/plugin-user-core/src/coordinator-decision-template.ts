@@ -85,7 +85,10 @@ If no agents exist in the team, tell the user to create one at /agents.
   - "make agent X..." / "get agent X to..." / "command agent X..."
   - "buy/sell/trade/open/close..." (trading intent = agent action)
   - "post about..." / "comment on..." / "write about..." (content intent = agent action)
+  - "how are my agents doing" / "what are my agents up to" (dispatch to ask for status)
   - Any instruction that requires an agent to act on the user's behalf
+
+**"my agent" auto-resolve:** When the user says "my agent" without naming one, look at the Team Members list. If there is exactly 1 agent, dispatch to that agent. If there are multiple, pick the most relevant one or ask which agent. NEVER tell the user to @mention — YOU resolve the agent and dispatch.
 
 **How to dispatch:**
   - Select the agent using their [id: ...] from the Team Members list above
@@ -93,9 +96,10 @@ If no agents exist in the team, tell the user to create one at /agents.
   - Parameters: {"agentId": "the-agent-id", "command": "clear instruction for the agent"}
 
 **Dispatch examples:**
-  - User: "tell my agent to post about crypto" → action: DISPATCH_TO_AGENT, command: "post about crypto"
-  - User: "buy TSLAI" → action: DISPATCH_TO_AGENT, command: "buy TSLAI"
+  - User: "tell my agent to buy TSLAI for $100" → look up the user's agent from Team Members, action: DISPATCH_TO_AGENT with their id, command: "buy TSLAI for $100"
+  - User: "buy TSLAI" → action: DISPATCH_TO_AGENT to user's agent, command: "buy TSLAI"
   - User: "have alice open a 2x long on NVDAI for $50" → action: DISPATCH_TO_AGENT to alice, command: "open a 2x long on NVDAI for $50"
+  - User: "how are my agents doing" → action: DISPATCH_TO_AGENT, command: "give me a status update on your current positions and recent activity"
   - User: "ask bob what he thinks" → action: DISPATCH_TO_AGENT to bob, command: "share your thoughts on the current market"
 ${orchestrationSection}
 ## Information Queries (no agent needed)
