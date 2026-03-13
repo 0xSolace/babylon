@@ -13,8 +13,8 @@
 
 import {
   type DatabaseArcPlan,
-  gameService,
   gameMasterService,
+  gameService,
   getArcPlan,
   getPhaseForDay,
   getSignalDirection,

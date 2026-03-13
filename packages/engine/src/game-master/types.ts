@@ -147,14 +147,12 @@ export interface GameMasterWorldSnapshot {
   gameId: string;
   gameDay: number;
   isRunning: boolean;
-  currentTopic:
-    | {
-        topicKey: string;
-        topicLabel: string;
-        summary: string;
-        isLocked: boolean;
-      }
-    | null;
+  currentTopic: {
+    topicKey: string;
+    topicLabel: string;
+    summary: string;
+    isLocked: boolean;
+  } | null;
   recentWorldEvents: Array<{
     id: string;
     eventType: string;

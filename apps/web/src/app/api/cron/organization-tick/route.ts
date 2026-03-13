@@ -415,16 +415,19 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
           targetType: 'organization',
           targetId: org.id,
         });
-        const marketNarrativeOverlay = await gameMasterService.buildPromptOverlay({
-          directiveType: 'market_narrative',
-          targetType: 'organization',
-          targetId: org.id,
-        });
+        const marketNarrativeOverlay =
+          await gameMasterService.buildPromptOverlay({
+            directiveType: 'market_narrative',
+            targetType: 'organization',
+            targetId: org.id,
+          });
         const prompt = buildOrgPostPrompt(
           org,
           worldFactsContext,
           eventContext,
-          [gameMasterOverlay, marketNarrativeOverlay].filter(Boolean).join('\n\n')
+          [gameMasterOverlay, marketNarrativeOverlay]
+            .filter(Boolean)
+            .join('\n\n')
         );
 
         // Generate content using LLM

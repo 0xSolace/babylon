@@ -93,7 +93,6 @@ export {
 } from './EmotionSystem';
 // Feed Generator
 export { FeedGenerator } from './FeedGenerator';
-export * from './game-master';
 // Bias Engine
 export {
   type BiasAdjustment,
@@ -149,6 +148,7 @@ export {
   type WorldConfig,
   type WorldState,
 } from './GameWorld';
+export * from './game-master';
 // Game Service
 export { type ActiveMarketSummary, gameService } from './game-service';
 // Game Tick (realtime/cron execution)

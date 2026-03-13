@@ -619,14 +619,15 @@ async function generateBaselineArticle(
   worldFactsContext: string,
   gameState: GameState,
   llmClient: BabylonLLMClient,
-  articleBrief:
-    | {
-        promptOverlay: string;
-        metadata: unknown;
-      }
-    | null
+  articleBrief: {
+    promptOverlay: string;
+    metadata: unknown;
+  } | null
 ): Promise<ArticleGenerationResult> {
-  const briefMetadata = (articleBrief?.metadata ?? {}) as Record<string, unknown>;
+  const briefMetadata = (articleBrief?.metadata ?? {}) as Record<
+    string,
+    unknown
+  >;
   // Pick a random actor to focus on
   const actorIndex = Math.floor(
     secureRandom() * Math.min(10, actorsList.length)

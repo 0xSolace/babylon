@@ -13,13 +13,18 @@ import { ensureEngineServices } from '@/lib/engine/ensure-engine-services';
 export const maxDuration = 240;
 export const dynamic = 'force-dynamic';
 
-export const GET = withErrorHandling(async (request: NextRequest) => POST(request));
+export const GET = withErrorHandling(async (request: NextRequest) =>
+  POST(request)
+);
 
 export const POST = withErrorHandling(async (request: NextRequest) => {
   ensureEngineServices();
 
   if (!verifyCronAuth(request, { jobName: 'GameMasterTick' })) {
-    return NextResponse.json({ error: 'Unauthorized cron request' }, { status: 401 });
+    return NextResponse.json(
+      { error: 'Unauthorized cron request' },
+      { status: 401 }
+    );
   }
 
   const startTime = Date.now();

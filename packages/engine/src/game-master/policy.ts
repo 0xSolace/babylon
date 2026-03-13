@@ -1,6 +1,8 @@
-import type { GameMasterPlannedAction } from './types';
-import type { GameMasterActionAssessment } from './types';
 import { GAME_MASTER_DEFAULTS } from './constants';
+import type {
+  GameMasterActionAssessment,
+  GameMasterPlannedAction,
+} from './types';
 
 function getTargetCount(action: GameMasterPlannedAction): number {
   switch (action.actionType) {
@@ -10,7 +12,8 @@ function getTargetCount(action: GameMasterPlannedAction): number {
       return action.payload.organizationIds.length;
     case 'SET_MARKET_NARRATIVE_BRIEF':
       return (
-        action.payload.questionIds.length + action.payload.organizationIds.length
+        action.payload.questionIds.length +
+        action.payload.organizationIds.length
       );
     case 'SHIFT_RELATIONSHIP':
       return 2;
@@ -74,7 +77,8 @@ export class GameMasterPolicyEngine {
       return {
         riskLevel: 'medium',
         requiresApproval: true,
-        approvalReason: 'Actor directive scope is broader than auto-run policy.',
+        approvalReason:
+          'Actor directive scope is broader than auto-run policy.',
       };
     }
 
@@ -85,7 +89,8 @@ export class GameMasterPolicyEngine {
       return {
         riskLevel: 'medium',
         requiresApproval: true,
-        approvalReason: 'Organization directive scope is broader than auto-run policy.',
+        approvalReason:
+          'Organization directive scope is broader than auto-run policy.',
       };
     }
 

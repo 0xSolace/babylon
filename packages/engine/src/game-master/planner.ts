@@ -3,9 +3,9 @@ import { secureRandom } from '../utils/entropy';
 import { GAME_MASTER_DEFAULTS } from './constants';
 import {
   type GameMasterPlan,
-  gameMasterPlanSchema,
   type GameMasterTriggerAssessment,
   type GameMasterWorldSnapshot,
+  gameMasterPlanSchema,
 } from './types';
 
 function pickRandom<T>(items: readonly T[], count: number): T[] {
@@ -28,7 +28,9 @@ function buildTopicSummary(snapshot: GameMasterWorldSnapshot): string {
   return `The day is centered on ${snapshot.currentTopic.topicLabel}. ${snapshot.currentTopic.summary}`;
 }
 
-function shouldEmitRandomLowRiskBatch(snapshot: GameMasterWorldSnapshot): boolean {
+function shouldEmitRandomLowRiskBatch(
+  snapshot: GameMasterWorldSnapshot
+): boolean {
   if (!snapshot.lastInterventionAt) return true;
 
   const millisSinceLastIntervention =
@@ -47,7 +49,9 @@ export class GameMasterPlanner {
     trigger: GameMasterTriggerAssessment
   ): GameMasterPlan {
     const actors = pickRandom(
-      StaticDataRegistry.getAllActors().filter((actor) => !/\btest\b/i.test(actor.name)),
+      StaticDataRegistry.getAllActors().filter(
+        (actor) => !/\btest\b/i.test(actor.name)
+      ),
       2
     );
     const organizations = pickRandom(
@@ -75,13 +79,15 @@ export class GameMasterPlanner {
           actionType: 'SET_DAILY_TOPIC',
           authorityLevel: 'steer',
           targetType: 'world',
-          instructionText: 'Establish a clear narrative topic for the new game day.',
+          instructionText:
+            'Establish a clear narrative topic for the new game day.',
           payload: {
             topicKey: 'market-sentiment',
             topicLabel: 'Market Sentiment',
             summary:
               'Anchor the day around competing interpretations of AI, markets, and institutional positioning.',
-            selectionReason: 'Halliday daily pass selected a stable narrative center.',
+            selectionReason:
+              'Halliday daily pass selected a stable narrative center.',
           },
         });
       }
@@ -181,7 +187,10 @@ export class GameMasterPlanner {
       }
     }
 
-    const actionBudget = actions.slice(0, GAME_MASTER_DEFAULTS.maxLowRiskBatchSize + 2);
+    const actionBudget = actions.slice(
+      0,
+      GAME_MASTER_DEFAULTS.maxLowRiskBatchSize + 2
+    );
 
     return gameMasterPlanSchema.parse({
       dailyObjective: `Keep the world converging on ${currentTopicLabel} while preserving conflict and motion.`,
