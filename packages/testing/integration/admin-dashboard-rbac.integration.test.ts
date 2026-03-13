@@ -13,6 +13,10 @@ import {
   users,
 } from '@babylon/db';
 import { generateSnowflakeId } from '@babylon/shared';
+import {
+  requireAuth as requireAuthShared,
+  requireServer as requireServerShared,
+} from './helpers';
 
 const BASE_URL =
   process.env.TEST_API_URL ||
@@ -26,17 +30,20 @@ let skippedTestCount = 0;
 const testUserIds: string[] = [];
 
 function requireServer(): void {
-  if (!serverAvailable) {
+  try {
+    requireServerShared(serverAvailable, BASE_URL);
+  } catch (e) {
     skippedTestCount++;
-    throw new Error(`TEST SKIPPED: Server not available at ${BASE_URL}`);
+    throw e;
   }
 }
 
 function requireAuth(): void {
-  requireServer();
-  if (!devAdminToken) {
+  try {
+    requireAuthShared(serverAvailable, devAdminToken, BASE_URL);
+  } catch (e) {
     skippedTestCount++;
-    throw new Error('TEST SKIPPED: Dev admin token not available');
+    throw e;
   }
 }
 
@@ -534,6 +541,31 @@ describe('Admin Dashboard RBAC Integration Tests', () => {
       expect(typeof stats.realtime.isHealthy).toBe('boolean');
 
       expect(stats.environment).toBeDefined();
+    });
+
+    test('GET /api/admin/stats/system - includes subsystem summary for observability UI', async () => {
+      requireAuth();
+
+      const res = await adminRequest('/api/admin/stats/system');
+      const data = await res.json();
+      const stats = data.data;
+
+      expect(['healthy', 'warning', 'critical']).toContain(stats.status);
+      expect(stats.summary).toBeDefined();
+      expect(typeof stats.summary.total).toBe('number');
+      expect(Array.isArray(stats.subsystems)).toBe(true);
+      expect(stats.subsystems.length).toBeGreaterThan(0);
+
+      const subsystem = stats.subsystems[0];
+      expect(typeof subsystem.key).toBe('string');
+      expect(typeof subsystem.label).toBe('string');
+      expect(['healthy', 'warning', 'critical']).toContain(subsystem.status);
+      expect(typeof subsystem.summary).toBe('string');
+      expect(typeof subsystem.details).toBe('string');
+
+      expect(stats.performance).toBeDefined();
+      expect(typeof stats.performance.query.slowRate).toBe('number');
+      expect(typeof stats.performance.memory.usagePercent).toBe('number');
     });
 
     test('GET /api/admin/stats/system - database tables have valid structure', async () => {

@@ -107,6 +107,12 @@ export type OracleTransaction = InferSelectModel<
   typeof schema.oracleTransactions
 >;
 export type RealtimeOutbox = InferSelectModel<typeof schema.realtimeOutboxes>;
+export type SentryIncidentAlertOutbox = InferSelectModel<
+  typeof schema.sentryIncidentAlertOutboxes
+>;
+export type SentryIncidentDiscordThread = InferSelectModel<
+  typeof schema.sentryIncidentDiscordThreads
+>;
 export type Game = InferSelectModel<typeof schema.games>;
 export type GameConfig = InferSelectModel<typeof schema.gameConfigs>;
 export type OAuthState = InferSelectModel<typeof schema.oAuthStates>;
@@ -238,6 +244,12 @@ export type NewOracleTransaction = InferInsertModel<
 >;
 export type NewRealtimeOutbox = InferInsertModel<
   typeof schema.realtimeOutboxes
+>;
+export type NewSentryIncidentAlertOutbox = InferInsertModel<
+  typeof schema.sentryIncidentAlertOutboxes
+>;
+export type NewSentryIncidentDiscordThread = InferInsertModel<
+  typeof schema.sentryIncidentDiscordThreads
 >;
 export type NewGame = InferInsertModel<typeof schema.games>;
 export type NewGameConfig = InferInsertModel<typeof schema.gameConfigs>;

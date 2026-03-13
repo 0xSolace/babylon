@@ -2,12 +2,14 @@ import {
   authenticate,
   issueRealtimeToken,
   type RealtimeChannel,
+  withErrorHandling,
 } from '@babylon/api';
 import { and, db, eq, inArray, users } from '@babylon/db';
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
+import { isUserInDmChatId } from '../../chats/_lib/dm-chat-id';
 
 const BodySchema = z.object({
   channels: z.array(z.string()).optional(),
@@ -25,27 +27,9 @@ const PUBLIC_CHANNELS: RealtimeChannel[] = [
 ];
 
 const dedupe = <T>(items: T[]) => Array.from(new Set(items));
-/**
- * Validates a DM chat ID format and checks if user is a participant.
- *
- * @security DM chat IDs follow the format dm-{userId1}-{userId2} where IDs are sorted.
- * This validation ensures:
- * 1. The format is correct (dm- prefix, exactly 2 user IDs)
- * 2. The requesting user is one of the participants
- *
- * Note: This is a format check only. For additional security, the actual
- * chat authorization is verified against the database in the main flow.
- */
-const isDmChatId = (id: string, userId: string): boolean => {
-  if (!id.startsWith('dm-')) return false;
-  const parts = id.substring('dm-'.length).split('-').filter(Boolean);
-  // Require exactly 2 user IDs
-  if (parts.length !== 2) return false;
-  // User must be one of the participants
-  return parts.includes(userId);
-};
-
-export async function POST(request: NextRequest) {
+export const POST = withErrorHandling(async function POST(
+  request: NextRequest
+) {
   const user = await authenticate(request);
 
   let body: unknown = {};
@@ -97,7 +81,7 @@ export async function POST(request: NextRequest) {
 
   // Allow deterministic DM channels even if the chat row/participants are not yet created.
   for (const chId of derivedChatIds) {
-    if (isDmChatId(chId, user.userId)) {
+    if (isUserInDmChatId(chId, user.userId)) {
       allowedChatIds.add(chId);
     }
   }
@@ -202,4 +186,4 @@ export async function POST(request: NextRequest) {
     channels: finalChannels,
     expiresAt,
   });
-}
+});

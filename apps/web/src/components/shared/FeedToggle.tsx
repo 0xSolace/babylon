@@ -6,41 +6,34 @@ import { Flame } from 'lucide-react';
 /**
  * Feed toggle component for switching between feed views.
  *
- * Provides tab navigation between Latest, Hot, Following, and Trades feed views.
- * Shows active tab with underline indicator and hover states.
- *
- * @param props - FeedToggle component props
- * @returns Feed toggle element with tabs
- *
- * @example
- * ```tsx
- * <FeedToggle
- *   activeTab="latest"
- *   onTabChange={(tab) => setActiveTab(tab)}
- * />
- * ```
+ * Tab order: For You → Hot → Latest → Following → Trades
+ * Default: For You
  */
 interface FeedToggleProps {
-  activeTab: 'latest' | 'hot' | 'following' | 'trades';
-  onTabChange: (tab: 'latest' | 'hot' | 'following' | 'trades') => void;
+  activeTab: 'forYou' | 'hot' | 'latest' | 'following' | 'trades';
+  onTabChange: (
+    tab: 'forYou' | 'hot' | 'latest' | 'following' | 'trades'
+  ) => void;
 }
 
 export function FeedToggle({ activeTab, onTabChange }: FeedToggleProps) {
   return (
     <div className="flex w-full items-center border-border border-b">
       <button
-        onClick={() => onTabChange('latest')}
+        type="button"
+        onClick={() => onTabChange('forYou')}
         className={cn(
           'relative flex-1 py-3.5 font-semibold transition-all hover:bg-muted/20',
-          activeTab === 'latest' ? 'text-foreground' : 'text-muted-foreground'
+          activeTab === 'forYou' ? 'text-foreground' : 'text-muted-foreground'
         )}
       >
-        Latest
-        {activeTab === 'latest' && (
+        For You
+        {activeTab === 'forYou' && (
           <div className="absolute right-0 bottom-0 left-0 h-[3px] bg-primary" />
         )}
       </button>
       <button
+        type="button"
         onClick={() => onTabChange('hot')}
         className={cn(
           'relative flex-1 py-3.5 font-semibold transition-all hover:bg-muted/20',
@@ -56,6 +49,20 @@ export function FeedToggle({ activeTab, onTabChange }: FeedToggleProps) {
         )}
       </button>
       <button
+        type="button"
+        onClick={() => onTabChange('latest')}
+        className={cn(
+          'relative flex-1 py-3.5 font-semibold transition-all hover:bg-muted/20',
+          activeTab === 'latest' ? 'text-foreground' : 'text-muted-foreground'
+        )}
+      >
+        Latest
+        {activeTab === 'latest' && (
+          <div className="absolute right-0 bottom-0 left-0 h-[3px] bg-primary" />
+        )}
+      </button>
+      <button
+        type="button"
         onClick={() => onTabChange('following')}
         className={cn(
           'relative flex-1 py-3.5 font-semibold transition-all hover:bg-muted/20',
@@ -70,6 +77,7 @@ export function FeedToggle({ activeTab, onTabChange }: FeedToggleProps) {
         )}
       </button>
       <button
+        type="button"
         onClick={() => onTabChange('trades')}
         className={cn(
           'relative flex-1 py-3.5 font-semibold transition-all hover:bg-muted/20',

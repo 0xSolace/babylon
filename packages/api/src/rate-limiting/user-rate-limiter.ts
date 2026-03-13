@@ -46,6 +46,11 @@ export const RATE_LIMIT_CONFIGS = {
     actionType: 'like_comment',
   }, // 20 likes per minute
   SHARE_POST: { maxRequests: 5, windowMs: 60000, actionType: 'share_post' }, // 5 shares per minute
+  FEED_EVENT_BATCH: {
+    maxRequests: 120,
+    windowMs: 60000,
+    actionType: 'feed_event_batch',
+  }, // 120 telemetry batches per minute per user
 
   // Social actions
   FOLLOW_USER: { maxRequests: 10, windowMs: 60000, actionType: 'follow_user' }, // 10 follows per minute
@@ -247,6 +252,29 @@ export const RATE_LIMIT_CONFIGS = {
     windowMs: 60000,
     actionType: 'public_firehose_anonymous',
   },
+
+  // Wallet read endpoints (authenticated, per-user)
+  WALLET_READ: {
+    maxRequests: 60,
+    windowMs: 60000,
+    actionType: 'wallet_read',
+  }, // 60 reads per minute per user (tokens, nfts, transactions)
+
+  // Wallet write endpoints (sendToken, sendNft)
+  WALLET_TRANSFER: {
+    maxRequests: 10,
+    windowMs: 60000,
+    actionType: 'wallet_transfer',
+  }, // 10 transfers per minute per user
+
+  // Step-up auth / limit elevation requests
+  // Reserved for the elevated-limit step-up auth flow (WalletTransferLimit.elevatedUntil).
+  // Wire to a dedicated endpoint when limit elevation UI is built.
+  WALLET_STEP_UP: {
+    maxRequests: 5,
+    windowMs: 300000,
+    actionType: 'wallet_step_up',
+  }, // 5 step-up requests per 5 minutes
 
   // Default fallback
   DEFAULT: { maxRequests: 30, windowMs: 60000, actionType: 'default' }, // 30 requests per minute

@@ -79,6 +79,8 @@ export function getCurrentChainId(): number {
   if (envChainId) return Number.parseInt(envChainId, 10);
 
   // Default to local for development, Base Sepolia for test
+  // For production, use Base mainnet (8453) as default
+  // Note: ensures production defaults to Base mainnet for compatibility with user wallets
   if (process.env.NODE_ENV === 'production') return 8453;
   if (process.env.NODE_ENV === 'test') return 84532;
   return 31337;

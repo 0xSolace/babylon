@@ -8,6 +8,7 @@
 import {
   COORDINATOR_SENDER_ID,
   generateUUID,
+  logger,
   type MessageMetadata,
 } from '@babylon/shared';
 import { usePrivy } from '@privy-io/react-auth';
@@ -20,7 +21,12 @@ import {
   useState,
 } from 'react';
 import { toast } from 'sonner';
-import type { ChatDetails, ChatParticipant } from '@/components/chats/types';
+import type {
+  ChatDetails,
+  ChatParticipant,
+  Message,
+  ReplyToMessage,
+} from '@/components/chats/types';
 import { MessageTypeEnum } from '@/components/chats/types';
 import {
   OptimisticMessageIdPrefix,
@@ -28,6 +34,7 @@ import {
 } from '@/hooks/useChatMessages';
 import { useSSEChannel } from '@/hooks/useSSE';
 import { useToggleReaction } from '@/hooks/useToggleReaction';
+import { getUserDisplayName } from '@/lib/user-display';
 import { useAuthStore } from '@/stores/authStore';
 
 // Constants for scroll behavior
@@ -191,6 +198,11 @@ interface UseTeamChatReturn {
   topSentinelRef: React.RefObject<HTMLDivElement | null>;
   messagesContainerRef: React.RefObject<HTMLDivElement | null>;
 
+  // Reply
+  replyToMessage: ReplyToMessage | null;
+  handleReplyToMessage: (msg: Message) => void;
+  clearReplyToMessage: () => void;
+
   // Agent processing state
   processingAgentIds: Set<string>;
   stopAgent: (agentId: string) => void;
@@ -232,6 +244,11 @@ export function useTeamChat(): UseTeamChatReturn {
   const [messageInput, setMessageInput] = useState('');
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
+
+  // Reply state
+  const [replyToMessage, setReplyToMessage] = useState<ReplyToMessage | null>(
+    null
+  );
 
   // Typing indicator state
   const [typingUsers, setTypingUsers] = useState<TypingUser[]>([]);
@@ -548,7 +565,7 @@ export function useTeamChat(): UseTeamChatReturn {
         body: JSON.stringify({ isTyping }),
       }).catch((err) => {
         // Log for debugging but don't block user experience
-        console.debug('Typing indicator failed:', err);
+        logger.debug('Typing indicator failed', { error: err }, 'useTeamChat');
       });
     },
     [teamChat, getAccessToken]
@@ -706,7 +723,7 @@ export function useTeamChat(): UseTeamChatReturn {
             ? [
                 {
                   id: user.id,
-                  displayName: user.displayName || user.username || 'You',
+                  displayName: getUserDisplayName(user, 'You'),
                   username: user.username,
                   profileImageUrl: user.profileImageUrl,
                 } as ChatParticipant,
@@ -717,7 +734,7 @@ export function useTeamChat(): UseTeamChatReturn {
             (agent) =>
               ({
                 id: agent.id,
-                displayName: agent.displayName || agent.username || 'Agent',
+                displayName: getUserDisplayName(agent, 'Agent'),
                 username: agent.username,
                 profileImageUrl: agent.profileImageUrl,
               }) as ChatParticipant
@@ -785,6 +802,7 @@ export function useTeamChat(): UseTeamChatReturn {
     const stickyMentions =
       mentionStrings.length > 0 ? mentionStrings.join(' ') + ' ' : '';
     setMessageInput(stickyMentions);
+    setReplyToMessage(null);
     setSending(true);
     setSendError(null);
 
@@ -808,6 +826,7 @@ export function useTeamChat(): UseTeamChatReturn {
         body: JSON.stringify({
           content,
           targetIds: mentionedAgentIds, // Empty array = coordinator, agent IDs = specific agents
+          ...(replyToMessage ? { replyToMessageId: replyToMessage.id } : {}),
         }),
       });
 
@@ -945,7 +964,7 @@ export function useTeamChat(): UseTeamChatReturn {
           // Remove thinking bubble on network error
           removeMessage(thinkingId);
           toast.error('Coordinator: Connection error. Please try again.');
-          console.error('Coordinator error:', err);
+          logger.error('Coordinator error', { error: err }, 'useTeamChat');
         }
 
         return; // Exit early - don't proceed to agent calls
@@ -965,7 +984,7 @@ export function useTeamChat(): UseTeamChatReturn {
       });
 
       // Get user info for team chat context
-      const ownerName = user.displayName || user.username || 'User';
+      const ownerName = getUserDisplayName(user, 'User');
       const ownerUsername = user.username || '';
 
       // Create thinking message IDs for each agent (for tracking)
@@ -1050,12 +1069,12 @@ export function useTeamChat(): UseTeamChatReturn {
             if (data.isLLMFailure) {
               // LLM failed to parse - no points charged, show warning
               toast.warning(
-                `${agent?.displayName} had trouble understanding. No points charged.`
+                `${getUserDisplayName(agent, 'Agent')} had trouble understanding. No points charged.`
               );
             } else if (data.pointsCost && data.pointsCost > 0) {
               // Successful response with points deducted
               toast.success(
-                `Response from ${agent?.displayName} (-${data.pointsCost} points)`
+                `Response from ${getUserDisplayName(agent, 'Agent')} (-${data.pointsCost} points)`
               );
             }
 
@@ -1088,7 +1107,7 @@ export function useTeamChat(): UseTeamChatReturn {
               // (e.g., "insufficient permissions" should not trigger this)
               if (errorMessage.toLowerCase().includes('insufficient balance')) {
                 // Replace thinking bubble with system message that has action button
-                const agentDisplayName = agent?.displayName || 'Agent';
+                const agentDisplayName = getUserDisplayName(agent, 'Agent');
                 updateMessage(thinkingId, {
                   id: `system-insufficient-${agentId}-${Date.now()}`,
                   content: `${agentDisplayName} needs more points to respond.`,
@@ -1106,11 +1125,15 @@ export function useTeamChat(): UseTeamChatReturn {
               } else {
                 // Remove thinking bubble and show toast for other errors
                 removeMessage(thinkingId);
-                toast.error(`${agent?.displayName}: ${errorMessage}`);
+                toast.error(
+                  `${getUserDisplayName(agent, 'Agent')}: ${errorMessage}`
+                );
               }
             } catch {
               removeMessage(thinkingId);
-              toast.error(`${agent?.displayName} failed to respond`);
+              toast.error(
+                `${getUserDisplayName(agent, 'Agent')} failed to respond`
+              );
             }
           }
         } catch (err) {
@@ -1123,7 +1146,7 @@ export function useTeamChat(): UseTeamChatReturn {
           } else {
             // Network or other unexpected errors - show toast
             toast.error(
-              `${agent?.displayName}: Connection error. Please try again.`
+              `${getUserDisplayName(agent, 'Agent')}: Connection error. Please try again.`
             );
           }
         } finally {
@@ -1141,7 +1164,11 @@ export function useTeamChat(): UseTeamChatReturn {
       // Don't await - let agents process in background
       // Responses will come through SSE/broadcast
       Promise.all(agentCalls).catch((err) => {
-        console.error('Error in parallel agent calls:', err);
+        logger.error(
+          'Error in parallel agent calls',
+          { error: err },
+          'useTeamChat'
+        );
       });
     } catch (err) {
       // Rollback optimistic message on network error
@@ -1164,6 +1191,7 @@ export function useTeamChat(): UseTeamChatReturn {
     removeMessage,
     sendTypingIndicator,
     scrollToBottom,
+    replyToMessage,
   ]);
 
   // =========================================================================
@@ -1188,9 +1216,24 @@ export function useTeamChat(): UseTeamChatReturn {
           conversations: ConversationInfo[];
         };
         setConversations(data.conversations);
+      } else {
+        const errorData = (await response.json().catch(() => ({}))) as {
+          error?: string;
+        };
+        logger.error(
+          'Failed to fetch conversations',
+          { status: response.status, errorData },
+          'useTeamChat'
+        );
+        toast.error(errorData.error || 'Failed to load conversations');
       }
     } catch (err) {
-      console.error('Failed to fetch conversations:', err);
+      logger.error(
+        'Failed to fetch conversations',
+        { error: err },
+        'useTeamChat'
+      );
+      toast.error('Failed to load conversations');
     } finally {
       setConversationsLoading(false);
     }
@@ -1272,7 +1315,11 @@ export function useTeamChat(): UseTeamChatReturn {
           toast.error(errorData.error || 'Failed to create conversation');
         }
       } catch (err) {
-        console.error('Failed to create conversation:', err);
+        logger.error(
+          'Failed to create conversation',
+          { error: err },
+          'useTeamChat'
+        );
         toast.error('Failed to create conversation');
       }
     },
@@ -1314,14 +1361,19 @@ export function useTeamChat(): UseTeamChatReturn {
             prev ? { ...prev, chatId: data.activeChatId } : prev
           );
 
-          // Clear messages (useChatMessages will refetch for new chatId)
+          // Clear messages and reply state (useChatMessages will refetch for new chatId)
           clearMessages();
+          setReplyToMessage(null);
         } else {
           const errorData = (await response.json()) as { error?: string };
           toast.error(errorData.error || 'Failed to switch conversation');
         }
       } catch (err) {
-        console.error('Failed to switch conversation:', err);
+        logger.error(
+          'Failed to switch conversation',
+          { error: err },
+          'useTeamChat'
+        );
         toast.error('Failed to switch conversation');
       }
     },
@@ -1360,7 +1412,11 @@ export function useTeamChat(): UseTeamChatReturn {
           toast.error(errorData.error || 'Failed to rename conversation');
         }
       } catch (err) {
-        console.error('Failed to rename conversation:', err);
+        logger.error(
+          'Failed to rename conversation',
+          { error: err },
+          'useTeamChat'
+        );
         toast.error('Failed to rename conversation');
       }
     },
@@ -1389,34 +1445,44 @@ export function useTeamChat(): UseTeamChatReturn {
             newActiveChatId: string | null;
           };
 
-          // Remove from conversations list
-          setConversations((prev) => prev.filter((c) => c.id !== chatId));
-
-          // If we switched to a new active chat, update state
-          if (data.newActiveChatId) {
-            setConversations((prev) =>
-              prev.map((c) => ({
-                ...c,
-                isActive: c.id === data.newActiveChatId,
-              }))
+          if (!data.newActiveChatId) {
+            // Unexpected: backend couldn't determine a replacement active chat
+            // (e.g. race condition where another session deleted conversations).
+            // Refresh the full list so the UI recovers to a consistent state.
+            toast.error(
+              'Conversation deleted, but could not determine the new active chat. Refreshing...'
             );
-            setTeamChat((prev) =>
-              prev ? { ...prev, chatId: data.newActiveChatId! } : prev
-            );
-            clearMessages();
+            await refreshConversations();
+            return;
           }
 
+          // Single atomic update: remove deleted + mark new active in one pass
+          setConversations((prev) =>
+            prev
+              .filter((c) => c.id !== chatId)
+              .map((c) => ({ ...c, isActive: c.id === data.newActiveChatId }))
+          );
+          setTeamChat((prev) =>
+            prev ? { ...prev, chatId: data.newActiveChatId! } : prev
+          );
+          clearMessages();
           toast.success('Conversation deleted');
         } else {
-          const errorData = (await response.json()) as { error?: string };
+          const errorData = (await response.json().catch(() => ({}))) as {
+            error?: string;
+          };
           toast.error(errorData.error || 'Failed to delete conversation');
         }
       } catch (err) {
-        console.error('Failed to delete conversation:', err);
+        logger.error(
+          'Failed to delete conversation',
+          { error: err },
+          'useTeamChat'
+        );
         toast.error('Failed to delete conversation');
       }
     },
-    [user, getAccessToken, clearMessages]
+    [user, getAccessToken, clearMessages, refreshConversations]
   );
 
   // Fetch conversations when team chat loads
@@ -1426,6 +1492,26 @@ export function useTeamChat(): UseTeamChatReturn {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally depend on id only
   }, [teamChat?.id, user, refreshConversations]);
+
+  // Reply handlers
+  const handleReplyToMessage = useCallback(
+    (msg: Message) => {
+      const participant = chatDetails?.participants?.find(
+        (p) => p.id === msg.senderId
+      );
+      setReplyToMessage({
+        id: msg.id,
+        content: msg.content,
+        senderId: msg.senderId,
+        senderName: participant?.displayName ?? undefined,
+      });
+    },
+    [chatDetails?.participants]
+  );
+
+  const clearReplyToMessage = useCallback(() => {
+    setReplyToMessage(null);
+  }, []);
 
   return {
     teamChat,
@@ -1445,6 +1531,10 @@ export function useTeamChat(): UseTeamChatReturn {
     messagesEndRef,
     topSentinelRef,
     messagesContainerRef,
+    // Reply
+    replyToMessage,
+    handleReplyToMessage,
+    clearReplyToMessage,
     // Agent processing state
     processingAgentIds,
     stopAgent,

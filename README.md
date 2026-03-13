@@ -152,6 +152,8 @@ bun run test:e2e           # E2E tests
 bun run contracts:test     # Smart contracts
 ```
 
+To skip chain-dependent tests (e.g. in CI when Hardhat/localnet is not available), set `SKIP_CHAIN_TESTS=1`.
+
 ---
 
 ## 🚢 Deploy to Vercel
@@ -164,10 +166,22 @@ vercel deploy --prod
 **Required Environment Variables:**
 
 - `DATABASE_URL` - PostgreSQL connection
-- `NEXT_PUBLIC_PRIVY_APP_ID` - Authentication
-- `OPENAI_API_KEY` - AI agents
+- `NEXT_PUBLIC_PRIVY_APP_ID` (or `PRIVY_APP_ID`) - Privy App ID
+- `PRIVY_APP_SECRET` - Privy backend secret
+- `CRON_SECRET` - Cron authentication
+- At least one LLM key: `GROQ_API_KEY` or `OPENAI_API_KEY` or `ANTHROPIC_API_KEY`
 
-See `.env.example` for complete list.
+Validate your env files before running the app:
+
+```bash
+bun run env:validate
+# optional profiles:
+bun run env:validate:staging
+bun run env:validate:production
+```
+
+Feature-specific requirements are validated conditionally (Agent0, SendGrid, NFT gating, on-chain perps).
+See `.env.example` for the full list.
 
 ---
 
@@ -300,6 +314,10 @@ See [`docs/nft-drop-implementation-plan.md`](docs/nft-drop-implementation-plan.m
 - RL Training: See `packages/training/README.md`
 - Game Control: `babylon game start|pause|status` (via CLI)
 - RSS feeds (outbound + inbound): See [docs/feeds-rss.md](docs/feeds-rss.md)
+- **Agent skills & LLM-facing docs**: We expose A2A and MCP; agents need an up-to-date reference. **Why generate**: Hand-maintained docs drift from code; generating from `@babylon/a2a` and `@babylon/mcp` keeps skills in sync.
+  - `bun run docs:generate` — Pulls vendor docs and **regenerates** `docs/skills.md` and `skills/babylon/` (SKILL.md, claw.json, README). Run after changing A2A/MCP surface.
+  - `bun run skills:generate` — Only `docs/skills.md`. `bun run skills:package` — Only full package.
+  - Packaging: [docs/agent-skill-packaging.md](docs/agent-skill-packaging.md). Potential roadmap (llms.txt, security.txt, etc.): [docs/roadmap.md](docs/roadmap.md).
 
 ---
 

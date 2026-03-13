@@ -160,12 +160,12 @@ import {
   getAgentConfig,
   isAutonomousTradingEnabled,
 } from '@babylon/agents';
-import { authenticateUser } from '@babylon/api';
+import { authenticateUser, withErrorHandling } from '@babylon/api';
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 
-export async function POST(req: NextRequest) {
+export const POST = withErrorHandling(async function POST(req: NextRequest) {
   const user = await authenticateUser(req);
 
   const body = await req.json();
@@ -246,9 +246,9 @@ export async function POST(req: NextRequest) {
       createdAt: agentUser.createdAt.toISOString(),
     },
   });
-}
+});
 
-export async function GET(req: NextRequest) {
+export const GET = withErrorHandling(async function GET(req: NextRequest) {
   const user = await authenticateUser(req);
 
   const { searchParams } = new URL(req.url);
@@ -263,11 +263,55 @@ export async function GET(req: NextRequest) {
 
   const agentsWithStats = await Promise.all(
     agents.map(async (agent) => {
-      const [performance, config] = await Promise.all([
+      const defaultPerformance = {
+        totalTrades: 0,
+        profitableTrades: 0,
+        winRate: 0,
+      };
+
+      const [performanceResult, configResult] = await Promise.allSettled([
         agentService.getPerformance(agent.id),
         getAgentConfig(agent.id),
       ]);
+
+      const performance =
+        performanceResult.status === 'fulfilled'
+          ? performanceResult.value
+          : defaultPerformance;
+      const config =
+        configResult.status === 'fulfilled' ? configResult.value : null;
       const tradingEnabled = isAutonomousTradingEnabled(config);
+
+      if (performanceResult.status === 'rejected') {
+        logger.warn(
+          'Failed to load agent performance for list endpoint; using defaults',
+          {
+            agentId: agent.id,
+            managerUserId: user.id,
+            error:
+              performanceResult.reason instanceof Error
+                ? performanceResult.reason.message
+                : String(performanceResult.reason),
+          },
+          'GET /api/agents'
+        );
+      }
+
+      if (configResult.status === 'rejected') {
+        logger.warn(
+          'Failed to load agent config for list endpoint; using defaults',
+          {
+            agentId: agent.id,
+            managerUserId: user.id,
+            error:
+              configResult.reason instanceof Error
+                ? configResult.reason.message
+                : String(configResult.reason),
+          },
+          'GET /api/agents'
+        );
+      }
+
       return {
         id: agent.id,
         username: agent.username,
@@ -303,4 +347,4 @@ export async function GET(req: NextRequest) {
     success: true,
     agents: agentsWithStats,
   });
-}
+});

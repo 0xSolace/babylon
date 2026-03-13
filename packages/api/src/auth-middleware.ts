@@ -15,10 +15,12 @@ import { PrivyClient } from '@privy-io/server-auth';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { verifyAgentSession } from './agent-auth';
+import { getPrivyAppIdFromEnv, getTrimmedEnv } from './env';
 import {
   AuthenticationError,
   AuthorizationError,
   isAuthenticationError,
+  ServiceUnavailableError,
 } from './errors';
 import { hasNftAccessForAuthUser } from './services/nft-access-service';
 
@@ -32,11 +34,15 @@ export { AuthenticationError, isAuthenticationError };
 // Lazy initialization of Privy client to prevent build-time errors
 let privyClient: PrivyClient | null = null;
 
+/** @internal Reset singleton for testing only */
+export function _resetPrivyClientForTesting(): void {
+  privyClient = null;
+}
+
 export function getPrivyClient(): PrivyClient {
   if (!privyClient) {
-    const privyAppId =
-      process.env.PRIVY_APP_ID ?? process.env.NEXT_PUBLIC_PRIVY_APP_ID;
-    const privyAppSecret = process.env.PRIVY_APP_SECRET;
+    const privyAppId = getPrivyAppIdFromEnv();
+    const privyAppSecret = getTrimmedEnv('PRIVY_APP_SECRET');
 
     if (!privyAppId || !privyAppSecret) {
       throw new Error('Privy credentials not configured');
@@ -144,17 +150,29 @@ export async function authenticate(
   }
 
   // Try agent session authentication first (faster)
-  const agentSession = await verifyAgentSession(token);
-  if (agentSession) {
-    return {
-      userId: agentSession.agentId,
-      privyId: agentSession.agentId,
-      isAgent: true,
-    };
+  // Wrap in try-catch so store errors (e.g. Redis) don't leak as 500
+  try {
+    const agentSession = await verifyAgentSession(token);
+    if (agentSession) {
+      return {
+        userId: agentSession.agentId,
+        privyId: agentSession.agentId,
+        isAgent: true,
+      };
+    }
+  } catch {
+    // Agent session lookup failed (e.g. Redis down) — fall through to Privy auth
   }
 
   // Try Privy authentication
-  const privy = getPrivyClient();
+  let privy: PrivyClient;
+  try {
+    privy = getPrivyClient();
+  } catch {
+    throw new ServiceUnavailableError(
+      'Authentication service unavailable. Please try again later.'
+    );
+  }
 
   // Get the Authorization header token as a potential fallback
   const authHeaderToken = authHeader?.startsWith('Bearer ')
@@ -247,8 +265,19 @@ export async function authenticate(
     }
   }
 
-  // If we get here, all tokens failed verification
-  throw lastError ?? new AuthenticationError('Token verification failed');
+  // If we get here, all tokens failed verification.
+  // Always normalize verification failures to AuthenticationError so malformed
+  // or garbage JWTs produce a clean 401 instead of bubbling a provider error as 500.
+  if (lastError instanceof AuthenticationError) {
+    throw lastError;
+  }
+
+  throw new AuthenticationError(
+    'Invalid authentication token. Please sign in again.',
+    {
+      reason: lastError instanceof Error ? lastError.message : 'unknown',
+    }
+  );
 }
 
 /**
@@ -290,17 +319,27 @@ export async function optionalAuth(
     return null;
   }
 
-  const agentSession = await verifyAgentSession(token);
-  if (agentSession) {
-    return {
-      userId: agentSession.agentId,
-      privyId: agentSession.agentId,
-      isAgent: true,
-    };
+  // Wrap in try-catch so store errors (e.g. Redis) return null instead of 500
+  try {
+    const agentSession = await verifyAgentSession(token);
+    if (agentSession) {
+      return {
+        userId: agentSession.agentId,
+        privyId: agentSession.agentId,
+        isAgent: true,
+      };
+    }
+  } catch {
+    // Agent session lookup failed (e.g. Redis down) — fall through to Privy auth
   }
 
   // Try Privy authentication - return null on failure (optional auth)
-  const privy = getPrivyClient();
+  let privy: PrivyClient;
+  try {
+    privy = getPrivyClient();
+  } catch {
+    return null;
+  }
 
   // Get the Authorization header token as a potential fallback
   const authHeaderToken = authHeader?.startsWith('Bearer ')
@@ -367,12 +406,17 @@ export async function optionalAuthFromHeaders(
 
   const token = authHeader.substring(7);
 
-  const agentSession = await verifyAgentSession(token);
-  if (agentSession) {
-    return {
-      userId: agentSession.agentId,
-      isAgent: true,
-    };
+  // Wrap in try-catch so store errors (e.g. Redis) return null instead of 500
+  try {
+    const agentSession = await verifyAgentSession(token);
+    if (agentSession) {
+      return {
+        userId: agentSession.agentId,
+        isAgent: true,
+      };
+    }
+  } catch {
+    // Agent session lookup failed (e.g. Redis down) — fall through to Privy auth
   }
 
   // Try Privy authentication - return null on failure (optional auth)

@@ -232,12 +232,16 @@ import {
   broadcastToChannel,
   cachedDb,
   checkRateLimitAndDuplicates,
+  checkRateLimitAsync,
   DUPLICATE_DETECTION_CONFIGS,
   ensureUserForAuth,
   getCacheOrFetch,
+  getHashedClientIp,
+  invalidateCache,
   notifyMention,
   publicRateLimit,
   RATE_LIMIT_CONFIGS,
+  rateLimitError,
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
@@ -743,10 +747,31 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       commentCounts.map((c) => [c.postId, Number(c.count)])
     );
 
+    // Fetch original posts for reposts in the following feed.
+    // getPostsForFollowing does a plain SELECT with no JOIN, so originalPost
+    // must be fetched separately — otherwise reposts render as blank cards.
+    const followingRepostIds = filteredPosts
+      .filter((p) => p.originalPostId)
+      .map((p) => p.originalPostId)
+      .filter((id): id is string => id !== null);
+
+    const followingOriginalPostsMap = new Map<string, Post>();
+    if (followingRepostIds.length > 0) {
+      const originals = await db
+        .select()
+        .from(posts)
+        .where(
+          and(inArray(posts.id, followingRepostIds), isNull(posts.deletedAt))
+        );
+      originals.forEach((p) => followingOriginalPostsMap.set(p.id, p));
+    }
+
     // Format following posts synchronously using lookup maps
-    // Note: filteredPosts already includes originalPost via the include in the query above
     const formattedFollowingPosts = filteredPosts.map((post: Post) => {
-      const postsWithOriginal = post as PostWithOriginal;
+      const originalPost = post.originalPostId
+        ? (followingOriginalPostsMap.get(post.originalPostId) ?? null)
+        : null;
+      const postsWithOriginal: PostWithOriginal = { ...post, originalPost };
       const user = post.authorId ? userMap.get(post.authorId) : undefined;
 
       // Build repost metadata from originalPost if it exists (clean, no text parsing)
@@ -1325,14 +1350,7 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
   const authUser = await authenticate(request);
 
   const body = (await request.json()) as { content: string };
-  const { content } = body;
-
-  checkRateLimitAndDuplicates(
-    authUser.userId,
-    content,
-    RATE_LIMIT_CONFIGS.CREATE_POST,
-    DUPLICATE_DETECTION_CONFIGS.POST
-  );
+  const normalizedContent = body.content.trim();
 
   const fallbackDisplayName = authUser.walletAddress
     ? `${authUser.walletAddress.slice(0, 6)}...${authUser.walletAddress.slice(-4)}`
@@ -1342,13 +1360,33 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
     displayName: fallbackDisplayName,
   });
   const canonicalUserId = canonicalUser.id;
+  const rateLimitResponse = checkRateLimitAndDuplicates(
+    canonicalUserId,
+    normalizedContent,
+    RATE_LIMIT_CONFIGS.CREATE_POST,
+    DUPLICATE_DETECTION_CONFIGS.POST
+  );
+  if (rateLimitResponse) {
+    return rateLimitResponse;
+  }
+
+  const clientIpHash = getHashedClientIp(request.headers);
+  if (clientIpHash) {
+    const ipRateLimit = await checkRateLimitAsync(
+      `post-ip:${clientIpHash}`,
+      RATE_LIMIT_CONFIGS.CREATE_POST
+    );
+    if (!ipRateLimit.allowed) {
+      return rateLimitError(ipRateLimit.retryAfter);
+    }
+  }
 
   const postId = await generateSnowflakeId();
   const [post] = await db
     .insert(posts)
     .values({
       id: postId,
-      content: content.trim(),
+      content: normalizedContent,
       authorId: canonicalUserId,
       timestamp: new Date(),
     })
@@ -1388,13 +1426,23 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
       timestamp: post.timestamp.toISOString(),
     },
   });
+
+  // Invalidate the narrative feed cache so the new post appears in story scoring
+  // immediately rather than waiting for the 120s TTL to expire.
+  invalidateCache('feed:narrative:v1', { namespace: 'feed' }).catch((err) => {
+    logger.warn(
+      'Narrative feed cache invalidation failed after new post',
+      { error: err, postId: post.id },
+      'POST /api/posts'
+    );
+  });
   logger.info(
     'Broadcast new user post to feed channel',
     { postId: post.id },
     'POST /api/posts'
   );
 
-  const mentions = content.match(/@(\w+)/g) || [];
+  const mentions = normalizedContent.match(/@(\w+)/g) || [];
   const usernames = [...new Set(mentions.map((m: string) => m.substring(1)))];
 
   const mentionedUsers =
@@ -1468,13 +1516,13 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
 
   trackServerEvent(canonicalUserId, 'post_created', {
     postId: post.id,
-    contentLength: content.trim().length,
+    contentLength: normalizedContent.length,
     hasUsername: Boolean(canonicalUser.username),
   });
 
   // Generate and store tags asynchronously (don't block response)
   // This allows posts to be tagged for trending without slowing down the API
-  void generateTagsFromPost(content.trim())
+  void generateTagsFromPost(normalizedContent)
     .then((generatedTags: GeneratedTag[]) => {
       if (generatedTags.length > 0) {
         return storeTagsForPost(post.id, generatedTags).then(() => {

@@ -7,6 +7,7 @@ import { useTheme } from 'next-themes';
 import { Fragment, Suspense, useEffect, useRef, useState } from 'react';
 import { PostHogErrorBoundary } from '@/components/analytics/PostHogErrorBoundary';
 import { PostHogIdentifier } from '@/components/analytics/PostHogIdentifier';
+import { DevThemeToggle } from '@/components/shared/DevThemeToggle';
 import { ThemeProvider } from '@/components/shared/ThemeProvider';
 import { FontSizeProvider } from '@/contexts/FontSizeContext';
 import { WidgetRefreshProvider } from '@/contexts/WidgetRefreshContext';
@@ -252,6 +253,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
           enableSystem
           disableTransitionOnChange={false}
         >
+          <DevThemeToggle />
           <FontSizeProvider>
             <QueryClientProvider client={queryClient}>
               <GamePlaybackManager />
@@ -269,7 +271,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
                     {children}
                   </Fragment>
                 ) : (
-                  <div className="min-h-screen bg-sidebar" />
+                  <div className="min-h-dvh bg-sidebar md:min-h-screen" />
                 )}
               </WidgetRefreshProvider>
             </QueryClientProvider>
@@ -290,6 +292,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
               enableSystem
               disableTransitionOnChange={false}
             >
+              <DevThemeToggle />
               <FontSizeProvider>
                 <QueryClientProvider client={queryClient}>
                   <GamePlaybackManager />
@@ -315,7 +318,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
                                   {mounted ? (
                                     <Fragment>{children}</Fragment>
                                   ) : (
-                                    <div className="min-h-screen bg-sidebar" />
+                                    <div className="min-h-dvh bg-sidebar md:min-h-screen" />
                                   )}
                                 </WidgetRefreshProvider>
                               </GameGuideProvider>

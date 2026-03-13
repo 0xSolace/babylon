@@ -10,7 +10,13 @@ import {
   timestamp,
 } from 'drizzle-orm/pg-core';
 import type { JsonValue } from '../types';
-import { realtimeOutboxStatusEnum } from './enums';
+import {
+  realtimeOutboxStatusEnum,
+  sentryIncidentAlertOutboxStatusEnum,
+  sentryIncidentRunDecisionEnum,
+  sentryIncidentRunStatusEnum,
+  sentryWebhookInboxStatusEnum,
+} from './enums';
 
 // Game
 export const games = pgTable(
@@ -73,6 +79,159 @@ export const realtimeOutboxes = pgTable(
       table.createdAt
     ),
     index('RealtimeOutbox_channel_status_idx').on(table.channel, table.status),
+  ]
+);
+
+// SentryWebhookInbox
+export const sentryWebhookInboxes = pgTable(
+  'SentryWebhookInbox',
+  {
+    id: text('id').primaryKey(),
+    provider: text('provider').notNull().default('sentry'),
+    resource: text('resource').notNull(),
+    action: text('action'),
+    organizationSlug: text('organizationSlug'),
+    projectSlug: text('projectSlug'),
+    issueId: text('issueId'),
+    issueShortId: text('issueShortId'),
+    issueTitle: text('issueTitle'),
+    issueUrl: text('issueUrl'),
+    eventId: text('eventId'),
+    level: text('level'),
+    culprit: text('culprit'),
+    dedupeKey: text('dedupeKey').notNull().unique(),
+    routingKey: text('routingKey'),
+    webhookTimestamp: timestamp('webhookTimestamp', { mode: 'date' }),
+    status: sentryWebhookInboxStatusEnum('status').notNull().default('pending'),
+    attempts: integer('attempts').notNull().default(0),
+    maxAttempts: integer('maxAttempts').notNull().default(8),
+    nextAttemptAt: timestamp('nextAttemptAt', { mode: 'date' })
+      .notNull()
+      .defaultNow(),
+    processingStartedAt: timestamp('processingStartedAt', { mode: 'date' }),
+    processedAt: timestamp('processedAt', { mode: 'date' }),
+    failedAt: timestamp('failedAt', { mode: 'date' }),
+    lastError: text('lastError'),
+    payload: json('payload').$type<JsonValue>().notNull(),
+    metadata: json('metadata').$type<JsonValue>(),
+    receivedAt: timestamp('receivedAt', { mode: 'date' })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp('updatedAt', { mode: 'date' }).notNull(),
+  },
+  (table) => [
+    index('SentryWebhookInbox_status_nextAttemptAt_idx').on(
+      table.status,
+      table.nextAttemptAt
+    ),
+    index('SentryWebhookInbox_project_issue_status_idx').on(
+      table.projectSlug,
+      table.issueId,
+      table.status
+    ),
+    index('SentryWebhookInbox_eventId_idx').on(table.eventId),
+    index('SentryWebhookInbox_routingKey_status_idx').on(
+      table.routingKey,
+      table.status
+    ),
+    index('SentryWebhookInbox_receivedAt_idx').on(table.receivedAt),
+    index('SentryWebhookInbox_resource_action_idx').on(
+      table.resource,
+      table.action
+    ),
+  ]
+);
+
+// SentryIncidentRun
+export const sentryIncidentRuns = pgTable(
+  'SentryIncidentRun',
+  {
+    id: text('id').primaryKey(),
+    inboxId: text('inboxId').notNull(),
+    sentryIssueKey: text('sentryIssueKey').notNull(),
+    issueId: text('issueId'),
+    issueShortId: text('issueShortId'),
+    action: text('action'),
+    workerId: text('workerId').notNull(),
+    status: sentryIncidentRunStatusEnum('status').notNull().default('running'),
+    decision: sentryIncidentRunDecisionEnum('decision')
+      .notNull()
+      .default('pending'),
+    linearIssueId: text('linearIssueId'),
+    linearIssueUrl: text('linearIssueUrl'),
+    codexSessionId: text('codexSessionId'),
+    summary: text('summary'),
+    resultReason: text('resultReason'),
+    error: text('error'),
+    createdAt: timestamp('createdAt', { mode: 'date' }).notNull().defaultNow(),
+    finishedAt: timestamp('finishedAt', { mode: 'date' }),
+    updatedAt: timestamp('updatedAt', { mode: 'date' }).notNull(),
+  },
+  (table) => [
+    index('SentryIncidentRun_inboxId_idx').on(table.inboxId),
+    index('SentryIncidentRun_issueKey_createdAt_idx').on(
+      table.sentryIssueKey,
+      table.createdAt
+    ),
+    index('SentryIncidentRun_linearIssueId_idx').on(table.linearIssueId),
+    index('SentryIncidentRun_status_createdAt_idx').on(
+      table.status,
+      table.createdAt
+    ),
+  ]
+);
+
+export const sentryIncidentAlertOutboxes = pgTable(
+  'SentryIncidentAlertOutbox',
+  {
+    id: text('id').primaryKey(),
+    runId: text('runId'),
+    inboxId: text('inboxId').notNull(),
+    sentryIssueKey: text('sentryIssueKey').notNull(),
+    eventType: text('eventType').notNull(),
+    dedupeKey: text('dedupeKey').notNull().unique(),
+    payload: json('payload').$type<JsonValue>().notNull(),
+    status: sentryIncidentAlertOutboxStatusEnum('status')
+      .notNull()
+      .default('pending'),
+    attempts: integer('attempts').notNull().default(0),
+    maxAttempts: integer('maxAttempts').notNull().default(8),
+    nextAttemptAt: timestamp('nextAttemptAt', { mode: 'date' })
+      .notNull()
+      .defaultNow(),
+    processingStartedAt: timestamp('processingStartedAt', { mode: 'date' }),
+    sentAt: timestamp('sentAt', { mode: 'date' }),
+    lastError: text('lastError'),
+    createdAt: timestamp('createdAt', { mode: 'date' }).notNull().defaultNow(),
+    updatedAt: timestamp('updatedAt', { mode: 'date' }).notNull(),
+  },
+  (table) => [
+    index('SentryIncidentAlertOutbox_status_nextAttemptAt_idx').on(
+      table.status,
+      table.nextAttemptAt
+    ),
+    index('SentryIncidentAlertOutbox_issueKey_createdAt_idx').on(
+      table.sentryIssueKey,
+      table.createdAt
+    ),
+    index('SentryIncidentAlertOutbox_runId_idx').on(table.runId),
+    index('SentryIncidentAlertOutbox_inboxId_idx').on(table.inboxId),
+  ]
+);
+
+export const sentryIncidentDiscordThreads = pgTable(
+  'SentryIncidentDiscordThread',
+  {
+    id: text('id').primaryKey(),
+    sentryIssueKey: text('sentryIssueKey').notNull().unique(),
+    channelId: text('channelId').notNull(),
+    rootMessageId: text('rootMessageId').notNull(),
+    threadId: text('threadId').notNull().unique(),
+    createdAt: timestamp('createdAt', { mode: 'date' }).notNull().defaultNow(),
+    updatedAt: timestamp('updatedAt', { mode: 'date' }).notNull(),
+  },
+  (table) => [
+    index('SentryIncidentDiscordThread_threadId_idx').on(table.threadId),
   ]
 );
 
@@ -297,6 +456,35 @@ export const parodyHeadlines = pgTable(
   ]
 );
 
+export type DailyTopicSourceType =
+  | 'auto'
+  | 'manual_override'
+  | 'fallback_previous_day'
+  | 'fallback_default';
+
+// DailyTopic - The single narrative topic that should drive new gameplay for a day
+export const dailyTopics = pgTable(
+  'DailyTopic',
+  {
+    id: text('id').primaryKey(),
+    date: timestamp('date', { mode: 'date' }).notNull().unique(),
+    topicKey: text('topicKey').notNull(),
+    topicLabel: text('topicLabel').notNull(),
+    summary: text('summary').notNull(),
+    sourceType: text('sourceType').$type<DailyTopicSourceType>().notNull(),
+    sourceHeadlineIds: json('sourceHeadlineIds').$type<string[]>().notNull(),
+    selectionReason: text('selectionReason'),
+    isLocked: boolean('isLocked').notNull().default(false),
+    createdAt: timestamp('createdAt', { mode: 'date' }).notNull().defaultNow(),
+    updatedAt: timestamp('updatedAt', { mode: 'date' }).notNull(),
+  },
+  (table) => [
+    index('DailyTopic_date_idx').on(table.date),
+    index('DailyTopic_topicKey_idx').on(table.topicKey),
+    index('DailyTopic_isLocked_date_idx').on(table.isLocked, table.date),
+  ]
+);
+
 // TickTokenStats - Stores LLM token usage statistics per game tick
 export const tickTokenStats = pgTable(
   'TickTokenStats',
@@ -349,6 +537,8 @@ export const parodyHeadlinesRelations = relations(
     }),
   })
 );
+
+export const dailyTopicsRelations = relations(dailyTopics, () => ({}));
 
 // AdminAuditLog - Stores audit trail for all admin actions
 export const adminAuditLogs = pgTable(
@@ -428,6 +618,18 @@ export type GameConfig = typeof gameConfigs.$inferSelect;
 export type NewGameConfig = typeof gameConfigs.$inferInsert;
 export type RealtimeOutbox = typeof realtimeOutboxes.$inferSelect;
 export type NewRealtimeOutbox = typeof realtimeOutboxes.$inferInsert;
+export type SentryWebhookInbox = typeof sentryWebhookInboxes.$inferSelect;
+export type NewSentryWebhookInbox = typeof sentryWebhookInboxes.$inferInsert;
+export type SentryIncidentRun = typeof sentryIncidentRuns.$inferSelect;
+export type NewSentryIncidentRun = typeof sentryIncidentRuns.$inferInsert;
+export type SentryIncidentAlertOutbox =
+  typeof sentryIncidentAlertOutboxes.$inferSelect;
+export type NewSentryIncidentAlertOutbox =
+  typeof sentryIncidentAlertOutboxes.$inferInsert;
+export type SentryIncidentDiscordThread =
+  typeof sentryIncidentDiscordThreads.$inferSelect;
+export type NewSentryIncidentDiscordThread =
+  typeof sentryIncidentDiscordThreads.$inferInsert;
 export type OAuthState = typeof oAuthStates.$inferSelect;
 export type NewOAuthState = typeof oAuthStates.$inferInsert;
 export type OracleCommitment = typeof oracleCommitments.$inferSelect;
@@ -448,6 +650,8 @@ export type RSSFeedSource = typeof rssFeedSources.$inferSelect;
 export type NewRSSFeedSource = typeof rssFeedSources.$inferInsert;
 export type RSSHeadline = typeof rssHeadlines.$inferSelect;
 export type NewRSSHeadline = typeof rssHeadlines.$inferInsert;
+export type DailyTopic = typeof dailyTopics.$inferSelect;
+export type NewDailyTopic = typeof dailyTopics.$inferInsert;
 export type ParodyHeadline = typeof parodyHeadlines.$inferSelect;
 export type NewParodyHeadline = typeof parodyHeadlines.$inferInsert;
 export type TickTokenStatsRow = typeof tickTokenStats.$inferSelect;

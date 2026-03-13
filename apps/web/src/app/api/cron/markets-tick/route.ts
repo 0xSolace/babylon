@@ -39,6 +39,7 @@ import {
   invalidateCache,
   recordCronExecution,
   verifyCronAuth,
+  withErrorHandling,
 } from '@babylon/api';
 import {
   PredictionDbAdapter as CorePredictionDbAdapter,
@@ -67,8 +68,12 @@ import {
 } from '@babylon/db';
 import {
   BabylonLLMClient,
+  type DailyTopicContext,
+  dailyTopicService,
+  deriveTopicFromText,
   isEligibleActor,
   mapGranularToDbTimeframe,
+  normalizeTopicDate,
   publishOracleCommitments,
   publishOracleReveals,
   QuestionManager,
@@ -420,9 +425,9 @@ function selectRelevantMediaOrg(
  * GET /api/cron/markets-tick
  * Alias for POST endpoint to support GET requests from cron services.
  */
-export async function GET(req: NextRequest) {
+export const GET = withErrorHandling(async function GET(req: NextRequest) {
   return POST(req);
-}
+});
 
 /**
  * POST /api/cron/markets-tick
@@ -433,7 +438,7 @@ export async function GET(req: NextRequest) {
  * 3. Settle positions
  * 4. Create replacement markets
  */
-export async function POST(_req: NextRequest) {
+export const POST = withErrorHandling(async function POST(_req: NextRequest) {
   // Verify cron authorization
   if (!verifyCronAuth(_req, { jobName: 'MarketsTick' })) {
     logger.warn(
@@ -570,7 +575,16 @@ export async function POST(_req: NextRequest) {
     };
 
     const now = new Date();
+    const currentDailyTopic = await dailyTopicService.ensureTopicForDate(now);
     const deadline = startTime + TICK_BUDGET_MS; // Configurable budget (default 4 min, leaves 1 min buffer)
+
+    if (!currentDailyTopic) {
+      logger.warn(
+        'No daily topic available - new main market creation will be skipped',
+        { date: now.toISOString() },
+        'MarketsTick'
+      );
+    }
 
     // Step 1: Get current market distribution
     const activeMarketsStart = Date.now();
@@ -654,7 +668,8 @@ export async function POST(_req: NextRequest) {
           MARKET_STRUCTURE[market.timeframe]?.durationMs ||
             getDefaultDuration(market.timeframe),
           llmClient,
-          gameState
+          gameState,
+          currentDailyTopic
         );
 
         if (created) {
@@ -837,7 +852,8 @@ export async function POST(_req: NextRequest) {
                 timeframe,
                 config.durationMs,
                 llmClient,
-                gameState
+                gameState,
+                currentDailyTopic
               );
 
               if (created) {
@@ -920,8 +936,22 @@ export async function POST(_req: NextRequest) {
           // Pick random active main markets as parents (one per sub-market to create)
           // Use FOR UPDATE SKIP LOCKED to avoid blocking on locked rows
           const parentMarkets = await tx
-            .select()
+            .select({
+              id: timeframedMarkets.id,
+              questionId: timeframedMarkets.questionId,
+              questionText: questions.text,
+              category: timeframedMarkets.category,
+              arcState: timeframedMarkets.arcState,
+              affiliatedActorIds: timeframedMarkets.affiliatedActorIds,
+              affiliatedOrgIds: timeframedMarkets.affiliatedOrgIds,
+              rootMarketId: timeframedMarkets.rootMarketId,
+              topicKey: timeframedMarkets.topicKey,
+              topicLabel: timeframedMarkets.topicLabel,
+              topicDate: timeframedMarkets.topicDate,
+              endTime: timeframedMarkets.endTime,
+            })
             .from(timeframedMarkets)
+            .leftJoin(questions, eq(questions.id, timeframedMarkets.questionId))
             .where(
               and(
                 eq(timeframedMarkets.isActive, true),
@@ -930,7 +960,7 @@ export async function POST(_req: NextRequest) {
             )
             .orderBy(sql`RANDOM()`)
             .limit(createCount)
-            .for('update', { skipLocked: true });
+            .for('update', { of: [timeframedMarkets], skipLocked: true });
 
           // Re-verify sub-market count after acquiring locks to prevent race condition
           // Another concurrent tick may have created sub-markets between our initial count and lock acquisition
@@ -1003,6 +1033,7 @@ export async function POST(_req: NextRequest) {
               const parentMarketData: ParentMarketData = {
                 id: parentMarket.id,
                 questionId: parentMarket.questionId,
+                questionText: parentMarket.questionText,
                 category: parseMarketCategory(
                   parentMarket.category,
                   `parent market ${parentMarket.id}`
@@ -1013,6 +1044,9 @@ export async function POST(_req: NextRequest) {
                 ),
                 affiliatedOrgIds: toStringArray(parentMarket.affiliatedOrgIds),
                 rootMarketId: parentMarket.rootMarketId,
+                topicKey: parentMarket.topicKey,
+                topicLabel: parentMarket.topicLabel,
+                topicDate: parentMarket.topicDate,
               };
               const created = await createSubMarket(
                 parentMarketData,
@@ -1162,7 +1196,7 @@ export async function POST(_req: NextRequest) {
     // Always release the global lock
     await DistributedLockService.releaseLock('markets-tick-global', processId);
   }
-}
+});
 
 /**
  * Get active markets grouped by GRANULAR timeframe (e.g., '15m', '30m', '1h')
@@ -1640,12 +1674,22 @@ async function createMarketForTimeframe(
   timeframe: string,
   durationMs: number,
   llmClient: BabylonLLMClient,
-  gameState: GameState
+  gameState: GameState,
+  dailyTopic: DailyTopicContext | null
 ): Promise<boolean> {
   const now = new Date();
   const resolutionDate = new Date(now.getTime() + durationMs);
 
   try {
+    if (!dailyTopic) {
+      logger.warn(
+        'Skipping main market creation because no daily topic is available',
+        { timeframe },
+        'MarketsTick'
+      );
+      return false;
+    }
+
     // IDEMPOTENCY CHECK: Verify we haven't exceeded the limit for this GRANULAR timeframe
     // This prevents duplicate creation from concurrent cron executions or stale counts
     // Count markets by duration to match the granular timeframe (e.g., 15m vs 30m)
@@ -1726,7 +1770,8 @@ async function createMarketForTimeframe(
     const questionManager = new QuestionManager(llmClient);
     const questionData = await questionManager.generateTimeframeQuestion(
       timeframe,
-      durationMs
+      durationMs,
+      dailyTopic
     );
 
     if (!questionData) {
@@ -1806,6 +1851,9 @@ async function createMarketForTimeframe(
         rank: 1,
         resolutionDate,
         status: 'active',
+        topicKey: dailyTopic.topicKey,
+        topicLabel: dailyTopic.topicLabel,
+        topicDate: dailyTopic.date,
         updatedAt: now,
       });
 
@@ -1839,6 +1887,9 @@ async function createMarketForTimeframe(
         timeframe: mapTimeframeToDbType(timeframe),
         granularTimeframe: timeframe, // Store precise timeframe key ('15m', '30m', etc.)
         category: inferCategory(questionData.text),
+        topicKey: dailyTopic.topicKey,
+        topicLabel: dailyTopic.topicLabel,
+        topicDate: dailyTopic.date,
         startTime: now,
         endTime: resolutionDate,
         arcState: (arcPlan.phaseOrder[0] || 'setup') as ArcStateType,
@@ -1890,6 +1941,8 @@ async function createMarketForTimeframe(
         marketId: market.id,
         timeframedMarketId,
         resolutionDate: resolutionDate.toISOString(),
+        topicKey: dailyTopic.topicKey,
+        topicLabel: dailyTopic.topicLabel,
         arcPhases: arcPlan.phaseOrder.length,
         insiders: arcPlan.insiders.length,
         deceivers: arcPlan.deceivers.length,
@@ -2137,11 +2190,45 @@ function parseMarketCategory(
 interface ParentMarketData {
   id: string;
   questionId: string | null;
+  questionText?: string | null;
   category: MarketCategory;
   arcState: string;
   affiliatedActorIds: string[];
   affiliatedOrgIds: string[];
   rootMarketId: string | null;
+  topicKey?: string | null;
+  topicLabel?: string | null;
+  topicDate?: Date | null;
+}
+
+function resolveTopicForMarket(
+  market: {
+    topicKey?: string | null;
+    topicLabel?: string | null;
+    topicDate?: Date | string | null;
+    questionText?: string | null;
+  },
+  fallbackDate = new Date()
+): DailyTopicContext {
+  if (market.topicKey && market.topicLabel) {
+    return {
+      date: market.topicDate
+        ? normalizeTopicDate(new Date(market.topicDate))
+        : normalizeTopicDate(fallbackDate),
+      topicKey: market.topicKey,
+      topicLabel: market.topicLabel,
+      summary: market.questionText?.trim() || market.topicLabel,
+      sourceType: 'fallback_previous_day',
+      sourceHeadlineIds: [],
+      selectionReason: 'Inherited from parent market topic',
+      isLocked: false,
+    };
+  }
+
+  return deriveTopicFromText(
+    market.questionText?.trim() || 'Legacy parent market topic',
+    fallbackDate
+  );
 }
 
 /**
@@ -2158,6 +2245,7 @@ async function createSubMarket(
   const now = new Date();
   const resolutionDate = new Date(now.getTime() + durationMs);
   const timeframe = inferSubMarketTimeframe(durationMs);
+  const inheritedTopic = resolveTopicForMarket(parentMarket, now);
 
   try {
     // Get parent's affiliated entities for context - inherit these for arc relevance
@@ -2202,7 +2290,8 @@ async function createSubMarket(
     const questionManager = new QuestionManager(llmClient);
     const questionData = await questionManager.generateTimeframeQuestion(
       timeframe,
-      durationMs
+      durationMs,
+      inheritedTopic
     );
 
     if (!questionData) {
@@ -2286,6 +2375,9 @@ async function createSubMarket(
         rank: 1,
         resolutionDate,
         status: 'active',
+        topicKey: inheritedTopic.topicKey,
+        topicLabel: inheritedTopic.topicLabel,
+        topicDate: inheritedTopic.date,
         updatedAt: now,
       });
 
@@ -2313,6 +2405,9 @@ async function createSubMarket(
         timeframe: mapTimeframeToDbType(timeframe),
         granularTimeframe: timeframe, // Store precise timeframe key ('15m', '30m', etc.)
         category: parentMarket.category, // Inherit from parent (already validated)
+        topicKey: inheritedTopic.topicKey,
+        topicLabel: inheritedTopic.topicLabel,
+        topicDate: inheritedTopic.date,
         parentMarketId: parentMarket.id,
         rootMarketId: parentMarket.rootMarketId ?? parentMarket.id, // Use parent's root or parent itself
         startTime: now,
@@ -2329,6 +2424,7 @@ async function createSubMarket(
       affiliatedActorIds: finalAffiliatedActorIds,
       affiliatedOrgIds: finalAffiliatedOrgIds,
       category: parentMarket.category,
+      topicLabel: inheritedTopic.topicLabel,
     });
 
     logger.info(
@@ -2337,6 +2433,7 @@ async function createSubMarket(
         questionId,
         parentId: parentMarket.id,
         category: parentMarket.category,
+        topicKey: inheritedTopic.topicKey,
         timeframe,
         durationMinutes: Math.round(durationMs / 60000),
         inheritedOrgs: finalAffiliatedOrgIds.length,
@@ -2373,6 +2470,7 @@ async function createSubMarketPost(
     affiliatedActorIds: string[];
     affiliatedOrgIds: string[];
     category: MarketCategory;
+    topicLabel?: string;
   }
 ): Promise<void> {
   try {
@@ -2409,7 +2507,7 @@ async function createSubMarketPost(
     await db.insert(posts).values({
       id: postId,
       authorId: mediaOrg.id,
-      content: `NEW MARKET: "${questionText}"\n\nA new ${durationLabel} prediction market is now open. Trade now before it closes!`,
+      content: `NEW MARKET: "${questionText}"\n\nA new ${durationLabel} prediction market is now open${parentMarketContext?.topicLabel ? ` as part of today's ${parentMarketContext.topicLabel} storyline` : ''}. Trade now before it closes!`,
       timestamp: new Date(),
       type: 'market_announcement',
       gameId: gameState.id,

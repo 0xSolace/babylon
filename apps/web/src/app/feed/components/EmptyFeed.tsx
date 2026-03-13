@@ -1,9 +1,9 @@
 'use client';
 
-import { Clock, FileText, Flame, Users } from 'lucide-react';
+import { Clock, Compass, FileText, Flame, Users } from 'lucide-react';
 import { EmptyState } from '@/components/shared/EmptyState';
 
-type EmptyFeedVariant = 'latest' | 'hot' | 'following' | 'default';
+type EmptyFeedVariant = 'latest' | 'hot' | 'forYou' | 'following' | 'default';
 
 interface EmptyFeedProps {
   variant: EmptyFeedVariant;
@@ -16,6 +16,7 @@ interface EmptyFeedProps {
  * Variants:
  * - latest: No posts in the main feed yet
  * - hot: No hot posts in the last 24 hours
+ * - forYou: No ranked recommendations in the feed
  * - following: User hasn't followed anyone
  * - default: Generic empty state
  */
@@ -26,6 +27,16 @@ export function EmptyFeed({ variant, isLoading = false }: EmptyFeedProps) {
         icon={FileText}
         title="No Posts Yet"
         description="Engine is generating posts. Check terminal for tick logs. Posts appear within 60 seconds."
+      />
+    );
+  }
+
+  if (variant === 'forYou') {
+    return (
+      <EmptyState
+        icon={Compass}
+        title="No Recommendations Yet"
+        description="For You fills up as the world reacts to the day’s story. New posts, articles, and markets will appear here as activity picks up."
       />
     );
   }

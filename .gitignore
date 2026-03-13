@@ -8,6 +8,7 @@
 .cursor/skills/
 
 # CLAUDE
+.claude/commands/
 .claude/skills/
 
 # next.js
@@ -23,6 +24,7 @@ dist/
 
 # Service Worker
 apps/web/public/sw.js
+apps/web/public/sw.js.map
 
 # misc
 .DS_Store
@@ -114,7 +116,10 @@ scripts/cleanup-excess-markets.ts
 
 # Continuous Claude cache (local only)
 .claude/cache/
+.claude/worktrees/
 .claude/tsc-cache/
+.claudekit/
+.env.hook-test
 /thoughts
 
 # START Ruler Generated Files
@@ -130,10 +135,11 @@ scripts/cleanup-excess-markets.ts
 /.gemini/settings.json.bak
 /.mcp.json
 /.mcp.json.bak
-/AGENTS.md
+# CLAUDE.md and AGENTS.md are checked in (single source of truth for all agents)
 /AGENTS.md.bak
-/CLAUDE.md
 /CLAUDE.md.bak
 /opencode.json
 /opencode.json.bak
 # END Ruler Generated Files
+# prr state file (auto-generated)
+.pr-resolver-state.json

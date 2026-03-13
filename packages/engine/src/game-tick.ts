@@ -61,6 +61,7 @@ import {
   createArcState,
   createParodyHeadlineGenerator,
   DistributedLockService,
+  dailyTopicService,
   generateArcPulseEventsIfNeeded,
   generateEvents,
   getOracleService,
@@ -74,9 +75,9 @@ import {
   rssFeedService,
   StaticDataRegistry,
   syncReputationIfAvailable,
-  TokenStatsService,
   TradeExecutionService,
   timeframeArcProcessor,
+  tokenStatsService,
   WalletService,
   worldFactsGenerator,
 } from './services';
@@ -136,6 +137,7 @@ export interface GameTickResult {
     newHeadlines: number;
     parodiesGenerated: number;
     headlinesCleaned: number;
+    dailyTopic?: string | null;
     worldFactsGenerated: number;
     worldFactsArchived: number;
   };
@@ -173,7 +175,8 @@ export interface GameTickResult {
 
 /** Executes a complete game tick (content, markets, questions, system updates). */
 export async function executeGameTick(
-  skipContentGeneration = false
+  skipContentGeneration = false,
+  skip = new Set<string>()
 ): Promise<GameTickResult> {
   const timestamp = new Date();
   const startedAt = Date.now();
@@ -181,11 +184,15 @@ export async function executeGameTick(
   const deadline = startedAt + budgetMs;
 
   // Start token usage collection for this tick
-  const tokenStatsTickId = TokenStatsService.startTick(`tick-${startedAt}`);
+  const tokenStatsTickId = tokenStatsService.startTick(`tick-${startedAt}`);
 
   logger.info(
     'Executing game tick',
-    { timestamp: timestamp.toISOString(), tokenStatsTickId },
+    {
+      timestamp: timestamp.toISOString(),
+      tokenStatsTickId,
+      ...(skip.size > 0 ? { skippedSubsystems: [...skip] } : {}),
+    },
     'GameTick'
   );
 
@@ -901,7 +908,7 @@ export async function executeGameTick(
   }
 
   // End token stats collection and store in database
-  const tickTokenStatsData = TokenStatsService.endTick();
+  const tickTokenStatsData = tokenStatsService.endTick();
   if (tickTokenStatsData) {
     // Calculate estimated cost from per-model usage
     let estimatedCostUSD = 0;
@@ -1484,6 +1491,8 @@ export async function resolveQuestionPayouts(
       .set({
         status: 'resolved',
         resolvedOutcome: winningSide,
+        resolutionReviewedAt: resolutionTimestamp,
+        resolutionReviewedBy: 'system',
         updatedAt: resolutionTimestamp,
       })
       .where(eq(questionsSchema.id, question.id));
@@ -2115,6 +2124,7 @@ export async function updateWorldFactsIfNeeded(): Promise<{
     newHeadlines: number;
     parodiesGenerated: number;
     headlinesCleaned: number;
+    dailyTopic?: string | null;
     worldFactsGenerated: number;
     worldFactsArchived: number;
   };
@@ -2218,6 +2228,9 @@ export async function updateWorldFactsIfNeeded(): Promise<{
       >
     > = [];
     let cleaned = 0;
+    let dailyTopic: Awaited<
+      ReturnType<typeof dailyTopicService.ensureTopicForDate>
+    > = null;
 
     try {
       // Step 1: Fetch all RSS feeds
@@ -2248,6 +2261,16 @@ export async function updateWorldFactsIfNeeded(): Promise<{
       logger.info(
         `Cleaned up ${cleaned} old headlines`,
         { count: cleaned },
+        'GameTick'
+      );
+
+      dailyTopic = await dailyTopicService.ensureTopicForDate(new Date());
+      logger.info(
+        'Daily topic ready',
+        {
+          topicKey: dailyTopic?.topicKey ?? null,
+          topicLabel: dailyTopic?.topicLabel ?? null,
+        },
         'GameTick'
       );
     } catch (error) {
@@ -2327,6 +2350,7 @@ export async function updateWorldFactsIfNeeded(): Promise<{
         newHeadlines: feedResult.stored,
         parodiesGenerated: parodies.length,
         headlinesCleaned: cleaned,
+        dailyTopic: dailyTopic?.topicLabel ?? null,
         worldFactsGenerated: factsResult.generated,
         worldFactsArchived: factsResult.archived,
       },
@@ -2340,6 +2364,7 @@ export async function updateWorldFactsIfNeeded(): Promise<{
         newHeadlines: feedResult.stored,
         parodiesGenerated: parodies.length,
         headlinesCleaned: cleaned,
+        dailyTopic: dailyTopic?.topicLabel ?? null,
         worldFactsGenerated: factsResult.generated,
         worldFactsArchived: factsResult.archived,
       },
@@ -2370,6 +2395,8 @@ const marketVolatilityState = new Map<
     lastMove: number;
   }
 >();
+
+const MIN_MARKET_VOLATILITY = 0.005;
 
 /**
  * Simulates natural market volatility for all perp markets.
@@ -2450,7 +2477,7 @@ export async function simulateMarketVolatility(options?: {
       let state = marketVolatilityState.get(market.ticker);
       if (!state) {
         state = {
-          recentVolatility: 0.003, // Start with 0.3% base volatility
+          recentVolatility: MIN_MARKET_VOLATILITY,
           momentum: 0,
           lastMove: 0,
         };
@@ -2472,8 +2499,10 @@ export async function simulateMarketVolatility(options?: {
       state.lastMove = move;
       state.momentum = move * 0.3; // 30% momentum carries forward
       // Volatility clustering: if big move, stay volatile
-      state.recentVolatility =
-        state.recentVolatility * 0.8 + Math.abs(move) * 0.2;
+      state.recentVolatility = Math.max(
+        MIN_MARKET_VOLATILITY,
+        state.recentVolatility * 0.8 + Math.abs(move) * 0.2
+      );
 
       // Only update if price changed meaningfully (> 0.01%)
       if (Math.abs(clampedPrice - currentPrice) / currentPrice > 0.0001) {

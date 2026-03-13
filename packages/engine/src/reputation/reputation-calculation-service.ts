@@ -7,6 +7,7 @@
 
 import {
   agentPerformanceMetrics,
+  and,
   db,
   desc,
   eq,
@@ -573,8 +574,21 @@ export async function getReputationBreakdown(
  */
 export async function getReputationLeaderboard(
   limit = 100,
-  minGames = 5
+  minGames = 5,
+  options?: {
+    activeSince?: Date | null;
+  }
 ): Promise<LeaderboardEntry[]> {
+  const leaderboardFilters = [
+    gte(agentPerformanceMetrics.gamesPlayed, minGames),
+  ];
+
+  if (options?.activeSince) {
+    leaderboardFilters.push(
+      gte(agentPerformanceMetrics.lastActivityAt, options.activeSince)
+    );
+  }
+
   const topAgents = await db
     .select({
       userId: agentPerformanceMetrics.userId,
@@ -586,7 +600,7 @@ export async function getReputationLeaderboard(
       normalizedPnL: agentPerformanceMetrics.normalizedPnL,
     })
     .from(agentPerformanceMetrics)
-    .where(gte(agentPerformanceMetrics.gamesPlayed, minGames))
+    .where(and(...leaderboardFilters))
     .orderBy(desc(agentPerformanceMetrics.reputationScore))
     .limit(limit);
 

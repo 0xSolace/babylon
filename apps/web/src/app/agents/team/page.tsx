@@ -198,6 +198,10 @@ export default function TeamChatPage() {
     handleScroll,
     scrollToBottom,
     refresh: refreshTeamChat,
+    // Reply
+    replyToMessage,
+    handleReplyToMessage,
+    clearReplyToMessage,
     // Agent processing state
     processingAgentIds,
     stopAgent,
@@ -209,6 +213,7 @@ export default function TeamChatPage() {
     createConversation,
     switchConversation,
     renameConversation,
+    deleteConversation,
   } = useTeamChat();
 
   // Mobile view state - which tab is active on mobile
@@ -840,6 +845,7 @@ export default function TeamChatPage() {
                 setMobileView('chat');
               }}
               onRenameConversation={renameConversation}
+              onDeleteConversation={deleteConversation}
             />
           </div>
 
@@ -1019,6 +1025,9 @@ export default function TeamChatPage() {
           onInputFocus={() => {
             setTimeout(() => scrollToBottom('smooth'), 150);
           }}
+          replyToMessage={replyToMessage}
+          onReply={handleReplyToMessage}
+          onDismissReply={clearReplyToMessage}
         />
       </div>
 
@@ -1039,6 +1048,7 @@ export default function TeamChatPage() {
                   onNewChat={() => createConversation()}
                   onSelectConversation={switchConversation}
                   onRenameConversation={renameConversation}
+                  onDeleteConversation={deleteConversation}
                 />
               </div>
 
@@ -1127,6 +1137,9 @@ export default function TeamChatPage() {
             onInputFocus={() => {
               setTimeout(() => scrollToBottom('smooth'), 150);
             }}
+            replyToMessage={replyToMessage}
+            onReply={handleReplyToMessage}
+            onDismissReply={clearReplyToMessage}
           />
         </div>
 

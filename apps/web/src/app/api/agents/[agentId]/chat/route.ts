@@ -41,6 +41,7 @@ import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { v4 as uuidv4 } from 'uuid';
 import { MODEL_TIER_POINTS_COST } from '@/lib/constants';
+import { trackServerEvent } from '@/lib/posthog/server';
 
 // =============================================================================
 // Multi-Step Decision Template
@@ -516,6 +517,28 @@ export const POST = withErrorHandling(
         actionParams,
       };
 
+      // Persist actionParams to stateCache so processActions' internal
+      // composeState() preserves them (it re-composes from cache, discarding
+      // any local state.data modifications).
+      const stateCache = (
+        runtime as unknown as {
+          stateCache?: Map<
+            string,
+            {
+              values?: Record<string, unknown>;
+              data?: Record<string, unknown>;
+              text?: string;
+            }
+          >;
+        }
+      ).stateCache;
+      if (stateCache && elizaMessage.id) {
+        const cached = stateCache.get(elizaMessage.id);
+        if (cached) {
+          cached.data = { ...cached.data, actionParams };
+        }
+      }
+
       // Build action content for processActions
       const actionContent = {
         text: `Executing action: ${action}`,
@@ -559,7 +582,7 @@ export const POST = withErrorHandling(
               const firstResult = resultsArray[0];
               if (firstResult) {
                 actionResult = {
-                  success: firstResult.content?.success ?? true,
+                  success: firstResult.content?.success ?? false,
                   text:
                     typeof firstResult.content?.text === 'string'
                       ? firstResult.content.text
@@ -596,7 +619,7 @@ export const POST = withErrorHandling(
               : null;
         }
 
-        const success = actionResult?.success ?? true;
+        const success = actionResult?.success ?? false;
 
         traceActionResults.push({
           actionType: action,
@@ -869,6 +892,20 @@ export const POST = withErrorHandling(
       { actionsExecuted: traceActionResults.length },
       'AgentsAPI'
     );
+
+    trackServerEvent(user.id, 'agent_message_sent', {
+      agent_id: agentId,
+      message_id: responseMessageId,
+      use_pro: usePro,
+      points_cost: actualPointsCost,
+      model_used: modelUsed,
+    }).catch((err) => {
+      logger.warn(
+        'Failed to track agent_message_sent',
+        { error: err },
+        'AgentChat'
+      );
+    });
 
     return NextResponse.json({
       success: true,

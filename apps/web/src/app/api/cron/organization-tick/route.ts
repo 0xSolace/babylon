@@ -34,6 +34,7 @@ import {
   getCacheOrFetch,
   recordCronExecution,
   verifyCronAuth,
+  withErrorHandling,
 } from '@babylon/api';
 import {
   db,
@@ -139,16 +140,16 @@ const ORG_MIN_MINUTES_BETWEEN_POSTS =
  * GET /api/cron/organization-tick
  * Alias for POST endpoint to support GET requests from cron services.
  */
-export async function GET(req: NextRequest) {
+export const GET = withErrorHandling(async function GET(req: NextRequest) {
   return POST(req);
-}
+});
 
 /**
  * POST /api/cron/organization-tick
  *
  * Executes organization autonomous tick for media orgs.
  */
-export async function POST(_req: NextRequest) {
+export const POST = withErrorHandling(async function POST(_req: NextRequest) {
   ensureEngineServices();
 
   // Verify cron authorization
@@ -543,7 +544,7 @@ export async function POST(_req: NextRequest) {
       processId
     );
   }
-}
+});
 
 /**
  * Organization type definitions for different posting behaviors.

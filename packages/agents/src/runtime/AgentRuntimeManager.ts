@@ -659,6 +659,7 @@ export class AgentRuntimeManager {
           logger.error(msg, new Error(msg), `Agent[${agentUser.displayName}]`),
         progress: (msg: string) =>
           logger.info(msg, undefined, `Agent[${agentUser.displayName}]`),
+        // biome-ignore lint/suspicious/noConsole: console.clear is not a logging call
         clear: () => (console.clear ? console.clear() : undefined),
         child: () => customLogger,
       };
@@ -668,7 +669,11 @@ export class AgentRuntimeManager {
 
     // Initialize runtime to signal services that runtime is ready
     // This prevents 30s timeout errors in services waiting for runtime initialization
-    await runtime.initialize();
+    // Skip ElizaOS plugin-sql migrations — Babylon manages its own schema via Drizzle.
+    // ElizaOS tables are included in packages/db/src/schema/eliza.ts and migrated with
+    // `bun run db:generate && bun run db:migrate`. The framework's runtime migrator is
+    // not designed for serverless and adds ~2 min cold-start overhead per agent.
+    await runtime.initialize({ skipMigrations: true });
 
     // Wrap Babylon plugin BEFORE registering (so wrapped version is used)
     // This ensures all actions and provider accesses are logged when executed
@@ -952,7 +957,8 @@ export class AgentRuntimeManager {
 
     // Initialize runtime to signal services that runtime is ready
     // This prevents 30s timeout errors in services waiting for runtime initialization
-    await runtime.initialize();
+    // Skip migrations — see comment in createNPCAgentRuntime for rationale.
+    await runtime.initialize({ skipMigrations: true });
 
     // Wrap and enhance with Babylon plugin
     // Use userId for USER_CONTROLLED agents (User table lookup), agentId for NPCs
@@ -1007,6 +1013,7 @@ export class AgentRuntimeManager {
           logger.error(msg, new Error(msg), `Agent[${agentName}]`),
         progress: (msg: string) =>
           logger.info(msg, undefined, `Agent[${agentName}]`),
+        // biome-ignore lint/suspicious/noConsole: console.clear is not a logging call
         clear: () => (console.clear ? console.clear() : undefined),
         child: () => customLogger,
       } as typeof runtime.logger;
@@ -1175,7 +1182,8 @@ export class AgentRuntimeManager {
 
     // Initialize runtime to signal services that runtime is ready
     // This prevents 30s timeout errors in services waiting for runtime initialization
-    await runtime.initialize();
+    // Skip migrations — see comment in createNPCAgentRuntime for rationale.
+    await runtime.initialize({ skipMigrations: true });
 
     // Store trajectory logger reference
     runtime.trajectoryLogger = trajectoryLogger;

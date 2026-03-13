@@ -89,6 +89,12 @@ import {
   renderPrompt,
   worldImpactAssessment,
 } from './prompts';
+import {
+  buildDailyTopicPromptContext,
+  type DailyTopicContext,
+  dailyTopicService,
+  isTextOnTopic,
+} from './services/daily-topic-service';
 import { MarketContextService } from './services/market-context-service';
 import { MarketMetricsService } from './services/market-metrics-service';
 import { saveArcPlan } from './services/narrative-state-service';
@@ -155,6 +161,7 @@ export interface QuestionCreationParams {
   activeQuestions: Question[];
   recentEvents: DayTimeline[];
   nextQuestionId: number;
+  dailyTopic?: DailyTopicContext | null;
 }
 
 /**
@@ -269,6 +276,7 @@ export class QuestionManager {
       activeQuestions,
       recentEvents,
       nextQuestionId,
+      dailyTopic,
     } = params;
 
     // Don't generate if we're at max capacity (20 questions)
@@ -309,13 +317,18 @@ export class QuestionManager {
             .join('\n')}`
         : '\n\nNo active questions yet.';
 
+    const resolvedDailyTopic =
+      dailyTopic ??
+      (await dailyTopicService.getTopicForDate(new Date(currentDate)));
+
     const prompt = await this.buildQuestionGenerationPrompt(
       scenarios,
       actors,
       organizations,
       recentContext,
       activeQuestionsContext,
-      numToGenerate
+      numToGenerate,
+      resolvedDailyTopic
     );
 
     const rawResponse = await this.llm.generateJSON<
@@ -363,6 +376,9 @@ export class QuestionManager {
 
     // Convert to Question objects with dates and IDs
     const questions: Question[] = response.questions
+      .filter(
+        (q) => !resolvedDailyTopic || isTextOnTopic(q.text, resolvedDailyTopic)
+      )
       .slice(0, numToGenerate)
       .map((q, index) => {
         const resolutionDate = new Date(currentDateObj);
@@ -379,6 +395,9 @@ export class QuestionManager {
           createdDate: currentDate,
           resolutionDate: toDateString(resolutionDate),
           status: 'active',
+          topicKey: resolvedDailyTopic?.topicKey,
+          topicLabel: resolvedDailyTopic?.topicLabel,
+          topicDate: resolvedDailyTopic?.date,
         };
       });
 
@@ -394,7 +413,8 @@ export class QuestionManager {
     organizations: Organization[],
     recentContext: string,
     activeQuestionsContext: string,
-    numToGenerate: number
+    numToGenerate: number,
+    dailyTopic: DailyTopicContext | null
   ): Promise<string> {
     const scenariosList = scenarios
       .map(
@@ -446,6 +466,7 @@ ${s.involvedOrganizations?.length ? `Organizations: ${s.involvedOrganizations.jo
       activeQuestionsContext,
       numToGenerate: numToGenerate.toString(),
       exampleQuestions,
+      dailyTopicContext: buildDailyTopicPromptContext(dailyTopic),
       ...worldContext,
     });
   }
@@ -1198,6 +1219,12 @@ TOPIC DIVERSITY (CRITICAL):
 - Mix question types: product launches, price targets, announcements, partnerships
 - NO two questions about the same actor or company in this batch
 
+STYLE VARIETY (CRITICAL):
+- Do NOT repeat the same sentence scaffold across the batch
+- Mix lead structures: person-led, company-led, metric-led, product/event-led, regulator/media-led
+- If two questions begin with the same named subject or same verb phrase, rewrite one
+- Avoid repetitive filler patterns such as "announce X by Y", "ban X in Y labs", or "launch X within Y"
+
 OUTCOME BALANCE:
 - Aim for 40-60% yes/no split in expectedOutcome
 - Not all questions should resolve the same way
@@ -1329,6 +1356,7 @@ XML: <response><questions><question><text>...</text><resolutionCriteria>...</res
     // Using default scenario ID until dynamic scenario selection is implemented
     const scenarioId = 1;
     const now = new Date();
+    const currentTopic = await dailyTopicService.ensureTopicForDate(now);
     const initialLiquidity = 20000;
 
     const marketService = new CorePredictionMarketService({
@@ -1424,6 +1452,9 @@ XML: <response><questions><question><text>...</text><resolutionCriteria>...</res
           rank: 1,
           resolutionDate,
           status: 'active',
+          topicKey: currentTopic?.topicKey,
+          topicLabel: currentTopic?.topicLabel,
+          topicDate: currentTopic?.date,
           updatedAt: now,
         })
         .returning();
@@ -1580,7 +1611,8 @@ XML: <response><questions><question><text>...</text><resolutionCriteria>...</res
    */
   async generateTimeframeQuestion(
     timeframe: string,
-    durationMs: number
+    durationMs: number,
+    dailyTopic?: DailyTopicContext | null
   ): Promise<{
     text: string;
     resolutionCriteria: string;
@@ -1596,6 +1628,9 @@ XML: <response><questions><question><text>...</text><resolutionCriteria>...</res
       { timeframe, durationMs, durationLabel },
       'QuestionManager'
     );
+
+    const resolvedDailyTopic =
+      dailyTopic ?? (await dailyTopicService.ensureTopicForDate(new Date()));
 
     // Gather comprehensive context (same as continuous game generation)
     const [
@@ -1696,9 +1731,14 @@ XML: <response><questions><question><text>...</text><resolutionCriteria>...</res
       organizationsList
     );
 
+    const dailyTopicContext = buildDailyTopicPromptContext(resolvedDailyTopic);
+
     const prompt = `Generate ONE prediction market question for a ${durationLabel} timeframe.
 
 ${worldFactsContext}
+
+=== DAILY TOPIC ===
+${dailyTopicContext}
 
 ${eventsContext}
 
@@ -1718,6 +1758,7 @@ CRITICAL RULES:
 - Must be DIFFERENT from active questions listed above
 - Keep under 100 characters
 - If possible, BUILD ON a recent event to create narrative continuity
+- The question must be directly related to today's daily topic
 
 DIVERSITY REQUIREMENT:
 - Make this question UNIQUE - not similar to existing active markets
@@ -1815,9 +1856,41 @@ XML: <response><question><text>Your question here</text><resolutionCriteria>How 
         if (org) affiliatedOrgIds.push(org.id);
       }
 
+      const affiliatedNames = [
+        ...affiliatedActorIds
+          .map((id) => actorsList.find((actor) => actor.id === id)?.name)
+          .filter((name): name is string => Boolean(name)),
+        ...affiliatedOrgIds
+          .map((id) => organizationsList.find((org) => org.id === id)?.name)
+          .filter((name): name is string => Boolean(name)),
+      ].join(' ');
+
+      if (
+        resolvedDailyTopic &&
+        !isTextOnTopic(
+          `${sanitizedText} ${questionData.resolutionCriteria || ''} ${questionData.primaryActor || ''} ${questionData.primaryOrg || ''} ${affiliatedNames}`,
+          resolvedDailyTopic
+        )
+      ) {
+        logger.warn(
+          'Rejected off-topic timeframe question',
+          {
+            timeframe,
+            topicKey: resolvedDailyTopic.topicKey,
+            question: sanitizedText,
+          },
+          'QuestionManager'
+        );
+        return null;
+      }
+
       logger.info(
         `Generated ${timeframe} question`,
-        { text: sanitizedText, expectedOutcome },
+        {
+          text: sanitizedText,
+          expectedOutcome,
+          topicKey: resolvedDailyTopic?.topicKey,
+        },
         'QuestionManager'
       );
 
