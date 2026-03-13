@@ -64,6 +64,48 @@ describe('GET /api/feed/for-you', () => {
     expect(payload.stories).toHaveLength(1);
   });
 
+  it('includes anchor post in posts array for isNewMarket stories', async () => {
+    mockPublicRateLimit.mockResolvedValue({
+      error: null,
+      user: { userId: 'user-1' },
+      rateLimitInfo: {
+        limit: 60,
+        remaining: 59,
+        resetAt: new Date('2026-03-08T12:00:00.000Z'),
+      },
+    });
+    mockBuildForYouFeed.mockResolvedValue({
+      generatedAt: '2026-03-08T11:55:00.000Z',
+      stories: [
+        {
+          storyKey: 'market:42',
+          isNewMarket: true,
+          anchorPostId: 'anchor-post-1',
+          posts: [
+            {
+              id: 'anchor-post-1',
+              likeCount: 5,
+              commentCount: 3,
+              shareCount: 1,
+              isLiked: false,
+              isShared: false,
+            },
+          ],
+        },
+      ],
+    });
+
+    const response = await GET(makeRequest());
+    const payload = await response.json();
+
+    const marketStory = payload.stories[0];
+    expect(marketStory.isNewMarket).toBe(true);
+    expect(marketStory.anchorPostId).toBe('anchor-post-1');
+    expect(marketStory.posts).toHaveLength(1);
+    expect(marketStory.posts[0].id).toBe('anchor-post-1');
+    expect(marketStory.posts[0].likeCount).toBe(5);
+  });
+
   it('returns a public response for anonymous users', async () => {
     mockPublicRateLimit.mockResolvedValue({
       error: null,

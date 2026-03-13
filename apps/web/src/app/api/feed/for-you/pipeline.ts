@@ -61,6 +61,7 @@ const GENERAL_STORY_KEY = '__general__';
 interface BaseForYouResult {
   stories: NarrativeStory[];
   postIds: string[];
+  anchorPostById: Map<string, NarrativePost>;
   generatedAt: string;
 }
 
@@ -554,6 +555,11 @@ async function loadBaseCandidates(): Promise<BaseForYouResult> {
     }
   }
 
+  // Map of post ID → NarrativePost for NPC "NEW MARKET:" anchor posts.
+  // These posts are excluded from storyPostMap to avoid duplication with
+  // the NewMarketCard, but their interaction data is needed for hydration.
+  const anchorPostById = new Map<string, NarrativePost>();
+
   const storyPostMap = new Map<string, NarrativePost[]>();
 
   for (const post of recentPosts) {
@@ -572,6 +578,34 @@ async function loadBaseCandidates(): Promise<BaseForYouResult> {
       orgRecord &&
       post.content.trimStart().toUpperCase().startsWith('NEW MARKET:')
     ) {
+      // Build the NarrativePost here so NewMarketCard can hydrate its InteractionBar,
+      // even though this post is excluded from the feed to avoid duplication.
+      anchorPostById.set(post.id, {
+        id: post.id,
+        content: post.content,
+        fullContent: post.fullContent ?? null,
+        articleTitle: post.articleTitle ?? null,
+        category: post.category ?? null,
+        imageUrl: post.imageUrl ?? null,
+        type: post.type,
+        timestamp: toISOStringStrict(post.timestamp, now),
+        authorId: post.authorId,
+        authorName: orgRecord.name ?? post.authorId,
+        authorUsername: orgRecord.id ?? null,
+        authorProfileImageUrl: orgRecord.imageUrl ?? null,
+        likeCount: reactionMap.get(post.id) ?? 0,
+        commentCount: commentMap.get(post.id) ?? 0,
+        shareCount: shareMap.get(post.id) ?? 0,
+        isLiked: false,
+        isShared: false,
+        relatedQuestion: post.relatedQuestion ?? null,
+        authorType: 'news',
+        isRepost: false,
+        isQuote: false,
+        quoteComment: null,
+        originalPostId: null,
+        originalPost: null,
+      });
       continue;
     }
 
@@ -897,6 +931,7 @@ async function loadBaseCandidates(): Promise<BaseForYouResult> {
   return {
     stories,
     postIds,
+    anchorPostById,
     generatedAt: now.toISOString(),
   };
 }
@@ -1040,6 +1075,19 @@ export async function buildForYouFeed(userId?: string | null) {
       .filter((postId): postId is string => Boolean(postId))
   );
   const sharedSet = new Set(userShares.map((row) => row.postId));
+
+  // Build an enriched version of anchor posts for new-market story hydration.
+  const enrichedAnchorPostById = new Map<string, NarrativePost>(
+    [...baseResult.anchorPostById.entries()].map(([id, post]) => [
+      id,
+      {
+        ...post,
+        isLiked: likedSet.has(id),
+        isShared: sharedSet.has(id),
+      },
+    ])
+  );
+
   const positionSet = new Set(
     userPositions
       .map((row) => row.questionId)
@@ -1197,7 +1245,11 @@ export async function buildForYouFeed(userId?: string | null) {
       ...story,
       storyScore: finalRankScore,
       finalRankScore,
-      posts: story.isNewMarket ? [] : leadPosts,
+      posts: story.isNewMarket
+        ? story.anchorPostId && enrichedAnchorPostById.has(story.anchorPostId)
+          ? [enrichedAnchorPostById.get(story.anchorPostId)!]
+          : []
+        : leadPosts,
       postCount: story.postCount,
       hasUserPosition,
       clusterId,

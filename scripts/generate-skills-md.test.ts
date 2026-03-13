@@ -1,11 +1,9 @@
-import { describe, test, expect } from 'bun:test';
-import { join } from 'node:path';
-import { readFile } from 'node:fs/promises';
+import { describe, expect, test } from 'bun:test';
 import {
+  generateSkillsMarkdown,
   parseAgentCardSkills,
   parseExecutorOperations,
   parseMCPTools,
-  generateSkillsMarkdown,
 } from './generate-skills-md';
 
 describe('generate-skills-md', () => {
@@ -26,7 +24,7 @@ describe('generate-skills-md', () => {
       }
     ],
     `;
-    
+
     const result = parseAgentCardSkills(mockContent);
     expect(result).toHaveLength(1);
     expect(result[0].id).toBe('test-skill');
@@ -47,7 +45,7 @@ describe('generate-skills-md', () => {
         return handleDefault();
     }
     `;
-    
+
     const result = parseExecutorOperations(mockContent);
     expect(result).toHaveLength(2);
     expect(result).toContain('test.operation1');
@@ -69,7 +67,7 @@ describe('generate-skills-md', () => {
       }
     ];
     `;
-    
+
     const result = parseMCPTools(mockContent);
     expect(result).toHaveLength(2);
     expect(result[0].name).toBe('tool1');
@@ -86,13 +84,20 @@ describe('generate-skills-md', () => {
         description: 'Skill description',
         tags: ['test'],
         examples: ['Example'],
-      }
+      },
     ];
     const operations = ['test.operation1', 'test.operation2'];
-    const byPrefix = new Map([['test', ['test.operation1', 'test.operation2']]]);
+    const byPrefix = new Map([
+      ['test', ['test.operation1', 'test.operation2']],
+    ]);
     const mcpTools = [{ name: 'tool1', description: 'Tool 1 description' }];
-    
-    const markdown = generateSkillsMarkdown(skills, operations, byPrefix, mcpTools);
+
+    const markdown = generateSkillsMarkdown(
+      skills,
+      operations,
+      byPrefix,
+      mcpTools
+    );
     expect(markdown).toContain('# Babylon Agent Skills');
     expect(markdown).toContain('Test Skill');
     expect(markdown).toContain('test.operation1');
