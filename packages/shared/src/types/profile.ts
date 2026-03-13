@@ -60,6 +60,8 @@ export interface PredictionPosition {
   resolution?: boolean | null;
   /** Position status: active, closed, resolved, cancelled */
   status?: string;
+  /** ISO timestamp of when the position was opened */
+  createdAt?: string;
   // Agent position metadata (optional)
   /** True if this position belongs to an agent */
   isAgentPosition?: boolean;

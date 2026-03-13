@@ -216,12 +216,15 @@ export const groqPlugin: Plugin = {
     },
     [ModelType.TEXT_SMALL]: async (
       runtime,
-      { prompt, stopSequences = [] }: GenerateTextParams
+      {
+        prompt,
+        stopSequences = [],
+        temperature = 0.7,
+        frequencyPenalty = 0.7,
+        presencePenalty = 0.7,
+        maxTokens = 8000,
+      }: GenerateTextParams
     ) => {
-      const temperature = 0.7;
-      const frequency_penalty = 0.7;
-      const presence_penalty = 0.7;
-      const max_response_length = 8000;
       const baseURL = getBaseURL(runtime);
       const groq = createGroq({
         apiKey: getStringSetting(runtime, 'GROQ_API_KEY') ?? '',
@@ -245,9 +248,9 @@ export const groqPlugin: Plugin = {
         prompt,
         system: runtime.character.system ?? undefined,
         temperature,
-        maxTokens: max_response_length,
-        frequencyPenalty: frequency_penalty,
-        presencePenalty: presence_penalty,
+        maxTokens,
+        frequencyPenalty,
+        presencePenalty,
         stopSequences,
         trajectoryLogger,
         trajectoryId,

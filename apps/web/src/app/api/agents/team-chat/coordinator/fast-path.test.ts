@@ -118,6 +118,11 @@ describe('tryFastPath', () => {
       'place',
       'submit',
       'transfer',
+      'have',
+      'get',
+      'command',
+      'instruct',
+      'order',
     ];
 
     it.each(
@@ -139,6 +144,14 @@ describe('tryFastPath', () => {
         null
       );
       expect(tryFastPath('Ask the trading bot about TSLAI')).toBe(null);
+    });
+
+    it('returns null for new dispatch verbs in agent command context', () => {
+      expect(tryFastPath('have my agent check the market')).toBe(null);
+      expect(tryFastPath('get the bot to look at prices')).toBe(null);
+      expect(tryFastPath('command the agent to analyze TSLAI')).toBe(null);
+      expect(tryFastPath('instruct agent to review my portfolio')).toBe(null);
+      expect(tryFastPath('order the bot to check predictions')).toBe(null);
     });
   });
 

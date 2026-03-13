@@ -130,9 +130,11 @@ export const dispatchToAgentAction: Action = {
     });
 
     if (!result.success) {
+      // Include available agent info so the coordinator's next iteration can retry
+      // with the correct agent ID instead of giving up.
       const failResult: ActionResult = {
         success: false,
-        text: `Failed to dispatch to agent: ${result.error ?? 'Unknown error'}`,
+        text: `Failed to dispatch to agent "${agentId}": ${result.error ?? 'Unknown error'}. Check the Team Members list for the correct agent [id: ...] and retry.`,
         values: { agentId, command, error: result.error },
       };
       _callback?.({ content: failResult });

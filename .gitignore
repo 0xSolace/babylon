@@ -8,6 +8,7 @@
 .cursor/skills/
 
 # CLAUDE
+.claude/commands/
 .claude/skills/
 
 # next.js
@@ -134,9 +135,8 @@ scripts/cleanup-excess-markets.ts
 /.gemini/settings.json.bak
 /.mcp.json
 /.mcp.json.bak
-/AGENTS.md
+# CLAUDE.md and AGENTS.md are checked in (single source of truth for all agents)
 /AGENTS.md.bak
-/CLAUDE.md
 /CLAUDE.md.bak
 /opencode.json
 /opencode.json.bak

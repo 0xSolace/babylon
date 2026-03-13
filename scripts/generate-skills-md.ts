@@ -67,7 +67,8 @@ export function parseAgentCardSkills(content: string): Array<{
   const blocks: { id: string; raw: string }[] = [];
   for (let i = 0; i < indices.length; i++) {
     // Find the end of this skill block: either the start of next skill or end of skills array
-    let end = i + 1 < indices.length ? indices[i + 1].start : block.indexOf('\n  ],');
+    let end =
+      i + 1 < indices.length ? indices[i + 1].start : block.indexOf('\n  ],');
     // Handle case where the closing array pattern isn't found
     if (end === -1) {
       end = block.indexOf('\n];'); // Try alternate closing pattern
@@ -420,9 +421,15 @@ function main() {
     process.exit(1);
   }
 
-  const mdBody = generateSkillsMarkdown(skills, operations, byPrefix, mcpTools, {
-    skipGeneratedNotice: packageMode,
-  });
+  const mdBody = generateSkillsMarkdown(
+    skills,
+    operations,
+    byPrefix,
+    mcpTools,
+    {
+      skipGeneratedNotice: packageMode,
+    }
+  );
 
   if (packageMode) {
     const skillDir = join(outputPath, SKILL_NAME);

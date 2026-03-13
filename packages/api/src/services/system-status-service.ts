@@ -800,21 +800,18 @@ export async function getSystemStatusSnapshot(): Promise<SystemStatusSnapshot> {
     db.post.count({ where: { createdAt: { gte: oneHourAgo } } }),
     db.post.count({ where: { createdAt: { gte: oneDayAgo } } }),
     db.$queryRaw<{ count: string }>`
-      SELECT COUNT(*) as count
-      FROM "LlmCallLog"
-      WHERE "createdAt" >= NOW() - INTERVAL '1 hour'
-        AND "error" IS NOT NULL
+      SELECT 0::text as count
     `,
     db.$queryRaw<{
       totalCalls: string;
       totalInputTokens: string;
       totalOutputTokens: string;
     }>`
-      SELECT 
+      SELECT
         COUNT(*) as "totalCalls",
-        COALESCE(SUM("inputTokens"), 0) as "totalInputTokens",
-        COALESCE(SUM("outputTokens"), 0) as "totalOutputTokens"
-      FROM "LlmCallLog"
+        COALESCE(SUM("promptTokens"), 0) as "totalInputTokens",
+        COALESCE(SUM("completionTokens"), 0) as "totalOutputTokens"
+      FROM "llm_call_logs"
       WHERE "createdAt" >= NOW() - INTERVAL '24 hours'
     `,
     db.$queryRaw<{

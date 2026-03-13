@@ -1,0 +1,96 @@
+# Babylon — Agent & Developer Rules
+
+> Single source of truth for all AI coding agents (Claude Code, Cursor, Codex, etc.) and human contributors.
+> If you are reading `AGENTS.md`, it points here. Do not duplicate rules — edit this file.
+
+## Quality Gate (run before every commit)
+
+```bash
+bun run check          # Biome format + lint (auto-fix)
+bun run typecheck      # TypeScript across all packages
+bun run lint           # Turbo lint (zero warnings required)
+bun run test:unit      # Unit tests
+```
+
+Run integration tests when your changes touch DB/API:
+```bash
+bun run test:integration
+```
+
+Build before declaring done:
+```bash
+bun run build
+```
+
+## Architecture
+
+### Dependency Direction
+
+`apps/* → packages/* → packages/contracts`
+
+- **Apps are wiring-only**: validate input → call service → map errors → return response.
+- **Domain logic belongs in packages** and must stay framework-agnostic (no Next/React/Elysia imports in domain code).
+- No circular dependencies between packages.
+
+### Where to Put Code
+
+| What | Where |
+|---|---|
+| Domain rules / game logic | `packages/engine`, `packages/agents` |
+| Infra adapters (db/redis/http/sse/auth) | `packages/api`, `packages/db`, `packages/shared` |
+| UI and route wiring | `apps/web` |
+| Tests | `packages/testing` |
+| Vendor docs | `docs/vendors/{vendor}` |
+
+### State (current → target)
+
+- **Current**: Next.js `apps/web` hosts UI + API routes + SSE + A2A. CLI in `apps/cli`. Domain in `packages/engine` and `packages/agents`.
+- **Target**: Elysia host in `apps/server`, workers in `apps/daemon`, dedicated `apps/agents`, domain split into `packages/core/*`.
+
+## Code Standards
+
+- **Bun + TypeScript ESM**, 2-space indent, minimal changes.
+- **No `any`**; avoid `unknown` (only as last resort, narrow immediately).
+- **No broad `try/catch`**: catch only expected errors, map at boundaries. Fail fast otherwise.
+- **Reuse before building**: search the codebase for existing patterns/utilities before adding new ones.
+- **No invented behavior**: don't add fake placeholders or synthetic data. Build the real thing or leave a clear TODO.
+- **Secrets**: never commit API keys, private keys, or tokens. Never log sensitive values.
+- **Env hygiene**: new/changed env vars must be reflected in `.env.example` with required/optional + default notes.
+- **Scope discipline**: don't fix unrelated lint/format issues or revert other WIP. Keep changes scoped to the task.
+- **Documentation**: don't create new docs/READMEs unless requested. Update existing docs when behavior changes.
+
+## Git Conventions
+
+- Default branch: `staging` (not `main`).
+- Commits: concise, imperative, prefixed (`feat:`, `fix:`, `chore:`, `refactor:`, `test:`, `docs:`).
+- Always run `bun run check` before committing (Biome auto-fix).
+- Run `bun run typecheck` and `bun run lint` before pushing.
+
+## Testing
+
+- Prefer **integration tests** for API/DB/infra flows (`packages/testing/integration`).
+- Use **unit tests** for pure logic where they add confidence without heavy mocking (`packages/testing/unit`).
+- Keep tests deterministic. Use fakes/stubs where appropriate, but avoid synthetic success paths.
+
+## Commands Reference
+
+| Task | Command |
+|---|---|
+| Install | `bun install` |
+| Dev (full) | `bun run dev` |
+| Dev (web only) | `bun run dev:web` |
+| Format + lint fix | `bun run check` |
+| Typecheck | `bun run typecheck` |
+| Lint | `bun run lint` |
+| Build | `bun run build` |
+| Unit tests | `bun run test:unit` |
+| Integration tests | `bun run test:integration` |
+| DB generate | `bun run db:generate` |
+| DB migrate | `bun run db:migrate` |
+| DB seed | `bun run db:seed` |
+| Vendor docs | `bun run docs:generate` |
+
+## Tooling Notes
+
+- Ruler (`.ruler/`) generates agent config files. After editing `.ruler/**`, run `bun run ruler:apply`.
+- Prefer local vendor docs (`docs/vendors/`) before guessing APIs.

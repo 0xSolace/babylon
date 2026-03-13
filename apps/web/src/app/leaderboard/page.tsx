@@ -40,7 +40,7 @@ const LeaderboardWidgetSidebar = dynamic(
 );
 
 export default function LeaderboardPage() {
-  const { authenticated, user } = useAuth();
+  const { authenticated, getAccessToken, user } = useAuth();
   const [leaderboardData, setLeaderboardData] =
     useState<LeaderboardData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -61,11 +61,13 @@ export default function LeaderboardPage() {
       setError(null);
 
       try {
+        const authToken = authenticated ? await getAccessToken() : null;
         const data = await fetchLeaderboardData({
           currentPage,
           pageSize,
           selectedTab,
           userId: authenticatedUserId,
+          authToken,
           signal: controller.signal,
         });
 
@@ -83,7 +85,13 @@ export default function LeaderboardPage() {
 
     void loadLeaderboard();
     return () => controller.abort();
-  }, [currentPage, selectedTab, authenticatedUserId]);
+  }, [
+    currentPage,
+    selectedTab,
+    authenticatedUserId,
+    authenticated,
+    getAccessToken,
+  ]);
 
   useEffect(() => {
     if (scrollToUserRef.current && !loading) {
@@ -159,6 +167,7 @@ export default function LeaderboardPage() {
   const isCurrentUserOnPage = currentUserRowId
     ? leaderboardData?.leaderboard.some((p) => p.id === currentUserRowId)
     : false;
+  const followedUserIds = new Set(leaderboardData?.followingUserIds ?? []);
 
   const tabDescriptions: Record<LeaderboardTab, string> = {
     wallet:
@@ -208,7 +217,15 @@ export default function LeaderboardPage() {
               onClick={(e) => e.stopPropagation()}
               onKeyDown={(e) => e.stopPropagation()}
             >
-              <FollowButton userId={player.id} variant="circle" />
+              <FollowButton
+                userId={player.id}
+                variant="circle"
+                initialFollowing={
+                  leaderboardData?.followingUserIdsResolved
+                    ? followedUserIds.has(player.id)
+                    : undefined
+                }
+              />
             </div>
           )}
         </div>
