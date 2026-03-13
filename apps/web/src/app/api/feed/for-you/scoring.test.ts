@@ -47,7 +47,10 @@ function makeStory(
   };
 }
 
-function makeAnchorPost(id: string, overrides: Partial<NarrativePost> = {}): NarrativePost {
+function makeAnchorPost(
+  id: string,
+  overrides: Partial<NarrativePost> = {}
+): NarrativePost {
   return {
     id,
     content: 'NEW MARKET: Will BTC reach $100k?',
@@ -86,9 +89,11 @@ describe('isNewMarket story invariants', () => {
       posts: [makeAnchorPost('anchor-2')],
       anchorPostId: 'anchor-2',
     });
+    // narrative score (8.8) must exceed market2's penalised score (9 - 0.5 = 8.5)
+    // so the window penalty is sufficient to push market2 below narrative
     const narrative = makeStory('story:1', {
       isNewMarket: false,
-      storyScore: 5,
+      storyScore: 8.8,
     });
 
     const input = [market1, market2, narrative];
