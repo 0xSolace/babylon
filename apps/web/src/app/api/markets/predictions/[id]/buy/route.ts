@@ -2,6 +2,7 @@ import type { JsonValue } from '@babylon/api';
 import {
   authenticate,
   broadcastToChannel,
+  checkProgress,
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
@@ -109,6 +110,8 @@ export const POST = withErrorHandling(
     }).catch((error) => {
       logger.warn('Failed to track prediction_bought event', { error });
     });
+
+    void checkProgress(user.userId, { type: 'prediction_trade', marketId });
 
     return successResponse(
       {
