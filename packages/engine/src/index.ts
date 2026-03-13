@@ -196,6 +196,15 @@ export {
   NPCPortfolioStrategy,
   type StrategyConfig,
 } from './npc/npc-portfolio-strategy';
+// NPC Portfolio Metrics (shared calculation utilities)
+export {
+  buildFallbackMetricsByPool,
+  getEffectiveLeverage,
+  getPositionExposure,
+  type FallbackPerpRow,
+  type FallbackPositionRow,
+  type PoolMetrics,
+} from './npc/portfolio-metrics';
 export {
   type ParsedPostMetadata,
   type ParseResult,
