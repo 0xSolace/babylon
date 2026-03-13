@@ -593,9 +593,9 @@ async function loadBaseCandidates(): Promise<BaseForYouResult> {
         authorName: orgRecord.name ?? post.authorId,
         authorUsername: orgRecord.id ?? null,
         authorProfileImageUrl: orgRecord.imageUrl ?? null,
-        likeCount: reactionMap.get(post.id) ?? 0,
-        commentCount: commentMap.get(post.id) ?? 0,
-        shareCount: shareMap.get(post.id) ?? 0,
+        likeCount,
+        commentCount,
+        shareCount,
         isLiked: false,
         isShared: false,
         relatedQuestion: post.relatedQuestion ?? null,
@@ -1246,9 +1246,13 @@ export async function buildForYouFeed(userId?: string | null) {
       storyScore: finalRankScore,
       finalRankScore,
       posts: story.isNewMarket
-        ? story.anchorPostId && enrichedAnchorPostById.has(story.anchorPostId)
-          ? [enrichedAnchorPostById.get(story.anchorPostId)!]
-          : []
+        ? (() => {
+            const anchorPost =
+              story.anchorPostId != null
+                ? enrichedAnchorPostById.get(story.anchorPostId)
+                : undefined;
+            return anchorPost != null ? [anchorPost] : [];
+          })()
         : leadPosts,
       postCount: story.postCount,
       hasUserPosition,
