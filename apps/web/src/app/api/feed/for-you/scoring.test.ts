@@ -106,7 +106,9 @@ describe('isNewMarket story invariants', () => {
       .map((s, i) => (s.isNewMarket ? i : -1))
       .filter((i) => i !== -1);
     expect(marketIndices.length).toBe(2);
-    expect((marketIndices[1] ?? 0) - (marketIndices[0] ?? 0)).toBeGreaterThan(1);
+    expect((marketIndices[1] ?? 0) - (marketIndices[0] ?? 0)).toBeGreaterThan(
+      1
+    );
   });
 
   it('diversifyForYouStories preserves anchor post data on new-market stories', () => {

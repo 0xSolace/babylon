@@ -380,7 +380,12 @@ async function loadBaseCandidates(): Promise<BaseForYouResult> {
     .limit(MAX_CANDIDATE_POSTS);
 
   if (recentPosts.length === 0) {
-    return { stories: [], postIds: [], anchorPostById: new Map(), generatedAt: now.toISOString() };
+    return {
+      stories: [],
+      postIds: [],
+      anchorPostById: new Map(),
+      generatedAt: now.toISOString(),
+    };
   }
 
   const postIds = recentPosts.map((post) => post.id);
