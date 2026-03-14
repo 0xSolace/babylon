@@ -6,6 +6,7 @@ import {
 import type {
   GameMasterAppraisal,
   GameMasterHypothesis,
+  GameMasterMotivationContext,
   GameMasterPluginContext,
   GameMasterPluginId,
   GameMasterPluginSummary,
@@ -57,7 +58,7 @@ function createAppraisals(
   return [
     {
       key: 'power',
-      pluginId: 'plugin-power',
+      pluginId: 'plugin-appraisal',
       score: powerImbalance,
       summary:
         powerImbalance > 0.6
@@ -66,7 +67,7 @@ function createAppraisals(
     },
     {
       key: 'money',
-      pluginId: 'plugin-money',
+      pluginId: 'plugin-appraisal',
       score: moneyPressure,
       summary:
         moneyPressure > 0.5
@@ -75,7 +76,7 @@ function createAppraisals(
     },
     {
       key: 'notoriety',
-      pluginId: 'plugin-notoriety',
+      pluginId: 'plugin-appraisal',
       score: notorietyPressure,
       summary:
         notorietyPressure > 0.65
@@ -84,7 +85,7 @@ function createAppraisals(
     },
     {
       key: 'relationship',
-      pluginId: 'plugin-relationship',
+      pluginId: 'plugin-appraisal',
       score: relationshipHeat,
       summary:
         relationshipHeat > 0.5
@@ -93,7 +94,7 @@ function createAppraisals(
     },
     {
       key: 'opportunity',
-      pluginId: 'plugin-opportunity',
+      pluginId: 'plugin-appraisal',
       score: opportunityDensity,
       summary:
         opportunityDensity > 0.55
@@ -120,7 +121,7 @@ function createAppraisals(
     },
     {
       key: 'urgency',
-      pluginId: 'plugin-engagement',
+      pluginId: 'plugin-observatory',
       score: interventionUrgency,
       summary:
         interventionUrgency > 0.75
@@ -234,7 +235,8 @@ function buildHypotheses(
 }
 
 function buildPluginSummaries(
-  appraisals: GameMasterAppraisal[]
+  appraisals: GameMasterAppraisal[],
+  additionalModeledPluginIds: readonly GameMasterPluginId[]
 ): GameMasterPluginSummary[] {
   const summaries = appraisals.map((appraisal) => {
     const definition = GAME_MASTER_PLUGIN_CATALOG[appraisal.pluginId];
@@ -246,6 +248,17 @@ function buildPluginSummaries(
   });
 
   const activeIds = new Set(summaries.map((summary) => summary.pluginId));
+  for (const pluginId of additionalModeledPluginIds) {
+    if (activeIds.has(pluginId)) continue;
+    const definition = GAME_MASTER_PLUGIN_CATALOG[pluginId];
+    summaries.push({
+      pluginId,
+      status: definition.status,
+      summary: definition.rationale,
+    });
+    activeIds.add(pluginId);
+  }
+
   for (const definition of listActiveGameMasterPlugins()) {
     if (activeIds.has(definition.id)) continue;
     summaries.push({
@@ -258,32 +271,32 @@ function buildPluginSummaries(
   return summaries;
 }
 
-export function buildGameMasterPluginContext(
-  snapshot: GameMasterWorldSnapshot
-): GameMasterPluginContext {
-  const appraisals = createAppraisals(snapshot);
-  const motivation = buildMotivation(appraisals);
-  const hypotheses = buildHypotheses(snapshot, appraisals);
-  const pluginSummaries = buildPluginSummaries(appraisals);
+export function buildGameMasterPluginContextFromData(input: {
+  appraisals: GameMasterAppraisal[];
+  motivation: GameMasterMotivationContext;
+  hypotheses: GameMasterHypothesis[];
+  additionalModeledPluginIds?: GameMasterPluginId[];
+}): GameMasterPluginContext {
+  const additionalModeledPluginIds = input.additionalModeledPluginIds ?? [];
+  const pluginSummaries = buildPluginSummaries(
+    input.appraisals,
+    additionalModeledPluginIds
+  );
   const catalogActivePluginIds = listActiveGameMasterPlugins().map(
     (plugin) => plugin.id
   );
   const modeledPluginIds = new Set<GameMasterPluginId>(
-    appraisals.map((appraisal) => appraisal.pluginId)
+    input.appraisals.map((appraisal) => appraisal.pluginId)
   );
-
-  if (motivation.priorities.length > 0 || motivation.constraints.length > 0) {
-    modeledPluginIds.add('plugin-motivation');
-  }
-  if (hypotheses.length > 0) {
-    modeledPluginIds.add('plugin-neuro');
+  for (const pluginId of additionalModeledPluginIds) {
+    modeledPluginIds.add(pluginId);
   }
 
   return {
     pluginSummaries,
-    appraisals,
-    motivation,
-    hypotheses,
+    appraisals: input.appraisals,
+    motivation: input.motivation,
+    hypotheses: input.hypotheses,
     observability: {
       catalogActivePluginCount: catalogActivePluginIds.length,
       catalogActivePluginIds,
@@ -291,4 +304,19 @@ export function buildGameMasterPluginContext(
       modeledPluginIds: [...modeledPluginIds],
     },
   };
+}
+
+export function buildGameMasterPluginContext(
+  snapshot: GameMasterWorldSnapshot
+): GameMasterPluginContext {
+  const appraisals = createAppraisals(snapshot);
+  const motivation = buildMotivation(appraisals);
+  const hypotheses = buildHypotheses(snapshot, appraisals);
+
+  return buildGameMasterPluginContextFromData({
+    appraisals,
+    motivation,
+    hypotheses,
+    additionalModeledPluginIds: ['plugin-observatory'],
+  });
 }

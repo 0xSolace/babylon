@@ -2,8 +2,8 @@ import { StaticDataRegistry } from '../services/static-data-registry';
 import { secureRandom } from '../utils/entropy';
 import { GAME_MASTER_DEFAULTS } from './constants';
 import {
-  type GameMasterPlanningInput,
   type GameMasterPlan,
+  type GameMasterPlanningInput,
   gameMasterPlanSchema,
 } from './types';
 
@@ -19,7 +19,9 @@ function pickRandom<T>(items: readonly T[], count: number): T[] {
   return picked;
 }
 
-function buildTopicSummary(snapshot: GameMasterPlanningInput['snapshot']): string {
+function buildTopicSummary(
+  snapshot: GameMasterPlanningInput['snapshot']
+): string {
   if (!snapshot.currentTopic) {
     return 'No daily topic is set. The narrative needs a clear center of gravity.';
   }

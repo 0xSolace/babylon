@@ -78,7 +78,7 @@ interface GameMasterDashboard {
     packageInstalled: boolean;
     runtimeMounted: boolean;
     planningMode: 'engine_modeled' | 'runtime_plugin' | 'inactive';
-    lastSuccessfullyUsedAt: string | null;
+    lastPlannedAt: string | null;
   }>;
 }
 
@@ -338,9 +338,10 @@ export function GameMasterTab() {
           <div>
             <h3 className="font-medium text-base">Plugin Integrations</h3>
             <p className="text-muted-foreground text-sm">
-              This panel shows the difference between catalog support,
-              workspace package installation, actual runtime mounting, and the
-              planning path Halliday is currently using.
+              This panel shows the difference between catalog support, workspace
+              package installation, actual runtime mounting, and whether
+              Halliday is currently using modeled engine context or a live
+              runtime plugin path.
             </p>
           </div>
           <div className="text-muted-foreground text-sm">
@@ -377,7 +378,9 @@ export function GameMasterTab() {
               <p className="mt-2 text-sm">{plugin.capability}</p>
               <div className="mt-2 flex flex-wrap gap-2 text-[11px] uppercase">
                 <span className="rounded bg-muted px-2 py-1 text-muted-foreground">
-                  {plugin.catalogSupported ? 'catalog-supported' : 'uncataloged'}
+                  {plugin.catalogSupported
+                    ? 'catalog-supported'
+                    : 'uncataloged'}
                 </span>
                 <span
                   className={cn(
@@ -387,7 +390,9 @@ export function GameMasterTab() {
                       : 'bg-muted text-muted-foreground'
                   )}
                 >
-                  {plugin.packageInstalled ? 'package-installed' : 'package-missing'}
+                  {plugin.packageInstalled
+                    ? 'package-installed'
+                    : 'package-missing'}
                 </span>
                 <span
                   className={cn(
@@ -397,7 +402,9 @@ export function GameMasterTab() {
                       : 'bg-muted text-muted-foreground'
                   )}
                 >
-                  {plugin.runtimeMounted ? 'runtime-mounted' : 'runtime-unmounted'}
+                  {plugin.runtimeMounted
+                    ? 'runtime-mounted'
+                    : 'runtime-unmounted'}
                 </span>
                 <span className="rounded bg-primary/10 px-2 py-1 text-primary">
                   planning: {plugin.planningMode.replace('_', '-')}
@@ -407,9 +414,9 @@ export function GameMasterTab() {
                 {plugin.rationale}
               </p>
               <p className="mt-1 text-muted-foreground text-xs">
-                Last successfully used:{' '}
-                {plugin.lastSuccessfullyUsedAt
-                  ? formatDate(plugin.lastSuccessfullyUsedAt)
+                Last observed in planning:{' '}
+                {plugin.lastPlannedAt
+                  ? formatDate(plugin.lastPlannedAt)
                   : 'Not yet observed'}
               </p>
             </div>

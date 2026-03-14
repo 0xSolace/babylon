@@ -6,24 +6,24 @@ export const GAME_MASTER_PLUGIN_CATALOG: Record<
 > = {
   'plugin-homeostasis': {
     id: 'plugin-homeostasis',
-    status: 'active',
+    status: 'advisory',
     capability: 'internal drives and resource stress',
     rationale:
-      'Halliday now maps world-state pressure into homeostasis-style stress signals so motivation can consume a normalized internal state.',
+      'Useful as a secondary runtime enrichment, but Halliday should not depend on internal-drive simulation for core planning.',
   },
   'plugin-appraisal': {
     id: 'plugin-appraisal',
     status: 'active',
     capability: 'typed world-state appraisal registry',
     rationale:
-      'Best fit for converting raw Babylon snapshot data into reusable Halliday state.',
+      'Primary structured scoring source for Halliday world-state interpretation.',
   },
   'plugin-motivation': {
     id: 'plugin-motivation',
-    status: 'active',
+    status: 'advisory',
     capability: 'priorities, constraints, and opportunities',
     rationale:
-      'Halliday needs a motivational layer above appraisals so actions come from ranked concerns rather than ad hoc rules.',
+      'Useful as an optional secondary interpreter, but not required for Halliday’s minimal correct architecture.',
   },
   'plugin-goals': {
     id: 'plugin-goals',
@@ -41,37 +41,38 @@ export const GAME_MASTER_PLUGIN_CATALOG: Record<
   },
   'plugin-neuro': {
     id: 'plugin-neuro',
-    status: 'active',
+    status: 'advisory',
     capability: 'hypotheses, narrative synthesis, and cognitive memory',
     rationale:
-      'Directly improves Halliday’s ability to form and update world-level narrative theories.',
+      'Useful for future richer hypothesis memory, but not required for lean Halliday planning.',
   },
   'plugin-opportunity': {
     id: 'plugin-opportunity',
-    status: 'active',
+    status: 'advisory',
     capability: 'opportunity detection',
     rationale:
-      'Maps cleanly to identifying where Halliday can inject pressure or attention next.',
+      'Its signal can be represented through appraisal outputs without Halliday depending on a separate first-class plugin.',
   },
   'plugin-investigator': {
     id: 'plugin-investigator',
     status: 'active',
     capability: 'story sensing and event tracking',
-    rationale: 'Strong fit for article and world-event sensing.',
+    rationale:
+      'Primary story-sensing source for Halliday event and narrative coherence analysis.',
   },
   'plugin-newsreporter': {
     id: 'plugin-newsreporter',
     status: 'active',
     capability: 'coverage cadence and anti-spam reporting',
     rationale:
-      'Improves how Halliday shapes article output without repetitive briefs.',
+      'Primary coverage-gap and article-brief shaping source for Halliday.',
   },
   'plugin-power': {
     id: 'plugin-power',
-    status: 'active',
+    status: 'advisory',
     capability: 'influence and leverage appraisal',
     rationale:
-      'Useful for deciding which actors and organizations Halliday should push or destabilize.',
+      'Best represented as a domain inside plugin-appraisal for Halliday rather than a separate required planning dependency.',
   },
   'plugin-money': {
     id: 'plugin-money',
@@ -82,17 +83,17 @@ export const GAME_MASTER_PLUGIN_CATALOG: Record<
   },
   'plugin-notoriety': {
     id: 'plugin-notoriety',
-    status: 'active',
+    status: 'advisory',
     capability: 'visibility and reputation appraisal',
     rationale:
-      'Useful for selecting amplification targets and narrative protagonists.',
+      'Useful as an appraisal domain, but not a required first-class Halliday plugin.',
   },
   'plugin-relationship': {
     id: 'plugin-relationship',
-    status: 'active',
+    status: 'advisory',
     capability: 'relationship health appraisal',
     rationale:
-      'Babylon already has relationship state; Halliday benefits from a derived relationship heat signal.',
+      'Halliday can consume relationship heat via appraisals without depending on a dedicated first-class relationship plugin.',
   },
   'plugin-health': {
     id: 'plugin-health',
@@ -150,10 +151,10 @@ export const GAME_MASTER_PLUGIN_CATALOG: Record<
   },
   'plugin-engagement': {
     id: 'plugin-engagement',
-    status: 'active',
+    status: 'advisory',
     capability: 'engagement and churn signals',
     rationale:
-      'Useful for measuring whether the current narrative is landing or stalling.',
+      'Useful as a secondary signal, but not part of the lean core Halliday planning stack.',
   },
   'plugin-wrapped': {
     id: 'plugin-wrapped',
@@ -202,7 +203,8 @@ export const GAME_MASTER_PLUGIN_CATALOG: Record<
     id: 'plugin-observatory',
     status: 'active',
     capability: 'provider observability and influence tracing',
-    rationale: 'Directly useful for Halliday operator trust and debugging.',
+    rationale:
+      'Primary operator-trust and planning-trace surface for Halliday.',
   },
   'plugin-rss': {
     id: 'plugin-rss',

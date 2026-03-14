@@ -1,6 +1,6 @@
-import { $ } from 'bun';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { $ } from 'bun';
 
 const plugins = [
   'plugin-appraisal',

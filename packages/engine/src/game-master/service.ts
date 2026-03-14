@@ -1,3 +1,6 @@
+import { existsSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   actorRelationships,
   and,
@@ -25,9 +28,6 @@ import {
   worldEvents,
 } from '@babylon/db';
 import { generateSnowflakeId, logger, ValidationError } from '@babylon/shared';
-import { existsSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { DistributedLockService } from '../services/distributed-lock-service';
 import { npcMemoryService } from '../services/npc-memory-service';
 import { broadcastToChannel } from '../services/realtime-broadcaster';
@@ -40,7 +40,9 @@ import {
 import {
   buildGameMasterPluginContext,
   GAME_MASTER_PLUGIN_CATALOG,
+  listMountedGameMasterPluginIds,
   type ResolvedGameMasterPluginContext,
+  resolveRuntimeGameMasterPluginContext,
 } from './integrations';
 import { gameMasterPlanner } from './planner';
 import { gameMasterPolicyEngine } from './policy';
@@ -54,7 +56,10 @@ import {
 const ENGINE_DIR = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(ENGINE_DIR, '..', '..', '..', '..');
 const GAME_MASTER_WORKSPACE_PLUGIN_PATHS = {
-  'plugin-appraisal': resolve(REPO_ROOT, 'packages/plugin-appraisal/package.json'),
+  'plugin-appraisal': resolve(
+    REPO_ROOT,
+    'packages/plugin-appraisal/package.json'
+  ),
   'plugin-homeostasis': resolve(
     REPO_ROOT,
     'packages/plugin-homeostasis/package.json'
@@ -129,7 +134,7 @@ export interface GameMasterDashboard {
     packageInstalled: boolean;
     runtimeMounted: boolean;
     planningMode: 'engine_modeled' | 'runtime_plugin' | 'inactive';
-    lastSuccessfullyUsedAt: string | null;
+    lastPlannedAt: string | null;
   }>;
 }
 
@@ -429,9 +434,15 @@ export class GameMasterService {
     };
   }
 
-  private resolvePluginContext(
+  private async resolvePluginContext(
     snapshot: GameMasterWorldSnapshot
-  ): ResolvedGameMasterPluginContext {
+  ): Promise<ResolvedGameMasterPluginContext> {
+    const runtimeResolved =
+      await resolveRuntimeGameMasterPluginContext(snapshot);
+    if (runtimeResolved) {
+      return runtimeResolved;
+    }
+
     return {
       source: 'engine_modeled',
       resolvedAt: new Date(),
@@ -446,6 +457,7 @@ export class GameMasterService {
     const modeledPluginIds = new Set(
       resolvedPluginContext?.context.observability.modeledPluginIds ?? []
     );
+    const mountedPluginIds = new Set(listMountedGameMasterPluginIds());
 
     return Object.values(GAME_MASTER_PLUGIN_CATALOG).map((plugin) => {
       const packageInstalled =
@@ -465,11 +477,11 @@ export class GameMasterService {
         rationale: plugin.rationale,
         catalogSupported: true,
         packageInstalled,
-        runtimeMounted: false,
+        runtimeMounted: mountedPluginIds.has(plugin.id),
         planningMode: modeled
-          ? resolvedPluginContext?.source ?? 'engine_modeled'
+          ? (resolvedPluginContext?.source ?? 'engine_modeled')
           : 'inactive',
-        lastSuccessfullyUsedAt:
+        lastPlannedAt:
           modeled && latestRunStartedAt
             ? latestRunStartedAt.toISOString()
             : null,
@@ -1061,7 +1073,7 @@ export class GameMasterService {
         return { runId: null, runType: trigger.runType, skipped: 'no_plan' };
       }
 
-      const pluginContext = this.resolvePluginContext(snapshot);
+      const pluginContext = await this.resolvePluginContext(snapshot);
       const plan = gameMasterPlanner.plan({
         snapshot,
         trigger,
@@ -1319,7 +1331,7 @@ export class GameMasterService {
     const latestRunStartedAt = latestRuns[0]?.startedAt ?? null;
     const resolvedPluginContext =
       game && game.currentDay !== null
-        ? this.resolvePluginContext({
+        ? await this.resolvePluginContext({
             gameId: game.id,
             gameDay: game.currentDay,
             isRunning: game.isRunning,

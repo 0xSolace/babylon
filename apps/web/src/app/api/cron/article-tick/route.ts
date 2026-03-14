@@ -59,6 +59,13 @@ interface GameState {
   currentDay: number | null;
 }
 
+interface HallidayArticleBrief {
+  id: string;
+  promptOverlay: string;
+  metadata: unknown;
+  createdAt?: string | Date | null;
+}
+
 /** Valid values for Actor.initialLuck field */
 const VALID_INITIAL_LUCK = ['low', 'medium', 'high'] as const;
 type InitialLuck = (typeof VALID_INITIAL_LUCK)[number];
@@ -139,6 +146,40 @@ type ArticleGenerationResult =
   | { status: 'success'; id: string }
   | { status: 'skipped'; reason: string }
   | { status: 'error'; error: string };
+
+function orderArticleBriefs(
+  briefs: HallidayArticleBrief[]
+): HallidayArticleBrief[] {
+  return [...briefs].sort((a, b) => {
+    const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+    return aTime - bTime;
+  });
+}
+
+function buildHallidayArticleContext(
+  articleBrief: HallidayArticleBrief | null
+): string {
+  if (!articleBrief) return '';
+
+  const metadata = (articleBrief.metadata ?? {}) as Record<string, unknown>;
+  const headlineAngle =
+    typeof metadata.headlineAngle === 'string'
+      ? metadata.headlineAngle
+      : 'halliday brief';
+
+  return `Halliday brief: ${headlineAngle}. ${articleBrief.promptOverlay}`;
+}
+
+function combineWorldFactsWithHallidayBrief(
+  worldFactsContext: string,
+  articleBrief: HallidayArticleBrief | null
+): string {
+  const hallidayArticleContext = buildHallidayArticleContext(articleBrief);
+  return hallidayArticleContext
+    ? `${worldFactsContext}\n\n=== GAME MASTER HALLIDAY ===\n${hallidayArticleContext}`
+    : worldFactsContext;
+}
 
 // Vercel function configuration
 export const maxDuration = 300; // 5 minutes max
@@ -397,24 +438,9 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
       );
     }
 
-    const articleBriefs = await gameMasterService.listQueuedArticleBriefs();
-    const selectedArticleBrief = articleBriefs[0] ?? null;
-    const hallidayArticleContext = selectedArticleBrief
-      ? (() => {
-          const metadata = (selectedArticleBrief.metadata ?? {}) as Record<
-            string,
-            unknown
-          >;
-          const headlineAngle =
-            typeof metadata.headlineAngle === 'string'
-              ? metadata.headlineAngle
-              : 'halliday brief';
-          return `Halliday brief: ${headlineAngle}. ${selectedArticleBrief.promptOverlay}`;
-        })()
-      : '';
-    const combinedWorldFactsContext = hallidayArticleContext
-      ? `${worldFactsContext}\n\n=== GAME MASTER HALLIDAY ===\n${hallidayArticleContext}`
-      : worldFactsContext;
+    const articleBriefs = orderArticleBriefs(
+      (await gameMasterService.listQueuedArticleBriefs()) as HallidayArticleBrief[]
+    );
 
     // Create LLM client for article generation
     const llmClient = BabylonLLMClient.forGameTick();
@@ -441,32 +467,47 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
           const orgIndex = Math.floor(secureRandom() * newsOrgs.length);
           const org = newsOrgs[orgIndex]!;
 
-          const result = await generateEventArticle(
-            event,
-            org,
-            actorsList,
-            combinedWorldFactsContext,
-            gameState,
-            llmClient
-          );
+          const eventBriefCandidates =
+            articleBriefs.length > 0 ? articleBriefs : [null];
 
-          if (result.status === 'success') {
-            articlesCreated++;
-            if (selectedArticleBrief) {
-              await gameMasterService.consumeDirective(selectedArticleBrief.id);
-            }
-            // Mark this event as covered for future duplicate detection
-            markEventAsCovered(eventId, org.id, result.id);
-            logger.info(
-              `Article created by ${org.name}`,
-              { eventId: event.questionId, articleId: result.id },
-              'ArticleTick'
+          for (const articleBrief of eventBriefCandidates) {
+            const result = await generateEventArticle(
+              event,
+              org,
+              actorsList,
+              combineWorldFactsWithHallidayBrief(
+                worldFactsContext,
+                articleBrief
+              ),
+              gameState,
+              llmClient
             );
-          } else if (result.status === 'error') {
-            // Count actual errors for accurate metrics
+
+            if (result.status === 'success') {
+              articlesCreated++;
+              if (articleBrief) {
+                await gameMasterService.consumeDirective(articleBrief.id);
+              }
+              // Mark this event as covered for future duplicate detection
+              markEventAsCovered(eventId, org.id, result.id);
+              logger.info(
+                `Article created by ${org.name}`,
+                {
+                  eventId: event.questionId,
+                  articleId: result.id,
+                  articleBriefId: articleBrief?.id ?? null,
+                },
+                'ArticleTick'
+              );
+              break;
+            }
+
+            if (result.status === 'skipped') {
+              break;
+            }
+
             errorCount++;
           }
-          // 'skipped' status is not an error, just means rate limit hit
         } else {
           logger.debug(
             'Event already covered - skipping',
@@ -482,30 +523,41 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
       const orgIndex = Math.floor(secureRandom() * newsOrgs.length);
       const org = newsOrgs[orgIndex]!;
 
-      const result = await generateBaselineArticle(
-        org,
-        actorsList,
-        combinedWorldFactsContext,
-        gameState,
-        llmClient,
-        selectedArticleBrief
-      );
+      const baselineBriefCandidates =
+        articleBriefs.length > 0 ? articleBriefs : [null];
 
-      if (result.status === 'success') {
-        articlesCreated++;
-        if (selectedArticleBrief) {
-          await gameMasterService.consumeDirective(selectedArticleBrief.id);
-        }
-        logger.info(
-          `Baseline article created by ${org.name}`,
-          { articleId: result.id },
-          'ArticleTick'
+      for (const articleBrief of baselineBriefCandidates) {
+        const result = await generateBaselineArticle(
+          org,
+          actorsList,
+          combineWorldFactsWithHallidayBrief(worldFactsContext, articleBrief),
+          gameState,
+          llmClient,
+          articleBrief
         );
-      } else if (result.status === 'error') {
-        // Count actual errors for accurate metrics
+
+        if (result.status === 'success') {
+          articlesCreated++;
+          if (articleBrief) {
+            await gameMasterService.consumeDirective(articleBrief.id);
+          }
+          logger.info(
+            `Baseline article created by ${org.name}`,
+            {
+              articleId: result.id,
+              articleBriefId: articleBrief?.id ?? null,
+            },
+            'ArticleTick'
+          );
+          break;
+        }
+
+        if (result.status === 'skipped') {
+          break;
+        }
+
         errorCount++;
       }
-      // 'skipped' status is not an error, just means rate limit hit
     }
 
     const duration = Date.now() - startTime;

@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
+import type { GameMasterWorldSnapshot } from '@babylon/engine';
 import type { IAgentRuntime } from '@elizaos/core';
 import { GameMasterPluginService } from '../src/service';
-import type { GameMasterWorldSnapshot } from '@babylon/engine';
 
 function createSnapshot(
   overrides: Partial<GameMasterWorldSnapshot> = {}
@@ -28,7 +28,7 @@ function createSnapshot(
 }
 
 describe('GameMasterPluginService', () => {
-  test('publishes appraisals, syncs homeostasis, and recalculates motivation', async () => {
+  test('resolves runtime plugin context through mounted services', async () => {
     const published: Array<Record<string, unknown>> = [];
     let syncedState: Record<string, unknown> | null = null;
     let syncMetadata: Record<string, unknown> | null = null;
@@ -63,6 +63,32 @@ describe('GameMasterPluginService', () => {
             async recalculate() {
               recalculated += 1;
             },
+            getState() {
+              return {
+                priorities: [
+                  {
+                    need: 'restore_coverage',
+                    intensity: 0.8,
+                    drivers: ['coverage'],
+                    rationale: 'Close the article coverage gap quickly.',
+                  },
+                ],
+                constraints: [
+                  {
+                    type: 'narrative_only',
+                    because: 'Halliday must not mutate markets directly.',
+                    guidance: 'Keep interventions narrative and auditable.',
+                  },
+                ],
+                opportunities: [
+                  {
+                    type: 'fresh_story_window',
+                    because: 'A new event can still be shaped into coverage.',
+                    potential: 0.7,
+                  },
+                ],
+              };
+            },
           };
         }
 
@@ -71,7 +97,7 @@ describe('GameMasterPluginService', () => {
     } as unknown as IAgentRuntime;
 
     const service = new GameMasterPluginService(runtime);
-    const context = await service.buildContext(
+    const resolved = await service.resolveContext(
       createSnapshot({
         recentOrganizationPosts: [
           { id: 'post-1', authorId: 'org-1', timestamp: new Date() },
@@ -79,26 +105,39 @@ describe('GameMasterPluginService', () => {
       })
     );
 
-    expect(context.appraisals.length).toBeGreaterThan(0);
-    expect(published.length).toBe(context.appraisals.length);
+    expect(resolved?.source).toBe('runtime_plugin');
+    expect(resolved?.context.appraisals.length).toBeGreaterThan(0);
+    expect(resolved?.context.motivation.priorities[0]).toBe(
+      'Close the article coverage gap quickly.'
+    );
+    expect(published.length).toBe(resolved?.context.appraisals.length);
     expect(syncedState).not.toBeNull();
     expect(syncMetadata).toEqual({
       source: 'game-master',
       reason: 'world_snapshot_sync',
     });
     expect(recalculated).toBe(1);
-    expect(service.getLatestContext()).toEqual(context);
+    expect(service.getMountedPluginIds()).toEqual(
+      expect.arrayContaining([
+        'plugin-appraisal',
+        'plugin-homeostasis',
+        'plugin-motivation',
+      ])
+    );
+    expect(service.getLatestContext()).toEqual(resolved?.context ?? null);
   });
 
-  test('falls back cleanly when optional plugin services are absent', async () => {
+  test('returns null runtime resolution when mounted plugin services are absent', async () => {
     const runtime = {
       agentId: 'test-agent',
       getService: () => null,
     } as unknown as IAgentRuntime;
 
     const service = new GameMasterPluginService(runtime);
+    const resolved = await service.resolveContext(createSnapshot());
     const context = await service.buildContext(createSnapshot());
 
+    expect(resolved).toBeNull();
     expect(context.observability.modeledPluginCount).toBeGreaterThan(0);
     expect(service.getLatestContext()).toEqual(context);
   });

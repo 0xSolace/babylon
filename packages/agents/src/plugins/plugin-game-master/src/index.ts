@@ -2,17 +2,25 @@ import type { Plugin } from '@elizaos/core';
 import { gameMasterPluginProvider } from './provider';
 import { GameMasterPluginService } from './service';
 
-export const gameMasterPluginRuntimeDependencies = [
-  '@elizaos/plugin-homeostasis',
+export const gameMasterPluginPrimaryRuntimeDependencies = [
   '@elizaos/plugin-appraisal',
+] as const;
+
+export const gameMasterPluginSecondaryRuntimeDependencies = [
+  '@elizaos/plugin-homeostasis',
   '@elizaos/plugin-motivation',
   '@elizaos/plugin-neuro',
+] as const;
+
+export const gameMasterPluginRuntimeDependencies = [
+  ...gameMasterPluginPrimaryRuntimeDependencies,
+  ...gameMasterPluginSecondaryRuntimeDependencies,
 ] as const;
 
 export const gameMasterPlugin: Plugin = {
   name: 'game-master',
   description:
-    'Optional Halliday world-orchestration wrapper that publishes Babylon game-master context into runtimes that may also mount homeostasis, appraisal, motivation, and neuro',
+    'Optional Halliday runtime wrapper that resolves Babylon world-state into plugin context, with appraisal as the primary runtime dependency and homeostasis/motivation/neuro as secondary enrichments',
   services: [GameMasterPluginService],
   providers: [gameMasterPluginProvider],
   evaluators: [],

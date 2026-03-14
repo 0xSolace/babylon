@@ -1,5 +1,9 @@
 import { describe, expect, test } from 'bun:test';
-import { buildGameMasterPluginContext } from '../../game-master/integrations';
+import {
+  buildGameMasterPluginContext,
+  registerGameMasterRuntimeResolver,
+  resolveRuntimeGameMasterPluginContext,
+} from '../../game-master/integrations';
 import { gameMasterPlanner } from '../../game-master/planner';
 import { gameMasterPolicyEngine } from '../../game-master/policy';
 import type { GameMasterWorldSnapshot } from '../../game-master/types';
@@ -67,7 +71,7 @@ describe('Game Master policy', () => {
 });
 
 describe('Game Master planner', () => {
-  test('builds plugin-backed Halliday context from the world snapshot', () => {
+  test('builds modeled Halliday context from the world snapshot', () => {
     const context = buildGameMasterPluginContext(
       createSnapshot({
         recentOrganizationPosts: [
@@ -150,7 +154,9 @@ describe('Game Master planner', () => {
   test('uses the resolved plugin context instead of rebuilding priorities internally', () => {
     const snapshot = createSnapshot();
     const context = buildGameMasterPluginContext(snapshot);
-    context.motivation.priorities = ['Drive coverage into a rivalry-heavy story.'];
+    context.motivation.priorities = [
+      'Drive coverage into a rivalry-heavy story.',
+    ];
     context.motivation.opportunities = ['Use an injected opportunity.'];
     context.hypotheses = [
       {
@@ -175,7 +181,39 @@ describe('Game Master planner', () => {
       },
     });
 
-    expect(plan.dailyObjective).toBe('Drive coverage into a rivalry-heavy story.');
-    expect(plan.worldSummary).toContain('Injected hypothesis should shape the plan.');
+    expect(plan.dailyObjective).toBe(
+      'Drive coverage into a rivalry-heavy story.'
+    );
+    expect(plan.worldSummary).toContain(
+      'Injected hypothesis should shape the plan.'
+    );
+  });
+
+  test('runtime resolver overrides engine fallback when mounted', async () => {
+    const snapshot = createSnapshot();
+    const unregister = registerGameMasterRuntimeResolver('test-runtime', {
+      async resolveContext(resolvedSnapshot) {
+        const context = buildGameMasterPluginContext(resolvedSnapshot);
+        context.motivation.priorities = ['Use the mounted runtime context.'];
+        return {
+          source: 'runtime_plugin',
+          resolvedAt: new Date(),
+          context,
+        };
+      },
+      getMountedPluginIds() {
+        return ['plugin-appraisal'];
+      },
+    });
+
+    try {
+      const resolved = await resolveRuntimeGameMasterPluginContext(snapshot);
+      expect(resolved?.source).toBe('runtime_plugin');
+      expect(resolved?.context.motivation.priorities[0]).toBe(
+        'Use the mounted runtime context.'
+      );
+    } finally {
+      unregister();
+    }
   });
 });

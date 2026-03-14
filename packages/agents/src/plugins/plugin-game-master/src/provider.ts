@@ -107,7 +107,8 @@ export const gameMasterPluginProvider: Provider = {
       };
     }
 
-    const context = await service.buildContext(snapshot);
+    const resolved = await service.resolveContext(snapshot);
+    const context = resolved?.context ?? (await service.buildContext(snapshot));
     return {
       text: formatContext(context),
       data: buildProviderData(context),
