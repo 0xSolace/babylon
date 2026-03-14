@@ -21,10 +21,10 @@
       "@babylon/a2a/*": ["../a2a/src/*"],
       "@babylon/training": ["../training/src/index.ts"],
       "@babylon/training/*": ["../training/src/*"],
-      "@elizaos/plugin-appraisal": ["./src/type-shims/eliza-plugin-appraisal.ts"],
-      "@elizaos/plugin-homeostasis": ["./src/type-shims/eliza-plugin-homeostasis.ts"],
-      "@elizaos/plugin-motivation": ["./src/type-shims/eliza-plugin-motivation.ts"],
-      "@elizaos/plugin-neuro": ["./src/type-shims/eliza-plugin-neuro.ts"]
+      "@elizaos/plugin-appraisal": ["../plugin-appraisal/src/index.ts"],
+      "@elizaos/plugin-homeostasis": ["../plugin-homeostasis/src/index.ts"],
+      "@elizaos/plugin-motivation": ["../plugin-motivation/src/index.ts"],
+      "@elizaos/plugin-neuro": ["../plugin-neuro/src/index.ts"]
     }
   },
   "include": ["src/**/*"],
