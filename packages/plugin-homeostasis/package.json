@@ -1,0 +1,50 @@
+{
+  "name": "@elizaos/plugin-homeostasis",
+  "version": "0.1.0",
+  "description": "Internal state manager for elizaOS agents - maintains drives and resources",
+  "type": "module",
+  "main": "src/index.ts",
+  "module": "src/index.ts",
+  "types": "src/index.ts",
+  "packageType": "plugin",
+  "platform": "node",
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "test": "bun test",
+    "lint": "biome lint .",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@elizaos/core": "2.0.0-alpha.33"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/node": "^24.10.0",
+    "tsup": "^8.4.0",
+    "typescript": "^5.6.3"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "package.json"
+  ],
+  "keywords": [
+    "eliza",
+    "elizaos",
+    "plugin",
+    "homeostasis",
+    "drives",
+    "motivation"
+  ],
+  "author": "elizaOS",
+  "license": "MIT"
+}
