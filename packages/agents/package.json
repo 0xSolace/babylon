@@ -23,6 +23,10 @@
   },
   "dependencies": {
     "@babylon/a2a": "workspace:*",
+    "@elizaos/plugin-appraisal": "workspace:*",
+    "@elizaos/plugin-homeostasis": "workspace:*",
+    "@elizaos/plugin-motivation": "workspace:*",
+    "@elizaos/plugin-neuro": "workspace:*",
     "posthog-node": "^5.17.0"
   },
   "peerDependencies": {
@@ -35,9 +39,9 @@
     "@babylon/engine": "workspace:*",
     "@babylon/shared": "workspace:*",
     "@babylon/training": "workspace:*",
-    "@elizaos/core": "^1.7.0",
-    "@elizaos/plugin-anthropic": "^1.5.12",
-    "@elizaos/plugin-openai": "^1.5.18",
+    "@elizaos/core": "2.0.0-alpha.33",
+    "@elizaos/plugin-anthropic": "2.0.0-alpha.7",
+    "@elizaos/plugin-openai": "2.0.0-alpha.9",
     "@huggingface/hub": "^2.6.12",
     "@privy-io/server-auth": "^1.32.5",
     "agent0-sdk": "1.5.2",

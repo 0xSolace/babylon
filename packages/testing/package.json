@@ -31,7 +31,7 @@
     "@babylon/training": "workspace:*"
   },
   "devDependencies": {
-    "@elizaos/core": "^1.7.0",
+    "@elizaos/core": "2.0.0-alpha.33",
     "@playwright/test": "^1.56.1",
     "@synthetixio/synpress": "^4.1.1",
     "@synthetixio/synpress-cache": "^0.0.13",

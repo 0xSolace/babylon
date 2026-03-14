@@ -37,7 +37,7 @@
     "@babylon/db": "workspace:*",
     "@babylon/engine": "workspace:*",
     "@babylon/shared": "workspace:*",
-    "@elizaos/core": "^1.6.4",
+    "@elizaos/core": "2.0.0-alpha.33",
     "drizzle-orm": "^0.44.7"
   },
   "devDependencies": {

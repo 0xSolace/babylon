@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { buildGameMasterPluginContext } from '../../game-master/integrations';
 import { gameMasterPlanner } from '../../game-master/planner';
 import { gameMasterPolicyEngine } from '../../game-master/policy';
 import type { GameMasterWorldSnapshot } from '../../game-master/types';
@@ -66,6 +67,31 @@ describe('Game Master policy', () => {
 });
 
 describe('Game Master planner', () => {
+  test('builds plugin-backed Halliday context from the world snapshot', () => {
+    const context = buildGameMasterPluginContext(
+      createSnapshot({
+        recentOrganizationPosts: [
+          {
+            id: 'post-1',
+            authorId: 'org-1',
+            timestamp: new Date(),
+          },
+          {
+            id: 'post-2',
+            authorId: 'org-2',
+            timestamp: new Date(),
+          },
+        ],
+      })
+    );
+
+    expect(context.observability.activePluginCount).toBeGreaterThan(0);
+    expect(
+      context.appraisals.some((appraisal) => appraisal.key === 'coverage')
+    ).toBe(true);
+    expect(context.motivation.constraints.length).toBeGreaterThan(0);
+  });
+
   test('creates daily pass actions for a new game day', () => {
     const plan = gameMasterPlanner.plan(createSnapshot(), {
       runType: 'daily',
@@ -78,6 +104,7 @@ describe('Game Master planner', () => {
     expect(
       plan.actions.some((action) => action.actionType === 'QUEUE_ARTICLE_BRIEF')
     ).toBe(true);
+    expect(plan.planSummary).toContain('active plugin integrations');
   });
 
   test('reactive run uses fresh event as a brief hook', () => {

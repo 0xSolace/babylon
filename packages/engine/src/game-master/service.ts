@@ -34,6 +34,7 @@ import {
   GAME_MASTER_NAME,
   GAME_MASTER_SENDER_ID,
 } from './constants';
+import { GAME_MASTER_PLUGIN_CATALOG } from './integrations';
 import { gameMasterPlanner } from './planner';
 import { gameMasterPolicyEngine } from './policy';
 import {
@@ -97,6 +98,12 @@ export interface GameMasterDashboard {
     createdAt: string;
   }>;
   hourlyAutoActionCount: number;
+  pluginIntegrations: Array<{
+    id: string;
+    status: 'active' | 'advisory' | 'inactive';
+    capability: string;
+    rationale: string;
+  }>;
 }
 
 function envFlag(value: string | undefined, defaultValue: boolean): boolean {
@@ -1257,6 +1264,14 @@ export class GameMasterService {
         createdAt: message.createdAt.toISOString(),
       })),
       hourlyAutoActionCount,
+      pluginIntegrations: Object.values(GAME_MASTER_PLUGIN_CATALOG).map(
+        (plugin) => ({
+          id: plugin.id,
+          status: plugin.status,
+          capability: plugin.capability,
+          rationale: plugin.rationale,
+        })
+      ),
     };
   }
 }

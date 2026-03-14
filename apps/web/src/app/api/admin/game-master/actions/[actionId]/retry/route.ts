@@ -24,11 +24,13 @@ export const POST = withErrorHandling(
     try {
       await gameMasterService.retryAction(actionId);
     } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Validation error';
       if (
         error instanceof ValidationError ||
-        error?.name === 'ValidationError'
+        (error instanceof Error && error.name === 'ValidationError')
       ) {
-        return errorResponse(error.message, 'VALIDATION_ERROR', 422);
+        return errorResponse(message, 'VALIDATION_ERROR', 422);
       }
       throw error;
     }

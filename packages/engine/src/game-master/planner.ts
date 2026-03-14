@@ -1,6 +1,7 @@
 import { StaticDataRegistry } from '../services/static-data-registry';
 import { secureRandom } from '../utils/entropy';
 import { GAME_MASTER_DEFAULTS } from './constants';
+import { buildGameMasterPluginContext } from './integrations';
 import {
   type GameMasterPlan,
   type GameMasterTriggerAssessment,
@@ -48,6 +49,7 @@ export class GameMasterPlanner {
     snapshot: GameMasterWorldSnapshot,
     trigger: GameMasterTriggerAssessment
   ): GameMasterPlan {
+    const pluginContext = buildGameMasterPluginContext(snapshot);
     const actors = pickRandom(
       StaticDataRegistry.getAllActors().filter(
         (actor) => !/\btest\b/i.test(actor.name)
@@ -63,6 +65,15 @@ export class GameMasterPlanner {
     const latestEvent = snapshot.recentWorldEvents[0];
     const currentTopicLabel =
       snapshot.currentTopic?.topicLabel ?? 'the emerging market narrative';
+    const primaryPriority =
+      pluginContext.motivation.priorities[0] ??
+      `Keep the world converging on ${currentTopicLabel}.`;
+    const primaryOpportunity =
+      pluginContext.motivation.opportunities[0] ??
+      'Use light-touch narrative interventions.';
+    const leadHypothesis =
+      pluginContext.hypotheses[0]?.summary ??
+      'No strong hypothesis is active beyond maintaining narrative motion.';
 
     const actions: GameMasterPlan['actions'] = [];
     const observations = [
@@ -71,10 +82,18 @@ export class GameMasterPlanner {
         ? `The freshest public event is ${latestEvent.description}.`
         : 'There are no fresh public world events right now.',
       `There have been ${snapshot.recentActionCount} Game Master actions in the last hour.`,
+      `Primary priority: ${primaryPriority}`,
+      `Primary opportunity: ${primaryOpportunity}`,
+      `Lead hypothesis: ${leadHypothesis}`,
     ];
 
     if (trigger.runType === 'daily') {
-      if (!snapshot.currentTopic) {
+      if (
+        !snapshot.currentTopic ||
+        pluginContext.appraisals.some(
+          (appraisal) => appraisal.key === 'coherence' && appraisal.score > 0.65
+        )
+      ) {
         actions.push({
           actionType: 'SET_DAILY_TOPIC',
           authorityLevel: 'steer',
@@ -84,10 +103,8 @@ export class GameMasterPlanner {
           payload: {
             topicKey: 'market-sentiment',
             topicLabel: 'Market Sentiment',
-            summary:
-              'Anchor the day around competing interpretations of AI, markets, and institutional positioning.',
-            selectionReason:
-              'Halliday daily pass selected a stable narrative center.',
+            summary: `${primaryPriority} Anchor the day around competing interpretations of AI, markets, and institutional positioning.`,
+            selectionReason: `Halliday daily pass selected a stable narrative center. ${leadHypothesis}`,
           },
         });
       }
@@ -101,8 +118,8 @@ export class GameMasterPlanner {
             'Push a small set of actors to sharpen the day narrative with stronger personal takes.',
           payload: {
             actorIds: actors.map((actor) => actor.id),
-            promptOverlay: `Lean into ${currentTopicLabel}. Be opinionated, specific, and in character. Create momentum rather than repeating consensus.`,
-            reason: 'Daily pass actor steering',
+            promptOverlay: `Lean into ${currentTopicLabel}. ${primaryPriority} Be opinionated, specific, and in character. Create momentum rather than repeating consensus.`,
+            reason: `Daily pass actor steering. ${leadHypothesis}`,
           },
         });
       }
@@ -116,8 +133,8 @@ export class GameMasterPlanner {
             'Encourage a few organizations to reinforce the daily narrative from their institutional voice.',
           payload: {
             organizationIds: organizations.map((org) => org.id),
-            promptOverlay: `Frame today through ${currentTopicLabel}. Stay in your editorial or institutional voice and add a new angle.`,
-            reason: 'Daily pass organization steering',
+            promptOverlay: `Frame today through ${currentTopicLabel}. ${primaryOpportunity} Stay in your editorial or institutional voice and add a new angle.`,
+            reason: `Daily pass organization steering. ${primaryPriority}`,
           },
         });
       }
@@ -132,7 +149,7 @@ export class GameMasterPlanner {
           targetOrgIds: organizations.map((org) => org.id),
           targetActorIds: actors.map((actor) => actor.id),
           headlineAngle: `${currentTopicLabel}: who is shaping the day`,
-          brief: `Focus coverage on ${currentTopicLabel}. Prioritize tension, rivalry, and institutions trying to control the interpretation of events.`,
+          brief: `Focus coverage on ${currentTopicLabel}. ${primaryPriority} ${leadHypothesis} Prioritize tension, rivalry, and institutions trying to control the interpretation of events.`,
           priority: 'high',
           category: 'news',
         },
@@ -147,7 +164,7 @@ export class GameMasterPlanner {
         payload: {
           targetOrgIds: organizations.map((org) => org.id),
           headlineAngle: latestEvent.description,
-          brief: `Use the event "${latestEvent.description}" as the immediate hook, but tie it back to ${currentTopicLabel}.`,
+          brief: `Use the event "${latestEvent.description}" as the immediate hook, but tie it back to ${currentTopicLabel}. ${leadHypothesis}`,
           priority: 'high',
           category: 'breaking',
         },
@@ -165,8 +182,8 @@ export class GameMasterPlanner {
             'Nudge a small set of actors to reintroduce motion into the feed.',
           payload: {
             actorIds: actors.map((actor) => actor.id),
-            promptOverlay: `Inject fresh tension into ${currentTopicLabel}. Say something that moves the conversation forward without breaking character.`,
-            reason: 'Pulse-based narrative nudge',
+            promptOverlay: `Inject fresh tension into ${currentTopicLabel}. ${primaryOpportunity} Say something that moves the conversation forward without breaking character.`,
+            reason: `Pulse-based narrative nudge. ${leadHypothesis}`,
           },
         });
       }
@@ -180,8 +197,8 @@ export class GameMasterPlanner {
             'Ask one or two organizations to provide a sharper framing on the current narrative.',
           payload: {
             organizationIds: organizations.map((org) => org.id).slice(0, 1),
-            promptOverlay: `Offer a concise institutional read on ${currentTopicLabel}. Add framing, not repetition.`,
-            reason: 'Pulse-based organization nudge',
+            promptOverlay: `Offer a concise institutional read on ${currentTopicLabel}. ${primaryPriority} Add framing, not repetition.`,
+            reason: `Pulse-based organization nudge. ${primaryOpportunity}`,
           },
         });
       }
@@ -193,10 +210,10 @@ export class GameMasterPlanner {
     );
 
     return gameMasterPlanSchema.parse({
-      dailyObjective: `Keep the world converging on ${currentTopicLabel} while preserving conflict and motion.`,
+      dailyObjective: primaryPriority,
       worldSummary: observations.join(' '),
       observationSummary: observations.join(' '),
-      planSummary: `Halliday is running a ${trigger.runType} pass with ${actionBudget.length} candidate interventions.`,
+      planSummary: `Halliday is running a ${trigger.runType} pass with ${actionBudget.length} candidate interventions using ${pluginContext.observability.activePluginCount} active plugin integrations.`,
       actions: actionBudget,
     });
   }

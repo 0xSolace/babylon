@@ -45,6 +45,7 @@ export { groqPlugin } from './plugins/groq';
 export * from './plugins/plugin-agent-core/src';
 export * from './plugins/plugin-autonomy/src';
 export * from './plugins/plugin-experience/src';
+export * from './plugins/plugin-game-master/src';
 // Plugin sub-exports for trajectory logging, autonomy, experience
 export * from './plugins/plugin-trajectory-logger/src';
 // Runtime

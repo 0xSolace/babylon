@@ -69,6 +69,12 @@ interface GameMasterDashboard {
   activeDirectives: GameMasterDirective[];
   recentMessages: GameMasterMessage[];
   hourlyAutoActionCount: number;
+  pluginIntegrations: Array<{
+    id: string;
+    status: 'active' | 'advisory' | 'inactive';
+    capability: string;
+    rationale: string;
+  }>;
 }
 
 export function GameMasterTab() {
@@ -321,6 +327,57 @@ export function GameMasterTab() {
           </div>
         </section>
       </div>
+
+      <section className="rounded-xl border border-border bg-card p-4">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <div>
+            <h3 className="font-medium text-base">Plugin Integrations</h3>
+            <p className="text-muted-foreground text-sm">
+              Halliday runs on a clean plugin-style cognition layer. Active
+              integrations shape planning, advisory integrations are modeled but
+              not yet fully signal-backed, and inactive integrations are kept
+              intentionally out of the runtime.
+            </p>
+          </div>
+          <div className="text-muted-foreground text-sm">
+            {
+              data.pluginIntegrations.filter(
+                (plugin) => plugin.status === 'active'
+              ).length
+            }{' '}
+            active
+          </div>
+        </div>
+        <div className="grid gap-3 lg:grid-cols-2">
+          {data.pluginIntegrations.map((plugin) => (
+            <div
+              key={plugin.id}
+              className="rounded-lg border border-border/60 bg-background/50 p-3"
+            >
+              <div className="flex items-center justify-between gap-2">
+                <div className="font-medium text-sm">{plugin.id}</div>
+                <span
+                  className={cn(
+                    'rounded-full px-2 py-0.5 text-xs capitalize',
+                    plugin.status === 'active' &&
+                      'bg-emerald-500/15 text-emerald-600',
+                    plugin.status === 'advisory' &&
+                      'bg-amber-500/15 text-amber-600',
+                    plugin.status === 'inactive' &&
+                      'bg-muted text-muted-foreground'
+                  )}
+                >
+                  {plugin.status}
+                </span>
+              </div>
+              <p className="mt-2 text-sm">{plugin.capability}</p>
+              <p className="mt-1 text-muted-foreground text-xs">
+                {plugin.rationale}
+              </p>
+            </div>
+          ))}
+        </div>
+      </section>
 
       <section className="rounded-xl border border-border bg-card p-4">
         <h3 className="mb-3 font-medium text-base">Action Queue</h3>

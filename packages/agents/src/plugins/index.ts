@@ -17,6 +17,7 @@ export { groqPlugin } from './groq';
 export * from './plugin-agent-core/src';
 export * from './plugin-autonomy/src';
 export * from './plugin-experience/src';
+export * from './plugin-game-master/src';
 export * from './plugin-trajectory-logger/src';
 // Note: plugin-user-core has action names that overlap with plugin-agent-core
 // Export only the plugin and unique exports to avoid TS2308 ambiguity errors
