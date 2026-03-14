@@ -24,7 +24,7 @@ import {
   sql,
   worldEvents,
 } from '@babylon/db';
-import { generateSnowflakeId, logger } from '@babylon/shared';
+import { generateSnowflakeId, logger, ValidationError } from '@babylon/shared';
 import { DistributedLockService } from '../services/distributed-lock-service';
 import { npcMemoryService } from '../services/npc-memory-service';
 import { broadcastToChannel } from '../services/realtime-broadcaster';
@@ -1081,6 +1081,18 @@ export class GameMasterService {
     });
   }
 
+  async consumeDirective(directiveId: string): Promise<void> {
+    const now = new Date();
+    await db
+      .update(gameMasterDirectives)
+      .set({
+        isActive: false,
+        updatedAt: now,
+        expiresAt: now,
+      })
+      .where(eq(gameMasterDirectives.id, directiveId));
+  }
+
   async approveAction(actionId: string, adminId: string): Promise<void> {
     const now = new Date();
     await db
@@ -1109,11 +1121,33 @@ export class GameMasterService {
   }
 
   async retryAction(actionId: string): Promise<void> {
+    const [record] = await db
+      .select({
+        id: gameMasterActions.id,
+        status: gameMasterActions.status,
+        requiresApproval: gameMasterActions.requiresApproval,
+      })
+      .from(gameMasterActions)
+      .where(eq(gameMasterActions.id, actionId))
+      .limit(1);
+
+    if (!record) {
+      throw new ValidationError('Game Master action not found');
+    }
+
+    if (record.status !== 'failed') {
+      throw new ValidationError(
+        'Only failed Game Master actions can be retried'
+      );
+    }
+
     const now = new Date();
     await db
       .update(gameMasterActions)
       .set({
-        status: 'queued',
+        status: record.requiresApproval ? 'approved' : 'queued',
+        executedAt: null,
+        executionResult: null,
         failedAt: null,
         error: null,
         updatedAt: now,

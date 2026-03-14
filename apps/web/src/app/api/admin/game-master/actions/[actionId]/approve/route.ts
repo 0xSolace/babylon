@@ -13,6 +13,9 @@ export const POST = withErrorHandling(
     request: NextRequest,
     { params }: { params: Promise<{ actionId: string }> }
   ) => {
+    // Approving high-impact Halliday actions is intentionally tied to the
+    // broader game-control permission, while reject/retry stay on the narrower
+    // Game Master management permission.
     const admin = await requirePermission(request, 'manage_game');
     const { actionId } = await params;
 
