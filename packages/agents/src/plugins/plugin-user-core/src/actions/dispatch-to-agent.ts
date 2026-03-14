@@ -33,20 +33,22 @@ export const dispatchToAgentAction: Action = {
   description:
     "Execute a command on the user's behalf by dispatching to a specific agent in their team. Use when the user wants to trade, post, comment, or take any agent action. Do NOT use for information queries — use CHECK_PERPS, CHECK_PREDICTIONS etc. for those.",
 
-  parameters: {
-    agentId: {
-      type: 'string',
+  parameters: [
+    {
+      name: 'agentId',
       required: true,
       description:
         'The ID of the agent to dispatch to — use the [id: ...] shown in the Team Members list',
+      schema: { type: 'string' },
     },
-    command: {
-      type: 'string',
+    {
+      name: 'command',
       required: true,
       description:
         'The exact instruction to send to the agent (e.g., "open a 2x long on TSLAI for $100", "post about the current market")',
+      schema: { type: 'string' },
     },
-  },
+  ],
 
   examples: [
     [

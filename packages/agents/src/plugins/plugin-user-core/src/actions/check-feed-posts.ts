@@ -73,13 +73,14 @@ export const checkFeedPostsAction: Action = {
   description:
     'Check the latest posts from the global feed. Help users discover trending content and community discussions.',
 
-  parameters: {
-    limit: {
-      type: 'number',
+  parameters: [
+    {
+      name: 'limit',
       description: 'Number of posts to retrieve (default: 10, max: 50)',
       required: false,
+      schema: { type: 'number' },
     },
-  },
+  ],
 
   examples: [
     [

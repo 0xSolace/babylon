@@ -27,30 +27,33 @@ export const openPerpAction: Action = {
   name: 'OPEN_PERP',
   description:
     'Open a leveraged perpetual position using YOUR funds. IMPORTANT: Call CHECK_PERPS first for tickers and prices, and CHECK_BALANCE to verify you have sufficient funds. Requires ticker, side (LONG/SHORT), amount in dollars, and optional leverage (1-10x).',
-  parameters: {
-    ticker: {
-      type: 'string',
+  parameters: [
+    {
+      name: 'ticker',
       description: 'Stock ticker symbol (e.g., AAPL, TSLA, NVDA)',
       required: true,
+      schema: { type: 'string' },
     },
-    side: {
-      type: 'string',
-      enum: ['LONG', 'SHORT'],
+    {
+      name: 'side',
       description:
         'Position direction: "LONG" (bet price goes up) or "SHORT" (bet price goes down)',
       required: true,
+      schema: { type: 'string', enum: ['LONG', 'SHORT'] },
     },
-    amount: {
-      type: 'number',
+    {
+      name: 'amount',
       description: 'Dollar amount to use as collateral',
       required: true,
+      schema: { type: 'number' },
     },
-    leverage: {
-      type: 'number',
+    {
+      name: 'leverage',
       description: 'Leverage multiplier (1-10x). Default: 1',
       required: false,
+      schema: { type: 'number' },
     },
-  },
+  ],
   examples: [
     [
       {

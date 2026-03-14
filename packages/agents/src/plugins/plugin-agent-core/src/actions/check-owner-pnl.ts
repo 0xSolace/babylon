@@ -37,7 +37,7 @@ export const checkOwnerPnlAction: Action = {
   description:
     "Check your OWNER's balance, P&L, and open positions. This shows your owner's trading performance, not yours. Useful for understanding their strategy or coordinating trades.",
 
-  parameters: {},
+  parameters: [],
 
   examples: [
     [

@@ -98,19 +98,21 @@ export const checkRecentCommentsAction: Action = {
   description:
     'Check recent comments for yourself or another user with thread context. Use LOOKUP_USER first to get a userId by username.',
 
-  parameters: {
-    userId: {
-      type: 'string',
+  parameters: [
+    {
+      name: 'userId',
       description:
         'User ID to check comments for. Use LOOKUP_USER to find ID by username. Omit to check your own comments.',
       required: false,
+      schema: { type: 'string' },
     },
-    limit: {
-      type: 'number',
+    {
+      name: 'limit',
       description: 'Number of comments to retrieve (default: 5, max: 10)',
       required: false,
+      schema: { type: 'number' },
     },
-  },
+  ],
 
   examples: [
     [

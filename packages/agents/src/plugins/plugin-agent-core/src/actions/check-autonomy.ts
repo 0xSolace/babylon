@@ -29,7 +29,7 @@ export const checkAutonomyAction: Action = {
   description:
     'Check which of YOUR autonomous features are enabled (trading, posting, commenting, DMs, group chats). When enabled, you act independently without explicit commands from your owner.',
 
-  parameters: {},
+  parameters: [],
 
   examples: [
     [

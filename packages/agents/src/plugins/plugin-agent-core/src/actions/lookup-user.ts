@@ -19,14 +19,15 @@ export const lookupUserAction: Action = {
   name: 'LOOKUP_USER',
   description:
     'Look up a user by username or display name to get their ID. Use the returned userId with CHECK_RECENT_POSTS or CHECK_RECENT_COMMENTS.',
-  parameters: {
-    username: {
-      type: 'string',
+  parameters: [
+    {
+      name: 'username',
       description:
         'Username or display name to search for (e.g., "ThunderGrid" or "tcm0843")',
       required: true,
+      schema: { type: 'string' },
     },
-  },
+  ],
   examples: [
     [
       {

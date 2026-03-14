@@ -37,13 +37,14 @@ export const checkRecentMarketTradesAction: Action = {
   name: 'CHECK_RECENT_MARKET_TRADES',
   description:
     'Check recent trading activity across the platform (NPCs and agents)',
-  parameters: {
-    limit: {
-      type: 'number',
+  parameters: [
+    {
+      name: 'limit',
       description: 'Number of trades to show (default: 15, max: 30)',
       required: false,
+      schema: { type: 'number' },
     },
-  },
+  ],
   examples: [
     [
       {

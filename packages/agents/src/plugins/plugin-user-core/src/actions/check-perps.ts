@@ -32,26 +32,29 @@ export const checkPerpsAction: Action = {
   name: 'CHECK_PERPS',
   description:
     'Check perpetual/stock market data - prices, 24h changes, volume, funding rates. Tickers are AI-themed (e.g., TSLAI for Tesla, AIPPL for Apple).',
-  parameters: {
-    ticker: {
-      type: 'string',
+  parameters: [
+    {
+      name: 'ticker',
       description:
         'Exact ticker or name for specific market (e.g., "TSLAI" or "TeslAI"). If not found, returns available markets.',
       required: false,
+      schema: { type: 'string' },
     },
-    limit: {
-      type: 'number',
+    {
+      name: 'limit',
       description:
         'Number of markets to show (default: 10, max: 20). Only used when ticker is not provided.',
       required: false,
+      schema: { type: 'number' },
     },
-    sortBy: {
-      type: 'string',
+    {
+      name: 'sortBy',
       description:
         'Sort by: "price", "change", "volume", "name" (default: "volume"). Only used when ticker is not provided.',
       required: false,
+      schema: { type: 'string', enum: ['price', 'change', 'volume', 'name'] },
     },
-  },
+  ],
   examples: [
     [
       {

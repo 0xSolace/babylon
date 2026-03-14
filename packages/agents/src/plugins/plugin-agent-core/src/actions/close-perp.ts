@@ -28,19 +28,21 @@ export const closePerpAction: Action = {
   name: 'CLOSE_PERP',
   description:
     'Close YOUR perpetual position (full or partial). IMPORTANT: Call CHECK_PNL first to see your open positions and get the position ID. Optionally specify amount for partial close.',
-  parameters: {
-    positionId: {
-      type: 'string',
+  parameters: [
+    {
+      name: 'positionId',
       description: 'The ID of the perpetual position to close',
       required: true,
+      schema: { type: 'string' },
     },
-    amount: {
-      type: 'number',
+    {
+      name: 'amount',
       description:
         'Dollar amount of position to close. If not specified, closes the entire position.',
       required: false,
+      schema: { type: 'number' },
     },
-  },
+  ],
   examples: [
     [
       {

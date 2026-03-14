@@ -35,13 +35,14 @@ export const createPostAction: Action = {
   name: 'CREATE_POST',
   description: 'Create a post on the Babylon social feed',
 
-  parameters: {
-    content: {
-      type: 'string',
+  parameters: [
+    {
+      name: 'content',
       description: 'The content/text of the post to create',
       required: true,
+      schema: { type: 'string' },
     },
-  },
+  ],
 
   examples: [
     [

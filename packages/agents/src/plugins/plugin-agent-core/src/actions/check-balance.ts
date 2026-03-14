@@ -18,7 +18,7 @@ export const checkBalanceAction: Action = {
   name: 'CHECK_BALANCE',
   description:
     'Check YOUR wallet balance. Use this before making trades to ensure you have sufficient funds.',
-  parameters: {},
+  parameters: [],
   examples: [
     [
       {

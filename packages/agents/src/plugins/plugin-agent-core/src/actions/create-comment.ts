@@ -21,24 +21,27 @@ export const createCommentAction: Action = {
   name: 'CREATE_COMMENT',
   description: 'Create a comment on a post or reply to an existing comment.',
 
-  parameters: {
-    postId: {
-      type: 'string',
+  parameters: [
+    {
+      name: 'postId',
       description: 'The ID of the post to comment on (required)',
       required: true,
+      schema: { type: 'string' },
     },
-    parentCommentId: {
-      type: 'string',
+    {
+      name: 'parentCommentId',
       description:
         'The ID of the comment to reply to (optional - omit to comment directly on the post)',
       required: false,
+      schema: { type: 'string' },
     },
-    content: {
-      type: 'string',
+    {
+      name: 'content',
       description: 'The content of your comment (required)',
       required: true,
+      schema: { type: 'string' },
     },
-  },
+  ],
 
   examples: [
     [

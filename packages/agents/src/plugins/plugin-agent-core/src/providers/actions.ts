@@ -7,6 +7,7 @@
 
 import type {
   Action,
+  ActionParameter,
   IAgentRuntime,
   Memory,
   Provider,
@@ -14,15 +15,6 @@ import type {
   State,
 } from '@elizaos/core';
 import { logger } from '../../../../shared/logger';
-
-/**
- * Action parameter definition
- */
-interface ActionParameter {
-  type: string;
-  description: string;
-  required: boolean;
-}
 
 /**
  * Formats actions with their parameter schemas for tool calling.
@@ -34,18 +26,15 @@ function formatActionsWithParams(actions: Action[]): string {
 
       // Check if action has parameters defined
       if (action.parameters !== undefined) {
-        const paramEntries = Object.entries(
-          action.parameters as Record<string, ActionParameter>
-        );
-
-        if (paramEntries.length === 0) {
+        if (action.parameters.length === 0) {
           formatted +=
             '\n\n**Parameters:** None (can be called directly without parameters)';
         } else {
           formatted += '\n\n**Parameters:**';
-          for (const [paramName, paramDef] of paramEntries) {
-            const required = paramDef.required ? '(required)' : '(optional)';
-            formatted += `\n- \`${paramName}\` ${required}: ${paramDef.type} - ${paramDef.description}`;
+          for (const param of action.parameters as ActionParameter[]) {
+            const required = param.required ? '(required)' : '(optional)';
+            const type = param.schema.type ?? 'unknown';
+            formatted += `\n- \`${param.name}\` ${required}: ${type} - ${param.description}`;
           }
         }
       }

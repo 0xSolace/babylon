@@ -150,13 +150,14 @@ export const checkPostDetailAction: Action = {
   description:
     'Get detailed information about a post including all comments with thread structure.',
 
-  parameters: {
-    postId: {
-      type: 'string',
+  parameters: [
+    {
+      name: 'postId',
       description: 'The ID of the post to retrieve',
       required: true,
+      schema: { type: 'string' },
     },
-  },
+  ],
 
   examples: [
     [

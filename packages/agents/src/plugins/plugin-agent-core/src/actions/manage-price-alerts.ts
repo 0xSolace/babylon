@@ -39,41 +39,47 @@ export const setPriceAlertAction: Action = {
   description:
     'Set a price alert on a perpetual market token. You will be notified when the price crosses the threshold. Delivery goes to your team chat by default, or a specific group chat.',
 
-  parameters: {
-    tokenSymbol: {
-      type: 'string',
+  parameters: [
+    {
+      name: 'tokenSymbol',
       description:
         'Token ticker symbol matching perpMarketSnapshots (e.g., "OPENAGI", "TSLAI")',
       required: true,
+      schema: { type: 'string' },
     },
-    condition: {
-      type: 'string',
+    {
+      name: 'condition',
       description: '"above" or "below" — the direction to trigger on',
       required: true,
+      schema: { type: 'string', enum: ['below', 'above'] },
     },
-    threshold: {
-      type: 'number',
+    {
+      name: 'threshold',
       description: 'Price threshold to trigger the alert',
       required: true,
+      schema: { type: 'number' },
     },
-    deliveryChannel: {
-      type: 'string',
+    {
+      name: 'deliveryChannel',
       description:
         '"team_chat" (default) or "group" — where to deliver the alert',
       required: false,
+      schema: { type: 'string', enum: ['team_chat', 'group'] },
     },
-    deliveryChatId: {
-      type: 'string',
+    {
+      name: 'deliveryChatId',
       description: 'Group chat ID — required when deliveryChannel is "group"',
       required: false,
+      schema: { type: 'string' },
     },
-    cooldownMinutes: {
-      type: 'number',
+    {
+      name: 'cooldownMinutes',
       description:
         'Minutes between re-triggers (default 15). Prevents alert spam.',
       required: false,
+      schema: { type: 'number' },
     },
-  },
+  ],
 
   examples: [
     [
@@ -272,7 +278,7 @@ export const listPriceAlertsAction: Action = {
   description:
     'List all configured price alerts with their current status, thresholds, and delivery settings.',
 
-  parameters: {},
+  parameters: [],
 
   examples: [
     [
@@ -348,25 +354,28 @@ export const removePriceAlertAction: Action = {
   description:
     'Remove a price alert by its ID, or by token symbol and condition.',
 
-  parameters: {
-    alertId: {
-      type: 'string',
+  parameters: [
+    {
+      name: 'alertId',
       description: 'The alert ID to remove (from LIST_PRICE_ALERTS)',
       required: false,
+      schema: { type: 'string' },
     },
-    tokenSymbol: {
-      type: 'string',
+    {
+      name: 'tokenSymbol',
       description:
         'Token symbol to match (used with condition when alertId not provided)',
       required: false,
+      schema: { type: 'string' },
     },
-    condition: {
-      type: 'string',
+    {
+      name: 'condition',
       description:
         '"above" or "below" — used with tokenSymbol when alertId not provided',
       required: false,
+      schema: { type: 'string', enum: ['below', 'above'] },
     },
-  },
+  ],
 
   examples: [
     [

@@ -36,19 +36,21 @@ export const checkRecentPostsAction: Action = {
   description:
     'Check recent posts for yourself or another user. Use LOOKUP_USER first to get a userId by username.',
 
-  parameters: {
-    userId: {
-      type: 'string',
+  parameters: [
+    {
+      name: 'userId',
       description:
         'User ID to check posts for. Use LOOKUP_USER to find ID by username. Omit to check your own posts.',
       required: false,
+      schema: { type: 'string' },
     },
-    limit: {
-      type: 'number',
+    {
+      name: 'limit',
       description: 'Number of posts to retrieve (default: 5, max: 20)',
       required: false,
+      schema: { type: 'number' },
     },
-  },
+  ],
 
   examples: [
     [

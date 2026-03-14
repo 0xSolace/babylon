@@ -40,26 +40,29 @@ export const checkPredictionsAction: Action = {
   name: 'CHECK_PREDICTIONS',
   description:
     'Check prediction markets - questions, YES/NO odds, resolution dates. Use marketId param for specific market details.',
-  parameters: {
-    marketId: {
-      type: 'string',
+  parameters: [
+    {
+      name: 'marketId',
       description:
         'Optional market ID to get specific prediction details. If omitted, returns a list of predictions.',
       required: false,
+      schema: { type: 'string' },
     },
-    status: {
-      type: 'string',
+    {
+      name: 'status',
       description:
         'Filter by status: "active", "resolved", or "all" (default: "active"). Only used when marketId is not provided.',
       required: false,
+      schema: { type: 'string', enum: ['active', 'resolved', 'all'] },
     },
-    limit: {
-      type: 'number',
+    {
+      name: 'limit',
       description:
         'Number of predictions to show (default: 10, max: 20). Only used when marketId is not provided.',
       required: false,
+      schema: { type: 'number' },
     },
-  },
+  ],
   examples: [
     [
       {

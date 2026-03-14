@@ -33,25 +33,28 @@ export const relayToAgentAction: Action = {
   description:
     'Dispatch to an agent with context from previous agent responses. Use after gathering information from other agents to pass their findings to an execution agent.',
 
-  parameters: {
-    agentId: {
-      type: 'string',
+  parameters: [
+    {
+      name: 'agentId',
       required: true,
       description:
         'The ID of the target agent — use the [id: ...] shown in Team Members',
+      schema: { type: 'string' },
     },
-    command: {
-      type: 'string',
+    {
+      name: 'command',
       required: true,
       description: 'The instruction for the target agent',
+      schema: { type: 'string' },
     },
-    relayContext: {
-      type: 'string',
+    {
+      name: 'relayContext',
       required: true,
       description:
         'Structured context from other agents to pass along (e.g., "Agent A found: X, Agent B found: Y")',
+      schema: { type: 'string' },
     },
-  },
+  ],
 
   examples: [
     [

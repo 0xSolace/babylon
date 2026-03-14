@@ -33,18 +33,20 @@ export const sellPredictionAction: Action = {
   name: 'SELL_PREDICTION',
   description:
     'Sell shares from YOUR prediction market position. IMPORTANT: Call CHECK_PNL first to see your holdings - you need the position ID and your actual share count. Do NOT rely on conversation history. Requires positionId and shares.',
-  parameters: {
-    positionId: {
-      type: 'string',
+  parameters: [
+    {
+      name: 'positionId',
       description: 'The ID of the position to sell from',
       required: true,
+      schema: { type: 'string' },
     },
-    shares: {
-      type: 'number',
+    {
+      name: 'shares',
       description: 'Number of shares to sell',
       required: true,
+      schema: { type: 'number' },
     },
-  },
+  ],
   examples: [
     [
       {

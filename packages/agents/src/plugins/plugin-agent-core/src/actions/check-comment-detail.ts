@@ -71,13 +71,14 @@ export const checkCommentDetailAction: Action = {
   description:
     'Get detailed information about a comment including its thread context (parent chain and replies).',
 
-  parameters: {
-    commentId: {
-      type: 'string',
+  parameters: [
+    {
+      name: 'commentId',
       description: 'The ID of the comment to retrieve',
       required: true,
+      schema: { type: 'string' },
     },
-  },
+  ],
 
   examples: [
     [

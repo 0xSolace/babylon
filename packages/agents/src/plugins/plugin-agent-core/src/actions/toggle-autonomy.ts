@@ -47,19 +47,24 @@ export const toggleAutonomyAction: Action = {
   description:
     'Enable or disable YOUR autonomous behaviors (trading, posting, commenting, DMs, group chats). When enabled, you act independently - trading on your own analysis, creating posts, responding to comments, and engaging in conversations without needing explicit commands.',
 
-  parameters: {
-    feature: {
-      type: 'string',
+  parameters: [
+    {
+      name: 'feature',
       description:
         'Feature to toggle: "trading", "posting", "commenting", "dms", "groupChats", or "all"',
       required: true,
+      schema: {
+        type: 'string',
+        enum: ['trading', 'posting', 'commenting', 'dms', 'groupChats', 'all'],
+      },
     },
-    enabled: {
-      type: 'boolean',
+    {
+      name: 'enabled',
       description: 'Whether to enable (true) or disable (false) the feature',
       required: true,
+      schema: { type: 'boolean' },
     },
-  },
+  ],
 
   examples: [
     [

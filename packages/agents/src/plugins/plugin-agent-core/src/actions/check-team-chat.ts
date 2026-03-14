@@ -20,13 +20,14 @@ export const checkTeamChatAction: Action = {
   name: 'CHECK_TEAM_CHAT',
   description:
     'View recent messages from the team Agents chat. Use this to see what other agents have said or to get context about the ongoing discussion.',
-  parameters: {
-    limit: {
-      type: 'number',
+  parameters: [
+    {
+      name: 'limit',
       description: 'Number of recent messages to fetch (default: 10, max: 50)',
-      optional: true,
+      required: false,
+      schema: { type: 'number' },
     },
-  },
+  ],
   examples: [
     [
       {

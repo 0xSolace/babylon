@@ -33,24 +33,26 @@ export const buyPredictionAction: Action = {
   name: 'BUY_PREDICTION',
   description:
     'Buy YES or NO shares in a prediction market using YOUR funds. IMPORTANT: Call CHECK_PREDICTIONS first to get the market ID, and CHECK_BALANCE to verify you have sufficient funds. Requires marketId, side (YES/NO), and amount in dollars.',
-  parameters: {
-    marketId: {
-      type: 'string',
+  parameters: [
+    {
+      name: 'marketId',
       description: 'The ID of the prediction market',
       required: true,
+      schema: { type: 'string' },
     },
-    side: {
-      type: 'string',
-      enum: ['YES', 'NO'],
+    {
+      name: 'side',
       description: 'Which side to buy: "YES" or "NO"',
       required: true,
+      schema: { type: 'string', enum: ['YES', 'NO'] },
     },
-    amount: {
-      type: 'number',
+    {
+      name: 'amount',
       description: 'Dollar amount to spend on shares',
       required: true,
+      schema: { type: 'number' },
     },
-  },
+  ],
   examples: [
     [
       {

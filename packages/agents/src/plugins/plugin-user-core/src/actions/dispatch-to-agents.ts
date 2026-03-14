@@ -50,14 +50,24 @@ export const dispatchToAgentsAction: Action = {
   description:
     'Dispatch commands to multiple agents simultaneously. Use when the user wants input from several agents, or when a task benefits from parallel agent work.',
 
-  parameters: {
-    dispatches: {
-      type: 'array',
+  parameters: [
+    {
+      name: 'dispatches',
       required: true,
       description:
         'Array of dispatch objects, each with agentId and command. Example: [{"agentId": "abc", "command": "check positions"}, {"agentId": "def", "command": "analyze trends"}]',
+      schema: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            agentId: { type: 'string' },
+            command: { type: 'string' },
+          },
+        },
+      },
     },
-  },
+  ],
 
   examples: [
     [
