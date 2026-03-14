@@ -398,16 +398,20 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
     }
 
     const articleBriefs = await gameMasterService.listQueuedArticleBriefs();
-    const hallidayArticleContext = articleBriefs
-      .map((directive) => {
-        const metadata = (directive.metadata ?? {}) as Record<string, unknown>;
-        const headlineAngle =
-          typeof metadata.headlineAngle === 'string'
-            ? metadata.headlineAngle
-            : 'halliday brief';
-        return `Halliday brief: ${headlineAngle}. ${directive.promptOverlay}`;
-      })
-      .join('\n');
+    const selectedArticleBrief = articleBriefs[0] ?? null;
+    const hallidayArticleContext = selectedArticleBrief
+      ? (() => {
+          const metadata = (selectedArticleBrief.metadata ?? {}) as Record<
+            string,
+            unknown
+          >;
+          const headlineAngle =
+            typeof metadata.headlineAngle === 'string'
+              ? metadata.headlineAngle
+              : 'halliday brief';
+          return `Halliday brief: ${headlineAngle}. ${selectedArticleBrief.promptOverlay}`;
+        })()
+      : '';
     const combinedWorldFactsContext = hallidayArticleContext
       ? `${worldFactsContext}\n\n=== GAME MASTER HALLIDAY ===\n${hallidayArticleContext}`
       : worldFactsContext;
@@ -448,6 +452,9 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
 
           if (result.status === 'success') {
             articlesCreated++;
+            if (selectedArticleBrief) {
+              await gameMasterService.consumeDirective(selectedArticleBrief.id);
+            }
             // Mark this event as covered for future duplicate detection
             markEventAsCovered(eventId, org.id, result.id);
             logger.info(
@@ -481,11 +488,14 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
         combinedWorldFactsContext,
         gameState,
         llmClient,
-        articleBriefs[0] ?? null
+        selectedArticleBrief
       );
 
       if (result.status === 'success') {
         articlesCreated++;
+        if (selectedArticleBrief) {
+          await gameMasterService.consumeDirective(selectedArticleBrief.id);
+        }
         logger.info(
           `Baseline article created by ${org.name}`,
           { articleId: result.id },

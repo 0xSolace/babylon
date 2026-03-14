@@ -108,4 +108,32 @@ describe('Game Master Halliday API', () => {
         payload.runType === null
     ).toBe(true);
   });
+
+  test('POST /api/admin/game-master/actions/:id/retry rejects non-failed actions', async () => {
+    requireServer();
+
+    const dashboardResponse = await adminRequest('/api/admin/game-master');
+    const dashboard = await dashboardResponse.json();
+
+    expect(dashboardResponse.status).toBe(200);
+
+    const nonFailedAction = dashboard.pendingActions.find(
+      (action: { id: string; status: string }) => action.status !== 'failed'
+    );
+
+    if (!nonFailedAction) {
+      throw new Error(
+        'TEST SKIPPED: No non-failed Game Master action available'
+      );
+    }
+
+    const retryResponse = await adminRequest(
+      `/api/admin/game-master/actions/${nonFailedAction.id}/retry`,
+      { method: 'POST' }
+    );
+    const payload = await retryResponse.json();
+
+    expect(retryResponse.status).toBeGreaterThanOrEqual(400);
+    expect(typeof payload.error?.message).toBe('string');
+  });
 });

@@ -3,6 +3,7 @@ import {
   logAdminAction,
   requirePermission,
   successResponse,
+  ValidationError,
   withErrorHandling,
 } from '@babylon/api';
 import { gameMasterService } from '@babylon/engine';
@@ -20,7 +21,17 @@ export const POST = withErrorHandling(
       return errorResponse('Missing actionId', 'VALIDATION_ERROR', 400);
     }
 
-    await gameMasterService.retryAction(actionId);
+    try {
+      await gameMasterService.retryAction(actionId);
+    } catch (error) {
+      if (
+        error instanceof ValidationError ||
+        error?.name === 'ValidationError'
+      ) {
+        return errorResponse(error.message, 'VALIDATION_ERROR', 422);
+      }
+      throw error;
+    }
     await logAdminAction('GAME_MASTER_RETRY', {
       adminId: admin.userId,
       userAgent: request.headers.get('user-agent') ?? undefined,
