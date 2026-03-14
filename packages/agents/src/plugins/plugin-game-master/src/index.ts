@@ -1,8 +1,4 @@
 import type { Plugin } from '@elizaos/core';
-import { appraisalPlugin } from '@elizaos/plugin-appraisal';
-import { homeostasisPlugin } from '@elizaos/plugin-homeostasis';
-import { motivationPlugin } from '@elizaos/plugin-motivation';
-import { neuroPlugin } from '@elizaos/plugin-neuro';
 import { gameMasterPluginProvider } from './provider';
 import { GameMasterPluginService } from './service';
 
@@ -13,36 +9,17 @@ export const gameMasterPluginRuntimeDependencies = [
   '@elizaos/plugin-neuro',
 ] as const;
 
-const composedPlugins = [
-  homeostasisPlugin,
-  appraisalPlugin,
-  motivationPlugin,
-  neuroPlugin,
-] as const;
-
 export const gameMasterPlugin: Plugin = {
   name: 'game-master',
   description:
-    'Halliday world-orchestration plugin that composes homeostasis, appraisal, motivation, and neuro with Babylon game-master context',
-  services: [
-    ...composedPlugins.flatMap((plugin) => plugin.services ?? []),
-    GameMasterPluginService,
-  ],
-  providers: [
-    gameMasterPluginProvider,
-    ...composedPlugins.flatMap((plugin) => plugin.providers ?? []),
-  ],
-  evaluators: composedPlugins.flatMap((plugin) => plugin.evaluators ?? []),
-  actions: composedPlugins.flatMap((plugin) => plugin.actions ?? []),
-  routes: Object.assign(
-    {},
-    ...composedPlugins.map((plugin) => plugin.routes ?? {})
-  ),
-  dependencies: composedPlugins.flatMap((plugin) => plugin.dependencies ?? []),
-  config: Object.assign(
-    {},
-    ...composedPlugins.map((plugin) => plugin.config ?? {})
-  ),
+    'Optional Halliday world-orchestration wrapper that publishes Babylon game-master context into runtimes that may also mount homeostasis, appraisal, motivation, and neuro',
+  services: [GameMasterPluginService],
+  providers: [gameMasterPluginProvider],
+  evaluators: [],
+  actions: [],
+  routes: [],
+  dependencies: [],
+  config: {},
 };
 
 export { gameMasterPluginProvider } from './provider';

@@ -82,7 +82,15 @@ export interface GameMasterPluginContext {
   motivation: GameMasterMotivationContext;
   hypotheses: GameMasterHypothesis[];
   observability: {
-    activePluginCount: number;
-    activePluginIds: GameMasterPluginId[];
+    catalogActivePluginCount: number;
+    catalogActivePluginIds: GameMasterPluginId[];
+    modeledPluginCount: number;
+    modeledPluginIds: GameMasterPluginId[];
   };
+}
+
+export interface ResolvedGameMasterPluginContext {
+  source: 'engine_modeled' | 'runtime_plugin';
+  resolvedAt: Date;
+  context: GameMasterPluginContext;
 }

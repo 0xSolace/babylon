@@ -7,6 +7,7 @@ import type {
   GameMasterAppraisal,
   GameMasterHypothesis,
   GameMasterPluginContext,
+  GameMasterPluginId,
   GameMasterPluginSummary,
 } from './types';
 
@@ -264,9 +265,19 @@ export function buildGameMasterPluginContext(
   const motivation = buildMotivation(appraisals);
   const hypotheses = buildHypotheses(snapshot, appraisals);
   const pluginSummaries = buildPluginSummaries(appraisals);
-  const activePluginIds = listActiveGameMasterPlugins().map(
+  const catalogActivePluginIds = listActiveGameMasterPlugins().map(
     (plugin) => plugin.id
   );
+  const modeledPluginIds = new Set<GameMasterPluginId>(
+    appraisals.map((appraisal) => appraisal.pluginId)
+  );
+
+  if (motivation.priorities.length > 0 || motivation.constraints.length > 0) {
+    modeledPluginIds.add('plugin-motivation');
+  }
+  if (hypotheses.length > 0) {
+    modeledPluginIds.add('plugin-neuro');
+  }
 
   return {
     pluginSummaries,
@@ -274,8 +285,10 @@ export function buildGameMasterPluginContext(
     motivation,
     hypotheses,
     observability: {
-      activePluginCount: activePluginIds.length,
-      activePluginIds,
+      catalogActivePluginCount: catalogActivePluginIds.length,
+      catalogActivePluginIds,
+      modeledPluginCount: modeledPluginIds.size,
+      modeledPluginIds: [...modeledPluginIds],
     },
   };
 }

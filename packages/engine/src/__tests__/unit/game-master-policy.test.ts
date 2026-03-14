@@ -85,7 +85,7 @@ describe('Game Master planner', () => {
       })
     );
 
-    expect(context.observability.activePluginCount).toBeGreaterThan(0);
+    expect(context.observability.modeledPluginCount).toBeGreaterThan(0);
     expect(
       context.appraisals.some((appraisal) => appraisal.key === 'coverage')
     ).toBe(true);
@@ -93,42 +93,89 @@ describe('Game Master planner', () => {
   });
 
   test('creates daily pass actions for a new game day', () => {
-    const plan = gameMasterPlanner.plan(createSnapshot(), {
-      runType: 'daily',
-      triggerType: 'new_game_day',
-      triggerData: {},
-      shouldPlan: true,
+    const pluginContext = buildGameMasterPluginContext(createSnapshot());
+    const plan = gameMasterPlanner.plan({
+      snapshot: createSnapshot(),
+      trigger: {
+        runType: 'daily',
+        triggerType: 'new_game_day',
+        triggerData: {},
+        shouldPlan: true,
+      },
+      pluginContext: {
+        source: 'engine_modeled',
+        resolvedAt: new Date(),
+        context: pluginContext,
+      },
     });
 
     expect(plan.actions.length).toBeGreaterThan(0);
     expect(
       plan.actions.some((action) => action.actionType === 'QUEUE_ARTICLE_BRIEF')
     ).toBe(true);
-    expect(plan.planSummary).toContain('active plugin integrations');
+    expect(plan.planSummary).toContain('modeled plugin integrations');
   });
 
   test('reactive run uses fresh event as a brief hook', () => {
-    const plan = gameMasterPlanner.plan(
-      createSnapshot({
-        recentWorldEvents: [
-          {
-            id: 'evt-1',
-            eventType: 'news',
-            description: 'A dramatic earnings surprise hit the feed.',
-            actors: ['actor-1'],
-            relatedQuestion: null,
-            timestamp: new Date(),
-          },
-        ],
-      }),
-      {
+    const snapshot = createSnapshot({
+      recentWorldEvents: [
+        {
+          id: 'evt-1',
+          eventType: 'news',
+          description: 'A dramatic earnings surprise hit the feed.',
+          actors: ['actor-1'],
+          relatedQuestion: null,
+          timestamp: new Date(),
+        },
+      ],
+    });
+    const plan = gameMasterPlanner.plan({
+      snapshot,
+      trigger: {
         runType: 'reactive',
         triggerType: 'fresh_world_event',
         triggerData: {},
         shouldPlan: true,
-      }
-    );
+      },
+      pluginContext: {
+        source: 'engine_modeled',
+        resolvedAt: new Date(),
+        context: buildGameMasterPluginContext(snapshot),
+      },
+    });
 
     expect(plan.actions[0]?.actionType).toBe('QUEUE_ARTICLE_BRIEF');
+  });
+
+  test('uses the resolved plugin context instead of rebuilding priorities internally', () => {
+    const snapshot = createSnapshot();
+    const context = buildGameMasterPluginContext(snapshot);
+    context.motivation.priorities = ['Drive coverage into a rivalry-heavy story.'];
+    context.motivation.opportunities = ['Use an injected opportunity.'];
+    context.hypotheses = [
+      {
+        key: 'injected',
+        confidence: 0.9,
+        summary: 'Injected hypothesis should shape the plan.',
+      },
+    ];
+
+    const plan = gameMasterPlanner.plan({
+      snapshot,
+      trigger: {
+        runType: 'daily',
+        triggerType: 'test',
+        triggerData: {},
+        shouldPlan: true,
+      },
+      pluginContext: {
+        source: 'engine_modeled',
+        resolvedAt: new Date(),
+        context,
+      },
+    });
+
+    expect(plan.dailyObjective).toBe('Drive coverage into a rivalry-heavy story.');
+    expect(plan.worldSummary).toContain('Injected hypothesis should shape the plan.');
   });
 });

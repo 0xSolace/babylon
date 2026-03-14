@@ -10,8 +10,10 @@ import type { GameMasterPluginState } from './types';
 
 function buildProviderData(context: GameMasterPluginContext) {
   return {
-    activePluginIds: context.observability.activePluginIds,
-    activePluginCount: context.observability.activePluginCount,
+    catalogActivePluginIds: context.observability.catalogActivePluginIds,
+    catalogActivePluginCount: context.observability.catalogActivePluginCount,
+    modeledPluginIds: context.observability.modeledPluginIds,
+    modeledPluginCount: context.observability.modeledPluginCount,
     priorities: context.motivation.priorities,
     constraints: context.motivation.constraints,
     opportunities: context.motivation.opportunities,
@@ -52,7 +54,8 @@ function formatContext(context: GameMasterPluginContext): string {
 
   return [
     '[GAME_MASTER_PLUGIN_CONTEXT]',
-    `Active integrations: ${context.observability.activePluginIds.join(', ')}`,
+    `Catalog-supported integrations: ${context.observability.catalogActivePluginIds.join(', ')}`,
+    `Integrations shaping modeled context: ${context.observability.modeledPluginIds.join(', ')}`,
     '',
     'Appraisals:',
     appraisals || '- None',
@@ -72,7 +75,7 @@ function formatContext(context: GameMasterPluginContext): string {
 export const gameMasterPluginProvider: Provider = {
   name: 'GAME_MASTER_PLUGIN_CONTEXT',
   description:
-    'Exposes Halliday plugin-backed appraisals, motivations, and hypotheses for world orchestration',
+    'Exposes optional Halliday plugin context when a Babylon world snapshot has been injected into a live runtime',
 
   get: async (runtime: IAgentRuntime, message: Memory, state: State) => {
     const service =

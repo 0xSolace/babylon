@@ -1,11 +1,9 @@
 import { StaticDataRegistry } from '../services/static-data-registry';
 import { secureRandom } from '../utils/entropy';
 import { GAME_MASTER_DEFAULTS } from './constants';
-import { buildGameMasterPluginContext } from './integrations';
 import {
+  type GameMasterPlanningInput,
   type GameMasterPlan,
-  type GameMasterTriggerAssessment,
-  type GameMasterWorldSnapshot,
   gameMasterPlanSchema,
 } from './types';
 
@@ -21,7 +19,7 @@ function pickRandom<T>(items: readonly T[], count: number): T[] {
   return picked;
 }
 
-function buildTopicSummary(snapshot: GameMasterWorldSnapshot): string {
+function buildTopicSummary(snapshot: GameMasterPlanningInput['snapshot']): string {
   if (!snapshot.currentTopic) {
     return 'No daily topic is set. The narrative needs a clear center of gravity.';
   }
@@ -30,7 +28,7 @@ function buildTopicSummary(snapshot: GameMasterWorldSnapshot): string {
 }
 
 function shouldEmitRandomLowRiskBatch(
-  snapshot: GameMasterWorldSnapshot
+  snapshot: GameMasterPlanningInput['snapshot']
 ): boolean {
   if (!snapshot.lastInterventionAt) return true;
 
@@ -45,11 +43,9 @@ function shouldEmitRandomLowRiskBatch(
 }
 
 export class GameMasterPlanner {
-  plan(
-    snapshot: GameMasterWorldSnapshot,
-    trigger: GameMasterTriggerAssessment
-  ): GameMasterPlan {
-    const pluginContext = buildGameMasterPluginContext(snapshot);
+  plan(input: GameMasterPlanningInput): GameMasterPlan {
+    const { snapshot, trigger, pluginContext } = input;
+    const context = pluginContext.context;
     const actors = pickRandom(
       StaticDataRegistry.getAllActors().filter(
         (actor) => !/\btest\b/i.test(actor.name)
@@ -66,13 +62,13 @@ export class GameMasterPlanner {
     const currentTopicLabel =
       snapshot.currentTopic?.topicLabel ?? 'the emerging market narrative';
     const primaryPriority =
-      pluginContext.motivation.priorities[0] ??
+      context.motivation.priorities[0] ??
       `Keep the world converging on ${currentTopicLabel}.`;
     const primaryOpportunity =
-      pluginContext.motivation.opportunities[0] ??
+      context.motivation.opportunities[0] ??
       'Use light-touch narrative interventions.';
     const leadHypothesis =
-      pluginContext.hypotheses[0]?.summary ??
+      context.hypotheses[0]?.summary ??
       'No strong hypothesis is active beyond maintaining narrative motion.';
 
     const actions: GameMasterPlan['actions'] = [];
@@ -90,7 +86,7 @@ export class GameMasterPlanner {
     if (trigger.runType === 'daily') {
       if (
         !snapshot.currentTopic ||
-        pluginContext.appraisals.some(
+        context.appraisals.some(
           (appraisal) => appraisal.key === 'coherence' && appraisal.score > 0.65
         )
       ) {
@@ -213,7 +209,7 @@ export class GameMasterPlanner {
       dailyObjective: primaryPriority,
       worldSummary: observations.join(' '),
       observationSummary: observations.join(' '),
-      planSummary: `Halliday is running a ${trigger.runType} pass with ${actionBudget.length} candidate interventions using ${pluginContext.observability.activePluginCount} active plugin integrations.`,
+      planSummary: `Halliday is running a ${trigger.runType} pass with ${actionBudget.length} candidate interventions using ${context.observability.modeledPluginCount} modeled plugin integrations from a ${pluginContext.source} planning context.`,
       actions: actionBudget,
     });
   }

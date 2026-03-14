@@ -25,6 +25,9 @@ import {
   worldEvents,
 } from '@babylon/db';
 import { generateSnowflakeId, logger, ValidationError } from '@babylon/shared';
+import { existsSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { DistributedLockService } from '../services/distributed-lock-service';
 import { npcMemoryService } from '../services/npc-memory-service';
 import { broadcastToChannel } from '../services/realtime-broadcaster';
@@ -34,7 +37,11 @@ import {
   GAME_MASTER_NAME,
   GAME_MASTER_SENDER_ID,
 } from './constants';
-import { GAME_MASTER_PLUGIN_CATALOG } from './integrations';
+import {
+  buildGameMasterPluginContext,
+  GAME_MASTER_PLUGIN_CATALOG,
+  type ResolvedGameMasterPluginContext,
+} from './integrations';
 import { gameMasterPlanner } from './planner';
 import { gameMasterPolicyEngine } from './policy';
 import {
@@ -43,6 +50,21 @@ import {
   type GameMasterTriggerAssessment,
   type GameMasterWorldSnapshot,
 } from './types';
+
+const ENGINE_DIR = dirname(fileURLToPath(import.meta.url));
+const REPO_ROOT = resolve(ENGINE_DIR, '..', '..', '..', '..');
+const GAME_MASTER_WORKSPACE_PLUGIN_PATHS = {
+  'plugin-appraisal': resolve(REPO_ROOT, 'packages/plugin-appraisal/package.json'),
+  'plugin-homeostasis': resolve(
+    REPO_ROOT,
+    'packages/plugin-homeostasis/package.json'
+  ),
+  'plugin-motivation': resolve(
+    REPO_ROOT,
+    'packages/plugin-motivation/package.json'
+  ),
+  'plugin-neuro': resolve(REPO_ROOT, 'packages/plugin-neuro/package.json'),
+} as const;
 
 type GameMasterDirectiveFilter = {
   directiveType?:
@@ -103,6 +125,11 @@ export interface GameMasterDashboard {
     status: 'active' | 'advisory' | 'inactive';
     capability: string;
     rationale: string;
+    catalogSupported: boolean;
+    packageInstalled: boolean;
+    runtimeMounted: boolean;
+    planningMode: 'engine_modeled' | 'runtime_plugin' | 'inactive';
+    lastSuccessfullyUsedAt: string | null;
   }>;
 }
 
@@ -400,6 +427,54 @@ export class GameMasterService {
       triggerData: {},
       shouldPlan: true,
     };
+  }
+
+  private resolvePluginContext(
+    snapshot: GameMasterWorldSnapshot
+  ): ResolvedGameMasterPluginContext {
+    return {
+      source: 'engine_modeled',
+      resolvedAt: new Date(),
+      context: buildGameMasterPluginContext(snapshot),
+    };
+  }
+
+  private getPluginIntegrationRows(
+    resolvedPluginContext: ResolvedGameMasterPluginContext | null,
+    latestRunStartedAt: Date | null
+  ): GameMasterDashboard['pluginIntegrations'] {
+    const modeledPluginIds = new Set(
+      resolvedPluginContext?.context.observability.modeledPluginIds ?? []
+    );
+
+    return Object.values(GAME_MASTER_PLUGIN_CATALOG).map((plugin) => {
+      const packageInstalled =
+        plugin.id in GAME_MASTER_WORKSPACE_PLUGIN_PATHS
+          ? existsSync(
+              GAME_MASTER_WORKSPACE_PLUGIN_PATHS[
+                plugin.id as keyof typeof GAME_MASTER_WORKSPACE_PLUGIN_PATHS
+              ]
+            )
+          : false;
+      const modeled = modeledPluginIds.has(plugin.id);
+
+      return {
+        id: plugin.id,
+        status: plugin.status,
+        capability: plugin.capability,
+        rationale: plugin.rationale,
+        catalogSupported: true,
+        packageInstalled,
+        runtimeMounted: false,
+        planningMode: modeled
+          ? resolvedPluginContext?.source ?? 'engine_modeled'
+          : 'inactive',
+        lastSuccessfullyUsedAt:
+          modeled && latestRunStartedAt
+            ? latestRunStartedAt.toISOString()
+            : null,
+      };
+    });
   }
 
   private async ensureControlChat(chatId: string, name: string): Promise<void> {
@@ -986,7 +1061,12 @@ export class GameMasterService {
         return { runId: null, runType: trigger.runType, skipped: 'no_plan' };
       }
 
-      const plan = gameMasterPlanner.plan(snapshot, trigger);
+      const pluginContext = this.resolvePluginContext(snapshot);
+      const plan = gameMasterPlanner.plan({
+        snapshot,
+        trigger,
+        pluginContext,
+      });
       const { runId, actionIds } = await this.persistRun(
         snapshot,
         trigger,
@@ -1236,6 +1316,24 @@ export class GameMasterService {
       this.isAutoRunActive(),
     ]);
 
+    const latestRunStartedAt = latestRuns[0]?.startedAt ?? null;
+    const resolvedPluginContext =
+      game && game.currentDay !== null
+        ? this.resolvePluginContext({
+            gameId: game.id,
+            gameDay: game.currentDay,
+            isRunning: game.isRunning,
+            currentTopic: null,
+            recentWorldEvents: [],
+            recentArticles: [],
+            recentOrganizationPosts: [],
+            recentRelationshipChanges: [],
+            lastRunAt: latestRunStartedAt,
+            lastInterventionAt: null,
+            recentActionCount: hourlyAutoActionCount,
+          })
+        : null;
+
     return {
       enabled: this.isEnabled(),
       autoRunEnabled: autoRunActive,
@@ -1264,13 +1362,9 @@ export class GameMasterService {
         createdAt: message.createdAt.toISOString(),
       })),
       hourlyAutoActionCount,
-      pluginIntegrations: Object.values(GAME_MASTER_PLUGIN_CATALOG).map(
-        (plugin) => ({
-          id: plugin.id,
-          status: plugin.status,
-          capability: plugin.capability,
-          rationale: plugin.rationale,
-        })
+      pluginIntegrations: this.getPluginIntegrationRows(
+        resolvedPluginContext,
+        latestRunStartedAt
       ),
     };
   }

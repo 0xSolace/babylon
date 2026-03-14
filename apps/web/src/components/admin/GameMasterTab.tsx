@@ -74,6 +74,11 @@ interface GameMasterDashboard {
     status: 'active' | 'advisory' | 'inactive';
     capability: string;
     rationale: string;
+    catalogSupported: boolean;
+    packageInstalled: boolean;
+    runtimeMounted: boolean;
+    planningMode: 'engine_modeled' | 'runtime_plugin' | 'inactive';
+    lastSuccessfullyUsedAt: string | null;
   }>;
 }
 
@@ -333,10 +338,9 @@ export function GameMasterTab() {
           <div>
             <h3 className="font-medium text-base">Plugin Integrations</h3>
             <p className="text-muted-foreground text-sm">
-              Halliday runs on a clean plugin-style cognition layer. Active
-              integrations shape planning, advisory integrations are modeled but
-              not yet fully signal-backed, and inactive integrations are kept
-              intentionally out of the runtime.
+              This panel shows the difference between catalog support,
+              workspace package installation, actual runtime mounting, and the
+              planning path Halliday is currently using.
             </p>
           </div>
           <div className="text-muted-foreground text-sm">
@@ -371,8 +375,42 @@ export function GameMasterTab() {
                 </span>
               </div>
               <p className="mt-2 text-sm">{plugin.capability}</p>
+              <div className="mt-2 flex flex-wrap gap-2 text-[11px] uppercase">
+                <span className="rounded bg-muted px-2 py-1 text-muted-foreground">
+                  {plugin.catalogSupported ? 'catalog-supported' : 'uncataloged'}
+                </span>
+                <span
+                  className={cn(
+                    'rounded px-2 py-1',
+                    plugin.packageInstalled
+                      ? 'bg-emerald-500/15 text-emerald-600'
+                      : 'bg-muted text-muted-foreground'
+                  )}
+                >
+                  {plugin.packageInstalled ? 'package-installed' : 'package-missing'}
+                </span>
+                <span
+                  className={cn(
+                    'rounded px-2 py-1',
+                    plugin.runtimeMounted
+                      ? 'bg-emerald-500/15 text-emerald-600'
+                      : 'bg-muted text-muted-foreground'
+                  )}
+                >
+                  {plugin.runtimeMounted ? 'runtime-mounted' : 'runtime-unmounted'}
+                </span>
+                <span className="rounded bg-primary/10 px-2 py-1 text-primary">
+                  planning: {plugin.planningMode.replace('_', '-')}
+                </span>
+              </div>
               <p className="mt-1 text-muted-foreground text-xs">
                 {plugin.rationale}
+              </p>
+              <p className="mt-1 text-muted-foreground text-xs">
+                Last successfully used:{' '}
+                {plugin.lastSuccessfullyUsedAt
+                  ? formatDate(plugin.lastSuccessfullyUsedAt)
+                  : 'Not yet observed'}
               </p>
             </div>
           ))}

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { ResolvedGameMasterPluginContext } from './integrations/types';
 
 export const gameMasterRunTypeSchema = z.enum(['daily', 'pulse', 'reactive']);
 export type GameMasterRunType = z.infer<typeof gameMasterRunTypeSchema>;
@@ -197,4 +198,10 @@ export interface GameMasterActionAssessment {
   riskLevel: GameMasterRisk;
   requiresApproval: boolean;
   approvalReason: string | null;
+}
+
+export interface GameMasterPlanningInput {
+  snapshot: GameMasterWorldSnapshot;
+  trigger: GameMasterTriggerAssessment;
+  pluginContext: ResolvedGameMasterPluginContext;
 }

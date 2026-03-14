@@ -5,13 +5,13 @@
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
-  "types": "./dist/index.d.ts",
+  "types": "./index.d.ts",
   "packageType": "plugin",
   "platform": "node",
   "exports": {
     "./package.json": "./package.json",
     ".": {
-      "types": "./dist/index.d.ts",
+      "types": "./index.d.ts",
       "import": "./dist/index.js",
       "default": "./dist/index.js"
     }
