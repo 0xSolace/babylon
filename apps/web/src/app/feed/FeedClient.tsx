@@ -150,8 +150,11 @@ export function FeedClient() {
     stories: forYouStories,
     ready: forYouReady,
     loading: forYouLoading,
+    loadingMore: forYouLoadingMore,
+    hasMore: forYouHasMore,
     error: forYouError,
     refresh: refreshForYou,
+    loadMore: loadMoreForYou,
   } = useForYouFeed({ enabled: tab === 'forYou' });
 
   // New market cards shown at the top of Latest and Hot tabs
@@ -359,7 +362,14 @@ export function FeedClient() {
     if (tab === 'forYou') {
       if (forYouError) return <ForYouFeedError onRetry={refreshForYou} />;
       if (forYouStories.length === 0) return <EmptyFeed variant="forYou" />;
-      return <ForYouFeedList stories={forYouStories} />;
+      return (
+        <ForYouFeedList
+          stories={forYouStories}
+          hasMore={forYouHasMore}
+          loadingMore={forYouLoadingMore}
+          loadMore={loadMoreForYou}
+        />
+      );
     }
 
     if (currentPosts.length === 0) {
