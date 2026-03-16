@@ -164,6 +164,10 @@ export function useForYouFeed(
       });
   }, [fetchPage, syncHasMore]);
 
+  // SSE is the primary refresh mechanism. The 5-minute fallback polling from
+  // the generic `useFeed` hook is intentionally omitted here: for a paginated
+  // hook, polling would reset the user to page 1 mid-scroll. If SSE is
+  // unavailable, the user retains their current page until they manually refresh.
   useSSEChannel(
     enabled ? 'feed' : null,
     useCallback(() => {

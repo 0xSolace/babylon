@@ -151,3 +151,39 @@ export function diversifyForYouStories(
 
   return result;
 }
+
+/**
+ * Hard-guarantee pass that ensures no two market cards are adjacent in the feed.
+ * Applied after `diversifyForYouStories()`, which uses score-based penalties that
+ * can fail to separate markets when score gaps are large. This function provides
+ * an unconditional structural guarantee with minimal rank-order disturbance.
+ *
+ * When two consecutive isNewMarket items are found, the nearest following
+ * non-market story is spliced between them.
+ */
+export function spreadNewMarkets(stories: NarrativeStory[]): NarrativeStory[] {
+  const result = [...stories];
+
+  for (let i = 0; i < result.length - 1; i++) {
+    const current = result[i];
+    const next = result[i + 1];
+    if (!current?.isNewMarket) continue;
+    if (!next?.isNewMarket) continue;
+
+    // Two consecutive markets at i and i+1 — find the next non-market after i+1
+    const nextPostIdx = result.findIndex(
+      (s, idx) => idx > i + 1 && !s.isNewMarket
+    );
+
+    if (nextPostIdx !== -1) {
+      // Pull the non-market post forward to sit between the two markets
+      const post = result.splice(nextPostIdx, 1)[0];
+      if (post !== undefined) {
+        result.splice(i + 1, 0, post);
+      }
+    }
+    // Edge case: all remaining items are markets — leave as-is
+  }
+
+  return result;
+}
