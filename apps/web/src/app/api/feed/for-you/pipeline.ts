@@ -50,8 +50,8 @@ import {
 } from './scoring';
 
 const MAX_CANDIDATE_POSTS = 500;
-const MAX_STANDALONE_POSTS = 24;
-const MAX_NEW_MARKET_CANDIDATES = 6;
+const MAX_STANDALONE_POSTS = 60;
+const MAX_NEW_MARKET_CANDIDATES = 12;
 const FEED_POST_WINDOW_MS = 24 * 60 * 60 * 1000;
 const NEW_MARKET_WINDOW_MS = 24 * 60 * 60 * 1000;
 const FEED_EVENT_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
@@ -989,6 +989,38 @@ async function loadFeedEventAggregates(
   );
 }
 
+/**
+ * Ensures no two market cards are adjacent in the feed.
+ * When two consecutive isNewMarket items are found, the nearest following
+ * non-market story is spliced between them, preserving rank order otherwise.
+ */
+function spreadNewMarkets(stories: NarrativeStory[]): NarrativeStory[] {
+  const result = [...stories];
+
+  for (let i = 0; i < result.length - 1; i++) {
+    const current = result[i];
+    const next = result[i + 1];
+    if (!current?.isNewMarket) continue;
+    if (!next?.isNewMarket) continue;
+
+    // Two consecutive markets at i and i+1 — find the next non-market after i+1
+    const nextPostIdx = result.findIndex(
+      (s, idx) => idx > i + 1 && !s.isNewMarket
+    );
+
+    if (nextPostIdx !== -1) {
+      // Pull the non-market post forward to sit between the two markets
+      const post = result.splice(nextPostIdx, 1)[0];
+      if (post !== undefined) {
+        result.splice(i + 1, 0, post);
+      }
+    }
+    // Edge case: all remaining items are markets — leave as-is
+  }
+
+  return result;
+}
+
 export async function buildForYouFeed(userId?: string | null) {
   const currentTopic = await dailyTopicService.getCurrentTopic();
 
@@ -1320,10 +1352,13 @@ export async function buildForYouFeed(userId?: string | null) {
     } satisfies NarrativeStory;
   });
 
-  const rankedStories = diversifyForYouStories(
-    rescoredStories.sort(
-      (a, b) =>
-        (b.finalRankScore ?? b.storyScore) - (a.finalRankScore ?? a.storyScore)
+  const rankedStories = spreadNewMarkets(
+    diversifyForYouStories(
+      rescoredStories.sort(
+        (a, b) =>
+          (b.finalRankScore ?? b.storyScore) -
+          (a.finalRankScore ?? a.storyScore)
+      )
     )
   );
 
