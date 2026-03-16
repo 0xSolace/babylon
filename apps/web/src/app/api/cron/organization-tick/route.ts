@@ -410,12 +410,13 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
             : '';
 
         // Build prompt for organization POST (not article - articles are handled by article-tick)
-        const gameMasterOverlay = await gameMasterService.buildPromptOverlay({
-          directiveType: 'organization_instruction',
-          targetType: 'organization',
-          targetId: org.id,
-        });
-        const marketNarrativeOverlay =
+        const { formatted: gameMasterOverlay } =
+          await gameMasterService.buildPromptOverlay({
+            directiveType: 'organization_instruction',
+            targetType: 'organization',
+            targetId: org.id,
+          });
+        const { formatted: marketNarrativeOverlay } =
           await gameMasterService.buildPromptOverlay({
             directiveType: 'market_narrative',
             targetType: 'organization',

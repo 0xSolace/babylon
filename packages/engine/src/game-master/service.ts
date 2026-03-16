@@ -37,6 +37,8 @@ import {
 import { gameMasterPlanner } from './planner';
 import { gameMasterPolicyEngine } from './policy';
 import {
+  type GameMasterAuthority,
+  type GameMasterOverlayResult,
   type GameMasterPlan,
   type GameMasterRunType,
   type GameMasterTriggerAssessment,
@@ -1042,7 +1044,7 @@ export class GameMasterService {
       | 'market_narrative';
     targetType: 'actor' | 'organization' | 'question';
     targetId: string;
-  }): Promise<string> {
+  }): Promise<GameMasterOverlayResult> {
     const directives = await this.listActiveDirectives({
       directiveType: params.directiveType,
       targetType: params.targetType,
@@ -1062,15 +1064,29 @@ export class GameMasterService {
       );
     }
 
-    const lines = directives
-      .map((directive) => directive.promptOverlay.trim())
-      .filter(Boolean);
+    const structured = directives
+      .map((directive) => ({
+        authorityLevel: directive.authorityLevel as GameMasterAuthority,
+        promptOverlay: directive.promptOverlay.trim(),
+      }))
+      .filter((d) => d.promptOverlay.length > 0);
 
-    if (lines.length === 0) return '';
-    return [
+    if (structured.length === 0) return { formatted: '', directives: [] };
+
+    const authorityLabel = (level: GameMasterAuthority): string => {
+      if (level === 'override') return '[DIRECTIVE — MUST FOLLOW]';
+      if (level === 'steer') return '[GUIDANCE — PRIORITIZE]';
+      return '[SUGGESTION]';
+    };
+
+    const formatted = [
       `=== GAME MASTER HALLIDAY ===`,
-      ...lines.map((line) => `- ${line}`),
+      ...structured.map(
+        (d) => `- ${authorityLabel(d.authorityLevel)} ${d.promptOverlay}`
+      ),
     ].join('\n');
+
+    return { formatted, directives: structured };
   }
 
   async listQueuedArticleBriefs() {

@@ -249,11 +249,12 @@ Remember: You are ${npcActor.name}. Post in YOUR voice, not as a reporter.
   const worldContext = worldFacts.general
     ? `=== WHAT'S HAPPENING ===\n${worldFacts.general}\n\n`
     : '';
-  const gameMasterOverlay = await gameMasterService.buildPromptOverlay({
-    directiveType: 'actor_instruction',
-    targetType: 'actor',
-    targetId: agentId,
-  });
+  const { formatted: gameMasterOverlay } =
+    await gameMasterService.buildPromptOverlay({
+      directiveType: 'actor_instruction',
+      targetType: 'actor',
+      targetId: agentId,
+    });
 
   return `
 === WHO YOU ARE ===

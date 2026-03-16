@@ -26,7 +26,7 @@ export const POST = withErrorHandling(
     } catch (error) {
       if (
         error instanceof ValidationError ||
-        error?.name === 'ValidationError'
+        (error instanceof Error && error.name === 'ValidationError')
       ) {
         return errorResponse(error.message, 'VALIDATION_ERROR', 422);
       }

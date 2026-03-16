@@ -198,3 +198,15 @@ export interface GameMasterActionAssessment {
   requiresApproval: boolean;
   approvalReason: string | null;
 }
+
+export interface GameMasterOverlayDirective {
+  authorityLevel: GameMasterAuthority;
+  promptOverlay: string;
+}
+
+export interface GameMasterOverlayResult {
+  /** Full formatted block ready to inject into an LLM prompt, with authority labels embedded. Empty string when no active directives. */
+  formatted: string;
+  /** Structured directive list for callers that need to inspect authority levels programmatically. */
+  directives: GameMasterOverlayDirective[];
+}
