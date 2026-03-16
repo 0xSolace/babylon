@@ -64,4 +64,29 @@ describe('assessAgentWalletState', () => {
     expect(result.classification).toBe('recreate_privy_user');
     expect(result.remediationAction).toBe('provision_with_new_privy_user');
   });
+
+  it('classifies real privyId + partial wallet state as offline_signer_missing', () => {
+    const result = assessAgentWalletState({
+      privyId: 'did:privy:agent-5',
+      privyWalletId: 'wallet-5',
+      walletAddress: '0x0000000000000000000000000000000000000005',
+      offlineWalletReady: false,
+    });
+
+    expect(result.classification).toBe('offline_signer_missing');
+    expect(result.remediationAction).toBe('provision_with_existing_privy_user');
+    expect(result.isReady).toBe(false);
+  });
+
+  it('classifies real privyId + privyWalletId only (no address) as offline_signer_missing', () => {
+    const result = assessAgentWalletState({
+      privyId: 'did:privy:agent-6',
+      privyWalletId: 'wallet-6',
+      walletAddress: null,
+      offlineWalletReady: false,
+    });
+
+    expect(result.classification).toBe('offline_signer_missing');
+    expect(result.remediationAction).toBe('provision_with_existing_privy_user');
+  });
 });

@@ -32,7 +32,11 @@ function parseTransactionValue(value: string): bigint | undefined {
     return undefined;
   }
 
-  return BigInt(trimmed);
+  try {
+    return BigInt(trimmed);
+  } catch {
+    return undefined;
+  }
 }
 
 export class AgentWalletService {

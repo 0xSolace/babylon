@@ -106,6 +106,7 @@ async function main(): Promise<void> {
     ready: 0,
     empty: 0,
     recover_with_existing_privy_user: 0,
+    offline_signer_missing: 0,
     recreate_privy_user: 0,
     inconsistent_partial_state: 0,
   };

@@ -301,6 +301,8 @@ describe('AgentWalletService', () => {
     ['whitespace only', '   ', undefined],
     ['"0"', '0', undefined],
     ['"0x0"', '0x0', undefined],
+    ['bare hex prefix "0x"', '0x', undefined],
+    ['malformed hex "0xgg"', '0xgg', undefined],
     ['decimal integer', '1000000000000000000', 1000000000000000000n],
     ['hex value "0x1"', '0x1', 1n],
     ['hex ETH value', '0xde0b6b3a7640000', 1000000000000000000n],
