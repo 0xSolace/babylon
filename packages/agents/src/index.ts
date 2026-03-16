@@ -63,6 +63,8 @@ export {
   isAutonomousPostingEnabled,
   isAutonomousTradingEnabled,
 } from './shared/agent-config';
+// Solana agent registration
+export * from './solana-registry';
 // Templates loader
 export * from './templates-loader';
 // Training utilities (RL model fetching, config)

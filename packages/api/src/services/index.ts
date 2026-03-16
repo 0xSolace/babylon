@@ -8,6 +8,7 @@
  */
 
 // Claude LLM Service
+export * from './agent-solana-registration-service';
 export * from './claude-service';
 export * from './cron-relay-service';
 // Daily Login Service (BAB-88)
