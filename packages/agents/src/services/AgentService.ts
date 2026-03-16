@@ -13,6 +13,7 @@
  * @packageDocumentation
  */
 
+import { assertPrivyOfflineConfig } from '@babylon/api';
 import {
   agentLogs,
   agentMessages,
@@ -90,9 +91,10 @@ export class AgentServiceV2 {
   /**
    * Creates a new agent (creates a full User with isAgent=true)
    *
-   * Creates a complete user account with agent capabilities, wallet, and
-   * initial configuration. The agent can immediately participate in all
-   * platform activities.
+   * Creates a complete user account with agent capabilities and initial
+   * configuration. Wallet readiness is provisioned asynchronously after
+   * creation; wallet-specific actions must remain gated until the agent
+   * reaches a ready state.
    *
    * @param params - Agent creation parameters
    * @returns Created user/agent entity
@@ -333,7 +335,16 @@ export class AgentServiceV2 {
     }
 
     if (this.shouldAutoSetupAgentIdentity()) {
-      void this.setupAgentIdentity(agentUserId);
+      void this.setupAgentIdentity(agentUserId).catch((error) => {
+        logger.error(
+          'Agent identity setup failed',
+          {
+            agentUserId,
+            error: error instanceof Error ? error.message : String(error),
+          },
+          'AgentService'
+        );
+      });
     }
 
     // Add agent to Agents (team chat)
@@ -1085,21 +1096,19 @@ export class AgentServiceV2 {
       return false;
     }
 
-    // Require Privy credentials outside development so we do not spam errors
-    const hasPrivyConfig = Boolean(
-      process.env.NEXT_PUBLIC_PRIVY_APP_ID && process.env.PRIVY_APP_SECRET
-    );
-
-    if (!hasPrivyConfig && process.env.NODE_ENV !== 'development') {
+    try {
+      assertPrivyOfflineConfig();
+      return true;
+    } catch (error) {
       logger.warn(
-        'Skipping automatic agent identity setup - Privy credentials missing',
-        undefined,
+        'Skipping automatic agent identity setup - Privy offline configuration is incomplete',
+        {
+          error: error instanceof Error ? error.message : String(error),
+        },
         'AgentService'
       );
       return false;
     }
-
-    return true;
   }
 
   private async setupAgentIdentity(agentUserId: string): Promise<void> {

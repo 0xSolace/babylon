@@ -8,10 +8,11 @@
  * @packageDocumentation
  */
 
-import { getPrivyAppIdFromEnv, getTrimmedEnv } from '@babylon/api';
+import {
+  provisionAgentPrivyWallet,
+  signPrivyEvmTransaction,
+} from '@babylon/api';
 import { agentLogs, db, eq, type JsonValue, users } from '@babylon/db';
-import { PrivyClient } from '@privy-io/server-auth';
-import { ethers } from 'ethers';
 import { v4 as uuidv4 } from 'uuid';
 import { getAgent0SDK } from '../agent0/sdk-instance';
 import {
@@ -19,84 +20,28 @@ import {
   isAutonomousTradingEnabled,
 } from '../shared/agent-config';
 import { logger } from '../shared/logger';
+import {
+  type AgentWalletStateSnapshot,
+  assessAgentWalletState,
+  isAgentWalletReady,
+} from './agent-wallet-state';
 
-/**
- * Privy wallet structure
- * @internal
- */
-interface PrivyWallet {
-  address: string;
-  id: string;
-}
-
-/**
- * Privy user structure
- * @internal
- */
-interface PrivyUser {
-  id: string;
-  wallet?: PrivyWallet;
-}
-
-/**
- * Privy create user parameters
- * @internal
- */
-interface PrivyCreateUserParams {
-  create_embedded_wallet: boolean;
-  linked_accounts: Array<Record<string, unknown>>;
-}
-
-/**
- * Privy sign transaction parameters
- * @internal
- */
-interface PrivySignTransactionParams {
-  wallet_id: string;
-  transaction: {
-    to: string;
-    value: string;
-    data: string;
-  };
-}
-
-/**
- * Privy signed transaction response
- * @internal
- */
-interface PrivySignedTransaction {
-  signed_transaction: string;
-}
-
-/**
- * Extended Privy client with additional methods
- * @internal
- */
-interface ExtendedPrivyClient extends PrivyClient {
-  createUser(params: PrivyCreateUserParams): Promise<PrivyUser>;
-  signTransaction(
-    params: PrivySignTransactionParams
-  ): Promise<PrivySignedTransaction>;
-}
-
-let privyClient: ExtendedPrivyClient | null = null;
-
-function getPrivyServerClient(): ExtendedPrivyClient | null {
-  const appId = getPrivyAppIdFromEnv();
-  const appSecret = getTrimmedEnv('PRIVY_APP_SECRET');
-  if (!appId || !appSecret) return null;
-
-  if (!privyClient) {
-    privyClient = new PrivyClient(appId, appSecret) as ExtendedPrivyClient;
+function parseTransactionValue(value: string): bigint | undefined {
+  const trimmed = value.trim();
+  if (!trimmed || trimmed === '0' || trimmed === '0x0') {
+    return undefined;
   }
 
-  return privyClient;
+  try {
+    return BigInt(trimmed);
+  } catch {
+    return undefined;
+  }
 }
 
 export class AgentWalletService {
   /**
-   * Create embedded wallet for agent via Privy (server-side, no user interaction)
-   * Falls back to dev wallet in development if Privy is not configured.
+   * Provision a Privy-backed offline-ready wallet for an agent.
    */
   async createAgentEmbeddedWallet(agentUserId: string): Promise<{
     walletAddress: string;
@@ -104,7 +49,14 @@ export class AgentWalletService {
     privyWalletId: string;
   }> {
     const [agent] = await db
-      .select()
+      .select({
+        id: users.id,
+        isAgent: users.isAgent,
+        walletAddress: users.walletAddress,
+        privyId: users.privyId,
+        privyWalletId: users.privyWalletId,
+        offlineWalletReady: users.offlineWalletReady,
+      })
       .from(users)
       .where(eq(users.id, agentUserId))
       .limit(1);
@@ -113,121 +65,104 @@ export class AgentWalletService {
       throw new Error('Agent user not found');
     }
 
-    // Check if agent already has a wallet address
-    if (agent.walletAddress) {
+    if (isAgentWalletReady(agent)) {
       logger.info(
-        'Agent already has wallet address, skipping creation',
+        'Agent wallet already provisioned and ready',
         {
           agentUserId,
           walletAddress: agent.walletAddress,
+          privyId: agent.privyId,
+          privyWalletId: agent.privyWalletId,
         },
         'AgentWalletService'
       );
 
       return {
-        walletAddress: agent.walletAddress,
-        privyUserId: agent.privyId || `dev_${agentUserId}`,
-        privyWalletId: `dev_wallet_${agentUserId}`,
+        walletAddress: agent.walletAddress!,
+        privyUserId: agent.privyId!,
+        privyWalletId: agent.privyWalletId!,
       };
     }
 
-    // Check if Privy is configured and if createUser method exists
-    const privy = getPrivyServerClient();
-    const hasPrivyConfig = !!privy;
-
-    // Check if createUser method exists (it may not in newer Privy SDK versions)
-    // PrivyClient may have createUser method that's not in the type definition
-    interface PrivyClientWithCreateUser {
-      createUser?: (params: PrivyCreateUserParams) => Promise<PrivyUser>;
-    }
-    const privyWithCreateUser = privy as PrivyClientWithCreateUser | null;
-    const hasCreateUserMethod =
-      typeof privyWithCreateUser?.createUser === 'function';
-
-    // If Privy is not available, skip directly to dev wallet (no error)
-    if (!hasPrivyConfig || !hasCreateUserMethod) {
-      logger.info(
-        'Privy not available, using development wallet',
-        {
-          agentUserId,
-          hasPrivyConfig,
-          hasCreateUserMethod,
-        },
-        'AgentWalletService'
+    const assessment = assessAgentWalletState(
+      agent as AgentWalletStateSnapshot
+    );
+    if (
+      assessment.classification !== 'empty' &&
+      assessment.classification !== 'recover_with_existing_privy_user' &&
+      assessment.classification !== 'offline_signer_missing'
+    ) {
+      throw new Error(
+        `Agent ${agentUserId} wallet state is inconsistent (${assessment.classification}); manual remediation required`
       );
-
-      // Create dev wallet directly
-      const devWallet = ethers.Wallet.createRandom();
-      const walletAddress = devWallet.address;
-      const privyUserId = `dev_${agentUserId}`;
-      const privyWalletId = `dev_wallet_${agentUserId}`;
-
-      await db
-        .update(users)
-        .set({
-          walletAddress,
-          privyId: privyUserId,
-        })
-        .where(eq(users.id, agentUserId));
-
-      return { walletAddress, privyUserId, privyWalletId };
     }
+    const existingPrivyId =
+      assessment.remediationAction === 'provision_with_existing_privy_user'
+        ? agent.privyId
+        : null;
 
-    // Try Privy wallet creation
     logger.info(
-      `Creating Privy embedded wallet for agent ${agentUserId}`,
-      undefined,
+      'Provisioning offline-ready Privy wallet for agent',
+      {
+        agentUserId,
+        existingPrivyId,
+        classification: assessment.classification,
+      },
       'AgentWalletService'
     );
 
-    // Step 1: Create Privy user for the agent (server-side)
-    // Privy allows server-side user creation without user interaction
-    if (!privyWithCreateUser?.createUser) {
-      throw new Error('Privy createUser method not available');
-    }
-    const privyUser = await privyWithCreateUser.createUser({
-      create_embedded_wallet: true,
-      linked_accounts: [],
+    const provisionedWallet = await provisionAgentPrivyWallet({
+      agentUserId,
+      existingPrivyId,
     });
 
-    if (!privyUser.wallet) {
-      throw new Error('Failed to create embedded wallet');
-    }
-
-    const walletAddress = privyUser.wallet.address;
-    const privyUserId = privyUser.id;
-    const privyWalletId = privyUser.wallet.id;
-
-    // Step 2: Update agent user with wallet info
     await db
       .update(users)
       .set({
-        walletAddress,
-        privyId: privyUserId,
+        walletAddress: provisionedWallet.walletAddress,
+        privyId: provisionedWallet.privyId,
+        privyWalletId: provisionedWallet.privyWalletId,
+        offlineWalletReady: true,
+        offlineWalletReadyAt: new Date(),
+        updatedAt: new Date(),
       })
       .where(eq(users.id, agentUserId));
 
-    // Step 3: Log wallet creation
     await db.insert(agentLogs).values({
       id: uuidv4(),
       agentUserId,
       type: 'system',
       level: 'info',
-      message: `Privy embedded wallet created: ${walletAddress}`,
+      message: `Agent wallet provisioned: ${provisionedWallet.walletAddress}`,
       metadata: {
-        privyUserId,
-        privyWalletId,
-        walletAddress,
+        privyUserId: provisionedWallet.privyId,
+        privyWalletId: provisionedWallet.privyWalletId,
+        walletAddress: provisionedWallet.walletAddress,
+        createdPrivyUser: provisionedWallet.createdPrivyUser,
+        createdWallet: provisionedWallet.createdWallet,
+        updatedSigner: provisionedWallet.updatedSigner,
       },
     });
 
     logger.info(
-      `Privy wallet created for agent ${agentUserId}: ${walletAddress}`,
-      undefined,
+      'Agent wallet provisioned successfully',
+      {
+        agentUserId,
+        privyId: provisionedWallet.privyId,
+        privyWalletId: provisionedWallet.privyWalletId,
+        walletAddress: provisionedWallet.walletAddress,
+        createdPrivyUser: provisionedWallet.createdPrivyUser,
+        createdWallet: provisionedWallet.createdWallet,
+        updatedSigner: provisionedWallet.updatedSigner,
+      },
       'AgentWalletService'
     );
 
-    return { walletAddress, privyUserId, privyWalletId };
+    return {
+      walletAddress: provisionedWallet.walletAddress,
+      privyUserId: provisionedWallet.privyId,
+      privyWalletId: provisionedWallet.privyWalletId,
+    };
   }
 
   /**
@@ -254,8 +189,8 @@ export class AgentWalletService {
       throw new Error('Agent user not found');
     }
 
-    if (!agent.walletAddress) {
-      throw new Error('Agent must have wallet before on-chain registration');
+    if (!isAgentWalletReady(agent)) {
+      throw new Error('Agent wallet is not ready for on-chain registration');
     }
 
     // Get agent config for capabilities
@@ -405,6 +340,9 @@ export class AgentWalletService {
         id: users.id,
         isAgent: users.isAgent,
         privyId: users.privyId,
+        privyWalletId: users.privyWalletId,
+        walletAddress: users.walletAddress,
+        offlineWalletReady: users.offlineWalletReady,
       })
       .from(users)
       .where(eq(users.id, agentUserId))
@@ -414,20 +352,15 @@ export class AgentWalletService {
       throw new Error('Agent not found');
     }
 
-    if (!agent.privyId) {
-      throw new Error('Agent does not have Privy wallet');
+    if (!isAgentWalletReady(agent)) {
+      throw new Error('Agent wallet is not offline-ready');
     }
 
-    const privy = getPrivyServerClient();
-    if (!privy) {
-      throw new Error('Privy credentials not configured');
-    }
-
-    // Use Privy server client to sign transaction (no user interaction needed)
-    // Privy handles the private key management and signing server-side
-    const signedTx = await privy.signTransaction({
-      wallet_id: agent.privyId,
-      transaction: transactionData,
+    const signedTransaction = await signPrivyEvmTransaction({
+      walletId: agent.privyWalletId!,
+      to: transactionData.to as `0x${string}`,
+      data: transactionData.data as `0x${string}`,
+      valueWei: parseTransactionValue(transactionData.value),
     });
 
     logger.info(
@@ -436,7 +369,7 @@ export class AgentWalletService {
       'AgentWalletService'
     );
 
-    return signedTx.signed_transaction;
+    return signedTransaction;
   }
 
   /**

@@ -31,6 +31,7 @@ export {
 // Identity and wallet management
 export * from './identity/AgentIdentityService';
 export * from './identity/AgentWalletService';
+export * from './identity/agent-wallet-state';
 // LLM integrations
 export * from './llm';
 // Plugins - Babylon plugin is the main export

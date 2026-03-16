@@ -238,6 +238,11 @@ export {
 // Services
 export * from './services';
 export {
+  type ProvisionAgentPrivyWalletInput,
+  type ProvisionAgentPrivyWalletResult,
+  provisionAgentPrivyWallet,
+} from './services/privy/agent-wallet-provisioning';
+export {
   type AuthedPrivyUserContext,
   getAuthedUserContextFromPrivyToken,
   getAuthedUserContextFromPrivyTokenBundle,
@@ -250,7 +255,9 @@ export {
 export {
   safeDecodeJwtPayload,
   sendSponsoredEvmTransaction,
+  signPrivyEvmTransaction,
 } from './services/privy/evm-send-transaction';
+export { assertPrivyOfflineConfig } from './services/privy/offline-config';
 export { ensureOfflineWalletReady } from './services/privy/offline-wallet-provisioning';
 // Privy (embedded wallet server-side helpers)
 export {

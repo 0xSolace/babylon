@@ -171,6 +171,9 @@ describe('PrivyJwtPayloadSchema', () => {
 const mockSendTransaction = mock(() =>
   Promise.resolve({ hash: '0xabc', caip2: 'eip155:1' })
 );
+const mockSignTransaction = mock(() =>
+  Promise.resolve({ signed_transaction: '0xsigned', encoding: 'eip155' })
+);
 
 mock.module('@babylon/shared', () => ({
   CHAIN: { id: 1 },
@@ -187,19 +190,23 @@ mock.module('../privy-node', () => ({
     wallets: () => ({
       ethereum: () => ({
         sendTransaction: mockSendTransaction,
+        signTransaction: mockSignTransaction,
       }),
     }),
   }),
 }));
 
 // Dynamic import after mocks are set up
-const { sendSponsoredEvmTransaction } = await import('../evm-send-transaction');
+const { sendSponsoredEvmTransaction, signPrivyEvmTransaction } = await import(
+  '../evm-send-transaction'
+);
 
 describe('sendSponsoredEvmTransaction – offline delegated path', () => {
   const validAddress = '0x0000000000000000000000000000000000000001' as const;
 
   beforeEach(() => {
     mockSendTransaction.mockClear();
+    mockSignTransaction.mockClear();
     process.env.PRIVY_APP_ID = 'test-app-id';
     process.env.PRIVY_APP_SECRET = 'test-secret';
     process.env.PRIVY_AUTHORIZATION_PRIVATE_KEY = 'test-authorization-key';
@@ -280,5 +287,55 @@ describe('sendSponsoredEvmTransaction – offline delegated path', () => {
         to: validAddress,
       })
     ).rejects.toThrow('upstream failed');
+  });
+});
+
+describe('signPrivyEvmTransaction', () => {
+  const validAddress = '0x0000000000000000000000000000000000000001' as const;
+
+  beforeEach(() => {
+    mockSendTransaction.mockClear();
+    mockSignTransaction.mockClear();
+    process.env.PRIVY_APP_ID = 'test-app-id';
+    process.env.PRIVY_APP_SECRET = 'test-secret';
+    process.env.PRIVY_AUTHORIZATION_PRIVATE_KEY = 'test-authorization-key';
+    process.env.PRIVY_OFFLINE_SIGNER_ID = 'test-offline-signer-id';
+    process.env.PRIVY_OFFLINE_POLICY_ID = 'test-offline-policy-id';
+    delete process.env.NEXT_PUBLIC_PRIVY_APP_ID;
+  });
+
+  it('signs a transaction with the offline authorization context', async () => {
+    const result = await signPrivyEvmTransaction({
+      walletId: 'wallet-1',
+      to: validAddress,
+      valueWei: 0n,
+    });
+
+    expect(result).toBe('0xsigned');
+    expect(mockSignTransaction).toHaveBeenCalledTimes(1);
+    expect(mockSignTransaction).toHaveBeenCalledWith('wallet-1', {
+      authorization_context: {
+        authorization_private_keys: ['test-authorization-key'],
+      },
+      params: {
+        transaction: {
+          to: validAddress,
+          chain_id: 1,
+        },
+      },
+    });
+  });
+
+  it('propagates signing errors', async () => {
+    mockSignTransaction.mockImplementationOnce(() =>
+      Promise.reject(new Error('signing failed'))
+    );
+
+    await expect(
+      signPrivyEvmTransaction({
+        walletId: 'wallet-1',
+        to: validAddress,
+      })
+    ).rejects.toThrow('signing failed');
   });
 });
