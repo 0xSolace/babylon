@@ -1,0 +1,136 @@
+import { beforeEach, describe, expect, it, mock } from 'bun:test';
+
+const mockUsersCreate = mock();
+const mockEnsureOfflineWalletReady = mock();
+
+mock.module('@babylon/shared', () => ({
+  logger: {
+    debug: () => {},
+    info: () => {},
+    warn: () => {},
+    error: () => {},
+  },
+}));
+
+mock.module('../privy-node', () => ({
+  getPrivyNodeClient: () => ({
+    users: () => ({
+      create: mockUsersCreate,
+    }),
+  }),
+}));
+
+mock.module('../offline-wallet-provisioning', () => ({
+  ensureOfflineWalletReady: mockEnsureOfflineWalletReady,
+}));
+
+const { provisionAgentPrivyWallet } = await import(
+  '../agent-wallet-provisioning'
+);
+
+describe('provisionAgentPrivyWallet', () => {
+  beforeEach(() => {
+    mockUsersCreate.mockReset();
+    mockEnsureOfflineWalletReady.mockReset();
+
+    process.env.PRIVY_APP_ID = 'test-app-id';
+    process.env.PRIVY_APP_SECRET = 'test-secret';
+    process.env.PRIVY_AUTHORIZATION_PRIVATE_KEY = 'test-authorization-key';
+    process.env.PRIVY_OFFLINE_SIGNER_ID = 'offline-signer-id';
+    process.env.PRIVY_OFFLINE_POLICY_ID = 'offline-policy-id';
+  });
+
+  it('reuses an existing Privy user when provided', async () => {
+    mockEnsureOfflineWalletReady.mockResolvedValue({
+      privyWalletId: 'wallet-1',
+      walletAddress: '0x0000000000000000000000000000000000000001',
+      offlineWalletReady: true,
+      createdWallet: false,
+      updatedSigner: false,
+    });
+
+    const result = await provisionAgentPrivyWallet({
+      agentUserId: 'agent-123',
+      existingPrivyId: 'did:privy:agent-123',
+    });
+
+    expect(mockUsersCreate).not.toHaveBeenCalled();
+    expect(mockEnsureOfflineWalletReady).toHaveBeenCalledWith({
+      privyId: 'did:privy:agent-123',
+    });
+    expect(result).toEqual({
+      privyId: 'did:privy:agent-123',
+      privyWalletId: 'wallet-1',
+      walletAddress: '0x0000000000000000000000000000000000000001',
+      offlineWalletReady: true,
+      createdPrivyUser: false,
+      createdWallet: false,
+      updatedSigner: false,
+    });
+  });
+
+  it('creates a server-managed Privy user and validates wallet readiness', async () => {
+    mockUsersCreate.mockResolvedValue({
+      id: 'did:privy:new-agent',
+      wallet: {
+        id: 'wallet-created',
+        address: '0x00000000000000000000000000000000000000aa',
+        chain_type: 'ethereum',
+      },
+      linked_accounts: [],
+    });
+    mockEnsureOfflineWalletReady.mockResolvedValue({
+      privyWalletId: 'wallet-created',
+      walletAddress: '0x00000000000000000000000000000000000000aa',
+      offlineWalletReady: true,
+      createdWallet: false,
+      updatedSigner: false,
+    });
+
+    const result = await provisionAgentPrivyWallet({
+      agentUserId: 'agent-456',
+    });
+
+    expect(mockUsersCreate).toHaveBeenCalledTimes(1);
+    expect(mockUsersCreate).toHaveBeenCalledWith({
+      linked_accounts: [],
+      custom_metadata: {
+        babylon_agent_user_id: 'agent-456',
+        babylon_user_type: 'agent',
+      },
+      wallets: [
+        {
+          chain_type: 'ethereum',
+          additional_signers: [
+            {
+              signer_id: 'offline-signer-id',
+              override_policy_ids: ['offline-policy-id'],
+            },
+          ],
+          policy_ids: [],
+        },
+      ],
+    });
+    expect(mockEnsureOfflineWalletReady).toHaveBeenCalledWith({
+      privyId: 'did:privy:new-agent',
+    });
+    expect(result.createdPrivyUser).toBe(true);
+    expect(result.privyId).toBe('did:privy:new-agent');
+    expect(result.privyWalletId).toBe('wallet-created');
+  });
+
+  it('fails when Privy user creation does not return an id', async () => {
+    mockUsersCreate.mockResolvedValue({
+      id: null,
+      linked_accounts: [],
+    });
+
+    await expect(
+      provisionAgentPrivyWallet({
+        agentUserId: 'agent-789',
+      })
+    ).rejects.toThrow('Failed to create Privy user for agent');
+
+    expect(mockEnsureOfflineWalletReady).not.toHaveBeenCalled();
+  });
+});

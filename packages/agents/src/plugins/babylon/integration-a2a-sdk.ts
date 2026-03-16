@@ -14,7 +14,6 @@ import { A2AClient } from '@a2a-js/sdk/client';
 import { db } from '@babylon/db';
 import { StaticDataRegistry } from '@babylon/engine';
 import type { AgentRuntime, Plugin } from '@elizaos/core';
-import { agentWalletService } from '../../identity/AgentWalletService';
 import { logger } from '../../shared/logger';
 import type { JsonValue } from '../../types/common';
 
@@ -121,13 +120,6 @@ function cacheIdentity(
   }
 
   AGENT_IDENTITY_CACHE.set(agentUserId, identity);
-}
-
-/**
- * Invalidate agent identity cache (call after wallet provisioning)
- */
-function invalidateAgentIdentityCache(agentUserId: string): void {
-  AGENT_IDENTITY_CACHE.delete(agentUserId);
 }
 
 // =============================================================================
@@ -294,57 +286,6 @@ async function createA2AClientForAgent(
 // Helper Functions
 // =============================================================================
 
-function shouldAutoProvisionWallets(): boolean {
-  return process.env.AUTO_CREATE_AGENT_WALLETS !== 'false';
-}
-
-/**
- * Ensure agent has wallet provisioned (if auto-provisioning enabled)
- * Returns updated identity after provisioning
- */
-async function ensureAgentWallet(
-  agentUserId: string,
-  identity: CachedAgentIdentity
-): Promise<CachedAgentIdentity> {
-  if (identity.walletAddress || !shouldAutoProvisionWallets()) {
-    return identity;
-  }
-
-  try {
-    const walletResult =
-      await agentWalletService.createAgentEmbeddedWallet(agentUserId);
-
-    logger.info(
-      'Auto-provisioned embedded wallet for agent',
-      {
-        agentUserId,
-        walletAddress: walletResult.walletAddress,
-      },
-      'BabylonIntegration'
-    );
-
-    // Invalidate cache and return updated identity
-    invalidateAgentIdentityCache(agentUserId);
-    return {
-      ...identity,
-      walletAddress: walletResult.walletAddress,
-      cachedAt: Date.now(),
-    };
-  } catch (error) {
-    // Use debug level for NPC wallet provisioning failures - these are expected
-    // for NPCs that don't have user records. Only warn for actual user agents.
-    logger.debug(
-      'Wallet auto-provision skipped for agent',
-      {
-        agentUserId,
-        reason: error instanceof Error ? error.message : String(error),
-      },
-      'BabylonIntegration'
-    );
-    return identity;
-  }
-}
-
 /**
  * Initialize A2A SDK client for an agent
  *
@@ -363,27 +304,24 @@ async function initializeA2ASdkClient(
     throw new Error(`Agent user ${agentUserId} not found or not an agent`);
   }
 
-  // Auto-provision wallet if needed
-  const updatedIdentity = await ensureAgentWallet(agentUserId, identity);
-
   // Log ERC-8004 identity status (only on first init, not on cache hit)
   const hasFullIdentity =
-    updatedIdentity.walletAddress && updatedIdentity.agent0TokenId !== null;
+    identity.walletAddress && identity.agent0TokenId !== null;
 
   if (!hasFullIdentity) {
     logger.debug(
       'Agent missing ERC-8004 identity - A2A will work with limited auth headers',
       {
         agentUserId,
-        hasWallet: !!updatedIdentity.walletAddress,
-        hasTokenId: updatedIdentity.agent0TokenId !== null,
+        hasWallet: !!identity.walletAddress,
+        hasTokenId: identity.agent0TokenId !== null,
       },
       'BabylonIntegration'
     );
   }
 
   // Create A2A client with cached agent card and identity-specific headers
-  const client = await createA2AClientForAgent(updatedIdentity);
+  const client = await createA2AClientForAgent(identity);
 
   if (!client) {
     logger.warn(
@@ -396,11 +334,11 @@ async function initializeA2ASdkClient(
 
   logger.debug('A2A client ready for agent', {
     agentUserId,
-    agentName: updatedIdentity.displayName,
+    agentName: identity.displayName,
     hasErc8004Identity: hasFullIdentity,
   });
 
-  return { client, identity: updatedIdentity };
+  return { client, identity };
 }
 
 /**

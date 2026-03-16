@@ -1,119 +1,260 @@
-/**
- * Unit Tests for Agent Wallet Service
- * Verifies Privy integration and on-chain registration with mocked dependencies
- */
+import { beforeEach, describe, expect, it, mock } from 'bun:test';
 
-import { beforeEach, describe, expect, mock, test } from 'bun:test';
-import { ethers } from 'ethers';
+const mockProvisionAgentPrivyWallet = mock();
+const mockSignPrivyEvmTransaction = mock();
 
-// Mock database
+let selectedRows: unknown[] = [];
+let lastUpdateData: Record<string, unknown> | null = null;
+let lastInsertedLog: Record<string, unknown> | null = null;
+
 const mockDb = {
   select: mock(() => ({
     from: mock(() => ({
-      where: mock(async () => [
-        {
-          id: 'test-agent-id',
-          walletAddress: '0x1234567890123456789012345678901234567890',
-          privyId: 'did:privy:test-wallet',
-        },
-      ]),
+      where: mock(() => ({
+        limit: mock(async () => selectedRows),
+      })),
     })),
   })),
   update: mock(() => ({
-    set: mock(() => ({
-      where: mock(async () => []),
-    })),
+    set: mock((data: Record<string, unknown>) => {
+      lastUpdateData = data;
+      return {
+        where: mock(async () => []),
+      };
+    }),
+  })),
+  insert: mock(() => ({
+    values: mock(async (data: Record<string, unknown>) => {
+      lastInsertedLog = data;
+      return [];
+    }),
   })),
 };
 
-// Mock the db module
-mock.module('@babylon/db', () => ({
-  db: mockDb,
-  users: { id: 'id' },
-  eq: (a: unknown, b: unknown) => ({ a, b }),
+mock.module('@babylon/api', () => ({
+  provisionAgentPrivyWallet: mockProvisionAgentPrivyWallet,
+  signPrivyEvmTransaction: mockSignPrivyEvmTransaction,
 }));
 
-// Mock ethers wallet
-const mockWallet = ethers.Wallet.createRandom();
+mock.module('@babylon/db', () => ({
+  agentLogs: { id: 'id' },
+  db: mockDb,
+  eq: (field: unknown, value: unknown) => ({ field, value }),
+  users: {
+    id: 'id',
+    isAgent: 'isAgent',
+    walletAddress: 'walletAddress',
+    privyId: 'privyId',
+    privyWalletId: 'privyWalletId',
+    offlineWalletReady: 'offlineWalletReady',
+  },
+}));
 
-describe('Agent Wallet Service', () => {
+mock.module('../agent0/sdk-instance', () => ({
+  getAgent0SDK: () => ({
+    createAgent: () => {
+      throw new Error('not expected in these tests');
+    },
+    getAgent: async () => null,
+  }),
+}));
+
+mock.module('../shared/agent-config', () => ({
+  getAgentConfig: async () => null,
+  isAutonomousTradingEnabled: () => false,
+}));
+
+mock.module('../shared/logger', () => ({
+  logger: {
+    debug: () => {},
+    info: () => {},
+    warn: () => {},
+    error: () => {},
+  },
+}));
+
+const { AgentWalletService } = await import('../identity/AgentWalletService');
+
+describe('AgentWalletService', () => {
+  let service: InstanceType<typeof AgentWalletService>;
+
   beforeEach(() => {
+    service = new AgentWalletService();
+    selectedRows = [];
+    lastUpdateData = null;
+    lastInsertedLog = null;
+    mockProvisionAgentPrivyWallet.mockReset();
+    mockSignPrivyEvmTransaction.mockReset();
     mockDb.select.mockClear();
+    mockDb.update.mockClear();
+    mockDb.insert.mockClear();
   });
 
-  test('generates valid Ethereum addresses', () => {
-    const address = mockWallet.address;
-
-    expect(address).toBeTruthy();
-    expect(address).toMatch(/^0x[a-fA-F0-9]{40}$/);
-    expect(address.length).toBe(42);
-  });
-
-  test('wallet addresses have correct format', () => {
-    const addresses = [
-      '0x1234567890123456789012345678901234567890',
-      '0xabcdef0123456789ABCDEF0123456789abcdef01',
-      mockWallet.address,
+  it('returns the persisted wallet when the agent is already ready', async () => {
+    selectedRows = [
+      {
+        id: 'agent-1',
+        isAgent: true,
+        walletAddress: '0x0000000000000000000000000000000000000001',
+        privyId: 'did:privy:agent-1',
+        privyWalletId: 'wallet-1',
+        offlineWalletReady: true,
+      },
     ];
 
-    for (const address of addresses) {
-      expect(address).toMatch(/^0x[a-fA-F0-9]{40}$/);
-      expect(address.length).toBe(42);
-    }
+    const result = await service.createAgentEmbeddedWallet('agent-1');
+
+    expect(result).toEqual({
+      walletAddress: '0x0000000000000000000000000000000000000001',
+      privyUserId: 'did:privy:agent-1',
+      privyWalletId: 'wallet-1',
+    });
+    expect(mockProvisionAgentPrivyWallet).not.toHaveBeenCalled();
+    expect(mockDb.update).not.toHaveBeenCalled();
   });
 
-  test('can create wallet from random seed', () => {
-    const wallet1 = ethers.Wallet.createRandom();
-    const wallet2 = ethers.Wallet.createRandom();
+  it('provisions and persists a new offline-ready wallet from scratch', async () => {
+    selectedRows = [
+      {
+        id: 'agent-2',
+        isAgent: true,
+        walletAddress: null,
+        privyId: null,
+        privyWalletId: null,
+        offlineWalletReady: false,
+      },
+    ];
+    mockProvisionAgentPrivyWallet.mockResolvedValue({
+      privyId: 'did:privy:agent-2',
+      privyWalletId: 'wallet-2',
+      walletAddress: '0x0000000000000000000000000000000000000002',
+      offlineWalletReady: true,
+      createdPrivyUser: true,
+      createdWallet: false,
+      updatedSigner: false,
+    });
 
-    expect(wallet1.address).not.toBe(wallet2.address);
-    expect(wallet1.privateKey).not.toBe(wallet2.privateKey);
+    const result = await service.createAgentEmbeddedWallet('agent-2');
+
+    expect(mockProvisionAgentPrivyWallet).toHaveBeenCalledWith({
+      agentUserId: 'agent-2',
+      existingPrivyId: null,
+    });
+    expect(lastUpdateData).toMatchObject({
+      walletAddress: '0x0000000000000000000000000000000000000002',
+      privyId: 'did:privy:agent-2',
+      privyWalletId: 'wallet-2',
+      offlineWalletReady: true,
+      offlineWalletReadyAt: expect.any(Date),
+      updatedAt: expect.any(Date),
+    });
+    expect(lastInsertedLog).toMatchObject({
+      agentUserId: 'agent-2',
+      type: 'system',
+      level: 'info',
+      message:
+        'Agent wallet provisioned: 0x0000000000000000000000000000000000000002',
+    });
+    expect(result).toEqual({
+      walletAddress: '0x0000000000000000000000000000000000000002',
+      privyUserId: 'did:privy:agent-2',
+      privyWalletId: 'wallet-2',
+    });
   });
 
-  test('wallet private key has correct format', () => {
-    expect(mockWallet.privateKey).toMatch(/^0x[a-fA-F0-9]{64}$/);
+  it('reuses an existing Privy user when only wallet readiness is missing', async () => {
+    selectedRows = [
+      {
+        id: 'agent-3',
+        isAgent: true,
+        walletAddress: null,
+        privyId: 'did:privy:agent-3',
+        privyWalletId: null,
+        offlineWalletReady: false,
+      },
+    ];
+    mockProvisionAgentPrivyWallet.mockResolvedValue({
+      privyId: 'did:privy:agent-3',
+      privyWalletId: 'wallet-3',
+      walletAddress: '0x0000000000000000000000000000000000000003',
+      offlineWalletReady: true,
+      createdPrivyUser: false,
+      createdWallet: true,
+      updatedSigner: false,
+    });
+
+    await service.createAgentEmbeddedWallet('agent-3');
+
+    expect(mockProvisionAgentPrivyWallet).toHaveBeenCalledWith({
+      agentUserId: 'agent-3',
+      existingPrivyId: 'did:privy:agent-3',
+    });
   });
 
-  test('can sign messages with wallet', async () => {
-    const message = 'Test message for signing';
-    const signature = await mockWallet.signMessage(message);
+  it('rejects inconsistent partial wallet state instead of masking it', async () => {
+    selectedRows = [
+      {
+        id: 'agent-4',
+        isAgent: true,
+        walletAddress: '0x0000000000000000000000000000000000000004',
+        privyId: null,
+        privyWalletId: null,
+        offlineWalletReady: false,
+      },
+    ];
 
-    expect(signature).toBeTruthy();
-    expect(signature).toMatch(/^0x[a-fA-F0-9]+$/);
-
-    // Verify signature
-    const recoveredAddress = ethers.verifyMessage(message, signature);
-    expect(recoveredAddress).toBe(mockWallet.address);
-  });
-
-  test('database mock returns expected agent data', async () => {
-    const result = await mockDb
-      .select()
-      .from({ id: 'id' })
-      .where({ a: 'id', b: 'test-agent-id' });
-
-    expect(result).toHaveLength(1);
-    expect(result[0]?.walletAddress).toBe(
-      '0x1234567890123456789012345678901234567890'
+    await expect(service.createAgentEmbeddedWallet('agent-4')).rejects.toThrow(
+      'Agent wallet state is inconsistent; manual remediation required'
     );
+
+    expect(mockProvisionAgentPrivyWallet).not.toHaveBeenCalled();
+    expect(mockDb.update).not.toHaveBeenCalled();
   });
 
-  test('verifyOnChainIdentity returns boolean', () => {
-    // Without actual chain, verification returns false
-    const isVerified = false;
-    expect(typeof isVerified).toBe('boolean');
+  it('signs transactions with the persisted Privy wallet id', async () => {
+    selectedRows = [
+      {
+        id: 'agent-5',
+        isAgent: true,
+        privyWalletId: 'wallet-5',
+        offlineWalletReady: true,
+      },
+    ];
+    mockSignPrivyEvmTransaction.mockResolvedValue('0xsigned');
+
+    const result = await service.signTransaction('agent-5', {
+      to: '0x0000000000000000000000000000000000000005',
+      value: '42',
+      data: '0xdeadbeef',
+    });
+
+    expect(result).toBe('0xsigned');
+    expect(mockSignPrivyEvmTransaction).toHaveBeenCalledWith({
+      walletId: 'wallet-5',
+      to: '0x0000000000000000000000000000000000000005',
+      data: '0xdeadbeef',
+      valueWei: 42n,
+    });
   });
 
-  test('setupAgentIdentity result structure', () => {
-    const result = {
-      walletAddress: mockWallet.address,
-      onChainRegistered: false,
-      privyUserId: 'did:privy:test-123',
-      privyWalletId: 'wallet-123',
-    };
+  it('blocks signing when the wallet is not offline-ready', async () => {
+    selectedRows = [
+      {
+        id: 'agent-6',
+        isAgent: true,
+        privyWalletId: null,
+        offlineWalletReady: false,
+      },
+    ];
 
-    expect(result.walletAddress).toMatch(/^0x[a-fA-F0-9]{40}$/);
-    expect(typeof result.onChainRegistered).toBe('boolean');
-    expect(result.privyUserId).toBeTruthy();
+    await expect(
+      service.signTransaction('agent-6', {
+        to: '0x0000000000000000000000000000000000000006',
+        value: '0',
+        data: '0x',
+      })
+    ).rejects.toThrow('Agent wallet is not offline-ready');
+
+    expect(mockSignPrivyEvmTransaction).not.toHaveBeenCalled();
   });
 });
