@@ -25,6 +25,7 @@ const SSE_DEBOUNCE_MS = 2_000;
 const LOG_CTX = 'useForYouFeed';
 
 interface FeedPageResponse {
+  success?: boolean;
   stories?: NarrativeStory[];
   hasMore?: boolean;
   total?: number;
@@ -45,14 +46,26 @@ export function useForYouFeed(
   const [error, setError] = useState<string | null>(null);
 
   const storiesRef = useRef<NarrativeStory[]>([]);
-  const isMountedRef = useRef(true);
+  // Initialise false — set true inside the mount effect to correctly handle
+  // React 18 strict-mode double-invoke (mount → unmount → remount).
+  const isMountedRef = useRef(false);
   const hasFetched = useRef(false);
   const sseDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const loadMoreAbortRef = useRef<AbortController | null>(null);
-  // Tracks whether a server loadMore is already in-flight (avoids duplicate
-  // requests that race when the sentinel fires multiple times quickly).
+  // Tracks in-flight loadMore independently of React state to prevent duplicate
+  // requests when the sentinel IntersectionObserver fires rapidly.
   const loadingMoreRef = useRef(false);
+  // Mirror of `hasMore` state in a ref so `loadMore` can guard against stale
+  // closure values without taking `hasMore` as a dependency (which recreates
+  // the function after every page, potentially triggering an extra observer
+  // reconnect before the child re-renders).
+  const hasMoreRef = useRef(false);
+
+  const syncHasMore = useCallback((value: boolean) => {
+    hasMoreRef.current = value;
+    setHasMore(value);
+  }, []);
 
   const buildHeaders = useCallback(async (): Promise<HeadersInit> => {
     if (!authenticated) return {};
@@ -84,9 +97,9 @@ export function useForYouFeed(
         const data = await fetchPage(0, signal);
         if (!data || signal.aborted) return;
         const items = data.stories ?? [];
-        setStories(items);
         storiesRef.current = items;
-        setHasMore(data.hasMore ?? false);
+        setStories(items);
+        syncHasMore(data.hasMore ?? false);
         setError(null);
       } catch (err) {
         if (err instanceof Error && err.name === 'AbortError') return;
@@ -100,7 +113,7 @@ export function useForYouFeed(
         }
       }
     },
-    [fetchPage]
+    [fetchPage, syncHasMore]
   );
 
   const refresh = useCallback(async () => {
@@ -113,10 +126,13 @@ export function useForYouFeed(
   }, [loadInitial]);
 
   const loadMore = useCallback(() => {
-    if (loadingMoreRef.current || !hasMore) return;
+    // Use ref-based guards to avoid stale closure values from React state.
+    if (loadingMoreRef.current || !hasMoreRef.current) return;
     loadMoreAbortRef.current?.abort();
     const controller = new AbortController();
     loadMoreAbortRef.current = controller;
+    // Read offset from ref (not state) so the value is always current even
+    // when `loadMore` is called before the previous setState has committed.
     const offset = storiesRef.current.length;
     loadingMoreRef.current = true;
     setLoadingMore(true);
@@ -125,12 +141,12 @@ export function useForYouFeed(
       .then((data) => {
         if (!data || controller.signal.aborted) return;
         const next = data.stories ?? [];
-        setStories((prev) => {
-          const merged = [...prev, ...next];
-          storiesRef.current = merged;
-          return merged;
-        });
-        setHasMore(data.hasMore ?? false);
+        // Update ref before setState so subsequent offset reads are correct
+        // even if React batches the state update with an in-flight sentinel.
+        const merged = [...storiesRef.current, ...next];
+        storiesRef.current = merged;
+        setStories(merged);
+        syncHasMore(data.hasMore ?? false);
       })
       .catch((err) => {
         if (err instanceof Error && err.name === 'AbortError') return;
@@ -146,7 +162,7 @@ export function useForYouFeed(
           setLoadingMore(false);
         }
       });
-  }, [fetchPage, hasMore]);
+  }, [fetchPage, syncHasMore]);
 
   useSSEChannel(
     enabled ? 'feed' : null,

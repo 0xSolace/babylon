@@ -23,11 +23,13 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   }
 
   const { searchParams } = request.nextUrl;
-  const offset = Math.max(0, Number(searchParams.get('offset') ?? 0));
-  const limit = Math.min(
-    PAGE_SIZE,
-    Math.max(1, Number(searchParams.get('limit') ?? PAGE_SIZE))
-  );
+  const rawOffset = Number(searchParams.get('offset') ?? 0);
+  const rawLimit = Number(searchParams.get('limit') ?? PAGE_SIZE);
+  // Guard against NaN from non-numeric query params to avoid silent slice(0, 20) fallback.
+  const offset = Number.isFinite(rawOffset) ? Math.max(0, rawOffset) : 0;
+  const limit = Number.isFinite(rawLimit)
+    ? Math.min(PAGE_SIZE, Math.max(1, rawLimit))
+    : PAGE_SIZE;
 
   const userId = user?.userId ?? null;
   // Per-user ranked snapshot cached for 5 minutes. Anonymous users share one
