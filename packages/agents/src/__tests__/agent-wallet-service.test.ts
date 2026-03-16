@@ -208,7 +208,7 @@ describe('AgentWalletService', () => {
     ];
 
     await expect(service.createAgentEmbeddedWallet('agent-4')).rejects.toThrow(
-      'Agent wallet state is inconsistent; manual remediation required'
+      /agent-4.*inconsistent|inconsistent.*agent-4/i
     );
 
     expect(mockProvisionAgentPrivyWallet).not.toHaveBeenCalled();
@@ -285,5 +285,37 @@ describe('AgentWalletService', () => {
     ).rejects.toThrow('Agent wallet is not offline-ready');
 
     expect(mockSignPrivyEvmTransaction).not.toHaveBeenCalled();
+  });
+
+  const readyAgent = {
+    id: 'agent-val',
+    isAgent: true,
+    privyId: 'did:privy:agent-val',
+    privyWalletId: 'wallet-val',
+    walletAddress: '0x000000000000000000000000000000000000000a',
+    offlineWalletReady: true,
+  };
+
+  it.each([
+    ['empty string', '', undefined],
+    ['whitespace only', '   ', undefined],
+    ['"0"', '0', undefined],
+    ['"0x0"', '0x0', undefined],
+    ['decimal integer', '1000000000000000000', 1000000000000000000n],
+    ['hex value "0x1"', '0x1', 1n],
+    ['hex ETH value', '0xde0b6b3a7640000', 1000000000000000000n],
+  ])('passes valueWei correctly for value %s', async (_label, value, expectedValueWei) => {
+    selectedRows = [readyAgent];
+    mockSignPrivyEvmTransaction.mockResolvedValue('0xsigned');
+
+    await service.signTransaction('agent-val', {
+      to: '0x000000000000000000000000000000000000000a',
+      value,
+      data: '0x',
+    });
+
+    expect(mockSignPrivyEvmTransaction).toHaveBeenCalledWith(
+      expect.objectContaining({ valueWei: expectedValueWei })
+    );
   });
 });

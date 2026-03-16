@@ -26,7 +26,7 @@ mock.module('../offline-wallet-provisioning', () => ({
   ensureOfflineWalletReady: mockEnsureOfflineWalletReady,
 }));
 
-const { provisionAgentPrivyWallet } = await import(
+const { provisionAgentPrivyWallet, isPrivyNotFoundError } = await import(
   '../agent-wallet-provisioning'
 );
 
@@ -173,5 +173,33 @@ describe('provisionAgentPrivyWallet', () => {
     ).rejects.toThrow('Failed to create Privy user for agent');
 
     expect(mockEnsureOfflineWalletReady).not.toHaveBeenCalled();
+  });
+});
+
+describe('isPrivyNotFoundError', () => {
+  it('returns true for an error containing "404"', () => {
+    expect(
+      isPrivyNotFoundError(new Error('Request failed with status 404'))
+    ).toBe(true);
+  });
+
+  it('returns true for an error containing "not found" (lowercase)', () => {
+    expect(isPrivyNotFoundError(new Error('user not found'))).toBe(true);
+  });
+
+  it('returns true for an error containing "Not Found" (mixed case)', () => {
+    expect(isPrivyNotFoundError(new Error('Not Found'))).toBe(true);
+  });
+
+  it('returns false for an error with an unrelated message', () => {
+    expect(isPrivyNotFoundError(new Error('internal server error'))).toBe(
+      false
+    );
+  });
+
+  it('returns false for a non-Error thrown value', () => {
+    expect(isPrivyNotFoundError('404 not found')).toBe(false);
+    expect(isPrivyNotFoundError({ message: 'not found' })).toBe(false);
+    expect(isPrivyNotFoundError(null)).toBe(false);
   });
 });

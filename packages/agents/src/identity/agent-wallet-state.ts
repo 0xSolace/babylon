@@ -9,6 +9,7 @@ export type AgentWalletStateClassification =
   | 'ready'
   | 'empty'
   | 'recover_with_existing_privy_user'
+  | 'offline_signer_missing'
   | 'recreate_privy_user'
   | 'inconsistent_partial_state';
 
@@ -143,6 +144,24 @@ export function assessAgentWalletState(
       remediationAction: 'provision_with_new_privy_user',
       reasons: [
         'agent has only a wallet address with no trustworthy Privy ownership metadata',
+      ],
+      hasSyntheticPrivyId,
+      hasSyntheticPrivyWalletId,
+      isReady: false,
+    };
+  }
+
+  if (
+    hasPrivyId &&
+    !isSyntheticAgentPrivyId(state.privyId) &&
+    (hasPrivyWalletId || hasWalletAddress) &&
+    !state.offlineWalletReady
+  ) {
+    return {
+      classification: 'offline_signer_missing',
+      remediationAction: 'provision_with_existing_privy_user',
+      reasons: [
+        'agent has real Privy identity and partial wallet state but offline signer is not configured',
       ],
       hasSyntheticPrivyId,
       hasSyntheticPrivyWalletId,

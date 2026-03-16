@@ -85,10 +85,11 @@ export class AgentWalletService {
     );
     if (
       assessment.classification !== 'empty' &&
-      assessment.classification !== 'recover_with_existing_privy_user'
+      assessment.classification !== 'recover_with_existing_privy_user' &&
+      assessment.classification !== 'offline_signer_missing'
     ) {
       throw new Error(
-        'Agent wallet state is inconsistent; manual remediation required'
+        `Agent ${agentUserId} wallet state is inconsistent (${assessment.classification}); manual remediation required`
       );
     }
     const existingPrivyId =
