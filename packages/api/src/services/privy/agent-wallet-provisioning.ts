@@ -28,7 +28,7 @@ function getAgentCustomAuthId(agentUserId: string): string {
   return `babylon-agent:${agentUserId}`;
 }
 
-function isPrivyNotFoundError(error: unknown): boolean {
+export function isPrivyNotFoundError(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
   const message = error.message.toLowerCase();
   return message.includes('404') || message.includes('not found');

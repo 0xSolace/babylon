@@ -73,6 +73,10 @@ mock.module('../shared/logger', () => ({
   },
 }));
 
+mock.module('uuid', () => ({
+  v4: () => 'test-uuid',
+}));
+
 const { AgentWalletService } = await import('../identity/AgentWalletService');
 
 describe('AgentWalletService', () => {
@@ -216,7 +220,9 @@ describe('AgentWalletService', () => {
       {
         id: 'agent-5',
         isAgent: true,
+        privyId: 'did:privy:agent-5',
         privyWalletId: 'wallet-5',
+        walletAddress: '0x0000000000000000000000000000000000000005',
         offlineWalletReady: true,
       },
     ];
@@ -250,6 +256,29 @@ describe('AgentWalletService', () => {
     await expect(
       service.signTransaction('agent-6', {
         to: '0x0000000000000000000000000000000000000006',
+        value: '0',
+        data: '0x',
+      })
+    ).rejects.toThrow('Agent wallet is not offline-ready');
+
+    expect(mockSignPrivyEvmTransaction).not.toHaveBeenCalled();
+  });
+
+  it('blocks signing when the persisted wallet state is partial', async () => {
+    selectedRows = [
+      {
+        id: 'agent-7',
+        isAgent: true,
+        privyId: null,
+        privyWalletId: 'wallet-7',
+        walletAddress: null,
+        offlineWalletReady: true,
+      },
+    ];
+
+    await expect(
+      service.signTransaction('agent-7', {
+        to: '0x0000000000000000000000000000000000000007',
         value: '0',
         data: '0x',
       })

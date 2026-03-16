@@ -334,7 +334,9 @@ export class AgentWalletService {
       .select({
         id: users.id,
         isAgent: users.isAgent,
+        privyId: users.privyId,
         privyWalletId: users.privyWalletId,
+        walletAddress: users.walletAddress,
         offlineWalletReady: users.offlineWalletReady,
       })
       .from(users)
@@ -345,12 +347,12 @@ export class AgentWalletService {
       throw new Error('Agent not found');
     }
 
-    if (!agent.privyWalletId || !agent.offlineWalletReady) {
+    if (!isAgentWalletReady(agent)) {
       throw new Error('Agent wallet is not offline-ready');
     }
 
     const signedTransaction = await signPrivyEvmTransaction({
-      walletId: agent.privyWalletId,
+      walletId: agent.privyWalletId!,
       to: transactionData.to as `0x${string}`,
       data: transactionData.data as `0x${string}`,
       valueWei: parseTransactionValue(transactionData.value),

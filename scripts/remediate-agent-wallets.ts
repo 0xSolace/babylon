@@ -14,7 +14,10 @@ import {
   type AgentWalletStateClassification,
   assessAgentWalletState,
 } from '../packages/agents/src/identity/agent-wallet-state';
-import { provisionAgentPrivyWallet } from '../packages/api/src/services/privy/agent-wallet-provisioning';
+import {
+  isPrivyNotFoundError,
+  provisionAgentPrivyWallet,
+} from '../packages/api/src/services/privy/agent-wallet-provisioning';
 import { assertPrivyOfflineConfig } from '../packages/api/src/services/privy/offline-config';
 
 /**
@@ -118,11 +121,6 @@ function formatPlannedAction(
     case 'manual_review':
       return 'manual review';
   }
-}
-
-function isPrivyUserNotFoundError(error: unknown): boolean {
-  if (!(error instanceof Error)) return false;
-  return error.message.toLowerCase().includes('user not found');
 }
 
 async function main(): Promise<void> {
@@ -252,7 +250,7 @@ async function main(): Promise<void> {
           existingPrivyId: preferredExistingPrivyId,
         });
       } catch (error) {
-        if (!preferredExistingPrivyId || !isPrivyUserNotFoundError(error)) {
+        if (!preferredExistingPrivyId || !isPrivyNotFoundError(error)) {
           throw error;
         }
 

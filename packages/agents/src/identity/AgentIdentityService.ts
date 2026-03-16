@@ -27,6 +27,7 @@ import {
 import { logger } from '../shared/logger';
 import { generateSnowflakeId } from '../shared/snowflake';
 import { agentWalletService } from './AgentWalletService';
+import { isAgentWalletReady } from './agent-wallet-state';
 
 /**
  * Service for agent identity management
@@ -98,8 +99,9 @@ export class AgentIdentityService {
 
     if (!agentUser || !agentUser.isAgent)
       throw new Error('Agent user not found');
-    if (!agentUser.walletAddress)
-      throw new Error('Agent must have wallet before Agent0 registration');
+    if (!isAgentWalletReady(agentUser)) {
+      throw new Error('Agent wallet is not ready for Agent0 registration');
+    }
 
     // Get agent config for capabilities
     const config = await getAgentConfig(agentUserId);
