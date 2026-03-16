@@ -47,11 +47,12 @@ import {
   calculateFreshnessScore,
   calculateVelocityScore,
   diversifyForYouStories,
+  spreadNewMarkets,
 } from './scoring';
 
 const MAX_CANDIDATE_POSTS = 500;
-const MAX_STANDALONE_POSTS = 24;
-const MAX_NEW_MARKET_CANDIDATES = 6;
+const MAX_STANDALONE_POSTS = 60;
+const MAX_NEW_MARKET_CANDIDATES = 12;
 const FEED_POST_WINDOW_MS = 24 * 60 * 60 * 1000;
 const NEW_MARKET_WINDOW_MS = 24 * 60 * 60 * 1000;
 const FEED_EVENT_WINDOW_MS = 14 * 24 * 60 * 60 * 1000;
@@ -1320,10 +1321,13 @@ export async function buildForYouFeed(userId?: string | null) {
     } satisfies NarrativeStory;
   });
 
-  const rankedStories = diversifyForYouStories(
-    rescoredStories.sort(
-      (a, b) =>
-        (b.finalRankScore ?? b.storyScore) - (a.finalRankScore ?? a.storyScore)
+  const rankedStories = spreadNewMarkets(
+    diversifyForYouStories(
+      rescoredStories.sort(
+        (a, b) =>
+          (b.finalRankScore ?? b.storyScore) -
+          (a.finalRankScore ?? a.storyScore)
+      )
     )
   );
 
