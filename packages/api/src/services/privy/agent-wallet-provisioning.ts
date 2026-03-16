@@ -24,6 +24,16 @@ export type ProvisionAgentPrivyWalletResult = EnsureOfflineWalletReadyResult & {
   createdPrivyUser: boolean;
 };
 
+function getAgentCustomAuthId(agentUserId: string): string {
+  return `babylon-agent:${agentUserId}`;
+}
+
+function isPrivyNotFoundError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const message = error.message.toLowerCase();
+  return message.includes('404') || message.includes('not found');
+}
+
 export async function provisionAgentPrivyWallet({
   agentUserId,
   existingPrivyId,
@@ -42,27 +52,46 @@ export async function provisionAgentPrivyWallet({
 
   const privy = getPrivyNodeClient();
   const offlineConfig = getPrivyOfflineConfig();
+  const customUserId = getAgentCustomAuthId(agentUserId);
 
-  const createdUser = (await privy.users().create({
-    // Backend-managed agent users intentionally have no end-user linked accounts.
-    linked_accounts: [],
-    custom_metadata: {
-      babylon_agent_user_id: agentUserId,
-      babylon_user_type: 'agent',
-    },
-    wallets: [
-      {
-        chain_type: 'ethereum',
-        additional_signers: [
-          {
-            signer_id: offlineConfig.offlineSignerId,
-            override_policy_ids: [offlineConfig.offlinePolicyId],
-          },
-        ],
-        policy_ids: [],
+  let createdPrivyUser = false;
+  let createdUser: PrivyCreateUserResponse | null = null;
+
+  try {
+    createdUser = (await privy.users().getByCustomAuthID({
+      custom_user_id: customUserId,
+    })) as PrivyCreateUserResponse;
+  } catch (error) {
+    if (!isPrivyNotFoundError(error)) {
+      throw error;
+    }
+
+    createdPrivyUser = true;
+    createdUser = (await privy.users().create({
+      linked_accounts: [
+        {
+          type: 'custom_auth',
+          custom_user_id: customUserId,
+        },
+      ],
+      custom_metadata: {
+        babylon_agent_user_id: agentUserId,
+        babylon_user_type: 'agent',
       },
-    ],
-  })) as PrivyCreateUserResponse;
+      wallets: [
+        {
+          chain_type: 'ethereum',
+          additional_signers: [
+            {
+              signer_id: offlineConfig.offlineSignerId,
+              override_policy_ids: [offlineConfig.offlinePolicyId],
+            },
+          ],
+          policy_ids: [],
+        },
+      ],
+    })) as PrivyCreateUserResponse;
+  }
 
   const privyId = createdUser.id?.trim();
   if (!privyId) {
@@ -85,7 +114,7 @@ export async function provisionAgentPrivyWallet({
 
   return {
     privyId,
-    createdPrivyUser: true,
+    createdPrivyUser,
     ...readyWallet,
   };
 }

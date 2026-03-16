@@ -20,42 +20,11 @@ import {
   isAutonomousTradingEnabled,
 } from '../shared/agent-config';
 import { logger } from '../shared/logger';
-
-type AgentWalletSnapshot = {
-  id: string;
-  isAgent: boolean;
-  walletAddress: string | null;
-  privyId: string | null;
-  privyWalletId: string | null;
-  offlineWalletReady: boolean;
-};
-
-function isAgentWalletReady(agent: AgentWalletSnapshot): boolean {
-  return Boolean(
-    agent.privyId &&
-      agent.privyWalletId &&
-      agent.walletAddress &&
-      agent.offlineWalletReady
-  );
-}
-
-function canProvisionFromScratch(agent: AgentWalletSnapshot): boolean {
-  return (
-    !agent.privyId &&
-    !agent.privyWalletId &&
-    !agent.walletAddress &&
-    !agent.offlineWalletReady
-  );
-}
-
-function canProvisionExistingPrivyUser(agent: AgentWalletSnapshot): boolean {
-  return (
-    Boolean(agent.privyId) &&
-    !agent.privyWalletId &&
-    !agent.walletAddress &&
-    !agent.offlineWalletReady
-  );
-}
+import {
+  type AgentWalletStateSnapshot,
+  assessAgentWalletState,
+  isAgentWalletReady,
+} from './agent-wallet-state';
 
 function parseTransactionValue(value: string): bigint | undefined {
   const trimmed = value.trim();
@@ -111,23 +80,28 @@ export class AgentWalletService {
       };
     }
 
-    const existingPrivyId = canProvisionExistingPrivyUser(agent)
-      ? agent.privyId
-      : null;
-    const canProvision =
-      canProvisionFromScratch(agent) || Boolean(existingPrivyId);
-
-    if (!canProvision) {
+    const assessment = assessAgentWalletState(
+      agent as AgentWalletStateSnapshot
+    );
+    if (
+      assessment.classification !== 'empty' &&
+      assessment.classification !== 'recover_with_existing_privy_user'
+    ) {
       throw new Error(
         'Agent wallet state is inconsistent; manual remediation required'
       );
     }
+    const existingPrivyId =
+      assessment.remediationAction === 'provision_with_existing_privy_user'
+        ? agent.privyId
+        : null;
 
     logger.info(
       'Provisioning offline-ready Privy wallet for agent',
       {
         agentUserId,
         existingPrivyId,
+        classification: assessment.classification,
       },
       'AgentWalletService'
     );
