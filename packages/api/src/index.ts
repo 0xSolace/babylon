@@ -259,10 +259,13 @@ export {
 } from './services/privy/evm-send-transaction';
 export { assertPrivyOfflineConfig } from './services/privy/offline-config';
 export { ensureOfflineWalletReady } from './services/privy/offline-wallet-provisioning';
+export { sendSponsoredSolanaTransaction } from './services/privy/solana-send-transaction';
+export { ensureSolanaWalletReady } from './services/privy/solana-wallet-provisioning';
 // Privy (embedded wallet server-side helpers)
 export {
   type PrivyUserWalletsLite,
   pickEmbeddedEvmWallet,
+  pickEmbeddedSolanaWallet,
 } from './services/privy/user-wallets';
 // SSE Event Broadcasting
 export {

@@ -26,6 +26,16 @@ interface Transaction {
   createdAt: string;
 }
 
+interface SolanaRegistrationStatus {
+  isRegistered: boolean;
+  assetId: string | null;
+  metadataUri: string | null;
+  txHash: string | null;
+  walletAddress: string | null;
+  walletReady: boolean;
+  cost: number;
+}
+
 /**
  * Agent wallet component for managing agent balance.
  *
@@ -53,6 +63,18 @@ export function AgentWallet({ agent, onUpdate }: AgentWalletProps) {
   const [amount, setAmount] = useState('');
   const [action, setAction] = useState<'deposit' | 'withdraw'>('deposit');
   const [processing, setProcessing] = useState(false);
+  const [solanaStatus, setSolanaStatus] = useState<SolanaRegistrationStatus>({
+    isRegistered: false,
+    assetId: null,
+    metadataUri: null,
+    txHash: null,
+    walletAddress: null,
+    walletReady: false,
+    cost: 0,
+  });
+  const [solanaLoading, setSolanaLoading] = useState(false);
+  const [solanaRegistering, setSolanaRegistering] = useState(false);
+  const [solanaError, setSolanaError] = useState<string | null>(null);
 
   // Balance state
   const [balanceInfo, setBalanceInfo] = useState({
@@ -82,10 +104,44 @@ export function AgentWallet({ agent, onUpdate }: AgentWalletProps) {
     }
   }, [agent.id, getAccessToken]);
 
+  const fetchSolanaStatus = useCallback(async () => {
+    const token = await getAccessToken();
+    if (!token) {
+      throw new Error('Authentication required');
+    }
+
+    const res = await fetch(`/api/agents/${agent.id}/solana-registration`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    if (!res.ok) {
+      throw new Error(
+        'Failed to fetch Solana registration status. Check Solana configuration and try again.'
+      );
+    }
+
+    const data = await res.json();
+    setSolanaStatus(data);
+  }, [agent.id, getAccessToken]);
+
   useEffect(() => {
     setLoading(true);
     fetchBalanceAndTransactions().finally(() => setLoading(false));
   }, [fetchBalanceAndTransactions]);
+
+  useEffect(() => {
+    setSolanaLoading(true);
+    setSolanaError(null);
+    fetchSolanaStatus()
+      .catch((error) => {
+        setSolanaError(
+          error instanceof Error
+            ? error.message
+            : 'Failed to load Solana registration status'
+        );
+      })
+      .finally(() => setSolanaLoading(false));
+  }, [fetchSolanaStatus]);
 
   const handleTransaction = async () => {
     const amountNum = parseFloat(amount);
@@ -146,6 +202,43 @@ export function AgentWallet({ agent, onUpdate }: AgentWalletProps) {
     }
   };
 
+  const handleSolanaRegistration = async () => {
+    setSolanaRegistering(true);
+    const token = await getAccessToken();
+    if (!token) {
+      setSolanaRegistering(false);
+      toast.error('Authentication required');
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/agents/${agent.id}/solana-registration`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const payload = await res.json();
+      if (!res.ok) {
+        throw new Error(payload.error || 'Failed to register agent on Solana');
+      }
+
+      toast.success(payload.message);
+      setSolanaError(null);
+      await Promise.all([fetchBalanceAndTransactions(), fetchSolanaStatus()]);
+      onUpdate();
+    } catch (error) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : 'Failed to register agent on Solana'
+      );
+    } finally {
+      setSolanaRegistering(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Balance Card */}
@@ -177,6 +270,103 @@ export function AgentWallet({ agent, onUpdate }: AgentWalletProps) {
         <p className="mt-3 text-muted-foreground text-xs">
           Used for trading and AI operations (chat, autonomous actions)
         </p>
+      </div>
+
+      <div className="rounded-lg border border-border bg-card/50 p-4 backdrop-blur sm:p-6">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <div>
+            <h3 className="font-semibold text-lg">Solana Registry</h3>
+            <p className="text-muted-foreground text-sm">
+              Optional agent registration on the Solana 8004 registry. Babylon
+              sponsors the transaction fee.
+            </p>
+          </div>
+          <div
+            className={cn(
+              'rounded-full px-3 py-1 font-medium text-xs',
+              solanaStatus.isRegistered
+                ? 'bg-green-500/10 text-green-600'
+                : 'bg-muted text-muted-foreground'
+            )}
+          >
+            {solanaStatus.isRegistered ? 'Registered' : 'Not registered'}
+          </div>
+        </div>
+
+        {solanaLoading ? (
+          <div className="text-muted-foreground text-sm">Loading...</div>
+        ) : solanaError ? (
+          <div className="space-y-3">
+            <div className="rounded-lg border border-red-500/20 bg-red-500/5 p-3 text-red-600 text-sm">
+              {solanaError}
+            </div>
+            <button
+              onClick={() => {
+                setSolanaLoading(true);
+                setSolanaError(null);
+                fetchSolanaStatus()
+                  .catch((error) => {
+                    setSolanaError(
+                      error instanceof Error
+                        ? error.message
+                        : 'Failed to load Solana registration status'
+                    );
+                  })
+                  .finally(() => setSolanaLoading(false));
+              }}
+              className="h-10 rounded-lg bg-muted px-4 font-medium text-sm transition-all hover:bg-muted/80"
+            >
+              Retry
+            </button>
+          </div>
+        ) : (
+          <div className="space-y-3">
+            <div className="grid gap-2 text-sm sm:grid-cols-2">
+              <div>
+                <span className="text-muted-foreground">Wallet</span>
+                <div className="font-medium">
+                  {solanaStatus.walletAddress
+                    ? `${solanaStatus.walletAddress.slice(0, 6)}...${solanaStatus.walletAddress.slice(-4)}`
+                    : solanaStatus.walletReady
+                      ? 'Ready'
+                      : 'Not provisioned'}
+                </div>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Cost</span>
+                <div className="font-medium">{solanaStatus.cost} pts</div>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Asset</span>
+                <div className="font-medium">
+                  {solanaStatus.assetId
+                    ? `${solanaStatus.assetId.slice(0, 6)}...${solanaStatus.assetId.slice(-4)}`
+                    : 'Not registered'}
+                </div>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Tx</span>
+                <div className="font-medium">
+                  {solanaStatus.txHash
+                    ? `${solanaStatus.txHash.slice(0, 6)}...${solanaStatus.txHash.slice(-4)}`
+                    : 'Pending / none'}
+                </div>
+              </div>
+            </div>
+
+            <button
+              onClick={handleSolanaRegistration}
+              disabled={solanaRegistering || solanaStatus.isRegistered}
+              className="h-10 rounded-lg bg-[#0066FF] px-4 font-medium text-sm text-white transition-all hover:bg-[#2952d9] disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {solanaRegistering
+                ? 'Registering...'
+                : solanaStatus.isRegistered
+                  ? 'Already registered'
+                  : `Register on Solana (${solanaStatus.cost} pts)`}
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Transaction Form */}
