@@ -282,13 +282,26 @@ export async function registerAgentOnSolanaForOwner({
     };
   }
 
+  if (!agent.privyId) {
+    throw new BusinessLogicError(
+      'Agent wallet identity is not ready yet. Try again after the agent wallet has been provisioned.',
+      'AGENT_IDENTITY_NOT_READY'
+    );
+  }
+
   try {
     const existingOnchain =
       await getAgentSolanaRegistration(deterministicAssetId);
     if (existingOnchain) {
+      const wallet = await ensureSolanaWalletReady({ privyId: agent.privyId });
+      await persistSolanaWalletState(agentUserId, wallet);
       await db
         .update(users)
         .set({
+          privySolanaWalletId: wallet.privyWalletId,
+          solanaWalletAddress: wallet.walletAddress,
+          solanaOfflineWalletReady: true,
+          solanaOfflineWalletReadyAt: new Date(),
           solanaRegistered: true,
           solanaRegistryAssetId: deterministicAssetId,
           solanaRegisteredAt: new Date(),
@@ -303,19 +316,12 @@ export async function registerAgentOnSolanaForOwner({
         assetId: deterministicAssetId,
         metadataUri: agent.solanaMetadataUri ?? '',
         txHash: agent.solanaRegistrationTxHash ?? undefined,
-        walletAddress: agent.solanaWalletAddress ?? '',
+        walletAddress: wallet.walletAddress,
         cost: 0,
       };
     }
   } catch {
     // If the on-chain lookup fails, continue with the normal registration path.
-  }
-
-  if (!agent.privyId) {
-    throw new BusinessLogicError(
-      'Agent wallet identity is not ready yet. Try again after the agent wallet has been provisioned.',
-      'AGENT_IDENTITY_NOT_READY'
-    );
   }
 
   const cost = POINTS.ONCHAIN_REGISTRATION;

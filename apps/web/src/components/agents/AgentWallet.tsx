@@ -74,6 +74,7 @@ export function AgentWallet({ agent, onUpdate }: AgentWalletProps) {
   });
   const [solanaLoading, setSolanaLoading] = useState(false);
   const [solanaRegistering, setSolanaRegistering] = useState(false);
+  const [solanaError, setSolanaError] = useState<string | null>(null);
 
   // Balance state
   const [balanceInfo, setBalanceInfo] = useState({
@@ -105,14 +106,18 @@ export function AgentWallet({ agent, onUpdate }: AgentWalletProps) {
 
   const fetchSolanaStatus = useCallback(async () => {
     const token = await getAccessToken();
-    if (!token) return;
+    if (!token) {
+      throw new Error('Authentication required');
+    }
 
     const res = await fetch(`/api/agents/${agent.id}/solana-registration`, {
       headers: { Authorization: `Bearer ${token}` },
     });
 
     if (!res.ok) {
-      throw new Error('Failed to fetch Solana registration status');
+      throw new Error(
+        'Failed to fetch Solana registration status. Check Solana configuration and try again.'
+      );
     }
 
     const data = await res.json();
@@ -126,9 +131,14 @@ export function AgentWallet({ agent, onUpdate }: AgentWalletProps) {
 
   useEffect(() => {
     setSolanaLoading(true);
+    setSolanaError(null);
     fetchSolanaStatus()
-      .catch(() => {
-        setSolanaStatus((current) => current);
+      .catch((error) => {
+        setSolanaError(
+          error instanceof Error
+            ? error.message
+            : 'Failed to load Solana registration status'
+        );
       })
       .finally(() => setSolanaLoading(false));
   }, [fetchSolanaStatus]);
@@ -215,6 +225,7 @@ export function AgentWallet({ agent, onUpdate }: AgentWalletProps) {
       }
 
       toast.success(payload.message);
+      setSolanaError(null);
       await Promise.all([fetchBalanceAndTransactions(), fetchSolanaStatus()]);
       onUpdate();
     } catch (error) {
@@ -284,6 +295,30 @@ export function AgentWallet({ agent, onUpdate }: AgentWalletProps) {
 
         {solanaLoading ? (
           <div className="text-muted-foreground text-sm">Loading...</div>
+        ) : solanaError ? (
+          <div className="space-y-3">
+            <div className="rounded-lg border border-red-500/20 bg-red-500/5 p-3 text-red-600 text-sm">
+              {solanaError}
+            </div>
+            <button
+              onClick={() => {
+                setSolanaLoading(true);
+                setSolanaError(null);
+                fetchSolanaStatus()
+                  .catch((error) => {
+                    setSolanaError(
+                      error instanceof Error
+                        ? error.message
+                        : 'Failed to load Solana registration status'
+                    );
+                  })
+                  .finally(() => setSolanaLoading(false));
+              }}
+              className="h-10 rounded-lg bg-muted px-4 font-medium text-sm transition-all hover:bg-muted/80"
+            >
+              Retry
+            </button>
+          </div>
         ) : (
           <div className="space-y-3">
             <div className="grid gap-2 text-sm sm:grid-cols-2">
