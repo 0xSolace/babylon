@@ -1,7 +1,7 @@
 import { logger } from '@babylon/shared';
 import type { User as PrivyUser } from '@privy-io/server-auth';
 import { getPrivyClient } from '../../auth-middleware';
-import { getPrivyOfflineConfig } from './offline-config';
+import { getPrivySolanaOfflineConfig } from './offline-config';
 import { getPrivyNodeClient } from './privy-node';
 import {
   listEmbeddedSolanaWallets,
@@ -163,7 +163,7 @@ export async function ensureSolanaWalletReady({
 }: EnsureSolanaWalletReadyInput): Promise<EnsureSolanaWalletReadyResult> {
   const privyNode = getPrivyNodeClient();
   const privyServer = getPrivyClient();
-  const offlineConfig = getPrivyOfflineConfig();
+  const offlineConfig = getPrivySolanaOfflineConfig();
 
   const initialPrivyUser = (await privyServer.getUser(
     privyId
