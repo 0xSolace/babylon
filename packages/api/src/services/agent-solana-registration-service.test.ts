@@ -4,6 +4,8 @@ const mockGetAgentSolanaRegistration = mock();
 const mockPrepareAgentSolanaRegistrationTransaction = mock();
 const mockEnsureSolanaWalletReady = mock();
 const mockSendSponsoredSolanaTransaction = mock();
+const mockAcquireLock = mock();
+const mockReleaseLock = mock();
 
 let selectResults: Array<unknown[]> = [];
 const capturedUpdates: Array<Record<string, unknown>> = [];
@@ -83,6 +85,7 @@ mock.module('@babylon/shared', () => ({
   getBaseUrl: () => 'https://play.babylon.market',
   getMCPEndpoint: () => 'https://play.babylon.market/api/mcp',
   logger: {
+    debug: mock(),
     info: mock(),
     warn: mock(),
     error: mock(),
@@ -98,6 +101,13 @@ mock.module('./privy/solana-wallet-provisioning', () => ({
 
 mock.module('./privy/solana-send-transaction', () => ({
   sendSponsoredSolanaTransaction: mockSendSponsoredSolanaTransaction,
+}));
+
+mock.module('./distributed-lock-service', () => ({
+  DistributedLockService: {
+    acquireLock: mockAcquireLock,
+    releaseLock: mockReleaseLock,
+  },
 }));
 
 const { getAgentSolanaRegistrationStatus, registerAgentOnSolanaForOwner } =
@@ -130,8 +140,12 @@ describe('agent-solana-registration-service', () => {
     mockPrepareAgentSolanaRegistrationTransaction.mockReset();
     mockEnsureSolanaWalletReady.mockReset();
     mockSendSponsoredSolanaTransaction.mockReset();
+    mockAcquireLock.mockReset();
+    mockReleaseLock.mockReset();
 
     process.env.SOLANA_REGISTRY_ENABLED = 'true';
+    mockAcquireLock.mockResolvedValue(true);
+    mockReleaseLock.mockResolvedValue(undefined);
     mockEnsureSolanaWalletReady.mockResolvedValue({
       privyWalletId: 'solana-wallet-1',
       walletAddress: 'SoLWallet111',
@@ -254,5 +268,47 @@ describe('agent-solana-registration-service', () => {
     expect(result.alreadyRegistered).toBe(true);
     expect(result.cost).toBe(0);
     expect(capturedInserts).toHaveLength(0);
+  });
+
+  it('blocks concurrent registration attempts before charging points', async () => {
+    selectResults.push([BASE_AGENT]);
+    mockAcquireLock.mockResolvedValueOnce(false);
+
+    await expect(
+      registerAgentOnSolanaForOwner({
+        ownerUserId: 'owner-1',
+        agentUserId: 'agent-1',
+      })
+    ).rejects.toThrow('already in progress');
+
+    expect(capturedInserts).toHaveLength(0);
+    expect(mockSendSponsoredSolanaTransaction).not.toHaveBeenCalled();
+  });
+
+  it('reconciles on-chain success after a post-send failure without refunding', async () => {
+    selectResults.push([BASE_AGENT]);
+    selectResults.push([{ virtualBalance: '900' }]);
+
+    mockGetAgentSolanaRegistration
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ owner: 'onchain' });
+    mockSendSponsoredSolanaTransaction.mockRejectedValueOnce(
+      new Error('Privy returned an unexpected response')
+    );
+
+    const result = await registerAgentOnSolanaForOwner({
+      ownerUserId: 'owner-1',
+      agentUserId: 'agent-1',
+    });
+
+    expect(result.assetId).toBe('asset-123');
+    expect(result.walletAddress).toBe('SoLWallet111');
+    expect(
+      capturedInserts.some(
+        (insert) =>
+          insert.description === 'Refund - agent Solana registration failed'
+      )
+    ).toBe(false);
   });
 });

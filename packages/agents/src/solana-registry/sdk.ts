@@ -143,6 +143,10 @@ async function uploadRegistrationFile(
 export function deriveDeterministicAgentSolanaAsset(
   agentUserId: string
 ): Keypair {
+  // The asset keypair is intentionally deterministic so retries and
+  // reconciliation always target the same registry asset. Treat this as a
+  // stable infrastructure identity, not a secret seed: anyone with the agent
+  // user id can derive the same asset public key.
   const digest = createHash('sha256')
     .update(`babylon:agent-solana:${agentUserId}`)
     .digest();

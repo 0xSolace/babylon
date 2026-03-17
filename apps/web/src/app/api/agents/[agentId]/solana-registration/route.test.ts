@@ -4,14 +4,34 @@ import type { NextRequest } from 'next/server';
 const mockAuthenticateUser = mock();
 const mockGetAgentSolanaRegistrationStatus = mock();
 const mockRegisterAgentOnSolanaForOwner = mock();
+const mockApplyRateLimit = mock();
 
 mock.module('@babylon/api', () => ({
+  applyRateLimit: mockApplyRateLimit,
   authenticateUser: mockAuthenticateUser,
   getAgentSolanaRegistrationStatus: mockGetAgentSolanaRegistrationStatus,
+  RATE_LIMIT_CONFIGS: {
+    ONCHAIN_REGISTRATION: 'ONCHAIN_REGISTRATION',
+  },
+  rateLimitError: (retryAfter?: number) => {
+    return new Response(
+      JSON.stringify({
+        success: false,
+        error: 'Rate limit exceeded',
+        retryAfter,
+      }),
+      {
+        status: 429,
+        headers: { 'Content-Type': 'application/json' },
+      }
+    );
+  },
   registerAgentOnSolanaForOwner: mockRegisterAgentOnSolanaForOwner,
   successResponse: (data: unknown) => {
-    const { NextResponse } = require('next/server');
-    return NextResponse.json(data, { status: 200 });
+    return new Response(JSON.stringify(data), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
   },
   withErrorHandling: (
     handler: (req: NextRequest, ctx: unknown) => Promise<unknown>
@@ -32,10 +52,12 @@ function createMockRequest(): NextRequest {
 
 describe('/api/agents/[agentId]/solana-registration', () => {
   beforeEach(() => {
+    mockApplyRateLimit.mockReset();
     mockAuthenticateUser.mockReset();
     mockGetAgentSolanaRegistrationStatus.mockReset();
     mockRegisterAgentOnSolanaForOwner.mockReset();
 
+    mockApplyRateLimit.mockReturnValue({ allowed: true });
     mockAuthenticateUser.mockResolvedValue({ id: 'owner-1' });
   });
 
@@ -84,5 +106,21 @@ describe('/api/agents/[agentId]/solana-registration', () => {
       ownerUserId: 'owner-1',
       agentUserId: 'agent-1',
     });
+  });
+
+  it('rate limits repeated registration attempts', async () => {
+    mockApplyRateLimit.mockReturnValueOnce({
+      allowed: false,
+      retryAfter: 42,
+    });
+
+    const response = (await POST(createMockRequest(), {
+      params: Promise.resolve({ agentId: 'agent-1' }),
+    })) as Response;
+    const body = await response.json();
+
+    expect(response.status).toBe(429);
+    expect(body.retryAfter).toBe(42);
+    expect(mockRegisterAgentOnSolanaForOwner).not.toHaveBeenCalled();
   });
 });

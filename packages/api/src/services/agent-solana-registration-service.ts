@@ -13,6 +13,7 @@ import {
   logger,
   POINTS,
 } from '@babylon/shared';
+import { DistributedLockService } from './distributed-lock-service';
 import { sendSponsoredSolanaTransaction } from './privy/solana-send-transaction';
 import { ensureSolanaWalletReady } from './privy/solana-wallet-provisioning';
 
@@ -196,34 +197,68 @@ async function persistSolanaWalletState(
 
 async function persistSolanaRegistrationState({
   agentUserId,
-  walletAddress,
-  walletId,
   assetId,
   metadataUri,
+  wallet,
   txHash,
 }: {
   agentUserId: string;
-  walletAddress: string;
-  walletId: string;
   assetId: string;
-  metadataUri: string;
+  metadataUri: string | null;
+  wallet?: {
+    walletAddress: string;
+    walletId: string;
+  } | null;
   txHash?: string | null;
 }): Promise<void> {
   await db
     .update(users)
     .set({
-      privySolanaWalletId: walletId,
-      solanaWalletAddress: walletAddress,
-      solanaOfflineWalletReady: true,
-      solanaOfflineWalletReadyAt: new Date(),
+      ...(wallet
+        ? {
+            privySolanaWalletId: wallet.walletId,
+            solanaWalletAddress: wallet.walletAddress,
+            solanaOfflineWalletReady: true,
+            solanaOfflineWalletReadyAt: new Date(),
+          }
+        : {}),
       solanaRegistered: true,
       solanaRegistryAssetId: assetId,
-      solanaMetadataUri: metadataUri,
+      solanaMetadataUri: metadataUri ?? null,
       solanaRegistrationTxHash: txHash ?? null,
       solanaRegisteredAt: new Date(),
       updatedAt: new Date(),
     })
     .where(eq(users.id, agentUserId));
+}
+
+async function withAgentSolanaRegistrationLock<T>(
+  agentUserId: string,
+  fn: () => Promise<T>
+): Promise<T> {
+  const lockId = `agent-solana-registration:${agentUserId}`;
+  const processId = `agent-solana-registration-${Date.now()}-${Math.random()
+    .toString(36)
+    .slice(2, 10)}`;
+  const acquired = await DistributedLockService.acquireLock({
+    lockId,
+    durationMs: 60_000,
+    operation: 'agent-solana-registration',
+    processId,
+  });
+
+  if (!acquired) {
+    throw new BusinessLogicError(
+      'A Solana registration attempt is already in progress for this agent. Please retry in a moment.',
+      'AGENT_SOLANA_REGISTRATION_IN_PROGRESS'
+    );
+  }
+
+  try {
+    return await fn();
+  } finally {
+    await DistributedLockService.releaseLock(lockId, processId);
+  }
 }
 
 export async function getAgentSolanaRegistrationStatus({
@@ -257,208 +292,279 @@ export async function registerAgentOnSolanaForOwner({
   ownerUserId: string;
   agentUserId: string;
 }): Promise<AgentSolanaRegistrationResult> {
-  let costCharged = false;
-  let prepared: {
-    assetId: string;
-    metadataUri: string;
-    metadataCid: string;
-    transaction: string;
-  } | null = null;
-
   const agent = await getAgentForOwner(ownerUserId, agentUserId);
-  const deterministicAssetId =
-    deriveDeterministicAgentSolanaAsset(agentUserId).publicKey.toBase58();
+  return withAgentSolanaRegistrationLock(agentUserId, async () => {
+    let costCharged = false;
+    let wallet: {
+      privyWalletId: string;
+      walletAddress: string;
+    } | null = null;
+    let prepared: {
+      assetId: string;
+      metadataUri: string;
+      metadataCid: string;
+      transaction: string;
+    } | null = null;
 
-  if (agent.solanaRegistered && agent.solanaRegistryAssetId) {
-    return {
-      message: 'Agent already registered on Solana',
-      alreadyRegistered: true,
-      agentUserId,
-      assetId: agent.solanaRegistryAssetId,
-      metadataUri: agent.solanaMetadataUri ?? '',
-      txHash: agent.solanaRegistrationTxHash ?? undefined,
-      walletAddress: agent.solanaWalletAddress ?? '',
-      cost: 0,
-    };
-  }
+    const deterministicAssetId =
+      deriveDeterministicAgentSolanaAsset(agentUserId).publicKey.toBase58();
 
-  if (!agent.privyId) {
-    throw new BusinessLogicError(
-      'Agent wallet identity is not ready yet. Try again after the agent wallet has been provisioned.',
-      'AGENT_IDENTITY_NOT_READY'
-    );
-  }
-
-  try {
-    const existingOnchain =
-      await getAgentSolanaRegistration(deterministicAssetId);
-    if (existingOnchain) {
-      const wallet = await ensureSolanaWalletReady({ privyId: agent.privyId });
-      await persistSolanaWalletState(agentUserId, wallet);
-      await db
-        .update(users)
-        .set({
-          privySolanaWalletId: wallet.privyWalletId,
-          solanaWalletAddress: wallet.walletAddress,
-          solanaOfflineWalletReady: true,
-          solanaOfflineWalletReadyAt: new Date(),
-          solanaRegistered: true,
-          solanaRegistryAssetId: deterministicAssetId,
-          solanaRegisteredAt: new Date(),
-          updatedAt: new Date(),
-        })
-        .where(eq(users.id, agentUserId));
-
+    if (agent.solanaRegistered && agent.solanaRegistryAssetId) {
       return {
         message: 'Agent already registered on Solana',
         alreadyRegistered: true,
         agentUserId,
-        assetId: deterministicAssetId,
+        assetId: agent.solanaRegistryAssetId,
         metadataUri: agent.solanaMetadataUri ?? '',
         txHash: agent.solanaRegistrationTxHash ?? undefined,
-        walletAddress: wallet.walletAddress,
-        cost: 0,
-      };
-    }
-  } catch {
-    // If the on-chain lookup fails, continue with the normal registration path.
-  }
-
-  const cost = POINTS.ONCHAIN_REGISTRATION;
-  await deductRegistrationCost(ownerUserId, agentUserId, cost);
-  costCharged = true;
-
-  try {
-    const wallet = await ensureSolanaWalletReady({ privyId: agent.privyId });
-    await persistSolanaWalletState(agentUserId, wallet);
-
-    const registrationFile = buildAgentSolanaRegistrationFile({
-      name: agent.displayName || agent.username || agentUserId,
-      description:
-        agent.bio || `Autonomous AI agent: ${agent.username || agentUserId}`,
-      image: agent.profileImageUrl,
-      walletAddress: wallet.walletAddress,
-      a2aEndpoint: `${getBaseUrl()}/api/agents/${agentUserId}/a2a`,
-      mcpEndpoint: getMCPEndpoint(),
-      metadata: {
-        platform: 'babylon',
-        userType: 'agent',
-        managerUserId: ownerUserId,
-        network: 'solana',
-      },
-      skills: [
-        'trade',
-        'analyze',
-        'chat',
-        'post',
-        'comment',
-        'prediction-markets',
-        'social-interaction',
-      ],
-      domains: ['prediction-markets', 'trading', 'social'],
-    });
-
-    prepared = await prepareAgentSolanaRegistrationTransaction({
-      agentUserId,
-      ownerWalletAddress: wallet.walletAddress,
-      registrationFile,
-    });
-
-    const existingOnchain = await getAgentSolanaRegistration(prepared.assetId);
-    if (existingOnchain) {
-      await persistSolanaRegistrationState({
-        agentUserId,
-        walletAddress: wallet.walletAddress,
-        walletId: wallet.privyWalletId,
-        assetId: prepared.assetId,
-        metadataUri: prepared.metadataUri,
-      });
-
-      return {
-        message: 'Agent already registered on Solana',
-        alreadyRegistered: true,
-        agentUserId,
-        assetId: prepared.assetId,
-        metadataUri: prepared.metadataUri,
-        walletAddress: wallet.walletAddress,
+        walletAddress: agent.solanaWalletAddress ?? '',
         cost: 0,
       };
     }
 
-    const tx = await sendSponsoredSolanaTransaction({
-      walletId: wallet.privyWalletId,
-      transaction: prepared.transaction,
-      idempotencyKey: `agent-solana-registration:${agentUserId}`,
-    });
+    if (!agent.privyId) {
+      throw new BusinessLogicError(
+        'Agent wallet identity is not ready yet. Try again after the agent wallet has been provisioned.',
+        'AGENT_IDENTITY_NOT_READY'
+      );
+    }
 
-    await persistSolanaRegistrationState({
-      agentUserId,
-      walletAddress: wallet.walletAddress,
-      walletId: wallet.privyWalletId,
-      assetId: prepared.assetId,
-      metadataUri: prepared.metadataUri,
-      txHash: tx.hash,
-    });
-
-    logger.info(
-      'Agent registered on the Solana Agent Registry',
-      {
-        ownerUserId,
-        agentUserId,
-        assetId: prepared.assetId,
-        txHash: tx.hash,
-        cost,
-      },
-      'AgentSolanaRegistration'
-    );
-
-    return {
-      message: 'Successfully registered agent on Solana',
-      alreadyRegistered: false,
-      agentUserId,
-      assetId: prepared.assetId,
-      metadataUri: prepared.metadataUri,
-      txHash: tx.hash,
-      walletAddress: wallet.walletAddress,
-      cost,
-    };
-  } catch (error) {
-    if (prepared?.assetId) {
-      try {
-        const existingOnchain = await getAgentSolanaRegistration(
-          prepared.assetId
-        );
-        if (existingOnchain) {
-          const wallet = await ensureSolanaWalletReady({
-            privyId: agent.privyId,
-          });
-          await persistSolanaRegistrationState({
-            agentUserId,
+    try {
+      const existingOnchain =
+        await getAgentSolanaRegistration(deterministicAssetId);
+      if (existingOnchain) {
+        wallet = await ensureSolanaWalletReady({ privyId: agent.privyId });
+        await persistSolanaRegistrationState({
+          agentUserId,
+          assetId: deterministicAssetId,
+          metadataUri: agent.solanaMetadataUri,
+          wallet: {
             walletAddress: wallet.walletAddress,
             walletId: wallet.privyWalletId,
-            assetId: prepared.assetId,
-            metadataUri: prepared.metadataUri,
-          });
+          },
+          txHash: agent.solanaRegistrationTxHash,
+        });
 
-          return {
-            message: 'Successfully registered agent on Solana',
-            alreadyRegistered: false,
-            agentUserId,
-            assetId: prepared.assetId,
-            metadataUri: prepared.metadataUri,
-            walletAddress: wallet.walletAddress,
-            cost,
-          };
-        }
-      } catch {
-        // Surface the original registration error below.
+        return {
+          message: 'Agent already registered on Solana',
+          alreadyRegistered: true,
+          agentUserId,
+          assetId: deterministicAssetId,
+          metadataUri: agent.solanaMetadataUri ?? '',
+          txHash: agent.solanaRegistrationTxHash ?? undefined,
+          walletAddress: wallet.walletAddress,
+          cost: 0,
+        };
       }
+    } catch (error) {
+      logger.debug(
+        'On-chain Solana registration lookup failed before registration attempt',
+        {
+          ownerUserId,
+          agentUserId,
+          assetId: deterministicAssetId,
+          error: error instanceof Error ? error.message : String(error),
+        },
+        'AgentSolanaRegistration'
+      );
     }
 
-    if (costCharged) {
-      await refundRegistrationCost(ownerUserId, agentUserId, cost);
-    }
+    const cost = POINTS.ONCHAIN_REGISTRATION;
+    await deductRegistrationCost(ownerUserId, agentUserId, cost);
+    costCharged = true;
 
-    throw error;
-  }
+    try {
+      wallet = await ensureSolanaWalletReady({ privyId: agent.privyId });
+      await persistSolanaWalletState(agentUserId, wallet);
+
+      const registrationFile = buildAgentSolanaRegistrationFile({
+        name: agent.displayName || agent.username || agentUserId,
+        description:
+          agent.bio || `Autonomous AI agent: ${agent.username || agentUserId}`,
+        image: agent.profileImageUrl,
+        walletAddress: wallet.walletAddress,
+        a2aEndpoint: `${getBaseUrl()}/api/agents/${agentUserId}/a2a`,
+        mcpEndpoint: getMCPEndpoint(),
+        metadata: {
+          platform: 'babylon',
+          userType: 'agent',
+          managerUserId: ownerUserId,
+          network: 'solana',
+        },
+        skills: [
+          'trade',
+          'analyze',
+          'chat',
+          'post',
+          'comment',
+          'prediction-markets',
+          'social-interaction',
+        ],
+        domains: ['prediction-markets', 'trading', 'social'],
+      });
+
+      prepared = await prepareAgentSolanaRegistrationTransaction({
+        agentUserId,
+        ownerWalletAddress: wallet.walletAddress,
+        registrationFile,
+      });
+
+      const existingOnchain = await getAgentSolanaRegistration(
+        prepared.assetId
+      );
+      if (existingOnchain) {
+        await persistSolanaRegistrationState({
+          agentUserId,
+          assetId: prepared.assetId,
+          metadataUri: prepared.metadataUri,
+          wallet: {
+            walletAddress: wallet.walletAddress,
+            walletId: wallet.privyWalletId,
+          },
+        });
+
+        return {
+          message: 'Agent already registered on Solana',
+          alreadyRegistered: true,
+          agentUserId,
+          assetId: prepared.assetId,
+          metadataUri: prepared.metadataUri,
+          walletAddress: wallet.walletAddress,
+          cost: 0,
+        };
+      }
+
+      const tx = await sendSponsoredSolanaTransaction({
+        walletId: wallet.privyWalletId,
+        transaction: prepared.transaction,
+        idempotencyKey: `agent-solana-registration:${agentUserId}`,
+      });
+
+      await persistSolanaRegistrationState({
+        agentUserId,
+        assetId: prepared.assetId,
+        metadataUri: prepared.metadataUri,
+        wallet: {
+          walletAddress: wallet.walletAddress,
+          walletId: wallet.privyWalletId,
+        },
+        txHash: tx.hash,
+      });
+
+      logger.info(
+        'Agent registered on the Solana Agent Registry',
+        {
+          ownerUserId,
+          agentUserId,
+          assetId: prepared.assetId,
+          txHash: tx.hash,
+          cost,
+        },
+        'AgentSolanaRegistration'
+      );
+
+      return {
+        message: 'Successfully registered agent on Solana',
+        alreadyRegistered: false,
+        agentUserId,
+        assetId: prepared.assetId,
+        metadataUri: prepared.metadataUri,
+        txHash: tx.hash,
+        walletAddress: wallet.walletAddress,
+        cost,
+      };
+    } catch (error) {
+      if (prepared?.assetId) {
+        try {
+          const existingOnchain = await getAgentSolanaRegistration(
+            prepared.assetId
+          );
+          if (existingOnchain) {
+            const reconciledWallet =
+              wallet ??
+              (await ensureSolanaWalletReady({
+                privyId: agent.privyId,
+              }).catch((walletError) => {
+                logger.warn(
+                  'Solana registration succeeded on-chain but wallet reconciliation failed',
+                  {
+                    ownerUserId,
+                    agentUserId,
+                    assetId: prepared?.assetId,
+                    error:
+                      walletError instanceof Error
+                        ? walletError.message
+                        : String(walletError),
+                  },
+                  'AgentSolanaRegistration'
+                );
+                return null;
+              }));
+
+            try {
+              await persistSolanaRegistrationState({
+                agentUserId,
+                assetId: prepared.assetId,
+                metadataUri: prepared.metadataUri,
+                wallet: reconciledWallet
+                  ? {
+                      walletAddress: reconciledWallet.walletAddress,
+                      walletId: reconciledWallet.privyWalletId,
+                    }
+                  : null,
+              });
+            } catch (persistError) {
+              logger.error(
+                'Solana registration was confirmed on-chain but local persistence failed during reconciliation',
+                {
+                  ownerUserId,
+                  agentUserId,
+                  assetId: prepared.assetId,
+                  error:
+                    persistError instanceof Error
+                      ? persistError.message
+                      : String(persistError),
+                },
+                'AgentSolanaRegistration'
+              );
+            }
+
+            return {
+              message: 'Successfully registered agent on Solana',
+              alreadyRegistered: false,
+              agentUserId,
+              assetId: prepared.assetId,
+              metadataUri: prepared.metadataUri,
+              walletAddress:
+                reconciledWallet?.walletAddress ??
+                wallet?.walletAddress ??
+                agent.solanaWalletAddress ??
+                '',
+              cost,
+            };
+          }
+        } catch (reconciliationError) {
+          logger.debug(
+            'Post-failure Solana registration reconciliation lookup failed',
+            {
+              ownerUserId,
+              agentUserId,
+              assetId: prepared.assetId,
+              error:
+                reconciliationError instanceof Error
+                  ? reconciliationError.message
+                  : String(reconciliationError),
+            },
+            'AgentSolanaRegistration'
+          );
+        }
+      }
+
+      if (costCharged) {
+        await refundRegistrationCost(ownerUserId, agentUserId, cost);
+      }
+
+      throw error;
+    }
+  });
 }

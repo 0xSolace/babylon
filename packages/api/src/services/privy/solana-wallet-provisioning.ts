@@ -86,6 +86,7 @@ async function resolveCandidateWalletsAfterCreateWithRetry(
 
   const { maxAttempts, delayMs } = getRetryConfig();
 
+  // Privy can lag briefly before the newly created wallet shows up on getUser.
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     const refreshedPrivyUser = (await privyServer.getUser(
       privyId
