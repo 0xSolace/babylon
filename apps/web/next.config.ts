@@ -101,6 +101,12 @@ const nextConfig: NextConfig = {
   },
   // Externalize packages with native Node.js dependencies for server-side
   // Note: @babylon/* packages are in transpilePackages, so they can't be here
+  //
+  // IMPORTANT: @elizaos/* packages are ESM-only ("type": "module") and MUST be listed here.
+  // Next.js 16 serverExternalPackages resolves externals via native import() at runtime —
+  // this is safe for ESM-only packages. Do NOT add them to the manual webpack externals
+  // callback below, which emits 'commonjs require()' calls and causes ERR_REQUIRE_ESM.
+  // Bundling @elizaos/* directly (the previous approach) causes 250 MB+ serverless functions.
   serverExternalPackages: [
     'ipfs-http-client',
     '@helia/unixfs',
@@ -114,9 +120,13 @@ const nextConfig: NextConfig = {
     'drizzle-orm',
     'drizzle-orm/postgres-js',
     'ioredis', // Node.js Redis client - requires tls/net modules not available in edge runtime
-    // NOTE: @elizaos/core was removed from externals because it's ESM-only ("type": "module").
-    // Externalizing ESM packages causes require() errors at Vercel runtime (ERR_REQUIRE_ESM).
-    // Webpack now bundles it directly which resolves the ESM compatibility issue.
+    // ESM-only ElizaOS packages — externalized so they are resolved via import() at runtime.
+    // This keeps them out of the webpack bundle and prevents the 250 MB Vercel function size limit.
+    '@elizaos/core',
+    '@elizaos/plugin-anthropic',
+    '@elizaos/plugin-openai',
+    '@elizaos/plugin-sql',
+    '@elizaos/prompts',
   ],
   images: {
     qualities: [100, 75],
@@ -242,8 +252,10 @@ const nextConfig: NextConfig = {
       // They're already in serverExternalPackages, but we also configure webpack
       // to externalize them so they're resolved at runtime from node_modules
       // NOTE: Do NOT externalize @babylon/* packages - they are TypeScript source files
-      // and must be transpiled by webpack via transpilePackages
-      // NOTE: @elizaos/core intentionally excluded - it's ESM-only and must be bundled
+      // and must be transpiled by webpack via transpilePackages.
+      // NOTE: Do NOT add @elizaos/* here — they use serverExternalPackages above so that
+      // Next.js resolves them via import() (ESM-safe). Adding them here would emit
+      // 'commonjs require()' calls and cause ERR_REQUIRE_ESM on Vercel.
       const serverExternalPackagesList = [
         'postgres',
         'drizzle-orm',
