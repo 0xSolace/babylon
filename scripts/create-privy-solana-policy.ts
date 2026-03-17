@@ -111,32 +111,39 @@ async function main() {
     appSecret: options.appSecret,
   });
 
+  const alwaysAllowCondition = {
+    field: 'current_unix_timestamp' as const,
+    field_source: 'system' as const,
+    operator: 'gte' as const,
+    value: '0',
+  };
+
   const rules: Array<{
     name: string;
     method: 'signAndSendTransaction' | 'signTransaction';
-    conditions: [];
+    conditions: [typeof alwaysAllowCondition];
     action: 'ALLOW';
   }> = [
     {
-      name: 'Allow Solana signAndSendTransaction for Babylon agent registration',
+      name: 'Allow Solana send tx',
       method: 'signAndSendTransaction',
-      conditions: [],
+      conditions: [alwaysAllowCondition],
       action: 'ALLOW',
     },
   ];
 
   if (options.allowSignTransaction) {
     rules.push({
-      name: 'Allow Solana signTransaction for Babylon agent operations',
+      name: 'Allow Solana sign tx',
       method: 'signTransaction',
-      conditions: [],
+      conditions: [alwaysAllowCondition],
       action: 'ALLOW',
     });
   }
 
   const policy = await privy.policies().create({
     version: '1.0',
-    name: `${options.namePrefix}-policy-${timestampTag()}`,
+    name: `${options.namePrefix}-${timestampTag()}`.slice(0, 49),
     chain_type: 'solana',
     ...(options.ownerId ? { owner_id: options.ownerId } : {}),
     rules,
