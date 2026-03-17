@@ -4,10 +4,10 @@ import type { PerpPositionFromAPI, PredictionPosition } from '@babylon/shared';
 import { BABYLON_POINTS_SYMBOL, cn, logger } from '@babylon/shared';
 import {
   ChevronDown,
+  ChevronRight,
   ChevronUp,
   TrendingDown,
   TrendingUp,
-  Wallet,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useState } from 'react';
@@ -239,10 +239,7 @@ export function PositionsPreviewPanel() {
   return (
     <div className="flex flex-col">
       <div className="mb-3 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <Wallet className="h-4 w-4 text-primary" />
-          <h2 className="font-bold text-foreground text-lg">Open Positions</h2>
-        </div>
+        <h2 className="font-bold text-foreground text-lg">Open Positions</h2>
         {hasMore && (
           <button
             onClick={() => setExpanded(!expanded)}
@@ -357,9 +354,10 @@ export function PositionsPreviewPanel() {
 
           <button
             onClick={() => router.push('/markets')}
-            className="mt-3 w-full rounded-lg border border-border py-2 text-center text-muted-foreground text-sm transition-colors hover:bg-muted/30 hover:text-foreground"
+            className="mt-3 flex w-full items-center justify-center gap-1 rounded-lg border border-border px-3 py-2 font-medium text-foreground text-sm transition-colors hover:bg-muted/50"
           >
             View Positions
+            <ChevronRight className="h-4 w-4" />
           </button>
         </>
       )}
