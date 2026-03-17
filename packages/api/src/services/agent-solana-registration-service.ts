@@ -434,7 +434,6 @@ export async function registerAgentOnSolanaForOwner({
       const tx = await sendSponsoredSolanaTransaction({
         walletId: wallet.privyWalletId,
         transaction: prepared.transaction,
-        idempotencyKey: `agent-solana-registration:${agentUserId}`,
       });
 
       await persistSolanaRegistrationState({

@@ -205,7 +205,6 @@ describe('agent-solana-registration-service', () => {
     expect(mockSendSponsoredSolanaTransaction).toHaveBeenCalledWith({
       walletId: 'solana-wallet-1',
       transaction: 'base64-tx',
-      idempotencyKey: 'agent-solana-registration:agent-1',
     });
     expect(capturedRegistrationFileInput?.skills).toEqual([]);
     expect(capturedRegistrationFileInput?.domains).toEqual([]);
