@@ -2,6 +2,7 @@ import { logger } from '@babylon/shared';
 import { extractPrivyApiDiagnostics } from './error-diagnostics';
 import { getPrivyOfflineConfig } from './offline-config';
 import { getPrivyNodeClient } from './privy-node';
+import { buildSponsoredSolanaTransactionIdempotencyKey } from './solana-idempotency';
 
 function resolveSolanaCaip2(): string {
   const cluster = process.env.SOLANA_REGISTRY_CLUSTER ?? 'mainnet-beta';
@@ -22,15 +23,18 @@ function resolveSolanaCaip2(): string {
 export async function sendSponsoredSolanaTransaction({
   walletId,
   transaction,
-  idempotencyKey,
 }: {
   walletId: string;
   transaction: string;
-  idempotencyKey?: string;
 }): Promise<{ hash: string; transactionId?: string; caip2: string }> {
   const privy = getPrivyNodeClient();
   const offlineConfig = getPrivyOfflineConfig();
   const caip2 = resolveSolanaCaip2();
+  const idempotencyKey = buildSponsoredSolanaTransactionIdempotencyKey({
+    walletId,
+    transaction,
+    caip2,
+  });
 
   try {
     const response = await privy
@@ -43,7 +47,7 @@ export async function sendSponsoredSolanaTransaction({
         authorization_context: {
           authorization_private_keys: [offlineConfig.authorizationPrivateKey],
         },
-        ...(idempotencyKey ? { idempotency_key: idempotencyKey } : {}),
+        idempotency_key: idempotencyKey,
       });
 
     return {
