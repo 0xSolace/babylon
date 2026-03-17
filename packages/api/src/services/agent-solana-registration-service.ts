@@ -394,16 +394,10 @@ export async function registerAgentOnSolanaForOwner({
           managerUserId: ownerUserId,
           network: 'solana',
         },
-        skills: [
-          'trade',
-          'analyze',
-          'chat',
-          'post',
-          'comment',
-          'prediction-markets',
-          'social-interaction',
-        ],
-        domains: ['prediction-markets', 'trading', 'social'],
+        // Do not publish Babylon-specific labels as OASF skills/domains until
+        // they are mapped to valid registry slugs.
+        skills: [],
+        domains: [],
       });
 
       prepared = await prepareAgentSolanaRegistrationTransaction({
@@ -440,7 +434,6 @@ export async function registerAgentOnSolanaForOwner({
       const tx = await sendSponsoredSolanaTransaction({
         walletId: wallet.privyWalletId,
         transaction: prepared.transaction,
-        idempotencyKey: `agent-solana-registration:${agentUserId}`,
       });
 
       await persistSolanaRegistrationState({

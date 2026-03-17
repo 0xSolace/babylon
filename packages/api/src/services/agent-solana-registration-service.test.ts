@@ -7,6 +7,7 @@ const mockSendSponsoredSolanaTransaction = mock();
 const mockAssertSolanaRegistryConfigured = mock();
 const mockAcquireLock = mock();
 const mockReleaseLock = mock();
+let capturedRegistrationFileInput: Record<string, unknown> | null = null;
 
 let selectResults: Array<unknown[]> = [];
 const capturedUpdates: Array<Record<string, unknown>> = [];
@@ -31,9 +32,12 @@ const usersTable = {
   virtualBalance: 'virtualBalance',
 } as const;
 
-mock.module('@babylon/agents', () => ({
+mock.module('@babylon/agents/solana-registry', () => ({
   assertSolanaRegistryConfigured: mockAssertSolanaRegistryConfigured,
-  buildAgentSolanaRegistrationFile: (input: unknown) => input,
+  buildAgentSolanaRegistrationFile: (input: Record<string, unknown>) => {
+    capturedRegistrationFileInput = input;
+    return input;
+  },
   deriveDeterministicAgentSolanaAsset: () => ({
     publicKey: { toBase58: () => 'asset-deterministic' },
   }),
@@ -138,6 +142,7 @@ describe('agent-solana-registration-service', () => {
     selectResults = [];
     capturedUpdates.length = 0;
     capturedInserts.length = 0;
+    capturedRegistrationFileInput = null;
     mockGetAgentSolanaRegistration.mockReset();
     mockPrepareAgentSolanaRegistrationTransaction.mockReset();
     mockEnsureSolanaWalletReady.mockReset();
@@ -200,8 +205,9 @@ describe('agent-solana-registration-service', () => {
     expect(mockSendSponsoredSolanaTransaction).toHaveBeenCalledWith({
       walletId: 'solana-wallet-1',
       transaction: 'base64-tx',
-      idempotencyKey: 'agent-solana-registration:agent-1',
     });
+    expect(capturedRegistrationFileInput?.skills).toEqual([]);
+    expect(capturedRegistrationFileInput?.domains).toEqual([]);
     expect(
       capturedUpdates.some((update) => update.solanaRegistered === true)
     ).toBe(true);
