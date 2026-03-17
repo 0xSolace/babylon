@@ -1,13 +1,14 @@
+import { authenticateUser } from '@babylon/api/auth-middleware';
+import { successResponse, withErrorHandling } from '@babylon/api/error-handler';
 import {
   applyRateLimit,
-  authenticateUser,
-  getAgentSolanaRegistrationStatus,
   RATE_LIMIT_CONFIGS,
   rateLimitError,
+} from '@babylon/api/rate-limiting';
+import {
+  getAgentSolanaRegistrationStatus,
   registerAgentOnSolanaForOwner,
-  successResponse,
-  withErrorHandling,
-} from '@babylon/api';
+} from '@babylon/api/services/agent-solana-registration-service';
 import type { NextRequest } from 'next/server';
 
 export const GET = withErrorHandling(async function GET(

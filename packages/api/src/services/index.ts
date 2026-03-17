@@ -7,8 +7,9 @@
  * Infrastructure and API-related services for user management, notifications, and system operations.
  */
 
+// Keep Solana registration service out of this barrel so lightweight routes
+// importing @babylon/api do not pull Solana SDK dependencies into shared Lambdas.
 // Claude LLM Service
-export * from './agent-solana-registration-service';
 export * from './claude-service';
 export * from './cron-relay-service';
 // Daily Login Service (BAB-88)

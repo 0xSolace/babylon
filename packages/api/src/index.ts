@@ -259,13 +259,12 @@ export {
 } from './services/privy/evm-send-transaction';
 export { assertPrivyOfflineConfig } from './services/privy/offline-config';
 export { ensureOfflineWalletReady } from './services/privy/offline-wallet-provisioning';
-export { sendSponsoredSolanaTransaction } from './services/privy/solana-send-transaction';
-export { ensureSolanaWalletReady } from './services/privy/solana-wallet-provisioning';
+// Keep Solana-specific Privy helpers off the root barrel to avoid pulling them
+// into every route that imports @babylon/api.
 // Privy (embedded wallet server-side helpers)
 export {
   type PrivyUserWalletsLite,
   pickEmbeddedEvmWallet,
-  pickEmbeddedSolanaWallet,
 } from './services/privy/user-wallets';
 // SSE Event Broadcasting
 export {

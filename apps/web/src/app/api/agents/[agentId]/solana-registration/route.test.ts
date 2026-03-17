@@ -6,10 +6,17 @@ const mockGetAgentSolanaRegistrationStatus = mock();
 const mockRegisterAgentOnSolanaForOwner = mock();
 const mockApplyRateLimit = mock();
 
-mock.module('@babylon/api', () => ({
-  applyRateLimit: mockApplyRateLimit,
+mock.module('@babylon/api/auth-middleware', () => ({
   authenticateUser: mockAuthenticateUser,
+}));
+
+mock.module('@babylon/api/services/agent-solana-registration-service', () => ({
   getAgentSolanaRegistrationStatus: mockGetAgentSolanaRegistrationStatus,
+  registerAgentOnSolanaForOwner: mockRegisterAgentOnSolanaForOwner,
+}));
+
+mock.module('@babylon/api/rate-limiting', () => ({
+  applyRateLimit: mockApplyRateLimit,
   RATE_LIMIT_CONFIGS: {
     ONCHAIN_REGISTRATION: 'ONCHAIN_REGISTRATION',
   },
@@ -26,7 +33,9 @@ mock.module('@babylon/api', () => ({
       }
     );
   },
-  registerAgentOnSolanaForOwner: mockRegisterAgentOnSolanaForOwner,
+}));
+
+mock.module('@babylon/api/error-handler', () => ({
   successResponse: (data: unknown) => {
     return new Response(JSON.stringify(data), {
       status: 200,

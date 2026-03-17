@@ -4,7 +4,7 @@ import {
   deriveDeterministicAgentSolanaAsset,
   getAgentSolanaRegistration,
   prepareAgentSolanaRegistrationTransaction,
-} from '@babylon/agents';
+} from '@babylon/agents/solana-registry';
 import { and, balanceTransactions, db, eq, sql, users } from '@babylon/db';
 import {
   BusinessLogicError,
