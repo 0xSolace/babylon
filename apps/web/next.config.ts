@@ -139,7 +139,7 @@ const nextConfig: NextConfig = {
   //   files for routes that never execute the ElizaOS runtime. Only 7 of the ~39 routes
   //   that import @babylon/agents actually call agentRuntimeManager or @elizaos/core at
   //   runtime; the rest only reach DB/service code through the @babylon/agents barrel.
-  //   Excluding @elizaos from the other 32 routes' Lambdas eliminates the size bloat.
+  //   Excluding @elizaos from the other 30 routes' Lambdas eliminates the size bloat.
   //
   // Routes confirmed to execute @elizaos/core at runtime (NOT excluded):
   //   /api/cron/agent-tick
@@ -154,59 +154,78 @@ const nextConfig: NextConfig = {
   // to exclude. The barrel import side-effect is a known Next.js limitation with
   // transpilePackages; outputFileTracingExcludes is the documented workaround (see
   // https://nextjs.org/docs/app/api-reference/config/next-config-js/outputFileTracingExcludes).
+  //
+  // IMPORTANT — two known footguns with this API:
+  //
+  // 1. PATH: `collect-build-traces.js` resolves exclude patterns with
+  //    `path.join(dir, exclude)` where `dir` is the Next.js app directory (apps/web),
+  //    NOT outputFileTracingRoot. In a Bun monorepo the hoisted node_modules live two
+  //    levels up from apps/web, so patterns must use '../../node_modules/…' not
+  //    './node_modules/…'.
+  //
+  // 2. ROUTE KEYS: picomatch matches keys with `{ contains: true }`, meaning a key
+  //    like '/api/agents' would also match '/api/agents/[agentId]/chat'. Never use a
+  //    prefix key that would catch a route that NEEDS @elizaos at runtime.
+  //    The listing route (/api/agents) and team-chat listing (/api/agents/team-chat)
+  //    are intentionally omitted — they are under 250 MB even with @elizaos included.
   outputFileTracingExcludes: {
-    // Agent CRUD and listing routes — DB queries only, no ElizaOS inference
-    '/api/agents': ['./node_modules/@elizaos/**/*'],
-    '/api/agents/activity': ['./node_modules/@elizaos/**/*'],
-    '/api/agents/auth': ['./node_modules/@elizaos/**/*'],
-    '/api/agents/discover': ['./node_modules/@elizaos/**/*'],
-    '/api/agents/generate-profile': ['./node_modules/@elizaos/**/*'],
-    '/api/agents/onboard': ['./node_modules/@elizaos/**/*'],
-    '/api/agents/team-chat': ['./node_modules/@elizaos/**/*'],
-    '/api/agents/team-chat/conversations': ['./node_modules/@elizaos/**/*'],
+    // Agent sub-routes — DB queries only, no ElizaOS inference.
+    // NOTE: '/api/agents' and '/api/agents/team-chat' are intentionally absent —
+    // picomatch `contains: true` would make those broad keys also match the runtime
+    // routes /api/agents/[agentId]/chat and /api/agents/team-chat/coordinator.
+    '/api/agents/activity': ['../../node_modules/@elizaos/**/*'],
+    '/api/agents/auth': ['../../node_modules/@elizaos/**/*'],
+    '/api/agents/discover': ['../../node_modules/@elizaos/**/*'],
+    '/api/agents/generate-profile': ['../../node_modules/@elizaos/**/*'],
+    '/api/agents/onboard': ['../../node_modules/@elizaos/**/*'],
+    '/api/agents/team-chat/conversations': ['../../node_modules/@elizaos/**/*'],
     '/api/agents/team-chat/conversations/[chatId]': [
-      './node_modules/@elizaos/**/*',
+      '../../node_modules/@elizaos/**/*',
     ],
-    '/api/agents/team-chat/message': ['./node_modules/@elizaos/**/*'],
-    '/api/agents/team-chat/typing': ['./node_modules/@elizaos/**/*'],
+    '/api/agents/team-chat/message': ['../../node_modules/@elizaos/**/*'],
+    '/api/agents/team-chat/typing': ['../../node_modules/@elizaos/**/*'],
     // Per-agent detail routes — DB queries only
-    '/api/agents/[agentId]': ['./node_modules/@elizaos/**/*'],
+    '/api/agents/[agentId]': ['../../node_modules/@elizaos/**/*'],
     '/api/agents/[agentId]/.well-known/agent-card': [
-      './node_modules/@elizaos/**/*',
+      '../../node_modules/@elizaos/**/*',
     ],
-    '/api/agents/[agentId]/a2a': ['./node_modules/@elizaos/**/*'],
-    '/api/agents/[agentId]/activity': ['./node_modules/@elizaos/**/*'],
-    '/api/agents/[agentId]/alerts': ['./node_modules/@elizaos/**/*'],
-    '/api/agents/[agentId]/card': ['./node_modules/@elizaos/**/*'],
-    '/api/agents/[agentId]/goals': ['./node_modules/@elizaos/**/*'],
-    '/api/agents/[agentId]/goals/[goalId]': ['./node_modules/@elizaos/**/*'],
-    '/api/agents/[agentId]/logs': ['./node_modules/@elizaos/**/*'],
-    '/api/agents/[agentId]/recent-trades': ['./node_modules/@elizaos/**/*'],
-    '/api/agents/[agentId]/trading-balance': ['./node_modules/@elizaos/**/*'],
-    '/api/agents/[agentId]/wallet': ['./node_modules/@elizaos/**/*'],
+    '/api/agents/[agentId]/a2a': ['../../node_modules/@elizaos/**/*'],
+    '/api/agents/[agentId]/activity': ['../../node_modules/@elizaos/**/*'],
+    '/api/agents/[agentId]/alerts': ['../../node_modules/@elizaos/**/*'],
+    '/api/agents/[agentId]/card': ['../../node_modules/@elizaos/**/*'],
+    '/api/agents/[agentId]/goals': ['../../node_modules/@elizaos/**/*'],
+    '/api/agents/[agentId]/goals/[goalId]': [
+      '../../node_modules/@elizaos/**/*',
+    ],
+    '/api/agents/[agentId]/logs': ['../../node_modules/@elizaos/**/*'],
+    '/api/agents/[agentId]/recent-trades': ['../../node_modules/@elizaos/**/*'],
+    '/api/agents/[agentId]/trading-balance': [
+      '../../node_modules/@elizaos/**/*',
+    ],
+    '/api/agents/[agentId]/wallet': ['../../node_modules/@elizaos/**/*'],
     // External agent adapter — HTTP bridge, no local inference
     '/api/agents/external/[externalId]/revoke': [
-      './node_modules/@elizaos/**/*',
+      '../../node_modules/@elizaos/**/*',
     ],
-    '/api/agents/external/connect': ['./node_modules/@elizaos/**/*'],
-    '/api/agents/external/discover': ['./node_modules/@elizaos/**/*'],
-    '/api/agents/external/register': ['./node_modules/@elizaos/**/*'],
+    '/api/agents/external/connect': ['../../node_modules/@elizaos/**/*'],
+    '/api/agents/external/discover': ['../../node_modules/@elizaos/**/*'],
+    '/api/agents/external/register': ['../../node_modules/@elizaos/**/*'],
     // Agent templates — pure static JSON, no runtime
-    '/api/agent-templates': ['./node_modules/@elizaos/**/*'],
-    '/api/agent-templates/[archetype]': ['./node_modules/@elizaos/**/*'],
+    '/api/agent-templates': ['../../node_modules/@elizaos/**/*'],
+    '/api/agent-templates/[archetype]': ['../../node_modules/@elizaos/**/*'],
     // Registry — DB queries only
-    '/api/registry/all': ['./node_modules/@elizaos/**/*'],
+    '/api/registry/all': ['../../node_modules/@elizaos/**/*'],
     // Reputation — DB sync, no inference
-    '/api/reputation/sync': ['./node_modules/@elizaos/**/*'],
-    '/api/cron/reputation-sync': ['./node_modules/@elizaos/**/*'],
+    '/api/reputation/sync': ['../../node_modules/@elizaos/**/*'],
+    '/api/cron/reputation-sync': ['../../node_modules/@elizaos/**/*'],
     // Feedback routes — scoring/storage, no inference
-    '/api/feedback/auto-generate': ['./node_modules/@elizaos/**/*'],
-    '/api/feedback/game-to-agent': ['./node_modules/@elizaos/**/*'],
-    '/api/feedback/submit': ['./node_modules/@elizaos/**/*'],
-    '/api/feedback/user-to-agent': ['./node_modules/@elizaos/**/*'],
+    '/api/feedback/auto-generate': ['../../node_modules/@elizaos/**/*'],
+    '/api/feedback/game-to-agent': ['../../node_modules/@elizaos/**/*'],
+    '/api/feedback/submit': ['../../node_modules/@elizaos/**/*'],
+    '/api/feedback/user-to-agent': ['../../node_modules/@elizaos/**/*'],
     // Admin agent management — DB queries only
-    '/api/admin/agents': ['./node_modules/@elizaos/**/*'],
-    '/api/admin/users/[userId]/ban': ['./node_modules/@elizaos/**/*'],
+    '/api/admin/agents': ['../../node_modules/@elizaos/**/*'],
+    '/api/admin/users/[userId]/ban': ['../../node_modules/@elizaos/**/*'],
   },
   images: {
     qualities: [100, 75],
