@@ -6,6 +6,7 @@ type SupportedEnvKey =
   | 'PRIVY_APP_SECRET'
   | 'PRIVY_AUTHORIZATION_PRIVATE_KEY'
   | 'PRIVY_OFFLINE_POLICY_ID'
+  | 'PRIVY_SOLANA_OFFLINE_POLICY_ID'
   | 'PRIVY_OFFLINE_SIGNER_ID';
 
 export function getTrimmedEnv(name: SupportedEnvKey): string | undefined {
@@ -26,6 +27,8 @@ export function getTrimmedEnv(name: SupportedEnvKey): string | undefined {
                 ? process.env.PRIVY_AUTHORIZATION_PRIVATE_KEY
                 : name === 'PRIVY_OFFLINE_POLICY_ID'
                   ? process.env.PRIVY_OFFLINE_POLICY_ID
+                  : name === 'PRIVY_SOLANA_OFFLINE_POLICY_ID'
+                    ? process.env.PRIVY_SOLANA_OFFLINE_POLICY_ID
                   : process.env.PRIVY_OFFLINE_SIGNER_ID;
 
   const trimmed = rawValue?.trim();
