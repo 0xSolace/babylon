@@ -101,6 +101,12 @@ const nextConfig: NextConfig = {
   },
   // Externalize packages with native Node.js dependencies for server-side
   // Note: @babylon/* packages are in transpilePackages, so they can't be here
+  //
+  // @elizaos/* packages are ESM-only ("type": "module"). Listing them here tells
+  // Next.js 16 to resolve them via native import() at runtime — NOT via the manual
+  // webpack externals callback below (which emits 'commonjs require()' calls and
+  // causes ERR_REQUIRE_ESM on Vercel). serverExternalPackages is necessary but NOT
+  // sufficient to solve the 250 MB Lambda limit; see outputFileTracingExcludes below.
   serverExternalPackages: [
     'ipfs-http-client',
     '@helia/unixfs',
@@ -114,10 +120,94 @@ const nextConfig: NextConfig = {
     'drizzle-orm',
     'drizzle-orm/postgres-js',
     'ioredis', // Node.js Redis client - requires tls/net modules not available in edge runtime
-    // NOTE: @elizaos/core was removed from externals because it's ESM-only ("type": "module").
-    // Externalizing ESM packages causes require() errors at Vercel runtime (ERR_REQUIRE_ESM).
-    // Webpack now bundles it directly which resolves the ESM compatibility issue.
+    // ESM-only ElizaOS runtime packages — resolved via import() at runtime.
+    '@elizaos/core',
+    '@elizaos/plugin-anthropic',
+    '@elizaos/plugin-openai',
+    '@elizaos/plugin-sql',
+    '@elizaos/prompts',
   ],
+  //
+  // Vercel 250 MB Lambda size fix — two-layer approach:
+  //
+  // Layer 1 (serverExternalPackages above): tells webpack NOT to bundle @elizaos/* —
+  //   instead it emits `import('@elizaos/core')` calls in the output. Necessary for
+  //   ESM-only packages, but Vercel's @vercel/nft file tracer still sees those import()
+  //   references and physically copies all @elizaos/* files into every Lambda ZIP.
+  //
+  // Layer 2 (outputFileTracingExcludes below): tells @vercel/nft NOT to trace @elizaos/*
+  //   files for routes that never execute the ElizaOS runtime. Only 7 of the ~39 routes
+  //   that import @babylon/agents actually call agentRuntimeManager or @elizaos/core at
+  //   runtime; the rest only reach DB/service code through the @babylon/agents barrel.
+  //   Excluding @elizaos from the other 32 routes' Lambdas eliminates the size bloat.
+  //
+  // Routes confirmed to execute @elizaos/core at runtime (NOT excluded):
+  //   /api/cron/agent-tick
+  //   /api/cron/npc-tick
+  //   /api/agents/[agentId]/chat
+  //   /api/agents/team-chat/coordinator
+  //   /api/agents/[agentId]/benchmark
+  //   /api/agents/generate-field
+  //   /api/debug/clear-agent-cache
+  //
+  // All other routes import only types/DB-services from @babylon/agents and are safe
+  // to exclude. The barrel import side-effect is a known Next.js limitation with
+  // transpilePackages; outputFileTracingExcludes is the documented workaround (see
+  // https://nextjs.org/docs/app/api-reference/config/next-config-js/outputFileTracingExcludes).
+  outputFileTracingExcludes: {
+    // Agent CRUD and listing routes — DB queries only, no ElizaOS inference
+    '/api/agents': ['./node_modules/@elizaos/**/*'],
+    '/api/agents/activity': ['./node_modules/@elizaos/**/*'],
+    '/api/agents/auth': ['./node_modules/@elizaos/**/*'],
+    '/api/agents/discover': ['./node_modules/@elizaos/**/*'],
+    '/api/agents/generate-profile': ['./node_modules/@elizaos/**/*'],
+    '/api/agents/onboard': ['./node_modules/@elizaos/**/*'],
+    '/api/agents/team-chat': ['./node_modules/@elizaos/**/*'],
+    '/api/agents/team-chat/conversations': ['./node_modules/@elizaos/**/*'],
+    '/api/agents/team-chat/conversations/[chatId]': [
+      './node_modules/@elizaos/**/*',
+    ],
+    '/api/agents/team-chat/message': ['./node_modules/@elizaos/**/*'],
+    '/api/agents/team-chat/typing': ['./node_modules/@elizaos/**/*'],
+    // Per-agent detail routes — DB queries only
+    '/api/agents/[agentId]': ['./node_modules/@elizaos/**/*'],
+    '/api/agents/[agentId]/.well-known/agent-card': [
+      './node_modules/@elizaos/**/*',
+    ],
+    '/api/agents/[agentId]/a2a': ['./node_modules/@elizaos/**/*'],
+    '/api/agents/[agentId]/activity': ['./node_modules/@elizaos/**/*'],
+    '/api/agents/[agentId]/alerts': ['./node_modules/@elizaos/**/*'],
+    '/api/agents/[agentId]/card': ['./node_modules/@elizaos/**/*'],
+    '/api/agents/[agentId]/goals': ['./node_modules/@elizaos/**/*'],
+    '/api/agents/[agentId]/goals/[goalId]': ['./node_modules/@elizaos/**/*'],
+    '/api/agents/[agentId]/logs': ['./node_modules/@elizaos/**/*'],
+    '/api/agents/[agentId]/recent-trades': ['./node_modules/@elizaos/**/*'],
+    '/api/agents/[agentId]/trading-balance': ['./node_modules/@elizaos/**/*'],
+    '/api/agents/[agentId]/wallet': ['./node_modules/@elizaos/**/*'],
+    // External agent adapter — HTTP bridge, no local inference
+    '/api/agents/external/[externalId]/revoke': [
+      './node_modules/@elizaos/**/*',
+    ],
+    '/api/agents/external/connect': ['./node_modules/@elizaos/**/*'],
+    '/api/agents/external/discover': ['./node_modules/@elizaos/**/*'],
+    '/api/agents/external/register': ['./node_modules/@elizaos/**/*'],
+    // Agent templates — pure static JSON, no runtime
+    '/api/agent-templates': ['./node_modules/@elizaos/**/*'],
+    '/api/agent-templates/[archetype]': ['./node_modules/@elizaos/**/*'],
+    // Registry — DB queries only
+    '/api/registry/all': ['./node_modules/@elizaos/**/*'],
+    // Reputation — DB sync, no inference
+    '/api/reputation/sync': ['./node_modules/@elizaos/**/*'],
+    '/api/cron/reputation-sync': ['./node_modules/@elizaos/**/*'],
+    // Feedback routes — scoring/storage, no inference
+    '/api/feedback/auto-generate': ['./node_modules/@elizaos/**/*'],
+    '/api/feedback/game-to-agent': ['./node_modules/@elizaos/**/*'],
+    '/api/feedback/submit': ['./node_modules/@elizaos/**/*'],
+    '/api/feedback/user-to-agent': ['./node_modules/@elizaos/**/*'],
+    // Admin agent management — DB queries only
+    '/api/admin/agents': ['./node_modules/@elizaos/**/*'],
+    '/api/admin/users/[userId]/ban': ['./node_modules/@elizaos/**/*'],
+  },
   images: {
     qualities: [100, 75],
     remotePatterns: [
@@ -242,8 +332,10 @@ const nextConfig: NextConfig = {
       // They're already in serverExternalPackages, but we also configure webpack
       // to externalize them so they're resolved at runtime from node_modules
       // NOTE: Do NOT externalize @babylon/* packages - they are TypeScript source files
-      // and must be transpiled by webpack via transpilePackages
-      // NOTE: @elizaos/core intentionally excluded - it's ESM-only and must be bundled
+      // and must be transpiled by webpack via transpilePackages.
+      // NOTE: Do NOT add @elizaos/* here — they use serverExternalPackages above so that
+      // Next.js resolves them via import() (ESM-safe). Adding them here would emit
+      // 'commonjs require()' calls and cause ERR_REQUIRE_ESM on Vercel.
       const serverExternalPackagesList = [
         'postgres',
         'drizzle-orm',
