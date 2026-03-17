@@ -30,7 +30,11 @@ export default defineConfig({
   // Drizzle Kit currently mis-resolves absolute paths by prefixing them with `./`,
   // which breaks reading existing snapshots under `drizzle/migrations/meta/*`.
   // These scripts are run with `--cwd packages/db`, so relative paths are stable.
-  schema: './src/schema/index.ts',
+  //
+  // eliza.ts is listed separately rather than re-exported through index.ts.
+  // Keeping it out of the index.ts barrel prevents @elizaos/plugin-sql from being
+  // traced into every Lambda that imports @babylon/db (would exceed Vercel 250 MB limit).
+  schema: ['./src/schema/index.ts', './src/schema/eliza.ts'],
   out: './drizzle/migrations',
   dialect: 'postgresql',
   dbCredentials: {

@@ -27,7 +27,8 @@ module.exports = {
   // Drizzle Kit currently mis-resolves absolute paths by prefixing them with `./`,
   // which breaks reading existing snapshots under `drizzle/migrations/meta/*`.
   // These scripts are run with `--cwd packages/db`, so relative paths are stable.
-  schema: './src/schema/index.ts',
+  // eliza.ts is listed separately — see drizzle.config.ts for the full explanation.
+  schema: ['./src/schema/index.ts', './src/schema/eliza.ts'],
   out: './drizzle/migrations',
   dialect: 'postgresql',
   dbCredentials: {
