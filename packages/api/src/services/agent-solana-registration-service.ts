@@ -1,4 +1,5 @@
 import {
+  assertSolanaRegistryConfigured,
   buildAgentSolanaRegistrationFile,
   deriveDeterministicAgentSolanaAsset,
   getAgentSolanaRegistration,
@@ -321,6 +322,8 @@ export async function registerAgentOnSolanaForOwner({
         cost: 0,
       };
     }
+
+    assertSolanaRegistryConfigured();
 
     if (!agent.privyId) {
       throw new BusinessLogicError(

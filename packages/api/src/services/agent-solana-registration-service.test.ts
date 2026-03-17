@@ -4,6 +4,7 @@ const mockGetAgentSolanaRegistration = mock();
 const mockPrepareAgentSolanaRegistrationTransaction = mock();
 const mockEnsureSolanaWalletReady = mock();
 const mockSendSponsoredSolanaTransaction = mock();
+const mockAssertSolanaRegistryConfigured = mock();
 const mockAcquireLock = mock();
 const mockReleaseLock = mock();
 
@@ -31,6 +32,7 @@ const usersTable = {
 } as const;
 
 mock.module('@babylon/agents', () => ({
+  assertSolanaRegistryConfigured: mockAssertSolanaRegistryConfigured,
   buildAgentSolanaRegistrationFile: (input: unknown) => input,
   deriveDeterministicAgentSolanaAsset: () => ({
     publicKey: { toBase58: () => 'asset-deterministic' },
@@ -140,10 +142,12 @@ describe('agent-solana-registration-service', () => {
     mockPrepareAgentSolanaRegistrationTransaction.mockReset();
     mockEnsureSolanaWalletReady.mockReset();
     mockSendSponsoredSolanaTransaction.mockReset();
+    mockAssertSolanaRegistryConfigured.mockReset();
     mockAcquireLock.mockReset();
     mockReleaseLock.mockReset();
 
     process.env.SOLANA_REGISTRY_ENABLED = 'true';
+    mockAssertSolanaRegistryConfigured.mockReturnValue(undefined);
     mockAcquireLock.mockResolvedValue(true);
     mockReleaseLock.mockResolvedValue(undefined);
     mockEnsureSolanaWalletReady.mockResolvedValue({
@@ -231,6 +235,22 @@ describe('agent-solana-registration-service', () => {
   });
 
   it('surfaces missing Solana configuration cleanly', async () => {
+    selectResults.push([BASE_AGENT]);
+    mockAssertSolanaRegistryConfigured.mockImplementationOnce(() => {
+      throw new Error('Solana agent registration is disabled.');
+    });
+
+    await expect(
+      registerAgentOnSolanaForOwner({
+        ownerUserId: 'owner-1',
+        agentUserId: 'agent-1',
+      })
+    ).rejects.toThrow('Solana agent registration is disabled.');
+    expect(capturedInserts).toHaveLength(0);
+    expect(capturedUpdates).toHaveLength(0);
+  });
+
+  it('refunds when Solana preparation fails after charging the owner', async () => {
     selectResults.push([BASE_AGENT]);
     selectResults.push([{ virtualBalance: '900' }]);
 
