@@ -19,6 +19,7 @@ export interface ForYouScoreInput {
   retentionScore?: number;
   fatiguePenalty?: number;
   explorationBonus?: number;
+  arcPositionAffinityScore?: number;
 }
 
 export function calculateVelocityScore(
@@ -51,14 +52,15 @@ const SCORE_WEIGHTS = {
   baseScore: 0.24,
   topicMatch: 0.2,
   socialAffinity: 0.14,
-  marketRelevance: 0.16,
+  marketRelevance: 0.13,
   engagementVelocity: 0.1,
   conversationDepth: 0.06,
-  narrativeUrgency: 0.05,
+  narrativeUrgency: 0.04,
   freshness: 0.03,
-  novelty: 0.02,
+  novelty: 0.01,
   retention: 0.07,
   exploration: 0.03,
+  arcPositionAffinity: 0.05,
   fatiguePenalty: 0.18,
 } as const;
 
@@ -67,6 +69,7 @@ export function calculateForYouScore(input: ForYouScoreInput): number {
   const retentionScore = input.retentionScore ?? 0;
   const fatiguePenalty = input.fatiguePenalty ?? 0;
   const explorationBonus = input.explorationBonus ?? 0;
+  const arcPositionAffinity = input.arcPositionAffinityScore ?? 0;
 
   return (
     normalizedBase * SCORE_WEIGHTS.baseScore +
@@ -79,9 +82,36 @@ export function calculateForYouScore(input: ForYouScoreInput): number {
     input.freshnessScore * SCORE_WEIGHTS.freshness +
     input.noveltyScore * SCORE_WEIGHTS.novelty +
     retentionScore * SCORE_WEIGHTS.retention +
-    explorationBonus * SCORE_WEIGHTS.exploration -
+    explorationBonus * SCORE_WEIGHTS.exploration +
+    arcPositionAffinity * SCORE_WEIGHTS.arcPositionAffinity -
     fatiguePenalty * SCORE_WEIGHTS.fatiguePenalty
   );
+}
+
+/**
+ * Calculates a score boosting posts by arc-relevant actors (insiders/deceivers)
+ * when the viewing user holds a prediction market position on the related question.
+ *
+ * Returns 1.0 for insider authors, 0.6 for deceiver authors, 0 otherwise.
+ * Deceivers score lower because their information is intentionally misleading —
+ * still worth surfacing for drama, but with less authority than insiders.
+ */
+export function calculateArcPositionAffinity(
+  primaryAuthorId: string | null,
+  positionSet: Set<number>,
+  storyQuestionNumber: number | null,
+  arcActorSets: Map<
+    number,
+    { insiderIds: Set<string>; deceiverIds: Set<string> }
+  >
+): number {
+  if (!primaryAuthorId || storyQuestionNumber === null) return 0;
+  if (!positionSet.has(storyQuestionNumber)) return 0;
+  const arcSet = arcActorSets.get(storyQuestionNumber);
+  if (!arcSet) return 0;
+  if (arcSet.insiderIds.has(primaryAuthorId)) return 1.0;
+  if (arcSet.deceiverIds.has(primaryAuthorId)) return 0.6;
+  return 0;
 }
 
 function getPrimaryAuthorId(story: NarrativeStory): string | null {

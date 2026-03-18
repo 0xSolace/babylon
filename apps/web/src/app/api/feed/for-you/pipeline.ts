@@ -17,6 +17,7 @@ import {
   not,
   positions,
   posts,
+  questionArcPlans,
   questions,
   reactions,
   shares,
@@ -42,6 +43,7 @@ import {
   calculateStoryScore,
 } from '@/app/api/feed/narrative/scoring';
 import {
+  calculateArcPositionAffinity,
   calculateConversationDepthScore,
   calculateForYouScore,
   calculateFreshnessScore,
@@ -989,6 +991,34 @@ async function loadFeedEventAggregates(
   );
 }
 
+async function loadArcActorSets(
+  questionNumbers: number[]
+): Promise<Map<number, { insiderIds: Set<string>; deceiverIds: Set<string> }>> {
+  if (questionNumbers.length === 0) return new Map();
+
+  const rows = await db
+    .select({
+      questionNumber: questions.questionNumber,
+      insiderActorIds: questionArcPlans.insiderActorIds,
+      deceiverActorIds: questionArcPlans.deceiverActorIds,
+    })
+    .from(questionArcPlans)
+    .innerJoin(questions, eq(questionArcPlans.questionId, questions.id))
+    .where(inArray(questions.questionNumber, questionNumbers));
+
+  const map = new Map<
+    number,
+    { insiderIds: Set<string>; deceiverIds: Set<string> }
+  >();
+  for (const row of rows) {
+    map.set(row.questionNumber, {
+      insiderIds: new Set(row.insiderActorIds ?? []),
+      deceiverIds: new Set(row.deceiverActorIds ?? []),
+    });
+  }
+  return map;
+}
+
 export async function buildForYouFeed(userId?: string | null) {
   const currentTopic = await dailyTopicService.getCurrentTopic();
 
@@ -998,6 +1028,10 @@ export async function buildForYouFeed(userId?: string | null) {
     { namespace: 'feed', ttl: BASE_CACHE_TTL_S }
   );
 
+  const storyQuestionNumbers = baseResult.stories
+    .map((story) => story.questionNumber)
+    .filter((n): n is number => n !== null);
+
   const [
     followedUsers,
     followedActors,
@@ -1005,6 +1039,7 @@ export async function buildForYouFeed(userId?: string | null) {
     userShares,
     userPositions,
     eventAggregates,
+    arcActorSets,
   ]: [
     FollowRow[],
     FollowRow[],
@@ -1012,6 +1047,7 @@ export async function buildForYouFeed(userId?: string | null) {
     Array<{ postId: string }>,
     Array<{ questionId: number | null }>,
     EventAggregates,
+    Map<number, { insiderIds: Set<string>; deceiverIds: Set<string> }>,
   ] = userId
     ? await (async () => {
         try {
@@ -1081,6 +1117,7 @@ export async function buildForYouFeed(userId?: string | null) {
                     );
                 })(),
                 loadFeedEventAggregates(userId),
+                loadArcActorSets(storyQuestionNumbers),
               ]);
             },
             { namespace: 'feed', ttl: USER_ENRICHMENT_TTL_S }
@@ -1097,17 +1134,18 @@ export async function buildForYouFeed(userId?: string | null) {
             { userId, error },
             'ForYouPipeline'
           );
-          return [[], [], [], [], [], aggregateFeedEvents([])] as [
+          return [[], [], [], [], [], aggregateFeedEvents([]), new Map()] as [
             FollowRow[],
             FollowRow[],
             Array<{ postId: string | null }>,
             Array<{ postId: string }>,
             Array<{ questionId: number | null }>,
             EventAggregates,
+            Map<number, { insiderIds: Set<string>; deceiverIds: Set<string> }>,
           ];
         }
       })()
-    : [[], [], [], [], [], aggregateFeedEvents([])];
+    : [[], [], [], [], [], aggregateFeedEvents([]), new Map()];
 
   const followedAuthorIds = new Set<string>([
     ...followedUsers.map((follow) => follow.id),
@@ -1226,6 +1264,11 @@ export async function buildForYouFeed(userId?: string | null) {
       totalComments,
       uniqueAuthors
     );
+    const urgencyPositionBoost = hasUserPosition
+      ? arcActorSets.has(story.questionNumber ?? -1)
+        ? 0.35
+        : 0.15
+      : 0;
     const narrativeUrgencyScore =
       calculateArcStateMultiplier(story.arcState) -
       1 +
@@ -1233,7 +1276,7 @@ export async function buildForYouFeed(userId?: string | null) {
         ? calculateResolutionBoost(new Date(story.resolutionDate)) - 1
         : 0) +
       (story.isNewMarket ? 0.2 : 0) +
-      (hasUserPosition ? 0.15 : 0);
+      urgencyPositionBoost;
     const freshnessScore = calculateFreshnessScore(newestDate);
     const retentionScore = clamp(
       getAffinityScore(eventAggregates.authorSatisfaction, primaryAuthorId) *
@@ -1272,6 +1315,12 @@ export async function buildForYouFeed(userId?: string | null) {
       freshnessScore > 0.6
         ? 0.35
         : 0;
+    const arcPositionAffinityScore = calculateArcPositionAffinity(
+      primaryAuthorId,
+      positionSet,
+      story.questionNumber ?? null,
+      arcActorSets
+    );
     const finalRankScore = calculateForYouScore({
       baseScore: story.storyScore,
       topicMatchScore,
@@ -1285,6 +1334,7 @@ export async function buildForYouFeed(userId?: string | null) {
       retentionScore,
       fatiguePenalty,
       explorationBonus,
+      arcPositionAffinityScore,
     });
 
     return {
