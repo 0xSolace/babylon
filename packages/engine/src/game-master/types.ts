@@ -184,6 +184,12 @@ export interface GameMasterWorldSnapshot {
   lastRunAt: Date | null;
   lastInterventionAt: Date | null;
   recentActionCount: number;
+  /** Arc events scheduled within the next 48 game hours that have not yet fired. */
+  upcomingArcEvents: Array<{
+    questionId: string;
+    questionNumber: number;
+    currentArcState: string;
+  }>;
 }
 
 export interface GameMasterTriggerAssessment {

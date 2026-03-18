@@ -1,6 +1,7 @@
 import {
   actorRelationships,
   and,
+  arcStates,
   chats,
   count,
   type DailyTopicSourceType,
@@ -21,6 +22,7 @@ import {
   messages,
   or,
   posts,
+  questions,
   sql,
   worldEvents,
 } from '@babylon/db';
@@ -222,6 +224,7 @@ export class GameMasterService {
       lastRun,
       lastExecuted,
       recentActionCountResult,
+      upcomingArcEvents,
     ] = await Promise.all([
       db
         .select({
@@ -311,6 +314,27 @@ export class GameMasterService {
           )
         )
         .then((rows) => rows[0]?.count ?? 0),
+      // Forward-looking arc event schedule: active arc states for the planner
+      // so it avoids issuing directives that contradict scripted narrative phases.
+      db
+        .select({
+          questionId: arcStates.questionId,
+          questionNumber: questions.questionNumber,
+          currentArcState: arcStates.currentState,
+        })
+        .from(arcStates)
+        .innerJoin(questions, eq(arcStates.questionId, questions.id))
+        .where(
+          inArray(arcStates.currentState, [
+            'setup',
+            'tension',
+            'escalation',
+            'crisis',
+            'revelation',
+          ])
+        )
+        .orderBy(desc(arcStates.stateEnteredAt))
+        .limit(20),
     ]);
 
     return {
@@ -325,6 +349,7 @@ export class GameMasterService {
       lastRunAt: lastRun?.startedAt ?? null,
       lastInterventionAt: lastExecuted?.executedAt ?? null,
       recentActionCount: recentActionCountResult,
+      upcomingArcEvents,
     };
   }
 
