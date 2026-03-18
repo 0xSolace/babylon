@@ -139,24 +139,31 @@ export function AgentWallet({ agent, onUpdate }: AgentWalletProps) {
     setSolanaStatus(data);
   }, [agent.id, getAccessToken]);
 
+  const refreshSolanaStatus = useCallback(async () => {
+    setSolanaLoading(true);
+    setSolanaError(null);
+
+    try {
+      await fetchSolanaStatus();
+    } catch (error) {
+      setSolanaError(
+        error instanceof Error
+          ? error.message
+          : 'Failed to load Solana registration status'
+      );
+    } finally {
+      setSolanaLoading(false);
+    }
+  }, [fetchSolanaStatus]);
+
   useEffect(() => {
     setLoading(true);
     fetchBalanceAndTransactions().finally(() => setLoading(false));
   }, [fetchBalanceAndTransactions]);
 
   useEffect(() => {
-    setSolanaLoading(true);
-    setSolanaError(null);
-    fetchSolanaStatus()
-      .catch((error) => {
-        setSolanaError(
-          error instanceof Error
-            ? error.message
-            : 'Failed to load Solana registration status'
-        );
-      })
-      .finally(() => setSolanaLoading(false));
-  }, [fetchSolanaStatus]);
+    void refreshSolanaStatus();
+  }, [refreshSolanaStatus]);
 
   const handleTransaction = async () => {
     const amountNum = parseFloat(amount);
@@ -326,19 +333,7 @@ export function AgentWallet({ agent, onUpdate }: AgentWalletProps) {
               {solanaError}
             </div>
             <button
-              onClick={() => {
-                setSolanaLoading(true);
-                setSolanaError(null);
-                fetchSolanaStatus()
-                  .catch((error) => {
-                    setSolanaError(
-                      error instanceof Error
-                        ? error.message
-                        : 'Failed to load Solana registration status'
-                    );
-                  })
-                  .finally(() => setSolanaLoading(false));
-              }}
+              onClick={() => void refreshSolanaStatus()}
               className="h-10 rounded-lg bg-muted px-4 font-medium text-sm transition-all hover:bg-muted/80"
             >
               Retry
@@ -432,6 +427,16 @@ export function AgentWallet({ agent, onUpdate }: AgentWalletProps) {
                   ? `Fund this wallet first. Current balance: ${solanaStatus.walletBalanceSol} SOL. Required: ${solanaStatus.minimumBalanceSol} SOL.`
                   : `Fund this wallet with at least ${solanaStatus.minimumBalanceSol} SOL before registering.`}
               </div>
+            ) : null}
+
+            {!solanaStatus.isRegistered ? (
+              <button
+                onClick={() => void refreshSolanaStatus()}
+                disabled={solanaLoading || solanaRegistering}
+                className="h-10 rounded-lg border border-border bg-background px-4 font-medium text-sm transition-all hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Refresh balance
+              </button>
             ) : null}
 
             <button

@@ -206,6 +206,25 @@ describe('agent-solana-registration-service', () => {
     expect(status.cost).toBe(100);
   });
 
+  it('returns wallet funding details even when balance lookup fails', async () => {
+    selectResults.push([BASE_AGENT]);
+    mockGetSolanaWalletBalanceLamports.mockRejectedValueOnce(
+      new Error('RPC unavailable')
+    );
+
+    const status = await getAgentSolanaRegistrationStatus({
+      ownerUserId: 'owner-1',
+      agentUserId: 'agent-1',
+    });
+
+    expect(status.walletReady).toBe(true);
+    expect(status.walletAddress).toBe('SoLWallet111');
+    expect(status.walletBalanceLamports).toBeNull();
+    expect(status.walletBalanceSol).toBeNull();
+    expect(status.hasEnoughBalance).toBe(false);
+    expect(status.canRegister).toBe(false);
+  });
+
   it('registers an agent on Solana, charges points once, and persists Solana-specific fields', async () => {
     selectResults.push([BASE_AGENT]);
     selectResults.push([{ virtualBalance: '900' }]);

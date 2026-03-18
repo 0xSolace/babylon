@@ -324,10 +324,27 @@ export async function getAgentSolanaRegistrationStatus({
 }): Promise<AgentSolanaRegistrationStatus> {
   const agent = await getAgentForOwner(ownerUserId, agentUserId);
   const wallet = await resolveAgentSolanaWallet(agent);
-  const walletBalanceLamports =
-    wallet && isSolanaRegistrationEnabled()
-      ? await getSolanaWalletBalanceLamports(wallet.walletAddress)
-      : null;
+  let walletBalanceLamports: bigint | null = null;
+
+  if (wallet && isSolanaRegistrationEnabled()) {
+    try {
+      walletBalanceLamports = await getSolanaWalletBalanceLamports(
+        wallet.walletAddress
+      );
+    } catch (error) {
+      logger.warn(
+        'Failed to load agent Solana wallet balance for registration status',
+        {
+          ownerUserId,
+          agentUserId,
+          walletAddress: wallet.walletAddress,
+          error: error instanceof Error ? error.message : String(error),
+        },
+        'AgentSolanaRegistration'
+      );
+    }
+  }
+
   const hasEnoughBalance =
     walletBalanceLamports !== null &&
     walletBalanceLamports >= MINIMUM_SOLANA_REGISTRATION_BALANCE_LAMPORTS;
