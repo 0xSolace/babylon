@@ -3,6 +3,7 @@ import { resolveSendGridConfig, sendViaSendGrid } from './email-utils';
 
 export type EmailNotificationCategory =
   | 'realtime'
+  | 'hourly_summary'
   | 'daily_summary'
   | 'weekly_summary'
   | 'monthly_summary';
@@ -144,6 +145,8 @@ function escapeHtml(str: string): string {
 
 function getCategoryLabel(category: EmailNotificationCategory): string {
   switch (category) {
+    case 'hourly_summary':
+      return 'Hourly Summary';
     case 'daily_summary':
       return 'Daily Summary';
     case 'weekly_summary':

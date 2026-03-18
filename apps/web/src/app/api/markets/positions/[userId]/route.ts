@@ -425,6 +425,7 @@ export const GET = withErrorHandling(
               unrealizedPnL,
               resolved: market.resolved,
               resolution: market.resolution,
+              closesAt: market.endDate?.toISOString() ?? null,
               status: p.status as string,
               createdAt: p.createdAt?.toISOString() ?? null,
               // Agent position metadata

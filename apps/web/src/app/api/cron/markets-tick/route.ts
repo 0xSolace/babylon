@@ -88,6 +88,7 @@ import {
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
+import { notifyResolvedMarketOwners } from '@/lib/services/market-resolution-notifications';
 
 /** Game state shape for cache */
 interface GameState {
@@ -753,6 +754,21 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
 
               try {
                 await resolveQuestionPayouts(linkedQuestion.questionNumber);
+                try {
+                  await notifyResolvedMarketOwners(linkedQuestion.id);
+                } catch (notificationError) {
+                  logger.error(
+                    'Resolved orphaned market without notification side effects',
+                    {
+                      marketId: linkedQuestion.id,
+                      error:
+                        notificationError instanceof Error
+                          ? notificationError.message
+                          : String(notificationError),
+                    },
+                    'MarketsTick'
+                  );
+                }
                 // resolveQuestionPayouts now updates questions + timeframedMarkets
                 // atomically. Avoid duplicate writes here.
                 shouldMarkTimeframedResolved = false;
@@ -1622,6 +1638,22 @@ async function resolveMarket(
     // Re-throw to abort cron run - positions must not be left unsettled
     throw new Error(
       `Payout failed for Q${market.questionNumber}: ${error instanceof Error ? error.message : String(error)}`
+    );
+  }
+
+  try {
+    await notifyResolvedMarketOwners(market.id);
+  } catch (notificationError) {
+    logger.error(
+      `Market resolved but notification side effects failed for Q${market.questionNumber}`,
+      {
+        marketId: market.id,
+        error:
+          notificationError instanceof Error
+            ? notificationError.message
+            : String(notificationError),
+      },
+      'MarketsTick'
     );
   }
 

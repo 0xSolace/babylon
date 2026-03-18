@@ -1,4 +1,4 @@
-import type { MessageMetadata } from '@babylon/shared';
+import type { MessageMetadata, NotificationData } from '@babylon/shared';
 import { relations, sql } from 'drizzle-orm';
 import {
   boolean,
@@ -185,12 +185,14 @@ export const notifications = pgTable(
   {
     id: text('id').primaryKey(),
     userId: text('userId').notNull(),
+    dedupeKey: text('dedupeKey'),
     type: text('type').notNull(),
     actorId: text('actorId'),
     postId: text('postId'),
     commentId: text('commentId'),
     chatId: text('chatId'),
     message: text('message').notNull(),
+    data: jsonb('data').$type<NotificationData>(),
     read: boolean('read').notNull().default(false),
     createdAt: timestamp('createdAt', { mode: 'date' }).notNull().defaultNow(),
     title: text('title').notNull(),
@@ -199,6 +201,9 @@ export const notifications = pgTable(
   },
   (table) => [
     index('Notification_chatId_idx').on(table.chatId),
+    uniqueIndex('Notification_dedupeKey_unique')
+      .on(table.dedupeKey)
+      .where(sql`${table.dedupeKey} IS NOT NULL`),
     index('Notification_groupId_idx').on(table.groupId),
     index('Notification_inviteId_idx').on(table.inviteId),
     index('Notification_read_idx').on(table.read),

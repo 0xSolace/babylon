@@ -143,6 +143,7 @@ export const positions = pgTable(
   (table) => [
     index('Position_marketId_idx').on(table.marketId),
     index('Position_questionId_idx').on(table.questionId),
+    index('Position_status_resolvedAt_idx').on(table.status, table.resolvedAt),
     index('Position_status_idx').on(table.status),
     index('Position_userId_idx').on(table.userId),
     index('Position_userId_marketId_idx').on(table.userId, table.marketId),
