@@ -69,20 +69,6 @@ export function checkUserInput(content: string): ContentCheckResult {
     }
   }
 
-  // Check for profanity
-  for (const pattern of BLOCKED_PATTERNS) {
-    if (pattern.test(content)) {
-      logger.warn('Blocked profanity in user input', {
-        preview: content.substring(0, 50),
-      });
-      return {
-        safe: false,
-        reason: 'Content contains inappropriate language',
-        category: 'profanity',
-      };
-    }
-  }
-
   // Check for prompt injection
   for (const pattern of INJECTION_PATTERNS) {
     if (pattern.test(content)) {
