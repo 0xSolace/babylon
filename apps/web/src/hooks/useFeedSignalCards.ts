@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import type {
   TopGainerProps,
   TopLoserProps,
@@ -69,6 +69,14 @@ export interface FeedSignalCardsResult {
   closingCard: null;
 }
 
+interface DerivedFeedSignalCards {
+  gainerCard: TopGainerProps | null;
+  loserCard: TopLoserProps | null;
+  closingCard: null;
+  /** Updated cap state to persist, or null if no new cards were selected. */
+  pendingCapState: FeedSignalCapState | null;
+}
+
 /**
  * Derives feed signal cards (top gainer / top loser) from the user's open
  * prediction positions. Applies daily capping and dedup via localStorage so
@@ -81,11 +89,13 @@ export function useFeedSignalCards(): FeedSignalCardsResult {
   const { user } = useAuth();
   const { predictionPositions } = useUserPositions(user?.id ?? null);
 
-  return useMemo(() => {
-    const noCards: FeedSignalCardsResult = {
+  // Pure derivation — no side effects. localStorage write happens in the effect below.
+  const derived = useMemo((): DerivedFeedSignalCards => {
+    const noCards: DerivedFeedSignalCards = {
       gainerCard: null,
       loserCard: null,
       closingCard: null,
+      pendingCapState: null,
     };
 
     if (!predictionPositions || predictionPositions.length === 0)
@@ -141,11 +151,25 @@ export function useFeedSignalCards(): FeedSignalCardsResult {
       }
     }
 
-    // Persist only if we actually selected new cards
-    if (gainerCard || loserCard) {
-      writeCapState(capState);
-    }
-
-    return { gainerCard, loserCard, closingCard: null };
+    return {
+      gainerCard,
+      loserCard,
+      closingCard: null,
+      // Only carry the updated state when new cards were selected
+      pendingCapState: gainerCard || loserCard ? capState : null,
+    };
   }, [predictionPositions]);
+
+  // Persist cap state after commit — safe for concurrent/aborted renders and Strict Mode.
+  useEffect(() => {
+    if (derived.pendingCapState) {
+      writeCapState(derived.pendingCapState);
+    }
+  }, [derived.pendingCapState]);
+
+  return {
+    gainerCard: derived.gainerCard,
+    loserCard: derived.loserCard,
+    closingCard: derived.closingCard,
+  };
 }

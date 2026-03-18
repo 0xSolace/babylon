@@ -44,7 +44,8 @@ function isMarketResolvedData(d: unknown): d is MarketResolvedData {
  * provider. Marks them as read once delivered.
  *
  * Runs once per authenticated session — repeated mounts are no-ops via
- * `deliveredRef`. Failures are silent (notifications are supplementary).
+ * `deliveredRef`. Transient failures (auth, network) reset the guard so the
+ * next mount can retry. Successful delivery keeps the guard set permanently.
  */
 export function useQueuedOutcomes(): void {
   const { authenticated, user } = useAuth();
@@ -63,9 +64,15 @@ export function useQueuedOutcomes(): void {
       try {
         accessToken = await getAccessToken();
       } catch {
+        // Transient auth failure — reset so the next mount can retry
+        deliveredRef.current = false;
         return;
       }
-      if (!accessToken) return;
+      if (!accessToken) {
+        // Token not yet available — reset so the next mount can retry
+        deliveredRef.current = false;
+        return;
+      }
 
       let body: NotificationsApiResponse;
       try {
@@ -73,7 +80,11 @@ export function useQueuedOutcomes(): void {
           '/api/notifications?type=market_resolved&unreadOnly=true&limit=20',
           { headers: { Authorization: `Bearer ${accessToken}` } }
         );
-        if (!res.ok) return;
+        if (!res.ok) {
+          // Server error — reset so the next mount can retry
+          deliveredRef.current = false;
+          return;
+        }
         body = (await res.json()) as NotificationsApiResponse;
       } catch (err) {
         logger.warn(
@@ -81,6 +92,8 @@ export function useQueuedOutcomes(): void {
           { error: err },
           'useQueuedOutcomes'
         );
+        // Network failure — reset so the next mount can retry
+        deliveredRef.current = false;
         return;
       }
 
