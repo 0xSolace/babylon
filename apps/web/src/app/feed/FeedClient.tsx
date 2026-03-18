@@ -7,10 +7,6 @@ import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { InlineComposer } from '@/components/feed/InlineComposer';
-import {
-  FeedSignalCardPreviews,
-  NotificationTestButtons,
-} from '@/components/notifications/NotificationTestButtons';
 import { FeedToggle } from '@/components/shared/FeedToggle';
 import { PageContainer } from '@/components/shared/PageContainer';
 import { PullToRefreshIndicator } from '@/components/shared/PullToRefreshIndicator';
@@ -431,16 +427,10 @@ export function FeedClient() {
                 isRefreshing={isRefreshing}
               />
 
-              {/* DEV: Notification test buttons — remove before merging */}
-              <NotificationTestButtons />
-
               {/* Inline Composer - shown on latest tab for authenticated users */}
               {authenticated && tab === 'latest' && (
                 <InlineComposer onPostCreated={handlePostCreated} />
               )}
-
-              {/* DEV: Feed signal card previews — remove before merging */}
-              <FeedSignalCardPreviews />
 
               <div>{renderContent()}</div>
             </div>

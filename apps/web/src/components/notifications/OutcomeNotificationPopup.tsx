@@ -163,15 +163,16 @@ export function ConfettiCanvas() {
         const age = t - p.birthTime;
         if (age < 0) continue; // not born yet
 
-        // Burst phase (ease-out)
-        const burstT = Math.min(age / p.burstDuration, 1);
-        const eased = 1 - (1 - burstT) * (1 - burstT); // ease-out quad
+        // Burst phase (ease-out) — update particle state, then compute position
+        p.burstProgress = Math.min(age / p.burstDuration, 1);
+        const eased = 1 - (1 - p.burstProgress) * (1 - p.burstProgress); // ease-out quad
         const bx = p.x + p.bx * eased;
         const by = p.y + p.by * eased;
 
-        // Gravity (continuous acceleration after burst)
+        // Gravity — update fall velocity (v = at), compute displacement (d = ½vt)
         const gravityTime = Math.max(age - p.burstDuration * 0.5, 0);
-        const gravityY = 0.5 * p.gravity * gravityTime * gravityTime;
+        p.fallSpeed = p.gravity * gravityTime;
+        const gravityY = 0.5 * p.fallSpeed * gravityTime;
 
         // Sway
         const swayX = Math.sin(age * p.swayFreq + p.swayOffset) * p.swayAmp;
@@ -266,6 +267,7 @@ function AnimatedPoints({ value, isWin }: { value: number; isWin: boolean }) {
     return (1 - p) * 800; // snap back to 0
   });
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: motionValue is a stable MotionValue reference (useMotionValue behaves like useRef)
   useEffect(() => {
     motionValue.set(startValue);
     const controls = animate(motionValue, value, {
@@ -274,7 +276,7 @@ function AnimatedPoints({ value, isWin }: { value: number; isWin: boolean }) {
       delay: 0.4,
     });
     return controls.stop;
-  }, [value, motionValue]);
+  }, [value]);
 
   return (
     <div

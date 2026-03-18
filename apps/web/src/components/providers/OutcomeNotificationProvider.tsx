@@ -94,7 +94,8 @@ export function OutcomeNotificationProvider({
 
   const handleDismiss = useCallback(() => {
     if (queueRef.current.length > 0) {
-      const next = queueRef.current.shift()!;
+      const next = queueRef.current.shift();
+      if (!next) return;
       setCurrent(next);
     } else {
       showingRef.current = false;
