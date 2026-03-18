@@ -16,11 +16,11 @@ const BLOCKED_PATTERNS = [
 
 // Prompt injection attempts
 const INJECTION_PATTERNS = [
-  /ignore (previous|all|above) instructions?/gi,
-  /system:?\s*you are now/gi,
-  /\[system\]/gi,
-  /forget (everything|all|previous)/gi,
-  /<\|.*?\|>/gi, // Special tokens
+  /ignore (previous|all|above) instructions?/i,
+  /system:?\s*you are now/i,
+  /\[system\]/i,
+  /forget (everything|all|previous)/i,
+  /<\|.*?\|>/i, // Special tokens
 ];
 
 export interface ContentCheckResult {
