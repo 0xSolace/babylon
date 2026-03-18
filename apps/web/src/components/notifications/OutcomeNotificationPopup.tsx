@@ -282,7 +282,7 @@ function AnimatedPoints({ value, isWin }: { value: number; isWin: boolean }) {
     <div
       className={cn(
         'mb-5 flex items-center justify-center rounded-xl py-3',
-        isWin ? 'bg-green-500/10' : 'bg-red-500/8'
+        isWin ? 'bg-green-500/10' : 'bg-red-500/5'
       )}
     >
       <span

@@ -107,12 +107,9 @@ export function OutcomeNotificationProvider({
     setBatchNotifications([]);
   }, []);
 
-  const handleBatchViewResult = useCallback(
-    (_notification: OutcomeNotification) => {
-      setBatchNotifications([]);
-    },
-    []
-  );
+  const handleBatchViewResult = useCallback(() => {
+    setBatchNotifications([]);
+  }, []);
 
   const value = useMemo(
     () => ({ showOutcome, showBatchOutcomes }),
