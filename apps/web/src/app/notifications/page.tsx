@@ -1,7 +1,7 @@
 'use client';
 
 import { cn, logger } from '@babylon/shared';
-import { Bell } from 'lucide-react';
+import { Bell, Settings } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -373,7 +373,15 @@ export default function NotificationsPage() {
           {/* Header */}
           <div className="sticky top-0 z-10 flex-shrink-0 bg-background shadow-sm">
             <div className="w-full px-4 py-3 lg:mx-auto lg:max-w-[700px] lg:px-6">
-              <h1 className="font-bold text-xl">Notifications</h1>
+              <div className="flex items-center justify-between">
+                <h1 className="font-bold text-xl">Notifications</h1>
+                <Link
+                  href="/settings?tab=notifications"
+                  className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+                >
+                  <Settings className="h-5 w-5" />
+                </Link>
+              </div>
               {unreadCount > 0 && (
                 <p className="text-muted-foreground text-sm">
                   {unreadCount} unread

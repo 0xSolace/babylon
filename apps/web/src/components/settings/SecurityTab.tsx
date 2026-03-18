@@ -1,18 +1,7 @@
 'use client';
 
-import { logger } from '@babylon/shared';
 import { usePrivy, useWallets } from '@privy-io/react-auth';
-import {
-  AlertCircle,
-  BookOpen,
-  CheckCircle2,
-  Copy,
-  ExternalLink,
-  Key,
-  LogOut,
-  Shield,
-  Wallet,
-} from 'lucide-react';
+import { Copy, ExternalLink, Key } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -40,21 +29,11 @@ export function SecurityTab() {
     exportWallet,
   } = usePrivy();
   const { wallets } = useWallets();
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
 
   const copyToClipboard = async (text: string, label: string) => {
     await navigator.clipboard.writeText(text);
     toast.success(`${label} copied to clipboard`);
-  };
-
-  const handleLogout = async () => {
-    await logout();
-    toast.success('Logged out successfully');
-    logger.info(
-      'User logged out from security settings',
-      undefined,
-      'SecurityTab'
-    );
   };
 
   const getWalletTypeDisplay = (walletClientType: string) => {
@@ -81,28 +60,9 @@ export function SecurityTab() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="space-y-2">
-        <h2 className="flex items-center gap-2 font-bold text-2xl">
-          <Shield className="h-6 w-6 text-[#0066FF]" />
-          Security Settings
-        </h2>
-        <p className="text-muted-foreground text-sm">
-          Manage your account security, connected wallets, and authentication
-          methods.
-        </p>
-      </div>
-
       {/* Authentication Info */}
       <div className="space-y-3 rounded-lg border border-border p-4">
-        <div className="flex items-start gap-3">
-          <CheckCircle2 className="mt-0.5 h-5 w-5 text-green-500" />
-          <div className="flex-1">
             <h3 className="font-semibold">Account Security</h3>
-            <p className="mt-1 text-muted-foreground text-sm">
-              Your account is secured with <strong>Privy authentication</strong>
-              , providing secure wallet-based and social login options.
-            </p>
             {privyUser && (
               <div className="mt-3 space-y-2">
                 <div className="text-sm">
@@ -137,15 +97,10 @@ export function SecurityTab() {
                 )}
               </div>
             )}
-          </div>
-        </div>
       </div>
 
       {/* Connected Wallets */}
-      <div className="rounded-lg border border-border p-4">
-        <div className="flex items-start gap-3">
-          <Wallet className="mt-0.5 h-5 w-5 shrink-0 text-[#0066FF]" />
-          <div className="flex-1 space-y-4">
+      <div className="space-y-4 rounded-lg border border-border p-4">
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div>
                 <h3 className="font-semibold">Connected Wallets</h3>
@@ -165,7 +120,6 @@ export function SecurityTab() {
 
             {wallets.length === 0 ? (
               <div className="py-8 text-center text-muted-foreground">
-                <Wallet className="mx-auto mb-3 h-12 w-12 opacity-50" />
                 <p className="text-sm">No wallets connected</p>
               </div>
             ) : (
@@ -236,46 +190,18 @@ export function SecurityTab() {
             )}
 
             <div className="rounded-lg border border-blue-500/20 bg-blue-500/5 p-3">
-              <div className="flex items-start gap-2">
-                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-blue-500" />
-                <div className="text-muted-foreground text-sm">
-                  <strong className="text-foreground">Embedded wallets</strong>{' '}
-                  are created and managed by Privy, enabling gasless
-                  transactions. You can export your private key at any time.{' '}
-                  <strong className="text-foreground">External wallets</strong>{' '}
-                  require you to pay gas fees.
-                </div>
-              </div>
+              <p className="text-muted-foreground text-sm">
+                <strong className="text-foreground">Embedded wallets</strong>{' '}
+                are created and managed by Privy, enabling gasless transactions.
+                You can export your private key at any time.{' '}
+                <strong className="text-foreground">External wallets</strong>{' '}
+                require you to pay gas fees.
+              </p>
             </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Session Management */}
-      <div className="space-y-3 rounded-lg border border-border p-4">
-        <div className="flex items-start gap-3">
-          <LogOut className="mt-0.5 h-5 w-5 text-[#0066FF]" />
-          <div className="flex-1">
-            <h3 className="font-semibold">Active Session</h3>
-            <p className="mt-1 text-muted-foreground text-sm">
-              You are currently logged in. Log out to end your session and clear
-              authentication.
-            </p>
-            <button
-              onClick={handleLogout}
-              className="mt-3 rounded-lg bg-muted px-4 py-2 font-medium text-foreground text-sm hover:bg-muted/80"
-            >
-              Log Out
-            </button>
-          </div>
-        </div>
       </div>
 
       {/* Additional Resources */}
       <div className="space-y-3 rounded-lg border border-border p-4">
-        <div className="flex items-start gap-3">
-          <BookOpen className="mt-0.5 h-5 w-5 text-[#0066FF]" />
-          <div className="flex-1">
             <h3 className="font-semibold">Security Resources</h3>
             <div className="mt-1 space-y-2">
               <a
@@ -306,24 +232,6 @@ export function SecurityTab() {
                 babylon@elizalabs.ai
               </a>
             </p>
-          </div>
-        </div>
-      </div>
-
-      {/* Privacy & Account Deletion Link */}
-      <div className="space-y-2 rounded-lg border border-yellow-500/30 bg-yellow-500/5 p-4">
-        <div className="flex items-start gap-3">
-          <AlertCircle className="mt-0.5 h-5 w-5 text-yellow-500" />
-          <div className="flex-1">
-            <h3 className="font-semibold text-yellow-500">
-              Account Privacy & Deletion
-            </h3>
-            <p className="mt-1 text-muted-foreground text-sm">
-              To export your data or permanently delete your account, visit the
-              Privacy tab.
-            </p>
-          </div>
-        </div>
       </div>
     </div>
   );
