@@ -28,11 +28,7 @@ const accentMap = {
 };
 
 /** Consistent shell for all feed signal cards — entire card is tappable */
-function SignalCardShell({
-  accent,
-  href,
-  children,
-}: SignalCardShellProps) {
+function SignalCardShell({ accent, href, children }: SignalCardShellProps) {
   const a = accentMap[accent];
 
   return (
@@ -43,9 +39,7 @@ function SignalCardShell({
         a.hover
       )}
     >
-      <div className="min-w-0 flex-1">
-        {children}
-      </div>
+      <div className="min-w-0 flex-1">{children}</div>
 
       <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200 group-hover:translate-x-0.5" />
     </Link>
@@ -90,7 +84,6 @@ export function MarketClosingSoonCard({
   return (
     <SignalCardShell
       accent="amber"
-
       href={`/markets/predictions/${encodeURIComponent(marketId)}`}
     >
       <p className="font-semibold text-foreground text-sm leading-snug">
@@ -141,7 +134,6 @@ export function TopGainerCard({
   return (
     <SignalCardShell
       accent="green"
-
       href={`/markets/predictions/${encodeURIComponent(marketId)}`}
     >
       <p className="font-semibold text-foreground text-sm leading-snug">
@@ -184,7 +176,6 @@ export function TopLoserCard({
   return (
     <SignalCardShell
       accent="red"
-
       href={`/markets/predictions/${encodeURIComponent(marketId)}`}
     >
       <p className="font-semibold text-foreground text-sm leading-snug">

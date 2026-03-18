@@ -2,15 +2,13 @@
 
 import { cn } from '@babylon/shared';
 import { AnimatePresence, motion } from 'framer-motion';
-import {
-  Bell,
-  ChevronRight,
-  TrendingDown,
-  TrendingUp,
-} from 'lucide-react';
+import { Bell, ChevronRight, TrendingDown, TrendingUp } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useRef } from 'react';
-import { ConfettiCanvas, type OutcomeNotification } from './OutcomeNotificationPopup';
+import {
+  ConfettiCanvas,
+  type OutcomeNotification,
+} from './OutcomeNotificationPopup';
 
 const AUTO_DISMISS_MS = 8000;
 
@@ -167,7 +165,7 @@ export function StackedSummaryPopup({
             </div>
 
             {/* Individual results list */}
-            <div className="scrollbar-hide mx-6 mt-3 max-h-48 overflow-x-hidden overflow-y-auto">
+            <div className="scrollbar-hide mx-6 mt-3 max-h-48 overflow-y-auto overflow-x-hidden">
               {notifications.map((n) => {
                 const isWin = n.outcome === 'win';
                 return (

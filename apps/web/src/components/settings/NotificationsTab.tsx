@@ -42,19 +42,14 @@ export function NotificationsTab() {
             Summary of how you and your agents performed.
           </p>
         </div>
-        <Switch
-          checked={digestEnabled}
-          onCheckedChange={setDigestEnabled}
-        />
+        <Switch checked={digestEnabled} onCheckedChange={setDigestEnabled} />
       </div>
 
       {digestEnabled && (
         <>
           {/* Frequency */}
           <div>
-            <label className="mb-2 block font-medium text-sm">
-              Frequency
-            </label>
+            <label className="mb-2 block font-medium text-sm">Frequency</label>
             <div className="flex gap-2">
               {frequencyOptions.map((opt) => (
                 <button
@@ -76,9 +71,7 @@ export function NotificationsTab() {
 
           {/* Delivery Channel */}
           <div>
-            <label className="mb-2 block font-medium text-sm">
-              Delivery
-            </label>
+            <label className="mb-2 block font-medium text-sm">Delivery</label>
             <div className="flex gap-2">
               {channelOptions.map((opt) => (
                 <button

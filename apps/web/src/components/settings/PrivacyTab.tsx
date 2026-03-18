@@ -132,9 +132,7 @@ export function PrivacyTab() {
       {/* Blockchain Data Notice */}
       {user?.onChainRegistered && (
         <div className="space-y-2 rounded-lg border border-border p-4">
-          <h3 className="font-semibold">
-            Blockchain Data Notice
-          </h3>
+          <h3 className="font-semibold">Blockchain Data Notice</h3>
           <p className="text-muted-foreground text-sm">
             You have on-chain identity data (wallet address:{' '}
             {user.walletAddress?.slice(0, 6)}...

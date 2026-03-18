@@ -7,7 +7,10 @@ import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { InlineComposer } from '@/components/feed/InlineComposer';
-import { FeedSignalCardPreviews, NotificationTestButtons } from '@/components/notifications/NotificationTestButtons';
+import {
+  FeedSignalCardPreviews,
+  NotificationTestButtons,
+} from '@/components/notifications/NotificationTestButtons';
 import { FeedToggle } from '@/components/shared/FeedToggle';
 import { PageContainer } from '@/components/shared/PageContainer';
 import { PullToRefreshIndicator } from '@/components/shared/PullToRefreshIndicator';
