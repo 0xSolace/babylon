@@ -251,7 +251,23 @@ export const POST = withErrorHandling(
           .where(eq(timeframedMarkets.questionId, marketId));
       });
 
-      const notificationsCreated = await notifyResolvedMarketOwners(marketId);
+      let notificationsCreated = 0;
+
+      try {
+        notificationsCreated = await notifyResolvedMarketOwners(marketId);
+      } catch (notificationError) {
+        logger.error(
+          'Admin market resolution completed without notification side effects',
+          {
+            marketId,
+            error:
+              notificationError instanceof Error
+                ? notificationError.message
+                : String(notificationError),
+          },
+          'POST /api/admin/markets/[marketId]'
+        );
+      }
 
       await logAdminModify({
         adminId: admin.userId,

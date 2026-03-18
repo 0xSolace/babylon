@@ -30,7 +30,7 @@ describe('groupResolvedMarketOutcomes', () => {
       points: 10.25,
       outcome: 'win',
       dedupeKey: 'market_resolved:market-1:user-1',
-      deepLink: '/markets/market-1',
+      deepLink: '/markets/predictions/market-1',
     });
   });
 
@@ -55,7 +55,7 @@ describe('groupResolvedMarketOutcomes', () => {
         points: -9,
         outcome: 'loss',
         agentName: 'Ares',
-        deepLink: '/markets/market-2',
+        deepLink: '/markets/predictions/market-2',
         dedupeKey: 'market_resolved:market-2:agent-9',
       },
     ]);

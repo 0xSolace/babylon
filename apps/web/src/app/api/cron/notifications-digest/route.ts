@@ -5,7 +5,7 @@ import {
   verifyCronAuth,
   withErrorHandling,
 } from '@babylon/api';
-import type { NotificationDigestSettings } from '@babylon/shared';
+import { logger, type NotificationDigestSettings } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import {
   deliverDigestForUser,
@@ -33,6 +33,7 @@ const cronHandler = async (request: NextRequest) => {
   let processed = 0;
   let delivered = 0;
   let withContent = 0;
+  let failed = 0;
 
   for (const candidate of candidates) {
     const settings: NotificationDigestSettings = {
@@ -54,17 +55,31 @@ const cronHandler = async (request: NextRequest) => {
 
     processed += 1;
 
-    const result = await deliverDigestForUser({
-      candidate,
-      settings,
-      now,
-    });
+    try {
+      const result = await deliverDigestForUser({
+        candidate,
+        settings,
+        now,
+      });
 
-    if (result.hadContent) {
-      withContent += 1;
-    }
-    if (result.delivered) {
-      delivered += 1;
+      if (result.hadContent) {
+        withContent += 1;
+      }
+      if (result.delivered) {
+        delivered += 1;
+      }
+    } catch (error) {
+      failed += 1;
+      logger.error(
+        'Digest delivery failed for candidate (continuing batch)',
+        {
+          userId: candidate.id,
+          frequency: settings.frequency,
+          deliveryChannel: settings.deliveryChannel,
+          error: error instanceof Error ? error.message : String(error),
+        },
+        'NotificationsDigestCron'
+      );
     }
   }
 
@@ -73,6 +88,7 @@ const cronHandler = async (request: NextRequest) => {
     processed,
     delivered,
     withContent,
+    failed,
   };
 
   recordCronExecution('notifications-digest', startTime, payload);

@@ -63,7 +63,7 @@ export function groupResolvedMarketOutcomes(
       points,
       outcome: points >= 0 ? 'win' : 'loss',
       agentName: row.agentName ?? undefined,
-      deepLink: `/markets/${row.marketId}`,
+      deepLink: `/markets/predictions/${row.marketId}`,
       dedupeKey: `market_resolved:${row.marketId}:${row.holderId}`,
     });
   }
