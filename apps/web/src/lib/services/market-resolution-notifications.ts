@@ -41,7 +41,9 @@ function formatPoints(points: number): string {
 export function groupResolvedMarketOutcomes(
   rows: ResolvedOutcomeRow[]
 ): GroupedResolvedOutcome[] {
-  const grouped = new Map<string, GroupedResolvedOutcome>();
+  // outcome is intentionally omitted during accumulation — points change as
+  // rows are merged, so outcome is derived once at the end from final points.
+  const grouped = new Map<string, Omit<GroupedResolvedOutcome, 'outcome'>>();
 
   for (const row of rows) {
     const key = `${row.ownerUserId}:${row.holderId}:${row.marketId}`;
@@ -51,14 +53,12 @@ export function groupResolvedMarketOutcomes(
       continue;
     }
 
-    const points = Number(row.points.toFixed(2));
     grouped.set(key, {
       holderId: row.holderId,
       ownerUserId: row.ownerUserId,
       marketId: row.marketId,
       marketName: row.marketName,
-      points,
-      outcome: points >= 0 ? 'win' : 'loss',
+      points: Number(row.points.toFixed(2)),
       agentName: row.agentName ?? undefined,
       deepLink: `/markets/predictions/${row.marketId}`,
       dedupeKey: `market_resolved:${row.marketId}:${row.holderId}`,

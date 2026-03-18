@@ -257,7 +257,7 @@ export const POST = withErrorHandling(
         notificationsCreated = await notifyResolvedMarketOwners(marketId);
       } catch (notificationError) {
         logger.error(
-          'Admin market resolution completed without notification side effects',
+          'Market resolution succeeded but notification delivery failed',
           {
             marketId,
             error:
