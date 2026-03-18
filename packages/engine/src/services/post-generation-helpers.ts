@@ -116,6 +116,12 @@ export function safeExtractFromResponse<T extends JsonValue>(
 }
 
 import {
+  ANGLE_VOCAB,
+  buildCoveredAnglesContext,
+  getCoveredAngles,
+  registerBeat,
+} from './narrative-beat-registry';
+import {
   getArcPlan,
   getPhaseForDay,
   getPhaseGuidance,
@@ -636,7 +642,21 @@ export async function generateNPCPost(
     .join('\n');
 
   // Get anti-repetition context to prevent overused patterns
-  const antiRepetitionContext = getAvoidedPatternsContext(actor.id);
+  const antiRepetitionContext = await getAvoidedPatternsContext(actor.id);
+
+  // Check narrative beat registry — skip topic if all angles are saturated
+  const topicKey = question.id;
+  const worldEventId: string | null = null; // EventContext doesn't expose IDs; keyed by question only
+  const coveredAngles = await getCoveredAngles(topicKey, worldEventId);
+  if (coveredAngles.size >= ANGLE_VOCAB.length) {
+    logger.debug(
+      'NPC topic saturated (all angles covered), skipping post',
+      { actorId: actor.id, topicKey, coveredAnglesCount: coveredAngles.size },
+      'PostGeneration'
+    );
+    return false;
+  }
+  const coveredAnglesContext = buildCoveredAnglesContext(coveredAngles);
 
   const prompt = `${signalGuidance ? `${signalGuidance}\n\n` : ''}You ARE ${actor.name}. Write a single post exactly as they would.
 
@@ -662,7 +682,7 @@ ${npcContextFormatted}
 - No dates ("by Dec 13")
 - Max 280 characters
 ${antiRepetitionContext}
-${worldFactsContext}
+${coveredAnglesContext ? coveredAnglesContext + '\n' : ''}${worldFactsContext}
 
 <response>
   <post>your post here</post>
@@ -724,6 +744,14 @@ ${worldFactsContext}
 
   // Track for anti-repetition analysis
   antiRepetitionService.addPost(actor.id, transformed.transformedText);
+
+  // Register this topic beat in the narrative registry so subsequent NPCs
+  // know to take a different angle. We register the first uncovered angle —
+  // we don't parse the LLM output to extract the exact angle, but the
+  // covered-angles prompt is sufficient to steer LLM output.
+  const nextAngle =
+    ANGLE_VOCAB.find((a) => !coveredAngles.has(a)) ?? ANGLE_VOCAB[0];
+  void registerBeat(topicKey, worldEventId, nextAngle);
 
   // Log voice metrics for monitoring character consistency
   logVoiceMetrics(actor.id, transformed.transformedText);
@@ -794,6 +822,9 @@ export async function generateOrganicPost(
     .map((ex) => `"${ex}"`)
     .join('\n');
 
+  // Get anti-repetition context to prevent overused patterns
+  const antiRepetitionContext = await getAvoidedPatternsContext(actor.id);
+
   // Organic prompt - no specific topic, just be yourself
   const prompt = `You ARE ${actor.name}. Write a single post that's naturally YOU.
 
@@ -824,7 +855,7 @@ Ideas (pick one or create your own):
 - No hashtags, no emojis
 - Max 280 characters
 - Be authentic to your personality
-${getAvoidedPatternsContext(actor.id)}
+${antiRepetitionContext}
 ${worldFactsContext}
 
 <response>
@@ -962,6 +993,9 @@ export async function generateRivalryPost(
     .map((ex) => `"${ex}"`)
     .join('\n');
 
+  // Get anti-repetition context to prevent overused patterns
+  const antiRepetitionContext = await getAvoidedPatternsContext(actor.id);
+
   // Determine the contrarian position
   const contraryPosition = rivalPosition === 'YES' ? 'NO' : 'YES';
 
@@ -994,7 +1028,7 @@ Write a post that:
 - Sound exactly like your examples above
 - No hashtags, no emojis
 - Max 280 characters
-${getAvoidedPatternsContext(actor.id)}
+${antiRepetitionContext}
 ${worldFactsContext}
 
 <response>
@@ -1116,6 +1150,9 @@ export async function generatePlayerReactionPost(
     .map((ex) => `"${ex}"`)
     .join('\n');
 
+  // Get anti-repetition context to prevent overused patterns
+  const antiRepetitionContext = await getAvoidedPatternsContext(actor.id);
+
   const prompt = `You ARE ${actor.name}. React to a big market move you noticed.
 
 === WHO YOU ARE ===
@@ -1146,7 +1183,7 @@ React to this in YOUR unique voice. You might:
 - Max 280 characters
 - React as your personality would
 - If the bet details contain ticker/price/leverage jargon, paraphrase into plain English in your own voice.
-${getAvoidedPatternsContext(actor.id)}
+${antiRepetitionContext}
 ${worldFactsContext}
 
 <response>
