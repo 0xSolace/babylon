@@ -7,6 +7,10 @@ import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { InlineComposer } from '@/components/feed/InlineComposer';
+import {
+  TopGainerCard,
+  TopLoserCard,
+} from '@/components/notifications/FeedSignalCards';
 import { FeedToggle } from '@/components/shared/FeedToggle';
 import { PageContainer } from '@/components/shared/PageContainer';
 import { PullToRefreshIndicator } from '@/components/shared/PullToRefreshIndicator';
@@ -14,6 +18,7 @@ import { FeedSkeleton } from '@/components/shared/Skeleton';
 import { useWidgetRefresh } from '@/contexts/WidgetRefreshContext';
 import { useAuth } from '@/hooks/useAuth';
 import { useErrorToasts } from '@/hooks/useErrorToasts';
+import { useFeedSignalCards } from '@/hooks/useFeedSignalCards';
 import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 import { useFeedStore } from '@/stores/feedStore';
 import { useGameStore } from '@/stores/gameStore';
@@ -156,6 +161,9 @@ export function FeedClient() {
     refresh: refreshForYou,
     loadMore: loadMoreForYou,
   } = useForYouFeed({ enabled: tab === 'forYou' });
+
+  // Feed signal cards (gainer / loser) — latest tab only
+  const { gainerCard, loserCard } = useFeedSignalCards();
 
   // New market cards shown at the top of Latest and Hot tabs
   // New market cards only appear on the Latest tab, chronologically merged.
@@ -430,6 +438,14 @@ export function FeedClient() {
               {/* Inline Composer - shown on latest tab for authenticated users */}
               {authenticated && tab === 'latest' && (
                 <InlineComposer onPostCreated={handlePostCreated} />
+              )}
+
+              {/* Feed signal cards — latest tab only */}
+              {tab === 'latest' && (gainerCard ?? loserCard) && (
+                <div>
+                  {gainerCard && <TopGainerCard {...gainerCard} />}
+                  {loserCard && <TopLoserCard {...loserCard} />}
+                </div>
               )}
 
               <div>{renderContent()}</div>

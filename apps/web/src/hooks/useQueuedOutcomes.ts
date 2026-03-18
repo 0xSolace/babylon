@@ -1,0 +1,130 @@
+'use client';
+
+import { logger } from '@babylon/shared';
+import { usePrivy } from '@privy-io/react-auth';
+import { useEffect, useRef } from 'react';
+import type { OutcomeNotification } from '@/components/notifications/OutcomeNotificationPopup';
+import { useOutcomeNotification } from '@/components/providers/OutcomeNotificationProvider';
+import { useAuth } from '@/hooks/useAuth';
+
+interface MarketResolvedData {
+  marketId: string;
+  marketName: string;
+  outcome: 'win' | 'loss';
+  points: number;
+  agentName?: string;
+  deepLink: string;
+}
+
+interface QueuedNotification {
+  id: string;
+  type: string;
+  data?: Record<string, unknown>;
+}
+
+interface NotificationsApiResponse {
+  notifications: QueuedNotification[];
+}
+
+function isMarketResolvedData(d: unknown): d is MarketResolvedData {
+  if (typeof d !== 'object' || d === null) return false;
+  const rec = d as Record<string, unknown>;
+  return (
+    typeof rec.marketId === 'string' &&
+    typeof rec.marketName === 'string' &&
+    (rec.outcome === 'win' || rec.outcome === 'loss') &&
+    typeof rec.points === 'number' &&
+    typeof rec.deepLink === 'string'
+  );
+}
+
+/**
+ * On mount (after authentication), fetches any undelivered `market_resolved`
+ * notifications from the server and shows them via the outcome notification
+ * provider. Marks them as read once delivered.
+ *
+ * Runs once per authenticated session — repeated mounts are no-ops via
+ * `deliveredRef`. Failures are silent (notifications are supplementary).
+ */
+export function useQueuedOutcomes(): void {
+  const { authenticated, user } = useAuth();
+  const { getAccessToken } = usePrivy();
+  const { showOutcome, showBatchOutcomes } = useOutcomeNotification();
+  const deliveredRef = useRef(false);
+
+  useEffect(() => {
+    if (!authenticated || !user || deliveredRef.current) return;
+
+    // Guard immediately — before any async work — to handle Strict Mode double-invoke
+    deliveredRef.current = true;
+
+    const deliver = async () => {
+      let accessToken: string | null = null;
+      try {
+        accessToken = await getAccessToken();
+      } catch {
+        return;
+      }
+      if (!accessToken) return;
+
+      let body: NotificationsApiResponse;
+      try {
+        const res = await fetch(
+          '/api/notifications?type=market_resolved&unreadOnly=true&limit=20',
+          { headers: { Authorization: `Bearer ${accessToken}` } }
+        );
+        if (!res.ok) return;
+        body = (await res.json()) as NotificationsApiResponse;
+      } catch (err) {
+        logger.warn(
+          'Failed to fetch queued outcome notifications',
+          { error: err },
+          'useQueuedOutcomes'
+        );
+        return;
+      }
+
+      const resolved = body.notifications.filter(
+        (n): n is QueuedNotification & { data: MarketResolvedData } =>
+          n.type === 'market_resolved' && isMarketResolvedData(n.data)
+      );
+
+      if (resolved.length === 0) return;
+
+      const outcomes: Omit<OutcomeNotification, 'id'>[] = resolved.map((n) => ({
+        marketId: n.data.marketId,
+        marketName: n.data.marketName,
+        outcome: n.data.outcome,
+        points: n.data.points,
+        agentName: n.data.agentName,
+        deepLink: n.data.deepLink,
+      }));
+
+      if (outcomes.length === 1) {
+        showOutcome(outcomes[0]!);
+      } else {
+        showBatchOutcomes(outcomes);
+      }
+
+      // Mark as read — fire-and-forget, failure is non-critical
+      void fetch('/api/notifications', {
+        method: 'PATCH',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          notificationIds: resolved.map((n) => n.id),
+        }),
+      }).catch((err) => {
+        logger.warn(
+          'Failed to mark outcome notifications as read',
+          { error: err },
+          'useQueuedOutcomes'
+        );
+      });
+    };
+
+    void deliver();
+  }, [authenticated, user, getAccessToken, showOutcome, showBatchOutcomes]);
+}

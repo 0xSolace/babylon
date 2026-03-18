@@ -13,6 +13,8 @@ import {
   OutcomeNotificationPopup,
 } from '@/components/notifications/OutcomeNotificationPopup';
 import { StackedSummaryPopup } from '@/components/notifications/StackedSummaryPopup';
+import { useMarketOutcomeListener } from '@/hooks/useMarketOutcomeListener';
+import { useQueuedOutcomes } from '@/hooks/useQueuedOutcomes';
 
 interface OutcomeNotificationContextValue {
   /** Show a single win/loss outcome notification pop-up */
@@ -36,6 +38,16 @@ export function useOutcomeNotification(): OutcomeNotificationContextValue {
 
 function makeId(): string {
   return `outcome-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+/**
+ * Mounts SSE listener + queued notification delivery inside the provider tree,
+ * so both hooks have access to the outcome notification context.
+ */
+function OutcomeNotificationListeners() {
+  useMarketOutcomeListener();
+  useQueuedOutcomes();
+  return null;
 }
 
 /**
@@ -119,6 +131,7 @@ export function OutcomeNotificationProvider({
   return (
     <OutcomeNotificationContext.Provider value={value}>
       {children}
+      <OutcomeNotificationListeners />
       <OutcomeNotificationPopup
         notification={current}
         onDismiss={handleDismiss}
