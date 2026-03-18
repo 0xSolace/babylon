@@ -2,7 +2,7 @@ import { logger } from '@babylon/shared';
 import { extractPrivyApiDiagnostics } from './error-diagnostics';
 import { getPrivyOfflineConfig } from './offline-config';
 import { getPrivyNodeClient } from './privy-node';
-import { buildSponsoredSolanaTransactionIdempotencyKey } from './solana-idempotency';
+import { buildSolanaTransactionIdempotencyKey } from './solana-idempotency';
 
 function resolveSolanaCaip2(): string {
   const cluster = process.env.SOLANA_REGISTRY_CLUSTER ?? 'mainnet-beta';
@@ -20,7 +20,7 @@ function resolveSolanaCaip2(): string {
   }
 }
 
-export async function sendSponsoredSolanaTransaction({
+export async function sendSolanaTransaction({
   walletId,
   transaction,
 }: {
@@ -30,7 +30,7 @@ export async function sendSponsoredSolanaTransaction({
   const privy = getPrivyNodeClient();
   const offlineConfig = getPrivyOfflineConfig();
   const caip2 = resolveSolanaCaip2();
-  const idempotencyKey = buildSponsoredSolanaTransactionIdempotencyKey({
+  const idempotencyKey = buildSolanaTransactionIdempotencyKey({
     walletId,
     transaction,
     caip2,
@@ -43,7 +43,6 @@ export async function sendSponsoredSolanaTransaction({
       .signAndSendTransaction(walletId, {
         caip2,
         transaction,
-        sponsor: true,
         authorization_context: {
           authorization_private_keys: [offlineConfig.authorizationPrivateKey],
         },
@@ -57,16 +56,16 @@ export async function sendSponsoredSolanaTransaction({
     };
   } catch (error) {
     logger.error(
-      'Failed to submit sponsored Solana transaction via Privy',
+      'Failed to submit Solana transaction via Privy',
       {
         walletId,
         ...extractPrivyApiDiagnostics(error),
       },
-      'sendSponsoredSolanaTransaction'
+      'sendSolanaTransaction'
     );
 
     throw error instanceof Error
       ? error
-      : new Error('Failed to submit sponsored Solana transaction');
+      : new Error('Failed to submit Solana transaction');
   }
 }

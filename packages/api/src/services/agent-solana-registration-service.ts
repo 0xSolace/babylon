@@ -2,7 +2,9 @@ import {
   assertSolanaRegistryConfigured,
   buildAgentSolanaRegistrationFile,
   deriveDeterministicAgentSolanaAsset,
+  formatLamportsAsSol,
   getAgentSolanaRegistration,
+  getSolanaWalletBalanceLamports,
   prepareAgentSolanaRegistrationTransaction,
 } from '@babylon/agents/solana-registry';
 import { and, balanceTransactions, db, eq, sql, users } from '@babylon/db';
@@ -15,7 +17,7 @@ import {
   POINTS,
 } from '@babylon/shared';
 import { DistributedLockService } from './distributed-lock-service';
-import { sendSponsoredSolanaTransaction } from './privy/solana-send-transaction';
+import { sendSolanaTransaction } from './privy/solana-send-transaction';
 import { ensureSolanaWalletReady } from './privy/solana-wallet-provisioning';
 
 export interface AgentSolanaRegistrationStatus {
@@ -25,6 +27,12 @@ export interface AgentSolanaRegistrationStatus {
   txHash: string | null;
   walletAddress: string | null;
   walletReady: boolean;
+  walletBalanceLamports: string | null;
+  walletBalanceSol: string | null;
+  minimumBalanceLamports: string;
+  minimumBalanceSol: string;
+  hasEnoughBalance: boolean;
+  canRegister: boolean;
   cost: number;
 }
 
@@ -74,6 +82,51 @@ const AGENT_SOLANA_SELECT = {
   solanaMetadataUri: users.solanaMetadataUri,
   solanaRegistrationTxHash: users.solanaRegistrationTxHash,
 } as const;
+
+const MINIMUM_SOLANA_REGISTRATION_BALANCE_LAMPORTS = 10_000_000n;
+const MINIMUM_SOLANA_REGISTRATION_BALANCE_SOL = formatLamportsAsSol(
+  MINIMUM_SOLANA_REGISTRATION_BALANCE_LAMPORTS
+);
+
+function isSolanaRegistrationEnabled(): boolean {
+  return process.env.SOLANA_REGISTRY_ENABLED === 'true';
+}
+
+function isPersistedSolanaWalletReady(agent: AgentSolanaRecord): boolean {
+  return (
+    agent.solanaOfflineWalletReady &&
+    agent.solanaWalletAddress !== null &&
+    agent.privySolanaWalletId !== null
+  );
+}
+
+async function resolveAgentSolanaWallet(agent: AgentSolanaRecord): Promise<{
+  privyWalletId: string;
+  walletAddress: string;
+} | null> {
+  if (!agent.privyId) {
+    return null;
+  }
+
+  if (isPersistedSolanaWalletReady(agent)) {
+    return {
+      privyWalletId: agent.privySolanaWalletId!,
+      walletAddress: agent.solanaWalletAddress!,
+    };
+  }
+
+  if (!isSolanaRegistrationEnabled()) {
+    return null;
+  }
+
+  const wallet = await ensureSolanaWalletReady({ privyId: agent.privyId });
+  await persistSolanaWalletState(agent.id, wallet);
+
+  return {
+    privyWalletId: wallet.privyWalletId,
+    walletAddress: wallet.walletAddress,
+  };
+}
 
 async function getAgentForOwner(
   ownerUserId: string,
@@ -270,6 +323,14 @@ export async function getAgentSolanaRegistrationStatus({
   agentUserId: string;
 }): Promise<AgentSolanaRegistrationStatus> {
   const agent = await getAgentForOwner(ownerUserId, agentUserId);
+  const wallet = await resolveAgentSolanaWallet(agent);
+  const walletBalanceLamports =
+    wallet && isSolanaRegistrationEnabled()
+      ? await getSolanaWalletBalanceLamports(wallet.walletAddress)
+      : null;
+  const hasEnoughBalance =
+    walletBalanceLamports !== null &&
+    walletBalanceLamports >= MINIMUM_SOLANA_REGISTRATION_BALANCE_LAMPORTS;
 
   return {
     isRegistered:
@@ -277,11 +338,23 @@ export async function getAgentSolanaRegistrationStatus({
     assetId: agent.solanaRegistryAssetId,
     metadataUri: agent.solanaMetadataUri,
     txHash: agent.solanaRegistrationTxHash,
-    walletAddress: agent.solanaWalletAddress,
-    walletReady:
-      agent.solanaOfflineWalletReady &&
-      agent.solanaWalletAddress !== null &&
-      agent.privySolanaWalletId !== null,
+    walletAddress: wallet?.walletAddress ?? agent.solanaWalletAddress,
+    walletReady: wallet !== null,
+    walletBalanceLamports:
+      walletBalanceLamports !== null ? walletBalanceLamports.toString() : null,
+    walletBalanceSol:
+      walletBalanceLamports !== null
+        ? formatLamportsAsSol(walletBalanceLamports)
+        : null,
+    minimumBalanceLamports:
+      MINIMUM_SOLANA_REGISTRATION_BALANCE_LAMPORTS.toString(),
+    minimumBalanceSol: MINIMUM_SOLANA_REGISTRATION_BALANCE_SOL,
+    hasEnoughBalance,
+    canRegister:
+      isSolanaRegistrationEnabled() &&
+      !agent.solanaRegistered &&
+      wallet !== null &&
+      hasEnoughBalance,
     cost: POINTS.ONCHAIN_REGISTRATION,
   };
 }
@@ -295,6 +368,7 @@ export async function registerAgentOnSolanaForOwner({
 }): Promise<AgentSolanaRegistrationResult> {
   const agent = await getAgentForOwner(ownerUserId, agentUserId);
   return withAgentSolanaRegistrationLock(agentUserId, async () => {
+    const cost = POINTS.ONCHAIN_REGISTRATION;
     let costCharged = false;
     let wallet: {
       privyWalletId: string;
@@ -372,13 +446,29 @@ export async function registerAgentOnSolanaForOwner({
       );
     }
 
-    const cost = POINTS.ONCHAIN_REGISTRATION;
-    await deductRegistrationCost(ownerUserId, agentUserId, cost);
-    costCharged = true;
-
     try {
-      wallet = await ensureSolanaWalletReady({ privyId: agent.privyId });
-      await persistSolanaWalletState(agentUserId, wallet);
+      wallet = await resolveAgentSolanaWallet(agent);
+      if (!wallet) {
+        throw new BusinessLogicError(
+          'Agent wallet identity is not ready yet. Try again after the agent wallet has been provisioned.',
+          'AGENT_IDENTITY_NOT_READY'
+        );
+      }
+
+      const walletBalanceLamports = await getSolanaWalletBalanceLamports(
+        wallet.walletAddress
+      );
+      if (
+        walletBalanceLamports < MINIMUM_SOLANA_REGISTRATION_BALANCE_LAMPORTS
+      ) {
+        throw new BusinessLogicError(
+          `Fund the agent wallet with at least ${MINIMUM_SOLANA_REGISTRATION_BALANCE_SOL} SOL before registering. Current balance: ${formatLamportsAsSol(walletBalanceLamports)} SOL.`,
+          'AGENT_SOLANA_WALLET_NOT_FUNDED'
+        );
+      }
+
+      await deductRegistrationCost(ownerUserId, agentUserId, cost);
+      costCharged = true;
 
       const registrationFile = buildAgentSolanaRegistrationFile({
         name: agent.displayName || agent.username || agentUserId,
@@ -431,7 +521,7 @@ export async function registerAgentOnSolanaForOwner({
         };
       }
 
-      const tx = await sendSponsoredSolanaTransaction({
+      const tx = await sendSolanaTransaction({
         walletId: wallet.privyWalletId,
         transaction: prepared.transaction,
       });

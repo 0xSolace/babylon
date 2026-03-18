@@ -1,5 +1,11 @@
 import { createHash } from 'node:crypto';
-import { Keypair, PublicKey, Transaction } from '@solana/web3.js';
+import {
+  Connection,
+  Keypair,
+  LAMPORTS_PER_SOL,
+  PublicKey,
+  Transaction,
+} from '@solana/web3.js';
 import {
   IPFSClient,
   type PreparedTransaction,
@@ -86,6 +92,10 @@ function createSolanaRegistrySdk(
     signer: config.signer,
     ipfsClient: createSolanaRegistryIpfsClient(),
   });
+}
+
+function createSolanaRegistryConnection(): Connection {
+  return new Connection(resolveSolanaRegistryRpcUrl(), 'confirmed');
 }
 
 export function buildAgentSolanaRegistrationFile({
@@ -210,4 +220,23 @@ export async function getAgentSolanaRegistration(
 ): Promise<Awaited<ReturnType<SolanaSDK['getAgent']>>> {
   const sdk = createSolanaRegistrySdk();
   return sdk.getAgent(new PublicKey(assetId));
+}
+
+export async function getSolanaWalletBalanceLamports(
+  walletAddress: string
+): Promise<bigint> {
+  const connection = createSolanaRegistryConnection();
+  const balance = await connection.getBalance(new PublicKey(walletAddress));
+  return BigInt(balance);
+}
+
+export function formatLamportsAsSol(lamports: bigint): string {
+  const divisor = BigInt(LAMPORTS_PER_SOL);
+  const whole = lamports / divisor;
+  const fractional = (lamports % divisor).toString().padStart(9, '0');
+  const trimmedFractional = fractional.replace(/0+$/, '');
+
+  return trimmedFractional.length > 0
+    ? `${whole}.${trimmedFractional}`
+    : whole.toString();
 }

@@ -2,8 +2,9 @@ import { beforeEach, describe, expect, it, mock } from 'bun:test';
 
 const mockGetAgentSolanaRegistration = mock();
 const mockPrepareAgentSolanaRegistrationTransaction = mock();
+const mockGetSolanaWalletBalanceLamports = mock();
 const mockEnsureSolanaWalletReady = mock();
-const mockSendSponsoredSolanaTransaction = mock();
+const mockSendSolanaTransaction = mock();
 const mockAssertSolanaRegistryConfigured = mock();
 const mockAcquireLock = mock();
 const mockReleaseLock = mock();
@@ -41,7 +42,18 @@ mock.module('@babylon/agents/solana-registry', () => ({
   deriveDeterministicAgentSolanaAsset: () => ({
     publicKey: { toBase58: () => 'asset-deterministic' },
   }),
+  formatLamportsAsSol: (lamports: bigint) => {
+    const divisor = 1_000_000_000n;
+    const whole = lamports / divisor;
+    const fractional = (lamports % divisor).toString().padStart(9, '0');
+    const trimmedFractional = fractional.replace(/0+$/, '');
+
+    return trimmedFractional.length > 0
+      ? `${whole}.${trimmedFractional}`
+      : whole.toString();
+  },
   getAgentSolanaRegistration: mockGetAgentSolanaRegistration,
+  getSolanaWalletBalanceLamports: mockGetSolanaWalletBalanceLamports,
   prepareAgentSolanaRegistrationTransaction:
     mockPrepareAgentSolanaRegistrationTransaction,
 }));
@@ -106,7 +118,7 @@ mock.module('./privy/solana-wallet-provisioning', () => ({
 }));
 
 mock.module('./privy/solana-send-transaction', () => ({
-  sendSponsoredSolanaTransaction: mockSendSponsoredSolanaTransaction,
+  sendSolanaTransaction: mockSendSolanaTransaction,
 }));
 
 mock.module('./distributed-lock-service', () => ({
@@ -145,8 +157,9 @@ describe('agent-solana-registration-service', () => {
     capturedRegistrationFileInput = null;
     mockGetAgentSolanaRegistration.mockReset();
     mockPrepareAgentSolanaRegistrationTransaction.mockReset();
+    mockGetSolanaWalletBalanceLamports.mockReset();
     mockEnsureSolanaWalletReady.mockReset();
-    mockSendSponsoredSolanaTransaction.mockReset();
+    mockSendSolanaTransaction.mockReset();
     mockAssertSolanaRegistryConfigured.mockReset();
     mockAcquireLock.mockReset();
     mockReleaseLock.mockReset();
@@ -167,7 +180,8 @@ describe('agent-solana-registration-service', () => {
       metadataCid: 'cid-123',
       transaction: 'base64-tx',
     });
-    mockSendSponsoredSolanaTransaction.mockResolvedValue({
+    mockGetSolanaWalletBalanceLamports.mockResolvedValue(20_000_000n);
+    mockSendSolanaTransaction.mockResolvedValue({
       hash: 'tx-123',
       transactionId: 'tx-123',
       caip2: 'solana:mainnet',
@@ -183,6 +197,12 @@ describe('agent-solana-registration-service', () => {
     });
 
     expect(status.isRegistered).toBe(false);
+    expect(status.walletReady).toBe(true);
+    expect(status.walletAddress).toBe('SoLWallet111');
+    expect(status.walletBalanceSol).toBe('0.02');
+    expect(status.minimumBalanceSol).toBe('0.01');
+    expect(status.hasEnoughBalance).toBe(true);
+    expect(status.canRegister).toBe(true);
     expect(status.cost).toBe(100);
   });
 
@@ -202,7 +222,10 @@ describe('agent-solana-registration-service', () => {
     expect(result.alreadyRegistered).toBe(false);
     expect(result.assetId).toBe('asset-123');
     expect(result.txHash).toBe('tx-123');
-    expect(mockSendSponsoredSolanaTransaction).toHaveBeenCalledWith({
+    expect(mockGetSolanaWalletBalanceLamports).toHaveBeenCalledWith(
+      'SoLWallet111'
+    );
+    expect(mockSendSolanaTransaction).toHaveBeenCalledWith({
       walletId: 'solana-wallet-1',
       transaction: 'base64-tx',
     });
@@ -216,6 +239,22 @@ describe('agent-solana-registration-service', () => {
         (insert) => insert.description === 'Agent Solana registration'
       )
     ).toBe(true);
+  });
+
+  it('blocks registration until the agent wallet is funded with enough SOL', async () => {
+    selectResults.push([BASE_AGENT]);
+    mockGetAgentSolanaRegistration.mockResolvedValueOnce(null);
+    mockGetSolanaWalletBalanceLamports.mockResolvedValueOnce(5_000_000n);
+
+    await expect(
+      registerAgentOnSolanaForOwner({
+        ownerUserId: 'owner-1',
+        agentUserId: 'agent-1',
+      })
+    ).rejects.toThrow('Fund the agent wallet with at least 0.01 SOL');
+
+    expect(capturedInserts).toHaveLength(0);
+    expect(mockSendSolanaTransaction).not.toHaveBeenCalled();
   });
 
   it('returns already registered without charging when DB is already in sync', async () => {
@@ -237,7 +276,7 @@ describe('agent-solana-registration-service', () => {
     expect(result.alreadyRegistered).toBe(true);
     expect(result.cost).toBe(0);
     expect(capturedInserts).toHaveLength(0);
-    expect(mockSendSponsoredSolanaTransaction).not.toHaveBeenCalled();
+    expect(mockSendSolanaTransaction).not.toHaveBeenCalled();
   });
 
   it('surfaces missing Solana configuration cleanly', async () => {
@@ -308,7 +347,7 @@ describe('agent-solana-registration-service', () => {
     ).rejects.toThrow('already in progress');
 
     expect(capturedInserts).toHaveLength(0);
-    expect(mockSendSponsoredSolanaTransaction).not.toHaveBeenCalled();
+    expect(mockSendSolanaTransaction).not.toHaveBeenCalled();
   });
 
   it('reconciles on-chain success after a post-send failure without refunding', async () => {
@@ -319,7 +358,7 @@ describe('agent-solana-registration-service', () => {
       .mockResolvedValueOnce(null)
       .mockResolvedValueOnce(null)
       .mockResolvedValueOnce({ owner: 'onchain' });
-    mockSendSponsoredSolanaTransaction.mockRejectedValueOnce(
+    mockSendSolanaTransaction.mockRejectedValueOnce(
       new Error('Privy returned an unexpected response')
     );
 
