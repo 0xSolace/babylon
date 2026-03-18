@@ -17,6 +17,7 @@ import { FarcasterMiniAppProvider } from './FarcasterMiniAppProvider';
 import { GameGuideProvider } from './GameGuideProvider';
 import { GamePlaybackManager } from './GamePlaybackManager';
 import { OnboardingProvider } from './OnboardingProvider';
+import { OutcomeNotificationProvider } from './OutcomeNotificationProvider';
 import { PostHogProvider } from './PostHogProvider';
 import { ReferralCaptureProvider } from './ReferralCaptureProvider';
 import { SolanaMobileProvider } from './SolanaMobileProvider';
@@ -314,13 +315,15 @@ export function Providers({ children }: { children: React.ReactNode }) {
                             <SessionHeartbeatProvider>
                               {/* Game guide provider for first-time tutorial */}
                               <GameGuideProvider>
-                                <WidgetRefreshProvider>
-                                  {mounted ? (
-                                    <Fragment>{children}</Fragment>
-                                  ) : (
-                                    <div className="min-h-dvh bg-sidebar md:min-h-screen" />
-                                  )}
-                                </WidgetRefreshProvider>
+                                <OutcomeNotificationProvider>
+                                  <WidgetRefreshProvider>
+                                    {mounted ? (
+                                      <Fragment>{children}</Fragment>
+                                    ) : (
+                                      <div className="min-h-dvh bg-sidebar md:min-h-screen" />
+                                    )}
+                                  </WidgetRefreshProvider>
+                                </OutcomeNotificationProvider>
                               </GameGuideProvider>
                             </SessionHeartbeatProvider>
                           </OnboardingProvider>
