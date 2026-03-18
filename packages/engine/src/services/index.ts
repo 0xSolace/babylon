@@ -80,6 +80,7 @@ export * from './article-image-service';
 export * from './article-persistence';
 export * from './article-rate-limiter';
 export * from './event-generation-helpers';
+export * from './narrative-beat-registry';
 export * from './narrative-state-service';
 export * from './npc-anti-repetition-service';
 export * from './npc-character-config';
