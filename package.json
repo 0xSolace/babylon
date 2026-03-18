@@ -79,6 +79,7 @@
     "ruler:apply:dry": "ruler apply --dry-run --verbose",
     "ruler:revert": "ruler revert",
     "audit:offline-wallet-readiness": "bun run scripts/audit-offline-wallet-readiness.ts",
+    "solana:debug:agent-registration": "bun run scripts/debug-solana-agent-registration.ts",
     "privy:setup:offline-controls": "bun run scripts/setup-privy-offline-controls.ts",
     "privy:setup:solana-policy": "bun run scripts/create-privy-solana-policy.ts",
     "seed:nft-snapshot:csv": "bun run scripts/seed-nft-snapshot-csv.ts",
