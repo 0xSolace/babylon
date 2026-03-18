@@ -6,28 +6,7 @@ import { useOutcomeNotification } from '@/components/providers/OutcomeNotificati
 import { useAuth } from '@/hooks/useAuth';
 import type { Channel } from '@/hooks/useSSE';
 import { useSSEChannel } from '@/hooks/useSSE';
-
-interface MarketResolvedData {
-  type: string;
-  marketId: string;
-  marketName: string;
-  outcome: 'win' | 'loss';
-  points: number;
-  agentName?: string;
-  deepLink: string;
-}
-
-function isMarketResolvedData(data: unknown): data is MarketResolvedData {
-  if (typeof data !== 'object' || data === null) return false;
-  const d = data as Record<string, unknown>;
-  return (
-    typeof d.marketId === 'string' &&
-    typeof d.marketName === 'string' &&
-    (d.outcome === 'win' || d.outcome === 'loss') &&
-    typeof d.points === 'number' &&
-    typeof d.deepLink === 'string'
-  );
-}
+import { isMarketResolvedData } from '@/types/notifications';
 
 /**
  * Subscribes to the `notifications:{userId}` SSE channel and forwards

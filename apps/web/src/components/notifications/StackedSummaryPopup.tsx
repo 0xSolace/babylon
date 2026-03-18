@@ -174,7 +174,11 @@ export function StackedSummaryPopup({
                     onClick={() => {
                       clearTimer();
                       onViewResult(n);
-                      router.push(n.deepLink);
+                      // Guard against open redirects — deep links must be relative paths
+                      const safeLink = n.deepLink.startsWith('/')
+                        ? n.deepLink
+                        : '/';
+                      router.push(safeLink);
                     }}
                     className="group flex w-full items-center gap-3 rounded-lg py-2 text-left transition-colors hover:bg-muted/30"
                   >

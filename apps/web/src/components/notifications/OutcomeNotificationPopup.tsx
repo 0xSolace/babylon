@@ -354,7 +354,11 @@ export function OutcomeNotificationPopup({
     if (!notification) return;
     clearTimer();
     onDismiss();
-    router.push(notification.deepLink);
+    // Guard against open redirects — deep links must be relative paths
+    const safeLink = notification.deepLink.startsWith('/')
+      ? notification.deepLink
+      : '/';
+    router.push(safeLink);
   }, [notification, onDismiss, clearTimer, router]);
 
   const isWin = notification?.outcome === 'win';

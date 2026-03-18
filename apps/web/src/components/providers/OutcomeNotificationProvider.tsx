@@ -37,7 +37,7 @@ export function useOutcomeNotification(): OutcomeNotificationContextValue {
 }
 
 function makeId(): string {
-  return `outcome-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  return crypto.randomUUID();
 }
 
 /**

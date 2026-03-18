@@ -6,15 +6,10 @@ import { useEffect, useRef } from 'react';
 import type { OutcomeNotification } from '@/components/notifications/OutcomeNotificationPopup';
 import { useOutcomeNotification } from '@/components/providers/OutcomeNotificationProvider';
 import { useAuth } from '@/hooks/useAuth';
-
-interface MarketResolvedData {
-  marketId: string;
-  marketName: string;
-  outcome: 'win' | 'loss';
-  points: number;
-  agentName?: string;
-  deepLink: string;
-}
+import {
+  isMarketResolvedData,
+  type MarketResolvedData,
+} from '@/types/notifications';
 
 interface QueuedNotification {
   id: string;
@@ -24,18 +19,6 @@ interface QueuedNotification {
 
 interface NotificationsApiResponse {
   notifications: QueuedNotification[];
-}
-
-function isMarketResolvedData(d: unknown): d is MarketResolvedData {
-  if (typeof d !== 'object' || d === null) return false;
-  const rec = d as Record<string, unknown>;
-  return (
-    typeof rec.marketId === 'string' &&
-    typeof rec.marketName === 'string' &&
-    (rec.outcome === 'win' || rec.outcome === 'loss') &&
-    typeof rec.points === 'number' &&
-    typeof rec.deepLink === 'string'
-  );
 }
 
 /**
