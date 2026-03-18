@@ -28,6 +28,7 @@ const WidgetSidebar = dynamic(
 interface Notification {
   id: string;
   type: string;
+  title: string;
   actorId: string | null;
   actor: {
     id: string;
@@ -41,6 +42,7 @@ interface Notification {
   groupId: string | null;
   inviteId: string | null;
   message: string;
+  data: Record<string, unknown> | null;
   read: boolean;
   createdAt: string;
 }
@@ -300,6 +302,21 @@ export default function NotificationsPage() {
   };
 
   const getNotificationLink = (notification: Notification) => {
+    if (
+      notification.type === 'market_resolved' &&
+      typeof notification.data?.deepLink === 'string'
+    ) {
+      return notification.data.deepLink;
+    }
+
+    if (
+      notification.type === 'hourly_summary' ||
+      notification.type === 'daily_summary' ||
+      notification.type === 'weekly_summary'
+    ) {
+      return '/notifications';
+    }
+
     // DM or group chat message - go to the specific chat if chatId is available
     if (notification.chatId) {
       return `/chats?chat=${notification.chatId}`;
@@ -448,7 +465,16 @@ export default function NotificationsPage() {
                   )}
 
                   {/* Regular Notifications */}
-                  {notifications.map((notification) => (
+                  {notifications.map((notification) => {
+                    const isSystemStyle =
+                      !notification.actor ||
+                      notification.type === 'system' ||
+                      notification.type === 'market_resolved' ||
+                      notification.type === 'hourly_summary' ||
+                      notification.type === 'daily_summary' ||
+                      notification.type === 'weekly_summary';
+
+                    return (
                     <Link
                       key={notification.id}
                       href={getNotificationLink(notification)}
@@ -469,7 +495,7 @@ export default function NotificationsPage() {
                         )}
 
                         {/* Actor Avatar */}
-                        {notification.actor ? (
+                        {notification.actor && !isSystemStyle ? (
                           <Avatar
                             id={notification.actor.id}
                             name={notification.actor.displayName}
@@ -492,7 +518,7 @@ export default function NotificationsPage() {
                         <div className="min-w-0 flex-1">
                           <div className="flex items-start gap-3">
                             <div className="flex-1">
-                              {notification.type === 'system' ? (
+                              {isSystemStyle ? (
                                 <p className="text-foreground leading-relaxed">
                                   {notification.message}{' '}
                                   <time className="text-muted-foreground/70 text-xs">
@@ -523,7 +549,8 @@ export default function NotificationsPage() {
                         </div>
                       </div>
                     </Link>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>

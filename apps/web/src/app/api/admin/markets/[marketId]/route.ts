@@ -41,11 +41,12 @@ import {
 import { logger } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';
+import { notifyResolvedMarketOwners } from '@/lib/services/market-resolution-notifications';
 
 /**
  * Build PredictionMarketService for admin operations
  */
-const buildCancelService = (marketId: string) =>
+const buildPredictionService = (marketId: string) =>
   new PredictionMarketService({
     db: new PredictionDbAdapter(),
     wallet: {
@@ -216,31 +217,17 @@ export const POST = withErrorHandling(
 
       // Use transaction to ensure atomic updates of market, positions, questions, and timeframedMarkets
       const resolvedAt = new Date();
+      const service = buildPredictionService(marketId);
+
+      await service.resolve({
+        marketId,
+        winningSide: resolution ? 'yes' : 'no',
+        resolvedAt,
+        resolutionDescription:
+          reason || `Resolved by admin as ${resolution ? 'YES' : 'NO'}`,
+      });
+
       await withTransaction(async (tx) => {
-        // Update the market table
-        await tx
-          .update(markets)
-          .set({
-            resolved: true,
-            resolution,
-            resolutionDescription:
-              reason || `Resolved by admin as ${resolution ? 'YES' : 'NO'}`,
-            updatedAt: resolvedAt,
-          })
-          .where(eq(markets.id, marketId));
-
-        // Update positions
-        await tx
-          .update(positions)
-          .set({
-            status: 'resolved',
-            outcome: resolution,
-            resolvedAt,
-            updatedAt: resolvedAt,
-          })
-          .where(eq(positions.marketId, marketId));
-
-        // Update the question table (market.id matches question.id)
         await tx
           .update(questions)
           .set({
@@ -264,6 +251,8 @@ export const POST = withErrorHandling(
           .where(eq(timeframedMarkets.questionId, marketId));
       });
 
+      const notificationsCreated = await notifyResolvedMarketOwners(marketId);
+
       await logAdminModify({
         adminId: admin.userId,
         resourceType: 'market',
@@ -280,6 +269,7 @@ export const POST = withErrorHandling(
         action: 'resolve',
         resolution,
         marketId,
+        notificationsCreated,
       });
     }
 
@@ -328,7 +318,7 @@ export const POST = withErrorHandling(
 
     if (action === 'void') {
       // Use PredictionMarketService.cancel() to properly refund all positions
-      const service = buildCancelService(marketId);
+      const service = buildPredictionService(marketId);
       const result = await service.cancel({
         marketId,
         reason: reason || 'Market voided by admin',
