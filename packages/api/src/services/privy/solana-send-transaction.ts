@@ -5,7 +5,7 @@ import { getPrivyNodeClient } from './privy-node';
 import { buildSolanaTransactionIdempotencyKey } from './solana-idempotency';
 
 function resolveSolanaCaip2(): string {
-  const cluster = process.env.SOLANA_REGISTRY_CLUSTER ?? 'mainnet-beta';
+  const cluster = process.env.SOLANA_CLUSTER ?? 'mainnet-beta';
 
   switch (cluster) {
     case 'devnet':
