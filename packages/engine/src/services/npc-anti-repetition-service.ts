@@ -33,6 +33,38 @@
 
 import { logger } from '@babylon/shared';
 
+/**
+ * Minimal Redis interface needed by this service.
+ * Allows the API layer to inject its Redis client without
+ * introducing a direct @babylon/api dependency in the engine package.
+ */
+export interface AntiRepetitionRedisClient {
+  get(key: string): Promise<string | null>;
+  set(
+    key: string,
+    value: string,
+    expiryMode: 'EX',
+    time: number
+  ): Promise<unknown>;
+}
+
+let redisClient: AntiRepetitionRedisClient | null = null;
+
+/**
+ * Inject a Redis client for persistence.
+ * Should be called once at startup from the npc-tick route or similar.
+ * Safe to skip — service degrades gracefully to in-memory-only mode.
+ */
+export function setAntiRepetitionRedis(
+  client: AntiRepetitionRedisClient
+): void {
+  redisClient = client;
+}
+
+/** Redis key prefix and TTL */
+const REDIS_KEY_PREFIX = 'npc:history:';
+const REDIS_TTL_S = 24 * 60 * 60; // 24 hours
+
 /** Maximum posts to track per character */
 const HISTORY_SIZE = 20;
 
@@ -201,6 +233,68 @@ class NPCAntiRepetitionService {
   }
 
   /**
+   * Persist this actor's opening history to Redis.
+   * No-ops when Redis is unavailable.
+   */
+  async persistToRedis(actorId: string): Promise<void> {
+    if (!redisClient) return;
+    const history = this.characterHistories.get(actorId);
+    if (!history) return;
+    try {
+      const payload = JSON.stringify({
+        openings: history.posts.map((p) => p.opening),
+        lastUpdated: history.lastUpdated.toISOString(),
+      });
+      await redisClient.set(
+        `${REDIS_KEY_PREFIX}${actorId}`,
+        payload,
+        'EX',
+        REDIS_TTL_S
+      );
+    } catch (err) {
+      logger.debug(
+        'Anti-repetition Redis persist failed (non-fatal)',
+        { actorId, err },
+        'AntiRepetition'
+      );
+    }
+  }
+
+  /**
+   * Restore this actor's opening history from Redis into the in-memory cache.
+   * Called lazily when an actorId is not present in characterHistories.
+   * No-ops when Redis is unavailable or no data is stored.
+   */
+  async restoreFromRedis(actorId: string): Promise<void> {
+    if (!redisClient) return;
+    if (this.characterHistories.has(actorId)) return;
+    try {
+      const raw = await redisClient.get(`${REDIS_KEY_PREFIX}${actorId}`);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as {
+        openings: string[];
+        lastUpdated: string;
+      };
+      const history: CharacterHistory = {
+        posts: parsed.openings.map((opening) => ({
+          content: opening,
+          timestamp: new Date(parsed.lastUpdated),
+          opening,
+          words: new Set<string>(),
+        })),
+        lastUpdated: new Date(parsed.lastUpdated),
+      };
+      this.characterHistories.set(actorId, history);
+    } catch (err) {
+      logger.debug(
+        'Anti-repetition Redis restore failed (non-fatal)',
+        { actorId, err },
+        'AntiRepetition'
+      );
+    }
+  }
+
+  /**
    * Add a post to the character's history
    */
   addPost(actorId: string, content: string): void {
@@ -229,12 +323,19 @@ class NPCAntiRepetitionService {
     if (!existing) {
       this.characterHistories.set(actorId, history);
     }
+
+    // Persist asynchronously — fire and forget, no-op if Redis unavailable
+    void this.persistToRedis(actorId);
   }
 
   /**
    * Analyze if a proposed post is too repetitive for this character
    */
-  analyzePost(actorId: string, proposedContent: string): RepetitionAnalysis {
+  async analyzePost(
+    actorId: string,
+    proposedContent: string
+  ): Promise<RepetitionAnalysis> {
+    await this.restoreFromRedis(actorId);
     const history = this.characterHistories.get(actorId);
 
     if (!history || history.posts.length < MIN_POSTS_FOR_ANALYSIS) {
@@ -328,7 +429,8 @@ class NPCAntiRepetitionService {
   /**
    * Get avoided openings for a character (to include in prompt)
    */
-  getAvoidedOpenings(actorId: string): string[] {
+  async getAvoidedOpenings(actorId: string): Promise<string[]> {
+    await this.restoreFromRedis(actorId);
     const history = this.characterHistories.get(actorId);
     if (!history || history.posts.length < MIN_POSTS_FOR_ANALYSIS) {
       return [];
@@ -393,8 +495,8 @@ class NPCAntiRepetitionService {
   /**
    * Log repetition metrics for monitoring
    */
-  logMetrics(actorId: string, content: string): void {
-    const analysis = this.analyzePost(actorId, content);
+  async logMetrics(actorId: string, content: string): Promise<void> {
+    const analysis = await this.analyzePost(actorId, content);
 
     if (analysis.isRepetitive) {
       logger.warn(
@@ -495,8 +597,10 @@ export function cleanupStaleNpcHistories(): number {
 /**
  * Export for direct access to avoided patterns
  */
-export function getAvoidedPatternsContext(actorId: string): string {
-  const openings = antiRepetitionService.getAvoidedOpenings(actorId);
+export async function getAvoidedPatternsContext(
+  actorId: string
+): Promise<string> {
+  const openings = await antiRepetitionService.getAvoidedOpenings(actorId);
   const vocabulary = antiRepetitionService.getAvoidedVocabulary(actorId);
 
   if (openings.length === 0 && vocabulary.length === 0) {

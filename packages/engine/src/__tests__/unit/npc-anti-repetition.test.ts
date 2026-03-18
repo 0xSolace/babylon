@@ -16,11 +16,11 @@ describe('NPC Anti-Repetition Service', () => {
   });
 
   describe('addPost and analyzePost', () => {
-    it('should not flag repetition with few posts', () => {
+    it('should not flag repetition with few posts', async () => {
       antiRepetitionService.addPost('actor1', 'Hello world');
       antiRepetitionService.addPost('actor1', 'Hello again');
 
-      const analysis = antiRepetitionService.analyzePost(
+      const analysis = await antiRepetitionService.analyzePost(
         'actor1',
         'Hello test'
       );
@@ -30,7 +30,7 @@ describe('NPC Anti-Repetition Service', () => {
       expect(analysis.repetitionScore).toBe(0);
     });
 
-    it('should detect overused opening phrases', () => {
+    it('should detect overused opening phrases', async () => {
       // Add posts all starting with same first 3 words (opening = first 3 words)
       // 40% threshold means if 2 out of 4 posts have same opening, it's flagged
       antiRepetitionService.addPost('actor1', 'I am the greatest artist');
@@ -39,7 +39,7 @@ describe('NPC Anti-Repetition Service', () => {
       antiRepetitionService.addPost('actor1', 'Another unique post');
 
       // The proposed post also starts with "I am the" (same first 3 words)
-      const analysis = antiRepetitionService.analyzePost(
+      const analysis = await antiRepetitionService.analyzePost(
         'actor1',
         'I am the future king'
       );
@@ -49,14 +49,14 @@ describe('NPC Anti-Repetition Service', () => {
       expect(analysis.repetitionScore).toBeGreaterThan(0);
     });
 
-    it('should detect overused vocabulary', () => {
+    it('should detect overused vocabulary', async () => {
       // Add posts all using "cryptocurrency"
       antiRepetitionService.addPost('actor1', 'Cryptocurrency is the future');
       antiRepetitionService.addPost('actor1', 'Bitcoin cryptocurrency gains');
       antiRepetitionService.addPost('actor1', 'More cryptocurrency news today');
       antiRepetitionService.addPost('actor1', 'Cryptocurrency markets moving');
 
-      const analysis = antiRepetitionService.analyzePost(
+      const analysis = await antiRepetitionService.analyzePost(
         'actor1',
         'Cryptocurrency update incoming'
       );
@@ -64,7 +64,7 @@ describe('NPC Anti-Repetition Service', () => {
       expect(analysis.overusedWords).toContain('cryptocurrency');
     });
 
-    it('should track separate histories per actor', () => {
+    it('should track separate histories per actor', async () => {
       // Actor 1: 2/4 posts with same first 3 words (50% > 40% threshold)
       antiRepetitionService.addPost('actor1', 'I am the greatest artist');
       antiRepetitionService.addPost('actor1', 'I am the best ever');
@@ -78,11 +78,11 @@ describe('NPC Anti-Repetition Service', () => {
       antiRepetitionService.addPost('actor2', 'Yet another post');
 
       // "I am the" should be flagged for actor1 but not actor2
-      const analysis1 = antiRepetitionService.analyzePost(
+      const analysis1 = await antiRepetitionService.analyzePost(
         'actor1',
         'I am the next one'
       );
-      const analysis2 = antiRepetitionService.analyzePost(
+      const analysis2 = await antiRepetitionService.analyzePost(
         'actor2',
         'I am the next one'
       );
@@ -93,29 +93,30 @@ describe('NPC Anti-Repetition Service', () => {
   });
 
   describe('getAvoidedOpenings', () => {
-    it('should return empty for new actors', () => {
-      const openings = antiRepetitionService.getAvoidedOpenings('new-actor');
+    it('should return empty for new actors', async () => {
+      const openings =
+        await antiRepetitionService.getAvoidedOpenings('new-actor');
       expect(openings).toEqual([]);
     });
 
-    it('should return overused openings', () => {
+    it('should return overused openings', async () => {
       for (let i = 0; i < 5; i++) {
         antiRepetitionService.addPost('actor1', `Starting phrase is ${i}`);
       }
 
-      const openings = antiRepetitionService.getAvoidedOpenings('actor1');
+      const openings = await antiRepetitionService.getAvoidedOpenings('actor1');
       expect(openings.length).toBeGreaterThan(0);
       expect(openings[0]).toContain('starting');
     });
   });
 
   describe('getAvoidedPatternsContext', () => {
-    it('should return empty string for new actors', () => {
-      const context = getAvoidedPatternsContext('new-actor');
+    it('should return empty string for new actors', async () => {
+      const context = await getAvoidedPatternsContext('new-actor');
       expect(context).toBe('');
     });
 
-    it('should return formatted context for actors with repetition issues', () => {
+    it('should return formatted context for actors with repetition issues', async () => {
       for (let i = 0; i < 5; i++) {
         antiRepetitionService.addPost(
           'actor1',
@@ -123,7 +124,7 @@ describe('NPC Anti-Repetition Service', () => {
         );
       }
 
-      const context = getAvoidedPatternsContext('actor1');
+      const context = await getAvoidedPatternsContext('actor1');
 
       expect(context).toContain('AVOID THESE');
       expect(context).toContain('Do NOT start with');
