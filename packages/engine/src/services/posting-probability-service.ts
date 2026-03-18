@@ -52,6 +52,12 @@ export interface PostingContext {
     /** Stock tickers affected by this event */
     affectedStocks?: string[];
   }>;
+  /**
+   * Arc-phase posting multipliers per actor ID.
+   * Crisis-phase insiders post more urgently; optional so callers without
+   * arc data still work correctly (treated as 1.0 for all actors).
+   */
+  arcPhaseMultipliers?: Map<string, number>;
 }
 
 /**
@@ -218,8 +224,9 @@ export function calculatePostingProbability(
     }
   }
 
-  // Base probability - equal for all
-  let prob = NPC_POSTING_CONFIG.baseProbability;
+  // Base probability - scaled by arc phase for crisis/escalation actors
+  const arcBoost = context.arcPhaseMultipliers?.get(actor.id) ?? 1.0;
+  let prob = NPC_POSTING_CONFIG.baseProbability * arcBoost;
 
   // Mention boost - keep this for player engagement reactivity
   if (context.recentlyMentionedActorIds.includes(actor.id)) {

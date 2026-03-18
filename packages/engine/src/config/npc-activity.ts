@@ -206,6 +206,32 @@ export const NPC_POSTING_CONFIG = {
    * @env NPC_AFFILIATION_BOOST
    */
   affiliationBoost: envNumber('NPC_AFFILIATION_BOOST', 1.2),
+
+  /**
+   * Posting probability multiplier for arc-insider/deceiver actors during crisis phase.
+   * Crisis is the peak narrative tension — relevant NPCs should post more urgently.
+   *
+   * @default 1.5
+   * @env NPC_ARC_CRISIS_MULTIPLIER
+   */
+  arcCrisisMultiplier: envNumber('NPC_ARC_CRISIS_MULTIPLIER', 1.5),
+
+  /**
+   * Posting probability multiplier for arc-relevant actors during escalation phase.
+   *
+   * @default 1.2
+   * @env NPC_ARC_ESCALATION_MULTIPLIER
+   */
+  arcEscalationMultiplier: envNumber('NPC_ARC_ESCALATION_MULTIPLIER', 1.2),
+
+  /**
+   * Posting probability multiplier for arc-relevant actors during revelation phase.
+   * Slightly higher than escalation — revelations reward attentive players.
+   *
+   * @default 1.35
+   * @env NPC_ARC_REVELATION_MULTIPLIER
+   */
+  arcRevelationMultiplier: envNumber('NPC_ARC_REVELATION_MULTIPLIER', 1.35),
 } as const;
 
 // =============================================================================
