@@ -9,12 +9,17 @@ import {
   getRateLimitStatus as apiGetRateLimitStatus,
   notifyGroupChatInvite as apiNotifyGroupChatInvite,
   resetRateLimit as apiResetRateLimit,
+  getRedisClient,
 } from '@babylon/api';
 import {
+  type AntiRepetitionRedisClient,
   type DistributedLockProvider,
+  type NarrativeBeatRedisClient,
   type RateLimitProvider,
+  setAntiRepetitionRedis,
   setBroadcastToChannel,
   setDistributedLockProvider,
+  setNarrativeBeatRedis,
   setNotifyGroupChatInvite,
   setRateLimitProvider,
 } from '@babylon/engine';
@@ -57,6 +62,26 @@ export function ensureEngineServices(): void {
 
   // Note: keep the provider assignment explicit for type safety
   setDistributedLockProvider(provider);
+
+  // Wire Redis client into engine services that need it.
+  // The engine package cannot import @babylon/api directly (dependency direction),
+  // so we inject the concrete Redis client here using injectable interfaces.
+  const rawRedis = getRedisClient();
+  if (rawRedis) {
+    const antiRepetitionRedis: AntiRepetitionRedisClient = {
+      get: (key) => rawRedis.get(key),
+      set: (key, value, expiryMode, time) =>
+        rawRedis.set(key, value, expiryMode, time),
+    };
+    setAntiRepetitionRedis(antiRepetitionRedis);
+
+    const narrativeBeatRedis: NarrativeBeatRedisClient = {
+      sadd: (key, ...members) => rawRedis.sadd(key, ...members),
+      smembers: (key) => rawRedis.smembers(key),
+      expire: (key, seconds) => rawRedis.expire(key, seconds),
+    };
+    setNarrativeBeatRedis(narrativeBeatRedis);
+  }
 
   const rateLimitProvider: RateLimitProvider = {
     checkRateLimit: (userId, config) => apiCheckRateLimit(userId, config),
