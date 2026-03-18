@@ -29,7 +29,14 @@ import {
   verifyCronAuth,
   withErrorHandling,
 } from '@babylon/api';
-import { db, eq, games } from '@babylon/db';
+import {
+  arcStates,
+  db,
+  eq,
+  games,
+  inArray,
+  questionArcPlans,
+} from '@babylon/db';
 import {
   ActorSocialActions,
   BabylonLLMClient,
@@ -41,6 +48,7 @@ import {
   isActiveHour,
   NPC_DIVERSITY_CONFIG,
   NPC_ENGAGEMENT_CONFIG,
+  NPC_POSTING_CONFIG,
   NPC_TICK_CONFIG,
   NPCInvestmentManager,
   npcMemoryService,
@@ -287,12 +295,74 @@ export const POST = withErrorHandling(async function POST(_req: NextRequest) {
       }),
     ]);
 
+    // Build arc-phase posting multipliers so crisis/escalation/revelation actors
+    // post more urgently. Two indexed queries cached for this tick duration.
+    // Graceful degradation: on any error, all actors default to 1.0x.
+    const arcPhaseMultipliers = await (async (): Promise<
+      Map<string, number>
+    > => {
+      try {
+        const activeArcStates = await db
+          .select({
+            questionId: arcStates.questionId,
+            currentState: arcStates.currentState,
+          })
+          .from(arcStates)
+          .where(
+            inArray(arcStates.currentState, [
+              'crisis',
+              'escalation',
+              'revelation',
+            ])
+          );
+        if (activeArcStates.length === 0) return new Map();
+
+        const activeQuestionIds = activeArcStates.map((s) => s.questionId);
+        const arcPlans = await db
+          .select({
+            questionId: questionArcPlans.questionId,
+            insiderActorIds: questionArcPlans.insiderActorIds,
+          })
+          .from(questionArcPlans)
+          .where(inArray(questionArcPlans.questionId, activeQuestionIds));
+
+        const stateByQuestion = new Map(
+          activeArcStates.map((s) => [s.questionId, s.currentState])
+        );
+
+        const multiplierMap = new Map<string, number>();
+        for (const plan of arcPlans) {
+          const state = stateByQuestion.get(plan.questionId);
+          const multiplier =
+            state === 'crisis'
+              ? NPC_POSTING_CONFIG.arcCrisisMultiplier
+              : state === 'revelation'
+                ? NPC_POSTING_CONFIG.arcRevelationMultiplier
+                : NPC_POSTING_CONFIG.arcEscalationMultiplier;
+          for (const actorId of plan.insiderActorIds ?? []) {
+            // Take the highest multiplier if an actor appears in multiple arcs
+            const existing = multiplierMap.get(actorId) ?? 1.0;
+            if (multiplier > existing) multiplierMap.set(actorId, multiplier);
+          }
+        }
+        return multiplierMap;
+      } catch (error) {
+        logger.warn(
+          'Failed to build arc phase multipliers, defaulting to 1.0x',
+          { error: error instanceof Error ? error.message : String(error) },
+          'NPCTick'
+        );
+        return new Map();
+      }
+    })();
+
     const postingContext: PostingContext = {
       currentHour,
       currentTime: now,
       recentlyMentionedActorIds,
       activeEventQuestionIds: activeEventsData.activeEventQuestionIds,
       activeEvents: activeEventsData.activeEvents,
+      arcPhaseMultipliers,
     };
 
     if (recentlyMentionedActorIds.length > 0) {
