@@ -32,7 +32,8 @@ export interface ContentCheckResult {
 /**
  * Check if user input is safe
  *
- * Validates user-provided content for safety, spam, profanity, and injection attempts.
+ * Performs basic safety checks on user-provided content, including empty/length checks,
+ * simple spam detection, and prompt-injection detection.
  *
  * @param content - User input string to validate
  * @returns ContentCheckResult indicating safety status and reason if unsafe
