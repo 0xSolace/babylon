@@ -1,16 +1,13 @@
-import {
-  broadcastToChannel,
-  createNotification,
-} from '@babylon/api';
+import { broadcastToChannel, createNotification } from '@babylon/api';
 import {
   and,
   db,
   eq,
   isNotNull,
+  type JsonValue,
   markets,
   positions,
   users,
-  type JsonValue,
 } from '@babylon/db';
 import { logger, type MarketResolvedNotificationData } from '@babylon/shared';
 
@@ -116,8 +113,7 @@ export async function notifyResolvedMarketOwners(
   const groupedOutcomes = groupResolvedMarketOutcomes(
     rows.map((row) => ({
       holderId: row.holderId,
-      ownerUserId:
-        row.isAgent && row.managedBy ? row.managedBy : row.holderId,
+      ownerUserId: row.isAgent && row.managedBy ? row.managedBy : row.holderId,
       marketId: row.marketId,
       marketName: row.marketName,
       points: Number(row.pnl),

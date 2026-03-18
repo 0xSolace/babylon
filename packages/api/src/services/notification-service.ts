@@ -263,7 +263,11 @@ export async function createNotification(
     if (inserted.length === 0) {
       logger.debug(
         'Skipping duplicate notification via dedupe key',
-        { userId: params.userId, type: params.type, dedupeKey: params.dedupeKey },
+        {
+          userId: params.userId,
+          type: params.type,
+          dedupeKey: params.dedupeKey,
+        },
         'NotificationService'
       );
       return { created: false };

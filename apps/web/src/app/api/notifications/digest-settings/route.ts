@@ -1,8 +1,4 @@
-import {
-  authenticate,
-  successResponse,
-  withErrorHandling,
-} from '@babylon/api';
+import { authenticate, successResponse, withErrorHandling } from '@babylon/api';
 import { db, eq, users } from '@babylon/db';
 import {
   DEFAULT_NOTIFICATION_DIGEST_SETTINGS,
@@ -24,7 +20,8 @@ function toSettings(row: {
 }): NotificationDigestSettings {
   return {
     digestEnabled: row.notificationDigestEnabled,
-    frequency: row.notificationDigestFrequency as NotificationDigestSettings['frequency'],
+    frequency:
+      row.notificationDigestFrequency as NotificationDigestSettings['frequency'],
     deliveryChannel:
       row.notificationDigestDeliveryChannel as NotificationDigestSettings['deliveryChannel'],
   };
@@ -37,7 +34,8 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     .select({
       notificationDigestEnabled: users.notificationDigestEnabled,
       notificationDigestFrequency: users.notificationDigestFrequency,
-      notificationDigestDeliveryChannel: users.notificationDigestDeliveryChannel,
+      notificationDigestDeliveryChannel:
+        users.notificationDigestDeliveryChannel,
     })
     .from(users)
     .where(eq(users.id, authUser.userId))
@@ -66,7 +64,8 @@ export const PUT = withErrorHandling(async (request: NextRequest) => {
     .returning({
       notificationDigestEnabled: users.notificationDigestEnabled,
       notificationDigestFrequency: users.notificationDigestFrequency,
-      notificationDigestDeliveryChannel: users.notificationDigestDeliveryChannel,
+      notificationDigestDeliveryChannel:
+        users.notificationDigestDeliveryChannel,
     });
 
   return successResponse({

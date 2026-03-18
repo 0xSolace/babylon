@@ -115,15 +115,17 @@ export async function buildDigestForUser(params: {
         isNotNull(positions.resolvedAt),
         gte(positions.resolvedAt, windowStart),
         lt(positions.resolvedAt, params.now),
-        or(eq(positions.userId, params.userId), eq(users.managedBy, params.userId))
+        or(
+          eq(positions.userId, params.userId),
+          eq(users.managedBy, params.userId)
+        )
       )
     );
 
   const groupedOutcomes = groupResolvedMarketOutcomes(
     rows.map((row) => ({
       holderId: row.holderId,
-      ownerUserId:
-        row.isAgent && row.managedBy ? row.managedBy : row.holderId,
+      ownerUserId: row.isAgent && row.managedBy ? row.managedBy : row.holderId,
       marketId: row.marketId,
       marketName: row.marketName,
       points: Number(row.pnl),
@@ -136,12 +138,12 @@ export async function buildDigestForUser(params: {
   }
 
   const netPointsChange = Number(
-    groupedOutcomes
-      .reduce((sum, entry) => sum + entry.points, 0)
-      .toFixed(2)
+    groupedOutcomes.reduce((sum, entry) => sum + entry.points, 0).toFixed(2)
   );
   const marketsWon = groupedOutcomes.filter((entry) => entry.points > 0).length;
-  const marketsLost = groupedOutcomes.filter((entry) => entry.points < 0).length;
+  const marketsLost = groupedOutcomes.filter(
+    (entry) => entry.points < 0
+  ).length;
 
   const topAgent = groupedOutcomes
     .filter((entry) => entry.agentName)
@@ -151,8 +153,9 @@ export async function buildDigestForUser(params: {
       return acc;
     }, new Map());
 
-  const topPerformingAgent = Array.from(topAgent.entries())
-    .sort((left, right) => right[1] - left[1])[0];
+  const topPerformingAgent = Array.from(topAgent.entries()).sort(
+    (left, right) => right[1] - left[1]
+  )[0];
 
   const summary = [
     `${formatSignedPoints(netPointsChange)} points net`,
