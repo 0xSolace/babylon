@@ -23,6 +23,9 @@ import type { ReactNode } from 'react';
  * ```
  */
 
+/** Re-exported for use at the app root (see Providers.tsx). */
+export const TooltipProvider = TooltipPrimitive.Provider;
+
 interface TooltipProps {
   children: ReactNode;
   content: ReactNode;
@@ -30,8 +33,6 @@ interface TooltipProps {
   side?: 'top' | 'bottom' | 'left' | 'right';
   /** Alignment along the side */
   align?: 'start' | 'center' | 'end';
-  /** Delay before showing in ms (default: 200) */
-  delayDuration?: number;
   /** Additional class for the content container */
   className?: string;
   /** Whether to show an arrow pointer */
@@ -77,22 +78,19 @@ export function Tooltip({
   content,
   side,
   align,
-  delayDuration = 200,
   className,
   arrow,
 }: TooltipProps) {
   return (
-    <TooltipPrimitive.Provider delayDuration={delayDuration}>
-      <TooltipPrimitive.Root>
-        <TooltipPrimitive.Trigger asChild>{children}</TooltipPrimitive.Trigger>
-        <TooltipContent
-          content={content}
-          side={side}
-          align={align}
-          className={className}
-          arrow={arrow}
-        />
-      </TooltipPrimitive.Root>
-    </TooltipPrimitive.Provider>
+    <TooltipPrimitive.Root>
+      <TooltipPrimitive.Trigger asChild>{children}</TooltipPrimitive.Trigger>
+      <TooltipContent
+        content={content}
+        side={side}
+        align={align}
+        className={className}
+        arrow={arrow}
+      />
+    </TooltipPrimitive.Root>
   );
 }
