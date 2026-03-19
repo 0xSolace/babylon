@@ -3,10 +3,10 @@
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
-import { AchievementsTab } from '@/components/rewards/rewards/achievements-tab';
-import { ChallengesTab } from '@/components/rewards/rewards/challenges-tab';
-import { OverviewTab } from '@/components/rewards/rewards/overview-tab';
-import { TabNavigation } from '@/components/rewards/rewards/tab-navigation';
+import { AchievementsTab } from '@/components/rewards/v2/achievements-tab';
+import { ChallengesTab } from '@/components/rewards/v2/challenges-tab';
+import { OverviewTab } from '@/components/rewards/v2/overview-tab';
+import { TabNavigation } from '@/components/rewards/v2/tab-navigation';
 import { PageContainer } from '@/components/shared/PageContainer';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -93,11 +93,14 @@ export default function RewardsPage() {
         <TabNavigation activeTab={activeTab} onTabChange={setActiveTab} />
 
         <div className="p-4">
-          {activeTab === 'overview' && <OverviewTab onClaim={handleClaim} />}
-          {activeTab === 'achievements' && <AchievementsTab />}
-          {activeTab === 'challenges' && (
-            <ChallengesTab onViewAchievements={handleViewAchievements} />
+          {activeTab === 'overview' && (
+            <OverviewTab
+              onClaim={handleClaim}
+              onViewAchievements={handleViewAchievements}
+            />
           )}
+          {activeTab === 'achievements' && <AchievementsTab />}
+          {activeTab === 'challenges' && <ChallengesTab />}
         </div>
       </div>
     </PageContainer>

@@ -31,9 +31,9 @@ export function AchievementCard({
     : 0;
 
   const tierColor: Record<AchievementTier, string> = {
-    Bronze: 'bg-orange-100 text-orange-600',
-    Silver: 'bg-gray-100 text-gray-600',
-    Gold: 'bg-yellow-100 text-yellow-600',
+    Bronze: 'bg-orange-500/10 text-orange-600 dark:text-orange-400',
+    Silver: 'bg-muted text-muted-foreground',
+    Gold: 'bg-yellow-500/10 text-yellow-600 dark:text-yellow-400',
   };
 
   return (
@@ -41,8 +41,8 @@ export function AchievementCard({
       className={cn(
         'rounded-xl border p-4',
         status === 'completed'
-          ? 'border-emerald-200 bg-emerald-50'
-          : 'border-gray-200 bg-white'
+          ? 'border-emerald-500/30 bg-emerald-500/10'
+          : 'border-border bg-card'
       )}
     >
       <div className="flex items-start justify-between">
@@ -54,7 +54,7 @@ export function AchievementCard({
           ) : status === 'in-progress' ? (
             <div className="mt-0.5 flex h-3 w-3 rounded-full bg-amber-400" />
           ) : (
-            <div className="mt-0.5 flex h-6 w-6 items-center justify-center rounded-md text-gray-400">
+            <div className="mt-0.5 flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground">
               <Lock className="h-4 w-4" />
             </div>
           )}
@@ -64,7 +64,7 @@ export function AchievementCard({
                 className={cn(
                   'font-semibold',
                   status === 'completed'
-                    ? 'text-emerald-600'
+                    ? 'text-emerald-600 dark:text-emerald-400'
                     : status === 'locked'
                       ? 'text-muted-foreground'
                       : 'text-foreground'
@@ -90,10 +90,10 @@ export function AchievementCard({
           className={cn(
             'rounded-md px-2.5 py-1 font-semibold text-sm',
             status === 'completed'
-              ? 'bg-white text-emerald-500'
+              ? 'bg-card text-emerald-500'
               : status === 'locked'
                 ? 'text-muted-foreground'
-                : 'bg-emerald-50 text-emerald-500'
+                : 'bg-emerald-500/10 text-emerald-500'
           )}
         >
           +{points}

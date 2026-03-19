@@ -31,8 +31,8 @@ export function ChallengeCard({
       className={cn(
         'rounded-xl border p-4',
         isCompleted
-          ? 'border-emerald-200 bg-emerald-50'
-          : 'border-gray-200 bg-white'
+          ? 'border-emerald-500/30 bg-emerald-500/10'
+          : 'border-border bg-card'
       )}
     >
       <div className="flex items-start justify-between">
@@ -42,8 +42,8 @@ export function ChallengeCard({
               <Check className="h-4 w-4 text-white" />
             </div>
           ) : variant === 'daily' ? (
-            <div className="mt-0.5 flex h-6 w-6 items-center justify-center rounded-full border-2 border-gray-300">
-              <Clock className="h-3.5 w-3.5 text-gray-400" />
+            <div className="mt-0.5 flex h-6 w-6 items-center justify-center rounded-full border-2 border-muted-foreground/30">
+              <Clock className="h-3.5 w-3.5 text-muted-foreground" />
             </div>
           ) : (
             <div className="mt-0.5 flex h-6 w-6 items-center justify-center rounded-md border-2 border-indigo-400 text-indigo-400">
@@ -54,7 +54,9 @@ export function ChallengeCard({
             <h3
               className={cn(
                 'font-semibold',
-                isCompleted ? 'text-emerald-600' : 'text-foreground'
+                isCompleted
+                  ? 'text-emerald-600 dark:text-emerald-400'
+                  : 'text-foreground'
               )}
             >
               {title}
@@ -70,8 +72,8 @@ export function ChallengeCard({
           className={cn(
             'rounded-md px-2.5 py-1 font-semibold text-sm',
             isCompleted
-              ? 'bg-white text-emerald-500'
-              : 'bg-emerald-50 text-emerald-500'
+              ? 'bg-card text-emerald-500'
+              : 'bg-emerald-500/10 text-emerald-500'
           )}
         >
           +{points}

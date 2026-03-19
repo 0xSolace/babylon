@@ -27,7 +27,7 @@ export function DailyRewardsCard({
   const progressPercent = (weeklyGoal.current / weeklyGoal.target) * 100;
 
   return (
-    <div className="rounded-2xl border border-gray-200 bg-white p-6">
+    <div className="rounded-2xl border border-border bg-card p-6">
       {/* Header */}
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-2">
@@ -39,14 +39,14 @@ export function DailyRewardsCard({
             </p>
           </div>
         </div>
-        <div className="flex flex-col items-center rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-2">
+        <div className="flex flex-col items-center rounded-lg border border-indigo-500/30 bg-indigo-500/10 px-4 py-2">
           <div className="flex items-center gap-1">
-            <span className="font-bold text-2xl text-indigo-600">
+            <span className="font-bold text-2xl text-indigo-600 dark:text-indigo-400">
               {dayStreak}
             </span>
             <Sparkles className="h-4 w-4 text-indigo-400" />
           </div>
-          <span className="font-medium text-indigo-500 text-xs uppercase tracking-wide">
+          <span className="font-medium text-indigo-500 dark:text-indigo-400 text-xs uppercase tracking-wide">
             Day Streak
           </span>
         </div>
@@ -94,7 +94,7 @@ export function DailyRewardsCard({
               {weeklyGoal.target}-day milestone
             </p>
           </div>
-          <span className="rounded-md border border-indigo-200 bg-indigo-50 px-2.5 py-1 font-medium text-indigo-600 text-sm">
+          <span className="rounded-md border border-indigo-500/30 bg-indigo-500/10 px-2.5 py-1 font-medium text-indigo-600 text-sm dark:text-indigo-400">
             {weeklyGoal.daysLeft} days left
           </span>
         </div>

@@ -40,7 +40,7 @@ export function AchievementsStats({
           <p className="font-bold text-2xl text-foreground">{pointsEarned}</p>
         </div>
       </div>
-      <div className="flex rounded-lg border border-gray-200 bg-white">
+      <div className="flex rounded-lg border border-border bg-card">
         {filters.map((filter) => (
           <button
             key={filter}
@@ -48,7 +48,7 @@ export function AchievementsStats({
             className={cn(
               'px-4 py-2 font-medium text-sm transition-colors',
               activeFilter === filter
-                ? 'bg-white text-foreground shadow-sm'
+                ? 'bg-card text-foreground shadow-sm'
                 : 'text-muted-foreground hover:text-foreground',
               filter === 'All' && 'rounded-l-lg',
               filter === 'Gold' && 'rounded-r-lg'

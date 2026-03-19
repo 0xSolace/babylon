@@ -139,12 +139,12 @@ export function OverviewTab({ onClaim }: OverviewTabProps) {
   if (loading) {
     return (
       <div className="space-y-8">
-        <div className="h-64 animate-pulse rounded-2xl border border-gray-200 bg-gray-50" />
+        <div className="h-64 animate-pulse rounded-2xl border border-border bg-muted" />
         <div className="space-y-3">
           {[1, 2, 3].map((i) => (
             <div
               key={i}
-              className="h-20 animate-pulse rounded-xl border border-gray-200 bg-gray-50"
+              className="h-20 animate-pulse rounded-xl border border-border bg-muted"
             />
           ))}
         </div>

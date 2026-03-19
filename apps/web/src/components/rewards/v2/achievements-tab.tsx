@@ -5,11 +5,8 @@ import { useAuth } from '@/hooks/useAuth';
 import { useSSEChannel } from '@/hooks/useSSE';
 import { useAuthStore } from '@/stores/authStore';
 import { AchievementCard } from './achievement-card';
-import { AchievementsStats } from './achievements-stats';
 
-type TierFilter = 'All' | 'Bronze' | 'Silver' | 'Gold';
-
-export interface AchievementFromApi {
+interface AchievementFromApi {
   id: string;
   name: string;
   description: string;
@@ -22,13 +19,13 @@ export interface AchievementFromApi {
   unlockedAt: string | null;
 }
 
-export function mapTier(tier: string): 'Bronze' | 'Silver' | 'Gold' {
+function mapTier(tier: string): 'Bronze' | 'Silver' | 'Gold' {
   if (tier === 'silver') return 'Silver';
   if (tier === 'gold') return 'Gold';
   return 'Bronze';
 }
 
-export function mapStatus(
+function mapStatus(
   a: AchievementFromApi
 ): 'completed' | 'in-progress' | 'locked' {
   if (a.unlocked) return 'completed';
@@ -36,12 +33,14 @@ export function mapStatus(
   return 'locked';
 }
 
+type TierFilter = 'All' | 'Bronze' | 'Silver' | 'Gold';
+
 export function AchievementsTab() {
   const { authenticated, getAccessToken } = useAuth();
   const { user } = useAuthStore();
   const [achievements, setAchievements] = useState<AchievementFromApi[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeFilter, setActiveFilter] = useState<TierFilter>('All');
+  const [filter, setFilter] = useState<TierFilter>('All');
 
   const fetchAchievements = useCallback(async () => {
     if (!authenticated) {
@@ -82,12 +81,15 @@ export function AchievementsTab() {
     authenticated && user?.id ? (`notifications:${user.id}` as const) : null;
   useSSEChannel(channel, handleSSE);
 
-  const filteredAchievements =
-    activeFilter === 'All'
-      ? achievements
-      : achievements.filter((a) => mapTier(a.tier) === activeFilter);
+  const filters: TierFilter[] = ['All', 'Bronze', 'Silver', 'Gold'];
 
-  const completedCount = achievements.filter((a) => a.unlocked).length;
+  const filteredAchievements =
+    filter === 'All'
+      ? achievements
+      : achievements.filter((a) => mapTier(a.tier) === filter);
+
+  const unlockedCount = achievements.filter((a) => a.unlocked).length;
+  const totalCount = achievements.length;
   const pointsEarned = achievements
     .filter((a) => a.unlocked)
     .reduce((sum, a) => sum + a.pointsReward, 0);
@@ -95,10 +97,10 @@ export function AchievementsTab() {
   if (loading) {
     return (
       <div className="space-y-3">
-        {[1, 2, 3, 4].map((i) => (
+        {[1, 2, 3, 4, 5].map((i) => (
           <div
             key={i}
-            className="h-20 animate-pulse rounded-xl border border-border bg-muted"
+            className="h-16 animate-pulse rounded-lg border border-border bg-muted"
           />
         ))}
       </div>
@@ -106,30 +108,58 @@ export function AchievementsTab() {
   }
 
   return (
-    <div className="space-y-6">
-      <AchievementsStats
-        unlockedCount={completedCount}
-        totalCount={achievements.length}
-        pointsEarned={pointsEarned}
-        activeFilter={activeFilter}
-        onFilterChange={setActiveFilter}
-      />
+    <div>
+      {/* Stats and Filter Row */}
+      <div className="mb-6 flex items-center justify-between">
+        <div className="flex items-center gap-6">
+          <div>
+            <p className="text-[10px] font-semibold tracking-wider text-muted-foreground">
+              UNLOCKED
+            </p>
+            <p className="text-lg font-bold">
+              <span className="text-foreground">{unlockedCount}</span>
+              <span className="text-muted-foreground">/{totalCount}</span>
+            </p>
+          </div>
+          <div className="h-8 w-px bg-border" />
+          <div>
+            <p className="text-[10px] font-semibold tracking-wider text-muted-foreground">
+              POINTS EARNED
+            </p>
+            <p className="text-lg font-bold text-foreground">{pointsEarned}</p>
+          </div>
+        </div>
 
+        <div className="flex rounded-lg border border-border bg-card p-1">
+          {filters.map((f) => (
+            <button
+              key={f}
+              onClick={() => setFilter(f)}
+              className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                filter === f
+                  ? 'bg-muted text-foreground'
+                  : 'text-muted-foreground hover:text-foreground'
+              }`}
+            >
+              {f}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Achievement Cards */}
       <div className="space-y-3">
-        {filteredAchievements.map((achievement) => (
+        {filteredAchievements.map((a) => (
           <AchievementCard
-            key={achievement.id}
-            title={achievement.name}
-            description={achievement.description}
-            points={achievement.pointsReward}
-            tier={mapTier(achievement.tier)}
-            status={mapStatus(achievement)}
+            key={a.id}
+            title={a.name}
+            description={a.description}
+            badge={mapTier(a.tier)}
+            points={a.pointsReward}
+            status={mapStatus(a)}
             progress={
-              !achievement.unlocked && achievement.threshold > 1
-                ? {
-                    current: achievement.progress,
-                    total: achievement.threshold,
-                  }
+              !a.unlocked && a.threshold > 1
+                ? { current: a.progress, total: a.threshold }
                 : undefined
             }
           />

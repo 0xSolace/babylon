@@ -1,14 +1,12 @@
 'use client';
 
 import { POINTS } from '@babylon/shared';
+import { Calendar, Clock } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useSSEChannel } from '@/hooks/useSSE';
 import { useAuthStore } from '@/stores/authStore';
-import { AchievementPreview } from './achievement-preview';
-import { BonusCard } from './bonus-card';
 import { ChallengeCard } from './challenge-card';
-import { ChallengeSection } from './challenge-section';
 
 interface ChallengeWithProgress {
   id: string;
@@ -37,16 +35,7 @@ interface ChallengesData {
   };
 }
 
-interface AchievementFromApi {
-  id: string;
-  unlocked: boolean;
-}
-
-interface ChallengesTabProps {
-  onViewAchievements: () => void;
-}
-
-export function formatCountdown(resetsAt: string): string {
+function formatCountdown(resetsAt: string): string {
   const diff = new Date(resetsAt).getTime() - Date.now();
   if (diff <= 0) return 'Resetting...';
   const hours = Math.floor(diff / (1000 * 60 * 60));
@@ -57,15 +46,45 @@ export function formatCountdown(resetsAt: string): string {
   return `${hours}h remaining`;
 }
 
-export function ChallengesTab({ onViewAchievements }: ChallengesTabProps) {
+function BonusTracker({
+  completed,
+  total,
+  bonus,
+}: {
+  completed: number;
+  total: number;
+  bonus: number;
+}) {
+  const label = total === 2 ? 'Complete both' : `Complete all ${total}`;
+
+  return (
+    <div className="flex items-center justify-between rounded-lg border border-border bg-card px-4 py-3">
+      <div className="flex items-center gap-2">
+        <div className="flex gap-1">
+          {Array.from({ length: total }).map((_, i) => (
+            <div
+              key={i}
+              className={`h-2 w-2 rounded-full ${
+                i < completed ? 'bg-[#5B5FC7]' : 'bg-muted-foreground/20'
+              }`}
+            />
+          ))}
+        </div>
+        <span className="text-sm text-muted-foreground">
+          {label} ({completed}/{total})
+        </span>
+      </div>
+      <span className="text-sm text-muted-foreground">+{bonus} bonus</span>
+    </div>
+  );
+}
+
+export function ChallengesTab() {
   const { authenticated, getAccessToken } = useAuth();
   const { user } = useAuthStore();
   const [challengesData, setChallengesData] = useState<ChallengesData | null>(
     null
   );
-  const [achievementPreviews, setAchievementPreviews] = useState<
-    { id: string; isCompleted: boolean }[]
-  >([]);
   const [loading, setLoading] = useState(true);
   const [countdown, setCountdown] = useState({ daily: '', weekly: '' });
 
@@ -80,29 +99,13 @@ export function ChallengesTab({ onViewAchievements }: ChallengesTabProps) {
       return;
     }
 
-    const [challengesRes, achievementsRes] = await Promise.all([
-      fetch('/api/challenges', {
-        headers: { Authorization: `Bearer ${token}` },
-      }),
-      fetch('/api/achievements', {
-        headers: { Authorization: `Bearer ${token}` },
-      }),
-    ]);
+    const res = await fetch('/api/challenges', {
+      headers: { Authorization: `Bearer ${token}` },
+    });
 
-    if (challengesRes.ok) {
-      const json = await challengesRes.json();
+    if (res.ok) {
+      const json = await res.json();
       setChallengesData(json);
-    }
-
-    if (achievementsRes.ok) {
-      const json = await achievementsRes.json();
-      const achievements: AchievementFromApi[] = json.achievements ?? [];
-      setAchievementPreviews(
-        achievements.slice(0, 4).map((a) => ({
-          id: a.id,
-          isCompleted: a.unlocked,
-        }))
-      );
     }
 
     setLoading(false);
@@ -112,7 +115,7 @@ export function ChallengesTab({ onViewAchievements }: ChallengesTabProps) {
     fetchData();
   }, [fetchData]);
 
-  // Re-fetch when SSE notifies of challenge/achievement completion
+  // Re-fetch on SSE events
   const handleSSE = useCallback(
     (data: Record<string, unknown>) => {
       const type = data.type as string;
@@ -151,7 +154,7 @@ export function ChallengesTab({ onViewAchievements }: ChallengesTabProps) {
         {[1, 2, 3, 4, 5].map((i) => (
           <div
             key={i}
-            className="h-20 animate-pulse rounded-xl border border-border bg-muted"
+            className="h-16 animate-pulse rounded-lg border border-border bg-muted"
           />
         ))}
       </div>
@@ -170,19 +173,28 @@ export function ChallengesTab({ onViewAchievements }: ChallengesTabProps) {
   return (
     <div className="space-y-8">
       {/* Daily Challenges */}
-      <div className="space-y-3">
-        <ChallengeSection
-          title="Daily Challenges"
-          timeRemaining={countdown.daily}
-          variant="daily"
-        >
+      <div>
+        <div className="mb-4 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Clock className="h-4 w-4 text-muted-foreground" />
+            <span className="text-sm font-semibold text-foreground">
+              Daily Challenges
+            </span>
+          </div>
+          <span className="text-xs text-muted-foreground">
+            {countdown.daily}
+          </span>
+        </div>
+
+        <div className="space-y-3">
           {challengesData.daily.challenges.map((c) => (
             <ChallengeCard
               key={c.id}
               title={c.name}
               description={c.description}
               points={c.pointsReward}
-              isCompleted={c.completed}
+              completed={c.completed}
+              variant="daily"
               progress={
                 !c.completed && c.threshold > 1
                   ? { current: c.progress, total: c.threshold }
@@ -190,49 +202,60 @@ export function ChallengesTab({ onViewAchievements }: ChallengesTabProps) {
               }
             />
           ))}
-        </ChallengeSection>
-        <BonusCard
-          completedCount={dailyCompleted}
-          totalCount={challengesData.daily.challenges.length}
-          bonusPoints={POINTS.CHALLENGE_DAILY_ALL_BONUS}
-        />
+          <BonusTracker
+            completed={dailyCompleted}
+            total={challengesData.daily.challenges.length}
+            bonus={POINTS.CHALLENGE_DAILY_ALL_BONUS}
+          />
+        </div>
       </div>
 
       {/* Weekly Challenges */}
-      <div className="space-y-3">
-        <ChallengeSection
-          title="Weekly Challenges"
-          timeRemaining={countdown.weekly}
-          variant="weekly"
-        >
+      <div>
+        <div className="mb-4 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Calendar className="h-4 w-4 text-muted-foreground" />
+            <span className="text-sm font-semibold text-foreground">
+              Weekly Challenges
+            </span>
+          </div>
+          <span className="text-xs text-muted-foreground">
+            {countdown.weekly}
+          </span>
+        </div>
+
+        <div className="space-y-3">
           {challengesData.weekly.challenges.map((c) => (
             <ChallengeCard
               key={c.id}
               title={c.name}
               description={c.description}
               points={c.pointsReward}
-              isCompleted={c.completed}
+              completed={c.completed}
+              variant="weekly"
               progress={
                 !c.completed && c.threshold > 1
                   ? { current: c.progress, total: c.threshold }
                   : undefined
               }
-              variant="weekly"
             />
           ))}
-        </ChallengeSection>
-        <BonusCard
-          completedCount={weeklyCompleted}
-          totalCount={challengesData.weekly.challenges.length}
-          bonusPoints={POINTS.CHALLENGE_WEEKLY_ALL_BONUS}
-        />
+          <BonusTracker
+            completed={weeklyCompleted}
+            total={challengesData.weekly.challenges.length}
+            bonus={POINTS.CHALLENGE_WEEKLY_ALL_BONUS}
+          />
+        </div>
       </div>
 
-      {/* Achievements Preview */}
-      <AchievementPreview
-        achievements={achievementPreviews}
-        onViewAll={onViewAchievements}
-      />
+      {/* Footer Note */}
+      <div className="rounded-lg border border-border bg-card p-4">
+        <p className="text-sm text-muted-foreground">
+          Challenges rotate automatically — daily at midnight UTC and weekly on
+          Monday. All challenges require play actions like trading, using agents,
+          or chatting.
+        </p>
+      </div>
     </div>
   );
 }

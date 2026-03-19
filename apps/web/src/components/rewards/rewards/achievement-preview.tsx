@@ -39,8 +39,8 @@ export function AchievementPreview({
             key={achievement.id}
             className={`flex aspect-square items-center justify-center rounded-xl ${
               index === 0 && achievement.isCompleted
-                ? 'bg-amber-100'
-                : 'bg-gray-100'
+                ? 'bg-amber-500/10'
+                : 'bg-muted'
             }`}
           >
             {achievement.isCompleted ? (
@@ -48,7 +48,7 @@ export function AchievementPreview({
                 <Check className="h-6 w-6 text-white" />
               </div>
             ) : (
-              <Star className="h-8 w-8 text-gray-300" />
+              <Star className="h-8 w-8 text-muted-foreground/40" />
             )}
           </div>
         ))}

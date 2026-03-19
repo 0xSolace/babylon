@@ -1,7 +1,5 @@
 'use client';
 
-import { cn } from '@babylon/shared/utils';
-
 type Tab = 'overview' | 'achievements' | 'challenges';
 
 interface TabNavigationProps {
@@ -17,19 +15,21 @@ export function TabNavigation({ activeTab, onTabChange }: TabNavigationProps) {
   ];
 
   return (
-    <div className="flex border-border border-b">
+    <div className="flex justify-center border-b border-border">
       {tabs.map((tab) => (
         <button
           key={tab.id}
           onClick={() => onTabChange(tab.id)}
-          className={cn(
-            'flex-1 py-4 text-center font-medium text-base transition-colors',
+          className={`relative px-8 py-3 text-sm font-medium transition-colors ${
             activeTab === tab.id
-              ? 'border-indigo-500 border-b-2 text-foreground'
+              ? 'text-foreground'
               : 'text-muted-foreground hover:text-foreground'
-          )}
+          }`}
         >
           {tab.label}
+          {activeTab === tab.id && (
+            <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-[#5B5FC7]" />
+          )}
         </button>
       ))}
     </div>
