@@ -69,3 +69,19 @@ export async function sendSolanaTransaction({
       : new Error('Failed to submit Solana transaction');
   }
 }
+
+export function isSolanaBlockhashNotFoundError(error: unknown): boolean {
+  const diagnostics = extractPrivyApiDiagnostics(error);
+  const combinedMessage = [
+    diagnostics.errorMessage,
+    diagnostics.providerMessage,
+  ]
+    .filter((value): value is string => typeof value === 'string')
+    .join(' ')
+    .toLowerCase();
+
+  return (
+    diagnostics.providerCode === 'transaction_broadcast_failure' &&
+    combinedMessage.includes('blockhash not found')
+  );
+}
