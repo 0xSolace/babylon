@@ -1,5 +1,11 @@
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
+import {
+  getLegacyCanonicalOrigin,
+  getLegacyCanonicalTargetForPath,
+  isLegacyCanonicalHostname,
+  isWaitlistHostname,
+} from '@/lib/host-routing';
 
 const ALLOWED_PATHS = new Set([
   '/',
@@ -10,24 +16,6 @@ const ALLOWED_PATHS = new Set([
   '/sw.js',
   '/.well-known/assetlinks.json',
 ]);
-
-const DEFAULT_WAITLIST_HOSTS = [
-  'babylon.market',
-  'www.babylon.market',
-  'staging.babylon.market',
-  'www.staging.babylon.market',
-] as const;
-
-function getWaitlistHosts(): Set<string> {
-  const raw = process.env.WAITLIST_HOSTNAMES;
-  if (!raw || raw.trim().length === 0) return new Set(DEFAULT_WAITLIST_HOSTS);
-  return new Set(
-    raw
-      .split(',')
-      .map((h) => h.trim().toLowerCase())
-      .filter((h) => h.length > 0)
-  );
-}
 
 const APP_PUBLIC_EXACT_ALLOWLIST = new Set([
   '/',
@@ -257,6 +245,19 @@ export function middleware(request: NextRequest) {
   const origin = request.headers.get('origin');
   const hostname = getHostname(request);
 
+  if (isLegacyCanonicalHostname(hostname)) {
+    const target = getLegacyCanonicalTargetForPath(pathname);
+    const redirectOrigin = getLegacyCanonicalOrigin(
+      hostname,
+      request.nextUrl.protocol,
+      target
+    );
+
+    if (redirectOrigin) {
+      return NextResponse.redirect(`${redirectOrigin}${pathname}${search}`);
+    }
+  }
+
   // Skip CORS handling for agent routes - handled in vercel.json with wildcard
   // Agent routes use Bearer token auth (not cookies), so they can use wildcard CORS
   if (isAgentApiRequest(pathname)) {
@@ -278,7 +279,7 @@ export function middleware(request: NextRequest) {
   // Host-based routing:
   // - Waitlist hosts: show waitlist (landing + waitlist dashboard)
   // - Everything else: app host
-  const isWaitlistHost = getWaitlistHosts().has(hostname);
+  const isWaitlistHost = isWaitlistHostname(hostname);
 
   if (isWaitlistHost) {
     if (ALLOWED_PATHS.has(pathname) || isAssetRequest(pathname)) {
