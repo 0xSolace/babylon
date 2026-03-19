@@ -42,7 +42,9 @@ export type NotificationType =
   | 'hourly_summary'
   | 'daily_summary'
   | 'weekly_summary'
-  | 'monthly_summary';
+  | 'monthly_summary'
+  | 'achievement_unlocked'
+  | 'challenge_completed';
 
 interface CreateNotificationParams {
   userId: string; // Who receives the notification

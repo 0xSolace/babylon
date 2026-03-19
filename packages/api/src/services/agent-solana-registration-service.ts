@@ -2,6 +2,7 @@ import {
   assertSolanaRegistryConfigured,
   buildAgentSolanaRegistrationFile,
   deriveDeterministicAgentSolanaAsset,
+  finalizeAgentSolanaRegistrationTransaction,
   formatLamportsAsSol,
   getAgentSolanaRegistration,
   getSolanaWalletBalanceLamports,
@@ -17,7 +18,10 @@ import {
   POINTS,
 } from '@babylon/shared';
 import { DistributedLockService } from './distributed-lock-service';
-import { sendSolanaTransaction } from './privy/solana-send-transaction';
+import {
+  isSolanaBlockhashNotFoundError,
+  sendSolanaTransaction,
+} from './privy/solana-send-transaction';
 import { ensureSolanaWalletReady } from './privy/solana-wallet-provisioning';
 
 export interface AgentSolanaRegistrationStatus {
@@ -315,6 +319,63 @@ async function withAgentSolanaRegistrationLock<T>(
   }
 }
 
+async function sendAgentSolanaRegistrationTransaction({
+  ownerUserId,
+  agentUserId,
+  walletId,
+  transactionTemplate,
+}: {
+  ownerUserId: string;
+  agentUserId: string;
+  walletId: string;
+  transactionTemplate: string;
+}): Promise<{ hash: string; transactionId?: string; caip2: string }> {
+  const finalized = await finalizeAgentSolanaRegistrationTransaction({
+    agentUserId,
+    transaction: transactionTemplate,
+  });
+
+  try {
+    return await sendSolanaTransaction({
+      walletId,
+      transaction: finalized.transaction,
+      confirmationStrategy: {
+        blockhash: finalized.blockhash,
+        lastValidBlockHeight: finalized.lastValidBlockHeight,
+      },
+    });
+  } catch (error) {
+    if (!isSolanaBlockhashNotFoundError(error)) {
+      throw error;
+    }
+
+    logger.warn(
+      'Retrying Solana registration after stale blockhash broadcast failure',
+      {
+        ownerUserId,
+        agentUserId,
+        walletId,
+        previousBlockhash: finalized.blockhash,
+      },
+      'AgentSolanaRegistration'
+    );
+
+    const retried = await finalizeAgentSolanaRegistrationTransaction({
+      agentUserId,
+      transaction: transactionTemplate,
+    });
+
+    return sendSolanaTransaction({
+      walletId,
+      transaction: retried.transaction,
+      confirmationStrategy: {
+        blockhash: retried.blockhash,
+        lastValidBlockHeight: retried.lastValidBlockHeight,
+      },
+    });
+  }
+}
+
 export async function getAgentSolanaRegistrationStatus({
   ownerUserId,
   agentUserId,
@@ -395,7 +456,7 @@ export async function registerAgentOnSolanaForOwner({
       assetId: string;
       metadataUri: string;
       metadataCid: string;
-      transaction: string;
+      transactionTemplate: string;
     } | null = null;
 
     const deterministicAssetId =
@@ -538,9 +599,11 @@ export async function registerAgentOnSolanaForOwner({
         };
       }
 
-      const tx = await sendSolanaTransaction({
+      const tx = await sendAgentSolanaRegistrationTransaction({
+        ownerUserId,
+        agentUserId,
         walletId: wallet.privyWalletId,
-        transaction: prepared.transaction,
+        transactionTemplate: prepared.transactionTemplate,
       });
 
       await persistSolanaRegistrationState({
