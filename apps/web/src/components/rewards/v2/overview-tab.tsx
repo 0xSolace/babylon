@@ -1,14 +1,7 @@
 'use client';
 
 import { POINTS } from '@babylon/shared';
-import {
-  ArrowRight,
-  Calendar,
-  Check,
-  Clock,
-  Gift,
-  Trophy,
-} from 'lucide-react';
+import { ArrowRight, Calendar, Check, Clock, Gift, Trophy } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useSSEChannel } from '@/hooks/useSSE';

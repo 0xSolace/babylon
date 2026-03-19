@@ -46,7 +46,7 @@ export function DailyRewardsCard({
             </span>
             <Sparkles className="h-4 w-4 text-indigo-400" />
           </div>
-          <span className="font-medium text-indigo-500 dark:text-indigo-400 text-xs uppercase tracking-wide">
+          <span className="font-medium text-indigo-500 text-xs uppercase tracking-wide dark:text-indigo-400">
             Day Streak
           </span>
         </div>

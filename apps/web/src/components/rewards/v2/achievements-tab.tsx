@@ -113,20 +113,20 @@ export function AchievementsTab() {
       <div className="mb-6 flex items-center justify-between">
         <div className="flex items-center gap-6">
           <div>
-            <p className="text-[10px] font-semibold tracking-wider text-muted-foreground">
+            <p className="font-semibold text-[10px] text-muted-foreground tracking-wider">
               UNLOCKED
             </p>
-            <p className="text-lg font-bold">
+            <p className="font-bold text-lg">
               <span className="text-foreground">{unlockedCount}</span>
               <span className="text-muted-foreground">/{totalCount}</span>
             </p>
           </div>
           <div className="h-8 w-px bg-border" />
           <div>
-            <p className="text-[10px] font-semibold tracking-wider text-muted-foreground">
+            <p className="font-semibold text-[10px] text-muted-foreground tracking-wider">
               POINTS EARNED
             </p>
-            <p className="text-lg font-bold text-foreground">{pointsEarned}</p>
+            <p className="font-bold text-foreground text-lg">{pointsEarned}</p>
           </div>
         </div>
 
@@ -135,7 +135,7 @@ export function AchievementsTab() {
             <button
               key={f}
               onClick={() => setFilter(f)}
-              className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+              className={`rounded-md px-3 py-1.5 font-medium text-xs transition-colors ${
                 filter === f
                   ? 'bg-muted text-foreground'
                   : 'text-muted-foreground hover:text-foreground'

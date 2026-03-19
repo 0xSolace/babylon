@@ -70,11 +70,11 @@ function BonusTracker({
             />
           ))}
         </div>
-        <span className="text-sm text-muted-foreground">
+        <span className="text-muted-foreground text-sm">
           {label} ({completed}/{total})
         </span>
       </div>
-      <span className="text-sm text-muted-foreground">+{bonus} bonus</span>
+      <span className="text-muted-foreground text-sm">+{bonus} bonus</span>
     </div>
   );
 }
@@ -177,11 +177,11 @@ export function ChallengesTab() {
         <div className="mb-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Clock className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm font-semibold text-foreground">
+            <span className="font-semibold text-foreground text-sm">
               Daily Challenges
             </span>
           </div>
-          <span className="text-xs text-muted-foreground">
+          <span className="text-muted-foreground text-xs">
             {countdown.daily}
           </span>
         </div>
@@ -215,11 +215,11 @@ export function ChallengesTab() {
         <div className="mb-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Calendar className="h-4 w-4 text-muted-foreground" />
-            <span className="text-sm font-semibold text-foreground">
+            <span className="font-semibold text-foreground text-sm">
               Weekly Challenges
             </span>
           </div>
-          <span className="text-xs text-muted-foreground">
+          <span className="text-muted-foreground text-xs">
             {countdown.weekly}
           </span>
         </div>
@@ -250,10 +250,10 @@ export function ChallengesTab() {
 
       {/* Footer Note */}
       <div className="rounded-lg border border-border bg-card p-4">
-        <p className="text-sm text-muted-foreground">
+        <p className="text-muted-foreground text-sm">
           Challenges rotate automatically — daily at midnight UTC and weekly on
-          Monday. All challenges require play actions like trading, using agents,
-          or chatting.
+          Monday. All challenges require play actions like trading, using
+          agents, or chatting.
         </p>
       </div>
     </div>

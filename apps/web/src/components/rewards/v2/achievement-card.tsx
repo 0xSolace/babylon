@@ -26,13 +26,11 @@ export function AchievementCard({
     ? Math.round((progress.current / progress.total) * 100)
     : 0;
 
-  const progressDotColor =
-    badge === 'Bronze' ? 'bg-[#F59E0B]' : 'bg-[#5B5FC7]';
+  const progressDotColor = badge === 'Bronze' ? 'bg-[#F59E0B]' : 'bg-[#5B5FC7]';
 
   const getBadgeStyles = () => {
     if (badge === 'Bronze') return 'bg-[#F59E0B]/10 text-[#F59E0B]';
-    if (badge === 'Silver')
-      return 'bg-muted text-muted-foreground';
+    if (badge === 'Silver') return 'bg-muted text-muted-foreground';
     return 'bg-[#F59E0B]/20 text-[#D97706] dark:text-[#F59E0B]';
   };
 
@@ -58,7 +56,7 @@ export function AchievementCard({
           <div>
             <div className="flex items-center gap-2">
               <h3
-                className={`text-sm font-semibold ${
+                className={`font-semibold text-sm ${
                   isCompleted
                     ? 'text-[#10B981]'
                     : isLocked
@@ -69,7 +67,7 @@ export function AchievementCard({
                 {title}
               </h3>
               <span
-                className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${getBadgeStyles()}`}
+                className={`rounded px-1.5 py-0.5 font-medium text-[10px] ${getBadgeStyles()}`}
               >
                 {badge}
               </span>
@@ -83,7 +81,7 @@ export function AchievementCard({
         </div>
         {points > 0 && (
           <span
-            className={`text-sm font-semibold ${
+            className={`font-semibold text-sm ${
               isCompleted ? 'text-[#10B981]' : 'text-muted-foreground'
             }`}
           >
@@ -94,7 +92,7 @@ export function AchievementCard({
 
       {progress && isInProgress && (
         <div className="mt-3 pl-8">
-          <div className="flex items-center justify-between text-xs text-muted-foreground">
+          <div className="flex items-center justify-between text-muted-foreground text-xs">
             <span>
               {progress.current} / {progress.total}
             </span>

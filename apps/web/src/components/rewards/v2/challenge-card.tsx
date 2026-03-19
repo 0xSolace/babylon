@@ -42,29 +42,25 @@ export function ChallengeCard({
           )}
           <div>
             <h3
-              className={`text-sm font-semibold ${
-                completed
-                  ? 'text-[#10B981] line-through'
-                  : 'text-foreground'
+              className={`font-semibold text-sm ${
+                completed ? 'text-[#10B981] line-through' : 'text-foreground'
               }`}
             >
               {title}
             </h3>
             {description && (
-              <p className="mt-0.5 text-xs text-muted-foreground">
+              <p className="mt-0.5 text-muted-foreground text-xs">
                 {description}
               </p>
             )}
           </div>
         </div>
-        <span className="text-sm font-semibold text-[#10B981]">
-          +{points}
-        </span>
+        <span className="font-semibold text-[#10B981] text-sm">+{points}</span>
       </div>
 
       {progress && !completed && (
         <div className="mt-3 pl-8">
-          <div className="flex items-center justify-between text-xs text-muted-foreground">
+          <div className="flex items-center justify-between text-muted-foreground text-xs">
             <span>
               {progress.current} / {progress.total}
             </span>
