@@ -1,4 +1,4 @@
-import { generateAuthorizationSignature, PrivyClient } from '@privy-io/node';
+import { PrivyClient } from '@privy-io/node';
 
 type CliOptions = {
   appId: string;
@@ -157,29 +157,16 @@ async function main() {
     });
   }
 
-  const updateBody = {
-    ...(options.namePrefix
-      ? { name: `${options.namePrefix}-${timestampTag()}`.slice(0, 49) }
-      : {}),
-    ...(options.ownerId ? { owner_id: options.ownerId } : {}),
-    rules,
-  };
-
   const policy = options.policyId
-    ? await privy.policies()._update(options.policyId, {
-        ...updateBody,
-        'privy-authorization-signature': generateAuthorizationSignature({
-          authorizationPrivateKey: options.authorizationPrivateKey!,
-          input: {
-            version: 1,
-            method: 'PATCH',
-            url: `${privy.baseURL}/v1/policies/${options.policyId}`,
-            body: updateBody,
-            headers: {
-              'privy-app-id': options.appId,
-            },
-          },
-        }),
+    ? await privy.policies().update(options.policyId, {
+        ...(options.namePrefix
+          ? { name: `${options.namePrefix}-${timestampTag()}`.slice(0, 49) }
+          : {}),
+        ...(options.ownerId ? { owner_id: options.ownerId } : {}),
+        rules,
+        authorization_context: {
+          authorization_private_keys: [options.authorizationPrivateKey!],
+        },
       })
     : await privy.policies().create({
         version: '1.0',
