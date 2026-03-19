@@ -20,11 +20,24 @@ describe('privy-link-account-errors', () => {
       ).toBe(true);
     });
 
+    it('detects the exited_link_flow string code from useLinkAccount onError', () => {
+      expect(isPrivyLinkFlowCancellationError('exited_link_flow')).toBe(true);
+    });
+
     it('detects a PrivyClientError-shaped object with code exited_auth_flow', () => {
       expect(
         isPrivyLinkFlowCancellationError({
           code: 'exited_auth_flow',
           message: 'User exited link email flow',
+        })
+      ).toBe(true);
+    });
+
+    it('detects a PrivyClientError-shaped object with code exited_link_flow', () => {
+      expect(
+        isPrivyLinkFlowCancellationError({
+          code: 'exited_link_flow',
+          message: 'User exited link account flow',
         })
       ).toBe(true);
     });
