@@ -8,6 +8,7 @@
 import {
   ApiError,
   authenticate,
+  checkProgress,
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
@@ -217,6 +218,8 @@ export const POST = withErrorHandling(
       { userId: user.userId, inviteId },
       'POST /api/groups/invites/:inviteId/accept'
     );
+
+    void checkProgress(user.userId, { type: 'group_joined' });
 
     return successResponse({
       success: true,
