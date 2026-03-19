@@ -9,6 +9,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useUserPositionsPolling } from '@/stores/userPositionsStore';
 import { useWalletBalancePolling } from '@/stores/walletBalanceStore';
 import { WalletBalance } from './wallet-balance';
+import { WalletHistory } from './wallet-history';
 import { WalletPnL } from './wallet-pnl';
 import { WalletPositions } from './wallet-positions';
 import { WalletTabs } from './wallet-tabs';
@@ -73,6 +74,9 @@ export function WalletContent({ mode = 'page' }: WalletContentProps) {
         {activeTab === 'P&L' && <WalletPnL userId={user.id} mode={mode} />}
         {activeTab === 'Positions' && (
           <WalletPositions userId={user.id} mode={mode} />
+        )}
+        {activeTab === 'History' && (
+          <WalletHistory userId={user.id} mode={mode} />
         )}
       </div>
     </div>

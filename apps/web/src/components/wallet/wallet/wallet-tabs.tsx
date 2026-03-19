@@ -7,7 +7,7 @@ interface WalletTabsProps {
   onTabChange: (tab: string) => void;
 }
 
-const tabs = ['Balance', 'P&L', 'Positions'];
+const tabs = ['Balance', 'P&L', 'Positions', 'History'];
 
 export function WalletTabs({ activeTab, onTabChange }: WalletTabsProps) {
   return (
