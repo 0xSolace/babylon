@@ -209,6 +209,7 @@ import {
 } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { z } from 'zod';
+import { getMissingNotificationSchemaErrorCode } from './schema-compat';
 
 const ClearNotificationsSchema = z
   .object({
@@ -319,96 +320,117 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   // OPTIMIZED: Cache notifications with short TTL (high-frequency polling endpoint)
   const cacheKey = `notifications:${authUser.userId}:${validatedUnreadOnly}:${validatedType}:${validatedLimit}`;
 
-  // Get blocked/muted user IDs to filter notifications
-  const [blockedIds, mutedIds, blockedByIds] = await Promise.all([
-    getBlockedUserIds(authUser.userId),
-    getMutedUserIds(authUser.userId),
-    getBlockedByUserIds(authUser.userId),
-  ]);
+  try {
+    // Get blocked/muted user IDs to filter notifications
+    const [blockedIds, mutedIds, blockedByIds] = await Promise.all([
+      getBlockedUserIds(authUser.userId),
+      getMutedUserIds(authUser.userId),
+      getBlockedByUserIds(authUser.userId),
+    ]);
 
-  const excludedUserIds = new Set([
-    ...blockedIds,
-    ...mutedIds,
-    ...blockedByIds,
-  ]);
+    const excludedUserIds = new Set([
+      ...blockedIds,
+      ...mutedIds,
+      ...blockedByIds,
+    ]);
 
-  const { notificationsList, unreadCount } = await getCacheOrFetch(
-    cacheKey,
-    async () => {
-      // Fetch notifications
-      const allNotifications = await db
-        .select()
-        .from(notifications)
-        .where(and(...conditions))
-        .orderBy(desc(notifications.createdAt))
-        .limit(validatedLimit * 2); // Fetch more to account for filtering
+    const { notificationsList, unreadCount } = await getCacheOrFetch(
+      cacheKey,
+      async () => {
+        // Fetch notifications
+        const allNotifications = await db
+          .select()
+          .from(notifications)
+          .where(and(...conditions))
+          .orderBy(desc(notifications.createdAt))
+          .limit(validatedLimit * 2); // Fetch more to account for filtering
 
-      // Get actor IDs to fetch user info
-      const actorIds = [
-        ...new Set(
-          allNotifications
-            .map((n) => n.actorId)
-            .filter((id): id is string => id !== null)
-        ),
-      ];
+        // Get actor IDs to fetch user info
+        const actorIds = [
+          ...new Set(
+            allNotifications
+              .map((n) => n.actorId)
+              .filter((id): id is string => id !== null)
+          ),
+        ];
 
-      // Fetch actor info
-      const actorsResult =
-        actorIds.length > 0
-          ? await db
-              .select({
-                id: users.id,
-                displayName: users.displayName,
-                username: users.username,
-                profileImageUrl: users.profileImageUrl,
-              })
-              .from(users)
-              .where(inArray(users.id, actorIds))
-          : [];
+        // Fetch actor info
+        const actorsResult =
+          actorIds.length > 0
+            ? await db
+                .select({
+                  id: users.id,
+                  displayName: users.displayName,
+                  username: users.username,
+                  profileImageUrl: users.profileImageUrl,
+                })
+                .from(users)
+                .where(inArray(users.id, actorIds))
+            : [];
 
-      const actorMap = new Map(actorsResult.map((a) => [a.id, a]));
+        const actorMap = new Map(actorsResult.map((a) => [a.id, a]));
 
-      // Filter out notifications from blocked/muted users and add actor info
-      const notificationsList = allNotifications
-        .filter((n) => !n.actorId || !excludedUserIds.has(n.actorId))
-        .slice(0, validatedLimit) // Limit to requested amount after filtering
-        .map((n) => ({
-          ...n,
-          actor: n.actorId ? actorMap.get(n.actorId) || null : null,
-        }));
+        // Filter out notifications from blocked/muted users and add actor info
+        const notificationsList = allNotifications
+          .filter((n) => !n.actorId || !excludedUserIds.has(n.actorId))
+          .slice(0, validatedLimit) // Limit to requested amount after filtering
+          .map((n) => ({
+            ...n,
+            actor: n.actorId ? actorMap.get(n.actorId) || null : null,
+          }));
 
-      // Get unread count
-      const [unreadCountResult] = await db
-        .select({ count: count() })
-        .from(notifications)
-        .where(
-          and(
-            eq(notifications.userId, authUser.userId),
-            eq(notifications.read, false)
-          )
-        );
+        // Get unread count
+        const [unreadCountResult] = await db
+          .select({ count: count() })
+          .from(notifications)
+          .where(
+            and(
+              eq(notifications.userId, authUser.userId),
+              eq(notifications.read, false)
+            )
+          );
 
-      return {
-        notificationsList,
-        unreadCount: Number(unreadCountResult?.count ?? 0),
-      };
-    },
-    {
-      namespace: CACHE_KEYS.USER,
-      ttl: 10, // 10 second cache (high-frequency endpoint, needs to be fresh)
+        return {
+          notificationsList,
+          unreadCount: Number(unreadCountResult?.count ?? 0),
+        };
+      },
+      {
+        namespace: CACHE_KEYS.USER,
+        ttl: 10, // 10 second cache (high-frequency endpoint, needs to be fresh)
+      }
+    );
+
+    logger.info(
+      'Notifications fetched successfully',
+      { userId: authUser.userId, count: notificationsList.length, unreadCount },
+      'GET /api/notifications'
+    );
+
+    return successResponse({
+      notifications: notificationsList.map((n) =>
+        serializeNotificationForApi(n)
+      ),
+      unreadCount,
+    });
+  } catch (error) {
+    const missingSchemaCode = getMissingNotificationSchemaErrorCode(error);
+    if (!missingSchemaCode) {
+      throw error;
     }
-  );
 
-  logger.info(
-    'Notifications fetched successfully',
-    { userId: authUser.userId, count: notificationsList.length, unreadCount },
-    'GET /api/notifications'
-  );
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    logger.warn(
+      'Notifications unavailable because the database schema is pending',
+      { userId: authUser.userId, code: missingSchemaCode, errorMessage },
+      'GET /api/notifications'
+    );
 
-  return successResponse({
-    notifications: notificationsList.map((n) => serializeNotificationForApi(n)),
-    unreadCount,
-  });
+    return successResponse({
+      notifications: [],
+      unreadCount: 0,
+    });
+  }
 });
 
 /**
