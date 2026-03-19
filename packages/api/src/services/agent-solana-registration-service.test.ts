@@ -276,6 +276,46 @@ describe('agent-solana-registration-service', () => {
     expect(mockSendSolanaTransaction).not.toHaveBeenCalled();
   });
 
+  it('rejects registration when the agent has no Privy identity', async () => {
+    selectResults.push([
+      {
+        ...BASE_AGENT,
+        privyId: null,
+        solanaOfflineWalletReady: false,
+        solanaWalletAddress: null,
+        privySolanaWalletId: null,
+      },
+    ]);
+    mockGetAgentSolanaRegistration.mockResolvedValueOnce(null);
+
+    await expect(
+      registerAgentOnSolanaForOwner({
+        ownerUserId: 'owner-1',
+        agentUserId: 'agent-1',
+      })
+    ).rejects.toThrow('Agent wallet identity is not ready');
+
+    expect(capturedInserts).toHaveLength(0);
+    expect(mockSendSolanaTransaction).not.toHaveBeenCalled();
+  });
+
+  it('allows registration when wallet balance equals exactly the minimum threshold', async () => {
+    selectResults.push([BASE_AGENT]);
+    selectResults.push([{ virtualBalance: '900' }]);
+    mockGetAgentSolanaRegistration
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null);
+    mockGetSolanaWalletBalanceLamports.mockResolvedValueOnce(10_000_000n);
+
+    const result = await registerAgentOnSolanaForOwner({
+      ownerUserId: 'owner-1',
+      agentUserId: 'agent-1',
+    });
+
+    expect(result.alreadyRegistered).toBe(false);
+    expect(mockSendSolanaTransaction).toHaveBeenCalled();
+  });
+
   it('returns already registered without charging when DB is already in sync', async () => {
     selectResults.push([
       {

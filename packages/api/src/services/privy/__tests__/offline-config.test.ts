@@ -2,10 +2,9 @@ import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 
 const ORIGINAL_ENV = { ...process.env };
 
-const {
-  getPrivyOfflineConfig,
-  getPrivySolanaOfflineConfig,
-} = await import('../offline-config');
+const { getPrivyOfflineConfig, getPrivySolanaOfflineConfig } = await import(
+  '../offline-config'
+);
 
 describe('offline-config', () => {
   beforeEach(() => {

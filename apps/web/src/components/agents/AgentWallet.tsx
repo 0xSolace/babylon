@@ -264,10 +264,14 @@ export function AgentWallet({ agent, onUpdate }: AgentWalletProps) {
   const copySolanaAddress = async () => {
     if (!solanaStatus.walletAddress) return;
 
-    await navigator.clipboard.writeText(solanaStatus.walletAddress);
-    setCopiedSolanaAddress(true);
-    toast.success('Address copied to clipboard');
-    setTimeout(() => setCopiedSolanaAddress(false), 2000);
+    try {
+      await navigator.clipboard.writeText(solanaStatus.walletAddress);
+      setCopiedSolanaAddress(true);
+      toast.success('Address copied to clipboard');
+      setTimeout(() => setCopiedSolanaAddress(false), 2000);
+    } catch {
+      toast.error('Failed to copy address to clipboard');
+    }
   };
 
   return (
