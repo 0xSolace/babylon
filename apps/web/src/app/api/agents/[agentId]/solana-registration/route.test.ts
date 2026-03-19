@@ -76,8 +76,14 @@ describe('/api/agents/[agentId]/solana-registration', () => {
       assetId: null,
       metadataUri: null,
       txHash: null,
-      walletAddress: null,
-      walletReady: false,
+      walletAddress: 'SoLWallet111',
+      walletReady: true,
+      walletBalanceLamports: '20000000',
+      walletBalanceSol: '0.02',
+      minimumBalanceLamports: '10000000',
+      minimumBalanceSol: '0.01',
+      hasEnoughBalance: true,
+      canRegister: true,
       cost: 100,
     });
 
@@ -87,6 +93,8 @@ describe('/api/agents/[agentId]/solana-registration', () => {
     const body = await response.json();
 
     expect(body.isRegistered).toBe(false);
+    expect(body.walletBalanceSol).toBe('0.02');
+    expect(body.canRegister).toBe(true);
     expect(mockGetAgentSolanaRegistrationStatus).toHaveBeenCalledWith({
       ownerUserId: 'owner-1',
       agentUserId: 'agent-1',

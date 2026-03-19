@@ -1,5 +1,11 @@
 import { createHash } from 'node:crypto';
-import { Keypair, PublicKey, Transaction } from '@solana/web3.js';
+import {
+  Connection,
+  Keypair,
+  LAMPORTS_PER_SOL,
+  PublicKey,
+  Transaction,
+} from '@solana/web3.js';
 import {
   IPFSClient,
   type PreparedTransaction,
@@ -11,8 +17,8 @@ import {
   type SolanaSDKConfig,
 } from '8004-solana';
 
-function resolveSolanaRegistryCluster(): SolanaSDKConfig['cluster'] {
-  const cluster = process.env.SOLANA_REGISTRY_CLUSTER ?? 'mainnet-beta';
+function resolveSolanaCluster(): SolanaSDKConfig['cluster'] {
+  const cluster = process.env.SOLANA_CLUSTER ?? 'mainnet-beta';
 
   if (
     cluster === 'devnet' ||
@@ -24,15 +30,15 @@ function resolveSolanaRegistryCluster(): SolanaSDKConfig['cluster'] {
   }
 
   throw new Error(
-    `Unsupported SOLANA_REGISTRY_CLUSTER value: ${cluster}. Expected devnet, testnet, mainnet-beta, or localnet.`
+    `Unsupported SOLANA_CLUSTER value: ${cluster}. Expected devnet, testnet, mainnet-beta, or localnet.`
   );
 }
 
-function resolveSolanaRegistryRpcUrl(): string {
-  const cluster = resolveSolanaRegistryCluster();
+function resolveSolanaRpcUrl(): string {
+  const cluster = resolveSolanaCluster();
 
-  if (process.env.SOLANA_REGISTRY_RPC_URL) {
-    return process.env.SOLANA_REGISTRY_RPC_URL;
+  if (process.env.SOLANA_RPC_URL) {
+    return process.env.SOLANA_RPC_URL;
   }
 
   return cluster === 'devnet' ? SOLANA_DEVNET_RPC : SOLANA_MAINNET_RPC;
@@ -45,7 +51,7 @@ export function assertSolanaRegistryConfigured(): void {
     );
   }
 
-  resolveSolanaRegistryRpcUrl();
+  resolveSolanaRpcUrl();
   createSolanaRegistryIpfsClient();
 }
 
@@ -81,11 +87,15 @@ function createSolanaRegistrySdk(
   config: Pick<SolanaSDKConfig, 'signer'> = {}
 ): SolanaSDK {
   return new SolanaSDK({
-    cluster: resolveSolanaRegistryCluster(),
-    rpcUrl: resolveSolanaRegistryRpcUrl(),
+    cluster: resolveSolanaCluster(),
+    rpcUrl: resolveSolanaRpcUrl(),
     signer: config.signer,
     ipfsClient: createSolanaRegistryIpfsClient(),
   });
+}
+
+function createSolanaRegistryConnection(): Connection {
+  return new Connection(resolveSolanaRpcUrl(), 'confirmed');
 }
 
 export function buildAgentSolanaRegistrationFile({
@@ -210,4 +220,23 @@ export async function getAgentSolanaRegistration(
 ): Promise<Awaited<ReturnType<SolanaSDK['getAgent']>>> {
   const sdk = createSolanaRegistrySdk();
   return sdk.getAgent(new PublicKey(assetId));
+}
+
+export async function getSolanaWalletBalanceLamports(
+  walletAddress: string
+): Promise<bigint> {
+  const connection = createSolanaRegistryConnection();
+  const balance = await connection.getBalance(new PublicKey(walletAddress));
+  return BigInt(balance);
+}
+
+export function formatLamportsAsSol(lamports: bigint): string {
+  const divisor = BigInt(LAMPORTS_PER_SOL);
+  const whole = lamports / divisor;
+  const fractional = (lamports % divisor).toString().padStart(9, '0');
+  const trimmedFractional = fractional.replace(/0+$/, '');
+
+  return trimmedFractional.length > 0
+    ? `${whole}.${trimmedFractional}`
+    : whole.toString();
 }
