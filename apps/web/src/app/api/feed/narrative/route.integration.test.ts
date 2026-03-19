@@ -640,7 +640,7 @@ describe('GET /api/feed/narrative — integration', () => {
         articleTitle: 'The Big Short 2.0',
         fullContent: 'Full article text here...',
         category: 'finance',
-        imageUrl: 'https://cdn.babylon.social/img.jpg',
+        imageUrl: 'https://cdn.babylon.market/img.jpg',
       };
 
       selectQueue[0] = [post];
@@ -657,7 +657,7 @@ describe('GET /api/feed/narrative — integration', () => {
       expect(np.articleTitle).toBe('The Big Short 2.0');
       expect(np.fullContent).toBe('Full article text here...');
       expect(np.category).toBe('finance');
-      expect(np.imageUrl).toBe('https://cdn.babylon.social/img.jpg');
+      expect(np.imageUrl).toBe('https://cdn.babylon.market/img.jpg');
       expect(np.likeCount).toBe(7);
       expect(np.commentCount).toBe(3);
       expect(np.shareCount).toBe(2);
