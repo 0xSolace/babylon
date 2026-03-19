@@ -289,6 +289,24 @@ describe('authenticate middleware', () => {
     });
   });
 
+  it('does not enforce NFT gating for /api/users/me/game-guide', async () => {
+    process.env.NFT_GATING_ENABLED = 'true';
+
+    mockVerifyAgentSession.mockReturnValueOnce(null);
+    mockVerifyAuthToken.mockResolvedValueOnce({ userId: 'privy-user' });
+    usersRows = [{ id: 'db-user-id', walletAddress: '0xabc', isAdmin: false }];
+    snapshotRows = [];
+    ownershipRows = [];
+
+    const request = createRequest('privy-token', '/api/users/me/game-guide');
+    const result = await authenticate(request);
+
+    expect(result).toMatchObject({
+      userId: 'db-user-id',
+      dbUserId: 'db-user-id',
+    });
+  });
+
   it('does not enforce NFT gating for /api/users/{id}/update-profile', async () => {
     process.env.NFT_GATING_ENABLED = 'true';
 
