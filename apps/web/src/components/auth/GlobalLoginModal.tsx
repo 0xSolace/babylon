@@ -1,7 +1,7 @@
 'use client';
 
-import { useSearchParams } from 'next/navigation';
-import { Suspense } from 'react';
+import { usePathname, useSearchParams } from 'next/navigation';
+import { Suspense, useEffect } from 'react';
 import { useLoginModal } from '@/hooks/useLoginModal';
 import { LoginModal } from './LoginModal';
 
@@ -15,7 +15,16 @@ import { LoginModal } from './LoginModal';
  * @returns Global login modal element or null if hidden/not open
  */
 function GlobalLoginModalContent() {
-  const { isOpen, closeLoginModal, title, message } = useLoginModal();
+  const {
+    isOpen,
+    queuedModal,
+    showLoginModal,
+    consumeQueuedLoginModal,
+    closeLoginModal,
+    title,
+    message,
+  } = useLoginModal();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
 
   // Check if dev mode is enabled via URL parameter
@@ -28,6 +37,15 @@ function GlobalLoginModalContent() {
   const isHomePage =
     typeof window !== 'undefined' && window.location.pathname === '/';
   const shouldHide = isProduction && isHomePage && !isDevMode;
+
+  useEffect(() => {
+    if (!queuedModal || pathname === '/') {
+      return;
+    }
+
+    showLoginModal(queuedModal);
+    consumeQueuedLoginModal();
+  }, [pathname, queuedModal, showLoginModal, consumeQueuedLoginModal]);
 
   // If should be hidden, don't render anything
   if (shouldHide) {
