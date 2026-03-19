@@ -23,13 +23,14 @@ Options:
                                (default: babylon-solana-registration)
   --owner-id <value>           Optional key quorum owner ID
                                (fallback: PRIVY_OFFLINE_SIGNER_ID)
-  --allow-sign-transaction     Also allow signTransaction
+  --sign-and-send-only         Only allow signAndSendTransaction
   --json                       Output machine-readable JSON only
   -h, --help                   Show this help
 
 What this creates:
   - A Solana-only Privy policy
-  - Default scope: ALLOW signAndSendTransaction, default-deny everything else
+  - Default scope: ALLOW signAndSendTransaction and signTransaction,
+    default-deny everything else
 
 Recommended next step:
   - Set PRIVY_SOLANA_OFFLINE_POLICY_ID to the returned policy ID
@@ -81,7 +82,7 @@ function parseOptions(): CliOptions {
     readArgValue(args, '--name-prefix') ?? 'babylon-solana-registration';
   const ownerId =
     readArgValue(args, '--owner-id') ?? readEnv('PRIVY_OFFLINE_SIGNER_ID');
-  const allowSignTransaction = hasFlag(args, '--allow-sign-transaction');
+  const allowSignTransaction = !hasFlag(args, '--sign-and-send-only');
   const json = hasFlag(args, '--json');
 
   const missing: string[] = [];

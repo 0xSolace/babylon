@@ -17,10 +17,12 @@ mock.module('@babylon/shared', () => ({
 }));
 
 mock.module('../offline-config', () => ({
-  getPrivyOfflineConfig: () => ({
+  getPrivySolanaOfflineConfig: () => ({
     appId: 'test-app-id',
     appSecret: 'test-secret',
     authorizationPrivateKey: 'test-authorization-key',
+    offlineSignerId: 'test-offline-signer-id',
+    offlinePolicyId: 'test-solana-policy-id',
   }),
 }));
 
@@ -34,9 +36,42 @@ mock.module('../privy-node', () => ({
   }),
 }));
 
-const { isSolanaBlockhashNotFoundError, sendSolanaTransaction } = await import(
-  '../solana-send-transaction'
-);
+const {
+  isSolanaBlockhashNotFoundError,
+  sendSolanaTransaction,
+  signSolanaTransaction,
+} = await import('../solana-send-transaction');
+
+describe('signSolanaTransaction', () => {
+  beforeEach(() => {
+    mockSignTransaction.mockReset();
+    process.env.SOLANA_CLUSTER = 'mainnet-beta';
+  });
+
+  it('signs with Privy without broadcasting', async () => {
+    mockSignTransaction.mockResolvedValue({
+      signed_transaction: 'signed-base64-tx',
+      encoding: 'base64',
+    });
+
+    const result = await signSolanaTransaction({
+      walletId: 'wallet-1',
+      transaction: 'unsigned-base64-tx',
+    });
+
+    expect(mockSignTransaction).toHaveBeenCalledWith('wallet-1', {
+      transaction: 'unsigned-base64-tx',
+      authorization_context: {
+        authorization_private_keys: ['test-authorization-key'],
+      },
+      idempotency_key: expect.stringContaining('solana-tx:v1:'),
+    });
+    expect(result).toEqual({
+      signedTransaction: 'signed-base64-tx',
+      caip2: 'solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp',
+    });
+  });
+});
 
 describe('sendSolanaTransaction', () => {
   beforeEach(() => {
@@ -63,13 +98,6 @@ describe('sendSolanaTransaction', () => {
       },
     });
 
-    expect(mockSignTransaction).toHaveBeenCalledWith('wallet-1', {
-      transaction: 'unsigned-base64-tx',
-      authorization_context: {
-        authorization_private_keys: ['test-authorization-key'],
-      },
-      idempotency_key: expect.stringContaining('solana-tx:v1:'),
-    });
     expect(mockBroadcastSignedSolanaTransaction).toHaveBeenCalledWith({
       transaction: 'signed-base64-tx',
       confirmationStrategy: {
@@ -81,6 +109,32 @@ describe('sendSolanaTransaction', () => {
       hash: 'solana-signature-1',
       caip2: 'solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp',
     });
+  });
+
+  it('surfaces an actionable error when the Solana Privy policy blocks signTransaction', async () => {
+    mockSignTransaction.mockRejectedValue(
+      Object.assign(
+        new Error(
+          '400 {"error":"RPC request denied due to policy violation","code":"policy_violation"}'
+        ),
+        {
+          status: 400,
+          error: {
+            code: 'policy_violation',
+            message: 'RPC request denied due to policy violation',
+          },
+        }
+      )
+    );
+
+    await expect(
+      sendSolanaTransaction({
+        walletId: 'wallet-1',
+        transaction: 'unsigned-base64-tx',
+      })
+    ).rejects.toThrow(
+      'Privy Solana policy violation: the configured Solana offline policy must allow signTransaction for agent registration.'
+    );
   });
 });
 

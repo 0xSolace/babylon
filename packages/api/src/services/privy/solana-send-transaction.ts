@@ -1,7 +1,7 @@
 import { broadcastSignedSolanaTransaction } from '@babylon/agents/solana-registry';
 import { logger } from '@babylon/shared';
 import { extractPrivyApiDiagnostics } from './error-diagnostics';
-import { getPrivyOfflineConfig } from './offline-config';
+import { getPrivySolanaOfflineConfig } from './offline-config';
 import { getPrivyNodeClient } from './privy-node';
 import { buildSolanaTransactionIdempotencyKey } from './solana-idempotency';
 
@@ -21,20 +21,20 @@ function resolveSolanaCaip2(): string {
   }
 }
 
-export async function sendSolanaTransaction({
+export type SolanaConfirmationStrategy = {
+  blockhash: string;
+  lastValidBlockHeight: number;
+};
+
+export async function signSolanaTransaction({
   walletId,
   transaction,
-  confirmationStrategy,
 }: {
   walletId: string;
   transaction: string;
-  confirmationStrategy?: {
-    blockhash: string;
-    lastValidBlockHeight: number;
-  };
-}): Promise<{ hash: string; transactionId?: string; caip2: string }> {
+}): Promise<{ signedTransaction: string; caip2: string }> {
   const privy = getPrivyNodeClient();
-  const offlineConfig = getPrivyOfflineConfig();
+  const offlineConfig = getPrivySolanaOfflineConfig();
   const caip2 = resolveSolanaCaip2();
   const idempotencyKey = buildSolanaTransactionIdempotencyKey({
     walletId,
@@ -54,29 +54,56 @@ export async function sendSolanaTransaction({
         idempotency_key: idempotencyKey,
       });
 
-    const broadcast = await broadcastSignedSolanaTransaction({
-      transaction: response.signed_transaction,
-      confirmationStrategy,
-    });
-
     return {
-      hash: broadcast.hash,
+      signedTransaction: response.signed_transaction,
       caip2,
     };
   } catch (error) {
+    const diagnostics = extractPrivyApiDiagnostics(error);
     logger.error(
-      'Failed to sign or broadcast Solana transaction',
+      'Failed to sign Solana transaction via Privy',
       {
         walletId,
-        ...extractPrivyApiDiagnostics(error),
+        ...diagnostics,
       },
       'sendSolanaTransaction'
     );
+
+    if (diagnostics.providerCode === 'policy_violation') {
+      throw new Error(
+        'Privy Solana policy violation: the configured Solana offline policy must allow signTransaction for agent registration.'
+      );
+    }
 
     throw error instanceof Error
       ? error
       : new Error('Failed to submit Solana transaction');
   }
+}
+
+export async function sendSolanaTransaction({
+  walletId,
+  transaction,
+  confirmationStrategy,
+}: {
+  walletId: string;
+  transaction: string;
+  confirmationStrategy?: SolanaConfirmationStrategy;
+}): Promise<{ hash: string; transactionId?: string; caip2: string }> {
+  const signed = await signSolanaTransaction({
+    walletId,
+    transaction,
+  });
+
+  const broadcast = await broadcastSignedSolanaTransaction({
+    transaction: signed.signedTransaction,
+    confirmationStrategy,
+  });
+
+  return {
+    hash: broadcast.hash,
+    caip2: signed.caip2,
+  };
 }
 
 export function isSolanaBlockhashNotFoundError(error: unknown): boolean {
