@@ -7,6 +7,7 @@
  * Infrastructure and API-related services for user management, notifications, and system operations.
  */
 
+export * from './achievement-service';
 // Keep Solana registration service out of this barrel so lightweight routes
 // importing @babylon/api do not pull Solana SDK dependencies into shared Lambdas.
 // Claude LLM Service
