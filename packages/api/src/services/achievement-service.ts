@@ -1050,10 +1050,24 @@ export async function checkProgress(
   const relevantTrackingTypes = EVENT_TO_TRACKING_TYPES[eventType];
   if (!relevantTrackingTypes || relevantTrackingTypes.length === 0) return;
 
-  await Promise.all([
-    checkAchievements(userId, relevantTrackingTypes),
-    checkChallenges(userId, event, relevantTrackingTypes),
-  ]);
+  try {
+    await Promise.all([
+      checkAchievements(userId, relevantTrackingTypes),
+      checkChallenges(userId, event, relevantTrackingTypes),
+    ]);
+  } catch (error) {
+    // Log but don't rethrow — checkProgress is fire-and-forget
+    logger.error(
+      'checkProgress failed',
+      {
+        userId,
+        eventType,
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      },
+      'AchievementService'
+    );
+  }
 }
 
 async function checkAchievements(
@@ -1182,6 +1196,7 @@ async function checkChallenges(
   if (relevantChallenges.length === 0) return;
 
   for (const challenge of relevantChallenges) {
+    try {
     const isDaily = challenge.pool === 'daily';
     const periodKey = isDaily ? getUTCDateString(now) : getISOWeekString(now);
     const start = isDaily ? getStartOfUTCDay(now) : getStartOfISOWeek(now);
@@ -1301,6 +1316,17 @@ async function checkChallenges(
         challenge.pool,
         periodKey,
         isDaily ? dailyIds : weeklyIds
+      );
+    }
+    } catch (error) {
+      logger.error(
+        `Challenge check failed for ${challenge.id}`,
+        {
+          userId,
+          challengeId: challenge.id,
+          error: error instanceof Error ? error.message : String(error),
+        },
+        'AchievementService'
       );
     }
   }
