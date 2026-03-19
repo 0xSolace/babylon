@@ -279,6 +279,16 @@ export function serializeNotificationForApi(
   };
 }
 
+type NotificationReadPayload = {
+  notificationsList: Array<
+    Record<string, unknown> & {
+      actor?: Record<string, unknown> | null;
+    }
+  >;
+  unreadCount: number;
+  degraded?: boolean;
+};
+
 /**
  * GET /api/notifications - Get user notifications
  */
@@ -320,37 +330,77 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   // OPTIMIZED: Cache notifications with short TTL (high-frequency polling endpoint)
   const cacheKey = `notifications:${authUser.userId}:${validatedUnreadOnly}:${validatedType}:${validatedLimit}`;
 
-  try {
-    // Get blocked/muted user IDs to filter notifications
-    const [blockedIds, mutedIds, blockedByIds] = await Promise.all([
-      getBlockedUserIds(authUser.userId),
-      getMutedUserIds(authUser.userId),
-      getBlockedByUserIds(authUser.userId),
-    ]);
+  // Keep moderation failures visible; only the notification-schema reads degrade.
+  const [blockedIds, mutedIds, blockedByIds] = await Promise.all([
+    getBlockedUserIds(authUser.userId),
+    getMutedUserIds(authUser.userId),
+    getBlockedByUserIds(authUser.userId),
+  ]);
 
-    const excludedUserIds = new Set([
-      ...blockedIds,
-      ...mutedIds,
-      ...blockedByIds,
-    ]);
+  const excludedUserIds = new Set([
+    ...blockedIds,
+    ...mutedIds,
+    ...blockedByIds,
+  ]);
 
-    const { notificationsList, unreadCount } = await getCacheOrFetch(
+  const { notificationsList, unreadCount, degraded } =
+    await getCacheOrFetch<NotificationReadPayload>(
       cacheKey,
       async () => {
-        // Fetch notifications
-        const allNotifications = await db
-          .select()
-          .from(notifications)
-          .where(and(...conditions))
-          .orderBy(desc(notifications.createdAt))
-          .limit(validatedLimit * 2); // Fetch more to account for filtering
+        let allNotifications:
+          | Array<Record<string, unknown> & { actorId?: string | null }>
+          | undefined;
+        let unreadCount = 0;
+
+        try {
+          // Fetch notifications
+          allNotifications = await db
+            .select()
+            .from(notifications)
+            .where(and(...conditions))
+            .orderBy(desc(notifications.createdAt))
+            .limit(validatedLimit * 2); // Fetch more to account for filtering
+
+          // Get unread count
+          const [unreadCountResult] = await db
+            .select({ count: count() })
+            .from(notifications)
+            .where(
+              and(
+                eq(notifications.userId, authUser.userId),
+                eq(notifications.read, false)
+              )
+            );
+
+          unreadCount = Number(unreadCountResult?.count ?? 0);
+        } catch (error) {
+          const missingSchemaCode =
+            getMissingNotificationSchemaErrorCode(error);
+          if (!missingSchemaCode) {
+            throw error;
+          }
+
+          const errorMessage =
+            error instanceof Error ? error.message : String(error);
+          logger.warn(
+            'Notifications unavailable because the database schema is pending',
+            { userId: authUser.userId, code: missingSchemaCode, errorMessage },
+            'GET /api/notifications'
+          );
+
+          return {
+            notificationsList: [],
+            unreadCount: 0,
+            degraded: true,
+          };
+        }
+
+        const rows = allNotifications ?? [];
 
         // Get actor IDs to fetch user info
         const actorIds = [
           ...new Set(
-            allNotifications
-              .map((n) => n.actorId)
-              .filter((id): id is string => id !== null)
+            rows.map((n) => n.actorId).filter((id): id is string => id !== null)
           ),
         ];
 
@@ -371,7 +421,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
         const actorMap = new Map(actorsResult.map((a) => [a.id, a]));
 
         // Filter out notifications from blocked/muted users and add actor info
-        const notificationsList = allNotifications
+        const notificationsList = rows
           .filter((n) => !n.actorId || !excludedUserIds.has(n.actorId))
           .slice(0, validatedLimit) // Limit to requested amount after filtering
           .map((n) => ({
@@ -379,20 +429,9 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
             actor: n.actorId ? actorMap.get(n.actorId) || null : null,
           }));
 
-        // Get unread count
-        const [unreadCountResult] = await db
-          .select({ count: count() })
-          .from(notifications)
-          .where(
-            and(
-              eq(notifications.userId, authUser.userId),
-              eq(notifications.read, false)
-            )
-          );
-
         return {
           notificationsList,
-          unreadCount: Number(unreadCountResult?.count ?? 0),
+          unreadCount,
         };
       },
       {
@@ -401,36 +440,18 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       }
     );
 
+  if (!degraded) {
     logger.info(
       'Notifications fetched successfully',
       { userId: authUser.userId, count: notificationsList.length, unreadCount },
       'GET /api/notifications'
     );
-
-    return successResponse({
-      notifications: notificationsList.map((n) =>
-        serializeNotificationForApi(n)
-      ),
-      unreadCount,
-    });
-  } catch (error) {
-    const missingSchemaCode = getMissingNotificationSchemaErrorCode(error);
-    if (!missingSchemaCode) {
-      throw error;
-    }
-
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    logger.warn(
-      'Notifications unavailable because the database schema is pending',
-      { userId: authUser.userId, code: missingSchemaCode, errorMessage },
-      'GET /api/notifications'
-    );
-
-    return successResponse({
-      notifications: [],
-      unreadCount: 0,
-    });
   }
+
+  return successResponse({
+    notifications: notificationsList.map((n) => serializeNotificationForApi(n)),
+    unreadCount,
+  });
 });
 
 /**
