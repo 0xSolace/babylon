@@ -24,9 +24,14 @@ function resolveSolanaCaip2(): string {
 export async function sendSolanaTransaction({
   walletId,
   transaction,
+  confirmationStrategy,
 }: {
   walletId: string;
   transaction: string;
+  confirmationStrategy?: {
+    blockhash: string;
+    lastValidBlockHeight: number;
+  };
 }): Promise<{ hash: string; transactionId?: string; caip2: string }> {
   const privy = getPrivyNodeClient();
   const offlineConfig = getPrivyOfflineConfig();
@@ -51,6 +56,7 @@ export async function sendSolanaTransaction({
 
     const broadcast = await broadcastSignedSolanaTransaction({
       transaction: response.signed_transaction,
+      confirmationStrategy,
     });
 
     return {

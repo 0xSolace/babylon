@@ -57,6 +57,10 @@ describe('sendSolanaTransaction', () => {
     const result = await sendSolanaTransaction({
       walletId: 'wallet-1',
       transaction: 'unsigned-base64-tx',
+      confirmationStrategy: {
+        blockhash: 'blockhash-1',
+        lastValidBlockHeight: 123,
+      },
     });
 
     expect(mockSignTransaction).toHaveBeenCalledWith('wallet-1', {
@@ -68,6 +72,10 @@ describe('sendSolanaTransaction', () => {
     });
     expect(mockBroadcastSignedSolanaTransaction).toHaveBeenCalledWith({
       transaction: 'signed-base64-tx',
+      confirmationStrategy: {
+        blockhash: 'blockhash-1',
+        lastValidBlockHeight: 123,
+      },
     });
     expect(result).toEqual({
       hash: 'solana-signature-1',

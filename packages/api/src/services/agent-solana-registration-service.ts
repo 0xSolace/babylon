@@ -339,6 +339,10 @@ async function sendAgentSolanaRegistrationTransaction({
     return await sendSolanaTransaction({
       walletId,
       transaction: finalized.transaction,
+      confirmationStrategy: {
+        blockhash: finalized.blockhash,
+        lastValidBlockHeight: finalized.lastValidBlockHeight,
+      },
     });
   } catch (error) {
     if (!isSolanaBlockhashNotFoundError(error)) {
@@ -364,6 +368,10 @@ async function sendAgentSolanaRegistrationTransaction({
     return sendSolanaTransaction({
       walletId,
       transaction: retried.transaction,
+      confirmationStrategy: {
+        blockhash: retried.blockhash,
+        lastValidBlockHeight: retried.lastValidBlockHeight,
+      },
     });
   }
 }
