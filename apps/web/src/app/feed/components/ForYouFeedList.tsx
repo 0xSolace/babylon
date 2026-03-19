@@ -1,6 +1,6 @@
 'use client';
 
-import type { FeedEventAction, NarrativeStory } from '@babylon/shared';
+import type { FeedEventAction, FeedSurface, NarrativeStory } from '@babylon/shared';
 import { Loader2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -18,6 +18,8 @@ const VISIBLE_DWELL_MS = 2000;
 
 interface ForYouFeedListProps {
   stories: NarrativeStory[];
+  /** Analytics surface identifier sent with feed events */
+  surface: FeedSurface;
   /** Whether the server has more pages beyond what is currently in `stories` */
   hasMore: boolean;
   /** Whether a server page fetch is in-flight */
@@ -28,6 +30,7 @@ interface ForYouFeedListProps {
 
 export function ForYouFeedList({
   stories,
+  surface,
   hasMore,
   loadingMore,
   loadMore,
@@ -100,7 +103,7 @@ export function ForYouFeedList({
       dwellMs?: number
     ) => ({
       actionType,
-      surface: 'for_you' as const,
+      surface,
       itemId: story.isNewMarket
         ? (story.marketId ?? story.storyKey)
         : (story.posts[0]?.id ?? story.storyKey),
@@ -122,7 +125,7 @@ export function ForYouFeedList({
       feedPosition: index,
       dwellMs,
     }),
-    []
+    [surface]
   );
 
   const trackStoryEvent = useCallback(

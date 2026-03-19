@@ -365,16 +365,20 @@ export function FeedClient() {
 
     if (tab === 'stories') {
       if (storiesError) return <EmptyFeed variant="stories" />;
-      if (storiesStories.length === 0) return <EmptyFeed variant="stories" />;
       return (
         <>
           {storiesTopic && <DailyTopicBanner topic={storiesTopic} />}
-          <ForYouFeedList
-            stories={storiesStories}
-            hasMore={storiesHasMore}
-            loadingMore={storiesLoadingMore}
-            loadMore={loadMoreStories}
-          />
+          {storiesStories.length === 0 ? (
+            <EmptyFeed variant="stories" />
+          ) : (
+            <ForYouFeedList
+              stories={storiesStories}
+              surface="stories"
+              hasMore={storiesHasMore}
+              loadingMore={storiesLoadingMore}
+              loadMore={loadMoreStories}
+            />
+          )}
         </>
       );
     }
@@ -385,6 +389,7 @@ export function FeedClient() {
       return (
         <ForYouFeedList
           stories={forYouStories}
+          surface="for_you"
           hasMore={forYouHasMore}
           loadingMore={forYouLoadingMore}
           loadMore={loadMoreForYou}
