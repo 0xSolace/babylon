@@ -47,9 +47,13 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
 
   // Deep-clone stories before per-user enrichment to avoid mutating the shared
   // cached object. Without this, isLiked/isShared state from one user bleeds
-  // into subsequent users' responses.
-  const stories = structuredClone(fullResult.stories);
-  if (userId && fullResult.postIds.length > 0) {
+  // into subsequent users' responses. Anonymous requests skip the clone since
+  // enrichment is never applied.
+  const needsEnrichment = userId && fullResult.postIds.length > 0;
+  const stories = needsEnrichment
+    ? structuredClone(fullResult.stories)
+    : fullResult.stories;
+  if (needsEnrichment) {
     await enrichStoriesForUser(stories, fullResult.postIds, userId);
   }
 
