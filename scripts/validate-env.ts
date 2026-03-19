@@ -112,11 +112,11 @@ const CONDITIONAL_RULES: ValidationRule[] = [
     when: ({ env }) => isEnabled(env.AGENT0_ENABLED),
   },
   {
-    id: 'nft-gating',
-    description: 'NFT gating dependencies when NFT gating is enabled',
+    id: 'nft-chat-gating',
+    description: 'NFT chat gating dependencies when NFT chat gating is enabled',
     kind: 'allOf',
     keys: ['NFT_CONTRACT_ADDRESS', 'NFT_INDEXER_GRAPHQL_URL'],
-    when: ({ env }) => isEnabled(env.NFT_GATING_ENABLED),
+    when: ({ env }) => isEnabled(env.NFT_CHAT_GATING_ENABLED),
   },
   {
     id: 'onchain-perps-diamond-address',
@@ -148,10 +148,6 @@ const DEPRECATED_ENV_VARS: DeprecatedEnvVar[] = [
   {
     key: 'NEXT_PUBLIC_POSTHOG_KEY',
     message: 'Deprecated alias. Use NEXT_PUBLIC_POSTHOG_PROJECT_ID.',
-  },
-  {
-    key: 'NFT_CHAT_GATING_ENABLED',
-    message: 'Legacy flag. Prefer NFT_GATING_ENABLED.',
   },
   {
     key: 'BABYLON_GAME_WALLET',

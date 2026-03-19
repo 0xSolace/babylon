@@ -154,6 +154,15 @@ describe('NFT Chat Gating Service', () => {
       expect(config.chatId).toBe('chat-123');
     });
 
+    it('ignores the removed global NFT gate flag', () => {
+      process.env.NFT_GATING_ENABLED = 'true';
+      process.env.NFT_CHAT_GATING_CHAT_ID = 'chat-123';
+
+      const config = getNftChatGatingConfig();
+      expect(config.enabled).toBe(false);
+      expect(config.chatId).toBe('chat-123');
+    });
+
     it('should parse various truthy values for enabled flag', () => {
       const truthyValues = ['true', 'TRUE', '1', 'yes', 'YES', 'on', 'ON'];
 

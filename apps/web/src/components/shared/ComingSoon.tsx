@@ -9,7 +9,6 @@ import {
   ChevronRight,
   Copy,
   Link2,
-  Mail,
   TrendingUp,
   Upload,
   User,
@@ -18,18 +17,12 @@ import {
   X,
 } from 'lucide-react';
 import Image from 'next/image';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { toast } from 'sonner';
 import { LinkSocialAccountsModal } from '@/components/profile/LinkSocialAccountsModal';
 import { Avatar } from '@/components/shared/Avatar';
-import {
-  getPrimaryAccessLabel,
-  getWaitlistHeaderCopy,
-  type NftAccessState,
-  shouldAutoRedirectWhitelistedUser,
-} from '@/components/shared/comingSoonAccess';
 import { MarketingFooter } from '@/components/shared/MarketingFooter';
 import { PlayerStatsModal } from '@/components/shared/PlayerStatsModal';
 import { useAuth } from '@/hooks/useAuth';
@@ -39,11 +32,7 @@ import {
   isPrivyTwitterLinkConflictError,
   X_ACCOUNT_ALREADY_LINKED_MESSAGE,
 } from '@/lib/privy-link-account-errors';
-import type {
-  EligibilityApiResponse,
-  EligibilityResponse,
-  NftAccessResponse,
-} from '@/types/nft';
+import type { EligibilityApiResponse, EligibilityResponse } from '@/types/nft';
 import { apiFetch } from '@/utils/api-fetch';
 import { uploadImage, validateImageFile } from '@/utils/upload-image';
 
@@ -92,7 +81,6 @@ interface WaitlistData {
   totalReferralPoints?: number; // Total points from referrals
   invitedUsers?: ReferralUser[]; // Pending users list
   qualifiedUsers?: ReferralUser[]; // Qualified users list
-  whitelistRankThreshold?: number;
 }
 
 /**
@@ -198,13 +186,11 @@ export function ComingSoon() {
       toast.error('Failed to link account. Please try again.');
     },
   });
-  const router = useRouter();
   const searchParams = useSearchParams();
   const [waitlistData, setWaitlistData] = useState<WaitlistData | null>(null);
   const [waitlistSetupError, setWaitlistSetupError] = useState<string | null>(
     null
   );
-  const [nftAccess, setNftAccess] = useState<NftAccessState>(null);
   const [nftEligibility, setNftEligibility] =
     useState<EligibilityResponse | null>(null);
   const [copiedCode, setCopiedCode] = useState(false);
@@ -239,7 +225,6 @@ export function ComingSoon() {
   const [isVerifyingDiscordJoin, setIsVerifyingDiscordJoin] = useState(false);
   const [showVerifyDiscordJoinButton, setShowVerifyDiscordJoinButton] =
     useState(false);
-  const hasAutoRedirectedRef = useRef(false);
 
   // Profile dropdown state
   const [showProfileDropdown, setShowProfileDropdown] = useState(false);
@@ -275,16 +260,6 @@ export function ComingSoon() {
   >(null);
   const [usernameSuggestion, setUsernameSuggestion] = useState<string | null>(
     null
-  );
-
-  // Email collection state — initialize from dbUser to avoid flash of wrong state.
-  // emailSaved tracks whether the bonus was already claimed (pointsAwardedForEmail flag),
-  // not just whether an email exists, to handle social-login users who have an email
-  // but haven't submitted the form and earned the bonus yet.
-  const [emailInput, setEmailInput] = useState(() => dbUser?.email ?? '');
-  const [isSavingEmail, setIsSavingEmail] = useState(false);
-  const [emailSaved, setEmailSaved] = useState(() =>
-    Boolean(dbUser?.pointsAwardedForEmail)
   );
 
   // Total available assets
@@ -839,53 +814,6 @@ export function ComingSoon() {
     [fetchWaitlistPosition]
   );
 
-  const handleEmailSubmit = useCallback(async () => {
-    if (!dbUser?.id || !emailInput.trim() || isSavingEmail) return;
-
-    // Basic email validation
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(emailInput.trim())) {
-      toast.error('Please enter a valid email address.');
-      return;
-    }
-
-    setIsSavingEmail(true);
-    try {
-      const response = await fetch('/api/waitlist/bonus/email', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: emailInput.trim() }),
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        logger.error(
-          'Failed to submit email',
-          { userId: dbUser.id, status: response.status, errorText },
-          'ComingSoon'
-        );
-        toast.error('Failed to save email. Please try again.');
-        return;
-      }
-
-      const result = await response.json();
-      setEmailSaved(true);
-
-      if (result.awarded) {
-        toast.success(`Email saved! +${POINTS.EMAIL_SUBMIT} points`);
-      } else {
-        toast.success('Email saved!');
-      }
-
-      // Refresh position to show updated points
-      await fetchWaitlistPosition(dbUser.id);
-    } catch {
-      toast.error('Network error. Please try again.');
-    } finally {
-      setIsSavingEmail(false);
-    }
-  }, [dbUser?.id, emailInput, isSavingEmail, fetchWaitlistPosition]);
-
   const dbUserId = dbUser?.id;
   const dbUserProfileComplete = dbUser?.profileComplete;
   const dbUserUsername = dbUser?.username;
@@ -1320,14 +1248,8 @@ export function ComingSoon() {
     reader.readAsDataURL(file);
   };
 
-  const handleJoinWaitlist = () => {
-    // Trigger Privy login with waitlist context
-    // After login, OnboardingProvider will handle profile setup
-    // Then we'll mark as waitlisted in the useEffect above
-    const currentUrl = new URL(window.location.href);
-    currentUrl.searchParams.set('waitlist', 'true');
-    router.push(currentUrl.pathname + currentUrl.search, { scroll: false });
-    login();
+  const handlePlay = () => {
+    window.location.assign(getAppBaseUrl());
   };
 
   useEffect(() => {
@@ -1340,28 +1262,14 @@ export function ComingSoon() {
         const token = await getAccessToken();
         if (!token || controller.signal.aborted) return;
 
-        const [eligibilityRes, accessRes] = await Promise.all([
-          fetch('/api/nft/eligibility', {
-            headers: { Authorization: `Bearer ${token}` },
-            signal: controller.signal,
-          }),
-          fetch('/api/nft/access', {
-            headers: { Authorization: `Bearer ${token}` },
-            signal: controller.signal,
-          }),
-        ]);
+        const eligibilityRes = await fetch('/api/nft/eligibility', {
+          headers: { Authorization: `Bearer ${token}` },
+          signal: controller.signal,
+        });
 
         if (!controller.signal.aborted && eligibilityRes.ok) {
           const json = (await eligibilityRes.json()) as EligibilityApiResponse;
           setNftEligibility(json.data);
-        }
-
-        if (!controller.signal.aborted && accessRes.ok) {
-          const json = (await accessRes.json()) as NftAccessResponse;
-          setNftAccess({
-            hasAccess: json.data.hasAccess,
-            reason: json.data.reason,
-          });
         }
       } catch {
         // best-effort only (do not block waitlist UI)
@@ -1378,24 +1286,7 @@ export function ComingSoon() {
   const appBaseUrl = getAppBaseUrl();
   const canClaimNft =
     nftEligibility?.eligible === true && nftEligibility.hasMinted === false;
-  const hasNft = Boolean(nftAccess?.hasAccess) && !canClaimNft;
-  const hasPrimaryAccess = canClaimNft || hasNft;
-  const headerCopy = getWaitlistHeaderCopy(
-    hasPrimaryAccess,
-    waitlistData?.whitelistRankThreshold
-  );
-
-  useEffect(() => {
-    if (
-      !shouldAutoRedirectWhitelistedUser(authenticated, dbUser?.id, nftAccess)
-    ) {
-      return;
-    }
-    if (hasAutoRedirectedRef.current) return;
-
-    hasAutoRedirectedRef.current = true;
-    window.location.replace(appBaseUrl);
-  }, [authenticated, appBaseUrl, dbUser?.id, nftAccess]);
+  const playHref = `${appBaseUrl}${canClaimNft ? '/nft' : '/feed'}`;
 
   // Unauthenticated state - Show landing page
   if (!authenticated || !dbUser) {
@@ -1465,7 +1356,7 @@ export function ComingSoon() {
             {/* Join Waitlist Button */}
             <div className="animation-delay-200 relative z-20 mb-8 animate-fadeIn px-4 sm:mb-16">
               <button
-                onClick={handleJoinWaitlist}
+                onClick={handlePlay}
                 className="group hover:-translate-y-1 relative w-full skew-x-[-10deg] overflow-hidden rounded-none bg-primary px-10 py-5 font-bold text-primary-foreground text-xl shadow-[0_0_20px_rgba(var(--primary),0.4)] transition-all duration-300 hover:bg-primary/90 hover:shadow-[0_0_40px_rgba(var(--primary),0.6)] disabled:opacity-50 sm:w-auto sm:px-12 sm:py-6 sm:text-2xl"
               >
                 <span className="relative z-10 inline-block skew-x-[10deg]">
@@ -2010,7 +1901,7 @@ export function ComingSoon() {
               <div className="mb-10 grid grid-cols-1 gap-4 sm:mb-12 sm:grid-cols-2 sm:gap-6 md:mb-16 md:gap-8 lg:grid-cols-4">
                 {/* Join Waitlist */}
                 <button
-                  onClick={handleJoinWaitlist}
+                  onClick={handlePlay}
                   className="group touch-manipulation rounded-none border border-primary/20 bg-primary p-6 text-center shadow-[0_0_20px_rgba(var(--primary),0.2)] backdrop-blur-md transition-all duration-300 hover:bg-primary/90 hover:shadow-[0_0_40px_rgba(var(--primary),0.4)] active:scale-95 disabled:opacity-50 sm:p-8 md:p-10"
                 >
                   <h3 className="mb-2 font-bold text-primary-foreground text-xl transition-colors group-hover:text-white sm:mb-3 sm:text-2xl">
@@ -2532,24 +2423,22 @@ export function ComingSoon() {
                 </div>
                 <div>
                   <h1 className="font-bold text-2xl text-foreground tracking-tight sm:text-3xl md:text-4xl">
-                    {headerCopy.title}
+                    Welcome back
                   </h1>
                   <p className="mt-1 text-muted-foreground text-sm">
-                    {headerCopy.subtitle}
+                    Jump straight into Babylon.
                   </p>
                 </div>
               </div>
 
               <div className="flex shrink-0 items-center gap-3">
-                {hasPrimaryAccess && (
-                  <a
-                    href={`${appBaseUrl}${canClaimNft ? '/nft' : '/feed'}`}
-                    className="flex min-h-[48px] items-center gap-2 rounded-lg border border-primary/30 bg-primary/10 px-4 py-2 font-semibold text-primary backdrop-blur-sm transition-all duration-200 hover:bg-primary/15"
-                  >
-                    {canClaimNft && <Wallet className="h-4 w-4" />}
-                    {getPrimaryAccessLabel(canClaimNft)}
-                  </a>
-                )}
+                <a
+                  href={playHref}
+                  className="flex min-h-[48px] items-center gap-2 rounded-lg border border-primary/30 bg-primary/10 px-4 py-2 font-semibold text-primary backdrop-blur-sm transition-all duration-200 hover:bg-primary/15"
+                >
+                  {canClaimNft && <Wallet className="h-4 w-4" />}
+                  {canClaimNft ? 'Claim your NFT' : 'Play'}
+                </a>
 
                 {/* Profile Dropdown */}
                 <div className="relative" ref={profileDropdownRef}>
@@ -2632,62 +2521,6 @@ export function ComingSoon() {
           </div>
 
           {/* Email Collection — prominent section */}
-          {!hasPrimaryAccess && !emailSaved && (
-            <div className="mb-8 rounded-xl border border-primary/30 bg-primary/5 p-5 backdrop-blur-sm sm:p-6">
-              <div className="mb-3 flex items-center gap-2">
-                <Mail className="h-5 w-5 text-primary" />
-                <h3 className="font-bold text-base text-foreground">
-                  Get notified by email
-                </h3>
-                <span className="rounded-full bg-primary/15 px-2 py-0.5 font-semibold text-primary text-xs">
-                  +{POINTS.EMAIL_SUBMIT} pts
-                </span>
-              </div>
-              <p className="mb-4 text-muted-foreground text-sm">
-                We are whitelisting new people every day, so stay patient. If
-                you provide your email, we will notify you when you get
-                whitelisted.
-              </p>
-              <div className="flex items-center gap-2">
-                <input
-                  type="email"
-                  aria-label="Email address"
-                  placeholder="Enter your email"
-                  value={emailInput}
-                  onChange={(e) => setEmailInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      handleEmailSubmit();
-                    }
-                  }}
-                  disabled={isSavingEmail}
-                  className="min-w-0 flex-1 rounded-lg border border-border bg-background/80 px-4 py-2.5 text-sm outline-none transition-colors placeholder:text-muted-foreground/50 focus:border-primary/50 focus:ring-1 focus:ring-primary/20"
-                />
-                <button
-                  onClick={handleEmailSubmit}
-                  disabled={isSavingEmail || !emailInput.trim()}
-                  className="shrink-0 rounded-lg bg-primary px-5 py-2.5 font-semibold text-primary-foreground text-sm transition-all duration-200 hover:bg-primary/90 active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {isSavingEmail ? 'Saving...' : 'Submit'}
-                </button>
-              </div>
-            </div>
-          )}
-          {!hasPrimaryAccess && emailSaved && (
-            <div className="mb-8 rounded-xl border border-green-500/30 bg-green-500/5 p-5 backdrop-blur-sm sm:p-6">
-              <div className="mb-3 flex items-center gap-2">
-                <Mail className="h-5 w-5 text-green-500" />
-                <h3 className="font-bold text-base text-foreground">
-                  Email Provided
-                </h3>
-              </div>
-              <p className="text-muted-foreground text-sm">
-                We are whitelisting new people every day, so stay patient. We
-                will notify you by email when you get whitelisted.
-              </p>
-            </div>
-          )}
-
           <div className="mb-8 rounded-xl border border-primary/10 bg-background/40 p-4 backdrop-blur-sm sm:p-5">
             <div className="mb-3 text-muted-foreground text-sm">
               Official Links
