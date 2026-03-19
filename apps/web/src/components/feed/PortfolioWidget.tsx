@@ -180,18 +180,18 @@ export function PortfolioWidget() {
     return () => unregisterRefresh('portfolio-widget');
   }, [registerRefresh, unregisterRefresh, handleRefresh]);
 
+  const handleViewProfile = useCallback(() => {
+    if (user) {
+      router.push(getProfileUrl(user.id, user.username));
+    }
+  }, [router, user]);
+
   if (!authenticated) {
     return null;
   }
 
   const data = portfolioData ?? cachedData;
   const loading = portfolioLoading && !data;
-
-  const handleViewProfile = useCallback(() => {
-    if (user) {
-      router.push(getProfileUrl(user.id, user.username));
-    }
-  }, [router, user]);
 
   return (
     <PortfolioWidgetContent

@@ -29,7 +29,7 @@ export function getTrimmedEnv(name: SupportedEnvKey): string | undefined {
                   ? process.env.PRIVY_OFFLINE_POLICY_ID
                   : name === 'PRIVY_SOLANA_OFFLINE_POLICY_ID'
                     ? process.env.PRIVY_SOLANA_OFFLINE_POLICY_ID
-                  : process.env.PRIVY_OFFLINE_SIGNER_ID;
+                    : process.env.PRIVY_OFFLINE_SIGNER_ID;
 
   const trimmed = rawValue?.trim();
   return trimmed ? trimmed : undefined;

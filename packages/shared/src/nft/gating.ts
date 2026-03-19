@@ -8,6 +8,7 @@ const EXACT_ALLOWLIST = new Set<string>([
 
   // API routes (exact)
   '/api/users/me',
+  '/api/users/me/game-guide',
   '/api/users/signup',
   '/api/upload',
 ]);

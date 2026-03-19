@@ -1,6 +1,6 @@
 'use client';
 
-import { logger } from '@babylon/shared';
+import { getAllVerifiedEmails, logger } from '@babylon/shared';
 import {
   type ConnectedWallet,
   usePrivy,
@@ -238,8 +238,9 @@ export function useAuth(): UseAuthReturn {
           : '/api/users/me';
 
         const currentUser = useAuthStore.getState().user;
+        const verifiedPrivyEmail = getAllVerifiedEmails(privyUser)[0] ?? null;
         const shouldForcePrivyIdentitySync =
-          (!!privyUser.email?.address &&
+          (!!verifiedPrivyEmail &&
             (!currentUser?.email || !currentUser?.emailVerified)) ||
           (!!privyUser.farcaster && !currentUser?.hasFarcaster) ||
           (!!privyUser.twitter && !currentUser?.hasTwitter);
@@ -291,8 +292,8 @@ export function useAuth(): UseAuthReturn {
             displayName:
               me.user.displayName && me.user.displayName.trim() !== ''
                 ? me.user.displayName
-                : privyUser.email?.address || wallet?.address || 'Anonymous',
-            email: privyUser.email?.address ?? me.user.email ?? undefined,
+                : (verifiedPrivyEmail ?? wallet?.address ?? 'Anonymous'),
+            email: verifiedPrivyEmail ?? me.user.email ?? undefined,
             emailVerified: me.user.emailVerified ?? undefined,
             emailNotificationsEnabled:
               me.user.emailNotificationsEnabled ?? undefined,
@@ -396,9 +397,8 @@ export function useAuth(): UseAuthReturn {
             setUser({
               id: privyUser.id,
               walletAddress: wallet?.address,
-              displayName:
-                privyUser.email?.address ?? wallet?.address ?? 'Anonymous',
-              email: privyUser.email?.address,
+              displayName: verifiedPrivyEmail ?? wallet?.address ?? 'Anonymous',
+              email: verifiedPrivyEmail ?? undefined,
               onChainRegistered: false,
             });
           }

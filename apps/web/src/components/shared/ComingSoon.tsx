@@ -1,7 +1,7 @@
 'use client';
 
 import { getReferralUrl, logger, POINTS } from '@babylon/shared';
-import { usePrivy } from '@privy-io/react-auth';
+import { useLinkAccount, usePrivy } from '@privy-io/react-auth';
 import {
   Check,
   ChevronDown,
@@ -34,6 +34,11 @@ import { MarketingFooter } from '@/components/shared/MarketingFooter';
 import { PlayerStatsModal } from '@/components/shared/PlayerStatsModal';
 import { useAuth } from '@/hooks/useAuth';
 import { EXTERNAL_LINKS } from '@/lib/constants';
+import {
+  isPrivyLinkFlowCancellationError,
+  isPrivyTwitterLinkConflictError,
+  X_ACCOUNT_ALREADY_LINKED_MESSAGE,
+} from '@/lib/privy-link-account-errors';
 import type {
   EligibilityApiResponse,
   EligibilityResponse,
@@ -138,15 +143,61 @@ interface ReferralUser {
  * @returns Coming soon page element
  */
 export function ComingSoon() {
-  const {
-    login,
-    authenticated,
-    user: privyUser,
-    logout,
-    linkTwitter,
-    linkFarcaster,
-  } = usePrivy();
+  const { login, authenticated, user: privyUser, logout } = usePrivy();
   const { user: dbUser, refresh, getAccessToken } = useAuth();
+  const { linkTwitter, linkFarcaster } = useLinkAccount({
+    onSuccess: async ({ linkedAccount }) => {
+      const linkedType = String(linkedAccount.type);
+      if (
+        linkedType !== 'farcaster' &&
+        linkedType !== 'farcaster_account' &&
+        linkedType !== 'twitter_oauth'
+      ) {
+        return;
+      }
+
+      await refresh();
+
+      if (dbUser?.id) {
+        await fetchWaitlistPosition(dbUser.id);
+      }
+
+      if (linkedType === 'farcaster' || linkedType === 'farcaster_account') {
+        toast.success('Farcaster account linked successfully!');
+      } else {
+        toast.success('X account linked successfully!');
+      }
+    },
+    onError: (error) => {
+      if (isPrivyLinkFlowCancellationError(error)) {
+        logger.info(
+          'Social account linking cancelled by user',
+          { userId: dbUser?.id },
+          'ComingSoon'
+        );
+        return;
+      }
+
+      if (isPrivyTwitterLinkConflictError(error)) {
+        logger.info(
+          'Handled X link conflict during waitlist social linking',
+          { userId: dbUser?.id },
+          'ComingSoon'
+        );
+        toast.error(X_ACCOUNT_ALREADY_LINKED_MESSAGE);
+        return;
+      }
+
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      logger.error(
+        'Failed to link social account via Privy',
+        { error: errorMessage, userId: dbUser?.id },
+        'ComingSoon'
+      );
+      toast.error('Failed to link account. Please try again.');
+    },
+  });
   const router = useRouter();
   const searchParams = useSearchParams();
   const [waitlistData, setWaitlistData] = useState<WaitlistData | null>(null);
@@ -278,11 +329,6 @@ export function ComingSoon() {
       return;
     }
 
-    if (!linkTwitter) {
-      toast.error('X linking is currently unavailable');
-      return;
-    }
-
     linkTwitter();
   };
 
@@ -309,11 +355,6 @@ export function ComingSoon() {
         {},
         'ComingSoon'
       );
-      return;
-    }
-
-    if (!linkFarcaster) {
-      toast.error('Farcaster linking is currently unavailable');
       return;
     }
 

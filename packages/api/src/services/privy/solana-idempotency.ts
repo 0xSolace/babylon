@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 
-export function buildSponsoredSolanaTransactionIdempotencyKey({
+export function buildSolanaTransactionIdempotencyKey({
   walletId,
   transaction,
   caip2,
@@ -15,10 +15,9 @@ export function buildSponsoredSolanaTransactionIdempotencyKey({
         walletId,
         caip2,
         transaction,
-        sponsor: true,
       })
     )
     .digest('hex');
 
-  return `solana-sponsored-tx:v1:${digest}`;
+  return `solana-tx:v1:${digest}`;
 }

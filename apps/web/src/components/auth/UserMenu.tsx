@@ -1,6 +1,11 @@
 'use client';
 
-import { getDisplayReferralUrl, getReferralUrl } from '@babylon/shared';
+import {
+  extractErrorMessage,
+  getDisplayReferralUrl,
+  getReferralUrl,
+  logger,
+} from '@babylon/shared';
 import {
   BookOpen,
   Check,
@@ -74,7 +79,15 @@ export function UserMenu() {
   useEffect(() => {
     const handleRewardsUpdated = () => {
       // Refresh the auth state to get latest reputation points
-      refresh();
+      void refresh().catch((error) => {
+        logger.warn(
+          'Failed to refresh auth state after rewards update',
+          {
+            error: extractErrorMessage(error),
+          },
+          'UserMenu'
+        );
+      });
     };
 
     window.addEventListener('rewards-updated', handleRewardsUpdated);
