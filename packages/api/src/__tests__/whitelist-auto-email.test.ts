@@ -142,7 +142,7 @@ mock.module('../services/whitelist-email-service', () => ({
 const { autoWhitelistCurrentTopN, normalizeWhitelistLeaderboardThreshold } =
   await import('../services/whitelist-service');
 
-describe('autoWhitelistCurrentTopN → whitelist welcome emails', () => {
+describe('autoWhitelistCurrentTopN', () => {
   beforeEach(() => {
     mockDbSelect.mockClear();
     mockDbInsert.mockClear();
@@ -155,15 +155,11 @@ describe('autoWhitelistCurrentTopN → whitelist welcome emails', () => {
     mockInsertedRows = [{ userId: 'user-1' }, { userId: 'user-2' }];
   });
 
-  it('sends whitelist welcome emails for users inserted by leaderboard cron', async () => {
+  it('does not send whitelist welcome emails for users inserted by leaderboard cron', async () => {
     const result = await autoWhitelistCurrentTopN();
 
     expect(result.inserted).toBe(2);
-    expect(mockSendWhitelistWelcomeEmailsToUsers).toHaveBeenCalledTimes(1);
-    expect(mockSendWhitelistWelcomeEmailsToUsers).toHaveBeenCalledWith([
-      'user-1',
-      'user-2',
-    ]);
+    expect(mockSendWhitelistWelcomeEmailsToUsers).toHaveBeenCalledTimes(0);
   });
 
   it('does not send whitelist welcome emails when leaderboard is empty', async () => {
