@@ -36,10 +36,12 @@ export function AgentPortfolio(props: AgentPortfolioProps) {
   }
 
   return (
-    <SharedAgentWallet
-      agent={{ id: props.agentId, name: entityName }}
-      onUpdate={() => {}}
-    />
+    <div className="p-4">
+      <SharedAgentWallet
+        agent={{ id: props.agentId, name: entityName }}
+        onUpdate={() => {}}
+      />
+    </div>
   );
 }
 
