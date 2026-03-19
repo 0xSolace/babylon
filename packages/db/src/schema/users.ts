@@ -298,6 +298,18 @@ export const users = pgTable(
     )
       .notNull()
       .default(true),
+    notificationDigestEnabled: boolean('notificationDigestEnabled')
+      .notNull()
+      .default(true),
+    notificationDigestFrequency: text('notificationDigestFrequency')
+      .notNull()
+      .default('daily'),
+    notificationDigestDeliveryChannel: text('notificationDigestDeliveryChannel')
+      .notNull()
+      .default('both'),
+    notificationDigestLastSentAt: timestamp('notificationDigestLastSentAt', {
+      mode: 'date',
+    }),
     emailNotificationsUnsubscribedAt: timestamp(
       'emailNotificationsUnsubscribedAt',
       {

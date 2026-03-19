@@ -25,6 +25,7 @@ import { LoginButton } from '@/components/auth/LoginButton';
 import { LinkSocialAccountsModal } from '@/components/profile/LinkSocialAccountsModal';
 import { ApiKeysTab } from '@/components/settings/ApiKeysTab';
 import { BillingTab } from '@/components/settings/BillingTab';
+import { NotificationsTab } from '@/components/settings/NotificationsTab';
 import { PrivacyTab } from '@/components/settings/PrivacyTab';
 import { SecurityTab } from '@/components/settings/SecurityTab';
 import { Avatar } from '@/components/shared/Avatar';
@@ -149,6 +150,7 @@ export default function SettingsPage() {
     const baseTabs = [
       { id: 'profile', label: 'Profile', icon: User },
       { id: 'theme', label: 'Theme', icon: Palette },
+      { id: 'notifications', label: 'Notifications', icon: Bell },
     ];
 
     // Add billing tab if feature flag is enabled
@@ -926,69 +928,11 @@ export default function SettingsPage() {
                           disabled={!emailNotificationPreferences.enabled}
                         />
                       </div>
-
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="min-w-0">
-                          <div className="font-medium text-sm">
-                            Daily summary
-                          </div>
-                          <div className="truncate text-muted-foreground text-xs">
-                            One summary email per day.
-                          </div>
-                        </div>
-                        <Switch
-                          checked={emailNotificationPreferences.dailySummary}
-                          onCheckedChange={(checked) =>
-                            void updateEmailNotificationPreferences({
-                              dailySummary: checked,
-                            })
-                          }
-                          disabled={!emailNotificationPreferences.enabled}
-                        />
-                      </div>
-
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="min-w-0">
-                          <div className="font-medium text-sm">
-                            Weekly summary
-                          </div>
-                          <div className="truncate text-muted-foreground text-xs">
-                            One summary email per week.
-                          </div>
-                        </div>
-                        <Switch
-                          checked={emailNotificationPreferences.weeklySummary}
-                          onCheckedChange={(checked) =>
-                            void updateEmailNotificationPreferences({
-                              weeklySummary: checked,
-                            })
-                          }
-                          disabled={!emailNotificationPreferences.enabled}
-                        />
-                      </div>
-
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="min-w-0">
-                          <div className="font-medium text-sm">
-                            Monthly summary
-                          </div>
-                          <div className="truncate text-muted-foreground text-xs">
-                            One summary email per month.
-                          </div>
-                        </div>
-                        <Switch
-                          checked={emailNotificationPreferences.monthlySummary}
-                          onCheckedChange={(checked) =>
-                            void updateEmailNotificationPreferences({
-                              monthlySummary: checked,
-                            })
-                          }
-                          disabled={!emailNotificationPreferences.enabled}
-                        />
-                      </div>
                     </div>
                     <div className="mt-3 text-muted-foreground text-xs">
-                      All notification emails include an unsubscribe link.
+                      Performance digest frequency and delivery are managed in
+                      the Notifications tab. All notification emails include an
+                      unsubscribe link.
                     </div>
                   </div>
 
@@ -1121,14 +1065,13 @@ export default function SettingsPage() {
                         );
                       })}
                     </div>
-                    <p className="text-muted-foreground text-xs">
-                      Theme preference is saved automatically and applied
-                      immediately.
-                    </p>
                   </>
                 )}
               </div>
             )}
+
+            {/* Notifications Tab */}
+            {activeTab === 'notifications' && <NotificationsTab />}
 
             {/* Billing Tab - Feature Flagged */}
             {activeTab === 'billing' && billingEnabled && <BillingTab />}

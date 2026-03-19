@@ -35,6 +35,8 @@ export * from './message-tags';
 export * from './messages';
 // Agent monitoring types
 export * from './monitoring';
+// Notification types
+export * from './notifications';
 // Payment types
 export * from './payments';
 // Profile widget types (balance, positions, etc.)

@@ -1,7 +1,7 @@
 'use client';
 
 import { cn, logger } from '@babylon/shared';
-import { Bell } from 'lucide-react';
+import { Bell, Settings } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -28,6 +28,7 @@ const WidgetSidebar = dynamic(
 interface Notification {
   id: string;
   type: string;
+  title: string;
   actorId: string | null;
   actor: {
     id: string;
@@ -41,6 +42,7 @@ interface Notification {
   groupId: string | null;
   inviteId: string | null;
   message: string;
+  data: Record<string, unknown> | null;
   read: boolean;
   createdAt: string;
 }
@@ -300,6 +302,21 @@ export default function NotificationsPage() {
   };
 
   const getNotificationLink = (notification: Notification) => {
+    if (
+      notification.type === 'market_resolved' &&
+      typeof notification.data?.deepLink === 'string'
+    ) {
+      return notification.data.deepLink;
+    }
+
+    if (
+      notification.type === 'hourly_summary' ||
+      notification.type === 'daily_summary' ||
+      notification.type === 'weekly_summary'
+    ) {
+      return '/notifications';
+    }
+
     // DM or group chat message - go to the specific chat if chatId is available
     if (notification.chatId) {
       return `/chats?chat=${notification.chatId}`;
@@ -373,7 +390,15 @@ export default function NotificationsPage() {
           {/* Header */}
           <div className="sticky top-0 z-10 flex-shrink-0 bg-background shadow-sm">
             <div className="w-full px-4 py-3 lg:mx-auto lg:max-w-[700px] lg:px-6">
-              <h1 className="font-bold text-xl">Notifications</h1>
+              <div className="flex items-center justify-between">
+                <h1 className="font-bold text-xl">Notifications</h1>
+                <Link
+                  href="/settings?tab=notifications"
+                  className="rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+                >
+                  <Settings className="h-5 w-5" />
+                </Link>
+              </div>
               {unreadCount > 0 && (
                 <p className="text-muted-foreground text-sm">
                   {unreadCount} unread
@@ -440,82 +465,92 @@ export default function NotificationsPage() {
                   )}
 
                   {/* Regular Notifications */}
-                  {notifications.map((notification) => (
-                    <Link
-                      key={notification.id}
-                      href={getNotificationLink(notification)}
-                      onClick={() =>
-                        markAsRead(notification.id, notification.read)
-                      }
-                      data-notification-id={notification.id}
-                      className={cn(
-                        'block border-border border-b px-4 py-4 lg:px-6',
-                        'transition-colors hover:bg-muted/30',
-                        !notification.read && 'bg-primary/5'
-                      )}
-                    >
-                      <div className="flex items-center gap-3">
-                        {/* Unread Indicator */}
-                        {!notification.read && (
-                          <div className="h-2 w-2 shrink-0 rounded-full bg-primary" />
-                        )}
+                  {notifications.map((notification) => {
+                    const isSystemStyle =
+                      !notification.actor ||
+                      notification.type === 'system' ||
+                      notification.type === 'market_resolved' ||
+                      notification.type === 'hourly_summary' ||
+                      notification.type === 'daily_summary' ||
+                      notification.type === 'weekly_summary';
 
-                        {/* Actor Avatar */}
-                        {notification.actor ? (
-                          <Avatar
-                            id={notification.actor.id}
-                            name={notification.actor.displayName}
-                            size="md"
-                            className="shrink-0"
-                          />
-                        ) : (
-                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full">
-                            {notification.type === 'system' ? (
-                              <span className="text-xl">
-                                {getNotificationIcon(notification.type)}
-                              </span>
-                            ) : (
-                              <Bell className="h-5 w-5 text-muted-foreground" />
-                            )}
-                          </div>
+                    return (
+                      <Link
+                        key={notification.id}
+                        href={getNotificationLink(notification)}
+                        onClick={() =>
+                          markAsRead(notification.id, notification.read)
+                        }
+                        data-notification-id={notification.id}
+                        className={cn(
+                          'block border-border border-b px-4 py-4 lg:px-6',
+                          'transition-colors hover:bg-muted/30',
+                          !notification.read && 'bg-primary/5'
                         )}
+                      >
+                        <div className="flex items-center gap-3">
+                          {/* Unread Indicator */}
+                          {!notification.read && (
+                            <div className="h-2 w-2 shrink-0 rounded-full bg-primary" />
+                          )}
 
-                        {/* Content */}
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-start gap-3">
-                            <div className="flex-1">
+                          {/* Actor Avatar */}
+                          {notification.actor && !isSystemStyle ? (
+                            <Avatar
+                              id={notification.actor.id}
+                              name={notification.actor.displayName}
+                              size="md"
+                              className="shrink-0"
+                            />
+                          ) : (
+                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full">
                               {notification.type === 'system' ? (
-                                <p className="text-foreground leading-relaxed">
-                                  {notification.message}{' '}
-                                  <time className="text-muted-foreground/70 text-xs">
-                                    {formatTimeAgo(notification.createdAt)}
-                                  </time>
-                                </p>
+                                <span className="text-xl">
+                                  {getNotificationIcon(notification.type)}
+                                </span>
                               ) : (
-                                <p className="text-foreground leading-relaxed">
-                                  <span className="block font-semibold md:inline">
-                                    {notification.actor?.displayName ||
-                                      'Someone'}
-                                  </span>{' '}
-                                  <span className="text-muted-foreground">
-                                    {notification.message
-                                      .replace(
-                                        notification.actor?.displayName || '',
-                                        ''
-                                      )
-                                      .replace(/^:\s*/, '')}
-                                  </span>{' '}
-                                  <time className="text-muted-foreground/70 text-xs">
-                                    {formatTimeAgo(notification.createdAt)}
-                                  </time>
-                                </p>
+                                <Bell className="h-5 w-5 text-muted-foreground" />
                               )}
+                            </div>
+                          )}
+
+                          {/* Content */}
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-start gap-3">
+                              <div className="flex-1">
+                                {isSystemStyle ? (
+                                  <p className="text-foreground leading-relaxed">
+                                    {notification.message}{' '}
+                                    <time className="text-muted-foreground/70 text-xs">
+                                      {formatTimeAgo(notification.createdAt)}
+                                    </time>
+                                  </p>
+                                ) : (
+                                  <p className="text-foreground leading-relaxed">
+                                    <span className="block font-semibold md:inline">
+                                      {notification.actor?.displayName ||
+                                        'Someone'}
+                                    </span>{' '}
+                                    <span className="text-muted-foreground">
+                                      {notification.message
+                                        .replace(
+                                          notification.actor?.displayName || '',
+                                          ''
+                                        )
+                                        .replace(/^:\s*/, '')}
+                                    </span>{' '}
+                                    <time className="text-muted-foreground/70 text-xs">
+                                      {formatTimeAgo(notification.createdAt)}
+                                    </time>
+                                  </p>
+                                )}
+                              </div>
                             </div>
                           </div>
                         </div>
-                      </div>
-                    </Link>
-                  ))}
+                      </Link>
+                    );
+                  })}
                 </div>
               )}
             </div>
