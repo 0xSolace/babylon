@@ -1,9 +1,11 @@
-import { PrivyClient } from '@privy-io/node';
+import { generateAuthorizationSignature, PrivyClient } from '@privy-io/node';
 
 type CliOptions = {
   appId: string;
   appSecret: string;
-  namePrefix: string;
+  namePrefix?: string;
+  policyId?: string;
+  authorizationPrivateKey?: string;
   ownerId?: string;
   allowSignTransaction: boolean;
   json: boolean;
@@ -11,7 +13,7 @@ type CliOptions = {
 
 function printUsage(): void {
   console.log(`
-Create a Privy Solana policy for Babylon agent registrations
+Create or update a Privy Solana policy for Babylon agent registrations
 
 Usage:
   bun run scripts/create-privy-solana-policy.ts [options]
@@ -21,13 +23,16 @@ Options:
   --app-secret <value>         Privy app secret (fallback: PRIVY_APP_SECRET)
   --name-prefix <value>        Prefix for the created policy name
                                (default: babylon-solana-registration)
+  --policy-id <value>          Update an existing policy instead of creating one
+  --authorization-key <value>  Authorization private key used to update a policy
+                               (fallback: PRIVY_AUTHORIZATION_PRIVATE_KEY)
   --owner-id <value>           Optional key quorum owner ID
                                (fallback: PRIVY_OFFLINE_SIGNER_ID)
   --sign-and-send-only         Only allow signAndSendTransaction
   --json                       Output machine-readable JSON only
   -h, --help                   Show this help
 
-What this creates:
+What this does:
   - A Solana-only Privy policy
   - Default scope: ALLOW signAndSendTransaction and signTransaction,
     default-deny everything else
@@ -78,8 +83,11 @@ function parseOptions(): CliOptions {
     readEnv('NEXT_PUBLIC_PRIVY_APP_ID');
   const appSecret =
     readArgValue(args, '--app-secret') ?? readEnv('PRIVY_APP_SECRET');
-  const namePrefix =
-    readArgValue(args, '--name-prefix') ?? 'babylon-solana-registration';
+  const namePrefix = readArgValue(args, '--name-prefix');
+  const policyId = readArgValue(args, '--policy-id');
+  const authorizationPrivateKey =
+    readArgValue(args, '--authorization-key') ??
+    readEnv('PRIVY_AUTHORIZATION_PRIVATE_KEY');
   const ownerId =
     readArgValue(args, '--owner-id') ?? readEnv('PRIVY_OFFLINE_SIGNER_ID');
   const allowSignTransaction = !hasFlag(args, '--sign-and-send-only');
@@ -90,6 +98,11 @@ function parseOptions(): CliOptions {
   if (!appSecret) {
     missing.push('app secret (--app-secret or PRIVY_APP_SECRET)');
   }
+  if (policyId && !authorizationPrivateKey) {
+    missing.push(
+      'authorization key (--authorization-key or PRIVY_AUTHORIZATION_PRIVATE_KEY) required for --policy-id updates'
+    );
+  }
 
   if (missing.length > 0) {
     throw new Error(`Missing required inputs: ${missing.join(', ')}`);
@@ -98,7 +111,9 @@ function parseOptions(): CliOptions {
   return {
     appId: appId!,
     appSecret: appSecret!,
-    namePrefix,
+    ...(namePrefix ? { namePrefix } : {}),
+    ...(policyId ? { policyId } : {}),
+    ...(authorizationPrivateKey ? { authorizationPrivateKey } : {}),
     ...(ownerId ? { ownerId } : {}),
     allowSignTransaction,
     json,
@@ -142,15 +157,43 @@ async function main() {
     });
   }
 
-  const policy = await privy.policies().create({
-    version: '1.0',
-    name: `${options.namePrefix}-${timestampTag()}`.slice(0, 49),
-    chain_type: 'solana',
+  const updateBody = {
+    ...(options.namePrefix
+      ? { name: `${options.namePrefix}-${timestampTag()}`.slice(0, 49) }
+      : {}),
     ...(options.ownerId ? { owner_id: options.ownerId } : {}),
     rules,
-  });
+  };
+
+  const policy = options.policyId
+    ? await privy.policies()._update(options.policyId, {
+        ...updateBody,
+        'privy-authorization-signature': generateAuthorizationSignature({
+          authorizationPrivateKey: options.authorizationPrivateKey!,
+          input: {
+            version: 1,
+            method: 'PATCH',
+            url: `${privy.baseURL}/v1/policies/${options.policyId}`,
+            body: updateBody,
+            headers: {
+              'privy-app-id': options.appId,
+            },
+          },
+        }),
+      })
+    : await privy.policies().create({
+        version: '1.0',
+        name: `${options.namePrefix ?? 'babylon-solana-registration'}-${timestampTag()}`.slice(
+          0,
+          49
+        ),
+        chain_type: 'solana',
+        ...(options.ownerId ? { owner_id: options.ownerId } : {}),
+        rules,
+      });
 
   const result = {
+    action: options.policyId ? 'updated' : 'created',
     appId: options.appId,
     policyId: policy.id,
     chainType: policy.chain_type,
@@ -163,7 +206,7 @@ async function main() {
     return;
   }
 
-  console.log('Privy Solana policy created successfully.\n');
+  console.log(`Privy Solana policy ${result.action} successfully.\n`);
   console.log(`Policy ID: ${result.policyId}`);
   console.log(`Chain type: ${result.chainType}`);
   console.log(`Methods: ${result.methods.join(', ')}`);
