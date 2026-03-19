@@ -39,7 +39,13 @@ describe('link-email-utils', () => {
       expect(isLinkEmailFlowCancellationError(err)).toBe(true);
     });
 
-    it('returns false when the thrown value is not an Error instance', () => {
+    it('treats the Authentication cancelled message as a cancellation', () => {
+      expect(isLinkEmailFlowCancellationError('Authentication cancelled')).toBe(
+        true
+      );
+    });
+
+    it('returns false for unrelated primitive values', () => {
       expect(isLinkEmailFlowCancellationError('exited')).toBe(false);
       expect(isLinkEmailFlowCancellationError(null)).toBe(false);
       expect(isLinkEmailFlowCancellationError(42)).toBe(false);
