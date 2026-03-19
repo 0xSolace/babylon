@@ -220,6 +220,22 @@ export async function finalizeAgentSolanaRegistrationTransaction({
   };
 }
 
+export async function broadcastSignedSolanaTransaction({
+  transaction,
+}: {
+  transaction: string;
+}): Promise<{ hash: string }> {
+  const connection = createSolanaRegistryConnection();
+  const rawTransaction = Buffer.from(transaction, 'base64');
+  const hash = await connection.sendRawTransaction(rawTransaction, {
+    skipPreflight: false,
+    preflightCommitment: 'confirmed',
+    maxRetries: 3,
+  });
+
+  return { hash };
+}
+
 export async function prepareAgentSolanaRegistrationTransaction({
   agentUserId,
   ownerWalletAddress,
