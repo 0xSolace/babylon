@@ -26,7 +26,7 @@ const FeedEventSchema = z.object({
     'hide',
     'trade_after_view',
   ]),
-  surface: z.enum(['for_you', 'following', 'trades', 'latest', 'hot']),
+  surface: z.enum(['for_you', 'following', 'trades', 'latest', 'hot', 'stories']),
   itemId: z.string().min(1).max(100),
   itemType: z.enum(['post', 'article', 'market']),
   clusterId: z.string().max(100).nullable().optional(),
