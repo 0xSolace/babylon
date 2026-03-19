@@ -8,7 +8,6 @@ import {
 } from '@solana/web3.js';
 import {
   IPFSClient,
-  type PreparedTransaction,
   type RegistrationFile,
   ServiceType,
   SOLANA_DEVNET_RPC,
@@ -165,16 +164,60 @@ export function deriveDeterministicAgentSolanaAsset(
 }
 
 function signPreparedTransaction(
-  prepared: PreparedTransaction,
-  signers: Keypair[]
+  transactionBase64: string,
+  signers: Keypair[],
+  recentBlockhash?: string
 ): string {
   const transaction = Transaction.from(
-    Buffer.from(prepared.transaction, 'base64')
+    Buffer.from(transactionBase64, 'base64')
   );
+  if (recentBlockhash) {
+    transaction.recentBlockhash = recentBlockhash;
+  }
   transaction.partialSign(...signers);
   return transaction
     .serialize({ requireAllSignatures: false })
     .toString('base64');
+}
+
+export function signAgentSolanaRegistrationTransaction({
+  agentUserId,
+  transaction,
+  recentBlockhash,
+}: {
+  agentUserId: string;
+  transaction: string;
+  recentBlockhash: string;
+}): string {
+  const asset = deriveDeterministicAgentSolanaAsset(agentUserId);
+
+  return signPreparedTransaction(transaction, [asset], recentBlockhash);
+}
+
+export async function finalizeAgentSolanaRegistrationTransaction({
+  agentUserId,
+  transaction,
+}: {
+  agentUserId: string;
+  transaction: string;
+}): Promise<{
+  transaction: string;
+  blockhash: string;
+  lastValidBlockHeight: number;
+}> {
+  const connection = createSolanaRegistryConnection();
+  const { blockhash, lastValidBlockHeight } =
+    await connection.getLatestBlockhash('confirmed');
+
+  return {
+    transaction: signAgentSolanaRegistrationTransaction({
+      agentUserId,
+      transaction,
+      recentBlockhash: blockhash,
+    }),
+    blockhash,
+    lastValidBlockHeight,
+  };
 }
 
 export async function prepareAgentSolanaRegistrationTransaction({
@@ -189,7 +232,7 @@ export async function prepareAgentSolanaRegistrationTransaction({
   assetId: string;
   metadataUri: string;
   metadataCid: string;
-  transaction: string;
+  transactionTemplate: string;
 }> {
   assertSolanaRegistryConfigured();
 
@@ -211,7 +254,7 @@ export async function prepareAgentSolanaRegistrationTransaction({
     assetId: prepared.asset.toBase58(),
     metadataUri: uri,
     metadataCid: cid,
-    transaction: signPreparedTransaction(prepared, [asset]),
+    transactionTemplate: prepared.transaction,
   };
 }
 
