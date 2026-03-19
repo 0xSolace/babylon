@@ -18,20 +18,24 @@ const LEGACY_CANONICAL_HOSTS = {
 
 export type CanonicalHostTarget = 'waitlist' | 'app';
 
-const LEGACY_WAITLIST_PATHS = new Set([
-  '/',
-  '/favicon.ico',
-  '/robots.txt',
-  '/sitemap.xml',
-  '/manifest.webmanifest',
-  '/sw.js',
-  '/.well-known',
-  '/.well-known/assetlinks.json',
-  '/share',
-]);
+const LEGACY_WAITLIST_PATHS = new Set(['/', '/share']);
 
 function normalizeHostname(hostname: string): string {
   return hostname.trim().toLowerCase();
+}
+
+export function isAssetRequest(pathname: string): boolean {
+  return (
+    pathname.startsWith('/_next') ||
+    pathname.startsWith('/assets') ||
+    pathname.startsWith('/static') ||
+    pathname.startsWith('/images') ||
+    pathname.startsWith('/fonts') ||
+    pathname.startsWith('/.well-known') ||
+    pathname.startsWith('/_vercel') ||
+    pathname.startsWith('/monitoring') ||
+    /\.[^/]+$/.test(pathname)
+  );
 }
 
 export function getWaitlistHostnames(): Set<string> {
@@ -73,19 +77,7 @@ export function getLegacyCanonicalTargetForPath(
 ): CanonicalHostTarget {
   if (LEGACY_WAITLIST_PATHS.has(pathname)) return 'waitlist';
   if (pathname.startsWith('/share/')) return 'waitlist';
-  if (pathname.startsWith('/.well-known/')) return 'waitlist';
-  if (
-    pathname.startsWith('/_next') ||
-    pathname.startsWith('/assets') ||
-    pathname.startsWith('/static') ||
-    pathname.startsWith('/images') ||
-    pathname.startsWith('/fonts') ||
-    pathname.startsWith('/_vercel') ||
-    pathname.startsWith('/monitoring') ||
-    /\.[^/]+$/.test(pathname)
-  ) {
-    return 'waitlist';
-  }
+  if (isAssetRequest(pathname)) return 'waitlist';
 
   return 'app';
 }

@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import {
   getLegacyCanonicalOrigin,
   getLegacyCanonicalTargetForPath,
+  isAssetRequest,
   isLegacyCanonicalHostname,
   isWaitlistHostname,
 } from '@/lib/host-routing';
@@ -104,20 +105,6 @@ const ALLOWED_ORIGINS = new Set<string>([
 function isAllowedOrigin(origin: string | null): boolean {
   if (!origin) return false;
   return ALLOWED_ORIGINS.has(origin);
-}
-
-function isAssetRequest(pathname: string) {
-  return (
-    pathname.startsWith('/_next') ||
-    pathname.startsWith('/assets') ||
-    pathname.startsWith('/static') ||
-    pathname.startsWith('/images') ||
-    pathname.startsWith('/fonts') ||
-    pathname.startsWith('/.well-known') ||
-    pathname.startsWith('/_vercel') ||
-    pathname.startsWith('/monitoring') ||
-    /\.[^/]+$/.test(pathname)
-  );
 }
 
 function isApiRequest(pathname: string) {
