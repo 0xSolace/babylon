@@ -35,7 +35,7 @@ interface ChallengesData {
   };
 }
 
-function formatCountdown(resetsAt: string): string {
+export function formatCountdown(resetsAt: string): string {
   const diff = new Date(resetsAt).getTime() - Date.now();
   if (diff <= 0) return 'Resetting...';
   const hours = Math.floor(diff / (1000 * 60 * 60));

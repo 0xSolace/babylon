@@ -6,7 +6,7 @@ import { useSSEChannel } from '@/hooks/useSSE';
 import { useAuthStore } from '@/stores/authStore';
 import { AchievementCard } from './achievement-card';
 
-interface AchievementFromApi {
+export interface AchievementFromApi {
   id: string;
   name: string;
   description: string;
@@ -19,13 +19,13 @@ interface AchievementFromApi {
   unlockedAt: string | null;
 }
 
-function mapTier(tier: string): 'Bronze' | 'Silver' | 'Gold' {
+export function mapTier(tier: string): 'Bronze' | 'Silver' | 'Gold' {
   if (tier === 'silver') return 'Silver';
   if (tier === 'gold') return 'Gold';
   return 'Bronze';
 }
 
-function mapStatus(
+export function mapStatus(
   a: AchievementFromApi
 ): 'completed' | 'in-progress' | 'locked' {
   if (a.unlocked) return 'completed';

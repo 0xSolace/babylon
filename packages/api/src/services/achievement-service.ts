@@ -1219,15 +1219,38 @@ async function checkChallenges(
     const completed = progress >= challenge.threshold ? 1 : 0;
     const completedAt = completed ? new Date() : null;
 
+    // Track whether this request actually transitioned to completed
+    let didComplete = false;
+
     if (existing[0]) {
-      // Update existing progress
-      await db
-        .update(userChallengeProgress)
-        .set({ progress, completed, completedAt })
-        .where(eq(userChallengeProgress.id, existing[0].id));
+      // Update existing progress — only award if we transition completed 0→1
+      if (completed && !existing[0].completed) {
+        const [updated] = await db
+          .update(userChallengeProgress)
+          .set({
+            progress,
+            completed,
+            completedAt,
+            pointsAwarded: challenge.pointsReward,
+          })
+          .where(
+            and(
+              eq(userChallengeProgress.id, existing[0].id),
+              eq(userChallengeProgress.completed, 0)
+            )
+          )
+          .returning({ id: userChallengeProgress.id });
+        didComplete = !!updated;
+      } else {
+        // Just update progress, not completing
+        await db
+          .update(userChallengeProgress)
+          .set({ progress, completed, completedAt })
+          .where(eq(userChallengeProgress.id, existing[0].id));
+      }
     } else {
-      // Insert new progress record
-      await db
+      // Insert new progress record — returning confirms insert won the race
+      const [inserted] = await db
         .insert(userChallengeProgress)
         .values({
           id: await generateSnowflakeId(),
@@ -1239,11 +1262,13 @@ async function checkChallenges(
           completedAt,
           pointsAwarded: completed ? challenge.pointsReward : 0,
         })
-        .onConflictDoNothing(); // Race condition guard
+        .onConflictDoNothing()
+        .returning({ id: userChallengeProgress.id });
+      didComplete = completed === 1 && !!inserted;
     }
 
-    // Award points if just completed
-    if (completed && !existing[0]?.completed) {
+    // Award points only if this request actually transitioned to completed
+    if (didComplete) {
       await PointsService.awardPoints(
         userId,
         challenge.pointsReward,

@@ -85,7 +85,6 @@ describe('formatCountdown', () => {
     const fiveHoursFromNow = new Date(
       Date.now() + 5 * 60 * 60 * 1000
     ).toISOString();
-    // Should be "4h remaining" or "5h remaining" depending on sub-hour rounding
     const result = formatCountdown(fiveHoursFromNow);
     expect(result).toMatch(/^\dh remaining$/);
   });
@@ -139,7 +138,6 @@ describe('achievement data mapping', () => {
       unlockedAt: '2026-01-15T12:00:00Z',
     };
 
-    // Map to card props
     const title = apiData.name;
     const description = apiData.description;
     const points = apiData.pointsReward;
@@ -223,7 +221,6 @@ describe('challenge data mapping', () => {
       completedAt: '2026-03-12T10:00:00Z',
     };
 
-    // Map to ChallengeCard props
     const title = challenge.name;
     const description = challenge.description;
     const points = challenge.pointsReward;
