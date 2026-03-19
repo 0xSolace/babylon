@@ -122,8 +122,17 @@ mock.module('@babylon/api', () => ({
   successResponse: mockSuccessResponse,
   withErrorHandling:
     (handler: (request: NextRequest) => Promise<Response>) =>
-    (request: NextRequest) =>
-      handler(request),
+    async (request: NextRequest) => {
+      try {
+        return await handler(request);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        return new Response(JSON.stringify({ error: message }), {
+          status: 500,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+    },
 }));
 
 mock.module('@babylon/db', () => ({
