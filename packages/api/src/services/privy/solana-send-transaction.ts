@@ -9,14 +9,14 @@ function resolveSolanaCaip2(): string {
 
   switch (cluster) {
     case 'devnet':
-      return 'solana:devnet';
+      return 'solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1';
     case 'testnet':
-      return 'solana:testnet';
+      return 'solana:4uhcVJyU9pJkvQyS88uRDiswHXSCkY3z';
     case 'localnet':
       return 'solana:localnet';
     case 'mainnet-beta':
     default:
-      return 'solana:mainnet';
+      return 'solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp';
   }
 }
 

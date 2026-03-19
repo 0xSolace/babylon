@@ -184,7 +184,7 @@ describe('agent-solana-registration-service', () => {
     mockSendSolanaTransaction.mockResolvedValue({
       hash: 'tx-123',
       transactionId: 'tx-123',
-      caip2: 'solana:mainnet',
+      caip2: 'solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp',
     });
   });
 
