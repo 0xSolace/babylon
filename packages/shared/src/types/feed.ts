@@ -120,7 +120,13 @@ export interface NarrativeStory {
   anchorPostId?: string | null;
 }
 
-export type FeedSurface = 'for_you' | 'following' | 'trades' | 'latest' | 'hot' | 'stories';
+export type FeedSurface =
+  | 'for_you'
+  | 'following'
+  | 'trades'
+  | 'latest'
+  | 'hot'
+  | 'stories';
 
 export type FeedEventAction =
   | 'impression'

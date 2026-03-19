@@ -1,6 +1,10 @@
 'use client';
 
-import type { FeedEventAction, FeedSurface, NarrativeStory } from '@babylon/shared';
+import type {
+  FeedEventAction,
+  FeedSurface,
+  NarrativeStory,
+} from '@babylon/shared';
 import { Loader2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
