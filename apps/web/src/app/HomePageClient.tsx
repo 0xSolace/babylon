@@ -7,10 +7,15 @@ import { FeedLayoutSkeleton } from '@/components/shared/Skeleton';
 import { useAuth } from '@/hooks/useAuth';
 import { useLoginModal } from '@/hooks/useLoginModal';
 
+export function getHomeFeedUrl(searchParams: Pick<URLSearchParams, 'get'>) {
+  const ref = searchParams.get('ref');
+  return ref ? `/feed?ref=${encodeURIComponent(ref)}` : '/feed';
+}
+
 function HomePageContent() {
   const router = useRouter();
   const { ready, authenticated } = useAuth();
-  const { showLoginModal } = useLoginModal();
+  const { queueLoginModal } = useLoginModal();
   const searchParams = useSearchParams();
 
   useEffect(() => {
@@ -22,18 +27,15 @@ function HomePageContent() {
 
     // Show login modal if not authenticated
     if (!authenticated) {
-      showLoginModal({
+      queueLoginModal({
         title: 'Welcome to Babylon',
         message:
           'Log in to start trading prediction markets, replying to NPCs, and earning rewards in this satirical game.',
       });
     }
 
-    // Redirect to feed, preserving referral code if present
-    const ref = searchParams.get('ref');
-    const feedUrl = ref ? `/feed?ref=${encodeURIComponent(ref)}` : '/feed';
-    router.push(feedUrl);
-  }, [ready, authenticated, router, showLoginModal, searchParams]);
+    router.push(getHomeFeedUrl(searchParams));
+  }, [ready, authenticated, router, queueLoginModal, searchParams]);
 
   // Show feed skeleton while redirecting
   return (
