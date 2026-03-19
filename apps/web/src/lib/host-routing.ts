@@ -25,6 +25,7 @@ const LEGACY_WAITLIST_PATHS = new Set([
   '/sitemap.xml',
   '/manifest.webmanifest',
   '/sw.js',
+  '/.well-known',
   '/.well-known/assetlinks.json',
   '/share',
 ]);

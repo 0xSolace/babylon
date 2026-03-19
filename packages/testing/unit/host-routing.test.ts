@@ -62,6 +62,7 @@ describe('host-routing (waitlist hostnames)', () => {
 
   it('routes legacy public paths to the waitlist host and app paths to play', () => {
     expect(getLegacyCanonicalTargetForPath('/')).toBe('waitlist');
+    expect(getLegacyCanonicalTargetForPath('/.well-known')).toBe('waitlist');
     expect(getLegacyCanonicalTargetForPath('/share/referral/user-1')).toBe(
       'waitlist'
     );
