@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  extractErrorMessage,
   getProfileUrl,
   getReferralShareText,
   getReferralUrl,
@@ -102,6 +103,26 @@ export default function RewardsPage() {
     totalPoints: number;
   } | null>(null);
 
+  const refreshAuthState = useCallback(
+    async (
+      source: 'twitter_linked' | 'discord_linked' | 'onchain_registration'
+    ) => {
+      try {
+        await refresh();
+      } catch (error) {
+        logger.warn(
+          'Failed to refresh auth state on rewards page',
+          {
+            source,
+            error: extractErrorMessage(error),
+          },
+          'RewardsPage'
+        );
+      }
+    },
+    [refresh]
+  );
+
   // Handle OAuth callback from Twitter/Discord linking
   useEffect(() => {
     const success = searchParams.get('success');
@@ -113,13 +134,13 @@ export default function RewardsPage() {
       // Dispatch event to notify other components (like UserMenu) to refresh
       window.dispatchEvent(new CustomEvent('rewards-updated'));
       // Refresh auth state to get latest reputation points
-      refresh();
+      void refreshAuthState('twitter_linked');
       // Clean up URL params
       window.history.replaceState({}, '', '/rewards');
     } else if (success === 'discord_linked' && points) {
       toast.success(`Discord account linked! +${points} points awarded`);
       window.dispatchEvent(new CustomEvent('rewards-updated'));
-      refresh();
+      void refreshAuthState('discord_linked');
       window.history.replaceState({}, '', '/rewards');
     } else if (errorParam) {
       const errorMessages: Record<string, string> = {
@@ -136,7 +157,7 @@ export default function RewardsPage() {
       );
       window.history.replaceState({}, '', '/rewards');
     }
-  }, [searchParams, refresh]);
+  }, [searchParams, refreshAuthState]);
 
   const fetchReferralData = useCallback(async () => {
     if (!user?.id || !authenticated) return;
@@ -293,7 +314,7 @@ export default function RewardsPage() {
           toast.success('On-chain registration complete!');
         }
         window.dispatchEvent(new CustomEvent('rewards-updated'));
-        refresh();
+        void refreshAuthState('onchain_registration');
         fetchReferralData();
         fetchPortfolio();
       } catch {
