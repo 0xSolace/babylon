@@ -40,7 +40,7 @@ describe('apiFetch', () => {
   });
 
   it('still performs the request when token retrieval rejects', async () => {
-    const fetchMock = mock((_input: RequestInfo | URL, init?: RequestInit) =>
+    const fetchMock = mock((_input: RequestInfo | URL, _init?: RequestInit) =>
       Promise.resolve(
         new Response(JSON.stringify({ ok: true }), {
           status: 200,
