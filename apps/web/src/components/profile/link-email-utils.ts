@@ -1,4 +1,7 @@
-import { isPrivyLinkFlowCancellationError } from '@/lib/privy-link-account-errors';
+import {
+  isPrivyAlreadyLinkedError,
+  isPrivyLinkFlowCancellationError,
+} from '@/lib/privy-link-account-errors';
 
 export function getLinkedEmail(
   privyEmail?: string | null,
@@ -21,3 +24,11 @@ export function getLinkedEmail(
  */
 export const isLinkEmailFlowCancellationError =
   isPrivyLinkFlowCancellationError;
+
+/**
+ * Returns true when Privy reports that an email is already linked for the user.
+ *
+ * Delegates to the shared Privy link-account helper for the
+ * `cannot_link_more_of_type` error code.
+ */
+export const isLinkEmailAlreadyLinkedError = isPrivyAlreadyLinkedError;

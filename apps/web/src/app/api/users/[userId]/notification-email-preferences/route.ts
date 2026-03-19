@@ -17,6 +17,7 @@ import {
 } from '@babylon/api';
 import { db, eq, users } from '@babylon/db';
 import {
+  getAllVerifiedEmails,
   logger,
   type PrivyUserWithEmails,
   UserIdParamSchema,
@@ -54,8 +55,7 @@ async function getVerifiedEmailFromPrivy(
   const privyUser = (await privyClient.getUser(
     privyId
   )) as PrivyUserWithOptionalEmail;
-  const email = privyUser.email?.address?.trim().toLowerCase() ?? null;
-  return email;
+  return getAllVerifiedEmails(privyUser)[0] ?? null;
 }
 
 export const GET = withErrorHandling(

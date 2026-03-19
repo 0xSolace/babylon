@@ -1,3 +1,4 @@
+import { getAllVerifiedEmails } from '@babylon/shared';
 import type { User as PrivyUser } from '@privy-io/server-auth';
 
 export type PrivyIdentitySnapshot = {
@@ -15,13 +16,16 @@ export type UserIdentitySyncState = {
   emailVerified: boolean;
 };
 
-type PrivyIdentityUserLike = Pick<PrivyUser, 'email' | 'farcaster' | 'twitter'>;
+type PrivyIdentityUserLike = Pick<
+  PrivyUser,
+  'email' | 'farcaster' | 'twitter' | 'linkedAccounts'
+>;
 
 export function extractPrivyIdentitySnapshot(
   privyUser: PrivyIdentityUserLike
 ): PrivyIdentitySnapshot {
   return {
-    email: privyUser.email?.address ?? null,
+    email: getAllVerifiedEmails(privyUser)[0] ?? null,
     farcasterUsername: privyUser.farcaster?.username ?? null,
     farcasterFid: privyUser.farcaster?.fid
       ? String(privyUser.farcaster.fid)
