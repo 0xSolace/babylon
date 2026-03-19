@@ -215,7 +215,7 @@ const GENERAL_STORY_KEY = '__general__';
 
 const makeRequest = (): NextRequest =>
   ({
-    url: 'https://babylon.social/api/feed/narrative',
+    url: 'https://play.babylon.market/api/feed/narrative',
     headers: { get: () => null },
   }) as unknown as NextRequest;
 
