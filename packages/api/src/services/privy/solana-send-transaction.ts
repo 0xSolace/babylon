@@ -5,18 +5,18 @@ import { getPrivyNodeClient } from './privy-node';
 import { buildSolanaTransactionIdempotencyKey } from './solana-idempotency';
 
 function resolveSolanaCaip2(): string {
-  const cluster = process.env.SOLANA_CLUSTER ?? 'mainnet-beta';
+  const cluster = process.env.SOLANA_REGISTRY_CLUSTER ?? 'mainnet-beta';
 
   switch (cluster) {
     case 'devnet':
-      return 'solana:devnet';
+      return 'solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1';
     case 'testnet':
-      return 'solana:testnet';
+      return 'solana:4uhcVJyU9pJkvQyS88uRDiswHXSCkY3z';
     case 'localnet':
       return 'solana:localnet';
     case 'mainnet-beta':
     default:
-      return 'solana:mainnet';
+      return 'solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp';
   }
 }
 
