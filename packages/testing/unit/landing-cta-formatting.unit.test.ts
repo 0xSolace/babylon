@@ -12,6 +12,15 @@ function readComponentSource(relativePathFromRepoRoot: string): string {
 }
 
 describe('Landing CTA formatting', () => {
+  test('ComingSoon Play CTA preserves referral codes when hopping to the app host', () => {
+    const source = readComponentSource(
+      'apps/web/src/components/shared/ComingSoon.tsx'
+    );
+
+    expect(source).toContain("searchParams.get('ref')");
+    expect(source).toContain('getReferralQueryString(referralCode)');
+  });
+
   test('ComingSoon CTA uses a single combined Develop and Deploy card', () => {
     const source = readComponentSource(
       'apps/web/src/components/shared/ComingSoon.tsx'

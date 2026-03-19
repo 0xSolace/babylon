@@ -202,7 +202,7 @@ export function WhitelistTab() {
     const label = entry?.displayName ?? entry?.username ?? userId.slice(0, 12);
     if (
       !window.confirm(
-        `Revoke whitelist access for "${label}"? They will be subject to NFT gating again.`
+        `Revoke whitelist entry for "${label}"?`
       )
     )
       return;

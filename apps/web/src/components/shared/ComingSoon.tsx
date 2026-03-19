@@ -53,6 +53,11 @@ function getAppBaseUrl(): string {
   return window.location.origin;
 }
 
+function getReferralQueryString(referralCode: string | null): string {
+  if (!referralCode) return '';
+  return `?ref=${encodeURIComponent(referralCode)}`;
+}
+
 /**
  * Waitlist data structure containing user position and points information.
  */
@@ -187,6 +192,7 @@ export function ComingSoon() {
     },
   });
   const searchParams = useSearchParams();
+  const referralCode = searchParams.get('ref');
   const [waitlistData, setWaitlistData] = useState<WaitlistData | null>(null);
   const [waitlistSetupError, setWaitlistSetupError] = useState<string | null>(
     null
@@ -1249,7 +1255,9 @@ export function ComingSoon() {
   };
 
   const handlePlay = () => {
-    window.location.assign(getAppBaseUrl());
+    window.location.assign(
+      `${getAppBaseUrl()}${getReferralQueryString(referralCode)}`
+    );
   };
 
   useEffect(() => {
@@ -1286,7 +1294,7 @@ export function ComingSoon() {
   const appBaseUrl = getAppBaseUrl();
   const canClaimNft =
     nftEligibility?.eligible === true && nftEligibility.hasMinted === false;
-  const playHref = `${appBaseUrl}${canClaimNft ? '/nft' : '/feed'}`;
+  const playHref = `${appBaseUrl}${canClaimNft ? '/nft' : '/feed'}${getReferralQueryString(referralCode)}`;
 
   // Unauthenticated state - Show landing page
   if (!authenticated || !dbUser) {
@@ -2520,7 +2528,7 @@ export function ComingSoon() {
             </div>
           </div>
 
-          {/* Email Collection — prominent section */}
+          {/* Official links */}
           <div className="mb-8 rounded-xl border border-primary/10 bg-background/40 p-4 backdrop-blur-sm sm:p-5">
             <div className="mb-3 text-muted-foreground text-sm">
               Official Links
