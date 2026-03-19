@@ -10,6 +10,7 @@ import { Suspense } from 'react';
 // Game tick runs via cron (production) or local-cron-simulator (development)
 // No initialization needed in layout - tick runs independently
 import { Toaster } from 'sonner';
+import { AchievementToastListener } from '@/components/achievements';
 import { FeedAuthBanner } from '@/components/auth/FeedAuthBanner';
 import { GlobalLoginModal } from '@/components/auth/GlobalLoginModal';
 import { NftAccessGate, NftPromoBanner } from '@/components/nft';
@@ -113,6 +114,7 @@ export default async function RootLayout({
       >
         <Providers>
           <Toaster position="top-center" richColors />
+          <AchievementToastListener />
           <Suspense fallback={null}>
             <GlobalLoginModal />
           </Suspense>

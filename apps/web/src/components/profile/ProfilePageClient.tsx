@@ -28,6 +28,7 @@ import {
   useMemo,
   useState,
 } from 'react';
+import { RecentAchievements } from '@/components/achievements';
 import { ArticleCard } from '@/components/articles/ArticleCard';
 import { FollowButton } from '@/components/interactions/FollowButton';
 import { ModerationMenu } from '@/components/moderation/ModerationMenu';
@@ -1022,6 +1023,12 @@ export function ProfilePageClient({
                   <p className="mb-3 whitespace-pre-wrap text-[15px] text-foreground">
                     {actorInfo.profileDescription || actorInfo.description}
                   </p>
+                )}
+
+                {actorInfo.type === 'user' && (
+                  <div className="mb-3">
+                    <RecentAchievements userId={actorInfo.id} />
+                  </div>
                 )}
 
                 <div className="flex gap-4 text-[15px]">
