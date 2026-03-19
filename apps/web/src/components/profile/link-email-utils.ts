@@ -1,3 +1,5 @@
+import { isPrivyLinkFlowCancellationError } from '@/lib/privy-link-account-errors';
+
 export function getLinkedEmail(
   privyEmail?: string | null,
   storedEmail?: string | null
@@ -16,12 +18,5 @@ export function getLinkedEmail(
  * - The string error code `'exited_auth_flow'` passed to `useLinkAccount` onError callbacks.
  * - A PrivyClientError (or similar) thrown synchronously with `code === 'exited_auth_flow'`.
  */
-export function isLinkEmailFlowCancellationError(error: unknown): boolean {
-  if (error === 'exited_auth_flow') return true;
-  if (
-    error instanceof Error &&
-    (error as { code?: string }).code === 'exited_auth_flow'
-  )
-    return true;
-  return false;
-}
+export const isLinkEmailFlowCancellationError =
+  isPrivyLinkFlowCancellationError;
