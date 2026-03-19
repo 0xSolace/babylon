@@ -33,12 +33,12 @@ import {
 import { MarketingFooter } from '@/components/shared/MarketingFooter';
 import { PlayerStatsModal } from '@/components/shared/PlayerStatsModal';
 import { useAuth } from '@/hooks/useAuth';
+import { EXTERNAL_LINKS } from '@/lib/constants';
 import {
   isPrivyLinkFlowCancellationError,
   isPrivyTwitterLinkConflictError,
   X_ACCOUNT_ALREADY_LINKED_MESSAGE,
 } from '@/lib/privy-link-account-errors';
-import { EXTERNAL_LINKS } from '@/lib/constants';
 import type {
   EligibilityApiResponse,
   EligibilityResponse,

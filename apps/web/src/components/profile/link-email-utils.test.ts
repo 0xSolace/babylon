@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import {
   getLinkedEmail,
+  isLinkEmailAlreadyLinkedError,
   isLinkEmailFlowCancellationError,
 } from './link-email-utils';
 
@@ -59,6 +60,29 @@ describe('link-email-utils', () => {
         code: 'network_error',
       });
       expect(isLinkEmailFlowCancellationError(errWrongCode)).toBe(false);
+    });
+  });
+
+  describe('isLinkEmailAlreadyLinkedError', () => {
+    it('detects the cannot_link_more_of_type string code from useLinkAccount onError', () => {
+      expect(isLinkEmailAlreadyLinkedError('cannot_link_more_of_type')).toBe(
+        true
+      );
+    });
+
+    it('detects Error instances that expose a Privy error code', () => {
+      const err = Object.assign(new Error('Email already linked'), {
+        privyErrorCode: 'cannot_link_more_of_type',
+      });
+
+      expect(isLinkEmailAlreadyLinkedError(err)).toBe(true);
+    });
+
+    it('returns false for other error codes', () => {
+      expect(isLinkEmailAlreadyLinkedError('exited_auth_flow')).toBe(false);
+      expect(isLinkEmailAlreadyLinkedError(new Error('Network failure'))).toBe(
+        false
+      );
     });
   });
 });

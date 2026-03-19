@@ -157,6 +157,7 @@ import {
 import { and, db, eq, ne, or, sql, users } from '@babylon/db';
 import {
   checkForAdminEmail,
+  getAllVerifiedEmails,
   logger,
   type PrivyUserWithEmails,
 } from '@babylon/shared';
@@ -596,10 +597,7 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       privyId
     )) as PrivyUserWithWallets;
 
-    // Extract email from linked accounts
-    if (privyUser.email?.address) {
-      email = privyUser.email.address;
-    }
+    email = getAllVerifiedEmails(privyUser)[0] ?? null;
 
     // Extract Farcaster info
     if (privyUser.farcaster) {

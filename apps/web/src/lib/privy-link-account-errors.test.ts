@@ -16,9 +16,7 @@ describe('privy-link-account-errors', () => {
         true
       );
       expect(
-        isPrivyLinkFlowCancellationError(
-          new Error('Authentication cancelled')
-        )
+        isPrivyLinkFlowCancellationError(new Error('Authentication cancelled'))
       ).toBe(true);
     });
 
