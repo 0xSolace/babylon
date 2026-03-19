@@ -12,30 +12,16 @@ function readComponentSource(relativePathFromRepoRoot: string): string {
 }
 
 describe('Landing CTA formatting', () => {
-  test('ComingSoon Play CTA preserves referral codes when hopping to the app host', () => {
+  test('Landing play CTA preserves referral codes when hopping to the app host', () => {
     const source = readComponentSource(
-      'apps/web/src/components/shared/ComingSoon.tsx'
+      'apps/web/src/components/landing/client/PlayLandingButton.tsx'
     );
 
     expect(source).toContain("searchParams.get('ref')");
     expect(source).toContain('getReferralQueryString(referralCode)');
   });
 
-  test('ComingSoon CTA uses a single combined Develop and Deploy card', () => {
-    const source = readComponentSource(
-      'apps/web/src/components/shared/ComingSoon.tsx'
-    );
-
-    expect(source).toContain('Develop and Deploy');
-    expect(source).toContain('Apply for Agent Developer Access');
-    expect(source).not.toContain('Build your own Agent');
-    expect(source).not.toContain('Request builder access');
-    expect(source).not.toContain(
-      '1FAIpQLSeYkR5dGc_tgEtelwldohhwSKcpq30o8SJVq78oMSJD4qsWYA'
-    );
-  });
-
-  test('LandingPage CTA mirrors the same combined card structure', () => {
+  test('LandingPage CTA uses a single combined Develop and Deploy card', () => {
     const source = readComponentSource(
       'apps/web/src/components/landing/LandingPage.tsx'
     );
@@ -47,5 +33,14 @@ describe('Landing CTA formatting', () => {
     expect(source).not.toContain(
       '1FAIpQLSeYkR5dGc_tgEtelwldohhwSKcpq30o8SJVq78oMSJD4qsWYA'
     );
+  });
+
+  test('LandingPage no longer references waitlist-only copy', () => {
+    const source = readComponentSource(
+      'apps/web/src/components/landing/LandingPage.tsx'
+    );
+
+    expect(source).not.toContain('Join Waitlist');
+    expect(source).not.toContain('Daily opening new open slots');
   });
 });

@@ -177,7 +177,7 @@ export function middleware(request: NextRequest) {
   }
 
   // Host-based routing:
-  // - Waitlist hosts: show waitlist (landing + waitlist dashboard)
+  // - Website hosts: show the marketing landing
   // - Everything else: app host
   const isWaitlistHost = isWaitlistHostname(hostname);
 
