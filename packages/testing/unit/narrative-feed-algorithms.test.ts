@@ -172,6 +172,23 @@ describe('flattenStories', () => {
       expect(items[0]!.story).toBe(story);
     }
   });
+
+  it('drops undefined posts instead of emitting invalid flat items', () => {
+    const story = makeStory('A', 3);
+    const malformedStory = {
+      ...story,
+      posts: [story.posts[0], undefined, story.posts[2]],
+    } as unknown as NarrativeStory;
+
+    const items = flattenStories([malformedStory]);
+
+    expect(items).toHaveLength(2);
+    expect(items.every((item) => item.type === 'post')).toBe(true);
+    expect(items.map((item) => item.key)).toEqual([
+      `A:${story.posts[0]!.id}`,
+      `A:${story.posts[2]!.id}`,
+    ]);
+  });
 });
 
 // ─── mergeChronologically tests ───────────────────────────────────────────────
