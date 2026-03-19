@@ -32,6 +32,60 @@ function toNumber(value: unknown, fallback = 0): number {
   return fallback;
 }
 
+export function isAbortError(error: unknown): boolean {
+  if (error instanceof DOMException && error.name === 'AbortError') {
+    return true;
+  }
+  if (error instanceof Error && error.name === 'AbortError') {
+    return true;
+  }
+  return false;
+}
+
+export async function fetchPortfolioBreakdownSnapshot(
+  userId: string,
+  signal: AbortSignal
+): Promise<PortfolioBreakdownSnapshot> {
+  let breakdownRes: Response;
+  try {
+    breakdownRes = await fetch(
+      `/api/users/${encodeURIComponent(userId)}/portfolio-breakdown`,
+      { signal }
+    );
+  } catch (error) {
+    if (signal.aborted || isAbortError(error)) {
+      throw error;
+    }
+    throw new Error('Failed to fetch portfolio breakdown');
+  }
+
+  if (!breakdownRes.ok) {
+    throw new Error('Failed to fetch portfolio breakdown');
+  }
+
+  let breakdownJson: Record<string, unknown>;
+  try {
+    breakdownJson = (await breakdownRes.json()) as Record<string, unknown>;
+  } catch (error) {
+    if (signal.aborted || isAbortError(error)) {
+      throw error;
+    }
+    throw new Error('Failed to parse portfolio breakdown');
+  }
+
+  return {
+    wallet: toNumber(breakdownJson.wallet),
+    agents: toNumber(breakdownJson.agents),
+    positions: toNumber(breakdownJson.positions),
+    available: toNumber(breakdownJson.available),
+    originalAmount: toNumber(breakdownJson.originalAmount),
+    totalAssets: toNumber(breakdownJson.totalAssets),
+    totalPnL: toNumber(breakdownJson.totalPnL),
+    agentCount: toNumber(breakdownJson.agentCount),
+    totalPoints: toNumber(breakdownJson.totalPoints),
+  };
+}
+
 /**
  * Hook for fetching and managing portfolio profit and loss (PnL) data.
  *
@@ -92,47 +146,32 @@ export function usePortfolioPnL(): UsePortfolioPnLResult {
     setLoading(true);
     setError(null);
 
-    const breakdownRes = await fetch(
-      `/api/users/${encodeURIComponent(user.id)}/portfolio-breakdown`,
-      { signal: abortController.signal }
-    );
-
-    if (!breakdownRes.ok) {
-      setError('Failed to fetch portfolio breakdown');
-      setLoading(false);
-      return;
-    }
-
-    if (abortController.signal.aborted) {
-      return;
-    }
-
-    let breakdownJson: Record<string, unknown>;
     try {
-      breakdownJson = (await breakdownRes.json()) as Record<string, unknown>;
-    } catch {
-      setError('Failed to parse portfolio breakdown');
-      setLoading(false);
-      return;
-    }
+      const nextData = await fetchPortfolioBreakdownSnapshot(
+        user.id,
+        abortController.signal
+      );
 
-    if (abortController.signal.aborted) {
-      return;
-    }
+      if (abortController.signal.aborted) {
+        return;
+      }
 
-    setData({
-      wallet: toNumber(breakdownJson.wallet),
-      agents: toNumber(breakdownJson.agents),
-      positions: toNumber(breakdownJson.positions),
-      available: toNumber(breakdownJson.available),
-      originalAmount: toNumber(breakdownJson.originalAmount),
-      totalAssets: toNumber(breakdownJson.totalAssets),
-      totalPnL: toNumber(breakdownJson.totalPnL),
-      agentCount: toNumber(breakdownJson.agentCount),
-      totalPoints: toNumber(breakdownJson.totalPoints),
-    });
-    setLastUpdated(Date.now());
-    setLoading(false);
+      setData(nextData);
+      setLastUpdated(Date.now());
+    } catch (error) {
+      if (abortController.signal.aborted || isAbortError(error)) {
+        return;
+      }
+      setError(
+        error instanceof Error
+          ? error.message
+          : 'Failed to fetch portfolio breakdown'
+      );
+    } finally {
+      if (!abortController.signal.aborted) {
+        setLoading(false);
+      }
+    }
   }, [authenticated, user?.id]);
 
   useEffect(() => {
