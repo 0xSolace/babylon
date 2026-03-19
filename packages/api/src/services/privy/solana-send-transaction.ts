@@ -1,3 +1,4 @@
+import { broadcastSignedSolanaTransaction } from '@babylon/agents/solana-registry';
 import { logger } from '@babylon/shared';
 import { extractPrivyApiDiagnostics } from './error-diagnostics';
 import { getPrivyOfflineConfig } from './offline-config';
@@ -23,9 +24,14 @@ function resolveSolanaCaip2(): string {
 export async function sendSolanaTransaction({
   walletId,
   transaction,
+  confirmationStrategy,
 }: {
   walletId: string;
   transaction: string;
+  confirmationStrategy?: {
+    blockhash: string;
+    lastValidBlockHeight: number;
+  };
 }): Promise<{ hash: string; transactionId?: string; caip2: string }> {
   const privy = getPrivyNodeClient();
   const offlineConfig = getPrivyOfflineConfig();
@@ -40,8 +46,7 @@ export async function sendSolanaTransaction({
     const response = await privy
       .wallets()
       .solana()
-      .signAndSendTransaction(walletId, {
-        caip2,
+      .signTransaction(walletId, {
         transaction,
         authorization_context: {
           authorization_private_keys: [offlineConfig.authorizationPrivateKey],
@@ -49,14 +54,18 @@ export async function sendSolanaTransaction({
         idempotency_key: idempotencyKey,
       });
 
+    const broadcast = await broadcastSignedSolanaTransaction({
+      transaction: response.signed_transaction,
+      confirmationStrategy,
+    });
+
     return {
-      hash: response.hash,
-      transactionId: response.transaction_id,
-      caip2: response.caip2,
+      hash: broadcast.hash,
+      caip2,
     };
   } catch (error) {
     logger.error(
-      'Failed to submit Solana transaction via Privy',
+      'Failed to sign or broadcast Solana transaction',
       {
         walletId,
         ...extractPrivyApiDiagnostics(error),
@@ -80,8 +89,5 @@ export function isSolanaBlockhashNotFoundError(error: unknown): boolean {
     .join(' ')
     .toLowerCase();
 
-  return (
-    diagnostics.providerCode === 'transaction_broadcast_failure' &&
-    combinedMessage.includes('blockhash not found')
-  );
+  return combinedMessage.includes('blockhash not found');
 }

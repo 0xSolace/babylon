@@ -220,6 +220,44 @@ export async function finalizeAgentSolanaRegistrationTransaction({
   };
 }
 
+export async function broadcastSignedSolanaTransaction({
+  transaction,
+  confirmationStrategy,
+}: {
+  transaction: string;
+  confirmationStrategy?: {
+    blockhash: string;
+    lastValidBlockHeight: number;
+  };
+}): Promise<{ hash: string }> {
+  const connection = createSolanaRegistryConnection();
+  const rawTransaction = Buffer.from(transaction, 'base64');
+  const hash = await connection.sendRawTransaction(rawTransaction, {
+    skipPreflight: false,
+    preflightCommitment: 'confirmed',
+    maxRetries: 3,
+  });
+
+  if (confirmationStrategy) {
+    const confirmation = await connection.confirmTransaction(
+      {
+        signature: hash,
+        blockhash: confirmationStrategy.blockhash,
+        lastValidBlockHeight: confirmationStrategy.lastValidBlockHeight,
+      },
+      'confirmed'
+    );
+
+    if (confirmation.value.err) {
+      throw new Error(
+        `Solana transaction confirmation failed: ${JSON.stringify(confirmation.value.err)}`
+      );
+    }
+  }
+
+  return { hash };
+}
+
 export async function prepareAgentSolanaRegistrationTransaction({
   agentUserId,
   ownerWalletAddress,

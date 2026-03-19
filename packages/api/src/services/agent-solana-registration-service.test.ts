@@ -263,6 +263,10 @@ describe('agent-solana-registration-service', () => {
     expect(mockSendSolanaTransaction).toHaveBeenCalledWith({
       walletId: 'solana-wallet-1',
       transaction: 'base64-tx-signed',
+      confirmationStrategy: {
+        blockhash: 'blockhash-1',
+        lastValidBlockHeight: 123,
+      },
     });
     expect(mockFinalizeAgentSolanaRegistrationTransaction).toHaveBeenCalledWith(
       {
@@ -380,10 +384,18 @@ describe('agent-solana-registration-service', () => {
     expect(mockSendSolanaTransaction).toHaveBeenNthCalledWith(1, {
       walletId: 'solana-wallet-1',
       transaction: 'base64-tx-signed-attempt-1',
+      confirmationStrategy: {
+        blockhash: 'blockhash-stale',
+        lastValidBlockHeight: 111,
+      },
     });
     expect(mockSendSolanaTransaction).toHaveBeenNthCalledWith(2, {
       walletId: 'solana-wallet-1',
       transaction: 'base64-tx-signed-attempt-2',
+      confirmationStrategy: {
+        blockhash: 'blockhash-fresh',
+        lastValidBlockHeight: 222,
+      },
     });
     expect(
       capturedInserts.some(
