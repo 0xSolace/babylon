@@ -41,7 +41,7 @@ Goal: make PRs easy to review + easy to ship.
 - [ ] Web UI (`apps/web`)
 - [ ] Web API routes / SSE / A2A (`apps/web`)
 - [ ] CLI (`apps/cli`)
-- [ ] Docs site (`apps/docs`) / vendor docs (`docs/vendors/*`)
+- [ ] Vendor docs (`docs/vendors/*`)
 - [ ] Domain / game engine (`packages/engine`, `packages/core/*`)
 - [ ] Agents / runtime / A2A / MCP (`packages/agents`, `packages/a2a`, `packages/mcp`)
 - [ ] API infra (`packages/api`)

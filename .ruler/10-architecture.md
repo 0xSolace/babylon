@@ -3,7 +3,7 @@
 ## State (target vs current)
 
 - **Target (in progress)**: Elysia host in `apps/server`, background workers in `apps/daemon`, dedicated `apps/agents`, domain split into `packages/core/*` with `packages/shared/infra` wiring.
-- **Current**: Next.js app `apps/web` hosts UI + API routes/SSE/A2A; CLI in `apps/cli`; docs in `apps/docs`. Domain/engine in `packages/engine` and `packages/agents` (+ `packages/a2a`, `packages/mcp`). Infra/util in `packages/api`, `packages/shared`, `packages/db`. On-chain in `packages/contracts`. Tests in `packages/testing`.
+- **Current**: Next.js app `apps/web` hosts UI + API routes/SSE/A2A; CLI in `apps/cli`. Domain/engine in `packages/engine` and `packages/agents` (+ `packages/a2a`, `packages/mcp`). Infra/util in `packages/api`, `packages/shared`, `packages/db`. On-chain in `packages/contracts`. Tests in `packages/testing`.
 
 ## Dependency direction
 
