@@ -8,6 +8,10 @@ import {
   it,
   mock,
 } from 'bun:test';
+import {
+  isValidDeliveryChannel,
+  isValidDigestFrequency,
+} from '@babylon/shared';
 
 type ErrorHandlerModule = typeof import('../../../api/src/error-handler');
 
@@ -188,5 +192,37 @@ describe('withErrorHandling + default Sentry capture', () => {
     const response = await handler(createRequest());
     expect(response.status).toBe(400);
     expect(captureError).toHaveBeenCalledTimes(0);
+  });
+});
+
+describe('Notification digest validation functions', () => {
+  describe('isValidDigestFrequency', () => {
+    it('returns true for valid frequencies', () => {
+      expect(isValidDigestFrequency('daily')).toBe(true);
+      expect(isValidDigestFrequency('weekly')).toBe(true);
+      expect(isValidDigestFrequency('immediate')).toBe(true);
+    });
+
+    it('returns false for invalid frequencies', () => {
+      expect(isValidDigestFrequency('monthly')).toBe(false);
+      expect(isValidDigestFrequency('hourly')).toBe(false);
+      expect(isValidDigestFrequency('')).toBe(false);
+      expect(isValidDigestFrequency('DAILY')).toBe(false);
+    });
+  });
+
+  describe('isValidDeliveryChannel', () => {
+    it('returns true for valid delivery channels', () => {
+      expect(isValidDeliveryChannel('email')).toBe(true);
+      expect(isValidDeliveryChannel('push')).toBe(true);
+      expect(isValidDeliveryChannel('in_app')).toBe(true);
+    });
+
+    it('returns false for invalid delivery channels', () => {
+      expect(isValidDeliveryChannel('sms')).toBe(false);
+      expect(isValidDeliveryChannel('slack')).toBe(false);
+      expect(isValidDeliveryChannel('')).toBe(false);
+      expect(isValidDeliveryChannel('EMAIL')).toBe(false);
+    });
   });
 });
