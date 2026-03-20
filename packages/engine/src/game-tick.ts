@@ -31,6 +31,7 @@ import {
   posts,
   postTags,
   questions as questionsSchema,
+  sql,
   tags,
   tickTokenStats,
   timeframedMarkets,
@@ -1472,11 +1473,13 @@ export async function resolveQuestionPayouts(
     });
 
     // Estimate positions settled for logging (coreService updates all positions for the market)
-    const existingPositions = await tx
-      .select({ id: positions.id })
+    // Use COUNT(*) instead of SELECT to avoid loading all position IDs into memory
+    // Note: count(*) returns bigint in Postgres; we parse as string to avoid overflow
+    const countResult = await tx
+      .select({ count: sql<string>`count(*)` })
       .from(positions)
       .where(eq(positions.marketId, marketId));
-    positionsSettled = existingPositions.length;
+    positionsSettled = Number(countResult[0]?.count ?? 0);
 
     await coreService.resolve({
       marketId,

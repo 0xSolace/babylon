@@ -13,6 +13,8 @@ import {
   users,
 } from '@babylon/db';
 import {
+  isValidDeliveryChannel,
+  isValidDigestFrequency,
   logger,
   type NotificationDeliveryChannel,
   type NotificationDigestFrequency,
@@ -44,6 +46,44 @@ const DIGEST_WINDOWS_MS: Record<NotificationDigestFrequency, number> = {
   weekly: 7 * 24 * 60 * 60 * 1000,
 };
 
+interface ValidatedDigestRow {
+  id: string;
+  email: string | null;
+  emailVerified: boolean;
+  digestEnabled: boolean;
+  digestFrequency: NotificationDigestFrequency;
+  deliveryChannel: NotificationDeliveryChannel;
+  lastSentAt: Date | null;
+}
+
+function isValidDigestCandidateRow(row: {
+  id: string;
+  email: string | null;
+  emailVerified: boolean;
+  digestEnabled: boolean;
+  digestFrequency: string | null;
+  deliveryChannel: string | null;
+  lastSentAt: Date | null;
+}): row is ValidatedDigestRow {
+  if (!isValidDigestFrequency(row.digestFrequency)) {
+    logger.warn(
+      'Invalid digest frequency in database',
+      { userId: row.id, value: row.digestFrequency },
+      'NotificationDigestService'
+    );
+    return false;
+  }
+  if (!isValidDeliveryChannel(row.deliveryChannel)) {
+    logger.warn(
+      'Invalid delivery channel in database',
+      { userId: row.id, value: row.deliveryChannel },
+      'NotificationDigestService'
+    );
+    return false;
+  }
+  return true;
+}
+
 export function getDigestWindowStart(
   now: Date,
   frequency: NotificationDigestFrequency
@@ -74,7 +114,7 @@ function formatSignedPoints(points: number): string {
 }
 
 export async function listDigestCandidates(): Promise<DigestCandidateUser[]> {
-  return await db
+  const rows = await db
     .select({
       id: users.id,
       email: users.email,
@@ -86,6 +126,8 @@ export async function listDigestCandidates(): Promise<DigestCandidateUser[]> {
     })
     .from(users)
     .where(eq(users.notificationDigestEnabled, true));
+
+  return rows.filter(isValidDigestCandidateRow);
 }
 
 export async function buildDigestForUser(params: {

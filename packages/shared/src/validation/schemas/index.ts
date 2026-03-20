@@ -18,6 +18,8 @@ export * from './market';
 export * from './moderation';
 // Export all monitoring schemas
 export * from './monitoring';
+// Export notification digest validation
+export * from './notifications';
 // Export onboarding schemas
 export * from './onboarding';
 // Export all post/social schemas

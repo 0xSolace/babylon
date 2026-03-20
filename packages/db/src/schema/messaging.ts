@@ -121,6 +121,7 @@ export const messages = pgTable(
   },
   (table) => [
     index('Message_chatId_createdAt_idx').on(table.chatId, table.createdAt),
+    index('Message_senderId_createdAt_idx').on(table.senderId, table.createdAt),
     index('Message_senderId_idx').on(table.senderId),
     index('Message_type_idx').on(table.type),
     // GIN index for efficient array containment queries (@>, <@, &&)
@@ -211,6 +212,12 @@ export const notifications = pgTable(
       table.userId,
       table.createdAt
     ),
+    index('Notification_userId_type_actorId_createdAt_idx').on(
+      table.userId,
+      table.type,
+      table.actorId,
+      table.createdAt
+    ),
     index('Notification_userId_read_createdAt_idx').on(
       table.userId,
       table.read,
@@ -260,6 +267,10 @@ export const groups = pgTable(
   (table) => [
     index('Group_type_idx').on(table.type),
     index('Group_ownerId_idx').on(table.ownerId),
+    index('Group_createdById_createdAt_idx').on(
+      table.createdById,
+      table.createdAt
+    ),
     index('Group_createdById_idx').on(table.createdById),
     index('Group_createdAt_idx').on(table.createdAt),
     index('Group_tier_idx').on(table.tier),
@@ -316,6 +327,7 @@ export const groupMembers = pgTable(
     // Note: This replaced the partial index approach - we now use isActive flag for soft deletes
     unique('GroupMember_groupId_userId_key').on(table.groupId, table.userId),
     index('GroupMember_groupId_idx').on(table.groupId),
+    index('GroupMember_userId_joinedAt_idx').on(table.userId, table.joinedAt),
     index('GroupMember_userId_idx').on(table.userId),
     index('GroupMember_groupId_isActive_idx').on(table.groupId, table.isActive),
     index('GroupMember_userId_isActive_idx').on(table.userId, table.isActive),

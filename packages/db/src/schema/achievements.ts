@@ -64,6 +64,10 @@ export const userAchievements = pgTable(
       table.achievementId
     ),
     index('UserAchievement_userId_idx').on(table.userId),
+    index('UserAchievement_userId_unlockedAt_idx').on(
+      table.userId,
+      table.unlockedAt
+    ),
     index('UserAchievement_unlockedAt_idx').on(table.unlockedAt),
   ]
 );
