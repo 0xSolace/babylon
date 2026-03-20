@@ -13,5 +13,3 @@ export {
 } from './dashboard';
 // Modal components
 export { ProfileModal } from './modals';
-// Types
-export * from './types';

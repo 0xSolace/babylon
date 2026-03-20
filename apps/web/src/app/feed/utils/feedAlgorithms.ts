@@ -62,7 +62,7 @@ export function flattenStories(stories: NarrativeStory[]): FlatItem[] {
 
   const queues = postStories.map((s) => ({
     story: s,
-    posts: [...s.posts],
+    posts: s.posts.filter((post): post is NarrativePost => Boolean(post)),
     firstAppearance: true,
   }));
 

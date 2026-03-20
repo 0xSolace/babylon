@@ -67,7 +67,6 @@
 import {
   authenticate,
   getCache,
-  getEffectiveWhitelistLeaderboardThreshold,
   setCache,
   successResponse,
   WaitlistService,
@@ -121,7 +120,6 @@ type PositionResponse = {
   invitedCount?: number;
   qualifiedCount?: number;
   totalReferralPoints?: number;
-  whitelistRankThreshold?: number;
 };
 
 const CACHE_KEY_NAMESPACE = 'waitlist:position';
@@ -258,9 +256,6 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       status: 'qualified' as const,
     }));
 
-  const whitelistRankThreshold =
-    await getEffectiveWhitelistLeaderboardThreshold();
-
   const responseBody: PositionResponse = {
     // IMPORTANT: Return leaderboardRank as "position" for UI compatibility
     position: position.leaderboardRank, // Dynamic rank based on invite points
@@ -288,7 +283,6 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
     invitedCount: invitedUsers.length,
     qualifiedCount: qualifiedUsers.length,
     totalReferralPoints: position.invitePoints, // Total points from referrals
-    whitelistRankThreshold,
   };
 
   if (CACHE_TTL_MS > 0) {

@@ -2,7 +2,12 @@
 
 import { cn } from '@babylon/shared';
 
-export type WalletTab = 'overview' | 'tokens' | 'nfts' | 'activity';
+export type WalletTab =
+  | 'portfolio'
+  | 'overview'
+  | 'tokens'
+  | 'nfts'
+  | 'activity';
 
 interface WalletTabsProps {
   activeTab: WalletTab;
@@ -10,6 +15,7 @@ interface WalletTabsProps {
 }
 
 const tabs: { id: WalletTab; label: string }[] = [
+  { id: 'portfolio', label: 'Portfolio' },
   { id: 'overview', label: 'Overview' },
   { id: 'tokens', label: 'Tokens' },
   { id: 'nfts', label: 'NFTs' },

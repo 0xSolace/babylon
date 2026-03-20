@@ -1,3 +1,4 @@
+import { broadcastSignedSolanaTransaction } from '@babylon/agents/solana-registry';
 import { logger } from '@babylon/shared';
 import { extractPrivyApiDiagnostics } from './error-diagnostics';
 import { getPrivyOfflineConfig } from './offline-config';
@@ -9,23 +10,28 @@ function resolveSolanaCaip2(): string {
 
   switch (cluster) {
     case 'devnet':
-      return 'solana:devnet';
+      return 'solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1';
     case 'testnet':
-      return 'solana:testnet';
+      return 'solana:4uhcVJyU9pJkvQyS88uRDiswHXSCkY3z';
     case 'localnet':
       return 'solana:localnet';
     case 'mainnet-beta':
     default:
-      return 'solana:mainnet';
+      return 'solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp';
   }
 }
 
 export async function sendSolanaTransaction({
   walletId,
   transaction,
+  confirmationStrategy,
 }: {
   walletId: string;
   transaction: string;
+  confirmationStrategy?: {
+    blockhash: string;
+    lastValidBlockHeight: number;
+  };
 }): Promise<{ hash: string; transactionId?: string; caip2: string }> {
   const privy = getPrivyNodeClient();
   const offlineConfig = getPrivyOfflineConfig();
@@ -40,8 +46,7 @@ export async function sendSolanaTransaction({
     const response = await privy
       .wallets()
       .solana()
-      .signAndSendTransaction(walletId, {
-        caip2,
+      .signTransaction(walletId, {
         transaction,
         authorization_context: {
           authorization_private_keys: [offlineConfig.authorizationPrivateKey],
@@ -49,14 +54,18 @@ export async function sendSolanaTransaction({
         idempotency_key: idempotencyKey,
       });
 
+    const broadcast = await broadcastSignedSolanaTransaction({
+      transaction: response.signed_transaction,
+      confirmationStrategy,
+    });
+
     return {
-      hash: response.hash,
-      transactionId: response.transaction_id,
-      caip2: response.caip2,
+      hash: broadcast.hash,
+      caip2,
     };
   } catch (error) {
     logger.error(
-      'Failed to submit Solana transaction via Privy',
+      'Failed to sign or broadcast Solana transaction',
       {
         walletId,
         ...extractPrivyApiDiagnostics(error),
@@ -68,4 +77,17 @@ export async function sendSolanaTransaction({
       ? error
       : new Error('Failed to submit Solana transaction');
   }
+}
+
+export function isSolanaBlockhashNotFoundError(error: unknown): boolean {
+  const diagnostics = extractPrivyApiDiagnostics(error);
+  const combinedMessage = [
+    diagnostics.errorMessage,
+    diagnostics.providerMessage,
+  ]
+    .filter((value): value is string => typeof value === 'string')
+    .join(' ')
+    .toLowerCase();
+
+  return combinedMessage.includes('blockhash not found');
 }

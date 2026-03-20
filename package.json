@@ -81,6 +81,7 @@
     "audit:offline-wallet-readiness": "bun run scripts/audit-offline-wallet-readiness.ts",
     "privy:setup:offline-controls": "bun run scripts/setup-privy-offline-controls.ts",
     "privy:setup:solana-policy": "bun run scripts/create-privy-solana-policy.ts",
+    "solana:registration:debug": "bun run scripts/debug-solana-registration.ts",
     "seed:nft-snapshot:csv": "bun run scripts/seed-nft-snapshot-csv.ts",
     "users:export:newsletter": "bun run scripts/export-newsletter-users-csv.ts"
   },

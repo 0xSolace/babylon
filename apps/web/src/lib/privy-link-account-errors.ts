@@ -20,14 +20,14 @@ function getPrivyErrorMessage(error: unknown): string | null {
  * Returns true when the Privy link-account flow was cancelled by the user.
  */
 export function isPrivyLinkFlowCancellationError(error: unknown): boolean {
-  if (error === 'exited_auth_flow') return true;
+  if (error === 'exited_auth_flow' || error === 'exited_link_flow') return true;
   if (error === 'Authentication cancelled') return true;
 
   if (
     typeof error === 'object' &&
     error !== null &&
     'code' in error &&
-    error.code === 'exited_auth_flow'
+    (error.code === 'exited_auth_flow' || error.code === 'exited_link_flow')
   ) {
     return true;
   }

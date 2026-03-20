@@ -18,38 +18,6 @@ const ALLOWED_PATHS = new Set([
   '/.well-known/assetlinks.json',
 ]);
 
-const APP_PUBLIC_EXACT_ALLOWLIST = new Set([
-  '/',
-  '/nft',
-  '/share',
-  '/api-docs',
-  '/mcp',
-  '/.well-known',
-  '/ticker',
-]);
-
-const APP_PUBLIC_PREFIX_ALLOWLIST = [
-  '/nft/',
-  '/share/',
-  '/ticker/',
-  '/api-docs/',
-  '/mcp/',
-  '/.well-known/',
-  '/api/og/',
-  '/api/auth/',
-  '/api/users/onboarding/',
-  '/api/onboarding/',
-  '/api/upload/',
-  '/api/waitlist/',
-] as const;
-
-function isAppPublicAllowlistedPath(pathname: string): boolean {
-  if (APP_PUBLIC_EXACT_ALLOWLIST.has(pathname)) return true;
-  return APP_PUBLIC_PREFIX_ALLOWLIST.some((prefix) =>
-    pathname.startsWith(prefix)
-  );
-}
-
 /**
  * Production and staging origins for CORS requests
  */
@@ -158,19 +126,6 @@ function getHostname(request: NextRequest): string {
   return host.split(':')[0]?.toLowerCase() ?? '';
 }
 
-function getWaitlistOrigin(hostname: string, protocol: string): string {
-  const fromEnv = process.env.NEXT_PUBLIC_WAITLIST_URL?.trim();
-  if (fromEnv && fromEnv.length > 0) return fromEnv;
-
-  if (hostname.endsWith('staging.babylon.market')) {
-    return `${protocol}//staging.babylon.market`;
-  }
-  if (hostname.endsWith('babylon.market')) {
-    return `${protocol}//babylon.market`;
-  }
-  return `${protocol}//${hostname}`;
-}
-
 function getAppOrigin(hostname: string, protocol: string): string {
   const fromEnv = process.env.NEXT_PUBLIC_APP_URL?.trim();
   if (fromEnv && fromEnv.length > 0) return fromEnv;
@@ -183,48 +138,6 @@ function getAppOrigin(hostname: string, protocol: string): string {
   }
 
   return `${protocol}//${hostname}`;
-}
-
-function isNftGatingEnabled(): boolean {
-  const flag = process.env.NFT_GATING_ENABLED ?? '';
-  return ['true', '1', 'yes', 'on'].includes(flag.toLowerCase());
-}
-
-function getAccessCacheMaxAgeSeconds(): number {
-  const raw = process.env.ACCESS_GATE_CACHE_SECONDS?.trim();
-  if (!raw) return 60;
-  const value = Number.parseInt(raw, 10);
-  if (!Number.isFinite(value) || value <= 0) return 60;
-  return Math.min(value, 300);
-}
-
-function buildWaitlistRedirectUrl(request: NextRequest): string {
-  const hostname = getHostname(request);
-  const origin = getWaitlistOrigin(hostname, request.nextUrl.protocol);
-
-  const nextUrl = request.nextUrl.pathname + request.nextUrl.search;
-  const params = new URLSearchParams();
-  if (nextUrl !== '/' && nextUrl !== '') params.set('next', nextUrl);
-  const qs = params.toString();
-
-  return qs ? `${origin}/?${qs}` : `${origin}/`;
-}
-
-function isNftAccessResponse(value: unknown): value is {
-  success: true;
-  data: { hasAccess: boolean; reason?: string };
-} {
-  if (typeof value !== 'object' || value === null) return false;
-  if (
-    !('success' in value) ||
-    (value as { success: unknown }).success !== true
-  ) {
-    return false;
-  }
-  if (!('data' in value)) return false;
-  const data = (value as { data: unknown }).data;
-  if (typeof data !== 'object' || data === null) return false;
-  return 'hasAccess' in data;
 }
 
 export function middleware(request: NextRequest) {
@@ -264,7 +177,7 @@ export function middleware(request: NextRequest) {
   }
 
   // Host-based routing:
-  // - Waitlist hosts: show waitlist (landing + waitlist dashboard)
+  // - Website hosts: show the marketing landing
   // - Everything else: app host
   const isWaitlistHost = isWaitlistHostname(hostname);
 
@@ -301,95 +214,7 @@ export function middleware(request: NextRequest) {
     return NextResponse.next({ request: { headers: requestHeaders } });
   }
 
-  // App host behavior: enforce gating via /api/nft/access for non-public pages.
-  if (!isNftGatingEnabled()) {
-    return NextResponse.next();
-  }
-
-  if (ALLOWED_PATHS.has(pathname) || isAssetRequest(pathname)) {
-    return NextResponse.next();
-  }
-
-  if (isAppPublicAllowlistedPath(pathname)) {
-    return NextResponse.next();
-  }
-
-  const cachedAccess = request.cookies.get('ba_access')?.value ?? null;
-  if (cachedAccess === '1') {
-    return NextResponse.next();
-  }
-  if (cachedAccess === '0') {
-    return NextResponse.redirect(buildWaitlistRedirectUrl(request));
-  }
-
-  const hasAuthCookie = Boolean(request.cookies.get('privy-token')?.value);
-  const hasAuthHeader = Boolean(request.headers.get('authorization'));
-
-  if (!hasAuthCookie && !hasAuthHeader) {
-    return NextResponse.redirect(buildWaitlistRedirectUrl(request));
-  }
-
-  const cookieHeader = request.headers.get('cookie') ?? '';
-  const authHeader = request.headers.get('authorization') ?? '';
-  const accessUrl = new URL(
-    '/api/nft/access',
-    request.nextUrl.origin
-  ).toString();
-
-  const responsePromise = (async () => {
-    const maxAge = getAccessCacheMaxAgeSeconds();
-    const secure = request.nextUrl.protocol === 'https:';
-
-    let res: Response;
-    try {
-      res = await fetch(accessUrl, {
-        method: 'GET',
-        headers: {
-          ...(cookieHeader ? { cookie: cookieHeader } : {}),
-          ...(authHeader ? { authorization: authHeader } : {}),
-          accept: 'application/json',
-        },
-        cache: 'no-store',
-        signal: AbortSignal.timeout(1200),
-      });
-    } catch {
-      // Fail closed (redirect) but do not cache a negative result (avoids pinning during transient failures).
-      return NextResponse.redirect(buildWaitlistRedirectUrl(request));
-    }
-
-    if (!res.ok) {
-      // Fail closed (redirect) but do not cache a negative result (avoids pinning during transient failures).
-      return NextResponse.redirect(buildWaitlistRedirectUrl(request));
-    }
-
-    const json = (await res.json()) as unknown;
-    if (!isNftAccessResponse(json) || json.data.hasAccess !== true) {
-      const holderDecision =
-        isNftAccessResponse(json) && json.data.reason === 'holder';
-      const redirect = NextResponse.redirect(buildWaitlistRedirectUrl(request));
-      redirect.cookies.set('ba_access', '0', {
-        httpOnly: true,
-        secure,
-        sameSite: 'lax',
-        maxAge: holderDecision ? Math.min(maxAge, 10) : maxAge,
-        path: '/',
-      });
-      return redirect;
-    }
-
-    const holderDecision = json.data.reason === 'holder';
-    const next = NextResponse.next();
-    next.cookies.set('ba_access', '1', {
-      httpOnly: true,
-      secure,
-      sameSite: 'lax',
-      maxAge: holderDecision ? Math.min(maxAge, 10) : maxAge,
-      path: '/',
-    });
-    return next;
-  })();
-
-  return responsePromise;
+  return NextResponse.next();
 }
 
 export const config = {

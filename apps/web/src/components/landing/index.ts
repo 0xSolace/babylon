@@ -2,5 +2,5 @@
  * Landing page component exports.
  */
 
-export { JoinWaitlistButton } from './client/JoinWaitlistButton';
+export { PlayLandingButton } from './client/PlayLandingButton';
 export { LandingPage } from './LandingPage';

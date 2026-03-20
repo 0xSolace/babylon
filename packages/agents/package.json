@@ -11,6 +11,11 @@
       "import": "./src/index.ts",
       "require": "./src/index.ts"
     },
+    "./solana-registry": {
+      "types": "./src/solana-registry/index.ts",
+      "import": "./src/solana-registry/index.ts",
+      "require": "./src/solana-registry/index.ts"
+    },
     "./client": {
       "types": "./src/client.ts",
       "import": "./src/client.ts",
