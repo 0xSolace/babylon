@@ -1,8 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import {
-  buildScopedPnlHistoryPoints,
-  getHourBoundary,
-} from './pnlHistory';
+import { buildScopedPnlHistoryPoints, getHourBoundary } from './pnlHistory';
 
 describe('buildScopedPnlHistoryPoints', () => {
   it('aggregates snapshots across the full team scope and appends a live point', () => {
@@ -86,8 +83,8 @@ describe('buildScopedPnlHistoryPoints', () => {
 
 describe('getHourBoundary', () => {
   it('normalizes dates to the top of the UTC hour', () => {
-    expect(getHourBoundary(new Date('2026-03-20T20:45:31.222Z')).toISOString()).toBe(
-      '2026-03-20T20:00:00.000Z'
-    );
+    expect(
+      getHourBoundary(new Date('2026-03-20T20:45:31.222Z')).toISOString()
+    ).toBe('2026-03-20T20:00:00.000Z');
   });
 });

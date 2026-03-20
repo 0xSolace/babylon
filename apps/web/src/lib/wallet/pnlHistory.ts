@@ -49,7 +49,8 @@ export function getPnlHistoryCutoff(
   range: PnlHistoryRange,
   now = new Date()
 ): Date | undefined {
-  const durationMs = TIMEFRAME_DURATIONS[range as Exclude<PnlHistoryRange, 'ALL'>];
+  const durationMs =
+    TIMEFRAME_DURATIONS[range as Exclude<PnlHistoryRange, 'ALL'>];
   return durationMs ? new Date(now.getTime() - durationMs) : undefined;
 }
 
@@ -165,12 +166,14 @@ export async function loadCurrentUserPnlMetrics(
   const perpUnrealizedRows = await db
     .select({
       userId: perpPositions.userId,
-      unrealizedPnL:
-        sql<number>`COALESCE(SUM(${perpPositions.unrealizedPnL}), 0)`,
+      unrealizedPnL: sql<number>`COALESCE(SUM(${perpPositions.unrealizedPnL}), 0)`,
     })
     .from(perpPositions)
     .where(
-      and(inArray(perpPositions.userId, userIds), isNull(perpPositions.closedAt))
+      and(
+        inArray(perpPositions.userId, userIds),
+        isNull(perpPositions.closedAt)
+      )
     )
     .groupBy(perpPositions.userId);
 

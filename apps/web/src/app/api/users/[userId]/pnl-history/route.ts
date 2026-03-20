@@ -12,9 +12,9 @@ import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import {
   getPnlHistoryCutoff,
+  loadScopedPnlHistoryPoints,
   type PnlHistoryRange,
   type PnlHistoryScope,
-  loadScopedPnlHistoryPoints,
 } from '@/lib/wallet/pnlHistory';
 
 function parseRange(value: string | null): PnlHistoryRange {
