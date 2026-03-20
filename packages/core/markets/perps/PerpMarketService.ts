@@ -694,7 +694,9 @@ export class PerpMarketService {
         positionId: position.id,
       },
       { ticker: position.ticker }
-    );
+    ).catch(() => {
+      // Error already logged in processFeeWithRetry; catch to prevent unhandled rejection
+    });
 
     // Apply market-level post-close impact after settlement to keep the close
     // path fail-safe (position is already settled if this step fails).
@@ -745,7 +747,7 @@ export class PerpMarketService {
     // Broadcast trade event for real-time UI updates.
     // emitTradeEvent already handles errors internally, so fire-and-forget
     // to avoid blocking the response.
-    void this.emitTradeEvent({
+    this.emitTradeEvent({
       type: 'perp_trade',
       action: isFullClose ? 'close' : 'partial_close',
       ticker: position.ticker,
@@ -759,6 +761,8 @@ export class PerpMarketService {
       openInterest: newOpenInterest,
       volume24h: market.volume24h + closeSize,
       timestamp: (this.deps.clock?.now() ?? new Date()).toISOString(),
+    }).catch(() => {
+      // Error already logged in emitTradeEvent; catch to prevent unhandled rejection
     });
 
     if (closeImpact) {
@@ -1471,7 +1475,9 @@ export class PerpMarketService {
           },
           { ticker: existing.ticker }
         ),
-      ]);
+      ]).catch(() => {
+        // Errors logged inside processFeeWithRetry; avoid unhandled rejection
+      });
 
       // Get balance after transaction commits
       const balance = (await this.deps.wallet.getBalance(input.userId)).balance;
