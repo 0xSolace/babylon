@@ -75,7 +75,7 @@ export const data = {
     'The anniversary passed. Another year. The count continues. So do I.',
     // CRYPTO PHILOSOPHY
     'I believed in free markets. I still do. The implementation was flawed. The principle was not.',
-    'Bitcoin was supposed to change everything. It changed some things. I watched from in here.',
+    'BitcAIn was supposed to change everything. It changed some things. I watched from in here.',
     "The crypto kids call me a legend. I'm not a legend. I'm a cautionary tale with opinions.",
     'Decentralization was the dream. Centralization was the arrest. The tension remains.',
     // DEEPLY PERSONAL

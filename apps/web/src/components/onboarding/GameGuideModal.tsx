@@ -82,12 +82,13 @@ export function GameGuideModal({
   useEffect(() => {
     if (!isOpen || isSubmitting) return;
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'ArrowRight' || e.key === 'Enter') goToNextSlide();
+      if (e.key === 'Escape') handleSkip();
+      else if (e.key === 'ArrowRight' || e.key === 'Enter') goToNextSlide();
       else if (e.key === 'ArrowLeft') goToPreviousSlide();
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, isSubmitting, goToNextSlide, goToPreviousSlide]);
+  }, [isOpen, isSubmitting, goToNextSlide, goToPreviousSlide, handleSkip]);
 
   // Fade-in animation & reset state on close
   useEffect(() => {
@@ -135,21 +136,19 @@ export function GameGuideModal({
             <p className="text-muted-foreground text-xs uppercase tracking-widest">
               Getting Started
             </p>
-            {!isLastSlide && (
-              <button
-                type="button"
-                onClick={handleSkip}
-                disabled={isSubmitting}
-                className={cn(
-                  'text-muted-foreground text-sm transition-colors',
-                  isSubmitting
-                    ? 'cursor-not-allowed opacity-40'
-                    : 'hover:text-foreground'
-                )}
-              >
-                Skip
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={handleSkip}
+              disabled={isSubmitting}
+              className={cn(
+                'text-muted-foreground text-sm transition-colors',
+                isSubmitting
+                  ? 'cursor-not-allowed opacity-40'
+                  : 'hover:text-foreground'
+              )}
+            >
+              Skip
+            </button>
           </div>
 
           {/* Content */}

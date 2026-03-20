@@ -785,7 +785,7 @@ export class StaticDataRegistry {
     )
       return 100;
 
-    const majorCryptoOrgs = ['Binance', 'Coinbase', 'Ethereum'];
+    const majorCryptoOrgs = ['BinAInce', 'CoinbAIse', 'EtherAIum'];
     if (
       majorCryptoOrgs.some((n) =>
         orgName.toLowerCase().includes(n.toLowerCase())

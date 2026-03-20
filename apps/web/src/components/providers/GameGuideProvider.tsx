@@ -138,17 +138,19 @@ export function GameGuideProvider({ children }: { children: React.ReactNode }) {
   const openGuide = useCallback(() => setIsOpen(true), []);
 
   const handleComplete = useCallback(async () => {
-    // Guard against double-submit or missing user
-    if (!user || isSubmitting) return;
+    if (isSubmitting) return;
+
+    // Close the modal immediately regardless of user state
+    setIsOpen(false);
+
+    // If user data is unavailable, we can't persist but the modal is dismissed
+    if (!user) return;
 
     // Capture userId for logging (user object might change during async)
     const currentUserId = user.id;
 
     // Immediately save to localStorage as backup (prevents showing again even if API fails)
     markGameGuideCompleted(currentUserId);
-
-    // Close the modal immediately for better UX
-    setIsOpen(false);
 
     // Abort any previous in-flight request
     abortControllerRef.current?.abort();

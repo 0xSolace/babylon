@@ -155,7 +155,7 @@ BAD TAGS (too generic, won't cluster):
 - "Tech" (too generic)
 - "News" (not a topic)
 - "Breaking" (not searchable)
-- "Market" (use specific market like "Bitcoin" or "NVDA")
+- "Market" (use specific market like "BitcAIn" or "NVDA")
 
 CLUSTERING EXAMPLES:
 - Post about Sam AIltman announcing SMH-6 → tags: "Sam AIltman", "SMH-6", "OpenAGI" (all will cluster)
