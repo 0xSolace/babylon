@@ -300,8 +300,11 @@ export async function registerAgentOnEvmForOwner({
   ownerUserId: string;
   agentUserId: string;
 }): Promise<AgentEvmRegistrationResult> {
-  const agent = await getAgentForOwner(ownerUserId, agentUserId);
+  await getAgentForOwner(ownerUserId, agentUserId);
+
   return withAgentEvmRegistrationLock(agentUserId, async () => {
+    const agent = await getAgentForOwner(ownerUserId, agentUserId);
+
     if (agent.onChainRegistered && agent.agent0TokenId !== null) {
       return {
         message: 'Already registered on-chain',
