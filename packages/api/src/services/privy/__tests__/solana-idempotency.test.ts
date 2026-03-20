@@ -1,8 +1,7 @@
 import { describe, expect, it } from 'bun:test';
 import { buildSolanaTransactionIdempotencyKey } from '../solana-idempotency';
 
-const SOLANA_MAINNET_CAIP2 =
-  'solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp';
+const SOLANA_MAINNET_CAIP2 = 'solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp';
 
 describe('buildSolanaTransactionIdempotencyKey', () => {
   it('is stable for the same transaction payload', () => {
