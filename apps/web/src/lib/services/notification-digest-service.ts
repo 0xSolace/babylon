@@ -3,6 +3,7 @@ import {
   and,
   db,
   eq,
+  gt,
   gte,
   isNotNull,
   lt,
@@ -114,6 +115,7 @@ export async function buildDigestForUser(params: {
         isNotNull(positions.outcome),
         isNotNull(positions.pnl),
         isNotNull(positions.resolvedAt),
+        gt(positions.shares, '0'),
         gte(positions.resolvedAt, windowStart),
         lt(positions.resolvedAt, params.now),
         or(
