@@ -48,11 +48,15 @@ const AGENT_IDENTITY_MAX_SIZE = 10000;
  * In-flight wallet creation promises to deduplicate concurrent requests.
  * Prevents race condition where multiple concurrent getCachedAgentIdentity calls
  * for the same agent without a wallet both attempt wallet creation.
+ * Note: Size-limited to prevent unbounded growth; oldest entries evicted at capacity.
  */
 const WALLET_CREATION_IN_FLIGHT = new Map<
   string,
   Promise<{ walletAddress: string } | null>
 >();
+
+/** Maximum size for in-flight map to prevent unbounded growth */
+const WALLET_CREATION_IN_FLIGHT_MAX_SIZE = 1000;
 
 /** Timeout for wallet creation to prevent unbounded promise hangs (30 seconds) */
 const WALLET_CREATION_TIMEOUT_MS = 30_000;
@@ -174,6 +178,13 @@ async function getCachedAgentIdentity(
             });
           // Wrap with timeout to prevent unbounded hangs in serverless environments
           walletPromise = withWalletCreationTimeout(rawPromise, agentUserId);
+          // Evict oldest entry if at capacity to prevent unbounded growth
+          if (WALLET_CREATION_IN_FLIGHT.size >= WALLET_CREATION_IN_FLIGHT_MAX_SIZE) {
+            const oldestKey = WALLET_CREATION_IN_FLIGHT.keys().next().value;
+            if (oldestKey) {
+              WALLET_CREATION_IN_FLIGHT.delete(oldestKey);
+            }
+          }
           WALLET_CREATION_IN_FLIGHT.set(agentUserId, walletPromise);
         }
         const walletResult = await walletPromise;
