@@ -74,10 +74,7 @@ export function BalanceTab({ userId }: BalanceTabProps) {
   }
 
   const members = walletSummary?.members ?? [];
-  const owner =
-    members.find((member) => member.isOwner) ??
-    members[0] ??
-    null;
+  const owner = members.find((member) => member.isOwner) ?? members[0] ?? null;
   const agentMembers = members.filter((member) => !member.isOwner);
   const ownerCash = owner?.cash ?? 0;
   const ownerPositions = owner?.openPositions ?? 0;
