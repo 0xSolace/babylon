@@ -12,7 +12,7 @@ import {
 } from './walletBalanceStore';
 import { useWidgetCacheStore } from './widgetCacheStore';
 
-export function invalidateOwnedPortfolioState(userId: string) {
+function invalidateOwnedPortfolioState(userId: string) {
   invalidateWalletBalance();
   invalidateUserPositions();
   invalidatePortfolioBreakdown();

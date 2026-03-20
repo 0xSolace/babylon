@@ -217,11 +217,6 @@ export default function TeamChatPage() {
     deleteConversation,
   } = useTeamChat();
 
-  useOwnedAgentTradeRefresh({
-    userId: user?.id,
-    agentIds: teamChat?.agents.map((agent) => agent.id) ?? [],
-  });
-
   // Mobile view state - which tab is active on mobile
   type MobileView = 'chat' | 'agents' | 'panel';
   const [mobileView, setMobileView] = useState<MobileView>('chat');
@@ -486,11 +481,18 @@ export default function TeamChatPage() {
     summary: teamSummary,
     loading: teamSummaryLoading,
     error: teamSummaryError,
+    refresh: refreshTeamSummary,
   } = useTeamTradingSummary({
     ownerId: user?.id,
     ownerName: user?.displayName || user?.username || 'You',
     enabled: teamSummaryEnabled,
     getAccessToken,
+  });
+
+  useOwnedAgentTradeRefresh({
+    userId: user?.id,
+    agentIds: teamChat?.agents.map((agent) => agent.id) ?? [],
+    onTrade: refreshTeamSummary,
   });
 
   // Agent IDs set for settings icon on latest agent messages

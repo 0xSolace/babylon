@@ -9,11 +9,13 @@ import { useSSE } from './useSSE';
 interface UseOwnedAgentTradeRefreshOptions {
   userId?: string | null;
   agentIds: string[];
+  onTrade?: () => void;
 }
 
 export function useOwnedAgentTradeRefresh({
   userId,
   agentIds,
+  onTrade,
 }: UseOwnedAgentTradeRefreshOptions) {
   const { subscribe } = useSSE();
 
@@ -32,7 +34,9 @@ export function useOwnedAgentTradeRefresh({
         return;
       }
 
-      void refreshOwnedPortfolioState(userId).catch((error) => {
+      onTrade?.();
+
+      refreshOwnedPortfolioState(userId).catch((error) => {
         logger.warn(
           'Failed to refresh owned portfolio after agent trade',
           {
@@ -43,7 +47,7 @@ export function useOwnedAgentTradeRefresh({
         );
       });
     },
-    [userId]
+    [onTrade, userId]
   );
 
   useEffect(() => {
