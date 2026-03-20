@@ -30,6 +30,8 @@ export { TableRepository } from './client';
 export * from './db';
 
 // Import-then-export so runtimes (e.g. Bun in CI) resolve these reliably from the barrel
+// Note: onReadReplica and onReadReplicaClient are deprecated - use dbRead or db instead.
+// They remain accessible via "export * from './db'" for backward compatibility.
 import {
   asPublic,
   asSystem,
@@ -40,8 +42,6 @@ import {
   getJsonState,
   getJsonStoragePath,
   getStorageMode,
-  onReadReplica,
-  onReadReplicaClient,
 } from './db';
 export {
   asPublic,
@@ -53,8 +53,6 @@ export {
   getJsonState,
   getJsonStoragePath,
   getStorageMode,
-  onReadReplica,
-  onReadReplicaClient,
 };
 /**
  * Re-export unique relation types from model-types.
