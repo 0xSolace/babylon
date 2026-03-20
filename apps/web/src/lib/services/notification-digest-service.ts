@@ -46,6 +46,7 @@ const DIGEST_WINDOWS_MS: Record<NotificationDigestFrequency, number> = {
 const VALID_DIGEST_FREQUENCIES = new Set<string>(['hourly', 'daily', 'weekly']);
 const VALID_DELIVERY_CHANNELS = new Set<string>(['in-app', 'email', 'both']);
 
+// Note: If these type guards are needed elsewhere, extract to @babylon/shared/validation
 function isValidDigestFrequency(value: unknown): value is NotificationDigestFrequency {
   return typeof value === 'string' && VALID_DIGEST_FREQUENCIES.has(value);
 }
