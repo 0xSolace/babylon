@@ -247,14 +247,24 @@ export async function processOnchainRegistration({
   };
 
   if (user.isAgent) {
-    const [existingUser] = await db
-      .select(userSelectFields)
-      .from(users)
-      .where(sql`lower(${users.username}) = lower(${user.userId})`)
-      .limit(1);
+    const [existingUser] = user.dbUserId
+      ? await db
+          .select(userSelectFields)
+          .from(users)
+          .where(eq(users.id, user.dbUserId))
+          .limit(1)
+      : await db
+          .select(userSelectFields)
+          .from(users)
+          .where(sql`lower(${users.username}) = lower(${user.userId})`)
+          .limit(1);
     dbUser = existingUser ?? null;
 
     if (!dbUser) {
+      if (user.dbUserId) {
+        throw new BusinessLogicError('Agent not found', 'AGENT_NOT_FOUND');
+      }
+
       const newId = await generateSnowflakeId();
       const [createdUser] = await db
         .insert(users)
@@ -661,17 +671,29 @@ export async function getOnchainRegistrationStatus(
   user: AuthenticatedUser
 ): Promise<OnchainRegistrationStatus> {
   const [userRecord] = user.isAgent
-    ? await db
-        .select({
-          walletAddress: users.walletAddress,
-          onChainRegistered: users.onChainRegistered,
-          nftTokenId: users.nftTokenId,
-          agent0TokenId: users.agent0TokenId,
-          registrationTxHash: users.registrationTxHash,
-        })
-        .from(users)
-        .where(sql`lower(${users.username}) = lower(${user.userId})`)
-        .limit(1)
+    ? user.dbUserId
+      ? await db
+          .select({
+            walletAddress: users.walletAddress,
+            onChainRegistered: users.onChainRegistered,
+            nftTokenId: users.nftTokenId,
+            agent0TokenId: users.agent0TokenId,
+            registrationTxHash: users.registrationTxHash,
+          })
+          .from(users)
+          .where(eq(users.id, user.dbUserId))
+          .limit(1)
+      : await db
+          .select({
+            walletAddress: users.walletAddress,
+            onChainRegistered: users.onChainRegistered,
+            nftTokenId: users.nftTokenId,
+            agent0TokenId: users.agent0TokenId,
+            registrationTxHash: users.registrationTxHash,
+          })
+          .from(users)
+          .where(sql`lower(${users.username}) = lower(${user.userId})`)
+          .limit(1)
     : await db
         .select({
           walletAddress: users.walletAddress,
