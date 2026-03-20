@@ -111,6 +111,41 @@ describe('migrateAuthStoreState', () => {
     });
   });
 
+  test('migrates version 2 payloads so current sessions survive the v3 upgrade', () => {
+    const migrated = migrateAuthStoreState(
+      {
+        user: {
+          id: 'did:privy:test-user',
+          displayName: 'Test User',
+          username: 'test-user',
+        },
+        wallet: {
+          address: '0x123',
+          chainId: 'eip155:8453',
+        },
+        loadedUserId: 'did:privy:test-user',
+        isLoadingProfile: true,
+        needsOnboarding: true,
+      },
+      2
+    );
+
+    expect(migrated).toEqual({
+      user: {
+        id: 'did:privy:test-user',
+        displayName: 'Test User',
+        username: 'test-user',
+      },
+      wallet: {
+        address: '0x123',
+        chainId: 'eip155:8453',
+      },
+      loadedUserId: 'did:privy:test-user',
+      isLoadingProfile: false,
+      needsOnboarding: true,
+    });
+  });
+
   test('drops partial user objects that do not satisfy the persisted user guard', () => {
     const migrated = migrateAuthStoreState(
       {
@@ -152,7 +187,7 @@ describe('migrateAuthStoreState', () => {
         },
         needsOnboarding: true,
       },
-      3
+      4
     );
 
     expect(migrated).toEqual({

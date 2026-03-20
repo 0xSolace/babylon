@@ -5,6 +5,7 @@ import {
   logger,
   POINTS,
 } from '@babylon/shared';
+import { DistributedLockService } from './distributed-lock-service';
 import { processOnchainRegistration } from './onchain-service';
 import { provisionAgentPrivyWallet } from './privy/agent-wallet-provisioning';
 
@@ -71,7 +72,8 @@ function isAgent0RegistrationConfigured(): boolean {
   return Boolean(
     process.env.AGENT0_RPC_URL &&
       process.env.AGENT0_PRIVATE_KEY &&
-      process.env.PINATA_JWT
+      process.env.PINATA_JWT &&
+      process.env.BABYLON_GAME_WALLET_ADDRESS
   );
 }
 
@@ -239,6 +241,35 @@ async function refundRegistrationCost(
   });
 }
 
+async function withAgentEvmRegistrationLock<T>(
+  agentUserId: string,
+  fn: () => Promise<T>
+): Promise<T> {
+  const lockId = `agent-evm-registration:${agentUserId}`;
+  const processId = `agent-evm-registration-${Date.now()}-${Math.random()
+    .toString(36)
+    .slice(2, 10)}`;
+  const acquired = await DistributedLockService.acquireLock({
+    lockId,
+    durationMs: 60_000,
+    operation: 'agent-evm-registration',
+    processId,
+  });
+
+  if (!acquired) {
+    throw new BusinessLogicError(
+      'An EVM registration attempt is already in progress for this agent. Please retry in a moment.',
+      'AGENT_EVM_REGISTRATION_IN_PROGRESS'
+    );
+  }
+
+  try {
+    return await fn();
+  } finally {
+    await DistributedLockService.releaseLock(lockId, processId);
+  }
+}
+
 export async function getAgentEvmRegistrationStatus({
   ownerUserId,
   agentUserId,
@@ -270,68 +301,69 @@ export async function registerAgentOnEvmForOwner({
   agentUserId: string;
 }): Promise<AgentEvmRegistrationResult> {
   const agent = await getAgentForOwner(ownerUserId, agentUserId);
-
-  if (agent.onChainRegistered && agent.agent0TokenId !== null) {
-    return {
-      message: 'Already registered on-chain',
-      alreadyRegistered: true,
-      agentUserId: agent.id,
-      tokenId: agent.agent0TokenId,
-      txHash: agent.registrationTxHash ?? undefined,
-      walletAddress: agent.walletAddress?.toLowerCase() ?? '',
-      cost: 0,
-    };
-  }
-
-  if (!isAgent0RegistrationConfigured()) {
-    throw new BusinessLogicError(
-      'On-chain registration is currently unavailable. Please try again later.',
-      'REGISTRATION_UNAVAILABLE'
-    );
-  }
-
-  const cost = POINTS.ONCHAIN_REGISTRATION;
-  await deductRegistrationCost(ownerUserId, agent.id, cost);
-
-  try {
-    const wallet = await resolveAgentEvmWallet(agent);
-    const registration = await processOnchainRegistration({
-      user: {
-        userId: agent.username ?? agent.id,
-        dbUserId: agent.id,
-        privyId: wallet.privyId,
-        isAgent: true,
-      },
-      walletAddress: wallet.walletAddress,
-      username: agent.username,
-      displayName: agent.displayName,
-      bio: agent.bio ?? undefined,
-      profileImageUrl: agent.profileImageUrl ?? undefined,
-      coverImageUrl: agent.coverImageUrl ?? undefined,
-    });
-
-    logger.info(
-      'Owner completed agent EVM registration',
-      {
-        ownerUserId,
+  return withAgentEvmRegistrationLock(agentUserId, async () => {
+    if (agent.onChainRegistered && agent.agent0TokenId !== null) {
+      return {
+        message: 'Already registered on-chain',
+        alreadyRegistered: true,
         agentUserId: agent.id,
-        agent0TokenId: registration.tokenId,
-        cost,
-      },
-      'registerAgentOnEvmForOwner'
-    );
+        tokenId: agent.agent0TokenId,
+        txHash: agent.registrationTxHash ?? undefined,
+        walletAddress: agent.walletAddress?.toLowerCase() ?? '',
+        cost: 0,
+      };
+    }
 
-    return {
-      message: registration.message,
-      alreadyRegistered: registration.alreadyRegistered,
-      agentUserId: agent.id,
-      tokenId: registration.tokenId ?? 0,
-      txHash: registration.txHash,
-      walletAddress: wallet.walletAddress,
-      cost,
-    };
-  } catch (error) {
-    await refundRegistrationCost(ownerUserId, agent.id, cost);
-    throw error;
-  }
+    if (!isAgent0RegistrationConfigured()) {
+      throw new BusinessLogicError(
+        'On-chain registration is currently unavailable. Please try again later.',
+        'REGISTRATION_UNAVAILABLE'
+      );
+    }
+
+    const cost = POINTS.ONCHAIN_REGISTRATION;
+    await deductRegistrationCost(ownerUserId, agent.id, cost);
+
+    try {
+      const wallet = await resolveAgentEvmWallet(agent);
+      const registration = await processOnchainRegistration({
+        user: {
+          userId: agent.username ?? agent.id,
+          dbUserId: agent.id,
+          privyId: wallet.privyId,
+          isAgent: true,
+        },
+        walletAddress: wallet.walletAddress,
+        username: agent.username,
+        displayName: agent.displayName,
+        bio: agent.bio ?? undefined,
+        profileImageUrl: agent.profileImageUrl ?? undefined,
+        coverImageUrl: agent.coverImageUrl ?? undefined,
+      });
+
+      logger.info(
+        'Owner completed agent EVM registration',
+        {
+          ownerUserId,
+          agentUserId: agent.id,
+          agent0TokenId: registration.tokenId,
+          cost,
+        },
+        'registerAgentOnEvmForOwner'
+      );
+
+      return {
+        message: registration.message,
+        alreadyRegistered: registration.alreadyRegistered,
+        agentUserId: agent.id,
+        tokenId: registration.tokenId ?? 0,
+        txHash: registration.txHash,
+        walletAddress: wallet.walletAddress,
+        cost,
+      };
+    } catch (error) {
+      await refundRegistrationCost(ownerUserId, agent.id, cost);
+      throw error;
+    }
+  });
 }

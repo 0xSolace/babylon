@@ -146,9 +146,9 @@ export function migrateAuthStoreState(
     return initialState;
   }
 
-  // Migrate only legacy payloads written before the current v3 schema.
-  // Unknown future versions should fall back to the initial state instead.
-  if (version !== 0 && version !== 1) {
+  // Migrate payloads written by known legacy schemas. Unknown future versions
+  // should fall back to the initial state instead.
+  if (version !== 0 && version !== 1 && version !== 2) {
     return initialState;
   }
 
