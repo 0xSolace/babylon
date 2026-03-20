@@ -71,7 +71,10 @@ function parsePositiveIntEnv(key: string): number | undefined {
   const raw = process.env[key];
   if (raw === undefined || raw === '') return undefined;
   const n = Number.parseInt(raw, 10);
-  if (!Number.isFinite(n) || n <= 0) return undefined;
+  if (!Number.isFinite(n) || n <= 0) {
+    logger.warn(`Invalid ${key} value: "${raw}", using default`);
+    return undefined;
+  }
   return Math.min(n, DATABASE_POOL_MAX_CAP);
 }
 
