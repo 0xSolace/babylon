@@ -137,39 +137,26 @@ function getPostgresClientConfig(
   const envKey =
     role === 'primary' ? 'DATABASE_POOL_MAX' : 'DATABASE_READ_REPLICA_POOL_MAX';
   const envMax = parsePositiveIntEnv(envKey);
+
+  // Pool size lookup table for clarity (avoids nested ternaries)
+  const POOL_DEFAULTS = {
+    pooler: {
+      primary: { prod: 10, test: 2, dev: 8 },
+      replica: { prod: 15, test: 2, dev: 12 },
+    },
+    direct: {
+      primary: { prod: 8, test: 5, dev: 10 },
+      replica: { prod: 12, test: 5, dev: 15 },
+    },
+  };
+
   let poolMax: number;
   if (envMax !== undefined) {
     poolMax = envMax;
-  } else if (isPooler) {
-    // PgBouncer / Neon pooler: multiplexes to backends. Defaults stay small per process
-    // so many concurrent app instances (serverless / workers) do not exhaust pooled (~10k) caps.
-    poolMax =
-      role === 'primary'
-        ? isProd
-          ? 10
-          : isTest
-            ? 2
-            : 8
-        : isProd
-          ? 15
-          : isTest
-            ? 2
-            : 12;
   } else {
-    // Direct Postgres: each slot may hold a server connection. Stricter than pooler so
-    // high fan-out stays under Neon direct (~4k) limits. Prefer pooled URL in production.
-    poolMax =
-      role === 'primary'
-        ? isProd
-          ? 8
-          : isTest
-            ? 5
-            : 10
-        : isProd
-          ? 12
-          : isTest
-            ? 5
-            : 15;
+    const connectionType = isPooler ? 'pooler' : 'direct';
+    const env = isProd ? 'prod' : isTest ? 'test' : 'dev';
+    poolMax = POOL_DEFAULTS[connectionType][role][env];
   }
 
   // Connection params
@@ -499,7 +486,9 @@ const TABLE_READ_METHODS = new Set([
 ]);
 
 /**
- * Write methods that must use primary database
+ * Write methods that must use primary database.
+ * Note: Currently used for detecting table repository access patterns in createModeAwareDbProxy.
+ * Reserved for future enhancements such as write-path logging or routing validation.
  */
 const WRITE_METHODS = new Set([
   'insert',
@@ -568,12 +557,20 @@ function createModeAwareDbProxy(): DrizzleClient {
         typeof value === 'object' &&
         'findMany' in value
       ) {
+        // Cache for bound methods to avoid rebinding on every access
+        const boundMethodCache = new Map<PropertyKey, unknown>();
+
         return new Proxy(value as object, {
           get(target, method: string | symbol) {
             const methodStr = String(method);
 
             // Route table read methods to replica if available
             if (TABLE_READ_METHODS.has(methodStr)) {
+              // Check cache first
+              if (boundMethodCache.has(method)) {
+                return boundMethodCache.get(method);
+              }
+
               const replicaClient = getReadReplicaDbClient();
               if (replicaClient) {
                 const tableRepo = replicaClient[prop as keyof DrizzleClient];
@@ -583,7 +580,9 @@ function createModeAwareDbProxy(): DrizzleClient {
                   )[method];
                   // Bind to replica table repo so `this` context is correct
                   if (typeof replicaMethod === 'function') {
-                    return replicaMethod.bind(tableRepo);
+                    const bound = replicaMethod.bind(tableRepo);
+                    boundMethodCache.set(method, bound);
+                    return bound;
                   }
                   return replicaMethod;
                 }
