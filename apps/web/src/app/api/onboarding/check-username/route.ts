@@ -103,7 +103,7 @@ import {
 } from '@babylon/api';
 import type { DrizzleClient } from '@babylon/db';
 import { asPublic, asUser } from '@babylon/db';
-import { logger } from '@babylon/shared';
+import { logger, sanitizeOnboardingUsername } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 
 interface UsernameCheckResult {
@@ -119,12 +119,7 @@ async function checkUsernameAvailability(
   baseUsername: string,
   db: DrizzleClient
 ): Promise<UsernameCheckResult> {
-  // Sanitize username
-  const cleanUsername = baseUsername
-    .replace(/^@/, '')
-    .replace(/[^a-zA-Z0-9_]/g, '_')
-    .toLowerCase()
-    .slice(0, 20);
+  const cleanUsername = sanitizeOnboardingUsername(baseUsername);
 
   // Check if base username is available
   const existingUser = await db.user.findUnique({

@@ -1,7 +1,7 @@
 'use client';
 
 import type { OnboardingProfilePayload } from '@babylon/shared';
-import { logger, POINTS } from '@babylon/shared';
+import { logger, POINTS, sanitizeOnboardingUsername } from '@babylon/shared';
 import { useIdentityToken, usePrivy } from '@privy-io/react-auth';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -304,8 +304,11 @@ export function OnboardingProvider({
           },
           'OnboardingProvider'
         );
+        const sanitizedUsername = sanitizeOnboardingUsername(
+          importedProfileData.username
+        );
         const autoProfile: OnboardingProfilePayload = {
-          username: importedProfileData.username,
+          username: sanitizedUsername,
           displayName: importedProfileData.displayName,
           bio: '', // Empty bio by default
           profileImageUrl: importedProfileData.profileImageUrl ?? undefined,
