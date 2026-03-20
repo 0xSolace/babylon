@@ -34,6 +34,36 @@ describe('groupResolvedMarketOutcomes', () => {
     });
   });
 
+  test('derives outcome from the final aggregated points total', () => {
+    const outcomes = groupResolvedMarketOutcomes([
+      {
+        holderId: 'user-1',
+        ownerUserId: 'user-1',
+        marketId: 'market-1',
+        marketName: 'Will ETH break $5k?',
+        points: 12.5,
+        agentName: null,
+      },
+      {
+        holderId: 'user-1',
+        ownerUserId: 'user-1',
+        marketId: 'market-1',
+        marketName: 'Will ETH break $5k?',
+        points: -18,
+        agentName: null,
+      },
+    ]);
+
+    expect(outcomes).toHaveLength(1);
+    expect(outcomes[0]).toMatchObject({
+      ownerUserId: 'user-1',
+      holderId: 'user-1',
+      marketId: 'market-1',
+      points: -5.5,
+      outcome: 'loss',
+    });
+  });
+
   test('keeps agent-held outcomes separate and attributes the agent name', () => {
     const outcomes = groupResolvedMarketOutcomes([
       {
