@@ -125,6 +125,8 @@ async function getCachedAgentIdentity(
           }
         }
       } catch (error) {
+        // Note: Wallet creation errors are caught by .catch() above and return null.
+        // This catch handles errors from the subsequent db.user.findUnique refresh.
         logger.warn(
           `Failed to auto-create wallet for agent ${agentUserId}`,
           {
