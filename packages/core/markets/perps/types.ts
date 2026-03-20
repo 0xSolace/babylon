@@ -205,6 +205,11 @@ export interface PriceImpactPort {
   getBasePrice?(ticker: string): Promise<number | undefined>;
 }
 
+/** Lightweight observability port for domain-level counters (Datadog, Grafana, etc.) */
+export interface MetricsPort {
+  increment(name: string, value: number, tags?: Record<string, string>): void;
+}
+
 // Service deps bundle (optional helper)
 export interface PerpServiceDeps {
   db: PerpDbPort;
@@ -218,4 +223,6 @@ export interface PerpServiceDeps {
   tradingFeeOutbox?: TradingFeeOutboxPort;
   /** Optional price impact port to prevent self-impact exploits */
   priceImpact?: PriceImpactPort;
+  /** Optional metrics port for operational counters */
+  metrics?: MetricsPort;
 }
