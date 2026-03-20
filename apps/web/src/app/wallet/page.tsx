@@ -9,11 +9,13 @@ import { ReceiveModal } from '@/components/wallet/ReceiveModal';
 import { SendModal } from '@/components/wallet/SendModal';
 import { TokenList } from '@/components/wallet/TokenList';
 import { TransactionHistory } from '@/components/wallet/TransactionHistory';
+import { BalanceTab } from '@/components/wallet/v2/balance-tab';
+import { PnLTab } from '@/components/wallet/v2/pnl-tab';
+import { PositionsTab } from '@/components/wallet/v2/positions-tab';
 import { WalletEmptyState } from '@/components/wallet/WalletEmptyState';
 import { WalletHeader } from '@/components/wallet/WalletHeader';
 import { WalletOverview } from '@/components/wallet/WalletOverview';
 import { type WalletTab, WalletTabs } from '@/components/wallet/WalletTabs';
-import { WalletContent } from '@/components/wallet/wallet/wallet-content';
 import { useAuth } from '@/hooks/useAuth';
 import {
   useOnchainNfts,
@@ -21,15 +23,27 @@ import {
   useOnchainTransactions,
   useOnchainWalletPolling,
 } from '@/stores/onchainWalletStore';
+import { useUserPositionsPolling } from '@/stores/userPositionsStore';
+import { useWalletBalancePolling } from '@/stores/walletBalanceStore';
+
+type PortfolioSubTab = 'balance' | 'pnl' | 'positions';
 
 export default function WalletPage() {
   const router = useRouter();
-  const { ready, authenticated, embeddedWalletAddress, login } = useAuth();
+  const { ready, authenticated, embeddedWalletAddress, login, user } =
+    useAuth();
   const [activeTab, setActiveTab] = useState<WalletTab>('portfolio');
+  const [portfolioSubTab, setPortfolioSubTab] =
+    useState<PortfolioSubTab>('balance');
   const [receiveOpen, setReceiveOpen] = useState(false);
   const [sendOpen, setSendOpen] = useState(false);
 
   const address = embeddedWalletAddress ?? null;
+  const userId = authenticated ? user?.id : undefined;
+
+  // Start polling for wallet data when authenticated
+  useWalletBalancePolling(userId ?? null, 15_000);
+  useUserPositionsPolling(userId ?? null);
 
   // Redirect unauthenticated users
   useEffect(() => {
@@ -105,7 +119,38 @@ export default function WalletPage() {
         <WalletTabs activeTab={activeTab} onTabChange={setActiveTab} />
 
         <div className="pb-8">
-          {activeTab === 'portfolio' && <WalletContent mode="page" />}
+          {activeTab === 'portfolio' && userId && (
+            <div>
+              {/* Portfolio sub-tabs */}
+              <div className="mb-6 flex gap-4 border-border border-b">
+                {(
+                  [
+                    ['balance', 'Balance'],
+                    ['pnl', 'P&L'],
+                    ['positions', 'Positions'],
+                  ] as const
+                ).map(([key, label]) => (
+                  <button
+                    key={key}
+                    onClick={() => setPortfolioSubTab(key)}
+                    className={`border-b-2 pb-2 font-medium text-sm transition-colors ${
+                      portfolioSubTab === key
+                        ? 'border-foreground text-foreground'
+                        : 'border-transparent text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+
+              {portfolioSubTab === 'balance' && <BalanceTab userId={userId} />}
+              {portfolioSubTab === 'pnl' && <PnLTab userId={userId} />}
+              {portfolioSubTab === 'positions' && (
+                <PositionsTab userId={userId} />
+              )}
+            </div>
+          )}
 
           {activeTab === 'overview' &&
             (address ? (
