@@ -515,9 +515,12 @@ const WRITE_METHODS = new Set([
  */
 function createModeAwareDbProxy(): DrizzleClient {
   // Cache for table repository proxies to avoid recreation on every access
+  // Note: Limited to 100 entries to prevent unbounded growth in long-running processes
   const tableProxyCache = new Map<string | symbol, object>();
   // Nested cache for bound methods per table (table -> method -> bound function)
   const boundMethodCachePerTable = new Map<string | symbol, Map<PropertyKey, unknown>>();
+  const TABLE_PROXY_CACHE_MAX = 100;
+  const BOUND_METHOD_CACHE_MAX = 50;
 
   const handler: ProxyHandler<DrizzleClient> = {
     get(_target, prop: string | symbol) {
@@ -598,6 +601,11 @@ function createModeAwareDbProxy(): DrizzleClient {
                   // Bind to replica table repo so `this` context is correct
                   if (typeof replicaMethod === 'function') {
                     const bound = replicaMethod.bind(tableRepo);
+                    // Enforce cache size limit
+                    if (boundMethodCache.size >= BOUND_METHOD_CACHE_MAX) {
+                      const firstKey = boundMethodCache.keys().next().value;
+                      if (firstKey !== undefined) boundMethodCache.delete(firstKey);
+                    }
                     boundMethodCache.set(method, bound);
                     return bound;
                   }
@@ -611,6 +619,14 @@ function createModeAwareDbProxy(): DrizzleClient {
           },
         }) as unknown as typeof value;
 
+        // Enforce cache size limit to prevent unbounded growth
+        if (tableProxyCache.size >= TABLE_PROXY_CACHE_MAX) {
+          const firstKey = tableProxyCache.keys().next().value;
+          if (firstKey !== undefined) {
+            tableProxyCache.delete(firstKey);
+            boundMethodCachePerTable.delete(firstKey);
+          }
+        }
         tableProxyCache.set(prop, tableProxy);
         return tableProxy;
       }
