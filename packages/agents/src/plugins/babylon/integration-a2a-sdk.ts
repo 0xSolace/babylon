@@ -45,6 +45,13 @@ const AGENT_IDENTITY_TTL_MS = 5 * 60 * 1000; // 5 minutes
 const AGENT_IDENTITY_MAX_SIZE = 10000;
 
 /**
+ * In-flight wallet creation promises to deduplicate concurrent requests.
+ * Prevents race condition where multiple concurrent getCachedAgentIdentity calls
+ * for the same agent without a wallet both attempt wallet creation.
+ */
+const WALLET_CREATION_IN_FLIGHT = new Map<string, Promise<{ walletAddress: string } | null>>();
+
+/**
  * Get agent identity from cache or database
  * Optimized for high concurrency with lazy refresh
  * Supports both USER_CONTROLLED agents (User table) and NPCs (StaticDataRegistry)
@@ -77,6 +84,7 @@ async function getCachedAgentIdentity(
     let agent0TokenId = user.agent0TokenId;
 
     // Auto-create wallet if missing and AUTO_CREATE_AGENT_WALLETS is explicitly enabled
+    // Uses in-flight map to deduplicate concurrent wallet creation requests for the same agent
     if (
       !walletAddress &&
       ['true', '1', 'yes'].includes(
@@ -84,26 +92,36 @@ async function getCachedAgentIdentity(
       )
     ) {
       try {
-        logger.info(
-          `Auto-creating wallet for agent ${agentUserId}`,
-          undefined,
-          'BabylonIntegration'
-        );
-        const walletResult =
-          await agentWalletService.createAgentEmbeddedWallet(agentUserId);
-        walletAddress = walletResult.walletAddress;
-
-        // Refresh user data to get updated walletAddress and agent0TokenId
-        const updatedUser = await db.user.findUnique({
-          where: { id: agentUserId },
-          select: {
-            walletAddress: true,
-            agent0TokenId: true,
-          },
-        });
-        if (updatedUser) {
-          walletAddress = updatedUser.walletAddress;
-          agent0TokenId = updatedUser.agent0TokenId;
+        // Check if wallet creation is already in progress for this agent
+        let walletPromise = WALLET_CREATION_IN_FLIGHT.get(agentUserId);
+        if (!walletPromise) {
+          logger.info(
+            `Auto-creating wallet for agent ${agentUserId}`,
+            undefined,
+            'BabylonIntegration'
+          );
+          walletPromise = agentWalletService.createAgentEmbeddedWallet(agentUserId)
+            .then(result => ({ walletAddress: result.walletAddress }))
+            .catch(() => null)
+            .finally(() => {
+              WALLET_CREATION_IN_FLIGHT.delete(agentUserId);
+            });
+          WALLET_CREATION_IN_FLIGHT.set(agentUserId, walletPromise);
+        }
+        const walletResult = await walletPromise;
+        if (walletResult) {
+          // Refresh user data to get updated walletAddress and agent0TokenId
+          const updatedUser = await db.user.findUnique({
+            where: { id: agentUserId },
+            select: {
+              walletAddress: true,
+              agent0TokenId: true,
+            },
+          });
+          if (updatedUser) {
+            walletAddress = updatedUser.walletAddress;
+            agent0TokenId = updatedUser.agent0TokenId;
+          }
         }
       } catch (error) {
         logger.warn(
