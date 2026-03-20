@@ -488,6 +488,17 @@ const READ_METHODS = new Set([
 ]);
 
 /**
+ * Read-only methods on table repositories (e.g. db.user.findMany)
+ */
+const TABLE_READ_METHODS = new Set([
+  'findUnique',
+  'findFirst',
+  'findMany',
+  'count',
+  'aggregate',
+]);
+
+/**
  * Write methods that must use primary database
  */
 const WRITE_METHODS = new Set([
@@ -560,23 +571,22 @@ function createModeAwareDbProxy(): DrizzleClient {
         return new Proxy(value as object, {
           get(target, method: string | symbol) {
             const methodStr = String(method);
-            const isTableRead = [
-              'findUnique',
-              'findFirst',
-              'findMany',
-              'count',
-              'aggregate',
-            ].includes(methodStr);
 
             // Route table read methods to replica if available
-            if (isTableRead) {
+            if (TABLE_READ_METHODS.has(methodStr)) {
               const replicaClient = getReadReplicaDbClient();
               if (replicaClient) {
                 const tableRepo = replicaClient[prop as keyof DrizzleClient];
-                const repo = tableRepo as
-                  | Record<PropertyKey, unknown>
-                  | undefined;
-                return repo?.[method];
+                if (tableRepo && typeof tableRepo === 'object') {
+                  const replicaMethod = (
+                    tableRepo as Record<PropertyKey, unknown>
+                  )[method];
+                  // Bind to replica table repo so `this` context is correct
+                  if (typeof replicaMethod === 'function') {
+                    return replicaMethod.bind(tableRepo);
+                  }
+                  return replicaMethod;
+                }
               }
             }
 

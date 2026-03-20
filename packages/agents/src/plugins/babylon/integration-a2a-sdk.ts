@@ -76,8 +76,13 @@ async function getCachedAgentIdentity(
     let walletAddress = user.walletAddress;
     let agent0TokenId = user.agent0TokenId;
 
-    // Auto-create wallet if missing and AUTO_CREATE_AGENT_WALLETS is enabled
-    if (!walletAddress && process.env.AUTO_CREATE_AGENT_WALLETS !== 'false') {
+    // Auto-create wallet if missing and AUTO_CREATE_AGENT_WALLETS is explicitly enabled
+    if (
+      !walletAddress &&
+      ['true', '1', 'yes'].includes(
+        process.env.AUTO_CREATE_AGENT_WALLETS?.toLowerCase() ?? ''
+      )
+    ) {
       try {
         logger.info(
           `Auto-creating wallet for agent ${agentUserId}`,
