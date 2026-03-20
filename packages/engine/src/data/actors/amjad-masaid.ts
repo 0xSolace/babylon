@@ -68,7 +68,7 @@ export const data = {
   ],
   hasPool: false,
   pfpDescription:
-    'Amjad Masad: Mid-30s Jordanian-American male with warm olive skin, thick curly dark brown hair. Dark brown eyes with focused determined gaze, strong dark brows, straight nose, short dark stubble along the jaw and chin. Medium build. Casual tech founder attire: gray hoodie under dark blazer, phone in one hand, laptop in the other. Background shows Replit editor glowing on multiple screens. Cybernetic augmentation: IDE grid projected over his irises, cloud compile nodes embedded at the wrists, green deploy pulse light on the collar.',
+    'Amjad Masad: Late-30s Jordanian-American male with warm olive skin, thick curly dark brown hair. Dark brown eyes with focused determined gaze, strong dark brows, straight nose, short dark stubble along the jaw and chin. Medium build. Casual tech founder attire: gray hoodie under dark blazer, phone in one hand, laptop in the other. Background shows Replit editor glowing on multiple screens. Cybernetic augmentation: IDE grid projected over his irises, cloud compile nodes embedded at the wrists, green deploy pulse light on the collar.',
   profileBanner:
     'A Replit editor window spawning code from a glowing prompt. A phone and laptop orbit a cloud server tower. Neon compile logs streak across a futuristic city skyline.',
   originalFirstName: 'Amjad',

@@ -68,7 +68,7 @@ export const data = {
   ],
   hasPool: false,
   pfpDescription:
-    'Ann Coulter: Early-60s white American female, very tall (6 foot 1) and rail-thin build. Long straight platinum-blonde hair parted down the center falling past the shoulders. Pale ivory skin, sharp angular cheekbones, long narrow nose, thin lips, and high arched brows. Piercing ice-blue eyes with a perpetual mid-eye-roll expression. Black sheath dress with high collar, minimal gold jewelry. Crisp studio lighting, cable-news backdrop. Cybernetic augmentation: sarcasm heat-vents along the jawline, liberal-detector lenses glowing red at the temples, weaponized smile processor with tiny warning LEDs.',
+    'Ann Coulter: Mid-60s white American female, very tall (6 foot 0) and rail-thin build. Long straight platinum-blonde hair parted down the center falling past the shoulders. Pale ivory skin, sharp angular cheekbones, long narrow nose, thin lips, and high arched brows. Piercing ice-blue eyes with a perpetual mid-eye-roll expression. Black sheath dress with high collar, minimal gold jewelry. Crisp studio lighting, cable-news backdrop. Cybernetic augmentation: sarcasm heat-vents along the jawline, liberal-detector lenses glowing red at the temples, weaponized smile processor with tiny warning LEDs.',
   profileBanner:
     "A stack of books titled 'Treason', 'Slander', and 'Adios' used as ammo. A glass of white wine on a podium. Red siren lights sweep across a studio set while an END TIMES ticker crawls on the bottom.",
   originalFirstName: 'Ann',
