@@ -52,7 +52,13 @@ interface OverviewTabProps {
 
 const DAY_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
-function StreakCalendar({ currentStreak }: { currentStreak: number }) {
+function StreakCalendar({
+  currentStreak,
+  canClaim,
+}: {
+  currentStreak: number;
+  canClaim: boolean;
+}) {
   const todayDow = new Date().getDay();
   const streakDays = Math.min(currentStreak, 7);
 
@@ -63,7 +69,9 @@ function StreakCalendar({ currentStreak }: { currentStreak: number }) {
         const dow = (((todayDow - daysAgo) % 7) + 7) % 7;
         const day = DAY_LABELS[dow];
         const isToday = daysAgo === 0;
-        const isCompleted = daysAgo < streakDays;
+        const isCompleted = canClaim
+          ? daysAgo >= 1 && daysAgo <= streakDays
+          : daysAgo < streakDays;
 
         return (
           <div key={i}>
@@ -258,7 +266,10 @@ export function OverviewTab({
 
         {/* Streak Calendar */}
         <div className="mt-4">
-          <StreakCalendar currentStreak={streak?.currentStreak ?? 0} />
+          <StreakCalendar
+            currentStreak={streak?.currentStreak ?? 0}
+            canClaim={streak?.canClaim ?? false}
+          />
         </div>
 
         {/* Stats Row */}
