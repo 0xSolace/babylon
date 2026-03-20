@@ -94,3 +94,18 @@ bun run build
 
 - Ruler (`.ruler/`) generates agent config files. After editing `.ruler/**`, run `bun run ruler:apply`.
 - Prefer local vendor docs (`docs/vendors/`) before guessing APIs.
+
+## Production database (scale / locks)
+
+Indexes and query shape are necessary but **not sufficient**: you cannot prove every query is safe without **runtime** evidence (`EXPLAIN (ANALYZE)`, `pg_stat_statements`, load tests). Code review alone does not scale to millions of users.
+
+**What actually prevents “one query takes the site down”:**
+
+- **Short transactions** — hold locks for the minimum work; no network/LLM calls inside `db.transaction()`.
+- **Pool + DB limits** — app pool (`DATABASE_POOL_MAX`, etc. in `.env.example`) must stay below Postgres `max_connections` (account for PgBouncer multipliers, replicas, workers). Defaults use **small per-process pools** for high fan-out (many serverless/workers) against Neon’s pooled (~10k) / direct (~4k) caps; prefer pooled `DATABASE_URL` in prod and tune `DATABASE_POOL_MAX` from metrics.
+- **Session guardrails** — in production, `packages/db` sets Postgres `statement_timeout`, `lock_timeout`, and `idle_in_transaction_session_timeout` on new connections (tunable via env). This caps runaway queries and fails lock waits instead of piling up.
+- **DDL** — `CREATE INDEX` on large tables blocks writes unless built **`CONCURRENTLY`** (hand-roll a migration for huge tables; Drizzle defaults are blocking).
+- **Observability** — enable `pg_stat_statements`, watch `pg_locks` / `pg_stat_activity`, set alerts on slow queries and connection saturation.
+- **Read path** — route read-heavy, latency-tolerant queries through **`DATABASE_READ_REPLICA_URL`** when configured.
+
+Treat every new high-volume query as guilty until measured under production-like data volume.
