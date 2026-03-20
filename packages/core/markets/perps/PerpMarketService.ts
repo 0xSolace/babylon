@@ -42,6 +42,11 @@ const MIN_IMPACT_DELTA = 0.001;
  * Goal: expose a single market view and clean open/close flows,
  * decoupled from app framework concerns.
  */
+/** Maximum retry attempts for fee processing */
+const FEE_PROCESSING_MAX_RETRIES = 3;
+/** Base delay (ms) for exponential backoff */
+const FEE_PROCESSING_BASE_DELAY_MS = 100;
+
 export class PerpMarketService {
   private readonly db: PerpDbPort;
   private readonly deps: PerpServiceDeps;
@@ -49,6 +54,55 @@ export class PerpMarketService {
   constructor(deps: PerpServiceDeps) {
     this.deps = deps;
     this.db = deps.db;
+  }
+
+  /**
+   * Process trading fee with retry logic.
+   * Retries with exponential backoff on transient failures.
+   * After exhausting retries, logs a critical error for alerting.
+   */
+  private async processFeeWithRetry(
+    params: {
+      userId: string;
+      amount: number;
+      type: string;
+      relatedId: string;
+      positionId: string;
+    },
+    context: { ticker: string }
+  ): Promise<void> {
+    if (!this.deps.feeProcessor) return;
+
+    let lastError: Error | undefined;
+    for (let attempt = 1; attempt <= FEE_PROCESSING_MAX_RETRIES; attempt++) {
+      try {
+        await this.deps.feeProcessor.processTradingFee(params);
+        return; // Success
+      } catch (err) {
+        lastError = err instanceof Error ? err : new Error(String(err));
+        if (attempt < FEE_PROCESSING_MAX_RETRIES) {
+          // Exponential backoff: 100ms, 200ms, 400ms...
+          const delay = FEE_PROCESSING_BASE_DELAY_MS * 2 ** (attempt - 1);
+          await new Promise((resolve) => setTimeout(resolve, delay));
+        }
+      }
+    }
+
+    // All retries exhausted - log critical error for alerting systems
+    logger.error(
+      'CRITICAL: Fee processing failed after all retries - requires manual intervention',
+      {
+        positionId: params.positionId,
+        userId: params.userId,
+        ticker: context.ticker,
+        type: params.type,
+        amount: params.amount,
+        retries: FEE_PROCESSING_MAX_RETRIES,
+        error: lastError?.message,
+        alertLevel: 'critical',
+      },
+      'PerpService'
+    );
   }
 
   /**
@@ -572,29 +626,17 @@ export class PerpMarketService {
 
     // Fee processing is bookkeeping (referral distribution, fee records).
     // The position is already settled, so this is safe to run without blocking
-    // the response back to the user.
-    if (this.deps.feeProcessor) {
-      void this.deps.feeProcessor
-        .processTradingFee({
-          userId: input.userId,
-          amount: position.size,
-          type: 'perp_close',
-          relatedId: position.ticker,
-          positionId: position.id,
-        })
-        .catch((err) => {
-          logger.error(
-            'Fee processing failed after close settlement',
-            {
-              positionId: position.id,
-              userId: input.userId,
-              ticker: position.ticker,
-              error: err instanceof Error ? err.message : String(err),
-            },
-            'PerpService'
-          );
-        });
-    }
+    // the response back to the user. Uses retry logic for reliability.
+    void this.processFeeWithRetry(
+      {
+        userId: input.userId,
+        amount: position.size,
+        type: 'perp_close',
+        relatedId: position.ticker,
+        positionId: position.id,
+      },
+      { ticker: position.ticker }
+    );
 
     // Apply market-level post-close impact after settlement to keep the close
     // path fail-safe (position is already settled if this step fails).
@@ -1085,29 +1127,18 @@ export class PerpMarketService {
       };
     });
 
-    // Process fees outside transaction to avoid holding locks during external work
-    if (this.deps.feeProcessor) {
-      void this.deps.feeProcessor
-        .processTradingFee({
-          userId: input.userId,
-          amount: addedSize,
-          type: 'perp_add_to_position',
-          relatedId: result.ticker,
-          positionId: result.positionId,
-        })
-        .catch((err) => {
-          logger.error(
-            'Fee processing failed after add-to-position',
-            {
-              positionId: result.positionId,
-              userId: input.userId,
-              ticker: result.ticker,
-              error: err instanceof Error ? err.message : String(err),
-            },
-            'PerpService'
-          );
-        });
-    }
+    // Process fees outside transaction to avoid holding locks during external work.
+    // Uses retry logic for reliability.
+    void this.processFeeWithRetry(
+      {
+        userId: input.userId,
+        amount: addedSize,
+        type: 'perp_add_to_position',
+        relatedId: result.ticker,
+        positionId: result.positionId,
+      },
+      { ticker: result.ticker }
+    );
 
     // Get balance after transaction commits
     const balance = (await this.deps.wallet.getBalance(input.userId)).balance;
@@ -1354,38 +1385,30 @@ export class PerpMarketService {
         };
       });
 
-      // Process fees for both legs outside transaction to avoid holding locks
-      // Note: Fire-and-forget is intentional; fees are non-critical bookkeeping (referral splits).
-      // Position settlement is already complete. Failed fees are logged for alerting/retry via log monitoring.
-      if (this.deps.feeProcessor) {
-        void Promise.all([
-          this.deps.feeProcessor.processTradingFee({
+      // Process fees for both legs outside transaction to avoid holding locks.
+      // Uses retry logic for reliability; position settlement is already complete.
+      void Promise.all([
+        this.processFeeWithRetry(
+          {
             userId: input.userId,
             amount: existing.size,
             type: 'perp_close',
             relatedId: existing.ticker,
             positionId: existing.id,
-          }),
-          this.deps.feeProcessor.processTradingFee({
+          },
+          { ticker: existing.ticker }
+        ),
+        this.processFeeWithRetry(
+          {
             userId: input.userId,
             amount: flipResult.size,
             type: 'perp_flip_position',
             relatedId: existing.ticker,
             positionId: flipResult.positionId,
-          }),
-        ]).catch((err) => {
-          logger.error(
-            'Fee processing failed after flip',
-            {
-              positionId: flipResult.positionId,
-              userId: input.userId,
-              ticker: existing.ticker,
-              error: err instanceof Error ? err.message : String(err),
-            },
-            'PerpService'
-          );
-        });
-      }
+          },
+          { ticker: existing.ticker }
+        ),
+      ]);
 
       // Get balance after transaction commits
       const balance = (await this.deps.wallet.getBalance(input.userId)).balance;
