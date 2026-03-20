@@ -13,17 +13,23 @@ describe('feed component wiring', () => {
   it('defaults /feed to the For You tab', () => {
     const source = readFileSync(FEED_CLIENT_PATH, 'utf8');
 
-    expect(source).toContain(
-      "const [tab, setTab] = useState<FeedTab>('forYou')"
+    expect(source).toMatch(
+      /const \[tab,\s*setTab\] = useState<FeedTab>\('forYou'\)/
     );
   });
 
   it('renders Stories through ForYouFeedList instead of the retired NarrativeStoryList', () => {
     const source = readFileSync(FEED_CLIENT_PATH, 'utf8');
+    const storiesBranchMatch = source.match(
+      /if \(tab === 'stories'\) \{([\s\S]*?)\n\s*\}\n\n\s*if \(tab === 'forYou'\) \{/m
+    );
 
-    expect(source).toContain("if (tab === 'stories') {");
-    expect(source).toContain('<ForYouFeedList');
-    expect(source).not.toContain('NarrativeStoryList');
+    expect(storiesBranchMatch).toBeTruthy();
+    const storiesBranch = storiesBranchMatch?.[1] ?? '';
+
+    expect(storiesBranch).toContain('<ForYouFeedList');
+    expect(storiesBranch).toContain('surface="stories"');
+    expect(storiesBranch).not.toContain('NarrativeStoryList');
   });
 
   it('does not re-export NarrativeStoryList from the feed components barrel', () => {
