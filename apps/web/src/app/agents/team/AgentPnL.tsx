@@ -12,6 +12,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { Switch } from '@/components/ui/switch';
 import { useAuth } from '@/hooks/useAuth';
 import { useCollapsibleHeight } from '@/hooks/useCollapsibleHeight';
+import { usePortfolioPnL } from '@/hooks/usePortfolioPnL';
 import { useUserPositions } from '@/hooks/useUserPositions';
 import {
   usePerpPositions,
@@ -146,9 +147,9 @@ function UserPnL({
   >(new Set(['predictions', 'perps']));
   const [showClosed, setShowClosed] = useState(false);
 
-  // Portfolio breakdown (same calculation as profile page)
-  const [portfolio, setPortfolio] = useState<PortfolioSnapshot | null>(null);
-  const [portfolioLoading, setPortfolioLoading] = useState(true);
+  const { data: portfolio, loading: portfolioLoading } = usePortfolioPnL({
+    userId,
+  });
 
   // Fetch user positions (for list display only)
   const { positions: perpsData, loading: perpsLoading } =
@@ -168,45 +169,6 @@ function UserPnL({
   const predictions = showClosed
     ? [...openPredictions, ...closedPredictions]
     : openPredictions;
-
-  // Fetch portfolio breakdown (same endpoint as profile page)
-  useEffect(() => {
-    let cancelled = false;
-    const fetchPortfolio = async () => {
-      setPortfolioLoading(true);
-      try {
-        const res = await fetch(
-          `/api/users/${encodeURIComponent(userId)}/portfolio-breakdown`
-        );
-        if (res.ok && !cancelled) {
-          const data = (await res.json()) as Record<string, unknown>;
-          setPortfolio({
-            totalPnL: Number(data.totalPnL) || 0,
-            positions: Number(data.positions) || 0,
-            totalAssets: Number(data.totalAssets) || 0,
-            available: Number(data.available) || 0,
-            wallet: Number(data.wallet) || 0,
-            agents: Number(data.agents) || 0,
-            totalPoints: Number(data.totalPoints) || 0,
-          });
-        }
-      } catch (err) {
-        if (!cancelled) {
-          logger.error(
-            'Failed to fetch portfolio breakdown',
-            { error: err instanceof Error ? err.message : String(err) },
-            'UserPnL'
-          );
-        }
-      } finally {
-        if (!cancelled) setPortfolioLoading(false);
-      }
-    };
-    void fetchPortfolio();
-    return () => {
-      cancelled = true;
-    };
-  }, [userId]);
 
   const toggleSection = useCallback((section: 'predictions' | 'perps') => {
     setExpandedSections((prev) => {
