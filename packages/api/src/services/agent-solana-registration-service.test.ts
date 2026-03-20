@@ -192,7 +192,7 @@ describe('agent-solana-registration-service', () => {
       blockhash: 'blockhash-1',
       lastValidBlockHeight: 123,
     });
-    mockGetSolanaWalletBalanceLamports.mockResolvedValue(20_000_000n);
+    mockGetSolanaWalletBalanceLamports.mockResolvedValue(22_000_000n);
     mockSendSolanaTransaction.mockResolvedValue({
       hash: 'tx-123',
       transactionId: 'tx-123',
@@ -215,8 +215,8 @@ describe('agent-solana-registration-service', () => {
     expect(status.isRegistered).toBe(false);
     expect(status.walletReady).toBe(true);
     expect(status.walletAddress).toBe('SoLWallet111');
-    expect(status.walletBalanceSol).toBe('0.02');
-    expect(status.minimumBalanceSol).toBe('0.01');
+    expect(status.walletBalanceSol).toBe('0.022');
+    expect(status.minimumBalanceSol).toBe('0.021');
     expect(status.hasEnoughBalance).toBe(true);
     expect(status.canRegister).toBe(true);
     expect(status.cost).toBe(100);
@@ -296,7 +296,7 @@ describe('agent-solana-registration-service', () => {
         ownerUserId: 'owner-1',
         agentUserId: 'agent-1',
       })
-    ).rejects.toThrow('Fund the agent wallet with at least 0.01 SOL');
+    ).rejects.toThrow('Fund the agent wallet with at least 0.021 SOL');
 
     expect(capturedInserts).toHaveLength(0);
     expect(mockSendSolanaTransaction).not.toHaveBeenCalled();
@@ -331,7 +331,7 @@ describe('agent-solana-registration-service', () => {
     mockGetAgentSolanaRegistration
       .mockResolvedValueOnce(null)
       .mockResolvedValueOnce(null);
-    mockGetSolanaWalletBalanceLamports.mockResolvedValueOnce(10_000_000n);
+    mockGetSolanaWalletBalanceLamports.mockResolvedValueOnce(21_000_000n);
 
     const result = await registerAgentOnSolanaForOwner({
       ownerUserId: 'owner-1',
