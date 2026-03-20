@@ -3,23 +3,29 @@
 import {
   assertSolanaRegistryConfigured,
   buildAgentSolanaRegistrationFile,
+  createSolanaRegistryConnection,
   deriveDeterministicAgentSolanaAsset,
   finalizeAgentSolanaRegistrationTransaction,
   formatLamportsAsSol,
   getAgentSolanaRegistration,
+  getSolanaRegistryCluster,
+  getSolanaRegistryRpcUrl,
   getSolanaWalletBalanceLamports,
   prepareAgentSolanaRegistrationTransaction,
+  SOLANA_REGISTRATION_MIN_BALANCE_LAMPORTS,
 } from '@babylon/agents/solana-registry';
+import {
+  buildSolanaTransactionIdempotencyKey,
+  ensureSolanaWalletReady,
+  extractPrivyApiDiagnostics,
+  getPrivyNodeClient,
+  getPrivyOfflineConfig,
+  registerAgentOnSolanaForOwner,
+} from '@babylon/api/solana-registration-debug';
 import { and, closeDatabase, db, eq, users } from '@babylon/db';
 import { getBaseUrl, getMCPEndpoint } from '@babylon/shared';
-import { Connection, Transaction } from '@solana/web3.js';
+import { Transaction } from '@solana/web3.js';
 import { config as loadEnvFile } from 'dotenv';
-import { registerAgentOnSolanaForOwner } from '../packages/api/src/services/agent-solana-registration-service';
-import { extractPrivyApiDiagnostics } from '../packages/api/src/services/privy/error-diagnostics';
-import { getPrivyOfflineConfig } from '../packages/api/src/services/privy/offline-config';
-import { getPrivyNodeClient } from '../packages/api/src/services/privy/privy-node';
-import { buildSolanaTransactionIdempotencyKey } from '../packages/api/src/services/privy/solana-idempotency';
-import { ensureSolanaWalletReady } from '../packages/api/src/services/privy/solana-wallet-provisioning';
 
 type CliMode = 'inspect' | 'simulate' | 'register';
 
@@ -27,6 +33,7 @@ type CliOptions = {
   agentId: string;
   ownerUserId: string | null;
   envFile: string | null;
+  forceRegister: boolean;
   json: boolean;
   mode: CliMode;
 };
@@ -77,7 +84,8 @@ type PreparedContext = {
   onchainBefore: Awaited<ReturnType<typeof getAgentSolanaRegistration>>;
 };
 
-const RECOMMENDED_SOLANA_REGISTRATION_BALANCE_LAMPORTS = 21_000_000n;
+const RECOMMENDED_SOLANA_REGISTRATION_BALANCE_LAMPORTS =
+  SOLANA_REGISTRATION_MIN_BALANCE_LAMPORTS;
 const RECOMMENDED_SOLANA_REGISTRATION_BALANCE_SOL = formatLamportsAsSol(
   RECOMMENDED_SOLANA_REGISTRATION_BALANCE_LAMPORTS
 );
@@ -98,6 +106,7 @@ Options:
                                register: exact production service flow (writes + broadcast)
                                default: inspect
   --env-file <path>            Optional env file to load before running
+  --i-know-what-im-doing       Required for --mode register
   --json                       Print machine-readable JSON
   -h, --help                   Show this help
 
@@ -157,6 +166,7 @@ function parseArgs(): CliOptions {
     agentId,
     ownerUserId: readArgValue(args, '--owner'),
     envFile: readArgValue(args, '--env-file'),
+    forceRegister: hasFlag(args, '--i-know-what-im-doing'),
     json: hasFlag(args, '--json'),
     mode: modeRaw as CliMode,
   };
@@ -171,31 +181,8 @@ function maybeLoadEnvFile(envFile: string | null): void {
   }
 }
 
-function resolveSolanaCluster(): string {
-  return process.env.SOLANA_CLUSTER ?? 'mainnet-beta';
-}
-
-function resolveSolanaRpcUrl(): string {
-  const cluster = resolveSolanaCluster();
-  if (process.env.SOLANA_RPC_URL) {
-    return process.env.SOLANA_RPC_URL;
-  }
-
-  switch (cluster) {
-    case 'devnet':
-      return 'https://api.devnet.solana.com';
-    case 'localnet':
-      return 'http://127.0.0.1:8899';
-    case 'testnet':
-      return 'https://api.testnet.solana.com';
-    case 'mainnet-beta':
-    default:
-      return 'https://api.mainnet-beta.solana.com';
-  }
-}
-
 function resolveSolanaCaip2(): string {
-  const cluster = resolveSolanaCluster();
+  const cluster = getSolanaRegistryCluster();
 
   switch (cluster) {
     case 'devnet':
@@ -358,8 +345,8 @@ async function runInspect(
     mode: 'inspect',
     environment: {
       solanaRegistryEnabled: process.env.SOLANA_REGISTRY_ENABLED === 'true',
-      solanaCluster: resolveSolanaCluster(),
-      solanaRpcUrl: resolveSolanaRpcUrl(),
+      solanaCluster: getSolanaRegistryCluster(),
+      solanaRpcUrl: getSolanaRegistryRpcUrl(),
       baseUrl: getBaseUrl(),
       mcpEndpoint: getMCPEndpoint(),
       privyAppIdConfigured:
@@ -472,7 +459,7 @@ async function runSimulate(
       idempotency_key: idempotencyKey,
     });
 
-  const connection = new Connection(resolveSolanaRpcUrl(), 'confirmed');
+  const connection = createSolanaRegistryConnection();
   const signedTransaction = Transaction.from(
     Buffer.from(signed.signed_transaction, 'base64')
   );
@@ -529,8 +516,15 @@ async function runSimulate(
 
 async function runRegister(
   agentUserId: string,
-  ownerUserId: string
+  ownerUserId: string,
+  forceRegister: boolean
 ): Promise<Record<string, unknown>> {
+  if (!forceRegister) {
+    throw new Error(
+      'Refusing to execute register mode without --i-know-what-im-doing.'
+    );
+  }
+
   const result = await registerAgentOnSolanaForOwner({
     ownerUserId,
     agentUserId,
@@ -569,7 +563,11 @@ async function main(): Promise<void> {
       result = await runSimulate(options.agentId, ownerUserId);
       break;
     case 'register':
-      result = await runRegister(options.agentId, ownerUserId);
+      result = await runRegister(
+        options.agentId,
+        ownerUserId,
+        options.forceRegister
+      );
       break;
   }
 

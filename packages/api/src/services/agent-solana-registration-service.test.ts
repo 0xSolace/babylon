@@ -36,6 +36,7 @@ const usersTable = {
 } as const;
 
 mock.module('@babylon/agents/solana-registry', () => ({
+  SOLANA_REGISTRATION_MIN_BALANCE_LAMPORTS: 21_000_000n,
   assertSolanaRegistryConfigured: mockAssertSolanaRegistryConfigured,
   buildAgentSolanaRegistrationFile: (input: Record<string, unknown>) => {
     capturedRegistrationFileInput = input;
