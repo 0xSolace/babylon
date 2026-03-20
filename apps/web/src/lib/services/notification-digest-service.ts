@@ -12,6 +12,8 @@ import {
   users,
 } from '@babylon/db';
 import {
+  isValidDeliveryChannel,
+  isValidDigestFrequency,
   logger,
   type NotificationDeliveryChannel,
   type NotificationDigestFrequency,
@@ -43,17 +45,6 @@ const DIGEST_WINDOWS_MS: Record<NotificationDigestFrequency, number> = {
   weekly: 7 * 24 * 60 * 60 * 1000,
 };
 
-const VALID_DIGEST_FREQUENCIES = new Set<string>(['hourly', 'daily', 'weekly']);
-const VALID_DELIVERY_CHANNELS = new Set<string>(['in-app', 'email', 'both']);
-
-function isValidDigestFrequency(value: unknown): value is NotificationDigestFrequency {
-  return typeof value === 'string' && VALID_DIGEST_FREQUENCIES.has(value);
-}
-
-function isValidDeliveryChannel(value: unknown): value is NotificationDeliveryChannel {
-  return typeof value === 'string' && VALID_DELIVERY_CHANNELS.has(value);
-}
-
 interface ValidatedDigestRow {
   id: string;
   email: string | null;
@@ -74,11 +65,19 @@ function isValidDigestCandidateRow(row: {
   lastSentAt: Date | null;
 }): row is ValidatedDigestRow {
   if (!isValidDigestFrequency(row.digestFrequency)) {
-    logger.warn('Invalid digest frequency in database', { userId: row.id, value: row.digestFrequency }, 'NotificationDigestService');
+    logger.warn(
+      'Invalid digest frequency in database',
+      { userId: row.id, value: row.digestFrequency },
+      'NotificationDigestService'
+    );
     return false;
   }
   if (!isValidDeliveryChannel(row.deliveryChannel)) {
-    logger.warn('Invalid delivery channel in database', { userId: row.id, value: row.deliveryChannel }, 'NotificationDigestService');
+    logger.warn(
+      'Invalid delivery channel in database',
+      { userId: row.id, value: row.deliveryChannel },
+      'NotificationDigestService'
+    );
     return false;
   }
   return true;

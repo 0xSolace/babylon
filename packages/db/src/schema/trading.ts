@@ -104,6 +104,35 @@ export const tradingFees = pgTable(
   ]
 );
 
+/**
+ * Durable queue for trading fee processing when inline FeeProcessor retries are exhausted.
+ * Rows are removed in the same DB transaction as FeeService.processTradingFee to avoid double charges.
+ */
+export const tradingFeeOutbox = pgTable(
+  'TradingFeeOutbox',
+  {
+    id: text('id').primaryKey(),
+    userId: text('userId').notNull(),
+    tradeType: text('tradeType').notNull(),
+    /** Notional trade amount (same semantics as FeeProcessor `amount`). */
+    tradeAmount: decimal('tradeAmount', { precision: 24, scale: 8 }).notNull(),
+    tradeId: text('tradeId'),
+    marketId: text('marketId'),
+    lastError: text('lastError'),
+    createdAt: timestamp('createdAt', { mode: 'date' }).notNull().defaultNow(),
+  },
+  (table) => [
+    index('TradingFeeOutbox_createdAt_idx').on(table.createdAt),
+    index('TradingFeeOutbox_userId_createdAt_idx').on(
+      table.userId,
+      table.createdAt
+    ),
+  ]
+);
+
+export type TradingFeeOutboxRow = typeof tradingFeeOutbox.$inferSelect;
+export type NewTradingFeeOutboxRow = typeof tradingFeeOutbox.$inferInsert;
+
 // Feedback
 export const feedbacks = pgTable(
   'Feedback',

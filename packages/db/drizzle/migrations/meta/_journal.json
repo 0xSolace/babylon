@@ -393,6 +393,13 @@
       "when": 1773964900000,
       "tag": "0056_add_query_audit_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "7",
+      "when": 1774000000000,
+      "tag": "0057_add_trading_fee_outbox",
+      "breakpoints": true
     }
   ]
 }

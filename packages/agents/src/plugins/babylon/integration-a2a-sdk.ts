@@ -49,7 +49,10 @@ const AGENT_IDENTITY_MAX_SIZE = 10000;
  * Prevents race condition where multiple concurrent getCachedAgentIdentity calls
  * for the same agent without a wallet both attempt wallet creation.
  */
-const WALLET_CREATION_IN_FLIGHT = new Map<string, Promise<{ walletAddress: string } | null>>();
+const WALLET_CREATION_IN_FLIGHT = new Map<
+  string,
+  Promise<{ walletAddress: string } | null>
+>();
 
 /**
  * Get agent identity from cache or database
@@ -101,8 +104,9 @@ async function getCachedAgentIdentity(
             undefined,
             'BabylonIntegration'
           );
-          walletPromise = agentWalletService.createAgentEmbeddedWallet(agentUserId)
-            .then(result => ({ walletAddress: result.walletAddress }))
+          walletPromise = agentWalletService
+            .createAgentEmbeddedWallet(agentUserId)
+            .then((result) => ({ walletAddress: result.walletAddress }))
             .catch(() => null)
             .finally(() => {
               WALLET_CREATION_IN_FLIGHT.delete(agentUserId);
@@ -111,20 +115,42 @@ async function getCachedAgentIdentity(
         }
         const walletResult = await walletPromise;
         if (walletResult) {
-          // Refresh user data to get updated walletAddress and agent0TokenId
-          const updatedUser = await db.user.findUnique({
-            where: { id: agentUserId },
-            select: {
-              walletAddress: true,
-              agent0TokenId: true,
-            },
-          });
-          if (updatedUser) {
-            walletAddress = updatedUser.walletAddress;
-            agent0TokenId = updatedUser.agent0TokenId;
+          // Wallet creation succeeded - refresh user data to get updated walletAddress and agent0TokenId
+          // Use separate try/catch so refresh failures don't mask successful wallet creation
+          try {
+            const updatedUser = await db.user.findUnique({
+              where: { id: agentUserId },
+              select: {
+                walletAddress: true,
+                agent0TokenId: true,
+              },
+            });
+            if (updatedUser) {
+              walletAddress = updatedUser.walletAddress;
+              agent0TokenId = updatedUser.agent0TokenId;
+            } else {
+              // Fallback to walletAddress from creation result if refresh returns null
+              walletAddress = walletResult.walletAddress;
+            }
+          } catch (refreshError) {
+            // Refresh failed but wallet was created successfully - use walletAddress from creation result
+            logger.warn(
+              `Wallet created for agent ${agentUserId} but failed to refresh user data`,
+              {
+                error:
+                  refreshError instanceof Error
+                    ? refreshError.message
+                    : String(refreshError),
+                walletAddress: walletResult.walletAddress,
+              },
+              'BabylonIntegration'
+            );
+            // Use walletAddress from creation result as fallback
+            walletAddress = walletResult.walletAddress;
           }
         }
       } catch (error) {
+        // This catch only handles wallet creation failures, not refresh failures
         logger.warn(
           `Failed to auto-create wallet for agent ${agentUserId}`,
           {
