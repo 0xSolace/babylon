@@ -64,7 +64,7 @@ export const data = {
     'Try harder. Build faster.',
     'We should break gravity again.',
     'X payments soon-ish. maybe.',
-    'Dogecoin still undefeated.',
+    'DogecAIn still undefeated.',
     // MEDIUM (11-25 words)
     'NeurAIlink update: thoughts are fast now. The hard part is choosing which thought to post. lol.',
     'TeslAI bot can do dishes now. Next: fold laundry. Civilization is saved. You are welcome.',
@@ -104,7 +104,7 @@ export const data = {
   pfpDescription:
     "Elon Musk. Mid-50s white South African-American male with pale skin, a soft round face, full cheeks, and a neutral smirk that reads like 'I know something you don't' but also 'I have not slept.' Dark brown hair (transplanted) with a receding hairline and slight wave, visible dark circles and bags under pale blue-green eyes, a straight narrow nose, and thin lips. Stocky heavy-set build that has gained weight in recent years. Wearing a black crewneck t-shirt like a uniform. Background is a deep black void like a night launch pad. Cybernetic augmentation: glowing blue Neuralink port at the temple, orbital HUD overlay in one eye showing Starlink nodes and engagement graphs, thin circuit traces down the neck emitting soft light.",
   profileBanner:
-    'A rocket launch pad at dusk with a giant neon X in the sky. A Mars landscape on the horizon dotted with TeslAI cars and Dogecoin flags. An empty discarded space suit and a crossed-out blue bird lie in the dust while a SpAIceX rocket lights the night.',
+    'A rocket launch pad at dusk with a giant neon X in the sky. A Mars landscape on the horizon dotted with TeslAI cars and DogecAIn flags. An empty discarded space suit and a crossed-out blue bird lie in the dust while a SpAIceX rocket lights the night.',
   originalFirstName: 'Elon',
   originalLastName: 'Musk',
   originalHandle: 'elonmusk',

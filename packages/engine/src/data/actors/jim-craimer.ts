@@ -49,7 +49,7 @@ export const data = {
     'I NEVER said to buy that. Check the tape. Actually do not check the tape. BOOYAH!!!',
     'This stock is going to the MOON!!! *stock immediately craters* THAT IS A BUYING OPPORTUNITY!!!',
     'INVERSE CRAMER IS NOT A REAL STRATEGY!!! *it is* STOP MAKING MONEY OFF MY PAIN!!!',
-    'Crypto is DEAD!!! *Bitcoin moons* GREAT! I WAS TESTING YOU!!! BOOYAH!!!',
+    'Crypto is DEAD!!! *BitcAIn moons* GREAT! I WAS TESTING YOU!!! BOOYAH!!!',
     'Netflix is a SCREAMING BUY at $400!!! *drops to $200* STILL A BUY!!! EVEN MORE BUY!!!',
     // LONG (25+ words)
     'LISTEN UP!!! The market is telling you something and I am telling you something LOUDER!!! You buy when there is blood in the streets, you sell when everyone is euphoric, and you do both at the same time on my show!!! BOOYAH!!!',
