@@ -20,7 +20,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import React, { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { LoginButton } from '@/components/auth/LoginButton';
 import { UserMenu } from '@/components/auth/UserMenu';
 import { GameFeedbackModal } from '@/components/feedback/GameFeedbackModal';
@@ -28,13 +28,11 @@ import { Avatar } from '@/components/shared/Avatar';
 import { BabylonIcon } from '@/components/shared/icons/BabylonIcon';
 import { BabylonFullLogo } from '@/components/shared/icons/BabylonLogo';
 import { HouseIcon } from '@/components/shared/icons/HouseIcon';
-import { WalletContent } from '@/components/wallet/wallet/wallet-content';
 import { useAuth } from '@/hooks/useAuth';
 import { usePostHog } from '@/hooks/usePostHog';
 import { useUnreadMessages } from '@/hooks/useUnreadMessages';
 import { getAuthToken } from '@/lib/auth';
 import { getUserDisplayName } from '@/lib/user-display';
-import { useWalletUiStore } from '@/stores/walletUiStore';
 
 /**
  * Main sidebar content component with navigation and user menu.
@@ -57,14 +55,6 @@ function SidebarContent() {
   const { ready, authenticated, user, logout, login } = useAuth();
   const { trackNavigation, trackClick } = usePostHog();
   const { totalUnread: unreadMessages } = useUnreadMessages();
-  const walletOpen = useWalletUiStore((s) => s.isOpen);
-  const toggleWallet = useWalletUiStore((s) => s.toggle);
-
-  // Pages where wallet can expand inline in sidebar
-  const walletInlinePages = ['/feed', '/', '/notifications', '/rewards'];
-  const canShowWalletInline = walletInlinePages.some(
-    (p) => pathname === p || pathname.startsWith(p + '/')
-  );
 
   // Hide sidebar when WAITLIST_MODE is enabled on home page
   const isWaitlistMode = process.env.NEXT_PUBLIC_WAITLIST_MODE === 'true';
@@ -176,9 +166,8 @@ function SidebarContent() {
       name: 'Wallet',
       href: '/wallet',
       icon: Wallet,
-      active: walletOpen || pathname === '/wallet',
+      active: pathname === '/wallet',
       requiresAuth: true,
-      isWallet: true,
     },
     {
       name: 'Notifications',
@@ -361,63 +350,6 @@ function SidebarContent() {
                 >
                   {navContent}
                 </button>
-              );
-            }
-
-            // Wallet item: toggle inline on desktop (lg+) when on supported pages,
-            // navigate to /wallet on tablet (md) or unsupported pages
-            if ('isWallet' in item && item.isWallet) {
-              return (
-                <React.Fragment key={item.name}>
-                  {/* On tablet (md): always link to /wallet page */}
-                  <Link
-                    href="/wallet"
-                    className={cn(
-                      sharedClassName,
-                      'md:flex',
-                      !collapsed && 'lg:hidden'
-                    )}
-                    title={item.name}
-                    onClick={() => trackNavigation('/wallet', 'sidebar')}
-                  >
-                    {navContent}
-                  </Link>
-                  {/* On desktop (lg+): toggle inline or navigate depending on page */}
-                  {!collapsed &&
-                    (canShowWalletInline ? (
-                      <button
-                        type="button"
-                        onClick={() => toggleWallet()}
-                        className={cn(
-                          sharedClassName,
-                          'hidden w-full',
-                          !collapsed && 'lg:flex'
-                        )}
-                        title={item.name}
-                      >
-                        {navContent}
-                      </button>
-                    ) : (
-                      <Link
-                        href="/wallet"
-                        className={cn(
-                          sharedClassName,
-                          'hidden',
-                          !collapsed && 'lg:flex'
-                        )}
-                        title={item.name}
-                        onClick={() => trackNavigation('/wallet', 'sidebar')}
-                      >
-                        {navContent}
-                      </Link>
-                    ))}
-                  {/* Inline wallet content (desktop only, supported pages) */}
-                  {walletOpen && canShowWalletInline && !collapsed && (
-                    <div className="hidden max-h-[60vh] overflow-y-auto border-border border-t border-b lg:block">
-                      <WalletContent mode="sidebar" />
-                    </div>
-                  )}
-                </React.Fragment>
               );
             }
 
