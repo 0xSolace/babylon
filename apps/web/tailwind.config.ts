@@ -124,6 +124,7 @@ const config: Config = {
         fadeIn: 'fadeIn 0.8s ease-out forwards',
         float: 'float 6s ease-in-out infinite',
         'pulse-slow': 'pulse-glow 3s ease-in-out infinite',
+        shimmer: 'shimmer 2s linear infinite',
       },
       backdropBlur: {
         xs: '2px',
