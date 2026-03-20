@@ -136,6 +136,14 @@ export class PerpMarketService {
     );
 
     // Emit metric for monitoring dashboards (Datadog, Grafana, etc.)
+    // Note: This counter tracks inline fee processing failures for operator visibility
+    this.deps.metrics?.increment('perp.fee_processing.inline_failure', 1, {
+      ticker: context.ticker,
+      type: params.type,
+    });
+
+    const outbox = this.deps.tradingFeeOutbox;
+    // Emit metric for monitoring dashboards (Datadog, Grafana, etc.)
     // This counter tracks inline fee processing failures for operator visibility
     this.deps.metrics?.increment('perp.fee_processing.inline_failure', 1, {
       ticker: context.ticker,
