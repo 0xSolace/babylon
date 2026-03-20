@@ -460,10 +460,11 @@ export function FeedClient() {
                 isRefreshing={isRefreshing}
               />
 
-              {/* Inline Composer - shown on latest tab for authenticated users */}
-              {authenticated && tab === 'latest' && (
-                <InlineComposer onPostCreated={handlePostCreated} />
-              )}
+              {/* Inline Composer - shown on feed tabs for authenticated users */}
+              {authenticated &&
+                (tab === 'latest' || tab === 'forYou' || tab === 'stories') && (
+                  <InlineComposer onPostCreated={handlePostCreated} />
+                )}
 
               {/* Feed signal cards — latest tab only */}
               {tab === 'latest' && (gainerCard ?? loserCard) && (
