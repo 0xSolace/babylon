@@ -87,16 +87,26 @@ export default function RewardsPage() {
     setActiveTab('achievements');
   };
 
-  return (
-    <PageContainer noPadding className="flex flex-col">
-      <div className="w-full">
-        <TabNavigation activeTab={activeTab} onTabChange={setActiveTab} />
+  const handleViewChallenges = () => {
+    setActiveTab('challenges');
+  };
 
-        <div className="p-4">
+  return (
+    <PageContainer
+      noPadding
+      className="overflow-x-clip! flex flex-col pt-14 md:pt-0"
+    >
+      <div className="min-h-full w-full border-border lg:border-r lg:border-l">
+        <div className="sticky top-14 z-10 bg-background/95 backdrop-blur-sm md:top-0">
+          <TabNavigation activeTab={activeTab} onTabChange={setActiveTab} />
+        </div>
+
+        <div className="p-4 pb-[calc(1rem+var(--bottom-nav-height))] md:pb-4">
           {activeTab === 'overview' && (
             <OverviewTab
               onClaim={handleClaim}
               onViewAchievements={handleViewAchievements}
+              onViewChallenges={handleViewChallenges}
             />
           )}
           {activeTab === 'achievements' && <AchievementsTab />}

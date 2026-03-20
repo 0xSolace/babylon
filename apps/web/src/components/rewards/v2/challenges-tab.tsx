@@ -1,12 +1,12 @@
 'use client';
 
 import { POINTS } from '@babylon/shared';
-import { Calendar, Clock } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useSSEChannel } from '@/hooks/useSSE';
 import { useAuthStore } from '@/stores/authStore';
 import { ChallengeCard } from './challenge-card';
+import { useAnimatedCount } from './use-animated-count';
 
 interface ChallengeWithProgress {
   id: string;
@@ -50,31 +50,41 @@ function BonusTracker({
   completed,
   total,
   bonus,
+  allCompleted,
 }: {
   completed: number;
   total: number;
   bonus: number;
+  allCompleted: boolean;
 }) {
-  const label = total === 2 ? 'Complete both' : `Complete all ${total}`;
-
   return (
-    <div className="flex items-center justify-between rounded-lg border border-border bg-card px-4 py-3">
-      <div className="flex items-center gap-2">
+    <div
+      className={`flex items-center justify-between border border-border p-3 ${
+        allCompleted ? 'border-emerald-500/30 bg-emerald-500/10' : 'bg-muted/30'
+      }`}
+    >
+      <div className="flex items-center gap-2.5">
         <div className="flex gap-1">
           {Array.from({ length: total }).map((_, i) => (
             <div
               key={i}
-              className={`h-2 w-2 rounded-full ${
-                i < completed ? 'bg-[#5B5FC7]' : 'bg-muted-foreground/20'
+              className={`h-2 w-2 rounded-full transition-colors ${
+                i < completed ? 'bg-emerald-500' : 'bg-muted-foreground/20'
               }`}
             />
           ))}
         </div>
-        <span className="text-muted-foreground text-sm">
-          {label} ({completed}/{total})
+        <span
+          className={`text-xs ${allCompleted ? 'font-semibold text-emerald-500' : 'text-muted-foreground'}`}
+        >
+          {completed}/{total} complete
         </span>
       </div>
-      <span className="text-muted-foreground text-sm">+{bonus} bonus</span>
+      <span
+        className={`font-semibold text-xs ${allCompleted ? 'text-emerald-500' : 'text-muted-foreground'}`}
+      >
+        +{bonus} bonus
+      </span>
     </div>
   );
 }
@@ -115,7 +125,6 @@ export function ChallengesTab() {
     fetchData();
   }, [fetchData]);
 
-  // Re-fetch on SSE events
   const handleSSE = useCallback(
     (data: Record<string, unknown>) => {
       const type = data.type as string;
@@ -134,7 +143,6 @@ export function ChallengesTab() {
     authenticated && user?.id ? (`notifications:${user.id}` as const) : null;
   useSSEChannel(channel, handleSSE);
 
-  // Countdown timer
   useEffect(() => {
     if (!challengesData) return;
     const update = () => {
@@ -148,14 +156,27 @@ export function ChallengesTab() {
     return () => clearInterval(interval);
   }, [challengesData]);
 
+  const dailyCompleted =
+    challengesData?.daily.challenges.filter((c) => c.completed).length ?? 0;
+  const weeklyCompleted =
+    challengesData?.weekly.challenges.filter((c) => c.completed).length ?? 0;
+
+  const totalCompleted = dailyCompleted + weeklyCompleted;
+  const totalChallenges =
+    (challengesData?.daily.challenges.length ?? 0) +
+    (challengesData?.weekly.challenges.length ?? 0);
+  const overallPercent =
+    totalChallenges > 0 ? (totalCompleted / totalChallenges) * 100 : 0;
+
+  const animTotal = useAnimatedCount(totalCompleted);
+  const animDaily = useAnimatedCount(dailyCompleted);
+  const animWeekly = useAnimatedCount(weeklyCompleted);
+
   if (loading) {
     return (
-      <div className="space-y-4">
+      <div className="space-y-3">
         {[1, 2, 3, 4, 5].map((i) => (
-          <div
-            key={i}
-            className="h-16 animate-pulse rounded-lg border border-border bg-muted"
-          />
+          <div key={i} className="h-16 animate-pulse bg-muted" />
         ))}
       </div>
     );
@@ -163,99 +184,155 @@ export function ChallengesTab() {
 
   if (!challengesData) return null;
 
-  const dailyCompleted = challengesData.daily.challenges.filter(
-    (c) => c.completed
-  ).length;
-  const weeklyCompleted = challengesData.weekly.challenges.filter(
-    (c) => c.completed
-  ).length;
-
   return (
-    <div className="space-y-8">
-      {/* Daily Challenges */}
-      <div>
-        <div className="mb-4 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Clock className="h-4 w-4 text-muted-foreground" />
-            <span className="font-semibold text-foreground text-sm">
-              Daily Challenges
-            </span>
+    <div className="space-y-6">
+      {/* Hero Stats */}
+      <div className="-mx-4 -mt-4 bg-gradient-to-br from-emerald-500/10 via-emerald-500/5 to-transparent p-5 pb-5 dark:from-emerald-500/15 dark:via-emerald-500/5">
+        <div className="flex items-center gap-8">
+          <div>
+            <p className="text-[11px] text-muted-foreground">Completed</p>
+            <p className="font-bold text-2xl text-emerald-500 tabular-nums">
+              {animTotal}
+              <span className="text-base text-muted-foreground">
+                /{totalChallenges}
+              </span>
+            </p>
           </div>
+          <div>
+            <p className="text-[11px] text-muted-foreground">Daily</p>
+            <p className="font-bold text-2xl text-foreground tabular-nums">
+              {animDaily}
+              <span className="text-base text-muted-foreground">
+                /{challengesData.daily.challenges.length}
+              </span>
+            </p>
+          </div>
+          <div>
+            <p className="text-[11px] text-muted-foreground">Weekly</p>
+            <p className="font-bold text-2xl text-foreground tabular-nums">
+              {animWeekly}
+              <span className="text-base text-muted-foreground">
+                /{challengesData.weekly.challenges.length}
+              </span>
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-3 h-2 w-full bg-muted/60">
+          <div
+            className="h-full bg-gradient-to-r from-emerald-500 to-emerald-400 transition-all duration-500"
+            style={{ width: `${overallPercent}%` }}
+          />
+        </div>
+
+        <p className="mt-2 text-muted-foreground text-xs">
+          {totalCompleted === totalChallenges
+            ? 'All challenges complete — nice work! 🎉'
+            : totalCompleted === 0
+              ? 'Complete challenges to earn bonus points'
+              : `${totalChallenges - totalCompleted} more to go — keep it up!`}
+        </p>
+      </div>
+
+      {/* Daily Challenges */}
+      <div
+        className="animate-fadeIn"
+        style={{ animationDelay: '0ms', animationFillMode: 'backwards' }}
+      >
+        <div className="mb-2 flex items-center justify-between">
+          <span className="font-semibold text-foreground text-sm">
+            Daily Challenges
+          </span>
           <span className="text-muted-foreground text-xs">
             {countdown.daily}
           </span>
         </div>
 
-        <div className="space-y-3">
-          {challengesData.daily.challenges.map((c) => (
-            <ChallengeCard
+        <div className="space-y-2">
+          {challengesData.daily.challenges.map((c, i) => (
+            <div
               key={c.id}
-              title={c.name}
-              description={c.description}
-              points={c.pointsReward}
-              completed={c.completed}
-              variant="daily"
-              progress={
-                !c.completed && c.threshold > 1
-                  ? { current: c.progress, total: c.threshold }
-                  : undefined
-              }
-            />
+              className="animate-fadeIn"
+              style={{
+                animationDelay: `${(i + 1) * 60}ms`,
+                animationFillMode: 'backwards',
+              }}
+            >
+              <ChallengeCard
+                title={c.name}
+                description={c.description}
+                points={c.pointsReward}
+                completed={c.completed}
+                variant="daily"
+                progress={
+                  !c.completed && c.threshold > 1
+                    ? { current: c.progress, total: c.threshold }
+                    : undefined
+                }
+              />
+            </div>
           ))}
           <BonusTracker
             completed={dailyCompleted}
             total={challengesData.daily.challenges.length}
             bonus={POINTS.CHALLENGE_DAILY_ALL_BONUS}
+            allCompleted={challengesData.daily.allCompleted}
           />
         </div>
       </div>
 
       {/* Weekly Challenges */}
-      <div>
-        <div className="mb-4 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Calendar className="h-4 w-4 text-muted-foreground" />
-            <span className="font-semibold text-foreground text-sm">
-              Weekly Challenges
-            </span>
-          </div>
+      <div
+        className="animate-fadeIn"
+        style={{ animationDelay: '200ms', animationFillMode: 'backwards' }}
+      >
+        <div className="mb-2 flex items-center justify-between">
+          <span className="font-semibold text-foreground text-sm">
+            Weekly Challenges
+          </span>
           <span className="text-muted-foreground text-xs">
             {countdown.weekly}
           </span>
         </div>
 
-        <div className="space-y-3">
-          {challengesData.weekly.challenges.map((c) => (
-            <ChallengeCard
+        <div className="space-y-2">
+          {challengesData.weekly.challenges.map((c, i) => (
+            <div
               key={c.id}
-              title={c.name}
-              description={c.description}
-              points={c.pointsReward}
-              completed={c.completed}
-              variant="weekly"
-              progress={
-                !c.completed && c.threshold > 1
-                  ? { current: c.progress, total: c.threshold }
-                  : undefined
-              }
-            />
+              className="animate-fadeIn"
+              style={{
+                animationDelay: `${250 + (i + 1) * 60}ms`,
+                animationFillMode: 'backwards',
+              }}
+            >
+              <ChallengeCard
+                title={c.name}
+                description={c.description}
+                points={c.pointsReward}
+                completed={c.completed}
+                variant="weekly"
+                progress={
+                  !c.completed && c.threshold > 1
+                    ? { current: c.progress, total: c.threshold }
+                    : undefined
+                }
+              />
+            </div>
           ))}
           <BonusTracker
             completed={weeklyCompleted}
             total={challengesData.weekly.challenges.length}
             bonus={POINTS.CHALLENGE_WEEKLY_ALL_BONUS}
+            allCompleted={challengesData.weekly.allCompleted}
           />
         </div>
       </div>
 
-      {/* Footer Note */}
-      <div className="rounded-lg border border-border bg-card p-4">
-        <p className="text-muted-foreground text-sm">
-          Challenges rotate automatically — daily at midnight UTC and weekly on
-          Monday. All challenges require play actions like trading, using
-          agents, or chatting.
-        </p>
-      </div>
+      {/* Footer */}
+      <p className="text-muted-foreground text-xs">
+        Challenges rotate automatically — daily at midnight UTC and weekly on
+        Monday.
+      </p>
     </div>
   );
 }
