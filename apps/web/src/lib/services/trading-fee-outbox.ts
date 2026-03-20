@@ -18,6 +18,11 @@ import { generateSnowflakeId, logger } from '@babylon/shared';
 import { asc } from 'drizzle-orm';
 
 const DRAIN_BATCH_SIZE = 50;
+// Note: Max retries configurable via FEE_PROCESSING_MAX_RETRIES env var for environment-specific tuning
+const FEE_PROCESSING_MAX_RETRIES = parseInt(
+  process.env.FEE_PROCESSING_MAX_RETRIES ?? '3',
+  10
+);
 
 export async function enqueueFailedTradingFee(params: {
   userId: string;
