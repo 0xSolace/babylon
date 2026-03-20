@@ -2,12 +2,12 @@ import { ChevronDown } from 'lucide-react';
 import Image from 'next/image';
 import { MarketingFooter } from '@/components/shared/MarketingFooter';
 import { EXTERNAL_LINKS } from '@/lib/constants';
-import { JoinWaitlistButton } from './client/JoinWaitlistButton';
+import { PlayLandingButton } from './client/PlayLandingButton';
 
 /**
- * Landing page for unauthenticated users.
+ * Marketing landing page for the website host.
  * Server Component with minimal client-side JavaScript.
- * Only the JoinWaitlistButton is a client component.
+ * Only the play CTA is a client component.
  */
 export function LandingPage() {
   return (
@@ -72,17 +72,14 @@ export function LandingPage() {
             </p>
           </div>
 
-          {/* Join Waitlist Button */}
+          {/* Play Button */}
           <div className="animation-delay-200 relative z-20 mb-8 animate-fadeIn px-4 sm:mb-16">
-            <JoinWaitlistButton className="group hover:-translate-y-1 relative w-full skew-x-[-10deg] overflow-hidden rounded-none bg-primary px-10 py-5 font-bold text-primary-foreground text-xl shadow-[0_0_20px_rgba(var(--primary),0.4)] transition-all duration-300 hover:bg-primary/90 hover:shadow-[0_0_40px_rgba(var(--primary),0.6)] disabled:opacity-50 sm:w-auto sm:px-12 sm:py-6 sm:text-2xl">
+            <PlayLandingButton className="group hover:-translate-y-1 relative w-full skew-x-[-10deg] overflow-hidden rounded-none bg-primary px-10 py-5 font-bold text-primary-foreground text-xl shadow-[0_0_20px_rgba(var(--primary),0.4)] transition-all duration-300 hover:bg-primary/90 hover:shadow-[0_0_40px_rgba(var(--primary),0.6)] disabled:opacity-50 sm:w-auto sm:px-12 sm:py-6 sm:text-2xl">
               <span className="relative z-10 inline-block skew-x-[10deg]">
                 Play
               </span>
               <div className="absolute inset-0 translate-y-full bg-white/20 transition-transform duration-300 group-hover:translate-y-0" />
-            </JoinWaitlistButton>
-            <p className="mt-4 animate-pulse text-muted-foreground/80 text-sm">
-              Daily opening new open slots
-            </p>
+            </PlayLandingButton>
           </div>
 
           {/* Features Preview */}
@@ -428,15 +425,15 @@ export function LandingPage() {
             </h3>
 
             <div className="mb-10 grid grid-cols-1 gap-4 sm:mb-12 sm:grid-cols-2 sm:gap-6 md:mb-16 md:gap-8 lg:grid-cols-4">
-              {/* Join Waitlist */}
-              <JoinWaitlistButton className="group touch-manipulation rounded-none border border-primary/20 bg-primary p-6 text-center shadow-[0_0_20px_rgba(var(--primary),0.2)] backdrop-blur-md transition-all duration-300 hover:bg-primary/90 hover:shadow-[0_0_40px_rgba(var(--primary),0.4)] active:scale-95 disabled:opacity-50 sm:p-8 md:p-10">
+              {/* Play */}
+              <PlayLandingButton className="group touch-manipulation rounded-none border border-primary/20 bg-primary p-6 text-center shadow-[0_0_20px_rgba(var(--primary),0.2)] backdrop-blur-md transition-all duration-300 hover:bg-primary/90 hover:shadow-[0_0_40px_rgba(var(--primary),0.4)] active:scale-95 disabled:opacity-50 sm:p-8 md:p-10">
                 <h3 className="mb-2 font-bold text-primary-foreground text-xl transition-colors group-hover:text-white sm:mb-3 sm:text-2xl">
                   Play
                 </h3>
                 <p className="text-primary-foreground/80 text-sm leading-relaxed sm:text-base">
                   Start competing now
                 </p>
-              </JoinWaitlistButton>
+              </PlayLandingButton>
 
               {/* Develop and Deploy */}
               <a

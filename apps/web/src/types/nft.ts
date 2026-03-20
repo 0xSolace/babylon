@@ -162,22 +162,6 @@ export interface NftHoldingsResponse {
   };
 }
 
-export interface NftAccessResponse {
-  success: true;
-  data: {
-    hasAccess: boolean;
-    /**
-     * Why access is granted/denied.
-     *
-     * - snapshot_2025: permanent access (Top 100 end-of-2025) + can mint
-     * - whitelist: whitelist-table access or current leaderboard threshold access
-     * - holder: access based on current onchain holding (can be lost after transfer)
-     * - none: no wallet and not in snapshot/whitelist
-     */
-    reason: 'snapshot_2025' | 'whitelist' | 'holder' | 'none';
-  };
-}
-
 /**
  * Mint confirmation request
  */

@@ -1,6 +1,6 @@
 /**
  * Upload an image to the app's image API (Vercel Blob or MinIO).
- * Used by edit profile, onboarding, and ComingSoon for profile/cover image uploads.
+ * Used by edit profile and onboarding for profile/cover image uploads.
  */
 
 import { apiFetch } from '@/utils/api-fetch';

@@ -200,12 +200,7 @@ export function WhitelistTab() {
   async function handleRemoveUser(userId: string) {
     const entry = entries.find((e) => e.userId === userId);
     const label = entry?.displayName ?? entry?.username ?? userId.slice(0, 12);
-    if (
-      !window.confirm(
-        `Revoke whitelist access for "${label}"? They will be subject to NFT gating again.`
-      )
-    )
-      return;
+    if (!window.confirm(`Revoke whitelist entry for "${label}"?`)) return;
 
     setRemovingUserId(userId);
     try {

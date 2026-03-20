@@ -27,17 +27,9 @@ function parseBooleanFlag(value: string | undefined): boolean {
 
 /**
  * Returns the NFT chat gating configuration.
- *
- * Flag precedence:
- * - If NFT_GATING_ENABLED is defined, it is authoritative (overrides legacy flag)
- * - Otherwise, falls back to NFT_CHAT_GATING_ENABLED for backwards compatibility
  */
 export function getNftChatGatingConfig(): NftChatGatingConfig {
-  const globalFlag = process.env.NFT_GATING_ENABLED;
-  const enabled =
-    globalFlag !== undefined
-      ? parseBooleanFlag(globalFlag)
-      : parseBooleanFlag(process.env.NFT_CHAT_GATING_ENABLED);
+  const enabled = parseBooleanFlag(process.env.NFT_CHAT_GATING_ENABLED);
   const chatId = process.env.NFT_CHAT_GATING_CHAT_ID?.trim() || null;
   return { enabled, chatId };
 }
