@@ -46,8 +46,8 @@ import {
   calculateForYouScore,
   calculateFreshnessScore,
   calculateVelocityScore,
-  distributeMarkets,
   diversifyForYouStories,
+  spreadNewMarkets,
 } from './scoring';
 
 const MAX_CANDIDATE_POSTS = 500;
@@ -415,11 +415,9 @@ async function loadBaseCandidates(): Promise<BaseForYouResult> {
         )
       )
       .orderBy(
-        sql`(
-          (SELECT COUNT(*) FROM "Reaction" r WHERE r."postId" = ${posts.id} AND r.type = 'like')
-          + (SELECT COUNT(*) FROM "Comment" c WHERE c."postId" = ${posts.id} AND c."deletedAt" IS NULL) * 2
-          + (SELECT COUNT(*) FROM "Share" s WHERE s."postId" = ${posts.id}) * 3
-        ) DESC`
+        sql`(SELECT COALESCE(mic.engagement_score, 0)
+             FROM mv_post_interaction_counts mic
+             WHERE mic.post_id = ${posts.id}) DESC`
       )
       .limit(backfillCapacity);
 
@@ -1372,13 +1370,15 @@ export async function buildForYouFeed(userId?: string | null) {
     } satisfies NarrativeStory;
   });
 
-  const diversified = diversifyForYouStories(
-    rescoredStories.sort(
-      (a, b) =>
-        (b.finalRankScore ?? b.storyScore) - (a.finalRankScore ?? a.storyScore)
+  const rankedStories = spreadNewMarkets(
+    diversifyForYouStories(
+      rescoredStories.sort(
+        (a, b) =>
+          (b.finalRankScore ?? b.storyScore) -
+          (a.finalRankScore ?? a.storyScore)
+      )
     )
   );
-  const rankedStories = distributeMarkets(diversified, 4);
 
   return {
     stories: rankedStories,

@@ -35,7 +35,7 @@ import type {
   NarrativeStory,
 } from '@babylon/shared';
 import { logger } from '@babylon/shared';
-import { distributeMarkets } from '@/app/api/feed/for-you/scoring';
+import { spreadNewMarkets } from '@/app/api/feed/for-you/scoring';
 import {
   calculateArcStateMultiplier,
   calculateResolutionBoost,
@@ -48,6 +48,7 @@ const MAX_NEW_MARKET_CANDIDATES = 12;
 const MAX_BACKFILL_STANDALONE = 60;
 const MIN_STANDALONE_SCORE = 0.05;
 const TWELVE_HOURS_MS = 12 * 60 * 60 * 1000;
+const NEW_MARKET_WINDOW_MS = 24 * 60 * 60 * 1000;
 const BACKFILL_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 const TOPIC_MATCH_MULTIPLIER = 2.0;
 const GENERAL_STORY_KEY = '__general__';
@@ -675,6 +676,7 @@ export async function buildStoriesFeed(): Promise<StoriesPipelineResult> {
   // ─── New market cards ──────────────────────────────────────────────────────
   // Port from the For You pipeline: inject isNewMarket story entries for
   // recently created markets that don't already have a story in the feed.
+  const newMarketCutoff = new Date(now.getTime() - NEW_MARKET_WINDOW_MS);
   const anchorPostById: Record<string, NarrativePost> = {};
   const existingQuestionNumbers = new Set(
     stories
@@ -704,7 +706,7 @@ export async function buildStoriesFeed(): Promise<StoriesPipelineResult> {
     .where(
       and(
         eq(questions.status, 'active'),
-        gte(questions.createdAt, cutoff),
+        gte(questions.createdAt, newMarketCutoff),
         lt(
           questions.resolutionDate,
           new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000)
@@ -794,8 +796,8 @@ export async function buildStoriesFeed(): Promise<StoriesPipelineResult> {
       arcState: (question.arcState as ArcStateType | null) ?? null,
       storyScore:
         Math.round(recencyScore * arcMultiplier * topicBoost * 10000) / 10000,
-      postCount: 0,
-      posts: [],
+      postCount: anchorPostId ? 1 : 0,
+      posts: anchorPostId ? [anchorPostById[anchorPostId]!] : [],
       hasUserPosition: false,
       isNewMarket: true,
       resolutionDate: question.resolutionDate.toISOString(),
@@ -811,9 +813,9 @@ export async function buildStoriesFeed(): Promise<StoriesPipelineResult> {
     });
   }
 
-  // Final sort then distribute markets evenly throughout the feed
+  // Final sort then ensure no adjacent market cards
   stories.sort((a, b) => b.storyScore - a.storyScore);
-  const distributedStories = distributeMarkets(stories, 4);
+  const distributedStories = spreadNewMarkets(stories);
 
   const allPostIds = [
     ...new Set(distributedStories.flatMap((s) => s.posts.map((p) => p.id))),
