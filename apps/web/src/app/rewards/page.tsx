@@ -13,17 +13,16 @@ import { useAuth } from '@/hooks/useAuth';
 type Tab = 'overview' | 'achievements' | 'challenges';
 
 export default function RewardsPage() {
-  // TODO: re-enable auth gate once mock data is removed
-  const _router = useRouter();
-  const { authenticated, getAccessToken, refresh } = useAuth();
+  const router = useRouter();
+  const { ready, authenticated, getAccessToken, login, refresh } = useAuth();
 
   // Auth required — redirect to feed and show login
-  // useEffect(() => {
-  //   if (!ready || authenticated) return;
-  //   router.push('/feed');
-  //   const timer = setTimeout(() => login(), 500);
-  //   return () => clearTimeout(timer);
-  // }, [ready, authenticated, router, login]);
+  useEffect(() => {
+    if (!ready || authenticated) return;
+    router.push('/feed');
+    const timer = setTimeout(() => login(), 500);
+    return () => clearTimeout(timer);
+  }, [ready, authenticated, router, login]);
 
   const searchParams = useSearchParams();
 

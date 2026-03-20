@@ -89,103 +89,6 @@ function BonusTracker({
   );
 }
 
-// TODO: remove mock data flag once APIs are populated
-const USE_MOCK_DATA = true;
-
-const MOCK_CHALLENGES: ChallengesData = {
-  daily: {
-    challenges: [
-      {
-        id: 'd1',
-        name: 'Join Discussion',
-        description: "Reply to someone's comment",
-        category: 'social',
-        pointsReward: 40,
-        threshold: 1,
-        progress: 1,
-        completed: true,
-        completedAt: '2026-03-19T08:00:00Z',
-      },
-      {
-        id: 'd2',
-        name: 'Post Comments',
-        description: 'Leave 5 comments on posts',
-        category: 'social',
-        pointsReward: 60,
-        threshold: 5,
-        progress: 2,
-        completed: false,
-        completedAt: null,
-      },
-      {
-        id: 'd3',
-        name: 'Agent Chat',
-        description: 'Send a message to an agent',
-        category: 'agents',
-        pointsReward: 35,
-        threshold: 1,
-        progress: 0,
-        completed: false,
-        completedAt: null,
-      },
-      {
-        id: 'd4',
-        name: 'Check Notifications',
-        description: undefined as unknown as string,
-        category: 'engagement',
-        pointsReward: 25,
-        threshold: 1,
-        progress: 0,
-        completed: false,
-        completedAt: null,
-      },
-    ],
-    allCompletedBonus: 40,
-    allCompleted: false,
-    resetsAt: new Date(Date.now() + 1 * 60 * 60 * 1000).toISOString(),
-  },
-  weekly: {
-    challenges: [
-      {
-        id: 'w1',
-        name: 'Bring a Friend',
-        description: 'Refer someone who makes a trade',
-        category: 'referral',
-        pointsReward: 250,
-        threshold: 1,
-        progress: 1,
-        completed: true,
-        completedAt: '2026-03-17T12:00:00Z',
-      },
-      {
-        id: 'w2',
-        name: 'Trading Spree',
-        description: 'Complete 10 trades this week',
-        category: 'trading',
-        pointsReward: 170,
-        threshold: 10,
-        progress: 3,
-        completed: false,
-        completedAt: null,
-      },
-      {
-        id: 'w3',
-        name: 'Top Market',
-        description: 'Trade in the highest-volume market',
-        category: 'trading',
-        pointsReward: 170,
-        threshold: 1,
-        progress: 0,
-        completed: false,
-        completedAt: null,
-      },
-    ],
-    allCompletedBonus: 100,
-    allCompleted: false,
-    resetsAt: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(),
-  },
-};
-
 export function ChallengesTab() {
   const { authenticated, getAccessToken } = useAuth();
   const { user } = useAuthStore();
@@ -196,12 +99,6 @@ export function ChallengesTab() {
   const [countdown, setCountdown] = useState({ daily: '', weekly: '' });
 
   const fetchData = useCallback(async () => {
-    if (USE_MOCK_DATA) {
-      setChallengesData(MOCK_CHALLENGES);
-      setLoading(false);
-      return;
-    }
-
     if (!authenticated) {
       setLoading(false);
       return;
