@@ -9,7 +9,7 @@ import {
 } from '@babylon/shared';
 import { usePrivy } from '@privy-io/react-auth';
 import { ChevronDown } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import {
   type ClosePerpDetails,
@@ -18,6 +18,7 @@ import {
 } from '@/components/markets/TradeConfirmationDialog';
 import { useAuth } from '@/hooks/useAuth';
 import { useMarketPrices } from '@/hooks/useMarketPrices';
+import { useOnClickOutside } from '@/hooks/useOnClickOutside';
 import { usePerpTrade } from '@/hooks/usePerpTrade';
 import { invalidatePerpMarketsCache } from '@/stores/perpMarketsStore';
 import {
@@ -83,6 +84,7 @@ export function PositionsTab({ userId }: PositionsTabProps) {
   const [pendingTrade, setPendingTrade] = useState<PendingTrade | null>(null);
   const [memberFilter, setMemberFilter] = useState<MemberFilter>('all');
   const [memberDropdownOpen, setMemberDropdownOpen] = useState(false);
+  const memberDropdownRef = useRef<HTMLDivElement>(null);
   const [closedPerps, setClosedPerps] = useState<ClosedPerpPosition[]>([]);
   const [closedLoading, setClosedLoading] = useState(false);
 
@@ -162,11 +164,15 @@ export function PositionsTab({ userId }: PositionsTabProps) {
     return ['all', 'owner', ...Array.from(agents)] as string[];
   }, [perpPositions, predictionPositions]);
 
+  useOnClickOutside(memberDropdownRef, () => {
+    setMemberDropdownOpen(false);
+  });
+
   const memberFilterLabel =
     memberFilter === 'all'
       ? 'All Members'
       : memberFilter === 'owner'
-        ? 'You (Owner)'
+        ? 'You'
         : memberFilter;
 
   // Filter positions by member
@@ -387,9 +393,9 @@ export function PositionsTab({ userId }: PositionsTabProps) {
 
   if (loading) {
     return (
-      <div className="space-y-3">
+      <div className="space-y-2">
         {Array.from({ length: 3 }).map((_, i) => (
-          <div key={i} className="h-16 animate-pulse rounded bg-muted" />
+          <div key={i} className="h-16 animate-pulse rounded-xl bg-muted" />
         ))}
       </div>
     );
@@ -401,25 +407,21 @@ export function PositionsTab({ userId }: PositionsTabProps) {
     filteredClosedPerps.length > 0;
 
   return (
-    <div>
+    <div className="space-y-4 md:space-y-6">
       {/* Header with member filter */}
-      <div className="relative mb-6 inline-block">
+      <div className="relative inline-block" ref={memberDropdownRef}>
         <button
-          className="flex items-center gap-2 font-semibold text-xl"
+          className="flex items-center gap-1.5 font-semibold text-base"
           onClick={() => setMemberDropdownOpen((prev) => !prev)}
         >
           {memberFilterLabel}
-          <ChevronDown className="h-4 w-4 text-muted-foreground" />
+          <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
         </button>
         {memberDropdownOpen && (
-          <div className="absolute top-full left-0 z-50 mt-1 min-w-[180px] rounded-md border border-border bg-background py-1 shadow-lg">
+          <div className="absolute top-full left-0 z-50 mt-1 min-w-[160px] overflow-hidden rounded-lg border border-border bg-background shadow-lg">
             {memberOptions.map((opt) => {
               const label =
-                opt === 'all'
-                  ? 'All Members'
-                  : opt === 'owner'
-                    ? 'You (Owner)'
-                    : opt;
+                opt === 'all' ? 'All Members' : opt === 'owner' ? 'You' : opt;
               return (
                 <button
                   key={opt}
@@ -428,8 +430,10 @@ export function PositionsTab({ userId }: PositionsTabProps) {
                     setMemberDropdownOpen(false);
                   }}
                   className={cn(
-                    'w-full px-3 py-2 text-left text-sm transition-colors hover:bg-muted',
-                    memberFilter === opt && 'bg-muted font-medium'
+                    'w-full px-3 py-2 text-left text-sm transition-colors',
+                    memberFilter === opt
+                      ? 'bg-muted font-medium'
+                      : 'hover:bg-muted/50'
                   )}
                 >
                   {label}
@@ -441,9 +445,9 @@ export function PositionsTab({ userId }: PositionsTabProps) {
       </div>
 
       {!hasPositions && (
-        <div className="py-8 text-center text-muted-foreground">
-          <p>No positions found</p>
-          <p className="mt-1 text-sm">
+        <div className="rounded-xl border border-border py-10 text-center">
+          <p className="text-muted-foreground">No positions found</p>
+          <p className="mt-1 text-muted-foreground text-sm">
             Open a position on the Terminal to get started
           </p>
         </div>
@@ -451,65 +455,90 @@ export function PositionsTab({ userId }: PositionsTabProps) {
 
       {/* Open Perpetuals */}
       {filteredPerps.length > 0 && (
-        <div className="mb-8">
-          <h3 className="mb-4 font-medium text-muted-foreground text-xs uppercase tracking-wider">
-            Open Perpetuals
-          </h3>
-          <div className="space-y-6">
+        <div>
+          <div className="mb-2 text-muted-foreground text-xs tracking-wide md:mb-3">
+            Open Perpetuals ({filteredPerps.length})
+          </div>
+          <div className="space-y-1.5 md:space-y-2">
             {filteredPerps.map(
               ({ position, currentPrice, pnl, pnlPercent }) => {
                 const isClosing = closingIds.has(position.id);
                 return (
                   <div
                     key={position.id}
-                    className="flex items-start justify-between py-2"
+                    className="rounded-xl border border-border px-3 py-3 md:px-4 md:py-3.5"
                   >
-                    <div>
-                      <div className="mb-0.5 flex items-center gap-2">
+                    {/* Row 1: Ticker + badge + PnL */}
+                    <div className="flex items-center justify-between whitespace-nowrap">
+                      <div className="flex items-center gap-2">
                         <span className="font-semibold text-sm">
                           ${position.ticker}
                         </span>
                         <span
-                          className={`rounded px-1.5 py-0.5 font-medium text-xs ${
+                          className={cn(
+                            'rounded px-1 pt-0 pb-0.5 font-medium text-[10px] leading-tight',
                             position.side === 'long'
-                              ? 'bg-emerald-100 text-emerald-600'
-                              : 'bg-red-100 text-red-600'
-                          }`}
+                              ? 'bg-emerald-500/15 text-emerald-500'
+                              : 'bg-red-500/15 text-red-500'
+                          )}
                         >
-                          {position.side.toUpperCase()}
+                          {position.side.toUpperCase()} {position.leverage}X
                         </span>
+                        {position.isAgentPosition && (
+                          <span className="text-muted-foreground text-xs">
+                            {position.agentName ?? 'Agent'}
+                          </span>
+                        )}
                       </div>
-                      <div className="mb-2 text-muted-foreground text-sm">
-                        {position.isAgentPosition
-                          ? (position.agentName ?? 'Agent')
-                          : 'Owner'}
-                      </div>
-                      <div className="text-muted-foreground text-sm">
-                        Entry {fmt(position.entryPrice)} &rarr; Now{' '}
-                        {fmt(currentPrice)} &middot; Size {fmt(position.size)}{' '}
-                        &middot; Liq {fmt(position.liquidationPrice)}
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <div className="flex items-center justify-end gap-2">
+                      <div className="flex items-baseline gap-1.5">
                         <span
-                          className={`font-medium text-sm ${
+                          className={cn(
+                            'font-semibold text-sm',
                             pnl >= 0 ? 'text-emerald-500' : 'text-red-500'
-                          }`}
+                          )}
                         >
                           {pnl >= 0 ? '+' : ''}
                           {fmt(pnl)}
                         </span>
                         <span
-                          className={`rounded px-1.5 py-0.5 text-xs ${
-                            pnl >= 0
-                              ? 'bg-emerald-100 text-emerald-600'
-                              : 'bg-red-100 text-red-600'
-                          }`}
+                          className={cn(
+                            'text-xs',
+                            pnl >= 0 ? 'text-emerald-500' : 'text-red-500'
+                          )}
                         >
                           {pnl >= 0 ? '+' : ''}
                           {pnlPercent.toFixed(1)}%
                         </span>
+                      </div>
+                    </div>
+
+                    {/* Row 2: Details grid + action */}
+                    <div className="mt-2 flex items-end justify-between whitespace-nowrap">
+                      <div className="flex gap-4 text-xs md:gap-6">
+                        <div>
+                          <div className="text-muted-foreground">Entry</div>
+                          <div className="font-medium text-foreground">
+                            {fmt(position.entryPrice)}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-muted-foreground">Now</div>
+                          <div className="font-medium text-foreground">
+                            {fmt(currentPrice)}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-muted-foreground">Size</div>
+                          <div className="font-medium text-foreground">
+                            {fmt(position.size)}
+                          </div>
+                        </div>
+                        <div>
+                          <div className="text-muted-foreground">Liq</div>
+                          <div className="font-medium text-foreground">
+                            {fmt(position.liquidationPrice)}
+                          </div>
+                        </div>
                       </div>
                       <button
                         onClick={() =>
@@ -521,7 +550,7 @@ export function PositionsTab({ userId }: PositionsTabProps) {
                           )
                         }
                         disabled={isClosing}
-                        className="mt-1 text-muted-foreground text-sm hover:text-foreground disabled:opacity-50"
+                        className="shrink-0 rounded-md border border-border px-3 py-1 text-muted-foreground text-xs transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
                       >
                         {isClosing ? 'Closing...' : 'Close'}
                       </button>
@@ -536,11 +565,11 @@ export function PositionsTab({ userId }: PositionsTabProps) {
 
       {/* Open Predictions */}
       {filteredPredictions.length > 0 && (
-        <div className="mb-8">
-          <h3 className="mb-4 font-medium text-muted-foreground text-xs uppercase tracking-wider">
-            Open Predictions
-          </h3>
-          <div className="space-y-6">
+        <div>
+          <div className="mb-2 text-muted-foreground text-xs tracking-wide md:mb-3">
+            Open Predictions ({filteredPredictions.length})
+          </div>
+          <div className="space-y-1.5 md:space-y-2">
             {filteredPredictions.map((position) => {
               const currentValue =
                 position.currentValue ??
@@ -556,63 +585,83 @@ export function PositionsTab({ userId }: PositionsTabProps) {
               return (
                 <div
                   key={position.id}
-                  className="flex items-start justify-between py-2"
+                  className="rounded-xl border border-border px-3 py-3 md:px-4 md:py-3.5"
                 >
-                  <div>
-                    <div className="mb-0.5 flex items-center gap-2">
-                      <span className="font-semibold text-sm">
-                        {position.question.length > 40
-                          ? `${position.question.slice(0, 40)}...`
-                          : position.question}
-                      </span>
-                      <span
-                        className={`rounded px-1.5 py-0.5 font-medium text-xs ${
-                          position.side === 'YES'
-                            ? 'bg-emerald-100 text-emerald-600'
-                            : 'bg-red-100 text-red-600'
-                        }`}
-                      >
-                        {position.side}
+                  {/* Row 1: Question + badge + PnL */}
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <span className="line-clamp-2 font-semibold text-sm leading-tight">
+                        {position.question}
                       </span>
                     </div>
-                    <div className="mb-2 text-muted-foreground text-sm">
-                      {position.isAgentPosition
-                        ? (position.agentName ?? 'Agent')
-                        : 'Owner'}
-                    </div>
-                    <div className="text-muted-foreground text-sm">
-                      Size {position.shares.toFixed(2)} shares &middot; Avg{' '}
-                      {fmtPrediction(position.avgPrice)} &middot; Now{' '}
-                      {fmtPrediction(position.currentPrice)}
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <div className="flex items-center justify-end gap-2">
-                      <span
-                        className={`font-medium text-sm ${
+                    <div className="shrink-0 text-right">
+                      <div
+                        className={cn(
+                          'font-semibold text-sm',
                           unrealizedPnL >= 0
                             ? 'text-emerald-500'
                             : 'text-red-500'
-                        }`}
+                        )}
                       >
                         {unrealizedPnL >= 0 ? '+' : ''}
                         {fmtPrediction(unrealizedPnL)}
-                      </span>
-                      <span
-                        className={`rounded px-1.5 py-0.5 text-xs ${
+                      </div>
+                      <div
+                        className={cn(
+                          'text-xs',
                           unrealizedPnL >= 0
-                            ? 'bg-emerald-100 text-emerald-600'
-                            : 'bg-red-100 text-red-600'
-                        }`}
+                            ? 'text-emerald-500'
+                            : 'text-red-500'
+                        )}
                       >
                         {unrealizedPnL >= 0 ? '+' : ''}
                         {pnlPercent.toFixed(1)}%
-                      </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {position.isAgentPosition && (
+                    <div className="mt-1 text-muted-foreground text-xs">
+                      {position.agentName ?? 'Agent'}
+                    </div>
+                  )}
+
+                  {/* Row 2: Details grid + action */}
+                  <div className="mt-2 flex items-end justify-between whitespace-nowrap">
+                    <div className="flex gap-4 text-xs md:gap-6">
+                      <div>
+                        <div className="text-muted-foreground">Shares</div>
+                        <div className="flex items-center gap-1 font-medium text-foreground">
+                          {position.shares.toFixed(2)}
+                          <span
+                            className={cn(
+                              'rounded px-1 pt-0 pb-0.5 font-medium text-[10px] leading-tight',
+                              position.side === 'YES'
+                                ? 'bg-emerald-500/15 text-emerald-500'
+                                : 'bg-red-500/15 text-red-500'
+                            )}
+                          >
+                            {position.side}
+                          </span>
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-muted-foreground">Avg</div>
+                        <div className="font-medium text-foreground">
+                          {fmtPrediction(position.avgPrice)}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-muted-foreground">Now</div>
+                        <div className="font-medium text-foreground">
+                          {fmtPrediction(position.currentPrice)}
+                        </div>
+                      </div>
                     </div>
                     <button
                       onClick={() => handleSellClick(position)}
                       disabled={isSelling || position.shares < 0.01}
-                      className="mt-1 text-muted-foreground text-sm hover:text-foreground disabled:opacity-50"
+                      className="shrink-0 rounded-md border border-border px-3 py-1 text-muted-foreground text-xs transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
                     >
                       {isSelling
                         ? 'Selling...'
@@ -631,10 +680,10 @@ export function PositionsTab({ userId }: PositionsTabProps) {
       {/* Closed Perpetuals */}
       {filteredClosedPerps.length > 0 && (
         <div>
-          <h3 className="mb-4 font-medium text-muted-foreground text-xs uppercase tracking-wider">
-            Closed Perpetuals
-          </h3>
-          <div className="space-y-6">
+          <div className="mb-2 text-muted-foreground text-xs tracking-wide md:mb-3">
+            Closed Perpetuals ({filteredClosedPerps.length})
+          </div>
+          <div className="space-y-1.5 md:space-y-2">
             {filteredClosedPerps.map((position) => {
               const pnl = position.realizedPnL;
               const pnlPercent =
@@ -642,60 +691,76 @@ export function PositionsTab({ userId }: PositionsTabProps) {
               return (
                 <div
                   key={position.id}
-                  className="flex items-start justify-between py-2"
+                  className="rounded-xl border border-border px-3 py-3 opacity-75 md:px-4 md:py-3.5"
                 >
-                  <div>
-                    <div className="mb-0.5 flex items-center gap-2">
+                  {/* Row 1: Ticker + badges + PnL */}
+                  <div className="flex items-center justify-between whitespace-nowrap">
+                    <div className="flex items-center gap-2">
                       <span className="font-semibold text-sm">
                         ${position.ticker}
                       </span>
                       <span
-                        className={`rounded px-1.5 py-0.5 font-medium text-xs ${
+                        className={cn(
+                          'rounded px-1 pt-0 pb-0.5 font-medium text-[10px] leading-tight',
                           position.side === 'long'
-                            ? 'bg-emerald-100 text-emerald-600'
-                            : 'bg-red-100 text-red-600'
-                        }`}
+                            ? 'bg-emerald-500/15 text-emerald-500'
+                            : 'bg-red-500/15 text-red-500'
+                        )}
                       >
-                        {position.side.toUpperCase()}
+                        {position.side.toUpperCase()} {position.leverage}X
                       </span>
-                      <span className="rounded bg-gray-100 px-1.5 py-0.5 font-medium text-gray-600 text-xs">
-                        CLOSED
-                      </span>
+                      {position.agentName && (
+                        <span className="text-muted-foreground text-xs">
+                          {position.agentName}
+                        </span>
+                      )}
                     </div>
-                    {position.agentName && (
-                      <div className="mb-2 text-muted-foreground text-sm">
-                        {position.agentName}
-                      </div>
-                    )}
-                    <div className="text-muted-foreground text-sm">
-                      Entry {fmt(position.entryPrice)} &rarr; Exit{' '}
-                      {fmt(position.currentPrice)} &middot; Size{' '}
-                      {fmt(position.size)}
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <div className="flex items-center justify-end gap-2">
+                    <div className="flex items-baseline gap-1.5">
                       <span
-                        className={`font-medium text-sm ${
+                        className={cn(
+                          'font-semibold text-sm',
                           pnl >= 0 ? 'text-emerald-500' : 'text-red-500'
-                        }`}
+                        )}
                       >
                         {pnl >= 0 ? '+' : ''}
                         {fmt(pnl)}
                       </span>
                       <span
-                        className={`rounded px-1.5 py-0.5 text-xs ${
-                          pnl >= 0
-                            ? 'bg-emerald-100 text-emerald-600'
-                            : 'bg-red-100 text-red-600'
-                        }`}
+                        className={cn(
+                          'text-xs',
+                          pnl >= 0 ? 'text-emerald-500' : 'text-red-500'
+                        )}
                       >
                         {pnl >= 0 ? '+' : ''}
                         {pnlPercent.toFixed(1)}%
                       </span>
                     </div>
+                  </div>
+
+                  {/* Row 2: Details */}
+                  <div className="mt-2 flex items-end justify-between whitespace-nowrap">
+                    <div className="flex gap-4 text-xs md:gap-6">
+                      <div>
+                        <div className="text-muted-foreground">Entry</div>
+                        <div className="font-medium text-foreground">
+                          {fmt(position.entryPrice)}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-muted-foreground">Exit</div>
+                        <div className="font-medium text-foreground">
+                          {fmt(position.currentPrice)}
+                        </div>
+                      </div>
+                      <div>
+                        <div className="text-muted-foreground">Size</div>
+                        <div className="font-medium text-foreground">
+                          {fmt(position.size)}
+                        </div>
+                      </div>
+                    </div>
                     {position.closedAt && (
-                      <div className="mt-1 text-muted-foreground text-sm">
+                      <div className="text-muted-foreground text-xs">
                         {new Date(position.closedAt).toLocaleDateString()}
                       </div>
                     )}
@@ -708,12 +773,12 @@ export function PositionsTab({ userId }: PositionsTabProps) {
       )}
 
       {closedLoading && filteredClosedPerps.length === 0 && (
-        <div className="space-y-3">
-          <h3 className="font-medium text-muted-foreground text-xs uppercase tracking-wider">
+        <div className="space-y-2">
+          <div className="text-muted-foreground text-xs tracking-wide">
             Closed Perpetuals
-          </h3>
+          </div>
           {Array.from({ length: 2 }).map((_, i) => (
-            <div key={i} className="h-12 animate-pulse rounded bg-muted" />
+            <div key={i} className="h-14 animate-pulse rounded-xl bg-muted" />
           ))}
         </div>
       )}

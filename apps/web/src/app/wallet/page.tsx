@@ -6,7 +6,6 @@ import { useEffect, useState } from 'react';
 import { LoginButton } from '@/components/auth/LoginButton';
 import { PageContainer } from '@/components/shared/PageContainer';
 import { BalanceTab } from '@/components/wallet/v2/balance-tab';
-import { PnLTab } from '@/components/wallet/v2/pnl-tab';
 import { PositionsTab } from '@/components/wallet/v2/positions-tab';
 import { useAuth } from '@/hooks/useAuth';
 import { useUserPositionsPolling } from '@/stores/userPositionsStore';
@@ -23,7 +22,7 @@ const WidgetSidebar = dynamic(
   }
 );
 
-type PortfolioTab = 'balance' | 'pnl' | 'positions';
+type PortfolioTab = 'balance' | 'positions';
 
 export default function WalletPage() {
   const router = useRouter();
@@ -62,7 +61,7 @@ export default function WalletPage() {
   }
 
   return (
-    <PageContainer noPadding className="flex w-full flex-col">
+    <PageContainer noPadding className="flex w-full flex-col pt-14 md:pt-0">
       <div className="relative flex flex-1">
         {/* Main wallet content */}
         <div className="flex min-w-0 flex-1 flex-col border-border lg:border-r lg:border-l">
@@ -71,14 +70,13 @@ export default function WalletPage() {
             {(
               [
                 ['balance', 'Balance'],
-                ['pnl', 'P&L'],
                 ['positions', 'Positions'],
               ] as const
             ).map(([key, label]) => (
               <button
                 key={key}
                 onClick={() => setActiveTab(key)}
-                className={`relative flex-1 py-4 text-center font-medium text-sm transition-colors ${
+                className={`relative flex-1 py-3 text-center font-medium text-sm transition-colors ${
                   activeTab === key
                     ? 'text-foreground'
                     : 'text-muted-foreground hover:text-foreground'
@@ -93,9 +91,11 @@ export default function WalletPage() {
           </div>
 
           {/* Tab Content */}
-          <div className="p-6">
+          <div className="p-4 pb-[calc(1rem+var(--bottom-nav-height))] md:p-6 md:pb-6">
+            {/* Temporarily hidden: the wallet P&L tab still mixes legacy metrics
+                and non-canonical history sources. Reintroduce it once the
+                entity rows and chart are rebuilt on a single canonical model. */}
             {activeTab === 'balance' && <BalanceTab userId={userId} />}
-            {activeTab === 'pnl' && <PnLTab userId={userId} />}
             {activeTab === 'positions' && <PositionsTab userId={userId} />}
           </div>
         </div>
@@ -109,13 +109,13 @@ export default function WalletPage() {
 
 function WalletPageSkeleton() {
   return (
-    <PageContainer noPadding className="flex w-full flex-col">
+    <PageContainer noPadding className="flex w-full flex-col pt-14 md:pt-0">
       <div className="relative flex flex-1">
         <div className="flex min-w-0 flex-1 flex-col border-border lg:border-r lg:border-l">
           {/* Tabs skeleton */}
           <div className="flex border-border border-b">
-            {Array.from({ length: 3 }).map((_, i) => (
-              <div key={i} className="flex flex-1 justify-center py-4">
+            {Array.from({ length: 2 }).map((_, i) => (
+              <div key={i} className="flex flex-1 justify-center py-3">
                 <div className="h-4 w-16 animate-pulse rounded bg-muted" />
               </div>
             ))}

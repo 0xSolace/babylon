@@ -7,7 +7,9 @@ interface WalletTabsProps {
   onTabChange: (tab: string) => void;
 }
 
-const tabs = ['Balance', 'P&L', 'Positions', 'History'];
+// Temporarily hidden: the legacy wallet P&L view is inconsistent with the
+// canonical wallet model and must be reintroduced only after a full rewrite.
+const tabs = ['Balance', 'Positions', 'History'];
 
 export function WalletTabs({ activeTab, onTabChange }: WalletTabsProps) {
   return (
