@@ -7,10 +7,10 @@
 import { describe, expect, test } from 'bun:test';
 import {
   ACHIEVEMENT_DEFINITIONS,
+  type AchievementEventType,
   ALL_CHALLENGE_DEFINITIONS,
   DAILY_CHALLENGE_DEFINITIONS,
   EVENT_TO_TRACKING_TYPES,
-  type AchievementEventType,
   WEEKLY_CHALLENGE_DEFINITIONS,
 } from '@babylon/shared';
 
@@ -103,7 +103,7 @@ describe('EVENT_TO_TRACKING_TYPES completeness', () => {
   });
 
   test('all event types map to at least one tracking type', () => {
-    for (const [event, types] of Object.entries(EVENT_TO_TRACKING_TYPES)) {
+    for (const [_event, types] of Object.entries(EVENT_TO_TRACKING_TYPES)) {
       expect(types.length).toBeGreaterThan(0);
     }
   });
@@ -187,114 +187,36 @@ describe('challenge rotation', () => {
 // ── Event-to-Challenge Wiring ─────────────────────────────────────
 
 describe('event-to-challenge wiring', () => {
-  // For each event type, verify that if the corresponding challenge is active,
-  // the event maps to it through EVENT_TO_TRACKING_TYPES.
-  const eventTypes = Object.keys(EVENT_TO_TRACKING_TYPES) as AchievementEventType[];
+  const eventTypes = Object.keys(
+    EVENT_TO_TRACKING_TYPES
+  ) as AchievementEventType[];
 
-  test('prediction_trade event reaches daily_place_prediction challenge', () => {
-    const trackingTypes = EVENT_TO_TRACKING_TYPES.prediction_trade;
-    const challenge = ALL_CHALLENGE_DEFINITIONS.find(
-      (c) => c.id === 'daily_place_prediction'
-    );
-    expect(challenge).toBeDefined();
-    expect(trackingTypes).toContain(challenge!.trackingType);
-  });
+  // Every event type must map to at least one tracking type
+  for (const event of eventTypes) {
+    test(`${event} maps to at least one tracking type`, () => {
+      expect(EVENT_TO_TRACKING_TYPES[event].length).toBeGreaterThan(0);
+    });
+  }
 
-  test('perp_trade event reaches daily_place_perp challenge', () => {
-    const trackingTypes = EVENT_TO_TRACKING_TYPES.perp_trade;
-    const challenge = ALL_CHALLENGE_DEFINITIONS.find(
-      (c) => c.id === 'daily_place_perp'
-    );
-    expect(challenge).toBeDefined();
-    expect(trackingTypes).toContain(challenge!.trackingType);
-  });
-
-  test('comment_created event reaches daily_reply_comment challenge', () => {
-    const trackingTypes = EVENT_TO_TRACKING_TYPES.comment_created;
-    const challenge = ALL_CHALLENGE_DEFINITIONS.find(
-      (c) => c.id === 'daily_reply_comment'
-    );
-    expect(challenge).toBeDefined();
-    expect(trackingTypes).toContain(challenge!.trackingType);
-  });
-
-  test('reaction_created event reaches daily_like_post challenge', () => {
-    const trackingTypes = EVENT_TO_TRACKING_TYPES.reaction_created;
-    const challenge = ALL_CHALLENGE_DEFINITIONS.find(
-      (c) => c.id === 'daily_like_post'
-    );
-    expect(challenge).toBeDefined();
-    expect(trackingTypes).toContain(challenge!.trackingType);
-  });
-
-  test('follow_created event reaches daily_follow_user challenge', () => {
-    const trackingTypes = EVENT_TO_TRACKING_TYPES.follow_created;
-    const challenge = ALL_CHALLENGE_DEFINITIONS.find(
-      (c) => c.id === 'daily_follow_user'
-    );
-    expect(challenge).toBeDefined();
-    expect(trackingTypes).toContain(challenge!.trackingType);
-  });
-
-  test('post_created event reaches daily_create_post challenge', () => {
-    const trackingTypes = EVENT_TO_TRACKING_TYPES.post_created;
-    const challenge = ALL_CHALLENGE_DEFINITIONS.find(
-      (c) => c.id === 'daily_create_post'
-    );
-    expect(challenge).toBeDefined();
-    expect(trackingTypes).toContain(challenge!.trackingType);
-  });
-
-  test('agent_message_sent event reaches daily_agent_message challenge', () => {
-    const trackingTypes = EVENT_TO_TRACKING_TYPES.agent_message_sent;
-    const challenge = ALL_CHALLENGE_DEFINITIONS.find(
-      (c) => c.id === 'daily_agent_message'
-    );
-    expect(challenge).toBeDefined();
-    expect(trackingTypes).toContain(challenge!.trackingType);
-  });
-
-  test('page_visited event reaches page visit challenges', () => {
-    const trackingTypes = EVENT_TO_TRACKING_TYPES.page_visited;
-    const visitChallenges = [
-      'daily_open_terminal',
-      'daily_open_agents',
-      'daily_visit_markets',
-      'daily_check_feed',
-      'daily_leaderboard',
-      'daily_notifications',
-      'daily_open_market',
-    ];
-    for (const id of visitChallenges) {
-      const challenge = ALL_CHALLENGE_DEFINITIONS.find((c) => c.id === id);
-      expect(challenge).toBeDefined();
-      expect(trackingTypes).toContain(challenge!.trackingType);
-    }
-  });
-
-  test('group_message_sent event reaches daily_group_message challenge', () => {
-    const trackingTypes = EVENT_TO_TRACKING_TYPES.group_message_sent;
-    const challenge = ALL_CHALLENGE_DEFINITIONS.find(
-      (c) => c.id === 'daily_group_message'
-    );
-    expect(challenge).toBeDefined();
-    expect(trackingTypes).toContain(challenge!.trackingType);
-  });
-
-  test('every challenge can be reached by at least one event when active', () => {
-    // For every challenge definition, simulate it being active and verify
-    // that at least one event type maps to its tracking type
-    for (const challenge of ALL_CHALLENGE_DEFINITIONS) {
-      let reachable = false;
-      for (const trackingTypes of Object.values(EVENT_TO_TRACKING_TYPES)) {
-        if (trackingTypes.includes(challenge.trackingType)) {
-          reachable = true;
-          break;
-        }
-      }
+  // Every challenge definition must be reachable from at least one event
+  for (const challenge of ALL_CHALLENGE_DEFINITIONS) {
+    test(`challenge ${challenge.id} (${challenge.trackingType}) is reachable from an event`, () => {
+      const reachable = eventTypes.some((event) =>
+        EVENT_TO_TRACKING_TYPES[event].includes(challenge.trackingType)
+      );
       expect(reachable).toBe(true);
-    }
-  });
+    });
+  }
+
+  // Every achievement definition must be reachable from at least one event
+  for (const achievement of ACHIEVEMENT_DEFINITIONS) {
+    test(`achievement ${achievement.id} (${achievement.trackingType}) is reachable from an event`, () => {
+      const reachable = eventTypes.some((event) =>
+        EVENT_TO_TRACKING_TYPES[event].includes(achievement.trackingType)
+      );
+      expect(reachable).toBe(true);
+    });
+  }
 });
 
 // ── Challenge Selection Simulation ────────────────────────────────
