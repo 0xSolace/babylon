@@ -367,7 +367,13 @@ async function withRetryInternal<T>(
         errorMsg.includes('deadlock') ||
         errorMsg.includes('econnrefused') ||
         errorMsg.includes('econnreset') ||
-        errorMsg.includes('etimedout');
+        errorMsg.includes('etimedout') ||
+        // SSL errors common with Neon's pooler
+        (errorMsg.includes('ssl') &&
+          (errorMsg.includes('error') || errorMsg.includes('failed'))) ||
+        // Connection limit errors
+        errorMsg.includes('too many connections') ||
+        errorMsg.includes('connection limit');
 
       if (!isRetryable || attempt === config.maxRetries) {
         throw lastError;
