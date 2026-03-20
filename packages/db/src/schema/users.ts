@@ -346,6 +346,7 @@ export const users = pgTable(
     index('User_invitePoints_idx').on(table.invitePoints),
     index('User_isActor_idx').on(table.isActor),
     // Admin stats indexes for optimized user signups queries
+    index('User_createdAt_idx').on(table.createdAt),
     index('User_isActor_createdAt_idx').on(table.isActor, table.createdAt),
     index('User_isAgent_idx').on(table.isAgent),
     index('User_isAgent_createdAt_idx').on(table.isAgent, table.createdAt),
@@ -354,6 +355,11 @@ export const users = pgTable(
     index('User_isScammer_idx').on(table.isScammer),
     index('User_isCSAM_idx').on(table.isCSAM),
     index('User_managedBy_idx').on(table.managedBy),
+    index('User_managedBy_isAgent_createdAt_idx').on(
+      table.managedBy,
+      table.isAgent,
+      table.createdAt
+    ),
     index('User_profileComplete_createdAt_idx').on(
       table.profileComplete,
       table.createdAt
@@ -447,6 +453,10 @@ export const follows = pgTable(
     unique('Follow_followerId_followingId_key').on(
       table.followerId,
       table.followingId
+    ),
+    index('Follow_followerId_createdAt_idx').on(
+      table.followerId,
+      table.createdAt
     ),
     index('Follow_followerId_idx').on(table.followerId),
     index('Follow_followingId_idx').on(table.followingId),

@@ -9,11 +9,7 @@ import { sql } from 'drizzle-orm';
 import type { PostgresJsDatabase } from 'drizzle-orm/postgres-js';
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
-import {
-  createDrizzleClient,
-  type DrizzleClient,
-  type SQLValue,
-} from './client';
+import { createDrizzleClient, type DrizzleClient } from './client';
 import { createJsonClient } from './json-client';
 import {
   clearJsonStorage,
@@ -47,9 +43,14 @@ const globalForDb = globalThis as typeof globalThis & {
   // Read replica support for high-scale deployments
   readReplicaClient: ReturnType<typeof postgres> | undefined;
   readReplicaDrizzle: Database | undefined;
+  readReplicaDb: DrizzleClient | undefined;
 };
 
 const isBuildTime = process.env.NEXT_PHASE === 'phase-production-build';
+
+// ============================================================================
+// Shared Utilities
+// ============================================================================
 
 function isTestEnvironment(): boolean {
   return (
@@ -59,30 +60,40 @@ function isTestEnvironment(): boolean {
   );
 }
 
+/** Hard cap so misconfiguration cannot exhaust Postgres max_connections */
+const DATABASE_POOL_MAX_CAP = 500;
+
+function parsePositiveIntEnv(key: string): number | undefined {
+  const raw = process.env[key];
+  if (raw === undefined || raw === '') return undefined;
+  const n = Number.parseInt(raw, 10);
+  if (!Number.isFinite(n) || n <= 0) {
+    logger.warn(`Invalid ${key} value: "${raw}", using default`);
+    return undefined;
+  }
+  return Math.min(n, DATABASE_POOL_MAX_CAP);
+}
+
+// ============================================================================
+// Primary/Master Configuration
+// ============================================================================
+
 function getConnectionUrl(): string {
   return process.env.DATABASE_URL || 'postgresql://localhost:5432/babylon';
 }
 
-/**
- * Get read replica connection URL
- * Falls back to primary if not configured
- */
-function getReadReplicaUrl(): string {
-  return process.env.DATABASE_READ_REPLICA_URL || getConnectionUrl();
-}
+// ============================================================================
+// Read Replica/Slave Configuration
+// ============================================================================
 
-/**
- * Check if a dedicated read replica is configured
- */
-function hasReadReplica(): boolean {
-  return (
-    !!process.env.DATABASE_READ_REPLICA_URL &&
-    process.env.DATABASE_READ_REPLICA_URL !== getConnectionUrl()
-  );
-}
+// ============================================================================
+// Postgres Client Configuration
+// ============================================================================
 
-function createPostgresClient(): ReturnType<typeof postgres> {
-  const url = getConnectionUrl();
+function getPostgresClientConfig(
+  url: string,
+  role: 'primary' | 'replica'
+): postgres.Options<{}> {
   const isTest = isTestEnvironment();
   const isProd = process.env.NODE_ENV === 'production';
 
@@ -111,23 +122,102 @@ function createPostgresClient(): ReturnType<typeof postgres> {
       ? 'require'
       : false;
 
-  logger.debug('[Drizzle] Creating postgres client', {
+  // Node serves many concurrent requests in one process; without a bounded pool we'd get
+  // one connection per in-flight query and exhaust Neon/Postgres limits. Pool caps connections
+  // and queues work. Defaults stay small so (instances × pool max) stays within Neon caps.
+  const isPooler =
+    url.includes('pooler') ||
+    url.includes('pgbouncer') ||
+    url.includes('?pgbouncer=true') ||
+    url.includes('?pgbouncer=1') ||
+    url.includes('-pooler.') ||
+    url.includes('pooler.supabase') ||
+    url.includes('transaction-pooler');
+
+  const envKey =
+    role === 'primary' ? 'DATABASE_POOL_MAX' : 'DATABASE_READ_REPLICA_POOL_MAX';
+  const envMax = parsePositiveIntEnv(envKey);
+
+  // Pool size lookup table for clarity (avoids nested ternaries)
+  const POOL_DEFAULTS = {
+    pooler: {
+      primary: { prod: 10, test: 2, dev: 8 },
+      replica: { prod: 15, test: 2, dev: 12 },
+    },
+    direct: {
+      primary: { prod: 8, test: 5, dev: 10 },
+      replica: { prod: 12, test: 5, dev: 15 },
+    },
+  };
+
+  let poolMax: number;
+  if (envMax !== undefined) {
+    poolMax = envMax;
+  } else {
+    const connectionType = isPooler ? 'pooler' : 'direct';
+    const env = isProd ? 'prod' : isTest ? 'test' : 'dev';
+    poolMax = POOL_DEFAULTS[connectionType][role][env];
+  }
+
+  // Connection params
+  const applicationName =
+    role === 'replica' && process.env.DATABASE_READ_REPLICA_APPLICATION_NAME
+      ? process.env.DATABASE_READ_REPLICA_APPLICATION_NAME
+      : (process.env.DATABASE_APPLICATION_NAME ?? 'babylon');
+
+  const applyGuardrails =
+    !isTest &&
+    (process.env.NODE_ENV === 'production' ||
+      ['true', '1', 'yes'].includes(
+        process.env.DATABASE_SESSION_GUARDRAILS?.toLowerCase() ?? ''
+      ));
+
+  const connectionParams: Partial<postgres.ConnectionParameters> = {
+    application_name: applicationName,
+  };
+
+  if (applyGuardrails) {
+    const statementMs =
+      parsePositiveIntEnv('DATABASE_STATEMENT_TIMEOUT_MS') ?? 60_000;
+    const lockMs = parsePositiveIntEnv('DATABASE_LOCK_TIMEOUT_MS') ?? 10_000;
+    const idleInTxMs =
+      parsePositiveIntEnv('DATABASE_IDLE_IN_TRANSACTION_TIMEOUT_MS') ?? 60_000;
+    if (statementMs > 0) connectionParams.statement_timeout = statementMs;
+    if (lockMs > 0) connectionParams.lock_timeout = lockMs;
+    if (idleInTxMs > 0)
+      connectionParams.idle_in_transaction_session_timeout = idleInTxMs;
+  }
+
+  logger.debug(`[Drizzle] Creating ${role} postgres client`, {
     isProd,
     isLocalhost,
     isCloudProvider,
     hasExplicitSSL,
     sslMode,
+    isPooler,
+    poolMax,
     urlHost: url.split('@')[1]?.split('/')[0] || 'unknown',
   });
 
-  return postgres(url, {
-    max: isProd ? 50 : isTest ? 5 : 10,
-    idle_timeout: isProd ? 30 : 20,
+  return {
+    max: poolMax,
+    // Shorter idle timeout for serverless to release connections faster
+    idle_timeout: isProd ? 20 : 15,
     connect_timeout: 10,
     ssl: sslMode,
     transform: { undefined: null },
     onnotice: () => {},
-  });
+    connection: connectionParams,
+  };
+}
+
+// ============================================================================
+// Primary/Master Client Creation
+// ============================================================================
+
+function createPostgresClient(): ReturnType<typeof postgres> {
+  const url = getConnectionUrl();
+  return postgres(url, getPostgresClientConfig(url, 'primary'));
 }
 
 function getPostgresClient(): ReturnType<typeof postgres> | null {
@@ -165,54 +255,17 @@ function getDrizzleInstance(): Database | null {
   return globalForDb.drizzleDb;
 }
 
+// ============================================================================
+// Read Replica/Slave Client Creation
+// ============================================================================
+
 /**
  * Create a read replica postgres client
  * Uses separate connection pool for read-heavy operations
  */
-function createReadReplicaClient(): ReturnType<typeof postgres> | null {
-  const url = getReadReplicaUrl();
-  const isTest = isTestEnvironment();
-  const isProd = process.env.NODE_ENV === 'production';
-
-  // Determine if this is a local database connection
-  const isLocalhost = url.includes('localhost') || url.includes('127.0.0.1');
-
-  // Check if SSL is already specified in the URL
-  const hasExplicitSSL =
-    url.includes('sslmode=require') || url.includes('ssl=true');
-
-  // Check for cloud database providers
-  const isCloudProvider =
-    url.includes('neon.tech') ||
-    url.includes('supabase.co') ||
-    url.includes('pooler.supabase') ||
-    url.includes('db.bit.io') ||
-    url.includes('.postgres.database.azure.com') ||
-    url.includes('.rds.amazonaws.com');
-
-  const sslMode: 'require' | false =
-    hasExplicitSSL || (!isLocalhost && (isProd || isCloudProvider))
-      ? 'require'
-      : false;
-
-  logger.debug('[Drizzle] Creating read replica client', {
-    isProd,
-    isLocalhost,
-    isCloudProvider,
-    hasExplicitSSL,
-    sslMode,
-    urlHost: url.split('@')[1]?.split('/')[0] || 'unknown',
-  });
-
-  return postgres(url, {
-    // Read replicas can have larger pools since they only handle reads
-    max: isProd ? 75 : isTest ? 5 : 15,
-    idle_timeout: isProd ? 30 : 20,
-    connect_timeout: 10,
-    ssl: sslMode,
-    transform: { undefined: null },
-    onnotice: () => {},
-  });
+function createReadReplicaClient(): ReturnType<typeof postgres> {
+  const url = process.env.DATABASE_READ_REPLICA_URL || getConnectionUrl();
+  return postgres(url, getPostgresClientConfig(url, 'replica'));
 }
 
 /**
@@ -221,16 +274,15 @@ function createReadReplicaClient(): ReturnType<typeof postgres> | null {
  */
 function getReadReplicaDrizzle(): Database | null {
   // If no dedicated read replica, use primary
-  if (!hasReadReplica()) {
+  const replicaUrl = process.env.DATABASE_READ_REPLICA_URL;
+  if (!replicaUrl || replicaUrl === getConnectionUrl()) {
     return getDrizzleInstance();
   }
 
   if (!globalForDb.readReplicaDrizzle) {
     if (!globalForDb.readReplicaClient) {
       const client = createReadReplicaClient();
-      if (client) {
-        globalForDb.readReplicaClient = client;
-      }
+      globalForDb.readReplicaClient = client;
     }
 
     if (!globalForDb.readReplicaClient) return getDrizzleInstance();
@@ -244,6 +296,35 @@ function getReadReplicaDrizzle(): Database | null {
   }
 
   return globalForDb.readReplicaDrizzle;
+}
+
+// Version counter to track read replica client changes for cache invalidation
+let readReplicaDbVersion = 0;
+
+/**
+ * Get current read replica version (used by proxy for cache invalidation)
+ */
+export function getReadReplicaDbVersion(): number {
+  return readReplicaDbVersion;
+}
+
+/**
+ * Get read replica DrizzleClient (cached)
+ * Falls back to primary if read replica not configured
+ */
+function getReadReplicaDbClient(): DrizzleClient | null {
+  const replica = getReadReplicaDrizzle();
+  if (!replica) {
+    return getDbClient();
+  }
+
+  if (!globalForDb.readReplicaDb) {
+    globalForDb.readReplicaDb = createDrizzleClient(replica);
+    // Increment version to invalidate bound method caches
+    readReplicaDbVersion++;
+  }
+
+  return globalForDb.readReplicaDb;
 }
 
 function getDbClient(): DrizzleClient | null {
@@ -285,11 +366,30 @@ async function withRetryInternal<T>(
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));
 
+      // Retry on transient connection errors
+      // Match specific error patterns to avoid retrying non-retryable errors
+      const errorMsg = lastError.message.toLowerCase();
       const isRetryable =
-        lastError.message.includes('connection') ||
-        lastError.message.includes('timeout') ||
-        lastError.message.includes('deadlock') ||
-        lastError.message.includes('ECONNREFUSED');
+        (errorMsg.includes('connection') &&
+          (errorMsg.includes('closed') ||
+            errorMsg.includes('terminated') ||
+            errorMsg.includes('refused') ||
+            errorMsg.includes('reset'))) ||
+        (errorMsg.includes('timeout') &&
+          (errorMsg.includes('connection') || errorMsg.includes('query'))) ||
+        errorMsg.includes('deadlock') ||
+        errorMsg.includes('econnrefused') ||
+        errorMsg.includes('econnreset') ||
+        errorMsg.includes('etimedout') ||
+        // SSL connection errors common with Neon's pooler (excludes certificate validation errors)
+        (errorMsg.includes('ssl') &&
+          (errorMsg.includes('connection') ||
+            errorMsg.includes('handshake') ||
+            errorMsg.includes('reset') ||
+            errorMsg.includes('closed'))) ||
+        // Connection limit errors
+        errorMsg.includes('too many connections') ||
+        errorMsg.includes('connection limit');
 
       if (!isRetryable || attempt === config.maxRetries) {
         throw lastError;
@@ -376,13 +476,248 @@ export {
 };
 
 // ============================================================================
+// Raw SQL Execution
+// ============================================================================
+
+/**
+ * Execute a raw SQL query with automatic retry logic.
+ * Use this for queries that cannot be expressed through the Drizzle ORM.
+ *
+ * @param query - SQL query built using drizzle-orm's sql template tag
+ * @returns Query result
+ *
+ * @example
+ * ```ts
+ * import { sql } from 'drizzle-orm';
+ * const result = await executeRaw(sql`SELECT * FROM users WHERE id = ${userId}`);
+ * ```
+ */
+export async function executeRaw<T = unknown>(
+  query: ReturnType<typeof sql>
+): Promise<T> {
+  if (currentStorageMode !== 'postgres') {
+    throw new Error('executeRaw is only supported in PostgreSQL mode');
+  }
+
+  const drizzleInstance = getDrizzleInstance();
+  if (!drizzleInstance) {
+    throw new Error(
+      'Database not initialized. Check DATABASE_URL or use initializeJsonMode().'
+    );
+  }
+
+  return withRetryInternal(async () => {
+    const result = await drizzleInstance.execute(query);
+    return result as T;
+  });
+}
+
+// ============================================================================
 // Main Exports
 // ============================================================================
 
 /**
- * Create a lazy proxy that switches between PostgreSQL and JSON mode.
+ * Read-only methods that can safely use read replica
+ */
+const READ_METHODS = new Set([
+  'select',
+  'selectDistinct',
+  'selectDistinctOn',
+  'query',
+  'findUnique',
+  'findFirst',
+  'findMany',
+  'count',
+  'aggregate',
+  '$queryRaw',
+]);
+
+/**
+ * Read-only methods on table repositories (e.g. db.user.findMany)
+ */
+const TABLE_READ_METHODS = new Set([
+  'findUnique',
+  'findFirst',
+  'findMany',
+  'count',
+  'aggregate',
+]);
+
+/**
+ * Write methods that must use primary database.
+ * Used in createModeAwareDbProxy to distinguish write operations from read operations
+ * for proper routing (writes always go to primary, reads can use replica).
+ */
+const WRITE_METHODS = new Set([
+  'insert',
+  'update',
+  'delete',
+  'execute',
+  'transaction',
+  '$transaction',
+  '$executeRaw',
+  'create',
+  'createMany',
+  'updateMany',
+  'deleteMany',
+  'upsert',
+]);
+
+/**
+ * Check if an object is a Drizzle table repository by verifying
+ * it has multiple expected ORM methods (not just one like findMany).
+ * This avoids false positives from arbitrary objects with a findMany property.
+ */
+function isTableRepository(obj: unknown): boolean {
+  if (!obj || typeof obj !== 'object') return false;
+  const tableRepoMethods = ['findMany', 'findFirst', 'findUnique'];
+  const matchCount = tableRepoMethods.filter(
+    (method) => method in (obj as Record<string, unknown>)
+  ).length;
+  return matchCount >= 2;
+}
+
+/**
+ * Create a lazy proxy that switches between PostgreSQL and JSON mode,
+ * and automatically routes reads to replica when available.
  */
 function createModeAwareDbProxy(): DrizzleClient {
+  // Cache for table repository proxies to avoid recreation on every access
+  // Note: Limited to 100 entries to prevent unbounded growth in long-running processes
+  const tableProxyCache = new Map<string | symbol, object>();
+  // Nested cache for bound methods per table (table -> method -> bound function)
+  const boundMethodCachePerTable = new Map<
+    string | symbol,
+    Map<PropertyKey, unknown>
+  >();
+  const TABLE_PROXY_CACHE_MAX = 100;
+  const BOUND_METHOD_CACHE_MAX = 50;
+  // Track the replica version to invalidate caches when replica changes
+  let cachedReplicaVersion = readReplicaDbVersion;
+
+  const handler: ProxyHandler<DrizzleClient> = {
+    get(_target, prop: string | symbol) {
+      // Invalidate caches if read replica has been updated
+      if (cachedReplicaVersion !== readReplicaDbVersion) {
+        tableProxyCache.clear();
+        boundMethodCachePerTable.clear();
+        cachedReplicaVersion = readReplicaDbVersion;
+      }
+
+      // In JSON/memory mode, use the JSON client
+      if (currentStorageMode !== 'postgres' && jsonClient) {
+        return jsonClient[prop as keyof DrizzleClient];
+      }
+
+      const propStr = String(prop);
+      const isReadMethod = READ_METHODS.has(propStr);
+      const isWriteMethod = WRITE_METHODS.has(propStr);
+
+      // For read operations, try to use replica
+      if (isReadMethod) {
+        const replicaClient = getReadReplicaDbClient();
+        if (replicaClient) {
+          return replicaClient[prop as keyof DrizzleClient];
+        }
+      }
+
+      // For writes or when no replica, use primary
+      const client = getDbClient();
+      if (!client) {
+        if (isBuildTime) {
+          return new Proxy(
+            {},
+            {
+              get() {
+                return () => Promise.resolve(null);
+              },
+            }
+          );
+        }
+        throw new Error(
+          'Database not initialized. Check DATABASE_URL or use initializeJsonMode().'
+        );
+      }
+
+      const value = client[prop as keyof DrizzleClient];
+
+      // For table repositories (user, post, etc.), wrap with read/write detection
+      if (!isReadMethod && !isWriteMethod && isTableRepository(value)) {
+        // Return cached proxy if available
+        if (tableProxyCache.has(prop)) {
+          return tableProxyCache.get(prop);
+        }
+
+        // Get or create bound method cache for this table
+        if (!boundMethodCachePerTable.has(prop)) {
+          boundMethodCachePerTable.set(prop, new Map<PropertyKey, unknown>());
+        }
+        const boundMethodCache = boundMethodCachePerTable.get(prop)!;
+
+        const tableProxy = new Proxy(value as object, {
+          get(target, method: string | symbol) {
+            const methodStr = String(method);
+
+            // Route table read methods to replica if available
+            if (TABLE_READ_METHODS.has(methodStr)) {
+              // Check cache first
+              if (boundMethodCache.has(method)) {
+                return boundMethodCache.get(method);
+              }
+
+              const replicaClient = getReadReplicaDbClient();
+              if (replicaClient) {
+                const tableRepo = replicaClient[prop as keyof DrizzleClient];
+                if (tableRepo && typeof tableRepo === 'object') {
+                  const replicaMethod = (
+                    tableRepo as Record<PropertyKey, unknown>
+                  )[method];
+                  // Bind to replica table repo so `this` context is correct
+                  if (typeof replicaMethod === 'function') {
+                    const bound = replicaMethod.bind(tableRepo);
+                    // Enforce cache size limit
+                    if (boundMethodCache.size >= BOUND_METHOD_CACHE_MAX) {
+                      const firstKey = boundMethodCache.keys().next().value;
+                      if (firstKey !== undefined)
+                        boundMethodCache.delete(firstKey);
+                    }
+                    boundMethodCache.set(method, bound);
+                    return bound;
+                  }
+                  return replicaMethod;
+                }
+              }
+            }
+
+            // Writes or no replica - use primary
+            return (target as Record<PropertyKey, unknown>)[method];
+          },
+        }) as unknown as typeof value;
+
+        // Enforce cache size limit to prevent unbounded growth
+        if (tableProxyCache.size >= TABLE_PROXY_CACHE_MAX) {
+          const firstKey = tableProxyCache.keys().next().value;
+          if (firstKey !== undefined) {
+            tableProxyCache.delete(firstKey);
+            boundMethodCachePerTable.delete(firstKey);
+          }
+        }
+        tableProxyCache.set(prop, tableProxy);
+        return tableProxy;
+      }
+
+      return value;
+    },
+  };
+
+  const proxyTarget: Partial<DrizzleClient> = {};
+  return new Proxy(proxyTarget, handler) as DrizzleClient;
+}
+
+/**
+ * Create a proxy that always routes to primary (writes)
+ */
+function createPrimaryDbProxy(): DrizzleClient {
   const handler: ProxyHandler<DrizzleClient> = {
     get(_target, prop: string | symbol) {
       // In JSON/memory mode, use the JSON client
@@ -390,7 +725,7 @@ function createModeAwareDbProxy(): DrizzleClient {
         return jsonClient[prop as keyof DrizzleClient];
       }
 
-      // In PostgreSQL mode, use the Drizzle client
+      // Always use primary
       const client = getDbClient();
       if (!client) {
         if (isBuildTime) {
@@ -415,8 +750,101 @@ function createModeAwareDbProxy(): DrizzleClient {
   return new Proxy(proxyTarget, handler) as DrizzleClient;
 }
 
-/** Main database instance - works with both PostgreSQL and JSON modes */
+/**
+ * Create a proxy that always routes to read replica (reads)
+ */
+function createReplicaDbProxy(): DrizzleClient {
+  const handler: ProxyHandler<DrizzleClient> = {
+    get(_target, prop: string | symbol) {
+      // In JSON/memory mode, use the JSON client
+      if (currentStorageMode !== 'postgres' && jsonClient) {
+        return jsonClient[prop as keyof DrizzleClient];
+      }
+
+      // Try to use read replica
+      const replicaClient = getReadReplicaDbClient();
+      if (replicaClient) {
+        return replicaClient[prop as keyof DrizzleClient];
+      }
+
+      // Fallback to primary if no replica
+      const client = getDbClient();
+      if (!client) {
+        if (isBuildTime) {
+          return new Proxy(
+            {},
+            {
+              get() {
+                return () => Promise.resolve(null);
+              },
+            }
+          );
+        }
+        throw new Error(
+          'Database not initialized. Check DATABASE_URL or use initializeJsonMode().'
+        );
+      }
+      return client[prop as keyof DrizzleClient];
+    },
+  };
+
+  const proxyTarget: Partial<DrizzleClient> = {};
+  return new Proxy(proxyTarget, handler) as DrizzleClient;
+}
+
+/**
+ * Main database client with automatic read/write routing.
+ *
+ * Automatically routes:
+ * - Reads (select, findMany, findUnique, count, etc.) → read replica (if configured)
+ * - Writes (insert, update, delete, create, etc.) → primary database
+ *
+ * Falls back to primary if no replica is configured.
+ *
+ * @example
+ * ```typescript
+ * // Automatically routes to replica
+ * const posts = await db.post.findMany({ take: 100 });
+ *
+ * // Automatically routes to primary
+ * await db.post.create({ data: { ... } });
+ * ```
+ */
 export const db: DrizzleClient = createModeAwareDbProxy();
+
+/**
+ * Explicit read-only client that always routes to read replica.
+ * Falls back to primary if no replica is configured.
+ *
+ * Use when you want to be explicit about using the replica:
+ * - Feed queries
+ * - Search results
+ * - Analytics queries
+ * - Public data that can tolerate slight replication lag
+ *
+ * @example
+ * ```typescript
+ * const posts = await dbRead.post.findMany({ take: 100 });
+ * const user = await dbRead.user.findUnique({ where: { id: userId } });
+ * ```
+ */
+export const dbRead: DrizzleClient = createReplicaDbProxy();
+
+/**
+ * Explicit write-only client that always routes to primary database.
+ *
+ * Use when you want to be explicit about using the primary:
+ * - Write operations
+ * - Operations requiring strong consistency
+ * - Transactions
+ *
+ * @example
+ * ```typescript
+ * await dbWrite.post.create({ data: { ... } });
+ * await dbWrite.user.update({ where: { id }, data: { ... } });
+ * ```
+ */
+export const dbWrite: DrizzleClient = createPrimaryDbProxy();
 
 /** Raw Drizzle instance for advanced queries (PostgreSQL only) */
 export function getRawDrizzle(): Database {
@@ -563,18 +991,14 @@ export async function checkDatabaseHealth(): Promise<boolean> {
 /**
  * Execute read-only query on read replica
  *
- * @description Routes read-heavy queries to a read replica to reduce load
- * on the primary database. Automatically falls back to primary if no replica
- * is configured.
- *
- * PERFORMANCE OPTIMIZATION: Use this for feed queries, search results, and
- * other read-heavy operations that don't require real-time consistency.
+ * @deprecated Use `dbRead` or `db` (which auto-routes reads) instead.
+ * This function is redundant with the automatic routing in the main `db` client.
  *
  * @example
  * ```typescript
- * const posts = await onReadReplica(async (db) => {
- *   return db.select().from(posts).limit(100);
- * });
+ * // Instead of: await onReadReplica(async (db) => db.select()...)
+ * // Just use: await db.select()... (automatically routes to replica)
+ * // Or explicitly: await dbRead.select()...
  * ```
  */
 export async function onReadReplica<T>(
@@ -589,10 +1013,35 @@ export async function onReadReplica<T>(
 }
 
 /**
+ * Execute read-only query on read replica using DrizzleClient (ORM-style API)
+ *
+ * @deprecated Use `dbRead` or `db` (which auto-routes reads) instead.
+ * This function is redundant with the automatic routing in the main `db` client.
+ *
+ * @example
+ * ```typescript
+ * // Instead of: await onReadReplicaClient(async (db) => db.user.findMany(...))
+ * // Just use: await db.user.findMany(...) (automatically routes to replica)
+ * // Or explicitly: await dbRead.user.findMany(...)
+ * ```
+ */
+export async function onReadReplicaClient<T>(
+  operation: (database: DrizzleClient) => Promise<T>
+): Promise<T> {
+  const replicaClient = getReadReplicaDbClient();
+  if (!replicaClient) {
+    throw new Error('Database not initialized');
+  }
+
+  return withRetryInternal(() => operation(replicaClient));
+}
+
+/**
  * Check if a read replica is configured and available
  */
 export function isReadReplicaAvailable(): boolean {
-  return hasReadReplica();
+  const replicaUrl = process.env.DATABASE_READ_REPLICA_URL;
+  return !!replicaUrl && replicaUrl !== getConnectionUrl();
 }
 
 /** Graceful shutdown */
@@ -602,6 +1051,7 @@ export async function closeDatabase(): Promise<void> {
     await globalForDb.readReplicaClient.end();
     globalForDb.readReplicaClient = undefined;
     globalForDb.readReplicaDrizzle = undefined;
+    globalForDb.readReplicaDb = undefined;
     logger.info('[Drizzle] Read replica connection closed');
   }
 
@@ -613,13 +1063,4 @@ export async function closeDatabase(): Promise<void> {
     globalForDb.db = undefined;
     logger.info('[Drizzle] Database connections closed');
   }
-}
-
-/** Execute raw SQL */
-export async function executeRaw<
-  T extends Record<string, SQLValue> = Record<string, SQLValue>,
->(query: ReturnType<typeof sql>): Promise<T[]> {
-  const instance = getDrizzleInstance();
-  if (!instance) throw new Error('Database not initialized');
-  return withRetryInternal(() => instance.execute(query)) as Promise<T[]>;
 }

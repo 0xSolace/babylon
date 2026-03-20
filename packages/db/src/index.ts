@@ -30,10 +30,19 @@ export { TableRepository } from './client';
 export * from './db';
 
 // Import-then-export so runtimes (e.g. Bun in CI) resolve these reliably from the barrel
+//
+// MIGRATION GUIDE for deprecated functions:
+// - onReadReplica(query) -> Use dbRead directly: dbRead.select()...
+// - onReadReplicaClient  -> Use dbRead (it's the read replica client)
+// These deprecated functions remain accessible via "export * from './db'" for backward
+// compatibility but will be removed in a future major version.
 import {
   asPublic,
   asSystem,
   asUser,
+  db,
+  dbRead,
+  dbWrite,
   getJsonState,
   getJsonStoragePath,
   getStorageMode,
@@ -42,6 +51,9 @@ export {
   asPublic,
   asSystem,
   asUser,
+  db,
+  dbRead,
+  dbWrite,
   getJsonState,
   getJsonStoragePath,
   getStorageMode,

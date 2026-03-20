@@ -17,6 +17,21 @@ export interface FeeProcessor {
   }) => Promise<{ feeCharged: number; referrerPaid?: number }>;
 }
 
+/**
+ * Persists failed fee processing for asynchronous retry (transactional outbox companion).
+ * Enqueue runs after inline retries are exhausted so fee intent is never dropped silently.
+ */
+export interface TradingFeeOutboxPort {
+  enqueue(params: {
+    userId: string;
+    amount: number;
+    type: string;
+    relatedId: string;
+    positionId: string;
+    lastError?: string;
+  }): Promise<void>;
+}
+
 export interface WalletPort {
   debit(params: {
     userId: string;

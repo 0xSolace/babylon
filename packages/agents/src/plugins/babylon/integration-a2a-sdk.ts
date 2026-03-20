@@ -14,6 +14,7 @@ import { A2AClient } from '@a2a-js/sdk/client';
 import { db } from '@babylon/db';
 import { StaticDataRegistry } from '@babylon/engine';
 import type { AgentRuntime, Plugin } from '@elizaos/core';
+import { agentWalletService } from '../../identity/AgentWalletService';
 import { logger } from '../../shared/logger';
 import type { JsonValue } from '../../types/common';
 
@@ -44,12 +45,77 @@ const AGENT_IDENTITY_TTL_MS = 5 * 60 * 1000; // 5 minutes
 const AGENT_IDENTITY_MAX_SIZE = 10000;
 
 /**
+ * In-flight wallet creation promises to deduplicate concurrent requests.
+ * Prevents race condition where multiple concurrent getCachedAgentIdentity calls
+ * for the same agent without a wallet both attempt wallet creation.
+ * Note: Size-limited to prevent unbounded growth; oldest entries evicted at capacity.
+ */
+const WALLET_CREATION_IN_FLIGHT = new Map<
+  string,
+  Promise<{ walletAddress: string } | null>
+>();
+
+/** Maximum size for in-flight map to prevent unbounded growth */
+const WALLET_CREATION_IN_FLIGHT_MAX_SIZE = 1000;
+
+/** Timeout for wallet creation to prevent unbounded promise hangs (30 seconds) */
+const WALLET_CREATION_TIMEOUT_MS = 30_000;
+
+/**
+ * Wraps a promise with a timeout. If the promise doesn't resolve within
+ * the timeout, returns null and cleans up the in-flight entry.
+ */
+function withWalletCreationTimeout<T>(
+  promise: Promise<T>,
+  agentUserId: string,
+  timeoutMs: number = WALLET_CREATION_TIMEOUT_MS
+): Promise<T | null> {
+  let didCleanup = false;
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      if (!didCleanup) {
+        didCleanup = true;
+        logger.warn(
+          `Wallet creation timed out for agent ${agentUserId} after ${timeoutMs}ms`,
+          { agentUserId, timeoutMs },
+          'BabylonIntegration'
+        );
+        WALLET_CREATION_IN_FLIGHT.delete(agentUserId);
+      }
+      resolve(null);
+    }, timeoutMs);
+
+    promise
+      .then((result) => {
+        clearTimeout(timer);
+        if (!didCleanup) {
+          didCleanup = true;
+          WALLET_CREATION_IN_FLIGHT.delete(agentUserId);
+        }
+        resolve(result);
+      })
+      .catch(() => {
+        clearTimeout(timer);
+        if (!didCleanup) {
+          didCleanup = true;
+          WALLET_CREATION_IN_FLIGHT.delete(agentUserId);
+        }
+        resolve(null);
+      });
+  });
+}
+
+/**
  * Get agent identity from cache or database
  * Optimized for high concurrency with lazy refresh
  * Supports both USER_CONTROLLED agents (User table) and NPCs (StaticDataRegistry)
+ *
+ * @param agentUserId - The agent's user ID
+ * @param options.requireWallet - If true, throws an error when wallet creation fails (for scenarios where wallet is mandatory)
  */
 async function getCachedAgentIdentity(
-  agentUserId: string
+  agentUserId: string,
+  options?: { requireWallet?: boolean }
 ): Promise<CachedAgentIdentity | null> {
   const now = Date.now();
   const cached = AGENT_IDENTITY_CACHE.get(agentUserId);
@@ -71,11 +137,118 @@ async function getCachedAgentIdentity(
     },
   });
 
+  // Note: checks if agent wallets should auto-create only when explicitly enabled by env var
   if (user && user.isAgent) {
+    let walletAddress = user.walletAddress;
+    let agent0TokenId = user.agent0TokenId;
+
+    // Auto-create wallet if missing and AUTO_CREATE_AGENT_WALLETS is explicitly enabled
+    // Uses in-flight map to deduplicate concurrent wallet creation requests for the same agent
+    const shouldAutoCreateWallet = ['true', '1', 'yes'].includes(
+      process.env.AUTO_CREATE_AGENT_WALLETS?.toLowerCase() ?? ''
+    );
+    if (!walletAddress && shouldAutoCreateWallet) {
+      try {
+        // Check if wallet creation is already in progress for this agent
+        let walletPromise = WALLET_CREATION_IN_FLIGHT.get(agentUserId);
+        if (!walletPromise) {
+          logger.info(
+            `Auto-creating wallet for agent ${agentUserId}`,
+            undefined,
+            'BabylonIntegration'
+          );
+          // Note: Cleanup of WALLET_CREATION_IN_FLIGHT is handled by withWalletCreationTimeout
+          // to avoid double-deletion race conditions when timeout occurs before promise settles
+          const rawPromise = agentWalletService
+            .createAgentEmbeddedWallet(agentUserId)
+            .then((result) => ({ walletAddress: result.walletAddress }))
+            .catch((err) => {
+              const errorMsg = err instanceof Error ? err.message : String(err);
+              logger.warn(
+                `Wallet creation failed for agent ${agentUserId}`,
+                { error: errorMsg },
+                'BabylonIntegration'
+              );
+              if (options?.requireWallet) {
+                throw new Error(
+                  `Wallet creation required but failed: ${errorMsg}`
+                );
+              }
+              return null;
+            });
+          // Wrap with timeout to prevent unbounded hangs in serverless environments
+          walletPromise = withWalletCreationTimeout(rawPromise, agentUserId);
+          // Evict oldest entry if at capacity to prevent unbounded growth
+          if (
+            WALLET_CREATION_IN_FLIGHT.size >= WALLET_CREATION_IN_FLIGHT_MAX_SIZE
+          ) {
+            const oldestKey = WALLET_CREATION_IN_FLIGHT.keys().next().value;
+            if (oldestKey) {
+              WALLET_CREATION_IN_FLIGHT.delete(oldestKey);
+            }
+          }
+          WALLET_CREATION_IN_FLIGHT.set(agentUserId, walletPromise);
+        }
+        const walletResult = await walletPromise;
+        if (walletResult) {
+          // Wallet creation succeeded - refresh user data to get updated walletAddress and agent0TokenId
+          // Use separate try/catch so refresh failures don't mask successful wallet creation
+          try {
+            const updatedUser = await db.user.findUnique({
+              where: { id: agentUserId },
+              select: {
+                walletAddress: true,
+                agent0TokenId: true,
+              },
+            });
+            if (updatedUser) {
+              walletAddress = updatedUser.walletAddress;
+              agent0TokenId = updatedUser.agent0TokenId;
+            } else {
+              // Fallback to walletAddress from creation result if refresh returns null
+              walletAddress = walletResult.walletAddress;
+            }
+          } catch (refreshError) {
+            // Refresh failed but wallet was created successfully - use walletAddress from creation result
+            // Note: agent0TokenId cannot be retrieved without DB access, so explicitly set to null
+            logger.warn(
+              `Wallet created for agent ${agentUserId} but failed to refresh user data`,
+              {
+                error:
+                  refreshError instanceof Error
+                    ? refreshError.message
+                    : String(refreshError),
+                walletAddress: walletResult.walletAddress,
+                agent0TokenIdStatus: 'unavailable due to refresh failure',
+              },
+              'BabylonIntegration'
+            );
+            // Use walletAddress from creation result as fallback
+            walletAddress = walletResult.walletAddress;
+            // Explicitly set agent0TokenId to null since we can't retrieve it without DB refresh
+            // This ensures downstream code knows the value is intentionally null, not undefined
+            agent0TokenId = null;
+          }
+        }
+      } catch (error) {
+        if (options?.requireWallet) {
+          throw error;
+        }
+        logger.warn(
+          `Failed to auto-create wallet for agent ${agentUserId}`,
+          {
+            error: error instanceof Error ? error.message : String(error),
+          },
+          'BabylonIntegration'
+        );
+        // Continue with null walletAddress - agent can still work without wallet
+      }
+    }
+
     const identity: CachedAgentIdentity = {
       agentUserId,
-      walletAddress: user.walletAddress,
-      agent0TokenId: user.agent0TokenId,
+      walletAddress,
+      agent0TokenId,
       displayName: user.displayName,
       cachedAt: now,
     };

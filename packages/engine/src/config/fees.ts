@@ -29,6 +29,8 @@ export const FEE_CONFIG = {
     PRED_SELL: 'pred_sell',
     PERP_OPEN: 'perp_open',
     PERP_CLOSE: 'perp_close',
+    PERP_ADD_TO_POSITION: 'perp_add_to_position',
+    PERP_FLIP_POSITION: 'perp_flip_position',
   } as const,
 
   // Balance transaction types for fees

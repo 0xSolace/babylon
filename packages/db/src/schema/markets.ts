@@ -141,12 +141,15 @@ export const positions = pgTable(
     status: text('status').notNull().default('active'),
   },
   (table) => [
+    index('Position_createdAt_idx').on(table.createdAt),
     index('Position_marketId_idx').on(table.marketId),
     index('Position_questionId_idx').on(table.questionId),
     index('Position_status_resolvedAt_idx').on(table.status, table.resolvedAt),
     index('Position_status_idx').on(table.status),
     index('Position_userId_idx').on(table.userId),
+    index('Position_userId_createdAt_idx').on(table.userId, table.createdAt),
     index('Position_userId_marketId_idx').on(table.userId, table.marketId),
+    index('Position_userId_resolvedAt_idx').on(table.userId, table.resolvedAt),
     index('Position_userId_status_idx').on(table.userId, table.status),
   ]
 );
@@ -287,6 +290,7 @@ export const perpPositions = pgTable(
     index('PerpPosition_settledToChain_idx').on(table.settledToChain),
     index('PerpPosition_ticker_idx').on(table.ticker),
     index('PerpPosition_userId_closedAt_idx').on(table.userId, table.closedAt),
+    index('PerpPosition_userId_openedAt_idx').on(table.userId, table.openedAt),
   ]
 );
 
