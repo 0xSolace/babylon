@@ -73,8 +73,11 @@ const MAX_POSITIONS_PER_USER = 50;
 
 const MIN_IMPACT_DELTA = 0.001;
 
-/** Maximum retry attempts for fee processing */
-const FEE_PROCESSING_MAX_RETRIES = 3;
+/** Maximum retry attempts for fee processing (configurable via env var) */
+const FEE_PROCESSING_MAX_RETRIES = parseInt(
+  process.env.FEE_PROCESSING_MAX_RETRIES ?? '3',
+  10
+);
 /** Base delay (ms) for exponential backoff */
 const FEE_PROCESSING_BASE_DELAY_MS = 100;
 
@@ -1351,7 +1354,8 @@ export class PerpMarketService {
           const grossSettlement = closeMarginPaid + realizedPnL;
           const netSettlement = Math.max(0, grossSettlement - closeFee);
 
-          // Credit wallet for closed position (wallet ops outside DB tx)
+          // Credit wallet for closed position
+          // Note: Wallet operations are inside DB transaction for atomicity; acceptable since wallet is in-process
           if (netSettlement > 0) {
             await this.deps.wallet.credit({
               userId: input.userId,
@@ -1387,7 +1391,7 @@ export class PerpMarketService {
           const openFee = this.calculateFee(inverseSize);
           const totalCost = marginRequired + openFee;
 
-          // Debit wallet for new position (wallet ops outside DB tx)
+          // Debit wallet for new position
           await this.deps.wallet.debit({
             userId: input.userId,
             amount: totalCost,
