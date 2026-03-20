@@ -4,23 +4,30 @@ import { calculateUnrealizedPnL, formatCurrency } from '@babylon/shared';
 import { ArrowRight } from 'lucide-react';
 import Link from 'next/link';
 import { useMemo } from 'react';
+import { calculateWalletPortfolioSummary } from '@/components/wallet/shared/portfolioBreakdown';
 import { useMarketPrices } from '@/hooks/useMarketPrices';
+import {
+  usePortfolioPnL,
+  usePortfolioPnLPolling,
+} from '@/hooks/usePortfolioPnL';
 import { useUserPositions } from '@/stores/userPositionsStore';
-import { useWalletBalance } from '@/stores/walletBalanceStore';
 
 interface WalletPreviewWidgetProps {
   userId: string;
 }
 
 export function WalletPreviewWidget({ userId }: WalletPreviewWidgetProps) {
-  const { balance, loading: balanceLoading } = useWalletBalance(userId);
+  const { data: portfolioData, loading: portfolioLoading } = usePortfolioPnL({
+    userId,
+  });
+  usePortfolioPnLPolling({ userId, intervalMs: 15_000 });
   const {
     perpPositions,
     predictionPositions,
     loading: positionsLoading,
   } = useUserPositions(userId);
 
-  const loading = balanceLoading || positionsLoading;
+  const loading = portfolioLoading || positionsLoading;
 
   // Live prices
   const tickers = useMemo(
@@ -29,34 +36,18 @@ export function WalletPreviewWidget({ userId }: WalletPreviewWidgetProps) {
   );
   const livePrices = useMarketPrices(tickers);
 
-  // Compute totals
-  const { totalBalance, agentsOnly } = useMemo(() => {
-    let ownerPositionValue = 0;
-    let agentTotal = 0;
-
-    for (const pos of perpPositions) {
-      const value = Math.abs(pos.unrealizedPnL) + pos.size;
-      if (pos.isAgentPosition) {
-        agentTotal += value;
-      } else {
-        ownerPositionValue += value;
-      }
+  const walletSummary = useMemo(() => {
+    if (!portfolioData) {
+      return null;
     }
 
-    for (const pos of predictionPositions) {
-      const value = pos.currentValue ?? pos.shares * pos.currentPrice;
-      if (pos.isAgentPosition) {
-        agentTotal += value;
-      } else {
-        ownerPositionValue += value;
-      }
-    }
-
-    return {
-      totalBalance: balance + ownerPositionValue + agentTotal,
-      agentsOnly: agentTotal,
-    };
-  }, [balance, perpPositions, predictionPositions]);
+    return calculateWalletPortfolioSummary({
+      userId,
+      snapshot: portfolioData,
+      perpPositions,
+      predictionPositions,
+    });
+  }, [portfolioData, predictionPositions, perpPositions, userId]);
 
   // Top 3 positions by PnL magnitude
   const latestPositions = useMemo(() => {
@@ -140,14 +131,30 @@ export function WalletPreviewWidget({ userId }: WalletPreviewWidgetProps) {
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <span className="text-muted-foreground text-sm">Total Balance</span>
-            <span className="font-bold text-base">{fmt(totalBalance)}</span>
+            <span className="font-bold text-base">
+              {fmt(walletSummary?.summary.totalBalance ?? 0)}
+            </span>
           </div>
-          {agentsOnly > 0 && (
+          <div className="flex items-center justify-between">
+            <span className="text-muted-foreground text-sm">Wallet</span>
+            <span className="font-semibold text-sm">
+              {fmt(walletSummary?.summary.wallet ?? 0)}
+            </span>
+          </div>
+          {walletSummary && walletSummary.summary.agentCount > 0 && (
             <div className="flex items-center justify-between">
-              <span className="text-muted-foreground text-sm">Agents Only</span>
-              <span className="font-semibold text-sm">{fmt(agentsOnly)}</span>
+              <span className="text-muted-foreground text-sm">Agents</span>
+              <span className="font-semibold text-sm">
+                {fmt(walletSummary.summary.agents)}
+              </span>
             </div>
           )}
+          <div className="flex items-center justify-between">
+            <span className="text-muted-foreground text-sm">Positions</span>
+            <span className="font-semibold text-sm">
+              {fmt(walletSummary?.summary.positions ?? 0)}
+            </span>
+          </div>
         </div>
       </div>
 

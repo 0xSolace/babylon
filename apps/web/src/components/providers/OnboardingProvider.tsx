@@ -23,9 +23,9 @@ type OnboardingStage = 'PROFILE' | 'COMPLETED';
 /**
  * Onboarding provider component for managing user onboarding flow.
  *
- * Manages the complete onboarding process including profile creation,
- * on-chain registration, and social account linking. Handles full-screen
- * onboarding display, form submission, error handling, and progress tracking.
+ * Manages the complete onboarding process including profile creation and social
+ * account linking. Handles full-screen onboarding display, form submission,
+ * error handling, and progress tracking.
  * Integrates with Privy authentication and smart wallet registration.
  *
  * Features:

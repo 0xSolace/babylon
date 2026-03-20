@@ -35,8 +35,8 @@ export interface ImportedProfileData {
 /**
  * Onboarding modal component for user onboarding flow.
  *
- * Provides a multi-stage onboarding interface including profile creation,
- * on-chain registration, and completion. Supports social account import,
+ * Provides a multi-stage onboarding interface including profile creation and
+ * completion. Supports social account import,
  * profile picture/banner selection, and username validation. Handles
  * form submission and error states.
  *
@@ -79,7 +79,6 @@ interface OnboardingModalProps {
     id?: string;
     username?: string;
     walletAddress?: string;
-    onChainRegistered?: boolean;
   } | null;
   importedData?: ImportedProfileData | null;
 }

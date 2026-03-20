@@ -75,7 +75,12 @@
  * @see {@link /lib/db/context} RLS context
  */
 
-import { optionalAuth, successResponse, withErrorHandling } from '@babylon/api';
+import {
+  findUserByIdentifier,
+  optionalAuth,
+  successResponse,
+  withErrorHandling,
+} from '@babylon/api';
 import { PredictionPricing } from '@babylon/core/markets/prediction';
 import { asPublic, asUser, db, eq, users } from '@babylon/db';
 import { FEE_CONFIG } from '@babylon/engine/config/fees';
@@ -176,6 +181,20 @@ export const GET = withErrorHandling(
 
     // Optional auth - positions are public for leaderboard but RLS still applies
     const authUser = await optionalAuth(request).catch(() => null);
+    const dbUser = await findUserByIdentifier(userId, {
+      id: true,
+      privyId: true,
+    });
+    const canonicalUserId = dbUser?.id ?? userId;
+    const positionUserIds = dbUser
+      ? [
+          ...new Set(
+            [dbUser.id, dbUser.privyId].filter(
+              (candidate): candidate is string => Boolean(candidate)
+            )
+          ),
+        ]
+      : [userId];
 
     const status = queryParams.status as string;
 
@@ -191,7 +210,7 @@ export const GET = withErrorHandling(
           displayName: users.displayName,
         })
         .from(users)
-        .where(eq(users.managedBy, userId));
+        .where(eq(users.managedBy, canonicalUserId));
     });
 
     const agentIds = userAgents.map((a) => a.id);
@@ -199,7 +218,10 @@ export const GET = withErrorHandling(
 
     // Build perp where clause with status filtering
     const perpWhereBase = {
-      userId,
+      userId:
+        positionUserIds.length === 1
+          ? canonicalUserId
+          : { in: positionUserIds },
       ...(closedAtFilter !== undefined ? { closedAt: closedAtFilter } : {}),
     };
 
@@ -254,14 +276,20 @@ export const GET = withErrorHandling(
         ? await asUser(authUser, async (db) => {
             return await db.position.findMany({
               where: {
-                userId,
+                userId:
+                  positionUserIds.length === 1
+                    ? canonicalUserId
+                    : { in: positionUserIds },
               },
             });
           })
         : await asPublic(async (db) => {
             return await db.position.findMany({
               where: {
-                userId,
+                userId:
+                  positionUserIds.length === 1
+                    ? canonicalUserId
+                    : { in: positionUserIds },
               },
             });
           });
@@ -361,7 +389,7 @@ export const GET = withErrorHandling(
     logger.info(
       'User positions fetched successfully',
       {
-        userId,
+        userId: canonicalUserId,
         perpPositions: perpStats.totalPositions,
         predictionPositions: predictionPositions.length,
       },

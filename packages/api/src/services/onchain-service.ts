@@ -247,14 +247,24 @@ export async function processOnchainRegistration({
   };
 
   if (user.isAgent) {
-    const [existingUser] = await db
-      .select(userSelectFields)
-      .from(users)
-      .where(sql`lower(${users.username}) = lower(${user.userId})`)
-      .limit(1);
+    const [existingUser] = user.dbUserId
+      ? await db
+          .select(userSelectFields)
+          .from(users)
+          .where(eq(users.id, user.dbUserId))
+          .limit(1)
+      : await db
+          .select(userSelectFields)
+          .from(users)
+          .where(sql`lower(${users.username}) = lower(${user.userId})`)
+          .limit(1);
     dbUser = existingUser ?? null;
 
     if (!dbUser) {
+      if (user.dbUserId) {
+        throw new BusinessLogicError('Agent not found', 'AGENT_NOT_FOUND');
+      }
+
       const newId = await generateSnowflakeId();
       const [createdUser] = await db
         .insert(users)
@@ -642,69 +652,6 @@ export async function processOnchainRegistration({
     alreadyRegistered: false,
     pointsAwarded: 0,
     userId: dbUser.id,
-  };
-}
-
-export interface OnchainRegistrationStatus {
-  isRegistered: boolean;
-  tokenId: number | null;
-  walletAddress: string | null;
-  txHash: string | null;
-  dbRegistered: boolean;
-}
-
-/**
- * Get on-chain registration status for a user.
- * Uses DB state (agent0TokenId) as the source of truth.
- */
-export async function getOnchainRegistrationStatus(
-  user: AuthenticatedUser
-): Promise<OnchainRegistrationStatus> {
-  const [userRecord] = user.isAgent
-    ? await db
-        .select({
-          walletAddress: users.walletAddress,
-          onChainRegistered: users.onChainRegistered,
-          nftTokenId: users.nftTokenId,
-          agent0TokenId: users.agent0TokenId,
-          registrationTxHash: users.registrationTxHash,
-        })
-        .from(users)
-        .where(sql`lower(${users.username}) = lower(${user.userId})`)
-        .limit(1)
-    : await db
-        .select({
-          walletAddress: users.walletAddress,
-          onChainRegistered: users.onChainRegistered,
-          nftTokenId: users.nftTokenId,
-          agent0TokenId: users.agent0TokenId,
-          registrationTxHash: users.registrationTxHash,
-        })
-        .from(users)
-        .where(eq(users.id, user.userId))
-        .limit(1);
-
-  if (!userRecord) {
-    return {
-      isRegistered: false,
-      tokenId: null,
-      walletAddress: null,
-      txHash: null,
-      dbRegistered: false,
-    };
-  }
-
-  const tokenId = userRecord.agent0TokenId ?? userRecord.nftTokenId ?? null;
-  const isRegistered = Boolean(
-    userRecord.onChainRegistered && tokenId !== null
-  );
-
-  return {
-    isRegistered,
-    tokenId,
-    walletAddress: userRecord.walletAddress ?? null,
-    txHash: userRecord.registrationTxHash ?? null,
-    dbRegistered: userRecord.onChainRegistered,
   };
 }
 

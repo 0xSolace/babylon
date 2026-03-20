@@ -50,7 +50,6 @@ describe('migrateAuthStoreState', () => {
         loadedUserId: 'did:privy:test-user',
         isLoadingProfile: true,
         needsOnboarding: true,
-        needsOnchain: true,
       },
       1
     );
@@ -68,7 +67,6 @@ describe('migrateAuthStoreState', () => {
       loadedUserId: 'did:privy:test-user',
       isLoadingProfile: false,
       needsOnboarding: true,
-      needsOnchain: true,
     });
   });
 
@@ -79,7 +77,6 @@ describe('migrateAuthStoreState', () => {
       loadedUserId: null,
       isLoadingProfile: false,
       needsOnboarding: false,
-      needsOnchain: false,
     });
   });
 
@@ -111,7 +108,41 @@ describe('migrateAuthStoreState', () => {
       loadedUserId: null,
       isLoadingProfile: false,
       needsOnboarding: true,
-      needsOnchain: false,
+    });
+  });
+
+  test('migrates version 2 payloads so current sessions survive the v3 upgrade', () => {
+    const migrated = migrateAuthStoreState(
+      {
+        user: {
+          id: 'did:privy:test-user',
+          displayName: 'Test User',
+          username: 'test-user',
+        },
+        wallet: {
+          address: '0x123',
+          chainId: 'eip155:8453',
+        },
+        loadedUserId: 'did:privy:test-user',
+        isLoadingProfile: true,
+        needsOnboarding: true,
+      },
+      2
+    );
+
+    expect(migrated).toEqual({
+      user: {
+        id: 'did:privy:test-user',
+        displayName: 'Test User',
+        username: 'test-user',
+      },
+      wallet: {
+        address: '0x123',
+        chainId: 'eip155:8453',
+      },
+      loadedUserId: 'did:privy:test-user',
+      isLoadingProfile: false,
+      needsOnboarding: true,
     });
   });
 
@@ -156,7 +187,7 @@ describe('migrateAuthStoreState', () => {
         },
         needsOnboarding: true,
       },
-      3
+      4
     );
 
     expect(migrated).toEqual({
@@ -165,7 +196,6 @@ describe('migrateAuthStoreState', () => {
       loadedUserId: null,
       isLoadingProfile: false,
       needsOnboarding: false,
-      needsOnchain: false,
     });
   });
 });

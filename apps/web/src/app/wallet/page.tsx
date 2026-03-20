@@ -52,7 +52,7 @@ export default function WalletPage() {
 
   const teamSummaryEnabled =
     Boolean(ready && authenticated && userId) &&
-    (activeTab === 'balance' || activeTab === 'pnl');
+    activeTab === 'pnl';
 
   const {
     summary: teamSummary,
@@ -149,12 +149,7 @@ export default function WalletPage() {
           {/* Tab Content */}
           <div className="p-4 pb-[calc(1rem+var(--bottom-nav-height))] md:p-6 md:pb-6">
             {activeTab === 'balance' && (
-              <BalanceTab
-                userId={userId}
-                teamSummary={teamSummary}
-                teamSummaryLoading={teamSummaryLoading}
-                teamSummaryError={teamSummaryError}
-              />
+              <BalanceTab userId={userId} />
             )}
             {activeTab === 'pnl' && (
               <PnLTab
