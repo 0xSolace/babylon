@@ -8,6 +8,7 @@
 
 import { db, eq, type User, users } from '@babylon/db';
 import type { AuthenticatedUser } from '../auth-middleware';
+import { cachedDb } from '../cache/cached-database-service';
 
 /**
  * Options for ensuring user exists
@@ -99,6 +100,9 @@ export async function ensureUserForAuth(
     }
 
     if (Object.keys(updateData).length > 0) {
+      const oldUsername = existingUser.username;
+      const oldPrivyId = existingUser.privyId;
+
       const updated = await db
         .update(users)
         .set(updateData)
@@ -115,6 +119,26 @@ export async function ensureUserForAuth(
 
       const updatedUser = updated[0]!;
       user.dbUserId = updatedUser.id;
+
+      // Invalidate identifier caches if username or privyId changed
+      const usernameChanged =
+        options.username !== undefined && oldUsername !== updatedUser.username;
+      const privyIdChanged = oldPrivyId !== updatedUser.privyId;
+
+      if (usernameChanged || privyIdChanged) {
+        await cachedDb.invalidateUserIdentifierCaches(
+          {
+            id: updatedUser.id,
+            privyId: updatedUser.privyId,
+            username: updatedUser.username,
+          },
+          {
+            username: usernameChanged ? oldUsername : undefined,
+            privyId: privyIdChanged ? oldPrivyId : undefined,
+          }
+        );
+      }
+
       return { user: updatedUser };
     }
 
@@ -156,6 +180,13 @@ export async function ensureUserForAuth(
 
   const createdUser = created[0]!;
   user.dbUserId = createdUser.id;
+
+  // Invalidate identifier caches for the new user (clears negative cache)
+  await cachedDb.invalidateUserIdentifierCaches({
+    id: createdUser.id,
+    privyId: createdUser.privyId,
+    username: createdUser.username,
+  });
 
   return { user: createdUser };
 }

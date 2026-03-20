@@ -510,6 +510,97 @@ class CachedDatabaseService {
   }
 
   /**
+   * Invalidate user identifier caches (id, privyId, username)
+   *
+   * @description Invalidates all identifier-based caches for a user. This includes
+   * caches for id, privyId, and username lookups. Must be called whenever user
+   * identifiers change (username update, privyId update, user creation).
+   *
+   * **WHY invalidate both old and new values?**
+   * - Old values: When username changes from "alice" to "bob", the old cache key
+   *   `username:alice` must be invalidated to prevent stale data
+   * - New values: The new cache key `username:bob` should be invalidated so it gets
+   *   refreshed on next lookup with the latest data from database
+   * - This ensures cache stays in sync with database state
+   *
+   * **WHY invalidate on user creation?**
+   * - Clears negative cache entries (cached null results for non-existent users)
+   * - If user "alice" didn't exist, we cached null. When user is created, we must
+   *   invalidate so next lookup finds the new user instead of returning cached null
+   * - This is critical for signup flows - without invalidation, new users can't be found
+   *
+   * **WHY unified namespace?**
+   * - All identifier caches in one namespace (`user:identifier`) reduces desync risk
+   * - Single helper call invalidates all identifier caches for a user
+   * - Easier to reason about and maintain than multiple namespaces
+   *
+   * @param {object} user - User object with id, privyId, and username
+   * @param {object} [oldValues] - Old values for fields that changed (for invalidation of old cache keys)
+   *
+   * @example
+   * ```typescript
+   * // On username change
+   * await cachedDb.invalidateUserIdentifierCaches(
+   *   { id: userId, username: newUsername },
+   *   { username: oldUsername }
+   * );
+   *
+   * // On user creation (clears negative cache)
+   * await cachedDb.invalidateUserIdentifierCaches({
+   *   id: newUser.id,
+   *   privyId: newUser.privyId,
+   *   username: newUser.username,
+   * });
+   * ```
+   */
+  async invalidateUserIdentifierCaches(
+    user: { id: string; privyId?: string | null; username?: string | null },
+    oldValues?: { privyId?: string | null; username?: string | null }
+  ) {
+    // WHY unified namespace? Single namespace for all identifier caches reduces desync risk
+    // If we used separate namespaces (user:id, user:privyId, user:username), we'd need to
+    // remember to invalidate in all three places. With unified namespace, one helper call
+    // invalidates everything, making it harder to miss an invalidation
+    const namespace = CACHE_KEYS.USER_IDENTIFIER;
+
+    // WHY always invalidate by ID? ID never changes, but we invalidate to ensure fresh data
+    // after user updates (e.g., profile changes that affect cached user object)
+    await invalidateCache(`id:${user.id}`, { namespace });
+
+    // WHY check oldValues?.privyId? Only invalidate old privyId if it actually changed
+    // This avoids unnecessary cache operations when privyId hasn't changed
+    if (oldValues?.privyId && oldValues.privyId !== user.privyId) {
+      await invalidateCache(`privy:${oldValues.privyId}`, { namespace });
+    }
+
+    // WHY invalidate new privyId even if it didn't change? Ensures fresh data on next lookup
+    // If privyId didn't change but other user fields did, we want to refresh the cache
+    if (user.privyId) {
+      await invalidateCache(`privy:${user.privyId}`, { namespace });
+    }
+
+    // WHY lowercase old username? Cache keys use lowercase for usernames (matches query normalization)
+    // Must match the cache key format used in getUserIdentifierCacheKey()
+    if (oldValues?.username && oldValues.username !== user.username) {
+      await invalidateCache(`username:${oldValues.username.toLowerCase()}`, {
+        namespace,
+      });
+    }
+
+    // WHY invalidate new username? Same reason as privyId - ensures fresh data
+    if (user.username) {
+      await invalidateCache(`username:${user.username.toLowerCase()}`, {
+        namespace,
+      });
+    }
+
+    // WHY also invalidate user data cache? User data cache (CACHE_KEYS.USER namespace) is separate
+    // from identifier cache, but both contain user data. When identifiers change, we should
+    // refresh both to maintain consistency
+    await this.invalidateUserCache(user.id);
+  }
+
+  /**
    * Invalidate cache for markets
    */
   async invalidateMarketsCache() {

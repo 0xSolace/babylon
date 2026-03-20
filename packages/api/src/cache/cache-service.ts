@@ -53,6 +53,21 @@ export const CACHE_KEYS = {
   POSTS_FOLLOWING: 'posts:following',
   USER: 'user',
   USER_BALANCE: 'user:balance',
+  /**
+   * Unified namespace for identifier-based user lookups (id, privyId, username)
+   *
+   * WHY unified namespace? Reduces desync risk - single namespace means we can't
+   * accidentally miss invalidating a namespace. Simpler mental model: "invalidate
+   * identifier caches" = one namespace, not three separate namespaces.
+   *
+   * Cache keys within this namespace use prefixes:
+   * - `id:{userId}` for ID lookups
+   * - `privy:{privyId}` for Privy ID lookups
+   * - `username:{lowercaseUsername}` for username lookups
+   *
+   * @see {@link packages/api/src/users/user-lookup.ts} for implementation details
+   */
+  USER_IDENTIFIER: 'user:identifier',
   ACTOR: 'actor',
   ORGANIZATION: 'org',
   MARKET: 'market',

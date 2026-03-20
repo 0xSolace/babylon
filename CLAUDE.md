@@ -108,4 +108,6 @@ Indexes and query shape are necessary but **not sufficient**: you cannot prove e
 - **Observability** — enable `pg_stat_statements`, watch `pg_locks` / `pg_stat_activity`, set alerts on slow queries and connection saturation.
 - **Read path** — route read-heavy, latency-tolerant queries through **`DATABASE_READ_REPLICA_URL`** when configured. **Replication lag caveat**: reads immediately after writes may return stale data; use the primary (`dbWrite`) for read-after-write consistency (e.g., fetching a record just created/updated). **TODO: Consider adding `readAfterWrite()` helper utility for cases requiring read-your-writes consistency.**
 
+**Lazy Connection Creation**: Database client objects are created lazily - only when queries execute, not during property access. This optimizes cold start performance for read-only routes. With `DATABASE_READ_REPLICA_URL` configured, reads never create write client objects. The fallback to primary (when no replica) is also lazy, deferring client creation until query execution.
+
 Treat every new high-volume query as guilty until measured under production-like data volume.

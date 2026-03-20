@@ -97,7 +97,8 @@ const { buildDigestForUser } = await import(
 function expectSharesFilter(condition: Condition | null) {
   expect(condition).not.toBeNull();
   expect(condition).toMatchObject({ op: 'and' });
-  const conditions = (condition as Extract<Condition, { op: 'and' }>).conditions;
+  const conditions = (condition as Extract<Condition, { op: 'and' }>)
+    .conditions;
   expect(conditions).toContainEqual({
     op: 'gt',
     left: 'positions.shares',

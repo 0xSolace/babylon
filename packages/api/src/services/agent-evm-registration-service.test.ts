@@ -95,10 +95,8 @@ mock.module('./distributed-lock-service', () => ({
   },
 }));
 
-const {
-  getAgentEvmRegistrationStatus,
-  registerAgentOnEvmForOwner,
-} = await import('./agent-evm-registration-service');
+const { getAgentEvmRegistrationStatus, registerAgentOnEvmForOwner } =
+  await import('./agent-evm-registration-service');
 
 const BASE_AGENT = {
   id: 'agent-1',

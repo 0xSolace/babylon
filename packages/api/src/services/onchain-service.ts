@@ -41,6 +41,7 @@ import {
   http,
 } from 'viem';
 import { baseSepolia, foundry, mainnet } from 'viem/chains';
+import { cachedDb } from '../cache/cached-database-service';
 
 function resolveViemChain(chainId: number): Chain {
   switch (chainId) {
@@ -283,6 +284,15 @@ export async function processOnchainRegistration({
         })
         .returning(userSelectFields);
       dbUser = createdUser ?? null;
+
+      // Invalidate identifier caches for the new user (clears negative cache)
+      if (dbUser) {
+        await cachedDb.invalidateUserIdentifierCaches({
+          id: dbUser.id,
+          privyId: user.userId,
+          username: dbUser.username,
+        });
+      }
     }
   } else {
     const [existingUser] = await db
@@ -312,12 +322,22 @@ export async function processOnchainRegistration({
         })
         .returning(userSelectFields);
       dbUser = createdUser ?? null;
+
+      // Invalidate identifier caches for the new user (clears negative cache)
+      if (dbUser) {
+        await cachedDb.invalidateUserIdentifierCaches({
+          id: dbUser.id,
+          privyId: user.privyId ?? user.userId,
+          username: dbUser.username,
+        });
+      }
     } else {
       const [fullUser] = await db
         .select()
         .from(users)
         .where(eq(users.id, dbUser.id))
         .limit(1);
+      const oldUsername = dbUser.username;
       const [updatedUser] = await db
         .update(users)
         .set({
@@ -332,6 +352,20 @@ export async function processOnchainRegistration({
         .where(eq(users.id, dbUser.id))
         .returning(userSelectFields);
       dbUser = updatedUser ?? null;
+
+      // Invalidate identifier caches if username changed
+      if (dbUser && oldUsername !== dbUser.username) {
+        await cachedDb.invalidateUserIdentifierCaches(
+          {
+            id: dbUser.id,
+            privyId: user.privyId ?? user.userId,
+            username: dbUser.username,
+          },
+          {
+            username: oldUsername,
+          }
+        );
+      }
     }
   }
 

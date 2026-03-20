@@ -1,11 +1,4 @@
-import {
-  beforeAll,
-  beforeEach,
-  describe,
-  expect,
-  it,
-  mock,
-} from 'bun:test';
+import { beforeAll, beforeEach, describe, expect, it, mock } from 'bun:test';
 
 const invalidateWalletBalance = mock();
 const refreshWalletBalance = mock().mockResolvedValue(undefined);

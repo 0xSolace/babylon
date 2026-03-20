@@ -70,6 +70,8 @@ export * from './utils/singleton';
 export * from './utils/snowflake';
 // UI utilities (cn function for Tailwind)
 export * from './utils/ui';
+// User identifier classification (pure functions)
+export * from './utils/user-identifier';
 // UUID generation (cross-browser compatible UUID v4)
 export * from './utils/uuid';
 export * from './utils/wallet';

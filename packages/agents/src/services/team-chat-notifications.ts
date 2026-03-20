@@ -42,7 +42,11 @@ export async function notifyTeamChatMessage({
             eq(chatParticipants.isActive, true)
           )
         ),
-      db.select({ name: chats.name }).from(chats).where(eq(chats.id, chatId)).limit(1),
+      db
+        .select({ name: chats.name })
+        .from(chats)
+        .where(eq(chats.id, chatId))
+        .limit(1),
     ]);
 
     const recipientUserIds = participantRows

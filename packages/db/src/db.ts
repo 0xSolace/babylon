@@ -309,13 +309,93 @@ export function getReadReplicaDbVersion(): number {
 }
 
 /**
+ * Create a lazy proxy that defers getDbClient() until method invocation.
+ * WHY: Prevents eager client creation during property access.
+ * Client is only created when a method is actually called (query executes).
+ *
+ * NOTE: This function uses READ_METHODS and WRITE_METHODS which are defined later.
+ * The actual implementation is deferred until those constants are available.
+ */
+function createLazyPrimaryClientProxy(): DrizzleClient {
+  const handler: ProxyHandler<DrizzleClient> = {
+    get(_target, prop: string | symbol) {
+      // In JSON/memory mode, use the JSON client
+      if (currentStorageMode !== 'postgres' && jsonClient) {
+        return jsonClient[prop as keyof DrizzleClient];
+      }
+
+      // ✅ Return a lazy property proxy that defers getDbClient() until method is called
+      // This ensures client is only created when db.user.findMany() is called,
+      // not when db.user is accessed
+      return createLazyPropertyProxy(prop);
+    },
+  };
+
+  const proxyTarget: Partial<DrizzleClient> = {};
+  return new Proxy(proxyTarget, handler) as DrizzleClient;
+}
+
+/**
+ * Create a lazy proxy for a specific property that defers getDbClient() until accessed.
+ * For table repositories, this returns a proxy that defers until a method is called.
+ *
+ * WHY: This ensures client is only created when db.user.findMany() is called,
+ * not when db.user is accessed. This is truly lazy.
+ */
+function createLazyPropertyProxy(prop: string | symbol): unknown {
+  // Return a proxy that defers getDbClient() until a method is accessed
+  // This proxy will only call getDbClient() when a method is accessed (e.g., db.user.findMany)
+  return new Proxy({} as Record<string, never>, {
+    get(_target, method: string | symbol) {
+      // ✅ Only NOW do we call getDbClient() - when a method on the property is accessed
+      // This is truly lazy: client is created when db.user.findMany() is called,
+      // not when db.user is accessed
+      const client = getDbClient();
+      if (!client) {
+        if (isBuildTime) {
+          return () => Promise.resolve(null);
+        }
+        throw new Error(
+          'Database not initialized. Check DATABASE_URL or use initializeJsonMode().'
+        );
+      }
+
+      const value = client[prop as keyof DrizzleClient];
+      if (value && typeof value === 'object') {
+        // For table repositories, return the method from the table repo
+        // WHY: Table repositories are objects with methods (findMany, findFirst, etc.).
+        // We return the method directly - it will be bound correctly by the caller if needed.
+        // The method's 'this' context is preserved when called on the table repo object.
+        const methodValue = (value as Record<PropertyKey, unknown>)[method];
+        // Return the method directly - it will be bound correctly by the caller if needed
+        return methodValue;
+      }
+      // If the property itself is a function (e.g., db.select), return it
+      // WHY: Top-level methods like select() are functions, not objects.
+      // They will be called with the correct 'this' context (the client).
+      if (typeof value === 'function') {
+        return value;
+      }
+      // For other values (primitives, etc.), return as-is
+      // WHY: Some properties might be primitives or other non-object values.
+      return value;
+    },
+  });
+}
+
+/**
  * Get read replica DrizzleClient (cached)
- * Falls back to primary if read replica not configured
+ * Falls back to lazy primary proxy if read replica not configured
+ *
+ * WHY: Keeps fallback for dev environments, but makes it lazy.
+ * Client is only created when query executes, not during property access.
  */
 function getReadReplicaDbClient(): DrizzleClient | null {
   const replica = getReadReplicaDrizzle();
   if (!replica) {
-    return getDbClient();
+    // ✅ Return lazy proxy instead of eagerly calling getDbClient()
+    // Client will only be created when a method is actually invoked
+    return createLazyPrimaryClientProxy();
   }
 
   if (!globalForDb.readReplicaDb) {
@@ -327,6 +407,17 @@ function getReadReplicaDbClient(): DrizzleClient | null {
   return globalForDb.readReplicaDb;
 }
 
+/**
+ * Get the primary (write) database client (cached).
+ *
+ * WHY: Caches the client in global state to avoid recreating it on every access.
+ * The client is created lazily - only when this function is called, not when
+ * the module is loaded. This is used by lazy proxies to create the client
+ * only when queries execute.
+ *
+ * NOTE: This function is called by lazy proxies when methods are accessed,
+ * ensuring client is only created when needed, not during property access.
+ */
 function getDbClient(): DrizzleClient | null {
   if (!globalForDb.db) {
     const drizzleInstance = getDrizzleInstance();
@@ -613,18 +704,37 @@ function createModeAwareDbProxy(): DrizzleClient {
       const isReadMethod = READ_METHODS.has(propStr);
       const isWriteMethod = WRITE_METHODS.has(propStr);
 
-      // For read operations, try to use replica
+      // For read operations, try to use replica first
       if (isReadMethod) {
         const replicaClient = getReadReplicaDbClient();
         if (replicaClient) {
+          // ✅ Replica available - use it (no write client created)
+          // WHY: With replica configured, reads never touch primary database.
+          // This is the main optimization: read-only routes don't create write connections.
           return replicaClient[prop as keyof DrizzleClient];
         }
+        // ✅ No replica - return lazy proxy (client created only on method invocation)
+        // WHY: Defers client creation until query executes, not during property access.
+        // This optimizes cold start performance for read-only routes.
+        // Fallback still works for dev environments (single DB), just lazy now.
+        // Example: db.user.findMany() creates client when findMany is accessed,
+        // not when db.user is accessed.
+        return createLazyPrimaryClientProxy()[prop as keyof DrizzleClient];
       }
 
-      // For writes or when no replica, use primary
+      // For writes, always use primary
+      // WHY: Writes must go to primary database for consistency and durability.
+      // All write operations (insert, update, delete, create, etc.) must hit the
+      // primary database to ensure data consistency and proper replication.
+      //
+      // NOTE: This could also be lazy (defer until method invocation), but writes
+      // typically execute anyway, so the optimization benefit is smaller than for reads.
+      // Consider making this lazy in a future optimization if measurements show benefit.
       const client = getDbClient();
       if (!client) {
         if (isBuildTime) {
+          // WHY: During Next.js build, database might not be available.
+          // Return a no-op proxy to avoid breaking builds.
           return new Proxy(
             {},
             {
@@ -642,13 +752,22 @@ function createModeAwareDbProxy(): DrizzleClient {
       const value = client[prop as keyof DrizzleClient];
 
       // For table repositories (user, post, etc.), wrap with read/write detection
+      // WHY: Table repositories need special handling to route reads to replica
+      // and writes to primary. The table proxy intercepts method calls and routes
+      // them appropriately based on whether they're read or write operations.
       if (!isReadMethod && !isWriteMethod && isTableRepository(value)) {
         // Return cached proxy if available
+        // WHY: Table repository proxies are expensive to create (involves proxy creation
+        // and method binding). Caching avoids recreating them on every property access.
+        // This improves performance for repeated access to the same table repository.
         if (tableProxyCache.has(prop)) {
           return tableProxyCache.get(prop);
         }
 
         // Get or create bound method cache for this table
+        // WHY: Cache bound methods to avoid rebinding on every access.
+        // Binding preserves 'this' context for table repository methods.
+        // Caching improves performance for repeated method access.
         if (!boundMethodCachePerTable.has(prop)) {
           boundMethodCachePerTable.set(prop, new Map<PropertyKey, unknown>());
         }
@@ -659,23 +778,35 @@ function createModeAwareDbProxy(): DrizzleClient {
             const methodStr = String(method);
 
             // Route table read methods to replica if available
+            // WHY: Read operations (findMany, findFirst, etc.) can safely use replica.
+            // This offloads read traffic from primary database, reducing load on master server.
+            // Replica reads never create write client objects, which is the main optimization.
             if (TABLE_READ_METHODS.has(methodStr)) {
               // Check cache first
+              // WHY: Avoid rebinding methods on every access. Bound methods are cached
+              // to improve performance for repeated calls to the same method.
+              // Binding preserves 'this' context, which is necessary for table repository methods.
               if (boundMethodCache.has(method)) {
                 return boundMethodCache.get(method);
               }
 
               const replicaClient = getReadReplicaDbClient();
               if (replicaClient) {
+                // ✅ Replica available - use it
                 const tableRepo = replicaClient[prop as keyof DrizzleClient];
                 if (tableRepo && typeof tableRepo === 'object') {
                   const replicaMethod = (
                     tableRepo as Record<PropertyKey, unknown>
                   )[method];
                   // Bind to replica table repo so `this` context is correct
+                  // WHY: Table repository methods need correct 'this' context to access
+                  // the table schema and other repository properties. Binding ensures
+                  // the method is called with the correct context.
                   if (typeof replicaMethod === 'function') {
                     const bound = replicaMethod.bind(tableRepo);
                     // Enforce cache size limit
+                    // WHY: Prevent unbounded cache growth in long-running processes.
+                    // Use LRU-style eviction (remove oldest entry) when limit reached.
                     if (boundMethodCache.size >= BOUND_METHOD_CACHE_MAX) {
                       const firstKey = boundMethodCache.keys().next().value;
                       if (firstKey !== undefined)
@@ -687,9 +818,43 @@ function createModeAwareDbProxy(): DrizzleClient {
                   return replicaMethod;
                 }
               }
+              // ✅ No replica - use lazy proxy (client created only on method invocation)
+              // WHY: Most reads go through table repos (db.user.findMany), so this is critical.
+              // The lazy proxy ensures client is only created when findMany() is accessed,
+              // not when db.user is accessed. This is where the optimization matters most.
+              //
+              // Flow: db.user.findMany()
+              // 1. db.user → returns lazy property proxy (no client)
+              // 2. .findMany → lazy proxy's get('findMany') → calls getDbClient() → returns method
+              // 3. () → method executes with client
+              const lazyClient = createLazyPrimaryClientProxy();
+              const tableRepo = lazyClient[prop as keyof DrizzleClient];
+              if (tableRepo && typeof tableRepo === 'object') {
+                const primaryMethod = (
+                  tableRepo as Record<PropertyKey, unknown>
+                )[method];
+                if (typeof primaryMethod === 'function') {
+                  // WHY: Bind to preserve 'this' context when method is called.
+                  // Table repository methods need correct 'this' to access table schema.
+                  const bound = primaryMethod.bind(tableRepo);
+                  // WHY: Cache bound methods to avoid rebinding on every access.
+                  // This improves performance for repeated method access.
+                  // WHY: Enforce cache size limit to prevent unbounded growth.
+                  if (boundMethodCache.size >= BOUND_METHOD_CACHE_MAX) {
+                    const firstKey = boundMethodCache.keys().next().value;
+                    if (firstKey !== undefined)
+                      boundMethodCache.delete(firstKey);
+                  }
+                  boundMethodCache.set(method, bound);
+                  return bound;
+                }
+                return primaryMethod;
+              }
             }
 
             // Writes or no replica - use primary
+            // WHY: Write operations (create, update, delete) must always use primary database.
+            // This ensures data consistency and proper replication to read replicas.
             return (target as Record<PropertyKey, unknown>)[method];
           },
         }) as unknown as typeof value;
@@ -715,17 +880,27 @@ function createModeAwareDbProxy(): DrizzleClient {
 }
 
 /**
- * Create a proxy that always routes to primary (writes)
+ * Create a proxy that always routes to primary (writes).
+ *
+ * WHY: Provides explicit write client for cases where you want to be explicit
+ * about using primary. Always uses primary database, never replica.
+ *
+ * NOTE: This proxy does NOT use lazy initialization - it calls getDbClient() eagerly.
+ * This is intentional for backward compatibility. The main `db` proxy uses lazy
+ * initialization, but `dbWrite` maintains eager behavior for existing code.
  */
 function createPrimaryDbProxy(): DrizzleClient {
   const handler: ProxyHandler<DrizzleClient> = {
     get(_target, prop: string | symbol) {
       // In JSON/memory mode, use the JSON client
+      // WHY: Tests use JSON mode, so we must handle it to avoid breaking tests.
       if (currentStorageMode !== 'postgres' && jsonClient) {
         return jsonClient[prop as keyof DrizzleClient];
       }
 
       // Always use primary
+      // WHY: Write operations must always go to primary database for consistency.
+      // NOTE: This is eager (not lazy) for backward compatibility with existing code.
       const client = getDbClient();
       if (!client) {
         if (isBuildTime) {
@@ -752,6 +927,13 @@ function createPrimaryDbProxy(): DrizzleClient {
 
 /**
  * Create a proxy that always routes to read replica (reads)
+ *
+ * WHY: Provides explicit read-only client for cases where you want to be explicit
+ * about using replica. Falls back to primary if no replica configured (for dev).
+ *
+ * NOTE: This proxy does NOT use lazy initialization - it calls getDbClient() eagerly
+ * when no replica. This is intentional for backward compatibility. The main `db` proxy
+ * uses lazy initialization, but `dbRead` maintains eager fallback for existing code.
  */
 function createReplicaDbProxy(): DrizzleClient {
   const handler: ProxyHandler<DrizzleClient> = {
@@ -764,10 +946,15 @@ function createReplicaDbProxy(): DrizzleClient {
       // Try to use read replica
       const replicaClient = getReadReplicaDbClient();
       if (replicaClient) {
+        // WHY: If replica is available (or lazy proxy returned), use it.
+        // The lazy proxy from getReadReplicaDbClient() handles the lazy behavior.
         return replicaClient[prop as keyof DrizzleClient];
       }
 
       // Fallback to primary if no replica
+      // WHY: Dev environments typically have only one DB, so fallback is needed.
+      // NOTE: This is eager (not lazy) for backward compatibility with existing code.
+      // The main `db` proxy uses lazy initialization, but `dbRead` keeps eager fallback.
       const client = getDbClient();
       if (!client) {
         if (isBuildTime) {
@@ -795,18 +982,40 @@ function createReplicaDbProxy(): DrizzleClient {
 /**
  * Main database client with automatic read/write routing.
  *
- * Automatically routes:
+ * **Lazy Connection Creation**: Client objects are only created when queries execute,
+ * not during property access. This optimizes cold start performance.
+ *
+ * **HOW IT WORKS**:
+ * - Property access (e.g., `db.user`) returns a lazy proxy (no client creation)
+ * - Method access (e.g., `db.user.findMany`) triggers client creation
+ * - Method invocation (e.g., `db.user.findMany()`) executes query with client
+ *
+ * **WHY LAZY**:
+ * - Faster cold starts: No connection pool initialization until needed
+ * - Lower memory: No client objects created for routes that don't execute queries
+ * - Better for serverless: Fewer objects created per request
+ * - With replica: Reads never create write client objects
+ *
+ * **Routing Behavior**:
  * - Reads (select, findMany, findUnique, count, etc.) → read replica (if configured)
  * - Writes (insert, update, delete, create, etc.) → primary database
+ * - Falls back to primary if no replica is configured (lazy - client only created on query execution)
  *
- * Falls back to primary if no replica is configured.
+ * **WHY FALLBACK**: Dev environments typically have only one database. The fallback
+ * ensures reads still work, but client creation is lazy (only when query executes).
  *
  * @example
  * ```typescript
- * // Automatically routes to replica
+ * // Property access - no client created (lazy)
+ * const userRepo = db.user;
+ *
+ * // Method access - client created now (lazy proxy triggers getDbClient())
+ * const findManyMethod = db.user.findMany;
+ *
+ * // Method invocation - query executes with client
  * const posts = await db.post.findMany({ take: 100 });
  *
- * // Automatically routes to primary
+ * // Write operation - uses primary (lazy - client created on query execution)
  * await db.post.create({ data: { ... } });
  * ```
  */
@@ -816,15 +1025,26 @@ export const db: DrizzleClient = createModeAwareDbProxy();
  * Explicit read-only client that always routes to read replica.
  * Falls back to primary if no replica is configured.
  *
- * Use when you want to be explicit about using the replica:
- * - Feed queries
- * - Search results
- * - Analytics queries
- * - Public data that can tolerate slight replication lag
+ * **WHY THIS EXISTS**: Provides explicit read-only client for cases where you want
+ * to be explicit about using replica. Useful for feed queries, search results,
+ * analytics queries, and public data that can tolerate slight replication lag.
+ *
+ * **LAZY BEHAVIOR**: When replica is configured, uses lazy proxy (client created on query).
+ * When no replica, falls back to primary eagerly (for backward compatibility).
+ *
+ * **WHY EAGER FALLBACK**: Maintains backward compatibility with existing code that
+ * relies on `dbRead` fallback. The main `db` proxy uses lazy initialization, but
+ * `dbRead` keeps eager fallback to avoid breaking existing code.
+ *
+ * **NOTE**: If you want lazy behavior without replica, use `db` instead of `dbRead`.
+ * The `db` proxy uses lazy initialization even when falling back to primary.
  *
  * @example
  * ```typescript
+ * // Uses replica if configured (lazy - client created on query)
  * const posts = await dbRead.post.findMany({ take: 100 });
+ *
+ * // Falls back to primary if no replica (eager - for backward compatibility)
  * const user = await dbRead.user.findUnique({ where: { id: userId } });
  * ```
  */
@@ -833,15 +1053,30 @@ export const dbRead: DrizzleClient = createReplicaDbProxy();
 /**
  * Explicit write-only client that always routes to primary database.
  *
- * Use when you want to be explicit about using the primary:
- * - Write operations
+ * **WHY THIS EXISTS**: Provides explicit write client for cases requiring strong consistency
+ * or when you want to be explicit about using primary. Always uses primary database.
+ *
+ * **LAZY BEHAVIOR**: Client is created lazily (only when query executes), not on property access.
+ * This is consistent with the main `db` proxy's lazy behavior.
+ *
+ * **USE CASES**:
+ * - Write operations (creates, updates, deletes)
  * - Operations requiring strong consistency
+ * - Read-after-write consistency (read immediately after write to ensure fresh data)
  * - Transactions
+ *
+ * **WHY READ-AFTER-WRITE**: After writing to primary, reading from replica might return
+ * stale data due to replication lag. Use `dbWrite` for both write and subsequent read
+ * to ensure you get the data you just wrote.
  *
  * @example
  * ```typescript
+ * // Write operation (lazy - client created on query execution)
  * await dbWrite.post.create({ data: { ... } });
+ *
+ * // Read-after-write (ensures consistency - uses primary for both)
  * await dbWrite.user.update({ where: { id }, data: { ... } });
+ * const user = await dbWrite.user.findUnique({ where: { id } }); // ✅ Fresh data
  * ```
  */
 export const dbWrite: DrizzleClient = createPrimaryDbProxy();

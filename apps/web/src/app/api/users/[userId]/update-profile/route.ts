@@ -94,6 +94,7 @@ import {
   AuthorizationError,
   authenticate,
   BusinessLogicError,
+  cachedDb,
   checkProfileUpdateRateLimit,
   confirmOnchainProfileUpdate,
   logProfileUpdate,
@@ -356,7 +357,22 @@ export const POST = withErrorHandling(
         onChainRegistered: users.onChainRegistered,
         nftTokenId: users.nftTokenId,
         profileChainSyncNeeded: users.profileChainSyncNeeded,
+        privyId: users.privyId,
       });
+
+    // Invalidate identifier caches if username changed
+    if (isUsernameChanging && updatedUser) {
+      await cachedDb.invalidateUserIdentifierCaches(
+        {
+          id: updatedUser.id,
+          privyId: updatedUser.privyId,
+          username: updatedUser.username,
+        },
+        {
+          username: currentUser!.username,
+        }
+      );
+    }
 
     // Award points for profile milestones
     const pointsAwarded: { reason: string; amount: number }[] = [];

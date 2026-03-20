@@ -6,6 +6,13 @@
  */
 
 export {
+  flushLastUsedUpdates,
+  getFlusherStats,
+  shutdownLastUsedFlusher,
+  startLastUsedFlusher,
+  stopLastUsedFlusher,
+} from './api-key-lastused-flusher';
+export {
   clearApiKeyCache,
   generateApiKey,
   generateTestApiKey,

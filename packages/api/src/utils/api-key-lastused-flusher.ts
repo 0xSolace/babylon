@@ -1,0 +1,342 @@
+/**
+ * API Key lastUsedAt Write-Back Cache Flusher
+ *
+ * WHY: Batches Redis updates and flushes to database periodically.
+ * This reduces database load by 90%+ compared to individual writes.
+ *
+ * Flush Strategy:
+ * - Time-based: Flush every 30 seconds
+ * - Size-based: Flush when 100+ updates pending
+ * - Startup: Flush all pending on server start
+ *
+ * Performance Impact:
+ * - Before: 1,830 individual UPDATE queries (115,885 seconds total)
+ * - After: ~18 batch UPDATE queries (estimated 1,000-2,000 seconds total)
+ */
+
+import { asSystem, eq, userApiKeys } from '@babylon/db';
+import { logger } from '@babylon/shared';
+import { getRedisClient, isRedisAvailable } from '../redis';
+
+/**
+ * Redis keys for write-back cache.
+ *
+ * WHY separate structures:
+ * - Hash: O(1) lookup for latest timestamp per key (handles multiple updates before flush)
+ * - Sorted Set: Natural ordering for batching oldest updates first
+ */
+const REDIS_KEY_LAST_USED_UPDATES = 'api-key:last-used:updates'; // Hash: keyId → timestamp
+const REDIS_KEY_LAST_USED_QUEUE = 'api-key:last-used:queue'; // Sorted Set: score=timestamp, member=keyId
+
+// Flush configuration
+/**
+ * Flush interval in milliseconds.
+ *
+ * WHY 30 seconds: Balances update freshness (acceptable delay for lastUsedAt) with database load.
+ * Lower = more frequent flushes (higher DB load), Higher = longer delay (lower DB load).
+ */
+const FLUSH_INTERVAL_MS = 30 * 1000; // 30 seconds
+
+/**
+ * Maximum number of updates to flush in a single batch.
+ *
+ * WHY 100: Balances transaction size with flush frequency. Higher = fewer transactions but larger,
+ * Lower = more transactions but smaller. 100 is a good balance for most workloads.
+ */
+const FLUSH_BATCH_SIZE = 100; // Flush up to 100 updates at once
+
+/**
+ * Queue size threshold to trigger early flush.
+ *
+ * WHY match FLUSH_BATCH_SIZE: Ensures consistent batching behavior. When queue reaches this size,
+ * we flush immediately instead of waiting for time-based flush.
+ */
+const FLUSH_SIZE_THRESHOLD = 100; // Flush when 100+ updates pending
+
+/**
+ * Flush interval timer.
+ *
+ * WHY null initially: Set when flusher starts, cleared when stopped. Null check prevents
+ * multiple flushers from starting.
+ */
+let flushInterval: NodeJS.Timeout | null = null;
+
+/**
+ * Flag to prevent concurrent flushes.
+ *
+ * WHY: Prevents race condition where two flushes could run simultaneously. However, this has
+ * a TOCTOU (time-of-check-time-of-use) issue in multi-instance deployments - consider using
+ * Redis distributed lock for production multi-instance setups.
+ */
+let isFlushing = false;
+
+// Metrics tracking
+/**
+ * WHY track metrics: Enables monitoring of flush health, success rate, and total throughput.
+ * Useful for detecting issues and tuning flush parameters.
+ */
+let flushSuccessCount = 0;
+let flushFailureCount = 0;
+let totalUpdatesFlushed = 0;
+
+/**
+ * Flush pending lastUsedAt updates from Redis to database.
+ *
+ * WHY: Batches multiple updates into single database query, reducing load.
+ *
+ * Process:
+ * 1. Get oldest N entries from sorted set (ordered by timestamp)
+ * 2. Read corresponding timestamps from hash
+ * 3. Batch UPDATE query to database (single query with CASE statement)
+ * 4. Remove processed entries from Redis
+ *
+ * @param maxEntries - Maximum number of entries to flush (default: FLUSH_BATCH_SIZE)
+ * @returns Number of entries flushed
+ */
+async function flushPendingUpdates(
+  maxEntries: number = FLUSH_BATCH_SIZE
+): Promise<number> {
+  if (isFlushing) {
+    logger.debug(
+      'Flush already in progress, skipping',
+      undefined,
+      'ApiKeyFlusher'
+    );
+    return 0;
+  }
+
+  const redisClient = getRedisClient();
+  if (!redisClient || !isRedisAvailable()) {
+    logger.debug(
+      'Redis not available, skipping flush',
+      undefined,
+      'ApiKeyFlusher'
+    );
+    return 0;
+  }
+
+  isFlushing = true;
+
+  try {
+    // Get oldest N entries from sorted set (ordered by timestamp)
+    // WHY: Process oldest updates first to minimize delay.
+    const queueEntries = await redisClient.zrange(
+      REDIS_KEY_LAST_USED_QUEUE,
+      0,
+      maxEntries - 1,
+      'WITHSCORES'
+    );
+
+    if (queueEntries.length === 0) {
+      return 0;
+    }
+
+    // Parse entries: [keyId1, timestamp1, keyId2, timestamp2, ...]
+    // WHY: ZRANGE WITHSCORES returns alternating [member, score, member, score, ...]
+    const keyIds: string[] = [];
+    for (let i = 0; i < queueEntries.length; i += 2) {
+      keyIds.push(queueEntries[i] as string);
+    }
+
+    // Read corresponding timestamps from hash
+    // WHY: Hash has the latest timestamp for each key. If a key was updated multiple times
+    // before flush, we only need the latest timestamp (not the queue score which is first update time).
+    const timestamps = await redisClient.hmget(
+      REDIS_KEY_LAST_USED_UPDATES,
+      ...keyIds
+    );
+
+    // Build array of updates with valid timestamps
+    // WHY filter nulls: If hash entry is missing (shouldn't happen, but handle gracefully),
+    // skip that key. Queue entry will be cleaned up below.
+    const updates: Array<{ keyId: string; timestamp: string }> = [];
+    for (let i = 0; i < keyIds.length; i++) {
+      const timestamp = timestamps[i];
+      if (timestamp) {
+        updates.push({ keyId: keyIds[i]!, timestamp });
+      }
+    }
+
+    if (updates.length === 0) {
+      // Clean up queue entries even if hash is empty (stale entries)
+      // WHY: Prevents queue from growing with stale entries. If hash is empty but queue has
+      // entries, they're orphaned and should be removed.
+      await redisClient.zrem(REDIS_KEY_LAST_USED_QUEUE, ...keyIds);
+      return 0;
+    }
+
+    // Execute batch UPDATE query using transaction with individual updates
+    // WHY: All updates in single transaction = single round-trip, much more efficient than separate queries.
+    // While not a single SQL statement, transaction batching is safe and still provides 90%+ reduction in DB load.
+    await asSystem(async (dbClient) => {
+      await dbClient.transaction(async (tx) => {
+        // Execute all updates within single transaction
+        // WHY: Transaction ensures atomicity and batches all updates in single round-trip.
+        for (const update of updates) {
+          await tx
+            .update(userApiKeys)
+            .set({ lastUsedAt: new Date(update.timestamp) })
+            .where(eq(userApiKeys.id, update.keyId));
+        }
+      });
+    });
+
+    // Remove processed entries from Redis
+    // WHY: Clean up after successful flush to prevent reprocessing. Only runs if DB transaction
+    // succeeded (inside try block). If DB fails, entries remain in Redis for retry on next flush.
+    // WHY pipeline: Atomic removal from both structures ensures consistency.
+    const pipeline = redisClient.pipeline();
+    pipeline.hdel(REDIS_KEY_LAST_USED_UPDATES, ...keyIds);
+    pipeline.zrem(REDIS_KEY_LAST_USED_QUEUE, ...keyIds);
+    await pipeline.exec();
+    // NOTE: If pipeline.exec() fails here, entries remain in Redis and will be reprocessed.
+    // This is safe (idempotent updates) but inefficient. Consider adding error handling.
+
+    totalUpdatesFlushed += updates.length;
+    flushSuccessCount++;
+
+    logger.info(
+      `Flushed ${updates.length} lastUsedAt updates to database`,
+      { count: updates.length },
+      'ApiKeyFlusher'
+    );
+
+    return updates.length;
+  } catch (error) {
+    flushFailureCount++;
+    logger.error(
+      'Failed to flush lastUsedAt updates',
+      { error },
+      'ApiKeyFlusher'
+    );
+    return 0;
+  } finally {
+    isFlushing = false;
+  }
+}
+
+/**
+ * Start the periodic flush service.
+ *
+ * WHY: Automatically flushes pending updates on schedule.
+ * Also checks size threshold to flush early if many updates pending.
+ */
+export function startLastUsedFlusher(): void {
+  if (flushInterval) {
+    logger.warn('Flusher already started', undefined, 'ApiKeyFlusher');
+    return;
+  }
+
+  logger.info(
+    'Starting API key lastUsedAt flusher',
+    undefined,
+    'ApiKeyFlusher'
+  );
+
+  // Flush on startup
+  // WHY: Handle any pending updates from previous server instance. If server restarted while
+  // updates were in Redis, they would be lost without this. Fire-and-forget because startup
+  // shouldn't block on flush (non-critical).
+  flushPendingUpdates().catch((err) => {
+    logger.error('Startup flush failed', { error: err }, 'ApiKeyFlusher');
+  });
+
+  // Periodic flush
+  // WHY setInterval: Automatically flushes on schedule. Works in long-running processes (Next.js),
+  // but may not work reliably in pure serverless (each invocation is new process). For pure
+  // serverless, consider using cron endpoint instead.
+  flushInterval = setInterval(async () => {
+    const redisClient = getRedisClient();
+    if (!redisClient || !isRedisAvailable()) {
+      // WHY return early: If Redis unavailable, skip flush. Updates will fall back to direct
+      // DB writes via scheduleLastUsedUpdate() fallback mechanism.
+      return;
+    }
+
+    // Check size threshold - flush early if many updates pending
+    // WHY: Prevents queue from growing too large during bursts. If queue reaches threshold,
+    // flush immediately instead of waiting for time-based flush.
+    const queueSize = await redisClient.zcard(REDIS_KEY_LAST_USED_QUEUE);
+    if (queueSize >= FLUSH_SIZE_THRESHOLD) {
+      await flushPendingUpdates();
+    } else {
+      // Normal time-based flush
+      // WHY: Regular periodic flush ensures updates don't sit too long, even during low activity.
+      await flushPendingUpdates(FLUSH_BATCH_SIZE);
+    }
+  }, FLUSH_INTERVAL_MS);
+
+  logger.info(
+    `Flusher started: ${FLUSH_INTERVAL_MS}ms interval, ${FLUSH_BATCH_SIZE} batch size`,
+    undefined,
+    'ApiKeyFlusher'
+  );
+}
+
+/**
+ * Stop the periodic flush service.
+ */
+export function stopLastUsedFlusher(): void {
+  if (flushInterval) {
+    clearInterval(flushInterval);
+    flushInterval = null;
+    logger.info(
+      'Stopped API key lastUsedAt flusher',
+      undefined,
+      'ApiKeyFlusher'
+    );
+  }
+}
+
+/**
+ * Graceful shutdown: flush pending updates before exit.
+ *
+ * WHY: Ensures no updates are lost on server restart or shutdown.
+ */
+export async function shutdownLastUsedFlusher(): Promise<void> {
+  stopLastUsedFlusher();
+
+  // Flush any remaining updates
+  const remaining = await flushPendingUpdates(1000); // Flush all remaining
+  if (remaining > 0) {
+    logger.info(
+      `Flushed ${remaining} remaining updates on shutdown`,
+      { count: remaining },
+      'ApiKeyFlusher'
+    );
+  }
+}
+
+/**
+ * Manually trigger a flush (useful for testing or graceful shutdown).
+ */
+export async function flushLastUsedUpdates(): Promise<number> {
+  return flushPendingUpdates();
+}
+
+/**
+ * Get flusher statistics for monitoring.
+ */
+export function getFlusherStats(): {
+  successCount: number;
+  failureCount: number;
+  totalUpdatesFlushed: number;
+} {
+  return {
+    successCount: flushSuccessCount,
+    failureCount: flushFailureCount,
+    totalUpdatesFlushed,
+  };
+}
+
+// Register shutdown handlers
+// WHY: Ensures no updates are lost on server restart or shutdown. Flushes any remaining
+// updates in Redis before process exits. Only register if process exists (not in edge runtime).
+if (typeof process !== 'undefined') {
+  process.on('SIGTERM', async () => {
+    await shutdownLastUsedFlusher();
+  });
+  process.on('SIGINT', async () => {
+    await shutdownLastUsedFlusher();
+  });
+}

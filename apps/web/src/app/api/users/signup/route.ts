@@ -90,6 +90,7 @@ import type { JsonValue } from '@babylon/api';
 import {
   authenticate,
   ConflictError,
+  cachedDb,
   ensureOfflineWalletReady,
   getHashedClientIp,
   getOrCreateReferralCode,
@@ -516,6 +517,13 @@ export const POST = withErrorHandling(async (request: NextRequest) => {
 
   // Generate referral code for new user (ensures they can refer others immediately)
   await getOrCreateReferralCode(result.user.id);
+
+  // Invalidate identifier caches for the new/updated user (clears negative cache)
+  await cachedDb.invalidateUserIdentifierCaches({
+    id: result.user.id,
+    privyId: result.user.privyId,
+    username: result.user.username,
+  });
 
   // Award welcome bonus at profile completion (idempotent, transaction-safe)
   const userId = result.user.id;
