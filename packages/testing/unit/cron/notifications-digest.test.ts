@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, mock, test } from 'bun:test';
+import { NextRequest } from 'next/server';
 
 const mockRecordCronExecution = mock(() => {});
 const mockRelayCronToStaging = mock();
@@ -78,7 +79,7 @@ describe('notifications-digest cron fan-out', () => {
     ]);
 
     const response = await GET(
-      new Request('https://babylon.market/api/cron/notifications-digest') as Request
+      new NextRequest('https://babylon.market/api/cron/notifications-digest')
     );
     const data = await response.json();
 
@@ -115,14 +116,14 @@ describe('notifications-digest cron fan-out', () => {
       },
     ]);
 
-    const request = new Request(
+    const request = new NextRequest(
       'https://staging.babylon.market/api/cron/notifications-digest',
       {
         headers: {
           'x-cron-relay': 'notifications-digest',
         },
       }
-    ) as Request;
+    );
 
     const response = await GET(request);
     const data = await response.json();
