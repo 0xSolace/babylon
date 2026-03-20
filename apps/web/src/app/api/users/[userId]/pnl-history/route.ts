@@ -64,6 +64,11 @@ export const GET = withErrorHandling(
       .orderBy(balanceTransactions.createdAt)
       .limit(500);
 
+    // Early return for empty transactions to avoid edge cases in downsampling
+    if (transactions.length === 0) {
+      return successResponse({ points: [] });
+    }
+
     // Downsample to reasonable number of chart points
     const maxPoints = 100;
     const points: Array<{ time: number; value: number }> = [];
