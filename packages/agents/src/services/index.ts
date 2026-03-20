@@ -26,3 +26,4 @@ export {
 } from './interfaces';
 export * from './npc-bootstrap.service';
 export * from './TeamChatService';
+export * from './team-chat-notifications';

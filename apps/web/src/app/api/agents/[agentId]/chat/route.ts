@@ -13,6 +13,7 @@
 import {
   agentRuntimeManager,
   agentService,
+  notifyTeamChatMessage,
   teamChatService,
 } from '@babylon/agents';
 import {
@@ -776,6 +777,13 @@ export const POST = withErrorHandling(
         content: responseText,
         createdAt: assistantMessageTime,
         metadata: messageMetadata,
+      });
+
+      void notifyTeamChatMessage({
+        chatId: teamChatId,
+        messageId: responseMessageId,
+        senderId: agentId,
+        messagePreview: responseText,
       });
 
       // Broadcast agent response to team chat
