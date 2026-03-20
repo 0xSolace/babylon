@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'bun:test';
-import { buildScopedPnlHistoryPoints, getHourBoundary } from './pnlHistory';
+import {
+  buildPnlMetricIdentityMap,
+  buildScopedPnlHistoryPoints,
+  getHourBoundary,
+} from './pnlHistory';
 
 describe('buildScopedPnlHistoryPoints', () => {
   it('aggregates snapshots across the full team scope and appends a live point', () => {
@@ -86,5 +90,33 @@ describe('getHourBoundary', () => {
     expect(
       getHourBoundary(new Date('2026-03-20T20:45:31.222Z')).toISOString()
     ).toBe('2026-03-20T20:00:00.000Z');
+  });
+});
+
+describe('buildPnlMetricIdentityMap', () => {
+  it('maps privy aliases back to the canonical user id', () => {
+    const result = buildPnlMetricIdentityMap([
+      {
+        id: 'owner-1',
+        lifetimePnL: '12',
+        privyId: 'did:privy:owner-1',
+      },
+      {
+        id: 'agent-1',
+        lifetimePnL: '5',
+        privyId: null,
+      },
+    ]);
+
+    expect(result.positionUserIds).toEqual([
+      'owner-1',
+      'did:privy:owner-1',
+      'agent-1',
+    ]);
+    expect(result.aliasToCanonicalUserId.get('owner-1')).toBe('owner-1');
+    expect(result.aliasToCanonicalUserId.get('did:privy:owner-1')).toBe(
+      'owner-1'
+    );
+    expect(result.aliasToCanonicalUserId.get('agent-1')).toBe('agent-1');
   });
 });

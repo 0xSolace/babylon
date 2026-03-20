@@ -7,6 +7,7 @@ import {
   inArray,
   isNull,
   markets,
+  or,
   perpPositions,
   positions,
   userPnLSnapshots,
@@ -38,6 +39,12 @@ interface SnapshotMetricRow {
   userId: string;
 }
 
+interface PnlMetricUserRow {
+  id: string;
+  lifetimePnL: unknown;
+  privyId: string | null;
+}
+
 const TIMEFRAME_DURATIONS: Record<Exclude<PnlHistoryRange, 'ALL'>, number> = {
   '1H': 60 * 60 * 1000,
   '4H': 4 * 60 * 60 * 1000,
@@ -58,6 +65,29 @@ export function getHourBoundary(date = new Date()): Date {
   const boundary = new Date(date);
   boundary.setUTCMinutes(0, 0, 0);
   return boundary;
+}
+
+export function buildPnlMetricIdentityMap(userRows: PnlMetricUserRow[]): {
+  aliasToCanonicalUserId: Map<string, string>;
+  positionUserIds: string[];
+} {
+  const aliasToCanonicalUserId = new Map<string, string>();
+  const positionUserIds: string[] = [];
+
+  for (const row of userRows) {
+    aliasToCanonicalUserId.set(row.id, row.id);
+    positionUserIds.push(row.id);
+
+    if (row.privyId && row.privyId !== row.id) {
+      aliasToCanonicalUserId.set(row.privyId, row.id);
+      positionUserIds.push(row.privyId);
+    }
+  }
+
+  return {
+    aliasToCanonicalUserId,
+    positionUserIds: Array.from(new Set(positionUserIds)),
+  };
 }
 
 export function buildScopedPnlHistoryPoints(params: {
@@ -131,17 +161,24 @@ export function buildScopedPnlHistoryPoints(params: {
 }
 
 export async function loadCurrentUserPnlMetrics(
-  targetUserIds?: string[]
+  targetUserIds?: string[],
+  options: {
+    onPredictionPricingError?: 'fallback' | 'throw';
+  } = {}
 ): Promise<Map<string, UserPnlMetrics>> {
   const userFilter =
     targetUserIds && targetUserIds.length > 0
-      ? inArray(users.id, targetUserIds)
+      ? or(
+          inArray(users.id, targetUserIds),
+          inArray(users.privyId, targetUserIds)
+        )
       : eq(users.isActor, false);
 
   const userRows = await db
     .select({
       id: users.id,
       lifetimePnL: users.lifetimePnL,
+      privyId: users.privyId,
     })
     .from(users)
     .where(userFilter);
@@ -150,7 +187,8 @@ export async function loadCurrentUserPnlMetrics(
     return new Map();
   }
 
-  const userIds = userRows.map((row) => row.id);
+  const { aliasToCanonicalUserId, positionUserIds } =
+    buildPnlMetricIdentityMap(userRows);
   const metricsByUserId = new Map<string, UserPnlMetrics>();
 
   for (const row of userRows) {
@@ -171,14 +209,17 @@ export async function loadCurrentUserPnlMetrics(
     .from(perpPositions)
     .where(
       and(
-        inArray(perpPositions.userId, userIds),
+        inArray(perpPositions.userId, positionUserIds),
         isNull(perpPositions.closedAt)
       )
     )
     .groupBy(perpPositions.userId);
 
   for (const row of perpUnrealizedRows) {
-    const metrics = metricsByUserId.get(row.userId);
+    const canonicalUserId = aliasToCanonicalUserId.get(row.userId);
+    if (!canonicalUserId) continue;
+
+    const metrics = metricsByUserId.get(canonicalUserId);
     if (!metrics) continue;
 
     const unrealizedPnL = toNumber(row.unrealizedPnL);
@@ -199,14 +240,17 @@ export async function loadCurrentUserPnlMetrics(
     .innerJoin(markets, eq(positions.marketId, markets.id))
     .where(
       and(
-        inArray(positions.userId, userIds),
+        inArray(positions.userId, positionUserIds),
         eq(positions.status, 'active'),
         eq(markets.resolved, false)
       )
     );
 
   for (const row of predictionRows) {
-    const metrics = metricsByUserId.get(row.userId);
+    const canonicalUserId = aliasToCanonicalUserId.get(row.userId);
+    if (!canonicalUserId) continue;
+
+    const metrics = metricsByUserId.get(canonicalUserId);
     if (!metrics) continue;
 
     const snapshot = calculatePredictionPositionSnapshot({
@@ -217,6 +261,7 @@ export async function loadCurrentUserPnlMetrics(
       noShares: toNumber(row.noShares),
       feeRate: FEE_CONFIG.TRADING_FEE_RATE,
       logContext: 'wallet/pnlHistory',
+      onSellPreviewError: options.onPredictionPricingError ?? 'fallback',
     });
 
     metrics.unrealizedPnL += snapshot.unrealizedPnL;
@@ -254,7 +299,9 @@ export async function loadScopedPnlHistoryPoints(params: {
     )
     .orderBy(asc(userPnLSnapshots.snapshotAt));
 
-  const liveMetricsByUserId = await loadCurrentUserPnlMetrics(scopeUserIds);
+  const liveMetricsByUserId = await loadCurrentUserPnlMetrics(scopeUserIds, {
+    onPredictionPricingError: 'fallback',
+  });
 
   return buildScopedPnlHistoryPoints({
     liveMetricsByUserId,
@@ -268,7 +315,12 @@ export async function snapshotAllUserPnlMetrics(
   snapshotAt: Date
 ): Promise<number> {
   const normalizedSnapshotAt = getHourBoundary(snapshotAt);
-  const metricsByUserId = await loadCurrentUserPnlMetrics();
+  // This is currently an hourly full snapshot over non-actor users.
+  // If user volume grows materially, split this into batches before widening
+  // the cron workload rather than adding silent partial writes here.
+  const metricsByUserId = await loadCurrentUserPnlMetrics(undefined, {
+    onPredictionPricingError: 'throw',
+  });
   const snapshotRows = Array.from(metricsByUserId.values()).map((metrics) => ({
     id: `${metrics.userId}:${normalizedSnapshotAt.toISOString()}:pnl`,
     userId: metrics.userId,

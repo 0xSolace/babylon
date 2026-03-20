@@ -17,6 +17,7 @@ export function calculatePredictionPositionSnapshot(params: {
   noShares: number;
   feeRate: number;
   logContext?: string;
+  onSellPreviewError?: 'fallback' | 'throw';
 }): PredictionPositionSnapshot {
   const {
     shares,
@@ -26,6 +27,7 @@ export function calculatePredictionPositionSnapshot(params: {
     noShares,
     feeRate,
     logContext = 'wallet/predictionPositionSnapshot',
+    onSellPreviewError = 'fallback',
   } = params;
 
   const costBasisNet = shares * avgPrice;
@@ -59,6 +61,10 @@ export function calculatePredictionPositionSnapshot(params: {
     );
     currentValue = sellPreview.netProceeds ?? sellPreview.totalCost;
   } catch (error) {
+    if (onSellPreviewError === 'throw') {
+      throw error;
+    }
+
     logger.warn(
       'Failed to calculate prediction sell preview; falling back to cost basis',
       {

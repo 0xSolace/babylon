@@ -64,6 +64,8 @@ async function resolveScopeUserIds(params: {
     return [];
   }
 
+  // Return an empty series for unknown/unowned agents to avoid exposing
+  // ownership information through this public endpoint.
   return agentRows.some((row) => row.id === entityId) ? [entityId] : [];
 }
 
