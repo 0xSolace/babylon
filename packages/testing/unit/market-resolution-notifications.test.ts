@@ -11,6 +11,7 @@ describe('groupResolvedMarketOutcomes', () => {
         marketName: 'Will ETH break $5k?',
         points: 12.5,
         agentName: null,
+        positionWon: true,
       },
       {
         holderId: 'user-1',
@@ -19,6 +20,7 @@ describe('groupResolvedMarketOutcomes', () => {
         marketName: 'Will ETH break $5k?',
         points: -2.25,
         agentName: null,
+        positionWon: false,
       },
     ]);
 
@@ -34,26 +36,28 @@ describe('groupResolvedMarketOutcomes', () => {
     });
   });
 
-  test('zero-point entry is classified as win', () => {
+  test('winning position with negative pnl (avgPrice > 1) is classified as win', () => {
     const outcomes = groupResolvedMarketOutcomes([
       {
-        holderId: 'user-1',
+        holderId: 'agent-1',
         ownerUserId: 'user-1',
         marketId: 'market-3',
-        marketName: 'Will SOL hit $500?',
-        points: 0,
-        agentName: null,
+        marketName: 'Will BTC stabilize above $23,700?',
+        points: -271.97,
+        agentName: 'Apex Force',
+        positionWon: true,
       },
     ]);
 
     expect(outcomes).toHaveLength(1);
     expect(outcomes[0]).toMatchObject({
-      points: 0,
+      points: -271.97,
       outcome: 'win',
+      agentName: 'Apex Force',
     });
   });
 
-  test('negative-point entry is classified as loss', () => {
+  test('losing position is classified as loss', () => {
     const outcomes = groupResolvedMarketOutcomes([
       {
         holderId: 'user-2',
@@ -62,6 +66,7 @@ describe('groupResolvedMarketOutcomes', () => {
         marketName: 'Will DOGE moon?',
         points: -150,
         agentName: null,
+        positionWon: false,
       },
     ]);
 
@@ -72,16 +77,8 @@ describe('groupResolvedMarketOutcomes', () => {
     });
   });
 
-  test('mixed YES/NO positions for same holder aggregate to net outcome', () => {
+  test('mixed YES/NO positions: win if any position on winning side', () => {
     const outcomes = groupResolvedMarketOutcomes([
-      {
-        holderId: 'agent-5',
-        ownerUserId: 'user-1',
-        marketId: 'market-5',
-        marketName: 'Will BTC hit $100k?',
-        points: 500,
-        agentName: 'Apex Force',
-      },
       {
         holderId: 'agent-5',
         ownerUserId: 'user-1',
@@ -89,12 +86,22 @@ describe('groupResolvedMarketOutcomes', () => {
         marketName: 'Will BTC hit $100k?',
         points: -300,
         agentName: 'Apex Force',
+        positionWon: true,
+      },
+      {
+        holderId: 'agent-5',
+        ownerUserId: 'user-1',
+        marketId: 'market-5',
+        marketName: 'Will BTC hit $100k?',
+        points: -500,
+        agentName: 'Apex Force',
+        positionWon: false,
       },
     ]);
 
     expect(outcomes).toHaveLength(1);
     expect(outcomes[0]).toMatchObject({
-      points: 200,
+      points: -800,
       outcome: 'win',
       agentName: 'Apex Force',
     });
@@ -109,6 +116,7 @@ describe('groupResolvedMarketOutcomes', () => {
         marketName: 'Will BTC close green?',
         points: -9,
         agentName: 'Ares',
+        positionWon: false,
       },
     ]);
 

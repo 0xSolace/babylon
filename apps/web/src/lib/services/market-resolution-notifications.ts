@@ -19,6 +19,8 @@ interface ResolvedOutcomeRow {
   marketName: string;
   points: number;
   agentName: string | null;
+  /** Position outcome from DB (true = winning side). */
+  positionWon: boolean;
 }
 
 export interface GroupedResolvedOutcome {
@@ -42,15 +44,20 @@ function formatPoints(points: number): string {
 export function groupResolvedMarketOutcomes(
   rows: ResolvedOutcomeRow[]
 ): GroupedResolvedOutcome[] {
-  // outcome is intentionally omitted during accumulation — points change as
-  // rows are merged, so outcome is derived once at the end from final points.
-  const grouped = new Map<string, Omit<GroupedResolvedOutcome, 'outcome'>>();
+  // Track both accumulated points and whether any row was on the winning side.
+  // A holder may have YES and NO positions on the same market — the final
+  // outcome is 'win' when at least one position resolved on the winning side.
+  const grouped = new Map<
+    string,
+    Omit<GroupedResolvedOutcome, 'outcome'> & { hasWinningPosition: boolean }
+  >();
 
   for (const row of rows) {
     const key = `${row.ownerUserId}:${row.holderId}:${row.marketId}`;
     const existing = grouped.get(key);
     if (existing) {
       existing.points = Number((existing.points + row.points).toFixed(2));
+      if (row.positionWon) existing.hasWinningPosition = true;
       continue;
     }
 
@@ -63,13 +70,16 @@ export function groupResolvedMarketOutcomes(
       agentName: row.agentName ?? undefined,
       deepLink: `/markets/predictions/${row.marketId}`,
       dedupeKey: `market_resolved:${row.marketId}:${row.holderId}`,
+      hasWinningPosition: row.positionWon,
     });
   }
 
-  return Array.from(grouped.values()).map((entry) => ({
-    ...entry,
-    outcome: entry.points >= 0 ? 'win' : 'loss',
-  }));
+  return Array.from(grouped.values()).map(
+    ({ hasWinningPosition, ...entry }) => ({
+      ...entry,
+      outcome: hasWinningPosition ? 'win' : 'loss',
+    })
+  );
 }
 
 function buildMessage(entry: GroupedResolvedOutcome): string {
@@ -97,6 +107,7 @@ export async function notifyResolvedMarketOwners(
       marketId: positions.marketId,
       marketName: markets.question,
       pnl: positions.pnl,
+      outcome: positions.outcome,
     })
     .from(positions)
     .innerJoin(markets, eq(markets.id, positions.marketId))
@@ -120,6 +131,7 @@ export async function notifyResolvedMarketOwners(
       marketName: row.marketName,
       points: Number(row.pnl),
       agentName: row.isAgent ? row.agentName : null,
+      positionWon: row.outcome === true,
     }))
   );
 

@@ -103,6 +103,7 @@ export async function buildDigestForUser(params: {
       marketId: positions.marketId,
       marketName: markets.question,
       pnl: positions.pnl,
+      outcome: positions.outcome,
     })
     .from(positions)
     .innerJoin(markets, eq(markets.id, positions.marketId))
@@ -130,6 +131,7 @@ export async function buildDigestForUser(params: {
       marketName: row.marketName,
       points: Number(row.pnl),
       agentName: row.isAgent ? row.agentName : null,
+      positionWon: row.outcome === true,
     }))
   ).filter((entry) => entry.ownerUserId === params.userId);
 
@@ -140,9 +142,11 @@ export async function buildDigestForUser(params: {
   const netPointsChange = Number(
     groupedOutcomes.reduce((sum, entry) => sum + entry.points, 0).toFixed(2)
   );
-  const marketsWon = groupedOutcomes.filter((entry) => entry.points > 0).length;
+  const marketsWon = groupedOutcomes.filter(
+    (entry) => entry.outcome === 'win'
+  ).length;
   const marketsLost = groupedOutcomes.filter(
-    (entry) => entry.points < 0
+    (entry) => entry.outcome === 'loss'
   ).length;
 
   const topAgent = groupedOutcomes
