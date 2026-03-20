@@ -867,7 +867,7 @@ export async function dispatchAgentChat(
     metadata: messageMetadata,
   });
 
-  await notifyTeamChatMessage({
+  void notifyTeamChatMessage({
     chatId: teamChatId,
     messageId: responseMessageId,
     senderId: resolvedAgentId,

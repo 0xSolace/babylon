@@ -779,7 +779,7 @@ export const POST = withErrorHandling(
         metadata: messageMetadata,
       });
 
-      await notifyTeamChatMessage({
+      void notifyTeamChatMessage({
         chatId: teamChatId,
         messageId: responseMessageId,
         senderId: agentId,
