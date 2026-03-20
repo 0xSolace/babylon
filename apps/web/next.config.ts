@@ -141,7 +141,7 @@ const nextConfig: NextConfig = {
   // Turbopack config for monorepo
   // Explicitly set root to suppress Next.js warning about multiple lockfiles.
   // The monorepo root contains the main bun.lock at /Users/shawwalters/babylon/bun.lock.
-  // Nested packages (apps/docs, packages/examples) may have their own lockfiles, but this
+  // Nested packages (packages/examples) may have their own lockfiles, but this
   // is the correct root for the web app's workspace.
   turbopack: {
     root: monorepoRoot,

@@ -299,8 +299,6 @@ forge test --match-contract ProtoMonkeysNFT -vvv
 | `/api/nft/mint/confirm` | Verify on-chain mint, update database |
 | `/api/nft/metadata/[tokenId]` | ERC-721 metadata endpoint |
 
-See [`docs/nft-drop-implementation-plan.md`](docs/nft-drop-implementation-plan.md) for complete technical details.
-
 ---
 
 ## 📚 Documentation
@@ -310,11 +308,9 @@ See [`docs/nft-drop-implementation-plan.md`](docs/nft-drop-implementation-plan.m
 - Smart Contracts: `bun run deploy:local|testnet`
 - RL Training: See `packages/training/README.md`
 - Game Control: `babylon game start|pause|status` (via CLI)
-- RSS feeds (outbound + inbound): See [docs/feeds-rss.md](docs/feeds-rss.md)
-- **Agent skills & LLM-facing docs**: We expose A2A and MCP; agents need an up-to-date reference. **Why generate**: Hand-maintained docs drift from code; generating from `@babylon/a2a` and `@babylon/mcp` keeps skills in sync.
-  - `bun run docs:generate` — Pulls vendor docs and **regenerates** `docs/skills.md` and `skills/babylon/` (SKILL.md, claw.json, README). Run after changing A2A/MCP surface.
-  - `bun run skills:generate` — Only `docs/skills.md`. `bun run skills:package` — Only full package.
-  - Packaging: [docs/agent-skill-packaging.md](docs/agent-skill-packaging.md). Potential roadmap (llms.txt, security.txt, etc.): [docs/roadmap.md](docs/roadmap.md).
+- **Agent skills & LLM-facing docs**: We expose A2A and MCP; agents need an up-to-date reference.
+  - `bun run docs:generate` — Pulls vendor docs and regenerates skills packages.
+  - `bun run skills:generate` — Skills markdown only. `bun run skills:package` — Full package.
 
 ---
 
