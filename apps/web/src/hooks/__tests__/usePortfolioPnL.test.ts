@@ -25,6 +25,20 @@ describe('fetchPortfolioBreakdownSnapshot', () => {
           totalPnL: '10',
           agentCount: '2',
           totalPoints: '99',
+          members: [
+            {
+              id: 'user-1',
+              name: 'Owner',
+              wallet: '12.5',
+              isAgent: false,
+            },
+            {
+              id: 'agent-1',
+              name: 'Apex Force',
+              wallet: 3,
+              isAgent: true,
+            },
+          ],
         }),
         { status: 200 }
       )
@@ -46,6 +60,20 @@ describe('fetchPortfolioBreakdownSnapshot', () => {
       totalPnL: 10,
       agentCount: 2,
       totalPoints: 99,
+      members: [
+        {
+          id: 'user-1',
+          name: 'Owner',
+          wallet: 12.5,
+          isAgent: false,
+        },
+        {
+          id: 'agent-1',
+          name: 'Apex Force',
+          wallet: 3,
+          isAgent: true,
+        },
+      ],
     });
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });

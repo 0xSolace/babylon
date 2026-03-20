@@ -2,86 +2,42 @@
 
 import { formatCurrency } from '@babylon/shared';
 import { useMemo } from 'react';
+import { calculateWalletPortfolioSummary } from '@/components/wallet/shared/portfolioBreakdown';
+import {
+  usePortfolioPnL,
+  usePortfolioPnLPolling,
+} from '@/hooks/usePortfolioPnL';
 import { useUserPositions } from '@/stores/userPositionsStore';
-import { useWalletBalance } from '@/stores/walletBalanceStore';
 
 interface BalanceTabProps {
   userId: string;
 }
 
-interface Member {
-  name: string;
-  cash: number;
-  openPositions: number;
-  total: number;
-}
-
 export function BalanceTab({ userId }: BalanceTabProps) {
-  const { balance, loading: balanceLoading } = useWalletBalance(userId);
+  const { data: portfolioData, loading: portfolioLoading } = usePortfolioPnL({
+    userId,
+  });
+  usePortfolioPnLPolling({ userId, intervalMs: 15_000 });
   const {
     perpPositions,
     predictionPositions,
     loading: positionsLoading,
   } = useUserPositions(userId);
 
-  const loading = balanceLoading || positionsLoading;
+  const loading = portfolioLoading || positionsLoading;
 
-  const { members, totalBalance, agentsOnly } = useMemo(() => {
-    let ownerPositionValue = 0;
-    const agentPositionValues = new Map<string, number>();
-
-    for (const pos of perpPositions) {
-      const value = Math.abs(pos.unrealizedPnL) + pos.size;
-      if (pos.isAgentPosition && pos.agentName) {
-        agentPositionValues.set(
-          pos.agentName,
-          (agentPositionValues.get(pos.agentName) ?? 0) + value
-        );
-      } else {
-        ownerPositionValue += value;
-      }
+  const walletSummary = useMemo(() => {
+    if (!portfolioData) {
+      return null;
     }
 
-    for (const pos of predictionPositions) {
-      const value = pos.currentValue ?? pos.shares * pos.currentPrice;
-      if (pos.isAgentPosition && pos.agentName) {
-        agentPositionValues.set(
-          pos.agentName,
-          (agentPositionValues.get(pos.agentName) ?? 0) + value
-        );
-      } else {
-        ownerPositionValue += value;
-      }
-    }
-
-    const memberList: Member[] = [
-      {
-        name: 'You (Owner)',
-        cash: balance,
-        openPositions: ownerPositionValue,
-        total: balance + ownerPositionValue,
-      },
-    ];
-
-    let agentTotal = 0;
-    for (const [agentName, posValue] of agentPositionValues) {
-      memberList.push({
-        name: agentName,
-        cash: 0,
-        openPositions: posValue,
-        total: posValue,
-      });
-      agentTotal += posValue;
-    }
-
-    const total = balance + ownerPositionValue + agentTotal;
-
-    return {
-      members: memberList,
-      totalBalance: total,
-      agentsOnly: agentTotal,
-    };
-  }, [balance, perpPositions, predictionPositions]);
+    return calculateWalletPortfolioSummary({
+      userId,
+      snapshot: portfolioData,
+      perpPositions,
+      predictionPositions,
+    });
+  }, [portfolioData, predictionPositions, perpPositions, userId]);
 
   const fmt = (amount: number) =>
     formatCurrency(amount, { useThousandsSeparator: true });
@@ -108,14 +64,30 @@ export function BalanceTab({ userId }: BalanceTabProps) {
       <div className="mb-8">
         <div className="flex items-center justify-between py-3">
           <span className="text-foreground text-sm">Total Balance</span>
-          <span className="font-bold text-2xl">{fmt(totalBalance)}</span>
+          <span className="font-bold text-2xl">
+            {fmt(walletSummary?.summary.totalBalance ?? 0)}
+          </span>
         </div>
-        {agentsOnly > 0 && (
+        <div className="flex items-center justify-between border-border border-b py-3">
+          <span className="text-foreground text-sm">Wallet</span>
+          <span className="font-semibold text-lg">
+            {fmt(walletSummary?.summary.wallet ?? 0)}
+          </span>
+        </div>
+        {walletSummary && walletSummary.summary.agentCount > 0 && (
           <div className="flex items-center justify-between border-border border-b py-3">
-            <span className="text-foreground text-sm">Agents Only</span>
-            <span className="font-semibold text-lg">{fmt(agentsOnly)}</span>
+            <span className="text-foreground text-sm">Agents</span>
+            <span className="font-semibold text-lg">
+              {fmt(walletSummary.summary.agents)}
+            </span>
           </div>
         )}
+        <div className="flex items-center justify-between border-border border-b py-3">
+          <span className="text-foreground text-sm">Positions</span>
+          <span className="font-semibold text-lg">
+            {fmt(walletSummary?.summary.positions ?? 0)}
+          </span>
+        </div>
       </div>
 
       {/* Table */}
@@ -126,9 +98,9 @@ export function BalanceTab({ userId }: BalanceTabProps) {
           <div className="text-right">Open Positions</div>
           <div className="text-right">Total</div>
         </div>
-        {members.map((row) => (
+        {(walletSummary?.members ?? []).map((row) => (
           <div
-            key={row.name}
+            key={row.id}
             className="grid grid-cols-4 items-center gap-4 border-border border-t py-4"
           >
             <div className="font-medium text-sm">{row.name}</div>
