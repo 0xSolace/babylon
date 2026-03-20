@@ -1405,6 +1405,7 @@ export class PerpMarketService {
             amount: existing.size,
             type: 'perp_close',
             relatedId: existing.ticker,
+            // Note: uses flipResult.size to ensure correct fee processing after transaction completion
             positionId: existing.id,
           },
           { ticker: existing.ticker }
