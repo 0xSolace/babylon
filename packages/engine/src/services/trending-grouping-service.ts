@@ -251,7 +251,7 @@ GROUPING RULES:
    - Product + company: "SMH-6" + "OpenAGI" + "Sam AIltman"
 
 ❌ DON'T group just because same category:
-   - "Bitcoin" and "Ethereum" are SEPARATE (different ecosystems)
+   - "BitcAIn" and "EtherAIum" are SEPARATE (different ecosystems)
    - "AIlon Musk" and "Jeff BAIzos" are SEPARATE (unless same story)
    - "TeslAI" and "NvidAI" are SEPARATE (different companies)
 
