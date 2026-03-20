@@ -54,6 +54,36 @@ function isValidDeliveryChannel(value: unknown): value is NotificationDeliveryCh
   return typeof value === 'string' && VALID_DELIVERY_CHANNELS.has(value);
 }
 
+interface ValidatedDigestRow {
+  id: string;
+  email: string | null;
+  emailVerified: boolean;
+  digestEnabled: boolean;
+  digestFrequency: NotificationDigestFrequency;
+  deliveryChannel: NotificationDeliveryChannel;
+  lastSentAt: Date | null;
+}
+
+function isValidDigestCandidateRow(row: {
+  id: string;
+  email: string | null;
+  emailVerified: boolean;
+  digestEnabled: boolean;
+  digestFrequency: string | null;
+  deliveryChannel: string | null;
+  lastSentAt: Date | null;
+}): row is ValidatedDigestRow {
+  if (!isValidDigestFrequency(row.digestFrequency)) {
+    logger.warn('Invalid digest frequency in database', { userId: row.id, value: row.digestFrequency }, 'NotificationDigestService');
+    return false;
+  }
+  if (!isValidDeliveryChannel(row.deliveryChannel)) {
+    logger.warn('Invalid delivery channel in database', { userId: row.id, value: row.deliveryChannel }, 'NotificationDigestService');
+    return false;
+  }
+  return true;
+}
+
 export function getDigestWindowStart(
   now: Date,
   frequency: NotificationDigestFrequency
@@ -97,23 +127,7 @@ export async function listDigestCandidates(): Promise<DigestCandidateUser[]> {
     .from(users)
     .where(eq(users.notificationDigestEnabled, true));
 
-  return rows
-    .filter((row) => {
-      if (!isValidDigestFrequency(row.digestFrequency)) {
-        logger.warn('Invalid digest frequency in database', { userId: row.id, value: row.digestFrequency }, 'NotificationDigestService');
-        return false;
-      }
-      if (!isValidDeliveryChannel(row.deliveryChannel)) {
-        logger.warn('Invalid delivery channel in database', { userId: row.id, value: row.deliveryChannel }, 'NotificationDigestService');
-        return false;
-      }
-      return true;
-    })
-    .map((row) => ({
-      ...row,
-      digestFrequency: row.digestFrequency as NotificationDigestFrequency,
-      deliveryChannel: row.deliveryChannel as NotificationDeliveryChannel,
-    }));
+  return rows.filter(isValidDigestCandidateRow);
 }
 
 export async function buildDigestForUser(params: {

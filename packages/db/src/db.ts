@@ -458,6 +458,43 @@ export {
 };
 
 // ============================================================================
+// Raw SQL Execution
+// ============================================================================
+
+/**
+ * Execute a raw SQL query with automatic retry logic.
+ * Use this for queries that cannot be expressed through the Drizzle ORM.
+ *
+ * @param query - SQL query built using drizzle-orm's sql template tag
+ * @returns Query result
+ *
+ * @example
+ * ```ts
+ * import { sql } from 'drizzle-orm';
+ * const result = await executeRaw(sql`SELECT * FROM users WHERE id = ${userId}`);
+ * ```
+ */
+export async function executeRaw<T = unknown>(
+  query: ReturnType<typeof sql>
+): Promise<T> {
+  if (currentStorageMode !== 'postgres') {
+    throw new Error('executeRaw is only supported in PostgreSQL mode');
+  }
+
+  const drizzleInstance = getDrizzleInstance();
+  if (!drizzleInstance) {
+    throw new Error(
+      'Database not initialized. Check DATABASE_URL or use initializeJsonMode().'
+    );
+  }
+
+  return withRetryInternal(async () => {
+    const result = await drizzleInstance.execute(query);
+    return result as T;
+  });
+}
+
+// ============================================================================
 // Main Exports
 // ============================================================================
 
