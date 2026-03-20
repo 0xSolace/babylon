@@ -187,9 +187,13 @@ export const GET = withErrorHandling(
     });
     const canonicalUserId = dbUser?.id ?? userId;
     const positionUserIds = dbUser
-      ? [dbUser.id, dbUser.privyId].filter((candidate): candidate is string =>
-          Boolean(candidate)
-        )
+      ? [
+          ...new Set(
+            [dbUser.id, dbUser.privyId].filter(
+              (candidate): candidate is string => Boolean(candidate)
+            )
+          ),
+        ]
       : [userId];
 
     const status = queryParams.status as string;
