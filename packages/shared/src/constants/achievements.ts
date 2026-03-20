@@ -117,7 +117,11 @@ export const EVENT_TO_TRACKING_TYPES: Record<AchievementEventType, string[]> = {
     'weekly_pred_and_perp',
     'weekly_trade_days',
   ],
-  prediction_win: ['prediction_win_count', 'weekly_trade_win'],
+  prediction_win: [
+    'prediction_win_count',
+    'weekly_trade_win',
+    'weekly_positive_pnl',
+  ],
   post_created: ['daily_post', 'weekly_post', 'weekly_feed_engage'],
   comment_created: [
     'comment_count',
@@ -145,7 +149,7 @@ export const EVENT_TO_TRACKING_TYPES: Record<AchievementEventType, string[]> = {
   share_created: ['daily_share', 'weekly_share'],
   group_joined: ['daily_group_join', 'weekly_group_join'],
   group_created: ['weekly_group_create'],
-  daily_login: ['login_streak', 'weekly_login_days'],
+  daily_login: ['login_streak', 'weekly_login_days', 'weekly_referral_play'],
   page_visited: [
     'terminal_visit_count',
     'agents_visit_count',
