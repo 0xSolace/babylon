@@ -87,6 +87,14 @@ import { MARKET_TIME_RANGES } from '@/types/markets';
 import { formatBalance } from '../../_lib/formatters';
 import { PerpsOrderEntryPanel } from '../perps-terminal/PerpsOrderEntryPanel';
 import { useMarketsTutorial } from '../tutorial/useMarketsTutorial';
+import {
+  buildPredictionLiveStateFromResolution,
+  buildPredictionLiveStateFromTrade,
+  buildPredictionTerminalState,
+  isSamePredictionLiveState,
+  type PredictionMarketLiveState,
+  type PredictionMarketTerminalState,
+} from './predictionTerminalState';
 import { TerminalAgentsChat } from './TerminalAgentsChat';
 import { TerminalPortfolio } from './TerminalPortfolio';
 import { TerminalSocialFeed } from './TerminalSocialFeed';
@@ -175,14 +183,6 @@ function MobileTabBar({
 
 interface MarketsTradingTerminalProps {
   onRequestBuyPoints?: () => void;
-}
-
-interface PredictionMarketTerminalState extends PredictionMarket {
-  liquidity?: number;
-  resolved?: boolean;
-  resolution?: boolean | null;
-  yesProbability?: number;
-  noProbability?: number;
 }
 
 interface UnifiedRow {
@@ -999,31 +999,38 @@ export function MarketsTradingTerminal({
     );
   }, [selected, perpMarkets]);
 
-  const [predictionState, setPredictionState] =
-    useState<PredictionMarketTerminalState | null>(null);
+  const selectedPredictionId =
+    selected?.kind === 'prediction' ? selected.id : null;
+  const selectedPredictionMarket = useMemo(() => {
+    if (!selectedPredictionId) return null;
+    return (
+      predictionMarkets.find((m) => m.id.toString() === selectedPredictionId) ??
+      null
+    );
+  }, [predictionMarkets, selectedPredictionId]);
+  const [predictionLiveState, setPredictionLiveState] =
+    useState<PredictionMarketLiveState | null>(null);
 
   useEffect(() => {
-    if (!selected || selected.kind !== 'prediction') {
-      setPredictionState(null);
-      return;
-    }
-    const base =
-      predictionMarkets.find((m) => m.id.toString() === selected.id) ?? null;
-    setPredictionState(base as PredictionMarketTerminalState | null);
-  }, [selected, predictionMarkets]);
+    setPredictionLiveState((prev) =>
+      prev?.marketId === selectedPredictionId ? prev : null
+    );
+  }, [selectedPredictionId]);
+
+  const predictionState = useMemo(
+    () =>
+      buildPredictionTerminalState(
+        selectedPredictionMarket,
+        predictionLiveState
+      ),
+    [selectedPredictionMarket, predictionLiveState]
+  );
 
   const handlePredictionTradeEvent = useCallback(
     (event: PredictionTradeSSE) => {
-      setPredictionState((prev) => {
-        if (!prev || prev.id.toString() !== event.marketId) return prev;
-        return {
-          ...prev,
-          yesShares: event.yesShares,
-          noShares: event.noShares,
-          liquidity: event.liquidity ?? prev.liquidity,
-          yesProbability: event.yesPrice,
-          noProbability: event.noPrice,
-        };
+      setPredictionLiveState((prev) => {
+        const next = buildPredictionLiveStateFromTrade(event);
+        return isSamePredictionLiveState(prev, next) ? prev : next;
       });
     },
     []
@@ -1031,30 +1038,18 @@ export function MarketsTradingTerminal({
 
   const handlePredictionResolutionEvent = useCallback(
     (event: PredictionResolutionSSE) => {
-      setPredictionState((prev) => {
-        if (!prev || prev.id.toString() !== event.marketId) return prev;
-        return {
-          ...prev,
-          resolved: true,
-          resolution: event.winningSide === 'yes',
-          yesShares: event.yesShares,
-          noShares: event.noShares,
-          liquidity: event.liquidity ?? prev.liquidity,
-          yesProbability: event.yesPrice,
-          noProbability: event.noPrice,
-        };
+      setPredictionLiveState((prev) => {
+        const next = buildPredictionLiveStateFromResolution(event);
+        return isSamePredictionLiveState(prev, next) ? prev : next;
       });
     },
     []
   );
 
-  usePredictionMarketStream(
-    selected?.kind === 'prediction' ? selected.id : null,
-    {
-      onTrade: handlePredictionTradeEvent,
-      onResolution: handlePredictionResolutionEvent,
-    }
-  );
+  usePredictionMarketStream(selectedPredictionId, {
+    onTrade: handlePredictionTradeEvent,
+    onResolution: handlePredictionResolutionEvent,
+  });
 
   const predictionEffectiveShares = useMemo(() => {
     if (!predictionState) return null;
@@ -1077,11 +1072,9 @@ export function MarketsTradingTerminal({
       liquidity: seeded.yesShares + seeded.noShares,
     };
   }, [
-    predictionState?.id,
     predictionState?.yesShares,
     predictionState?.noShares,
     predictionState?.liquidity,
-    predictionState,
   ]);
 
   const predictionHistorySeed = useMemo(
@@ -1157,8 +1150,6 @@ export function MarketsTradingTerminal({
     [router, searchParams, sortBy, sortDesc]
   );
 
-  const selectedPredictionId =
-    selected?.kind === 'prediction' ? selected.id : null;
   const selectedPredictionPositions = useMemo(() => {
     if (!selectedPredictionId) return [];
     return predictionPositions.filter(
