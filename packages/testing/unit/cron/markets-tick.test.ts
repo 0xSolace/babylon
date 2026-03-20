@@ -37,6 +37,7 @@ interface MockQuestion {
   questionNumber: number;
   resolutionDate: Date;
   status: string;
+  timeframe?: string;
 }
 
 /**
@@ -52,6 +53,19 @@ interface MockWorldEvent {
   description: string;
 }
 
+interface MockTimeframedMarket {
+  id: string;
+  questionId: string | null;
+  endTime: Date;
+  timeframe?: string;
+  granularTimeframe?: string | null;
+  startTime?: Date;
+  isActive?: boolean;
+  isResolved?: boolean;
+  resolvedAt?: Date | null;
+  parentMarketId?: string | null;
+}
+
 interface CronMockState {
   articleGame: MockGame | null;
   articleCount: number;
@@ -59,9 +73,11 @@ interface CronMockState {
   articleCoveredEventIds: Set<string>;
   marketsGame: MockGame | null;
   marketsActiveQuestions: MockQuestion[];
+  marketsTimeframedMarkets: MockTimeframedMarket[];
   marketsWorldEvents: MockWorldEvent[];
   marketsCronAuthResult: boolean;
   marketsAcquireLockResult: boolean;
+  marketsResolvedQuestionNumbers: number[];
 }
 
 const CRON_MOCK_STATE_KEY = '__babylonCronMockState';
@@ -81,9 +97,11 @@ const cronMockState =
     articleCoveredEventIds: new Set<string>(),
     marketsGame: null,
     marketsActiveQuestions: [],
+    marketsTimeframedMarkets: [],
     marketsWorldEvents: [],
     marketsCronAuthResult: true,
     marketsAcquireLockResult: true,
+    marketsResolvedQuestionNumbers: [],
   });
 
 let mockSnowflakeCounter = 0;
@@ -136,7 +154,7 @@ const getTableData = (): unknown => {
     case 'worldEvents':
       return cronMockState.marketsWorldEvents;
     case 'timeframedMarkets':
-      return [];
+      return cronMockState.marketsTimeframedMarkets;
     case 'posts':
       return [];
     default:
@@ -167,6 +185,7 @@ const createQueryBuilder = (
     fullJoin: mock(() => builder),
     limit: mock(() => builder),
     orderBy: mock(() => builder),
+    for: mock(() => builder),
     returning: mock(async () => {
       if (operation === 'insert') return [{ id: `mock-${Date.now()}` }];
       if (operation === 'update') return [{ id: 'mock-updated' }];
@@ -455,7 +474,25 @@ const registerMocks = () => {
       factors: {},
     }),
     recalculateReputation: async () => {},
-    resolveQuestionPayouts: async () => {},
+    resolveQuestionPayouts: async (questionNumber: number) => {
+      cronMockState.marketsResolvedQuestionNumbers.push(questionNumber);
+
+      const question = cronMockState.marketsActiveQuestions.find(
+        (candidate) => candidate.questionNumber === questionNumber
+      );
+      if (question) {
+        question.status = 'resolved';
+      }
+
+      const resolutionTimestamp = new Date('2026-03-20T00:00:00.000Z');
+      for (const market of cronMockState.marketsTimeframedMarkets) {
+        if (market.questionId === question?.id) {
+          market.isActive = false;
+          market.isResolved = true;
+          market.resolvedAt = resolutionTimestamp;
+        }
+      }
+    },
     SignalExtractionService: {
       extractMarketSignal: async () => ({
         suggestedOutcome: 'YES',
@@ -549,9 +586,11 @@ describe('Markets Tick Cron', () => {
   beforeEach(() => {
     cronMockState.marketsGame = null;
     cronMockState.marketsActiveQuestions = [];
+    cronMockState.marketsTimeframedMarkets = [];
     cronMockState.marketsWorldEvents = [];
     cronMockState.marketsCronAuthResult = true;
     cronMockState.marketsAcquireLockResult = true;
+    cronMockState.marketsResolvedQuestionNumbers = [];
     currentQueryTable = null;
   });
 
@@ -656,6 +695,56 @@ describe('Markets Tick Cron', () => {
     // Additional integration tests (game running, market creation, resolution)
     // are in packages/testing/integration/markets-tick.integration.test.ts
     // These require real database access and are run separately.
+  });
+
+  describe('Orphaned Market Recovery', () => {
+    test('should resolve expired active markets through resolveQuestionPayouts and keep status sync owned by markets-tick', async () => {
+      cronMockState.marketsGame = {
+        id: 'game-123',
+        isContinuous: true,
+        isRunning: true,
+        currentDay: 1,
+      };
+      cronMockState.marketsActiveQuestions = [
+        {
+          id: 'question-1',
+          questionNumber: 42,
+          resolutionDate: new Date('2026-03-20T01:00:00.000Z'),
+          status: 'active',
+          timeframe: 'flash',
+        },
+      ];
+      cronMockState.marketsTimeframedMarkets = [
+        {
+          id: 'market-1',
+          questionId: 'question-1',
+          timeframe: 'flash',
+          granularTimeframe: '15m',
+          startTime: new Date('2026-03-19T23:00:00.000Z'),
+          endTime: new Date('2026-03-19T23:30:00.000Z'),
+          isActive: true,
+          isResolved: false,
+          parentMarketId: null,
+          resolvedAt: null,
+        },
+      ];
+
+      const req = new NextRequest('http://localhost/api/cron/markets-tick', {
+        method: 'POST',
+      });
+      const res = await POST(req);
+      const data = await res.json();
+
+      expect(res.status).toBe(200);
+      expect(data.success).toBe(true);
+      expect(cronMockState.marketsResolvedQuestionNumbers).toContain(42);
+      expect(cronMockState.marketsActiveQuestions[0]?.status).toBe('resolved');
+      expect(cronMockState.marketsTimeframedMarkets[0]?.isActive).toBe(false);
+      expect(cronMockState.marketsTimeframedMarkets[0]?.isResolved).toBe(true);
+      expect(
+        cronMockState.marketsTimeframedMarkets[0]?.resolvedAt
+      ).toBeInstanceOf(Date);
+    });
   });
 });
 

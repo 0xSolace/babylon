@@ -117,4 +117,33 @@ describe('TimeframeArcProcessor', () => {
     expect(result.transitionsOccurred).toBe(0);
     expect(mockDbUpdateSet).not.toHaveBeenCalled();
   });
+
+  test('does not generate events or event triggers for markets past endTime', async () => {
+    const now = new Date('2026-03-19T20:50:00.000Z');
+    const expiredMarket = {
+      id: 'market-3',
+      timeframe: 'intraday',
+      startTime: new Date('2026-03-19T18:50:00.000Z'),
+      endTime: new Date('2026-03-19T19:50:00.000Z'),
+      arcState: 'climax',
+      eventsGenerated: 7,
+      lastEventAt: new Date('2026-03-19T19:40:00.000Z'),
+    };
+
+    mockDbSelectOffset.mockResolvedValueOnce([expiredMarket]);
+
+    const processor = new TimeframeArcProcessor();
+    const result = await processor.processTick(now);
+
+    expect(result.marketsProcessed).toBe(1);
+    expect(result.transitionsOccurred).toBe(1);
+    expect(result.eventsGenerated).toBe(0);
+    expect(result.eventTriggers).toEqual([]);
+    expect(mockDbUpdateSet).toHaveBeenCalledTimes(1);
+    expect(mockDbUpdateSet).toHaveBeenCalledWith({
+      arcState: 'resolution',
+      arcStateEnteredAt: now,
+      updatedAt: now,
+    });
+  });
 });
