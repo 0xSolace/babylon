@@ -55,9 +55,13 @@ const WALLET_CREATION_IN_FLIGHT = new Map<string, Promise<{ walletAddress: strin
  * Get agent identity from cache or database
  * Optimized for high concurrency with lazy refresh
  * Supports both USER_CONTROLLED agents (User table) and NPCs (StaticDataRegistry)
+ *
+ * @param agentUserId - The agent's user ID
+ * @param options.requireWallet - If true, throws an error when wallet creation fails (for scenarios where wallet is mandatory)
  */
 async function getCachedAgentIdentity(
-  agentUserId: string
+  agentUserId: string,
+  options?: { requireWallet?: boolean }
 ): Promise<CachedAgentIdentity | null> {
   const now = Date.now();
   const cached = AGENT_IDENTITY_CACHE.get(agentUserId);
@@ -86,12 +90,11 @@ async function getCachedAgentIdentity(
 
     // Auto-create wallet if missing and AUTO_CREATE_AGENT_WALLETS is explicitly enabled
     // Uses in-flight map to deduplicate concurrent wallet creation requests for the same agent
-    if (
-      !walletAddress &&
-      ['true', '1', 'yes'].includes(
-        process.env.AUTO_CREATE_AGENT_WALLETS?.toLowerCase() ?? ''
-      )
-    ) {
+// Note: checks if agent wallets should auto-create only when explicitly enabled by env var
+    const shouldAutoCreateWallet = ['true', '1', 'yes'].includes(
+      process.env.AUTO_CREATE_AGENT_WALLETS?.toLowerCase() ?? ''
+    );
+    if (!walletAddress && shouldAutoCreateWallet) {
       try {
         // Check if wallet creation is already in progress for this agent
         let walletPromise = WALLET_CREATION_IN_FLIGHT.get(agentUserId);
@@ -101,9 +104,22 @@ async function getCachedAgentIdentity(
             undefined,
             'BabylonIntegration'
           );
+          // Note: Wallet creation failure handling depends on requireWallet option
           walletPromise = agentWalletService.createAgentEmbeddedWallet(agentUserId)
             .then(result => ({ walletAddress: result.walletAddress }))
-            .catch(() => null)
+            .catch((err) => {
+              const errorMsg = err instanceof Error ? err.message : String(err);
+              logger.warn(
+                `Wallet creation failed for agent ${agentUserId}`,
+                { error: errorMsg },
+                'BabylonIntegration'
+              );
+              // If wallet is required, propagate the error
+              if (options?.requireWallet) {
+                throw new Error(`Wallet creation required but failed: ${errorMsg}`);
+              }
+              return null;
+            })
             .finally(() => {
               WALLET_CREATION_IN_FLIGHT.delete(agentUserId);
             });
@@ -125,13 +141,16 @@ async function getCachedAgentIdentity(
           }
         }
       } catch (error) {
-        // Note: Wallet creation errors are caught by .catch() above and return null.
-        // This catch handles errors from the subsequent db.user.findUnique refresh.
+        // Note: Wallet creation errors propagate here if requireWallet is true.
+        // Otherwise, errors from .catch() return null and this handles db.user.findUnique refresh errors.
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        if (options?.requireWallet) {
+          // Re-throw if wallet is required - caller must handle this
+          throw error;
+        }
         logger.warn(
           `Failed to auto-create wallet for agent ${agentUserId}`,
-          {
-            error: error instanceof Error ? error.message : String(error),
-          },
+          { error: errorMsg },
           'BabylonIntegration'
         );
         // Continue with null walletAddress - agent can still work without wallet
