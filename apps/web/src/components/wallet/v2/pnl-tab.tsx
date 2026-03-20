@@ -174,9 +174,7 @@ export function PnLTab({
             <div
               className={cn(
                 'font-semibold text-sm md:text-base',
-                selected.lifetimePnl >= 0
-                  ? 'text-emerald-500'
-                  : 'text-red-500'
+                selected.lifetimePnl >= 0 ? 'text-emerald-500' : 'text-red-500'
               )}
             >
               {fmtPnl(selected.lifetimePnl)}
@@ -227,7 +225,9 @@ export function PnLTab({
                     <div
                       className={cn(
                         'font-medium text-xs',
-                        row.currentPnl >= 0 ? 'text-emerald-500' : 'text-red-500'
+                        row.currentPnl >= 0
+                          ? 'text-emerald-500'
+                          : 'text-red-500'
                       )}
                     >
                       {fmtPnl(row.currentPnl)}
