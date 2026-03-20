@@ -892,7 +892,6 @@ export default function SettingsPage() {
                       unsubscribe link.
                     </div>
                   </div>
-
                 </div>
 
                 {/* Save area */}

@@ -97,11 +97,7 @@ interface AuthState {
 
 type PersistedAuthState = Pick<
   AuthState,
-  | 'user'
-  | 'wallet'
-  | 'loadedUserId'
-  | 'isLoadingProfile'
-  | 'needsOnboarding'
+  'user' | 'wallet' | 'loadedUserId' | 'isLoadingProfile' | 'needsOnboarding'
 >;
 
 const CURRENT_AUTH_STORE_VERSION = 3;
