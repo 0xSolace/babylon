@@ -48,26 +48,32 @@ export function buildPredictionTerminalState(
 }
 
 export function buildPredictionLiveStateFromTrade(
-  event: PredictionTradeSSE
+  event: PredictionTradeSSE,
+  previous?: PredictionMarketLiveState | null
 ): PredictionMarketLiveState {
   return {
     marketId: event.marketId,
     yesShares: event.yesShares,
     noShares: event.noShares,
-    liquidity: event.liquidity,
+    liquidity:
+      event.liquidity ??
+      (previous?.marketId === event.marketId ? previous.liquidity : undefined),
     yesProbability: event.yesPrice,
     noProbability: event.noPrice,
   };
 }
 
 export function buildPredictionLiveStateFromResolution(
-  event: PredictionResolutionSSE
+  event: PredictionResolutionSSE,
+  previous?: PredictionMarketLiveState | null
 ): PredictionMarketLiveState {
   return {
     marketId: event.marketId,
     yesShares: event.yesShares,
     noShares: event.noShares,
-    liquidity: event.liquidity,
+    liquidity:
+      event.liquidity ??
+      (previous?.marketId === event.marketId ? previous.liquidity : undefined),
     yesProbability: event.yesPrice,
     noProbability: event.noPrice,
     resolved: true,

@@ -1029,7 +1029,7 @@ export function MarketsTradingTerminal({
   const handlePredictionTradeEvent = useCallback(
     (event: PredictionTradeSSE) => {
       setPredictionLiveState((prev) => {
-        const next = buildPredictionLiveStateFromTrade(event);
+        const next = buildPredictionLiveStateFromTrade(event, prev);
         return isSamePredictionLiveState(prev, next) ? prev : next;
       });
     },
@@ -1039,7 +1039,7 @@ export function MarketsTradingTerminal({
   const handlePredictionResolutionEvent = useCallback(
     (event: PredictionResolutionSSE) => {
       setPredictionLiveState((prev) => {
-        const next = buildPredictionLiveStateFromResolution(event);
+        const next = buildPredictionLiveStateFromResolution(event, prev);
         return isSamePredictionLiveState(prev, next) ? prev : next;
       });
     },
