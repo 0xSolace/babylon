@@ -35,8 +35,6 @@
  *                   type: boolean
  *                 needsOnboarding:
  *                   type: boolean
- *                 needsOnchain:
- *                   type: boolean
  *                 user:
  *                   type: object
  *                   nullable: true
@@ -64,7 +62,7 @@
  *
  * **Profile Data Includes:**
  * - **Identity:** username, display name, bio, avatar, cover image
- * - **Onboarding Status:** profile completion, on-chain registration
+ * - **Onboarding Status:** profile completion
  * - **Social Links:** Farcaster, Twitter connections and visibility settings
  * - **Blockchain:** wallet address, NFT token ID, on-chain status
  * - **Reputation:** reputation points, referral code, referral source
@@ -73,8 +71,7 @@
  *
  * **Onboarding States:**
  * - `needsOnboarding: true` - User exists in DB but hasn't completed profile setup
- * - `needsOnchain: true` - Profile complete but not registered on-chain
- * - Both false - Fully onboarded user
+ * - `needsOnboarding: false` - Fully onboarded user
  *
  * **Profile Completeness:**
  * A profile is considered complete when user has:
@@ -89,7 +86,6 @@
  * @returns {object} User profile response
  * @property {boolean} authenticated - Always true (auth required)
  * @property {boolean} needsOnboarding - Whether user needs profile setup
- * @property {boolean} needsOnchain - Whether user needs on-chain registration
  * @property {object} user - User profile object (minimal record until profile completed)
  * @property {object} user.stats - Cached profile statistics
  *
@@ -121,14 +117,11 @@
  * const response = await fetch('/api/users/me', {
  *   headers: { 'Authorization': `Bearer ${token}` }
  * });
- * const { user, needsOnboarding, needsOnchain } = await response.json();
+ * const { user, needsOnboarding } = await response.json();
  *
  * if (needsOnboarding) {
  *   // Redirect to onboarding flow
  *   router.push('/onboarding');
- * } else if (needsOnchain) {
- *   // Prompt for on-chain registration
- *   showOnchainModal();
  * } else {
  *   // User fully onboarded
  *   console.log(`Welcome, ${user.displayName}!`);
@@ -779,8 +772,6 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       const responseUser = buildUserResponse(linkedUser, stats);
 
       const needsOnboarding = !linkedUser.profileComplete;
-      const needsOnchain = false;
-
       logger.info(
         'Returning linked existing user profile',
         {
@@ -789,7 +780,6 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
           profileComplete: linkedUser.profileComplete,
           onChainRegistered: linkedUser.onChainRegistered,
           needsOnboarding,
-          needsOnchain,
         },
         'GET /api/users/me'
       );
@@ -797,7 +787,6 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       return successResponse({
         authenticated: true,
         needsOnboarding,
-        needsOnchain,
         user: responseUser,
       });
     }
@@ -1126,8 +1115,6 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   const responseUser = buildUserResponse(dbUser, stats);
 
   const needsOnboarding = !dbUser.profileComplete;
-  const needsOnchain = false;
-
   logger.info(
     'Authenticated user profile fetched',
     {
@@ -1137,7 +1124,6 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
       onChainRegistered: dbUser.onChainRegistered,
       nftTokenId: dbUser.nftTokenId,
       needsOnboarding,
-      needsOnchain,
     },
     'GET /api/users/me'
   );
@@ -1145,7 +1131,6 @@ export const GET = withErrorHandling(async (request: NextRequest) => {
   return successResponse({
     authenticated: true,
     needsOnboarding,
-    needsOnchain,
     user: responseUser,
   });
 });

@@ -87,13 +87,11 @@ interface AuthState {
   loadedUserId: string | null;
   isLoadingProfile: boolean;
   needsOnboarding: boolean;
-  needsOnchain: boolean;
   setUser: (user: User) => void;
   setWallet: (wallet: Wallet) => void;
   setLoadedUserId: (userId: string) => void;
   setIsLoadingProfile: (loading: boolean) => void;
   setNeedsOnboarding: (needsOnboarding: boolean) => void;
-  setNeedsOnchain: (needsOnchain: boolean) => void;
   clearAuth: () => void;
 }
 
@@ -104,10 +102,9 @@ type PersistedAuthState = Pick<
   | 'loadedUserId'
   | 'isLoadingProfile'
   | 'needsOnboarding'
-  | 'needsOnchain'
 >;
 
-const CURRENT_AUTH_STORE_VERSION = 2;
+const CURRENT_AUTH_STORE_VERSION = 3;
 
 function createInitialAuthState(): PersistedAuthState {
   return {
@@ -116,7 +113,6 @@ function createInitialAuthState(): PersistedAuthState {
     loadedUserId: null,
     isLoadingProfile: false,
     needsOnboarding: false,
-    needsOnchain: false,
   };
 }
 
@@ -150,9 +146,9 @@ export function migrateAuthStoreState(
     return initialState;
   }
 
-  // Migrate only legacy payloads written before the current v2 schema.
-  // Unknown future versions should fall back to the initial state instead.
-  if (version !== 0 && version !== 1) {
+  // Migrate payloads written by known legacy schemas. Unknown future versions
+  // should fall back to the initial state instead.
+  if (version !== 0 && version !== 1 && version !== 2) {
     return initialState;
   }
 
@@ -168,7 +164,6 @@ export function migrateAuthStoreState(
     // Loading state is ephemeral and should not survive a page refresh.
     isLoadingProfile: false,
     needsOnboarding: persistedState.needsOnboarding === true,
-    needsOnchain: persistedState.needsOnchain === true,
   };
 }
 
@@ -181,7 +176,6 @@ export const useAuthStore = create<AuthState>()(
       setLoadedUserId: (userId) => set({ loadedUserId: userId }),
       setIsLoadingProfile: (loading) => set({ isLoadingProfile: loading }),
       setNeedsOnboarding: (needsOnboarding) => set({ needsOnboarding }),
-      setNeedsOnchain: (needsOnchain) => set({ needsOnchain }),
       clearAuth: () => set(createInitialAuthState()),
     }),
     {
