@@ -66,6 +66,11 @@ export const GET = withErrorHandling(
 
     // Early return for empty transactions to avoid edge cases in downsampling
     if (transactions.length === 0) {
+      logger.debug(
+        'No transactions found for P&L history',
+        { userId, timeframe, cutoff: cutoff?.toISOString() },
+        'GET /api/users/[userId]/pnl-history'
+      );
       return successResponse({ points: [] });
     }
 
