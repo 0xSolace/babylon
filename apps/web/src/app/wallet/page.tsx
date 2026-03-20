@@ -2,7 +2,7 @@
 
 import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { LoginButton } from '@/components/auth/LoginButton';
 import { PageContainer } from '@/components/shared/PageContainer';
 import { BalanceTab } from '@/components/wallet/v2/balance-tab';
@@ -10,14 +10,8 @@ import { PnLTab } from '@/components/wallet/v2/pnl-tab';
 import { PositionsTab } from '@/components/wallet/v2/positions-tab';
 import { useAuth } from '@/hooks/useAuth';
 import { useTeamTradingSummary } from '@/hooks/useTeamTradingSummary';
-import {
-  useUserPositionsPolling,
-  useUserPositionsStore,
-} from '@/stores/userPositionsStore';
-import {
-  useWalletBalancePolling,
-  useWalletBalanceStore,
-} from '@/stores/walletBalanceStore';
+import { useUserPositionsPolling } from '@/stores/userPositionsStore';
+import { useWalletBalancePolling } from '@/stores/walletBalanceStore';
 
 const WidgetSidebar = dynamic(
   () =>
@@ -36,19 +30,12 @@ export default function WalletPage() {
   const router = useRouter();
   const { ready, authenticated, login, user, getAccessToken } = useAuth();
   const [activeTab, setActiveTab] = useState<PortfolioTab>('positions');
-  const teamSummaryRefreshKeyRef = useRef<string | null>(null);
 
   const userId = authenticated ? user?.id : undefined;
 
   // Start polling for wallet data when authenticated
   useWalletBalancePolling(userId ?? null, 15_000);
   useUserPositionsPolling(userId ?? null);
-  const walletBalanceLastFetchedAt = useWalletBalanceStore(
-    (state) => state.lastFetchedAt
-  );
-  const userPositionsLastFetchedAt = useUserPositionsStore(
-    (state) => state.lastFetchedAt
-  );
 
   const teamSummaryEnabled =
     Boolean(ready && authenticated && userId) && activeTab === 'pnl';
@@ -57,37 +44,12 @@ export default function WalletPage() {
     summary: teamSummary,
     loading: teamSummaryLoading,
     error: teamSummaryError,
-    refresh: refreshTeamSummary,
   } = useTeamTradingSummary({
     ownerId: userId ?? null,
     ownerName: user?.displayName || user?.username || 'You',
     enabled: teamSummaryEnabled,
     getAccessToken,
   });
-
-  useEffect(() => {
-    if (!teamSummaryEnabled) {
-      teamSummaryRefreshKeyRef.current = null;
-      return;
-    }
-
-    const refreshKey = `${walletBalanceLastFetchedAt ?? 'none'}:${userPositionsLastFetchedAt ?? 'none'}`;
-    if (teamSummaryRefreshKeyRef.current === null) {
-      teamSummaryRefreshKeyRef.current = refreshKey;
-      return;
-    }
-    if (teamSummaryRefreshKeyRef.current === refreshKey) {
-      return;
-    }
-
-    teamSummaryRefreshKeyRef.current = refreshKey;
-    void refreshTeamSummary();
-  }, [
-    teamSummaryEnabled,
-    walletBalanceLastFetchedAt,
-    userPositionsLastFetchedAt,
-    refreshTeamSummary,
-  ]);
 
   // Redirect unauthenticated users
   useEffect(() => {
