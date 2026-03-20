@@ -13,7 +13,7 @@ import {
   tradingFeeOutbox,
   withTransaction,
 } from '@babylon/db';
-import { FeeService, type FeeType } from '@babylon/engine';
+import { FeeService, isValidFeeType, type FeeType } from '@babylon/engine';
 import { generateSnowflakeId, logger } from '@babylon/shared';
 import { asc } from 'drizzle-orm';
 
@@ -60,6 +60,21 @@ export async function drainTradingFeeOutboxBatch(): Promise<{
   let failed = 0;
 
   for (const row of rows) {
+    // Validate tradeType before processing to catch invalid data early
+    if (!isValidFeeType(row.tradeType)) {
+      failed += 1;
+      logger.error(
+        'Invalid tradeType in outbox — skipping row',
+        {
+          outboxId: row.id,
+          userId: row.userId,
+          tradeType: row.tradeType,
+        },
+        'TradingFeeOutbox'
+      );
+      continue;
+    }
+
     try {
       await withTransaction(async (tx: Transaction) => {
         await FeeService.processTradingFee(
