@@ -179,7 +179,9 @@ async function getCachedAgentIdentity(
           // Wrap with timeout to prevent unbounded hangs in serverless environments
           walletPromise = withWalletCreationTimeout(rawPromise, agentUserId);
           // Evict oldest entry if at capacity to prevent unbounded growth
-          if (WALLET_CREATION_IN_FLIGHT.size >= WALLET_CREATION_IN_FLIGHT_MAX_SIZE) {
+          if (
+            WALLET_CREATION_IN_FLIGHT.size >= WALLET_CREATION_IN_FLIGHT_MAX_SIZE
+          ) {
             const oldestKey = WALLET_CREATION_IN_FLIGHT.keys().next().value;
             if (oldestKey) {
               WALLET_CREATION_IN_FLIGHT.delete(oldestKey);

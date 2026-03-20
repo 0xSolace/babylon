@@ -14,7 +14,7 @@ import {
   tradingFeeOutbox,
   withTransaction,
 } from '@babylon/db';
-import { FeeService, isValidFeeType, type FeeType } from '@babylon/engine';
+import { FeeService, type FeeType, isValidFeeType } from '@babylon/engine';
 import { generateSnowflakeId, logger } from '@babylon/shared';
 import { asc } from 'drizzle-orm';
 

@@ -3,9 +3,17 @@ import type {
   NotificationDigestFrequency,
 } from '../../types/notifications';
 
-export const VALID_DIGEST_FREQUENCIES = new Set<string>(['hourly', 'daily', 'weekly']);
+export const VALID_DIGEST_FREQUENCIES = new Set<string>([
+  'hourly',
+  'daily',
+  'weekly',
+]);
 
-export const VALID_DELIVERY_CHANNELS = new Set<string>(['in-app', 'email', 'both']);
+export const VALID_DELIVERY_CHANNELS = new Set<string>([
+  'in-app',
+  'email',
+  'both',
+]);
 
 /**
  * Defensive check for DB / external values that should match NotificationDigestFrequency.
