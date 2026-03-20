@@ -18,6 +18,7 @@ import {
 } from '@/components/markets/TradeConfirmationDialog';
 import { useAuth } from '@/hooks/useAuth';
 import { useMarketPrices } from '@/hooks/useMarketPrices';
+import { useOnClickOutside } from '@/hooks/useOnClickOutside';
 import { usePerpTrade } from '@/hooks/usePerpTrade';
 import { invalidatePerpMarketsCache } from '@/stores/perpMarketsStore';
 import {
@@ -163,20 +164,9 @@ export function PositionsTab({ userId }: PositionsTabProps) {
     return ['all', 'owner', ...Array.from(agents)] as string[];
   }, [perpPositions, predictionPositions]);
 
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    if (!memberDropdownOpen) return;
-    const handleClickOutside = (e: MouseEvent) => {
-      if (
-        memberDropdownRef.current &&
-        !memberDropdownRef.current.contains(e.target as Node)
-      ) {
-        setMemberDropdownOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [memberDropdownOpen]);
+  useOnClickOutside(memberDropdownRef, () => {
+    setMemberDropdownOpen(false);
+  });
 
   const memberFilterLabel =
     memberFilter === 'all'

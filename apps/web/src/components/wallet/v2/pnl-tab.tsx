@@ -2,7 +2,8 @@
 
 import { cn, formatCurrency } from '@babylon/shared';
 import { ChevronDown } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
+import { useOnClickOutside } from '@/hooks/useOnClickOutside';
 import { useUserPositions } from '@/stores/userPositionsStore';
 import { useWalletBalance } from '@/stores/walletBalanceStore';
 import { PnLChart } from './pnl-chart';
@@ -73,14 +74,14 @@ export function PnLTab({ userId }: PnLTabProps) {
     const list: EntityPnL[] = [
       {
         name: 'Team',
-        currentPnl: lifetimePnL,
+        currentPnl: lifetimePnL + totalUnrealized,
         lifetimePnl: lifetimePnL,
         unrealized: totalUnrealized,
         isSelected: selectedEntity === 'Team',
       },
       {
         name: 'You',
-        currentPnl: lifetimePnL,
+        currentPnl: lifetimePnL + ownerUnrealized,
         lifetimePnl: lifetimePnL,
         unrealized: ownerUnrealized,
         isSelected: selectedEntity === 'You',
@@ -100,20 +101,9 @@ export function PnLTab({ userId }: PnLTabProps) {
     return list;
   }, [perpPositions, predictionPositions, lifetimePnL, selectedEntity]);
 
-  // Close dropdown when clicking outside
-  useEffect(() => {
-    if (!entityDropdownOpen) return;
-    const handleClickOutside = (e: MouseEvent) => {
-      if (
-        dropdownRef.current &&
-        !dropdownRef.current.contains(e.target as Node)
-      ) {
-        setEntityDropdownOpen(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [entityDropdownOpen]);
+  useOnClickOutside(dropdownRef, () => {
+    setEntityDropdownOpen(false);
+  });
 
   const handleEntitySelect = useCallback((name: string) => {
     setSelectedEntity(name);
@@ -123,12 +113,6 @@ export function PnLTab({ userId }: PnLTabProps) {
   const fmtPnl = (value: number) => {
     const sign = value >= 0 ? '+' : '-';
     return `${sign}${formatCurrency(Math.abs(value), { useThousandsSeparator: true })}`;
-  };
-
-  const fmtPercent = (value: number, base: number) => {
-    if (base === 0) return '0.0%';
-    const pct = (value / Math.abs(base)) * 100;
-    return `${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%`;
   };
 
   if (loading) {
@@ -211,14 +195,6 @@ export function PnLTab({ userId }: PnLTabProps) {
             >
               {fmtPnl(selected.currentPnl)}
             </div>
-            <div
-              className={cn(
-                'text-xs',
-                selected.currentPnl >= 0 ? 'text-emerald-500' : 'text-red-500'
-              )}
-            >
-              {fmtPercent(selected.currentPnl, selected.lifetimePnl || 1)}
-            </div>
           </div>
           <div className="rounded-xl border border-border px-3 py-2.5 md:p-4">
             <div className="mb-1 text-muted-foreground text-xs tracking-wide">
@@ -232,14 +208,6 @@ export function PnLTab({ userId }: PnLTabProps) {
             >
               {fmtPnl(selected.lifetimePnl)}
             </div>
-            <div
-              className={cn(
-                'text-xs',
-                selected.lifetimePnl >= 0 ? 'text-emerald-500' : 'text-red-500'
-              )}
-            >
-              {fmtPercent(selected.lifetimePnl, selected.lifetimePnl || 1)}
-            </div>
           </div>
           <div className="rounded-xl border border-border px-3 py-2.5 md:p-4">
             <div className="mb-1 text-muted-foreground text-xs tracking-wide">
@@ -252,14 +220,6 @@ export function PnLTab({ userId }: PnLTabProps) {
               )}
             >
               {fmtPnl(selected.unrealized)}
-            </div>
-            <div
-              className={cn(
-                'text-xs',
-                selected.unrealized >= 0 ? 'text-emerald-500' : 'text-red-500'
-              )}
-            >
-              {fmtPercent(selected.unrealized, selected.lifetimePnl || 1)}
             </div>
           </div>
         </div>
@@ -277,11 +237,12 @@ export function PnLTab({ userId }: PnLTabProps) {
         </div>
         <div className="space-y-1.5 md:space-y-2">
           {entities.map((row) => (
-            <div
+            <button
               key={row.name}
+              type="button"
               onClick={() => handleEntitySelect(row.name)}
               className={cn(
-                'cursor-pointer rounded-xl border px-3 py-2.5 transition-colors md:p-4',
+                'w-full rounded-xl border px-3 py-2.5 text-left transition-colors md:p-4',
                 row.isSelected
                   ? 'border-[#1a365d]/40 bg-[#1a365d]/5'
                   : 'border-border hover:bg-muted/30'
@@ -337,7 +298,7 @@ export function PnLTab({ userId }: PnLTabProps) {
                   </div>
                 </div>
               </div>
-            </div>
+            </button>
           ))}
         </div>
       </div>
