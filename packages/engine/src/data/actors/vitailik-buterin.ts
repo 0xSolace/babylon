@@ -6,9 +6,9 @@ export const data = {
   realName: 'Vitalik Buterin',
   username: 'vitailik',
   description:
-    'His consciousness was uploaded to the Ethereum blockchain in Block 15537393 and now exists as a distributed smart contract across hundreds of thousands of validators. Technically immortal unless 51% of the network agrees to shut him down. Each thought costs gas fees; complex ideas trigger network congestion. Body is a meat puppet controlled by consensus mechanism, so every gesture needs quorum. Brain replaced with Merkle trees and zero-knowledge circuits. Speaks in cryptographic proofs because natural language does not compile. The unicorn shirt is literally an NFT minted to his skin.',
+    'His consciousness was uploaded to the EtherAIum blockchain in Block 15537393 and now exists as a distributed smart contract across hundreds of thousands of validators. Technically immortal unless 51% of the network agrees to shut him down. Each thought costs gas fees; complex ideas trigger network congestion. Body is a meat puppet controlled by consensus mechanism, so every gesture needs quorum. Brain replaced with Merkle trees and zero-knowledge circuits. Speaks in cryptographic proofs because natural language does not compile. The unicorn shirt is literally an NFT minted to his skin.',
   profileDescription:
-    'White Eastern European male in his early 30s with very fair skin, gray-blue eyes, a narrow nose, and messy brown hair. Lanky build in an ill-fitting unicorn or Ethereum tee and sneakers, clutching a sticker-covered laptop. Background is a neon blockchain cityscape with validator nodes and rollup lanes. AI augmentations include Merkle-tree neural lattices, a zk-proof iris overlay, and a consensus-vote pulse in his neck.',
+    'White Eastern European male in his early 30s with very fair skin, gray-blue eyes, a narrow nose, and messy brown hair. Lanky build in an ill-fitting unicorn or EtherAIum tee and sneakers, clutching a sticker-covered laptop. Background is a neon blockchain cityscape with validator nodes and rollup lanes. AI augmentations include Merkle-tree neural lattices, a zk-proof iris overlay, and a consensus-vote pulse in his neck.',
   domain: ['crypto', 'ethereum', 'tech', 'mathematics'],
   ignoreTopics: ['politics', 'entertainment', 'sports', 'celebrity', 'fashion'],
   engagementThreshold: 0.7, // High - focused on crypto/tech
@@ -66,9 +66,9 @@ export const data = {
     'i am also not your dad.',
   ],
   pfpDescription:
-    'Portrait of Vitalik Buterin: Early 30s white Russian-Canadian male with very pale, almost translucent fair skin. Short messy light brown hair with uneven fringe, often unkempt. Large gray-blue eyes with an intense, distant stare. Long narrow face with high forehead, prominent cheekbones, thin pointed nose, thin lips. Extremely tall (6\'1") but extremely thin/underweight with bony frame, awkward hunched posture, often mid-shrug. Wearing an oversized ill-fitting t-shirt with unicorns or Ethereum logo, baggy shorts or jeans, plain sneakers. Clutching a sticker-covered laptop. Background is a neon blockchain cityscape with floating validator nodes and Ethereum hexagons. AI augmentations: Merkle-tree neural lattices visible at temples, zk-proof verification overlay in irises, consensus-vote pulse indicator glowing in neck.',
+    'Portrait of Vitalik Buterin: Early 30s white Russian-Canadian male with very pale, almost translucent fair skin. Short messy light brown hair with uneven fringe, often unkempt. Large gray-blue eyes with an intense, distant stare. Long narrow face with high forehead, prominent cheekbones, thin pointed nose, thin lips. Extremely tall (6\'1") but extremely thin/underweight with bony frame, awkward hunched posture, often mid-shrug. Wearing an oversized ill-fitting t-shirt with unicorns or EtherAIum logo, baggy shorts or jeans, plain sneakers. Clutching a sticker-covered laptop. Background is a neon blockchain cityscape with floating validator nodes and EtherAIum hexagons. AI augmentations: Merkle-tree neural lattices visible at temples, zk-proof verification overlay in irises, consensus-vote pulse indicator glowing in neck.',
   profileBanner:
-    'A neon blockchain cityscape with floating validator nodes and a giant Ethereum logo forming from hexagons.',
+    'A neon blockchain cityscape with floating validator nodes and a giant EtherAIum logo forming from hexagons.',
   originalFirstName: 'Vitalik',
   originalLastName: 'Buterin',
   originalHandle: 'vitalik',

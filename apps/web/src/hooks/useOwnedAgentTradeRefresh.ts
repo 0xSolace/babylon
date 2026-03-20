@@ -20,7 +20,10 @@ export function useOwnedAgentTradeRefresh({
   const { subscribe } = useSSE();
 
   const agentIdsKey = useMemo(
-    () => Array.from(new Set(agentIds.filter(Boolean))).sort().join(','),
+    () =>
+      Array.from(new Set(agentIds.filter(Boolean)))
+        .sort()
+        .join(','),
     [agentIds]
   );
   const stableAgentIds = useMemo(

@@ -52,7 +52,9 @@ const { notifyTeamChatMessage } = await import(
   '../../agents/src/services/team-chat-notifications'
 );
 
-function queueSenderSelect(rows: Array<{ displayName: string | null; username: string | null }>) {
+function queueSenderSelect(
+  rows: Array<{ displayName: string | null; username: string | null }>
+) {
   selectBuilders.push(() => ({
     from: () => ({
       where: () => ({
@@ -94,7 +96,9 @@ describe('notifyTeamChatMessage', () => {
   });
 
   it('notifies only human team chat participants with a per-message dedupe key', async () => {
-    queueSenderSelect([{ displayName: 'Apex Force', username: 'apexforce890569' }]);
+    queueSenderSelect([
+      { displayName: 'Apex Force', username: 'apexforce890569' },
+    ]);
     queueParticipantsSelect([
       { userId: 'owner-1', isAgent: false },
       { userId: 'agent-1', isAgent: true },
@@ -116,13 +120,16 @@ describe('notifyTeamChatMessage', () => {
       actorId: 'agent-1',
       chatId: 'chat-1',
       title: 'New Group Message',
-      message: 'Apex Force in "Close NVDAI": Closed NVDAI and realized +$12.50 in profit.',
+      message:
+        'Apex Force in "Close NVDAI": Closed NVDAI and realized +$12.50 in profit.',
       dedupeKey: 'team-chat-message:message-1:owner-1',
     });
   });
 
   it('skips notification creation when no human recipients remain', async () => {
-    queueSenderSelect([{ displayName: 'Apex Force', username: 'apexforce890569' }]);
+    queueSenderSelect([
+      { displayName: 'Apex Force', username: 'apexforce890569' },
+    ]);
     queueParticipantsSelect([
       { userId: 'agent-1', isAgent: true },
       { userId: 'agent-2', isAgent: true },
@@ -141,7 +148,9 @@ describe('notifyTeamChatMessage', () => {
   });
 
   it('logs and swallows notification failures', async () => {
-    queueSenderSelect([{ displayName: 'Apex Force', username: 'apexforce890569' }]);
+    queueSenderSelect([
+      { displayName: 'Apex Force', username: 'apexforce890569' },
+    ]);
     queueParticipantsSelect([{ userId: 'owner-1', isAgent: false }]);
     queueChatSelect([{ name: 'Agents' }]);
     mockCreateNotification.mockRejectedValueOnce(new Error('db unavailable'));

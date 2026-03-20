@@ -167,6 +167,22 @@ const UserActivity = dynamic(
   }
 );
 
+// Lazy load agent registry for performance
+const AgentRegistry = dynamic(
+  () =>
+    import('@/components/agents/AgentRegistry').then((m) => ({
+      default: m.AgentRegistry,
+    })),
+  {
+    ssr: false,
+    loading: () => (
+      <div className="flex h-full items-center justify-center">
+        <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+      </div>
+    ),
+  }
+);
+
 /**
  * Agent Team Chat Page (Agents)
  *
@@ -246,6 +262,9 @@ export default function TeamChatPage() {
   const [bottomPanelHeight, setBottomPanelHeight] = useState(
     BOTTOM_PANEL_DEFAULT_HEIGHT
   );
+
+  // Registry tab: which agent is selected for registration when viewing team/user
+  const [registryAgentId, setRegistryAgentId] = useState<string | null>(null);
 
   const [teamScope, setTeamScope] = useState<TeamScope>('owner_agents');
 
@@ -1286,6 +1305,90 @@ export default function TeamChatPage() {
                         'Agent'
                       }
                     />
+                  );
+                })()}
+
+              {/* Registry Tab */}
+              {bottomPanelTab === 'registry' &&
+                (() => {
+                  // For agents, render registry directly
+                  if (bottomPanelEntityType === 'agent') {
+                    const bottomAgent = teamChat?.agents.find(
+                      (a) => a.id === bottomPanelEntityId
+                    );
+                    return (
+                      <div className="p-4">
+                        <AgentRegistry
+                          agent={{
+                            id: bottomPanelEntityId,
+                            name:
+                              bottomAgent?.displayName ||
+                              bottomAgent?.username ||
+                              'Agent',
+                          }}
+                          onUpdate={() => void refreshTeamChat()}
+                        />
+                      </div>
+                    );
+                  }
+
+                  // For team/user, show agent picker then registry
+                  const agents = teamChat?.agents ?? [];
+                  if (agents.length === 0) {
+                    return (
+                      <div className="flex h-full items-center justify-center text-muted-foreground text-sm">
+                        No agents available. Create an agent first.
+                      </div>
+                    );
+                  }
+
+                  // Auto-select first agent if none selected or selected no longer exists
+                  const selectedAgent = agents.find(
+                    (a) => a.id === registryAgentId
+                  );
+                  const effectiveAgentId = selectedAgent
+                    ? selectedAgent.id
+                    : agents[0]?.id;
+                  const effectiveAgent = selectedAgent ?? agents[0];
+
+                  return (
+                    <div className="p-4">
+                      {agents.length > 1 && (
+                        <div className="mb-4">
+                          <label
+                            htmlFor="registry-agent-select"
+                            className="mb-1.5 block font-medium text-sm"
+                          >
+                            Select agent to register
+                          </label>
+                          <select
+                            id="registry-agent-select"
+                            value={effectiveAgentId ?? ''}
+                            onChange={(e) => setRegistryAgentId(e.target.value)}
+                            className="h-9 w-full max-w-xs rounded-md border border-border bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                          >
+                            {agents.map((a) => (
+                              <option key={a.id} value={a.id}>
+                                {a.displayName || a.username || 'Agent'}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+                      {effectiveAgent && effectiveAgentId && (
+                        <AgentRegistry
+                          key={effectiveAgentId}
+                          agent={{
+                            id: effectiveAgentId,
+                            name:
+                              effectiveAgent.displayName ||
+                              effectiveAgent.username ||
+                              'Agent',
+                          }}
+                          onUpdate={() => void refreshTeamChat()}
+                        />
+                      )}
+                    </div>
                   );
                 })()}
 

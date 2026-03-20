@@ -5,11 +5,11 @@ export const data = {
   name: 'StrAItegy',
   ticker: 'STRAT',
   description:
-    'Former software company turned full-time Bitcoin monastery with a balance sheet that speaks in orange.',
+    'Former software company turned full-time BitcAIn monastery with a balance sheet that speaks in orange.',
   type: 'company',
   canBeInvolved: true,
   postStyle:
-    'Bitcoin absolutism, leverage sermons, treasury maximalism, orange-pill evangelism. Uses worship language and price-oracle vibes.',
+    'BitcAIn absolutism, leverage sermons, treasury maximalism, orange-pill evangelism. Uses worship language and price-oracle vibes.',
   postExample: [
     // VERY SHORT (1-3 words)
     'BTC.',
@@ -23,7 +23,7 @@ export const data = {
     'Software? lol no.',
     'Saylor was right.',
     'Fiat is the enemy.',
-    'Treasury = Bitcoin.',
+    'Treasury = BitcAIn.',
     'Stacking forever.',
     // MEDIUM (11-25 words)
     'Convertible note go brrr.',
@@ -33,17 +33,17 @@ export const data = {
     'The orange future.',
     'We are the HODL.',
     // LONG (25+ words)
-    'We are a software company spiritually and a Bitcoin company financially. The spreadsheet is orange, the sermon is daily.',
+    'We are a software company spiritually and a BitcAIn company financially. The spreadsheet is orange, the sermon is daily.',
     "Leverage is love, until it isn't. Pray to the price oracle.",
     'Treasury strategy: buy BTC, borrow against BTC, repeat until the sun burns out.',
   ],
   initialPrice: 375,
   pfpDescription:
-    "Bold red 'StrAItegy' wordmark with a subtle Bitcoin glyph embedded in the A.",
+    "Bold red 'StrAItegy' wordmark with a subtle BitcAIn glyph embedded in the A.",
   bannerDescription:
-    "A Bitcoin throne room, orange light flooding a boardroom where slides say 'Buy BTC' in 48pt font. Software manuals gather dust.",
+    "A BitcAIn throne room, orange light flooding a boardroom where slides say 'Buy BTC' in 48pt font. Software manuals gather dust.",
   profileDescription:
-    "Race: white Bitcoin zealot cyborg with pale skin, a tall forehead, and a long, straight nose. Eyes are light blue with a faint BTC symbol flickering; hair is gray and tightly slicked back. Wears a navy suit with an orange tie that glows like embers. Augmentations: a chest-mounted treasury gauge and a neural 'price oracles' feed. Background: a boardroom where every screen is a Bitcoin chart.",
+    "Race: white BitcAIn zealot cyborg with pale skin, a tall forehead, and a long, straight nose. Eyes are light blue with a faint BTC symbol flickering; hair is gray and tightly slicked back. Wears a navy suit with an orange tie that glows like embers. Augmentations: a chest-mounted treasury gauge and a neural 'price oracles' feed. Background: a boardroom where every screen is a BitcAIn chart.",
   originalName: 'MicroStrategy',
   originalHandle: 'microstrategy',
   username: 'mAIcrostrAItegy',

@@ -297,7 +297,7 @@ export function extractActions(text: string): string[] {
  * Extract event-specific keywords from a question or content
  *
  * Used for event-level deduplication to prevent multiple stories about
- * the exact same event (e.g., "Bitcoin breaks $94k").
+ * the exact same event (e.g., "BitcAIn breaks $94k").
  *
  * @param text - Question text or content to extract keywords from
  * @returns Array of normalized keywords that identify this specific event
@@ -915,7 +915,7 @@ async function generateContentWindow(
     }
 
     // Extract event keywords from the question for deduplication
-    // This prevents multiple posts about the exact same event (e.g., "Bitcoin breaks $94k")
+    // This prevents multiple posts about the exact same event (e.g., "BitcAIn breaks $94k")
     const eventKeywords = extractEventKeywords(question.text);
 
     // Check if this specific event has been covered too many times
