@@ -401,7 +401,11 @@ export class PredictionMarketService {
           (winningSide === 'yes' && p.side === 'yes') ||
           (winningSide === 'no' && p.side === 'no')
       )
-      .reduce((acc, p) => acc + p.shares, 0);
+      .reduce(
+        (acc, p) =>
+          acc + PredictionPricing.calculateExpectedPayout(p.shares, p.avgPrice),
+        0
+      );
 
     const liquidityReduction = Math.min(totalPayout, market.liquidity);
     const newLiquidity = market.liquidity - liquidityReduction;
@@ -418,7 +422,9 @@ export class PredictionMarketService {
       const isWinner =
         (winningSide === 'yes' && pos.side === 'yes') ||
         (winningSide === 'no' && pos.side === 'no');
-      const payout = isWinner ? pos.shares : 0;
+      const payout = isWinner
+        ? PredictionPricing.calculateExpectedPayout(pos.shares, pos.avgPrice)
+        : 0;
       const costBasisWithFees = grossUpBuyAmount(
         pos.avgPrice * pos.shares,
         this.deps.fees.tradingFeeRate
