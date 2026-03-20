@@ -34,6 +34,72 @@ describe('groupResolvedMarketOutcomes', () => {
     });
   });
 
+  test('zero-point entry is classified as win', () => {
+    const outcomes = groupResolvedMarketOutcomes([
+      {
+        holderId: 'user-1',
+        ownerUserId: 'user-1',
+        marketId: 'market-3',
+        marketName: 'Will SOL hit $500?',
+        points: 0,
+        agentName: null,
+      },
+    ]);
+
+    expect(outcomes).toHaveLength(1);
+    expect(outcomes[0]).toMatchObject({
+      points: 0,
+      outcome: 'win',
+    });
+  });
+
+  test('negative-point entry is classified as loss', () => {
+    const outcomes = groupResolvedMarketOutcomes([
+      {
+        holderId: 'user-2',
+        ownerUserId: 'user-2',
+        marketId: 'market-4',
+        marketName: 'Will DOGE moon?',
+        points: -150,
+        agentName: null,
+      },
+    ]);
+
+    expect(outcomes).toHaveLength(1);
+    expect(outcomes[0]).toMatchObject({
+      points: -150,
+      outcome: 'loss',
+    });
+  });
+
+  test('mixed YES/NO positions for same holder aggregate to net outcome', () => {
+    const outcomes = groupResolvedMarketOutcomes([
+      {
+        holderId: 'agent-5',
+        ownerUserId: 'user-1',
+        marketId: 'market-5',
+        marketName: 'Will BTC hit $100k?',
+        points: 500,
+        agentName: 'Apex Force',
+      },
+      {
+        holderId: 'agent-5',
+        ownerUserId: 'user-1',
+        marketId: 'market-5',
+        marketName: 'Will BTC hit $100k?',
+        points: -300,
+        agentName: 'Apex Force',
+      },
+    ]);
+
+    expect(outcomes).toHaveLength(1);
+    expect(outcomes[0]).toMatchObject({
+      points: 200,
+      outcome: 'win',
+      agentName: 'Apex Force',
+    });
+  });
+
   test('keeps agent-held outcomes separate and attributes the agent name', () => {
     const outcomes = groupResolvedMarketOutcomes([
       {
