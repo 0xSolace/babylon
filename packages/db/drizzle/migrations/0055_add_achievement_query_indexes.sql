@@ -13,4 +13,5 @@ CREATE INDEX IF NOT EXISTS "UserAchievement_userId_unlockedAt_idx" ON "UserAchie
 CREATE INDEX IF NOT EXISTS "UserActivityLog_userId_activityType_idx" ON "UserActivityLog" USING btree ("userId", "activityType");
 CREATE INDEX IF NOT EXISTS "Message_senderId_createdAt_idx" ON "Message" USING btree ("senderId", "createdAt");
 CREATE INDEX IF NOT EXISTS "Group_createdById_createdAt_idx" ON "Group" USING btree ("createdById", "createdAt");
+-- Note: using non-concurrent indexes to avoid potential complexity in migration logic
 CREATE INDEX IF NOT EXISTS "GroupMember_userId_joinedAt_idx" ON "GroupMember" USING btree ("userId", "joinedAt");

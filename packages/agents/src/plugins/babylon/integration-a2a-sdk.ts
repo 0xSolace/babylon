@@ -79,6 +79,7 @@ async function getCachedAgentIdentity(
     },
   });
 
+  // Note: checks if agent wallets should auto-create only when explicitly enabled by env var
   if (user && user.isAgent) {
     let walletAddress = user.walletAddress;
     let agent0TokenId = user.agent0TokenId;
