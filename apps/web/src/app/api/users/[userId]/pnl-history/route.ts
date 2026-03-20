@@ -1,21 +1,71 @@
 import {
   checkRateLimitAsync,
+  findUserByIdentifier,
   getClientIp,
   RATE_LIMIT_CONFIGS,
   successResponse,
   withErrorHandling,
 } from '@babylon/api';
-import { and, balanceTransactions, db, eq, gte } from '@babylon/db';
+import { and, db, eq, users } from '@babylon/db';
 import { logger, UserIdParamSchema } from '@babylon/shared';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
+import {
+  getPnlHistoryCutoff,
+  type PnlHistoryRange,
+  type PnlHistoryScope,
+  loadScopedPnlHistoryPoints,
+} from '@/lib/wallet/pnlHistory';
 
-const TIMEFRAME_DURATIONS: Record<string, number> = {
-  '1H': 60 * 60 * 1000,
-  '4H': 4 * 60 * 60 * 1000,
-  '1D': 24 * 60 * 60 * 1000,
-  '1W': 7 * 24 * 60 * 60 * 1000,
-};
+function parseRange(value: string | null): PnlHistoryRange {
+  switch (value) {
+    case '1H':
+    case '4H':
+    case '1D':
+    case '1W':
+    case 'ALL':
+      return value;
+    default:
+      return '1D';
+  }
+}
+
+function parseScope(value: string | null): PnlHistoryScope {
+  switch (value) {
+    case 'owner':
+    case 'agent':
+      return value;
+    default:
+      return 'team';
+  }
+}
+
+async function resolveScopeUserIds(params: {
+  entityId: string | null;
+  ownerUserId: string;
+  scope: PnlHistoryScope;
+}): Promise<string[]> {
+  const { entityId, ownerUserId, scope } = params;
+
+  if (scope === 'owner') {
+    return [ownerUserId];
+  }
+
+  const agentRows = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(and(eq(users.managedBy, ownerUserId), eq(users.isAgent, true)));
+
+  if (scope === 'team') {
+    return [ownerUserId, ...agentRows.map((row) => row.id)];
+  }
+
+  if (!entityId) {
+    return [];
+  }
+
+  return agentRows.some((row) => row.id === entityId) ? [entityId] : [];
+}
 
 export const GET = withErrorHandling(
   async (
@@ -40,79 +90,48 @@ export const GET = withErrorHandling(
 
     const { userId } = UserIdParamSchema.parse(await context.params);
     const { searchParams } = new URL(request.url);
-    const timeframe = searchParams.get('range') ?? '1D';
+    const range = parseRange(searchParams.get('range'));
+    const scope = parseScope(searchParams.get('scope'));
+    const entityId = searchParams.get('entityId');
 
-    const durationMs = TIMEFRAME_DURATIONS[timeframe];
-    const cutoff = durationMs ? new Date(Date.now() - durationMs) : undefined;
-
-    // Query balance transactions ordered by time
-    const whereConditions = cutoff
-      ? and(
-          eq(balanceTransactions.userId, userId),
-          gte(balanceTransactions.createdAt, cutoff)
-        )
-      : eq(balanceTransactions.userId, userId);
-
-    const transactions = await db
-      .select({
-        balanceAfter: balanceTransactions.balanceAfter,
-        createdAt: balanceTransactions.createdAt,
-        type: balanceTransactions.type,
-      })
-      .from(balanceTransactions)
-      .where(whereConditions)
-      .orderBy(balanceTransactions.createdAt)
-      .limit(500);
-
-    // Early return for empty transactions to avoid edge cases in downsampling
-    if (transactions.length === 0) {
-      logger.debug(
-        'No transactions found for P&L history',
-        { userId, timeframe, cutoff: cutoff?.toISOString() },
-        'GET /api/users/[userId]/pnl-history'
-      );
+    const dbUser = await findUserByIdentifier(userId, { id: true });
+    if (!dbUser) {
       return successResponse({ points: [] });
     }
 
-    // Downsample to reasonable number of chart points
-    const maxPoints = 100;
-    const points: Array<{ time: number; value: number }> = [];
+    const scopeUserIds = await resolveScopeUserIds({
+      entityId,
+      ownerUserId: dbUser.id,
+      scope,
+    });
 
-    if (transactions.length <= maxPoints) {
-      for (const tx of transactions) {
-        points.push({
-          time: tx.createdAt.getTime(),
-          value: Number(tx.balanceAfter),
-        });
-      }
-    } else {
-      const step = transactions.length / maxPoints;
-      for (let i = 0; i < maxPoints; i++) {
-        const idx = Math.min(Math.floor(i * step), transactions.length - 1);
-        const tx = transactions[idx];
-        if (!tx) continue;
-        points.push({
-          time: tx.createdAt.getTime(),
-          value: Number(tx.balanceAfter),
-        });
-      }
-      // Always include last point
-      const last = transactions[transactions.length - 1];
-      const lastPoint = points[points.length - 1];
-      if (last && lastPoint && lastPoint.time !== last.createdAt.getTime()) {
-        points.push({
-          time: last.createdAt.getTime(),
-          value: Number(last.balanceAfter),
-        });
-      }
+    if (scopeUserIds.length === 0) {
+      return successResponse({ points: [] });
     }
 
+    const now = new Date();
+    const points = await loadScopedPnlHistoryPoints({
+      cutoff: getPnlHistoryCutoff(range, now),
+      now,
+      scopeUserIds,
+    });
+
     logger.info(
-      'P&L history fetched',
-      { userId, timeframe, pointCount: points.length },
+      'Wallet current P&L history fetched',
+      {
+        userId: dbUser.id,
+        range,
+        scope,
+        entityId,
+        pointCount: points.length,
+      },
       'GET /api/users/[userId]/pnl-history'
     );
 
-    return successResponse({ points });
+    return successResponse({
+      metric: 'currentPnL',
+      points,
+      scope,
+    });
   }
 );
