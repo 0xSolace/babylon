@@ -23,6 +23,11 @@ interface UsePortfolioPnLResult {
   lastUpdated: number | null;
 }
 
+interface UsePortfolioPnLOptions {
+  pollingIntervalMs?: number | null;
+  userId?: string | null;
+}
+
 function toNumber(value: unknown, fallback = 0): number {
   if (typeof value === 'number' && Number.isFinite(value)) return value;
   if (typeof value === 'string') {
@@ -83,6 +88,19 @@ export async function fetchPortfolioBreakdownSnapshot(
     totalPnL: toNumber(breakdownJson.totalPnL),
     agentCount: toNumber(breakdownJson.agentCount),
     totalPoints: toNumber(breakdownJson.totalPoints),
+    members: Array.isArray(breakdownJson.members)
+      ? breakdownJson.members
+          .filter(
+            (member): member is Record<string, unknown> =>
+              typeof member === 'object' && member !== null
+          )
+          .map((member) => ({
+            id: String(member.id ?? ''),
+            name: String(member.name ?? 'Agent'),
+            wallet: toNumber(member.wallet),
+            isAgent: Boolean(member.isAgent),
+          }))
+      : [],
   };
 }
 
@@ -119,8 +137,13 @@ export async function fetchPortfolioBreakdownSnapshot(
  * }
  * ```
  */
-export function usePortfolioPnL(): UsePortfolioPnLResult {
+export function usePortfolioPnL(
+  options: UsePortfolioPnLOptions = {}
+): UsePortfolioPnLResult {
   const { user, authenticated } = useAuth();
+  const targetUserId =
+    options.userId ?? (authenticated ? (user?.id ?? null) : null);
+  const pollingIntervalMs = options.pollingIntervalMs ?? null;
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<PortfolioBreakdownSnapshot | null>(null);
@@ -128,7 +151,7 @@ export function usePortfolioPnL(): UsePortfolioPnLResult {
   const abortControllerRef = useRef<AbortController | null>(null);
 
   const refresh = useCallback(async () => {
-    if (!authenticated || !user?.id) {
+    if (!targetUserId) {
       setData(null);
       setLoading(false);
       setError(null);
@@ -148,7 +171,7 @@ export function usePortfolioPnL(): UsePortfolioPnLResult {
 
     try {
       const nextData = await fetchPortfolioBreakdownSnapshot(
-        user.id,
+        targetUserId,
         abortController.signal
       );
 
@@ -172,7 +195,7 @@ export function usePortfolioPnL(): UsePortfolioPnLResult {
         setLoading(false);
       }
     }
-  }, [authenticated, user?.id]);
+  }, [targetUserId]);
 
   useEffect(() => {
     refresh();
@@ -181,6 +204,18 @@ export function usePortfolioPnL(): UsePortfolioPnLResult {
       abortControllerRef.current?.abort();
     };
   }, [refresh]);
+
+  useEffect(() => {
+    if (!targetUserId || !pollingIntervalMs || pollingIntervalMs <= 0) {
+      return;
+    }
+
+    const intervalId = setInterval(() => {
+      void refresh();
+    }, pollingIntervalMs);
+
+    return () => clearInterval(intervalId);
+  }, [pollingIntervalMs, refresh, targetUserId]);
 
   const memoizedData = useMemo(() => data, [data]);
 

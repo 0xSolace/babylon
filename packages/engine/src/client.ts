@@ -149,4 +149,12 @@ export interface PortfolioBreakdownSnapshot {
   totalPnL: number;
   agentCount: number;
   totalPoints: number;
+  members?: PortfolioBreakdownMember[];
+}
+
+export interface PortfolioBreakdownMember {
+  id: string;
+  name: string;
+  wallet: number;
+  isAgent: boolean;
 }

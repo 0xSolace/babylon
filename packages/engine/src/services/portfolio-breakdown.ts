@@ -24,6 +24,14 @@ export interface PortfolioBreakdownSnapshot {
   totalPnL: number;
   agentCount: number;
   totalPoints: number;
+  members: PortfolioBreakdownMember[];
+}
+
+export interface PortfolioBreakdownMember {
+  id: string;
+  name: string;
+  wallet: number;
+  isAgent: boolean;
 }
 
 function toNumber(value: unknown, fallback = 0): number {
@@ -104,6 +112,8 @@ export async function calculatePortfolioBreakdown(
     .select({
       id: users.id,
       privyId: users.privyId,
+      displayName: users.displayName,
+      username: users.username,
       virtualBalance: users.virtualBalance,
       totalDeposited: users.totalDeposited,
       totalWithdrawn: users.totalWithdrawn,
@@ -117,6 +127,8 @@ export async function calculatePortfolioBreakdown(
     | {
         id: string;
         privyId: string | null;
+        displayName: string | null;
+        username: string | null;
         virtualBalance: unknown;
         totalDeposited: unknown;
         totalWithdrawn: unknown;
@@ -133,6 +145,8 @@ export async function calculatePortfolioBreakdown(
   const agentRows = await db
     .select({
       id: users.id,
+      displayName: users.displayName,
+      username: users.username,
       virtualBalance: users.virtualBalance,
     })
     .from(users)
@@ -226,6 +240,20 @@ export async function calculatePortfolioBreakdown(
   const totalAssets = wallet + agents + positionsValue;
   const totalPnL = totalAssets - originalAmount;
   const totalPoints = wallet + positionsValue + user.reputationPoints;
+  const members: PortfolioBreakdownMember[] = [
+    {
+      id: canonicalUserId,
+      name: user.displayName || user.username || 'You (Owner)',
+      wallet,
+      isAgent: false,
+    },
+    ...agentRows.map((agent) => ({
+      id: agent.id,
+      name: agent.displayName || agent.username || 'Agent',
+      wallet: toNumber(agent.virtualBalance),
+      isAgent: true,
+    })),
+  ];
 
   return {
     wallet,
@@ -237,5 +265,6 @@ export async function calculatePortfolioBreakdown(
     totalPnL,
     agentCount,
     totalPoints,
+    members,
   };
 }

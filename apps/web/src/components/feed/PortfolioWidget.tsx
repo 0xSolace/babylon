@@ -138,7 +138,10 @@ export function PortfolioWidget() {
     data: portfolioData,
     loading: portfolioLoading,
     refresh: refreshPortfolio,
-  } = usePortfolioPnL();
+  } = usePortfolioPnL({
+    userId,
+    pollingIntervalMs: 15_000,
+  });
   const { balance, lifetimePnL } = useWalletBalance(userId);
   const getPortfolioWidget = useWidgetCacheStore(
     (state) => state.getPortfolioWidget
@@ -195,7 +198,7 @@ export function PortfolioWidget() {
 
   return (
     <PortfolioWidgetContent
-      balance={balance}
+      balance={data?.wallet ?? balance}
       lifetimePnL={lifetimePnL}
       data={data}
       loading={loading}
