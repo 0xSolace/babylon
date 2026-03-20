@@ -15,6 +15,7 @@ export function NftPromoBanner() {
     '/agents/team',
     '/settings',
     '/rewards',
+    '/wallet',
   ];
   if (hiddenPaths.some((p) => pathname?.startsWith(p))) return null;
 

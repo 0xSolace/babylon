@@ -1,8 +1,8 @@
 'use client';
 
 import { cn, formatCurrency } from '@babylon/shared';
-import { ChevronDown, HelpCircle, Maximize2 } from 'lucide-react';
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { ChevronDown } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useUserPositions } from '@/stores/userPositionsStore';
 import { useWalletBalance } from '@/stores/walletBalanceStore';
 import { PnLChart } from './pnl-chart';
@@ -79,11 +79,11 @@ export function PnLTab({ userId }: PnLTabProps) {
         isSelected: selectedEntity === 'Team',
       },
       {
-        name: 'You (Owner)',
+        name: 'You',
         currentPnl: lifetimePnL,
         lifetimePnl: lifetimePnL,
         unrealized: ownerUnrealized,
-        isSelected: selectedEntity === 'You (Owner)',
+        isSelected: selectedEntity === 'You',
       },
     ];
 
@@ -99,6 +99,21 @@ export function PnLTab({ userId }: PnLTabProps) {
 
     return list;
   }, [perpPositions, predictionPositions, lifetimePnL, selectedEntity]);
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    if (!entityDropdownOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(e.target as Node)
+      ) {
+        setEntityDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [entityDropdownOpen]);
 
   const handleEntitySelect = useCallback((name: string) => {
     setSelectedEntity(name);
@@ -118,39 +133,44 @@ export function PnLTab({ userId }: PnLTabProps) {
 
   if (loading) {
     return (
-      <div className="space-y-4">
+      <div className="space-y-3 md:space-y-4">
         <div className="h-8 w-32 animate-pulse rounded bg-muted" />
-        <div className="h-[240px] animate-pulse rounded bg-muted" />
-        <div className="space-y-3">
+        <div className="h-[200px] animate-pulse rounded-xl bg-muted" />
+        <div className="space-y-2">
           {Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="h-10 animate-pulse rounded bg-muted" />
+            <div key={i} className="h-16 animate-pulse rounded-xl bg-muted" />
           ))}
         </div>
       </div>
     );
   }
 
+  // Find selected entity for the hero display
+  const selected = entities.find((e) => e.isSelected) ?? entities[0];
+
   return (
-    <div>
-      {/* Header */}
-      <div className="mb-4 flex items-center justify-between">
+    <div className="space-y-3 md:space-y-5">
+      {/* Header: entity selector + time filters */}
+      <div className="flex items-center justify-between">
         <div className="relative" ref={dropdownRef}>
           <button
-            className="flex items-center gap-2 font-semibold text-lg"
+            className="flex items-center gap-1.5 font-semibold text-base"
             onClick={() => setEntityDropdownOpen((prev) => !prev)}
           >
             {selectedEntity}
-            <ChevronDown className="h-4 w-4 text-muted-foreground" />
+            <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
           </button>
           {entityDropdownOpen && (
-            <div className="absolute top-full left-0 z-50 mt-1 min-w-[160px] rounded-md border border-border bg-background py-1 shadow-lg">
+            <div className="absolute top-full left-0 z-50 mt-1 min-w-[140px] overflow-hidden rounded-lg border border-border bg-background shadow-lg">
               {entities.map((entity) => (
                 <button
                   key={entity.name}
                   onClick={() => handleEntitySelect(entity.name)}
                   className={cn(
-                    'w-full px-3 py-2 text-left text-sm transition-colors hover:bg-muted',
-                    entity.name === selectedEntity && 'bg-muted font-medium'
+                    'w-full px-3 py-2 text-left text-sm transition-colors',
+                    entity.name === selectedEntity
+                      ? 'bg-muted font-medium'
+                      : 'hover:bg-muted/50'
                   )}
                 >
                   {entity.name}
@@ -159,107 +179,167 @@ export function PnLTab({ userId }: PnLTabProps) {
             </div>
           )}
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-0.5">
           {timeFilters.map((time) => (
             <button
               key={time}
               onClick={() => setSelectedTime(time)}
-              className={`rounded-md px-3 py-1.5 font-medium text-sm transition-colors ${
+              className={`rounded-md px-2.5 py-1 font-medium text-xs transition-colors ${
                 selectedTime === time
-                  ? 'bg-[#1a365d] text-white'
+                  ? 'bg-primary text-primary-foreground'
                   : 'text-muted-foreground hover:text-foreground'
               }`}
             >
               {time}
             </button>
           ))}
-          <button className="ml-1 p-1.5 text-muted-foreground hover:text-foreground">
-            <Maximize2 className="h-4 w-4" />
-          </button>
-          <button className="p-1.5 text-muted-foreground hover:text-foreground">
-            <HelpCircle className="h-4 w-4" />
-          </button>
         </div>
       </div>
 
-      {/* Chart */}
-      <PnLChart userId={userId} timeframe={selectedTime} />
-
-      {/* Table */}
-      <div className="mt-6">
-        <div className="grid grid-cols-4 gap-4 py-3 text-muted-foreground text-xs">
-          <div>Entity</div>
-          <div>Current P&L</div>
-          <div>Lifetime P&L</div>
-          <div>Unrealized</div>
-        </div>
-        {entities.map((row) => (
-          <div
-            key={row.name}
-            className="grid grid-cols-4 items-start gap-4 border-border border-t py-4"
-          >
-            <div className="flex items-center gap-2">
-              {row.isSelected && (
-                <span className="h-2 w-2 shrink-0 rounded-full bg-[#1a365d]" />
+      {/* Selected entity P&L summary */}
+      {selected && (
+        <div className="grid grid-cols-1 gap-1.5 md:grid-cols-3 md:gap-3">
+          <div className="rounded-xl border border-border px-3 py-2.5 md:p-4">
+            <div className="mb-1 text-muted-foreground text-xs tracking-wide">
+              Current
+            </div>
+            <div
+              className={cn(
+                'font-semibold text-sm md:text-base',
+                selected.currentPnl >= 0 ? 'text-emerald-500' : 'text-red-500'
               )}
-              <span className="font-medium text-sm">{row.name}</span>
+            >
+              {fmtPnl(selected.currentPnl)}
             </div>
-            <div>
-              <div
-                className={`font-medium text-sm ${
-                  row.currentPnl >= 0 ? 'text-emerald-500' : 'text-red-500'
-                }`}
-              >
-                {fmtPnl(row.currentPnl)}
-              </div>
-              <span
-                className={`mt-0.5 inline-block rounded px-1.5 py-0.5 text-xs ${
-                  row.currentPnl >= 0
-                    ? 'bg-emerald-100 text-emerald-600'
-                    : 'bg-red-100 text-red-600'
-                }`}
-              >
-                {fmtPercent(row.currentPnl, row.lifetimePnl || 1)}
-              </span>
-            </div>
-            <div>
-              <div
-                className={`font-medium text-sm ${
-                  row.lifetimePnl >= 0 ? 'text-emerald-500' : 'text-red-500'
-                }`}
-              >
-                {fmtPnl(row.lifetimePnl)}
-              </div>
-              <span
-                className={`mt-0.5 inline-block rounded px-1.5 py-0.5 text-xs ${
-                  row.lifetimePnl >= 0
-                    ? 'bg-emerald-100 text-emerald-600'
-                    : 'bg-red-100 text-red-600'
-                }`}
-              >
-                {fmtPercent(row.lifetimePnl, row.lifetimePnl || 1)}
-              </span>
-            </div>
-            <div>
-              <div
-                className={`font-medium text-sm ${
-                  row.unrealized >= 0 ? 'text-emerald-500' : 'text-red-500'
-                }`}
-              >
-                {fmtPnl(row.unrealized)}
-              </div>
-              <span
-                className={`mt-0.5 inline-block rounded px-1.5 py-0.5 text-xs ${
-                  row.unrealized >= 0
-                    ? 'bg-emerald-100 text-emerald-600'
-                    : 'bg-red-100 text-red-600'
-                }`}
-              >
-                {fmtPercent(row.unrealized, row.lifetimePnl || 1)}
-              </span>
+            <div
+              className={cn(
+                'text-xs',
+                selected.currentPnl >= 0 ? 'text-emerald-500' : 'text-red-500'
+              )}
+            >
+              {fmtPercent(selected.currentPnl, selected.lifetimePnl || 1)}
             </div>
           </div>
-        ))}
+          <div className="rounded-xl border border-border px-3 py-2.5 md:p-4">
+            <div className="mb-1 text-muted-foreground text-xs tracking-wide">
+              Lifetime
+            </div>
+            <div
+              className={cn(
+                'font-semibold text-sm md:text-base',
+                selected.lifetimePnl >= 0 ? 'text-emerald-500' : 'text-red-500'
+              )}
+            >
+              {fmtPnl(selected.lifetimePnl)}
+            </div>
+            <div
+              className={cn(
+                'text-xs',
+                selected.lifetimePnl >= 0 ? 'text-emerald-500' : 'text-red-500'
+              )}
+            >
+              {fmtPercent(selected.lifetimePnl, selected.lifetimePnl || 1)}
+            </div>
+          </div>
+          <div className="rounded-xl border border-border px-3 py-2.5 md:p-4">
+            <div className="mb-1 text-muted-foreground text-xs tracking-wide">
+              Unrealized
+            </div>
+            <div
+              className={cn(
+                'font-semibold text-sm md:text-base',
+                selected.unrealized >= 0 ? 'text-emerald-500' : 'text-red-500'
+              )}
+            >
+              {fmtPnl(selected.unrealized)}
+            </div>
+            <div
+              className={cn(
+                'text-xs',
+                selected.unrealized >= 0 ? 'text-emerald-500' : 'text-red-500'
+              )}
+            >
+              {fmtPercent(selected.unrealized, selected.lifetimePnl || 1)}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Chart */}
+      <div className="rounded-xl border border-border p-2 md:p-3">
+        <PnLChart userId={userId} timeframe={selectedTime} />
+      </div>
+
+      {/* Members */}
+      <div>
+        <div className="mb-2 text-muted-foreground text-xs tracking-wide md:mb-3">
+          Members
+        </div>
+        <div className="space-y-1.5 md:space-y-2">
+          {entities.map((row) => (
+            <div
+              key={row.name}
+              onClick={() => handleEntitySelect(row.name)}
+              className={cn(
+                'cursor-pointer rounded-xl border px-3 py-2.5 transition-colors md:p-4',
+                row.isSelected
+                  ? 'border-[#1a365d]/40 bg-[#1a365d]/5'
+                  : 'border-border hover:bg-muted/30'
+              )}
+            >
+              <div className="flex items-center justify-between">
+                <span className="font-medium text-sm">{row.name}</span>
+                <div className="flex items-center gap-3 md:gap-4">
+                  <div className="text-right">
+                    <div className="text-[10px] text-muted-foreground tracking-wide">
+                      Current
+                    </div>
+                    <div
+                      className={cn(
+                        'font-medium text-xs',
+                        row.currentPnl >= 0
+                          ? 'text-emerald-500'
+                          : 'text-red-500'
+                      )}
+                    >
+                      {fmtPnl(row.currentPnl)}
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-[10px] text-muted-foreground tracking-wide">
+                      Lifetime
+                    </div>
+                    <div
+                      className={cn(
+                        'font-medium text-xs',
+                        row.lifetimePnl >= 0
+                          ? 'text-emerald-500'
+                          : 'text-red-500'
+                      )}
+                    >
+                      {fmtPnl(row.lifetimePnl)}
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-[10px] text-muted-foreground tracking-wide">
+                      Unreal.
+                    </div>
+                    <div
+                      className={cn(
+                        'font-medium text-xs',
+                        row.unrealized >= 0
+                          ? 'text-emerald-500'
+                          : 'text-red-500'
+                      )}
+                    >
+                      {fmtPnl(row.unrealized)}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );

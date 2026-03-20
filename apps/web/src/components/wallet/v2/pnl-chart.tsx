@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Area,
   AreaChart,
@@ -9,6 +9,9 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
+// ⚠️ DEV MOCK — remove before production (see /WALLET-DEV-REMINDER.md)
+import { WALLET_MOCK_ENABLED } from '@/components/wallet/__dev__/wallet-mock-data';
+// END DEV MOCK
 import { usePnlHistory } from '@/hooks/usePnlHistory';
 
 interface PnLChartProps {
@@ -16,8 +19,35 @@ interface PnLChartProps {
   timeframe: string;
 }
 
+// ⚠️ DEV MOCK — lazy-loaded only when enabled
+let mockPnlHistory: Record<string, { time: number; value: number }[]> | null =
+  null;
+
 export function PnLChart({ userId, timeframe }: PnLChartProps) {
-  const { points, loading } = usePnlHistory(userId, timeframe);
+  const real = usePnlHistory(
+    WALLET_MOCK_ENABLED ? undefined : userId,
+    timeframe
+  );
+
+  // ⚠️ DEV MOCK
+  const [mockPoints, setMockPoints] = useState<
+    { time: number; value: number }[]
+  >([]);
+  useEffect(() => {
+    if (!WALLET_MOCK_ENABLED) return;
+    if (mockPnlHistory) {
+      setMockPoints(mockPnlHistory[timeframe] ?? []);
+      return;
+    }
+    void import('@/components/wallet/__dev__/wallet-mock-data').then((m) => {
+      mockPnlHistory = m.MOCK_PNL_HISTORY;
+      setMockPoints(m.MOCK_PNL_HISTORY[timeframe] ?? []);
+    });
+  }, [timeframe]);
+
+  const points = WALLET_MOCK_ENABLED ? mockPoints : real.points;
+  const loading = WALLET_MOCK_ENABLED ? false : real.loading;
+  // END DEV MOCK
 
   const chartData = useMemo(() => {
     if (points.length === 0) return [];
@@ -37,6 +67,13 @@ export function PnLChart({ userId, timeframe }: PnLChartProps) {
     const padding = Math.max((max - min) * 0.1, 1);
     return [Math.floor(min - padding), Math.ceil(max + padding)] as const;
   }, [chartData]);
+
+  // Estimate Y-axis width based on the longest label
+  const yAxisWidth = useMemo(() => {
+    if (chartData.length === 0) return 40;
+    const maxLabel = `b${Math.round(yDomain[1]).toLocaleString()}`;
+    return Math.max(maxLabel.length * 7, 38);
+  }, [chartData, yDomain]);
 
   const isPnlPositive =
     chartData.length >= 2
@@ -61,11 +98,11 @@ export function PnLChart({ userId, timeframe }: PnLChartProps) {
   }
 
   return (
-    <div className="h-72 w-full">
+    <div className="h-72 w-full [&_*:focus]:outline-none [&_*]:outline-none">
       <ResponsiveContainer width="100%" height="100%">
         <AreaChart
           data={chartData}
-          margin={{ top: 10, right: 50, left: 0, bottom: 0 }}
+          margin={{ top: 10, right: 0, left: 0, bottom: 0 }}
         >
           <defs>
             <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
@@ -83,9 +120,10 @@ export function PnLChart({ userId, timeframe }: PnLChartProps) {
             orientation="right"
             axisLine={false}
             tickLine={false}
-            tick={{ fill: '#9ca3af', fontSize: 12 }}
-            tickFormatter={(value) => `b${value}`}
+            tick={{ fill: '#9ca3af', fontSize: 11 }}
+            tickFormatter={(value) => `b${Math.round(value).toLocaleString()}`}
             domain={[yDomain[0], yDomain[1]]}
+            width={yAxisWidth}
           />
           <Tooltip
             content={({ active, payload }) => {
