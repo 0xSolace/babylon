@@ -50,7 +50,6 @@ describe('migrateAuthStoreState', () => {
         loadedUserId: 'did:privy:test-user',
         isLoadingProfile: true,
         needsOnboarding: true,
-        needsOnchain: true,
       },
       1
     );
@@ -68,7 +67,6 @@ describe('migrateAuthStoreState', () => {
       loadedUserId: 'did:privy:test-user',
       isLoadingProfile: false,
       needsOnboarding: true,
-      needsOnchain: true,
     });
   });
 
@@ -79,7 +77,6 @@ describe('migrateAuthStoreState', () => {
       loadedUserId: null,
       isLoadingProfile: false,
       needsOnboarding: false,
-      needsOnchain: false,
     });
   });
 
@@ -111,7 +108,6 @@ describe('migrateAuthStoreState', () => {
       loadedUserId: null,
       isLoadingProfile: false,
       needsOnboarding: true,
-      needsOnchain: false,
     });
   });
 
@@ -165,7 +161,6 @@ describe('migrateAuthStoreState', () => {
       loadedUserId: null,
       isLoadingProfile: false,
       needsOnboarding: false,
-      needsOnchain: false,
     });
   });
 });

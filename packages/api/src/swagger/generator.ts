@@ -745,7 +745,6 @@ export function generateOpenApiSpec() {
                     properties: {
                       authenticated: { type: 'boolean' },
                       needsOnboarding: { type: 'boolean' },
-                      needsOnchain: { type: 'boolean' },
                       user: {
                         type: 'object',
                         properties: {

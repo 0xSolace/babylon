@@ -79,19 +79,12 @@ export function useGameGuide(): GameGuideContextValue {
 /**
  * Manages the game onboarding guide. Auto-shows when:
  * - User is authenticated with complete profile
- * - On-chain step is done
  * - Guide not yet completed (checked via API AND localStorage backup)
  * - User is not an NPC/actor
  */
 export function GameGuideProvider({ children }: { children: React.ReactNode }) {
-  const {
-    ready,
-    authenticated,
-    user,
-    loadingProfile,
-    needsOnboarding,
-    needsOnchain,
-  } = useAuth();
+  const { ready, authenticated, user, loadingProfile, needsOnboarding } =
+    useAuth();
   const { setUser } = useAuthStore();
 
   const [isOpen, setIsOpen] = useState(false);
@@ -110,12 +103,11 @@ export function GameGuideProvider({ children }: { children: React.ReactNode }) {
   );
 
   // Check if guide should auto-open (only once per session)
-  // Only shows after user has completed onboarding (profile + on-chain)
+  // Only shows after user has completed profile onboarding.
   const shouldAutoShow =
     authenticated &&
     !loadingProfile &&
     !needsOnboarding &&
-    !needsOnchain &&
     !hasCompleted &&
     !user?.isActor;
 
