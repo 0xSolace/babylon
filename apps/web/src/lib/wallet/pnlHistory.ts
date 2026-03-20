@@ -52,6 +52,9 @@ const TIMEFRAME_DURATIONS: Record<Exclude<PnlHistoryRange, 'ALL'>, number> = {
   '1W': 7 * 24 * 60 * 60 * 1000,
 };
 
+/**
+ * Resolve the lower time boundary for a requested history range.
+ */
 export function getPnlHistoryCutoff(
   range: PnlHistoryRange,
   now = new Date()
@@ -61,12 +64,19 @@ export function getPnlHistoryCutoff(
   return durationMs ? new Date(now.getTime() - durationMs) : undefined;
 }
 
+/**
+ * Normalize a timestamp to the top of its UTC hour.
+ */
 export function getHourBoundary(date = new Date()): Date {
   const boundary = new Date(date);
   boundary.setUTCMinutes(0, 0, 0);
   return boundary;
 }
 
+/**
+ * Build the canonical-to-alias identity map used for legacy owner rows where
+ * open positions may still be stored under `users.privyId`.
+ */
 export function buildPnlMetricIdentityMap(userRows: PnlMetricUserRow[]): {
   aliasToCanonicalUserId: Map<string, string>;
   positionUserIds: string[];
@@ -90,6 +100,10 @@ export function buildPnlMetricIdentityMap(userRows: PnlMetricUserRow[]): {
   };
 }
 
+/**
+ * Aggregate raw per-user snapshot rows into a single scoped chart series and
+ * append an optional live point for the current in-memory value.
+ */
 export function buildScopedPnlHistoryPoints(params: {
   liveMetricsByUserId?: ReadonlyMap<string, UserPnlMetrics>;
   maxPoints?: number;
@@ -160,6 +174,9 @@ export function buildScopedPnlHistoryPoints(params: {
   return downsampled;
 }
 
+/**
+ * Compute canonical current P&L metrics for the requested users.
+ */
 export async function loadCurrentUserPnlMetrics(
   targetUserIds?: string[],
   options: {
@@ -271,6 +288,10 @@ export async function loadCurrentUserPnlMetrics(
   return metricsByUserId;
 }
 
+/**
+ * Load historical scoped P&L points from persisted snapshots and append the
+ * latest live scoped value.
+ */
 export async function loadScopedPnlHistoryPoints(params: {
   cutoff?: Date;
   now?: Date;
@@ -311,6 +332,9 @@ export async function loadScopedPnlHistoryPoints(params: {
   });
 }
 
+/**
+ * Persist one hourly canonical P&L snapshot row per non-actor user.
+ */
 export async function snapshotAllUserPnlMetrics(
   snapshotAt: Date
 ): Promise<number> {

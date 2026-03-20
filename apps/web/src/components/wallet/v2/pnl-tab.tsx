@@ -27,6 +27,20 @@ interface EntityPnL {
 
 const timeFilters = ['1H', '4H', '1D', '1W', 'ALL'];
 
+function getEntitySelectionKey(entity: {
+  entityId: string | null;
+  scope: PnlHistoryScope;
+}): string {
+  switch (entity.scope) {
+    case 'team':
+      return 'team';
+    case 'owner':
+      return 'owner';
+    case 'agent':
+      return `agent:${entity.entityId}`;
+  }
+}
+
 export function PnLTab({
   userId,
   teamSummary,
@@ -59,17 +73,18 @@ export function PnLTab({
 
     for (const member of teamSummary.members) {
       const name = member.entityType === 'owner' ? 'You' : member.name;
-      const key =
-        member.entityType === 'owner' ? 'owner' : `agent:${member.id}`;
+      const scope = member.entityType === 'owner' ? 'owner' : 'agent';
 
       list.push({
         entityId: member.id,
         name,
-        currentPnl: member.currentPnL,
-        lifetimePnl: member.lifetimePnL,
-        scope: member.entityType === 'owner' ? 'owner' : 'agent',
+        currentPnl: member.currentPnl,
+        lifetimePnl: member.lifetimePnl,
+        scope,
         unrealized: member.unrealizedPnL,
-        isSelected: selectedEntityKey === key,
+        isSelected:
+          selectedEntityKey ===
+          getEntitySelectionKey({ entityId: member.id, scope }),
       });
     }
 
@@ -81,13 +96,7 @@ export function PnLTab({
   });
 
   const handleEntitySelect = useCallback((entity: EntityPnL) => {
-    setSelectedEntityKey(
-      entity.scope === 'team'
-        ? 'team'
-        : entity.scope === 'owner'
-          ? 'owner'
-          : `agent:${entity.entityId}`
-    );
+    setSelectedEntityKey(getEntitySelectionKey(entity));
     setEntityDropdownOpen(false);
   }, []);
 

@@ -20,6 +20,20 @@ interface PnLChartProps {
   timeframe: string;
 }
 
+function formatChartTime(time: number, timeframe: string): string {
+  const date = new Date(time);
+
+  if (timeframe === '1H' || timeframe === '4H' || timeframe === '1D') {
+    return `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`;
+  }
+
+  if (timeframe === '1W') {
+    return `${date.getMonth() + 1}/${date.getDate()} ${date.getHours().toString().padStart(2, '0')}:00`;
+  }
+
+  return `${date.getMonth() + 1}/${date.getDate()}`;
+}
+
 export function PnLChart({
   entityId,
   metricLabel = 'Current P&L',
@@ -34,16 +48,10 @@ export function PnLChart({
 
   const chartData = useMemo(() => {
     if (points.length === 0) return [];
-    return points.map((p) => {
-      const d = new Date(p.time);
-      const label =
-        timeframe === '1H' || timeframe === '4H' || timeframe === '1D'
-          ? `${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`
-          : timeframe === '1W'
-            ? `${d.getMonth() + 1}/${d.getDate()} ${d.getHours().toString().padStart(2, '0')}:00`
-            : `${d.getMonth() + 1}/${d.getDate()}`;
-      return { time: label, value: p.value };
-    });
+    return points.map((p) => ({
+      time: formatChartTime(p.time, timeframe),
+      value: p.value,
+    }));
   }, [points, timeframe]);
 
   const yDomain = useMemo(() => {
