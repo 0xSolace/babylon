@@ -50,20 +50,20 @@ interface OverviewTabProps {
   onViewChallenges: () => void;
 }
 
-const DAYS = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+const DAY_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
 function StreakCalendar({ currentStreak }: { currentStreak: number }) {
-  const today = new Date().getDay();
-  // Convert to Monday-based index (0=Mon, 6=Sun)
-  const todayIdx = today === 0 ? 6 : today - 1;
-  // How many days back does the streak go (capped at 7)
+  const todayDow = new Date().getDay();
   const streakDays = Math.min(currentStreak, 7);
 
   return (
     <div className="flex items-end justify-between gap-1.5 sm:gap-2">
-      {DAYS.map((day, i) => {
-        const isToday = i === todayIdx;
-        const isCompleted = i <= todayIdx && i > todayIdx - streakDays;
+      {Array.from({ length: 7 }).map((_, i) => {
+        const daysAgo = 6 - i;
+        const dow = (((todayDow - daysAgo) % 7) + 7) % 7;
+        const day = DAY_LABELS[dow];
+        const isToday = daysAgo === 0;
+        const isCompleted = daysAgo < streakDays;
 
         return (
           <div key={i}>
