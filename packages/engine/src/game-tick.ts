@@ -1474,11 +1474,12 @@ export async function resolveQuestionPayouts(
 
     // Estimate positions settled for logging (coreService updates all positions for the market)
     // Use COUNT(*) instead of SELECT to avoid loading all position IDs into memory
+    // Note: count(*) returns bigint in Postgres; we parse as string to avoid overflow
     const countResult = await tx
-      .select({ count: sql<number>`count(*)::int` })
+      .select({ count: sql<string>`count(*)` })
       .from(positions)
       .where(eq(positions.marketId, marketId));
-    positionsSettled = countResult[0]?.count ?? 0;
+    positionsSettled = Number(countResult[0]?.count ?? 0);
 
     await coreService.resolve({
       marketId,

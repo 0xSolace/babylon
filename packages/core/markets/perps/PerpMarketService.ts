@@ -1355,6 +1355,8 @@ export class PerpMarketService {
       });
 
       // Process fees for both legs outside transaction to avoid holding locks
+      // Note: Fire-and-forget is intentional; fees are non-critical bookkeeping (referral splits).
+      // Position settlement is already complete. Failed fees are logged for alerting/retry via log monitoring.
       if (this.deps.feeProcessor) {
         void Promise.all([
           this.deps.feeProcessor.processTradingFee({
