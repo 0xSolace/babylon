@@ -12,10 +12,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - **Agent skills generation and docs integration**
   - **Why**: We expose A2A and MCP; agents (Cursor, Claude Code, ClawHub, etc.) need a single, up-to-date reference. Hand-maintained docs drift from code; generating from source keeps skills and endpoints in sync.
-  - **Script** `scripts/generate-skills-md.ts`: Reads `packages/a2a` (babylon-agent-card, executor operations) and `packages/mcp` (tool list); writes `docs/skills.md` and/or a full Agent Skills package to `skills/babylon/` (SKILL.md with frontmatter, claw.json, README). **Why two modes**: Markdown-only for in-repo reference; `--package` for the directory format required by AgentSkills (agentskills.io) and optional marketplaces.
-  - **npm scripts** `skills:generate` (docs/skills.md only), `skills:package` (full package). **Why both**: Sometimes we only refresh the doc; sometimes we need the publishable skill dir.
-  - **docs:generate** now runs the skills generator after vendor doc pulls (both markdown and package). **Why**: One command updates all LLM-facing docs so skills don’t go stale when we change A2A/MCP.
-  - **Docs**: `docs/agent-skill-packaging.md` (AgentSkills spec, metadata, security); `docs/roadmap.md` (potential work: llms.txt, security.txt, ACP, with WHYs).
+  - **Script** `scripts/generate-skills-md.ts`: Reads `packages/a2a` (babylon-agent-card, executor operations) and `packages/mcp` (tool list); writes a full Agent Skills package to `skills/babylon/` (SKILL.md with frontmatter, claw.json, README).
+  - **npm scripts** `skills:generate` (skills markdown), `skills:package` (full package).
+  - **docs:generate** now runs the skills generator after vendor doc pulls.
 - **Outbound RSS feeds**
   - **Why**: Let users and tools subscribe to Babylon content (hot posts, breaking news) in standard RSS readers without duplicating feed logic.
   - **GET /feed/rss**: RSS 2.0 feed of hot posts. Reuses `/api/feed/hot` internally so scoring, caching, and filtering stay in one place; this route only converts JSON → XML.
