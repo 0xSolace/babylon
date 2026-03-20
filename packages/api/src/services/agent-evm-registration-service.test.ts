@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it, mock } from 'bun:test';
 
 const mockProcessOnchainRegistration = mock();
 const mockProvisionAgentPrivyWallet = mock();
+const mockAcquireLock = mock();
+const mockReleaseLock = mock();
 
 let selectResults: Array<unknown[]> = [];
 const capturedUpdates: Array<Record<string, unknown>> = [];
@@ -86,6 +88,13 @@ mock.module('./privy/agent-wallet-provisioning', () => ({
   provisionAgentPrivyWallet: mockProvisionAgentPrivyWallet,
 }));
 
+mock.module('./distributed-lock-service', () => ({
+  DistributedLockService: {
+    acquireLock: mockAcquireLock,
+    releaseLock: mockReleaseLock,
+  },
+}));
+
 const {
   getAgentEvmRegistrationStatus,
   registerAgentOnEvmForOwner,
@@ -117,10 +126,16 @@ describe('agent-evm-registration-service', () => {
     capturedInserts.length = 0;
     mockProcessOnchainRegistration.mockReset();
     mockProvisionAgentPrivyWallet.mockReset();
+    mockAcquireLock.mockReset();
+    mockReleaseLock.mockReset();
 
     process.env.AGENT0_RPC_URL = 'https://rpc.example.com';
     process.env.AGENT0_PRIVATE_KEY = '0xabc';
     process.env.PINATA_JWT = 'pinata';
+    process.env.BABYLON_GAME_WALLET_ADDRESS =
+      '0x0000000000000000000000000000000000000001';
+    mockAcquireLock.mockResolvedValue(true);
+    mockReleaseLock.mockResolvedValue(undefined);
   });
 
   it('returns status for an owned agent', async () => {
@@ -135,6 +150,18 @@ describe('agent-evm-registration-service', () => {
     expect(status.walletReady).toBe(false);
     expect(status.canRegister).toBe(true);
     expect(status.cost).toBe(100);
+  });
+
+  it('marks registration unavailable when Agent0 is missing required game wallet config', async () => {
+    delete process.env.BABYLON_GAME_WALLET_ADDRESS;
+    selectResults.push([BASE_AGENT]);
+
+    const status = await getAgentEvmRegistrationStatus({
+      ownerUserId: 'owner-1',
+      agentUserId: 'agent-1',
+    });
+
+    expect(status.canRegister).toBe(false);
   });
 
   it('rejects registration when the caller does not manage the agent', async () => {
@@ -224,6 +251,7 @@ describe('agent-evm-registration-service', () => {
         description: 'Agent EVM registration',
       })
     );
+    expect(mockReleaseLock).toHaveBeenCalledTimes(1);
   });
 
   it('refunds the owner when registration fails', async () => {
@@ -281,5 +309,25 @@ describe('agent-evm-registration-service', () => {
     expect(result.cost).toBe(0);
     expect(capturedInserts).toHaveLength(0);
     expect(mockProcessOnchainRegistration).not.toHaveBeenCalled();
+  });
+
+  it('rejects concurrent registration attempts for the same agent before charging points', async () => {
+    mockAcquireLock.mockResolvedValueOnce(false);
+    selectResults.push([BASE_AGENT]);
+
+    await expect(
+      registerAgentOnEvmForOwner({
+        ownerUserId: 'owner-1',
+        agentUserId: 'agent-1',
+      })
+    ).rejects.toMatchObject({
+      message:
+        'An EVM registration attempt is already in progress for this agent. Please retry in a moment.',
+      code: 'AGENT_EVM_REGISTRATION_IN_PROGRESS',
+    });
+
+    expect(capturedInserts).toHaveLength(0);
+    expect(mockProcessOnchainRegistration).not.toHaveBeenCalled();
+    expect(mockReleaseLock).not.toHaveBeenCalled();
   });
 });
