@@ -1065,18 +1065,8 @@ export class PerpMarketService {
         volume24h: market.volume24h + addedSize,
       });
 
-      // Process fees (outside transaction - fee service is separate)
-      if (this.deps.feeProcessor) {
-        await this.deps.feeProcessor.processTradingFee({
-          userId: input.userId,
-          amount: addedSize,
-          type: 'perp_add_to_position',
-          relatedId: freshPosition.ticker,
-          positionId: freshPosition.id,
-        });
-      }
-
-      const result: PerpTradeResult = {
+      // Return result data for use after transaction commits
+      return {
         positionId: freshPosition.id,
         ticker: freshPosition.ticker,
         side: freshPosition.side,
@@ -1086,32 +1076,76 @@ export class PerpMarketService {
         liquidationPrice: newLiquidationPrice,
         marginPaid: marginRequired,
         feePaid: fee,
-        balance: (await this.deps.wallet.getBalance(input.userId)).balance,
         isRebalance: true,
         rebalanceType: 'add',
         previousSize: freshPosition.size,
         previousEntryPrice: freshPosition.entryPrice,
-      };
-
-      // Broadcast trade event
-      await this.emitTradeEvent({
-        type: 'perp_trade',
-        action: 'add_to_position',
-        ticker: freshPosition.ticker,
-        side: freshPosition.side,
-        size: actualNewSize,
-        addedSize,
-        leverage: effectiveLeverage,
-        entryPrice: newEntryPrice,
-        previousEntryPrice: freshPosition.entryPrice,
-        positionId: freshPosition.id,
-        openInterest: newOpenInterest,
+        newOpenInterest,
         volume24h: market.volume24h + addedSize,
-        timestamp: now.toISOString(),
-      });
-
-      return result;
+      };
     });
+
+    // Process fees outside transaction to avoid holding locks during external work
+    if (this.deps.feeProcessor) {
+      void this.deps.feeProcessor
+        .processTradingFee({
+          userId: input.userId,
+          amount: addedSize,
+          type: 'perp_add_to_position',
+          relatedId: result.ticker,
+          positionId: result.positionId,
+        })
+        .catch((err) => {
+          logger.error(
+            'Fee processing failed after add-to-position',
+            {
+              positionId: result.positionId,
+              userId: input.userId,
+              ticker: result.ticker,
+              error: err instanceof Error ? err.message : String(err),
+            },
+            'PerpService'
+          );
+        });
+    }
+
+    // Get balance after transaction commits
+    const balance = (await this.deps.wallet.getBalance(input.userId)).balance;
+
+    // Broadcast trade event outside transaction (SSE should not hold DB locks)
+    void this.emitTradeEvent({
+      type: 'perp_trade',
+      action: 'add_to_position',
+      ticker: result.ticker,
+      side: result.side,
+      size: result.size,
+      addedSize,
+      leverage: result.leverage,
+      entryPrice: result.entryPrice,
+      previousEntryPrice: result.previousEntryPrice,
+      positionId: result.positionId,
+      openInterest: result.newOpenInterest,
+      volume24h: result.volume24h,
+      timestamp: now.toISOString(),
+    });
+
+    // Return final result with balance (exclude helper fields not in PerpTradeResult)
+    const finalResult: PerpTradeResult = {
+      positionId: result.positionId,
+      ticker: result.ticker,
+      side: result.side,
+      size: result.size,
+      leverage: result.leverage,
+      entryPrice: result.entryPrice,
+      liquidationPrice: result.liquidationPrice,
+      marginPaid: result.marginPaid,
+      feePaid: result.feePaid,
+      balance,
+      isRebalance: result.isRebalance,
+      rebalanceType: result.rebalanceType as 'add',
+      previousSize: result.previousSize,
+      previousEntryPrice: result.previousEntryPrice,
+    };
 
     // Record realized PnL impact of the ADD operation (fees are realized immediately).
     await this.deps.wallet.recordPnL({
@@ -1124,18 +1158,18 @@ export class PerpMarketService {
     // BF-75: Apply price impact and adjust averaged entry price
     const impactAdj = await this.applyPostTradeImpact(
       existing.ticker,
-      result.positionId,
-      result.entryPrice,
-      result.side,
+      finalResult.positionId,
+      finalResult.entryPrice,
+      finalResult.side,
       existing.leverage,
       input.size
     );
     if (impactAdj) {
-      result.entryPrice = impactAdj.entryPrice;
-      result.liquidationPrice = impactAdj.liquidationPrice;
+      finalResult.entryPrice = impactAdj.entryPrice;
+      finalResult.liquidationPrice = impactAdj.liquidationPrice;
     }
 
-    return result;
+    return finalResult;
   }
 
   /**
@@ -1298,26 +1332,9 @@ export class PerpMarketService {
           volume24h: market.volume24h + volumeTraded,
         });
 
-        // Process fees for both legs (outside DB tx)
-        if (this.deps.feeProcessor) {
-          await this.deps.feeProcessor.processTradingFee({
-            userId: input.userId,
-            amount: existing.size,
-            type: 'perp_close',
-            relatedId: existing.ticker,
-            positionId: existing.id,
-          });
-          await this.deps.feeProcessor.processTradingFee({
-            userId: input.userId,
-            amount: inverseSize,
-            type: 'perp_flip_position',
-            relatedId: existing.ticker,
-            positionId: newPosition.id,
-          });
-        }
-
+        // Return result data for use after transaction commits
         const totalFees = closeFee + openFee;
-        const result: PerpTradeResult = {
+        return {
           positionId: newPosition.id,
           ticker: existing.ticker,
           side: tradeSide,
@@ -1328,50 +1345,102 @@ export class PerpMarketService {
           marginPaid: marginRequired,
           feePaid: totalFees,
           realizedPnL,
-          balance: (await this.deps.wallet.getBalance(input.userId)).balance,
           isRebalance: true,
           rebalanceType: 'flip',
           previousSize: existing.size,
           previousEntryPrice: existing.entryPrice,
-        };
-
-        // Broadcast flip event
-        await this.emitTradeEvent({
-          type: 'perp_trade',
-          action: 'flip_position',
-          ticker: existing.ticker,
-          previousSide: existing.side,
-          newSide: tradeSide,
-          closedSize: existing.size,
-          newSize: inverseSize,
-          leverage: effectiveLeverage,
-          entryPrice,
-          realizedPnL,
-          positionId: newPosition.id,
-          previousPositionId: existing.id,
-          openInterest: newOpenInterest,
+          newOpenInterest,
           volume24h: market.volume24h + volumeTraded,
-          timestamp: now.toISOString(),
-        });
-
-        return result;
+        };
       });
+
+      // Process fees for both legs outside transaction to avoid holding locks
+      if (this.deps.feeProcessor) {
+        void Promise.all([
+          this.deps.feeProcessor.processTradingFee({
+            userId: input.userId,
+            amount: existing.size,
+            type: 'perp_close',
+            relatedId: existing.ticker,
+            positionId: existing.id,
+          }),
+          this.deps.feeProcessor.processTradingFee({
+            userId: input.userId,
+            amount: flipResult.size,
+            type: 'perp_flip_position',
+            relatedId: existing.ticker,
+            positionId: flipResult.positionId,
+          }),
+        ]).catch((err) => {
+          logger.error(
+            'Fee processing failed after flip',
+            {
+              positionId: flipResult.positionId,
+              userId: input.userId,
+              ticker: existing.ticker,
+              error: err instanceof Error ? err.message : String(err),
+            },
+            'PerpService'
+          );
+        });
+      }
+
+      // Get balance after transaction commits
+      const balance = (await this.deps.wallet.getBalance(input.userId)).balance;
+
+      // Broadcast flip event outside transaction (SSE should not hold DB locks)
+      void this.emitTradeEvent({
+        type: 'perp_trade',
+        action: 'flip_position',
+        ticker: existing.ticker,
+        previousSide: existing.side,
+        newSide: flipResult.side,
+        closedSize: existing.size,
+        newSize: flipResult.size,
+        leverage: flipResult.leverage,
+        entryPrice: flipResult.entryPrice,
+        realizedPnL: flipResult.realizedPnL,
+        positionId: flipResult.positionId,
+        previousPositionId: existing.id,
+        openInterest: flipResult.newOpenInterest,
+        volume24h: flipResult.volume24h,
+        timestamp: now.toISOString(),
+      });
+
+      // Return final result with balance (exclude helper fields not in PerpTradeResult)
+      const finalResult: PerpTradeResult = {
+        positionId: flipResult.positionId,
+        ticker: flipResult.ticker,
+        side: flipResult.side,
+        size: flipResult.size,
+        leverage: flipResult.leverage,
+        entryPrice: flipResult.entryPrice,
+        liquidationPrice: flipResult.liquidationPrice,
+        marginPaid: flipResult.marginPaid,
+        feePaid: flipResult.feePaid,
+        realizedPnL: flipResult.realizedPnL,
+        balance,
+        isRebalance: flipResult.isRebalance,
+        rebalanceType: flipResult.rebalanceType as 'flip',
+        previousSize: flipResult.previousSize,
+        previousEntryPrice: flipResult.previousEntryPrice,
+      };
 
       // BF-75: Apply price impact and adjust entry for the new flipped position
       const impactAdj = await this.applyPostTradeImpact(
         existing.ticker,
-        flipResult.positionId,
-        flipResult.entryPrice,
+        finalResult.positionId,
+        finalResult.entryPrice,
         tradeSide,
         Math.min(leverage, market.maxLeverage ?? DEFAULT_MAX_LEVERAGE),
         tradeSize - existing.size
       );
       if (impactAdj) {
-        flipResult.entryPrice = impactAdj.entryPrice;
-        flipResult.liquidationPrice = impactAdj.liquidationPrice;
+        finalResult.entryPrice = impactAdj.entryPrice;
+        finalResult.liquidationPrice = impactAdj.liquidationPrice;
       }
 
-      return flipResult;
+      return finalResult;
     }
   }
 

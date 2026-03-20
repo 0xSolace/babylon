@@ -138,13 +138,15 @@ export function WalletPnL({ userId, mode = 'page' }: WalletPnLProps) {
   }, [chartData]);
 
   // Current value from the latest chart point
+  const lastPoint = chartData[chartData.length - 1];
+  const firstPoint = chartData[0];
   const currentValue =
-    chartData.length > 0 ? chartData[chartData.length - 1].value : null;
+    chartData.length > 0 && lastPoint ? lastPoint.value : null;
 
   // Determine chart color based on P&L direction
   const isPnlPositive =
-    chartData.length >= 2
-      ? chartData[chartData.length - 1].value >= chartData[0].value
+    chartData.length >= 2 && lastPoint && firstPoint
+      ? lastPoint.value >= firstPoint.value
       : true;
   const chartColor = isPnlPositive ? '#10b981' : '#f87171';
 

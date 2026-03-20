@@ -188,8 +188,9 @@ export function ComingSoon() {
         return;
       }
 
+      const errUnknown: unknown = error;
       const errorMessage =
-        error instanceof Error ? error.message : String(error);
+        errUnknown instanceof Error ? errUnknown.message : String(errUnknown);
       logger.error(
         'Failed to link social account via Privy',
         { error: errorMessage, userId: dbUser?.id },

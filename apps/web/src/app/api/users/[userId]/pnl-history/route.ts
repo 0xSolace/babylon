@@ -80,6 +80,7 @@ export const GET = withErrorHandling(
       for (let i = 0; i < maxPoints; i++) {
         const idx = Math.min(Math.floor(i * step), transactions.length - 1);
         const tx = transactions[idx];
+        if (!tx) continue;
         points.push({
           time: tx.createdAt.getTime(),
           value: Number(tx.balanceAfter),
@@ -87,7 +88,8 @@ export const GET = withErrorHandling(
       }
       // Always include last point
       const last = transactions[transactions.length - 1];
-      if (points[points.length - 1].time !== last.createdAt.getTime()) {
+      const lastPoint = points[points.length - 1];
+      if (last && lastPoint && lastPoint.time !== last.createdAt.getTime()) {
         points.push({
           time: last.createdAt.getTime(),
           value: Number(last.balanceAfter),

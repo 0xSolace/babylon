@@ -442,7 +442,7 @@ export function OverviewTab({ onClaim, onViewAchievements }: OverviewTabProps) {
             <div className="flex items-center justify-between rounded-lg border border-border bg-card px-4 py-3">
               <div className="flex items-center gap-2">
                 <div className="flex gap-1">
-                  {dailyData.challenges.map((c, i) => (
+                  {dailyData.challenges.map((_c, i) => (
                     <div
                       key={i}
                       className={`h-2 w-2 rounded-full ${
@@ -502,7 +502,7 @@ export function OverviewTab({ onClaim, onViewAchievements }: OverviewTabProps) {
             <div className="flex items-center justify-between rounded-lg border border-border bg-card px-4 py-3">
               <div className="flex items-center gap-2">
                 <div className="flex gap-1">
-                  {weeklyData.challenges.map((c, i) => (
+                  {weeklyData.challenges.map((_c, i) => (
                     <div
                       key={i}
                       className={`h-2 w-2 rounded-full ${

@@ -24,8 +24,12 @@ const cronHandler = async (request: NextRequest) => {
   }
 
   const relay = await relayCronToStaging(request, 'notifications-digest');
-  if (relay) {
-    return relay;
+  if (relay.forwarded) {
+    logger.info(
+      'Notifications digest cron relayed to staging (fan-out: also executing locally)',
+      { status: relay.status, error: relay.error },
+      'NotificationsDigestCron'
+    );
   }
 
   const now = new Date();

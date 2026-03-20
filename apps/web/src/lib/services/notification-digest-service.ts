@@ -73,7 +73,7 @@ function formatSignedPoints(points: number): string {
 }
 
 export async function listDigestCandidates(): Promise<DigestCandidateUser[]> {
-  return await db
+  const rows = await db
     .select({
       id: users.id,
       email: users.email,
@@ -85,6 +85,12 @@ export async function listDigestCandidates(): Promise<DigestCandidateUser[]> {
     })
     .from(users)
     .where(eq(users.notificationDigestEnabled, true));
+
+  return rows.map((row) => ({
+    ...row,
+    digestFrequency: row.digestFrequency as NotificationDigestFrequency,
+    deliveryChannel: row.deliveryChannel as NotificationDeliveryChannel,
+  }));
 }
 
 export async function buildDigestForUser(params: {

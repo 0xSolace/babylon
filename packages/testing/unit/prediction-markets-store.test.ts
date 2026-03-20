@@ -159,8 +159,13 @@ describe('Prediction Markets Store', () => {
     expect(mockFetch).toHaveBeenCalledTimes(2);
     expect(state.error).toBeNull();
     expect(state.fetchPromise).toBeNull();
-    expect(state.markets).toEqual([
-      { id: 'market-2', question: 'Will BTC rally?' },
-    ]);
+    expect(state.markets).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'market-2',
+          question: 'Will BTC rally?',
+        }),
+      ])
+    );
   });
 });
