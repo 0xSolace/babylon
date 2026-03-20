@@ -205,7 +205,10 @@ export {
   getPositionExposure,
   type PoolMetrics,
 } from './npc/portfolio-metrics';
-export { calculatePerpPositionMarketValue } from './portfolio-valuation';
+export {
+  calculatePerpPositionMarketValue,
+  toNumber,
+} from './portfolio-valuation';
 export {
   type ParsedPostMetadata,
   type ParseResult,

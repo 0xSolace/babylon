@@ -1,4 +1,7 @@
-import type { PortfolioBreakdownSnapshot } from '@babylon/engine/client';
+import {
+  type PortfolioBreakdownSnapshot,
+  toNumber,
+} from '@babylon/engine/client';
 import { useCallback, useEffect, useRef } from 'react';
 import { create } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
@@ -20,15 +23,6 @@ interface PortfolioBreakdownState {
 }
 
 const CACHE_TTL = 5000;
-
-function toNumber(value: unknown, fallback = 0): number {
-  if (typeof value === 'number' && Number.isFinite(value)) return value;
-  if (typeof value === 'string') {
-    const parsed = Number(value);
-    return Number.isFinite(parsed) ? parsed : fallback;
-  }
-  return fallback;
-}
 
 export function isAbortError(error: unknown): boolean {
   if (error instanceof DOMException && error.name === 'AbortError') {

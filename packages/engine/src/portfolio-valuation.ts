@@ -1,4 +1,5 @@
-function toNumber(value: unknown, fallback = 0): number {
+/** Safely coerce an unknown value (DB column, JSON field) to a finite number. */
+export function toNumber(value: unknown, fallback = 0): number {
   if (typeof value === 'number' && Number.isFinite(value)) return value;
   if (typeof value === 'string') {
     const parsed = Number.parseFloat(value);

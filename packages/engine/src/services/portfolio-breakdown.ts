@@ -13,7 +13,10 @@ import {
 } from '@babylon/db';
 import { and, eq, inArray, isNull, or, sql } from 'drizzle-orm';
 import { FEE_CONFIG } from '../config/fees';
-import { calculatePerpPositionMarketValue } from '../portfolio-valuation';
+import {
+  calculatePerpPositionMarketValue,
+  toNumber,
+} from '../portfolio-valuation';
 
 export interface PortfolioBreakdownSnapshot {
   wallet: number;
@@ -33,15 +36,6 @@ export interface PortfolioBreakdownMember {
   name: string;
   wallet: number;
   isAgent: boolean;
-}
-
-function toNumber(value: unknown, fallback = 0): number {
-  if (typeof value === 'number' && Number.isFinite(value)) return value;
-  if (typeof value === 'string') {
-    const parsed = Number.parseFloat(value);
-    return Number.isFinite(parsed) ? parsed : fallback;
-  }
-  return fallback;
 }
 
 function clampFeeRate(rate: number): number {
