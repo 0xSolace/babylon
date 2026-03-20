@@ -9,6 +9,7 @@ import { BalanceTab } from '@/components/wallet/v2/balance-tab';
 import { PnLTab } from '@/components/wallet/v2/pnl-tab';
 import { PositionsTab } from '@/components/wallet/v2/positions-tab';
 import { useAuth } from '@/hooks/useAuth';
+import { useTeamTradingSummary } from '@/hooks/useTeamTradingSummary';
 import { useUserPositionsPolling } from '@/stores/userPositionsStore';
 import { useWalletBalancePolling } from '@/stores/walletBalanceStore';
 
@@ -27,7 +28,7 @@ type PortfolioTab = 'balance' | 'pnl' | 'positions';
 
 export default function WalletPage() {
   const router = useRouter();
-  const { ready, authenticated, login, user } = useAuth();
+  const { ready, authenticated, login, user, getAccessToken } = useAuth();
   const [activeTab, setActiveTab] = useState<PortfolioTab>('positions');
 
   const userId = authenticated ? user?.id : undefined;
@@ -35,6 +36,17 @@ export default function WalletPage() {
   // Start polling for wallet data when authenticated
   useWalletBalancePolling(userId ?? null, 15_000);
   useUserPositionsPolling(userId ?? null);
+
+  const {
+    summary: teamSummary,
+    loading: teamSummaryLoading,
+    error: teamSummaryError,
+  } = useTeamTradingSummary({
+    ownerId: userId ?? null,
+    ownerName: user?.displayName || user?.username || 'You',
+    enabled: Boolean(ready && authenticated && userId),
+    getAccessToken,
+  });
 
   // Redirect unauthenticated users
   useEffect(() => {
@@ -94,8 +106,22 @@ export default function WalletPage() {
 
           {/* Tab Content */}
           <div className="p-4 pb-[calc(1rem+var(--bottom-nav-height))] md:p-6 md:pb-6">
-            {activeTab === 'balance' && <BalanceTab userId={userId} />}
-            {activeTab === 'pnl' && <PnLTab userId={userId} />}
+            {activeTab === 'balance' && (
+              <BalanceTab
+                userId={userId}
+                teamSummary={teamSummary}
+                teamSummaryLoading={teamSummaryLoading}
+                teamSummaryError={teamSummaryError}
+              />
+            )}
+            {activeTab === 'pnl' && (
+              <PnLTab
+                userId={userId}
+                teamSummary={teamSummary}
+                teamSummaryLoading={teamSummaryLoading}
+                teamSummaryError={teamSummaryError}
+              />
+            )}
             {activeTab === 'positions' && <PositionsTab userId={userId} />}
           </div>
         </div>

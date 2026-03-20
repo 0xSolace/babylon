@@ -4,12 +4,14 @@ import { cn, formatCurrency } from '@babylon/shared';
 import { ChevronDown } from 'lucide-react';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { useOnClickOutside } from '@/hooks/useOnClickOutside';
-import { useUserPositions } from '@/stores/userPositionsStore';
-import { useWalletBalance } from '@/stores/walletBalanceStore';
+import type { TeamTradingSummary } from '@/hooks/useTeamTradingSummary';
 import { PnLChart } from './pnl-chart';
 
 interface PnLTabProps {
   userId: string;
+  teamSummary: TeamTradingSummary | null;
+  teamSummaryLoading: boolean;
+  teamSummaryError: string | null;
 }
 
 interface EntityPnL {
@@ -22,84 +24,48 @@ interface EntityPnL {
 
 const timeFilters = ['1H', '4H', '1D', '1W', 'ALL'];
 
-export function PnLTab({ userId }: PnLTabProps) {
+export function PnLTab({
+  userId,
+  teamSummary,
+  teamSummaryLoading,
+  teamSummaryError,
+}: PnLTabProps) {
   const [selectedTime, setSelectedTime] = useState('1D');
   const [selectedEntity, setSelectedEntity] = useState('Team');
   const [entityDropdownOpen, setEntityDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  const { lifetimePnL, loading: balanceLoading } = useWalletBalance(userId);
-  const {
-    perpPositions,
-    predictionPositions,
-    loading: positionsLoading,
-  } = useUserPositions(userId);
-
-  const loading = balanceLoading || positionsLoading;
+  const loading = teamSummaryLoading;
 
   const entities = useMemo(() => {
-    let ownerUnrealized = 0;
-    const agentUnrealized = new Map<string, number>();
-
-    for (const pos of perpPositions) {
-      if (pos.isAgentPosition && pos.agentName) {
-        agentUnrealized.set(
-          pos.agentName,
-          (agentUnrealized.get(pos.agentName) ?? 0) + pos.unrealizedPnL
-        );
-      } else {
-        ownerUnrealized += pos.unrealizedPnL;
-      }
+    if (!teamSummary) {
+      return [] as EntityPnL[];
     }
-
-    for (const pos of predictionPositions) {
-      const costBasis = pos.costBasis ?? pos.shares * pos.avgPrice;
-      const currentValue = pos.currentValue ?? pos.shares * pos.currentPrice;
-      const pnl = pos.unrealizedPnL ?? currentValue - costBasis;
-
-      if (pos.isAgentPosition && pos.agentName) {
-        agentUnrealized.set(
-          pos.agentName,
-          (agentUnrealized.get(pos.agentName) ?? 0) + pnl
-        );
-      } else {
-        ownerUnrealized += pnl;
-      }
-    }
-
-    const totalUnrealized =
-      ownerUnrealized +
-      Array.from(agentUnrealized.values()).reduce((s, v) => s + v, 0);
 
     const list: EntityPnL[] = [
       {
         name: 'Team',
-        currentPnl: lifetimePnL + totalUnrealized,
-        lifetimePnl: lifetimePnL,
-        unrealized: totalUnrealized,
+        currentPnl: teamSummary.totals.currentPnL,
+        lifetimePnl: teamSummary.totals.lifetimePnL,
+        unrealized: teamSummary.totals.unrealizedPnL,
         isSelected: selectedEntity === 'Team',
-      },
-      {
-        name: 'You',
-        currentPnl: lifetimePnL + ownerUnrealized,
-        lifetimePnl: lifetimePnL,
-        unrealized: ownerUnrealized,
-        isSelected: selectedEntity === 'You',
       },
     ];
 
-    for (const [agentName, unrealized] of agentUnrealized) {
+    for (const member of teamSummary.members) {
       list.push({
-        name: agentName,
-        currentPnl: unrealized,
-        lifetimePnl: unrealized,
-        unrealized,
-        isSelected: selectedEntity === agentName,
+        name: member.entityType === 'owner' ? 'You' : member.name,
+        currentPnl: member.currentPnL,
+        lifetimePnl: member.lifetimePnL,
+        unrealized: member.unrealizedPnL,
+        isSelected:
+          selectedEntity ===
+          (member.entityType === 'owner' ? 'You' : member.name),
       });
     }
 
     return list;
-  }, [perpPositions, predictionPositions, lifetimePnL, selectedEntity]);
+  }, [teamSummary, selectedEntity]);
 
   useOnClickOutside(dropdownRef, () => {
     setEntityDropdownOpen(false);
@@ -125,6 +91,15 @@ export function PnLTab({ userId }: PnLTabProps) {
             <div key={i} className="h-16 animate-pulse rounded-xl bg-muted" />
           ))}
         </div>
+      </div>
+    );
+  }
+
+  if (!teamSummary && teamSummaryError) {
+    return (
+      <div className="rounded-xl border border-border py-10 text-center">
+        <p className="text-muted-foreground">Failed to load team P&L</p>
+        <p className="mt-1 text-muted-foreground text-sm">{teamSummaryError}</p>
       </div>
     );
   }

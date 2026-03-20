@@ -1,88 +1,91 @@
 'use client';
 
 import { formatCurrency } from '@babylon/shared';
-
 import { useMemo } from 'react';
+import type { TeamTradingSummary } from '@/hooks/useTeamTradingSummary';
 import { useUserPositions } from '@/stores/userPositionsStore';
-import { useWalletBalance } from '@/stores/walletBalanceStore';
 
 interface BalanceTabProps {
   userId: string;
+  teamSummary: TeamTradingSummary | null;
+  teamSummaryLoading: boolean;
+  teamSummaryError: string | null;
 }
 
 interface Member {
+  id: string;
+  kind: 'owner' | 'agent';
   name: string;
   cash: number;
   openPositions: number;
   total: number;
 }
 
-export function BalanceTab({ userId }: BalanceTabProps) {
-  const { balance, loading: balanceLoading } = useWalletBalance(userId);
+export function BalanceTab({
+  userId,
+  teamSummary,
+  teamSummaryLoading,
+  teamSummaryError,
+}: BalanceTabProps) {
   const {
     perpPositions,
     predictionPositions,
     loading: positionsLoading,
   } = useUserPositions(userId);
 
-  const loading = balanceLoading || positionsLoading;
+  const loading = teamSummaryLoading || positionsLoading;
 
   const { members, totalBalance, agentsOnly } = useMemo(() => {
-    let ownerPositionValue = 0;
-    const agentPositionValues = new Map<string, number>();
+    if (!teamSummary) {
+      return {
+        members: [] as Member[],
+        totalBalance: 0,
+        agentsOnly: 0,
+      };
+    }
+
+    const positionValues = new Map<string, number>();
 
     for (const pos of perpPositions) {
       const value = Math.abs(pos.unrealizedPnL) + pos.size;
-      if (pos.isAgentPosition && pos.agentName) {
-        agentPositionValues.set(
-          pos.agentName,
-          (agentPositionValues.get(pos.agentName) ?? 0) + value
-        );
-      } else {
-        ownerPositionValue += value;
-      }
+      const memberId = pos.isAgentPosition
+        ? (pos.agentId ?? teamSummary.ownerId)
+        : teamSummary.ownerId;
+      positionValues.set(memberId, (positionValues.get(memberId) ?? 0) + value);
     }
 
     for (const pos of predictionPositions) {
       const value = pos.currentValue ?? pos.shares * pos.currentPrice;
-      if (pos.isAgentPosition && pos.agentName) {
-        agentPositionValues.set(
-          pos.agentName,
-          (agentPositionValues.get(pos.agentName) ?? 0) + value
-        );
-      } else {
-        ownerPositionValue += value;
-      }
+      const memberId = pos.isAgentPosition
+        ? (pos.agentId ?? teamSummary.ownerId)
+        : teamSummary.ownerId;
+      positionValues.set(memberId, (positionValues.get(memberId) ?? 0) + value);
     }
 
-    const memberList: Member[] = [
-      {
-        name: 'You',
-        cash: balance,
-        openPositions: ownerPositionValue,
-        total: balance + ownerPositionValue,
-      },
-    ];
+    const memberList: Member[] = teamSummary.members.map((member) => {
+      const openPositions = positionValues.get(member.id) ?? 0;
+      const cash = member.walletBalance;
+      return {
+        id: member.id,
+        kind: member.entityType,
+        name: member.entityType === 'owner' ? 'You' : member.name,
+        cash,
+        openPositions,
+        total: cash + openPositions,
+      };
+    });
 
-    let agentTotal = 0;
-    for (const [agentName, posValue] of agentPositionValues) {
-      memberList.push({
-        name: agentName,
-        cash: 0,
-        openPositions: posValue,
-        total: posValue,
-      });
-      agentTotal += posValue;
-    }
-
-    const total = balance + ownerPositionValue + agentTotal;
+    const total = memberList.reduce((sum, member) => sum + member.total, 0);
+    const agentTotal = memberList
+      .filter((member) => member.kind === 'agent')
+      .reduce((sum, member) => sum + member.total, 0);
 
     return {
       members: memberList,
       totalBalance: total,
       agentsOnly: agentTotal,
     };
-  }, [balance, perpPositions, predictionPositions]);
+  }, [teamSummary, perpPositions, predictionPositions]);
 
   const fmt = (amount: number) =>
     formatCurrency(amount, { useThousandsSeparator: true });
@@ -100,6 +103,15 @@ export function BalanceTab({ userId }: BalanceTabProps) {
             <div key={i} className="h-16 animate-pulse rounded-xl bg-muted" />
           ))}
         </div>
+      </div>
+    );
+  }
+
+  if (!teamSummary && teamSummaryError) {
+    return (
+      <div className="rounded-xl border border-border py-10 text-center">
+        <p className="text-muted-foreground">Failed to load team balances</p>
+        <p className="mt-1 text-muted-foreground text-sm">{teamSummaryError}</p>
       </div>
     );
   }
@@ -182,7 +194,7 @@ export function BalanceTab({ userId }: BalanceTabProps) {
                 : '0.0';
             return (
               <div
-                key={agent.name}
+                key={agent.id}
                 className="rounded-xl border border-border px-3 py-2.5 md:p-4"
               >
                 <div className="flex items-center justify-between">
@@ -204,7 +216,8 @@ export function BalanceTab({ userId }: BalanceTabProps) {
                       {fmt(agent.total)}
                     </div>
                     <div className="text-muted-foreground text-xs">
-                      Positions {fmt(agent.openPositions)}
+                      Cash {fmt(agent.cash)} · Positions{' '}
+                      {fmt(agent.openPositions)}
                     </div>
                   </div>
                 </div>

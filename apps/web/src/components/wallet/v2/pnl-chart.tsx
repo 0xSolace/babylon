@@ -68,7 +68,7 @@ export function PnLChart({ userId, timeframe }: PnLChartProps) {
   }
 
   return (
-    <div className="h-72 w-full [&_*:focus]:outline-none [&_*]:outline-none">
+    <div className="h-72 w-full">
       <ResponsiveContainer width="100%" height="100%">
         <AreaChart
           data={chartData}
