@@ -64,6 +64,7 @@ import { Skeleton } from '@/components/shared/Skeleton';
 import { SpotlightTutorial } from '@/components/tutorial/SpotlightTutorial';
 import { TutorialHelpButton } from '@/components/tutorial/TutorialHelpButton';
 import { useAuth } from '@/hooks/useAuth';
+import { useOwnedAgentTradeRefresh } from '@/hooks/useOwnedAgentTradeRefresh';
 import { useTeamChat } from '@/hooks/useTeamChat';
 import {
   type TeamScope,
@@ -480,11 +481,18 @@ export default function TeamChatPage() {
     summary: teamSummary,
     loading: teamSummaryLoading,
     error: teamSummaryError,
+    refresh: refreshTeamSummary,
   } = useTeamTradingSummary({
     ownerId: user?.id,
     ownerName: user?.displayName || user?.username || 'You',
     enabled: teamSummaryEnabled,
     getAccessToken,
+  });
+
+  useOwnedAgentTradeRefresh({
+    userId: user?.id,
+    agentIds: teamChat?.agents.map((agent) => agent.id) ?? [],
+    onTrade: refreshTeamSummary,
   });
 
   // Agent IDs set for settings icon on latest agent messages
