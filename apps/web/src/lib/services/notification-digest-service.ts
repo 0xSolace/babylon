@@ -43,6 +43,17 @@ const DIGEST_WINDOWS_MS: Record<NotificationDigestFrequency, number> = {
   weekly: 7 * 24 * 60 * 60 * 1000,
 };
 
+const VALID_DIGEST_FREQUENCIES = new Set<string>(['hourly', 'daily', 'weekly']);
+const VALID_DELIVERY_CHANNELS = new Set<string>(['in-app', 'email', 'both']);
+
+function isValidDigestFrequency(value: unknown): value is NotificationDigestFrequency {
+  return typeof value === 'string' && VALID_DIGEST_FREQUENCIES.has(value);
+}
+
+function isValidDeliveryChannel(value: unknown): value is NotificationDeliveryChannel {
+  return typeof value === 'string' && VALID_DELIVERY_CHANNELS.has(value);
+}
+
 export function getDigestWindowStart(
   now: Date,
   frequency: NotificationDigestFrequency
@@ -86,11 +97,23 @@ export async function listDigestCandidates(): Promise<DigestCandidateUser[]> {
     .from(users)
     .where(eq(users.notificationDigestEnabled, true));
 
-  return rows.map((row) => ({
-    ...row,
-    digestFrequency: row.digestFrequency as NotificationDigestFrequency,
-    deliveryChannel: row.deliveryChannel as NotificationDeliveryChannel,
-  }));
+  return rows
+    .filter((row) => {
+      if (!isValidDigestFrequency(row.digestFrequency)) {
+        logger.warn('Invalid digest frequency in database', { userId: row.id, value: row.digestFrequency }, 'NotificationDigestService');
+        return false;
+      }
+      if (!isValidDeliveryChannel(row.deliveryChannel)) {
+        logger.warn('Invalid delivery channel in database', { userId: row.id, value: row.deliveryChannel }, 'NotificationDigestService');
+        return false;
+      }
+      return true;
+    })
+    .map((row) => ({
+      ...row,
+      digestFrequency: row.digestFrequency as NotificationDigestFrequency,
+      deliveryChannel: row.deliveryChannel as NotificationDeliveryChannel,
+    }));
 }
 
 export async function buildDigestForUser(params: {
