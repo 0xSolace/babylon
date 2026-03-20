@@ -106,6 +106,6 @@ Indexes and query shape are necessary but **not sufficient**: you cannot prove e
 - **Session guardrails** — in production, `packages/db` sets Postgres `statement_timeout`, `lock_timeout`, and `idle_in_transaction_session_timeout` on new connections (tunable via env). This caps runaway queries and fails lock waits instead of piling up.
 - **DDL** — `CREATE INDEX` on large tables blocks writes unless built **`CONCURRENTLY`** (hand-roll a migration for huge tables; Drizzle defaults are blocking). Note: migrations 0055/0056 use blocking indexes; acceptable for current table sizes (<100k rows) but must be rewritten with `CONCURRENTLY` before scaling. To use `CONCURRENTLY`, create a manual migration outside a transaction since concurrent index builds cannot run inside transactions.
 - **Observability** — enable `pg_stat_statements`, watch `pg_locks` / `pg_stat_activity`, set alerts on slow queries and connection saturation.
-- **Read path** — route read-heavy, latency-tolerant queries through **`DATABASE_READ_REPLICA_URL`** when configured.
+- **Read path** — route read-heavy, latency-tolerant queries through **`DATABASE_READ_REPLICA_URL`** when configured. **Replication lag caveat**: reads immediately after writes may return stale data; use the primary (`dbWrite`) for read-after-write consistency (e.g., fetching a record just created/updated).
 
 Treat every new high-volume query as guilty until measured under production-like data volume.
