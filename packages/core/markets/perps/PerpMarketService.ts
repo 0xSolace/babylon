@@ -627,6 +627,7 @@ export class PerpMarketService {
     // Fee processing is bookkeeping (referral distribution, fee records).
     // The position is already settled, so this is safe to run without blocking
     // the response back to the user. Uses retry logic for reliability.
+    // TODO: Consider transactional outbox pattern for fee events to guarantee delivery if process crashes
     void this.processFeeWithRetry(
       {
         userId: input.userId,
@@ -1387,6 +1388,7 @@ export class PerpMarketService {
 
       // Process fees for both legs outside transaction to avoid holding locks.
       // Uses retry logic for reliability; position settlement is already complete.
+      // TODO: Consider transactional outbox pattern for fee events to guarantee delivery if process crashes
       void Promise.all([
         this.processFeeWithRetry(
           {
