@@ -198,14 +198,15 @@ describe('withErrorHandling + default Sentry capture', () => {
 describe('Notification digest validation functions', () => {
   describe('isValidDigestFrequency', () => {
     it('returns true for valid frequencies', () => {
+      expect(isValidDigestFrequency('hourly')).toBe(true);
       expect(isValidDigestFrequency('daily')).toBe(true);
       expect(isValidDigestFrequency('weekly')).toBe(true);
-      expect(isValidDigestFrequency('immediate')).toBe(true);
     });
 
     it('returns false for invalid frequencies', () => {
       expect(isValidDigestFrequency('monthly')).toBe(false);
-      expect(isValidDigestFrequency('hourly')).toBe(false);
+      expect(isValidDigestFrequency('immediate')).toBe(false);
+      expect(isValidDigestFrequency('both')).toBe(false);
       expect(isValidDigestFrequency('')).toBe(false);
       expect(isValidDigestFrequency('DAILY')).toBe(false);
     });
@@ -213,14 +214,16 @@ describe('Notification digest validation functions', () => {
 
   describe('isValidDeliveryChannel', () => {
     it('returns true for valid delivery channels', () => {
+      expect(isValidDeliveryChannel('in-app')).toBe(true);
       expect(isValidDeliveryChannel('email')).toBe(true);
-      expect(isValidDeliveryChannel('push')).toBe(true);
-      expect(isValidDeliveryChannel('in_app')).toBe(true);
+      expect(isValidDeliveryChannel('both')).toBe(true);
     });
 
     it('returns false for invalid delivery channels', () => {
       expect(isValidDeliveryChannel('sms')).toBe(false);
       expect(isValidDeliveryChannel('slack')).toBe(false);
+      expect(isValidDeliveryChannel('push')).toBe(false);
+      expect(isValidDeliveryChannel('in_app')).toBe(false);
       expect(isValidDeliveryChannel('')).toBe(false);
       expect(isValidDeliveryChannel('EMAIL')).toBe(false);
     });
