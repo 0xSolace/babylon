@@ -64,6 +64,7 @@ import { Skeleton } from '@/components/shared/Skeleton';
 import { SpotlightTutorial } from '@/components/tutorial/SpotlightTutorial';
 import { TutorialHelpButton } from '@/components/tutorial/TutorialHelpButton';
 import { useAuth } from '@/hooks/useAuth';
+import { useOwnedAgentTradeRefresh } from '@/hooks/useOwnedAgentTradeRefresh';
 import { useTeamChat } from '@/hooks/useTeamChat';
 import {
   type TeamScope,
@@ -215,6 +216,11 @@ export default function TeamChatPage() {
     renameConversation,
     deleteConversation,
   } = useTeamChat();
+
+  useOwnedAgentTradeRefresh({
+    userId: user?.id,
+    agentIds: teamChat?.agents.map((agent) => agent.id) ?? [],
+  });
 
   // Mobile view state - which tab is active on mobile
   type MobileView = 'chat' | 'agents' | 'panel';
