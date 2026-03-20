@@ -5,6 +5,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useSSEChannel } from '@/hooks/useSSE';
 import { useAuthStore } from '@/stores/authStore';
 import { AchievementCard } from './achievement-card';
+import { useAnimatedCount } from './use-animated-count';
 
 export interface AchievementFromApi {
   id: string;
@@ -35,6 +36,192 @@ export function mapStatus(
 
 type TierFilter = 'All' | 'Bronze' | 'Silver' | 'Gold';
 
+// TODO: remove mock data flag once APIs are populated
+const USE_MOCK_DATA = true;
+
+const MOCK_ACHIEVEMENTS: AchievementFromApi[] = [
+  {
+    id: 'a1',
+    name: 'First Prediction',
+    description: 'Make your first prediction trade',
+    category: 'trading',
+    tier: 'bronze',
+    pointsReward: 75,
+    threshold: 1,
+    progress: 1,
+    unlocked: true,
+    unlockedAt: '2026-03-15T10:00:00Z',
+  },
+  {
+    id: 'a2',
+    name: 'First Win',
+    description: 'Win your first resolved prediction',
+    category: 'trading',
+    tier: 'silver',
+    pointsReward: 150,
+    threshold: 1,
+    progress: 1,
+    unlocked: true,
+    unlockedAt: '2026-03-16T14:00:00Z',
+  },
+  {
+    id: 'a3',
+    name: 'Week Trader',
+    description: 'Maintain a 7-day login streak',
+    category: 'streak',
+    tier: 'gold',
+    pointsReward: 250,
+    threshold: 7,
+    progress: 7,
+    unlocked: true,
+    unlockedAt: '2026-03-18T08:00:00Z',
+  },
+  {
+    id: 'a4',
+    name: 'Feed Commenter',
+    description: 'Leave 5 comments on posts',
+    category: 'social',
+    tier: 'bronze',
+    pointsReward: 50,
+    threshold: 5,
+    progress: 1,
+    unlocked: false,
+    unlockedAt: null,
+  },
+  {
+    id: 'a5',
+    name: 'Five Markets',
+    description: 'Trade in 5 different markets',
+    category: 'trading',
+    tier: 'silver',
+    pointsReward: 150,
+    threshold: 5,
+    progress: 3,
+    unlocked: false,
+    unlockedAt: null,
+  },
+  {
+    id: 'a6',
+    name: 'Market Veteran',
+    description: 'Trade in 25 different markets',
+    category: 'trading',
+    tier: 'gold',
+    pointsReward: 300,
+    threshold: 25,
+    progress: 20,
+    unlocked: false,
+    unlockedAt: null,
+  },
+  {
+    id: 'a7',
+    name: 'Active Trader',
+    description: 'Complete 10 trades (prediction or perp)',
+    category: 'trading',
+    tier: 'silver',
+    pointsReward: 100,
+    threshold: 10,
+    progress: 3,
+    unlocked: false,
+    unlockedAt: null,
+  },
+  {
+    id: 'a8',
+    name: 'Agent Squad',
+    description: 'Create 3 agents',
+    category: 'agents',
+    tier: 'silver',
+    pointsReward: 200,
+    threshold: 3,
+    progress: 2,
+    unlocked: false,
+    unlockedAt: null,
+  },
+  {
+    id: 'a9',
+    name: 'First Perp',
+    description: 'Make your first perpetual trade',
+    category: 'trading',
+    tier: 'bronze',
+    pointsReward: 75,
+    threshold: 1,
+    progress: 0,
+    unlocked: false,
+    unlockedAt: null,
+  },
+  {
+    id: 'a10',
+    name: 'Agent Creator',
+    description: 'Create your first agent',
+    category: 'agents',
+    tier: 'bronze',
+    pointsReward: 100,
+    threshold: 1,
+    progress: 0,
+    unlocked: false,
+    unlockedAt: null,
+  },
+  {
+    id: 'a11',
+    name: 'Chat with Agent',
+    description: 'Send your first message to an agent',
+    category: 'agents',
+    tier: 'bronze',
+    pointsReward: 50,
+    threshold: 1,
+    progress: 0,
+    unlocked: false,
+    unlockedAt: null,
+  },
+  {
+    id: 'a12',
+    name: 'Terminal Explorer',
+    description: 'Visit the Terminal page',
+    category: 'exploration',
+    tier: 'bronze',
+    pointsReward: 50,
+    threshold: 1,
+    progress: 0,
+    unlocked: false,
+    unlockedAt: null,
+  },
+  {
+    id: 'a13',
+    name: 'Agent Trader',
+    description: 'Have an agent execute a trade',
+    category: 'agents',
+    tier: 'silver',
+    pointsReward: 150,
+    threshold: 1,
+    progress: 0,
+    unlocked: false,
+    unlockedAt: null,
+  },
+  {
+    id: 'a14',
+    name: 'Group Chatter',
+    description: 'Send a message in a group chat',
+    category: 'social',
+    tier: 'bronze',
+    pointsReward: 75,
+    threshold: 1,
+    progress: 0,
+    unlocked: false,
+    unlockedAt: null,
+  },
+  {
+    id: 'a15',
+    name: 'Agents Explorer',
+    description: 'Visit the Agents page',
+    category: 'exploration',
+    tier: 'bronze',
+    pointsReward: 50,
+    threshold: 1,
+    progress: 0,
+    unlocked: false,
+    unlockedAt: null,
+  },
+];
+
 export function AchievementsTab() {
   const { authenticated, getAccessToken } = useAuth();
   const { user } = useAuthStore();
@@ -43,6 +230,12 @@ export function AchievementsTab() {
   const [filter, setFilter] = useState<TierFilter>('All');
 
   const fetchAchievements = useCallback(async () => {
+    if (USE_MOCK_DATA) {
+      setAchievements(MOCK_ACHIEVEMENTS);
+      setLoading(false);
+      return;
+    }
+
     if (!authenticated) {
       setLoading(false);
       return;
@@ -66,7 +259,6 @@ export function AchievementsTab() {
     fetchAchievements();
   }, [fetchAchievements]);
 
-  // Re-fetch when SSE notifies of achievement unlock
   const handleSSE = useCallback(
     (data: Record<string, unknown>) => {
       const type = data.type as string;
@@ -81,27 +273,37 @@ export function AchievementsTab() {
     authenticated && user?.id ? (`notifications:${user.id}` as const) : null;
   useSSEChannel(channel, handleSSE);
 
-  const filters: TierFilter[] = ['All', 'Bronze', 'Silver', 'Gold'];
+  const filters: TierFilter[] = ['All', 'Gold', 'Silver', 'Bronze'];
 
   const filteredAchievements =
     filter === 'All'
       ? achievements
       : achievements.filter((a) => mapTier(a.tier) === filter);
 
+  const completed = filteredAchievements.filter(
+    (a) => mapStatus(a) === 'completed'
+  );
+  const inProgress = filteredAchievements.filter(
+    (a) => mapStatus(a) === 'in-progress'
+  );
+  const locked = filteredAchievements.filter((a) => mapStatus(a) === 'locked');
+
   const unlockedCount = achievements.filter((a) => a.unlocked).length;
   const totalCount = achievements.length;
   const pointsEarned = achievements
     .filter((a) => a.unlocked)
     .reduce((sum, a) => sum + a.pointsReward, 0);
+  const progressPercent =
+    totalCount > 0 ? (unlockedCount / totalCount) * 100 : 0;
+
+  const animUnlocked = useAnimatedCount(unlockedCount);
+  const animPoints = useAnimatedCount(pointsEarned);
 
   if (loading) {
     return (
       <div className="space-y-3">
         {[1, 2, 3, 4, 5].map((i) => (
-          <div
-            key={i}
-            className="h-16 animate-pulse rounded-lg border border-border bg-muted"
-          />
+          <div key={i} className="h-16 animate-pulse bg-muted" />
         ))}
       </div>
     );
@@ -109,61 +311,152 @@ export function AchievementsTab() {
 
   return (
     <div>
-      {/* Stats and Filter Row */}
-      <div className="mb-6 flex items-center justify-between">
-        <div className="flex items-center gap-6">
+      {/* Hero Stats */}
+      <div className="-mx-4 -mt-4 bg-gradient-to-br from-amber-500/10 via-amber-500/5 to-transparent p-5 pb-5 dark:from-amber-500/15 dark:via-amber-500/5">
+        <div className="flex items-center gap-8">
           <div>
-            <p className="font-semibold text-[10px] text-muted-foreground tracking-wider">
-              UNLOCKED
-            </p>
-            <p className="font-bold text-lg">
-              <span className="text-foreground">{unlockedCount}</span>
-              <span className="text-muted-foreground">/{totalCount}</span>
+            <p className="text-[11px] text-muted-foreground">Unlocked</p>
+            <p className="font-bold text-2xl text-amber-500 tabular-nums">
+              {animUnlocked}
+              <span className="text-base text-muted-foreground">
+                /{totalCount}
+              </span>
             </p>
           </div>
-          <div className="h-8 w-px bg-border" />
           <div>
-            <p className="font-semibold text-[10px] text-muted-foreground tracking-wider">
-              POINTS EARNED
+            <p className="text-[11px] text-muted-foreground">Points earned</p>
+            <p className="font-bold text-2xl text-foreground tabular-nums">
+              {animPoints}
             </p>
-            <p className="font-bold text-foreground text-lg">{pointsEarned}</p>
           </div>
         </div>
 
-        <div className="flex rounded-lg border border-border bg-card p-1">
-          {filters.map((f) => (
-            <button
-              key={f}
-              onClick={() => setFilter(f)}
-              className={`rounded-md px-3 py-1.5 font-medium text-xs transition-colors ${
-                filter === f
-                  ? 'bg-muted text-foreground'
-                  : 'text-muted-foreground hover:text-foreground'
-              }`}
-            >
-              {f}
-            </button>
-          ))}
+        {/* Overall progress */}
+        <div className="mt-3 h-2 w-full bg-muted/60">
+          <div
+            className="h-full bg-gradient-to-r from-amber-500 to-yellow-400 transition-all duration-500"
+            style={{ width: `${progressPercent}%` }}
+          />
         </div>
+
+        <p className="mt-2 text-muted-foreground text-xs">
+          {unlockedCount === totalCount
+            ? 'All achievements unlocked — legendary! 🏆'
+            : unlockedCount === 0
+              ? 'Start playing to unlock achievements'
+              : `${totalCount - unlockedCount} more to discover — keep exploring!`}
+        </p>
       </div>
 
-      {/* Achievement Cards */}
-      <div className="space-y-3">
-        {filteredAchievements.map((a) => (
-          <AchievementCard
-            key={a.id}
-            title={a.name}
-            description={a.description}
-            badge={mapTier(a.tier)}
-            points={a.pointsReward}
-            status={mapStatus(a)}
-            progress={
-              !a.unlocked && a.threshold > 1
-                ? { current: a.progress, total: a.threshold }
-                : undefined
-            }
-          />
+      {/* Filter Pills */}
+      <div className="mt-4 flex gap-2">
+        {filters.map((f) => (
+          <button
+            key={f}
+            onClick={() => setFilter(f)}
+            className={`rounded-full px-3.5 py-1.5 font-medium text-xs transition-all ${
+              filter === f
+                ? 'bg-amber-500 text-white'
+                : 'bg-muted text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            {f}
+          </button>
         ))}
+      </div>
+
+      {/* Achievement List — grouped by status */}
+      <div className="mt-4 space-y-5">
+        {completed.length > 0 && (
+          <div>
+            <p className="mb-2 font-semibold text-emerald-500 text-xs uppercase tracking-wide">
+              Unlocked ({completed.length})
+            </p>
+            <div className="space-y-2">
+              {completed.map((a, i) => (
+                <div
+                  key={a.id}
+                  className="animate-fadeIn"
+                  style={{
+                    animationDelay: `${i * 40}ms`,
+                    animationFillMode: 'backwards',
+                  }}
+                >
+                  <AchievementCard
+                    title={a.name}
+                    description={a.description}
+                    badge={mapTier(a.tier)}
+                    points={a.pointsReward}
+                    status="completed"
+                    progress={undefined}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {inProgress.length > 0 && (
+          <div>
+            <p className="mb-2 font-semibold text-amber-500 text-xs uppercase tracking-wide">
+              In Progress ({inProgress.length})
+            </p>
+            <div className="space-y-2">
+              {inProgress.map((a, i) => (
+                <div
+                  key={a.id}
+                  className="animate-fadeIn"
+                  style={{
+                    animationDelay: `${(completed.length + i) * 40}ms`,
+                    animationFillMode: 'backwards',
+                  }}
+                >
+                  <AchievementCard
+                    title={a.name}
+                    description={a.description}
+                    badge={mapTier(a.tier)}
+                    points={a.pointsReward}
+                    status="in-progress"
+                    progress={
+                      a.threshold > 1
+                        ? { current: a.progress, total: a.threshold }
+                        : undefined
+                    }
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {locked.length > 0 && (
+          <div>
+            <p className="mb-2 font-semibold text-muted-foreground text-xs uppercase tracking-wide">
+              Locked ({locked.length})
+            </p>
+            <div className="space-y-2">
+              {locked.map((a, i) => (
+                <div
+                  key={a.id}
+                  className="animate-fadeIn"
+                  style={{
+                    animationDelay: `${(completed.length + inProgress.length + i) * 40}ms`,
+                    animationFillMode: 'backwards',
+                  }}
+                >
+                  <AchievementCard
+                    title={a.name}
+                    description={a.description}
+                    badge={mapTier(a.tier)}
+                    points={a.pointsReward}
+                    status="locked"
+                    progress={undefined}
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
