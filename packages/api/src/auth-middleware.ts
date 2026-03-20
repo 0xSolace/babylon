@@ -7,10 +7,7 @@
  */
 
 import { db, eq, users } from '@babylon/db';
-import {
-  type AuthenticatedUser,
-  isNftGatingAllowlistedPath,
-} from '@babylon/shared';
+import { type AuthenticatedUser } from '@babylon/shared';
 import { PrivyClient } from '@privy-io/server-auth';
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
@@ -18,11 +15,9 @@ import { verifyAgentSession } from './agent-auth';
 import { getPrivyAppIdFromEnv, getTrimmedEnv } from './env';
 import {
   AuthenticationError,
-  AuthorizationError,
   isAuthenticationError,
   ServiceUnavailableError,
 } from './errors';
-import { hasNftAccessForAuthUser } from './services/nft-access-service';
 
 // Re-export types from shared for backwards compatibility
 export type { AuthenticatedUser } from '@babylon/shared';
@@ -75,13 +70,6 @@ export function getPrivyClient(): PrivyClient {
 export async function authenticate(
   request: NextRequest
 ): Promise<AuthenticatedUser> {
-  const pathname = new URL(request.url).pathname;
-
-  const nftGatingFlag = process.env.NFT_GATING_ENABLED ?? '';
-  const nftGatingEnabled = ['true', '1', 'yes', 'on'].includes(
-    nftGatingFlag.toLowerCase()
-  );
-
   const authHeader = request.headers.get('authorization');
   let token: string | undefined;
 
@@ -215,32 +203,8 @@ export async function authenticate(
         isAgent: false,
       };
 
-      if (
-        nftGatingEnabled &&
-        !authedUser.isAgent &&
-        !authedUser.isAdmin &&
-        !isNftGatingAllowlistedPath(pathname)
-      ) {
-        if (!authedUser.dbUserId) {
-          throw new AuthorizationError('NFT access required', 'nft', 'access', {
-            pathname,
-          });
-        }
-
-        const allowed = await hasNftAccessForAuthUser(authedUser);
-        if (!allowed) {
-          throw new AuthorizationError('NFT access required', 'nft', 'access', {
-            pathname,
-          });
-        }
-      }
-
       return authedUser;
     } catch (error) {
-      if (error instanceof AuthorizationError) {
-        throw error;
-      }
-
       const errorMessage =
         error instanceof Error ? error.message.toLowerCase() : '';
       const isExpiredTokenError =
