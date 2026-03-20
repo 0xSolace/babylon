@@ -368,9 +368,12 @@ async function withRetryInternal<T>(
         errorMsg.includes('econnrefused') ||
         errorMsg.includes('econnreset') ||
         errorMsg.includes('etimedout') ||
-        // SSL errors common with Neon's pooler
+        // SSL connection errors common with Neon's pooler (excludes certificate validation errors)
         (errorMsg.includes('ssl') &&
-          (errorMsg.includes('error') || errorMsg.includes('failed'))) ||
+          (errorMsg.includes('connection') ||
+            errorMsg.includes('handshake') ||
+            errorMsg.includes('reset') ||
+            errorMsg.includes('closed'))) ||
         // Connection limit errors
         errorMsg.includes('too many connections') ||
         errorMsg.includes('connection limit');
