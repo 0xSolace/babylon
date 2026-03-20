@@ -188,6 +188,7 @@ describe('agent-evm-registration-service', () => {
 
   it('registers an agent on EVM, charges the owner, and persists wallet state when needed', async () => {
     selectResults.push([BASE_AGENT]);
+    selectResults.push([BASE_AGENT]);
     selectResults.push([{ virtualBalance: '900' }]);
     mockProvisionAgentPrivyWallet.mockResolvedValue({
       privyId: 'did:privy:agent-1',
@@ -256,6 +257,7 @@ describe('agent-evm-registration-service', () => {
 
   it('refunds the owner when registration fails', async () => {
     selectResults.push([BASE_AGENT]);
+    selectResults.push([BASE_AGENT]);
     selectResults.push([{ virtualBalance: '900' }]);
     selectResults.push([{ virtualBalance: '1000' }]);
     mockProvisionAgentPrivyWallet.mockResolvedValue({
@@ -289,6 +291,30 @@ describe('agent-evm-registration-service', () => {
   });
 
   it('returns already-registered agents without charging points', async () => {
+    const registeredAgent = {
+      ...BASE_AGENT,
+      walletAddress: '0xabc0000000000000000000000000000000000123',
+      onChainRegistered: true,
+      agent0TokenId: 456,
+      registrationTxHash: '0xbeef',
+    };
+    selectResults.push([registeredAgent]);
+    selectResults.push([registeredAgent]);
+
+    const result = await registerAgentOnEvmForOwner({
+      ownerUserId: 'owner-1',
+      agentUserId: 'agent-1',
+    });
+
+    expect(result.alreadyRegistered).toBe(true);
+    expect(result.tokenId).toBe(456);
+    expect(result.cost).toBe(0);
+    expect(capturedInserts).toHaveLength(0);
+    expect(mockProcessOnchainRegistration).not.toHaveBeenCalled();
+  });
+
+  it('re-checks registration state after acquiring the lock to avoid charging a stale second request', async () => {
+    selectResults.push([BASE_AGENT]);
     selectResults.push([
       {
         ...BASE_AGENT,
