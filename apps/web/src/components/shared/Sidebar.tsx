@@ -16,6 +16,7 @@ import {
   Trophy,
   User,
   Users,
+  Wallet,
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -160,6 +161,13 @@ function SidebarContent() {
       href: '/feed',
       icon: HouseIcon,
       active: pathname === '/feed' || pathname === '/',
+    },
+    {
+      name: 'Wallet',
+      href: '/wallet',
+      icon: Wallet,
+      active: pathname === '/wallet',
+      requiresAuth: true,
     },
     {
       name: 'Notifications',

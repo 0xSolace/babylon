@@ -9,6 +9,7 @@ import {
   Settings,
   Trophy,
   User,
+  Wallet,
   X,
 } from 'lucide-react';
 import Link from 'next/link';
@@ -168,6 +169,12 @@ function MobileHeaderContent() {
   }
 
   const menuItems = [
+    {
+      name: 'Wallet',
+      href: '/wallet',
+      icon: Wallet,
+      active: pathname === '/wallet',
+    },
     {
       name: 'Profile',
       href: '/profile',

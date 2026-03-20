@@ -37,7 +37,7 @@ const { GET } = await import('./route');
 const makeRequest = (params: Record<string, string> = {}): NextRequest => {
   const searchParams = new URLSearchParams(params);
   return {
-    url: 'https://babylon.social/api/feed/for-you',
+    url: 'https://play.babylon.market/api/feed/for-you',
     headers: { get: () => null },
     nextUrl: { searchParams },
   } as unknown as NextRequest;

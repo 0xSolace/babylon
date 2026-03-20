@@ -2,9 +2,11 @@ import { beforeEach, describe, expect, it, mock } from 'bun:test';
 
 const mockGetAgentSolanaRegistration = mock();
 const mockPrepareAgentSolanaRegistrationTransaction = mock();
+const mockFinalizeAgentSolanaRegistrationTransaction = mock();
 const mockGetSolanaWalletBalanceLamports = mock();
 const mockEnsureSolanaWalletReady = mock();
 const mockSendSolanaTransaction = mock();
+const mockIsSolanaBlockhashNotFoundError = mock();
 const mockAssertSolanaRegistryConfigured = mock();
 const mockAcquireLock = mock();
 const mockReleaseLock = mock();
@@ -34,6 +36,7 @@ const usersTable = {
 } as const;
 
 mock.module('@babylon/agents/solana-registry', () => ({
+  SOLANA_REGISTRATION_MIN_BALANCE_LAMPORTS: 21_000_000n,
   assertSolanaRegistryConfigured: mockAssertSolanaRegistryConfigured,
   buildAgentSolanaRegistrationFile: (input: Record<string, unknown>) => {
     capturedRegistrationFileInput = input;
@@ -54,6 +57,8 @@ mock.module('@babylon/agents/solana-registry', () => ({
   },
   getAgentSolanaRegistration: mockGetAgentSolanaRegistration,
   getSolanaWalletBalanceLamports: mockGetSolanaWalletBalanceLamports,
+  finalizeAgentSolanaRegistrationTransaction:
+    mockFinalizeAgentSolanaRegistrationTransaction,
   prepareAgentSolanaRegistrationTransaction:
     mockPrepareAgentSolanaRegistrationTransaction,
 }));
@@ -118,6 +123,7 @@ mock.module('./privy/solana-wallet-provisioning', () => ({
 }));
 
 mock.module('./privy/solana-send-transaction', () => ({
+  isSolanaBlockhashNotFoundError: mockIsSolanaBlockhashNotFoundError,
   sendSolanaTransaction: mockSendSolanaTransaction,
 }));
 
@@ -157,9 +163,11 @@ describe('agent-solana-registration-service', () => {
     capturedRegistrationFileInput = null;
     mockGetAgentSolanaRegistration.mockReset();
     mockPrepareAgentSolanaRegistrationTransaction.mockReset();
+    mockFinalizeAgentSolanaRegistrationTransaction.mockReset();
     mockGetSolanaWalletBalanceLamports.mockReset();
     mockEnsureSolanaWalletReady.mockReset();
     mockSendSolanaTransaction.mockReset();
+    mockIsSolanaBlockhashNotFoundError.mockReset();
     mockAssertSolanaRegistryConfigured.mockReset();
     mockAcquireLock.mockReset();
     mockReleaseLock.mockReset();
@@ -178,14 +186,23 @@ describe('agent-solana-registration-service', () => {
       assetId: 'asset-123',
       metadataUri: 'ipfs://cid-123',
       metadataCid: 'cid-123',
-      transaction: 'base64-tx',
+      transactionTemplate: 'base64-tx-template',
     });
-    mockGetSolanaWalletBalanceLamports.mockResolvedValue(20_000_000n);
+    mockFinalizeAgentSolanaRegistrationTransaction.mockResolvedValue({
+      transaction: 'base64-tx-signed',
+      blockhash: 'blockhash-1',
+      lastValidBlockHeight: 123,
+    });
+    mockGetSolanaWalletBalanceLamports.mockResolvedValue(22_000_000n);
     mockSendSolanaTransaction.mockResolvedValue({
       hash: 'tx-123',
       transactionId: 'tx-123',
-      caip2: 'solana:mainnet',
+      caip2: 'solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp',
     });
+    mockIsSolanaBlockhashNotFoundError.mockImplementation(
+      (error: unknown) =>
+        error instanceof Error && error.message.includes('Blockhash not found')
+    );
   });
 
   it('returns status for an owned agent', async () => {
@@ -199,8 +216,8 @@ describe('agent-solana-registration-service', () => {
     expect(status.isRegistered).toBe(false);
     expect(status.walletReady).toBe(true);
     expect(status.walletAddress).toBe('SoLWallet111');
-    expect(status.walletBalanceSol).toBe('0.02');
-    expect(status.minimumBalanceSol).toBe('0.01');
+    expect(status.walletBalanceSol).toBe('0.022');
+    expect(status.minimumBalanceSol).toBe('0.021');
     expect(status.hasEnoughBalance).toBe(true);
     expect(status.canRegister).toBe(true);
     expect(status.cost).toBe(100);
@@ -246,8 +263,18 @@ describe('agent-solana-registration-service', () => {
     );
     expect(mockSendSolanaTransaction).toHaveBeenCalledWith({
       walletId: 'solana-wallet-1',
-      transaction: 'base64-tx',
+      transaction: 'base64-tx-signed',
+      confirmationStrategy: {
+        blockhash: 'blockhash-1',
+        lastValidBlockHeight: 123,
+      },
     });
+    expect(mockFinalizeAgentSolanaRegistrationTransaction).toHaveBeenCalledWith(
+      {
+        agentUserId: 'agent-1',
+        transaction: 'base64-tx-template',
+      }
+    );
     expect(capturedRegistrationFileInput?.skills).toEqual([]);
     expect(capturedRegistrationFileInput?.domains).toEqual([]);
     expect(
@@ -270,7 +297,7 @@ describe('agent-solana-registration-service', () => {
         ownerUserId: 'owner-1',
         agentUserId: 'agent-1',
       })
-    ).rejects.toThrow('Fund the agent wallet with at least 0.01 SOL');
+    ).rejects.toThrow('Fund the agent wallet with at least 0.021 SOL');
 
     expect(capturedInserts).toHaveLength(0);
     expect(mockSendSolanaTransaction).not.toHaveBeenCalled();
@@ -305,7 +332,7 @@ describe('agent-solana-registration-service', () => {
     mockGetAgentSolanaRegistration
       .mockResolvedValueOnce(null)
       .mockResolvedValueOnce(null);
-    mockGetSolanaWalletBalanceLamports.mockResolvedValueOnce(10_000_000n);
+    mockGetSolanaWalletBalanceLamports.mockResolvedValueOnce(21_000_000n);
 
     const result = await registerAgentOnSolanaForOwner({
       ownerUserId: 'owner-1',
@@ -314,6 +341,69 @@ describe('agent-solana-registration-service', () => {
 
     expect(result.alreadyRegistered).toBe(false);
     expect(mockSendSolanaTransaction).toHaveBeenCalled();
+  });
+
+  it('refreshes and retries once when Privy rejects the transaction with a stale blockhash', async () => {
+    selectResults.push([BASE_AGENT]);
+    selectResults.push([{ virtualBalance: '900' }]);
+
+    mockGetAgentSolanaRegistration
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null);
+    mockFinalizeAgentSolanaRegistrationTransaction
+      .mockResolvedValueOnce({
+        transaction: 'base64-tx-signed-attempt-1',
+        blockhash: 'blockhash-stale',
+        lastValidBlockHeight: 111,
+      })
+      .mockResolvedValueOnce({
+        transaction: 'base64-tx-signed-attempt-2',
+        blockhash: 'blockhash-fresh',
+        lastValidBlockHeight: 222,
+      });
+    mockSendSolanaTransaction
+      .mockRejectedValueOnce(
+        new Error(
+          '400 {"error":"Error broadcasting transaction with message: Error: Transaction simulation failed: Blockhash not found","code":"transaction_broadcast_failure"}'
+        )
+      )
+      .mockResolvedValueOnce({
+        hash: 'tx-456',
+        transactionId: 'tx-456',
+        caip2: 'solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp',
+      });
+
+    const result = await registerAgentOnSolanaForOwner({
+      ownerUserId: 'owner-1',
+      agentUserId: 'agent-1',
+    });
+
+    expect(result.txHash).toBe('tx-456');
+    expect(
+      mockFinalizeAgentSolanaRegistrationTransaction
+    ).toHaveBeenCalledTimes(2);
+    expect(mockSendSolanaTransaction).toHaveBeenNthCalledWith(1, {
+      walletId: 'solana-wallet-1',
+      transaction: 'base64-tx-signed-attempt-1',
+      confirmationStrategy: {
+        blockhash: 'blockhash-stale',
+        lastValidBlockHeight: 111,
+      },
+    });
+    expect(mockSendSolanaTransaction).toHaveBeenNthCalledWith(2, {
+      walletId: 'solana-wallet-1',
+      transaction: 'base64-tx-signed-attempt-2',
+      confirmationStrategy: {
+        blockhash: 'blockhash-fresh',
+        lastValidBlockHeight: 222,
+      },
+    });
+    expect(
+      capturedInserts.some(
+        (insert) =>
+          insert.description === 'Refund - agent Solana registration failed'
+      )
+    ).toBe(false);
   });
 
   it('returns already registered without charging when DB is already in sync', async () => {

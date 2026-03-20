@@ -177,6 +177,12 @@ export const GET = withErrorHandling(
     // Optional auth - positions are public for leaderboard but RLS still applies
     const authUser = await optionalAuth(request).catch(() => null);
 
+    const status = queryParams.status as string;
+
+    // Build closedAt filter based on status query param
+    const closedAtFilter =
+      status === 'closed' ? { not: null } : status === 'all' ? undefined : null; // default: open
+
     // Get user's agents to include their positions
     const userAgents = await asPublic(async () => {
       return await db
@@ -191,23 +197,28 @@ export const GET = withErrorHandling(
     const agentIds = userAgents.map((a) => a.id);
     const agentMap = new Map(userAgents.map((a) => [a.id, a.displayName]));
 
+    // Build perp where clause with status filtering
+    const perpWhereBase = {
+      userId,
+      ...(closedAtFilter !== undefined ? { closedAt: closedAtFilter } : {}),
+    };
+
+    const agentPerpWhereBase = {
+      userId: { in: agentIds },
+      ...(closedAtFilter !== undefined ? { closedAt: closedAtFilter } : {}),
+    };
+
     // Get perpetual positions from database (respecting RLS if viewer is the same user)
     const userPerpPositions =
       authUser && authUser.userId
         ? await asUser(authUser, async (db) => {
             return await db.perpPosition.findMany({
-              where: {
-                userId,
-                closedAt: null,
-              },
+              where: perpWhereBase,
             });
           })
         : await asPublic(async (db) => {
             return await db.perpPosition.findMany({
-              where: {
-                userId,
-                closedAt: null,
-              },
+              where: perpWhereBase,
             });
           });
 
@@ -216,10 +227,7 @@ export const GET = withErrorHandling(
       agentIds.length > 0
         ? await asPublic(async (db) => {
             return await db.perpPosition.findMany({
-              where: {
-                userId: { in: agentIds },
-                closedAt: null,
-              },
+              where: agentPerpWhereBase,
             });
           })
         : [];
@@ -374,7 +382,9 @@ export const GET = withErrorHandling(
           unrealizedPnLPercent: Number(p.unrealizedPnLPercent),
           liquidationPrice: Number(p.liquidationPrice),
           fundingPaid: Number(p.fundingPaid),
+          realizedPnL: Number((p as Record<string, unknown>).realizedPnL ?? 0),
           openedAt: p.openedAt.toISOString(),
+          closedAt: p.closedAt?.toISOString() ?? null,
           // Agent position metadata
           isAgentPosition: p.isAgentPosition,
           agentId: p.agentId ?? null,
