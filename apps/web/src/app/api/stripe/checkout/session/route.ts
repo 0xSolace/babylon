@@ -54,8 +54,8 @@
  *         description: Invalid input (amount out of range)
  *       401:
  *         description: Unauthorized
- *       500:
- *         description: Stripe API error
+ *       503:
+ *         description: Card payments are temporarily unavailable
  *
  * @example
  * ```typescript
