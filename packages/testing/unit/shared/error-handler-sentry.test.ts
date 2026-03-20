@@ -44,8 +44,8 @@ describe('withErrorHandling + default Sentry capture', () => {
       },
     }));
 
-    mock.module('zod', () => ({
-      ZodError: class ZodError extends Error {
+    mock.module('zod', () => {
+      class ZodError extends Error {
         issues: Array<{ code: string; message: string; path: string[] }>;
 
         constructor(
@@ -55,8 +55,19 @@ describe('withErrorHandling + default Sentry capture', () => {
           this.name = 'ZodError';
           this.issues = issues;
         }
-      },
-    }));
+      }
+
+      // Mock z object with ZodError property
+      const z = {
+        ZodError,
+      };
+
+      return {
+        ZodError,
+        z,
+        default: z,
+      };
+    });
 
     mock.module('next/server', () => ({
       NextResponse: class NextResponse extends Response {

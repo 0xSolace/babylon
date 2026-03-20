@@ -14,6 +14,7 @@ import { A2AClient } from '@a2a-js/sdk/client';
 import { db } from '@babylon/db';
 import { StaticDataRegistry } from '@babylon/engine';
 import type { AgentRuntime, Plugin } from '@elizaos/core';
+import { agentWalletService } from '../../identity/AgentWalletService';
 import { logger } from '../../shared/logger';
 import type { JsonValue } from '../../types/common';
 
@@ -72,10 +73,49 @@ async function getCachedAgentIdentity(
   });
 
   if (user && user.isAgent) {
+    let walletAddress = user.walletAddress;
+    let agent0TokenId = user.agent0TokenId;
+
+    // Auto-create wallet if missing and AUTO_CREATE_AGENT_WALLETS is enabled
+    if (!walletAddress && process.env.AUTO_CREATE_AGENT_WALLETS !== 'false') {
+      try {
+        logger.info(
+          `Auto-creating wallet for agent ${agentUserId}`,
+          undefined,
+          'BabylonIntegration'
+        );
+        const walletResult =
+          await agentWalletService.createAgentEmbeddedWallet(agentUserId);
+        walletAddress = walletResult.walletAddress;
+
+        // Refresh user data to get updated walletAddress and agent0TokenId
+        const updatedUser = await db.user.findUnique({
+          where: { id: agentUserId },
+          select: {
+            walletAddress: true,
+            agent0TokenId: true,
+          },
+        });
+        if (updatedUser) {
+          walletAddress = updatedUser.walletAddress;
+          agent0TokenId = updatedUser.agent0TokenId;
+        }
+      } catch (error) {
+        logger.warn(
+          `Failed to auto-create wallet for agent ${agentUserId}`,
+          {
+            error: error instanceof Error ? error.message : String(error),
+          },
+          'BabylonIntegration'
+        );
+        // Continue with null walletAddress - agent can still work without wallet
+      }
+    }
+
     const identity: CachedAgentIdentity = {
       agentUserId,
-      walletAddress: user.walletAddress,
-      agent0TokenId: user.agent0TokenId,
+      walletAddress,
+      agent0TokenId,
       displayName: user.displayName,
       cachedAt: now,
     };
