@@ -1050,10 +1050,24 @@ export async function checkProgress(
   const relevantTrackingTypes = EVENT_TO_TRACKING_TYPES[eventType];
   if (!relevantTrackingTypes || relevantTrackingTypes.length === 0) return;
 
-  await Promise.all([
-    checkAchievements(userId, relevantTrackingTypes),
-    checkChallenges(userId, event, relevantTrackingTypes),
-  ]);
+  try {
+    await Promise.all([
+      checkAchievements(userId, relevantTrackingTypes),
+      checkChallenges(userId, event, relevantTrackingTypes),
+    ]);
+  } catch (error) {
+    // Log but don't rethrow — checkProgress is fire-and-forget
+    logger.error(
+      'checkProgress failed',
+      {
+        userId,
+        eventType,
+        error: error instanceof Error ? error.message : String(error),
+        stack: error instanceof Error ? error.stack : undefined,
+      },
+      'AchievementService'
+    );
+  }
 }
 
 async function checkAchievements(
@@ -1182,125 +1196,137 @@ async function checkChallenges(
   if (relevantChallenges.length === 0) return;
 
   for (const challenge of relevantChallenges) {
-    const isDaily = challenge.pool === 'daily';
-    const periodKey = isDaily ? getUTCDateString(now) : getISOWeekString(now);
-    const start = isDaily ? getStartOfUTCDay(now) : getStartOfISOWeek(now);
-    const end = isDaily ? getEndOfUTCDay(now) : getEndOfISOWeek(now);
+    try {
+      const isDaily = challenge.pool === 'daily';
+      const periodKey = isDaily ? getUTCDateString(now) : getISOWeekString(now);
+      const start = isDaily ? getStartOfUTCDay(now) : getStartOfISOWeek(now);
+      const end = isDaily ? getEndOfUTCDay(now) : getEndOfISOWeek(now);
 
-    // Check if already completed for this period
-    const existing = await db
-      .select({
-        id: userChallengeProgress.id,
-        completed: userChallengeProgress.completed,
-      })
-      .from(userChallengeProgress)
-      .where(
-        and(
-          eq(userChallengeProgress.userId, userId),
-          eq(userChallengeProgress.challengeId, challenge.id),
-          eq(userChallengeProgress.periodKey, periodKey)
-        )
-      );
+      // Check if already completed for this period
+      const existing = await db
+        .select({
+          id: userChallengeProgress.id,
+          completed: userChallengeProgress.completed,
+        })
+        .from(userChallengeProgress)
+        .where(
+          and(
+            eq(userChallengeProgress.userId, userId),
+            eq(userChallengeProgress.challengeId, challenge.id),
+            eq(userChallengeProgress.periodKey, periodKey)
+          )
+        );
 
-    if (existing[0]?.completed === 1) continue; // Already done
+      if (existing[0]?.completed === 1) continue; // Already done
 
-    // Resolve current progress
-    const resolver = CHALLENGE_RESOLVERS[challenge.trackingType];
-    if (!resolver) {
-      logger.warn(
-        `No challenge resolver for trackingType: ${challenge.trackingType}`,
-        undefined,
-        'AchievementService'
-      );
-      continue;
-    }
+      // Resolve current progress
+      const resolver = CHALLENGE_RESOLVERS[challenge.trackingType];
+      if (!resolver) {
+        logger.warn(
+          `No challenge resolver for trackingType: ${challenge.trackingType}`,
+          undefined,
+          'AchievementService'
+        );
+        continue;
+      }
 
-    const progress = await resolver(userId, start, end);
-    const completed = progress >= challenge.threshold ? 1 : 0;
-    const completedAt = completed ? new Date() : null;
+      const progress = await resolver(userId, start, end);
+      const completed = progress >= challenge.threshold ? 1 : 0;
+      const completedAt = completed ? new Date() : null;
 
-    // Track whether this request actually transitioned to completed
-    let didComplete = false;
+      // Track whether this request actually transitioned to completed
+      let didComplete = false;
 
-    if (existing[0]) {
-      // Update existing progress — only award if we transition completed 0→1
-      if (completed && !existing[0].completed) {
-        const [updated] = await db
-          .update(userChallengeProgress)
-          .set({
+      if (existing[0]) {
+        // Update existing progress — only award if we transition completed 0→1
+        if (completed && !existing[0].completed) {
+          const [updated] = await db
+            .update(userChallengeProgress)
+            .set({
+              progress,
+              completed,
+              completedAt,
+              pointsAwarded: challenge.pointsReward,
+            })
+            .where(
+              and(
+                eq(userChallengeProgress.id, existing[0].id),
+                eq(userChallengeProgress.completed, 0)
+              )
+            )
+            .returning({ id: userChallengeProgress.id });
+          didComplete = !!updated;
+        } else {
+          // Just update progress, not completing
+          await db
+            .update(userChallengeProgress)
+            .set({ progress, completed, completedAt })
+            .where(eq(userChallengeProgress.id, existing[0].id));
+        }
+      } else {
+        // Insert new progress record — returning confirms insert won the race
+        const [inserted] = await db
+          .insert(userChallengeProgress)
+          .values({
+            id: await generateSnowflakeId(),
+            userId,
+            challengeId: challenge.id,
+            periodKey,
             progress,
             completed,
             completedAt,
-            pointsAwarded: challenge.pointsReward,
+            pointsAwarded: completed ? challenge.pointsReward : 0,
           })
-          .where(
-            and(
-              eq(userChallengeProgress.id, existing[0].id),
-              eq(userChallengeProgress.completed, 0)
-            )
-          )
+          .onConflictDoNothing()
           .returning({ id: userChallengeProgress.id });
-        didComplete = !!updated;
-      } else {
-        // Just update progress, not completing
-        await db
-          .update(userChallengeProgress)
-          .set({ progress, completed, completedAt })
-          .where(eq(userChallengeProgress.id, existing[0].id));
+        didComplete = completed === 1 && !!inserted;
       }
-    } else {
-      // Insert new progress record — returning confirms insert won the race
-      const [inserted] = await db
-        .insert(userChallengeProgress)
-        .values({
-          id: await generateSnowflakeId(),
+
+      // Award points only if this request actually transitioned to completed
+      if (didComplete) {
+        await PointsService.awardPoints(
+          userId,
+          challenge.pointsReward,
+          'challenge_complete',
+          {
+            challengeId: challenge.id,
+            challengeName: challenge.name,
+            periodKey,
+          }
+        );
+
+        await createNotification({
+          userId,
+          type: 'challenge_completed',
+          title: `Challenge Complete: ${challenge.name}`,
+          message: `+${challenge.pointsReward} points`,
+        });
+
+        await broadcastToChannel(`notifications:${userId}`, {
+          type: 'challenge_completed',
+          challengeId: challenge.id,
+          name: challenge.name,
+          pointsReward: challenge.pointsReward,
+          iconKey: challenge.iconKey,
+        });
+
+        // Check for all-complete bonus
+        await checkCompletionBonus(
+          userId,
+          challenge.pool,
+          periodKey,
+          isDaily ? dailyIds : weeklyIds
+        );
+      }
+    } catch (error) {
+      logger.error(
+        `Challenge check failed for ${challenge.id}`,
+        {
           userId,
           challengeId: challenge.id,
-          periodKey,
-          progress,
-          completed,
-          completedAt,
-          pointsAwarded: completed ? challenge.pointsReward : 0,
-        })
-        .onConflictDoNothing()
-        .returning({ id: userChallengeProgress.id });
-      didComplete = completed === 1 && !!inserted;
-    }
-
-    // Award points only if this request actually transitioned to completed
-    if (didComplete) {
-      await PointsService.awardPoints(
-        userId,
-        challenge.pointsReward,
-        'challenge_complete',
-        {
-          challengeId: challenge.id,
-          challengeName: challenge.name,
-          periodKey,
-        }
-      );
-
-      await createNotification({
-        userId,
-        type: 'challenge_completed',
-        title: `Challenge Complete: ${challenge.name}`,
-        message: `+${challenge.pointsReward} points`,
-      });
-
-      await broadcastToChannel(`notifications:${userId}`, {
-        type: 'challenge_completed',
-        challengeId: challenge.id,
-        name: challenge.name,
-        pointsReward: challenge.pointsReward,
-        iconKey: challenge.iconKey,
-      });
-
-      // Check for all-complete bonus
-      await checkCompletionBonus(
-        userId,
-        challenge.pool,
-        periodKey,
-        isDaily ? dailyIds : weeklyIds
+          error: error instanceof Error ? error.message : String(error),
+        },
+        'AchievementService'
       );
     }
   }
