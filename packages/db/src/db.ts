@@ -298,6 +298,16 @@ function getReadReplicaDrizzle(): Database | null {
   return globalForDb.readReplicaDrizzle;
 }
 
+// Version counter to track read replica client changes for cache invalidation
+let readReplicaDbVersion = 0;
+
+/**
+ * Get current read replica version (used by proxy for cache invalidation)
+ */
+export function getReadReplicaDbVersion(): number {
+  return readReplicaDbVersion;
+}
+
 /**
  * Get read replica DrizzleClient (cached)
  * Falls back to primary if read replica not configured
@@ -310,6 +320,8 @@ function getReadReplicaDbClient(): DrizzleClient | null {
 
   if (!globalForDb.readReplicaDb) {
     globalForDb.readReplicaDb = createDrizzleClient(replica);
+    // Increment version to invalidate bound method caches
+    readReplicaDbVersion++;
   }
 
   return globalForDb.readReplicaDb;
@@ -566,9 +578,18 @@ function createModeAwareDbProxy(): DrizzleClient {
   >();
   const TABLE_PROXY_CACHE_MAX = 100;
   const BOUND_METHOD_CACHE_MAX = 50;
+  // Track the replica version to invalidate caches when replica changes
+  let cachedReplicaVersion = readReplicaDbVersion;
 
   const handler: ProxyHandler<DrizzleClient> = {
     get(_target, prop: string | symbol) {
+      // Invalidate caches if read replica has been updated
+      if (cachedReplicaVersion !== readReplicaDbVersion) {
+        tableProxyCache.clear();
+        boundMethodCachePerTable.clear();
+        cachedReplicaVersion = readReplicaDbVersion;
+      }
+
       // In JSON/memory mode, use the JSON client
       if (currentStorageMode !== 'postgres' && jsonClient) {
         return jsonClient[prop as keyof DrizzleClient];
