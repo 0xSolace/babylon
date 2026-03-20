@@ -66,24 +66,36 @@ function withWalletCreationTimeout<T>(
   agentUserId: string,
   timeoutMs: number = WALLET_CREATION_TIMEOUT_MS
 ): Promise<T | null> {
+  let didCleanup = false;
   return new Promise((resolve) => {
     const timer = setTimeout(() => {
-      logger.warn(
-        `Wallet creation timed out for agent ${agentUserId} after ${timeoutMs}ms`,
-        { agentUserId, timeoutMs },
-        'BabylonIntegration'
-      );
-      WALLET_CREATION_IN_FLIGHT.delete(agentUserId);
+      if (!didCleanup) {
+        didCleanup = true;
+        logger.warn(
+          `Wallet creation timed out for agent ${agentUserId} after ${timeoutMs}ms`,
+          { agentUserId, timeoutMs },
+          'BabylonIntegration'
+        );
+        WALLET_CREATION_IN_FLIGHT.delete(agentUserId);
+      }
       resolve(null);
     }, timeoutMs);
 
     promise
       .then((result) => {
         clearTimeout(timer);
+        if (!didCleanup) {
+          didCleanup = true;
+          WALLET_CREATION_IN_FLIGHT.delete(agentUserId);
+        }
         resolve(result);
       })
       .catch(() => {
         clearTimeout(timer);
+        if (!didCleanup) {
+          didCleanup = true;
+          WALLET_CREATION_IN_FLIGHT.delete(agentUserId);
+        }
         resolve(null);
       });
   });
@@ -141,6 +153,8 @@ async function getCachedAgentIdentity(
             undefined,
             'BabylonIntegration'
           );
+          // Note: Cleanup of WALLET_CREATION_IN_FLIGHT is handled by withWalletCreationTimeout
+          // to avoid double-deletion race conditions when timeout occurs before promise settles
           const rawPromise = agentWalletService
             .createAgentEmbeddedWallet(agentUserId)
             .then((result) => ({ walletAddress: result.walletAddress }))
@@ -157,9 +171,6 @@ async function getCachedAgentIdentity(
                 );
               }
               return null;
-            })
-            .finally(() => {
-              WALLET_CREATION_IN_FLIGHT.delete(agentUserId);
             });
           // Wrap with timeout to prevent unbounded hangs in serverless environments
           walletPromise = withWalletCreationTimeout(rawPromise, agentUserId);
