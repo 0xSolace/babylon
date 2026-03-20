@@ -238,6 +238,10 @@ export const usePortfolioBreakdownStore = create<PortfolioBreakdownState>(
 
       return () => {
         const currentState = get();
+        // Stale cleanup from a previous userId — ignore to avoid
+        // decrementing the new userId's subscriber count.
+        if (currentState.userId !== userId) return;
+
         const updatedCount = currentState.subscriberCount - 1;
         set({ subscriberCount: updatedCount });
 

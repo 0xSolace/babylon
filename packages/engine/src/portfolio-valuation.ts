@@ -18,7 +18,7 @@ export function calculatePerpPositionMarketValue(position: {
   leverage: unknown;
   size: unknown;
   unrealizedPnL: unknown;
-}) {
+}): number {
   const size = toNumber(position.size);
   const leverage = toNumber(position.leverage);
   const unrealizedPnL = toNumber(position.unrealizedPnL);
