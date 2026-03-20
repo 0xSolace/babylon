@@ -487,8 +487,9 @@ const TABLE_READ_METHODS = new Set([
 
 /**
  * Write methods that must use primary database.
- * Note: Currently used for detecting table repository access patterns in createModeAwareDbProxy.
- * Reserved for future enhancements such as write-path logging or routing validation.
+ * Currently used in createModeAwareDbProxy to distinguish table repository access
+ * (where prop is neither a known read nor write method) from direct method calls.
+ * Reserved for future write-path logging, metrics, or routing validation.
  */
 const WRITE_METHODS = new Set([
   'insert',
@@ -510,6 +511,11 @@ const WRITE_METHODS = new Set([
  * and automatically routes reads to replica when available.
  */
 function createModeAwareDbProxy(): DrizzleClient {
+  // Cache for table repository proxies to avoid recreation on every access
+  const tableProxyCache = new Map<string | symbol, object>();
+  // Nested cache for bound methods per table (table -> method -> bound function)
+  const boundMethodCachePerTable = new Map<string | symbol, Map<PropertyKey, unknown>>();
+
   const handler: ProxyHandler<DrizzleClient> = {
     get(_target, prop: string | symbol) {
       // In JSON/memory mode, use the JSON client
@@ -557,10 +563,18 @@ function createModeAwareDbProxy(): DrizzleClient {
         typeof value === 'object' &&
         'findMany' in value
       ) {
-        // Cache for bound methods to avoid rebinding on every access
-        const boundMethodCache = new Map<PropertyKey, unknown>();
+        // Return cached proxy if available
+        if (tableProxyCache.has(prop)) {
+          return tableProxyCache.get(prop);
+        }
 
-        return new Proxy(value as object, {
+        // Get or create bound method cache for this table
+        if (!boundMethodCachePerTable.has(prop)) {
+          boundMethodCachePerTable.set(prop, new Map<PropertyKey, unknown>());
+        }
+        const boundMethodCache = boundMethodCachePerTable.get(prop)!;
+
+        const tableProxy = new Proxy(value as object, {
           get(target, method: string | symbol) {
             const methodStr = String(method);
 
@@ -593,6 +607,9 @@ function createModeAwareDbProxy(): DrizzleClient {
             return (target as Record<PropertyKey, unknown>)[method];
           },
         }) as unknown as typeof value;
+
+        tableProxyCache.set(prop, tableProxy);
+        return tableProxy;
       }
 
       return value;
